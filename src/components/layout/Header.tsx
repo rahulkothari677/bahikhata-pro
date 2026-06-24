@@ -1,7 +1,7 @@
 'use client'
 
-import { useAppStore } from '@/store/app-store'
-import { Menu, Plus, Sparkles } from 'lucide-react'
+import { useAppStore, type ViewType } from '@/store/app-store'
+import { Menu, Plus, Sparkles, ScanLine, ArrowLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useQuery } from '@tanstack/react-query'
 
@@ -15,10 +15,15 @@ const viewTitles: Record<string, { title: string; subtitle: string }> = {
   scanner: { title: 'AI Bill Scanner', subtitle: 'Snap a bill, we auto-fill' },
   reports: { title: 'Reports', subtitle: 'P&L, GST & stock reports' },
   settings: { title: 'Settings', subtitle: 'Shop profile & preferences' },
+  'transaction-detail': { title: 'Transaction Details', subtitle: 'View, edit & invoice' },
+  'party-profile': { title: 'Party Profile', subtitle: 'Customer / supplier history' },
 }
 
+// Views where "New Entry" should trigger a dialog (not navigate)
+const dialogViews: ViewType[] = ['dashboard', 'inventory', 'sales', 'purchases', 'income-expense', 'parties']
+
 export function Header() {
-  const { currentView, setSidebarOpen, setView } = useAppStore()
+  const { currentView, setSidebarOpen, setView, fireTriggerNewEntry, previousView, setPreviousView } = useAppStore()
   const info = viewTitles[currentView] || { title: 'BahiKhata Pro', subtitle: '' }
 
   const { data: settingData } = useQuery({
@@ -31,6 +36,41 @@ export function Header() {
 
   const shopName = settingData?.setting?.shopName || 'My Shop'
 
+  const isDetailView = currentView === 'transaction-detail' || currentView === 'party-profile'
+  const showNewEntry = dialogViews.includes(currentView)
+
+  const handleNewEntry = () => {
+    if (currentView === 'dashboard') {
+      // From dashboard, navigate to sales and open dialog
+      setView('sales')
+      setTimeout(() => fireTriggerNewEntry(), 300)
+    } else if (dialogViews.includes(currentView)) {
+      // For dialog views, fire the trigger (each module listens to it)
+      fireTriggerNewEntry()
+    }
+  }
+
+  const handleBack = () => {
+    if (previousView) {
+      setView(previousView)
+    } else {
+      setView('dashboard')
+    }
+    setPreviousView(null)
+  }
+
+  const newEntryLabel = (() => {
+    switch (currentView) {
+      case 'dashboard': return 'New Sale'
+      case 'inventory': return 'Add Product'
+      case 'sales': return 'New Sale'
+      case 'purchases': return 'New Purchase'
+      case 'income-expense': return 'Add Entry'
+      case 'parties': return 'Add Party'
+      default: return 'New Entry'
+    }
+  })()
+
   return (
     <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-md border-b border-border">
       <div className="flex items-center justify-between gap-3 px-4 lg:px-6 py-3">
@@ -41,6 +81,15 @@ export function Header() {
           >
             <Menu className="w-5 h-5" />
           </button>
+          {isDetailView && (
+            <button
+              onClick={handleBack}
+              className="p-2 -ml-2 rounded-lg hover:bg-muted flex items-center gap-1 text-sm font-medium"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span className="hidden sm:inline">Back</span>
+            </button>
+          )}
           <div className="min-w-0">
             <h2 className="text-lg lg:text-xl font-bold tracking-tight truncate">{info.title}</h2>
             <p className="text-xs text-muted-foreground truncate hidden sm:block">{info.subtitle}</p>
@@ -48,26 +97,30 @@ export function Header() {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Quick action: AI Scan */}
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setView('scanner')}
-            className="hidden sm:flex gap-2 border-primary/30 text-primary hover:bg-primary/10"
-          >
-            <Sparkles className="w-4 h-4" />
-            <span className="hidden md:inline">Scan Bill</span>
-          </Button>
+          {/* Quick action: AI Scan - hide on scanner page */}
+          {currentView !== 'scanner' && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setView('scanner')}
+              className="hidden sm:flex gap-2 border-primary/30 text-primary hover:bg-primary/10"
+            >
+              <Sparkles className="w-4 h-4" />
+              <span className="hidden md:inline">Scan Bill</span>
+            </Button>
+          )}
 
-          {/* New Sale quick action */}
-          <Button
-            size="sm"
-            onClick={() => setView('sales')}
-            className="bg-gradient-saffron gap-2 shadow-md hover:opacity-90"
-          >
-            <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">New Entry</span>
-          </Button>
+          {/* New Entry button - context aware */}
+          {showNewEntry && (
+            <Button
+              size="sm"
+              onClick={handleNewEntry}
+              className="bg-gradient-saffron gap-2 shadow-md hover:opacity-90"
+            >
+              <Plus className="w-4 h-4" />
+              <span className="hidden sm:inline">{newEntryLabel}</span>
+            </Button>
+          )}
 
           {/* Shop name badge */}
           <div className="hidden lg:flex items-center gap-2 pl-3 ml-1 border-l border-border">

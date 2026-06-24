@@ -1,23 +1,31 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAppStore } from '@/store/app-store'
 import { useToast } from '@/hooks/use-toast'
 import { toast as sonnerToast } from 'sonner'
-import { formatINR, formatDate, cn, getInitials } from '@/lib/utils'
-import { Plus, Search, Users, Trash2, Phone, User, ArrowDownRight, ArrowUpRight, Building2 } from 'lucide-react'
+import { formatINR, formatDate, cn, getInitials, formatINRCompact } from '@/lib/utils'
+import { ViewModeToggle } from '@/components/common/ViewModeToggle'
+import {
+  Plus, Search, Users, Phone, User, ArrowDownRight, ArrowUpRight,
+  Building2, ChevronRight, Receipt,
+} from 'lucide-react'
 
 export function Parties() {
-  const { refreshKey, triggerRefresh } = useAppStore()
+  const {
+    refreshKey, triggerRefresh, partiesViewMode, setPartiesViewMode,
+    triggerNewEntry, triggerNewEntryView, setSelectedPartyId, setView, setPreviousView,
+  } = useAppStore()
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'all' | 'customer' | 'supplier'>('all')
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -31,6 +39,17 @@ export function Parties() {
   })
 
   const parties: any[] = data?.parties || []
+
+  // Listen for global "New Entry" trigger from Header (only if fired on this view)
+  const lastTriggerRef = useRef(0)
+  useEffect(() => {
+    if (triggerNewEntry > lastTriggerRef.current && triggerNewEntryView === 'parties') {
+      lastTriggerRef.current = triggerNewEntry
+      Promise.resolve().then(() => setDialogOpen(true))
+    } else if (triggerNewEntry > lastTriggerRef.current) {
+      lastTriggerRef.current = triggerNewEntry
+    }
+  }, [triggerNewEntry, triggerNewEntryView])
 
   const filtered = parties.filter(p => {
     if (filter !== 'all' && p.type !== filter && p.type !== 'both') return false
@@ -48,10 +67,10 @@ export function Parties() {
   const customers = parties.filter(p => p.type === 'customer' || p.type === 'both').length
   const suppliers = parties.filter(p => p.type === 'supplier' || p.type === 'both').length
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Delete this party? Existing transactions will remain but lose party link.')) return
-    // For demo: don't actually delete since we don't have an endpoint, but show toast
-    sonnerToast.info('Party delete is not available in demo')
+  const handleViewParty = (id: string) => {
+    setSelectedPartyId(id)
+    setPreviousView('parties')
+    setView('party-profile')
   }
 
   return (
@@ -99,8 +118,8 @@ export function Parties() {
       {/* Toolbar */}
       <Card className="shadow-card border-border/60">
         <CardContent className="p-3 lg:p-4">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1">
+          <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+            <div className="relative flex-1 w-full">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 placeholder="Search by name, phone, GSTIN..."
@@ -119,11 +138,12 @@ export function Parties() {
                 <SelectItem value="supplier">Suppliers</SelectItem>
               </SelectContent>
             </Select>
+            <ViewModeToggle mode={partiesViewMode} onChange={setPartiesViewMode} />
             <Button
               onClick={() => setDialogOpen(true)}
               className="bg-gradient-saffron gap-2 shadow-md"
             >
-              <Plus className="w-4 h-4" /> Add Party
+              <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Add Party</span>
             </Button>
           </div>
         </CardContent>
@@ -144,26 +164,35 @@ export function Parties() {
             </p>
           </CardContent>
         </Card>
-      ) : (
+      ) : partiesViewMode === 'grid' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
           {filtered.map((p) => (
-            <Card key={p.id} className="shadow-card border-border/60 hover:shadow-md transition">
+            <Card
+              key={p.id}
+              className="shadow-card border-border/60 hover:shadow-md hover:border-primary/30 transition cursor-pointer group"
+              onClick={() => handleViewParty(p.id)}
+            >
               <CardContent className="p-4">
                 <div className="flex items-start gap-3">
-                  <div className={cn(
-                    'w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 text-white font-semibold text-sm',
-                    p.type === 'customer' ? 'bg-gradient-to-br from-emerald-500 to-teal-600' :
-                    p.type === 'supplier' ? 'bg-gradient-to-br from-amber-500 to-orange-600' :
-                    'bg-gradient-to-br from-violet-500 to-purple-600'
+                  <Avatar className={cn(
+                    'w-11 h-11 flex-shrink-0',
                   )}>
-                    {getInitials(p.name)}
-                  </div>
+                    <AvatarFallback className={cn(
+                      'text-white font-semibold text-sm',
+                      p.type === 'customer' ? 'bg-gradient-to-br from-emerald-500 to-teal-600' :
+                      p.type === 'supplier' ? 'bg-gradient-to-br from-amber-500 to-orange-600' :
+                      'bg-gradient-to-br from-violet-500 to-purple-600'
+                    )}>
+                      {getInitials(p.name)}
+                    </AvatarFallback>
+                  </Avatar>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <h3 className="font-semibold text-sm truncate">{p.name}</h3>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="font-semibold text-sm truncate group-hover:text-primary transition">{p.name}</h3>
                         <Badge variant="secondary" className="text-[10px] py-0 capitalize mt-0.5">{p.type}</Badge>
                       </div>
+                      <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary flex-shrink-0" />
                     </div>
 
                     <div className="mt-2 space-y-1">
@@ -179,9 +208,6 @@ export function Parties() {
                           <span className="font-mono">{p.gstin}</span>
                         </div>
                       )}
-                      {p.state && (
-                        <p className="text-[11px] text-muted-foreground">{p.state}</p>
-                      )}
                     </div>
 
                     <div className="mt-3 pt-3 border-t border-border flex items-center justify-between">
@@ -195,7 +221,7 @@ export function Parties() {
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="text-[10px] text-muted-foreground uppercase">Transactions</p>
+                        <p className="text-[10px] text-muted-foreground uppercase">Txns</p>
                         <p className="text-sm font-medium">{p.transactionCount}</p>
                       </div>
                     </div>
@@ -214,6 +240,68 @@ export function Parties() {
             </Card>
           ))}
         </div>
+      ) : (
+        /* List mode - compact table */
+        <Card className="shadow-card border-border/60 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50">
+                <tr className="text-left text-xs uppercase text-muted-foreground">
+                  <th className="py-3 px-4 font-medium">Name</th>
+                  <th className="py-3 px-2 font-medium">Type</th>
+                  <th className="py-3 px-2 font-medium">Contact</th>
+                  <th className="py-3 px-2 font-medium text-right">Txns</th>
+                  <th className="py-3 px-2 font-medium text-right">Balance</th>
+                  <th className="py-3 px-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((p) => (
+                  <tr
+                    key={p.id}
+                    className="border-b border-border/50 hover:bg-muted/30 cursor-pointer group"
+                    onClick={() => handleViewParty(p.id)}
+                  >
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-2">
+                        <Avatar className="w-8 h-8">
+                          <AvatarFallback className={cn(
+                            'text-white font-semibold text-xs',
+                            p.type === 'customer' ? 'bg-gradient-to-br from-emerald-500 to-teal-600' :
+                            p.type === 'supplier' ? 'bg-gradient-to-br from-amber-500 to-orange-600' :
+                            'bg-gradient-to-br from-violet-500 to-purple-600'
+                          )}>
+                            {getInitials(p.name)}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="font-medium group-hover:text-primary transition">{p.name}</p>
+                          {p.gstin && <p className="text-[10px] font-mono text-muted-foreground">{p.gstin}</p>}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-3 px-2">
+                      <Badge variant="secondary" className="text-[10px] capitalize">{p.type}</Badge>
+                    </td>
+                    <td className="py-3 px-2 text-muted-foreground">
+                      {p.phone || '—'}
+                      {p.state && <span className="block text-[10px]">{p.state}</span>}
+                    </td>
+                    <td className="py-3 px-2 text-right">{p.transactionCount}</td>
+                    <td className={cn('py-3 px-2 text-right font-semibold',
+                      p.balance > 0 ? 'text-emerald-600' : p.balance < 0 ? 'text-rose-600' : 'text-muted-foreground'
+                    )}>
+                      {p.balance > 0 ? `+${formatINRCompact(p.balance)}` : p.balance < 0 ? `-${formatINRCompact(Math.abs(p.balance))}` : 'Settled'}
+                    </td>
+                    <td className="py-3 px-2">
+                      <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary" />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       )}
 
       <PartyDialog
@@ -278,7 +366,7 @@ function PartyDialog({ open, onOpenChange, onSuccess }: {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 py-2">
           <div className="sm:col-span-2">
             <Label>Name *</Label>
-            <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Customer or supplier name" />
+            <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Customer or supplier name" autoFocus />
           </div>
           <div>
             <Label>Type</Label>

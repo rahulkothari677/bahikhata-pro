@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -21,10 +21,22 @@ const INCOME_CATEGORIES = ['Commission', 'Interest', 'Rent Received', 'Scrap Sal
 const PAYMENT_MODES = ['cash', 'upi', 'card', 'bank']
 
 export function IncomeExpense() {
-  const { refreshKey, triggerRefresh } = useAppStore()
+  const { refreshKey, triggerRefresh, triggerNewEntry, triggerNewEntryView, setSelectedTransactionId, setView, setPreviousView } = useAppStore()
   const [filter, setFilter] = useState<'all' | 'income' | 'expense'>('all')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [dialogType, setDialogType] = useState<'income' | 'expense'>('expense')
+  const [choiceOpen, setChoiceOpen] = useState(false)
+
+  // Listen for global "New Entry" trigger from Header (only if fired on this view)
+  const lastTriggerRef = useRef(0)
+  useEffect(() => {
+    if (triggerNewEntry > lastTriggerRef.current && triggerNewEntryView === 'income-expense') {
+      lastTriggerRef.current = triggerNewEntry
+      Promise.resolve().then(() => setChoiceOpen(true))
+    } else if (triggerNewEntry > lastTriggerRef.current) {
+      lastTriggerRef.current = triggerNewEntry
+    }
+  }, [triggerNewEntry, triggerNewEntryView])
 
   const { data, isLoading } = useQuery({
     queryKey: ['transactions', 'income-expense', refreshKey],
@@ -140,7 +152,15 @@ export function IncomeExpense() {
               {filtered.map((t) => {
                 const isIncome = t.type === 'income'
                 return (
-                  <Card key={t.id} className="shadow-card border-border/60 hover:shadow-md transition group">
+                  <Card
+                    key={t.id}
+                    className="shadow-card border-border/60 hover:shadow-md hover:border-primary/30 transition group cursor-pointer"
+                    onClick={() => {
+                      setSelectedTransactionId(t.id)
+                      setPreviousView('income-expense')
+                      setView('transaction-detail')
+                    }}
+                  >
                     <CardContent className="p-3 lg:p-4">
                       <div className="flex items-center gap-3">
                         <div className={cn(
@@ -153,7 +173,7 @@ export function IncomeExpense() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <p className="font-semibold text-sm">{t.category || 'Other'}</p>
+                            <p className="font-semibold text-sm group-hover:text-primary transition">{t.category || 'Other'}</p>
                             <Badge variant="secondary" className="text-[10px] py-0 uppercase">{t.paymentMode}</Badge>
                           </div>
                           <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-0.5">
@@ -168,7 +188,7 @@ export function IncomeExpense() {
                           variant="ghost"
                           size="sm"
                           className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 text-rose-600 hover:text-rose-700 hover:bg-rose-50"
-                          onClick={() => handleDelete(t.id)}
+                          onClick={(e) => { e.stopPropagation(); handleDelete(t.id) }}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </Button>
@@ -223,6 +243,36 @@ export function IncomeExpense() {
         type={dialogType}
         onSuccess={() => triggerRefresh()}
       />
+
+      {/* Choice dialog when triggered from Header */}
+      <Dialog open={choiceOpen} onOpenChange={setChoiceOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Wallet className="w-5 h-5 text-violet-600" />
+              Add New Entry
+            </DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-3 py-2">
+            <button
+              onClick={() => { setDialogType('income'); setDialogOpen(true); setChoiceOpen(false) }}
+              className="rounded-xl p-4 border-2 border-emerald-300 hover:border-emerald-500 hover:bg-emerald-50 transition text-left"
+            >
+              <ArrowDownRight className="w-6 h-6 mb-2 text-emerald-600" />
+              <p className="font-semibold text-sm">Add Income</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Commission, interest, etc.</p>
+            </button>
+            <button
+              onClick={() => { setDialogType('expense'); setDialogOpen(true); setChoiceOpen(false) }}
+              className="rounded-xl p-4 border-2 border-rose-300 hover:border-rose-500 hover:bg-rose-50 transition text-left"
+            >
+              <ArrowUpRight className="w-6 h-6 mb-2 text-rose-600" />
+              <p className="font-semibold text-sm">Add Expense</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">Rent, salary, bills</p>
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

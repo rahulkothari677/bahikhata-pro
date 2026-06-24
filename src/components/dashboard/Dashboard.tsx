@@ -23,7 +23,7 @@ import { motion } from 'framer-motion'
 const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)']
 
 export function Dashboard() {
-  const { setView, refreshKey } = useAppStore()
+  const { setView, refreshKey, setSelectedTransactionId, setSelectedPartyId, setPreviousView } = useAppStore()
 
   const { data, isLoading } = useQuery({
     queryKey: ['dashboard', refreshKey],
@@ -392,7 +392,15 @@ export function Dashboard() {
                   const isExpense = t.type === 'expense'
                   const isInflow = isSale || isIncome
                   return (
-                    <div key={t.id} className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted/50 transition">
+                    <button
+                      key={t.id}
+                      onClick={() => {
+                        setSelectedTransactionId(t.id)
+                        setPreviousView('dashboard')
+                        setView('transaction-detail')
+                      }}
+                      className="w-full flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted/50 transition text-left"
+                    >
                       <div className={cn(
                         'w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0',
                         isInflow ? 'bg-emerald-100' : 'bg-rose-100'
@@ -422,7 +430,7 @@ export function Dashboard() {
                           </p>
                         )}
                       </div>
-                    </div>
+                    </button>
                   )
                 })}
               </div>

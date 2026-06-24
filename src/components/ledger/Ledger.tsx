@@ -1,8 +1,8 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
-import { useState, useEffect } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { useState, useEffect, useRef } from 'react'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -14,8 +14,12 @@ import { Switch } from '@/components/ui/switch'
 import { useAppStore } from '@/store/app-store'
 import { useToast } from '@/hooks/use-toast'
 import { toast as sonnerToast } from 'sonner'
-import { formatINR, formatDateTime, cn } from '@/lib/utils'
-import { Plus, Search, ShoppingCart, Truck, Trash2, Receipt, X, ScanLine, IndianRupee, TrendingUp, Calendar, User } from 'lucide-react'
+import { formatINR, formatDateTime, formatINRCompact, cn } from '@/lib/utils'
+import { ViewModeToggle } from '@/components/common/ViewModeToggle'
+import {
+  Plus, Search, ShoppingCart, Truck, Receipt, IndianRupee,
+  TrendingUp, Calendar, User, ScanLine, ChevronRight,
+} from 'lucide-react'
 
 const PAYMENT_MODES = [
   { value: 'cash', label: 'Cash' },
@@ -28,7 +32,11 @@ const PAYMENT_MODES = [
 type LedgerType = 'sale' | 'purchase'
 
 export function Ledger({ type }: { type: LedgerType }) {
-  const { refreshKey, triggerRefresh, setView, setScannerBillType } = useAppStore()
+  const {
+    refreshKey, triggerRefresh, setView, setScannerBillType,
+    transactionsViewMode, setTransactionsViewMode, triggerNewEntry, triggerNewEntryView,
+    setSelectedTransactionId, setPreviousView,
+  } = useAppStore()
   const [search, setSearch] = useState('')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [presetData, setPresetData] = useState<any>(null)
@@ -60,7 +68,22 @@ export function Ledger({ type }: { type: LedgerType }) {
   const totalPaid = filtered.reduce((s, t) => s + t.paidAmount, 0)
   const totalDue = totalAmount - totalPaid
 
-  // Listen for preset data (when called from scanner)
+  // Listen for global "New Entry" trigger from Header (only if fired on this view)
+  const lastTriggerRef = useRef(0)
+  const targetView = isSale ? 'sales' : 'purchases'
+  useEffect(() => {
+    if (triggerNewEntry > lastTriggerRef.current && triggerNewEntryView === targetView) {
+      lastTriggerRef.current = triggerNewEntry
+      Promise.resolve().then(() => {
+        setPresetData(null)
+        setDialogOpen(true)
+      })
+    } else if (triggerNewEntry > lastTriggerRef.current) {
+      lastTriggerRef.current = triggerNewEntry
+    }
+  }, [triggerNewEntry, triggerNewEntryView, targetView])
+
+  // Listen for preset data (when called from scanner or party profile)
   useEffect(() => {
     const checkPreset = () => {
       const stored = (window as any).__ledgerPreset
@@ -75,13 +98,10 @@ export function Ledger({ type }: { type: LedgerType }) {
     return () => clearInterval(interval)
   }, [type])
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Delete this transaction?')) return
-    const r = await fetch(`/api/transactions?id=${id}`, { method: 'DELETE' })
-    if (r.ok) {
-      sonnerToast.success('Transaction deleted')
-      triggerRefresh()
-    }
+  const handleViewTransaction = (txnId: string) => {
+    setSelectedTransactionId(txnId)
+    setPreviousView(isSale ? 'sales' : 'purchases')
+    setView('transaction-detail')
   }
 
   return (
@@ -133,8 +153,8 @@ export function Ledger({ type }: { type: LedgerType }) {
       {/* Toolbar */}
       <Card className="shadow-card border-border/60">
         <CardContent className="p-3 lg:p-4">
-          <div className="flex flex-col sm:flex-row gap-3">
-            <div className="relative flex-1">
+          <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+            <div className="relative flex-1 w-full">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 placeholder={`Search ${isSale ? 'sales' : 'purchases'} by invoice, party, notes...`}
@@ -143,18 +163,19 @@ export function Ledger({ type }: { type: LedgerType }) {
                 className="pl-9"
               />
             </div>
+            <ViewModeToggle mode={transactionsViewMode} onChange={setTransactionsViewMode} />
             <Button
               variant="outline"
               onClick={() => { setScannerBillType(type); setView('scanner') }}
               className="gap-2 border-primary/30 text-primary hover:bg-primary/10"
             >
-              <ScanLine className="w-4 h-4" /> Scan Bill
+              <ScanLine className="w-4 h-4" /> <span className="hidden sm:inline">Scan Bill</span>
             </Button>
             <Button
               onClick={() => { setPresetData(null); setDialogOpen(true) }}
               className={cn('gap-2 shadow-md', isSale ? 'bg-gradient-emerald' : 'bg-gradient-saffron')}
             >
-              <Plus className="w-4 h-4" /> New {isSale ? 'Sale' : 'Purchase'}
+              <Plus className="w-4 h-4" /> <span className="hidden sm:inline">New {isSale ? 'Sale' : 'Purchase'}</span>
             </Button>
           </div>
         </CardContent>
@@ -175,12 +196,16 @@ export function Ledger({ type }: { type: LedgerType }) {
             </p>
           </CardContent>
         </Card>
-      ) : (
+      ) : transactionsViewMode === 'list' ? (
         <div className="space-y-2">
           {filtered.map((t) => {
             const due = t.totalAmount - t.paidAmount
             return (
-              <Card key={t.id} className="shadow-card border-border/60 hover:shadow-md transition group">
+              <Card
+                key={t.id}
+                className="shadow-card border-border/60 hover:shadow-md hover:border-primary/30 transition group cursor-pointer"
+                onClick={() => handleViewTransaction(t.id)}
+              >
                 <CardContent className="p-3 lg:p-4">
                   <div className="flex items-start gap-3">
                     <div className={cn('w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0', accentBg)}>
@@ -215,14 +240,7 @@ export function Ledger({ type }: { type: LedgerType }) {
                             <p className="text-[11px] text-emerald-600 mt-0.5">Profit: {formatINR(t.grossProfit)}</p>
                           )}
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 text-rose-600 hover:text-rose-700 hover:bg-rose-50"
-                          onClick={() => handleDelete(t.id)}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
+                        <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary mt-1 flex-shrink-0" />
                       </div>
 
                       {/* Items preview */}
@@ -238,16 +256,47 @@ export function Ledger({ type }: { type: LedgerType }) {
                           )}
                         </div>
                       )}
-
-                      {/* Tax breakdown */}
-                      <div className="mt-2 flex items-center gap-3 text-[10px] text-muted-foreground">
-                        <span>Subtotal: {formatINR(t.subtotal)}</span>
-                        {(t.cgst + t.sgst) > 0 && <span>CGST+SGST: {formatINR(t.cgst + t.sgst)}</span>}
-                        {t.igst > 0 && <span>IGST: {formatINR(t.igst)}</span>}
-                        {t.discountAmount > 0 && <span className="text-rose-600">Disc: -{formatINR(t.discountAmount)}</span>}
-                      </div>
                     </div>
                   </div>
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
+      ) : (
+        /* Grid mode - compact cards */
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+          {filtered.map((t) => {
+            const due = t.totalAmount - t.paidAmount
+            return (
+              <Card
+                key={t.id}
+                className="shadow-card border-border/60 hover:shadow-md hover:border-primary/30 transition cursor-pointer"
+                onClick={() => handleViewTransaction(t.id)}
+              >
+                <CardContent className="p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center', accentBg)}>
+                      {isSale
+                        ? <ShoppingCart className={cn('w-4 h-4', accentColor)} />
+                        : <Truck className={cn('w-4 h-4', accentColor)} />}
+                    </div>
+                    <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
+                  </div>
+                  <p className="font-semibold text-sm truncate">{t.party?.name || 'Walk-in'}</p>
+                  {t.invoiceNo && <p className="text-[10px] text-muted-foreground">{t.invoiceNo}</p>}
+                  <p className="text-[10px] text-muted-foreground mt-1">{formatDateTime(t.date)}</p>
+                  <div className="mt-2 pt-2 border-t border-border flex items-center justify-between">
+                    <span className={cn('font-bold', accentColor)}>{formatINRCompact(t.totalAmount)}</span>
+                    {due > 0 ? (
+                      <Badge variant="destructive" className="text-[9px]">Due {formatINRCompact(due)}</Badge>
+                    ) : (
+                      <Badge variant="secondary" className="text-[9px] bg-emerald-100 text-emerald-700">Paid</Badge>
+                    )}
+                  </div>
+                  {isSale && (
+                    <p className="text-[10px] text-emerald-600 mt-1">+{formatINRCompact(t.grossProfit)} profit</p>
+                  )}
                 </CardContent>
               </Card>
             )
@@ -309,9 +358,10 @@ function TransactionDialog({ open, onOpenChange, type, presetData, onSuccess }: 
     isSale ? p.type === 'customer' || p.type === 'both' : p.type === 'supplier' || p.type === 'both'
   )
 
-  // Apply preset data (from scanner)
+  // Apply preset data (from scanner or party profile)
   useEffect(() => {
     if (open && presetData) {
+      if (presetData.partyId) setPartyId(presetData.partyId)
       if (presetData.invoiceNo) setInvoiceNo(presetData.invoiceNo)
       if (presetData.date) {
         try {
@@ -322,7 +372,6 @@ function TransactionDialog({ open, onOpenChange, type, presetData, onSuccess }: 
       if (presetData.paymentMode) setPaymentMode(presetData.paymentMode)
       if (presetData.discountAmount) setDiscountAmount(String(presetData.discountAmount))
       if (presetData.sellerName && !isSale) {
-        // Try to match party name
         const matched = parties.find(p =>
           p.name.toLowerCase().includes(presetData.sellerName.toLowerCase()) ||
           presetData.sellerName.toLowerCase().includes(p.name.toLowerCase())
@@ -331,7 +380,6 @@ function TransactionDialog({ open, onOpenChange, type, presetData, onSuccess }: 
       }
       if (presetData.items?.length > 0) {
         const mapped = presetData.items.map((item: any) => {
-          // Try to match existing product by name
           const matched = products.find(p =>
             p.name.toLowerCase().includes(item.name.toLowerCase()) ||
             item.name.toLowerCase().includes(p.name.toLowerCase())
@@ -373,7 +421,6 @@ function TransactionDialog({ open, onOpenChange, type, presetData, onSuccess }: 
   const updateItem = (index: number, field: string, value: any) => {
     const newItems = [...items]
     newItems[index] = { ...newItems[index], [field]: value }
-    // When product selected, auto-fill price and gst
     if (field === 'productId' && value) {
       const p = products.find(p => p.id === value)
       if (p) {
@@ -393,7 +440,6 @@ function TransactionDialog({ open, onOpenChange, type, presetData, onSuccess }: 
     setItems(items.filter((_, i) => i !== index))
   }
 
-  // Compute totals
   let subtotal = 0
   let totalGst = 0
   let totalDiscount = parseFloat(discountAmount) || 0
@@ -466,16 +512,18 @@ function TransactionDialog({ open, onOpenChange, type, presetData, onSuccess }: 
           <DialogTitle className="flex items-center gap-2">
             {isSale ? <ShoppingCart className="w-5 h-5 text-emerald-600" /> : <Truck className="w-5 h-5 text-amber-600" />}
             New {isSale ? 'Sale' : 'Purchase'} Entry
-            {presetData && (
+            {presetData?.items && (
               <Badge className="bg-gradient-saffron text-white text-[10px] ml-2 gap-1">
                 <ScanLine className="w-3 h-3" /> AI-filled
               </Badge>
+            )}
+            {presetData?.partyId && !presetData?.items && (
+              <Badge variant="secondary" className="text-[10px] ml-2">Pre-filled party</Badge>
             )}
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          {/* Top row: party, date, invoice */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <Label>{isSale ? 'Customer' : 'Supplier'} (optional)</Label>
@@ -498,7 +546,6 @@ function TransactionDialog({ open, onOpenChange, type, presetData, onSuccess }: 
             </div>
           </div>
 
-          {/* Inter-state GST toggle */}
           <div className="flex items-center justify-between rounded-lg bg-muted/50 p-3">
             <div>
               <Label className="cursor-pointer">Inter-state transaction (IGST)</Label>
@@ -507,7 +554,6 @@ function TransactionDialog({ open, onOpenChange, type, presetData, onSuccess }: 
             <Switch checked={isInterState} onCheckedChange={setIsInterState} />
           </div>
 
-          {/* Items */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <Label>Items *</Label>
@@ -575,7 +621,7 @@ function TransactionDialog({ open, onOpenChange, type, presetData, onSuccess }: 
                       onClick={() => removeItem(i)}
                       disabled={items.length === 1}
                     >
-                      <X className="w-4 h-4" />
+                      ✕
                     </Button>
                   </div>
                 </div>
@@ -583,7 +629,6 @@ function TransactionDialog({ open, onOpenChange, type, presetData, onSuccess }: 
             </div>
           </div>
 
-          {/* Discount & payment */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
               <Label>Discount (₹)</Label>
@@ -610,7 +655,6 @@ function TransactionDialog({ open, onOpenChange, type, presetData, onSuccess }: 
             </div>
           </div>
 
-          {/* Live summary */}
           <div className="rounded-xl bg-muted/50 p-4 space-y-2">
             <div className="flex items-center justify-between text-sm">
               <span className="text-muted-foreground">Subtotal</span>

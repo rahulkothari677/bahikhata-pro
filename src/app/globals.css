@@ -181,3 +181,18 @@
 .pulse-ring {
   animation: pulse-ring 2s infinite;
 }
+
+/* Print styles - hide app chrome, show only invoice */
+@media print {
+  .no-print,
+  .no-print * {
+    display: none !important;
+  }
+  body {
+    background: white !important;
+  }
+  main {
+    padding: 0 !important;
+    max-width: none !important;
+  }
+}

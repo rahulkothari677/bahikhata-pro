@@ -75,7 +75,9 @@ export function Sidebar() {
         <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
           {navItems.map((item) => {
             const Icon = item.icon
-            const active = currentView === item.id
+            const active = currentView === item.id ||
+              (currentView === 'transaction-detail' && (item.id === 'sales' || item.id === 'purchases')) ||
+              (currentView === 'party-profile' && item.id === 'parties')
             return (
               <button
                 key={item.id}

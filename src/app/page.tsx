@@ -9,8 +9,10 @@ import { Onboarding } from '@/components/layout/Onboarding'
 import { Dashboard } from '@/components/dashboard/Dashboard'
 import { Inventory } from '@/components/inventory/Inventory'
 import { Ledger } from '@/components/ledger/Ledger'
+import { TransactionDetail } from '@/components/ledger/TransactionDetail'
 import { IncomeExpense } from '@/components/income/IncomeExpense'
 import { Parties } from '@/components/parties/Parties'
+import { PartyProfile } from '@/components/parties/PartyProfile'
 import { BillScanner } from '@/components/scanner/BillScanner'
 import { Reports } from '@/components/reports/Reports'
 import { Settings } from '@/components/settings/Settings'
@@ -48,9 +50,11 @@ export default function Home() {
           {currentView === 'scanner' && <BillScanner />}
           {currentView === 'reports' && <Reports />}
           {currentView === 'settings' && <Settings />}
+          {currentView === 'transaction-detail' && <TransactionDetail />}
+          {currentView === 'party-profile' && <PartyProfile />}
         </main>
 
-        <footer className="mt-auto border-t border-border py-3 px-4 lg:px-6 text-center text-[11px] text-muted-foreground">
+        <footer className="mt-auto border-t border-border py-3 px-4 lg:px-6 text-center text-[11px] text-muted-foreground no-print">
           <p>BahiKhata Pro — Made with ❤️ for Bharat • Track sales, purchases, GST, inventory & profit in one app</p>
         </footer>
       </div>
