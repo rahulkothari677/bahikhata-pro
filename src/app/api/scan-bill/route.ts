@@ -20,44 +20,61 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Image is required' }, { status: 400 })
     }
 
-    const prompt = `You are an expert at reading Indian shop bills, invoices and receipts. Carefully analyze this ${billType} bill image and extract all information.
+    const prompt = `You are an expert at reading Indian shop bills, invoices, receipts, AND handwritten notes on plain paper. Indian shop owners often write sales/purchases as rough notes on any paper — plain paper, notebook pages, diaries, even napkins. Your job is to read ANY text (printed or handwritten) and extract structured data.
+
+This image may be:
+- A printed bill/invoice from a supplier
+- A handwritten note on plain paper (rough entry)
+- A diary/notebook page with entries
+- A mix of printed and handwritten text
+- Written in English, Hindi, or regional languages
+- Written in any handwriting style (neat or messy)
+
+Analyze the image carefully and extract all information.
 
 Return ONLY a valid JSON object with this exact structure (no markdown, no extra text):
 {
   "invoiceNo": "bill/invoice number if visible, else null",
   "date": "YYYY-MM-DD format if visible, else null",
-  "sellerName": "name of seller/shop if visible else null",
+  "sellerName": "name of seller/shop/customer if visible (for handwritten notes, the name at the top is usually the customer or supplier), else null",
   "sellerPhone": "phone if visible else null",
   "sellerGSTIN": "GSTIN if visible else null",
   "items": [
     {
-      "name": "product name",
+      "name": "product name (clean up abbreviations - 'atta' = 'Wheat Flour', 'oil' = 'Cooking Oil', etc.)",
       "quantity": number,
-      "unit": "unit if visible (pcs/kg/ltr/box) else 'pcs'",
-      "unitPrice": number (price per unit, exclude tax),
+      "unit": "unit if visible (pcs/kg/ltr/box/gm/ml/dozen/packet) else 'pcs'",
+      "unitPrice": number (price per unit if visible, else calculate from total ÷ quantity),
       "gstRate": number (GST % if visible, else 0),
-      "total": number (line total including tax)
+      "total": number (line total — if only total is written, use that; if only unit price and qty, multiply them)
     }
   ],
-  "subtotal": number (sum before tax),
+  "subtotal": number (sum of all item totals before tax/discount),
   "discountAmount": number (total discount if visible else 0),
   "cgst": number,
   "sgst": number,
   "igst": number,
-  "totalAmount": number (final payable),
-  "paymentMode": "cash|upi|card|bank|credit - infer from bill"
+  "totalAmount": number (final payable — if written on paper, use that; else calculate subtotal - discount + tax),
+  "paymentMode": "cash|upi|card|bank|credit - infer from text (if 'cash' written = cash, 'upi' or 'qr' = upi, 'card' = card, 'udhaar' or 'credit' or 'baad mein' = credit, else cash)"
 }
 
-Rules:
-- If a value is not visible, use null (for strings) or 0 (for numbers).
-- Extract EVERY item line in the bill, do not skip any.
-- Quantities should be numbers (e.g. 2 not "2 pcs").
-- Prices should be numbers without currency symbols.
-- GST rate is the percentage (5, 12, 18, 28), not the amount.
-- For CGST/SGST/IGST provide the actual tax amount, not percentage.
-- If the bill shows CGST+SGST, set both and igst=0. If shows IGST, set igst and cgst=sgst=0.
-- Match each item's name with what's written, even if abbreviated.
-- Return JSON only, no commentary.`
+CRITICAL RULES FOR HANDWRITTEN NOTES:
+1. The first name at the top of the paper is usually the customer (for sales) or supplier (for purchases).
+2. Each line typically has: product name + quantity + price (in any order).
+3. If quantity is missing, assume 1.
+4. If unit is missing, assume 'pcs'.
+5. If price is written as "100" next to "2kg sugar", the 100 might be total (not per kg) — use it as total, calculate unitPrice = total ÷ quantity.
+6. If only total is written (no per-unit price), set unitPrice = total ÷ quantity, and total = the written amount.
+7. Numbers may be written in Hindi numerals (०-९) — convert to Arabic (0-9).
+8. Product names may be abbreviated: "atta" = flour, "tel" = oil, "chai" = tea, "namak" = salt, "chini" = sugar, etc.
+9. "Udhaar" or "Baad mein" or "credit" = payment mode "credit".
+10. If the word "total" or "jama" is visible, the number after it is the totalAmount.
+
+For printed bills:
+- Extract all items, GST breakdown, and totals exactly as shown.
+- If CGST+SGST shown, set both. If IGST shown, set only igst.
+
+Return JSON only, no commentary, no markdown formatting.`
 
     let content = ''
 
