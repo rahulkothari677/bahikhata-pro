@@ -102,6 +102,7 @@ export function IncomeExpense() {
         </Card>
       </div>
 
+      {/* Toolbar - removed duplicate Add Income/Expense buttons (header has "Add Entry") */}
       <Card className="shadow-card border-border/60">
         <CardContent className="p-3 lg:p-4">
           <div className="flex flex-col sm:flex-row gap-3">
@@ -116,19 +117,6 @@ export function IncomeExpense() {
               </SelectContent>
             </Select>
             <div className="flex-1" />
-            <Button
-              variant="outline"
-              onClick={() => { setDialogType('income'); setDialogOpen(true) }}
-              className="gap-2 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
-            >
-              <Plus className="w-4 h-4" /> Add Income
-            </Button>
-            <Button
-              onClick={() => { setDialogType('expense'); setDialogOpen(true) }}
-              className="gap-2 bg-gradient-saffron shadow-md"
-            >
-              <Plus className="w-4 h-4" /> Add Expense
-            </Button>
           </div>
         </CardContent>
       </Card>

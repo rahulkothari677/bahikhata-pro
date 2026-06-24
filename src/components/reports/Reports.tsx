@@ -7,11 +7,12 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { DateRangePicker, getPresetRange, type DateRange, type DatePreset } from '@/components/common/DateRangePicker'
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer,
 } from 'recharts'
-import { formatINR, formatINRCompact, cn } from '@/lib/utils'
+import { formatINR, formatINRCompact, cn, formatDate } from '@/lib/utils'
 import {
   FileBarChart, TrendingUp, Receipt, Package, Users, Calendar,
   ArrowDownRight, ArrowUpRight, IndianRupee, Percent, FileText,
@@ -21,38 +22,21 @@ const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 
 
 export function Reports() {
   const [reportType, setReportType] = useState<'pl' | 'gst' | 'stock' | 'party'>('pl')
-  const [period, setPeriod] = useState<'thisMonth' | 'lastMonth' | 'thisQuarter' | 'thisYear'>('thisMonth')
+  const [dateRange, setDateRange] = useState<DateRange>(() => getPresetRange('thisMonth'))
+  const [datePreset, setDatePreset] = useState<DatePreset>('thisMonth')
 
-  const getDates = () => {
-    const now = new Date()
-    if (period === 'thisMonth') {
-      return { from: new Date(now.getFullYear(), now.getMonth(), 1), to: now }
-    }
-    if (period === 'lastMonth') {
-      return { from: new Date(now.getFullYear(), now.getMonth() - 1, 1), to: new Date(now.getFullYear(), now.getMonth(), 0) }
-    }
-    if (period === 'thisQuarter') {
-      const q = Math.floor(now.getMonth() / 3)
-      return { from: new Date(now.getFullYear(), q * 3, 1), to: now }
-    }
-    return { from: new Date(now.getFullYear(), 0, 1), to: now }
+  const handleDateChange = (range: DateRange, preset: DatePreset) => {
+    setDateRange(range)
+    setDatePreset(preset)
   }
 
-  const { from, to } = getDates()
   const { data, isLoading } = useQuery({
-    queryKey: ['report', reportType, period],
+    queryKey: ['report', reportType, dateRange.from.toISOString(), dateRange.to.toISOString()],
     queryFn: async () => {
-      const r = await fetch(`/api/reports?type=${reportType}&from=${from.toISOString()}&to=${to.toISOString()}`)
+      const r = await fetch(`/api/reports?type=${reportType}&from=${dateRange.from.toISOString()}&to=${dateRange.to.toISOString()}`)
       return r.json()
     },
   })
-
-  const periods = [
-    { id: 'thisMonth', label: 'This Month' },
-    { id: 'lastMonth', label: 'Last Month' },
-    { id: 'thisQuarter', label: 'This Quarter' },
-    { id: 'thisYear', label: 'This Year' },
-  ] as const
 
   return (
     <div className="space-y-4">
@@ -62,24 +46,14 @@ export function Reports() {
           <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
             <div className="flex items-center gap-2">
               <Calendar className="w-4 h-4 text-muted-foreground" />
-              <span className="text-sm font-medium">Period:</span>
-              <div className="flex gap-1 flex-wrap">
-                {periods.map(p => (
-                  <Button
-                    key={p.id}
-                    variant={period === p.id ? 'default' : 'outline'}
-                    size="sm"
-                    className="h-8"
-                    onClick={() => setPeriod(p.id)}
-                  >
-                    {p.label}
-                  </Button>
-                ))}
-              </div>
+              <span className="text-sm font-medium">Report Period:</span>
             </div>
-            <p className="text-xs text-muted-foreground">
-              {from.toLocaleDateString('en-IN')} — {to.toLocaleDateString('en-IN')}
-            </p>
+            <div className="flex items-center gap-3">
+              <DateRangePicker value={dateRange} onChange={handleDateChange} align="right" />
+              <p className="text-xs text-muted-foreground hidden sm:block">
+                {formatDate(dateRange.from)} — {formatDate(dateRange.to)}
+              </p>
+            </div>
           </div>
         </CardContent>
       </Card>

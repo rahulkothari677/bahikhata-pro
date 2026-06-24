@@ -9,16 +9,18 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
-import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
+import { Skeleton } from '@/components/ui/skeleton'
 import { useAppStore } from '@/store/app-store'
 import { useToast } from '@/hooks/use-toast'
 import { toast as sonnerToast } from 'sonner'
 import { formatINR, formatDateTime, formatINRCompact, cn } from '@/lib/utils'
 import { ViewModeToggle } from '@/components/common/ViewModeToggle'
+import { PartySelect } from '@/components/common/PartySelect'
+import { ProductPicker, type ProductSelectValue } from '@/components/common/ProductPicker'
 import {
-  Plus, Search, ShoppingCart, Truck, Receipt, IndianRupee,
-  TrendingUp, Calendar, User, ScanLine, ChevronRight,
+  Search, ShoppingCart, Truck, Receipt, IndianRupee,
+  TrendingUp, Calendar, User, ScanLine, ChevronRight, Plus, X,
 } from 'lucide-react'
 
 const PAYMENT_MODES = [
@@ -150,7 +152,7 @@ export function Ledger({ type }: { type: LedgerType }) {
         </Card>
       </div>
 
-      {/* Toolbar */}
+      {/* Toolbar - removed duplicate New Entry button (it's in header now) */}
       <Card className="shadow-card border-border/60">
         <CardContent className="p-3 lg:p-4">
           <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
@@ -171,12 +173,6 @@ export function Ledger({ type }: { type: LedgerType }) {
             >
               <ScanLine className="w-4 h-4" /> <span className="hidden sm:inline">Scan Bill</span>
             </Button>
-            <Button
-              onClick={() => { setPresetData(null); setDialogOpen(true) }}
-              className={cn('gap-2 shadow-md', isSale ? 'bg-gradient-emerald' : 'bg-gradient-saffron')}
-            >
-              <Plus className="w-4 h-4" /> <span className="hidden sm:inline">New {isSale ? 'Sale' : 'Purchase'}</span>
-            </Button>
           </div>
         </CardContent>
       </Card>
@@ -194,6 +190,12 @@ export function Ledger({ type }: { type: LedgerType }) {
             <p className="text-xs text-muted-foreground mt-1">
               {isSale ? 'Record your first sale or scan a bill to begin' : 'Record your first stock purchase'}
             </p>
+            <Button
+              onClick={() => { setPresetData(null); setDialogOpen(true) }}
+              className={cn('mt-4 gap-2 shadow-md', isSale ? 'bg-gradient-emerald' : 'bg-gradient-saffron')}
+            >
+              <Plus className="w-4 h-4" /> New {isSale ? 'Sale' : 'Purchase'}
+            </Button>
           </CardContent>
         </Card>
       ) : transactionsViewMode === 'list' ? (
@@ -243,7 +245,6 @@ export function Ledger({ type }: { type: LedgerType }) {
                         <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary mt-1 flex-shrink-0" />
                       </div>
 
-                      {/* Items preview */}
                       {t.items?.length > 0 && (
                         <div className="mt-2 flex flex-wrap gap-1">
                           {t.items.slice(0, 4).map((item: any, i: number) => (
@@ -264,7 +265,6 @@ export function Ledger({ type }: { type: LedgerType }) {
           })}
         </div>
       ) : (
-        /* Grid mode - compact cards */
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
           {filtered.map((t) => {
             const due = t.totalAmount - t.paidAmount
@@ -333,30 +333,10 @@ function TransactionDialog({ open, onOpenChange, type, presetData, onSuccess }: 
   const [paidAmount, setPaidAmount] = useState('')
   const [discountAmount, setDiscountAmount] = useState('')
   const [notes, setNotes] = useState('')
-  const [items, setItems] = useState<any[]>([
-    { productId: '', productName: '', quantity: 1, unitPrice: 0, gstRate: 0, discountAmount: 0 }
+  const [items, setItems] = useState<ProductSelectValue[]>([
+    { productId: '', productName: '', quantity: 1, unitPrice: 0, gstRate: 0, unit: 'pcs' }
   ])
   const [saving, setSaving] = useState(false)
-
-  const { data: productsData } = useQuery({
-    queryKey: ['products', 'for-ledger'],
-    queryFn: async () => {
-      const r = await fetch('/api/products')
-      return r.json()
-    },
-  })
-  const products: any[] = productsData?.products || []
-
-  const { data: partiesData } = useQuery({
-    queryKey: ['parties', 'for-ledger'],
-    queryFn: async () => {
-      const r = await fetch('/api/parties')
-      return r.json()
-    },
-  })
-  const parties: any[] = (partiesData?.parties || []).filter((p: any) =>
-    isSale ? p.type === 'customer' || p.type === 'both' : p.type === 'supplier' || p.type === 'both'
-  )
 
   // Apply preset data (from scanner or party profile)
   useEffect(() => {
@@ -371,29 +351,15 @@ function TransactionDialog({ open, onOpenChange, type, presetData, onSuccess }: 
       }
       if (presetData.paymentMode) setPaymentMode(presetData.paymentMode)
       if (presetData.discountAmount) setDiscountAmount(String(presetData.discountAmount))
-      if (presetData.sellerName && !isSale) {
-        const matched = parties.find(p =>
-          p.name.toLowerCase().includes(presetData.sellerName.toLowerCase()) ||
-          presetData.sellerName.toLowerCase().includes(p.name.toLowerCase())
-        )
-        if (matched) setPartyId(matched.id)
-      }
       if (presetData.items?.length > 0) {
-        const mapped = presetData.items.map((item: any) => {
-          const matched = products.find(p =>
-            p.name.toLowerCase().includes(item.name.toLowerCase()) ||
-            item.name.toLowerCase().includes(p.name.toLowerCase())
-          )
-          return {
-            productId: matched?.id || '',
-            productName: item.name,
-            quantity: Number(item.quantity) || 1,
-            unitPrice: Number(item.unitPrice) || (matched ? (isSale ? matched.salePrice : matched.purchasePrice) : 0),
-            gstRate: Number(item.gstRate) || (matched?.gstRate ?? 0),
-            discountAmount: 0,
-          }
-        })
-        setItems(mapped)
+        setItems(presetData.items.map((item: any) => ({
+          productId: item.productId || '',
+          productName: item.name || item.productName,
+          quantity: Number(item.quantity) || 1,
+          unitPrice: Number(item.unitPrice) || 0,
+          gstRate: Number(item.gstRate) || 0,
+          unit: item.unit || 'pcs',
+        })))
       }
       if (presetData.totalAmount) {
         setPaidAmount(String(presetData.totalAmount))
@@ -413,27 +379,19 @@ function TransactionDialog({ open, onOpenChange, type, presetData, onSuccess }: 
         setPaidAmount('')
         setDiscountAmount('')
         setNotes('')
-        setItems([{ productId: '', productName: '', quantity: 1, unitPrice: 0, gstRate: 0, discountAmount: 0 }])
+        setItems([{ productId: '', productName: '', quantity: 1, unitPrice: 0, gstRate: 0, unit: 'pcs' }])
       }, 200)
     }
   }, [open])
 
-  const updateItem = (index: number, field: string, value: any) => {
+  const updateItem = (index: number, value: Partial<ProductSelectValue>) => {
     const newItems = [...items]
-    newItems[index] = { ...newItems[index], [field]: value }
-    if (field === 'productId' && value) {
-      const p = products.find(p => p.id === value)
-      if (p) {
-        newItems[index].productName = p.name
-        newItems[index].unitPrice = isSale ? p.salePrice : p.purchasePrice
-        newItems[index].gstRate = p.gstRate
-      }
-    }
+    newItems[index] = { ...newItems[index], ...value }
     setItems(newItems)
   }
 
   const addItem = () => {
-    setItems([...items, { productId: '', productName: '', quantity: 1, unitPrice: 0, gstRate: 0, discountAmount: 0 }])
+    setItems([...items, { productId: '', productName: '', quantity: 1, unitPrice: 0, gstRate: 0, unit: 'pcs' }])
   }
 
   const removeItem = (index: number) => {
@@ -445,13 +403,24 @@ function TransactionDialog({ open, onOpenChange, type, presetData, onSuccess }: 
   let totalDiscount = parseFloat(discountAmount) || 0
   let totalProfit = 0
 
+  // We need product purchase prices for profit calc
+  const { data: productsData } = useQuery({
+    queryKey: ['products', 'for-profit-calc'],
+    queryFn: async () => {
+      const r = await fetch('/api/products')
+      return r.json()
+    },
+  })
+  const products: any[] = productsData?.products || []
+  const productMap = new Map(products.map(p => [p.id, p]))
+
   items.forEach(item => {
     const amount = (item.quantity || 0) * (item.unitPrice || 0)
     const itemGst = amount * (item.gstRate || 0) / 100
     subtotal += amount
     totalGst += itemGst
     if (isSale && item.productId) {
-      const p = products.find(p => p.id === item.productId)
+      const p = productMap.get(item.productId)
       if (p) totalProfit += (item.unitPrice - p.purchasePrice) * item.quantity
     }
   })
@@ -490,7 +459,7 @@ function TransactionDialog({ open, onOpenChange, type, presetData, onSuccess }: 
             quantity: Number(i.quantity),
             unitPrice: Number(i.unitPrice),
             gstRate: Number(i.gstRate) || 0,
-            discountAmount: Number(i.discountAmount) || 0,
+            discountAmount: 0,
           })),
         }),
       })
@@ -507,7 +476,7 @@ function TransactionDialog({ open, onOpenChange, type, presetData, onSuccess }: 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto">
+      <DialogContent className="max-w-5xl max-h-[95vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {isSale ? <ShoppingCart className="w-5 h-5 text-emerald-600" /> : <Truck className="w-5 h-5 text-amber-600" />}
@@ -523,186 +492,218 @@ function TransactionDialog({ open, onOpenChange, type, presetData, onSuccess }: 
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4 py-2">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* LEFT: Items section (takes 2 cols on desktop) */}
+          <div className="lg:col-span-2 space-y-4">
+            {/* Items */}
             <div>
-              <Label>{isSale ? 'Customer' : 'Supplier'} (optional)</Label>
-              <Select value={partyId} onValueChange={setPartyId}>
-                <SelectTrigger><SelectValue placeholder={`Select ${isSale ? 'customer' : 'supplier'}`} /></SelectTrigger>
-                <SelectContent>
-                  {parties.map(p => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}{p.phone ? ` • ${p.phone}` : ''}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Date</Label>
-              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
-            </div>
-            <div>
-              <Label>Invoice/Bill No.</Label>
-              <Input value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} placeholder="Optional" />
-            </div>
-          </div>
+              <div className="flex items-center justify-between mb-2">
+                <Label className="text-sm font-semibold">Items *</Label>
+                <Button variant="outline" size="sm" onClick={addItem} className="h-8 gap-1">
+                  <Plus className="w-3.5 h-3.5" /> Add Item
+                </Button>
+              </div>
+              <div className="space-y-3">
+                {items.map((item, i) => (
+                  <div key={i} className="rounded-xl border border-border p-3 bg-muted/20">
+                    {/* Product picker row */}
+                    <div className="flex items-start gap-2">
+                      <div className="flex-1">
+                        <ProductPicker
+                          value={item}
+                          onChange={(v) => updateItem(i, v)}
+                          isSale={isSale}
+                        />
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-9 w-9 p-0 text-rose-600 hover:bg-rose-50 flex-shrink-0"
+                        onClick={() => removeItem(i)}
+                        disabled={items.length === 1}
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
 
-          <div className="flex items-center justify-between rounded-lg bg-muted/50 p-3">
-            <div>
-              <Label className="cursor-pointer">Inter-state transaction (IGST)</Label>
-              <p className="text-[11px] text-muted-foreground mt-0.5">Toggle ON if buyer/seller is from another state</p>
-            </div>
-            <Switch checked={isInterState} onCheckedChange={setIsInterState} />
-          </div>
+                    {/* Quantity & price row (only show if product selected or has name) */}
+                    {(item.productId || item.productName) && (
+                      <div className="grid grid-cols-3 gap-2 mt-3">
+                        <div>
+                          <label className="text-[10px] text-muted-foreground uppercase font-medium">Qty</label>
+                          <Input
+                            type="number"
+                            value={item.quantity}
+                            onChange={(e) => updateItem(i, { quantity: parseFloat(e.target.value) || 0 })}
+                            className="h-8"
+                            min="0"
+                            step="0.01"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-muted-foreground uppercase font-medium">Unit Price ₹</label>
+                          <Input
+                            type="number"
+                            value={item.unitPrice}
+                            onChange={(e) => updateItem(i, { unitPrice: parseFloat(e.target.value) || 0 })}
+                            className="h-8"
+                            min="0"
+                            step="0.01"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-muted-foreground uppercase font-medium">GST %</label>
+                          <Select
+                            value={String(item.gstRate)}
+                            onValueChange={(v) => updateItem(i, { gstRate: parseFloat(v) })}
+                          >
+                            <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                              {[0, 5, 12, 18, 28].map(r => <SelectItem key={r} value={String(r)}>{r}%</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    )}
 
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <Label>Items *</Label>
-              <Button variant="outline" size="sm" onClick={addItem} className="h-7 gap-1">
-                <Plus className="w-3.5 h-3.5" /> Add Item
-              </Button>
+                    {/* Line total */}
+                    {(item.productId || item.productName) && item.quantity > 0 && (
+                      <div className="mt-2 flex items-center justify-between text-xs">
+                        <span className="text-muted-foreground">
+                          {item.quantity} × {formatINR(item.unitPrice)} = <span className="font-medium">{formatINR(item.quantity * item.unitPrice)}</span>
+                          {item.gstRate > 0 && <span className="text-muted-foreground"> + {item.gstRate}% GST</span>}
+                        </span>
+                        <span className="font-semibold">
+                          {formatINR(item.quantity * item.unitPrice * (1 + item.gstRate / 100))}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="space-y-2 max-h-72 overflow-y-auto">
-              {items.map((item, i) => (
-                <div key={i} className="grid grid-cols-12 gap-2 items-end p-2 rounded-lg bg-muted/30">
-                  <div className="col-span-12 sm:col-span-4">
-                    {i === 0 && <Label className="text-[10px]">Product</Label>}
-                    <Select value={item.productId} onValueChange={(v) => updateItem(i, 'productId', v)}>
-                      <SelectTrigger className="h-9"><SelectValue placeholder="Select product" /></SelectTrigger>
-                      <SelectContent>
-                        {products.map(p => (
-                          <SelectItem key={p.id} value={p.id}>
-                            {p.name} ({formatINR(isSale ? p.salePrice : p.purchasePrice)})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="col-span-5 sm:col-span-3">
-                    {i === 0 && <Label className="text-[10px]">Name (if not in list)</Label>}
-                    <Input
-                      value={item.productName}
-                      onChange={(e) => updateItem(i, 'productName', e.target.value)}
-                      placeholder="Product name"
-                      className="h-9"
-                    />
-                  </div>
-                  <div className="col-span-3 sm:col-span-1">
-                    {i === 0 && <Label className="text-[10px]">Qty</Label>}
-                    <Input
-                      type="number"
-                      value={item.quantity}
-                      onChange={(e) => updateItem(i, 'quantity', parseFloat(e.target.value) || 0)}
-                      className="h-9"
-                    />
-                  </div>
-                  <div className="col-span-4 sm:col-span-2">
-                    {i === 0 && <Label className="text-[10px]">Price ₹</Label>}
-                    <Input
-                      type="number"
-                      value={item.unitPrice}
-                      onChange={(e) => updateItem(i, 'unitPrice', parseFloat(e.target.value) || 0)}
-                      className="h-9"
-                    />
-                  </div>
-                  <div className="col-span-3 sm:col-span-1">
-                    {i === 0 && <Label className="text-[10px]">GST%</Label>}
-                    <Select value={String(item.gstRate)} onValueChange={(v) => updateItem(i, 'gstRate', parseFloat(v))}>
-                      <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {[0, 5, 12, 18, 28].map(r => <SelectItem key={r} value={String(r)}>{r}%</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="col-span-2 sm:col-span-1 flex justify-end">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-9 w-9 p-0 text-rose-600 hover:bg-rose-50"
-                      onClick={() => removeItem(i)}
-                      disabled={items.length === 1}
-                    >
-                      ✕
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* Notes */}
             <div>
-              <Label>Discount (₹)</Label>
-              <Input type="number" value={discountAmount} onChange={(e) => setDiscountAmount(e.target.value)} placeholder="0" />
-            </div>
-            <div>
-              <Label>Payment Mode</Label>
-              <Select value={paymentMode} onValueChange={setPaymentMode}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {PAYMENT_MODES.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label>Paid Amount (₹)</Label>
+              <Label>Notes (optional)</Label>
               <Input
-                type="number"
-                value={paidAmount}
-                onChange={(e) => setPaidAmount(e.target.value)}
-                placeholder={`Full: ${totalAmount.toFixed(0)}`}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Any additional notes..."
+                className="mt-1"
               />
-              <p className="text-[10px] text-muted-foreground mt-1">Leave empty for full payment</p>
             </div>
           </div>
 
-          <div className="rounded-xl bg-muted/50 p-4 space-y-2">
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Subtotal</span>
-              <span className="font-medium">{formatINR(subtotal)}</span>
+          {/* RIGHT: Party, date, payment, summary */}
+          <div className="space-y-4">
+            {/* Party select with search & add */}
+            <PartySelect
+              value={partyId}
+              onChange={(id) => setPartyId(id)}
+              partyType={isSale ? 'customer' : 'supplier'}
+              label={isSale ? 'Customer' : 'Supplier'}
+            />
+
+            {/* Date & Invoice */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Date</Label>
+                <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="mt-1" />
+              </div>
+              <div>
+                <Label>Invoice No.</Label>
+                <Input value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} placeholder="Optional" className="mt-1" />
+              </div>
             </div>
-            {totalDiscount > 0 && (
+
+            {/* Inter-state toggle */}
+            <div className="flex items-center justify-between rounded-lg bg-muted/50 p-3">
+              <div>
+                <Label className="cursor-pointer text-sm">Inter-state (IGST)</Label>
+                <p className="text-[11px] text-muted-foreground mt-0.5">Toggle ON if other state</p>
+              </div>
+              <Switch checked={isInterState} onCheckedChange={setIsInterState} />
+            </div>
+
+            {/* Discount & Payment */}
+            <div className="space-y-3">
+              <div>
+                <Label>Discount (₹)</Label>
+                <Input type="number" value={discountAmount} onChange={(e) => setDiscountAmount(e.target.value)} placeholder="0" className="mt-1" />
+              </div>
+              <div>
+                <Label>Payment Mode</Label>
+                <Select value={paymentMode} onValueChange={setPaymentMode}>
+                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {PAYMENT_MODES.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Paid Amount (₹)</Label>
+                <Input
+                  type="number"
+                  value={paidAmount}
+                  onChange={(e) => setPaidAmount(e.target.value)}
+                  placeholder={`Full: ${totalAmount.toFixed(0)}`}
+                  className="mt-1"
+                />
+                <p className="text-[10px] text-muted-foreground mt-1">Leave empty for full payment</p>
+              </div>
+            </div>
+
+            {/* Live summary */}
+            <div className="rounded-xl bg-muted/50 p-4 space-y-2 sticky bottom-0">
               <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Discount</span>
-                <span className="font-medium text-rose-600">-{formatINR(totalDiscount)}</span>
+                <span className="text-muted-foreground">Subtotal</span>
+                <span className="font-medium">{formatINR(subtotal)}</span>
               </div>
-            )}
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">GST Total</span>
-              <span className="font-medium">{formatINR(totalGst)}</span>
-            </div>
-            {!isInterState ? (
-              <div className="flex items-center justify-between text-xs text-muted-foreground pl-4">
-                <span>CGST + SGST</span>
-                <span>{formatINR(cgst)} + {formatINR(sgst)}</span>
-              </div>
-            ) : (
-              <div className="flex items-center justify-between text-xs text-muted-foreground pl-4">
-                <span>IGST</span>
-                <span>{formatINR(igst)}</span>
-              </div>
-            )}
-            <div className="border-t border-border pt-2 flex items-center justify-between">
-              <span className="font-semibold">Total Payable</span>
-              <span className="text-lg font-bold">{formatINR(totalAmount)}</span>
-            </div>
-            {finalPaid < totalAmount && (
+              {totalDiscount > 0 && (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Discount</span>
+                  <span className="font-medium text-rose-600">-{formatINR(totalDiscount)}</span>
+                </div>
+              )}
               <div className="flex items-center justify-between text-sm">
-                <span className="text-rose-600">Outstanding</span>
-                <span className="font-medium text-rose-600">{formatINR(totalAmount - finalPaid)}</span>
+                <span className="text-muted-foreground">GST Total</span>
+                <span className="font-medium">{formatINR(totalGst)}</span>
               </div>
-            )}
-            {isSale && totalProfit > 0 && (
-              <div className="flex items-center justify-between text-sm bg-emerald-50 -mx-4 -mb-4 px-4 py-2 rounded-b-xl mt-2">
-                <span className="text-emerald-700 font-medium flex items-center gap-1">
-                  <TrendingUp className="w-3.5 h-3.5" /> Gross Profit
-                </span>
-                <span className="font-bold text-emerald-700">{formatINR(totalProfit)} ({totalAmount > 0 ? ((totalProfit / totalAmount) * 100).toFixed(1) : 0}%)</span>
+              {!isInterState ? (
+                <div className="flex items-center justify-between text-xs text-muted-foreground pl-4">
+                  <span>CGST + SGST</span>
+                  <span>{formatINR(cgst)} + {formatINR(sgst)}</span>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between text-xs text-muted-foreground pl-4">
+                  <span>IGST</span>
+                  <span>{formatINR(igst)}</span>
+                </div>
+              )}
+              <div className="border-t border-border pt-2 flex items-center justify-between">
+                <span className="font-semibold">Total Payable</span>
+                <span className="text-lg font-bold">{formatINR(totalAmount)}</span>
               </div>
-            )}
+              {finalPaid < totalAmount && (
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-rose-600">Outstanding</span>
+                  <span className="font-medium text-rose-600">{formatINR(totalAmount - finalPaid)}</span>
+                </div>
+              )}
+              {isSale && totalProfit > 0 && (
+                <div className="flex items-center justify-between text-sm bg-emerald-50 -mx-4 -mb-4 px-4 py-2 rounded-b-xl mt-2">
+                  <span className="text-emerald-700 font-medium flex items-center gap-1">
+                    <TrendingUp className="w-3.5 h-3.5" /> Gross Profit
+                  </span>
+                  <span className="font-bold text-emerald-700">{formatINR(totalProfit)} ({totalAmount > 0 ? ((totalProfit / totalAmount) * 100).toFixed(1) : 0}%)</span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="mt-4">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button onClick={handleSave} disabled={saving} className={isSale ? 'bg-gradient-emerald' : 'bg-gradient-saffron'}>
             {saving ? 'Saving...' : `Save ${isSale ? 'Sale' : 'Purchase'}`}

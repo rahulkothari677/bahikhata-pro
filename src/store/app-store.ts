@@ -20,6 +20,10 @@ interface AppState {
   setView: (v: ViewType) => void
   sidebarOpen: boolean
   setSidebarOpen: (open: boolean) => void
+  // Collapsed sidebar (desktop)
+  sidebarCollapsed: boolean
+  toggleSidebarCollapsed: () => void
+  setSidebarCollapsed: (c: boolean) => void
   // Refresh trigger
   refreshKey: number
   triggerRefresh: () => void
@@ -57,6 +61,9 @@ export const useAppStore = create<AppState>((set) => ({
   setView: (v) => set({ currentView: v, sidebarOpen: false }),
   sidebarOpen: false,
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
+  sidebarCollapsed: false,
+  toggleSidebarCollapsed: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
+  setSidebarCollapsed: (c) => set({ sidebarCollapsed: c }),
   refreshKey: 0,
   triggerRefresh: () => set((s) => ({ refreshKey: s.refreshKey + 1 })),
   scannerResult: null,

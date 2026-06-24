@@ -1,21 +1,22 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
+import { useState } from 'react'
 import { useAppStore } from '@/store/app-store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Progress } from '@/components/ui/progress'
 import { Skeleton } from '@/components/ui/skeleton'
+import { DateRangePicker, getPresetRange, type DateRange, type DatePreset } from '@/components/common/DateRangePicker'
 import {
-  TrendingUp, TrendingDown, Wallet, ShoppingBag, Package,
+  TrendingUp, TrendingDown, Wallet, Package,
   ArrowUpRight, ArrowDownRight, AlertTriangle, IndianRupee,
-  Receipt, Users, Boxes, PiggyBank, ScanLine, ArrowRight,
+  Receipt, Boxes, PiggyBank, ScanLine, ArrowRight,
 } from 'lucide-react'
 import {
-  Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Legend,
-  Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip,
-  XAxis, YAxis, RadialBar, RadialBarChart,
+  Area, AreaChart, Bar, BarChart, CartesianGrid, Cell,
+  Pie, PieChart, ResponsiveContainer, Tooltip,
+  XAxis, YAxis,
 } from 'recharts'
 import { formatINR, formatINRCompact, relativeTime, cn } from '@/lib/utils'
 import { motion } from 'framer-motion'
@@ -23,21 +24,30 @@ import { motion } from 'framer-motion'
 const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)']
 
 export function Dashboard() {
-  const { setView, refreshKey, setSelectedTransactionId, setSelectedPartyId, setPreviousView } = useAppStore()
+  const { setView, refreshKey, setSelectedTransactionId, setPreviousView } = useAppStore()
+  const [dateRange, setDateRange] = useState<DateRange>(() => getPresetRange('thisMonth'))
+  const [datePreset, setDatePreset] = useState<DatePreset>('thisMonth')
 
   const { data, isLoading } = useQuery({
-    queryKey: ['dashboard', refreshKey],
+    queryKey: ['dashboard', refreshKey, dateRange.from.toISOString(), dateRange.to.toISOString()],
     queryFn: async () => {
-      const r = await fetch('/api/dashboard')
+      const r = await fetch(`/api/dashboard?from=${dateRange.from.toISOString()}&to=${dateRange.to.toISOString()}`)
       return r.json()
     },
   })
+
+  const handleDateChange = (range: DateRange, preset: DatePreset) => {
+    setDateRange(range)
+    setDatePreset(preset)
+  }
 
   if (isLoading || !data) {
     return <DashboardSkeleton />
   }
 
-  const { kpis, salesTrend, monthlyTrend, topProducts, categoryBreakdown, paymentModeSplit, lowStockProducts, gstSummary, recentTransactions, setting } = data
+  const { kpis, salesTrend, topProducts, categoryBreakdown, paymentModeSplit, lowStockProducts, gstSummary, recentTransactions, setting, dateRange: serverRange } = data
+
+  const rangeLabel = datePreset === 'custom' ? 'Selected Period' : datePreset === 'thisMonth' ? 'This Period' : datePreset === 'lastMonth' ? 'Last Month' : 'Selected Period'
 
   return (
     <div className="space-y-5">
@@ -67,6 +77,15 @@ export function Dashboard() {
         </div>
       </motion.div>
 
+      {/* Date range selector + KPI header */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h3 className="text-base font-semibold">Business Overview</h3>
+          <p className="text-xs text-muted-foreground">Filter all charts and stats by date range</p>
+        </div>
+        <DateRangePicker value={dateRange} onChange={handleDateChange} />
+      </div>
+
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
         <KPICard
@@ -84,19 +103,19 @@ export function Dashboard() {
           subtitle={`Margin ${kpis.todayRevenue > 0 ? ((kpis.todayProfit / kpis.todayRevenue) * 100).toFixed(1) : 0}%`}
         />
         <KPICard
-          title="This Month Revenue"
-          value={formatINR(kpis.monthRevenue)}
+          title={`${rangeLabel} Revenue`}
+          value={formatINR(kpis.rangeRevenue)}
           icon={Wallet}
           gradient="from-rose-500 to-pink-600"
-          subtitle={`${kpis.revenueGrowth >= 0 ? '↑' : '↓'} ${Math.abs(kpis.revenueGrowth).toFixed(1)}% vs last month`}
+          subtitle={`${kpis.rangeTxnCount} sales • ${kpis.revenueGrowth >= 0 ? '↑' : '↓'} ${Math.abs(kpis.revenueGrowth).toFixed(1)}% vs prev`}
           trend={kpis.revenueGrowth >= 0 ? 'up' : 'down'}
         />
         <KPICard
-          title="Net Profit (Month)"
+          title={`Net Profit (${rangeLabel})`}
           value={formatINR(kpis.netProfit)}
           icon={PiggyBank}
           gradient="from-violet-500 to-purple-600"
-          subtitle={`${kpis.profitGrowth >= 0 ? '↑' : '↓'} ${Math.abs(kpis.profitGrowth).toFixed(1)}% profit growth`}
+          subtitle={`${kpis.profitGrowth >= 0 ? '↑' : '↓'} ${Math.abs(kpis.profitGrowth).toFixed(1)}% profit trend`}
           trend={kpis.profitGrowth >= 0 ? 'up' : 'down'}
         />
       </div>
@@ -125,7 +144,7 @@ export function Dashboard() {
           onClick={() => setView('inventory')}
         />
         <MiniStatCard
-          label="GST Payable ( Month )"
+          label={`GST (${rangeLabel})`}
           value={formatINR(gstSummary.netPayable)}
           icon={Receipt}
           color="text-violet-600"
@@ -139,11 +158,11 @@ export function Dashboard() {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-base font-semibold">Sales & Profit Trend</CardTitle>
-              <p className="text-xs text-muted-foreground mt-0.5">Last 14 days performance</p>
+              <p className="text-xs text-muted-foreground mt-0.5">For selected date range</p>
             </div>
             <Badge variant="secondary" className="gap-1">
               <TrendingUp className="w-3 h-3" />
-              Live
+              {salesTrend.length} points
             </Badge>
           </div>
         </CardHeader>
@@ -180,16 +199,18 @@ export function Dashboard() {
         <Card className="shadow-card border-border/60 lg:col-span-2">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-base font-semibold">Top Selling Products</CardTitle>
+              <div>
+                <CardTitle className="text-base font-semibold">Top Selling Products</CardTitle>
+                <p className="text-xs text-muted-foreground">For selected date range</p>
+              </div>
               <Button variant="ghost" size="sm" className="text-xs h-7 gap-1" onClick={() => setView('inventory')}>
                 View all <ArrowRight className="w-3 h-3" />
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground">Last 30 days by revenue</p>
           </CardHeader>
           <CardContent>
             {topProducts.length === 0 ? (
-              <div className="text-center py-10 text-sm text-muted-foreground">No sales in last 30 days</div>
+              <div className="text-center py-10 text-sm text-muted-foreground">No sales in selected range</div>
             ) : (
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={topProducts} layout="vertical" margin={{ top: 0, right: 10, left: 0, bottom: 0 }}>
@@ -213,7 +234,7 @@ export function Dashboard() {
         <Card className="shadow-card border-border/60">
           <CardHeader className="pb-2">
             <CardTitle className="text-base font-semibold">Payment Modes</CardTitle>
-            <p className="text-xs text-muted-foreground">Last 30 days</p>
+            <p className="text-xs text-muted-foreground">For selected date range</p>
           </CardHeader>
           <CardContent>
             {paymentModeSplit.length === 0 ? (
@@ -254,47 +275,22 @@ export function Dashboard() {
         </Card>
       </div>
 
-      {/* 6-month trend & category */}
+      {/* Category breakdown & low stock */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Monthly revenue vs expenses */}
+        {/* Category breakdown */}
         <Card className="shadow-card border-border/60 lg:col-span-2">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base font-semibold">6-Month Performance</CardTitle>
-            <p className="text-xs text-muted-foreground">Revenue, profit & expenses trend</p>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={monthlyTrend} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.91 0.01 60)" vertical={false} />
-                <XAxis dataKey="month" tick={{ fontSize: 11, fill: 'oklch(0.52 0.02 30)' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: 'oklch(0.52 0.02 30)' }} axisLine={false} tickLine={false} tickFormatter={(v) => formatINRCompact(v)} />
-                <Tooltip
-                  contentStyle={{ borderRadius: 12, border: '1px solid oklch(0.91 0.01 60)', fontSize: 12 }}
-                  formatter={(v: number) => formatINR(v)}
-                />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="revenue" fill="oklch(0.62 0.18 42)" radius={[6, 6, 0, 0]} name="Revenue" barSize={28} />
-                <Bar dataKey="profit" fill="oklch(0.62 0.15 155)" radius={[6, 6, 0, 0]} name="Profit" barSize={28} />
-                <Bar dataKey="expenses" fill="oklch(0.65 0.22 15)" radius={[6, 6, 0, 0]} name="Expenses" barSize={28} />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        {/* Category breakdown */}
-        <Card className="shadow-card border-border/60">
-          <CardHeader className="pb-2">
             <CardTitle className="text-base font-semibold">Sales by Category</CardTitle>
-            <p className="text-xs text-muted-foreground">Last 30 days</p>
+            <p className="text-xs text-muted-foreground">For selected date range</p>
           </CardHeader>
           <CardContent>
             {categoryBreakdown.length === 0 ? (
-              <div className="text-center py-10 text-sm text-muted-foreground">No data</div>
+              <div className="text-center py-10 text-sm text-muted-foreground">No sales in selected range</div>
             ) : (
-              <div className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
                 {(() => {
-                  const total = categoryBreakdown.reduce((s, c) => s + c.value, 0)
-                  return categoryBreakdown.slice(0, 6).map((cat, i) => {
+                  const total = categoryBreakdown.reduce((s: number, c: any) => s + c.value, 0)
+                  return categoryBreakdown.slice(0, 8).map((cat: any, i: number) => {
                     const pct = (cat.value / total) * 100
                     return (
                       <div key={cat.name}>
@@ -316,11 +312,8 @@ export function Dashboard() {
             )}
           </CardContent>
         </Card>
-      </div>
 
-      {/* Low stock alerts & recent transactions */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Low stock alert */}
+        {/* Low stock alerts */}
         <Card className="shadow-card border-border/60">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
@@ -361,7 +354,10 @@ export function Dashboard() {
             )}
           </CardContent>
         </Card>
+      </div>
 
+      {/* Recent transactions & GST summary */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Recent transactions */}
         <Card className="shadow-card border-border/60">
           <CardHeader className="pb-2">
@@ -387,9 +383,7 @@ export function Dashboard() {
               <div className="space-y-2 max-h-72 overflow-y-auto">
                 {recentTransactions.map((t: any) => {
                   const isSale = t.type === 'sale'
-                  const isPurchase = t.type === 'purchase'
                   const isIncome = t.type === 'income'
-                  const isExpense = t.type === 'expense'
                   const isInflow = isSale || isIncome
                   return (
                     <button
@@ -437,27 +431,27 @@ export function Dashboard() {
             )}
           </CardContent>
         </Card>
-      </div>
 
-      {/* GST summary mini */}
-      <Card className="shadow-card border-border/60">
-        <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-base font-semibold">GST Summary (This Month)</CardTitle>
-            <Button variant="ghost" size="sm" className="text-xs h-7 gap-1" onClick={() => setView('reports')}>
-              Full report <ArrowRight className="w-3 h-3" />
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <GstMiniStat label="Output Tax (Sales)" value={gstSummary.outputTax} color="text-amber-600" />
-            <GstMiniStat label="Input Tax (Purchase)" value={gstSummary.inputTax} color="text-emerald-600" />
-            <GstMiniStat label="CGST + SGST" value={gstSummary.cgst + gstSummary.sgst} color="text-violet-600" />
-            <GstMiniStat label="Net GST Payable" value={gstSummary.netPayable} color={gstSummary.netPayable >= 0 ? 'text-rose-600' : 'text-emerald-600'} highlight />
-          </div>
-        </CardContent>
-      </Card>
+        {/* GST summary */}
+        <Card className="shadow-card border-border/60">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base font-semibold">GST Summary ({rangeLabel})</CardTitle>
+              <Button variant="ghost" size="sm" className="text-xs h-7 gap-1" onClick={() => setView('reports')}>
+                Full report <ArrowRight className="w-3 h-3" />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <GstMiniStat label="Output Tax (Sales)" value={gstSummary.outputTax} color="text-amber-600" />
+              <GstMiniStat label="Input Tax (Purchase)" value={gstSummary.inputTax} color="text-emerald-600" />
+              <GstMiniStat label="CGST + SGST" value={gstSummary.cgst + gstSummary.sgst} color="text-violet-600" />
+              <GstMiniStat label="Net GST Payable" value={gstSummary.netPayable} color={gstSummary.netPayable >= 0 ? 'text-rose-600' : 'text-emerald-600'} highlight />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   )
 }

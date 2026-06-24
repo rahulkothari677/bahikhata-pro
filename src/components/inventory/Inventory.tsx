@@ -178,7 +178,7 @@ export function Inventory() {
         </CardContent>
       </Card>
 
-      {/* Toolbar */}
+      {/* Toolbar - removed duplicate Add Product button (it's in header now) */}
       <Card className="shadow-card border-border/60">
         <CardContent className="p-3 lg:p-4">
           <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
@@ -202,12 +202,6 @@ export function Inventory() {
               </SelectContent>
             </Select>
             <ViewModeToggle mode={inventoryViewMode} onChange={setInventoryViewMode} />
-            <Button
-              onClick={() => { setEditingProduct(null); setDialogOpen(true) }}
-              className="bg-gradient-saffron gap-2 shadow-md"
-            >
-              <Plus className="w-4 h-4" /> <span className="hidden sm:inline">Add Product</span>
-            </Button>
           </div>
 
           {/* Breadcrumb for active category */}
