@@ -136,7 +136,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     // Apply ALL theme variables via inline style override
     root.style.setProperty('--primary', palette.primary)
     root.style.setProperty('--ring', palette.ring)
-    // Only override sidebar variables in LIGHT mode (dark mode keeps its own dark sidebar)
+
+    // In LIGHT mode: override sidebar to match the theme color (light sidebar)
     if (!darkMode) {
       root.style.setProperty('--background', palette.background)
       root.style.setProperty('--sidebar', palette.sidebar)
@@ -146,6 +147,17 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       root.style.setProperty('--sidebar-accent', palette.sidebarAccent)
       root.style.setProperty('--sidebar-accent-foreground', palette.sidebarAccentForeground)
       root.style.setProperty('--sidebar-border', palette.sidebarBorder)
+    } else {
+      // In DARK mode: CLEAR the inline overrides so the .dark CSS class takes over
+      // This lets the dark mode CSS (globals.css) control the sidebar colors
+      root.style.removeProperty('--background')
+      root.style.removeProperty('--sidebar')
+      root.style.removeProperty('--sidebar-foreground')
+      root.style.removeProperty('--sidebar-primary')
+      root.style.removeProperty('--sidebar-primary-foreground')
+      root.style.removeProperty('--sidebar-accent')
+      root.style.removeProperty('--sidebar-accent-foreground')
+      root.style.removeProperty('--sidebar-border')
     }
     root.style.setProperty('--chart-1', palette.charts[0])
     root.style.setProperty('--chart-2', palette.charts[1])
