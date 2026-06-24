@@ -166,6 +166,7 @@ export function IncomeExpense() {
                           </div>
                           <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-0.5">
                             <span>{formatDate(t.date)}</span>
+                            {t.payeeName && <span>• {isIncome ? 'From' : 'To'}: {t.payeeName}</span>}
                             {t.notes && <span>• {t.notes}</span>}
                           </div>
                         </div>
@@ -275,18 +276,26 @@ function IncomeExpenseDialog({ open, onOpenChange, type, onSuccess }: {
   const { toast } = useToast()
   const [amount, setAmount] = useState('')
   const [category, setCategory] = useState('')
+  const [customCategory, setCustomCategory] = useState('')
+  const [isCustomCategory, setIsCustomCategory] = useState(false)
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
   const [paymentMode, setPaymentMode] = useState('cash')
   const [notes, setNotes] = useState('')
+  const [payeeName, setPayeeName] = useState('')
+  const [payeePhone, setPayeePhone] = useState('')
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     if (open) {
       setAmount('')
       setCategory('')
+      setCustomCategory('')
+      setIsCustomCategory(false)
       setDate(new Date().toISOString().slice(0, 10))
       setPaymentMode('cash')
       setNotes('')
+      setPayeeName('')
+      setPayeePhone('')
     }
   }, [open, type])
 
@@ -298,8 +307,9 @@ function IncomeExpenseDialog({ open, onOpenChange, type, onSuccess }: {
       toast({ title: 'Enter valid amount', variant: 'destructive' })
       return
     }
-    if (!category) {
-      toast({ title: 'Select a category', variant: 'destructive' })
+    const finalCategory = isCustomCategory ? customCategory.trim() : category
+    if (!finalCategory) {
+      toast({ title: 'Select or enter a category', variant: 'destructive' })
       return
     }
     setSaving(true)
@@ -309,11 +319,13 @@ function IncomeExpenseDialog({ open, onOpenChange, type, onSuccess }: {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           type,
-          category,
+          category: finalCategory,
           totalAmount: amt,
           date,
           paymentMode,
           notes,
+          payeeName: payeeName.trim() || null,
+          payeePhone: payeePhone.trim() || null,
         }),
       })
       if (!r.ok) throw new Error('Failed')
@@ -329,7 +341,7 @@ function IncomeExpenseDialog({ open, onOpenChange, type, onSuccess }: {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {isExpense
@@ -348,17 +360,62 @@ function IncomeExpenseDialog({ open, onOpenChange, type, onSuccess }: {
               placeholder="0"
               className="text-lg font-semibold"
               autoFocus
+              min="0"
+              step="0.01"
             />
           </div>
+
+          {/* Category with custom option */}
           <div>
-            <Label>Category *</Label>
-            <Select value={category} onValueChange={setCategory}>
-              <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
-              <SelectContent>
-                {categories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <div className="flex items-center justify-between mb-1">
+              <Label>Category *</Label>
+              <button
+                type="button"
+                onClick={() => setIsCustomCategory(!isCustomCategory)}
+                className="text-[11px] text-primary hover:underline"
+              >
+                {isCustomCategory ? '← Choose from list' : '+ Custom category'}
+              </button>
+            </div>
+            {isCustomCategory ? (
+              <Input
+                value={customCategory}
+                onChange={(e) => setCustomCategory(e.target.value)}
+                placeholder="Enter custom category name"
+                autoFocus
+              />
+            ) : (
+              <Select value={category} onValueChange={setCategory}>
+                <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
+                <SelectContent>
+                  {categories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )}
           </div>
+
+          {/* Payee info - who you paid / received from */}
+          <div className="rounded-lg bg-muted/30 p-3 space-y-2">
+            <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+              {isExpense ? 'Paid To' : 'Received From'} (optional)
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              <Input
+                value={payeeName}
+                onChange={(e) => setPayeeName(e.target.value)}
+                placeholder="Name"
+                className="h-9"
+              />
+              <Input
+                value={payeePhone}
+                onChange={(e) => setPayeePhone(e.target.value)}
+                placeholder="Mobile number"
+                className="h-9"
+                inputMode="numeric"
+              />
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label>Date</Label>

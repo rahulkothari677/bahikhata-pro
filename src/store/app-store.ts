@@ -37,6 +37,8 @@ export type FeatureKey =
 
 export type FeatureFlags = Record<FeatureKey, boolean>
 
+export type ThemeColor = 'saffron' | 'emerald' | 'blue' | 'violet' | 'rose' | 'teal'
+
 const DEFAULT_FEATURES: FeatureFlags = {
   darkMode: false,
   keyboardShortcuts: true,
@@ -91,6 +93,9 @@ interface AppState {
   features: FeatureFlags
   setFeature: (key: FeatureKey, enabled: boolean) => void
   resetFeatures: () => void
+  // Theme color - persisted
+  themeColor: ThemeColor
+  setThemeColor: (c: ThemeColor) => void
   // Global search
   searchOpen: boolean
   setSearchOpen: (open: boolean) => void
@@ -134,6 +139,8 @@ export const useAppStore = create<AppState>()(
       features: DEFAULT_FEATURES,
       setFeature: (key, enabled) => set((s) => ({ features: { ...s.features, [key]: enabled } })),
       resetFeatures: () => set({ features: DEFAULT_FEATURES }),
+      themeColor: 'saffron',
+      setThemeColor: (c) => set({ themeColor: c }),
       searchOpen: false,
       setSearchOpen: (open) => set({ searchOpen: open }),
     }),
@@ -146,6 +153,7 @@ export const useAppStore = create<AppState>()(
         partiesViewMode: state.partiesViewMode,
         transactionsViewMode: state.transactionsViewMode,
         features: state.features,
+        themeColor: state.themeColor,
       }),
     }
   )

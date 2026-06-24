@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useAppStore } from '@/store/app-store'
-import { Dialog, DialogContent } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Search, ShoppingCart, Truck, Package, Users, Receipt, ArrowRight, TrendingUp, IndianRupee } from 'lucide-react'
@@ -154,6 +154,8 @@ export function GlobalSearch() {
   return (
     <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
       <DialogContent className="max-w-2xl p-0 gap-0 overflow-hidden">
+        <DialogTitle className="sr-only">Global Search</DialogTitle>
+        <DialogDescription className="sr-only">Search products, parties, and transactions</DialogDescription>
         {/* Search input */}
         <div className="flex items-center gap-3 p-4 border-b border-border">
           <Search className="w-5 h-5 text-muted-foreground" />

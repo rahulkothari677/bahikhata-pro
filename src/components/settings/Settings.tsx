@@ -11,10 +11,11 @@ import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/hooks/use-toast'
 import { toast as sonnerToast } from 'sonner'
 import { useAppStore, type FeatureKey } from '@/store/app-store'
+import { THEME_OPTIONS } from '@/components/providers/ThemeProvider'
 import {
   Store, Save, Database, Trash2, AlertTriangle, Moon, Keyboard,
   Search, MessageCircle, Sparkles, Bell, Repeat, FileSpreadsheet,
-  Users, Package, ScanLine, TrendingUp, Smartphone, RotateCcw,
+  Users, Package, ScanLine, TrendingUp, Smartphone, RotateCcw, Palette, Check,
 } from 'lucide-react'
 
 const FEATURE_CONFIG: { key: FeatureKey; label: string; description: string; icon: any }[] = [
@@ -37,7 +38,7 @@ const FEATURE_CONFIG: { key: FeatureKey; label: string; description: string; ico
 export function Settings() {
   const { toast } = useToast()
   const queryClient = useQueryClient()
-  const { features, setFeature, resetFeatures } = useAppStore()
+  const { features, setFeature, resetFeatures, themeColor, setThemeColor } = useAppStore()
   const [form, setForm] = useState({
     shopName: '', ownerName: '', phone: '', email: '',
     gstin: '', state: '', address: '',
@@ -173,6 +174,43 @@ export function Settings() {
                 </Button>
               </div>
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Theme Color Picker */}
+      <Card className="shadow-card border-border/60">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Palette className="w-5 h-5 text-primary" /> Theme Color
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">Choose your preferred accent color</p>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+            {THEME_OPTIONS.map((theme) => (
+              <button
+                key={theme.id}
+                onClick={() => {
+                  setThemeColor(theme.id)
+                  sonnerToast.success(`${theme.label} theme applied`)
+                }}
+                className={`group relative rounded-xl p-3 border-2 transition flex flex-col items-center gap-2 ${
+                  themeColor === theme.id ? 'border-primary shadow-md' : 'border-border hover:border-primary/40'
+                }`}
+              >
+                <div
+                  className="w-10 h-10 rounded-full shadow-sm"
+                  style={{ background: theme.gradient }}
+                />
+                <span className="text-[11px] font-medium">{theme.label}</span>
+                {themeColor === theme.id && (
+                  <div className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
+                    <Check className="w-3 h-3" />
+                  </div>
+                )}
+              </button>
+            ))}
           </div>
         </CardContent>
       </Card>

@@ -360,7 +360,7 @@ function StockReport({ data }: { data: any }) {
                 </tr>
               </thead>
               <tbody>
-                {data.products.slice(0, 20).map((p: any) => (
+                {(data?.products || []).slice(0, 20).map((p: any) => (
                   <tr key={p.id} className="border-b border-border/50 hover:bg-muted/30">
                     <td className="py-2 px-2 font-medium">{p.name}</td>
                     <td className="py-2 px-2 text-muted-foreground">{p.category || '—'}</td>
@@ -380,7 +380,7 @@ function StockReport({ data }: { data: any }) {
                 ))}
               </tbody>
             </table>
-            {data.products.length > 20 && (
+            {(data?.products?.length || 0) > 20 && (
               <p className="text-xs text-muted-foreground text-center mt-3">Showing top 20 of {data.products.length} products</p>
             )}
           </div>
@@ -413,7 +413,7 @@ function PartyReport({ data }: { data: any }) {
                 </tr>
               </thead>
               <tbody>
-                {data.parties.map((p: any) => (
+                {(data?.parties || []).map((p: any) => (
                   <tr key={p.party.id} className="border-b border-border/50 hover:bg-muted/30">
                     <td className="py-2 px-2 font-medium">{p.party.name}</td>
                     <td className="py-2 px-2">
@@ -430,7 +430,7 @@ function PartyReport({ data }: { data: any }) {
                 ))}
               </tbody>
             </table>
-            {data.parties.length === 0 && (
+            {(!data?.parties || data.parties.length === 0) && (
               <p className="text-center py-8 text-sm text-muted-foreground">No party activity in this period</p>
             )}
           </div>

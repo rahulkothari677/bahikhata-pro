@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { type, partyId, date, items, discountAmount, paymentMode, isInterState, notes, invoiceNo, category, paidAmount } = body
+    const { type, partyId, date, items, discountAmount, paymentMode, isInterState, notes, invoiceNo, category, paidAmount, payeeName, payeePhone } = body
 
     // Calculate totals
     let subtotal = 0
@@ -60,6 +60,8 @@ export async function POST(req: NextRequest) {
           paymentMode: paymentMode || 'cash',
           notes: notes || null,
           invoiceNo: invoiceNo || null,
+          payeeName: payeeName || null,
+          payeePhone: payeePhone || null,
         },
         include: { items: true, party: true },
       })

@@ -71,6 +71,9 @@ model Transaction {
   notes          String?
   // For income/expense (no items)
   category       String?  // e.g. rent, salary, electricity for expenses; commission etc for income
+  // Payee info for income/expense (who you paid or received from)
+  payeeName      String?  // name of person you paid / received from
+  payeePhone     String?  // mobile number of payee
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
