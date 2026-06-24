@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useAppStore } from '@/store/app-store'
+import { SmartInsights } from '@/components/dashboard/SmartInsights'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -481,6 +482,9 @@ export function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Smart Insights - AI-powered alerts */}
+      {kpis && <SmartInsights />}
     </div>
   )
 }

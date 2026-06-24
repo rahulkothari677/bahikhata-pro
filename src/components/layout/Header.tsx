@@ -1,7 +1,7 @@
 'use client'
 
 import { useAppStore, type ViewType } from '@/store/app-store'
-import { Menu, Plus, Sparkles, ScanLine, ArrowLeft } from 'lucide-react'
+import { Menu, Plus, Sparkles, ScanLine, ArrowLeft, Search, Sun, Moon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useQuery } from '@tanstack/react-query'
 
@@ -25,7 +25,7 @@ const viewTitles: Record<string, { title: string; subtitle: string }> = {
 const dialogViews: ViewType[] = ['dashboard', 'inventory', 'sales', 'purchases', 'income-expense', 'parties']
 
 export function Header() {
-  const { currentView, setSidebarOpen, setView, fireTriggerNewEntry, previousView, setPreviousView } = useAppStore()
+  const { currentView, setSidebarOpen, setView, fireTriggerNewEntry, previousView, setPreviousView, features, setFeature, setSearchOpen } = useAppStore()
   const info = viewTitles[currentView] || { title: 'BahiKhata Pro', subtitle: '' }
 
   const { data: settingData } = useQuery({
@@ -106,6 +106,33 @@ export function Header() {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Global Search button (Ctrl+K) */}
+          {features.globalSearch && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setSearchOpen(true)}
+              className="hidden sm:flex gap-2"
+              title="Search (Ctrl+K)"
+            >
+              <Search className="w-4 h-4" />
+              <span className="hidden lg:inline text-xs text-muted-foreground">Ctrl+K</span>
+            </Button>
+          )}
+
+          {/* Dark mode toggle */}
+          {features.darkMode !== undefined && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setFeature('darkMode', !features.darkMode)}
+              className="h-9 w-9 p-0"
+              title={features.darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+            >
+              {features.darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+            </Button>
+          )}
+
           {/* Quick action: AI Scan - hide on scanner page */}
           {currentView !== 'scanner' && (
             <Button

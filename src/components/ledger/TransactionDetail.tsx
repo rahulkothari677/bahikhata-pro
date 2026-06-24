@@ -19,6 +19,7 @@ import {
   Edit2, Trash2, Printer, Download, User, Calendar, Receipt,
   ShoppingCart, Truck, ArrowDownRight, ArrowUpRight, X, Plus,
   IndianRupee, FileText, Phone, Building2, MapPin, TrendingUp,
+  MessageCircle,
 } from 'lucide-react'
 
 const PAYMENT_MODES = [
@@ -70,7 +71,6 @@ export function TransactionDetail() {
   }
 
   const handleDownload = () => {
-    // Generate a printable HTML and download
     if (!txn) return
     const html = generateInvoiceHTML(txn)
     const blob = new Blob([html], { type: 'text/html' })
@@ -81,6 +81,24 @@ export function TransactionDetail() {
     a.click()
     URL.revokeObjectURL(url)
     sonnerToast.success('Invoice downloaded')
+  }
+
+  const handleWhatsAppShare = async () => {
+    if (!txn) return
+    try {
+      const r = await fetch('/api/whatsapp-invoice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transactionId: txn.id }),
+      })
+      const data = await r.json()
+      if (data.whatsappUrl) {
+        window.open(data.whatsappUrl, '_blank')
+        sonnerToast.success('Opening WhatsApp...')
+      }
+    } catch {
+      sonnerToast.error('Failed to generate invoice')
+    }
   }
 
   if (isLoading || !txn) {
@@ -111,6 +129,9 @@ export function TransactionDetail() {
         </Button>
         <Button variant="outline" size="sm" onClick={handleDownload} className="gap-2">
           <Download className="w-4 h-4" /> Download
+        </Button>
+        <Button variant="outline" size="sm" onClick={handleWhatsAppShare} className="gap-2 border-emerald-300 text-emerald-700 hover:bg-emerald-50">
+          <MessageCircle className="w-4 h-4" /> WhatsApp
         </Button>
         <div className="flex-1" />
         <Button variant="outline" size="sm" onClick={handleDelete} className="gap-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50">

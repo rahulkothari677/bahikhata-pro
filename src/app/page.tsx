@@ -17,9 +17,11 @@ import { PartyProfile } from '@/components/parties/PartyProfile'
 import { BillScanner } from '@/components/scanner/BillScanner'
 import { Reports } from '@/components/reports/Reports'
 import { Settings } from '@/components/settings/Settings'
+import { KeyboardShortcuts } from '@/components/common/KeyboardShortcuts'
+import { GlobalSearch } from '@/components/common/GlobalSearch'
 
 export default function Home() {
-  const { currentView } = useAppStore()
+  const { currentView, features } = useAppStore()
   const [onboardingDismissed, setOnboardingDismissed] = useState(false)
 
   // Check if data exists — if not, show onboarding
@@ -36,6 +38,11 @@ export default function Home() {
 
   return (
     <div className="flex min-h-screen bg-background">
+      {/* Global keyboard shortcuts handler */}
+      {features.keyboardShortcuts && <KeyboardShortcuts />}
+      {/* Global search command palette */}
+      {features.globalSearch && <GlobalSearch />}
+
       <Sidebar />
 
       <div className="flex-1 flex flex-col min-w-0">
