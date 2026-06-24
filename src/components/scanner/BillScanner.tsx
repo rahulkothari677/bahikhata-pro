@@ -37,10 +37,51 @@ export function BillScanner() {
       return
     }
 
-    // Convert to base64 for preview
-    const reader = new FileReader()
-    reader.onload = async (e) => {
-      const base64 = e.target?.result as string
+    // Compress and resize image on client side before sending to API
+    // This prevents Vercel serverless timeout on large phone photos
+    const compressImage = (file: File): Promise<string> => {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = (e) => {
+          const img = new Image()
+          img.onload = () => {
+            // Max dimensions: 1200x1600 (enough for AI to read, small enough for API)
+            const MAX_WIDTH = 1200
+            const MAX_HEIGHT = 1600
+            let width = img.width
+            let height = img.height
+
+            if (width > MAX_WIDTH || height > MAX_HEIGHT) {
+              const ratio = Math.min(MAX_WIDTH / width, MAX_HEIGHT / height)
+              width = Math.round(width * ratio)
+              height = Math.round(height * ratio)
+            }
+
+            const canvas = document.createElement('canvas')
+            canvas.width = width
+            canvas.height = height
+            const ctx = canvas.getContext('2d')
+            if (!ctx) {
+              reject(new Error('Canvas not supported'))
+              return
+            }
+            ctx.drawImage(img, 0, 0, width, height)
+
+            // Compress as JPEG with quality 0.85
+            const compressed = canvas.toDataURL('image/jpeg', 0.85)
+            resolve(compressed)
+          }
+          img.onerror = () => reject(new Error('Failed to load image'))
+          img.src = e.target?.result as string
+        }
+        reader.onerror = () => reject(new Error('Failed to read file'))
+        reader.readAsDataURL(file)
+      })
+    }
+
+    try {
+      // Compress the image first
+      const base64 = await compressImage(file)
       setPreview(base64)
       setScanning(true)
       setScanned(null)
@@ -83,8 +124,14 @@ export function BillScanner() {
       } finally {
         setScanning(false)
       }
+    } catch (compressError) {
+      toast({
+        title: 'Failed to process image',
+        description: 'Please try a different image',
+        variant: 'destructive',
+      })
+      setScanning(false)
     }
-    reader.readAsDataURL(file)
   }
 
   const handleDrop = (e: React.DragEvent) => {
