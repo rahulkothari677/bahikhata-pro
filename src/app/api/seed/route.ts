@@ -1,12 +1,16 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { getAuthUserId } from '@/lib/get-auth'
 
 // POST /api/seed - seed demo data
 export async function POST() {
   try {
+    const { userId, error } = await getAuthUserId()
+    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     // Use dynamic import to avoid path issues
     const { seedDemoData } = await import('@/lib/seed')
-    const result = await seedDemoData()
+    const result = await seedDemoData(userId)
     return NextResponse.json({ success: true, ...result })
   } catch (error) {
     console.error('Seed error:', error)
@@ -17,10 +21,13 @@ export async function POST() {
 // GET /api/seed - check if seeded
 export async function GET() {
   try {
+    const { userId, error } = await getAuthUserId()
+    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const [productCount, partyCount, txnCount] = await Promise.all([
-      db.product.count(),
-      db.party.count(),
-      db.transaction.count(),
+      db.product.count({ where: { userId } }),
+      db.party.count({ where: { userId } }),
+      db.transaction.count({ where: { userId } }),
     ])
     return NextResponse.json({
       seeded: productCount > 0 || partyCount > 0 || txnCount > 0,
@@ -31,15 +38,21 @@ export async function GET() {
   }
 }
 
-// DELETE /api/seed - wipe all data
+// DELETE /api/seed - wipe all data for this user
 export async function DELETE() {
   try {
-    await db.transactionItem.deleteMany()
-    await db.transaction.deleteMany()
-    await db.payment.deleteMany()
-    await db.party.deleteMany()
-    await db.product.deleteMany()
-    await db.setting.deleteMany()
+    const { userId, error } = await getAuthUserId()
+    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    // Cascade delete in dependency order, scoped to this user
+    await db.transactionItem.deleteMany({
+      where: { transaction: { userId } },
+    })
+    await db.transaction.deleteMany({ where: { userId } })
+    await db.payment.deleteMany({ where: { userId } })
+    await db.party.deleteMany({ where: { userId } })
+    await db.product.deleteMany({ where: { userId } })
+    await db.setting.deleteMany({ where: { userId } })
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Delete error:', error)

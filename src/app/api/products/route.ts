@@ -1,14 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { getAuthUserId } from '@/lib/get-auth'
 
 export async function GET() {
   try {
+    const { userId, error } = await getAuthUserId()
+    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const products = await db.product.findMany({
+      where: { userId },
       orderBy: { name: 'asc' },
     })
 
     const transactions = await db.transaction.findMany({
-      where: { items: { some: {} } },
+      where: { userId, items: { some: {} } },
       include: { items: true },
     })
 
@@ -40,9 +45,13 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    const { userId, error } = await getAuthUserId()
+    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const body = await req.json()
     const product = await db.product.create({
       data: {
+        userId,
         name: body.name,
         sku: body.sku || null,
         hsn: body.hsn || null,
@@ -64,12 +73,18 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// PUT /api/products?id=xxx
 export async function PUT(req: NextRequest) {
   try {
+    const { userId, error } = await getAuthUserId()
+    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const { searchParams } = new URL(req.url)
     const id = searchParams.get('id')
     if (!id) return NextResponse.json({ error: 'ID required' }, { status: 400 })
+
+    // Verify ownership
+    const existing = await db.product.findFirst({ where: { id, userId } })
+    if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     const body = await req.json()
     const product = await db.product.update({
@@ -96,12 +111,18 @@ export async function PUT(req: NextRequest) {
   }
 }
 
-// DELETE /api/products?id=xxx
 export async function DELETE(req: NextRequest) {
   try {
+    const { userId, error } = await getAuthUserId()
+    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const { searchParams } = new URL(req.url)
     const id = searchParams.get('id')
     if (!id) return NextResponse.json({ error: 'ID required' }, { status: 400 })
+
+    // Verify ownership
+    const existing = await db.product.findFirst({ where: { id, userId } })
+    if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     await db.product.delete({ where: { id } })
     return NextResponse.json({ success: true })

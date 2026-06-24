@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { getAuthUserId } from '@/lib/get-auth'
 
 export async function GET() {
   try {
+    const { userId, error } = await getAuthUserId()
+    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const parties = await db.party.findMany({
+      where: { userId },
       orderBy: { name: 'asc' },
       include: {
         transactions: {
@@ -45,9 +50,13 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
+    const { userId, error } = await getAuthUserId()
+    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const body = await req.json()
     const party = await db.party.create({
       data: {
+        userId,
         name: body.name,
         type: body.type || 'customer',
         phone: body.phone || null,

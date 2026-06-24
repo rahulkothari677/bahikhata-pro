@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import ZAI from 'z-ai-web-dev-sdk'
+import { getAuthUserId } from '@/lib/get-auth'
 
 // POST /api/scan-bill - uses VLM to extract bill data from image
 export async function POST(req: NextRequest) {
   try {
+    const { userId, error } = await getAuthUserId()
+    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const body = await req.json()
     const { imageBase64, billType = 'purchase' } = body
 

@@ -1,16 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { getAuthUserId } from '@/lib/get-auth'
 
 // GET /api/transactions - list with filters (type, from, to, limit)
 export async function GET(req: NextRequest) {
   try {
+    const { userId, error } = await getAuthUserId()
+    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const { searchParams } = new URL(req.url)
     const type = searchParams.get('type')
     const limit = parseInt(searchParams.get('limit') || '100')
     const from = searchParams.get('from')
     const to = searchParams.get('to')
 
-    const where: any = {}
+    const where: any = { userId }
     if (type && type !== 'all') where.type = type
     if (from || to) {
       where.date = {}
@@ -38,8 +42,17 @@ export async function GET(req: NextRequest) {
 // POST /api/transactions - create new transaction (sale, purchase, income, expense)
 export async function POST(req: NextRequest) {
   try {
+    const { userId, error } = await getAuthUserId()
+    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const body = await req.json()
     const { type, partyId, date, items, discountAmount, paymentMode, isInterState, notes, invoiceNo, category, paidAmount, payeeName, payeePhone } = body
+
+    // Verify party ownership (if provided)
+    if (partyId) {
+      const party = await db.party.findFirst({ where: { id: partyId, userId } })
+      if (!party) return NextResponse.json({ error: 'Party not found' }, { status: 404 })
+    }
 
     // Calculate totals
     let subtotal = 0
@@ -51,6 +64,7 @@ export async function POST(req: NextRequest) {
       const amount = parseFloat(body.totalAmount) || 0
       const transaction = await db.transaction.create({
         data: {
+          userId,
           type,
           category: category || null,
           date: new Date(date || new Date()),
@@ -75,7 +89,7 @@ export async function POST(req: NextRequest) {
 
     // Get product details for profit calc (for sales)
     const productIds = items.map((i: any) => i.productId).filter(Boolean)
-    const products = productIds.length > 0 ? await db.product.findMany({ where: { id: { in: productIds } } }) : []
+    const products = productIds.length > 0 ? await db.product.findMany({ where: { id: { in: productIds }, userId } }) : []
     const productMap = new Map(products.map(p => [p.id, p]))
 
     const txItems = items.map((item: any) => {
@@ -114,6 +128,7 @@ export async function POST(req: NextRequest) {
 
     const transaction = await db.transaction.create({
       data: {
+        userId,
         type,
         partyId: partyId || null,
         date: new Date(date || new Date()),
@@ -144,9 +159,16 @@ export async function POST(req: NextRequest) {
 // DELETE /api/transactions?id=xxx
 export async function DELETE(req: NextRequest) {
   try {
+    const { userId, error } = await getAuthUserId()
+    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const { searchParams } = new URL(req.url)
     const id = searchParams.get('id')
     if (!id) return NextResponse.json({ error: 'ID required' }, { status: 400 })
+
+    // Verify ownership
+    const existing = await db.transaction.findFirst({ where: { id, userId } })
+    if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     await db.transaction.delete({ where: { id } })
     return NextResponse.json({ success: true })

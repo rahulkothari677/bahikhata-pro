@@ -1,17 +1,17 @@
 import { db } from '@/lib/db'
 
 // Indian shop demo data — Kirana / General Store
-export async function seedDemoData() {
-  // Check if already seeded
-  const existing = await db.product.count()
+export async function seedDemoData(userId: string) {
+  // Check if already seeded for this user
+  const existing = await db.product.count({ where: { userId } })
   if (existing > 0) return { skipped: true }
 
   // 1. Create Settings
   await db.setting.upsert({
-    where: { id: 'default' },
+    where: { userId },
     update: {},
     create: {
-      id: 'default',
+      userId,
       shopName: 'Sharma Kirana Store',
       ownerName: 'Rajesh Sharma',
       address: 'Main Bazaar, Lucknow, UP - 226001',
@@ -42,7 +42,7 @@ export async function seedDemoData() {
   ]
 
   const createdProducts = await Promise.all(
-    products.map(p => db.product.create({ data: p }))
+    products.map(p => db.product.create({ data: { ...p, userId } }))
   )
 
   // 3. Create Parties
@@ -57,7 +57,7 @@ export async function seedDemoData() {
   ]
 
   const createdParties = await Promise.all(
-    parties.map(p => db.party.create({ data: p }))
+    parties.map(p => db.party.create({ data: { ...p, userId } }))
   )
 
   // 4. Create transactions (last 60 days)
@@ -111,6 +111,7 @@ export async function seedDemoData() {
       const paidAmount = isCredit ? Math.floor(totalAmount * 0.5) : totalAmount
 
       salesData.push({
+        userId,
         type: 'sale',
         partyId: customer.id,
         date: new Date(date),
@@ -160,6 +161,7 @@ export async function seedDemoData() {
       const totalAmount = subtotal + cgst + sgst
 
       purchaseData.push({
+        userId,
         type: 'purchase',
         partyId: supplier.id,
         date: new Date(date),
@@ -195,11 +197,12 @@ export async function seedDemoData() {
     { type: 'expense', category: 'Transport', date: new Date(now.getTime() - 3 * 86400000), subtotal: 350, totalAmount: 350, paidAmount: 350, paymentMode: 'cash', notes: 'Auto fare for goods pickup' },
   ]
   for (const exp of expenses) {
-    await db.transaction.create({ data: exp })
+    await db.transaction.create({ data: { ...exp, userId } })
   }
 
   await db.transaction.create({
     data: {
+      userId,
       type: 'income',
       category: 'Scrap Sale',
       date: new Date(now.getTime() - 10 * 86400000),

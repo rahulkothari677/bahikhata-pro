@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { getAuthUserId } from '@/lib/get-auth'
 
 // GET /api/gstr-export?from=&to= - generates GSTR-1 format data (JSON + CSV)
 export async function GET(req: NextRequest) {
   try {
+    const { userId, error } = await getAuthUserId()
+    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const { searchParams } = new URL(req.url)
     const fromStr = searchParams.get('from')
     const toStr = searchParams.get('to')
@@ -16,13 +20,14 @@ export async function GET(req: NextRequest) {
     const [transactions, setting] = await Promise.all([
       db.transaction.findMany({
         where: {
+          userId,
           type: 'sale',
           date: { gte: from, lte: to },
         },
         include: { items: true, party: true },
         orderBy: { date: 'asc' },
       }),
-      db.setting.findUnique({ where: { id: 'default' } }),
+      db.setting.findUnique({ where: { userId } }),
     ])
 
     // Build GSTR-1 B2B section (invoices with GSTIN)

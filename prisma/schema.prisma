@@ -1,5 +1,6 @@
 // BahiKhata Pro — India's Best Ledger App
 // Database schema for shop owners: products, parties, transactions, GST, etc.
+// Multi-tenant: every model has userId for data isolation
 
 generator client {
   provider = "prisma-client-js"
@@ -10,11 +11,33 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ==================== USERS (Authentication) ====================
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  password      String    // hashed with bcrypt
+  phone         String?   // for future phone OTP
+  emailVerified DateTime? // for future email verification
+  image         String?   // profile picture URL
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations — every user has their own shop data
+  products      Product[]
+  parties       Party[]
+  transactions  Transaction[]
+  payments      Payment[]
+  settings      Setting[]
+}
+
 // ==================== PRODUCTS / INVENTORY ====================
 model Product {
   id                String   @id @default(cuid())
+  userId            String   // owner of this product
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   name              String
-  sku               String?  @unique
+  sku               String?
   hsn               String?  // HSN/SAC code for GST
   category          String?
   unit              String   @default("pcs") // pcs, kg, ltr, m, box
@@ -30,12 +53,15 @@ model Product {
 
   transactionItems  TransactionItem[]
 
-  // computed stock = openingStock + sum(purchase items) - sum(sale items)
+  // Unique SKU per user (not globally)
+  @@unique([userId, sku])
 }
 
 // ==================== PARTIES (Customers & Suppliers) ====================
 model Party {
   id              String   @id @default(cuid())
+  userId          String   // owner of this party
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   name            String
   type            String   @default("customer") // customer | supplier | both
   phone           String?
@@ -54,6 +80,8 @@ model Party {
 // ==================== TRANSACTIONS (Sales, Purchases, Income, Expense) ====================
 model Transaction {
   id             String   @id @default(cuid())
+  userId         String   // owner of this transaction
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   invoiceNo      String?  // bill/invoice number from bill
   type           String   // sale | purchase | income | expense
   partyId        String?  // customer for sale, supplier for purchase
@@ -79,8 +107,7 @@ model Transaction {
 
   items          TransactionItem[]
 
-  // Auto-computed gross profit when type=sale (sum of (salePrice - purchasePrice) * qty)
-  // Stored for quick queries
+  // Auto-computed gross profit when type=sale
   grossProfit    Float    @default(0)
 }
 
@@ -103,6 +130,8 @@ model TransactionItem {
 // ==================== PAYMENTS (separate from transaction totals) ====================
 model Payment {
   id          String   @id @default(cuid())
+  userId      String   // owner of this payment
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   partyId     String
   party       Party    @relation(fields: [partyId], references: [id])
   amount      Float
@@ -113,9 +142,11 @@ model Payment {
   createdAt   DateTime @default(now())
 }
 
-// ==================== APP SETTINGS ====================
+// ==================== APP SETTINGS (per user) ====================
 model Setting {
-  id        String   @id @default("default")
+  id        String   @id @default(cuid())
+  userId    String   @unique // one setting per user
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   shopName  String   @default("My Shop")
   ownerName String?
   address   String?

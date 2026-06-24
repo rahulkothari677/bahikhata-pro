@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { getAuthUserId } from '@/lib/get-auth'
 
 // GET /api/parties/[id] - get party with all transactions
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { userId, error } = await getAuthUserId()
+    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const { id } = await params
-    const party = await db.party.findUnique({
-      where: { id },
+    const party = await db.party.findFirst({
+      where: { id, userId },
       include: {
         transactions: {
           include: { items: true },
@@ -93,7 +97,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 // PUT /api/parties/[id] - update party
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { userId, error } = await getAuthUserId()
+    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const { id } = await params
+    // Verify ownership
+    const existing = await db.party.findFirst({ where: { id, userId } })
+    if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
     const body = await req.json()
     const party = await db.party.update({
       where: { id },
@@ -118,7 +129,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 // DELETE /api/parties/[id]
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { userId, error } = await getAuthUserId()
+    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const { id } = await params
+    // Verify ownership
+    const existing = await db.party.findFirst({ where: { id, userId } })
+    if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
     await db.party.delete({ where: { id } })
     return NextResponse.json({ success: true })
   } catch (error) {

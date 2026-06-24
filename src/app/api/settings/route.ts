@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { getAuthUserId } from '@/lib/get-auth'
 
 // GET /api/settings
 export async function GET() {
   try {
-    const setting = await db.setting.findUnique({ where: { id: 'default' } })
+    const { userId, error } = await getAuthUserId()
+    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const setting = await db.setting.findUnique({ where: { userId } })
     return NextResponse.json({ setting: setting || { shopName: 'My Shop' } })
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch settings' }, { status: 500 })
@@ -14,9 +18,12 @@ export async function GET() {
 // PUT /api/settings
 export async function PUT(req: NextRequest) {
   try {
+    const { userId, error } = await getAuthUserId()
+    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const body = await req.json()
     const setting = await db.setting.upsert({
-      where: { id: 'default' },
+      where: { userId },
       update: {
         shopName: body.shopName,
         ownerName: body.ownerName,
@@ -27,7 +34,7 @@ export async function PUT(req: NextRequest) {
         email: body.email,
       },
       create: {
-        id: 'default',
+        userId,
         shopName: body.shopName || 'My Shop',
         ownerName: body.ownerName,
         address: body.address,

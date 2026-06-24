@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { getAuthUserId } from '@/lib/get-auth'
 
 // GET /api/dashboard?from=&to= - returns aggregated stats for dashboard with date filtering
 export async function GET(req: NextRequest) {
   try {
+    const { userId, error } = await getAuthUserId()
+    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const { searchParams } = new URL(req.url)
     const fromStr = searchParams.get('from')
     const toStr = searchParams.get('to')
@@ -25,12 +29,13 @@ export async function GET(req: NextRequest) {
       setting,
     ] = await Promise.all([
       db.transaction.findMany({
+        where: { userId },
         include: { items: true, party: true },
         orderBy: { date: 'desc' },
       }),
-      db.product.findMany(),
-      db.party.findMany(),
-      db.setting.findUnique({ where: { id: 'default' } }),
+      db.product.findMany({ where: { userId } }),
+      db.party.findMany({ where: { userId } }),
+      db.setting.findUnique({ where: { userId } }),
     ])
 
     const sales = allTransactions.filter(t => t.type === 'sale')

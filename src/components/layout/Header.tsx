@@ -1,9 +1,10 @@
 'use client'
 
 import { useAppStore, type ViewType } from '@/store/app-store'
-import { Menu, Plus, Sparkles, ScanLine, ArrowLeft, Search, Sun, Moon } from 'lucide-react'
+import { Menu, Plus, Sparkles, ScanLine, ArrowLeft, Search, Sun, Moon, LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useQuery } from '@tanstack/react-query'
+import { useSession, signOut } from 'next-auth/react'
 
 const viewTitles: Record<string, { title: string; subtitle: string }> = {
   dashboard: { title: 'Dashboard', subtitle: 'Your shop at a glance' },
@@ -26,6 +27,7 @@ const dialogViews: ViewType[] = ['dashboard', 'inventory', 'sales', 'purchases',
 
 export function Header() {
   const { currentView, setSidebarOpen, setView, fireTriggerNewEntry, previousView, setPreviousView, features, setFeature, setSearchOpen } = useAppStore()
+  const { data: session } = useSession()
   const info = viewTitles[currentView] || { title: 'BahiKhata Pro', subtitle: '' }
 
   const { data: settingData } = useQuery({
@@ -158,16 +160,36 @@ export function Header() {
             </Button>
           )}
 
-          {/* Shop name badge */}
+          {/* Shop name badge + user menu */}
           <div className="hidden lg:flex items-center gap-2 pl-3 ml-1 border-l border-border">
             <div className="w-8 h-8 rounded-full bg-gradient-saffron flex items-center justify-center text-white text-xs font-bold">
               {shopName.charAt(0)}
             </div>
             <div className="text-xs">
               <p className="font-semibold leading-tight">{shopName}</p>
-              <p className="text-muted-foreground leading-tight">Owner</p>
+              <p className="text-muted-foreground leading-tight">{session?.user?.email || 'Owner'}</p>
             </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-8 w-8 p-0 ml-1"
+              onClick={() => signOut({ callbackUrl: '/' })}
+              title="Sign out"
+            >
+              <LogOut className="w-4 h-4" />
+            </Button>
           </div>
+
+          {/* Mobile logout button */}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="lg:hidden h-9 w-9 p-0"
+            onClick={() => signOut({ callbackUrl: '/' })}
+            title="Sign out"
+          >
+            <LogOut className="w-4 h-4" />
+          </Button>
         </div>
       </div>
     </header>

@@ -1,13 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { getAuthUserId } from '@/lib/get-auth'
 
 // POST /api/whatsapp-invoice - generate WhatsApp share link for an invoice
 export async function POST(req: NextRequest) {
   try {
+    const { userId, error } = await getAuthUserId()
+    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const { transactionId } = await req.json()
 
-    const transaction = await db.transaction.findUnique({
-      where: { id: transactionId },
+    // Verify transaction belongs to this user
+    const transaction = await db.transaction.findFirst({
+      where: { id: transactionId, userId },
       include: { items: true, party: true },
     })
 
@@ -15,7 +20,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Transaction not found' }, { status: 404 })
     }
 
-    const setting = await db.setting.findUnique({ where: { id: 'default' } })
+    const setting = await db.setting.findUnique({ where: { userId } })
 
     // Build invoice text
     const lines: string[] = []

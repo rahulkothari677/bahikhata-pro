@@ -1,8 +1,10 @@
 'use client'
 
 import { useState } from 'react'
+import { useSession } from 'next-auth/react'
 import { useQuery } from '@tanstack/react-query'
 import { useAppStore } from '@/store/app-store'
+import { AuthScreen } from '@/components/auth/AuthScreen'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { Header } from '@/components/layout/Header'
 import { Onboarding } from '@/components/layout/Onboarding'
@@ -21,26 +23,31 @@ import { KeyboardShortcuts } from '@/components/common/KeyboardShortcuts'
 import { GlobalSearch } from '@/components/common/GlobalSearch'
 
 export default function Home() {
+  const { data: session, status } = useSession()
   const { currentView, features } = useAppStore()
   const [onboardingDismissed, setOnboardingDismissed] = useState(false)
 
-  // Check if data exists — if not, show onboarding
+  // Check if data exists — if not, show onboarding.
+  // Hook must run unconditionally; only enable once we have a session.
   const { data: seedStatus } = useQuery({
     queryKey: ['seed-status'],
+    enabled: status === 'authenticated' && !!session,
     queryFn: async () => {
       const r = await fetch('/api/seed')
       return r.json()
     },
   })
 
-  // Show onboarding only when we know data is empty AND user hasn't dismissed it
+  // Show auth screen if not logged in
+  if (status === 'loading' || !session) {
+    return <AuthScreen />
+  }
+
   const showOnboarding = !onboardingDismissed && seedStatus !== undefined && !seedStatus.seeded
 
   return (
     <div className="flex min-h-screen bg-background">
-      {/* Global keyboard shortcuts handler */}
       {features.keyboardShortcuts && <KeyboardShortcuts />}
-      {/* Global search command palette */}
       {features.globalSearch && <GlobalSearch />}
 
       <Sidebar />

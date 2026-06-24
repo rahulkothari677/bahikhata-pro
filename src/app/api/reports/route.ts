@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { getAuthUserId } from '@/lib/get-auth'
 
 // GET /api/reports?type=pl|gst|stock|party&from=&to=
 export async function GET(req: NextRequest) {
   try {
+    const { userId, error } = await getAuthUserId()
+    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const { searchParams } = new URL(req.url)
     const type = searchParams.get('type') || 'pl'
     const fromStr = searchParams.get('from')
@@ -14,12 +18,12 @@ export async function GET(req: NextRequest) {
     const to = toStr ? new Date(toStr) : now
 
     const transactions = await db.transaction.findMany({
-      where: { date: { gte: from, lte: to } },
+      where: { userId, date: { gte: from, lte: to } },
       include: { items: true, party: true },
       orderBy: { date: 'asc' },
     })
 
-    const products = await db.product.findMany()
+    const products = await db.product.findMany({ where: { userId } })
 
     if (type === 'pl') {
       // Profit & Loss report
@@ -122,7 +126,7 @@ export async function GET(req: NextRequest) {
     if (type === 'stock') {
       // Stock valuation report
       const allTxns = await db.transaction.findMany({
-        where: { items: { some: {} } },
+        where: { userId, items: { some: {} } },
         include: { items: true },
       })
 
@@ -176,7 +180,7 @@ export async function GET(req: NextRequest) {
       const partyTransactions = transactions.filter(t => t.partyId)
       const partyMap = new Map<string, { party: any; transactions: any[]; balance: number; totalSales: number; totalPurchases: number; totalPaid: number; totalReceived: number }>()
 
-      const parties = await db.party.findMany()
+      const parties = await db.party.findMany({ where: { userId } })
       parties.forEach(p => {
         partyMap.set(p.id, {
           party: p,

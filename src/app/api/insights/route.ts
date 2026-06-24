@@ -1,13 +1,17 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { getAuthUserId } from '@/lib/get-auth'
 
 // GET /api/insights - AI-powered smart insights and alerts
 export async function GET() {
   try {
+    const { userId, error } = await getAuthUserId()
+    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const [products, parties, transactions] = await Promise.all([
-      db.product.findMany(),
-      db.party.findMany(),
-      db.transaction.findMany({ include: { items: true, party: true } }),
+      db.product.findMany({ where: { userId } }),
+      db.party.findMany({ where: { userId } }),
+      db.transaction.findMany({ where: { userId }, include: { items: true, party: true } }),
     ])
 
     const insights: any[] = []
