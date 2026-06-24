@@ -49,7 +49,7 @@ export function Reports() {
               <span className="text-sm font-medium">Report Period:</span>
             </div>
             <div className="flex items-center gap-3">
-              <DateRangePicker value={dateRange} onChange={handleDateChange} align="right" />
+              <DateRangePicker value={dateRange} onChange={handleDateChange} preset={datePreset} onPresetChange={setDatePreset} align="right" />
               <p className="text-xs text-muted-foreground hidden sm:block">
                 {formatDate(dateRange.from)} — {formatDate(dateRange.to)}
               </p>

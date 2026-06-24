@@ -1,15 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
-// GET /api/transactions - list with filters
+// GET /api/transactions - list with filters (type, from, to, limit)
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
     const type = searchParams.get('type')
-    const limit = parseInt(searchParams.get('limit') || '50')
+    const limit = parseInt(searchParams.get('limit') || '100')
+    const from = searchParams.get('from')
+    const to = searchParams.get('to')
 
     const where: any = {}
     if (type && type !== 'all') where.type = type
+    if (from || to) {
+      where.date = {}
+      if (from) where.date.gte = new Date(from)
+      if (to) where.date.lte = new Date(to)
+    }
 
     const transactions = await db.transaction.findMany({
       where,

@@ -103,19 +103,26 @@ export function getPresetRange(preset: DatePreset): DateRange {
   return PRESETS.find(p => p.id === preset)!.getDescription()
 }
 
+export function getPresetLabel(preset: DatePreset): string {
+  return PRESETS.find(p => p.id === preset)?.label || 'Custom'
+}
+
 export function DateRangePicker({
   value,
   onChange,
+  preset,
+  onPresetChange,
   className,
   align = 'left',
 }: {
   value: DateRange
   onChange: (range: DateRange, preset: DatePreset) => void
+  preset: DatePreset
+  onPresetChange: (preset: DatePreset) => void
   className?: string
   align?: 'left' | 'right'
 }) {
   const [open, setOpen] = useState(false)
-  const [preset, setPreset] = useState<DatePreset>('thisMonth')
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
   const ref = useRef<HTMLDivElement>(null)
@@ -131,7 +138,7 @@ export function DateRangePicker({
   }, [])
 
   const handlePreset = (p: DatePreset) => {
-    setPreset(p)
+    onPresetChange(p)
     if (p !== 'custom') {
       const range = getPresetRange(p)
       onChange(range, p)
@@ -145,12 +152,12 @@ export function DateRangePicker({
       const to = new Date(customTo)
       to.setHours(23, 59, 59, 999)
       onChange({ from, to }, 'custom')
-      setPreset('custom')
+      onPresetChange('custom')
       setOpen(false)
     }
   }
 
-  const currentPresetLabel = PRESETS.find(p => p.id === preset)?.label || 'Custom'
+  const currentPresetLabel = getPresetLabel(preset)
 
   return (
     <div className={cn('relative', className)} ref={ref}>
@@ -187,7 +194,7 @@ export function DateRangePicker({
               </button>
             ))}
             <button
-              onClick={() => { setPreset('custom'); }}
+              onClick={() => { onPresetChange('custom') }}
               className={cn(
                 'w-full text-left px-3 py-2 rounded-lg text-sm transition',
                 preset === 'custom' ? 'bg-primary text-primary-foreground font-medium' : 'hover:bg-muted'

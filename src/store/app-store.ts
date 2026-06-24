@@ -56,6 +56,9 @@ interface AppState {
   // Previous view (for back button from detail pages)
   previousView: ViewType | null
   setPreviousView: (v: ViewType | null) => void
+  // Pending date filter for cross-page navigation (e.g., clicking a KPI card jumps to ledger with date filter)
+  pendingDateRange: { from: string; to: string; preset: string } | null
+  setPendingDateRange: (r: { from: string; to: string; preset: string } | null) => void
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -89,4 +92,6 @@ export const useAppStore = create<AppState>((set) => ({
   fireTriggerNewEntry: () => set((s) => ({ triggerNewEntry: s.triggerNewEntry + 1, triggerNewEntryView: s.currentView })),
   previousView: null,
   setPreviousView: (v) => set({ previousView: v }),
+  pendingDateRange: null,
+  setPendingDateRange: (r) => set({ pendingDateRange: r }),
 }))

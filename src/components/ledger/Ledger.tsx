@@ -10,9 +10,10 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useAppStore } from '@/store/app-store'
 import { formatINR, formatDateTime, formatINRCompact, cn } from '@/lib/utils'
 import { ViewModeToggle } from '@/components/common/ViewModeToggle'
+import { DateRangePicker, getPresetRange, getPresetLabel, type DateRange, type DatePreset } from '@/components/common/DateRangePicker'
 import {
   Search, ShoppingCart, Truck, Receipt, IndianRupee,
-  TrendingUp, Calendar, User, ScanLine, ChevronRight, Plus,
+  TrendingUp, Calendar, User, ScanLine, ChevronRight, Plus, X,
 } from 'lucide-react'
 
 type LedgerType = 'sale' | 'purchase'
@@ -21,18 +22,50 @@ export function Ledger({ type }: { type: LedgerType }) {
   const {
     refreshKey, triggerRefresh, setView, setScannerBillType,
     transactionsViewMode, setTransactionsViewMode, triggerNewEntry, triggerNewEntryView,
-    setSelectedTransactionId, setPreviousView,
+    setSelectedTransactionId, setPreviousView, pendingDateRange, setPendingDateRange,
   } = useAppStore()
   const [search, setSearch] = useState('')
+
+  // Date range state - defaults to no filter (all transactions)
+  const [dateRange, setDateRange] = useState<DateRange | null>(null)
+  const [datePreset, setDatePreset] = useState<DatePreset>('thisMonth')
+
+  // Pick up pending date range from store (when navigating from dashboard KPI click)
+  useEffect(() => {
+    if (pendingDateRange) {
+      Promise.resolve().then(() => {
+        setDateRange({
+          from: new Date(pendingDateRange.from),
+          to: new Date(pendingDateRange.to),
+        })
+        // Try to match preset label
+        const matchedPreset = (['today', 'yesterday', 'last7', 'last30', 'thisMonth', 'lastMonth', 'thisQuarter', 'thisYear'] as DatePreset[]).find(
+          p => getPresetLabel(p) === pendingDateRange.preset
+        )
+        setDatePreset(matchedPreset || 'custom')
+        setPendingDateRange(null) // Clear after consuming
+      })
+    }
+  }, [pendingDateRange, setPendingDateRange])
 
   const isSale = type === 'sale'
   const accentColor = isSale ? 'text-emerald-600' : 'text-amber-600'
   const accentBg = isSale ? 'bg-emerald-100' : 'bg-amber-100'
 
+  // Build query with optional date filter
+  const queryParams = new URLSearchParams({
+    type,
+    limit: '200',
+  })
+  if (dateRange) {
+    queryParams.set('from', dateRange.from.toISOString())
+    queryParams.set('to', dateRange.to.toISOString())
+  }
+
   const { data, isLoading } = useQuery({
-    queryKey: ['transactions', type, refreshKey],
+    queryKey: ['transactions', type, refreshKey, dateRange?.from.toISOString() || 'all', dateRange?.to.toISOString() || 'all'],
     queryFn: async () => {
-      const r = await fetch(`/api/transactions?type=${type}&limit=100`)
+      const r = await fetch(`/api/transactions?${queryParams.toString()}`)
       return r.json()
     },
   })
@@ -151,6 +184,41 @@ export function Ledger({ type }: { type: LedgerType }) {
               />
             </div>
             <ViewModeToggle mode={transactionsViewMode} onChange={setTransactionsViewMode} />
+
+            {/* Date range picker - shows "All Time" when no filter, or the preset label */}
+            {dateRange ? (
+              <div className="flex items-center gap-1">
+                <DateRangePicker
+                  value={dateRange}
+                  onChange={(range, preset) => { setDateRange(range); setDatePreset(preset) }}
+                  preset={datePreset}
+                  onPresetChange={(p) => {
+                    setDatePreset(p)
+                    if (p !== 'custom') setDateRange(getPresetRange(p))
+                  }}
+                />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-9 w-9 p-0"
+                  onClick={() => { setDateRange(null); setDatePreset('thisMonth') }}
+                  title="Clear date filter"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
+            ) : (
+              <DateRangePicker
+                value={getPresetRange('thisMonth')}
+                onChange={(range, preset) => { setDateRange(range); setDatePreset(preset) }}
+                preset={'thisMonth'}
+                onPresetChange={(p) => {
+                  setDatePreset(p)
+                  if (p !== 'custom') setDateRange(getPresetRange(p))
+                }}
+              />
+            )}
+
             <Button
               variant="outline"
               onClick={() => { setScannerBillType(type); setView('scanner') }}
@@ -159,6 +227,19 @@ export function Ledger({ type }: { type: LedgerType }) {
               <ScanLine className="w-4 h-4" /> <span className="hidden sm:inline">Scan Bill</span>
             </Button>
           </div>
+
+          {/* Active filter indicator */}
+          {dateRange && (
+            <div className="mt-2 flex items-center gap-2 text-xs">
+              <Badge variant="secondary" className="gap-1">
+                <Calendar className="w-3 h-3" />
+                Filtered: {getPresetLabel(datePreset)}
+              </Badge>
+              <span className="text-muted-foreground">
+                {dateRange.from.toLocaleDateString('en-IN')} — {dateRange.to.toLocaleDateString('en-IN')}
+              </span>
+            </div>
+          )}
         </CardContent>
       </Card>
 

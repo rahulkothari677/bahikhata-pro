@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { DateRangePicker, getPresetRange, type DateRange, type DatePreset } from '@/components/common/DateRangePicker'
+import { DateRangePicker, getPresetRange, getPresetLabel, type DateRange, type DatePreset } from '@/components/common/DateRangePicker'
 import {
   TrendingUp, TrendingDown, Wallet, Package,
   ArrowUpRight, ArrowDownRight, AlertTriangle, IndianRupee,
@@ -24,7 +24,7 @@ import { motion } from 'framer-motion'
 const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)']
 
 export function Dashboard() {
-  const { setView, refreshKey, setSelectedTransactionId, setPreviousView } = useAppStore()
+  const { setView, refreshKey, setSelectedTransactionId, setPreviousView, setPendingDateRange } = useAppStore()
   const [dateRange, setDateRange] = useState<DateRange>(() => getPresetRange('thisMonth'))
   const [datePreset, setDatePreset] = useState<DatePreset>('thisMonth')
 
@@ -41,13 +41,38 @@ export function Dashboard() {
     setDatePreset(preset)
   }
 
-  if (isLoading || !data) {
-    return <DashboardSkeleton />
+  // Navigate to sales ledger with a date filter applied
+  const navigateToSalesWithDate = (from: Date, to: Date, presetLabel: string) => {
+    setPendingDateRange({
+      from: from.toISOString(),
+      to: to.toISOString(),
+      preset: presetLabel,
+    })
+    setPreviousView('dashboard')
+    setView('sales')
   }
 
-  const { kpis, salesTrend, topProducts, categoryBreakdown, paymentModeSplit, lowStockProducts, gstSummary, recentTransactions, setting, dateRange: serverRange } = data
+  // Today's date range for "today" KPIs
+  const todayStart = new Date()
+  todayStart.setHours(0, 0, 0, 0)
 
-  const rangeLabel = datePreset === 'custom' ? 'Selected Period' : datePreset === 'thisMonth' ? 'This Period' : datePreset === 'lastMonth' ? 'Last Month' : 'Selected Period'
+  if (isLoading || !data) {
+    return (
+      <div className="space-y-5">
+        <DateRangeHeader
+          dateRange={dateRange}
+          datePreset={datePreset}
+          onChange={handleDateChange}
+          onPresetChange={setDatePreset}
+        />
+        <DashboardSkeleton />
+      </div>
+    )
+  }
+
+  const { kpis, salesTrend, topProducts, categoryBreakdown, paymentModeSplit, lowStockProducts, gstSummary, recentTransactions, setting } = data
+
+  const rangeLabel = datePreset === 'custom' ? 'Selected Period' : getPresetLabel(datePreset)
 
   return (
     <div className="space-y-5">
@@ -83,7 +108,7 @@ export function Dashboard() {
           <h3 className="text-base font-semibold">Business Overview</h3>
           <p className="text-xs text-muted-foreground">Filter all charts and stats by date range</p>
         </div>
-        <DateRangePicker value={dateRange} onChange={handleDateChange} />
+        <DateRangePicker value={dateRange} onChange={handleDateChange} preset={datePreset} onPresetChange={setDatePreset} />
       </div>
 
       {/* KPI Cards */}
@@ -94,6 +119,7 @@ export function Dashboard() {
           icon={IndianRupee}
           gradient="from-amber-500 to-orange-600"
           subtitle={`${kpis.todayTxnCount} sales today`}
+          onClick={() => navigateToSalesWithDate(todayStart, new Date(), 'Today')}
         />
         <KPICard
           title="Today's Profit"
@@ -101,6 +127,7 @@ export function Dashboard() {
           icon={TrendingUp}
           gradient="from-emerald-500 to-teal-600"
           subtitle={`Margin ${kpis.todayRevenue > 0 ? ((kpis.todayProfit / kpis.todayRevenue) * 100).toFixed(1) : 0}%`}
+          onClick={() => navigateToSalesWithDate(todayStart, new Date(), 'Today')}
         />
         <KPICard
           title={`${rangeLabel} Revenue`}
@@ -109,6 +136,7 @@ export function Dashboard() {
           gradient="from-rose-500 to-pink-600"
           subtitle={`${kpis.rangeTxnCount} sales • ${kpis.revenueGrowth >= 0 ? '↑' : '↓'} ${Math.abs(kpis.revenueGrowth).toFixed(1)}% vs prev`}
           trend={kpis.revenueGrowth >= 0 ? 'up' : 'down'}
+          onClick={() => navigateToSalesWithDate(dateRange.from, dateRange.to, rangeLabel)}
         />
         <KPICard
           title={`Net Profit (${rangeLabel})`}
@@ -117,6 +145,7 @@ export function Dashboard() {
           gradient="from-violet-500 to-purple-600"
           subtitle={`${kpis.profitGrowth >= 0 ? '↑' : '↓'} ${Math.abs(kpis.profitGrowth).toFixed(1)}% profit trend`}
           trend={kpis.profitGrowth >= 0 ? 'up' : 'down'}
+          onClick={() => navigateToSalesWithDate(dateRange.from, dateRange.to, rangeLabel)}
         />
       </div>
 
@@ -456,20 +485,24 @@ export function Dashboard() {
   )
 }
 
-function KPICard({ title, value, icon: Icon, gradient, subtitle, trend }: {
+function KPICard({ title, value, icon: Icon, gradient, subtitle, trend, onClick }: {
   title: string
   value: string
   icon: any
   gradient: string
   subtitle?: string
   trend?: 'up' | 'down'
+  onClick?: () => void
 }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
     >
-      <Card className="shadow-card border-border/60 overflow-hidden relative">
+      <Card
+        className={`shadow-card border-border/60 overflow-hidden relative transition ${onClick ? 'cursor-pointer hover:shadow-md hover:border-primary/30' : ''}`}
+        onClick={onClick}
+      >
         <div className={`absolute top-0 right-0 w-20 h-20 bg-gradient-to-br ${gradient} opacity-10 rounded-full -mr-8 -mt-8`} />
         <CardContent className="p-4 lg:p-5 relative">
           <div className="flex items-start justify-between mb-3">
@@ -540,6 +573,29 @@ function DashboardSkeleton() {
         <Skeleton className="h-72 rounded-xl lg:col-span-2" />
         <Skeleton className="h-72 rounded-xl" />
       </div>
+    </div>
+  )
+}
+
+// Header with date range picker - shown even during loading so preset state persists
+function DateRangeHeader({ dateRange, datePreset, onChange, onPresetChange }: {
+  dateRange: DateRange
+  datePreset: DatePreset
+  onChange: (range: DateRange, preset: DatePreset) => void
+  onPresetChange: (preset: DatePreset) => void
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 flex-wrap">
+      <div>
+        <h3 className="text-base font-semibold">Business Overview</h3>
+        <p className="text-xs text-muted-foreground">Filter all charts and stats by date range</p>
+      </div>
+      <DateRangePicker
+        value={dateRange}
+        onChange={onChange}
+        preset={datePreset}
+        onPresetChange={onPresetChange}
+      />
     </div>
   )
 }
