@@ -1,0 +1,61 @@
+'use client'
+
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { useAppStore } from '@/store/app-store'
+import { Sidebar } from '@/components/layout/Sidebar'
+import { Header } from '@/components/layout/Header'
+import { Onboarding } from '@/components/layout/Onboarding'
+import { Dashboard } from '@/components/dashboard/Dashboard'
+import { Inventory } from '@/components/inventory/Inventory'
+import { Ledger } from '@/components/ledger/Ledger'
+import { IncomeExpense } from '@/components/income/IncomeExpense'
+import { Parties } from '@/components/parties/Parties'
+import { BillScanner } from '@/components/scanner/BillScanner'
+import { Reports } from '@/components/reports/Reports'
+import { Settings } from '@/components/settings/Settings'
+
+export default function Home() {
+  const { currentView } = useAppStore()
+  const [onboardingDismissed, setOnboardingDismissed] = useState(false)
+
+  // Check if data exists — if not, show onboarding
+  const { data: seedStatus } = useQuery({
+    queryKey: ['seed-status'],
+    queryFn: async () => {
+      const r = await fetch('/api/seed')
+      return r.json()
+    },
+  })
+
+  // Show onboarding only when we know data is empty AND user hasn't dismissed it
+  const showOnboarding = !onboardingDismissed && seedStatus !== undefined && !seedStatus.seeded
+
+  return (
+    <div className="flex min-h-screen bg-background">
+      <Sidebar />
+
+      <div className="flex-1 flex flex-col min-w-0">
+        <Header />
+
+        <main className="flex-1 p-4 lg:p-6 max-w-7xl mx-auto w-full">
+          {currentView === 'dashboard' && <Dashboard />}
+          {currentView === 'inventory' && <Inventory />}
+          {currentView === 'sales' && <Ledger type="sale" />}
+          {currentView === 'purchases' && <Ledger type="purchase" />}
+          {currentView === 'income-expense' && <IncomeExpense />}
+          {currentView === 'parties' && <Parties />}
+          {currentView === 'scanner' && <BillScanner />}
+          {currentView === 'reports' && <Reports />}
+          {currentView === 'settings' && <Settings />}
+        </main>
+
+        <footer className="mt-auto border-t border-border py-3 px-4 lg:px-6 text-center text-[11px] text-muted-foreground">
+          <p>BahiKhata Pro — Made with ❤️ for Bharat • Track sales, purchases, GST, inventory & profit in one app</p>
+        </footer>
+      </div>
+
+      <Onboarding open={showOnboarding} onDone={() => setOnboardingDismissed(true)} />
+    </div>
+  )
+}

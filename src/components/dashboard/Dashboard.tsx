@@ -1,0 +1,543 @@
+'use client'
+
+import { useQuery } from '@tanstack/react-query'
+import { useAppStore } from '@/store/app-store'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Progress } from '@/components/ui/progress'
+import { Skeleton } from '@/components/ui/skeleton'
+import {
+  TrendingUp, TrendingDown, Wallet, ShoppingBag, Package,
+  ArrowUpRight, ArrowDownRight, AlertTriangle, IndianRupee,
+  Receipt, Users, Boxes, PiggyBank, ScanLine, ArrowRight,
+} from 'lucide-react'
+import {
+  Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Legend,
+  Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip,
+  XAxis, YAxis, RadialBar, RadialBarChart,
+} from 'recharts'
+import { formatINR, formatINRCompact, relativeTime, cn } from '@/lib/utils'
+import { motion } from 'framer-motion'
+
+const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)']
+
+export function Dashboard() {
+  const { setView, refreshKey } = useAppStore()
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['dashboard', refreshKey],
+    queryFn: async () => {
+      const r = await fetch('/api/dashboard')
+      return r.json()
+    },
+  })
+
+  if (isLoading || !data) {
+    return <DashboardSkeleton />
+  }
+
+  const { kpis, salesTrend, monthlyTrend, topProducts, categoryBreakdown, paymentModeSplit, lowStockProducts, gstSummary, recentTransactions, setting } = data
+
+  return (
+    <div className="space-y-5">
+      {/* Greeting banner */}
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="rounded-2xl bg-gradient-saffron p-5 lg:p-6 text-white shadow-lg relative overflow-hidden"
+      >
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32" />
+        <div className="absolute bottom-0 right-20 w-40 h-40 bg-white/5 rounded-full -mb-20" />
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div>
+            <p className="text-white/80 text-sm font-medium">Namaste, {setting?.ownerName || 'Shop Owner'} 🙏</p>
+            <h2 className="text-2xl lg:text-3xl font-bold mt-1">{setting?.shopName || 'My Shop'}</h2>
+            <p className="text-white/80 text-sm mt-1">
+              Today you made <span className="font-bold text-white">{formatINR(kpis.todayRevenue)}</span> from <span className="font-bold text-white">{kpis.todayTxnCount}</span> sales
+            </p>
+          </div>
+          <Button
+            onClick={() => setView('scanner')}
+            className="bg-white text-primary hover:bg-white/90 gap-2 shadow-md"
+          >
+            <ScanLine className="w-4 h-4" />
+            Scan a Bill
+          </Button>
+        </div>
+      </motion.div>
+
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
+        <KPICard
+          title="Today's Revenue"
+          value={formatINR(kpis.todayRevenue)}
+          icon={IndianRupee}
+          gradient="from-amber-500 to-orange-600"
+          subtitle={`${kpis.todayTxnCount} sales today`}
+        />
+        <KPICard
+          title="Today's Profit"
+          value={formatINR(kpis.todayProfit)}
+          icon={TrendingUp}
+          gradient="from-emerald-500 to-teal-600"
+          subtitle={`Margin ${kpis.todayRevenue > 0 ? ((kpis.todayProfit / kpis.todayRevenue) * 100).toFixed(1) : 0}%`}
+        />
+        <KPICard
+          title="This Month Revenue"
+          value={formatINR(kpis.monthRevenue)}
+          icon={Wallet}
+          gradient="from-rose-500 to-pink-600"
+          subtitle={`${kpis.revenueGrowth >= 0 ? '↑' : '↓'} ${Math.abs(kpis.revenueGrowth).toFixed(1)}% vs last month`}
+          trend={kpis.revenueGrowth >= 0 ? 'up' : 'down'}
+        />
+        <KPICard
+          title="Net Profit (Month)"
+          value={formatINR(kpis.netProfit)}
+          icon={PiggyBank}
+          gradient="from-violet-500 to-purple-600"
+          subtitle={`${kpis.profitGrowth >= 0 ? '↑' : '↓'} ${Math.abs(kpis.profitGrowth).toFixed(1)}% profit growth`}
+          trend={kpis.profitGrowth >= 0 ? 'up' : 'down'}
+        />
+      </div>
+
+      {/* Secondary KPIs */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
+        <MiniStatCard
+          label="Receivable ( Customers owe )"
+          value={formatINR(kpis.totalReceivable)}
+          icon={ArrowDownRight}
+          color="text-emerald-600"
+          onClick={() => setView('parties')}
+        />
+        <MiniStatCard
+          label="Payable ( We owe suppliers )"
+          value={formatINR(kpis.totalPayable)}
+          icon={ArrowUpRight}
+          color="text-rose-600"
+          onClick={() => setView('parties')}
+        />
+        <MiniStatCard
+          label="Stock Value"
+          value={formatINR(kpis.totalStockValue)}
+          icon={Boxes}
+          color="text-amber-600"
+          onClick={() => setView('inventory')}
+        />
+        <MiniStatCard
+          label="GST Payable ( Month )"
+          value={formatINR(gstSummary.netPayable)}
+          icon={Receipt}
+          color="text-violet-600"
+          onClick={() => setView('reports')}
+        />
+      </div>
+
+      {/* Sales trend chart - full width */}
+      <Card className="shadow-card border-border/60">
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-base font-semibold">Sales & Profit Trend</CardTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">Last 14 days performance</p>
+            </div>
+            <Badge variant="secondary" className="gap-1">
+              <TrendingUp className="w-3 h-3" />
+              Live
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <ResponsiveContainer width="100%" height={280}>
+            <AreaChart data={salesTrend} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="oklch(0.62 0.18 42)" stopOpacity={0.4} />
+                  <stop offset="100%" stopColor="oklch(0.62 0.18 42)" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="oklch(0.62 0.15 155)" stopOpacity={0.4} />
+                  <stop offset="100%" stopColor="oklch(0.62 0.15 155)" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.91 0.01 60)" vertical={false} />
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'oklch(0.52 0.02 30)' }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: 'oklch(0.52 0.02 30)' }} axisLine={false} tickLine={false} tickFormatter={(v) => formatINRCompact(v)} />
+              <Tooltip
+                contentStyle={{ borderRadius: '12px', border: '1px solid oklch(0.91 0.01 60)', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                formatter={(v: number) => formatINR(v)}
+              />
+              <Area type="monotone" dataKey="revenue" stroke="oklch(0.62 0.18 42)" strokeWidth={2} fill="url(#colorRev)" name="Revenue" />
+              <Area type="monotone" dataKey="profit" stroke="oklch(0.62 0.15 155)" strokeWidth={2} fill="url(#colorProfit)" name="Profit" />
+            </AreaChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
+
+      {/* 3-column row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Top products */}
+        <Card className="shadow-card border-border/60 lg:col-span-2">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base font-semibold">Top Selling Products</CardTitle>
+              <Button variant="ghost" size="sm" className="text-xs h-7 gap-1" onClick={() => setView('inventory')}>
+                View all <ArrowRight className="w-3 h-3" />
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">Last 30 days by revenue</p>
+          </CardHeader>
+          <CardContent>
+            {topProducts.length === 0 ? (
+              <div className="text-center py-10 text-sm text-muted-foreground">No sales in last 30 days</div>
+            ) : (
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={topProducts} layout="vertical" margin={{ top: 0, right: 10, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.91 0.01 60)" horizontal={false} />
+                  <XAxis type="number" tick={{ fontSize: 11, fill: 'oklch(0.52 0.02 30)' }} axisLine={false} tickLine={false} tickFormatter={(v) => formatINRCompact(v)} />
+                  <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: 'oklch(0.18 0.02 30)' }} axisLine={false} tickLine={false} width={130}
+                    tickFormatter={(v) => v.length > 18 ? v.slice(0, 18) + '…' : v}
+                  />
+                  <Tooltip
+                    contentStyle={{ borderRadius: '12px', border: '1px solid oklch(0.91 0.01 60)', fontSize: 12 }}
+                    formatter={(v: number, name: string) => name === 'revenue' ? [formatINR(v), 'Revenue'] : [formatINR(v), 'Profit']}
+                  />
+                  <Bar dataKey="revenue" fill="oklch(0.62 0.18 42)" radius={[0, 6, 6, 0]} barSize={18} name="revenue" />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Payment mode pie */}
+        <Card className="shadow-card border-border/60">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base font-semibold">Payment Modes</CardTitle>
+            <p className="text-xs text-muted-foreground">Last 30 days</p>
+          </CardHeader>
+          <CardContent>
+            {paymentModeSplit.length === 0 ? (
+              <div className="text-center py-10 text-sm text-muted-foreground">No data</div>
+            ) : (
+              <>
+                <ResponsiveContainer width="100%" height={180}>
+                  <PieChart>
+                    <Pie
+                      data={paymentModeSplit}
+                      dataKey="value"
+                      nameKey="name"
+                      cx="50%" cy="50%"
+                      innerRadius={45} outerRadius={70}
+                      paddingAngle={2}
+                    >
+                      {paymentModeSplit.map((_, i) => (
+                        <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(v: number) => formatINR(v)} contentStyle={{ borderRadius: 12, fontSize: 12 }} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="grid grid-cols-2 gap-2 mt-3">
+                  {paymentModeSplit.map((p, i) => (
+                    <div key={p.name} className="flex items-center gap-2">
+                      <div className="w-2.5 h-2.5 rounded-full" style={{ background: COLORS[i % COLORS.length] }} />
+                      <div className="text-xs">
+                        <span className="font-medium">{p.name}</span>
+                        <span className="text-muted-foreground ml-1">{formatINRCompact(p.value)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* 6-month trend & category */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* Monthly revenue vs expenses */}
+        <Card className="shadow-card border-border/60 lg:col-span-2">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base font-semibold">6-Month Performance</CardTitle>
+            <p className="text-xs text-muted-foreground">Revenue, profit & expenses trend</p>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={monthlyTrend} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.91 0.01 60)" vertical={false} />
+                <XAxis dataKey="month" tick={{ fontSize: 11, fill: 'oklch(0.52 0.02 30)' }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: 'oklch(0.52 0.02 30)' }} axisLine={false} tickLine={false} tickFormatter={(v) => formatINRCompact(v)} />
+                <Tooltip
+                  contentStyle={{ borderRadius: 12, border: '1px solid oklch(0.91 0.01 60)', fontSize: 12 }}
+                  formatter={(v: number) => formatINR(v)}
+                />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Bar dataKey="revenue" fill="oklch(0.62 0.18 42)" radius={[6, 6, 0, 0]} name="Revenue" barSize={28} />
+                <Bar dataKey="profit" fill="oklch(0.62 0.15 155)" radius={[6, 6, 0, 0]} name="Profit" barSize={28} />
+                <Bar dataKey="expenses" fill="oklch(0.65 0.22 15)" radius={[6, 6, 0, 0]} name="Expenses" barSize={28} />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        {/* Category breakdown */}
+        <Card className="shadow-card border-border/60">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base font-semibold">Sales by Category</CardTitle>
+            <p className="text-xs text-muted-foreground">Last 30 days</p>
+          </CardHeader>
+          <CardContent>
+            {categoryBreakdown.length === 0 ? (
+              <div className="text-center py-10 text-sm text-muted-foreground">No data</div>
+            ) : (
+              <div className="space-y-3">
+                {(() => {
+                  const total = categoryBreakdown.reduce((s, c) => s + c.value, 0)
+                  return categoryBreakdown.slice(0, 6).map((cat, i) => {
+                    const pct = (cat.value / total) * 100
+                    return (
+                      <div key={cat.name}>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-medium">{cat.name}</span>
+                          <span className="text-xs text-muted-foreground">{formatINRCompact(cat.value)}</span>
+                        </div>
+                        <div className="h-2 rounded-full bg-muted overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all"
+                            style={{ width: `${pct}%`, background: COLORS[i % COLORS.length] }}
+                          />
+                        </div>
+                      </div>
+                    )
+                  })
+                })()}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Low stock alerts & recent transactions */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Low stock alert */}
+        <Card className="shadow-card border-border/60">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-rose-100 flex items-center justify-center">
+                  <AlertTriangle className="w-4 h-4 text-rose-600" />
+                </div>
+                <div>
+                  <CardTitle className="text-base font-semibold">Low Stock Alerts</CardTitle>
+                  <p className="text-xs text-muted-foreground">{lowStockProducts.length} products need restocking</p>
+                </div>
+              </div>
+              <Button variant="ghost" size="sm" className="text-xs h-7 gap-1" onClick={() => setView('inventory')}>
+                Manage <ArrowRight className="w-3 h-3" />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {lowStockProducts.length === 0 ? (
+              <div className="text-center py-8 text-sm text-muted-foreground">
+                <Package className="w-10 h-10 mx-auto mb-2 text-emerald-500" />
+                All products well stocked!
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-72 overflow-y-auto">
+                {lowStockProducts.slice(0, 6).map((p: any) => (
+                  <div key={p.id} className="flex items-center justify-between p-2.5 rounded-lg bg-rose-50/50 border border-rose-100">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{p.name}</p>
+                      <p className="text-[11px] text-muted-foreground">{p.category} • Stock: {p.currentStock} {p.unit}</p>
+                    </div>
+                    <Badge variant="destructive" className="text-[10px]">
+                      {p.currentStock === 0 ? 'Out of stock' : `Low`}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Recent transactions */}
+        <Card className="shadow-card border-border/60">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center">
+                  <Receipt className="w-4 h-4 text-amber-600" />
+                </div>
+                <div>
+                  <CardTitle className="text-base font-semibold">Recent Transactions</CardTitle>
+                  <p className="text-xs text-muted-foreground">Latest activity</p>
+                </div>
+              </div>
+              <Button variant="ghost" size="sm" className="text-xs h-7 gap-1" onClick={() => setView('sales')}>
+                View all <ArrowRight className="w-3 h-3" />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {recentTransactions.length === 0 ? (
+              <div className="text-center py-8 text-sm text-muted-foreground">No transactions yet</div>
+            ) : (
+              <div className="space-y-2 max-h-72 overflow-y-auto">
+                {recentTransactions.map((t: any) => {
+                  const isSale = t.type === 'sale'
+                  const isPurchase = t.type === 'purchase'
+                  const isIncome = t.type === 'income'
+                  const isExpense = t.type === 'expense'
+                  const isInflow = isSale || isIncome
+                  return (
+                    <div key={t.id} className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted/50 transition">
+                      <div className={cn(
+                        'w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0',
+                        isInflow ? 'bg-emerald-100' : 'bg-rose-100'
+                      )}>
+                        {isInflow ? (
+                          <ArrowDownRight className="w-4 h-4 text-emerald-600" />
+                        ) : (
+                          <ArrowUpRight className="w-4 h-4 text-rose-600" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">
+                          {t.partyName}
+                          {t.invoiceNo && <span className="text-muted-foreground text-xs ml-1">• {t.invoiceNo}</span>}
+                        </p>
+                        <p className="text-[11px] text-muted-foreground capitalize">
+                          {t.type} • {relativeTime(t.date)} • {t.paymentMode}
+                        </p>
+                      </div>
+                      <div className="text-right flex-shrink-0">
+                        <p className={cn('text-sm font-semibold', isInflow ? 'text-emerald-600' : 'text-rose-600')}>
+                          {isInflow ? '+' : '-'}{formatINRCompact(t.totalAmount)}
+                        </p>
+                        {isSale && t.profit !== undefined && (
+                          <p className="text-[10px] text-muted-foreground">
+                            Profit {formatINRCompact(t.profit)}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* GST summary mini */}
+      <Card className="shadow-card border-border/60">
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base font-semibold">GST Summary (This Month)</CardTitle>
+            <Button variant="ghost" size="sm" className="text-xs h-7 gap-1" onClick={() => setView('reports')}>
+              Full report <ArrowRight className="w-3 h-3" />
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <GstMiniStat label="Output Tax (Sales)" value={gstSummary.outputTax} color="text-amber-600" />
+            <GstMiniStat label="Input Tax (Purchase)" value={gstSummary.inputTax} color="text-emerald-600" />
+            <GstMiniStat label="CGST + SGST" value={gstSummary.cgst + gstSummary.sgst} color="text-violet-600" />
+            <GstMiniStat label="Net GST Payable" value={gstSummary.netPayable} color={gstSummary.netPayable >= 0 ? 'text-rose-600' : 'text-emerald-600'} highlight />
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+function KPICard({ title, value, icon: Icon, gradient, subtitle, trend }: {
+  title: string
+  value: string
+  icon: any
+  gradient: string
+  subtitle?: string
+  trend?: 'up' | 'down'
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+    >
+      <Card className="shadow-card border-border/60 overflow-hidden relative">
+        <div className={`absolute top-0 right-0 w-20 h-20 bg-gradient-to-br ${gradient} opacity-10 rounded-full -mr-8 -mt-8`} />
+        <CardContent className="p-4 lg:p-5 relative">
+          <div className="flex items-start justify-between mb-3">
+            <div className={`w-9 h-9 rounded-lg bg-gradient-to-br ${gradient} flex items-center justify-center shadow-md`}>
+              <Icon className="w-4 h-4 text-white" />
+            </div>
+            {trend && (
+              <div className={cn('flex items-center text-xs font-medium', trend === 'up' ? 'text-emerald-600' : 'text-rose-600')}>
+                {trend === 'up' ? <TrendingUp className="w-3 h-3 mr-0.5" /> : <TrendingDown className="w-3 h-3 mr-0.5" />}
+              </div>
+            )}
+          </div>
+          <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">{title}</p>
+          <p className="text-xl lg:text-2xl font-bold mt-0.5 tracking-tight">{value}</p>
+          {subtitle && <p className="text-[11px] text-muted-foreground mt-1">{subtitle}</p>}
+        </CardContent>
+      </Card>
+    </motion.div>
+  )
+}
+
+function MiniStatCard({ label, value, icon: Icon, color, onClick }: {
+  label: string
+  value: string
+  icon: any
+  color: string
+  onClick?: () => void
+}) {
+  return (
+    <Card
+      className="shadow-card border-border/60 hover:shadow-md transition cursor-pointer"
+      onClick={onClick}
+    >
+      <CardContent className="p-3 lg:p-4">
+        <div className="flex items-center gap-2 mb-1">
+          <Icon className={cn('w-3.5 h-3.5', color)} />
+          <p className="text-[10px] lg:text-[11px] text-muted-foreground font-medium uppercase tracking-wide leading-tight">{label}</p>
+        </div>
+        <p className="text-base lg:text-lg font-bold tracking-tight">{value}</p>
+      </CardContent>
+    </Card>
+  )
+}
+
+function GstMiniStat({ label, value, color, highlight }: {
+  label: string
+  value: number
+  color: string
+  highlight?: boolean
+}) {
+  return (
+    <div className={cn('rounded-lg p-3 border', highlight ? 'bg-muted/50 border-primary/30' : 'bg-card border-border')}>
+      <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">{label}</p>
+      <p className={cn('text-base font-bold mt-1', color)}>{formatINR(value)}</p>
+    </div>
+  )
+}
+
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-5">
+      <Skeleton className="h-32 w-full rounded-2xl" />
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-32 rounded-xl" />)}
+      </div>
+      <Skeleton className="h-80 w-full rounded-xl" />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <Skeleton className="h-72 rounded-xl lg:col-span-2" />
+        <Skeleton className="h-72 rounded-xl" />
+      </div>
+    </div>
+  )
+}

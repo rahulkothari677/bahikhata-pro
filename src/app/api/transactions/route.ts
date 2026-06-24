@@ -1,0 +1,148 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { db } from '@/lib/db'
+
+// GET /api/transactions - list with filters
+export async function GET(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url)
+    const type = searchParams.get('type')
+    const limit = parseInt(searchParams.get('limit') || '50')
+
+    const where: any = {}
+    if (type && type !== 'all') where.type = type
+
+    const transactions = await db.transaction.findMany({
+      where,
+      include: {
+        items: true,
+        party: true,
+      },
+      orderBy: { date: 'desc' },
+      take: limit,
+    })
+
+    return NextResponse.json({ transactions })
+  } catch (error) {
+    console.error('Transactions GET error:', error)
+    return NextResponse.json({ error: 'Failed to fetch transactions' }, { status: 500 })
+  }
+}
+
+// POST /api/transactions - create new transaction (sale, purchase, income, expense)
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json()
+    const { type, partyId, date, items, discountAmount, paymentMode, isInterState, notes, invoiceNo, category, paidAmount } = body
+
+    // Calculate totals
+    let subtotal = 0
+    let cgst = 0, sgst = 0, igst = 0
+    let grossProfit = 0
+
+    // For income/expense - just total amount
+    if (type === 'income' || type === 'expense') {
+      const amount = parseFloat(body.totalAmount) || 0
+      const transaction = await db.transaction.create({
+        data: {
+          type,
+          category: category || null,
+          date: new Date(date || new Date()),
+          subtotal: amount,
+          totalAmount: amount,
+          paidAmount: amount,
+          paymentMode: paymentMode || 'cash',
+          notes: notes || null,
+          invoiceNo: invoiceNo || null,
+        },
+        include: { items: true, party: true },
+      })
+      return NextResponse.json({ transaction })
+    }
+
+    // For sale/purchase - compute from items
+    if (!items || items.length === 0) {
+      return NextResponse.json({ error: 'At least one item is required' }, { status: 400 })
+    }
+
+    // Get product details for profit calc (for sales)
+    const productIds = items.map((i: any) => i.productId).filter(Boolean)
+    const products = productIds.length > 0 ? await db.product.findMany({ where: { id: { in: productIds } } }) : []
+    const productMap = new Map(products.map(p => [p.id, p]))
+
+    const txItems = items.map((item: any) => {
+      const amount = item.quantity * item.unitPrice
+      const itemGst = amount * (item.gstRate || 0) / 100
+      const itemTotal = amount - (item.discountAmount || 0) + itemGst
+      subtotal += amount
+      if (isInterState) {
+        igst += itemGst
+      } else {
+        cgst += itemGst / 2
+        sgst += itemGst / 2
+      }
+      // Profit calculation for sales
+      if (type === 'sale' && item.productId) {
+        const product = productMap.get(item.productId)
+        if (product) {
+          grossProfit += (item.unitPrice - product.purchasePrice) * item.quantity
+        }
+      }
+      return {
+        productId: item.productId || null,
+        productName: item.productName,
+        quantity: parseFloat(item.quantity),
+        unitPrice: parseFloat(item.unitPrice),
+        gstRate: parseFloat(item.gstRate) || 0,
+        discountAmount: parseFloat(item.discountAmount) || 0,
+        total: itemTotal,
+      }
+    })
+
+    const discount = parseFloat(discountAmount) || 0
+    const totalAmount = subtotal - discount + cgst + sgst + igst
+    const paid = parseFloat(paidAmount)
+    const finalPaid = isNaN(paid) ? totalAmount : paid
+
+    const transaction = await db.transaction.create({
+      data: {
+        type,
+        partyId: partyId || null,
+        date: new Date(date || new Date()),
+        subtotal,
+        discountAmount: discount,
+        cgst,
+        sgst,
+        igst,
+        totalAmount,
+        paidAmount: finalPaid,
+        paymentMode: paymentMode || 'cash',
+        isInterState: !!isInterState,
+        notes: notes || null,
+        invoiceNo: invoiceNo || null,
+        grossProfit,
+        items: { create: txItems },
+      },
+      include: { items: true, party: true },
+    })
+
+    return NextResponse.json({ transaction })
+  } catch (error) {
+    console.error('Transactions POST error:', error)
+    return NextResponse.json({ error: 'Failed to create transaction' }, { status: 500 })
+  }
+}
+
+// DELETE /api/transactions?id=xxx
+export async function DELETE(req: NextRequest) {
+  try {
+    const { searchParams } = new URL(req.url)
+    const id = searchParams.get('id')
+    if (!id) return NextResponse.json({ error: 'ID required' }, { status: 400 })
+
+    await db.transaction.delete({ where: { id } })
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error('Transactions DELETE error:', error)
+    return NextResponse.json({ error: 'Failed to delete transaction' }, { status: 500 })
+  }
+}

@@ -1,0 +1,125 @@
+// BahiKhata Pro — India's Best Ledger App
+// Database schema for shop owners: products, parties, transactions, GST, etc.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== PRODUCTS / INVENTORY ====================
+model Product {
+  id                String   @id @default(cuid())
+  name              String
+  sku               String?  @unique
+  hsn               String?  // HSN/SAC code for GST
+  category          String?
+  unit              String   @default("pcs") // pcs, kg, ltr, m, box
+  purchasePrice     Float    @default(0)  // price at which shop owner buys
+  salePrice         Float    @default(0)  // price at which shop owner sells
+  mrp               Float?   // MRP printed on product
+  gstRate           Float    @default(0)  // 0, 5, 12, 18, 28
+  openingStock      Float    @default(0)
+  lowStockThreshold Float    @default(5)
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  transactionItems  TransactionItem[]
+
+  // computed stock = openingStock + sum(purchase items) - sum(sale items)
+}
+
+// ==================== PARTIES (Customers & Suppliers) ====================
+model Party {
+  id              String   @id @default(cuid())
+  name            String
+  type            String   @default("customer") // customer | supplier | both
+  phone           String?
+  email           String?
+  gstin           String?  // GST Identification Number
+  address         String?
+  state           String?  // for intra/inter state GST
+  openingBalance  Float    @default(0) // positive = they owe us; negative = we owe them
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  transactions    Transaction[]
+  payments        Payment[]
+}
+
+// ==================== TRANSACTIONS (Sales, Purchases, Income, Expense) ====================
+model Transaction {
+  id             String   @id @default(cuid())
+  invoiceNo      String?  // bill/invoice number from bill
+  type           String   // sale | purchase | income | expense
+  partyId        String?  // customer for sale, supplier for purchase
+  party          Party?   @relation(fields: [partyId], references: [id])
+  date           DateTime @default(now())
+  subtotal       Float    @default(0)  // before tax & discount
+  discountAmount Float    @default(0)
+  cgst           Float    @default(0)
+  sgst           Float    @default(0)
+  igst           Float    @default(0)
+  totalAmount    Float    @default(0)  // final payable
+  paidAmount     Float    @default(0)  // amount actually paid
+  paymentMode    String   @default("cash") // cash | upi | card | bank | credit
+  isInterState   Boolean  @default(false)
+  notes          String?
+  // For income/expense (no items)
+  category       String?  // e.g. rent, salary, electricity for expenses; commission etc for income
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  items          TransactionItem[]
+
+  // Auto-computed gross profit when type=sale (sum of (salePrice - purchasePrice) * qty)
+  // Stored for quick queries
+  grossProfit    Float    @default(0)
+}
+
+model TransactionItem {
+  id             String   @id @default(cuid())
+  transactionId  String
+  transaction    Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  productId      String?
+  product        Product?  @relation(fields: [productId], references: [id])
+  productName    String   // snapshot of name at time of transaction
+  quantity       Float    @default(1)
+  unitPrice      Float    @default(0)  // price per unit (sale or purchase)
+  gstRate        Float    @default(0)
+  discountAmount Float    @default(0)
+  total          Float    @default(0)  // qty * unitPrice - discount + gst
+
+  createdAt      DateTime @default(now())
+}
+
+// ==================== PAYMENTS (separate from transaction totals) ====================
+model Payment {
+  id          String   @id @default(cuid())
+  partyId     String
+  party       Party    @relation(fields: [partyId], references: [id])
+  amount      Float
+  date        DateTime @default(now())
+  mode        String   @default("cash") // cash | upi | card | bank
+  type        String   @default("received") // received (from customer) | paid (to supplier)
+  notes       String?
+  createdAt   DateTime @default(now())
+}
+
+// ==================== APP SETTINGS ====================
+model Setting {
+  id        String   @id @default("default")
+  shopName  String   @default("My Shop")
+  ownerName String?
+  address   String?
+  phone     String?
+  gstin     String?
+  state     String?
+  email     String?
+  currency  String   @default("INR")
+  language  String   @default("en")
+}
