@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import ZAI from 'z-ai-web-dev-sdk'
 import { getAuthUserId } from '@/lib/get-auth'
 
 // POST /api/scan-bill - uses VLM to extract bill data from image
+// Supports two modes:
+// 1. Z.AI SDK (for sandbox/dev - auto-configured)
+// 2. OpenAI-compatible API (for production - set VLM_API_KEY & VLM_BASE_URL env vars)
 export async function POST(req: NextRequest) {
   try {
     const { userId, error } = await getAuthUserId()
@@ -17,9 +19,6 @@ export async function POST(req: NextRequest) {
     if (!imageSource) {
       return NextResponse.json({ error: 'Image is required' }, { status: 400 })
     }
-
-    const zai = await ZAI.create()
-    const vlm = await zai.images.vlm.create()
 
     const prompt = `You are an expert at reading Indian shop bills, invoices and receipts. Carefully analyze this ${billType} bill image and extract all information.
 
@@ -60,69 +59,113 @@ Rules:
 - Match each item's name with what's written, even if abbreviated.
 - Return JSON only, no commentary.`
 
-    const response = await vlm.invoke({
-      messages: [
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: prompt },
-            { type: 'image_url', image_url: { url: imageSource } },
-          ],
-        },
-      ],
-    })
-
-    // Extract text content from response
     let content = ''
-    if (typeof response === 'string') {
-      content = response
-    } else if (response?.choices?.[0]?.message?.content) {
-      content = response.choices[0].message.content
-    } else if (response?.content) {
-      content = response.content
+
+    // Mode 1: Try Z.AI SDK first (works in sandbox/dev)
+    if (!process.env.VLM_API_KEY) {
+      try {
+        const ZAI = (await import('z-ai-web-dev-sdk')).default
+        const zai = await ZAI.create()
+        const vlm = await zai.images.vlm.create()
+
+        const response = await vlm.invoke({
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: prompt },
+                { type: 'image_url', image_url: { url: imageSource } },
+              ],
+            },
+          ],
+        })
+
+        if (typeof response === 'string') {
+          content = response
+        } else if (response?.choices?.[0]?.message?.content) {
+          content = response.choices[0].message.content
+        } else if (response?.content) {
+          content = response.content
+        } else {
+          content = JSON.stringify(response)
+        }
+      } catch (zaiError) {
+        console.error('Z.AI SDK error:', zaiError)
+        return NextResponse.json({
+          error: 'AI scanner not configured for production',
+          detail: 'Set VLM_API_KEY and VLM_BASE_URL environment variables in Vercel to enable AI bill scanning. See README for setup instructions.',
+          needsConfig: true,
+        }, { status: 503 })
+      }
     } else {
-      content = JSON.stringify(response)
+      // Mode 2: Use OpenAI-compatible API (for production/Vercel)
+      const baseUrl = process.env.VLM_BASE_URL || 'https://api.openai.com/v1'
+      const model = process.env.VLM_MODEL || 'gpt-4o-mini'
+
+      const response = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.VLM_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: prompt },
+                { type: 'image_url', image_url: { url: imageSource } },
+              ],
+            },
+          ],
+          max_tokens: 2000,
+        }),
+      })
+
+      if (!response.ok) {
+        const errText = await response.text()
+        console.error('VLM API error:', errText)
+        return NextResponse.json({
+          error: 'AI scanner request failed',
+          detail: errText,
+        }, { status: 502 })
+      }
+
+      const data = await response.json()
+      content = data.choices?.[0]?.message?.content || ''
     }
 
-    // Try to parse JSON from response - handle both raw JSON and markdown-wrapped
+    // Try to parse JSON from response
     let parsed = null
     try {
-      // Try direct parse first
       parsed = JSON.parse(content)
     } catch {
-      // Try to extract JSON from markdown
       const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/)
       if (jsonMatch) {
         try {
           parsed = JSON.parse(jsonMatch[1])
-        } catch (e) {
-          console.error('Failed to parse extracted JSON:', e)
-        }
+        } catch {}
       }
-      // Try to find any JSON object in the text
       if (!parsed) {
         const objMatch = content.match(/\{[\s\S]*\}/)
         if (objMatch) {
           try {
             parsed = JSON.parse(objMatch[0])
-          } catch (e) {
-            console.error('Failed to parse matched JSON:', e)
-          }
+          } catch {}
         }
       }
     }
 
     if (!parsed) {
-      // Return raw content for debugging
       return NextResponse.json({
         error: 'Could not parse bill data',
         rawContent: content.slice(0, 2000),
       }, { status: 422 })
     }
 
-    // Ensure items array exists
+    // Sanitize
     if (!parsed.items) parsed.items = []
-    // Sanitize numbers
     parsed.items = parsed.items.map((item: any) => ({
       name: String(item.name || 'Unknown Product'),
       quantity: Number(item.quantity) || 1,
