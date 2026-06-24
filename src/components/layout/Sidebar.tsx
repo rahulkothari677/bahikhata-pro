@@ -96,6 +96,8 @@ export function Sidebar() {
             const Icon = item.icon
             const active = currentView === item.id ||
               (currentView === 'transaction-detail' && (item.id === 'sales' || item.id === 'purchases')) ||
+              (currentView === 'new-sale' && item.id === 'sales') ||
+              (currentView === 'new-purchase' && item.id === 'purchases') ||
               (currentView === 'party-profile' && item.id === 'parties')
             return (
               <button

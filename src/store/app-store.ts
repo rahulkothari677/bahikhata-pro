@@ -12,6 +12,8 @@ export type ViewType =
   | 'settings'
   | 'transaction-detail'
   | 'party-profile'
+  | 'new-sale'
+  | 'new-purchase'
 
 export type ViewMode = 'grid' | 'list'
 

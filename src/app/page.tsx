@@ -10,6 +10,7 @@ import { Dashboard } from '@/components/dashboard/Dashboard'
 import { Inventory } from '@/components/inventory/Inventory'
 import { Ledger } from '@/components/ledger/Ledger'
 import { TransactionDetail } from '@/components/ledger/TransactionDetail'
+import { TransactionEntry } from '@/components/ledger/TransactionEntry'
 import { IncomeExpense } from '@/components/income/IncomeExpense'
 import { Parties } from '@/components/parties/Parties'
 import { PartyProfile } from '@/components/parties/PartyProfile'
@@ -52,6 +53,8 @@ export default function Home() {
           {currentView === 'settings' && <Settings />}
           {currentView === 'transaction-detail' && <TransactionDetail />}
           {currentView === 'party-profile' && <PartyProfile />}
+          {currentView === 'new-sale' && <TransactionEntry type="sale" />}
+          {currentView === 'new-purchase' && <TransactionEntry type="purchase" />}
         </main>
 
         <footer className="mt-auto border-t border-border py-3 px-4 lg:px-6 text-center text-[11px] text-muted-foreground no-print">

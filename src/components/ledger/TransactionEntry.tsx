@@ -1,0 +1,846 @@
+'use client'
+
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState, useEffect, useRef } from 'react'
+import { useAppStore } from '@/store/app-store'
+import { Card, CardContent } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Badge } from '@/components/ui/badge'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { useToast } from '@/hooks/use-toast'
+import { toast as sonnerToast } from 'sonner'
+import { formatINR, cn, getInitials } from '@/lib/utils'
+import {
+  ArrowLeft, ShoppingCart, Truck, Plus, X, Search, ChevronDown,
+  TrendingUp, Calendar, User, ScanLine, Folder, FolderOpen,
+  Package, Phone, IndianRupee, Save, Trash2, Check, AlertCircle,
+} from 'lucide-react'
+
+const PAYMENT_MODES = [
+  { value: 'cash', label: 'Cash' },
+  { value: 'upi', label: 'UPI / QR' },
+  { value: 'card', label: 'Card' },
+  { value: 'bank', label: 'Bank Transfer' },
+  { value: 'credit', label: 'Credit (Udhaar)' },
+]
+
+type LedgerType = 'sale' | 'purchase'
+
+type ItemRow = {
+  productId: string
+  productName: string
+  quantity: number
+  unitPrice: number
+  gstRate: number
+  unit: string
+}
+
+export function TransactionEntry({ type }: { type: LedgerType }) {
+  const isSale = type === 'sale'
+  const { setView, triggerRefresh, setScannerBillType, previousView, setPreviousView } = useAppStore()
+  const { toast } = useToast()
+  const queryClient = useQueryClient()
+
+  const [partyId, setPartyId] = useState('')
+  const [partySearch, setPartySearch] = useState('')
+  const [partyDropdownOpen, setPartyDropdownOpen] = useState(false)
+  const [addPartyOpen, setAddPartyOpen] = useState(false)
+
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
+  const [invoiceNo, setInvoiceNo] = useState('')
+  const [isInterState, setIsInterState] = useState(false)
+  const [paymentMode, setPaymentMode] = useState('cash')
+  const [paidAmount, setPaidAmount] = useState('')
+  const [discountAmount, setDiscountAmount] = useState('')
+  const [notes, setNotes] = useState('')
+
+  // Cascading product selection
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
+  const [productSearch, setProductSearch] = useState('')
+  const [items, setItems] = useState<ItemRow[]>([])
+
+  const [saving, setSaving] = useState(false)
+
+  // Fetch products
+  const { data: productsData } = useQuery({
+    queryKey: ['products', 'for-entry'],
+    queryFn: async () => {
+      const r = await fetch('/api/products')
+      return r.json()
+    },
+  })
+  const products: any[] = productsData?.products || []
+  const productMap = new Map(products.map(p => [p.id, p]))
+
+  // Fetch parties
+  const { data: partiesData, refetch: refetchParties } = useQuery({
+    queryKey: ['parties', 'for-entry'],
+    queryFn: async () => {
+      const r = await fetch('/api/parties')
+      return r.json()
+    },
+  })
+  const allParties: any[] = partiesData?.parties || []
+  const filteredParties = allParties.filter(p =>
+    (p.type === (isSale ? 'customer' : 'supplier') || p.type === 'both') &&
+    (!partySearch ||
+      p.name?.toLowerCase().includes(partySearch.toLowerCase()) ||
+      p.phone?.includes(partySearch))
+  )
+
+  // Build categories
+  const categories = Array.from(new Set(products.map(p => p.category || 'Uncategorized'))).sort()
+  const productsInCategory = selectedCategory
+    ? products.filter(p => (p.category || 'Uncategorized') === selectedCategory)
+    : products
+
+  const filteredProducts = productsInCategory.filter(p => {
+    if (!productSearch) return true
+    const q = productSearch.toLowerCase()
+    return p.name?.toLowerCase().includes(q) ||
+      p.sku?.toLowerCase().includes(q) ||
+      p.hsn?.toLowerCase().includes(q)
+  })
+
+  // Check for preset data (from scanner or party profile)
+  useEffect(() => {
+    const checkPreset = () => {
+      const stored = (window as any).__ledgerPreset
+      if (stored && stored.type === type) {
+        if (stored.data.partyId) setPartyId(stored.data.partyId)
+        if (stored.data.invoiceNo) setInvoiceNo(stored.data.invoiceNo)
+        if (stored.data.date) {
+          try {
+            const d = new Date(stored.data.date)
+            if (!isNaN(d.getTime())) setDate(d.toISOString().slice(0, 10))
+          } catch {}
+        }
+        if (stored.data.items?.length > 0) {
+          setItems(stored.data.items.map((item: any) => ({
+            productId: item.productId || '',
+            productName: item.name || item.productName,
+            quantity: Number(item.quantity) || 1,
+            unitPrice: Number(item.unitPrice) || 0,
+            gstRate: Number(item.gstRate) || 0,
+            unit: item.unit || 'pcs',
+          })))
+        }
+        if (stored.data.totalAmount) setPaidAmount(String(stored.data.totalAmount))
+        ;(window as any).__ledgerPreset = null
+      }
+    }
+    checkPreset()
+  }, [type])
+
+  const partyDropdownRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (partyDropdownRef.current && !partyDropdownRef.current.contains(e.target as Node)) {
+        setPartyDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const selectedParty = allParties.find(p => p.id === partyId)
+
+  const handleAddProduct = (product: any) => {
+    // Check if product already in list
+    const existing = items.find(i => i.productId === product.id)
+    if (existing) {
+      setItems(items.map(i =>
+        i.productId === product.id
+          ? { ...i, quantity: i.quantity + 1 }
+          : i
+      ))
+      sonnerToast.info(`Increased quantity of ${product.name}`)
+    } else {
+      setItems([...items, {
+        productId: product.id,
+        productName: product.name,
+        quantity: 1,
+        unitPrice: isSale ? product.salePrice : product.purchasePrice,
+        gstRate: product.gstRate,
+        unit: product.unit,
+      }])
+    }
+    setProductSearch('')
+  }
+
+  const handleUpdateItem = (index: number, field: keyof ItemRow, value: any) => {
+    const newItems = [...items]
+    newItems[index] = { ...newItems[index], [field]: value }
+    setItems(newItems)
+  }
+
+  const handleRemoveItem = (index: number) => {
+    setItems(items.filter((_, i) => i !== index))
+  }
+
+  // Totals
+  let subtotal = 0
+  let totalGst = 0
+  let totalProfit = 0
+  const totalDiscount = parseFloat(discountAmount) || 0
+
+  items.forEach(item => {
+    const amount = (item.quantity || 0) * (item.unitPrice || 0)
+    const itemGst = amount * (item.gstRate || 0) / 100
+    subtotal += amount
+    totalGst += itemGst
+    if (isSale && item.productId) {
+      const p = productMap.get(item.productId)
+      if (p) totalProfit += (item.unitPrice - p.purchasePrice) * item.quantity
+    }
+  })
+
+  const totalAmount = subtotal - totalDiscount + totalGst
+  const cgst = isInterState ? 0 : totalGst / 2
+  const sgst = isInterState ? 0 : totalGst / 2
+  const igst = isInterState ? totalGst : 0
+  const paid = parseFloat(paidAmount) || 0
+  const finalPaid = paidAmount === '' ? totalAmount : paid
+  const due = totalAmount - finalPaid
+
+  const handleSave = async () => {
+    if (items.length === 0) {
+      toast({ title: 'Add at least one item', variant: 'destructive' })
+      return
+    }
+    setSaving(true)
+    try {
+      const r = await fetch('/api/transactions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type,
+          partyId: partyId || null,
+          date,
+          invoiceNo: invoiceNo || null,
+          isInterState,
+          paymentMode,
+          paidAmount: finalPaid,
+          discountAmount: totalDiscount,
+          notes,
+          items: items.map(i => ({
+            productId: i.productId || null,
+            productName: i.productName,
+            quantity: Number(i.quantity),
+            unitPrice: Number(i.unitPrice),
+            gstRate: Number(i.gstRate) || 0,
+            discountAmount: 0,
+          })),
+        }),
+      })
+      if (!r.ok) throw new Error('Failed')
+      sonnerToast.success(`${isSale ? 'Sale' : 'Purchase'} recorded successfully!`)
+      queryClient.invalidateQueries({ queryKey: ['transactions'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      triggerRefresh()
+      setView(isSale ? 'sales' : 'purchases')
+    } catch (e) {
+      toast({ title: 'Failed to save transaction', variant: 'destructive' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleCancel = () => {
+    if (previousView) {
+      setView(previousView)
+    } else {
+      setView(isSale ? 'sales' : 'purchases')
+    }
+    setPreviousView(null)
+  }
+
+  const accentColor = isSale ? 'text-emerald-600' : 'text-amber-600'
+  const accentBg = isSale ? 'bg-emerald-100' : 'bg-amber-100'
+  const accentGradient = isSale ? 'bg-gradient-emerald' : 'bg-gradient-saffron'
+
+  return (
+    <div className="space-y-4 pb-24 lg:pb-4">
+      {/* Top action bar */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="sm" onClick={handleCancel} className="gap-2">
+            <ArrowLeft className="w-4 h-4" /> Back
+          </Button>
+          <div>
+            <h2 className="text-xl font-bold flex items-center gap-2">
+              {isSale ? <ShoppingCart className="w-5 h-5 text-emerald-600" /> : <Truck className="w-5 h-5 text-amber-600" />}
+              New {isSale ? 'Sale' : 'Purchase'}
+            </h2>
+            <p className="text-xs text-muted-foreground">Fill in the details below</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => { setScannerBillType(type); setView('scanner') }} className="gap-2">
+            <ScanLine className="w-4 h-4" /> Scan Bill
+          </Button>
+          <Button size="sm" onClick={handleSave} disabled={saving} className={`${accentGradient} gap-2 shadow-md`}>
+            <Save className="w-4 h-4" /> {saving ? 'Saving...' : `Save ${isSale ? 'Sale' : 'Purchase'}`}
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        {/* LEFT: Product selection + items list (takes 2 cols) */}
+        <div className="lg:col-span-2 space-y-4">
+          {/* Product selector card */}
+          <Card className="shadow-card border-border/60">
+            <div className="p-4 border-b border-border bg-muted/30">
+              <h3 className="font-semibold text-sm flex items-center gap-2 mb-3">
+                <Package className="w-4 h-4" /> Add Products
+              </h3>
+
+              {/* Cascading: Category dropdown + Product search */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* Category selector */}
+                <div>
+                  <Label className="text-[11px] uppercase text-muted-foreground">Category</Label>
+                  <Select
+                    value={selectedCategory || '__all__'}
+                    onValueChange={(v) => setSelectedCategory(v === '__all__' ? null : v)}
+                  >
+                    <SelectTrigger className="mt-1 bg-background">
+                      <Folder className="w-3.5 h-3.5 mr-1 text-muted-foreground" />
+                      <SelectValue placeholder="All Categories" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">All Categories ({products.length})</SelectItem>
+                      {categories.map(cat => {
+                        const count = products.filter(p => (p.category || 'Uncategorized') === cat).length
+                        return (
+                          <SelectItem key={cat} value={cat}>
+                            {cat} ({count})
+                          </SelectItem>
+                        )
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Product search */}
+                <div className="sm:col-span-2">
+                  <Label className="text-[11px] uppercase text-muted-foreground">Search Product</Label>
+                  <div className="relative mt-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Type name, SKU or HSN..."
+                      value={productSearch}
+                      onChange={(e) => setProductSearch(e.target.value)}
+                      className="pl-9"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Product list - clickable to add */}
+              {filteredProducts.length > 0 && (
+                <div className="mt-3 max-h-48 overflow-y-auto rounded-lg border border-border bg-background">
+                  {filteredProducts.slice(0, 20).map(p => {
+                    const inList = items.find(i => i.productId === p.id)
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => handleAddProduct(p)}
+                        className="w-full flex items-center gap-3 p-2.5 hover:bg-muted/50 transition text-left border-b border-border/30 last:border-0"
+                      >
+                        <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                          <Package className="w-4 h-4 text-muted-foreground" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{p.name}</p>
+                          <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                            {p.category && <Badge variant="outline" className="text-[9px] py-0">{p.category}</Badge>}
+                            <span>{formatINR(isSale ? p.salePrice : p.purchasePrice)}/{p.unit}</span>
+                            <span>•</span>
+                            <span>GST {p.gstRate}%</span>
+                          </div>
+                        </div>
+                        <div className="text-right flex-shrink-0">
+                          <p className={cn(
+                            'text-[11px] font-medium',
+                            p.currentStock <= 0 ? 'text-rose-600' :
+                            p.isLowStock ? 'text-amber-600' : 'text-emerald-600'
+                          )}>
+                            {p.currentStock} {p.unit}
+                          </p>
+                        </div>
+                        <div className="flex-shrink-0">
+                          {inList ? (
+                            <Badge className="bg-emerald-100 text-emerald-700 text-[9px] gap-1">
+                              <Check className="w-2.5 h-2.5" /> Added
+                            </Badge>
+                          ) : (
+                            <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center">
+                              <Plus className="w-4 h-4 text-primary" />
+                            </div>
+                          )}
+                        </div>
+                      </button>
+                    )
+                  })}
+                  {filteredProducts.length > 20 && (
+                    <p className="text-center text-[11px] text-muted-foreground py-2">
+                      Showing 20 of {filteredProducts.length} — refine search to see more
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {filteredProducts.length === 0 && (
+                <div className="mt-3 text-center py-6 text-sm text-muted-foreground border border-dashed border-border rounded-lg">
+                  <Package className="w-8 h-8 mx-auto mb-1 text-muted-foreground/50" />
+                  {productSearch ? `No products match "${productSearch}"` : 'No products found. Add products in Inventory first.'}
+                </div>
+              )}
+            </div>
+
+            {/* Items list */}
+            <div className="p-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold text-sm flex items-center gap-2">
+                  <ShoppingCart className="w-4 h-4" /> Selected Items
+                  {items.length > 0 && <Badge variant="secondary">{items.length}</Badge>}
+                </h3>
+              </div>
+
+              {items.length === 0 ? (
+                <div className="text-center py-8 text-sm text-muted-foreground border border-dashed border-border rounded-lg">
+                  <ShoppingCart className="w-10 h-10 mx-auto mb-2 text-muted-foreground/40" />
+                  <p>No items added yet</p>
+                  <p className="text-[11px] mt-1">Click products above to add them here</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {/* Header row */}
+                  <div className="hidden sm:grid grid-cols-12 gap-2 text-[10px] uppercase text-muted-foreground font-medium px-2">
+                    <div className="col-span-5">Product</div>
+                    <div className="col-span-2 text-center">Qty</div>
+                    <div className="col-span-2 text-right">Price ₹</div>
+                    <div className="col-span-1 text-center">GST</div>
+                    <div className="col-span-2 text-right">Total</div>
+                  </div>
+
+                  {items.map((item, i) => (
+                    <div key={i} className="grid grid-cols-12 gap-2 items-center p-2.5 rounded-lg bg-muted/30 border border-border/50">
+                      {/* Product name */}
+                      <div className="col-span-12 sm:col-span-5">
+                        <p className="text-sm font-medium truncate">{item.productName}</p>
+                        <p className="text-[10px] text-muted-foreground">{item.unit} • GST {item.gstRate}%</p>
+                      </div>
+
+                      {/* Quantity */}
+                      <div className="col-span-4 sm:col-span-2">
+                        <label className="sm:hidden text-[10px] text-muted-foreground">Qty</label>
+                        <Input
+                          type="number"
+                          value={item.quantity}
+                          onChange={(e) => handleUpdateItem(i, 'quantity', parseFloat(e.target.value) || 0)}
+                          className="h-8 text-center"
+                          min="0"
+                          step="0.01"
+                        />
+                      </div>
+
+                      {/* Unit price */}
+                      <div className="col-span-4 sm:col-span-2">
+                        <label className="sm:hidden text-[10px] text-muted-foreground">Price ₹</label>
+                        <Input
+                          type="number"
+                          value={item.unitPrice}
+                          onChange={(e) => handleUpdateItem(i, 'unitPrice', parseFloat(e.target.value) || 0)}
+                          className="h-8 text-right"
+                          min="0"
+                          step="0.01"
+                        />
+                      </div>
+
+                      {/* GST */}
+                      <div className="col-span-3 sm:col-span-1">
+                        <Select
+                          value={String(item.gstRate)}
+                          onValueChange={(v) => handleUpdateItem(i, 'gstRate', parseFloat(v))}
+                        >
+                          <SelectTrigger className="h-8 text-center text-xs px-1">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {[0, 5, 12, 18, 28].map(r => <SelectItem key={r} value={String(r)}>{r}%</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Total + delete */}
+                      <div className="col-span-1 flex justify-end items-center gap-1">
+                        <span className="text-sm font-semibold hidden sm:inline">
+                          {formatINR(item.quantity * item.unitPrice * (1 + item.gstRate / 100))}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 text-rose-600 hover:bg-rose-50"
+                          onClick={() => handleRemoveItem(i)}
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </Card>
+
+          {/* Notes */}
+          <Card className="shadow-card border-border/60">
+            <div className="p-4">
+              <Label>Notes (optional)</Label>
+              <Input
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Any additional notes about this transaction..."
+                className="mt-1"
+              />
+            </div>
+          </Card>
+        </div>
+
+        {/* RIGHT: Party, date, payment, summary */}
+        <div className="space-y-4">
+          {/* Party selection */}
+          <Card className="shadow-card border-border/60">
+            <div className="p-4">
+              <h3 className="font-semibold text-sm flex items-center gap-2 mb-3">
+                <User className="w-4 h-4" /> {isSale ? 'Customer' : 'Supplier'}
+              </h3>
+
+              {selectedParty ? (
+                <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border">
+                  <Avatar className="w-10 h-10">
+                    <AvatarFallback className={cn(
+                      'text-white text-xs font-semibold',
+                      selectedParty.type === 'customer' ? 'bg-gradient-to-br from-emerald-500 to-teal-600' :
+                      selectedParty.type === 'supplier' ? 'bg-gradient-to-br from-amber-500 to-orange-600' :
+                      'bg-gradient-to-br from-violet-500 to-purple-600'
+                    )}>
+                      {getInitials(selectedParty.name)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{selectedParty.name}</p>
+                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                      {selectedParty.phone && <span className="flex items-center gap-0.5"><Phone className="w-2.5 h-2.5" />{selectedParty.phone}</span>}
+                      {selectedParty.balance !== 0 && (
+                        <Badge variant="outline" className={cn('text-[9px] py-0', selectedParty.balance > 0 ? 'text-emerald-600 border-emerald-300' : 'text-rose-600 border-rose-300')}>
+                          {selectedParty.balance > 0 ? `Owes ₹${selectedParty.balance}` : `You owe ₹${Math.abs(selectedParty.balance)}`}
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setPartyId('')}>
+                    <X className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              ) : (
+                <div className="relative" ref={partyDropdownRef}>
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground z-10" />
+                  <Input
+                    placeholder={`Search ${isSale ? 'customer' : 'supplier'} by name or phone...`}
+                    value={partySearch}
+                    onChange={(e) => { setPartySearch(e.target.value); setPartyDropdownOpen(true) }}
+                    onFocus={() => setPartyDropdownOpen(true)}
+                    className="pl-9"
+                  />
+
+                  {partyDropdownOpen && (
+                    <div className="absolute top-full mt-1 left-0 right-0 z-50 bg-popover border border-border rounded-lg shadow-lg max-h-64 overflow-y-auto">
+                      {filteredParties.length === 0 ? (
+                        <div className="p-4 text-center">
+                          <p className="text-sm text-muted-foreground mb-2">
+                            {partySearch ? `No match for "${partySearch}"` : `No ${isSale ? 'customers' : 'suppliers'} yet`}
+                          </p>
+                          <Button size="sm" className="bg-gradient-saffron gap-1" onClick={() => { setPartyDropdownOpen(false); setAddPartyOpen(true) }}>
+                            <Plus className="w-3.5 h-3.5" /> Add New {isSale ? 'Customer' : 'Supplier'}
+                          </Button>
+                        </div>
+                      ) : (
+                        <>
+                          {partySearch && (
+                            <div className="px-3 py-1.5 text-[10px] text-muted-foreground uppercase font-medium border-b border-border">
+                              {filteredParties.length} match{filteredParties.length !== 1 ? 'es' : ''}
+                            </div>
+                          )}
+                          {filteredParties.slice(0, 20).map(p => (
+                            <button
+                              key={p.id}
+                              onClick={() => { setPartyId(p.id); setPartyDropdownOpen(false); setPartySearch('') }}
+                              className="w-full flex items-center gap-2 p-2 hover:bg-muted transition text-left"
+                            >
+                              <Avatar className="w-8 h-8 flex-shrink-0">
+                                <AvatarFallback className={cn(
+                                  'text-white text-xs font-semibold',
+                                  p.type === 'customer' ? 'bg-gradient-to-br from-emerald-500 to-teal-600' :
+                                  p.type === 'supplier' ? 'bg-gradient-to-br from-amber-500 to-orange-600' :
+                                  'bg-gradient-to-br from-violet-500 to-purple-600'
+                                )}>
+                                  {getInitials(p.name)}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium truncate">{p.name}</p>
+                                <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                                  {p.phone && <span className="flex items-center gap-0.5"><Phone className="w-2.5 h-2.5" />{p.phone}</span>}
+                                  {p.state && <span>{p.state}</span>}
+                                </div>
+                              </div>
+                              {p.balance !== 0 && (
+                                <Badge variant="outline" className={cn('text-[9px] py-0', p.balance > 0 ? 'text-emerald-600' : 'text-rose-600')}>
+                                  {p.balance > 0 ? `+₹${p.balance}` : `-₹${Math.abs(p.balance)}`}
+                                </Badge>
+                              )}
+                            </button>
+                          ))}
+                          <div className="p-2 border-t border-border">
+                            <Button variant="outline" size="sm" className="w-full gap-1" onClick={() => { setPartyDropdownOpen(false); setAddPartyOpen(true) }}>
+                              <Plus className="w-3.5 h-3.5" /> Add New {isSale ? 'Customer' : 'Supplier'}
+                            </Button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </Card>
+
+          {/* Transaction details */}
+          <Card className="shadow-card border-border/60">
+            <div className="p-4 space-y-3">
+              <h3 className="font-semibold text-sm flex items-center gap-2">
+                <Calendar className="w-4 h-4" /> Details
+              </h3>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label>Date</Label>
+                  <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="mt-1" />
+                </div>
+                <div>
+                  <Label>Invoice No.</Label>
+                  <Input value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} placeholder="Optional" className="mt-1" />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between rounded-lg bg-muted/50 p-3">
+                <div>
+                  <Label className="cursor-pointer text-sm">Inter-state (IGST)</Label>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">ON if other state</p>
+                </div>
+                <Switch checked={isInterState} onCheckedChange={setIsInterState} />
+              </div>
+
+              <div>
+                <Label>Discount (₹)</Label>
+                <Input type="number" value={discountAmount} onChange={(e) => setDiscountAmount(e.target.value)} placeholder="0" className="mt-1" />
+              </div>
+
+              <div>
+                <Label>Payment Mode</Label>
+                <Select value={paymentMode} onValueChange={setPaymentMode}>
+                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {PAYMENT_MODES.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label>Paid Amount (₹)</Label>
+                <Input
+                  type="number"
+                  value={paidAmount}
+                  onChange={(e) => setPaidAmount(e.target.value)}
+                  placeholder={`Full: ${totalAmount.toFixed(0)}`}
+                  className="mt-1"
+                />
+                <p className="text-[10px] text-muted-foreground mt-1">Leave empty for full payment</p>
+              </div>
+            </div>
+          </Card>
+
+          {/* Live summary */}
+          <Card className="shadow-card border-border/60 sticky top-20">
+            <div className="p-4">
+              <h3 className="font-semibold text-sm flex items-center gap-2 mb-3">
+                <IndianRupee className="w-4 h-4" /> Summary
+              </h3>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Subtotal ({items.length} items)</span>
+                  <span className="font-medium">{formatINR(subtotal)}</span>
+                </div>
+                {totalDiscount > 0 && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Discount</span>
+                    <span className="font-medium text-rose-600">-{formatINR(totalDiscount)}</span>
+                  </div>
+                )}
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">GST Total</span>
+                  <span className="font-medium">{formatINR(totalGst)}</span>
+                </div>
+                {!isInterState ? (
+                  <div className="flex items-center justify-between text-xs text-muted-foreground pl-4">
+                    <span>CGST + SGST</span>
+                    <span>{formatINR(cgst)} + {formatINR(sgst)}</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between text-xs text-muted-foreground pl-4">
+                    <span>IGST</span>
+                    <span>{formatINR(igst)}</span>
+                  </div>
+                )}
+                <div className="border-t border-border pt-2 flex items-center justify-between">
+                  <span className="font-semibold">Total</span>
+                  <span className="text-xl font-bold">{formatINR(totalAmount)}</span>
+                </div>
+                {due > 0 && (
+                  <div className="flex items-center justify-between text-sm bg-rose-50 -mx-4 px-4 py-2 rounded-lg">
+                    <span className="text-rose-600 font-medium flex items-center gap-1">
+                      <AlertCircle className="w-3.5 h-3.5" /> Outstanding
+                    </span>
+                    <span className="font-bold text-rose-600">{formatINR(due)}</span>
+                  </div>
+                )}
+                {isSale && totalProfit > 0 && (
+                  <div className="flex items-center justify-between text-sm bg-emerald-50 -mx-4 px-4 py-2 rounded-lg">
+                    <span className="text-emerald-700 font-medium flex items-center gap-1">
+                      <TrendingUp className="w-3.5 h-3.5" /> Gross Profit
+                    </span>
+                    <span className="font-bold text-emerald-700">
+                      {formatINR(totalProfit)}
+                      <span className="text-[10px] ml-1">({totalAmount > 0 ? ((totalProfit / totalAmount) * 100).toFixed(1) : 0}%)</span>
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </Card>
+        </div>
+      </div>
+
+      {/* Mobile sticky save bar */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-background border-t border-border p-3 flex gap-2 z-30">
+        <Button variant="outline" className="flex-1" onClick={handleCancel}>Cancel</Button>
+        <Button className={`flex-1 ${accentGradient} gap-2`} onClick={handleSave} disabled={saving}>
+          <Save className="w-4 h-4" /> {saving ? 'Saving...' : `Save ${formatINR(totalAmount)}`}
+        </Button>
+      </div>
+
+      {/* Add Party Dialog */}
+      <AddPartyInline
+        open={addPartyOpen}
+        onOpenChange={setAddPartyOpen}
+        defaultType={isSale ? 'customer' : 'supplier'}
+        onAdded={(newParty) => {
+          refetchParties()
+          setPartyId(newParty.id)
+        }}
+      />
+    </div>
+  )
+}
+
+function AddPartyInline({ open, onOpenChange, defaultType, onAdded }: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  defaultType: 'customer' | 'supplier'
+  onAdded: (party: any) => void
+}) {
+  const { toast } = useToast()
+  const [form, setForm] = useState({
+    name: '', type: defaultType, phone: '', gstin: '', state: '', address: '',
+  })
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (open) {
+      setForm({ name: '', type: defaultType, phone: '', gstin: '', state: '', address: '' })
+    }
+  }, [open, defaultType])
+
+  const handleSave = async () => {
+    if (!form.name.trim()) {
+      toast({ title: 'Name is required', variant: 'destructive' })
+      return
+    }
+    setSaving(true)
+    try {
+      const r = await fetch('/api/parties', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      })
+      if (!r.ok) throw new Error('Failed')
+      const data = await r.json()
+      sonnerToast.success(`${defaultType === 'customer' ? 'Customer' : 'Supplier'} added`)
+      onAdded(data.party)
+      onOpenChange(false)
+    } catch {
+      toast({ title: 'Failed to add', variant: 'destructive' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Card className={`fixed inset-0 z-50 m-auto w-full max-w-md h-fit shadow-2xl ${open ? 'flex' : 'hidden'} flex-col`}>
+      <div className="p-4 border-b border-border flex items-center justify-between">
+        <h3 className="font-semibold flex items-center gap-2">
+          <Plus className="w-4 h-4 text-primary" /> Add New {defaultType === 'customer' ? 'Customer' : 'Supplier'}
+        </h3>
+        <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => onOpenChange(false)}>
+          <X className="w-4 h-4" />
+        </Button>
+      </div>
+      <div className="p-4 space-y-3">
+        <div>
+          <Label>Name *</Label>
+          <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} autoFocus className="mt-1" />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label>Phone</Label>
+            <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="mt-1" />
+          </div>
+          <div>
+            <Label>State</Label>
+            <Input value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} className="mt-1" />
+          </div>
+        </div>
+        <div>
+          <Label>GSTIN</Label>
+          <Input value={form.gstin} onChange={(e) => setForm({ ...form, gstin: e.target.value })} className="mt-1 font-mono" />
+        </div>
+        <div>
+          <Label>Address</Label>
+          <Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} className="mt-1" />
+        </div>
+      </div>
+      <div className="p-4 border-t border-border flex gap-2">
+        <Button variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>Cancel</Button>
+        <Button className="flex-1 bg-gradient-saffron" onClick={handleSave} disabled={saving}>
+          {saving ? 'Adding...' : 'Add'}
+        </Button>
+      </div>
+    </Card>
+  )
+}

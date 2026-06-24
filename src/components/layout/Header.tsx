@@ -17,6 +17,8 @@ const viewTitles: Record<string, { title: string; subtitle: string }> = {
   settings: { title: 'Settings', subtitle: 'Shop profile & preferences' },
   'transaction-detail': { title: 'Transaction Details', subtitle: 'View, edit & invoice' },
   'party-profile': { title: 'Party Profile', subtitle: 'Customer / supplier history' },
+  'new-sale': { title: 'New Sale', subtitle: 'Create a new sales entry' },
+  'new-purchase': { title: 'New Purchase', subtitle: 'Record a new purchase' },
 }
 
 // Views where "New Entry" should trigger a dialog (not navigate)
@@ -36,16 +38,23 @@ export function Header() {
 
   const shopName = settingData?.setting?.shopName || 'My Shop'
 
-  const isDetailView = currentView === 'transaction-detail' || currentView === 'party-profile'
-  const showNewEntry = dialogViews.includes(currentView)
+  const isDetailView = currentView === 'transaction-detail' || currentView === 'party-profile' || currentView === 'new-sale' || currentView === 'new-purchase'
+  const isNewEntryView = currentView === 'new-sale' || currentView === 'new-purchase'
+  const showNewEntry = dialogViews.includes(currentView) && !isDetailView && !isNewEntryView
 
   const handleNewEntry = () => {
     if (currentView === 'dashboard') {
-      // From dashboard, navigate to sales and open dialog
-      setView('sales')
-      setTimeout(() => fireTriggerNewEntry(), 300)
+      // From dashboard, navigate to full-page new sale
+      setPreviousView('dashboard')
+      setView('new-sale')
+    } else if (currentView === 'sales') {
+      setPreviousView('sales')
+      setView('new-sale')
+    } else if (currentView === 'purchases') {
+      setPreviousView('purchases')
+      setView('new-purchase')
     } else if (dialogViews.includes(currentView)) {
-      // For dialog views, fire the trigger (each module listens to it)
+      // For other dialog views (inventory, parties, income-expense), fire the trigger
       fireTriggerNewEntry()
     }
   }

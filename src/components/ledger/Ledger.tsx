@@ -5,31 +5,15 @@ import { useState, useEffect, useRef } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
-import { Switch } from '@/components/ui/switch'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAppStore } from '@/store/app-store'
-import { useToast } from '@/hooks/use-toast'
-import { toast as sonnerToast } from 'sonner'
 import { formatINR, formatDateTime, formatINRCompact, cn } from '@/lib/utils'
 import { ViewModeToggle } from '@/components/common/ViewModeToggle'
-import { PartySelect } from '@/components/common/PartySelect'
-import { ProductPicker, type ProductSelectValue } from '@/components/common/ProductPicker'
 import {
   Search, ShoppingCart, Truck, Receipt, IndianRupee,
-  TrendingUp, Calendar, User, ScanLine, ChevronRight, Plus, X,
+  TrendingUp, Calendar, User, ScanLine, ChevronRight, Plus,
 } from 'lucide-react'
-
-const PAYMENT_MODES = [
-  { value: 'cash', label: 'Cash' },
-  { value: 'upi', label: 'UPI / QR' },
-  { value: 'card', label: 'Card' },
-  { value: 'bank', label: 'Bank Transfer' },
-  { value: 'credit', label: 'Credit (Udhaar)' },
-]
 
 type LedgerType = 'sale' | 'purchase'
 
@@ -40,8 +24,6 @@ export function Ledger({ type }: { type: LedgerType }) {
     setSelectedTransactionId, setPreviousView,
   } = useAppStore()
   const [search, setSearch] = useState('')
-  const [dialogOpen, setDialogOpen] = useState(false)
-  const [presetData, setPresetData] = useState<any>(null)
 
   const isSale = type === 'sale'
   const accentColor = isSale ? 'text-emerald-600' : 'text-amber-600'
@@ -76,34 +58,37 @@ export function Ledger({ type }: { type: LedgerType }) {
   useEffect(() => {
     if (triggerNewEntry > lastTriggerRef.current && triggerNewEntryView === targetView) {
       lastTriggerRef.current = triggerNewEntry
-      Promise.resolve().then(() => {
-        setPresetData(null)
-        setDialogOpen(true)
-      })
+      setPreviousView(targetView)
+      setView(isSale ? 'new-sale' : 'new-purchase')
     } else if (triggerNewEntry > lastTriggerRef.current) {
       lastTriggerRef.current = triggerNewEntry
     }
-  }, [triggerNewEntry, triggerNewEntryView, targetView])
+  }, [triggerNewEntry, triggerNewEntryView, targetView, isSale, setView, setPreviousView])
 
-  // Listen for preset data (when called from scanner or party profile)
+  // Listen for preset data (from scanner or party profile)
   useEffect(() => {
     const checkPreset = () => {
       const stored = (window as any).__ledgerPreset
       if (stored && stored.type === type) {
-        setPresetData(stored.data)
-        setDialogOpen(true)
-        ;(window as any).__ledgerPreset = null
+        setPreviousView(targetView)
+        setView(isSale ? 'new-sale' : 'new-purchase')
+        ;(window as any).__ledgerPreset = stored
       }
     }
     checkPreset()
     const interval = setInterval(checkPreset, 300)
     return () => clearInterval(interval)
-  }, [type])
+  }, [type, isSale, targetView, setView, setPreviousView])
 
   const handleViewTransaction = (txnId: string) => {
     setSelectedTransactionId(txnId)
     setPreviousView(isSale ? 'sales' : 'purchases')
     setView('transaction-detail')
+  }
+
+  const handleNewEntry = () => {
+    setPreviousView(isSale ? 'sales' : 'purchases')
+    setView(isSale ? 'new-sale' : 'new-purchase')
   }
 
   return (
@@ -152,7 +137,7 @@ export function Ledger({ type }: { type: LedgerType }) {
         </Card>
       </div>
 
-      {/* Toolbar - removed duplicate New Entry button (it's in header now) */}
+      {/* Toolbar */}
       <Card className="shadow-card border-border/60">
         <CardContent className="p-3 lg:p-4">
           <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
@@ -191,7 +176,7 @@ export function Ledger({ type }: { type: LedgerType }) {
               {isSale ? 'Record your first sale or scan a bill to begin' : 'Record your first stock purchase'}
             </p>
             <Button
-              onClick={() => { setPresetData(null); setDialogOpen(true) }}
+              onClick={handleNewEntry}
               className={cn('mt-4 gap-2 shadow-md', isSale ? 'bg-gradient-emerald' : 'bg-gradient-saffron')}
             >
               <Plus className="w-4 h-4" /> New {isSale ? 'Sale' : 'Purchase'}
@@ -303,413 +288,6 @@ export function Ledger({ type }: { type: LedgerType }) {
           })}
         </div>
       )}
-
-      <TransactionDialog
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        type={type}
-        presetData={presetData}
-        onSuccess={() => { triggerRefresh(); setPresetData(null) }}
-      />
     </div>
-  )
-}
-
-function TransactionDialog({ open, onOpenChange, type, presetData, onSuccess }: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  type: LedgerType
-  presetData?: any
-  onSuccess?: () => void
-}) {
-  const isSale = type === 'sale'
-  const { toast } = useToast()
-
-  const [partyId, setPartyId] = useState('')
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
-  const [invoiceNo, setInvoiceNo] = useState('')
-  const [isInterState, setIsInterState] = useState(false)
-  const [paymentMode, setPaymentMode] = useState('cash')
-  const [paidAmount, setPaidAmount] = useState('')
-  const [discountAmount, setDiscountAmount] = useState('')
-  const [notes, setNotes] = useState('')
-  const [items, setItems] = useState<ProductSelectValue[]>([
-    { productId: '', productName: '', quantity: 1, unitPrice: 0, gstRate: 0, unit: 'pcs' }
-  ])
-  const [saving, setSaving] = useState(false)
-
-  // Apply preset data (from scanner or party profile)
-  useEffect(() => {
-    if (open && presetData) {
-      if (presetData.partyId) setPartyId(presetData.partyId)
-      if (presetData.invoiceNo) setInvoiceNo(presetData.invoiceNo)
-      if (presetData.date) {
-        try {
-          const d = new Date(presetData.date)
-          if (!isNaN(d.getTime())) setDate(d.toISOString().slice(0, 10))
-        } catch {}
-      }
-      if (presetData.paymentMode) setPaymentMode(presetData.paymentMode)
-      if (presetData.discountAmount) setDiscountAmount(String(presetData.discountAmount))
-      if (presetData.items?.length > 0) {
-        setItems(presetData.items.map((item: any) => ({
-          productId: item.productId || '',
-          productName: item.name || item.productName,
-          quantity: Number(item.quantity) || 1,
-          unitPrice: Number(item.unitPrice) || 0,
-          gstRate: Number(item.gstRate) || 0,
-          unit: item.unit || 'pcs',
-        })))
-      }
-      if (presetData.totalAmount) {
-        setPaidAmount(String(presetData.totalAmount))
-      }
-    }
-  }, [open, presetData])
-
-  // Reset on close
-  useEffect(() => {
-    if (!open) {
-      setTimeout(() => {
-        setPartyId('')
-        setDate(new Date().toISOString().slice(0, 10))
-        setInvoiceNo('')
-        setIsInterState(false)
-        setPaymentMode('cash')
-        setPaidAmount('')
-        setDiscountAmount('')
-        setNotes('')
-        setItems([{ productId: '', productName: '', quantity: 1, unitPrice: 0, gstRate: 0, unit: 'pcs' }])
-      }, 200)
-    }
-  }, [open])
-
-  const updateItem = (index: number, value: Partial<ProductSelectValue>) => {
-    const newItems = [...items]
-    newItems[index] = { ...newItems[index], ...value }
-    setItems(newItems)
-  }
-
-  const addItem = () => {
-    setItems([...items, { productId: '', productName: '', quantity: 1, unitPrice: 0, gstRate: 0, unit: 'pcs' }])
-  }
-
-  const removeItem = (index: number) => {
-    setItems(items.filter((_, i) => i !== index))
-  }
-
-  let subtotal = 0
-  let totalGst = 0
-  let totalDiscount = parseFloat(discountAmount) || 0
-  let totalProfit = 0
-
-  // We need product purchase prices for profit calc
-  const { data: productsData } = useQuery({
-    queryKey: ['products', 'for-profit-calc'],
-    queryFn: async () => {
-      const r = await fetch('/api/products')
-      return r.json()
-    },
-  })
-  const products: any[] = productsData?.products || []
-  const productMap = new Map(products.map(p => [p.id, p]))
-
-  items.forEach(item => {
-    const amount = (item.quantity || 0) * (item.unitPrice || 0)
-    const itemGst = amount * (item.gstRate || 0) / 100
-    subtotal += amount
-    totalGst += itemGst
-    if (isSale && item.productId) {
-      const p = productMap.get(item.productId)
-      if (p) totalProfit += (item.unitPrice - p.purchasePrice) * item.quantity
-    }
-  })
-
-  const totalAmount = subtotal - totalDiscount + totalGst
-  const cgst = isInterState ? 0 : totalGst / 2
-  const sgst = isInterState ? 0 : totalGst / 2
-  const igst = isInterState ? totalGst : 0
-  const paid = parseFloat(paidAmount) || 0
-  const finalPaid = paidAmount === '' ? totalAmount : paid
-
-  const handleSave = async () => {
-    const validItems = items.filter(i => i.productName && i.quantity > 0)
-    if (validItems.length === 0) {
-      toast({ title: 'Add at least one item', variant: 'destructive' })
-      return
-    }
-    setSaving(true)
-    try {
-      const r = await fetch('/api/transactions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type,
-          partyId: partyId || null,
-          date,
-          invoiceNo: invoiceNo || null,
-          isInterState,
-          paymentMode,
-          paidAmount: finalPaid,
-          discountAmount: totalDiscount,
-          notes,
-          items: validItems.map(i => ({
-            productId: i.productId || null,
-            productName: i.productName,
-            quantity: Number(i.quantity),
-            unitPrice: Number(i.unitPrice),
-            gstRate: Number(i.gstRate) || 0,
-            discountAmount: 0,
-          })),
-        }),
-      })
-      if (!r.ok) throw new Error('Failed')
-      sonnerToast.success(`${isSale ? 'Sale' : 'Purchase'} recorded successfully!`)
-      onSuccess?.()
-      onOpenChange(false)
-    } catch (e) {
-      toast({ title: 'Failed to save transaction', variant: 'destructive' })
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-5xl max-h-[95vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            {isSale ? <ShoppingCart className="w-5 h-5 text-emerald-600" /> : <Truck className="w-5 h-5 text-amber-600" />}
-            New {isSale ? 'Sale' : 'Purchase'} Entry
-            {presetData?.items && (
-              <Badge className="bg-gradient-saffron text-white text-[10px] ml-2 gap-1">
-                <ScanLine className="w-3 h-3" /> AI-filled
-              </Badge>
-            )}
-            {presetData?.partyId && !presetData?.items && (
-              <Badge variant="secondary" className="text-[10px] ml-2">Pre-filled party</Badge>
-            )}
-          </DialogTitle>
-        </DialogHeader>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* LEFT: Items section (takes 2 cols on desktop) */}
-          <div className="lg:col-span-2 space-y-4">
-            {/* Items */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <Label className="text-sm font-semibold">Items *</Label>
-                <Button variant="outline" size="sm" onClick={addItem} className="h-8 gap-1">
-                  <Plus className="w-3.5 h-3.5" /> Add Item
-                </Button>
-              </div>
-              <div className="space-y-3">
-                {items.map((item, i) => (
-                  <div key={i} className="rounded-xl border border-border p-3 bg-muted/20">
-                    {/* Product picker row */}
-                    <div className="flex items-start gap-2">
-                      <div className="flex-1">
-                        <ProductPicker
-                          value={item}
-                          onChange={(v) => updateItem(i, v)}
-                          isSale={isSale}
-                        />
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-9 w-9 p-0 text-rose-600 hover:bg-rose-50 flex-shrink-0"
-                        onClick={() => removeItem(i)}
-                        disabled={items.length === 1}
-                      >
-                        <X className="w-4 h-4" />
-                      </Button>
-                    </div>
-
-                    {/* Quantity & price row (only show if product selected or has name) */}
-                    {(item.productId || item.productName) && (
-                      <div className="grid grid-cols-3 gap-2 mt-3">
-                        <div>
-                          <label className="text-[10px] text-muted-foreground uppercase font-medium">Qty</label>
-                          <Input
-                            type="number"
-                            value={item.quantity}
-                            onChange={(e) => updateItem(i, { quantity: parseFloat(e.target.value) || 0 })}
-                            className="h-8"
-                            min="0"
-                            step="0.01"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[10px] text-muted-foreground uppercase font-medium">Unit Price ₹</label>
-                          <Input
-                            type="number"
-                            value={item.unitPrice}
-                            onChange={(e) => updateItem(i, { unitPrice: parseFloat(e.target.value) || 0 })}
-                            className="h-8"
-                            min="0"
-                            step="0.01"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[10px] text-muted-foreground uppercase font-medium">GST %</label>
-                          <Select
-                            value={String(item.gstRate)}
-                            onValueChange={(v) => updateItem(i, { gstRate: parseFloat(v) })}
-                          >
-                            <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              {[0, 5, 12, 18, 28].map(r => <SelectItem key={r} value={String(r)}>{r}%</SelectItem>)}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Line total */}
-                    {(item.productId || item.productName) && item.quantity > 0 && (
-                      <div className="mt-2 flex items-center justify-between text-xs">
-                        <span className="text-muted-foreground">
-                          {item.quantity} × {formatINR(item.unitPrice)} = <span className="font-medium">{formatINR(item.quantity * item.unitPrice)}</span>
-                          {item.gstRate > 0 && <span className="text-muted-foreground"> + {item.gstRate}% GST</span>}
-                        </span>
-                        <span className="font-semibold">
-                          {formatINR(item.quantity * item.unitPrice * (1 + item.gstRate / 100))}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Notes */}
-            <div>
-              <Label>Notes (optional)</Label>
-              <Input
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Any additional notes..."
-                className="mt-1"
-              />
-            </div>
-          </div>
-
-          {/* RIGHT: Party, date, payment, summary */}
-          <div className="space-y-4">
-            {/* Party select with search & add */}
-            <PartySelect
-              value={partyId}
-              onChange={(id) => setPartyId(id)}
-              partyType={isSale ? 'customer' : 'supplier'}
-              label={isSale ? 'Customer' : 'Supplier'}
-            />
-
-            {/* Date & Invoice */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label>Date</Label>
-                <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="mt-1" />
-              </div>
-              <div>
-                <Label>Invoice No.</Label>
-                <Input value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} placeholder="Optional" className="mt-1" />
-              </div>
-            </div>
-
-            {/* Inter-state toggle */}
-            <div className="flex items-center justify-between rounded-lg bg-muted/50 p-3">
-              <div>
-                <Label className="cursor-pointer text-sm">Inter-state (IGST)</Label>
-                <p className="text-[11px] text-muted-foreground mt-0.5">Toggle ON if other state</p>
-              </div>
-              <Switch checked={isInterState} onCheckedChange={setIsInterState} />
-            </div>
-
-            {/* Discount & Payment */}
-            <div className="space-y-3">
-              <div>
-                <Label>Discount (₹)</Label>
-                <Input type="number" value={discountAmount} onChange={(e) => setDiscountAmount(e.target.value)} placeholder="0" className="mt-1" />
-              </div>
-              <div>
-                <Label>Payment Mode</Label>
-                <Select value={paymentMode} onValueChange={setPaymentMode}>
-                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {PAYMENT_MODES.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Paid Amount (₹)</Label>
-                <Input
-                  type="number"
-                  value={paidAmount}
-                  onChange={(e) => setPaidAmount(e.target.value)}
-                  placeholder={`Full: ${totalAmount.toFixed(0)}`}
-                  className="mt-1"
-                />
-                <p className="text-[10px] text-muted-foreground mt-1">Leave empty for full payment</p>
-              </div>
-            </div>
-
-            {/* Live summary */}
-            <div className="rounded-xl bg-muted/50 p-4 space-y-2 sticky bottom-0">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Subtotal</span>
-                <span className="font-medium">{formatINR(subtotal)}</span>
-              </div>
-              {totalDiscount > 0 && (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-muted-foreground">Discount</span>
-                  <span className="font-medium text-rose-600">-{formatINR(totalDiscount)}</span>
-                </div>
-              )}
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">GST Total</span>
-                <span className="font-medium">{formatINR(totalGst)}</span>
-              </div>
-              {!isInterState ? (
-                <div className="flex items-center justify-between text-xs text-muted-foreground pl-4">
-                  <span>CGST + SGST</span>
-                  <span>{formatINR(cgst)} + {formatINR(sgst)}</span>
-                </div>
-              ) : (
-                <div className="flex items-center justify-between text-xs text-muted-foreground pl-4">
-                  <span>IGST</span>
-                  <span>{formatINR(igst)}</span>
-                </div>
-              )}
-              <div className="border-t border-border pt-2 flex items-center justify-between">
-                <span className="font-semibold">Total Payable</span>
-                <span className="text-lg font-bold">{formatINR(totalAmount)}</span>
-              </div>
-              {finalPaid < totalAmount && (
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-rose-600">Outstanding</span>
-                  <span className="font-medium text-rose-600">{formatINR(totalAmount - finalPaid)}</span>
-                </div>
-              )}
-              {isSale && totalProfit > 0 && (
-                <div className="flex items-center justify-between text-sm bg-emerald-50 -mx-4 -mb-4 px-4 py-2 rounded-b-xl mt-2">
-                  <span className="text-emerald-700 font-medium flex items-center gap-1">
-                    <TrendingUp className="w-3.5 h-3.5" /> Gross Profit
-                  </span>
-                  <span className="font-bold text-emerald-700">{formatINR(totalProfit)} ({totalAmount > 0 ? ((totalProfit / totalAmount) * 100).toFixed(1) : 0}%)</span>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <DialogFooter className="mt-4">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={handleSave} disabled={saving} className={isSale ? 'bg-gradient-emerald' : 'bg-gradient-saffron'}>
-            {saving ? 'Saving...' : `Save ${isSale ? 'Sale' : 'Purchase'}`}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   )
 }
