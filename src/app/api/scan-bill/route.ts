@@ -185,3 +185,4 @@ Rules:
   }
 }
 // Force fresh deploy Wed Jun 24 19:32:36 UTC 2026
+// Force fresh deploy for VLM config Wed Jun 24 20:09:13 UTC 2026
