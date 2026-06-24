@@ -9,9 +9,12 @@ export async function POST(req: NextRequest) {
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const body = await req.json()
-    const { imageBase64, billType = 'purchase' } = body
+    const { imageBase64, imageUrl, billType = 'purchase' } = body
 
-    if (!imageBase64) {
+    // Accept either a Cloudinary URL or base64
+    const imageSource = imageUrl || imageBase64
+
+    if (!imageSource) {
       return NextResponse.json({ error: 'Image is required' }, { status: 400 })
     }
 
@@ -63,7 +66,7 @@ Rules:
           role: 'user',
           content: [
             { type: 'text', text: prompt },
-            { type: 'image_url', image_url: { url: imageBase64 } },
+            { type: 'image_url', image_url: { url: imageSource } },
           ],
         },
       ],

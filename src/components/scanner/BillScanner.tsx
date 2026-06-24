@@ -37,7 +37,7 @@ export function BillScanner() {
       return
     }
 
-    // Convert to base64
+    // Convert to base64 for preview
     const reader = new FileReader()
     reader.onload = async (e) => {
       const base64 = e.target?.result as string
@@ -45,19 +45,28 @@ export function BillScanner() {
       setScanning(true)
       setScanned(null)
       try {
-        const r = await fetch('/api/scan-bill', {
+        // Step 1: Upload to Cloudinary (gets a URL, stores image for future)
+        const uploadRes = await fetch('/api/upload-bill', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageBase64: base64, billType }),
+          body: JSON.stringify({ imageBase64: base64 }),
         })
-        const data = await r.json()
+        const uploadData = await uploadRes.json()
+
+        // Step 2: Send to AI scanner (use Cloudinary URL if upload succeeded, else base64)
+        const imageUrl = uploadData.success ? uploadData.url : null
+        const scanRes = await fetch('/api/scan-bill', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(imageUrl ? { imageUrl, billType } : { imageBase64: base64, billType }),
+        })
+        const data = await scanRes.json()
         if (data.error) {
           toast({
             title: 'Scan failed',
             description: data.error,
             variant: 'destructive',
           })
-          // For demo: still allow manual entry
           if (data.rawContent) {
             console.log('Raw AI output:', data.rawContent)
           }
