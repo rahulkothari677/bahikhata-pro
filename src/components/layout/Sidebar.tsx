@@ -66,15 +66,15 @@ export function Sidebar() {
             </div>
             {!sidebarCollapsed && (
               <div>
-                <h1 className="text-lg font-bold text-white tracking-tight">BahiKhata Pro</h1>
-                <p className="text-[10px] text-sidebar-foreground/60 font-medium tracking-wide">INDIA&apos;S SMART LEDGER</p>
+                <h1 className="text-lg font-bold text-sidebar-foreground tracking-tight">BahiKhata Pro</h1>
+                <p className="text-[10px] text-sidebar-foreground/50 font-medium tracking-wide">INDIA&apos;S SMART LEDGER</p>
               </div>
             )}
           </div>
           {!sidebarCollapsed && (
             <button
               onClick={() => setSidebarOpen(false)}
-              className="lg:hidden text-sidebar-foreground/70 hover:text-white"
+              className="lg:hidden text-sidebar-foreground/70 hover:text-sidebar-foreground"
             >
               <X className="w-5 h-5" />
             </button>

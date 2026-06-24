@@ -182,12 +182,12 @@ export function Settings() {
       <Card className="shadow-card border-border/60">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Palette className="w-5 h-5 text-primary" /> Theme Color
+            <Palette className="w-5 h-5 text-primary" /> Theme & Appearance
           </CardTitle>
-          <p className="text-xs text-muted-foreground">Choose your preferred accent color</p>
+          <p className="text-xs text-muted-foreground">Choose a theme — sidebar, buttons, charts & accents all update together</p>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-3 sm:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {THEME_OPTIONS.map((theme) => (
               <button
                 key={theme.id}
@@ -195,22 +195,41 @@ export function Settings() {
                   setThemeColor(theme.id)
                   sonnerToast.success(`${theme.label} theme applied`)
                 }}
-                className={`group relative rounded-xl p-3 border-2 transition flex flex-col items-center gap-2 ${
-                  themeColor === theme.id ? 'border-primary shadow-md' : 'border-border hover:border-primary/40'
+                className={`group relative rounded-xl p-4 border-2 transition text-left ${
+                  themeColor === theme.id ? 'border-primary shadow-lg' : 'border-border hover:border-primary/40 hover:shadow-md'
                 }`}
               >
-                <div
-                  className="w-10 h-10 rounded-full shadow-sm"
-                  style={{ background: theme.gradient }}
-                />
-                <span className="text-[11px] font-medium">{theme.label}</span>
-                {themeColor === theme.id && (
-                  <div className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
-                    <Check className="w-3 h-3" />
-                  </div>
-                )}
+                <div className="flex items-center gap-3 mb-2">
+                  <div
+                    className="w-12 h-12 rounded-xl shadow-md"
+                    style={{ background: theme.swatch }}
+                  />
+                  {themeColor === theme.id && (
+                    <div className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
+                      <Check className="w-3.5 h-3.5" />
+                    </div>
+                  )}
+                </div>
+                <p className="text-sm font-semibold">{theme.label}</p>
+                <p className="text-[11px] text-muted-foreground">{theme.description}</p>
               </button>
             ))}
+          </div>
+          <div className="mt-4 flex items-center justify-between rounded-lg bg-muted/50 p-3">
+            <div className="flex items-center gap-2">
+              <Moon className="w-4 h-4 text-muted-foreground" />
+              <div>
+                <p className="text-sm font-medium">Dark Mode</p>
+                <p className="text-[11px] text-muted-foreground">Switch to dark background</p>
+              </div>
+            </div>
+            <Switch
+              checked={features.darkMode}
+              onCheckedChange={(checked) => {
+                setFeature('darkMode', checked)
+                sonnerToast.success(`Dark mode ${checked ? 'enabled' : 'disabled'}`)
+              }}
+            />
           </div>
         </CardContent>
       </Card>
