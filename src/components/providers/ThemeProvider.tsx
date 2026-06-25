@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react'
 import { useAppStore, type ThemeColor } from '@/store/app-store'
+import { useLocalStorage } from '@/hooks/use-local-storage'
 
 // Full theme palettes — each defines ALL colors for a cohesive look
 export type ThemePalette = {
@@ -119,8 +120,36 @@ const THEMES: Record<ThemeColor, ThemePalette> = {
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const darkMode = useAppStore((s) => s.features?.darkMode ?? false)
-  const themeColor = useAppStore((s) => s.themeColor)
+  const storeDarkMode = useAppStore((s) => s.features?.darkMode ?? false)
+  const storeThemeColor = useAppStore((s) => s.themeColor)
+  const setFeature = useAppStore((s) => s.setFeature)
+  const setThemeColor = useAppStore((s) => s.setThemeColor)
+
+  // Persist theme settings in localStorage (SSR-safe)
+  const [savedDarkMode, setSavedDarkMode] = useLocalStorage('bahikhata-darkMode', false)
+  const [savedThemeColor, setSavedThemeColor] = useLocalStorage('bahikhata-themeColor', 'saffron')
+
+  // On mount, load saved values into store
+  useEffect(() => {
+    if (savedDarkMode !== storeDarkMode) {
+      setFeature('darkMode', savedDarkMode)
+    }
+    if (savedThemeColor !== storeThemeColor) {
+      setThemeColor(savedThemeColor)
+    }
+  }, [])
+
+  // Save to localStorage when store changes
+  useEffect(() => {
+    setSavedDarkMode(storeDarkMode)
+  }, [storeDarkMode])
+
+  useEffect(() => {
+    setSavedThemeColor(storeThemeColor)
+  }, [storeThemeColor])
+
+  const darkMode = storeDarkMode
+  const themeColor = storeThemeColor
 
   useEffect(() => {
     const root = document.documentElement
