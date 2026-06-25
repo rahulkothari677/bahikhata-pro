@@ -253,7 +253,7 @@ export function Dashboard() {
                   />
                   <Tooltip
                     contentStyle={{ borderRadius: '12px', border: '1px solid oklch(0.91 0.01 60)', fontSize: 12 }}
-                    formatter={(v: number, name: string) => name === 'revenue' ? [formatINR(v), language === 'hi' ? 'बिक्री' : 'Revenue'] : [formatINR(v), language === 'hi' ? 'मुनाफा' : 'Profit']}
+                    formatter={(v: number, name: string) => name === 'revenue' ? [formatINR(v), language === 'hi' ? 'बिक्री' : 'Revenue'] : [formatINR(v), 'Profit']}
                   />
                   <Bar dataKey="revenue" fill="oklch(0.62 0.18 42)" radius={[0, 6, 6, 0]} barSize={18} name="revenue" />
                 </BarChart>
@@ -367,12 +367,12 @@ export function Dashboard() {
             {lowStockProducts.length === 0 ? (
               <div className="text-center py-8 text-sm text-muted-foreground">
                 <Package className="w-10 h-10 mx-auto mb-2 text-emerald-500" />
-                सारा स्टॉक ठीक है!
+                All products well stocked!
               </div>
             ) : (
               <div className="space-y-2 max-h-72 overflow-y-auto">
                 {lowStockProducts.slice(0, 6).map((p: any) => (
-                  <div key={p.id} className="flex items-center justify-between p-2.5 rounded-lg bg-rose-50/50 border border-rose-100">
+                  <div key={p.id} className="flex items-center justify-between p-2.5 rounded-lg bg-rose-50/50 dark:bg-rose-950/30 border border-rose-100 dark:border-rose-900">
                     <div className="min-w-0">
                       <p className="text-sm font-medium truncate">{p.name}</p>
                       <p className="text-[11px] text-muted-foreground">{p.category} • Stock: {p.currentStock} {p.unit}</p>
@@ -410,7 +410,7 @@ export function Dashboard() {
           </CardHeader>
           <CardContent>
             {recentTransactions.length === 0 ? (
-              <div className="text-center py-8 text-sm text-muted-foreground">अभी कोई एंट्री नहीं</div>
+              <div className="text-center py-8 text-sm text-muted-foreground">No transactions yet</div>
             ) : (
               <div className="space-y-2 max-h-72 overflow-y-auto">
                 {recentTransactions.map((txn: any) => {

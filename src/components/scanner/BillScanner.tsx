@@ -203,8 +203,8 @@ export function BillScanner() {
               className={cn(
                 'rounded-xl p-4 border-2 transition text-left',
                 billType === 'purchase'
-                  ? 'border-amber-500 bg-amber-50'
-                  : 'border-border hover:border-amber-300'
+                  ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/30'
+                  : 'border-border hover:border-amber-300 dark:hover:border-amber-700'
               )}
             >
               <Truck className={cn('w-6 h-6 mb-2', billType === 'purchase' ? 'text-amber-600' : 'text-muted-foreground')} />
@@ -216,8 +216,8 @@ export function BillScanner() {
               className={cn(
                 'rounded-xl p-4 border-2 transition text-left',
                 billType === 'sale'
-                  ? 'border-emerald-500 bg-emerald-50'
-                  : 'border-border hover:border-emerald-300'
+                  ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30'
+                  : 'border-border hover:border-emerald-300 dark:hover:border-emerald-700'
               )}
             >
               <ShoppingCart className={cn('w-6 h-6 mb-2', billType === 'sale' ? 'text-emerald-600' : 'text-muted-foreground')} />
@@ -288,12 +288,12 @@ export function BillScanner() {
                     <div className="rounded-lg bg-muted/50 p-3 text-left">
                       <Sparkles className="w-4 h-4 text-primary mb-1" />
                       <p className="text-xs font-semibold">Auto-Extract Items</p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">नाम, मात्रा, दाम, GST सब भर जाएगा</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Name, qty, price, GST all filled</p>
                     </div>
                     <div className="rounded-lg bg-muted/50 p-3 text-left">
                       <FileText className="w-4 h-4 text-primary mb-1" />
                       <p className="text-xs font-semibold">Smart Tax Split</p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">CGST/SGST/IGST अपने आप पहचानें</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">CGST/SGST/IGST auto-detected</p>
                     </div>
                     <div className="rounded-lg bg-muted/50 p-3 text-left">
                       <Check className="w-4 h-4 text-primary mb-1" />

@@ -13,10 +13,10 @@ import {
 } from 'lucide-react'
 
 const typeConfig = {
-  critical: { icon: AlertCircle, color: 'text-rose-600', bg: 'bg-rose-100', border: 'border-rose-200' },
-  warning: { icon: AlertTriangle, color: 'text-amber-600', bg: 'bg-amber-100', border: 'border-amber-200' },
-  info: { icon: Info, color: 'text-blue-600', bg: 'bg-blue-100', border: 'border-blue-200' },
-  success: { icon: CheckCircle, color: 'text-emerald-600', bg: 'bg-emerald-100', border: 'border-emerald-200' },
+  critical: { icon: AlertCircle, color: 'text-rose-600', bg: 'bg-rose-100 dark:bg-rose-950/50', border: 'border-rose-200' },
+  warning: { icon: AlertTriangle, color: 'text-amber-600', bg: 'bg-amber-100 dark:bg-amber-950/50', border: 'border-amber-200' },
+  info: { icon: Info, color: 'text-blue-600', bg: 'bg-blue-100 dark:bg-blue-950/50', border: 'border-blue-200' },
+  success: { icon: CheckCircle, color: 'text-emerald-600', bg: 'bg-emerald-100 dark:bg-emerald-950/50', border: 'border-emerald-200' },
 }
 
 const categoryIcon = {
@@ -104,7 +104,7 @@ export function SmartInsights() {
               </Badge>
             )}
             {summary?.warnings > 0 && (
-              <Badge className="bg-amber-100 text-amber-700 text-[10px] gap-1">
+              <Badge className="bg-amber-100 dark:bg-amber-950/50 text-amber-700 text-[10px] gap-1">
                 <AlertTriangle className="w-2.5 h-2.5" /> {summary.warnings}
               </Badge>
             )}

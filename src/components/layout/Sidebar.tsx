@@ -97,7 +97,7 @@ export function Sidebar() {
           {navItems.map((item) => {
             const Icon = item.icon
             const active = currentView === item.id ||
-              (currentView === 'transaction-detail' && item.id === 'sales') ||
+              (currentView === 'transaction-detail' && false) ||
               (currentView === 'new-sale' && item.id === 'sales') ||
               (currentView === 'new-purchase' && item.id === 'purchases') ||
               (currentView === 'party-profile' && item.id === 'parties')

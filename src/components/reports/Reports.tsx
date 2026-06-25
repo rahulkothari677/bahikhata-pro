@@ -184,7 +184,7 @@ function PLReport({ data }: { data: any }) {
           </CardHeader>
           <CardContent>
             {incomeByCategory.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-8">इस अवधि में कोई Other Income नहीं</p>
+              <p className="text-sm text-muted-foreground text-center py-8">No other income in this period</p>
             ) : (
               <div className="space-y-2">
                 {incomeByCategory.map((e, i) => {
@@ -217,7 +217,7 @@ function PLReport({ data }: { data: any }) {
         <CardContent>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between py-1.5 border-b border-border">
-              <span className="text-muted-foreground">बिक्री (उप-योग)</span>
+              <span className="text-muted-foreground">Revenue (Sales Subtotal)</span>
               <span className="font-medium">{formatINR(summary.totalRevenue)}</span>
             </div>
             <div className="flex justify-between py-1.5 border-b border-border">
@@ -243,7 +243,7 @@ function PLReport({ data }: { data: any }) {
               </span>
             </div>
             <div className="flex justify-between text-xs text-muted-foreground">
-              <span>मुनाफा %</span>
+              <span>Profit Margin</span>
               <span>{summary.profitMargin.toFixed(1)}%</span>
             </div>
           </div>
@@ -438,7 +438,7 @@ function PartyReport({ data }: { data: any }) {
     <div className="space-y-4">
       <Card className="shadow-card border-border/60">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">ग्राहक वार विवरण</CardTitle>
+          <CardTitle className="text-base">Party-wise Statement</CardTitle>
           <p className="text-xs text-muted-foreground">Showing all parties with activity or opening balance</p>
         </CardHeader>
         <CardContent>
