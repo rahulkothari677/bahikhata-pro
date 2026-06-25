@@ -2,12 +2,14 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, useEffect } from 'react'
+import { useSession } from 'next-auth/react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
+import { StaffManagement } from '@/components/settings/StaffManagement'
 import { useToast } from '@/hooks/use-toast'
 import { toast as sonnerToast } from 'sonner'
 import { useAppStore, type FeatureKey } from '@/store/app-store'
@@ -38,7 +40,9 @@ const FEATURE_CONFIG: { key: FeatureKey; label: string; description: string; ico
 export function Settings() {
   const { toast } = useToast()
   const queryClient = useQueryClient()
+  const { data: session } = useSession()
   const { features, setFeature, resetFeatures, themeColor, setThemeColor, language, setLanguage } = useAppStore()
+  const isOwner = session?.user?.role !== 'staff'
   const [form, setForm] = useState({
     shopName: '', ownerName: '', phone: '', email: '',
     gstin: '', state: '', address: '',
@@ -153,6 +157,7 @@ export function Settings() {
         </CardContent>
       </Card>
 
+      {isOwner && (
       <Card className="shadow-card border-border/60">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -177,6 +182,7 @@ export function Settings() {
           </div>
         </CardContent>
       </Card>
+      )}
 
       {/* Theme Color Picker */}
       <Card className="shadow-card border-border/60">
@@ -259,7 +265,11 @@ export function Settings() {
         </CardContent>
       </Card>
 
-      {/* Feature Toggles */}
+      {/* Staff Management - Owner only */}
+      {isOwner && <StaffManagement />}
+
+      {/* Feature Toggles - Owner only */}
+      {isOwner && (
       <Card className="shadow-card border-border/60">
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -303,6 +313,7 @@ export function Settings() {
           </div>
         </CardContent>
       </Card>
+      )}
 
       <Card className="shadow-card border-border/60">
         <CardHeader>

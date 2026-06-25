@@ -2,6 +2,7 @@
 
 import { useAppStore, type ViewType } from '@/store/app-store'
 import { useTranslation } from '@/hooks/use-translation'
+import { useSession } from 'next-auth/react'
 import { cn } from '@/lib/utils'
 import {
   LayoutDashboard,
@@ -35,6 +36,10 @@ const navItems: { id: ViewType; labelKey: string; descKey: string; icon: any; ba
 export function Sidebar() {
   const { currentView, setView, sidebarOpen, setSidebarOpen, sidebarCollapsed, toggleSidebarCollapsed, selectedTransactionType } = useAppStore()
   const { t } = useTranslation()
+  const { data: session } = useSession()
+  const isStaff = session?.user?.role === 'staff'
+  // Staff can't see: reports, settings (except theme)
+  const staffHiddenItems: ViewType[] = isStaff ? ['reports'] : []
 
   return (
     <>
@@ -94,7 +99,7 @@ export function Sidebar() {
 
         {/* Navigation */}
         <nav className={cn('flex-1 overflow-y-auto px-3 py-4 space-y-1', sidebarCollapsed && 'lg:px-2')}>
-          {navItems.map((item) => {
+          {navItems.filter(item => !staffHiddenItems.includes(item.id)).map((item) => {
             const Icon = item.icon
             const active = currentView === item.id ||
               (currentView === 'transaction-detail' && ((selectedTransactionType === 'purchase' && item.id === 'purchases') || (selectedTransactionType !== 'purchase' && item.id === 'sales'))) ||

@@ -20,6 +20,8 @@ model User {
   phone         String?   // for future phone OTP
   emailVerified DateTime? // for future email verification
   image         String?   // profile picture URL
+  role          String    @default("owner") // owner | staff
+  ownerId       String?   // if staff, links to the owner's account
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
