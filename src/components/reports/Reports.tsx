@@ -3,6 +3,7 @@
 import { useTranslation } from '@/hooks/use-translation'
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
+import { useAppStore } from '@/store/app-store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -17,19 +18,43 @@ import { formatINR, formatINRCompact, cn, formatDate } from '@/lib/utils'
 import {
   FileBarChart, TrendingUp, Receipt, Package, Users, Calendar,
   ArrowDownRight, ArrowUpRight, IndianRupee, Percent, FileText,
+  FileSpreadsheet, Loader2,
 } from 'lucide-react'
+import { toast as sonnerToast } from 'sonner'
 
 const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)', 'oklch(0.7 0.16 250)']
 
 export function Reports() {
   const { t } = useTranslation()
+  const { features } = useAppStore()
   const [reportType, setReportType] = useState<'pl' | 'gst' | 'stock' | 'party'>('pl')
   const [dateRange, setDateRange] = useState<DateRange>(() => getPresetRange('thisMonth'))
   const [datePreset, setDatePreset] = useState<DatePreset>('thisMonth')
+  const [exportingGstr, setExportingGstr] = useState(false)
 
   const handleDateChange = (range: DateRange, preset: DatePreset) => {
     setDateRange(range)
     setDatePreset(preset)
+  }
+
+  const handleGstrExport = async () => {
+    setExportingGstr(true)
+    try {
+      const r = await fetch(`/api/gstr-export?from=${dateRange.from.toISOString()}&to=${dateRange.to.toISOString()}&format=csv`)
+      if (!r.ok) throw new Error('Export failed')
+      const blob = await r.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `GSTR1_${dateRange.from.toISOString().slice(0, 7)}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+      sonnerToast.success('GSTR-1 exported! Upload this to GST portal.')
+    } catch {
+      sonnerToast.error('Failed to export GSTR-1')
+    } finally {
+      setExportingGstr(false)
+    }
   }
 
   const { data, isLoading } = useQuery({
@@ -55,6 +80,18 @@ export function Reports() {
               <p className="text-xs text-muted-foreground hidden sm:block">
                 {formatDate(dateRange.from)} — {formatDate(dateRange.to)}
               </p>
+              {features.gstrExport && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleGstrExport}
+                  disabled={exportingGstr}
+                  className="gap-2 border-primary/30 text-primary hover:bg-primary/10"
+                >
+                  {exportingGstr ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileSpreadsheet className="w-3.5 h-3.5" />}
+                  <span className="hidden sm:inline">{t('reports.export_gstr')}</span>
+                </Button>
+              )}
             </div>
           </div>
         </CardContent>

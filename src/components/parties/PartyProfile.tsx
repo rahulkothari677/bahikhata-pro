@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAppStore } from '@/store/app-store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -11,7 +12,7 @@ import { formatINR, formatDate, formatDateTime, cn, getInitials } from '@/lib/ut
 import {
   Phone, Building2, MapPin, User, Plus, ShoppingCart, Truck,
   ArrowDownRight, ArrowUpRight, IndianRupee, Calendar, TrendingUp,
-  Receipt, Edit2, Trash2,
+  Receipt, Edit2, Trash2, MessageCircle, Loader2,
 } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -20,8 +21,9 @@ import {
 import { toast as sonnerToast } from 'sonner'
 
 export function PartyProfile() {
-  const { selectedPartyId, setView, setPreviousView, triggerRefresh, previousView } = useAppStore()
+  const { selectedPartyId, setView, setPreviousView, triggerRefresh, previousView, features } = useAppStore()
   const queryClient = useQueryClient()
+  const [sendingReminder, setSendingReminder] = useState(false)
 
   const { data, isLoading } = useQuery({
     queryKey: ['party-profile', selectedPartyId],
@@ -72,6 +74,29 @@ export function PartyProfile() {
       queryClient.invalidateQueries({ queryKey: ['parties'] })
       setView(previousView || 'parties')
       triggerRefresh()
+    }
+  }
+
+  const handleSendReminder = async () => {
+    if (!party) return
+    setSendingReminder(true)
+    try {
+      const r = await fetch('/api/whatsapp-reminder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ partyId: party.id }),
+      })
+      const data = await r.json()
+      if (data.success) {
+        window.open(data.whatsappUrl, '_blank')
+        sonnerToast.success('Opening WhatsApp with reminder message...')
+      } else {
+        sonnerToast.error(data.error || 'Failed to generate reminder')
+      }
+    } catch {
+      sonnerToast.error('Failed to send reminder')
+    } finally {
+      setSendingReminder(false)
     }
   }
 
@@ -132,6 +157,18 @@ export function PartyProfile() {
           {isSupplier && (
             <Button size="sm" onClick={() => handleNewTransaction('purchase')} className="bg-gradient-saffron gap-2">
               <Plus className="w-4 h-4" /> New Purchase
+            </Button>
+          )}
+          {isCustomer && stats.balance > 0 && features.paymentReminders && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleSendReminder}
+              disabled={sendingReminder}
+              className="gap-2 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+            >
+              {sendingReminder ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageCircle className="w-4 h-4" />}
+              Send Reminder
             </Button>
           )}
           <Button size="sm" variant="outline" onClick={() => setView('parties')} className="gap-2">
