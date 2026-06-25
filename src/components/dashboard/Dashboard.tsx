@@ -108,7 +108,7 @@ export function Dashboard() {
       {/* Date range selector + KPI header */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h3 className="text-base font-semibold">${t('dash.business_overview')}</h3>
+          <h3 className="text-base font-semibold">{t('dash.business_overview')}</h3>
           <p className="text-xs text-muted-foreground">Filter all charts and stats by date range</p>
         </div>
         <DateRangePicker value={dateRange} onChange={handleDateChange} preset={datePreset} onPresetChange={setDatePreset} />
@@ -117,7 +117,7 @@ export function Dashboard() {
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
         <KPICard
-          title="${t('dash.today_revenue')}"
+          title={t('dash.today_revenue')}
           value={formatINR(kpis.todayRevenue)}
           icon={IndianRupee}
           gradient="from-amber-500 to-orange-600"
@@ -125,7 +125,7 @@ export function Dashboard() {
           onClick={() => navigateToSalesWithDate(todayStart, new Date(), 'Today')}
         />
         <KPICard
-          title="${t('dash.today_profit')}"
+          title={t('dash.today_profit')}
           value={formatINR(kpis.todayProfit)}
           icon={TrendingUp}
           gradient="from-emerald-500 to-teal-600"
@@ -189,7 +189,7 @@ export function Dashboard() {
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-base font-semibold">${t('dash.sales_trend')}</CardTitle>
+              <CardTitle className="text-base font-semibold">{t('dash.sales_trend')}</CardTitle>
               <p className="text-xs text-muted-foreground mt-0.5">For selected date range</p>
             </div>
             <Badge variant="secondary" className="gap-1">
@@ -232,7 +232,7 @@ export function Dashboard() {
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-base font-semibold">${t('dash.top_products')}</CardTitle>
+                <CardTitle className="text-base font-semibold">{t('dash.top_products')}</CardTitle>
                 <p className="text-xs text-muted-foreground">For selected date range</p>
               </div>
               <Button variant="ghost" size="sm" className="text-xs h-7 gap-1" onClick={() => setView('inventory')}>
@@ -265,7 +265,7 @@ export function Dashboard() {
         {/* Payment mode pie */}
         <Card className="shadow-card border-border/60">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base font-semibold">${t('dash.payment_modes')}</CardTitle>
+            <CardTitle className="text-base font-semibold">{t('dash.payment_modes')}</CardTitle>
             <p className="text-xs text-muted-foreground">For selected date range</p>
           </CardHeader>
           <CardContent>
@@ -312,7 +312,7 @@ export function Dashboard() {
         {/* Category breakdown */}
         <Card className="shadow-card border-border/60 lg:col-span-2">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base font-semibold">${t('dash.category_breakdown')}</CardTitle>
+            <CardTitle className="text-base font-semibold">{t('dash.category_breakdown')}</CardTitle>
             <p className="text-xs text-muted-foreground">For selected date range</p>
           </CardHeader>
           <CardContent>
@@ -354,7 +354,7 @@ export function Dashboard() {
                   <AlertTriangle className="w-4 h-4 text-rose-600" />
                 </div>
                 <div>
-                  <CardTitle className="text-base font-semibold">${t('dash.low_stock')}</CardTitle>
+                  <CardTitle className="text-base font-semibold">{t('dash.low_stock')}</CardTitle>
                   <p className="text-xs text-muted-foreground">{lowStockProducts.length} products need restocking</p>
                 </div>
               </div>
@@ -399,7 +399,7 @@ export function Dashboard() {
                   <Receipt className="w-4 h-4 text-amber-600" />
                 </div>
                 <div>
-                  <CardTitle className="text-base font-semibold">${t('dash.recent_transactions')}</CardTitle>
+                  <CardTitle className="text-base font-semibold">{t('dash.recent_transactions')}</CardTitle>
                   <p className="text-xs text-muted-foreground">Latest activity</p>
                 </div>
               </div>
@@ -468,7 +468,7 @@ export function Dashboard() {
         <Card className="shadow-card border-border/60">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-base font-semibold">${t('dash.gst_summary')} ({rangeLabel})</CardTitle>
+              <CardTitle className="text-base font-semibold">{t('dash.gst_summary')} ({rangeLabel})</CardTitle>
               <Button variant="ghost" size="sm" className="text-xs h-7 gap-1" onClick={() => setView('reports')}>
                 Full report <ArrowRight className="w-3 h-3" />
               </Button>
@@ -485,7 +485,7 @@ export function Dashboard() {
         </Card>
       </div>
 
-      {/* ${t('dash.smart_insights')} - AI-powered alerts */}
+      {/* {t('dash.smart_insights')} - AI-powered alerts */}
       {kpis && <SmartInsights />}
     </div>
   )
@@ -593,7 +593,7 @@ function DateRangeHeader({ dateRange, datePreset, onChange, onPresetChange }: {
   return (
     <div className="flex items-center justify-between gap-3 flex-wrap">
       <div>
-        <h3 className="text-base font-semibold">${t('dash.business_overview')}</h3>
+        <h3 className="text-base font-semibold">{t('dash.business_overview')}</h3>
         <p className="text-xs text-muted-foreground">Filter all charts and stats by date range</p>
       </div>
       <DateRangePicker
