@@ -352,11 +352,11 @@ function ProductGridCard({ product: p, onEdit }: { product: any; onEdit: () => v
 
         <div className="grid grid-cols-2 gap-2 text-xs mt-3">
           <div className="rounded-lg bg-muted/50 p-2">
-            <p className="text-[10px] text-muted-foreground uppercase">{t('inv.buy_price')}</p>
+            <p className="text-[10px] text-muted-foreground uppercase">Buy Price</p>
             <p className="font-semibold mt-0.5">{formatINR(p.purchasePrice)}</p>
           </div>
           <div className="rounded-lg bg-muted/50 p-2">
-            <p className="text-[10px] text-muted-foreground uppercase">{t('inv.sale_price')}</p>
+            <p className="text-[10px] text-muted-foreground uppercase">Sale Price</p>
             <p className="font-semibold mt-0.5">{formatINR(p.salePrice)}</p>
           </div>
         </div>
@@ -373,7 +373,7 @@ function ProductGridCard({ product: p, onEdit }: { product: any; onEdit: () => v
             </p>
           </div>
           <div className="text-right">
-            <p className="text-[10px] text-muted-foreground uppercase">{t('inv.profit_unit')}</p>
+            <p className="text-[10px] text-muted-foreground uppercase">Profit / unit</p>
             <p className="text-sm font-semibold text-emerald-600">
               {formatINR(profit)}
               <span className="text-[10px] text-muted-foreground ml-1">({margin.toFixed(0)}%)</span>

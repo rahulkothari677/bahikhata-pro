@@ -478,8 +478,8 @@ export function Dashboard() {
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               <GstMiniStat label="Output Tax (Sales)" value={gstSummary.outputTax} color="text-amber-600" />
               <GstMiniStat label="Input Tax (Purchase)" value={gstSummary.inputTax} color="text-emerald-600" />
-              <GstMiniStat label="C{t('dash.gst_summary')} + S{t('dash.gst_summary')}" value={gstSummary.cgst + gstSummary.sgst} color="text-violet-600" />
-              <GstMiniStat label="Net {t('dash.gst_summary')} Payable" value={gstSummary.netPayable} color={gstSummary.netPayable >= 0 ? 'text-rose-600' : 'text-emerald-600'} highlight />
+              <GstMiniStat label="CGST + SGST" value={gstSummary.cgst + gstSummary.sgst} color="text-violet-600" />
+              <GstMiniStat label="Net GST Payable" value={gstSummary.netPayable} color={gstSummary.netPayable >= 0 ? 'text-rose-600' : 'text-emerald-600'} highlight />
             </div>
           </CardContent>
         </Card>

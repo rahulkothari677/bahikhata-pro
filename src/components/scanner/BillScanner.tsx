@@ -196,7 +196,7 @@ export function BillScanner() {
       {/* Bill type selector */}
       <Card className="shadow-card border-border/60">
         <CardContent className="p-4">
-          <Label className="text-xs uppercase tracking-wide text-muted-foreground">आप स्कैन कर रहे हैं...</Label>
+          <Label className="text-xs uppercase tracking-wide text-muted-foreground">I am scanning a...</Label>
           <div className="grid grid-cols-2 gap-3 mt-2">
             <button
               onClick={() => setBillType('purchase')}
