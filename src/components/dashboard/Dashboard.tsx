@@ -593,7 +593,7 @@ function DateRangeHeader({ dateRange, datePreset, onChange, onPresetChange }: {
   return (
     <div className="flex items-center justify-between gap-3 flex-wrap">
       <div>
-        <h3 className="text-base font-semibold">{t('dash.business_overview')}</h3>
+        <h3 className="text-base font-semibold">Business Overview</h3>
         <p className="text-xs text-muted-foreground">Filter all charts and stats by date range</p>
       </div>
       <DateRangePicker
