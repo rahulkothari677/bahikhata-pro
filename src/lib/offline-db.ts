@@ -179,9 +179,94 @@ export async function clearCacheByUrlPrefix(prefix: string): Promise<void> {
   }
 }
 
+/**
+ * Find the MOST RECENT cached response whose key starts with `prefix`.
+ * Used when offline and the exact URL isn't cached (e.g. dashboard with
+ * a timestamp query param that changes every millisecond).
+ */
+export async function getCachedResponseByPrefix(prefix: string): Promise<CachedResponse | null> {
+  try {
+    const db = await openDB()
+    const t = db.transaction(STORE_KV, 'readonly')
+    const store = t.objectStore(STORE_KV)
+    return new Promise<CachedResponse | null>((resolve) => {
+      const req = store.openCursor()
+      let bestMatch: CachedResponse | null = null
+      let bestTime = 0
+      req.onsuccess = () => {
+        const cursor = req.result
+        if (cursor) {
+          const val = cursor.value as CachedResponse
+          if (val.key.startsWith(prefix) && val.cachedAt > bestTime) {
+            bestMatch = val
+            bestTime = val.cachedAt
+          }
+          cursor.continue()
+        } else {
+          resolve(bestMatch)
+        }
+      }
+      req.onerror = () => resolve(null)
+    })
+  } catch {
+    return null
+  }
+}
+
 export async function clearAllCache(): Promise<void> {
   try {
     await tx(STORE_KV, 'readwrite', (s) => s.clear())
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Keep only the `keep` most recent cached entries for a given URL prefix.
+ * Older entries are deleted to prevent IndexedDB from growing unbounded
+ * (e.g. dashboard with timestamps created a new entry every page load).
+ */
+export async function trimCacheByPrefix(prefix: string, keep: number): Promise<void> {
+  try {
+    const db = await openDB()
+    const t = db.transaction(STORE_KV, 'readwrite')
+    const store = t.objectStore(STORE_KV)
+    return new Promise<void>((resolve) => {
+      // Collect all entries matching the prefix
+      const matches: { key: string; cachedAt: number }[] = []
+      const req = store.openCursor()
+      req.onsuccess = () => {
+        const cursor = req.result
+        if (cursor) {
+          const val = cursor.value as CachedResponse
+          if (val.key.startsWith(prefix)) {
+            matches.push({ key: val.key, cachedAt: val.cachedAt })
+          }
+          cursor.continue()
+        } else {
+          // Sort by cachedAt descending, delete everything after `keep`
+          matches.sort((a, b) => b.cachedAt - a.cachedAt)
+          const toDelete = matches.slice(keep)
+          if (toDelete.length === 0) {
+            resolve()
+            return
+          }
+          let deleted = 0
+          for (const item of toDelete) {
+            const delReq = store.delete(item.key)
+            delReq.onsuccess = () => {
+              deleted++
+              if (deleted === toDelete.length) resolve()
+            }
+            delReq.onerror = () => {
+              deleted++
+              if (deleted === toDelete.length) resolve()
+            }
+          }
+        }
+      }
+      req.onerror = () => resolve()
+    })
   } catch {
     /* ignore */
   }

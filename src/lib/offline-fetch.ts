@@ -23,12 +23,16 @@
 import {
   cacheResponse,
   getCachedResponse,
+  getCachedResponseByPrefix,
   clearCacheByUrlPrefix,
+  trimCacheByPrefix,
   queuePendingWrite,
   saveSession,
   getCachedSession,
   clearAllOfflineData,
   getPendingWriteCount,
+  getPendingWrites,
+  deletePendingWrite,
   setMeta,
   getMeta,
   type PendingWrite,
@@ -178,14 +182,61 @@ export async function offlineFetch(
 // GET handler: cache-first (offline), network-first (online) with cache fallback
 // ────────────────────────────────────────────────────────────────────────────
 
+/**
+ * URLs whose cache key should be normalized — strip volatile query params
+ * (timestamps, dates) so the cache key is stable and matches when offline.
+ * Format: { pathPrefix, paramName } — strip `paramName` from the cache key
+ * for any URL starting with `pathPrefix`.
+ */
+const NORMALIZE_RULES: { prefix: string; stripParams: string[] }[] = [
+  // Dashboard uses from= & to= with millisecond timestamps → unstable key
+  { prefix: '/api/dashboard', stripParams: ['from', 'to'] },
+  // Reports also use from/to
+  { prefix: '/api/reports', stripParams: ['from', 'to'] },
+  { prefix: '/api/gstr-export', stripParams: ['from', 'to'] },
+  // Transactions list uses limit/type which are fine, but from/to are volatile
+  { prefix: '/api/transactions', stripParams: ['from', 'to'] },
+]
+
+/** Normalize a URL for caching — strip volatile query params. */
+function normalizeCacheKey(url: string): string {
+  try {
+    const u = new URL(url, window.location.origin)
+    for (const rule of NORMALIZE_RULES) {
+      if (u.pathname.startsWith(rule.prefix)) {
+        for (const param of rule.stripParams) {
+          u.searchParams.delete(param)
+        }
+        break
+      }
+    }
+    return u.pathname + (u.search || '')
+  } catch {
+    return url
+  }
+}
+
 async function handleGet(url: string, fetchOpts: RequestInit): Promise<Response> {
-  // Offline: return cached response, or throw OfflineError
+  const cacheKey = normalizeCacheKey(url)
+
+  // Offline: return cached response (exact match first, then prefix match)
   if (!isOnline()) {
-    const cached = await getCachedResponse(url)
+    // 1. Try exact key match
+    const cached = await getCachedResponse(cacheKey)
     if (cached) {
       return new Response(JSON.stringify(cached.body), {
         status: 200,
         headers: { 'Content-Type': 'application/json', 'X-BahiKhata-Source': 'offline-cache' },
+      })
+    }
+    // 2. Fall back to most recent cached entry for this path prefix
+    //    (e.g. dashboard with different timestamps)
+    const prefix = cacheKey.split('?')[0]
+    const fallback = await getCachedResponseByPrefix(prefix)
+    if (fallback) {
+      return new Response(JSON.stringify(fallback.body), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json', 'X-BahiKhata-Source': 'offline-cache-fallback' },
       })
     }
     throw new OfflineError()
@@ -195,12 +246,14 @@ async function handleGet(url: string, fetchOpts: RequestInit): Promise<Response>
   try {
     const res = await fetch(url, fetchOpts)
     if (res.ok) {
-      // Clone & cache (only JSON responses)
       const ct = res.headers.get('content-type') || ''
       if (ct.includes('application/json')) {
         try {
           const body = await res.clone().json()
-          await cacheResponse(url, body)
+          // Cache with NORMALIZED key so it's findable offline
+          await cacheResponse(cacheKey, body)
+          // Also clean up old entries with the same prefix (keep only latest 3)
+          await trimCacheByPrefix(cacheKey.split('?')[0], 3)
         } catch {
           /* not JSON or caching failed — ignore */
         }
@@ -208,10 +261,18 @@ async function handleGet(url: string, fetchOpts: RequestInit): Promise<Response>
     }
     return res
   } catch (err) {
-    // Network failed — fall back to cache
-    const cached = await getCachedResponse(url)
+    // Network failed — fall back to cache (exact, then prefix)
+    const cached = await getCachedResponse(cacheKey)
     if (cached) {
       return new Response(JSON.stringify(cached.body), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json', 'X-BahiKhata-Source': 'offline-cache-fallback' },
+      })
+    }
+    const prefix = cacheKey.split('?')[0]
+    const fallback = await getCachedResponseByPrefix(prefix)
+    if (fallback) {
+      return new Response(JSON.stringify(fallback.body), {
         status: 200,
         headers: { 'Content-Type': 'application/json', 'X-BahiKhata-Source': 'offline-cache-fallback' },
       })
@@ -368,6 +429,8 @@ export {
   getCachedSession,
   clearAllOfflineData,
   getPendingWriteCount,
+  getPendingWrites,
+  deletePendingWrite,
 }
 
 /**

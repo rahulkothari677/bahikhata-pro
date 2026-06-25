@@ -110,6 +110,33 @@ export function Settings() {
     }
   }
 
+  const handleClearPendingWrites = async () => {
+    if (!confirm('Clear all pending offline writes? These are changes made while offline that haven\'t synced yet. This cannot be undone.')) return
+    try {
+      const { getPendingWrites, deletePendingWrite } = await import('@/lib/offline-fetch')
+      const writes = await getPendingWrites()
+      for (const w of writes) {
+        if (w.id) await deletePendingWrite(w.id)
+      }
+      sonnerToast.success(`Cleared ${writes.length} pending write(s)`)
+      window.location.reload()
+    } catch {
+      toast({ title: 'Failed to clear pending writes', variant: 'destructive' })
+    }
+  }
+
+  const handleClearOfflineCache = async () => {
+    if (!confirm('Clear offline cache? This will remove all locally cached data. You\'ll need internet to reload it. Your cloud data is NOT affected.')) return
+    try {
+      const { clearAllOfflineData } = await import('@/lib/offline-fetch')
+      await clearAllOfflineData()
+      sonnerToast.success('Offline cache cleared. Reloading...')
+      setTimeout(() => window.location.reload(), 1000)
+    } catch {
+      toast({ title: 'Failed to clear cache', variant: 'destructive' })
+    }
+  }
+
   return (
     <div className="space-y-4 max-w-3xl">
       <Card className="shadow-card border-border/60">
@@ -167,7 +194,29 @@ export function Settings() {
           </CardTitle>
           <p className="text-xs text-muted-foreground">Manage your app data</p>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
+          {/* Offline cache management */}
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+            <div className="flex items-start gap-3">
+              <Database className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-semibold text-blue-900 text-sm">Offline Data</p>
+                <p className="text-xs text-blue-700 mt-1">
+                  Clear locally cached data or stuck pending writes. Your cloud data is never affected.
+                </p>
+                <div className="flex gap-2 mt-3 flex-wrap">
+                  <Button variant="outline" size="sm" className="gap-2 border-blue-300 text-blue-700 hover:bg-blue-100" onClick={handleClearPendingWrites}>
+                    <Trash2 className="w-4 h-4" /> Clear Pending Writes
+                  </Button>
+                  <Button variant="outline" size="sm" className="gap-2 border-blue-300 text-blue-700 hover:bg-blue-100" onClick={handleClearOfflineCache}>
+                    <Database className="w-4 h-4" /> Clear Offline Cache
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Danger zone */}
           <div className="rounded-lg border border-rose-200 bg-rose-50 p-4">
             <div className="flex items-start gap-3">
               <AlertTriangle className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" />

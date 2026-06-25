@@ -13,7 +13,7 @@
  *    queueing via IndexedDB.
  */
 
-const CACHE_VERSION = 'bahikhata-pro-v4'
+const CACHE_VERSION = 'bahikhata-pro-v5'
 const APP_SHELL = [
   '/',
   '/manifest.json',
@@ -59,18 +59,32 @@ self.addEventListener('fetch', (event) => {
   // IndexedDB (not the Cache API), to keep auth headers and timestamps clean.
   if (url.pathname.startsWith('/api/')) return
 
-  // Navigation requests: network-first, fall back to cached '/'
+  // Navigation requests: network-first, fall back to cached '/' or cached
+  // navigation response. Never return undefined (causes "Failed to fetch").
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request)
-        .then((response) => {
+      (async () => {
+        try {
+          const response = await fetch(request)
           const clone = response.clone()
-          caches.open(CACHE_VERSION).then((cache) => cache.put(request, clone))
+          const cache = await caches.open(CACHE_VERSION)
+          cache.put(request, clone)
           return response
-        })
-        .catch(() =>
-          caches.match(request).then((cached) => cached || caches.match('/')),
-        ),
+        } catch {
+          // Offline — try exact match first, then cached '/'
+          const exact = await caches.match(request)
+          if (exact) return exact
+          const root = await caches.match('/')
+          if (root) return root
+          // Last resort: a basic offline page
+          return new Response(
+            '<!DOCTYPE html><html><body style="font-family:sans-serif;padding:40px;text-align:center">' +
+              '<h2>You are offline</h2><p>Please connect to the internet and refresh.</p>' +
+              '</body></html>',
+            { status: 503, headers: { 'Content-Type': 'text/html' } },
+          )
+        }
+      })(),
     )
     return
   }
@@ -81,22 +95,27 @@ self.addEventListener('fetch', (event) => {
     url.pathname.match(/\.(?:js|css|woff2?|ttf|png|jpg|jpeg|svg|gif|webp|ico)$/)
   ) {
     event.respondWith(
-      caches.match(request).then(
-        (cached) =>
-          cached ||
-          fetch(request).then((response) => {
-            if (response.ok) {
-              const clone = response.clone()
-              caches.open(CACHE_VERSION).then((cache) => cache.put(request, clone))
-            }
-            return response
-          }),
-      ),
+      (async () => {
+        const cached = await caches.match(request)
+        if (cached) return cached
+        try {
+          const response = await fetch(request)
+          if (response.ok) {
+            const clone = response.clone()
+            const cache = await caches.open(CACHE_VERSION)
+            cache.put(request, clone)
+          }
+          return response
+        } catch {
+          // No cache, no network — return 503 instead of undefined
+          return new Response('', { status: 504, statusText: 'Not Cached' })
+        }
+      })(),
     )
     return
   }
 
-  // Default: try network, fall back to cache
+  // Default: try network, fall back to cache, return 503 if neither
   event.respondWith(
     fetch(request)
       .then((response) => {
@@ -106,7 +125,17 @@ self.addEventListener('fetch', (event) => {
         }
         return response
       })
-      .catch(() => caches.match(request)),
+      .catch(async () => {
+        const cached = await caches.match(request)
+        if (cached) return cached
+        // No cache match — return a proper error response instead of undefined
+        // (which would throw "Failed to fetch" inside event.respondWith)
+        return new Response('Offline and not cached', {
+          status: 503,
+          statusText: 'Service Unavailable',
+          headers: { 'Content-Type': 'text/plain' },
+        })
+      }),
   )
 })
 
