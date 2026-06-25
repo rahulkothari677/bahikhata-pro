@@ -3,34 +3,42 @@
 import { useEffect } from 'react'
 import { useAppStore } from '@/store/app-store'
 import { getTranslation, type Language } from '@/lib/i18n'
-import { useLocalStorage } from '@/hooks/use-local-storage'
 
 // SSR-safe translation hook
-// During SSR: always returns English (matches server output)
-// After mount: loads saved language from localStorage
+// Uses Zustand store as the single source of truth
+// Syncs with localStorage on mount and on changes
 export function useTranslation() {
-  const storeLanguage = useAppStore((s) => s.language)
+  const language = useAppStore((s) => s.language)
   const setLanguage = useAppStore((s) => s.setLanguage)
-  const [savedLanguage, setSavedLanguage] = useLocalStorage('bahikhata-language', 'en')
 
-  // On mount, load saved language into store
+  // On mount: load saved language from localStorage into store
   useEffect(() => {
-    if (savedLanguage !== storeLanguage) {
-      setLanguage(savedLanguage)
+    try {
+      const saved = localStorage.getItem('bahikhata-language')
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (parsed === 'hi' || parsed === 'en') {
+          if (parsed !== language) {
+            setLanguage(parsed)
+          }
+        }
+      }
+    } catch (e) {
+      // localStorage not available
     }
   }, [])
 
-  // Save to localStorage when store changes
+  // When language changes in store: save to localStorage
   useEffect(() => {
-    setSavedLanguage(storeLanguage)
-  }, [storeLanguage])
-
-  // Use savedLanguage if it's loaded (client-side after mount)
-  // Otherwise use storeLanguage (which is 'en' by default during SSR)
-  const language = savedLanguage as Language
+    try {
+      localStorage.setItem('bahikhata-language', JSON.stringify(language))
+    } catch (e) {
+      // localStorage not available
+    }
+  }, [language])
 
   const t = (key: string): string => {
-    return getTranslation(language, key)
+    return getTranslation(language as Language, key)
   }
 
   return { t, language }

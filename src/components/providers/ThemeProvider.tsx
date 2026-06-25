@@ -2,15 +2,11 @@
 
 import { useEffect } from 'react'
 import { useAppStore, type ThemeColor } from '@/store/app-store'
-import { useLocalStorage } from '@/hooks/use-local-storage'
 
-// Full theme palettes — each defines ALL colors for a cohesive look
 export type ThemePalette = {
-  // Main accent
   primary: string
   ring: string
   gradient: string
-  // Sidebar - now LIGHT to complement dashboard
   sidebar: string
   sidebarForeground: string
   sidebarPrimary: string
@@ -18,11 +14,8 @@ export type ThemePalette = {
   sidebarAccent: string
   sidebarAccentForeground: string
   sidebarBorder: string
-  // Background tint - subtle warm/cool tone
   background: string
-  // Chart colors - 5 complementary colors
   charts: [string, string, string, string, string]
-  // Preview swatch
   swatch: string
 }
 
@@ -120,53 +113,58 @@ const THEMES: Record<ThemeColor, ThemePalette> = {
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const storeDarkMode = useAppStore((s) => s.features?.darkMode ?? false)
-  const storeThemeColor = useAppStore((s) => s.themeColor)
+  const darkMode = useAppStore((s) => s.features?.darkMode ?? false)
+  const themeColor = useAppStore((s) => s.themeColor)
   const setFeature = useAppStore((s) => s.setFeature)
   const setThemeColor = useAppStore((s) => s.setThemeColor)
 
-  // Persist theme settings in localStorage (SSR-safe)
-  const [savedDarkMode, setSavedDarkMode] = useLocalStorage('bahikhata-darkMode', false)
-  const [savedThemeColor, setSavedThemeColor] = useLocalStorage('bahikhata-themeColor', 'saffron')
-
-  // On mount, load saved values into store
+  // On mount: load saved theme from localStorage into store
   useEffect(() => {
-    if (savedDarkMode !== storeDarkMode) {
-      setFeature('darkMode', savedDarkMode)
-    }
-    if (savedThemeColor !== storeThemeColor) {
-      setThemeColor(savedThemeColor)
-    }
+    try {
+      const savedDark = localStorage.getItem('bahikhata-darkMode')
+      if (savedDark !== null) {
+        const parsed = JSON.parse(savedDark)
+        if (parsed !== darkMode) {
+          setFeature('darkMode', parsed)
+        }
+      }
+      const savedColor = localStorage.getItem('bahikhata-themeColor')
+      if (savedColor !== null) {
+        const parsed = JSON.parse(savedColor)
+        if (parsed !== themeColor) {
+          setThemeColor(parsed)
+        }
+      }
+    } catch (e) {}
   }, [])
 
-  // Save to localStorage when store changes
+  // Save to localStorage when values change
   useEffect(() => {
-    setSavedDarkMode(storeDarkMode)
-  }, [storeDarkMode])
+    try {
+      localStorage.setItem('bahikhata-darkMode', JSON.stringify(darkMode))
+    } catch (e) {}
+  }, [darkMode])
 
   useEffect(() => {
-    setSavedThemeColor(storeThemeColor)
-  }, [storeThemeColor])
+    try {
+      localStorage.setItem('bahakhata-themeColor', JSON.stringify(themeColor))
+    } catch (e) {}
+  }, [themeColor])
 
-  const darkMode = storeDarkMode
-  const themeColor = storeThemeColor
-
+  // Apply theme to document
   useEffect(() => {
     const root = document.documentElement
     const palette = THEMES[themeColor]
 
-    // Apply dark mode class
     if (darkMode) {
       root.classList.add('dark')
     } else {
       root.classList.remove('dark')
     }
 
-    // Apply ALL theme variables via inline style override
     root.style.setProperty('--primary', palette.primary)
     root.style.setProperty('--ring', palette.ring)
 
-    // In LIGHT mode: override sidebar to match the theme color (light sidebar)
     if (!darkMode) {
       root.style.setProperty('--background', palette.background)
       root.style.setProperty('--sidebar', palette.sidebar)
@@ -177,8 +175,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       root.style.setProperty('--sidebar-accent-foreground', palette.sidebarAccentForeground)
       root.style.setProperty('--sidebar-border', palette.sidebarBorder)
     } else {
-      // In DARK mode: CLEAR the inline overrides so the .dark CSS class takes over
-      // This lets the dark mode CSS (globals.css) control the sidebar colors
       root.style.removeProperty('--background')
       root.style.removeProperty('--sidebar')
       root.style.removeProperty('--sidebar-foreground')
@@ -194,7 +190,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     root.style.setProperty('--chart-4', palette.charts[3])
     root.style.setProperty('--chart-5', palette.charts[4])
 
-    // Update gradient utility classes
     const styleId = 'theme-gradient-style'
     let styleEl = document.getElementById(styleId)
     if (!styleEl) {
