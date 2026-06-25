@@ -21,6 +21,7 @@ import { Reports } from '@/components/reports/Reports'
 import { Settings } from '@/components/settings/Settings'
 import { KeyboardShortcuts } from '@/components/common/KeyboardShortcuts'
 import { GlobalSearch } from '@/components/common/GlobalSearch'
+import { PWAInstallPrompt } from '@/components/common/PWAInstallPrompt'
 
 export default function Home() {
   const { data: session, status } = useSession()
@@ -77,6 +78,9 @@ export default function Home() {
       </div>
 
       <Onboarding open={showOnboarding} onDone={() => setOnboardingDismissed(true)} />
+
+      {/* PWA Install Prompt */}
+      {features.pwaInstall && <PWAInstallPrompt />}
     </div>
   )
 }

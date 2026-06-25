@@ -96,6 +96,9 @@ interface AppState {
   // Theme color - persisted
   themeColor: ThemeColor
   setThemeColor: (c: ThemeColor) => void
+  // Language - persisted
+  language: 'en' | 'hi'
+  setLanguage: (l: 'en' | 'hi') => void
   // Global search
   searchOpen: boolean
   setSearchOpen: (open: boolean) => void
@@ -141,6 +144,8 @@ export const useAppStore = create<AppState>()(
       resetFeatures: () => set({ features: DEFAULT_FEATURES }),
       themeColor: 'saffron',
       setThemeColor: (c) => set({ themeColor: c }),
+      language: 'en',
+      setLanguage: (l) => set({ language: l }),
       searchOpen: false,
       setSearchOpen: (open) => set({ searchOpen: open }),
     }),
@@ -154,6 +159,7 @@ export const useAppStore = create<AppState>()(
         transactionsViewMode: state.transactionsViewMode,
         features: state.features,
         themeColor: state.themeColor,
+        language: state.language,
       }),
     }
   )

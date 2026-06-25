@@ -15,7 +15,7 @@ import { THEME_OPTIONS } from '@/components/providers/ThemeProvider'
 import {
   Store, Save, Database, Trash2, AlertTriangle, Moon, Keyboard,
   Search, MessageCircle, Sparkles, Bell, Repeat, FileSpreadsheet,
-  Users, Package, ScanLine, TrendingUp, Smartphone, RotateCcw, Palette, Check,
+  Users, Package, ScanLine, TrendingUp, Smartphone, RotateCcw, Palette, Check, Globe,
 } from 'lucide-react'
 
 const FEATURE_CONFIG: { key: FeatureKey; label: string; description: string; icon: any }[] = [
@@ -38,7 +38,7 @@ const FEATURE_CONFIG: { key: FeatureKey; label: string; description: string; ico
 export function Settings() {
   const { toast } = useToast()
   const queryClient = useQueryClient()
-  const { features, setFeature, resetFeatures, themeColor, setThemeColor } = useAppStore()
+  const { features, setFeature, resetFeatures, themeColor, setThemeColor, language, setLanguage } = useAppStore()
   const [form, setForm] = useState({
     shopName: '', ownerName: '', phone: '', email: '',
     gstin: '', state: '', address: '',
@@ -230,6 +230,31 @@ export function Settings() {
                 sonnerToast.success(`Dark mode ${checked ? 'enabled' : 'disabled'}`)
               }}
             />
+          </div>
+
+          {/* Language Toggle */}
+          <div className="mt-3 flex items-center justify-between rounded-lg bg-muted/50 p-3">
+            <div className="flex items-center gap-2">
+              <Globe className="w-4 h-4 text-muted-foreground" />
+              <div>
+                <p className="text-sm font-medium">Language / भाषा</p>
+                <p className="text-[11px] text-muted-foreground">Choose your preferred language</p>
+              </div>
+            </div>
+            <div className="flex gap-1 bg-background rounded-lg p-0.5">
+              <button
+                onClick={() => { setLanguage('en'); sonnerToast.success('Language: English') }}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${language === 'en' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}
+              >
+                English
+              </button>
+              <button
+                onClick={() => { setLanguage('hi'); sonnerToast.success('भाषा: हिंदी') }}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${language === 'hi' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}
+              >
+                हिंदी
+              </button>
+            </div>
           </div>
         </CardContent>
       </Card>

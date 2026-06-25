@@ -17,8 +17,9 @@ import { formatINR, cn, getInitials } from '@/lib/utils'
 import {
   ArrowLeft, ShoppingCart, Truck, Plus, X, Search, ChevronDown,
   TrendingUp, Calendar, User, ScanLine, Folder, FolderOpen,
-  Package, Phone, IndianRupee, Save, Trash2, Check, AlertCircle,
+  Package, Phone, IndianRupee, Save, Trash2, Check, AlertCircle, Mic,
 } from 'lucide-react'
+import { VoiceEntry } from '@/components/common/VoiceEntry'
 
 const PAYMENT_MODES = [
   { value: 'cash', label: 'Cash' },
@@ -64,6 +65,7 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
   const [items, setItems] = useState<ItemRow[]>([])
 
   const [saving, setSaving] = useState(false)
+  const [showVoiceEntry, setShowVoiceEntry] = useState(false)
 
   // Fetch products
   const { data: productsData } = useQuery({
@@ -280,6 +282,9 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setShowVoiceEntry(!showVoiceEntry)} className="gap-2">
+            <Mic className="w-4 h-4" /> Voice
+          </Button>
           <Button variant="outline" size="sm" onClick={() => { setScannerBillType(type); setView('scanner') }} className="gap-2">
             <ScanLine className="w-4 h-4" /> Scan Bill
           </Button>
@@ -288,6 +293,50 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
           </Button>
         </div>
       </div>
+
+      {/* Voice Entry Section */}
+      {showVoiceEntry && (
+        <Card className="shadow-card border-border/60 border-primary/30">
+          <CardContent className="p-4">
+            <h3 className="font-semibold text-sm flex items-center gap-2 mb-3">
+              <Mic className="w-4 h-4 text-primary" /> Voice Entry
+            </h3>
+            <p className="text-xs text-muted-foreground mb-3">
+              Speak naturally: &quot;Sold 2 kg sugar to Ramesh at 50 rupees cash&quot;
+            </p>
+            <VoiceEntry onTransactionParsed={(data) => {
+              // Apply parsed data to the form
+              if (data.partyName) {
+                // Find matching party
+                const matched = allParties.find(p =>
+                  p.name.toLowerCase().includes(data.partyName.toLowerCase()) ||
+                  data.partyName.toLowerCase().includes(p.name.toLowerCase())
+                )
+                if (matched) setPartyId(matched.id)
+              }
+              if (data.paymentMode) setPaymentMode(data.paymentMode)
+              if (data.items?.length > 0) {
+                setItems(data.items.map((item: any) => {
+                  const product = products.find(p =>
+                    p.name.toLowerCase().includes(item.name.toLowerCase()) ||
+                    item.name.toLowerCase().includes(p.name.toLowerCase())
+                  )
+                  return {
+                    productId: product?.id || '',
+                    productName: item.name,
+                    quantity: item.quantity,
+                    unitPrice: item.unitPrice || (product ? (isSale ? product.salePrice : product.purchasePrice) : 0),
+                    gstRate: product?.gstRate || 0,
+                    unit: product?.unit || item.unit || 'pcs',
+                  }
+                }))
+              }
+              setShowVoiceEntry(false)
+              sonnerToast.success('Voice entry applied! Review and save.')
+            }} />
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* LEFT: Product selection + items list (takes 2 cols) */}
