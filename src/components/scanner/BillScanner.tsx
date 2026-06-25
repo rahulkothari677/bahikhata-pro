@@ -260,7 +260,7 @@ export function BillScanner() {
                   </div>
                   <h3 className="text-lg lg:text-xl font-bold">{t('scanner.scan_bill')}</h3>
                   <p className="text-sm text-muted-foreground mt-1 max-w-md mx-auto">
-                    किसी भी बिल, इनवॉइस या रसीद की फोटो लें। हमारा AI हर सामान, दाम, टैक्स और विवरण अपने आप निकाल देगा।
+                    Snap a photo of any bill, invoice or receipt. Our AI will extract every item, price, tax and party detail automatically.
                   </p>
                   <div className="flex flex-col sm:flex-row gap-3 justify-center mt-6">
                     <Button
@@ -280,25 +280,25 @@ export function BillScanner() {
                     </Button>
                   </div>
                   <p className="text-[11px] text-muted-foreground mt-4">
-                    JPG, PNG सपोर्ट • अधिकतम 10MB • साफ फोटो सबसे अच्छा
+                    Supports JPG, PNG • Max 10MB • Works best with clear photos
                   </p>
 
                   {/* Feature highlights */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-8 max-w-2xl mx-auto">
                     <div className="rounded-lg bg-muted/50 p-3 text-left">
                       <Sparkles className="w-4 h-4 text-primary mb-1" />
-                      <p className="text-xs font-semibold">सामान अपने आप निकालें</p>
+                      <p className="text-xs font-semibold">Auto-Extract Items</p>
                       <p className="text-[11px] text-muted-foreground mt-0.5">नाम, मात्रा, दाम, GST सब भर जाएगा</p>
                     </div>
                     <div className="rounded-lg bg-muted/50 p-3 text-left">
                       <FileText className="w-4 h-4 text-primary mb-1" />
-                      <p className="text-xs font-semibold">स्मार्ट टैक्स</p>
+                      <p className="text-xs font-semibold">Smart Tax Split</p>
                       <p className="text-[11px] text-muted-foreground mt-0.5">CGST/SGST/IGST अपने आप पहचानें</p>
                     </div>
                     <div className="rounded-lg bg-muted/50 p-3 text-left">
                       <Check className="w-4 h-4 text-primary mb-1" />
-                      <p className="text-xs font-semibold">जांचें और बदलें</p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">कुछ भी जोड़ें, हटाएं या बदलें</p>
+                      <p className="text-xs font-semibold">Verify & Edit</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Add, remove or change anything</p>
                     </div>
                   </div>
                 </>
@@ -337,7 +337,7 @@ export function BillScanner() {
                   <span className="text-sm font-medium">{billType === 'sale' ? t('scanner.sales_bill') : t('scanner.purchase_bill')}</span>
                 </div>
                 <Button variant="ghost" size="sm" className="text-white hover:bg-white/20" onClick={handleReset}>
-                  <X className="w-4 h-4" /> दोबारा करें
+                  <X className="w-4 h-4" /> Start Over
                 </Button>
               </div>
               <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">

@@ -75,7 +75,7 @@ export function Dashboard() {
 
   const { kpis, salesTrend, topProducts, categoryBreakdown, paymentModeSplit, lowStockProducts, gstSummary, recentTransactions, setting } = data
 
-  const rangeLabel = datePreset === 'custom' ? 'चुनी हुई अवधि' : getPresetLabel(datePreset)
+  const rangeLabel = datePreset === 'custom' ? 'Selected Period' : getPresetLabel(datePreset)
 
   return (
     <div className="space-y-5">
@@ -137,7 +137,7 @@ export function Dashboard() {
           value={formatINR(kpis.rangeRevenue)}
           icon={Wallet}
           gradient="from-rose-500 to-pink-600"
-          subtitle={`${kpis.rangeTxnCount} ${t('dash.sales_word')} • ${kpis.revenueGrowth >= 0 ? '↑' : '↓'} ${Math.abs(kpis.revenueGrowth).toFixed(1)}% पिछले से`}
+          subtitle={`${kpis.rangeTxnCount} ${t('dash.sales_word')} • ${kpis.revenueGrowth >= 0 ? '↑' : '↓'} ${Math.abs(kpis.revenueGrowth).toFixed(1)}% vs prev`}
           trend={kpis.revenueGrowth >= 0 ? 'up' : 'down'}
           onClick={() => navigateToSalesWithDate(dateRange.from, dateRange.to, rangeLabel)}
         />
@@ -146,7 +146,7 @@ export function Dashboard() {
           value={formatINR(kpis.netProfit)}
           icon={PiggyBank}
           gradient="from-violet-500 to-purple-600"
-          subtitle={`${kpis.profitGrowth >= 0 ? '↑' : '↓'} ${Math.abs(kpis.profitGrowth).toFixed(1)}% मुनाफा रुझान`}
+          subtitle={`${kpis.profitGrowth >= 0 ? '↑' : '↓'} ${Math.abs(kpis.profitGrowth).toFixed(1)}% profit trend`}
           trend={kpis.profitGrowth >= 0 ? 'up' : 'down'}
           onClick={() => navigateToSalesWithDate(dateRange.from, dateRange.to, rangeLabel)}
         />
@@ -190,11 +190,11 @@ export function Dashboard() {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-base font-semibold">{t('dash.sales_trend')}</CardTitle>
-              <p className="text-xs text-muted-foreground mt-0.5">चुनी हुई अवधि के लिए</p>
+              <p className="text-xs text-muted-foreground mt-0.5">For selected date range</p>
             </div>
             <Badge variant="secondary" className="gap-1">
               <TrendingUp className="w-3 h-3" />
-              {salesTrend.length} पॉइंट्स
+              {salesTrend.length} points
             </Badge>
           </div>
         </CardHeader>
@@ -233,7 +233,7 @@ export function Dashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="text-base font-semibold">{t('dash.top_products')}</CardTitle>
-                <p className="text-xs text-muted-foreground">चुनी हुई अवधि के लिए</p>
+                <p className="text-xs text-muted-foreground">For selected date range</p>
               </div>
               <Button variant="ghost" size="sm" className="text-xs h-7 gap-1" onClick={() => setView('inventory')}>
                 {t('dash.view_all')} <ArrowRight className="w-3 h-3" />
@@ -266,7 +266,7 @@ export function Dashboard() {
         <Card className="shadow-card border-border/60">
           <CardHeader className="pb-2">
             <CardTitle className="text-base font-semibold">{t('dash.payment_modes')}</CardTitle>
-            <p className="text-xs text-muted-foreground">चुनी हुई अवधि के लिए</p>
+            <p className="text-xs text-muted-foreground">For selected date range</p>
           </CardHeader>
           <CardContent>
             {paymentModeSplit.length === 0 ? (
@@ -313,7 +313,7 @@ export function Dashboard() {
         <Card className="shadow-card border-border/60 lg:col-span-2">
           <CardHeader className="pb-2">
             <CardTitle className="text-base font-semibold">{t('dash.category_breakdown')}</CardTitle>
-            <p className="text-xs text-muted-foreground">चुनी हुई अवधि के लिए</p>
+            <p className="text-xs text-muted-foreground">For selected date range</p>
           </CardHeader>
           <CardContent>
             {categoryBreakdown.length === 0 ? (
@@ -476,8 +476,8 @@ export function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <GstMiniStat label="आउटपुट टैक्स (बिक्री)" value={gstSummary.outputTax} color="text-amber-600" />
-              <GstMiniStat label="इनपुट टैक्स (खरीद)" value={gstSummary.inputTax} color="text-emerald-600" />
+              <GstMiniStat label="Output Tax (Sales)" value={gstSummary.outputTax} color="text-amber-600" />
+              <GstMiniStat label="Input Tax (Purchase)" value={gstSummary.inputTax} color="text-emerald-600" />
               <GstMiniStat label="C{t('dash.gst_summary')} + S{t('dash.gst_summary')}" value={gstSummary.cgst + gstSummary.sgst} color="text-violet-600" />
               <GstMiniStat label="Net {t('dash.gst_summary')} Payable" value={gstSummary.netPayable} color={gstSummary.netPayable >= 0 ? 'text-rose-600' : 'text-emerald-600'} highlight />
             </div>
