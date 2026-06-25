@@ -3,7 +3,8 @@ import { authOptions } from '@/lib/auth'
 import { NextResponse } from 'next/server'
 
 // Get the authenticated user's ID from the session
-// Returns { userId, error } — if error is set, return it as NextResponse
+// For staff members, returns the OWNER's userId (so they see owner's data)
+// For owners, returns their own userId
 export async function getAuthUserId(): Promise<{ userId: string | null; error?: NextResponse }> {
   const session = await getServerSession(authOptions)
 
@@ -14,5 +15,9 @@ export async function getAuthUserId(): Promise<{ userId: string | null; error?: 
     }
   }
 
-  return { userId: session.user.id }
+  // If staff, use ownerId (the owner's account) so they see owner's data
+  // If owner, use their own id
+  const userId = session.user.ownerId || session.user.id
+
+  return { userId }
 }
