@@ -77,11 +77,11 @@ export function useOfflineSession(): OfflineSessionState {
 
   // If we've timed out loading AND we're offline AND we have a cached session,
   // return the cached session instead of staying stuck.
-  if (status === 'loading' && loadingTimeout && !online && cached) {
+  if (status === 'loading' && loadingTimeout && !online && cached && cached.user?.id && cached.expiresAt) {
     return {
       session: {
         user: cached.user,
-        expires: new Date(cached.expiresAt).toISOString(),
+        expires: safeToISOString(cached.expiresAt),
       },
       status: 'authenticated',
       isOfflineSession: true,
@@ -100,12 +100,12 @@ export function useOfflineSession(): OfflineSessionState {
 
   // Unauthenticated via NextAuth — check if we have a cached offline session
   if (status === 'unauthenticated') {
-    if (!online && cached) {
+    if (!online && cached && cached.user?.id && cached.expiresAt) {
       // Offline + cached session → use it
       return {
         session: {
           user: cached.user,
-          expires: new Date(cached.expiresAt).toISOString(),
+          expires: safeToISOString(cached.expiresAt),
         },
         status: 'authenticated',
         isOfflineSession: true,
@@ -116,6 +116,17 @@ export function useOfflineSession(): OfflineSessionState {
   }
 
   return { session: null, status: 'loading', isOfflineSession: false }
+}
+
+/** Safely convert epoch ms to ISO string — never throws. */
+function safeToISOString(ts: number): string {
+  try {
+    const d = new Date(ts)
+    if (isNaN(d.getTime())) return new Date().toISOString()
+    return d.toISOString()
+  } catch {
+    return new Date().toISOString()
+  }
 }
 
 /** Clear the cached offline session (used on manual logout). */

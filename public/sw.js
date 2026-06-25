@@ -13,7 +13,7 @@
  *    queueing via IndexedDB.
  */
 
-const CACHE_VERSION = 'bahikhata-pro-v3'
+const CACHE_VERSION = 'bahikhata-pro-v4'
 const APP_SHELL = [
   '/',
   '/manifest.json',

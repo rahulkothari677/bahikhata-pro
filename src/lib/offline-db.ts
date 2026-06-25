@@ -86,10 +86,10 @@ export interface CachedSession {
   cachedAt: number
 }
 
-export async function saveSession(s: Omit<CachedSession, 'key' | 'cachedAt'>): Promise<void> {
+export async function saveSession(session: Omit<CachedSession, 'key' | 'cachedAt'>): Promise<void> {
   try {
-    await tx(STORE_SESSION, 'readwrite', (s) =>
-      s.put({ ...s, key: 'current' as const, cachedAt: Date.now() } as CachedSession),
+    await tx(STORE_SESSION, 'readwrite', (store) =>
+      store.put({ ...session, key: 'current' as const, cachedAt: Date.now() } as CachedSession),
     )
   } catch {
     /* ignore */
@@ -100,6 +100,14 @@ export async function getCachedSession(): Promise<CachedSession | null> {
   try {
     const r = await tx<CachedSession | undefined>(STORE_SESSION, 'readonly', (s) => s.get('current'))
     if (!r) return null
+
+    // Defensive: validate shape (older versions saved broken sessions without
+    // expiresAt / user due to a parameter-shadowing bug)
+    if (!r.user || !r.user.id || typeof r.expiresAt !== 'number' || isNaN(r.expiresAt)) {
+      await clearSession()
+      return null
+    }
+
     // Expire after 30 days (matches JWT maxAge)
     if (Date.now() > r.expiresAt) {
       await clearSession()
