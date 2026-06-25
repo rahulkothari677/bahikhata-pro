@@ -21,6 +21,7 @@ import { Reports } from '@/components/reports/Reports'
 import { Settings } from '@/components/settings/Settings'
 import { KeyboardShortcuts } from '@/components/common/KeyboardShortcuts'
 import { GlobalSearch } from '@/components/common/GlobalSearch'
+import { OfflineIndicator } from '@/components/common/OfflineIndicator'
 import { PWAInstallPrompt } from '@/components/common/PWAInstallPrompt'
 
 export default function Home() {
@@ -89,6 +90,7 @@ export default function Home() {
         </footer>
       </div>
 
+      <OfflineIndicator />
       <Onboarding open={showOnboarding} onDone={() => setOnboardingDismissed(true)} />
 
       {features?.pwaInstall && <PWAInstallPrompt />}
