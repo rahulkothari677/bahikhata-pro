@@ -253,7 +253,7 @@ export function Dashboard() {
                   />
                   <Tooltip
                     contentStyle={{ borderRadius: '12px', border: '1px solid oklch(0.91 0.01 60)', fontSize: 12 }}
-                    formatter={(v: number, name: string) => name === 'revenue' ? [formatINR(v), language === 'hi' ? 'बिक्री' : 'Revenue'] : [formatINR(v), 'Profit']}
+                    formatter={(v: number, name: string) => name === 'revenue' ? [formatINR(v), 'Revenue'] : [formatINR(v), 'Profit']}
                   />
                   <Bar dataKey="revenue" fill="oklch(0.62 0.18 42)" radius={[0, 6, 6, 0]} barSize={18} name="revenue" />
                 </BarChart>
