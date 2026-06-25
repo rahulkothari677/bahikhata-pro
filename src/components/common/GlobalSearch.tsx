@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Search, ShoppingCart, Truck, Package, Users, Receipt, ArrowRight, TrendingUp, IndianRupee } from 'lucide-react'
 import { cn, formatINR, formatDate } from '@/lib/utils'
+import { offlineFetch } from '@/lib/offline-fetch'
 
 type SearchResult = {
   type: 'product' | 'party' | 'transaction'
@@ -28,7 +29,7 @@ export function GlobalSearch() {
   const { data: productsData } = useQuery({
     queryKey: ['products', 'search'],
     queryFn: async () => {
-      const r = await fetch('/api/products')
+      const r = await offlineFetch('/api/products')
       return r.json()
     },
     enabled: searchOpen,
@@ -37,7 +38,7 @@ export function GlobalSearch() {
   const { data: partiesData } = useQuery({
     queryKey: ['parties', 'search'],
     queryFn: async () => {
-      const r = await fetch('/api/parties')
+      const r = await offlineFetch('/api/parties')
       return r.json()
     },
     enabled: searchOpen,
@@ -46,7 +47,7 @@ export function GlobalSearch() {
   const { data: txnData } = useQuery({
     queryKey: ['transactions', 'search'],
     queryFn: async () => {
-      const r = await fetch('/api/transactions?type=all&limit=200')
+      const r = await offlineFetch('/api/transactions?type=all&limit=200')
       return r.json()
     },
     enabled: searchOpen,

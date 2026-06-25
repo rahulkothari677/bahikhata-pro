@@ -19,6 +19,7 @@ import {
   ResponsiveContainer, Legend,
 } from 'recharts'
 import { toast as sonnerToast } from 'sonner'
+import { offlineFetch } from '@/lib/offline-fetch'
 
 export function PartyProfile() {
   const { selectedPartyId, setView, setPreviousView, triggerRefresh, previousView, features } = useAppStore()
@@ -28,7 +29,7 @@ export function PartyProfile() {
   const { data, isLoading } = useQuery({
     queryKey: ['party-profile', selectedPartyId],
     queryFn: async () => {
-      const r = await fetch(`/api/parties/${selectedPartyId}`)
+      const r = await offlineFetch(`/api/parties/${selectedPartyId}`)
       return r.json()
     },
     enabled: !!selectedPartyId,
@@ -68,7 +69,7 @@ export function PartyProfile() {
 
   const handleDelete = async () => {
     if (!confirm(`Delete ${party.name}? All their transactions will remain but lose the party link.`)) return
-    const r = await fetch(`/api/parties/${party.id}`, { method: 'DELETE' })
+    const r = await offlineFetch(`/api/parties/${party.id}`, { method: 'DELETE', offline: { invalidate: ['/api/parties', '/api/dashboard'] } })
     if (r.ok) {
       sonnerToast.success('Party deleted')
       queryClient.invalidateQueries({ queryKey: ['parties'] })
@@ -81,7 +82,7 @@ export function PartyProfile() {
     if (!party) return
     setSendingReminder(true)
     try {
-      const r = await fetch('/api/whatsapp-reminder', {
+      const r = await offlineFetch('/api/whatsapp-reminder', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ partyId: party.id }),

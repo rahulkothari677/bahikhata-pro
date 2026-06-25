@@ -1,12 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useSession, signIn } from 'next-auth/react'
-import { BookOpenText, Mail, Lock, User, Eye, EyeOff, Loader2, ArrowRight } from 'lucide-react'
+import { BookOpenText, Mail, Lock, User, Eye, EyeOff, Loader2, ArrowRight, WifiOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { toast as sonnerToast } from 'sonner'
+import { getCachedSession } from '@/lib/offline-db'
 
 export function AuthScreen() {
   const { data: session, status } = useSession()
@@ -16,6 +17,21 @@ export function AuthScreen() {
   const [name, setName] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [isOnline, setIsOnline] = useState(true)
+  const [hasCachedSession, setHasCachedSession] = useState(false)
+
+  useEffect(() => {
+    setIsOnline(navigator.onLine)
+    const on = () => setIsOnline(true)
+    const off = () => setIsOnline(false)
+    window.addEventListener('online', on)
+    window.addEventListener('offline', off)
+    getCachedSession().then((s) => setHasCachedSession(!!s))
+    return () => {
+      window.removeEventListener('online', on)
+      window.removeEventListener('offline', off)
+    }
+  }, [])
 
   if (status === 'loading') {
     return (
@@ -33,6 +49,12 @@ export function AuthScreen() {
     e.preventDefault()
     setLoading(true)
     try {
+      if (!navigator.onLine) {
+        sonnerToast.error('You are offline. Please connect to internet to login.')
+        setLoading(false)
+        return
+      }
+
       if (mode === 'signup') {
         const r = await fetch('/api/auth/register', {
           method: 'POST',
@@ -106,6 +128,20 @@ export function AuthScreen() {
               Create Account
             </button>
           </div>
+
+          {!isOnline && (
+            <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-start gap-2 text-amber-700 dark:text-amber-400">
+              <WifiOff className="w-4 h-4 mt-0.5 shrink-0" />
+              <div className="text-xs space-y-1">
+                <p className="font-semibold">You are offline</p>
+                {hasCachedSession ? (
+                  <p>Please reconnect to internet, then refresh the page to continue using the app with your cached session.</p>
+                ) : (
+                  <p>First-time login requires internet. Please connect to WiFi or mobile data to sign in. After that, you can use the app offline anytime.</p>
+                )}
+              </div>
+            </div>
+          )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             {mode === 'signup' && (

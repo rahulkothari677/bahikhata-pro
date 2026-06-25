@@ -11,6 +11,7 @@ import {
   AlertCircle, AlertTriangle, Info, CheckCircle, Sparkles,
   TrendingUp, Package, Users, IndianRupee, Bell,
 } from 'lucide-react'
+import { offlineFetch } from '@/lib/offline-fetch'
 
 const typeConfig = {
   critical: { icon: AlertCircle, color: 'text-rose-600', bg: 'bg-rose-100 dark:bg-rose-950/50', border: 'border-rose-200' },
@@ -32,7 +33,7 @@ export function SmartInsights() {
   const { data, isLoading } = useQuery({
     queryKey: ['insights', refreshKey],
     queryFn: async () => {
-      const r = await fetch('/api/insights')
+      const r = await offlineFetch('/api/insights')
       return r.json()
     },
   })

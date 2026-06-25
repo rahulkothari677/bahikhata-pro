@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
 import { toast as sonnerToast } from 'sonner'
+import { offlineFetch } from '@/lib/offline-fetch'
 import { TrendingUp } from 'lucide-react'
 import { formatINR } from '@/lib/utils'
 
@@ -63,10 +64,11 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
     try {
       const url = product ? `/api/products?id=${product.id}` : '/api/products'
       const method = product ? 'PUT' : 'POST'
-      const r = await fetch(url, {
+      const r = await offlineFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
+        offline: { invalidate: ['/api/products', '/api/dashboard'] },
       })
       if (!r.ok) throw new Error('Failed')
       sonnerToast.success(product ? 'Product updated' : 'Product added successfully')

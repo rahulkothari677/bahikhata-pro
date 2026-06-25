@@ -12,6 +12,7 @@ import { Search, Plus, X, Phone, User, ChevronDown, Check } from 'lucide-react'
 import { cn, getInitials } from '@/lib/utils'
 import { toast as sonnerToast } from 'sonner'
 import { useToast } from '@/hooks/use-toast'
+import { offlineFetch } from '@/lib/offline-fetch'
 
 type PartyType = 'customer' | 'supplier' | 'both'
 
@@ -35,7 +36,7 @@ export function PartySelect({
   const { data: partiesData, refetch } = useQuery({
     queryKey: ['parties', 'for-select'],
     queryFn: async () => {
-      const r = await fetch('/api/parties')
+      const r = await offlineFetch('/api/parties')
       return r.json()
     },
   })
@@ -247,10 +248,11 @@ function AddPartyDialog({ open, onOpenChange, defaultType, onSuccess }: {
     }
     setSaving(true)
     try {
-      const r = await fetch('/api/parties', {
+      const r = await offlineFetch('/api/parties', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
+        offline: { invalidate: ['/api/parties', '/api/dashboard'] },
       })
       if (!r.ok) throw new Error('Failed')
       const data = await r.json()

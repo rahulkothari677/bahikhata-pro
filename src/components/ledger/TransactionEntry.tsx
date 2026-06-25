@@ -20,6 +20,7 @@ import {
   Package, Phone, IndianRupee, Save, Trash2, Check, AlertCircle, Mic,
 } from 'lucide-react'
 import { VoiceEntry } from '@/components/common/VoiceEntry'
+import { offlineFetch } from '@/lib/offline-fetch'
 
 const PAYMENT_MODES = [
   { value: 'cash', label: 'Cash' },
@@ -71,7 +72,7 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
   const { data: productsData } = useQuery({
     queryKey: ['products', 'for-entry'],
     queryFn: async () => {
-      const r = await fetch('/api/products')
+      const r = await offlineFetch('/api/products')
       return r.json()
     },
   })
@@ -82,7 +83,7 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
   const { data: partiesData, refetch: refetchParties } = useQuery({
     queryKey: ['parties', 'for-entry'],
     queryFn: async () => {
-      const r = await fetch('/api/parties')
+      const r = await offlineFetch('/api/parties')
       return r.json()
     },
   })
@@ -216,7 +217,7 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
     }
     setSaving(true)
     try {
-      const r = await fetch('/api/transactions', {
+      const r = await offlineFetch('/api/transactions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -238,6 +239,7 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
             discountAmount: 0,
           })),
         }),
+        offline: { invalidate: ['/api/transactions', '/api/dashboard', '/api/products', '/api/parties', '/api/insights'] },
       })
       if (!r.ok) throw new Error('Failed')
       sonnerToast.success(`${isSale ? 'Sale' : 'Purchase'} recorded successfully!`)
@@ -833,10 +835,11 @@ function AddPartyInline({ open, onOpenChange, defaultType, onAdded }: {
     }
     setSaving(true)
     try {
-      const r = await fetch('/api/parties', {
+      const r = await offlineFetch('/api/parties', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
+        offline: { invalidate: ['/api/parties', '/api/dashboard'] },
       })
       if (!r.ok) throw new Error('Failed')
       const data = await r.json()

@@ -19,6 +19,7 @@ import {
   Search, MessageCircle, Sparkles, Bell, Repeat, FileSpreadsheet,
   Users, Package, ScanLine, TrendingUp, Smartphone, RotateCcw, Palette, Check, Globe,
 } from 'lucide-react'
+import { offlineFetch } from '@/lib/offline-fetch'
 
 const FEATURE_CONFIG: { key: FeatureKey; label: string; description: string; icon: any }[] = [
   { key: 'darkMode', label: 'Dark Mode', description: 'Switch between light and dark themes', icon: Moon },
@@ -52,7 +53,7 @@ export function Settings() {
   const { data } = useQuery({
     queryKey: ['setting'],
     queryFn: async () => {
-      const r = await fetch('/api/settings')
+      const r = await offlineFetch('/api/settings')
       return r.json()
     },
   })
@@ -78,10 +79,11 @@ export function Settings() {
     }
     setSaving(true)
     try {
-      const r = await fetch('/api/settings', {
+      const r = await offlineFetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
+        offline: { invalidate: ['/api/settings', '/api/dashboard'] },
       })
       if (!r.ok) throw new Error('Failed')
       sonnerToast.success('Settings saved')
@@ -98,7 +100,7 @@ export function Settings() {
     if (!confirm('Last confirmation: All data will be permanently deleted. Continue?')) return
     try {
       // Delete via prisma - we'll do this via a special endpoint
-      const r = await fetch('/api/seed', { method: 'DELETE' })
+      const r = await offlineFetch('/api/seed', { method: 'DELETE', offline: { queueable: false, invalidate: ['/api/products', '/api/parties', '/api/transactions', '/api/dashboard', '/api/settings'] } })
       if (r.ok) {
         sonnerToast.success('All data deleted. Refreshing...')
         setTimeout(() => window.location.reload(), 1500)

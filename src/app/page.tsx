@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useSession } from 'next-auth/react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAppStore } from '@/store/app-store'
+import { useOfflineSession } from '@/hooks/use-offline-session'
+import { isOnline, onSyncComplete } from '@/lib/offline-fetch'
 import { AuthScreen } from '@/components/auth/AuthScreen'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { Header } from '@/components/layout/Header'
@@ -25,8 +26,9 @@ import { OfflineIndicator } from '@/components/common/OfflineIndicator'
 import { PWAInstallPrompt } from '@/components/common/PWAInstallPrompt'
 
 export default function Home() {
-  const { data: session, status } = useSession()
-  const { currentView, features } = useAppStore()
+  const { session, status, isOfflineSession } = useOfflineSession()
+  const { currentView, features, triggerRefresh } = useAppStore()
+  const queryClient = useQueryClient()
   const [onboardingDismissed, setOnboardingDismissed] = useState(false)
   const [mounted, setMounted] = useState(false)
 
@@ -34,9 +36,22 @@ export default function Home() {
     Promise.resolve().then(() => setMounted(true))
   }, [])
 
+  // When sync completes (after coming back online), invalidate all queries
+  // so components refetch fresh data from the server.
+  useEffect(() => {
+    const unsub = onSyncComplete(() => {
+      queryClient.invalidateQueries()
+      triggerRefresh()
+    })
+    return unsub
+  }, [queryClient, triggerRefresh])
+
+  // Skip the seed check entirely when offline (we can't reach the server, and
+  // returning undefined would incorrectly trigger onboarding).
+  const online = typeof window !== 'undefined' ? isOnline() : true
   const { data: seedStatus } = useQuery({
     queryKey: ['seed-status'],
-    enabled: status === 'authenticated' && !!session,
+    enabled: status === 'authenticated' && !!session && online,
     queryFn: async () => {
       const r = await fetch('/api/seed')
       return r.json()
@@ -57,7 +72,7 @@ export default function Home() {
     return <AuthScreen />
   }
 
-  const showOnboarding = !onboardingDismissed && seedStatus !== undefined && !seedStatus.seeded
+  const showOnboarding = !onboardingDismissed && !isOfflineSession && seedStatus !== undefined && !seedStatus.seeded
 
   return (
     <div className="flex min-h-screen bg-background">
