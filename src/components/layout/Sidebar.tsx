@@ -69,7 +69,7 @@ export function Sidebar() {
             {!sidebarCollapsed && (
               <div>
                 <h1 className="text-lg font-bold text-sidebar-foreground tracking-tight">BahiKhata Pro</h1>
-                <p className="text-[10px] text-sidebar-foreground/50 font-medium tracking-wide">INDIA&apos;S SMART LEDGER</p>
+                <p className="text-[10px] text-sidebar-foreground/50 font-medium tracking-wide">{t('nav.smart_ledger')}</p>
               </div>
             )}
           </div>
@@ -87,7 +87,7 @@ export function Sidebar() {
         <button
           onClick={toggleSidebarCollapsed}
           className="hidden lg:flex absolute -right-3 top-20 z-50 w-6 h-6 rounded-full bg-sidebar-border text-sidebar-foreground items-center justify-center hover:bg-sidebar-primary hover:text-white transition shadow-md"
-          title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          title={sidebarCollapsed ? t('nav.expand') : t('nav.collapse')}
         >
           {sidebarCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
         </button>
@@ -153,9 +153,9 @@ export function Sidebar() {
             <div className="rounded-lg bg-sidebar-accent p-3 flex items-start gap-2">
               <Sparkles className="w-4 h-4 text-sidebar-primary flex-shrink-0 mt-0.5" />
               <div>
-                <p className="text-xs font-semibold text-sidebar-accent-foreground">Pro Tip</p>
+                <p className="text-xs font-semibold text-sidebar-accent-foreground">{t('nav.pro_tip')}</p>
                 <p className="text-[11px] text-sidebar-foreground/60 mt-0.5 leading-snug">
-                  Use AI Scanner to add bills in 5 seconds.
+                  {t('nav.pro_tip_desc')}
                 </p>
               </div>
             </div>

@@ -1,5 +1,6 @@
 'use client'
 
+import { useTranslation } from '@/hooks/use-translation'
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -21,6 +22,7 @@ import {
 const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)', 'oklch(0.7 0.16 250)']
 
 export function Reports() {
+  const { t } = useTranslation()
   const [reportType, setReportType] = useState<'pl' | 'gst' | 'stock' | 'party'>('pl')
   const [dateRange, setDateRange] = useState<DateRange>(() => getPresetRange('thisMonth'))
   const [datePreset, setDatePreset] = useState<DatePreset>('thisMonth')
@@ -46,7 +48,7 @@ export function Reports() {
           <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
             <div className="flex items-center gap-2">
               <Calendar className="w-4 h-4 text-muted-foreground" />
-              <span className="text-sm font-medium">Report Period:</span>
+              <span className="text-sm font-medium">{t('reports.period')}</span>
             </div>
             <div className="flex items-center gap-3">
               <DateRangePicker value={dateRange} onChange={handleDateChange} preset={datePreset} onPresetChange={setDatePreset} align="right" />
@@ -62,7 +64,7 @@ export function Reports() {
       <Tabs value={reportType} onValueChange={(v) => setReportType(v as any)}>
         <TabsList className="grid grid-cols-2 lg:grid-cols-4 w-full h-auto">
           <TabsTrigger value="pl" className="gap-1.5 py-2">
-            <TrendingUp className="w-3.5 h-3.5" /> P&L
+            <TrendingUp className="w-3.5 h-3.5" /> {t('reports.pl')}
           </TabsTrigger>
           <TabsTrigger value="gst" className="gap-1.5 py-2">
             <Receipt className="w-3.5 h-3.5" /> GST
@@ -98,23 +100,23 @@ function PLReport({ data }: { data: any }) {
     <div className="space-y-4">
       {/* Top metrics */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <ReportStatCard label="Revenue (Sales)" value={formatINR(summary.totalRevenue)} icon={IndianRupee} color="text-amber-600" bg="bg-amber-100" />
-        <ReportStatCard label="Gross Profit" value={formatINR(summary.grossProfit)} icon={TrendingUp} color="text-emerald-600" bg="bg-emerald-100" />
-        <ReportStatCard label="Total Expenses" value={formatINR(summary.totalExpenses)} icon={ArrowUpRight} color="text-rose-600" bg="bg-rose-100" />
-        <ReportStatCard label="Net Profit" value={formatINR(summary.netProfit)} icon={Percent} color={summary.netProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'} bg={summary.netProfit >= 0 ? 'bg-emerald-100' : 'bg-rose-100'} />
+        <ReportStatCard label="बिक्री (सेल्स)" value={formatINR(summary.totalRevenue)} icon={IndianRupee} color="text-amber-600" bg="bg-amber-100" />
+        <ReportStatCard label="{t('stat.gross_profit')}" value={formatINR(summary.grossProfit)} icon={TrendingUp} color="text-emerald-600" bg="bg-emerald-100" />
+        <ReportStatCard label="{t('stat.total_expenses')}" value={formatINR(summary.totalExpenses)} icon={ArrowUpRight} color="text-rose-600" bg="bg-rose-100" />
+        <ReportStatCard label="{t('dash.net_profit')}" value={formatINR(summary.netProfit)} icon={Percent} color={summary.netProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'} bg={summary.netProfit >= 0 ? 'bg-emerald-100' : 'bg-rose-100'} />
       </div>
 
-      {/* P&L breakdown */}
+      {/* {t('reports.pl')} breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card className="shadow-card border-border/60">
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
-              <ArrowUpRight className="w-4 h-4 text-rose-600" /> Expenses Breakdown
+              <ArrowUpRight className="w-4 h-4 text-rose-600" /> खर्च का ब्यौरा
             </CardTitle>
           </CardHeader>
           <CardContent>
             {expensesByCategory.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-8">No expenses in this period</p>
+              <p className="text-sm text-muted-foreground text-center py-8">इस अवधि में कोई खर्च नहीं</p>
             ) : (
               <div className="space-y-2">
                 {expensesByCategory.map((e, i) => {
@@ -139,12 +141,12 @@ function PLReport({ data }: { data: any }) {
         <Card className="shadow-card border-border/60">
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
-              <ArrowDownRight className="w-4 h-4 text-emerald-600" /> Other Income
+              <ArrowDownRight className="w-4 h-4 text-emerald-600" /> अन्य आय
             </CardTitle>
           </CardHeader>
           <CardContent>
             {incomeByCategory.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-8">No other income in this period</p>
+              <p className="text-sm text-muted-foreground text-center py-8">इस अवधि में कोई अन्य आय नहीं</p>
             ) : (
               <div className="space-y-2">
                 {incomeByCategory.map((e, i) => {
@@ -171,39 +173,39 @@ function PLReport({ data }: { data: any }) {
       <Card className="shadow-card border-border/60">
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2">
-            <FileText className="w-4 h-4" /> Profit & Loss Statement
+            <FileText className="w-4 h-4" /> मुनाफा-नुकसान विवरण
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between py-1.5 border-b border-border">
-              <span className="text-muted-foreground">Revenue (Sales Subtotal)</span>
+              <span className="text-muted-foreground">बिक्री (उप-योग)</span>
               <span className="font-medium">{formatINR(summary.totalRevenue)}</span>
             </div>
             <div className="flex justify-between py-1.5 border-b border-border">
-              <span className="text-muted-foreground">Less: Cost of Goods Sold</span>
+              <span className="text-muted-foreground">घटाएं: सामान की कीमत</span>
               <span className="font-medium text-rose-600">-{formatINR(summary.totalRevenue - summary.grossProfit)}</span>
             </div>
             <div className="flex justify-between py-1.5 border-b border-border">
-              <span className="font-semibold">Gross Profit</span>
+              <span className="font-semibold">{t('stat.gross_profit')}</span>
               <span className="font-bold text-emerald-600">{formatINR(summary.grossProfit)}</span>
             </div>
             <div className="flex justify-between py-1.5 border-b border-border">
-              <span className="text-muted-foreground">Add: Other Income</span>
+              <span className="text-muted-foreground">Add: अन्य आय</span>
               <span className="font-medium text-emerald-600">+{formatINR(summary.otherIncome)}</span>
             </div>
             <div className="flex justify-between py-1.5 border-b border-border">
-              <span className="text-muted-foreground">Less: Operating Expenses</span>
+              <span className="text-muted-foreground">घटाएं: चल खर्च</span>
               <span className="font-medium text-rose-600">-{formatINR(summary.totalExpenses)}</span>
             </div>
             <div className="flex justify-between py-2 text-base">
-              <span className="font-bold">Net Profit</span>
+              <span className="font-bold">{t('dash.net_profit')}</span>
               <span className={cn('font-bold', summary.netProfit >= 0 ? 'text-emerald-600' : 'text-rose-600')}>
                 {formatINR(summary.netProfit)}
               </span>
             </div>
             <div className="flex justify-between text-xs text-muted-foreground">
-              <span>Profit Margin</span>
+              <span>मुनाफा %</span>
               <span>{summary.profitMargin.toFixed(1)}%</span>
             </div>
           </div>
@@ -228,8 +230,8 @@ function GSTReport({ data }: { data: any }) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card className="shadow-card border-border/60">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Output Tax by GST Slab (Sales)</CardTitle>
-            <p className="text-xs text-muted-foreground">GST collected from customers</p>
+            <CardTitle className="text-base">GST स्लैब से आउटपुट टैक्स (बिक्री)</CardTitle>
+            <p className="text-xs text-muted-foreground">ग्राहकों से वसूला GST</p>
           </CardHeader>
           <CardContent>
             {outputSales.bySlab.length === 0 ? (
@@ -252,8 +254,8 @@ function GSTReport({ data }: { data: any }) {
 
         <Card className="shadow-card border-border/60">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Input Tax by GST Slab (Purchases)</CardTitle>
-            <p className="text-xs text-muted-foreground">GST paid to suppliers</p>
+            <CardTitle className="text-base">GST स्लैब से इनपुट टैक्स (खरीद)</CardTitle>
+            <p className="text-xs text-muted-foreground">सप्लायर को दिया GST</p>
           </CardHeader>
           <CardContent>
             {inputPurchases.bySlab.length === 0 ? (
@@ -278,7 +280,7 @@ function GSTReport({ data }: { data: any }) {
       {/* Slab table */}
       <Card className="shadow-card border-border/60">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">GST Slab-wise Summary</CardTitle>
+          <CardTitle className="text-base">GST स्लैब सारांश</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -342,7 +344,7 @@ function StockReport({ data }: { data: any }) {
 
       <Card className="shadow-card border-border/60">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Stock Valuation by Product</CardTitle>
+          <CardTitle className="text-base">सामान की कीमत</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -395,8 +397,8 @@ function PartyReport({ data }: { data: any }) {
     <div className="space-y-4">
       <Card className="shadow-card border-border/60">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Party-wise Statement</CardTitle>
-          <p className="text-xs text-muted-foreground">Showing all parties with activity or opening balance</p>
+          <CardTitle className="text-base">ग्राहक वार विवरण</CardTitle>
+          <p className="text-xs text-muted-foreground">सभी ग्राहक जिनकी गतिविधि है</p>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
@@ -431,7 +433,7 @@ function PartyReport({ data }: { data: any }) {
               </tbody>
             </table>
             {(!data?.parties || data.parties.length === 0) && (
-              <p className="text-center py-8 text-sm text-muted-foreground">No party activity in this period</p>
+              <p className="text-center py-8 text-sm text-muted-foreground">इस अवधि में कोई ग्राहक गतिविधि नहीं</p>
             )}
           </div>
         </CardContent>

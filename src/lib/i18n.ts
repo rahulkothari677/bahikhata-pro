@@ -19,6 +19,7 @@ export const translations = {
     'nav.pro_tip_desc': 'Use AI Scanner to add bills in 5 seconds.',
     'nav.collapse': 'Collapse sidebar',
     'nav.expand': 'Expand sidebar',
+    'nav.smart_ledger': "INDIA'S SMART LEDGER",
 
     // Dashboard
     'dash.greeting': 'Namaste',
@@ -296,6 +297,7 @@ export const translations = {
     'nav.pro_tip_desc': 'AI स्कैनर से 5 सेकंड में बिल जोड़ें।',
     'nav.collapse': 'मेनू बंद करें',
     'nav.expand': 'मेनू खोलें',
+    'nav.smart_ledger': 'भारत का स्मार्ट लेजर',
 
     // Dashboard
     'dash.greeting': 'नमस्ते',

@@ -44,7 +44,7 @@ export function Dashboard() {
     setDatePreset(preset)
   }
 
-  // Navigate to sales ledger with a date filter applied
+  // Navigate to {t('dash.sales_word')} ledger with a date filter applied
   const navigateToSalesWithDate = (from: Date, to: Date, presetLabel: string) => {
     setPendingDateRange({
       from: from.toISOString(),
@@ -75,7 +75,7 @@ export function Dashboard() {
 
   const { kpis, salesTrend, topProducts, categoryBreakdown, paymentModeSplit, lowStockProducts, gstSummary, recentTransactions, setting } = data
 
-  const rangeLabel = datePreset === 'custom' ? 'Selected Period' : getPresetLabel(datePreset)
+  const rangeLabel = datePreset === 'custom' ? 'चुनी हुई अवधि' : getPresetLabel(datePreset)
 
   return (
     <div className="space-y-5">
@@ -89,10 +89,10 @@ export function Dashboard() {
         <div className="absolute bottom-0 right-20 w-40 h-40 bg-white/5 rounded-full -mb-20" />
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
-            <p className="text-white/80 text-sm font-medium">Namaste, {setting?.ownerName || 'Shop Owner'} 🙏</p>
+            <p className="text-white/80 text-sm font-medium">{t('dash.greeting')}, {setting?.ownerName || 'Shop Owner'} 🙏</p>
             <h2 className="text-2xl lg:text-3xl font-bold mt-1">{setting?.shopName || 'My Shop'}</h2>
             <p className="text-white/80 text-sm mt-1">
-              Today you made <span className="font-bold text-white">{formatINR(kpis.todayRevenue)}</span> from <span className="font-bold text-white">{kpis.todayTxnCount}</span> sales
+              {t('dash.today_made')} <span className="font-bold text-white">{formatINR(kpis.todayRevenue)}</span> {t('dash.from')} <span className="font-bold text-white">{kpis.todayTxnCount}</span> {t('dash.sales_word')}
             </p>
           </div>
           <Button
@@ -100,7 +100,7 @@ export function Dashboard() {
             className="bg-white text-primary hover:bg-white/90 gap-2 shadow-md"
           >
             <ScanLine className="w-4 h-4" />
-            Scan a Bill
+            {t('dash.scan_bill')}
           </Button>
         </div>
       </motion.div>
@@ -109,7 +109,7 @@ export function Dashboard() {
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h3 className="text-base font-semibold">{t('dash.business_overview')}</h3>
-          <p className="text-xs text-muted-foreground">Filter all charts and stats by date range</p>
+          <p className="text-xs text-muted-foreground">{t('dash.filter_hint')}</p>
         </div>
         <DateRangePicker value={dateRange} onChange={handleDateChange} preset={datePreset} onPresetChange={setDatePreset} />
       </div>
@@ -121,7 +121,7 @@ export function Dashboard() {
           value={formatINR(kpis.todayRevenue)}
           icon={IndianRupee}
           gradient="from-amber-500 to-orange-600"
-          subtitle={`${kpis.todayTxnCount} sales today`}
+          subtitle={`${kpis.todayTxnCount} {t('dash.sales_word')} today`}
           onClick={() => navigateToSalesWithDate(todayStart, new Date(), 'Today')}
         />
         <KPICard
@@ -129,7 +129,7 @@ export function Dashboard() {
           value={formatINR(kpis.todayProfit)}
           icon={TrendingUp}
           gradient="from-emerald-500 to-teal-600"
-          subtitle={`Margin ${kpis.todayRevenue > 0 ? ((kpis.todayProfit / kpis.todayRevenue) * 100).toFixed(1) : 0}%`}
+          subtitle={`{t('stat.margin')} ${kpis.todayRevenue > 0 ? ((kpis.todayProfit / kpis.todayRevenue) * 100).toFixed(1) : 0}%`}
           onClick={() => navigateToSalesWithDate(todayStart, new Date(), 'Today')}
         />
         <KPICard
@@ -137,16 +137,16 @@ export function Dashboard() {
           value={formatINR(kpis.rangeRevenue)}
           icon={Wallet}
           gradient="from-rose-500 to-pink-600"
-          subtitle={`${kpis.rangeTxnCount} sales • ${kpis.revenueGrowth >= 0 ? '↑' : '↓'} ${Math.abs(kpis.revenueGrowth).toFixed(1)}% vs prev`}
+          subtitle={`${kpis.rangeTxnCount} {t('dash.sales_word')} • ${kpis.revenueGrowth >= 0 ? '↑' : '↓'} ${Math.abs(kpis.revenueGrowth).toFixed(1)}% पिछले से`}
           trend={kpis.revenueGrowth >= 0 ? 'up' : 'down'}
           onClick={() => navigateToSalesWithDate(dateRange.from, dateRange.to, rangeLabel)}
         />
         <KPICard
-          title={`Net Profit (${rangeLabel})`}
+          title={`Net {t('common.profit')} (${rangeLabel})`}
           value={formatINR(kpis.netProfit)}
           icon={PiggyBank}
           gradient="from-violet-500 to-purple-600"
-          subtitle={`${kpis.profitGrowth >= 0 ? '↑' : '↓'} ${Math.abs(kpis.profitGrowth).toFixed(1)}% profit trend`}
+          subtitle={`${kpis.profitGrowth >= 0 ? '↑' : '↓'} ${Math.abs(kpis.profitGrowth).toFixed(1)}% मुनाफा रुझान`}
           trend={kpis.profitGrowth >= 0 ? 'up' : 'down'}
           onClick={() => navigateToSalesWithDate(dateRange.from, dateRange.to, rangeLabel)}
         />
@@ -155,28 +155,28 @@ export function Dashboard() {
       {/* Secondary KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
         <MiniStatCard
-          label="Receivable ( Customers owe )"
+          label="{t('dash.receivable')}"
           value={formatINR(kpis.totalReceivable)}
           icon={ArrowDownRight}
           color="text-emerald-600"
           onClick={() => setView('parties')}
         />
         <MiniStatCard
-          label="Payable ( We owe suppliers )"
+          label="{t('dash.payable')}"
           value={formatINR(kpis.totalPayable)}
           icon={ArrowUpRight}
           color="text-rose-600"
           onClick={() => setView('parties')}
         />
         <MiniStatCard
-          label="Stock Value"
+          label="{t('dash.stock_value')}"
           value={formatINR(kpis.totalStockValue)}
           icon={Boxes}
           color="text-amber-600"
           onClick={() => setView('inventory')}
         />
         <MiniStatCard
-          label={`GST (${rangeLabel})`}
+          label={`{t('dash.gst_summary')} (${rangeLabel})`}
           value={formatINR(gstSummary.netPayable)}
           icon={Receipt}
           color="text-violet-600"
@@ -190,11 +190,11 @@ export function Dashboard() {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-base font-semibold">{t('dash.sales_trend')}</CardTitle>
-              <p className="text-xs text-muted-foreground mt-0.5">For selected date range</p>
+              <p className="text-xs text-muted-foreground mt-0.5">चुनी हुई अवधि के लिए</p>
             </div>
             <Badge variant="secondary" className="gap-1">
               <TrendingUp className="w-3 h-3" />
-              {salesTrend.length} points
+              {salesTrend.length} पॉइंट्स
             </Badge>
           </div>
         </CardHeader>
@@ -206,7 +206,7 @@ export function Dashboard() {
                   <stop offset="0%" stopColor="oklch(0.62 0.18 42)" stopOpacity={0.4} />
                   <stop offset="100%" stopColor="oklch(0.62 0.18 42)" stopOpacity={0} />
                 </linearGradient>
-                <linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1">
+                <linearGradient id="color{t('common.profit')}" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="oklch(0.62 0.15 155)" stopOpacity={0.4} />
                   <stop offset="100%" stopColor="oklch(0.62 0.15 155)" stopOpacity={0} />
                 </linearGradient>
@@ -219,7 +219,7 @@ export function Dashboard() {
                 formatter={(v: number) => formatINR(v)}
               />
               <Area type="monotone" dataKey="revenue" stroke="oklch(0.62 0.18 42)" strokeWidth={2} fill="url(#colorRev)" name="Revenue" />
-              <Area type="monotone" dataKey="profit" stroke="oklch(0.62 0.15 155)" strokeWidth={2} fill="url(#colorProfit)" name="Profit" />
+              <Area type="monotone" dataKey="profit" stroke="oklch(0.62 0.15 155)" strokeWidth={2} fill="url(#color{t('common.profit')})" name="{t('common.profit')}" />
             </AreaChart>
           </ResponsiveContainer>
         </CardContent>
@@ -233,16 +233,16 @@ export function Dashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="text-base font-semibold">{t('dash.top_products')}</CardTitle>
-                <p className="text-xs text-muted-foreground">For selected date range</p>
+                <p className="text-xs text-muted-foreground">चुनी हुई अवधि के लिए</p>
               </div>
               <Button variant="ghost" size="sm" className="text-xs h-7 gap-1" onClick={() => setView('inventory')}>
-                View all <ArrowRight className="w-3 h-3" />
+                {t('dash.view_all')} <ArrowRight className="w-3 h-3" />
               </Button>
             </div>
           </CardHeader>
           <CardContent>
             {topProducts.length === 0 ? (
-              <div className="text-center py-10 text-sm text-muted-foreground">No sales in selected range</div>
+              <div className="text-center py-10 text-sm text-muted-foreground">No {t('dash.sales_word')} in selected range</div>
             ) : (
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={topProducts} layout="vertical" margin={{ top: 0, right: 10, left: 0, bottom: 0 }}>
@@ -253,7 +253,7 @@ export function Dashboard() {
                   />
                   <Tooltip
                     contentStyle={{ borderRadius: '12px', border: '1px solid oklch(0.91 0.01 60)', fontSize: 12 }}
-                    formatter={(v: number, name: string) => name === 'revenue' ? [formatINR(v), 'Revenue'] : [formatINR(v), 'Profit']}
+                    formatter={(v: number, name: string) => name === 'revenue' ? [formatINR(v), 'Revenue'] : [formatINR(v), language === 'hi' ? 'मुनाफा' : 'Profit']}
                   />
                   <Bar dataKey="revenue" fill="oklch(0.62 0.18 42)" radius={[0, 6, 6, 0]} barSize={18} name="revenue" />
                 </BarChart>
@@ -266,7 +266,7 @@ export function Dashboard() {
         <Card className="shadow-card border-border/60">
           <CardHeader className="pb-2">
             <CardTitle className="text-base font-semibold">{t('dash.payment_modes')}</CardTitle>
-            <p className="text-xs text-muted-foreground">For selected date range</p>
+            <p className="text-xs text-muted-foreground">चुनी हुई अवधि के लिए</p>
           </CardHeader>
           <CardContent>
             {paymentModeSplit.length === 0 ? (
@@ -313,11 +313,11 @@ export function Dashboard() {
         <Card className="shadow-card border-border/60 lg:col-span-2">
           <CardHeader className="pb-2">
             <CardTitle className="text-base font-semibold">{t('dash.category_breakdown')}</CardTitle>
-            <p className="text-xs text-muted-foreground">For selected date range</p>
+            <p className="text-xs text-muted-foreground">चुनी हुई अवधि के लिए</p>
           </CardHeader>
           <CardContent>
             {categoryBreakdown.length === 0 ? (
-              <div className="text-center py-10 text-sm text-muted-foreground">No sales in selected range</div>
+              <div className="text-center py-10 text-sm text-muted-foreground">No {t('dash.sales_word')} in selected range</div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
                 {(() => {
@@ -345,7 +345,7 @@ export function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Low stock alerts */}
+        {/* {t('dash.low_stock_short')} stock alerts */}
         <Card className="shadow-card border-border/60">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
@@ -355,11 +355,11 @@ export function Dashboard() {
                 </div>
                 <div>
                   <CardTitle className="text-base font-semibold">{t('dash.low_stock')}</CardTitle>
-                  <p className="text-xs text-muted-foreground">{lowStockProducts.length} products need restocking</p>
+                  <p className="text-xs text-muted-foreground">{lowStockProducts.length} {t('dash.need_restock')}</p>
                 </div>
               </div>
               <Button variant="ghost" size="sm" className="text-xs h-7 gap-1" onClick={() => setView('inventory')}>
-                Manage <ArrowRight className="w-3 h-3" />
+                {t('dash.manage')} <ArrowRight className="w-3 h-3" />
               </Button>
             </div>
           </CardHeader>
@@ -367,7 +367,7 @@ export function Dashboard() {
             {lowStockProducts.length === 0 ? (
               <div className="text-center py-8 text-sm text-muted-foreground">
                 <Package className="w-10 h-10 mx-auto mb-2 text-emerald-500" />
-                All products well stocked!
+                सारा स्टॉक ठीक है!
               </div>
             ) : (
               <div className="space-y-2 max-h-72 overflow-y-auto">
@@ -378,7 +378,7 @@ export function Dashboard() {
                       <p className="text-[11px] text-muted-foreground">{p.category} • Stock: {p.currentStock} {p.unit}</p>
                     </div>
                     <Badge variant="destructive" className="text-[10px]">
-                      {p.currentStock === 0 ? 'Out of stock' : `Low`}
+                      {p.currentStock === 0 ? t('dash.out_of_stock') : t('dash.low_stock_short')}
                     </Badge>
                   </div>
                 ))}
@@ -388,7 +388,7 @@ export function Dashboard() {
         </Card>
       </div>
 
-      {/* Recent transactions & GST summary */}
+      {/* Recent transactions & {t('dash.gst_summary')} summary */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Recent transactions */}
         <Card className="shadow-card border-border/60">
@@ -400,17 +400,17 @@ export function Dashboard() {
                 </div>
                 <div>
                   <CardTitle className="text-base font-semibold">{t('dash.recent_transactions')}</CardTitle>
-                  <p className="text-xs text-muted-foreground">Latest activity</p>
+                  <p className="text-xs text-muted-foreground">{t('dash.latest_activity')}</p>
                 </div>
               </div>
               <Button variant="ghost" size="sm" className="text-xs h-7 gap-1" onClick={() => setView('sales')}>
-                View all <ArrowRight className="w-3 h-3" />
+                {t('dash.view_all')} <ArrowRight className="w-3 h-3" />
               </Button>
             </div>
           </CardHeader>
           <CardContent>
             {recentTransactions.length === 0 ? (
-              <div className="text-center py-8 text-sm text-muted-foreground">No transactions yet</div>
+              <div className="text-center py-8 text-sm text-muted-foreground">अभी कोई एंट्री नहीं</div>
             ) : (
               <div className="space-y-2 max-h-72 overflow-y-auto">
                 {recentTransactions.map((t: any) => {
@@ -452,7 +452,7 @@ export function Dashboard() {
                         </p>
                         {isSale && t.profit !== undefined && (
                           <p className="text-[10px] text-muted-foreground">
-                            Profit {formatINRCompact(t.profit)}
+                            {t('common.profit')} {formatINRCompact(t.profit)}
                           </p>
                         )}
                       </div>
@@ -464,22 +464,22 @@ export function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* GST summary */}
+        {/* {t('dash.gst_summary')} summary */}
         <Card className="shadow-card border-border/60">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base font-semibold">{t('dash.gst_summary')} ({rangeLabel})</CardTitle>
               <Button variant="ghost" size="sm" className="text-xs h-7 gap-1" onClick={() => setView('reports')}>
-                Full report <ArrowRight className="w-3 h-3" />
+                {t('dash.full_report')} <ArrowRight className="w-3 h-3" />
               </Button>
             </div>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <GstMiniStat label="Output Tax (Sales)" value={gstSummary.outputTax} color="text-amber-600" />
-              <GstMiniStat label="Input Tax (Purchase)" value={gstSummary.inputTax} color="text-emerald-600" />
-              <GstMiniStat label="CGST + SGST" value={gstSummary.cgst + gstSummary.sgst} color="text-violet-600" />
-              <GstMiniStat label="Net GST Payable" value={gstSummary.netPayable} color={gstSummary.netPayable >= 0 ? 'text-rose-600' : 'text-emerald-600'} highlight />
+              <GstMiniStat label="आउटपुट टैक्स (बिक्री)" value={gstSummary.outputTax} color="text-amber-600" />
+              <GstMiniStat label="इनपुट टैक्स (खरीद)" value={gstSummary.inputTax} color="text-emerald-600" />
+              <GstMiniStat label="C{t('dash.gst_summary')} + S{t('dash.gst_summary')}" value={gstSummary.cgst + gstSummary.sgst} color="text-violet-600" />
+              <GstMiniStat label="Net {t('dash.gst_summary')} Payable" value={gstSummary.netPayable} color={gstSummary.netPayable >= 0 ? 'text-rose-600' : 'text-emerald-600'} highlight />
             </div>
           </CardContent>
         </Card>
@@ -593,8 +593,8 @@ function DateRangeHeader({ dateRange, datePreset, onChange, onPresetChange }: {
   return (
     <div className="flex items-center justify-between gap-3 flex-wrap">
       <div>
-        <h3 className="text-base font-semibold">Business Overview</h3>
-        <p className="text-xs text-muted-foreground">Filter all charts and stats by date range</p>
+        <h3 className="text-base font-semibold">{t('dash.business_overview')}</h3>
+        <p className="text-xs text-muted-foreground">{t('dash.filter_hint')}</p>
       </div>
       <DateRangePicker
         value={dateRange}

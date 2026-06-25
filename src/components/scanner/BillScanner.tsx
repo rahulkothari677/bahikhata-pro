@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
+import { useTranslation } from '@/hooks/use-translation'
 import { useAppStore } from '@/store/app-store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -16,6 +17,7 @@ import {
 } from 'lucide-react'
 
 export function BillScanner() {
+  const { t } = useTranslation()
   const { setView, scannerBillType, setScannerBillType, setScannerResult } = useAppStore()
   const { toast } = useToast()
   const [scanning, setScanning] = useState(false)
@@ -194,7 +196,7 @@ export function BillScanner() {
       {/* Bill type selector */}
       <Card className="shadow-card border-border/60">
         <CardContent className="p-4">
-          <Label className="text-xs uppercase tracking-wide text-muted-foreground">I am scanning a...</Label>
+          <Label className="text-xs uppercase tracking-wide text-muted-foreground">आप स्कैन कर रहे हैं...</Label>
           <div className="grid grid-cols-2 gap-3 mt-2">
             <button
               onClick={() => setBillType('purchase')}
@@ -206,8 +208,8 @@ export function BillScanner() {
               )}
             >
               <Truck className={cn('w-6 h-6 mb-2', billType === 'purchase' ? 'text-amber-600' : 'text-muted-foreground')} />
-              <p className="font-semibold text-sm">Purchase Bill</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">Goods I bought from supplier</p>
+              <p className="font-semibold text-sm">{t('scanner.purchase_bill')}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">{t('scanner.goods_bought')}</p>
             </button>
             <button
               onClick={() => setBillType('sale')}
@@ -219,8 +221,8 @@ export function BillScanner() {
               )}
             >
               <ShoppingCart className={cn('w-6 h-6 mb-2', billType === 'sale' ? 'text-emerald-600' : 'text-muted-foreground')} />
-              <p className="font-semibold text-sm">Sales Bill / Invoice</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">Goods I sold to customer</p>
+              <p className="font-semibold text-sm">{t('scanner.sales_bill')}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">{t('scanner.goods_sold')}</p>
             </button>
           </div>
         </CardContent>
@@ -243,8 +245,8 @@ export function BillScanner() {
                       <Loader2 className="w-8 h-8 text-primary animate-spin" />
                     </div>
                   </div>
-                  <h3 className="font-semibold text-lg">AI is reading your bill...</h3>
-                  <p className="text-sm text-muted-foreground mt-1">Extracting items, prices, taxes & party details</p>
+                  <h3 className="font-semibold text-lg">{t('scanner.scanning')}</h3>
+                  <p className="text-sm text-muted-foreground mt-1">{t('scanner.extracting')}</p>
                 </div>
               ) : preview ? (
                 <div className="space-y-3">
@@ -256,9 +258,9 @@ export function BillScanner() {
                   <div className="w-20 h-20 mx-auto rounded-full bg-gradient-saffron flex items-center justify-center mb-4 shadow-lg">
                     <ScanLine className="w-10 h-10 text-white" />
                   </div>
-                  <h3 className="text-lg lg:text-xl font-bold">Scan Your Bill</h3>
+                  <h3 className="text-lg lg:text-xl font-bold">{t('scanner.scan_bill')}</h3>
                   <p className="text-sm text-muted-foreground mt-1 max-w-md mx-auto">
-                    Snap a photo of any bill, invoice or receipt. Our AI will extract every item, price, tax and party detail automatically.
+                    किसी भी बिल, इनवॉइस या रसीद की फोटो लें। हमारा AI हर सामान, दाम, टैक्स और विवरण अपने आप निकाल देगा।
                   </p>
                   <div className="flex flex-col sm:flex-row gap-3 justify-center mt-6">
                     <Button
@@ -266,7 +268,7 @@ export function BillScanner() {
                       onClick={() => cameraInputRef.current?.click()}
                       className="bg-gradient-saffron gap-2 shadow-lg"
                     >
-                      <Camera className="w-5 h-5" /> Take Photo
+                      <Camera className="w-5 h-5" /> {t('scanner.take_photo')}
                     </Button>
                     <Button
                       size="lg"
@@ -274,29 +276,29 @@ export function BillScanner() {
                       onClick={() => fileInputRef.current?.click()}
                       className="gap-2"
                     >
-                      <Upload className="w-5 h-5" /> Upload Image
+                      <Upload className="w-5 h-5" /> {t('scanner.upload_image')}
                     </Button>
                   </div>
                   <p className="text-[11px] text-muted-foreground mt-4">
-                    Supports JPG, PNG • Max 10MB • Works best with clear photos
+                    JPG, PNG सपोर्ट • अधिकतम 10MB • साफ फोटो सबसे अच्छा
                   </p>
 
                   {/* Feature highlights */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-8 max-w-2xl mx-auto">
                     <div className="rounded-lg bg-muted/50 p-3 text-left">
                       <Sparkles className="w-4 h-4 text-primary mb-1" />
-                      <p className="text-xs font-semibold">Auto-Extract Items</p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">Name, qty, price, GST all filled</p>
+                      <p className="text-xs font-semibold">सामान अपने आप निकालें</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">नाम, मात्रा, दाम, GST सब भर जाएगा</p>
                     </div>
                     <div className="rounded-lg bg-muted/50 p-3 text-left">
                       <FileText className="w-4 h-4 text-primary mb-1" />
-                      <p className="text-xs font-semibold">Smart Tax Split</p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">CGST/SGST/IGST auto-detected</p>
+                      <p className="text-xs font-semibold">स्मार्ट टैक्स</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">CGST/SGST/IGST अपने आप पहचानें</p>
                     </div>
                     <div className="rounded-lg bg-muted/50 p-3 text-left">
                       <Check className="w-4 h-4 text-primary mb-1" />
-                      <p className="text-xs font-semibold">Verify & Edit</p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">Add, remove or change anything</p>
+                      <p className="text-xs font-semibold">जांचें और बदलें</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">कुछ भी जोड़ें, हटाएं या बदलें</p>
                     </div>
                   </div>
                 </>
@@ -330,12 +332,12 @@ export function BillScanner() {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Badge className="bg-white/20 text-white border-0 gap-1">
-                    <Sparkles className="w-3 h-3" /> AI Extracted
+                    <Sparkles className="w-3 h-3" /> {t('scanner.ai_extracted')}
                   </Badge>
-                  <span className="text-sm font-medium">{billType === 'sale' ? 'Sales Bill' : 'Purchase Bill'}</span>
+                  <span className="text-sm font-medium">{billType === 'sale' ? t('scanner.sales_bill') : t('scanner.purchase_bill')}</span>
                 </div>
                 <Button variant="ghost" size="sm" className="text-white hover:bg-white/20" onClick={handleReset}>
-                  <X className="w-4 h-4" /> Start over
+                  <X className="w-4 h-4" /> दोबारा करें
                 </Button>
               </div>
               <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -504,13 +506,13 @@ export function BillScanner() {
             <CardContent className="p-4">
               <div className="flex flex-col sm:flex-row gap-3">
                 <Button variant="outline" className="flex-1 gap-2" onClick={handleReset}>
-                  <X className="w-4 h-4" /> Discard & Start Over
+                  <X className="w-4 h-4" /> {t('scanner.discard')}
                 </Button>
                 <Button
                   className="flex-1 gap-2 bg-gradient-saffron shadow-md"
                   onClick={handleProceedToSave}
                 >
-                  <Check className="w-4 h-4" /> Verify & Save to Ledger
+                  <Check className="w-4 h-4" /> {t('scanner.verify_save')}
                   <ArrowRight className="w-4 h-4" />
                 </Button>
               </div>

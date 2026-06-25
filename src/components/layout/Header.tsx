@@ -75,12 +75,12 @@ export function Header() {
 
   const newEntryLabel = (() => {
     switch (currentView) {
-      case 'dashboard': return 'New Sale'
-      case 'inventory': return 'Add Product'
-      case 'sales': return 'New Sale'
-      case 'purchases': return 'New Purchase'
-      case 'income-expense': return 'Add Entry'
-      case 'parties': return 'Add Party'
+      case 'dashboard': return t('action.new_sale')
+      case 'inventory': return t('action.add_product')
+      case 'sales': return t('action.new_sale')
+      case 'purchases': return t('action.new_purchase')
+      case 'income-expense': return t('action.new_entry')
+      case 'parties': return t('action.add_party')
       default: return 'New Entry'
     }
   })()
@@ -147,7 +147,7 @@ export function Header() {
               className="hidden sm:flex gap-2 border-primary/30 text-primary hover:bg-primary/10"
             >
               <Sparkles className="w-4 h-4" />
-              <span className="hidden md:inline">Scan Bill</span>
+              <span className="hidden md:inline">{t('action.scan_bill')}</span>
             </Button>
           )}
 
