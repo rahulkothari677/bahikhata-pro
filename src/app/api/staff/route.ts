@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
 
     // Verify the current user is an owner
     const owner = await db.user.findUnique({ where: { id: userId } })
-    if (!owner || owner.role !== 'owner') {
+    if (!owner || (owner.role !== 'owner' && owner.role !== null && owner.role !== undefined)) {
       return NextResponse.json({ error: 'Only owners can add staff' }, { status: 403 })
     }
 
