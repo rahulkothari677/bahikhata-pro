@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useAppStore } from '@/store/app-store'
+import { useTranslation } from '@/hooks/use-translation'
 import { SmartInsights } from '@/components/dashboard/SmartInsights'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -26,6 +27,7 @@ const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 
 
 export function Dashboard() {
   const { setView, refreshKey, setSelectedTransactionId, setPreviousView, setPendingDateRange } = useAppStore()
+  const { t } = useTranslation()
   const [dateRange, setDateRange] = useState<DateRange>(() => getPresetRange('thisMonth'))
   const [datePreset, setDatePreset] = useState<DatePreset>('thisMonth')
 
@@ -106,7 +108,7 @@ export function Dashboard() {
       {/* Date range selector + KPI header */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h3 className="text-base font-semibold">Business Overview</h3>
+          <h3 className="text-base font-semibold">${t('dash.business_overview')}</h3>
           <p className="text-xs text-muted-foreground">Filter all charts and stats by date range</p>
         </div>
         <DateRangePicker value={dateRange} onChange={handleDateChange} preset={datePreset} onPresetChange={setDatePreset} />
@@ -115,7 +117,7 @@ export function Dashboard() {
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
         <KPICard
-          title="Today's Revenue"
+          title="${t('dash.today_revenue')}"
           value={formatINR(kpis.todayRevenue)}
           icon={IndianRupee}
           gradient="from-amber-500 to-orange-600"
@@ -123,7 +125,7 @@ export function Dashboard() {
           onClick={() => navigateToSalesWithDate(todayStart, new Date(), 'Today')}
         />
         <KPICard
-          title="Today's Profit"
+          title="${t('dash.today_profit')}"
           value={formatINR(kpis.todayProfit)}
           icon={TrendingUp}
           gradient="from-emerald-500 to-teal-600"
@@ -187,7 +189,7 @@ export function Dashboard() {
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-base font-semibold">Sales & Profit Trend</CardTitle>
+              <CardTitle className="text-base font-semibold">${t('dash.sales_trend')}</CardTitle>
               <p className="text-xs text-muted-foreground mt-0.5">For selected date range</p>
             </div>
             <Badge variant="secondary" className="gap-1">
@@ -230,7 +232,7 @@ export function Dashboard() {
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle className="text-base font-semibold">Top Selling Products</CardTitle>
+                <CardTitle className="text-base font-semibold">${t('dash.top_products')}</CardTitle>
                 <p className="text-xs text-muted-foreground">For selected date range</p>
               </div>
               <Button variant="ghost" size="sm" className="text-xs h-7 gap-1" onClick={() => setView('inventory')}>
@@ -263,7 +265,7 @@ export function Dashboard() {
         {/* Payment mode pie */}
         <Card className="shadow-card border-border/60">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base font-semibold">Payment Modes</CardTitle>
+            <CardTitle className="text-base font-semibold">${t('dash.payment_modes')}</CardTitle>
             <p className="text-xs text-muted-foreground">For selected date range</p>
           </CardHeader>
           <CardContent>
@@ -310,7 +312,7 @@ export function Dashboard() {
         {/* Category breakdown */}
         <Card className="shadow-card border-border/60 lg:col-span-2">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base font-semibold">Sales by Category</CardTitle>
+            <CardTitle className="text-base font-semibold">${t('dash.category_breakdown')}</CardTitle>
             <p className="text-xs text-muted-foreground">For selected date range</p>
           </CardHeader>
           <CardContent>
@@ -352,7 +354,7 @@ export function Dashboard() {
                   <AlertTriangle className="w-4 h-4 text-rose-600" />
                 </div>
                 <div>
-                  <CardTitle className="text-base font-semibold">Low Stock Alerts</CardTitle>
+                  <CardTitle className="text-base font-semibold">${t('dash.low_stock')}</CardTitle>
                   <p className="text-xs text-muted-foreground">{lowStockProducts.length} products need restocking</p>
                 </div>
               </div>
@@ -397,7 +399,7 @@ export function Dashboard() {
                   <Receipt className="w-4 h-4 text-amber-600" />
                 </div>
                 <div>
-                  <CardTitle className="text-base font-semibold">Recent Transactions</CardTitle>
+                  <CardTitle className="text-base font-semibold">${t('dash.recent_transactions')}</CardTitle>
                   <p className="text-xs text-muted-foreground">Latest activity</p>
                 </div>
               </div>
@@ -466,7 +468,7 @@ export function Dashboard() {
         <Card className="shadow-card border-border/60">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
-              <CardTitle className="text-base font-semibold">GST Summary ({rangeLabel})</CardTitle>
+              <CardTitle className="text-base font-semibold">${t('dash.gst_summary')} ({rangeLabel})</CardTitle>
               <Button variant="ghost" size="sm" className="text-xs h-7 gap-1" onClick={() => setView('reports')}>
                 Full report <ArrowRight className="w-3 h-3" />
               </Button>
@@ -483,7 +485,7 @@ export function Dashboard() {
         </Card>
       </div>
 
-      {/* Smart Insights - AI-powered alerts */}
+      {/* ${t('dash.smart_insights')} - AI-powered alerts */}
       {kpis && <SmartInsights />}
     </div>
   )
@@ -591,7 +593,7 @@ function DateRangeHeader({ dateRange, datePreset, onChange, onPresetChange }: {
   return (
     <div className="flex items-center justify-between gap-3 flex-wrap">
       <div>
-        <h3 className="text-base font-semibold">Business Overview</h3>
+        <h3 className="text-base font-semibold">${t('dash.business_overview')}</h3>
         <p className="text-xs text-muted-foreground">Filter all charts and stats by date range</p>
       </div>
       <DateRangePicker

@@ -1,6 +1,7 @@
 'use client'
 
 import { useAppStore, type ViewType } from '@/store/app-store'
+import { useTranslation } from '@/hooks/use-translation'
 import { cn } from '@/lib/utils'
 import {
   LayoutDashboard,
@@ -19,20 +20,21 @@ import {
   ChevronRight,
 } from 'lucide-react'
 
-const navItems: { id: ViewType; label: string; icon: any; description: string; badge?: string }[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, description: 'Overview & charts' },
-  { id: 'scanner', label: 'AI Bill Scanner', icon: ScanLine, description: 'Snap & auto-fill', badge: 'AI' },
-  { id: 'sales', label: 'Sales Ledger', icon: ShoppingCart, description: 'Sales & invoices' },
-  { id: 'purchases', label: 'Purchase Ledger', icon: Truck, description: 'Stock purchases' },
-  { id: 'inventory', label: 'Inventory', icon: Package, description: 'Products & stock' },
-  { id: 'income-expense', label: 'Income & Expense', icon: Wallet, description: 'Track money flow' },
-  { id: 'parties', label: 'Parties', icon: Users, description: 'Customers & suppliers' },
-  { id: 'reports', label: 'Reports', icon: FileBarChart, description: 'P&L, GST, stock' },
-  { id: 'settings', label: 'Settings', icon: Settings, description: 'Shop profile' },
+const navItems: { id: ViewType; labelKey: string; descKey: string; icon: any; badge?: string }[] = [
+  { id: 'dashboard', labelKey: 'nav.dashboard', descKey: 'dash.business_overview', icon: LayoutDashboard },
+  { id: 'scanner', labelKey: 'nav.scanner', descKey: 'nav.scanner', icon: ScanLine, badge: 'AI' },
+  { id: 'sales', labelKey: 'nav.sales', descKey: 'nav.sales', icon: ShoppingCart },
+  { id: 'purchases', labelKey: 'nav.purchases', descKey: 'nav.purchases', icon: Truck },
+  { id: 'inventory', labelKey: 'nav.inventory', descKey: 'nav.inventory', icon: Package },
+  { id: 'income-expense', labelKey: 'nav.income', descKey: 'nav.income', icon: Wallet },
+  { id: 'parties', labelKey: 'nav.parties', descKey: 'nav.parties', icon: Users },
+  { id: 'reports', labelKey: 'nav.reports', descKey: 'nav.reports', icon: FileBarChart },
+  { id: 'settings', labelKey: 'nav.settings', descKey: 'nav.settings', icon: Settings },
 ]
 
 export function Sidebar() {
   const { currentView, setView, sidebarOpen, setSidebarOpen, sidebarCollapsed, toggleSidebarCollapsed } = useAppStore()
+  const { t } = useTranslation()
 
   return (
     <>
@@ -110,13 +112,13 @@ export function Sidebar() {
                     ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-lg'
                     : 'text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
                 )}
-                title={sidebarCollapsed ? item.label : undefined}
+                title={sidebarCollapsed ? t(item.labelKey) : undefined}
               >
                 <Icon className={cn('w-[18px] h-[18px] flex-shrink-0', active && 'text-white')} />
                 {!sidebarCollapsed && (
                   <div className="flex-1 text-left min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium truncate">{item.label}</span>
+                      <span className="text-sm font-medium truncate">{t(item.labelKey)}</span>
                       {item.badge && (
                         <span className={cn(
                           'text-[9px] px-1.5 py-0.5 rounded-full font-bold',
@@ -132,7 +134,7 @@ export function Sidebar() {
                       'text-[11px] truncate',
                       active ? 'text-white/70' : 'text-sidebar-foreground/50'
                     )}>
-                      {item.description}
+                      {t(item.descKey)}
                     </p>
                   </div>
                 )}

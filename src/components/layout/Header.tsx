@@ -1,25 +1,26 @@
 'use client'
 
 import { useAppStore, type ViewType } from '@/store/app-store'
+import { useTranslation } from '@/hooks/use-translation'
 import { Menu, Plus, Sparkles, ScanLine, ArrowLeft, Search, Sun, Moon, LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useQuery } from '@tanstack/react-query'
 import { useSession, signOut } from 'next-auth/react'
 
-const viewTitles: Record<string, { title: string; subtitle: string }> = {
-  dashboard: { title: 'Dashboard', subtitle: 'Your shop at a glance' },
-  inventory: { title: 'Inventory', subtitle: 'Manage products & stock' },
-  sales: { title: 'Sales Ledger', subtitle: 'Record sales & invoices' },
-  purchases: { title: 'Purchase Ledger', subtitle: 'Record stock purchases' },
-  'income-expense': { title: 'Income & Expenses', subtitle: 'Track money flow' },
-  parties: { title: 'Parties', subtitle: 'Customers & suppliers' },
-  scanner: { title: 'AI Bill Scanner', subtitle: 'Snap a bill, we auto-fill' },
-  reports: { title: 'Reports', subtitle: 'P&L, GST & stock reports' },
-  settings: { title: 'Settings', subtitle: 'Shop profile & preferences' },
-  'transaction-detail': { title: 'Transaction Details', subtitle: 'View, edit & invoice' },
-  'party-profile': { title: 'Party Profile', subtitle: 'Customer / supplier history' },
-  'new-sale': { title: 'New Sale', subtitle: 'Create a new sales entry' },
-  'new-purchase': { title: 'New Purchase', subtitle: 'Record a new purchase' },
+const viewTitleKeys: Record<string, { titleKey: string; subtitleKey: string }> = {
+  dashboard: { titleKey: 'nav.dashboard', subtitleKey: 'nav.dashboard' },
+  inventory: { titleKey: 'nav.inventory', subtitleKey: 'nav.inventory' },
+  sales: { titleKey: 'nav.sales', subtitleKey: 'nav.sales' },
+  purchases: { titleKey: 'nav.purchases', subtitleKey: 'nav.purchases' },
+  'income-expense': { titleKey: 'nav.income', subtitleKey: 'nav.income' },
+  parties: { titleKey: 'nav.parties', subtitleKey: 'nav.parties' },
+  scanner: { titleKey: 'nav.scanner', subtitleKey: 'nav.scanner' },
+  reports: { titleKey: 'nav.reports', subtitleKey: 'nav.reports' },
+  settings: { titleKey: 'nav.settings', subtitleKey: 'nav.settings' },
+  'transaction-detail': { titleKey: 'nav.sales', subtitleKey: 'nav.sales' },
+  'party-profile': { titleKey: 'nav.parties', subtitleKey: 'nav.parties' },
+  'new-sale': { titleKey: 'action.new_sale', subtitleKey: 'action.new_sale' },
+  'new-purchase': { titleKey: 'action.new_purchase', subtitleKey: 'action.new_purchase' },
 }
 
 // Views where "New Entry" should trigger a dialog (not navigate)
@@ -28,7 +29,9 @@ const dialogViews: ViewType[] = ['dashboard', 'inventory', 'sales', 'purchases',
 export function Header() {
   const { currentView, setSidebarOpen, setView, fireTriggerNewEntry, previousView, setPreviousView, features, setFeature, setSearchOpen } = useAppStore()
   const { data: session } = useSession()
-  const info = viewTitles[currentView] || { title: 'BahiKhata Pro', subtitle: '' }
+  const { t } = useTranslation()
+  const titleKeys = viewTitleKeys[currentView] || { titleKey: 'nav.dashboard', subtitleKey: 'nav.dashboard' }
+  const info = { title: t(titleKeys.titleKey), subtitle: t(titleKeys.subtitleKey) }
 
   const { data: settingData } = useQuery({
     queryKey: ['setting'],
@@ -174,7 +177,7 @@ export function Header() {
               size="sm"
               className="h-8 w-8 p-0 ml-1"
               onClick={() => signOut({ callbackUrl: '/' })}
-              title="Sign out"
+              title={t('action.sign_out')}
             >
               <LogOut className="w-4 h-4" />
             </Button>
@@ -186,7 +189,7 @@ export function Header() {
             size="sm"
             className="lg:hidden h-9 w-9 p-0"
             onClick={() => signOut({ callbackUrl: '/' })}
-            title="Sign out"
+            title={t('action.sign_out')}
           >
             <LogOut className="w-4 h-4" />
           </Button>
