@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { useQuery } from '@tanstack/react-query'
 import { useAppStore } from '@/store/app-store'
@@ -27,9 +27,12 @@ export default function Home() {
   const { data: session, status } = useSession()
   const { currentView, features } = useAppStore()
   const [onboardingDismissed, setOnboardingDismissed] = useState(false)
+  const [mounted, setMounted] = useState(false)
 
-  // Check if data exists — if not, show onboarding.
-  // Hook must run unconditionally; only enable once we have a session.
+  useEffect(() => {
+    Promise.resolve().then(() => setMounted(true))
+  }, [])
+
   const { data: seedStatus } = useQuery({
     queryKey: ['seed-status'],
     enabled: status === 'authenticated' && !!session,
@@ -39,8 +42,17 @@ export default function Home() {
     },
   })
 
-  // Show auth screen if not logged in
-  if (status === 'loading' || !session) {
+  // During SSR and first client render, show loading
+  // This prevents hydration mismatch
+  if (!mounted || status === 'loading') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="w-10 h-10 rounded-full border-4 border-primary border-t-transparent animate-spin" />
+      </div>
+    )
+  }
+
+  if (!session) {
     return <AuthScreen />
   }
 
@@ -73,13 +85,12 @@ export default function Home() {
         </main>
 
         <footer className="mt-auto border-t border-border py-3 px-4 lg:px-6 text-center text-[11px] text-muted-foreground no-print">
-          <p>BahiKhata Pro — Made with ❤️ for Bharat • Track sales, purchases, GST, inventory & profit in one app</p>
+          <p>BahiKhata Pro — Made with love for Bharat</p>
         </footer>
       </div>
 
       <Onboarding open={showOnboarding} onDone={() => setOnboardingDismissed(true)} />
 
-      {/* PWA Install Prompt */}
       {features?.pwaInstall && <PWAInstallPrompt />}
     </div>
   )
