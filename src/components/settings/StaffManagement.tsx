@@ -43,7 +43,7 @@ export function StaffManagement() {
         body: JSON.stringify(form),
       })
       const data = await r.json()
-      if (!r.ok) throw new Error(data.error)
+      if (!r.ok) throw new Error(data.detail || data.error || 'Unknown error')
       sonnerToast.success('Staff member added!')
       refetch()
       setDialogOpen(false)
