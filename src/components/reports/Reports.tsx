@@ -73,7 +73,7 @@ export function Reports() {
           <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
             <div className="flex items-center gap-2">
               <Calendar className="w-4 h-4 text-muted-foreground" />
-              <span className="text-sm font-medium">{t('reports.period')}</span>
+              <span className="text-sm font-medium">Report Period:</span>
             </div>
             <div className="flex items-center gap-3">
               <DateRangePicker value={dateRange} onChange={handleDateChange} preset={datePreset} onPresetChange={setDatePreset} align="right" />
@@ -139,9 +139,9 @@ function PLReport({ data }: { data: any }) {
       {/* Top metrics */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <ReportStatCard label="बिक्री (सेल्स)" value={formatINR(summary.totalRevenue)} icon={IndianRupee} color="text-amber-600" bg="bg-amber-100" />
-        <ReportStatCard label={t('stat.gross_profit')} value={formatINR(summary.grossProfit)} icon={TrendingUp} color="text-emerald-600" bg="bg-emerald-100" />
-        <ReportStatCard label={t('stat.total_expenses')} value={formatINR(summary.totalExpenses)} icon={ArrowUpRight} color="text-rose-600" bg="bg-rose-100" />
-        <ReportStatCard label={t('dash.net_profit')} value={formatINR(summary.netProfit)} icon={Percent} color={summary.netProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'} bg={summary.netProfit >= 0 ? 'bg-emerald-100' : 'bg-rose-100'} />
+        <ReportStatCard label="Gross Profit" value={formatINR(summary.grossProfit)} icon={TrendingUp} color="text-emerald-600" bg="bg-emerald-100" />
+        <ReportStatCard label="Total Expenses" value={formatINR(summary.totalExpenses)} icon={ArrowUpRight} color="text-rose-600" bg="bg-rose-100" />
+        <ReportStatCard label="Net Profit" value={formatINR(summary.netProfit)} icon={Percent} color={summary.netProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'} bg={summary.netProfit >= 0 ? 'bg-emerald-100' : 'bg-rose-100'} />
       </div>
 
       {/* {t('reports.pl')} breakdown */}
@@ -225,7 +225,7 @@ function PLReport({ data }: { data: any }) {
               <span className="font-medium text-rose-600">-{formatINR(summary.totalRevenue - summary.grossProfit)}</span>
             </div>
             <div className="flex justify-between py-1.5 border-b border-border">
-              <span className="font-semibold">{t('stat.gross_profit')}</span>
+              <span className="font-semibold">Gross Profit</span>
               <span className="font-bold text-emerald-600">{formatINR(summary.grossProfit)}</span>
             </div>
             <div className="flex justify-between py-1.5 border-b border-border">
@@ -237,7 +237,7 @@ function PLReport({ data }: { data: any }) {
               <span className="font-medium text-rose-600">-{formatINR(summary.totalExpenses)}</span>
             </div>
             <div className="flex justify-between py-2 text-base">
-              <span className="font-bold">{t('dash.net_profit')}</span>
+              <span className="font-bold">Net Profit</span>
               <span className={cn('font-bold', summary.netProfit >= 0 ? 'text-emerald-600' : 'text-rose-600')}>
                 {formatINR(summary.netProfit)}
               </span>
