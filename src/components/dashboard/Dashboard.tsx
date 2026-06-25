@@ -27,7 +27,7 @@ const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 
 
 export function Dashboard() {
   const { setView, refreshKey, setSelectedTransactionId, setPreviousView, setPendingDateRange } = useAppStore()
-  const { t } = useTranslation()
+  const { t, language } = useTranslation()
   const [dateRange, setDateRange] = useState<DateRange>(() => getPresetRange('thisMonth'))
   const [datePreset, setDatePreset] = useState<DatePreset>('thisMonth')
 
@@ -253,7 +253,7 @@ export function Dashboard() {
                   />
                   <Tooltip
                     contentStyle={{ borderRadius: '12px', border: '1px solid oklch(0.91 0.01 60)', fontSize: 12 }}
-                    formatter={(v: number, name: string) => name === 'revenue' ? [formatINR(v), 'Revenue'] : [formatINR(v), language === 'hi' ? 'मुनाफा' : 'Profit']}
+                    formatter={(v: number, name: string) => name === 'revenue' ? [formatINR(v), language === 'hi' ? 'बिक्री' : 'Revenue'] : [formatINR(v), language === 'hi' ? 'मुनाफा' : 'Profit']}
                   />
                   <Bar dataKey="revenue" fill="oklch(0.62 0.18 42)" radius={[0, 6, 6, 0]} barSize={18} name="revenue" />
                 </BarChart>

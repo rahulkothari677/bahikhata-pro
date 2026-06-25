@@ -80,7 +80,7 @@ export function Reports() {
               <p className="text-xs text-muted-foreground hidden sm:block">
                 {formatDate(dateRange.from)} — {formatDate(dateRange.to)}
               </p>
-              {features.gstrExport && (
+              {features?.gstrExport && (
                 <Button
                   size="sm"
                   variant="outline"

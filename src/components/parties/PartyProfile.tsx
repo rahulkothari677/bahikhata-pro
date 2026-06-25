@@ -159,7 +159,7 @@ export function PartyProfile() {
               <Plus className="w-4 h-4" /> New Purchase
             </Button>
           )}
-          {isCustomer && stats.balance > 0 && features.paymentReminders && (
+          {isCustomer && stats.balance > 0 && features?.paymentReminders && (
             <Button
               size="sm"
               variant="outline"
