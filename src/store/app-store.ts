@@ -1,5 +1,4 @@
 import { create } from 'zustand'
-import { persist, createJSONStorage } from 'zustand/middleware'
 
 export type ViewType =
   | 'dashboard'
@@ -99,16 +98,8 @@ interface AppState {
   setSearchOpen: (open: boolean) => void
 }
 
-// SSR-safe storage: returns undefined on server, localStorage on client
-const storage = createJSONStorage(() => {
-  if (typeof window !== 'undefined') {
-    return window.localStorage
-  }
-  return undefined as any
-})
 
 export const useAppStore = create<AppState>()(
-  persist(
     (set) => ({
       currentView: 'dashboard',
       setView: (v) => set({ currentView: v, sidebarOpen: false }),
@@ -152,18 +143,5 @@ export const useAppStore = create<AppState>()(
       searchOpen: false,
       setSearchOpen: (open) => set({ searchOpen: open }),
     }),
-    {
-      name: 'bahikhata-storage',
-      storage: storage,
-      partialize: (state) => ({
-        sidebarCollapsed: state.sidebarCollapsed,
-        inventoryViewMode: state.inventoryViewMode,
-        partiesViewMode: state.partiesViewMode,
-        transactionsViewMode: state.transactionsViewMode,
-        features: state.features,
-        themeColor: state.themeColor,
-        language: state.language,
-      }),
-    }
   )
-)
+
