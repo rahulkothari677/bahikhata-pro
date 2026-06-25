@@ -101,9 +101,9 @@ function PLReport({ data }: { data: any }) {
       {/* Top metrics */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <ReportStatCard label="बिक्री (सेल्स)" value={formatINR(summary.totalRevenue)} icon={IndianRupee} color="text-amber-600" bg="bg-amber-100" />
-        <ReportStatCard label="{t('stat.gross_profit')}" value={formatINR(summary.grossProfit)} icon={TrendingUp} color="text-emerald-600" bg="bg-emerald-100" />
-        <ReportStatCard label="{t('stat.total_expenses')}" value={formatINR(summary.totalExpenses)} icon={ArrowUpRight} color="text-rose-600" bg="bg-rose-100" />
-        <ReportStatCard label="{t('dash.net_profit')}" value={formatINR(summary.netProfit)} icon={Percent} color={summary.netProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'} bg={summary.netProfit >= 0 ? 'bg-emerald-100' : 'bg-rose-100'} />
+        <ReportStatCard label={t('stat.gross_profit')} value={formatINR(summary.grossProfit)} icon={TrendingUp} color="text-emerald-600" bg="bg-emerald-100" />
+        <ReportStatCard label={t('stat.total_expenses')} value={formatINR(summary.totalExpenses)} icon={ArrowUpRight} color="text-rose-600" bg="bg-rose-100" />
+        <ReportStatCard label={t('dash.net_profit')} value={formatINR(summary.netProfit)} icon={Percent} color={summary.netProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'} bg={summary.netProfit >= 0 ? 'bg-emerald-100' : 'bg-rose-100'} />
       </div>
 
       {/* {t('reports.pl')} breakdown */}

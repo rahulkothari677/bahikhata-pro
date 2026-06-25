@@ -121,7 +121,7 @@ export function Dashboard() {
           value={formatINR(kpis.todayRevenue)}
           icon={IndianRupee}
           gradient="from-amber-500 to-orange-600"
-          subtitle={`${kpis.todayTxnCount} {t('dash.sales_word')} today`}
+          subtitle={`${kpis.todayTxnCount} ${t('dash.sales_word')}`}
           onClick={() => navigateToSalesWithDate(todayStart, new Date(), 'Today')}
         />
         <KPICard
@@ -129,7 +129,7 @@ export function Dashboard() {
           value={formatINR(kpis.todayProfit)}
           icon={TrendingUp}
           gradient="from-emerald-500 to-teal-600"
-          subtitle={`{t('stat.margin')} ${kpis.todayRevenue > 0 ? ((kpis.todayProfit / kpis.todayRevenue) * 100).toFixed(1) : 0}%`}
+          subtitle={`${t('stat.margin')} ${kpis.todayRevenue > 0 ? ((kpis.todayProfit / kpis.todayRevenue) * 100).toFixed(1) : 0}%`}
           onClick={() => navigateToSalesWithDate(todayStart, new Date(), 'Today')}
         />
         <KPICard
@@ -137,12 +137,12 @@ export function Dashboard() {
           value={formatINR(kpis.rangeRevenue)}
           icon={Wallet}
           gradient="from-rose-500 to-pink-600"
-          subtitle={`${kpis.rangeTxnCount} {t('dash.sales_word')} • ${kpis.revenueGrowth >= 0 ? '↑' : '↓'} ${Math.abs(kpis.revenueGrowth).toFixed(1)}% पिछले से`}
+          subtitle={`${kpis.rangeTxnCount} ${t('dash.sales_word')} • ${kpis.revenueGrowth >= 0 ? '↑' : '↓'} ${Math.abs(kpis.revenueGrowth).toFixed(1)}% पिछले से`}
           trend={kpis.revenueGrowth >= 0 ? 'up' : 'down'}
           onClick={() => navigateToSalesWithDate(dateRange.from, dateRange.to, rangeLabel)}
         />
         <KPICard
-          title={`Net {t('common.profit')} (${rangeLabel})`}
+          title={`${t('dash.net_profit')} (${rangeLabel})`}
           value={formatINR(kpis.netProfit)}
           icon={PiggyBank}
           gradient="from-violet-500 to-purple-600"
@@ -155,28 +155,28 @@ export function Dashboard() {
       {/* Secondary KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
         <MiniStatCard
-          label="{t('dash.receivable')}"
+          label={t('dash.receivable')}
           value={formatINR(kpis.totalReceivable)}
           icon={ArrowDownRight}
           color="text-emerald-600"
           onClick={() => setView('parties')}
         />
         <MiniStatCard
-          label="{t('dash.payable')}"
+          label={t('dash.payable')}
           value={formatINR(kpis.totalPayable)}
           icon={ArrowUpRight}
           color="text-rose-600"
           onClick={() => setView('parties')}
         />
         <MiniStatCard
-          label="{t('dash.stock_value')}"
+          label={t('dash.stock_value')}
           value={formatINR(kpis.totalStockValue)}
           icon={Boxes}
           color="text-amber-600"
           onClick={() => setView('inventory')}
         />
         <MiniStatCard
-          label={`{t('dash.gst_summary')} (${rangeLabel})`}
+          label={`${t('dash.gst_summary')} (${rangeLabel})`}
           value={formatINR(gstSummary.netPayable)}
           icon={Receipt}
           color="text-violet-600"
@@ -219,7 +219,7 @@ export function Dashboard() {
                 formatter={(v: number) => formatINR(v)}
               />
               <Area type="monotone" dataKey="revenue" stroke="oklch(0.62 0.18 42)" strokeWidth={2} fill="url(#colorRev)" name="Revenue" />
-              <Area type="monotone" dataKey="profit" stroke="oklch(0.62 0.15 155)" strokeWidth={2} fill="url(#color{t('common.profit')})" name="{t('common.profit')}" />
+              <Area type="monotone" dataKey="profit" stroke="oklch(0.62 0.15 155)" strokeWidth={2} fill="url(#colorProfit)" name={t('common.profit')} />
             </AreaChart>
           </ResponsiveContainer>
         </CardContent>
