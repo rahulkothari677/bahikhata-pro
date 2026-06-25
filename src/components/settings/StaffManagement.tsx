@@ -49,7 +49,7 @@ export function StaffManagement() {
       setDialogOpen(false)
       setForm({ name: '', email: '', password: '' })
     } catch (e: any) {
-      toast({ title: e.message || 'Failed to add staff', variant: 'destructive' })
+      toast({ title: 'Failed to add staff', description: e.message || 'Unknown error', variant: 'destructive' })
     } finally {
       setSaving(false)
     }

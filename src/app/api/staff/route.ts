@@ -23,7 +23,7 @@ export async function GET() {
     return NextResponse.json({ staff })
   } catch (error) {
     console.error('Staff GET error:', error)
-    return NextResponse.json({ error: 'Failed to fetch staff' }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to fetch staff', detail: String(error) }, { status: 500 })
   }
 }
 
@@ -33,13 +33,18 @@ export async function POST(req: NextRequest) {
     const { userId, error } = await getAuthUserId()
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    // Verify the current user is an owner
+    // Verify the current user is an owner (null role = owner for existing users)
     const owner = await db.user.findUnique({ where: { id: userId } })
-    if (!owner || (owner.role !== 'owner' && owner.role !== null && owner.role !== undefined)) {
+    if (!owner) {
+      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    }
+    // Allow if role is 'owner' OR null/undefined (existing users created before role field)
+    if (owner.role === 'staff') {
       return NextResponse.json({ error: 'Only owners can add staff' }, { status: 403 })
     }
 
-    const { name, email, password } = await req.json()
+    const body = await req.json()
+    const { name, email, password } = body
 
     if (!email || !password) {
       return NextResponse.json({ error: 'Email and password are required' }, { status: 400 })
@@ -80,7 +85,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ staff })
   } catch (error) {
     console.error('Staff POST error:', error)
-    return NextResponse.json({ error: 'Failed to create staff account' }, { status: 500 })
+    return NextResponse.json({ 
+      error: 'Failed to create staff account', 
+      detail: String(error instanceof Error ? error.message : error) 
+    }, { status: 500 })
   }
 }
 
@@ -94,7 +102,6 @@ export async function DELETE(req: NextRequest) {
     const id = searchParams.get('id')
     if (!id) return NextResponse.json({ error: 'ID required' }, { status: 400 })
 
-    // Verify the staff belongs to this owner
     const staff = await db.user.findFirst({ where: { id, ownerId: userId, role: 'staff' } })
     if (!staff) return NextResponse.json({ error: 'Staff not found' }, { status: 404 })
 
