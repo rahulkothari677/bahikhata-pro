@@ -320,15 +320,15 @@ export function PartyProfile() {
             <p className="text-center py-8 text-sm text-muted-foreground">No transactions yet with this party</p>
           ) : (
             <div className="space-y-2 max-h-96 overflow-y-auto">
-              {transactions.map((t: any) => {
-                const isSale = t.type === 'sale'
-                const isPurchase = t.type === 'purchase'
+              {transactions.map((txn: any) => {
+                const isSale = txn.type === 'sale'
+                const isPurchase = txn.type === 'purchase'
                 const isInflow = isSale
-                const due = t.totalAmount - t.paidAmount
+                const due = txn.totalAmount - txn.paidAmount
                 return (
                   <button
-                    key={t.id}
-                    onClick={() => handleViewTransaction(t.id)}
+                    key={txn.id}
+                    onClick={() => handleViewTransaction(txn.id)}
                     className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 transition text-left border border-transparent hover:border-border"
                   >
                     <div className={cn(
@@ -341,17 +341,17 @@ export function PartyProfile() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-medium text-sm capitalize">{t.type}</p>
-                        {t.invoiceNo && <Badge variant="outline" className="text-[10px] py-0">{t.invoiceNo}</Badge>}
-                        <span className="text-[11px] text-muted-foreground">{t.items?.length || 0} items</span>
+                        <p className="font-medium text-sm capitalize">{txn.type}</p>
+                        {txn.invoiceNo && <Badge variant="outline" className="text-[10px] py-0">{txn.invoiceNo}</Badge>}
+                        <span className="text-[11px] text-muted-foreground">{txn.items?.length || 0} items</span>
                       </div>
                       <p className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1">
-                        <Calendar className="w-3 h-3" /> {formatDateTime(t.date)}
+                        <Calendar className="w-3 h-3" /> {formatDateTime(txn.date)}
                       </p>
                     </div>
                     <div className="text-right flex-shrink-0">
                       <p className={cn('font-semibold text-sm', isInflow ? 'text-emerald-600' : 'text-rose-600')}>
-                        {isInflow ? '+' : '-'}{formatINR(t.totalAmount)}
+                        {isInflow ? '+' : '-'}{formatINR(txn.totalAmount)}
                       </p>
                       {due > 0 && <p className="text-[10px] text-rose-600">Due: {formatINR(due)}</p>}
                     </div>

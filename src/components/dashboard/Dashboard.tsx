@@ -413,15 +413,15 @@ export function Dashboard() {
               <div className="text-center py-8 text-sm text-muted-foreground">अभी कोई एंट्री नहीं</div>
             ) : (
               <div className="space-y-2 max-h-72 overflow-y-auto">
-                {recentTransactions.map((t: any) => {
-                  const isSale = t.type === 'sale'
-                  const isIncome = t.type === 'income'
+                {recentTransactions.map((txn: any) => {
+                  const isSale = txn.type === 'sale'
+                  const isIncome = txn.type === 'income'
                   const isInflow = isSale || isIncome
                   return (
                     <button
-                      key={t.id}
+                      key={txn.id}
                       onClick={() => {
-                        setSelectedTransactionId(t.id)
+                        setSelectedTransactionId(txn.id)
                         setPreviousView('dashboard')
                         setView('transaction-detail')
                       }}
@@ -439,20 +439,20 @@ export function Dashboard() {
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">
-                          {t.partyName}
-                          {t.invoiceNo && <span className="text-muted-foreground text-xs ml-1">• {t.invoiceNo}</span>}
+                          {txn.partyName}
+                          {txn.invoiceNo && <span className="text-muted-foreground text-xs ml-1">• {txn.invoiceNo}</span>}
                         </p>
                         <p className="text-[11px] text-muted-foreground capitalize">
-                          {t.type} • {relativeTime(t.date)} • {t.paymentMode}
+                          {txn.type} • {relativeTime(txn.date)} • {txn.paymentMode}
                         </p>
                       </div>
                       <div className="text-right flex-shrink-0">
                         <p className={cn('text-sm font-semibold', isInflow ? 'text-emerald-600' : 'text-rose-600')}>
-                          {isInflow ? '+' : '-'}{formatINRCompact(t.totalAmount)}
+                          {isInflow ? '+' : '-'}{formatINRCompact(txn.totalAmount)}
                         </p>
-                        {isSale && t.profit !== undefined && (
+                        {isSale && txn.profit !== undefined && (
                           <p className="text-[10px] text-muted-foreground">
-                            {t('common.profit')} {formatINRCompact(t.profit)}
+                            {t('common.profit')} {formatINRCompact(txn.profit)}
                           </p>
                         )}
                       </div>
