@@ -21,7 +21,7 @@ import {
   IndianRupee, FileText, Phone, Building2, MapPin, TrendingUp,
   MessageCircle,
 } from 'lucide-react'
-import { offlineFetch } from '@/lib/offline-fetch'
+import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 
 const PAYMENT_MODES = [
   { value: 'cash', label: 'Cash' },
@@ -53,7 +53,7 @@ export function TransactionDetail() {
     if (!confirm('Delete this transaction? This cannot be undone.')) return
     const r = await offlineFetch(`/api/transactions/${txn.id}`, { method: 'DELETE', offline: { invalidate: ['/api/transactions', '/api/dashboard', '/api/products', '/api/parties'] } })
     if (r.ok) {
-      sonnerToast.success('Transaction deleted')
+      sonnerToast.success(isQueuedResponse(r) ? 'Will delete when online' : 'Transaction deleted')
       queryClient.invalidateQueries({ queryKey: ['transactions'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       // Go back to ledger
@@ -513,7 +513,7 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
         offline: { invalidate: ['/api/transactions', '/api/dashboard', '/api/products', '/api/parties'] },
       })
       if (!r.ok) throw new Error('Failed')
-      sonnerToast.success('Transaction updated')
+      sonnerToast.success(isQueuedResponse(r) ? 'Saved offline — will sync when online' : 'Transaction updated')
       onSuccess?.()
       onOpenChange(false)
     } catch (e) {

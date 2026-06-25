@@ -19,7 +19,7 @@ import {
   ResponsiveContainer, Legend,
 } from 'recharts'
 import { toast as sonnerToast } from 'sonner'
-import { offlineFetch } from '@/lib/offline-fetch'
+import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 
 export function PartyProfile() {
   const { selectedPartyId, setView, setPreviousView, triggerRefresh, previousView, features } = useAppStore()
@@ -71,7 +71,7 @@ export function PartyProfile() {
     if (!confirm(`Delete ${party.name}? All their transactions will remain but lose the party link.`)) return
     const r = await offlineFetch(`/api/parties/${party.id}`, { method: 'DELETE', offline: { invalidate: ['/api/parties', '/api/dashboard'] } })
     if (r.ok) {
-      sonnerToast.success('Party deleted')
+      sonnerToast.success(isQueuedResponse(r) ? 'Will delete when online' : 'Party deleted')
       queryClient.invalidateQueries({ queryKey: ['parties'] })
       setView(previousView || 'parties')
       triggerRefresh()

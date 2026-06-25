@@ -20,7 +20,7 @@ import {
   Package, Phone, IndianRupee, Save, Trash2, Check, AlertCircle, Mic,
 } from 'lucide-react'
 import { VoiceEntry } from '@/components/common/VoiceEntry'
-import { offlineFetch } from '@/lib/offline-fetch'
+import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 
 const PAYMENT_MODES = [
   { value: 'cash', label: 'Cash' },
@@ -242,7 +242,11 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
         offline: { invalidate: ['/api/transactions', '/api/dashboard', '/api/products', '/api/parties', '/api/insights'] },
       })
       if (!r.ok) throw new Error('Failed')
-      sonnerToast.success(`${isSale ? 'Sale' : 'Purchase'} recorded successfully!`)
+      if (isQueuedResponse(r)) {
+        sonnerToast.success(`${isSale ? 'Sale' : 'Purchase'} saved offline — will sync when online`)
+      } else {
+        sonnerToast.success(`${isSale ? 'Sale' : 'Purchase'} recorded successfully!`)
+      }
       queryClient.invalidateQueries({ queryKey: ['transactions'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       triggerRefresh()
@@ -842,6 +846,11 @@ function AddPartyInline({ open, onOpenChange, defaultType, onAdded }: {
         offline: { invalidate: ['/api/parties', '/api/dashboard'] },
       })
       if (!r.ok) throw new Error('Failed')
+      if (isQueuedResponse(r)) {
+        sonnerToast.success('Saved offline — will sync when online')
+        onOpenChange(false)
+        return
+      }
       const data = await r.json()
       sonnerToast.success(`${defaultType === 'customer' ? 'Customer' : 'Supplier'} added`)
       onAdded(data.party)

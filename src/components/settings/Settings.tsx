@@ -19,7 +19,7 @@ import {
   Search, MessageCircle, Sparkles, Bell, Repeat, FileSpreadsheet,
   Users, Package, ScanLine, TrendingUp, Smartphone, RotateCcw, Palette, Check, Globe,
 } from 'lucide-react'
-import { offlineFetch } from '@/lib/offline-fetch'
+import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 
 const FEATURE_CONFIG: { key: FeatureKey; label: string; description: string; icon: any }[] = [
   { key: 'darkMode', label: 'Dark Mode', description: 'Switch between light and dark themes', icon: Moon },
@@ -86,7 +86,7 @@ export function Settings() {
         offline: { invalidate: ['/api/settings', '/api/dashboard'] },
       })
       if (!r.ok) throw new Error('Failed')
-      sonnerToast.success('Settings saved')
+      sonnerToast.success(isQueuedResponse(r) ? 'Saved offline — will sync when online' : 'Settings saved')
       queryClient.invalidateQueries({ queryKey: ['setting'] })
     } catch {
       toast({ title: 'Failed to save settings', variant: 'destructive' })

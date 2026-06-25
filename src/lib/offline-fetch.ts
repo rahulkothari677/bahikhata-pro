@@ -371,6 +371,19 @@ export {
 }
 
 /**
+ * Check if a response is an offline-queued response (HTTP 202 from our queue).
+ * Components should check this after mutations to handle the offline case
+ * gracefully (e.g. don't try to read the response body, show a different
+ * toast, navigate back without expecting server-created data).
+ */
+export function isQueuedResponse(r: Response): boolean {
+  return (
+    r.status === 202 &&
+    r.headers.get('X-BahiKhata-Source') === 'offline-queue'
+  )
+}
+
+/**
  * Auto-sync session to IndexedDB whenever NextAuth session is available.
  * Call this from a top-level client component.
  */

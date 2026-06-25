@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAppStore } from '@/store/app-store'
 import { useOfflineSession } from '@/hooks/use-offline-session'
 import { isOnline, onSyncComplete } from '@/lib/offline-fetch'
+import { precacheData } from '@/lib/precache'
 import { AuthScreen } from '@/components/auth/AuthScreen'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { Header } from '@/components/layout/Header'
@@ -45,6 +46,21 @@ export default function Home() {
     })
     return unsub
   }, [queryClient, triggerRefresh])
+
+  // Pre-cache all key data right after login (only once per session, only online)
+  // This populates IndexedDB so the user can go offline anytime.
+  const precacheDone = useRef(false)
+  useEffect(() => {
+    if (
+      status === 'authenticated' &&
+      session &&
+      !precacheDone.current &&
+      isOnline()
+    ) {
+      precacheDone.current = true
+      precacheData().catch(() => {})
+    }
+  }, [status, session])
 
   // Skip the seed check entirely when offline (we can't reach the server, and
   // returning undefined would incorrectly trigger onboarding).

@@ -21,7 +21,7 @@ import {
   Plus, Search, Users, Phone, User, ArrowDownRight, ArrowUpRight,
   Building2, ChevronRight, Receipt,
 } from 'lucide-react'
-import { offlineFetch } from '@/lib/offline-fetch'
+import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 
 export function Parties() {
   const {
@@ -342,7 +342,11 @@ function PartyDialog({ open, onOpenChange, onSuccess }: {
         offline: { invalidate: ['/api/parties', '/api/dashboard'] },
       })
       if (!r.ok) throw new Error('Failed')
-      sonnerToast.success('Party added successfully')
+      if (isQueuedResponse(r)) {
+        sonnerToast.success('Saved offline — will sync when online')
+      } else {
+        sonnerToast.success('Party added successfully')
+      }
       onSuccess?.()
       onOpenChange(false)
     } catch {

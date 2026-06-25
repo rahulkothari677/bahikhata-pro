@@ -3,16 +3,11 @@
 /**
  * useOfflineSession — bridges NextAuth's useSession with the offline cache.
  *
- * Logic:
- *  - If useSession returns 'authenticated' → save session to IndexedDB.
- *  - If useSession returns 'unauthenticated' AND we are offline AND there is
- *    a valid cached session → return that cached session (so user can keep
- *    working offline).
- *  - If useSession returns 'unauthenticated' AND we are online → return null
- *    (force login screen).
- *  - If useSession is stuck on 'loading' for >3 seconds AND we are offline
- *    AND have a cached session → return the cached session (don't make the
- *    user stare at a spinner forever when there's no network).
+ * CRITICAL: We never return 'unauthenticated' until we've finished checking
+ * IndexedDB for a cached session. This prevents a race condition where
+ * NextAuth quickly returns 'unauthenticated' (because /api/auth/session
+ * fails offline) before our IndexedDB read completes, causing the login
+ * page to flash even when a valid cached session exists.
  */
 
 import { useEffect, useState } from 'react'
@@ -31,12 +26,24 @@ interface OfflineSessionState {
 export function useOfflineSession(): OfflineSessionState {
   const { data: session, status } = useSession()
   const [cached, setCached] = useState<CachedSession | null>(null)
+  const [cachedChecked, setCachedChecked] = useState(false) // ← THE FIX
   const [online, setOnline] = useState(true)
   const [loadingTimeout, setLoadingTimeout] = useState(false)
 
-  // Load cached session once on mount
+  // Load cached session once on mount — set cachedChecked=true when done
   useEffect(() => {
-    getCachedSession().then(setCached)
+    let cancelled = false
+    getCachedSession()
+      .then((s) => {
+        if (!cancelled) setCached(s)
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setCachedChecked(true)
+      })
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   // Listen to online/offline changes
@@ -50,34 +57,37 @@ export function useOfflineSession(): OfflineSessionState {
   useEffect(() => {
     if (status === 'authenticated' && session?.user) {
       const u = session.user as any
+      // Guard: don't save if user.id is missing (would create a broken session)
+      if (!u.id) {
+        console.warn('[offline] Skipping session cache — user.id missing')
+        return
+      }
       saveSession({
         user: {
           id: u.id,
-          email: u.email,
-          name: u.name,
+          email: u.email || '',
+          name: u.name || null,
           role: u.role || 'owner',
           ownerId: u.ownerId || null,
         },
-        // NextAuth JWT maxAge is 30 days — match it
         expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,
       }).catch(() => {})
     }
   }, [status, session])
 
   // If NextAuth is stuck on 'loading' for too long while offline, fall back
-  // to the cached session (after 3 seconds).
+  // to the cached session (after 2 seconds — reduced from 3 for snappier UX).
   useEffect(() => {
     if (status !== 'loading') {
       setLoadingTimeout(false)
       return
     }
-    const timer = setTimeout(() => setLoadingTimeout(true), 3000)
+    const timer = setTimeout(() => setLoadingTimeout(true), 2000)
     return () => clearTimeout(timer)
   }, [status])
 
-  // If we've timed out loading AND we're offline AND we have a cached session,
-  // return the cached session instead of staying stuck.
-  if (status === 'loading' && loadingTimeout && !online && cached && cached.user?.id && cached.expiresAt) {
+  // Timeout fallback: loading too long + offline + cached session = use it
+  if (status === 'loading' && loadingTimeout && !online && cached && cached.user?.id) {
     return {
       session: {
         user: cached.user,
@@ -88,8 +98,8 @@ export function useOfflineSession(): OfflineSessionState {
     }
   }
 
-  // Loading state — wait for both NextAuth and cached session check
-  if (status === 'loading') {
+  // Still loading NextAuth OR haven't checked IndexedDB yet → show loading
+  if (status === 'loading' || !cachedChecked) {
     return { session: null, status: 'loading', isOfflineSession: false }
   }
 
@@ -100,7 +110,7 @@ export function useOfflineSession(): OfflineSessionState {
 
   // Unauthenticated via NextAuth — check if we have a cached offline session
   if (status === 'unauthenticated') {
-    if (!online && cached && cached.user?.id && cached.expiresAt) {
+    if (!online && cached && cached.user?.id) {
       // Offline + cached session → use it
       return {
         session: {
