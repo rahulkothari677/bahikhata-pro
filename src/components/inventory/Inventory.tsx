@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { useState, useEffect, useRef } from 'react'
+import { useTranslation } from '@/hooks/use-translation'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -24,6 +25,7 @@ export function Inventory() {
     refreshKey, triggerRefresh, inventoryViewMode, setInventoryViewMode,
     inventoryCategory, setInventoryCategory, triggerNewEntry, triggerNewEntryView,
   } = useAppStore()
+  const { t } = useTranslation()
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'all' | 'low' | 'out'>('all')
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -100,7 +102,7 @@ export function Inventory() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <Package className="w-4 h-4 text-amber-600" />
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Total Products</p>
+              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">{t('stat.total_products')}</p>
             </div>
             <p className="text-xl font-bold">{products.length}</p>
           </CardContent>
@@ -109,7 +111,7 @@ export function Inventory() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <IndianRupee className="w-4 h-4 text-emerald-600" />
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Stock Value</p>
+              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">{t('dash.stock_value')}</p>
             </div>
             <p className="text-xl font-bold">{formatINR(totalStockValue)}</p>
           </CardContent>
@@ -118,7 +120,7 @@ export function Inventory() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <TrendingUp className="w-4 h-4 text-violet-600" />
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Potential Profit</p>
+              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">{t('stat.potential_profit')}</p>
             </div>
             <p className="text-xl font-bold">{formatINR(totalPotentialProfit)}</p>
           </CardContent>
@@ -127,7 +129,7 @@ export function Inventory() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <AlertTriangle className="w-4 h-4 text-rose-600" />
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Low/Out of Stock</p>
+              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">{t('stat.low_out_stock')}</p>
             </div>
             <p className="text-xl font-bold">{lowStockCount} <span className="text-sm text-muted-foreground">/ {outOfStockCount}</span></p>
           </CardContent>
@@ -139,7 +141,7 @@ export function Inventory() {
         <CardContent className="p-3">
           <div className="flex items-center gap-2 mb-2">
             <Folder className="w-4 h-4 text-amber-600" />
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Categories</p>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t('inv.categories')}</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <button
@@ -185,7 +187,7 @@ export function Inventory() {
             <div className="relative flex-1 w-full">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder="Search products, SKU, HSN..."
+                placeholder="{t('inv.search_placeholder')}"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-9"
@@ -196,9 +198,9 @@ export function Inventory() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Products</SelectItem>
-                <SelectItem value="low">Low Stock</SelectItem>
-                <SelectItem value="out">Out of Stock</SelectItem>
+                <SelectItem value="all">{t('inv.all_products')}</SelectItem>
+                <SelectItem value="low">{t('inv.low_stock')}</SelectItem>
+                <SelectItem value="out">{t('inv.out_stock')}</SelectItem>
               </SelectContent>
             </Select>
             <ViewModeToggle mode={inventoryViewMode} onChange={setInventoryViewMode} />
@@ -230,7 +232,7 @@ export function Inventory() {
         <Card className="shadow-card border-border/60">
           <CardContent className="py-16 text-center">
             <Package className="w-12 h-12 mx-auto text-muted-foreground/50 mb-3" />
-            <p className="text-sm font-medium">No products found</p>
+            <p className="text-sm font-medium">{t('inv.no_products')}</p>
             <p className="text-xs text-muted-foreground mt-1">
               {products.length === 0 ? 'Add your first product to start tracking inventory' : 'Try a different search or category'}
             </p>
@@ -249,8 +251,8 @@ export function Inventory() {
               <thead className="bg-muted/50">
                 <tr className="text-left text-xs uppercase text-muted-foreground">
                   <th className="py-3 px-4 font-medium">Product</th>
-                  <th className="py-3 px-2 font-medium text-right">Buy Price</th>
-                  <th className="py-3 px-2 font-medium text-right">Sale Price</th>
+                  <th className="py-3 px-2 font-medium text-right">{t('inv.buy_price')}</th>
+                  <th className="py-3 px-2 font-medium text-right">{t('inv.sale_price')}</th>
                   <th className="py-3 px-2 font-medium text-right">Stock</th>
                   <th className="py-3 px-2 font-medium text-right">Value</th>
                   <th className="py-3 px-2 font-medium text-right">Profit/unit</th>
@@ -350,11 +352,11 @@ function ProductGridCard({ product: p, onEdit }: { product: any; onEdit: () => v
 
         <div className="grid grid-cols-2 gap-2 text-xs mt-3">
           <div className="rounded-lg bg-muted/50 p-2">
-            <p className="text-[10px] text-muted-foreground uppercase">Buy Price</p>
+            <p className="text-[10px] text-muted-foreground uppercase">{t('inv.buy_price')}</p>
             <p className="font-semibold mt-0.5">{formatINR(p.purchasePrice)}</p>
           </div>
           <div className="rounded-lg bg-muted/50 p-2">
-            <p className="text-[10px] text-muted-foreground uppercase">Sale Price</p>
+            <p className="text-[10px] text-muted-foreground uppercase">{t('inv.sale_price')}</p>
             <p className="font-semibold mt-0.5">{formatINR(p.salePrice)}</p>
           </div>
         </div>
@@ -371,7 +373,7 @@ function ProductGridCard({ product: p, onEdit }: { product: any; onEdit: () => v
             </p>
           </div>
           <div className="text-right">
-            <p className="text-[10px] text-muted-foreground uppercase">Profit / unit</p>
+            <p className="text-[10px] text-muted-foreground uppercase">{t('inv.profit_unit')}</p>
             <p className="text-sm font-semibold text-emerald-600">
               {formatINR(profit)}
               <span className="text-[10px] text-muted-foreground ml-1">({margin.toFixed(0)}%)</span>

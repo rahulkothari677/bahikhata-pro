@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAppStore } from '@/store/app-store'
+import { useTranslation } from '@/hooks/use-translation'
 import { useToast } from '@/hooks/use-toast'
 import { toast as sonnerToast } from 'sonner'
 import { formatINR, formatDate, cn } from '@/lib/utils'
@@ -22,6 +23,7 @@ const PAYMENT_MODES = ['cash', 'upi', 'card', 'bank']
 
 export function IncomeExpense() {
   const { refreshKey, triggerRefresh, triggerNewEntry, triggerNewEntryView, setSelectedTransactionId, setView, setPreviousView } = useAppStore()
+  const { t } = useTranslation()
   const [filter, setFilter] = useState<'all' | 'income' | 'expense'>('all')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [dialogType, setDialogType] = useState<'income' | 'expense'>('expense')
@@ -77,7 +79,7 @@ export function IncomeExpense() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <ArrowDownRight className="w-4 h-4 text-emerald-600" />
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Total Income</p>
+              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">{t('stat.total_income')}</p>
             </div>
             <p className="text-2xl font-bold text-emerald-600">{formatINR(totalIncome)}</p>
           </CardContent>
@@ -86,7 +88,7 @@ export function IncomeExpense() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <ArrowUpRight className="w-4 h-4 text-rose-600" />
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Total Expenses</p>
+              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">{t('stat.total_expenses')}</p>
             </div>
             <p className="text-2xl font-bold text-rose-600">{formatINR(totalExpense)}</p>
           </CardContent>
@@ -95,7 +97,7 @@ export function IncomeExpense() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <Wallet className="w-4 h-4 text-violet-600" />
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Net Cashflow</p>
+              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">{t('stat.net_cashflow')}</p>
             </div>
             <p className={cn('text-2xl font-bold', netCashflow >= 0 ? 'text-emerald-600' : 'text-rose-600')}>{formatINR(netCashflow)}</p>
           </CardContent>
@@ -111,9 +113,9 @@ export function IncomeExpense() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Entries</SelectItem>
-                <SelectItem value="income">Income Only</SelectItem>
-                <SelectItem value="expense">Expenses Only</SelectItem>
+                <SelectItem value="all">{t('ie.all_entries')}</SelectItem>
+                <SelectItem value="income">{t('ie.income_only')}</SelectItem>
+                <SelectItem value="expense">{t('ie.expenses_only')}</SelectItem>
               </SelectContent>
             </Select>
             <div className="flex-1" />
@@ -131,8 +133,8 @@ export function IncomeExpense() {
             <Card className="shadow-card border-border/60">
               <CardContent className="py-16 text-center">
                 <Wallet className="w-12 h-12 mx-auto text-muted-foreground/50 mb-3" />
-                <p className="text-sm font-medium">No income/expense entries yet</p>
-                <p className="text-xs text-muted-foreground mt-1">Track your rent, salary, electricity, and other income/expenses</p>
+                <p className="text-sm font-medium">{t('ie.no_entries')}</p>
+                <p className="text-xs text-muted-foreground mt-1">{t('ie.track_hint')}</p>
               </CardContent>
             </Card>
           ) : (
@@ -194,10 +196,10 @@ export function IncomeExpense() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-3">
               <Receipt className="w-4 h-4 text-rose-600" />
-              <h3 className="font-semibold text-sm">Top Expense Categories</h3>
+              <h3 className="font-semibold text-sm">{t('ie.top_expense_cat')}</h3>
             </div>
             {topExpenses.length === 0 ? (
-              <p className="text-xs text-muted-foreground text-center py-8">No expenses yet</p>
+              <p className="text-xs text-muted-foreground text-center py-8">{t('ie.no_expenses')}</p>
             ) : (
               <div className="space-y-3">
                 {(() => {

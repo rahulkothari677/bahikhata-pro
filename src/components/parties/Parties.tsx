@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAppStore } from '@/store/app-store'
+import { useTranslation } from '@/hooks/use-translation'
 import { useToast } from '@/hooks/use-toast'
 import { toast as sonnerToast } from 'sonner'
 import { formatINR, formatDate, cn, getInitials, formatINRCompact } from '@/lib/utils'
@@ -26,6 +27,7 @@ export function Parties() {
     refreshKey, triggerRefresh, partiesViewMode, setPartiesViewMode,
     triggerNewEntry, triggerNewEntryView, setSelectedPartyId, setView, setPreviousView,
   } = useAppStore()
+  const { t } = useTranslation()
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'all' | 'customer' | 'supplier'>('all')
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -81,7 +83,7 @@ export function Parties() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <Users className="w-4 h-4 text-amber-600" />
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Total Parties</p>
+              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">{t('stat.total_parties')}</p>
             </div>
             <p className="text-xl font-bold">{parties.length}</p>
           </CardContent>
@@ -90,7 +92,7 @@ export function Parties() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <User className="w-4 h-4 text-emerald-600" />
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Customers</p>
+              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">{t('stat.customers')}</p>
             </div>
             <p className="text-xl font-bold">{customers}</p>
           </CardContent>
@@ -99,7 +101,7 @@ export function Parties() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <ArrowDownRight className="w-4 h-4 text-emerald-600" />
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Receivable</p>
+              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">{t('dash.receivable')}</p>
             </div>
             <p className="text-xl font-bold text-emerald-600">{formatINR(totalReceivable)}</p>
           </CardContent>
@@ -108,7 +110,7 @@ export function Parties() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <ArrowUpRight className="w-4 h-4 text-rose-600" />
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Payable</p>
+              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">{t('dash.payable')}</p>
             </div>
             <p className="text-xl font-bold text-rose-600">{formatINR(totalPayable)}</p>
           </CardContent>
@@ -133,8 +135,8 @@ export function Parties() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All Parties</SelectItem>
-                <SelectItem value="customer">Customers</SelectItem>
+                <SelectItem value="all">{t('parties.all_parties')}</SelectItem>
+                <SelectItem value="customer">{t('stat.customers')}</SelectItem>
                 <SelectItem value="supplier">Suppliers</SelectItem>
               </SelectContent>
             </Select>
@@ -152,7 +154,7 @@ export function Parties() {
         <Card className="shadow-card border-border/60">
           <CardContent className="py-16 text-center">
             <Users className="w-12 h-12 mx-auto text-muted-foreground/50 mb-3" />
-            <p className="text-sm font-medium">No parties found</p>
+            <p className="text-sm font-medium">{t('parties.no_parties')}</p>
             <p className="text-xs text-muted-foreground mt-1">
               {parties.length === 0 ? 'Add customers and suppliers to track dues' : 'Try a different search'}
             </p>

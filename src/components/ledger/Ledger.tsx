@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAppStore } from '@/store/app-store'
 import { formatINR, formatDateTime, formatINRCompact, cn } from '@/lib/utils'
+import { useTranslation } from '@/hooks/use-translation'
 import { ViewModeToggle } from '@/components/common/ViewModeToggle'
 import { DateRangePicker, getPresetRange, getPresetLabel, type DateRange, type DatePreset } from '@/components/common/DateRangePicker'
 import {
@@ -25,6 +26,7 @@ export function Ledger({ type }: { type: LedgerType }) {
     setSelectedTransactionId, setPreviousView, pendingDateRange, setPendingDateRange,
   } = useAppStore()
   const [search, setSearch] = useState('')
+  const { t } = useTranslation()
 
   // Date range state - defaults to no filter (all transactions)
   const [dateRange, setDateRange] = useState<DateRange | null>(null)
@@ -143,7 +145,7 @@ export function Ledger({ type }: { type: LedgerType }) {
             <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-1">
                 <TrendingUp className="w-4 h-4 text-emerald-600" />
-                <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Gross Profit</p>
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">{t('stat.gross_profit')}</p>
               </div>
               <p className="text-xl font-bold text-emerald-600">{formatINR(totalProfit)}</p>
               <p className="text-[11px] text-muted-foreground">{totalAmount > 0 ? ((totalProfit / totalAmount) * 100).toFixed(1) : 0}% margin</p>
@@ -154,7 +156,7 @@ export function Ledger({ type }: { type: LedgerType }) {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <IndianRupee className="w-4 h-4 text-violet-600" />
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Paid</p>
+              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">{t('stat.paid')}</p>
             </div>
             <p className="text-xl font-bold">{formatINR(totalPaid)}</p>
           </CardContent>
@@ -357,7 +359,7 @@ export function Ledger({ type }: { type: LedgerType }) {
                     {due > 0 ? (
                       <Badge variant="destructive" className="text-[9px]">Due {formatINRCompact(due)}</Badge>
                     ) : (
-                      <Badge variant="secondary" className="text-[9px] bg-emerald-100 text-emerald-700">Paid</Badge>
+                      <Badge variant="secondary" className="text-[9px] bg-emerald-100 text-emerald-700">{t('stat.paid')}</Badge>
                     )}
                   </div>
                   {isSale && (
