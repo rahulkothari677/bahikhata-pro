@@ -23,7 +23,7 @@ export function Ledger({ type }: { type: LedgerType }) {
   const {
     refreshKey, triggerRefresh, setView, setScannerBillType,
     transactionsViewMode, setTransactionsViewMode, triggerNewEntry, triggerNewEntryView,
-    setSelectedTransactionId, setPreviousView, pendingDateRange, setPendingDateRange,
+    setSelectedTransactionId, setSelectedTransactionType, setPreviousView, pendingDateRange, setPendingDateRange,
   } = useAppStore()
   const [search, setSearch] = useState('')
   const { t } = useTranslation()
@@ -117,6 +117,7 @@ export function Ledger({ type }: { type: LedgerType }) {
 
   const handleViewTransaction = (txnId: string) => {
     setSelectedTransactionId(txnId)
+    setSelectedTransactionType(type)
     setPreviousView(isSale ? 'sales' : 'purchases')
     setView('transaction-detail')
   }

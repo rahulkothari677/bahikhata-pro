@@ -27,10 +27,15 @@ const viewTitleKeys: Record<string, { titleKey: string; subtitleKey: string }> =
 const dialogViews: ViewType[] = ['dashboard', 'inventory', 'sales', 'purchases', 'income-expense', 'parties']
 
 export function Header() {
-  const { currentView, setSidebarOpen, setView, fireTriggerNewEntry, previousView, setPreviousView, features, setFeature, setSearchOpen } = useAppStore()
+  const { currentView, setSidebarOpen, setView, fireTriggerNewEntry, previousView, setPreviousView, features, setFeature, setSearchOpen, selectedTransactionType } = useAppStore()
   const { data: session } = useSession()
   const { t } = useTranslation()
   const titleKeys = viewTitleKeys[currentView] || { titleKey: 'nav.dashboard', subtitleKey: 'nav.dashboard' }
+  // Override for transaction detail - show Purchase Ledger if it's a purchase
+  if (currentView === 'transaction-detail' && selectedTransactionType === 'purchase') {
+    titleKeys.titleKey = 'nav.purchases'
+    titleKeys.subtitleKey = 'nav.purchases'
+  }
   const info = { title: t(titleKeys.titleKey), subtitle: t(titleKeys.subtitleKey) }
 
   const { data: settingData } = useQuery({

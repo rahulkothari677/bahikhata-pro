@@ -69,7 +69,9 @@ interface AppState {
   scannerBillType: 'sale' | 'purchase'
   setScannerBillType: (t: 'sale' | 'purchase') => void
   selectedTransactionId: string | null
+  selectedTransactionType: string | null
   setSelectedTransactionId: (id: string | null) => void
+  setSelectedTransactionType: (type: string | null) => void
   selectedPartyId: string | null
   setSelectedPartyId: (id: string | null) => void
   inventoryViewMode: ViewMode
@@ -115,7 +117,9 @@ export const useAppStore = create<AppState>()(
       scannerBillType: 'purchase',
       setScannerBillType: (t) => set({ scannerBillType: t }),
       selectedTransactionId: null,
+  selectedTransactionType: null,
       setSelectedTransactionId: (id) => set({ selectedTransactionId: id }),
+  setSelectedTransactionType: (type) => set({ selectedTransactionType: type }),
       selectedPartyId: null,
       setSelectedPartyId: (id) => set({ selectedPartyId: id }),
       inventoryViewMode: 'grid',

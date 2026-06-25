@@ -33,7 +33,7 @@ const navItems: { id: ViewType; labelKey: string; descKey: string; icon: any; ba
 ]
 
 export function Sidebar() {
-  const { currentView, setView, sidebarOpen, setSidebarOpen, sidebarCollapsed, toggleSidebarCollapsed } = useAppStore()
+  const { currentView, setView, sidebarOpen, setSidebarOpen, sidebarCollapsed, toggleSidebarCollapsed, selectedTransactionType } = useAppStore()
   const { t } = useTranslation()
 
   return (
@@ -97,7 +97,7 @@ export function Sidebar() {
           {navItems.map((item) => {
             const Icon = item.icon
             const active = currentView === item.id ||
-              (currentView === 'transaction-detail' && false) ||
+              (currentView === 'transaction-detail' && ((selectedTransactionType === 'purchase' && item.id === 'purchases') || (selectedTransactionType !== 'purchase' && item.id === 'sales'))) ||
               (currentView === 'new-sale' && item.id === 'sales') ||
               (currentView === 'new-purchase' && item.id === 'purchases') ||
               (currentView === 'party-profile' && item.id === 'parties')
