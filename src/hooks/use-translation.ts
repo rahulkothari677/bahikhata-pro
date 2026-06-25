@@ -4,16 +4,13 @@ import { useAppStore } from '@/store/app-store'
 import { getTranslation, type Language } from '@/lib/i18n'
 
 export function useTranslation() {
-  const language = useAppStore((s) => s.language)
-
-  // On server, always use English. On client, use the stored language.
-  // This prevents hydration mismatch without needing useState/useEffect.
-  const isClient = typeof window !== 'undefined'
-  const effectiveLanguage = isClient ? language : 'en'
+  // Always use English to prevent hydration mismatch
+  // Hindi support will be added back properly in next update
+  const language = 'en' as Language
 
   const t = (key: string): string => {
-    return getTranslation(effectiveLanguage as Language, key)
+    return getTranslation(language, key)
   }
 
-  return { t, language: effectiveLanguage }
+  return { t, language }
 }

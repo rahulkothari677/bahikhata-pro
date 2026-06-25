@@ -48,8 +48,8 @@ export default function Home() {
 
   return (
     <div className="flex min-h-screen bg-background">
-      {features.keyboardShortcuts && <KeyboardShortcuts />}
-      {features.globalSearch && <GlobalSearch />}
+      {features?.keyboardShortcuts && <KeyboardShortcuts />}
+      {features?.globalSearch && <GlobalSearch />}
 
       <Sidebar />
 
@@ -80,7 +80,7 @@ export default function Home() {
       <Onboarding open={showOnboarding} onDone={() => setOnboardingDismissed(true)} />
 
       {/* PWA Install Prompt */}
-      {features.pwaInstall && <PWAInstallPrompt />}
+      {features?.pwaInstall && <PWAInstallPrompt />}
     </div>
   )
 }

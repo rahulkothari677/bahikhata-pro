@@ -119,7 +119,7 @@ const THEMES: Record<ThemeColor, ThemePalette> = {
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const darkMode = useAppStore((s) => s.features.darkMode)
+  const darkMode = useAppStore((s) => s.features?.darkMode ?? false)
   const themeColor = useAppStore((s) => s.themeColor)
 
   useEffect(() => {

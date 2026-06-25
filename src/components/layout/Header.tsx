@@ -112,7 +112,7 @@ export function Header() {
 
         <div className="flex items-center gap-2">
           {/* Global Search button (Ctrl+K) */}
-          {features.globalSearch && (
+          {features?.globalSearch && (
             <Button
               size="sm"
               variant="outline"
@@ -126,15 +126,15 @@ export function Header() {
           )}
 
           {/* Dark mode toggle */}
-          {features.darkMode !== undefined && (
+          {features?.darkMode !== undefined && (
             <Button
               size="sm"
               variant="ghost"
-              onClick={() => setFeature('darkMode', !features.darkMode)}
+              onClick={() => setFeature('darkMode', !features?.darkMode)}
               className="h-9 w-9 p-0"
-              title={features.darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+              title={features?.darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
             >
-              {features.darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              {features?.darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
             </Button>
           )}
 
