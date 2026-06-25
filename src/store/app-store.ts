@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
+import { persist, createJSONStorage } from 'zustand/middleware'
 
 export type ViewType =
   | 'dashboard'
@@ -18,7 +18,6 @@ export type ViewType =
 
 export type ViewMode = 'grid' | 'list'
 
-// Feature toggle keys — each feature can be turned on/off by user in Settings
 export type FeatureKey =
   | 'darkMode'
   | 'keyboardShortcuts'
@@ -89,20 +88,24 @@ interface AppState {
   setPreviousView: (v: ViewType | null) => void
   pendingDateRange: { from: string; to: string; preset: string } | null
   setPendingDateRange: (r: { from: string; to: string; preset: string } | null) => void
-  // Feature flags - persisted
   features: FeatureFlags
   setFeature: (key: FeatureKey, enabled: boolean) => void
   resetFeatures: () => void
-  // Theme color - persisted
   themeColor: ThemeColor
   setThemeColor: (c: ThemeColor) => void
-  // Language - persisted
   language: 'en' | 'hi'
   setLanguage: (l: 'en' | 'hi') => void
-  // Global search
   searchOpen: boolean
   setSearchOpen: (open: boolean) => void
 }
+
+// SSR-safe storage: returns undefined on server, localStorage on client
+const storage = createJSONStorage(() => {
+  if (typeof window !== 'undefined') {
+    return window.localStorage
+  }
+  return undefined as any
+})
 
 export const useAppStore = create<AppState>()(
   persist(
@@ -151,7 +154,7 @@ export const useAppStore = create<AppState>()(
     }),
     {
       name: 'bahikhata-storage',
-      // Only persist: sidebarCollapsed, view modes, and feature flags
+      storage: storage,
       partialize: (state) => ({
         sidebarCollapsed: state.sidebarCollapsed,
         inventoryViewMode: state.inventoryViewMode,
