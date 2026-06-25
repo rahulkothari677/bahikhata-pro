@@ -95,6 +95,7 @@ export function Reports() {
 }
 
 function PLReport({ data }: { data: any }) {
+  const { t } = useTranslation()
   const { summary, expensesByCategory, incomeByCategory } = data
   return (
     <div className="space-y-4">
@@ -216,6 +217,7 @@ function PLReport({ data }: { data: any }) {
 }
 
 function GSTReport({ data }: { data: any }) {
+  const { t } = useTranslation()
   const { outputSales, inputPurchases, netGSTPayable } = data
   return (
     <div className="space-y-4">
@@ -333,6 +335,7 @@ function GSTReport({ data }: { data: any }) {
 }
 
 function StockReport({ data }: { data: any }) {
+  const { t } = useTranslation()
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -393,6 +396,7 @@ function StockReport({ data }: { data: any }) {
 }
 
 function PartyReport({ data }: { data: any }) {
+  const { t } = useTranslation()
   return (
     <div className="space-y-4">
       <Card className="shadow-card border-border/60">
