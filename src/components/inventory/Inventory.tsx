@@ -15,6 +15,7 @@ import { toast as sonnerToast } from 'sonner'
 import { formatINR, cn } from '@/lib/utils'
 import { ProductDialog } from './ProductDialog'
 import { ViewModeToggle } from '@/components/common/ViewModeToggle'
+import { EmptyState } from '@/components/common/EmptyState'
 import {
   Plus, Search, Package, AlertTriangle, Edit2, TrendingUp, IndianRupee,
   ChevronRight, Folder, FolderOpen, LayoutGrid, List, X,
@@ -231,12 +232,25 @@ export function Inventory() {
         </div>
       ) : filtered.length === 0 ? (
         <Card className="shadow-card border-border/60">
-          <CardContent className="py-16 text-center">
-            <Package className="w-12 h-12 mx-auto text-muted-foreground/50 mb-3" />
-            <p className="text-sm font-medium">{t('inv.no_products')}</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              {products.length === 0 ? 'Add your first product to start tracking inventory' : 'Try a different search or category'}
-            </p>
+          <CardContent className="p-0">
+            {products.length === 0 ? (
+              <EmptyState
+                icon={Package}
+                title="No products yet"
+                description="Add your first product to start tracking inventory, stock levels, and profit margins. Use barcode or manual entry — your choice."
+                action={{
+                  label: 'Add Product',
+                  onClick: () => { setEditingProduct(null); setDialogOpen(true) },
+                }}
+              />
+            ) : (
+              <EmptyState
+                icon={Package}
+                title="No products match your search"
+                description="Try a different search term, category, or clear the filters to see all products."
+                size="compact"
+              />
+            )}
           </CardContent>
         </Card>
       ) : inventoryViewMode === 'grid' ? (

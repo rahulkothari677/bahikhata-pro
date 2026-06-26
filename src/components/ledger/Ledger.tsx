@@ -12,6 +12,7 @@ import { formatINR, formatDateTime, formatINRCompact, cn } from '@/lib/utils'
 import { useTranslation } from '@/hooks/use-translation'
 import { ViewModeToggle } from '@/components/common/ViewModeToggle'
 import { DateRangePicker, getPresetRange, getPresetLabel, type DateRange, type DatePreset } from '@/components/common/DateRangePicker'
+import { EmptyState } from '@/components/common/EmptyState'
 import {
   Search, ShoppingCart, Truck, Receipt, IndianRupee,
   TrendingUp, Calendar, User, ScanLine, ChevronRight, Plus, X,
@@ -254,18 +255,25 @@ export function Ledger({ type }: { type: LedgerType }) {
         </div>
       ) : filtered.length === 0 ? (
         <Card className="shadow-card border-border/60">
-          <CardContent className="py-16 text-center">
-            {isSale ? <ShoppingCart className="w-12 h-12 mx-auto text-muted-foreground/50 mb-3" /> : <Truck className="w-12 h-12 mx-auto text-muted-foreground/50 mb-3" />}
-            <p className="text-sm font-medium">No {isSale ? 'sales' : 'purchases'} yet</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              {isSale ? 'Record your first sale or scan a bill to begin' : 'Record your first stock purchase'}
-            </p>
-            <Button
-              onClick={handleNewEntry}
-              className={cn('mt-4 gap-2 shadow-md', isSale ? 'bg-gradient-emerald' : 'bg-gradient-saffron')}
-            >
-              <Plus className="w-4 h-4" /> New {isSale ? 'Sale' : 'Purchase'}
-            </Button>
+          <CardContent className="p-0">
+            <EmptyState
+              icon={isSale ? ShoppingCart : Truck}
+              title={`No ${isSale ? 'sales' : 'purchases'} yet`}
+              description={
+                isSale
+                  ? 'Record your first sale to start tracking revenue, or scan a bill to auto-fill the details in seconds.'
+                  : 'Record your first stock purchase to track inventory and supplier balances.'
+              }
+              action={{
+                label: `New ${isSale ? 'Sale' : 'Purchase'}`,
+                onClick: handleNewEntry,
+              }}
+              secondaryAction={
+                isSale
+                  ? { label: 'Scan Bill', onClick: () => setView('scanner') }
+                  : undefined
+              }
+            />
           </CardContent>
         </Card>
       ) : transactionsViewMode === 'list' ? (

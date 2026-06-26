@@ -17,6 +17,7 @@ import { useToast } from '@/hooks/use-toast'
 import { toast as sonnerToast } from 'sonner'
 import { formatINR, formatDate, cn, getInitials, formatINRCompact } from '@/lib/utils'
 import { ViewModeToggle } from '@/components/common/ViewModeToggle'
+import { EmptyState } from '@/components/common/EmptyState'
 import {
   Plus, Search, Users, Phone, User, ArrowDownRight, ArrowUpRight,
   Building2, ChevronRight, Receipt,
@@ -153,12 +154,25 @@ export function Parties() {
         </div>
       ) : filtered.length === 0 ? (
         <Card className="shadow-card border-border/60">
-          <CardContent className="py-16 text-center">
-            <Users className="w-12 h-12 mx-auto text-muted-foreground/50 mb-3" />
-            <p className="text-sm font-medium">{t('parties.no_parties')}</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              {parties.length === 0 ? 'Add customers and suppliers to track dues' : 'Try a different search'}
-            </p>
+          <CardContent className="p-0">
+            {parties.length === 0 ? (
+              <EmptyState
+                icon={Users}
+                title="No customers or suppliers yet"
+                description="Add customers to track their outstanding dues, and suppliers to manage purchases. You can add them anytime from here or while creating a sale/purchase."
+                action={{
+                  label: 'Add Customer',
+                  onClick: () => setDialogOpen(true),
+                }}
+              />
+            ) : (
+              <EmptyState
+                icon={Users}
+                title="No parties match your search"
+                description="Try a different name, phone number, or clear the search to see all customers and suppliers."
+                size="compact"
+              />
+            )}
           </CardContent>
         </Card>
       ) : partiesViewMode === 'grid' ? (
