@@ -13,7 +13,7 @@ import { DateRangePicker, getPresetRange, getPresetLabel, type DateRange, type D
 import {
   TrendingUp, TrendingDown, Wallet, Package,
   ArrowUpRight, ArrowDownRight, AlertTriangle, IndianRupee,
-  Receipt, Boxes, PiggyBank, ScanLine, ArrowRight,
+  Receipt, Boxes, PiggyBank, ScanLine, ArrowRight, Plus,
 } from 'lucide-react'
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell,
@@ -96,13 +96,23 @@ export function Dashboard() {
               {t('dash.today_made')} <span className="font-bold text-white">{formatINR(kpis.todayRevenue)}</span> {t('dash.from')} <span className="font-bold text-white">{kpis.todayTxnCount}</span> {t('dash.sales_word')}
             </p>
           </div>
-          <Button
-            onClick={() => setView('scanner')}
-            className="bg-white text-primary hover:bg-white/90 gap-2 shadow-md"
-          >
-            <ScanLine className="w-4 h-4" />
-            {t('dash.scan_bill')}
-          </Button>
+          <div className="flex gap-2 flex-wrap">
+            <Button
+              onClick={() => setView('new-sale')}
+              className="bg-white text-primary hover:bg-white/90 gap-2 shadow-md"
+            >
+              <Plus className="w-4 h-4" />
+              New Sale
+            </Button>
+            <Button
+              onClick={() => setView('scanner')}
+              variant="outline"
+              className="bg-white/10 text-white border-white/30 hover:bg-white/20 hover:text-white gap-2"
+            >
+              <ScanLine className="w-4 h-4" />
+              {t('dash.scan_bill')}
+            </Button>
+          </div>
         </div>
       </motion.div>
 
