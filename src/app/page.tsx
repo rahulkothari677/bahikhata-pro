@@ -5,11 +5,13 @@ import dynamic from 'next/dynamic'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAppStore } from '@/store/app-store'
 import { useOfflineSession } from '@/hooks/use-offline-session'
+import { useBrowserBackButton } from '@/hooks/use-browser-back-button'
 import { isOnline, onSyncComplete } from '@/lib/offline-fetch'
 import { precacheData } from '@/lib/precache'
 import { AuthScreen } from '@/components/auth/AuthScreen'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { Header } from '@/components/layout/Header'
+import { MobileBottomNav } from '@/components/layout/MobileBottomNav'
 import { Onboarding } from '@/components/layout/Onboarding'
 import { Dashboard } from '@/components/dashboard/Dashboard'
 import { Inventory } from '@/components/inventory/Inventory'
@@ -35,6 +37,7 @@ const Settings = dynamic(() => import('@/components/settings/Settings').then(m =
 export default function Home() {
   const { session, status, isOfflineSession } = useOfflineSession()
   const { currentView, features, triggerRefresh } = useAppStore()
+  useBrowserBackButton() // Enable browser back button to navigate within app
   const queryClient = useQueryClient()
   const [onboardingDismissed, setOnboardingDismissed] = useState(false)
   const [mounted, setMounted] = useState(false)
@@ -122,10 +125,12 @@ export default function Home() {
           {currentView === 'new-purchase' && <TransactionEntry type="purchase" />}
         </main>
 
-        <footer className="mt-auto border-t border-border py-3 px-4 lg:px-6 text-center text-[11px] text-muted-foreground no-print">
+        <footer className="mt-auto border-t border-border py-3 px-4 lg:px-6 text-center text-[11px] text-muted-foreground no-print hidden lg:block">
           <p>BahiKhata Pro — Made with love for Bharat</p>
         </footer>
       </div>
+
+      <MobileBottomNav />
 
       <OfflineIndicator />
       <Onboarding open={showOnboarding} onDone={() => setOnboardingDismissed(true)} />
