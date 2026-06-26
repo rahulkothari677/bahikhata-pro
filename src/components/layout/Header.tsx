@@ -96,12 +96,8 @@ export function Header() {
     <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-md border-b border-border">
       <div className="flex items-center justify-between gap-3 px-4 lg:px-6 py-3">
         <div className="flex items-center gap-3 min-w-0">
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="lg:hidden p-2 -ml-2 rounded-lg hover:bg-muted"
-          >
-            <Menu className="w-5 h-5" />
-          </button>
+          {/* Hamburger menu hidden on mobile — use "More" tab in bottom nav instead.
+              On desktop, sidebar is always visible so no hamburger needed. */}
           {isDetailView && (
             <button
               onClick={handleBack}

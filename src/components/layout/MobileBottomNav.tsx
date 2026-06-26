@@ -39,8 +39,13 @@ const TABS: Tab[] = [
 ]
 
 export function MobileBottomNav() {
-  const { currentView, setView, setSidebarOpen } = useAppStore()
+  const { currentView, setView, setSidebarOpen, sidebarOpen } = useAppStore()
   const { t } = useTranslation()
+
+  // Toggle sidebar: if open, close; if closed, open. Makes "More" tab a toggle.
+  const toggleSidebar = () => {
+    setSidebarOpen(!sidebarOpen)
+  }
 
   // Don't show on auth screen or when creating a new entry (those have their own back button)
   const hideOnViews: ViewType[] = ['new-sale', 'new-purchase', 'transaction-detail', 'party-profile']
@@ -108,14 +113,14 @@ export function MobileBottomNav() {
           })}
 
           <button
-            onClick={() => { haptic.click(); setSidebarOpen(true) }}
+            onClick={() => { haptic.click(); toggleSidebar() }}
             className={cn(
               'flex flex-col items-center justify-center gap-0.5 flex-1 h-full transition-colors',
-              isMoreActive ? 'text-primary' : 'text-muted-foreground',
+              isMoreActive || sidebarOpen ? 'text-primary' : 'text-muted-foreground',
             )}
             aria-label="More"
           >
-            <Menu className="w-5 h-5" strokeWidth={isMoreActive ? 2.5 : 2} />
+            <Menu className="w-5 h-5" strokeWidth={isMoreActive || sidebarOpen ? 2.5 : 2} />
             <span className="text-[10px] font-medium">More</span>
           </button>
         </div>
