@@ -1,28 +1,43 @@
 'use client'
 
 /**
- * useBrowserBackButton — syncs the app's view navigation with browser history.
+ * useBrowserBackButton — hierarchical navigation synced with browser history.
  *
- * PROBLEM: Mobile users expect the hardware/browser back button to navigate
- * WITHIN the app. By default, pressing back exits the app entirely because
- * the app uses client-side view switching (Zustand) that doesn't touch
- * browser history.
+ * MODEL:
+ * The app uses a "hierarchical stack" model, not a linear history model.
+ * This matches how top mobile apps (WhatsApp, Instagram) handle back button.
  *
- * SOLUTION:
- * 1. Every time currentView changes via setView, push a new history entry.
- * 2. When popstate fires (user pressed back), restore the previous view
- *    from our internal stack instead of letting the browser navigate away.
- * 3. When the stack is empty (user is on dashboard), let the browser
- *    back button work normally (exit the app).
+ * ROOT VIEWS (bottom nav items): dashboard, sales, inventory, more
+ *   - When you tap a bottom nav item, the back stack RESETS.
+ *   - Previous history is cleared (marked as stale and skipped).
+ *   - Stack becomes: [dashboard, currentRootView]
  *
- * IMPORTANT: To prevent the "infinite back" problem (where navigating
- * A → B → A → B creates a huge stack), we DEDUPLICATE consecutive
- * same-view entries. If the new view equals the top of the stack, we
- * don't push — this keeps the stack minimal.
+ * CHILD VIEWS (everything else): transaction-detail, party-profile,
+ * new-sale, new-purchase, purchases, income-expense, parties, scanner,
+ * reports, settings
+ *   - Pushed onto the stack.
+ *   - Back from a child view goes to its parent (previous stack entry).
  *
- * MAX_STACK_DEPTH = 15 prevents unbounded growth. If the stack exceeds
- * this, older entries are pruned (user can still go back, just not 50
- * levels deep).
+ * EXAMPLE FLOW:
+ *   Dashboard → Sales → Customer Detail → (tap Inventory) → More →
+ *   Purchases → Distributor → (back) → Purchases → (tap More) →
+ *   Income & Expense
+ *
+ *   Stack at Income & Expense: [dashboard, more, income-expense]
+ *
+ *   Back from Income & Expense: → More (menu page)
+ *   Back from More: → Dashboard (main interface)
+ *   Back from Dashboard: → Exit app
+ *
+ *   (Does NOT go through Sales, Customer Detail, Inventory, Purchases, Distributor)
+ *
+ * IMPLEMENTATION:
+ * - "Generation" counter: bumped every time a root view is navigated to.
+ *   Old history entries have a stale generation and are skipped on popstate.
+ * - When navigating to a root view, push a "dashboard" entry first, then
+ *   the root view entry. This ensures back from root view goes to dashboard.
+ * - Stale entries are skipped in popstate by calling history.back() again
+ *   without triggering UI updates.
  */
 
 import { useEffect, useRef } from 'react'
@@ -30,22 +45,31 @@ import { useAppStore } from '@/store/app-store'
 import type { ViewType } from '@/store/app-store'
 
 const HISTORY_STATE_KEY = 'bahikhata-view'
+const HISTORY_GEN_KEY = 'bahikhata-gen'
 const MAX_STACK_DEPTH = 15
+
+// Views that RESET the navigation stack when navigated to via bottom nav.
+// These are the "root" destinations — tapping them starts a new context.
+const ROOT_VIEWS: ViewType[] = ['dashboard', 'sales', 'inventory', 'more']
 
 export function useBrowserBackButton() {
   const { currentView, setView } = useAppStore()
   const viewStackRef = useRef<ViewType[]>([])
+  const generationRef = useRef(0)
   const isPopstateRef = useRef(false)
   const lastPushedViewRef = useRef<ViewType | null>(null)
 
   useEffect(() => {
-    // Skip the very first render — initialize the stack with dashboard
+    // ── Initialize on first render ──────────────────────────────────────
     if (viewStackRef.current.length === 0) {
       viewStackRef.current = [currentView]
       lastPushedViewRef.current = currentView
       if (typeof window !== 'undefined') {
         window.history.replaceState(
-          { [HISTORY_STATE_KEY]: currentView, stackDepth: 0 },
+          {
+            [HISTORY_STATE_KEY]: currentView,
+            [HISTORY_GEN_KEY]: generationRef.current,
+          },
           '',
           window.location.href,
         )
@@ -53,66 +77,116 @@ export function useBrowserBackButton() {
       return
     }
 
-    // If this view change was triggered by popstate (back button), don't
-    // push a new history entry — we're already moving back in the stack
+    // ── Skip if triggered by popstate (back button) ─────────────────────
     if (isPopstateRef.current) {
       isPopstateRef.current = false
       lastPushedViewRef.current = currentView
       return
     }
 
-    // DEDUPLICATE: if the new view is the same as the top of the stack,
-    // don't push another entry. This prevents A → B → A → B from creating
-    // a 4-entry stack when it should only have 2.
+    // ── Skip duplicate consecutive views ────────────────────────────────
     if (lastPushedViewRef.current === currentView) {
       return
     }
 
-    // User navigated forward (clicked a button or menu item) — push new entry
-    viewStackRef.current.push(currentView)
-    lastPushedViewRef.current = currentView
+    if (typeof window === 'undefined') return
 
-    // Prune stack if it exceeds max depth (keep most recent entries)
-    if (viewStackRef.current.length > MAX_STACK_DEPTH) {
-      viewStackRef.current = viewStackRef.current.slice(-MAX_STACK_DEPTH)
-    }
+    if (ROOT_VIEWS.includes(currentView)) {
+      // ── ROOT VIEW: reset the stack ────────────────────────────────────
+      // Bump generation so old history entries become stale
+      generationRef.current++
 
-    if (typeof window !== 'undefined') {
+      if (currentView === 'dashboard') {
+        viewStackRef.current = ['dashboard']
+        // Push dashboard entry with new generation
+        window.history.pushState(
+          {
+            [HISTORY_STATE_KEY]: 'dashboard',
+            [HISTORY_GEN_KEY]: generationRef.current,
+          },
+          '',
+          window.location.href,
+        )
+      } else {
+        // Stack: [dashboard, currentRootView]
+        viewStackRef.current = ['dashboard', currentView]
+
+        // Push a "dashboard" entry first so back from root view → dashboard
+        window.history.pushState(
+          {
+            [HISTORY_STATE_KEY]: 'dashboard',
+            [HISTORY_GEN_KEY]: generationRef.current,
+          },
+          '',
+          window.location.href,
+        )
+
+        // Then push the root view entry
+        window.history.pushState(
+          {
+            [HISTORY_STATE_KEY]: currentView,
+            [HISTORY_GEN_KEY]: generationRef.current,
+          },
+          '',
+          window.location.href,
+        )
+      }
+    } else {
+      // ── CHILD VIEW: push onto stack ───────────────────────────────────
+      viewStackRef.current.push(currentView)
+
+      // Prune if too deep
+      if (viewStackRef.current.length > MAX_STACK_DEPTH) {
+        viewStackRef.current = viewStackRef.current.slice(-MAX_STACK_DEPTH)
+      }
+
+      // Push to browser history with current generation
       window.history.pushState(
-        { [HISTORY_STATE_KEY]: currentView, stackDepth: viewStackRef.current.length - 1 },
+        {
+          [HISTORY_STATE_KEY]: currentView,
+          [HISTORY_GEN_KEY]: generationRef.current,
+        },
         '',
         window.location.href,
       )
     }
+
+    lastPushedViewRef.current = currentView
   }, [currentView])
 
+  // ── Popstate handler ──────────────────────────────────────────────────
   useEffect(() => {
     if (typeof window === 'undefined') return
 
     const handlePopState = (event: PopStateEvent) => {
       const state = event.state as { [key: string]: any } | null
 
+      // No app state — user is going back beyond our app, let them exit
       if (!state || !(HISTORY_STATE_KEY in state)) {
-        // No app state in history — user is going back beyond the app.
-        // Let them exit normally (don't preventDefault).
         return
       }
 
-      // Mark that this is a popstate-triggered navigation
-      isPopstateRef.current = true
+      // ── Check if this entry is from the current generation ────────────
+      // If not, it's a stale entry from before a stack reset. Skip it
+      // WITHOUT triggering a UI update — just go back again.
+      if (state[HISTORY_GEN_KEY] !== generationRef.current) {
+        // Stale entry — skip by going back again
+        // Safety: only skip if there's history to go back to
+        if (window.history.length > 1) {
+          window.history.back()
+        }
+        return
+      }
 
-      // Pop the current view from our stack
+      // ── Valid entry — pop our stack and navigate ──────────────────────
       if (viewStackRef.current.length > 1) {
         viewStackRef.current.pop()
         const previousView = viewStackRef.current[viewStackRef.current.length - 1]
+        isPopstateRef.current = true
         lastPushedViewRef.current = previousView
         setView(previousView)
-      } else {
-        // Stack is empty — go back to dashboard (or stay if already there)
-        viewStackRef.current = ['dashboard']
-        lastPushedViewRef.current = 'dashboard'
-        setView('dashboard')
       }
+      // If stack is just [dashboard], don't pop — next back press exits
     }
 
     window.addEventListener('popstate', handlePopState)
