@@ -13,21 +13,29 @@ export async function GET() {
       orderBy: { name: 'asc' },
     })
 
-    const transactions = await db.transaction.findMany({
-      where: { userId, items: { some: {} } },
-      include: { items: true },
+    // PERFORMANCE: fetch only transactionItems (not full transactions) for stock calc.
+    // Old code fetched ALL transactions with items include — huge payload.
+    // New code fetches only the items themselves, joined to user's transactions.
+    const allItems = await db.transactionItem.findMany({
+      where: {
+        transaction: { userId },
+        productId: { not: null },
+      },
+      select: {
+        productId: true,
+        quantity: true,
+        transaction: { select: { type: true } },
+      },
     })
 
     const stockMap = new Map<string, number>()
     products.forEach(p => stockMap.set(p.id, p.openingStock))
-    transactions.forEach(t => {
-      t.items.forEach(item => {
-        if (item.productId) {
-          const current = stockMap.get(item.productId) || 0
-          if (t.type === 'purchase') stockMap.set(item.productId, current + item.quantity)
-          else if (t.type === 'sale') stockMap.set(item.productId, current - item.quantity)
-        }
-      })
+    allItems.forEach(item => {
+      if (item.productId) {
+        const current = stockMap.get(item.productId) || 0
+        if (item.transaction.type === 'purchase') stockMap.set(item.productId, current + item.quantity)
+        else if (item.transaction.type === 'sale') stockMap.set(item.productId, current - item.quantity)
+      }
     })
 
     const productsWithStock = products.map(p => ({

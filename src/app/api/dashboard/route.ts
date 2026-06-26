@@ -36,23 +36,73 @@ export async function GET(req: NextRequest) {
       setting,
     ] = await Promise.all([
       // Always fetch latest 8 transactions (for "recent transactions" widget)
+      // Needs items + party for display
       db.transaction.findMany({
         where: { userId },
         include: { items: true, party: true },
         orderBy: { date: 'desc' },
         take: 8,
       }),
-      // Fetch transactions in the last 13 months (for KPIs, charts, comparisons)
+      // Fetch transactions in the last 13 months for KPIs, charts, comparisons.
+      // PERFORMANCE: only select fields we actually use for aggregation —
+      // skip notes, invoiceNo, payeeName, payeePhone, isInterState, etc.
+      // and skip the items/party includes (we only need items for top products
+      // + category breakdown, which we fetch separately below if in range).
       db.transaction.findMany({
         where: {
           userId,
           date: { gte: thirteenMonthsAgo },
         },
-        include: { items: true, party: true },
+        select: {
+          id: true,
+          type: true,
+          date: true,
+          subtotal: true,
+          discountAmount: true,
+          cgst: true,
+          sgst: true,
+          igst: true,
+          totalAmount: true,
+          paidAmount: true,
+          paymentMode: true,
+          grossProfit: true,
+          partyId: true,
+          // Items: only fetch the fields needed for top-products + category breakdown
+          items: {
+            select: {
+              productId: true,
+              productName: true,
+              quantity: true,
+              unitPrice: true,
+              gstRate: true,
+              discountAmount: true,
+              total: true,
+            },
+          },
+        },
         orderBy: { date: 'desc' },
       }),
-      db.product.findMany({ where: { userId } }),
-      db.party.findMany({ where: { userId } }),
+      // Products: only fetch fields needed for stock calc + category breakdown
+      db.product.findMany({
+        where: { userId },
+        select: {
+          id: true,
+          name: true,
+          category: true,
+          purchasePrice: true,
+          salePrice: true,
+          openingStock: true,
+          lowStockThreshold: true,
+        },
+      }),
+      // Parties: only fetch fields needed for receivable/payable calc
+      db.party.findMany({
+        where: { userId },
+        select: {
+          id: true,
+          openingBalance: true,
+        },
+      }),
       db.setting.findUnique({ where: { userId } }),
     ])
 
