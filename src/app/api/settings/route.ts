@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
+import { withCache } from '@/lib/cache'
 
 // GET /api/settings
 export async function GET() {
@@ -9,7 +10,7 @@ export async function GET() {
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const setting = await db.setting.findUnique({ where: { userId } })
-    return NextResponse.json({ setting: setting || { shopName: 'My Shop' } })
+    return withCache({ setting: setting || { shopName: 'My Shop' } }, { maxAge: 120, swr: 600 })
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch settings' }, { status: 500 })
   }

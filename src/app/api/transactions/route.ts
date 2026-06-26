@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
+import { withCache } from '@/lib/cache'
 
 // GET /api/transactions - list with filters (type, from, to, limit)
 export async function GET(req: NextRequest) {
@@ -32,7 +33,7 @@ export async function GET(req: NextRequest) {
       take: limit,
     })
 
-    return NextResponse.json({ transactions })
+    return withCache({ transactions }, { maxAge: 30, swr: 300 })
   } catch (error) {
     console.error('Transactions GET error:', error)
     return NextResponse.json({ error: 'Failed to fetch transactions' }, { status: 500 })

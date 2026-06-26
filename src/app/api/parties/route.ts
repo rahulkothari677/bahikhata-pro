@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
+import { withCache } from '@/lib/cache'
 
 export async function GET() {
   try {
@@ -41,7 +42,7 @@ export async function GET() {
       }
     })
 
-    return NextResponse.json({ parties: partiesWithBalance })
+    return withCache({ parties: partiesWithBalance }, { maxAge: 60, swr: 300 })
   } catch (error) {
     console.error('Parties GET error:', error)
     return NextResponse.json({ error: 'Failed to fetch parties' }, { status: 500 })

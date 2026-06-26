@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
+import { withCache } from '@/lib/cache'
 
 export async function GET() {
   try {
@@ -36,7 +37,7 @@ export async function GET() {
       isLowStock: (stockMap.get(p.id) || 0) <= p.lowStockThreshold,
     }))
 
-    return NextResponse.json({ products: productsWithStock })
+    return withCache({ products: productsWithStock }, { maxAge: 60, swr: 300 })
   } catch (error) {
     console.error('Products GET error:', error)
     return NextResponse.json({ error: 'Failed to fetch products' }, { status: 500 })

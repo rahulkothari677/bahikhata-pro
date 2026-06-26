@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
+import { withCache } from '@/lib/cache'
 
 // GET /api/dashboard?from=&to= - returns aggregated stats for dashboard with date filtering
 export async function GET(req: NextRequest) {
@@ -238,7 +239,7 @@ export async function GET(req: NextRequest) {
       itemsCount: t.items.length,
     }))
 
-    return NextResponse.json({
+    return withCache({
       setting: setting || { shopName: 'My Shop' },
       dateRange: { from: rangeFrom, to: rangeTo },
       kpis: {
@@ -276,7 +277,7 @@ export async function GET(req: NextRequest) {
         netPayable: netGSTPayable,
       },
       recentTransactions: recentTransactionsData,
-    })
+    }, { maxAge: 30, swr: 300 })
   } catch (error) {
     console.error('Dashboard API error:', error)
     return NextResponse.json({ error: 'Failed to load dashboard' }, { status: 500 })
