@@ -20,6 +20,7 @@ import { KeyboardShortcuts } from '@/components/common/KeyboardShortcuts'
 import { GlobalSearch } from '@/components/common/GlobalSearch'
 import { OfflineIndicator } from '@/components/common/OfflineIndicator'
 import { PWAInstallPrompt } from '@/components/common/PWAInstallPrompt'
+import { OnboardingTour } from '@/components/common/OnboardingTour'
 
 // Lazy-load heavy components that are only used occasionally.
 // This splits them into separate JS chunks, loaded on-demand when the user
@@ -130,6 +131,7 @@ export default function Home() {
       <Onboarding open={showOnboarding} onDone={() => setOnboardingDismissed(true)} />
 
       {features?.pwaInstall && <PWAInstallPrompt />}
+      <OnboardingTour />
     </div>
   )
 }
