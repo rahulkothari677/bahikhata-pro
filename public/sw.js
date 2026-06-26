@@ -1,19 +1,21 @@
 /**
- * BahiKhata Pro Service Worker
+ * BahiKhata Pro Service Worker v6
+ *
+ * PERFORMANCE: Aggressive static asset caching for instant repeat loads.
  *
  * Strategy:
- *  - Precache the app shell on install (so the app loads even with zero cache).
+ *  - Precache the app shell on install (HTML, icons, manifest).
  *  - For navigation requests: network-first, fall back to cached '/'.
- *    This ensures users can open the app offline (PWA), and the React app
- *    then uses offlineFetch for data which has its own IndexedDB cache.
- *  - For /api/* GET requests: passthrough to the app (offlineFetch handles
- *    caching). We don't intercept here to avoid double-caching.
- *  - For static assets (_next/static, images): cache-first (indefinite).
- *  - For mutations (POST/PUT/DELETE): passthrough — offlineFetch handles
- *    queueing via IndexedDB.
+ *  - For /api/* GET requests: passthrough (offlineFetch handles caching).
+ *  - For static assets (_next/static, fonts, images): CACHE-FIRST.
+ *    Static assets are content-hashed (e.g. chunks/abc123.js), so they're
+ *    safe to cache indefinitely. When the app updates, the hash changes
+ *    and a new URL is fetched — the old cache just becomes stale.
+ *  - For mutations (POST/PUT/DELETE): passthrough (offlineFetch handles queueing).
  */
 
-const CACHE_VERSION = 'bahikhata-pro-v5'
+const CACHE_VERSION = 'bahikhata-pro-v6'
+const STATIC_CACHE = 'bahikhata-static-v6'
 const APP_SHELL = [
   '/',
   '/manifest.json',
@@ -38,7 +40,9 @@ self.addEventListener('activate', (event) => {
       .keys()
       .then((names) =>
         Promise.all(
-          names.filter((n) => n !== CACHE_VERSION).map((n) => caches.delete(n)),
+          names
+            .filter((n) => n !== CACHE_VERSION && n !== STATIC_CACHE)
+            .map((n) => caches.delete(n)),
         ),
       )
       .then(() => self.clients.claim()),
@@ -89,25 +93,29 @@ self.addEventListener('fetch', (event) => {
     return
   }
 
-  // Static assets: cache-first
+  // Static assets: CACHE-FIRST with indefinite caching.
+  // These assets are content-hashed by Next.js (e.g. chunks/abc123.js), so
+  // caching them forever is safe — when the app updates, the hash changes
+  // and a new URL is requested. Old cached entries are purged on SW activate.
   if (
     url.pathname.startsWith('/_next/static/') ||
     url.pathname.match(/\.(?:js|css|woff2?|ttf|png|jpg|jpeg|svg|gif|webp|ico)$/)
   ) {
     event.respondWith(
       (async () => {
+        // 1. Check cache first
         const cached = await caches.match(request)
         if (cached) return cached
+        // 2. Fetch from network, cache the response
         try {
           const response = await fetch(request)
           if (response.ok) {
             const clone = response.clone()
-            const cache = await caches.open(CACHE_VERSION)
+            const cache = await caches.open(STATIC_CACHE)
             cache.put(request, clone)
           }
           return response
         } catch {
-          // No cache, no network — return 503 instead of undefined
           return new Response('', { status: 504, statusText: 'Not Cached' })
         }
       })(),
