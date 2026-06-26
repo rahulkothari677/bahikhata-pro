@@ -22,6 +22,7 @@ import {
 } from 'recharts'
 import { formatINR, formatINRCompact, relativeTime, cn } from '@/lib/utils'
 import { motion } from 'framer-motion'
+import { offlineFetch } from '@/lib/offline-fetch'
 
 const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)']
 
@@ -34,7 +35,7 @@ export function Dashboard() {
   const { data, isLoading } = useQuery({
     queryKey: ['dashboard', refreshKey, dateRange.from.toISOString(), dateRange.to.toISOString()],
     queryFn: async () => {
-      const r = await fetch(`/api/dashboard?from=${dateRange.from.toISOString()}&to=${dateRange.to.toISOString()}`)
+      const r = await offlineFetch(`/api/dashboard?from=${dateRange.from.toISOString()}&to=${dateRange.to.toISOString()}`)
       return r.json()
     },
   })

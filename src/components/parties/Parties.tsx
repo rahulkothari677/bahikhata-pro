@@ -21,6 +21,7 @@ import {
   Plus, Search, Users, Phone, User, ArrowDownRight, ArrowUpRight,
   Building2, ChevronRight, Receipt,
 } from 'lucide-react'
+import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 
 export function Parties() {
   const {
@@ -35,7 +36,7 @@ export function Parties() {
   const { data, isLoading } = useQuery({
     queryKey: ['parties', refreshKey],
     queryFn: async () => {
-      const r = await fetch('/api/parties')
+      const r = await offlineFetch('/api/parties')
       return r.json()
     },
   })
@@ -334,13 +335,18 @@ function PartyDialog({ open, onOpenChange, onSuccess }: {
     }
     setSaving(true)
     try {
-      const r = await fetch('/api/parties', {
+      const r = await offlineFetch('/api/parties', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
+        offline: { invalidate: ['/api/parties', '/api/dashboard'] },
       })
       if (!r.ok) throw new Error('Failed')
-      sonnerToast.success('Party added successfully')
+      if (isQueuedResponse(r)) {
+        sonnerToast.success('Saved offline — will sync when online')
+      } else {
+        sonnerToast.success('Party added successfully')
+      }
       onSuccess?.()
       onOpenChange(false)
     } catch {

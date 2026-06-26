@@ -16,6 +16,7 @@ import {
   Search, ShoppingCart, Truck, Receipt, IndianRupee,
   TrendingUp, Calendar, User, ScanLine, ChevronRight, Plus, X,
 } from 'lucide-react'
+import { offlineFetch } from '@/lib/offline-fetch'
 
 type LedgerType = 'sale' | 'purchase'
 
@@ -67,7 +68,7 @@ export function Ledger({ type }: { type: LedgerType }) {
   const { data, isLoading } = useQuery({
     queryKey: ['transactions', type, refreshKey, dateRange?.from.toISOString() || 'all', dateRange?.to.toISOString() || 'all'],
     queryFn: async () => {
-      const r = await fetch(`/api/transactions?${queryParams.toString()}`)
+      const r = await offlineFetch(`/api/transactions?${queryParams.toString()}`)
       return r.json()
     },
   })

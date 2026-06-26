@@ -6,6 +6,7 @@ import { Mic, Square, Loader2, X } from 'lucide-react'
 import { toast as sonnerToast } from 'sonner'
 import { useToast } from '@/hooks/use-toast'
 import { useAppStore } from '@/store/app-store'
+import { offlineFetch } from '@/lib/offline-fetch'
 
 // Voice Entry component - uses Web Speech API for speech recognition
 // and AI (Groq) to parse the transcribed text into a transaction
@@ -87,7 +88,7 @@ export function VoiceEntry({ onTransactionParsed }: { onTransactionParsed: (data
 
     setProcessing(true)
     try {
-      const r = await fetch('/api/voice-parse', {
+      const r = await offlineFetch('/api/voice-parse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ transcript }),

@@ -21,6 +21,7 @@ import {
   IndianRupee, FileText, Phone, Building2, MapPin, TrendingUp,
   MessageCircle,
 } from 'lucide-react'
+import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 
 const PAYMENT_MODES = [
   { value: 'cash', label: 'Cash' },
@@ -39,7 +40,7 @@ export function TransactionDetail() {
   const { data, isLoading } = useQuery({
     queryKey: ['transaction', selectedTransactionId],
     queryFn: async () => {
-      const r = await fetch(`/api/transactions/${selectedTransactionId}`)
+      const r = await offlineFetch(`/api/transactions/${selectedTransactionId}`)
       return r.json()
     },
     enabled: !!selectedTransactionId,
@@ -50,9 +51,9 @@ export function TransactionDetail() {
   const handleDelete = async () => {
     if (!txn) return
     if (!confirm('Delete this transaction? This cannot be undone.')) return
-    const r = await fetch(`/api/transactions/${txn.id}`, { method: 'DELETE' })
+    const r = await offlineFetch(`/api/transactions/${txn.id}`, { method: 'DELETE', offline: { invalidate: ['/api/transactions', '/api/dashboard', '/api/products', '/api/parties'] } })
     if (r.ok) {
-      sonnerToast.success('Transaction deleted')
+      sonnerToast.success(isQueuedResponse(r) ? 'Will delete when online' : 'Transaction deleted')
       queryClient.invalidateQueries({ queryKey: ['transactions'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       // Go back to ledger
@@ -86,7 +87,7 @@ export function TransactionDetail() {
   const handleWhatsAppShare = async () => {
     if (!txn) return
     try {
-      const r = await fetch('/api/whatsapp-invoice', {
+      const r = await offlineFetch('/api/whatsapp-invoice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ transactionId: txn.id }),
@@ -417,7 +418,7 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
   const { data: productsData } = useQuery({
     queryKey: ['products', 'for-edit'],
     queryFn: async () => {
-      const r = await fetch('/api/products')
+      const r = await offlineFetch('/api/products')
       return r.json()
     },
   })
@@ -426,7 +427,7 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
   const { data: partiesData } = useQuery({
     queryKey: ['parties', 'for-edit'],
     queryFn: async () => {
-      const r = await fetch('/api/parties')
+      const r = await offlineFetch('/api/parties')
       return r.json()
     },
   })
@@ -505,13 +506,14 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
           discountAmount: Number(i.discountAmount) || 0,
         })),
       }
-      const r = await fetch(`/api/transactions/${transaction.id}`, {
+      const r = await offlineFetch(`/api/transactions/${transaction.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
+        offline: { invalidate: ['/api/transactions', '/api/dashboard', '/api/products', '/api/parties'] },
       })
       if (!r.ok) throw new Error('Failed')
-      sonnerToast.success('Transaction updated')
+      sonnerToast.success(isQueuedResponse(r) ? 'Saved offline — will sync when online' : 'Transaction updated')
       onSuccess?.()
       onOpenChange(false)
     } catch (e) {

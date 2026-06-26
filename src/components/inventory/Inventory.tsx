@@ -19,6 +19,7 @@ import {
   Plus, Search, Package, AlertTriangle, Edit2, TrendingUp, IndianRupee,
   ChevronRight, Folder, FolderOpen, LayoutGrid, List, X,
 } from 'lucide-react'
+import { offlineFetch } from '@/lib/offline-fetch'
 
 export function Inventory() {
   const {
@@ -35,7 +36,7 @@ export function Inventory() {
   const { data, isLoading } = useQuery({
     queryKey: ['products', refreshKey],
     queryFn: async () => {
-      const r = await fetch('/api/products')
+      const r = await offlineFetch('/api/products')
       return r.json()
     },
   })

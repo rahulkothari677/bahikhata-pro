@@ -13,6 +13,7 @@ import { useToast } from '@/hooks/use-toast'
 import { toast as sonnerToast } from 'sonner'
 import { UserPlus, Trash2, Users, Shield } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
+import { offlineFetch } from '@/lib/offline-fetch'
 
 export function StaffManagement() {
   const { toast } = useToast()
@@ -23,7 +24,7 @@ export function StaffManagement() {
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['staff'],
     queryFn: async () => {
-      const r = await fetch('/api/staff')
+      const r = await offlineFetch('/api/staff')
       return r.json()
     },
   })
@@ -37,10 +38,11 @@ export function StaffManagement() {
     }
     setSaving(true)
     try {
-      const r = await fetch('/api/staff', {
+      const r = await offlineFetch('/api/staff', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
+        offline: { queueable: false },
       })
       const data = await r.json()
       if (!r.ok) throw new Error(data.detail || data.error || 'Unknown error')
@@ -57,7 +59,7 @@ export function StaffManagement() {
 
   const handleDelete = async (id: string) => {
     if (!confirm('Remove this staff member? They will no longer be able to log in.')) return
-    const r = await fetch(`/api/staff?id=${id}`, { method: 'DELETE' })
+    const r = await offlineFetch(`/api/staff?id=${id}`, { method: 'DELETE', offline: { queueable: false } })
     if (r.ok) {
       sonnerToast.success('Staff member removed')
       refetch()

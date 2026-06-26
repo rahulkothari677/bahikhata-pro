@@ -6,6 +6,8 @@ import { Menu, Plus, Sparkles, ScanLine, ArrowLeft, Search, Sun, Moon, LogOut } 
 import { Button } from '@/components/ui/button'
 import { useQuery } from '@tanstack/react-query'
 import { useSession, signOut } from 'next-auth/react'
+import { clearAllOfflineData } from '@/lib/offline-db'
+import { offlineFetch } from '@/lib/offline-fetch'
 
 const viewTitleKeys: Record<string, { titleKey: string; subtitleKey: string }> = {
   dashboard: { titleKey: 'nav.dashboard', subtitleKey: 'nav.dashboard' },
@@ -41,7 +43,7 @@ export function Header() {
   const { data: settingData } = useQuery({
     queryKey: ['setting'],
     queryFn: async () => {
-      const r = await fetch('/api/settings')
+      const r = await offlineFetch('/api/settings')
       return r.json()
     },
   })
@@ -181,7 +183,7 @@ export function Header() {
               variant="ghost"
               size="sm"
               className="h-8 w-8 p-0 ml-1"
-              onClick={() => signOut({ callbackUrl: '/' })}
+              onClick={async () => { await clearAllOfflineData(); signOut({ callbackUrl: '/' }) }}
               title={t('action.sign_out')}
             >
               <LogOut className="w-4 h-4" />
@@ -193,7 +195,7 @@ export function Header() {
             variant="ghost"
             size="sm"
             className="lg:hidden h-9 w-9 p-0"
-            onClick={() => signOut({ callbackUrl: '/' })}
+            onClick={async () => { await clearAllOfflineData(); signOut({ callbackUrl: '/' }) }}
             title={t('action.sign_out')}
           >
             <LogOut className="w-4 h-4" />

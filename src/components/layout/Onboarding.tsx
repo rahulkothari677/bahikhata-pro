@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Button } from '@/components/ui/button'
 import { toast as sonnerToast } from 'sonner'
 import { BookOpenText, ScanLine, ShoppingCart, Package, Wallet, FileBarChart, Sparkles, Loader2, ArrowRight } from 'lucide-react'
+import { offlineFetch } from '@/lib/offline-fetch'
 
 export function Onboarding({ open, onDone }: { open: boolean; onDone: () => void }) {
   const { triggerRefresh, setView } = useAppStore()
@@ -15,7 +16,7 @@ export function Onboarding({ open, onDone }: { open: boolean; onDone: () => void
   const handleSeed = async () => {
     setSeeding(true)
     try {
-      const r = await fetch('/api/seed', { method: 'POST' })
+      const r = await offlineFetch('/api/seed', { method: 'POST', offline: { queueable: false, invalidate: ['/api/products', '/api/parties', '/api/transactions', '/api/dashboard'] } })
       const data = await r.json()
       if (data.skipped) {
         sonnerToast.info('Demo data already exists')
@@ -35,10 +36,11 @@ export function Onboarding({ open, onDone }: { open: boolean; onDone: () => void
     setSkipping(true)
     // Create empty setting so the app doesn't keep showing onboarding
     try {
-      await fetch('/api/settings', {
+      await offlineFetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ shopName: 'My Shop' }),
+        offline: { invalidate: ['/api/settings', '/api/dashboard'] },
       })
     } catch {}
     onDone()

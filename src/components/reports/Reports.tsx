@@ -21,6 +21,7 @@ import {
   FileSpreadsheet, Loader2,
 } from 'lucide-react'
 import { toast as sonnerToast } from 'sonner'
+import { offlineFetch } from '@/lib/offline-fetch'
 
 const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)', 'oklch(0.7 0.16 250)']
 
@@ -40,7 +41,7 @@ export function Reports() {
   const handleGstrExport = async () => {
     setExportingGstr(true)
     try {
-      const r = await fetch(`/api/gstr-export?from=${dateRange.from.toISOString()}&to=${dateRange.to.toISOString()}&format=csv`)
+      const r = await offlineFetch(`/api/gstr-export?from=${dateRange.from.toISOString()}&to=${dateRange.to.toISOString()}&format=csv`)
       if (!r.ok) throw new Error('Export failed')
       const blob = await r.blob()
       const url = URL.createObjectURL(blob)
@@ -60,7 +61,7 @@ export function Reports() {
   const { data, isLoading } = useQuery({
     queryKey: ['report', reportType, dateRange.from.toISOString(), dateRange.to.toISOString()],
     queryFn: async () => {
-      const r = await fetch(`/api/reports?type=${reportType}&from=${dateRange.from.toISOString()}&to=${dateRange.to.toISOString()}`)
+      const r = await offlineFetch(`/api/reports?type=${reportType}&from=${dateRange.from.toISOString()}&to=${dateRange.to.toISOString()}`)
       return r.json()
     },
   })

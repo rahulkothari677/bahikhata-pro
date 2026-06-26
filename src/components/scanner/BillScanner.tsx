@@ -15,6 +15,7 @@ import {
   ScanLine, Upload, Camera, Sparkles, X, Check, Loader2,
   ImageIcon, FileText, ArrowRight, Trash2, ShoppingCart, Truck,
 } from 'lucide-react'
+import { offlineFetch } from '@/lib/offline-fetch'
 
 export function BillScanner() {
   const { t } = useTranslation()
@@ -89,7 +90,7 @@ export function BillScanner() {
       setScanned(null)
       try {
         // Step 1: Upload to Cloudinary (gets a URL, stores image for future)
-        const uploadRes = await fetch('/api/upload-bill', {
+        const uploadRes = await offlineFetch('/api/upload-bill', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ imageBase64: base64 }),
@@ -98,7 +99,7 @@ export function BillScanner() {
 
         // Step 2: Send to AI scanner (use Cloudinary URL if upload succeeded, else base64)
         const imageUrl = uploadData.success ? uploadData.url : null
-        const scanRes = await fetch('/api/scan-bill', {
+        const scanRes = await offlineFetch('/api/scan-bill', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(imageUrl ? { imageUrl, billType } : { imageBase64: base64, billType }),

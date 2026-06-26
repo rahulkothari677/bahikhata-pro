@@ -16,6 +16,7 @@ import { useToast } from '@/hooks/use-toast'
 import { toast as sonnerToast } from 'sonner'
 import { formatINR, formatDate, cn } from '@/lib/utils'
 import { Plus, Wallet, Trash2, ArrowDownRight, ArrowUpRight, Receipt } from 'lucide-react'
+import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 
 const EXPENSE_CATEGORIES = ['Rent', 'Salary', 'Electricity', 'Water', 'Telephone', 'Internet', 'Transport', 'Packaging', 'Marketing', 'Maintenance', 'Bank Charges', 'Insurance', 'Taxes', 'Miscellaneous']
 const INCOME_CATEGORIES = ['Commission', 'Interest', 'Rent Received', 'Scrap Sale', 'Discount Received', 'Refund', 'Miscellaneous']
@@ -43,7 +44,7 @@ export function IncomeExpense() {
   const { data, isLoading } = useQuery({
     queryKey: ['transactions', 'income-expense', refreshKey],
     queryFn: async () => {
-      const r = await fetch('/api/transactions?type=all&limit=200')
+      const r = await offlineFetch('/api/transactions?type=all&limit=200')
       return r.json()
     },
   })
@@ -65,9 +66,9 @@ export function IncomeExpense() {
 
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this entry?')) return
-    const r = await fetch(`/api/transactions?id=${id}`, { method: 'DELETE' })
+    const r = await offlineFetch(`/api/transactions?id=${id}`, { method: 'DELETE', offline: { invalidate: ['/api/transactions', '/api/dashboard'] } })
     if (r.ok) {
-      sonnerToast.success('Entry deleted')
+      sonnerToast.success(isQueuedResponse(r) ? 'Will delete when online' : 'Entry deleted')
       triggerRefresh()
     }
   }
@@ -316,7 +317,7 @@ function IncomeExpenseDialog({ open, onOpenChange, type, onSuccess }: {
     }
     setSaving(true)
     try {
-      const r = await fetch('/api/transactions', {
+      const r = await offlineFetch('/api/transactions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -329,9 +330,14 @@ function IncomeExpenseDialog({ open, onOpenChange, type, onSuccess }: {
           payeeName: payeeName.trim() || null,
           payeePhone: payeePhone.trim() || null,
         }),
+        offline: { invalidate: ['/api/transactions', '/api/dashboard'] },
       })
       if (!r.ok) throw new Error('Failed')
-      sonnerToast.success(`${isExpense ? 'Expense' : 'Income'} recorded`)
+      if (isQueuedResponse(r)) {
+        sonnerToast.success('Saved offline — will sync when online')
+      } else {
+        sonnerToast.success(`${isExpense ? 'Expense' : 'Income'} recorded`)
+      }
       onSuccess?.()
       onOpenChange(false)
     } catch {

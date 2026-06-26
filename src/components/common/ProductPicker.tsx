@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Search, Package, ChevronDown, X, Folder } from 'lucide-react'
 import { cn, formatINR } from '@/lib/utils'
+import { offlineFetch } from '@/lib/offline-fetch'
 
 export type ProductSelectValue = {
   productId: string
@@ -34,7 +35,7 @@ export function ProductPicker({
   const { data: productsData } = useQuery({
     queryKey: ['products', 'for-picker'],
     queryFn: async () => {
-      const r = await fetch('/api/products')
+      const r = await offlineFetch('/api/products')
       return r.json()
     },
   })
