@@ -1,6 +1,6 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, useEffect, useRef } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -13,11 +13,13 @@ import { useTranslation } from '@/hooks/use-translation'
 import { ViewModeToggle } from '@/components/common/ViewModeToggle'
 import { DateRangePicker, getPresetRange, getPresetLabel, type DateRange, type DatePreset } from '@/components/common/DateRangePicker'
 import { EmptyState } from '@/components/common/EmptyState'
+import { SwipeToDelete } from '@/components/common/SwipeToDelete'
 import {
   Search, ShoppingCart, Truck, Receipt, IndianRupee,
   TrendingUp, Calendar, User, ScanLine, ChevronRight, Plus, X,
 } from 'lucide-react'
-import { offlineFetch } from '@/lib/offline-fetch'
+import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
+import { toast as sonnerToast } from 'sonner'
 
 type LedgerType = 'sale' | 'purchase'
 
@@ -27,8 +29,27 @@ export function Ledger({ type }: { type: LedgerType }) {
     transactionsViewMode, setTransactionsViewMode, triggerNewEntry, triggerNewEntryView,
     setSelectedTransactionId, setSelectedTransactionType, setPreviousView, pendingDateRange, setPendingDateRange,
   } = useAppStore()
+  const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
   const { t } = useTranslation()
+
+  // Delete a transaction (used by SwipeToDelete)
+  const handleDeleteTransaction = async (id: string) => {
+    try {
+      const r = await offlineFetch(`/api/transactions?id=${id}`, {
+        method: 'DELETE',
+        offline: { invalidate: ['/api/transactions', '/api/dashboard'] },
+      })
+      if (r.ok) {
+        sonnerToast.success(isQueuedResponse(r) ? 'Will delete when online' : 'Transaction deleted')
+        queryClient.invalidateQueries({ queryKey: ['transactions'] })
+        queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+        triggerRefresh()
+      }
+    } catch {
+      sonnerToast.error('Failed to delete')
+    }
+  }
 
   // Date range state - defaults to no filter (all transactions)
   const [dateRange, setDateRange] = useState<DateRange | null>(null)
@@ -281,8 +302,12 @@ export function Ledger({ type }: { type: LedgerType }) {
           {filtered.map((t) => {
             const due = t.totalAmount - t.paidAmount
             return (
-              <Card
+              <SwipeToDelete
                 key={t.id}
+                onDelete={() => handleDeleteTransaction(t.id)}
+                confirmMessage={`Delete this ${isSale ? 'sale' : 'purchase'}? This cannot be undone.`}
+              >
+              <Card
                 className="shadow-card border-border/60 hover:shadow-md hover:border-primary/30 transition group cursor-pointer"
                 onClick={() => handleViewTransaction(t.id)}
               >
@@ -339,6 +364,7 @@ export function Ledger({ type }: { type: LedgerType }) {
                   </div>
                 </CardContent>
               </Card>
+              </SwipeToDelete>
             )
           })}
         </div>
