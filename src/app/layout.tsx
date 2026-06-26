@@ -4,6 +4,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { Providers } from "@/components/providers";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { Analytics } from "@vercel/analytics/react";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 export const metadata: Metadata = {
   title: "BahiKhata Pro — India's Smartest Ledger App",
@@ -47,6 +49,10 @@ export default function RootLayout({
         </ErrorBoundary>
         <Toaster />
         <SonnerToaster position="top-right" richColors closeButton />
+        {/* Vercel Analytics — privacy-friendly, no cookies, GDPR compliant */}
+        <Analytics />
+        {/* Vercel Speed Insights — measures Core Web Vitals, helps us optimize */}
+        <SpeedInsights />
       </body>
     </html>
   );
