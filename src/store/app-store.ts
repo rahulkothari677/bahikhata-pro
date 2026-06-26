@@ -10,6 +10,7 @@ export type ViewType =
   | 'scanner'
   | 'reports'
   | 'settings'
+  | 'more'
   | 'transaction-detail'
   | 'party-profile'
   | 'new-sale'

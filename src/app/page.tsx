@@ -12,6 +12,7 @@ import { AuthScreen } from '@/components/auth/AuthScreen'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { Header } from '@/components/layout/Header'
 import { MobileBottomNav } from '@/components/layout/MobileBottomNav'
+import { MoreScreen } from '@/components/layout/MoreScreen'
 import { Onboarding } from '@/components/layout/Onboarding'
 import { Dashboard } from '@/components/dashboard/Dashboard'
 import { Inventory } from '@/components/inventory/Inventory'
@@ -98,6 +99,22 @@ export default function Home() {
   }
 
   const showOnboarding = !onboardingDismissed && !isOfflineSession && seedStatus !== undefined && !seedStatus.seeded
+
+  // More screen renders full-screen (no sidebar, no regular header)
+  if (currentView === 'more') {
+    return (
+      <div className="flex min-h-screen bg-background">
+        {features?.keyboardShortcuts && <KeyboardShortcuts />}
+        {features?.globalSearch && <GlobalSearch />}
+        <MoreScreen />
+        <MobileBottomNav />
+        <OfflineIndicator />
+        <Onboarding open={showOnboarding} onDone={() => setOnboardingDismissed(true)} />
+        {features?.pwaInstall && <PWAInstallPrompt />}
+        <OnboardingTour />
+      </div>
+    )
+  }
 
   return (
     <div className="flex min-h-screen bg-background">
