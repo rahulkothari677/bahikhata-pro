@@ -136,7 +136,10 @@ export function MoreScreen() {
         </div>
       </div>
 
-      <div className="max-w-2xl mx-auto px-4 py-4 space-y-4 pb-24">
+      <div
+        className="max-w-2xl mx-auto px-4 py-4 space-y-4 pb-24"
+        style={{ paddingBottom: 'calc(6rem + env(safe-area-inset-bottom))' }}
+      >
         {/* Profile Header */}
         <button
           onClick={handleEditProfile}

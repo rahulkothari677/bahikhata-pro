@@ -42,19 +42,27 @@ export function MobileBottomNav() {
   const { currentView, setView } = useAppStore()
   const { t } = useTranslation()
 
-  // Don't show on auth screen, new entry pages, or the More screen itself
-  const hideOnViews: ViewType[] = ['new-sale', 'new-purchase', 'transaction-detail', 'party-profile', 'more']
+  // Don't show on auth screen or new entry/detail pages (those have their own back button)
+  // The More screen KEEPS the bottom nav so users can switch tabs without going back
+  const hideOnViews: ViewType[] = ['new-sale', 'new-purchase', 'transaction-detail', 'party-profile']
   if (hideOnViews.includes(currentView)) return null
 
-  const isMoreActive = ['purchases', 'income-expense', 'parties', 'scanner', 'reports', 'settings'].includes(currentView)
+  // 'More' tab is active when on the More screen OR any secondary view reached from More
+  const isMoreActive = currentView === 'more' || ['purchases', 'income-expense', 'parties', 'scanner', 'reports', 'settings'].includes(currentView)
 
   return (
     <>
-      {/* Spacer to prevent content from being hidden behind the nav */}
-      <div className="h-16 lg:hidden" />
+      {/* Spacer to prevent content from being hidden behind the nav.
+          Includes safe-area padding for phones with home indicators (iPhone X+). */}
+      <div className="h-16 lg:hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }} />
 
-      {/* Bottom nav bar */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 lg:hidden bg-background/95 backdrop-blur-md border-t border-border">
+      {/* Bottom nav bar.
+          safe-area-inset-bottom prevents the nav from being hidden behind
+          the iPhone home indicator or Android gesture bar. */}
+      <nav
+        className="fixed bottom-0 left-0 right-0 z-40 lg:hidden bg-background/95 backdrop-blur-md border-t border-border"
+        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      >
         <div className="flex items-center justify-around h-16 px-2 relative">
           {/* Left side: Dashboard + Sales */}
           {TABS.slice(0, 2).map((tab) => {

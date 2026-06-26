@@ -34,6 +34,9 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
+  // viewportFit=cover enables safe-area-inset CSS env() variables
+  // so the bottom nav isn't hidden behind iPhone home indicator or Android gesture bar
+  viewportFit: "cover",
 }
 
 export default function RootLayout({
