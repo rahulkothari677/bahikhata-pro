@@ -1,14 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUserId } from '@/lib/get-auth'
+import { rateLimit, getClientIP, rateLimitedResponse } from '@/lib/rate-limit'
 
 // POST /api/scan-bill - uses VLM to extract bill data from image
 // Supports two modes:
 // 1. Z.AI SDK (for sandbox/dev - auto-configured)
 // 2. OpenAI-compatible API (for production - set VLM_API_KEY & VLM_BASE_URL env vars)
+//
+// Rate limited: 30 scans per user per day (protects Groq API quota)
+// Plus 10 scans per IP per hour (prevents account sharing abuse)
 export async function POST(req: NextRequest) {
   try {
     const { userId, error } = await getAuthUserId()
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    // Rate limit by user (daily quota)
+    const userRL = rateLimit(`scan:user:${userId}`, { limit: 30, windowSec: 86400 })
+    if (!userRL.success) return rateLimitedResponse(userRL)
+
+    // Rate limit by IP (anti-abuse — prevents one user from logging in from many IPs)
+    const ip = getClientIP(req)
+    const ipRL = rateLimit(`scan:ip:${ip}`, { limit: 10, windowSec: 3600 })
+    if (!ipRL.success) return rateLimitedResponse(ipRL)
 
     const body = await req.json()
     const { imageBase64, imageUrl, billType = 'purchase' } = body

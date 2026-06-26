@@ -31,6 +31,7 @@ model User {
   transactions  Transaction[]
   payments      Payment[]
   settings      Setting[]
+  auditLogs     AuditLog[]
 }
 
 // ==================== PRODUCTS / INVENTORY ====================
@@ -57,6 +58,9 @@ model Product {
 
   // Unique SKU per user (not globally)
   @@unique([userId, sku])
+  // Performance: list products per user, search by name within user
+  @@index([userId, name])
+  @@index([userId, category])
 }
 
 // ==================== PARTIES (Customers & Suppliers) ====================
@@ -111,6 +115,12 @@ model Transaction {
 
   // Auto-computed gross profit when type=sale
   grossProfit    Float    @default(0)
+
+  // Performance: list transactions per user filtered by date and/or type
+  // Used by: dashboard, ledger (sales/purchases), reports
+  @@index([userId, date])
+  @@index([userId, type, date])
+  @@index([userId, partyId])
 }
 
 model TransactionItem {
@@ -158,4 +168,23 @@ model Setting {
   email     String?
   currency  String   @default("INR")
   language  String   @default("en")
+}
+
+// ==================== AUDIT LOG (security & compliance) ====================
+// Track every important action: logins, data exports, deletes, role changes.
+// Used for: security forensics, compliance (DPDP Act), dispute resolution.
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?  // user who performed the action (null = unauthenticated attempt)
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String   // login_success | login_failure | logout | data_export | data_delete | role_change | settings_update | etc.
+  entityType String?  // product | party | transaction | setting | user | staff
+  entityId   String?  // ID of the affected entity
+  ip         String?  // IP address of the actor
+  userAgent  String?  // browser/device info
+  metadata   Json?    // any extra context (what changed, what was exported, etc.)
+  createdAt  DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([action, createdAt])
 }

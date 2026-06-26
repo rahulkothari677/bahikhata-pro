@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUserId } from '@/lib/get-auth'
+import { rateLimit, rateLimitedResponse } from '@/lib/rate-limit'
 
 // POST /api/voice-parse - parse voice transcript into transaction data
+// Rate limited: 50 per user per day (same as scan-bill — protects Groq quota)
 export async function POST(req: NextRequest) {
   try {
     const { userId, error } = await getAuthUserId()
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    // Rate limit by user
+    const rl = rateLimit(`voice:user:${userId}`, { limit: 50, windowSec: 86400 })
+    if (!rl.success) return rateLimitedResponse(rl)
 
     const { transcript } = await req.json()
 
