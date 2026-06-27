@@ -20,6 +20,7 @@ import {
   Pie, PieChart, ResponsiveContainer, Tooltip,
   XAxis, YAxis,
 } from 'recharts'
+import { chartColors } from '@/lib/chart-theme'
 import { formatINR, formatINRCompact, relativeTime, cn } from '@/lib/utils'
 import { motion } from 'framer-motion'
 import { offlineFetch } from '@/lib/offline-fetch'
@@ -192,8 +193,8 @@ export function Dashboard() {
         </div>
       </motion.div>
 
-      {/* Date range selector + KPI header */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
+      {/* Date range selector + KPI header — sticky on desktop so user can change dates without scrolling back to top */}
+      <div className="flex items-center justify-between gap-3 flex-wrap lg:sticky lg:top-3 lg:z-20 lg:bg-background/80 lg:backdrop-blur-md lg:py-2 lg:-mx-2 lg:px-2 lg:rounded-lg">
         <div>
           <h3 className="text-base font-semibold">{t('dash.business_overview')}</h3>
           <p className="text-xs text-muted-foreground">{t('dash.filter_hint')}</p>
@@ -298,11 +299,11 @@ export function Dashboard() {
                   <stop offset="100%" stopColor="oklch(0.62 0.15 155)" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.91 0.01 60)" vertical={false} />
-              <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'oklch(0.52 0.02 30)' }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: 'oklch(0.52 0.02 30)' }} axisLine={false} tickLine={false} tickFormatter={(v) => formatINRCompact(v)} />
+              <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} vertical={false} />
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: chartColors.tick }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: chartColors.tick }} axisLine={false} tickLine={false} tickFormatter={(v) => formatINRCompact(v)} />
               <Tooltip
-                contentStyle={{ borderRadius: '12px', border: '1px solid oklch(0.91 0.01 60)', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                contentStyle={{ borderRadius: '12px', border: `1px solid ${chartColors.tooltipBorder}`, fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
                 formatter={(v: number) => formatINR(v)}
               />
               <Area type="monotone" dataKey="revenue" stroke="oklch(0.62 0.18 42)" strokeWidth={2} fill="url(#colorRev)" name="Revenue" />
@@ -333,13 +334,13 @@ export function Dashboard() {
             ) : (
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={topProducts} layout="vertical" margin={{ top: 0, right: 10, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.91 0.01 60)" horizontal={false} />
-                  <XAxis type="number" tick={{ fontSize: 11, fill: 'oklch(0.52 0.02 30)' }} axisLine={false} tickLine={false} tickFormatter={(v) => formatINRCompact(v)} />
-                  <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: 'oklch(0.18 0.02 30)' }} axisLine={false} tickLine={false} width={130}
+                  <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} horizontal={false} />
+                  <XAxis type="number" tick={{ fontSize: 11, fill: chartColors.tick }} axisLine={false} tickLine={false} tickFormatter={(v) => formatINRCompact(v)} />
+                  <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: chartColors.tick }} axisLine={false} tickLine={false} width={130}
                     tickFormatter={(v) => v.length > 18 ? v.slice(0, 18) + '…' : v}
                   />
                   <Tooltip
-                    contentStyle={{ borderRadius: '12px', border: '1px solid oklch(0.91 0.01 60)', fontSize: 12 }}
+                    contentStyle={{ borderRadius: '12px', border: `1px solid ${chartColors.tooltipBorder}`, fontSize: 12 }}
                     formatter={(v: number, name: string) => name === 'revenue' ? [formatINR(v), 'Revenue'] : [formatINR(v), 'Profit']}
                   />
                   <Bar dataKey="revenue" fill="oklch(0.62 0.18 42)" radius={[0, 6, 6, 0]} barSize={18} name="revenue" />

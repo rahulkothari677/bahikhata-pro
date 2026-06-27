@@ -103,9 +103,9 @@ export function Header() {
           {isDetailView && (
             <button
               onClick={handleBack}
-              className="p-2 -ml-2 rounded-lg hover:bg-muted flex items-center gap-1 text-sm font-medium"
+              className="p-2.5 -ml-2 rounded-lg hover:bg-muted flex items-center gap-1 text-sm font-medium min-h-[44px]"
             >
-              <ArrowLeft className="w-4 h-4" />
+              <ArrowLeft className="w-5 h-5" />
               <span className="hidden sm:inline">Back</span>
             </button>
           )}
@@ -133,13 +133,13 @@ export function Header() {
           {/* Dark mode toggle */}
           {features?.darkMode !== undefined && (
             <Button
-              size="sm"
+              size="iconTouch"
               variant="ghost"
               onClick={() => setFeature('darkMode', !features?.darkMode)}
-              className="h-9 w-9 p-0"
+              className="lg:size-9 lg:h-9"
               title={features?.darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
             >
-              {features?.darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              {features?.darkMode ? <Sun className="w-5 h-5 lg:w-4 lg:h-4" /> : <Moon className="w-5 h-5 lg:w-4 lg:h-4" />}
             </Button>
           )}
 
@@ -191,12 +191,12 @@ export function Header() {
           {/* Mobile logout button */}
           <Button
             variant="ghost"
-            size="sm"
-            className="lg:hidden h-9 w-9 p-0"
+            size="iconTouch"
+            className="lg:hidden"
             onClick={async () => { await clearAllOfflineData(); signOut({ callbackUrl: '/' }) }}
             title={t('action.sign_out')}
           >
-            <LogOut className="w-4 h-4" />
+            <LogOut className="w-5 h-5" />
           </Button>
         </div>
       </div>
