@@ -108,8 +108,12 @@ export function Inventory() {
 
   return (
     <div className="space-y-4">
-      {/* Stats */}
+      {/* Stats — show skeletons during loading */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {isLoading ? (
+          [...Array(4)].map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)
+        ) : (
+          <>
         <Card className="shadow-card border-border/60">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
@@ -146,6 +150,8 @@ export function Inventory() {
             <p className="text-xl font-bold">{lowStockCount} <span className="text-sm text-muted-foreground">/ {outOfStockCount}</span></p>
           </CardContent>
         </Card>
+          </>
+        )}
       </div>
 
       {/* Category navigation */}
