@@ -42,35 +42,32 @@ export function VoiceEntry({ onTransactionParsed }: VoiceEntryProps) {
     }
 
     const recognition = new SpeechRecognition()
-    recognition.continuous = true
+    recognition.continuous = false   // Auto-stop when user pauses (prevents mobile duplication)
     recognition.interimResults = true
     recognition.lang = 'en-IN'
 
-    // Track which result indices have been finalized (prevents duplication)
-    // Using ref so startRecording can reset it
-
     recognition.onresult = (event: any) => {
+      let finalText = ''
       let interim = ''
 
       for (let i = 0; i < event.results.length; i++) {
         const result = event.results[i]
         const transcript = result[0].transcript
-
         if (result.isFinal) {
-          // Only append if we haven't processed this index yet
-          if (!processedFinalsRef.current.has(i)) {
-            processedFinalsRef.current.add(i)
-            const cleanText = transcript.trim()
-            if (cleanText) {
-              setAccumulatedTranscript(prev => (prev ? prev + ' ' : '') + cleanText)
-            }
-          }
+          finalText += transcript
         } else {
-          // Interim (live) — just show it, don't accumulate
           interim += transcript
         }
       }
+
+      // Show interim live
       setLiveTranscript(interim)
+
+      // When a final result arrives, append it ONCE
+      if (finalText.trim()) {
+        setAccumulatedTranscript(prev => (prev ? prev + ' ' : '') + finalText.trim())
+        setLiveTranscript('')  // Clear interim after final
+      }
     }
 
     recognition.onerror = (event: any) => {
@@ -83,11 +80,12 @@ export function VoiceEntry({ onTransactionParsed }: VoiceEntryProps) {
     }
 
     recognition.onend = () => {
-      // Use ref instead of state (avoids stale closure)
+      // In continuous=false mode, recognition auto-stops after a pause.
+      // Just update the UI state.
       if (isRecordingRef.current) {
-        try {
-          recognition.start()
-        } catch {}
+        setIsRecording(false)
+        isRecordingRef.current = false
+        setLiveTranscript('')
       }
     }
 
