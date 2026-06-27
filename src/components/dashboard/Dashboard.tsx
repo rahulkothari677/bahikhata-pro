@@ -355,7 +355,8 @@ export function Dashboard() {
               <XAxis dataKey="label" tick={{ fontSize: 11, fill: chartColors.tick }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 11, fill: chartColors.tick }} axisLine={false} tickLine={false} tickFormatter={(v) => formatINRCompact(v)} />
               <Tooltip
-                contentStyle={{ borderRadius: '12px', border: `1px solid ${chartColors.tooltipBorder}`, fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                cursor={{ stroke: chartColors.grid, strokeWidth: 1, strokeDasharray: '3 3' }}
+                contentStyle={chartColors.tooltipStyle}
                 formatter={(v: number) => formatINR(v)}
               />
               <Area type="monotone" dataKey="revenue" stroke="oklch(0.62 0.18 42)" strokeWidth={2} fill="url(#colorRev)" name="Revenue" />
@@ -392,10 +393,13 @@ export function Dashboard() {
                     tickFormatter={(v) => v.length > 18 ? v.slice(0, 18) + '…' : v}
                   />
                   <Tooltip
-                    contentStyle={{ borderRadius: '12px', border: `1px solid ${chartColors.tooltipBorder}`, fontSize: 12 }}
+                    cursor={{ fill: 'transparent' }}
+                    contentStyle={chartColors.tooltipStyle}
                     formatter={(v: number, name: string) => name === 'revenue' ? [formatINR(v), 'Revenue'] : [formatINR(v), 'Profit']}
                   />
-                  <Bar dataKey="revenue" fill="oklch(0.62 0.18 42)" radius={[0, 6, 6, 0]} barSize={18} name="revenue" />
+                  <Bar dataKey="revenue" fill="oklch(0.62 0.18 42)" radius={[0, 6, 6, 0]} barSize={18} name="revenue"
+                    activeBar={{ fill: 'oklch(0.68 0.20 42)', barSize: 24 }}
+                  />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -422,12 +426,23 @@ export function Dashboard() {
                       cx="50%" cy="50%"
                       innerRadius={45} outerRadius={70}
                       paddingAngle={2}
+                      isAnimationActive
+                      animationDuration={300}
                     >
                       {paymentModeSplit.map((_, i) => (
-                        <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                        <Cell
+                          key={i}
+                          fill={COLORS[i % COLORS.length]}
+                          stroke="var(--background)"
+                          strokeWidth={2}
+                        />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(v: number) => formatINR(v)} contentStyle={{ borderRadius: 12, fontSize: 12 }} />
+                    <Tooltip
+                      cursor={{ stroke: 'transparent', strokeWidth: 0 }}
+                      formatter={(v: number) => formatINR(v)}
+                      contentStyle={chartColors.tooltipStyle}
+                    />
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="grid grid-cols-2 gap-2 mt-3">

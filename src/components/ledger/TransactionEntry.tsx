@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 import { VoiceEntry } from '@/components/common/VoiceEntry'
 import { DraftManagerModal } from '@/components/common/DraftManagerModal'
+import { BarcodeScanner } from '@/components/common/BarcodeScanner'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { useDrafts } from '@/hooks/use-drafts'
 import { haptic } from '@/lib/haptic'
@@ -48,7 +49,7 @@ type ItemRow = {
 
 export function TransactionEntry({ type }: { type: LedgerType }) {
   const isSale = type === 'sale'
-  const { setView, triggerRefresh, setScannerBillType, previousView, setPreviousView } = useAppStore()
+  const { setView, triggerRefresh, setScannerBillType, previousView, setPreviousView, features } = useAppStore()
   const { toast } = useToast()
   const queryClient = useQueryClient()
 
@@ -73,6 +74,7 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
   const [saving, setSaving] = useState(false)
   const [showVoiceEntry, setShowVoiceEntry] = useState(false)
   const [draftModalOpen, setDraftModalOpen] = useState(false)
+  const [barcodeOpen, setBarcodeOpen] = useState(false)
 
   // Multi-draft autosave — supports multiple saved drafts per form type.
   // Each draft has a unique ID; the hook tracks which draft is "active" (currently being edited).
@@ -421,6 +423,26 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
         onDelete={deleteDraft}
       />
 
+      {/* Barcode scanner — scan to find and add product */}
+      {barcodeOpen && (
+        <BarcodeScanner
+          onScan={(code) => {
+            setBarcodeOpen(false)
+            // Match scanned code against product SKU or name
+            const match = products.find((p) =>
+              p.sku === code || p.name?.toLowerCase() === code.toLowerCase()
+            )
+            if (match) {
+              handleAddProduct(match)
+            } else {
+              // No match — put the code in the search field so user can see it
+              setProductSearch(code)
+            }
+          }}
+          onClose={() => setBarcodeOpen(false)}
+        />
+      )}
+
       {/* Top action bar */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-3">
@@ -553,11 +575,22 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
                   <div className="relative mt-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
-                      placeholder="Type name, SKU or HSN..."
+                      placeholder="Type name, SKU, HSN, or scan barcode..."
                       value={productSearch}
                       onChange={(e) => setProductSearch(e.target.value)}
-                      className="pl-9"
+                      className="pl-9 pr-12"
                     />
+                    {features?.barcodeScanner && (
+                      <button
+                        type="button"
+                        onClick={() => setBarcodeOpen(true)}
+                        className="absolute right-1.5 top-1/2 -translate-y-1/2 p-2 rounded-md hover:bg-muted text-primary"
+                        aria-label="Scan barcode"
+                        title="Scan barcode to find product"
+                      >
+                        <ScanLine className="w-5 h-5" />
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

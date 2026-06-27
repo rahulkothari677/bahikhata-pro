@@ -22,7 +22,9 @@ export const chartColors = {
       background: 'var(--chart-tooltip-bg)',
       border: '1px solid var(--chart-tooltip-border)',
       color: 'var(--chart-tooltip-text)',
-      boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+      boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+      padding: '8px 12px',
+      zIndex: 1000,
     }
   },
 }
