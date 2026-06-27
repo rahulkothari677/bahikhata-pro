@@ -48,6 +48,7 @@ export default function Home() {
   const { shouldShowRatePrompt, onRated, onDismiss } = useRatePrompt()
   const queryClient = useQueryClient()
   const [onboardingDismissed, setOnboardingDismissed] = useState(false)
+  const [tourDone, setTourDone] = useState(false)
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
@@ -120,8 +121,8 @@ export default function Home() {
         <MobileBottomNav />
         <Onboarding open={showOnboarding} onDone={() => setOnboardingDismissed(true)} />
         {features?.pwaInstall && <PWAInstallPrompt />}
-        {!showOnboarding && <OnboardingTour />}
-        {!showOnboarding && <ConsentModal />}
+        {!showOnboarding && <OnboardingTour onDone={() => setTourDone(true)} />}
+        {!showOnboarding && tourDone && <ConsentModal />}
         <RatePromptModal open={shouldShowRatePrompt} onRated={onRated} onDismiss={onDismiss} />
       </div>
     )
@@ -193,9 +194,12 @@ export default function Home() {
       <Onboarding open={showOnboarding} onDone={() => setOnboardingDismissed(true)} />
 
       {features?.pwaInstall && <PWAInstallPrompt />}
-      {/* Only show tour + consent AFTER onboarding is dismissed */}
-      {!showOnboarding && <OnboardingTour />}
-      {!showOnboarding && <ConsentModal />}
+      {/* Only show tour + consent AFTER onboarding is dismissed.
+          Tour shows first, then ConsentModal shows after tour is done.
+          This prevents focus-trap conflicts between Radix Dialog (ConsentModal)
+          and the tour's plain div overlay (z-[100]). */}
+      {!showOnboarding && <OnboardingTour onDone={() => setTourDone(true)} />}
+      {!showOnboarding && tourDone && <ConsentModal />}
       <RatePromptModal open={shouldShowRatePrompt} onRated={onRated} onDismiss={onDismiss} />
     </div>
   )
