@@ -37,10 +37,15 @@ export function Dashboard() {
     queryKey: ['dashboard', refreshKey, dateRange.from.toISOString(), dateRange.to.toISOString()],
     queryFn: async () => {
       const r = await offlineFetch(`/api/dashboard?from=${dateRange.from.toISOString()}&to=${dateRange.to.toISOString()}`)
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
       return r.json()
     },
-    // Don't retry when offline — fail fast so we can show the right UI
-    retry: (count, err) => !(err instanceof OfflineError) && count < 3,
+    // Don't retry when offline or on network errors — fail fast
+    retry: (count, err) => {
+      if (err instanceof OfflineError) return false
+      if (err instanceof TypeError) return false // Network failure
+      return count < 2
+    },
   })
 
   const handleDateChange = (range: DateRange, preset: DatePreset) => {
@@ -63,9 +68,8 @@ export function Dashboard() {
   const todayStart = new Date()
   todayStart.setHours(0, 0, 0, 0)
 
-  // Show offline-no-data state if: offline AND query failed with OfflineError
-  // (means no cached data exists for this endpoint)
-  const isOfflineNoData = !isOnline() && error instanceof OfflineError && !data
+  // Show offline-no-data state if: offline AND query failed (any error) AND no cached data
+  const isOfflineNoData = !isOnline() && !!error && !data
 
   if (isOfflineNoData) {
     return (

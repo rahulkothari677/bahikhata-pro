@@ -3,28 +3,19 @@
 /**
  * usePullToRefresh — touch-based pull-to-refresh for mobile.
  *
+ * CRITICAL: Uses a NON-PASSIVE event listener for touchmove so we can call
+ * preventDefault() to block the browser's native pull-to-refresh.
+ * React's onTouchMove is passive by default, so preventDefault() is ignored.
+ * That's why we must use window.addEventListener with { passive: false }.
+ *
  * Works on touch devices only (desktop is unaffected).
  * - User must be scrolled to top (scrollTop <= 0)
  * - User pulls down at least `threshold` px (default 70)
  * - Spinner shows during pull, release triggers refresh
  * - Haptic feedback at threshold
- *
- * Usage:
- *   const { pullDistance, isRefreshing } = usePullToRefresh({
- *     onRefresh: async () => { await refetch() }
- *   })
- *
- *   return (
- *     <div {...pullToRefreshHandlers} style={{ transform: `translateY(${pullDistance}px)` }}>
- *       <PullToRefreshIndicator pullDistance={pullDistance} isRefreshing={isRefreshing} />
- *       {content}
- *     </div>
- *   )
- *
- * Or wrap content in <PullToRefresh onRefresh={...}>...</PullToRefresh>
  */
 
-import { useState, useEffect, useRef, useCallback, type ReactNode } from 'react'
+import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
 import { Loader2, RefreshCw, ArrowDown } from 'lucide-react'
 import { haptic } from '@/lib/haptic'
 import { cn } from '@/lib/utils'
@@ -35,7 +26,6 @@ const MAX_PULL = 120
 type Options = {
   onRefresh: () => Promise<void> | void
   threshold?: number
-  // When false, pull-to-refresh is disabled (e.g., on detail pages)
   enabled?: boolean
 }
 
@@ -44,76 +34,105 @@ export function usePullToRefresh({ onRefresh, threshold = THRESHOLD, enabled = t
   const [isRefreshing, setIsRefreshing] = useState(false)
   const startYRef = useRef<number | null>(null)
   const triggeredRef = useRef(false)
+  const isRefreshingRef = useRef(false)
+  const enabledRef = useRef(enabled)
+  const onRefreshRef = useRef(onRefresh)
 
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if (!enabled || isRefreshing) return
-    // Only track if user is at top of scroll
-    const scrollTop = window.scrollY || document.documentElement.scrollTop
-    if (scrollTop > 0) return
-    startYRef.current = e.touches[0].clientY
-  }, [enabled, isRefreshing])
+  // Keep refs in sync with latest values
+  useEffect(() => {
+    enabledRef.current = enabled
+  }, [enabled])
 
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (!enabled || isRefreshing || startYRef.current === null) return
-    const deltaY = e.touches[0].clientY - startYRef.current
-    if (deltaY <= 0) {
-      setPullDistance(0)
-      triggeredRef.current = false
-      return
+  useEffect(() => {
+    onRefreshRef.current = onRefresh
+  }, [onRefresh])
+
+  // Attach NON-PASSIVE touch listeners to window so we can preventDefault()
+  useEffect(() => {
+    if (!enabled) return
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (!enabledRef.current || isRefreshingRef.current) return
+      const scrollTop = window.scrollY || document.documentElement.scrollTop
+      if (scrollTop > 0) return
+      startYRef.current = e.touches[0].clientY
     }
-    // Dampen the pull (resistance)
-    const dampened = Math.min(MAX_PULL, deltaY * 0.5)
-    setPullDistance(dampened)
-    if (dampened >= threshold && !triggeredRef.current) {
-      triggeredRef.current = true
-      haptic.medium()
-    } else if (dampened < threshold) {
-      triggeredRef.current = false
-    }
-  }, [enabled, isRefreshing, threshold])
 
-  const handleTouchEnd = useCallback(async () => {
-    if (!enabled || isRefreshing) return
-    if (triggeredRef.current) {
-      setIsRefreshing(true)
-      setPullDistance(threshold) // hold at threshold while refreshing
-      try {
-        await onRefresh()
-        haptic.success()
-      } catch {
-        haptic.error()
-      } finally {
-        setIsRefreshing(false)
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!enabledRef.current || isRefreshingRef.current || startYRef.current === null) return
+      const deltaY = e.touches[0].clientY - startYRef.current
+      if (deltaY <= 0) {
+        // User is scrolling UP — not a pull-to-refresh gesture.
+        // Reset the start ref so we don't accidentally trigger preventDefault
+        // if the user reverses direction.
+        if (pullDistance !== 0) setPullDistance(0)
+        triggeredRef.current = false
+        startYRef.current = null
+        return
+      }
+      // User is pulling DOWN at the top of the page.
+      // CRITICAL: preventDefault() stops the browser's native pull-to-refresh.
+      // This requires a non-passive listener.
+      e.preventDefault()
+
+      const dampened = Math.min(MAX_PULL, deltaY * 0.5)
+      setPullDistance(dampened)
+      if (dampened >= threshold && !triggeredRef.current) {
+        triggeredRef.current = true
+        haptic.medium()
+      } else if (dampened < threshold) {
+        triggeredRef.current = false
+      }
+    }
+
+    const handleTouchEnd = async () => {
+      if (!enabledRef.current || isRefreshingRef.current) {
+        startYRef.current = null
+        return
+      }
+      if (triggeredRef.current) {
+        isRefreshingRef.current = true
+        setIsRefreshing(true)
+        setPullDistance(threshold)
+        try {
+          await onRefreshRef.current()
+          haptic.success()
+        } catch {
+          haptic.error()
+        } finally {
+          isRefreshingRef.current = false
+          setIsRefreshing(false)
+          setPullDistance(0)
+        }
+      } else {
         setPullDistance(0)
       }
-    } else {
-      setPullDistance(0)
-    }
-    startYRef.current = null
-    triggeredRef.current = false
-  }, [enabled, isRefreshing, onRefresh, threshold])
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
       startYRef.current = null
+      triggeredRef.current = false
     }
-  }, [])
+
+    // touchstart and touchend can be passive (we don't preventDefault on them)
+    window.addEventListener('touchstart', handleTouchStart, { passive: true })
+    // touchmove MUST be non-passive so preventDefault() works
+    window.addEventListener('touchmove', handleTouchMove, { passive: false })
+    window.addEventListener('touchend', handleTouchEnd, { passive: true })
+    window.addEventListener('touchcancel', handleTouchEnd, { passive: true })
+
+    return () => {
+      window.removeEventListener('touchstart', handleTouchStart)
+      window.removeEventListener('touchmove', handleTouchMove)
+      window.removeEventListener('touchend', handleTouchEnd)
+      window.removeEventListener('touchcancel', handleTouchEnd)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, threshold])
 
   return {
     pullDistance,
     isRefreshing,
-    handlers: {
-      onTouchStart: handleTouchStart,
-      onTouchMove: handleTouchMove,
-      onTouchEnd: handleTouchEnd,
-    },
   }
 }
 
-/**
- * Pull-to-refresh spinner indicator. Place at the top of the scroll container.
- */
 export function PullToRefreshIndicator({
   pullDistance,
   isRefreshing,
@@ -150,13 +169,6 @@ export function PullToRefreshIndicator({
   )
 }
 
-/**
- * Convenience wrapper component. Wrap scrollable content to enable pull-to-refresh.
- *
- * <PullToRefresh onRefresh={async () => { await refetch() }}>
- *   <Dashboard />
- * </PullToRefresh>
- */
 export function PullToRefresh({
   children,
   onRefresh,
@@ -166,22 +178,16 @@ export function PullToRefresh({
   onRefresh: () => Promise<void> | void
   enabled?: boolean
 }) {
-  const { pullDistance, isRefreshing, handlers } = usePullToRefresh({ onRefresh, enabled })
+  const { pullDistance, isRefreshing } = usePullToRefresh({ onRefresh, enabled })
 
-  // When there's no pull activity and not refreshing, render a simple div
-  // with the touch handlers attached but no transforms (zero layout impact).
   const isActive = pullDistance > 0 || isRefreshing
 
   if (!isActive) {
-    return (
-      <div {...handlers} className="relative">
-        {children}
-      </div>
-    )
+    return <div className="relative">{children}</div>
   }
 
   return (
-    <div {...handlers} className={cn('relative', isRefreshing && 'overflow-hidden')}>
+    <div className={cn('relative', isRefreshing && 'overflow-hidden')}>
       <div
         className="absolute top-0 left-0 right-0 z-10 pointer-events-none"
         style={{ transform: `translateY(${isRefreshing ? 0 : -THRESHOLD + pullDistance}px)` }}

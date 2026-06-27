@@ -130,16 +130,32 @@ export function AuthScreen() {
           </div>
 
           {!isOnline && (
-            <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-start gap-2 text-amber-700 dark:text-amber-400">
-              <WifiOff className="w-4 h-4 mt-0.5 shrink-0" />
-              <div className="text-xs space-y-1">
-                <p className="font-semibold">You are offline</p>
-                {hasCachedSession ? (
-                  <p>Please reconnect to internet, then refresh the page to continue using the app with your cached session.</p>
-                ) : (
-                  <p>First-time login requires internet. Please connect to WiFi or mobile data to sign in. After that, you can use the app offline anytime.</p>
-                )}
+            <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 flex flex-col gap-2 text-amber-700 dark:text-amber-400">
+              <div className="flex items-start gap-2">
+                <WifiOff className="w-4 h-4 mt-0.5 shrink-0" />
+                <div className="text-xs space-y-1">
+                  <p className="font-semibold">You are offline</p>
+                  {hasCachedSession ? (
+                    <p>You have a cached session. Tap below to continue using the app offline.</p>
+                  ) : (
+                    <p>First-time login requires internet. Please connect to WiFi or mobile data to sign in. After that, you can use the app offline anytime.</p>
+                  )}
+                </div>
               </div>
+              {hasCachedSession && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full border-amber-500/50 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10"
+                  onClick={() => {
+                    // Force a page reload — the useOfflineSession hook will
+                    // detect the cached session and bypass the AuthScreen.
+                    window.location.reload()
+                  }}
+                >
+                  Continue Offline
+                </Button>
+              )}
             </div>
           )}
 

@@ -105,8 +105,8 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
   }
 
   // Autosave on form changes (debounced inside the hook).
-  // The hook skips the very first render (hasInteractedRef) so we don't
-  // wipe an existing draft with the initial empty form state.
+  // save() is now stable (uses refs internally), so it's safe to exclude
+  // from the dependency array — the effect fires on form state changes only.
   useEffect(() => {
     save({
       partyId,
@@ -119,7 +119,8 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
       notes,
       items,
     })
-  }, [partyId, date, invoiceNo, isInterState, paymentMode, paidAmount, discountAmount, notes, items, save])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [partyId, date, invoiceNo, isInterState, paymentMode, paidAmount, discountAmount, notes, items])
 
   // Fetch products
   const { data: productsData } = useQuery({

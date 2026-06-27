@@ -40,9 +40,14 @@ export function Parties() {
     queryKey: ['parties', refreshKey],
     queryFn: async () => {
       const r = await offlineFetch('/api/parties')
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
       return r.json()
     },
-    retry: (count, err) => !(err instanceof OfflineError) && count < 3,
+    retry: (count, err) => {
+      if (err instanceof OfflineError) return false
+      if (err instanceof TypeError) return false
+      return count < 2
+    },
   })
 
   const parties: any[] = data?.parties || []
@@ -151,7 +156,7 @@ export function Parties() {
       </Card>
 
       {/* Parties list */}
-      {!isOnline() && error instanceof OfflineError && !data ? (
+      {!isOnline() && !!error && !data ? (
         <Card className="shadow-card border-border/60">
           <CardContent className="p-0">
             <OfflineNoData

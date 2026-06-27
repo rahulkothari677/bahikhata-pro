@@ -92,9 +92,14 @@ export function Ledger({ type }: { type: LedgerType }) {
     queryKey: ['transactions', type, refreshKey, dateRange?.from.toISOString() || 'all', dateRange?.to.toISOString() || 'all'],
     queryFn: async () => {
       const r = await offlineFetch(`/api/transactions?${queryParams.toString()}`)
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
       return r.json()
     },
-    retry: (count, err) => !(err instanceof OfflineError) && count < 3,
+    retry: (count, err) => {
+      if (err instanceof OfflineError) return false
+      if (err instanceof TypeError) return false
+      return count < 2
+    },
   })
 
   const transactions: any[] = data?.transactions || []
@@ -272,7 +277,7 @@ export function Ledger({ type }: { type: LedgerType }) {
       </Card>
 
       {/* Transactions list */}
-      {!isOnline() && error instanceof OfflineError && !data ? (
+      {!isOnline() && !!error && !data ? (
         <Card className="shadow-card border-border/60">
           <CardContent className="p-0">
             <OfflineNoData
