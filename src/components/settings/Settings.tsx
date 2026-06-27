@@ -137,8 +137,41 @@ export function Settings() {
     }
   }
 
+  const [settingsTab, setSettingsTab] = useState<'profile' | 'features' | 'appearance' | 'data' | 'staff'>('profile')
+
+  const tabs = [
+    { id: 'profile', label: 'Profile', icon: Store },
+    { id: 'features', label: 'Features', icon: Check },
+    { id: 'appearance', label: 'Appearance', icon: Palette },
+    { id: 'data', label: 'Data', icon: Database },
+    ...(isOwner ? [{ id: 'staff', label: 'Staff', icon: Users }] : []),
+  ] as const
+
   return (
     <div className="space-y-4 max-w-3xl">
+      {/* Tab bar */}
+      <div className="flex gap-1 overflow-x-auto border-b border-border">
+        {tabs.map(tab => {
+          const Icon = tab.icon
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setSettingsTab(tab.id as any)}
+              className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition whitespace-nowrap ${
+                settingsTab === tab.id
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Icon className="w-4 h-4" />
+              {tab.label}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* ── PROFILE TAB ─────────────────────────────────────────────── */}
+      {settingsTab === 'profile' && (
       <Card className="shadow-card border-border/60">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -185,8 +218,10 @@ export function Settings() {
           </div>
         </CardContent>
       </Card>
+      )}
 
-      {isOwner && (
+      {/* ── DATA TAB ────────────────────────────────────────────────── */}
+      {settingsTab === 'data' && isOwner && (
       <Card className="shadow-card border-border/60">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -235,7 +270,8 @@ export function Settings() {
       </Card>
       )}
 
-      {/* Theme Color Picker */}
+      {/* ── APPEARANCE TAB ──────────────────────────────────────────── */}
+      {settingsTab === 'appearance' && (
       <Card className="shadow-card border-border/60">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -315,12 +351,13 @@ export function Settings() {
           </div>
         </CardContent>
       </Card>
+      )}
 
-      {/* Staff Management - Owner only */}
-      {isOwner && <StaffManagement />}
+      {/* ── STAFF TAB ───────────────────────────────────────────────── */}
+      {settingsTab === 'staff' && isOwner && <StaffManagement />}
 
-      {/* Feature Toggles - Owner only */}
-      {isOwner && (
+      {/* ── FEATURES TAB ────────────────────────────────────────────── */}
+      {settingsTab === 'features' && isOwner && (
       <Card className="shadow-card border-border/60">
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -366,13 +403,14 @@ export function Settings() {
       </Card>
       )}
 
+      {/* About card — always visible at bottom */}
       <Card className="shadow-card border-border/60">
         <CardHeader>
           <CardTitle className="text-base">About BahiKhata Pro</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            India&apos;s smartest ledger app for small shop owners. Track sales, purchases, inventory, GST, and profit — all in one place. Built with ❤️ for Bharat.
+            India&apos;s smartest ledger app for small shop owners. Track sales, purchases, inventory, GST, and profit — all in one place. Built with love for Bharat.
           </p>
           <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
             <div className="rounded-lg bg-muted/50 p-2">
@@ -381,7 +419,7 @@ export function Settings() {
             </div>
             <div className="rounded-lg bg-muted/50 p-2">
               <p className="font-medium">Built for</p>
-              <p className="text-muted-foreground">🇮🇳 Indian Shop Owners</p>
+              <p className="text-muted-foreground">Indian Shop Owners</p>
             </div>
           </div>
         </CardContent>

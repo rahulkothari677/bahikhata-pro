@@ -24,6 +24,9 @@ import { GlobalSearch } from '@/components/common/GlobalSearch'
 import { OfflineIndicator } from '@/components/common/OfflineIndicator'
 import { PWAInstallPrompt } from '@/components/common/PWAInstallPrompt'
 import { OnboardingTour } from '@/components/common/OnboardingTour'
+import { AnnouncementBanner } from '@/components/common/AnnouncementBanner'
+import { ConsentModal } from '@/components/common/ConsentModal'
+import { FloatingActionButton } from '@/components/common/FloatingActionButton'
 
 // Lazy-load heavy components that are only used occasionally.
 // This splits them into separate JS chunks, loaded on-demand when the user
@@ -148,12 +151,14 @@ export default function Home() {
       </div>
 
       <MobileBottomNav />
+      <FloatingActionButton />
 
       <OfflineIndicator />
       <Onboarding open={showOnboarding} onDone={() => setOnboardingDismissed(true)} />
 
       {features?.pwaInstall && <PWAInstallPrompt />}
       <OnboardingTour />
+      <ConsentModal />
     </div>
   )
 }
