@@ -89,6 +89,11 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
   }>(draftFormType)
 
   const handleRestoreDraft = useCallback((id: string) => {
+    if (typeof restoreDraft !== 'function') {
+      console.error('[TransactionEntry] restoreDraft is not a function:', typeof restoreDraft)
+      sonnerToast.error('Unable to restore — please refresh the page')
+      return
+    }
     const draft = restoreDraft(id)
     if (!draft) {
       sonnerToast.error('Draft not found — it may have expired')

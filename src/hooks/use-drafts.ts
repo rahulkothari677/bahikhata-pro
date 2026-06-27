@@ -192,6 +192,8 @@ export function useDrafts<T>(formType: string) {
     activeDraftId,
     save,
     restore,
+    // Alias for backward compat — some callers use restoreDraft
+    restoreDraft: restore,
     deleteDraft,
     clearActive,
     hasDrafts: drafts.length > 0,
