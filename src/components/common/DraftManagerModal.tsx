@@ -18,7 +18,7 @@ import { cn, formatINR } from '@/lib/utils'
 import { haptic } from '@/lib/haptic'
 import { getDraftLabel, getDraftTotal, type DraftEnvelope } from '@/hooks/use-drafts'
 
-export function DraftManagerModal<T>({
+export function DraftManagerModal({
   open,
   onOpenChange,
   drafts,
@@ -28,7 +28,7 @@ export function DraftManagerModal<T>({
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  drafts: DraftEnvelope<T>[]
+  drafts: DraftEnvelope<any>[]
   activeDraftId: string | null
   onRestore: (id: string) => void
   onDelete: (id: string) => void

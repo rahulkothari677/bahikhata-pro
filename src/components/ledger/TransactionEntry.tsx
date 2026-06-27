@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useAppStore } from '@/store/app-store'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -88,7 +88,7 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
     items: ItemRow[]
   }>(draftFormType)
 
-  const handleRestoreDraft = (id: string) => {
+  const handleRestoreDraft = useCallback((id: string) => {
     const draft = restoreDraft(id)
     if (!draft) {
       sonnerToast.error('Draft not found — it may have expired')
@@ -122,7 +122,7 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
     }
     haptic.success()
     sonnerToast.success(`Draft restored — ${draft.items?.length || 0} item${(draft.items?.length || 0) === 1 ? '' : 's'}`)
-  }
+  }, [restoreDraft])
 
   // Autosave on form changes (debounced inside the hook).
   // save() is now stable (uses refs internally), so it's safe to exclude
