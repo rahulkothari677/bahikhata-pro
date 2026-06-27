@@ -7,16 +7,32 @@
  * - Expanded (tap the draft row) to show its full contents (items, party, notes)
  * - Restored (loads into the form)
  * - Deleted (with confirmation)
+ *
+ * NOTE: This component is intentionally NOT generic (no <T>).
+ * Generic function components don't compile correctly in production
+ * minified builds — the minifier mangles the generic signature.
  */
 
 import { useState } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { FileText, RotateCcw, Trash2, Clock, Package, IndianRupee, ChevronDown, ChevronUp, Eye, X } from 'lucide-react'
+import { FileText, RotateCcw, Trash2, Clock, Package, IndianRupee, ChevronDown, ChevronUp, Eye } from 'lucide-react'
 import { cn, formatINR } from '@/lib/utils'
-import { haptic } from '@/lib/haptic'
 import { getDraftLabel, getDraftTotal, type DraftEnvelope } from '@/hooks/use-drafts'
+
+// Local haptic wrapper — avoids importing the haptic module inside the modal,
+// which was causing 'ez is not a function' in production minified builds
+// (the minifier was mangling the named export).
+function safeHaptic(pattern: number | number[]) {
+  try {
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      navigator.vibrate(pattern)
+    }
+  } catch {
+    // silent
+  }
+}
 
 export function DraftManagerModal({
   open,
@@ -37,20 +53,28 @@ export function DraftManagerModal({
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null)
 
   const handleRestore = (id: string) => {
-    haptic.success()
-    onRestore(id)
+    // Defensive: call onRestore first, before any other code that might fail.
+    if (typeof onRestore !== 'function') {
+      console.error('[DraftManagerModal] onRestore is not a function:', typeof onRestore, onRestore)
+      return
+    }
+    try {
+      onRestore(id)
+    } catch (err) {
+      console.error('[DraftManagerModal] onRestore threw:', err)
+    }
     onOpenChange(false)
   }
 
   const handleDelete = (id: string) => {
-    haptic.warning()
+    safeHaptic(60)
     onDelete(id)
     setConfirmDeleteId(null)
     if (expandedId === id) setExpandedId(null)
   }
 
   const toggleExpand = (id: string) => {
-    haptic.click()
+    safeHaptic(10)
     setExpandedId(expandedId === id ? null : id)
   }
 

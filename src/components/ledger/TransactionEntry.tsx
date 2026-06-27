@@ -120,7 +120,7 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
         unit: item.unit || 'pcs',
       })))
     }
-    haptic.success()
+    try { haptic.success() } catch {}
     sonnerToast.success(`Draft restored — ${draft.items?.length || 0} item${(draft.items?.length || 0) === 1 ? '' : 's'}`)
   }, [restoreDraft])
 
