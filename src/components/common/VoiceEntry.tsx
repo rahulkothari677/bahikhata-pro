@@ -19,9 +19,10 @@ import { useToast } from '@/hooks/use-toast'
 
 interface VoiceEntryProps {
   onTransactionParsed: (data: any) => void
+  products?: any[]  // Pass products so we can auto-fill prices
 }
 
-export function VoiceEntry({ onTransactionParsed }: VoiceEntryProps) {
+export function VoiceEntry({ onTransactionParsed, products = [] }: VoiceEntryProps) {
   const [isRecording, setIsRecording] = useState(false)
   const [liveTranscript, setLiveTranscript] = useState('')
   const [accumulatedTranscript, setAccumulatedTranscript] = useState('')
@@ -137,8 +138,32 @@ export function VoiceEntry({ onTransactionParsed }: VoiceEntryProps) {
       const data = await r.json()
 
       if (data.success) {
-        setParsed(data.transaction)
-        sonnerToast.success('Voice entry parsed! Review below.')
+        // Auto-fill prices from inventory
+        const enrichedItems = (data.transaction.items || []).map((item: any) => {
+          const nameLower = (item.productName || item.name || '').toLowerCase().trim()
+          // Try exact match, then partial match
+          const matched = products.find((p: any) =>
+            p.name?.toLowerCase() === nameLower
+          ) || products.find((p: any) =>
+            p.name?.toLowerCase().includes(nameLower) || nameLower.includes(p.name?.toLowerCase())
+          )
+
+          if (matched && (!item.unitPrice || item.unitPrice === 0)) {
+            return {
+              ...item,
+              productName: matched.name,
+              productId: matched.id,
+              unitPrice: matched.salePrice || matched.unitPrice || 0,
+              unit: matched.unit || item.unit || 'pcs',
+              gstRate: matched.gstRate ?? item.gstRate ?? 0,
+            }
+          }
+          return item
+        })
+
+        setParsed({ ...data.transaction, items: enrichedItems })
+        const matchedCount = enrichedItems.filter((i: any) => i.unitPrice > 0).length
+        sonnerToast.success(`Parsed ${enrichedItems.length} items! ${matchedCount} prices auto-filled from inventory.`)
       } else {
         toast({ title: 'Could not parse voice entry', description: data.error, variant: 'destructive' })
       }

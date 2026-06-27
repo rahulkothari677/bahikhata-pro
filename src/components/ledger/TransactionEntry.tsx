@@ -310,10 +310,11 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
             <p className="text-xs text-muted-foreground mb-3">
               Speak naturally: &quot;Sold 2 kg sugar to Ramesh at 50 rupees cash&quot;
             </p>
-            <VoiceEntry onTransactionParsed={(data) => {
+            <VoiceEntry
+              products={products}
+              onTransactionParsed={(data) => {
               // Apply parsed data to the form
               if (data.partyName) {
-                // Find matching party
                 const matched = allParties.find(p =>
                   p.name.toLowerCase().includes(data.partyName.toLowerCase()) ||
                   data.partyName.toLowerCase().includes(p.name.toLowerCase())
@@ -322,20 +323,37 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
               }
               if (data.paymentMode) setPaymentMode(data.paymentMode)
               if (data.items?.length > 0) {
-                setItems(data.items.map((item: any) => {
+                // APPEND items instead of replacing (so "Add More" works)
+                const newItems = data.items.map((item: any) => {
+                  // If price already filled by VoiceEntry, use it
+                  if (item.unitPrice && item.unitPrice > 0) {
+                    return {
+                      productId: item.productId || '',
+                      productName: item.productName || item.name,
+                      quantity: Number(item.quantity) || 1,
+                      unitPrice: Number(item.unitPrice) || 0,
+                      gstRate: Number(item.gstRate) || 0,
+                      unit: item.unit || 'pcs',
+                    }
+                  }
+                  // Otherwise try to match from inventory
+                  const itemName = (item.productName || item.name || '').toLowerCase()
                   const product = products.find(p =>
-                    p.name.toLowerCase().includes(item.name.toLowerCase()) ||
-                    item.name.toLowerCase().includes(p.name.toLowerCase())
+                    p.name?.toLowerCase() === itemName
+                  ) || products.find(p =>
+                    p.name?.toLowerCase().includes(itemName) || itemName.includes(p.name?.toLowerCase())
                   )
                   return {
                     productId: product?.id || '',
-                    productName: item.name,
-                    quantity: item.quantity,
-                    unitPrice: item.unitPrice || (product ? (isSale ? product.salePrice : product.purchasePrice) : 0),
+                    productName: item.productName || item.name,
+                    quantity: Number(item.quantity) || 1,
+                    unitPrice: product ? (isSale ? product.salePrice : product.purchasePrice) : (Number(item.unitPrice) || 0),
                     gstRate: product?.gstRate || 0,
                     unit: product?.unit || item.unit || 'pcs',
                   }
-                }))
+                })
+                setItems(prev => [...prev, ...newItems])
+                sonnerToast.success(`Added ${newItems.length} items to sale`)
               }
               setShowVoiceEntry(false)
               sonnerToast.success('Voice entry applied! Review and save.')
@@ -465,6 +483,16 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
                   <ShoppingCart className="w-4 h-4" /> Selected Items
                   {items.length > 0 && <Badge variant="secondary">{items.length}</Badge>}
                 </h3>
+                {items.length > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowVoiceEntry(true)}
+                    className="gap-1.5 text-xs"
+                  >
+                    <Mic className="w-3.5 h-3.5" /> Add via Voice
+                  </Button>
+                )}
               </div>
 
               {items.length === 0 ? (
