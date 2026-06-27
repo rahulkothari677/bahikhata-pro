@@ -25,6 +25,7 @@ import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { useDrafts } from '@/hooks/use-drafts'
 import { haptic } from '@/lib/haptic'
 import { trackRecentProduct, getRecentProductIds } from '@/lib/recent-products'
+import { useRatePrompt } from '@/hooks/use-rate-prompt'
 
 const PAYMENT_MODES = [
   { value: 'cash', label: 'Cash' },
@@ -87,6 +88,9 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
     notes: string
     items: ItemRow[]
   }>(draftFormType)
+
+  // Rate prompt — increments counter after each successful transaction
+  const { increment: incrementRateCount } = useRatePrompt()
 
   const handleRestoreDraft = useCallback((id: string) => {
     if (typeof restoreDraft !== 'function') {
@@ -343,6 +347,8 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
       items.forEach((i) => {
         if (i.productId) trackRecentProduct(i.productId, i.productName)
       })
+      // Increment rate-prompt counter (shows rating modal at milestones)
+      incrementRateCount()
       queryClient.invalidateQueries({ queryKey: ['transactions'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       triggerRefresh()

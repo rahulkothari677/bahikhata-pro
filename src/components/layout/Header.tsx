@@ -156,16 +156,37 @@ export function Header() {
             </Button>
           )}
 
-          {/* New Entry button - desktop only (mobile uses bottom nav center +) */}
+          {/* New Entry button — context-aware.
+              Desktop: full button with label (hidden on mobile, mobile uses bottom nav +).
+              Mobile: icon-only button shown on Inventory, Parties, Income/Expense views
+              (where there's no other quick-add affordance).
+              Hidden on Dashboard (has hero buttons), Sales (has bottom nav +),
+              and detail/form views. */}
           {showNewEntry && (
-            <Button
-              size="sm"
-              onClick={handleNewEntry}
-              className="hidden lg:flex bg-gradient-saffron gap-2 shadow-md hover:opacity-90"
-            >
-              <Plus className="w-4 h-4" />
-              <span className="hidden xl:inline">{newEntryLabel}</span>
-            </Button>
+            <>
+              {/* Desktop: full button */}
+              <Button
+                size="sm"
+                onClick={handleNewEntry}
+                className="hidden lg:flex bg-gradient-saffron gap-2 shadow-md hover:opacity-90"
+              >
+                <Plus className="w-4 h-4" />
+                <span className="hidden xl:inline">{newEntryLabel}</span>
+              </Button>
+
+              {/* Mobile: icon-only button for non-Sales/Dashboard views */}
+              {currentView !== 'dashboard' && currentView !== 'sales' && (
+                <Button
+                  size="iconTouch"
+                  onClick={handleNewEntry}
+                  className="lg:hidden bg-gradient-saffron shadow-md hover:opacity-90"
+                  title={newEntryLabel}
+                  aria-label={newEntryLabel}
+                >
+                  <Plus className="w-5 h-5" />
+                </Button>
+              )}
+            </>
           )}
 
           {/* Shop name badge + user menu */}

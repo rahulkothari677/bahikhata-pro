@@ -28,7 +28,8 @@ import { PWAInstallPrompt } from '@/components/common/PWAInstallPrompt'
 import { OnboardingTour } from '@/components/common/OnboardingTour'
 import { AnnouncementBanner } from '@/components/common/AnnouncementBanner'
 import { ConsentModal } from '@/components/common/ConsentModal'
-import { FloatingActionButton } from '@/components/common/FloatingActionButton'
+import { RatePromptModal } from '@/components/common/RatePromptModal'
+import { useRatePrompt } from '@/hooks/use-rate-prompt'
 
 // Lazy-load heavy components that are only used occasionally.
 // This splits them into separate JS chunks, loaded on-demand when the user
@@ -45,6 +46,7 @@ export default function Home() {
   const { session, status, isOfflineSession } = useOfflineSession()
   const { currentView, features, triggerRefresh, setView } = useAppStore()
   useBrowserBackButton() // Enable browser back button to navigate within app
+  const { shouldShowRatePrompt, onRated, onDismiss } = useRatePrompt()
   const queryClient = useQueryClient()
   const [onboardingDismissed, setOnboardingDismissed] = useState(false)
   const [mounted, setMounted] = useState(false)
@@ -121,6 +123,7 @@ export default function Home() {
         {features?.pwaInstall && <PWAInstallPrompt />}
         {!showOnboarding && <OnboardingTour />}
         {!showOnboarding && <ConsentModal />}
+        <RatePromptModal open={shouldShowRatePrompt} onRated={onRated} onDismiss={onDismiss} />
       </div>
     )
   }
@@ -192,6 +195,7 @@ export default function Home() {
       {/* Only show tour + consent AFTER onboarding is dismissed */}
       {!showOnboarding && <OnboardingTour />}
       {!showOnboarding && <ConsentModal />}
+      <RatePromptModal open={shouldShowRatePrompt} onRated={onRated} onDismiss={onDismiss} />
     </div>
   )
 }

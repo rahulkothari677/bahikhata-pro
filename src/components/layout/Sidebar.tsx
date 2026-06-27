@@ -46,7 +46,9 @@ const navItems: { id: ViewType; labelKey: string; descKey: string; icon: any; ba
   { id: 'reports', labelKey: 'nav.reports', descKey: 'nav.reports', icon: FileBarChart },
   { id: 'pricing', labelKey: 'Plans & Pricing', descKey: 'Upgrade or manage subscription', icon: Crown },
   { id: 'settings', labelKey: 'nav.settings', descKey: 'nav.settings', icon: Settings },
-  { id: 'more', labelKey: 'More', descKey: 'Help, about, referrals & more', icon: MoreHorizontal },
+  // NOTE: 'more' is intentionally NOT in the desktop sidebar.
+  // The sidebar already shows all items, so a 'More' button would duplicate.
+  // 'More' is a mobile-only concept (via MobileBottomNav) for secondary items.
 ]
 
 export function Sidebar() {
@@ -204,21 +206,10 @@ export function Sidebar() {
         {/* Footer — Clean, organized sections */}
         {!sidebarCollapsed ? (
           <div className="border-t border-sidebar-border">
-            {/* Upgrade banner (only for non-staff) */}
-            {!isStaff && (
-              <div className="px-3 pt-3">
-                <button
-                  onClick={() => setView('pricing')}
-                  className="w-full p-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 text-white text-left hover:shadow-lg transition flex items-center gap-2"
-                >
-                  <Crown className="w-4 h-4 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-bold">Upgrade to Pro</p>
-                    <p className="text-[10px] text-white/80">Unlock AI scans, GST & more</p>
-                  </div>
-                </button>
-              </div>
-            )}
+            {/* NOTE: 'Upgrade to Pro' banner removed from sidebar footer.
+                The 'Plans & Pricing' nav item above already handles this,
+                so the duplicate banner was redundant. Mobile users see the
+                upgrade banner in the MoreScreen instead. */}
 
             {/* Logout button — clean, full width */}
             <div className="px-3 py-2">

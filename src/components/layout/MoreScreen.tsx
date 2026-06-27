@@ -197,9 +197,9 @@ export function MoreScreen() {
           </div>
         ))}
 
-        {/* Premium Banner */}
+        {/* Premium Banner — links to Plans & Pricing view */}
         <button
-          onClick={() => { haptic.click(); sonnerToast.info('Premium coming soon! 🚀') }}
+          onClick={() => { haptic.click(); setPreviousView('more'); setView('pricing') }}
           className="w-full bg-gradient-to-r from-amber-500 to-orange-600 rounded-2xl p-4 shadow-lg text-white text-left hover:shadow-xl transition active:scale-[0.98] flex items-center gap-4"
         >
           <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">

@@ -331,11 +331,12 @@ export function Inventory() {
                       <td className="py-3 px-2">
                         <Button
                           variant="ghost"
-                          size="sm"
-                          className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100"
+                          size="iconTouch"
+                          className="lg:size-8 lg:p-0 opacity-100 lg:opacity-0 lg:group-hover:opacity-100"
                           onClick={() => { setEditingProduct(p); setDialogOpen(true) }}
+                          aria-label="Edit product"
                         >
-                          <Edit2 className="w-3.5 h-3.5" />
+                          <Edit2 className="w-4 h-4 lg:w-3.5 lg:h-3.5" />
                         </Button>
                       </td>
                     </tr>
@@ -374,11 +375,12 @@ function ProductGridCard({ product: p, onEdit }: { product: any; onEdit: () => v
           </div>
           <Button
             variant="ghost"
-            size="sm"
-            className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100"
+            size="iconTouch"
+            className="lg:size-8 lg:p-0 opacity-100 lg:opacity-0 lg:group-hover:opacity-100"
             onClick={(e) => { e.stopPropagation(); onEdit() }}
+            aria-label="Edit product"
           >
-            <Edit2 className="w-3.5 h-3.5" />
+            <Edit2 className="w-4 h-4 lg:w-3.5 lg:h-3.5" />
           </Button>
         </div>
 
