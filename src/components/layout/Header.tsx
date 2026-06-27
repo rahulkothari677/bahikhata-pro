@@ -8,6 +8,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useSession, signOut } from 'next-auth/react'
 import { clearAllOfflineData } from '@/lib/offline-db'
 import { offlineFetch } from '@/lib/offline-fetch'
+import { useFeatureFlags } from '@/hooks/use-feature-flags'
 
 const viewTitleKeys: Record<string, { titleKey: string; subtitleKey: string }> = {
   dashboard: { titleKey: 'nav.dashboard', subtitleKey: 'nav.dashboard' },
@@ -30,6 +31,7 @@ const dialogViews: ViewType[] = ['dashboard', 'inventory', 'sales', 'purchases',
 
 export function Header() {
   const { currentView, setSidebarOpen, setView, fireTriggerNewEntry, previousView, setPreviousView, features, setFeature, setSearchOpen, selectedTransactionType } = useAppStore()
+  const { isFlagEnabled } = useFeatureFlags()
   const { data: session } = useSession()
   const { t } = useTranslation()
   const titleKeys = viewTitleKeys[currentView] || { titleKey: 'nav.dashboard', subtitleKey: 'nav.dashboard' }
