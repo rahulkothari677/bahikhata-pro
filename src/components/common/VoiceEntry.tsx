@@ -30,7 +30,7 @@ export function VoiceEntry({ onTransactionParsed }: VoiceEntryProps) {
   const [error, setError] = useState('')
   const [supported, setSupported] = useState(true)
   const recognitionRef = useRef<any>(null)
-  const lastResultIndexRef = useRef(0)  // Track which results we've already processed
+  const processedFinalsRef = useRef<Set<number>>(new Set())  // Track processed result indices
   const isRecordingRef = useRef(false)  // Use ref to avoid stale closure in onend
   const { toast } = useToast()
 
@@ -46,15 +46,27 @@ export function VoiceEntry({ onTransactionParsed }: VoiceEntryProps) {
     recognition.interimResults = true
     recognition.lang = 'en-IN'
 
+    // Track which result indices have been finalized (prevents duplication)
+    // Using ref so startRecording can reset it
+
     recognition.onresult = (event: any) => {
       let interim = ''
-      // Only process results from lastResultIndex onward (prevents duplication)
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript
-        if (event.results[i].isFinal) {
-          // Append ONLY this new final result
-          setAccumulatedTranscript(prev => (prev ? prev + ' ' : '') + transcript.trim())
+
+      for (let i = 0; i < event.results.length; i++) {
+        const result = event.results[i]
+        const transcript = result[0].transcript
+
+        if (result.isFinal) {
+          // Only append if we haven't processed this index yet
+          if (!processedFinalsRef.current.has(i)) {
+            processedFinalsRef.current.add(i)
+            const cleanText = transcript.trim()
+            if (cleanText) {
+              setAccumulatedTranscript(prev => (prev ? prev + ' ' : '') + cleanText)
+            }
+          }
         } else {
+          // Interim (live) — just show it, don't accumulate
           interim += transcript
         }
       }
@@ -93,9 +105,9 @@ export function VoiceEntry({ onTransactionParsed }: VoiceEntryProps) {
     setIsRecording(true)
     isRecordingRef.current = true
     setLiveTranscript('')
-    try {
-      recognitionRef.current?.start()
-    } catch {}
+    // Reset processed finals for new session
+    processedFinalsRef.current.clear()
+    try { recognitionRef.current?.start() } catch {}
   }
 
   const stopRecording = () => {
