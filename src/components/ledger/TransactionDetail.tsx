@@ -22,6 +22,7 @@ import {
   MessageCircle,
 } from 'lucide-react'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
+import { useSetting } from '@/hooks/use-setting'
 
 const PAYMENT_MODES = [
   { value: 'cash', label: 'Cash' },
@@ -33,6 +34,7 @@ const PAYMENT_MODES = [
 
 export function TransactionDetail() {
   const { selectedTransactionId, setView, triggerRefresh, previousView, setPreviousView } = useAppStore()
+  const { hideProfit } = useSetting()
   const [editOpen, setEditOpen] = useState(false)
   const [printing, setPrinting] = useState(false)
   const queryClient = useQueryClient()
@@ -268,7 +270,7 @@ export function TransactionDetail() {
                   <span className="text-muted-foreground">GST Type</span>
                   <span className="font-medium">{txn.isInterState ? 'IGST (Inter-state)' : 'CGST+SGST'}</span>
                 </div>
-                {isSale && (
+                {isSale && !hideProfit && (
                   <div className="flex items-center justify-between pt-2 border-t border-border">
                     <span className="text-muted-foreground flex items-center gap-1.5"><TrendingUp className="w-3.5 h-3.5" /> Profit</span>
                     <span className="font-bold text-emerald-600">{formatINR(txn.grossProfit)}</span>

@@ -17,9 +17,10 @@ import { THEME_OPTIONS } from '@/components/providers/ThemeProvider'
 import {
   Store, Save, Database, Trash2, AlertTriangle, Moon, Keyboard,
   Search, MessageCircle, Sparkles, Bell, Repeat, FileSpreadsheet,
-  Users, Package, ScanLine, TrendingUp, Smartphone, RotateCcw, Palette, Check, Globe,
+  Users, Package, ScanLine, TrendingUp, Smartphone, RotateCcw, Palette, Check, Globe, EyeOff,
 } from 'lucide-react'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
+import { useSetting } from '@/hooks/use-setting'
 
 const FEATURE_CONFIG: { key: FeatureKey; label: string; description: string; icon: any }[] = [
   { key: 'darkMode', label: 'Dark Mode', description: 'Switch between light and dark themes', icon: Moon },
@@ -43,6 +44,7 @@ export function Settings() {
   const queryClient = useQueryClient()
   const { data: session } = useSession()
   const { features, setFeature, resetFeatures, themeColor, setThemeColor, language, setLanguage } = useAppStore()
+  const { hideProfit, updateHideProfit } = useSetting()
   const isOwner = session?.user?.role !== 'staff'
   const [form, setForm] = useState({
     shopName: '', ownerName: '', phone: '', email: '',
@@ -312,6 +314,26 @@ export function Settings() {
                 हिंदी
               </button>
             </div>
+          </div>
+
+          {/* Hide Profit Toggle — saves immediately, no need to click Save */}
+          <div className="mt-3 flex items-center justify-between rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 p-3">
+            <div className="flex items-center gap-2">
+              <EyeOff className="w-4 h-4 text-amber-600" />
+              <div>
+                <p className="text-sm font-medium">Hide Profit</p>
+                <p className="text-[11px] text-muted-foreground">
+                  Hide profit from dashboard, ledger, and transaction details. Useful when staff or customers are looking at your screen. Profit is still calculated — just hidden from view.
+                </p>
+              </div>
+            </div>
+            <Switch
+              checked={hideProfit}
+              onCheckedChange={(checked) => {
+                updateHideProfit(checked)
+                sonnerToast.success(`Profit ${checked ? 'hidden' : 'visible'}`)
+              }}
+            />
           </div>
         </CardContent>
       </Card>

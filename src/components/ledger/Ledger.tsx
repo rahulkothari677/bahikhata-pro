@@ -19,6 +19,7 @@ import {
   TrendingUp, Calendar, User, ScanLine, ChevronRight, Plus, X,
 } from 'lucide-react'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
+import { useSetting } from '@/hooks/use-setting'
 import { toast as sonnerToast } from 'sonner'
 
 type LedgerType = 'sale' | 'purchase'
@@ -32,6 +33,7 @@ export function Ledger({ type }: { type: LedgerType }) {
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
   const { t } = useTranslation()
+  const { hideProfit } = useSetting()
 
   // Delete a transaction (used by SwipeToDelete)
   const handleDeleteTransaction = async (id: string) => {
@@ -164,7 +166,7 @@ export function Ledger({ type }: { type: LedgerType }) {
             <p className="text-[11px] text-muted-foreground">{filtered.length} transactions</p>
           </CardContent>
         </Card>
-        {isSale && (
+        {isSale && !hideProfit && (
           <Card className="shadow-card border-border/60">
             <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-1">
@@ -341,7 +343,7 @@ export function Ledger({ type }: { type: LedgerType }) {
                           {due > 0 && (
                             <p className="text-[11px] text-rose-600 mt-0.5">Due: {formatINR(due)}</p>
                           )}
-                          {isSale && (
+                          {isSale && !hideProfit && (
                             <p className="text-[11px] text-emerald-600 mt-0.5">Profit: {formatINR(t.grossProfit)}</p>
                           )}
                         </div>
@@ -398,7 +400,7 @@ export function Ledger({ type }: { type: LedgerType }) {
                       <Badge variant="secondary" className="text-[9px] bg-emerald-100 text-emerald-700">{t('stat.paid')}</Badge>
                     )}
                   </div>
-                  {isSale && (
+                  {isSale && !hideProfit && (
                     <p className="text-[10px] text-emerald-600 mt-1">+{formatINRCompact(t.grossProfit)} profit</p>
                   )}
                 </CardContent>

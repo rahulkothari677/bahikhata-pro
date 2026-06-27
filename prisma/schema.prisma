@@ -25,6 +25,12 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  // Subscription / plan
+  cancelledAt   DateTime?
+  plan          String    @default("free") // free | pro | elite
+  renewsAt      DateTime?
+  trialEndsAt   DateTime?
+
   // Relations — every user has their own shop data
   products      Product[]
   parties       Party[]
@@ -32,6 +38,10 @@ model User {
   payments      Payment[]
   settings      Setting[]
   auditLogs     AuditLog[]
+  referralsMade Referral[]      @relation("Referral_referrerIdToUser")
+  referralReceived Referral?    @relation("Referral_referredIdToUser")
+  subscriptions Subscription[]
+  usageTracking  UsageTracking[]
 }
 
 // ==================== PRODUCTS / INVENTORY ====================
@@ -168,6 +178,10 @@ model Setting {
   email     String?
   currency  String   @default("INR")
   language  String   @default("en")
+  // Privacy: when true, profit figures are hidden from all UI (dashboard,
+  // ledger, transaction detail). Data is still calculated and stored —
+  // only the display is hidden. Owner controls this; staff inherits.
+  hideProfit Boolean @default(false)
 }
 
 // ==================== AUDIT LOG (security & compliance) ====================
@@ -187,4 +201,85 @@ model AuditLog {
 
   @@index([userId, createdAt])
   @@index([action, createdAt])
+}
+
+// ==================== ANNOUNCEMENTS (broadcast messages) ====================
+model Announcement {
+  id        String    @id
+  title     String
+  message   String
+  type      String    @default("info")
+  link      String?
+  isActive  Boolean   @default(true)
+  startsAt  DateTime  @default(now())
+  endsAt    DateTime?
+  createdAt DateTime  @default(now())
+  createdBy String?
+
+  @@index([isActive, startsAt, endsAt])
+}
+
+// ==================== FEATURE FLAGS (remote kill switches) ====================
+model FeatureFlag {
+  id          String   @id
+  key         String   @unique
+  enabled     Boolean  @default(true)
+  label       String
+  description String?
+  updatedAt   DateTime
+  updatedBy   String?
+
+  @@index([enabled])
+}
+
+// ==================== REFERRALS (refer 3 = 1 year free Pro) ====================
+model Referral {
+  id          String    @id
+  referrerId  String
+  referredId  String?   @unique
+  code        String    @unique
+  status      String    @default("pending")
+  rewardGiven Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+  referrer    User      @relation("Referral_referrerIdToUser", fields: [referrerId], references: [id], onDelete: Cascade)
+  referred    User?     @relation("Referral_referredIdToUser", fields: [referredId], references: [id])
+
+  @@index([referredId])
+  @@index([referrerId, status])
+}
+
+// ==================== SUBSCRIPTIONS (Razorpay payments) ====================
+model Subscription {
+  id             String   @id
+  userId         String
+  plan           String
+  status         String   @default("active")
+  amount         Float
+  paymentMode    String   @default("razorpay")
+  paymentId      String?
+  subscriptionId String?
+  startDate      DateTime @default(now())
+  endDate        DateTime
+  createdAt      DateTime @default(now())
+  User           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([userId, status])
+}
+
+// ==================== USAGE TRACKING (plan limits) ====================
+model UsageTracking {
+  id           String   @id
+  userId       String
+  month        String
+  transactions Int      @default(0)
+  aiScans      Int      @default(0)
+  voiceParses  Int      @default(0)
+  products     Int      @default(0)
+  updatedAt    DateTime
+  User         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, month])
+  @@index([userId, month])
 }
