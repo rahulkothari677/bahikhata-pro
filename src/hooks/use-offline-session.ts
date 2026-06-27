@@ -87,7 +87,7 @@ export function useOfflineSession(): OfflineSessionState {
   }, [status])
 
   // Timeout fallback: loading too long + offline + cached session = use it
-  if (status === 'loading' && loadingTimeout && !online && cached && cached.user?.id) {
+  if (status === 'loading' && loadingTimeout && (!online || !navigator.onLine) && cached && cached.user?.id) {
     return {
       session: {
         user: cached.user,
@@ -108,9 +108,12 @@ export function useOfflineSession(): OfflineSessionState {
     return { session, status: 'authenticated', isOfflineSession: false }
   }
 
-  // Unauthenticated via NextAuth — check if we have a cached offline session
+  // Unauthenticated via NextAuth — check if we have a cached offline session.
+  // Use BOTH the React `online` state AND navigator.onLine for redundancy,
+  // in case the online state hasn't updated yet.
   if (status === 'unauthenticated') {
-    if (!online && cached && cached.user?.id) {
+    const effectivelyOffline = !online || !navigator.onLine
+    if (effectivelyOffline && cached && cached.user?.id) {
       // Offline + cached session → use it
       return {
         session: {

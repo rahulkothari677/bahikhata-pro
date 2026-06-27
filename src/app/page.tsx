@@ -3,9 +3,11 @@
 import { useState, useEffect, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { ArrowLeft } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
 import { useOfflineSession } from '@/hooks/use-offline-session'
 import { useBrowserBackButton } from '@/hooks/use-browser-back-button'
+import { PullToRefresh } from '@/hooks/use-pull-to-refresh'
 import { isOnline, onSyncComplete } from '@/lib/offline-fetch'
 import { precacheData } from '@/lib/precache'
 import { AuthScreen } from '@/components/auth/AuthScreen'
@@ -24,6 +26,9 @@ import { GlobalSearch } from '@/components/common/GlobalSearch'
 import { OfflineIndicator } from '@/components/common/OfflineIndicator'
 import { PWAInstallPrompt } from '@/components/common/PWAInstallPrompt'
 import { OnboardingTour } from '@/components/common/OnboardingTour'
+import { ConsentModal } from '@/components/common/ConsentModal'
+import { RatePromptModal } from '@/components/common/RatePromptModal'
+import { useRatePrompt } from '@/hooks/use-rate-prompt'
 
 // Lazy-load heavy components that are only used occasionally.
 // This splits them into separate JS chunks, loaded on-demand when the user
@@ -34,13 +39,16 @@ const PartyProfile = dynamic(() => import('@/components/parties/PartyProfile').t
 const BillScanner = dynamic(() => import('@/components/scanner/BillScanner').then(m => ({ default: m.BillScanner })), { ssr: false })
 const Reports = dynamic(() => import('@/components/reports/Reports').then(m => ({ default: m.Reports })), { ssr: false })
 const Settings = dynamic(() => import('@/components/settings/Settings').then(m => ({ default: m.Settings })), { ssr: false })
+const PricingPlans = dynamic(() => import('@/components/subscription/PricingPlans').then(m => ({ default: m.PricingPlans })), { ssr: false })
 
 export default function Home() {
   const { session, status, isOfflineSession } = useOfflineSession()
-  const { currentView, features, triggerRefresh } = useAppStore()
+  const { currentView, features, triggerRefresh, setView } = useAppStore()
   useBrowserBackButton() // Enable browser back button to navigate within app
+  const { shouldShowRatePrompt, onRated, onDismiss } = useRatePrompt()
   const queryClient = useQueryClient()
   const [onboardingDismissed, setOnboardingDismissed] = useState(false)
+  const [tourDone, setTourDone] = useState(false)
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => {
@@ -106,12 +114,16 @@ export default function Home() {
       <div className="flex min-h-screen bg-background">
         {features?.keyboardShortcuts && <KeyboardShortcuts />}
         {features?.globalSearch && <GlobalSearch />}
-        <MoreScreen />
+        <div className="flex-1 flex flex-col min-w-0">
+          <OfflineIndicator />
+          <MoreScreen />
+        </div>
         <MobileBottomNav />
-        <OfflineIndicator />
         <Onboarding open={showOnboarding} onDone={() => setOnboardingDismissed(true)} />
         {features?.pwaInstall && <PWAInstallPrompt />}
-        <OnboardingTour />
+        {!showOnboarding && <OnboardingTour onDone={() => setTourDone(true)} />}
+        {!showOnboarding && tourDone && <ConsentModal />}
+        <RatePromptModal open={shouldShowRatePrompt} onRated={onRated} onDismiss={onDismiss} />
       </div>
     )
   }
@@ -124,22 +136,52 @@ export default function Home() {
       <Sidebar />
 
       <div className="flex-1 flex flex-col min-w-0">
+        <OfflineIndicator />
         <Header />
 
         <main className="flex-1 p-4 lg:p-6 max-w-7xl mx-auto w-full">
-          {currentView === 'dashboard' && <Dashboard />}
-          {currentView === 'inventory' && <Inventory />}
-          {currentView === 'sales' && <Ledger type="sale" />}
-          {currentView === 'purchases' && <Ledger type="purchase" />}
-          {currentView === 'income-expense' && <IncomeExpense />}
-          {currentView === 'parties' && <Parties />}
-          {currentView === 'scanner' && <BillScanner />}
-          {currentView === 'reports' && <Reports />}
-          {currentView === 'settings' && <Settings />}
-          {currentView === 'transaction-detail' && <TransactionDetail />}
-          {currentView === 'party-profile' && <PartyProfile />}
-          {currentView === 'new-sale' && <TransactionEntry type="sale" />}
-          {currentView === 'new-purchase' && <TransactionEntry type="purchase" />}
+          {/* PullToRefresh wraps all main content views. Disabled on form/detail
+              views where pull-down might interfere with scrolling. */}
+          <PullToRefresh
+            onRefresh={async () => {
+              // Use refetchQueries with 'active' type — waits for active
+              // queries to refetch and resolves when done. No fixed timeout.
+              // Cap with a 3s timeout in case a query hangs.
+              await Promise.race([
+                queryClient.refetchQueries({ type: 'active' }),
+                new Promise((r) => setTimeout(r, 3000)),
+              ])
+            }}
+            enabled={!['new-sale', 'new-purchase', 'transaction-detail', 'party-profile', 'scanner', 'pricing'].includes(currentView)}
+          >
+            {currentView === 'dashboard' && <Dashboard />}
+            {currentView === 'inventory' && <Inventory />}
+            {currentView === 'sales' && <Ledger type="sale" />}
+            {currentView === 'purchases' && <Ledger type="purchase" />}
+            {currentView === 'income-expense' && <IncomeExpense />}
+            {currentView === 'parties' && <Parties />}
+            {currentView === 'scanner' && <BillScanner />}
+            {currentView === 'reports' && <Reports />}
+            {currentView === 'settings' && <Settings />}
+            {currentView === 'pricing' && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <button onClick={() => setView('more')} className="p-2 -ml-2 rounded-lg hover:bg-muted">
+                    <ArrowLeft className="w-5 h-5" />
+                  </button>
+                  <div>
+                    <h2 className="text-xl font-bold">Plans &amp; Pricing</h2>
+                    <p className="text-xs text-muted-foreground">Choose the plan that fits your business</p>
+                  </div>
+                </div>
+                <PricingPlans />
+              </div>
+            )}
+            {currentView === 'transaction-detail' && <TransactionDetail />}
+            {currentView === 'party-profile' && <PartyProfile />}
+            {currentView === 'new-sale' && <TransactionEntry type="sale" />}
+            {currentView === 'new-purchase' && <TransactionEntry type="purchase" />}
+          </PullToRefresh>
         </main>
 
         <footer className="mt-auto border-t border-border py-3 px-4 lg:px-6 text-center text-[11px] text-muted-foreground no-print hidden lg:block">
@@ -149,11 +191,16 @@ export default function Home() {
 
       <MobileBottomNav />
 
-      <OfflineIndicator />
       <Onboarding open={showOnboarding} onDone={() => setOnboardingDismissed(true)} />
 
       {features?.pwaInstall && <PWAInstallPrompt />}
-      <OnboardingTour />
+      {/* Only show tour + consent AFTER onboarding is dismissed.
+          Tour shows first, then ConsentModal shows after tour is done.
+          This prevents focus-trap conflicts between Radix Dialog (ConsentModal)
+          and the tour's plain div overlay (z-[100]). */}
+      {!showOnboarding && <OnboardingTour onDone={() => setTourDone(true)} />}
+      {!showOnboarding && tourDone && <ConsentModal />}
+      <RatePromptModal open={shouldShowRatePrompt} onRated={onRated} onDismiss={onDismiss} />
     </div>
   )
 }

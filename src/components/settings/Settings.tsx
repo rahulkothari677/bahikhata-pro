@@ -12,31 +12,62 @@ import { Badge } from '@/components/ui/badge'
 import { StaffManagement } from '@/components/settings/StaffManagement'
 import { useToast } from '@/hooks/use-toast'
 import { toast as sonnerToast } from 'sonner'
+import { haptic } from '@/lib/haptic'
 import { useAppStore, type FeatureKey } from '@/store/app-store'
 import { THEME_OPTIONS } from '@/components/providers/ThemeProvider'
 import {
   Store, Save, Database, Trash2, AlertTriangle, Moon, Keyboard,
   Search, MessageCircle, Sparkles, Bell, Repeat, FileSpreadsheet,
-  Users, Package, ScanLine, TrendingUp, Smartphone, RotateCcw, Palette, Check, Globe, EyeOff,
+  Users, Package, ScanLine, TrendingUp, Smartphone, RotateCcw, Palette, Check, Globe, Shield, EyeOff,
 } from 'lucide-react'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
-import { useSetting } from '@/hooks/use-setting'
 
-const FEATURE_CONFIG: { key: FeatureKey; label: string; description: string; icon: any }[] = [
-  { key: 'darkMode', label: 'Dark Mode', description: 'Switch between light and dark themes', icon: Moon },
-  { key: 'keyboardShortcuts', label: 'Keyboard Shortcuts', description: 'Press N/S/I/D/R/A for quick navigation', icon: Keyboard },
-  { key: 'globalSearch', label: 'Global Search (Ctrl+K)', description: 'Search products, parties & transactions anywhere', icon: Search },
-  { key: 'whatsappSharing', label: 'WhatsApp Invoice Sharing', description: 'Send invoices to customers via WhatsApp', icon: MessageCircle },
-  { key: 'smartInsights', label: 'Smart Insights & Alerts', description: 'AI-powered alerts for stock, dues & profit', icon: Sparkles },
-  { key: 'paymentReminders', label: 'Payment Reminders', description: 'Track outstanding dues and send reminders', icon: Bell },
-  { key: 'recurringEntries', label: 'Recurring Entries', description: 'Auto-create rent, salary entries monthly', icon: Repeat },
-  { key: 'gstrExport', label: 'GSTR-1 Export', description: 'Export GST returns in portal format', icon: FileSpreadsheet },
-  { key: 'customerLoyalty', label: 'Customer Loyalty Tracking', description: 'Track repeat customers & lifetime value', icon: Users },
-  { key: 'reorderAlerts', label: 'Reorder Automation', description: 'Auto-suggest purchases when stock is low', icon: Package },
-  { key: 'aiScanner', label: 'AI Bill Scanner', description: 'Snap bill photos and auto-extract data', icon: ScanLine },
-  { key: 'lowStockAlerts', label: 'Low Stock Alerts', description: 'Get notified when products run low', icon: AlertTriangle },
-  { key: 'profitTracking', label: 'Profit Tracking', description: 'Auto-calculate profit on every sale', icon: TrendingUp },
-  { key: 'pwaInstall', label: 'PWA Install', description: 'Install as app on phone/desktop', icon: Smartphone },
+const FEATURE_CATEGORIES: { title: string; features: { key: FeatureKey; label: string; description: string; icon: any }[] }[] = [
+  {
+    title: 'AI Features',
+    features: [
+      { key: 'aiScanner', label: 'AI Bill Scanner', description: 'Snap bill photos and auto-extract data', icon: ScanLine },
+      { key: 'smartInsights', label: 'Smart Insights & Alerts', description: 'AI-powered alerts for stock, dues & profit', icon: Sparkles },
+      { key: 'barcodeScanner', label: 'Barcode Scanner', description: 'Scan product barcodes for fast billing', icon: ScanLine },
+    ],
+  },
+  {
+    title: 'Business Features',
+    features: [
+      { key: 'whatsappSharing', label: 'WhatsApp Invoice Sharing', description: 'Send invoices to customers via WhatsApp', icon: MessageCircle },
+      { key: 'paymentReminders', label: 'Payment Reminders', description: 'Track outstanding dues and send reminders', icon: Bell },
+      { key: 'gstrExport', label: 'GSTR-1 Export', description: 'Export GST returns in portal format', icon: FileSpreadsheet },
+      { key: 'recurringEntries', label: 'Recurring Entries', description: 'Auto-create rent, salary entries monthly', icon: Repeat },
+      { key: 'customerLoyalty', label: 'Customer Loyalty Tracking', description: 'Track repeat customers & lifetime value', icon: Users },
+      { key: 'reorderAlerts', label: 'Reorder Automation', description: 'Auto-suggest purchases when stock is low', icon: Package },
+      { key: 'profitTracking', label: 'Profit Tracking', description: 'Auto-calculate profit on every sale', icon: TrendingUp },
+      { key: 'lowStockAlerts', label: 'Low Stock Alerts', description: 'Get notified when products run low', icon: AlertTriangle },
+    ],
+  },
+  {
+    title: 'Appearance',
+    features: [
+      { key: 'darkMode', label: 'Dark Mode', description: 'Switch between light and dark themes', icon: Moon },
+      { key: 'keyboardShortcuts', label: 'Keyboard Shortcuts', description: 'Press N/S/I/D/R/A for quick navigation', icon: Keyboard },
+      { key: 'globalSearch', label: 'Global Search (Ctrl+K)', description: 'Search products, parties & transactions anywhere', icon: Search },
+      { key: 'pwaInstall', label: 'PWA Install Prompt', description: 'Show install as app prompt', icon: Smartphone },
+    ],
+  },
+  {
+    title: 'Notifications',
+    features: [
+      { key: 'dailySummary', label: 'Daily Sales Summary', description: 'Get a daily summary of your sales', icon: Bell },
+      { key: 'announcementBanners', label: 'Announcement Banners', description: 'Show important updates from admin', icon: Bell },
+    ],
+  },
+  {
+    title: 'Data & Privacy',
+    features: [
+      { key: 'analyticsTracking', label: 'Anonymous Analytics', description: 'Help improve BahiKhata Pro with anonymous usage data', icon: Shield },
+      { key: 'offlineMode', label: 'Offline Mode', description: 'Use app without internet, sync when online', icon: Database },
+      { key: 'autoSaveDrafts', label: 'Auto-Save Drafts', description: 'Automatically save sale/purchase forms while typing', icon: Save },
+    ],
+  },
 ]
 
 export function Settings() {
@@ -44,12 +75,12 @@ export function Settings() {
   const queryClient = useQueryClient()
   const { data: session } = useSession()
   const { features, setFeature, resetFeatures, themeColor, setThemeColor, language, setLanguage } = useAppStore()
-  const { hideProfit, updateHideProfit } = useSetting()
   const isOwner = session?.user?.role !== 'staff'
   const [form, setForm] = useState({
     shopName: '', ownerName: '', phone: '', email: '',
     gstin: '', state: '', address: '',
   })
+  const [hideProfit, setHideProfit] = useState(false)
   const [saving, setSaving] = useState(false)
 
   const { data } = useQuery({
@@ -71,6 +102,7 @@ export function Settings() {
         state: data.setting.state || '',
         address: data.setting.address || '',
       })
+      setHideProfit(data.setting.hideProfit === true)
     }
   }, [data])
 
@@ -84,13 +116,15 @@ export function Settings() {
       const r = await offlineFetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, hideProfit }),
         offline: { invalidate: ['/api/settings', '/api/dashboard'] },
       })
       if (!r.ok) throw new Error('Failed')
       sonnerToast.success(isQueuedResponse(r) ? 'Saved offline — will sync when online' : 'Settings saved')
+      haptic.success()
       queryClient.invalidateQueries({ queryKey: ['setting'] })
     } catch {
+      haptic.error()
       toast({ title: 'Failed to save settings', variant: 'destructive' })
     } finally {
       setSaving(false)
@@ -104,10 +138,12 @@ export function Settings() {
       // Delete via prisma - we'll do this via a special endpoint
       const r = await offlineFetch('/api/seed', { method: 'DELETE', offline: { queueable: false, invalidate: ['/api/products', '/api/parties', '/api/transactions', '/api/dashboard', '/api/settings'] } })
       if (r.ok) {
+        haptic.error()
         sonnerToast.success('All data deleted. Refreshing...')
         setTimeout(() => window.location.reload(), 1500)
       }
     } catch {
+      haptic.error()
       toast({ title: 'Failed to reset data', variant: 'destructive' })
     }
   }
@@ -139,8 +175,41 @@ export function Settings() {
     }
   }
 
+  const [settingsTab, setSettingsTab] = useState<'profile' | 'features' | 'appearance' | 'data' | 'staff'>('profile')
+
+  const tabs = [
+    { id: 'profile', label: 'Profile', icon: Store },
+    { id: 'features', label: 'Features', icon: Check },
+    { id: 'appearance', label: 'Appearance', icon: Palette },
+    { id: 'data', label: 'Data', icon: Database },
+    ...(isOwner ? [{ id: 'staff', label: 'Staff', icon: Users }] : []),
+  ] as const
+
   return (
     <div className="space-y-4 max-w-3xl">
+      {/* Tab bar */}
+      <div className="flex gap-1 overflow-x-auto border-b border-border">
+        {tabs.map(tab => {
+          const Icon = tab.icon
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setSettingsTab(tab.id as any)}
+              className={`flex items-center gap-1.5 px-3 py-2.5 text-sm font-medium border-b-2 transition whitespace-nowrap ${
+                settingsTab === tab.id
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              <Icon className="w-4 h-4" />
+              {tab.label}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* ── PROFILE TAB ─────────────────────────────────────────────── */}
+      {settingsTab === 'profile' && (
       <Card className="shadow-card border-border/60">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -187,8 +256,10 @@ export function Settings() {
           </div>
         </CardContent>
       </Card>
+      )}
 
-      {isOwner && (
+      {/* ── DATA TAB ────────────────────────────────────────────────── */}
+      {settingsTab === 'data' && isOwner && (
       <Card className="shadow-card border-border/60">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -237,7 +308,8 @@ export function Settings() {
       </Card>
       )}
 
-      {/* Theme Color Picker */}
+      {/* ── APPEARANCE TAB ──────────────────────────────────────────── */}
+      {settingsTab === 'appearance' && (
       <Card className="shadow-card border-border/60">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -316,33 +388,34 @@ export function Settings() {
             </div>
           </div>
 
-          {/* Hide Profit Toggle — saves immediately, no need to click Save */}
+          {/* Hide Profit Toggle */}
           <div className="mt-3 flex items-center justify-between rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 p-3">
             <div className="flex items-center gap-2">
               <EyeOff className="w-4 h-4 text-amber-600" />
               <div>
                 <p className="text-sm font-medium">Hide Profit</p>
                 <p className="text-[11px] text-muted-foreground">
-                  Hide profit from dashboard, ledger, and transaction details. Useful when staff or customers are looking at your screen. Profit is still calculated — just hidden from view.
+                  Hide profit figures from dashboard, ledger, and transaction details. Useful when staff or customers are looking at your screen. Profit is still calculated — just hidden from view.
                 </p>
               </div>
             </div>
             <Switch
               checked={hideProfit}
               onCheckedChange={(checked) => {
-                updateHideProfit(checked)
+                setHideProfit(checked)
                 sonnerToast.success(`Profit ${checked ? 'hidden' : 'visible'}`)
               }}
             />
           </div>
         </CardContent>
       </Card>
+      )}
 
-      {/* Staff Management - Owner only */}
-      {isOwner && <StaffManagement />}
+      {/* ── STAFF TAB ───────────────────────────────────────────────── */}
+      {settingsTab === 'staff' && isOwner && <StaffManagement />}
 
-      {/* Feature Toggles - Owner only */}
-      {isOwner && (
+      {/* ── FEATURES TAB ────────────────────────────────────────────── */}
+      {settingsTab === 'features' && isOwner && (
       <Card className="shadow-card border-border/60">
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -357,44 +430,50 @@ export function Settings() {
             </Button>
           </div>
         </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {FEATURE_CONFIG.map(({ key, label, description, icon: Icon }) => (
-              <div
-                key={key}
-                className={`rounded-lg border p-3 flex items-start gap-3 transition ${features[key] ? 'border-primary/30 bg-primary/5' : 'border-border'}`}
-              >
-                <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${features[key] ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>
-                  <Icon className="w-4 h-4" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium">{label}</p>
-                    {features[key] && <Badge className="text-[9px] bg-emerald-100 text-emerald-700">ON</Badge>}
+        <CardContent className="space-y-4">
+          {FEATURE_CATEGORIES.map((category) => (
+            <div key={category.title}>
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">{category.title}</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {category.features.map(({ key, label, description, icon: Icon }) => (
+                  <div
+                    key={key}
+                    className={`rounded-lg border p-3 flex items-start gap-3 transition ${features[key] ? 'border-primary/30 bg-primary/5' : 'border-border'}`}
+                  >
+                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${features[key] ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>
+                      <Icon className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium">{label}</p>
+                        {features[key] && <Badge className="text-[9px] bg-emerald-100 text-emerald-700">ON</Badge>}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{description}</p>
+                    </div>
+                    <Switch
+                      checked={features[key]}
+                      onCheckedChange={(checked) => {
+                        setFeature(key, checked)
+                        sonnerToast.success(`${label} ${checked ? 'enabled' : 'disabled'}`)
+                      }}
+                    />
                   </div>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">{description}</p>
-                </div>
-                <Switch
-                  checked={features[key]}
-                  onCheckedChange={(checked) => {
-                    setFeature(key, checked)
-                    sonnerToast.success(`${label} ${checked ? 'enabled' : 'disabled'}`)
-                  }}
-                />
+                ))}
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
         </CardContent>
       </Card>
       )}
 
+      {/* About card — always visible at bottom */}
       <Card className="shadow-card border-border/60">
         <CardHeader>
           <CardTitle className="text-base">About BahiKhata Pro</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            India&apos;s smartest ledger app for small shop owners. Track sales, purchases, inventory, GST, and profit — all in one place. Built with ❤️ for Bharat.
+            India&apos;s smartest ledger app for small shop owners. Track sales, purchases, inventory, GST, and profit — all in one place. Built with love for Bharat.
           </p>
           <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
             <div className="rounded-lg bg-muted/50 p-2">
@@ -403,7 +482,7 @@ export function Settings() {
             </div>
             <div className="rounded-lg bg-muted/50 p-2">
               <p className="font-medium">Built for</p>
-              <p className="text-muted-foreground">🇮🇳 Indian Shop Owners</p>
+              <p className="text-muted-foreground">Indian Shop Owners</p>
             </div>
           </div>
         </CardContent>

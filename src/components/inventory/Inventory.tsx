@@ -18,14 +18,17 @@ import { ViewModeToggle } from '@/components/common/ViewModeToggle'
 import { EmptyState } from '@/components/common/EmptyState'
 import {
   Plus, Search, Package, AlertTriangle, Edit2, TrendingUp, IndianRupee,
-  ChevronRight, Folder, FolderOpen, LayoutGrid, List, X,
+  ChevronRight, Folder, FolderOpen, LayoutGrid, List, X, ScanLine,
 } from 'lucide-react'
-import { offlineFetch } from '@/lib/offline-fetch'
+import { offlineFetch, isOnline, OfflineError } from '@/lib/offline-fetch'
+import { OfflineNoData } from '@/components/common/OfflineNoData'
+import { BarcodeScanner } from '@/components/common/BarcodeScanner'
 
 export function Inventory() {
   const {
     refreshKey, triggerRefresh, inventoryViewMode, setInventoryViewMode,
     inventoryCategory, setInventoryCategory, triggerNewEntry, triggerNewEntryView,
+    features,
   } = useAppStore()
   const { t } = useTranslation()
   const [search, setSearch] = useState('')
@@ -33,12 +36,19 @@ export function Inventory() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<any>(null)
   const [subCategory, setSubCategory] = useState<string | null>(null)
+  const [barcodeOpen, setBarcodeOpen] = useState(false)
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ['products', refreshKey],
     queryFn: async () => {
       const r = await offlineFetch('/api/products')
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
       return r.json()
+    },
+    retry: (count, err) => {
+      if (err instanceof OfflineError) return false
+      if (err instanceof TypeError) return false
+      return count < 2
     },
   })
 
@@ -192,8 +202,18 @@ export function Inventory() {
                 placeholder={t('inv.search_placeholder')}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="pl-9"
+                className="pl-9 pr-12"
               />
+              {features?.barcodeScanner && (
+                <button
+                  onClick={() => setBarcodeOpen(true)}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 p-2 rounded-md hover:bg-muted text-primary"
+                  aria-label="Scan barcode"
+                  title="Scan barcode"
+                >
+                  <ScanLine className="w-5 h-5" />
+                </button>
+              )}
             </div>
             <Select value={filter} onValueChange={(v) => setFilter(v as any)}>
               <SelectTrigger className="w-full sm:w-40">
@@ -226,7 +246,17 @@ export function Inventory() {
       </Card>
 
       {/* Products - Grid or List */}
-      {isLoading ? (
+      {!isOnline() && !!error && !data ? (
+        <Card className="shadow-card border-border/60">
+          <CardContent className="p-0">
+            <OfflineNoData
+              title="No cached inventory"
+              message="You're offline and your product list hasn't been cached yet. Connect to internet once to load it — after that, inventory works offline."
+              onRetry={() => triggerRefresh()}
+            />
+          </CardContent>
+        </Card>
+      ) : isLoading ? (
         <div className="space-y-2">
           {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-16 w-full rounded-xl" />)}
         </div>
@@ -314,11 +344,12 @@ export function Inventory() {
                       <td className="py-3 px-2">
                         <Button
                           variant="ghost"
-                          size="sm"
-                          className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100"
+                          size="iconTouch"
+                          className="lg:size-8 lg:p-0 opacity-100 lg:opacity-0 lg:group-hover:opacity-100"
                           onClick={() => { setEditingProduct(p); setDialogOpen(true) }}
+                          aria-label="Edit product"
                         >
-                          <Edit2 className="w-3.5 h-3.5" />
+                          <Edit2 className="w-4 h-4 lg:w-3.5 lg:h-3.5" />
                         </Button>
                       </td>
                     </tr>
@@ -336,6 +367,27 @@ export function Inventory() {
         product={editingProduct}
         onSuccess={() => triggerRefresh()}
       />
+
+      {/* Barcode scanner — scan to search products by SKU/barcode */}
+      {barcodeOpen && (
+        <BarcodeScanner
+          onScan={(code) => {
+            // Search for the scanned code in the product list
+            setSearch(code)
+            setBarcodeOpen(false)
+            // Check if any product matches
+            const match = products.find((p: any) =>
+              p.sku === code || p.barcode === code || p.name?.toLowerCase() === code.toLowerCase()
+            )
+            if (match) {
+              sonnerToast.success(`Found: ${match.name}`)
+            } else {
+              sonnerToast.info(`No product matches barcode ${code}. You can add it as a new product.`)
+            }
+          }}
+          onClose={() => setBarcodeOpen(false)}
+        />
+      )}
     </div>
   )
 }
@@ -357,11 +409,12 @@ function ProductGridCard({ product: p, onEdit }: { product: any; onEdit: () => v
           </div>
           <Button
             variant="ghost"
-            size="sm"
-            className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100"
+            size="iconTouch"
+            className="lg:size-8 lg:p-0 opacity-100 lg:opacity-0 lg:group-hover:opacity-100"
             onClick={(e) => { e.stopPropagation(); onEdit() }}
+            aria-label="Edit product"
           >
-            <Edit2 className="w-3.5 h-3.5" />
+            <Edit2 className="w-4 h-4 lg:w-3.5 lg:h-3.5" />
           </Button>
         </div>
 

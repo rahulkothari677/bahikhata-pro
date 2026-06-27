@@ -25,7 +25,7 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  // Subscription / plan
+  // Subscription / plan (built earlier — restored from DB)
   cancelledAt   DateTime?
   plan          String    @default("free") // free | pro | elite
   renewsAt      DateTime?
@@ -38,8 +38,8 @@ model User {
   payments      Payment[]
   settings      Setting[]
   auditLogs     AuditLog[]
-  referralsMade Referral[]      @relation("Referral_referrerIdToUser")
-  referralReceived Referral?    @relation("Referral_referredIdToUser")
+  referralsMade Referral[] @relation("Referral_referrerIdToUser")
+  referralReceived Referral? @relation("Referral_referredIdToUser")
   subscriptions Subscription[]
   usageTracking  UsageTracking[]
 }
@@ -184,31 +184,12 @@ model Setting {
   hideProfit Boolean @default(false)
 }
 
-// ==================== AUDIT LOG (security & compliance) ====================
-// Track every important action: logins, data exports, deletes, role changes.
-// Used for: security forensics, compliance (DPDP Act), dispute resolution.
-model AuditLog {
-  id         String   @id @default(cuid())
-  userId     String?  // user who performed the action (null = unauthenticated attempt)
-  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  action     String   // login_success | login_failure | logout | data_export | data_delete | role_change | settings_update | etc.
-  entityType String?  // product | party | transaction | setting | user | staff
-  entityId   String?  // ID of the affected entity
-  ip         String?  // IP address of the actor
-  userAgent  String?  // browser/device info
-  metadata   Json?    // any extra context (what changed, what was exported, etc.)
-  createdAt  DateTime @default(now())
-
-  @@index([userId, createdAt])
-  @@index([action, createdAt])
-}
-
 // ==================== ANNOUNCEMENTS (broadcast messages) ====================
 model Announcement {
   id        String    @id
   title     String
   message   String
-  type      String    @default("info")
+  type      String    @default("info") // info | warning | success | promo
   link      String?
   isActive  Boolean   @default(true)
   startsAt  DateTime  @default(now())
@@ -238,7 +219,7 @@ model Referral {
   referrerId  String
   referredId  String?   @unique
   code        String    @unique
-  status      String    @default("pending")
+  status      String    @default("pending") // pending | completed | rewarded
   rewardGiven Boolean   @default(false)
   createdAt   DateTime  @default(now())
   completedAt DateTime?
@@ -253,8 +234,8 @@ model Referral {
 model Subscription {
   id             String   @id
   userId         String
-  plan           String
-  status         String   @default("active")
+  plan           String   // pro | elite
+  status         String   @default("active") // active | cancelled | expired
   amount         Float
   paymentMode    String   @default("razorpay")
   paymentId      String?
@@ -272,7 +253,7 @@ model Subscription {
 model UsageTracking {
   id           String   @id
   userId       String
-  month        String
+  month        String   // YYYY-MM format
   transactions Int      @default(0)
   aiScans      Int      @default(0)
   voiceParses  Int      @default(0)
@@ -282,4 +263,23 @@ model UsageTracking {
 
   @@unique([userId, month])
   @@index([userId, month])
+}
+
+// ==================== AUDIT LOG (security & compliance) ====================
+// Track every important action: logins, data exports, deletes, role changes.
+// Used for: security forensics, compliance (DPDP Act), dispute resolution.
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?  // user who performed the action (null = unauthenticated attempt)
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String   // login_success | login_failure | logout | data_export | data_delete | role_change | settings_update | etc.
+  entityType String?  // product | party | transaction | setting | user | staff
+  entityId   String?  // ID of the affected entity
+  ip         String?  // IP address of the actor
+  userAgent  String?  // browser/device info
+  metadata   Json?    // any extra context (what changed, what was exported, etc.)
+  createdAt  DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([action, createdAt])
 }

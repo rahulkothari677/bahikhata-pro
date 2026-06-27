@@ -22,7 +22,9 @@ import {
   Plus, Search, Users, Phone, User, ArrowDownRight, ArrowUpRight,
   Building2, ChevronRight, Receipt,
 } from 'lucide-react'
-import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
+import { offlineFetch, isQueuedResponse, isOnline, OfflineError } from '@/lib/offline-fetch'
+import { OfflineNoData } from '@/components/common/OfflineNoData'
+import { haptic } from '@/lib/haptic'
 
 export function Parties() {
   const {
@@ -34,11 +36,17 @@ export function Parties() {
   const [filter, setFilter] = useState<'all' | 'customer' | 'supplier'>('all')
   const [dialogOpen, setDialogOpen] = useState(false)
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ['parties', refreshKey],
     queryFn: async () => {
       const r = await offlineFetch('/api/parties')
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
       return r.json()
+    },
+    retry: (count, err) => {
+      if (err instanceof OfflineError) return false
+      if (err instanceof TypeError) return false
+      return count < 2
     },
   })
 
@@ -148,7 +156,17 @@ export function Parties() {
       </Card>
 
       {/* Parties list */}
-      {isLoading ? (
+      {!isOnline() && !!error && !data ? (
+        <Card className="shadow-card border-border/60">
+          <CardContent className="p-0">
+            <OfflineNoData
+              title="No cached parties"
+              message="You're offline and your customer/supplier list hasn't been cached yet. Connect to internet once to load it — after that, it works offline."
+              onRetry={() => triggerRefresh()}
+            />
+          </CardContent>
+        </Card>
+      ) : isLoading ? (
         <div className="space-y-2">
           {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}
         </div>
@@ -361,9 +379,11 @@ function PartyDialog({ open, onOpenChange, onSuccess }: {
       } else {
         sonnerToast.success('Party added successfully')
       }
+      haptic.success()
       onSuccess?.()
       onOpenChange(false)
     } catch {
+      haptic.error()
       toast({ title: 'Failed to save party', variant: 'destructive' })
     } finally {
       setSaving(false)

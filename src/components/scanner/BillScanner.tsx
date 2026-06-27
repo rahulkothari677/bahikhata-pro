@@ -13,7 +13,7 @@ import { toast as sonnerToast } from 'sonner'
 import { formatINR, cn } from '@/lib/utils'
 import {
   ScanLine, Upload, Camera, Sparkles, X, Check, Loader2,
-  ImageIcon, FileText, ArrowRight, Trash2, ShoppingCart, Truck,
+  ImageIcon, FileText, ArrowRight, Trash2, ShoppingCart, Truck, Plus,
 } from 'lucide-react'
 import { offlineFetch } from '@/lib/offline-fetch'
 
@@ -87,7 +87,13 @@ export function BillScanner() {
       const base64 = await compressImage(file)
       setPreview(base64)
       setScanning(true)
-      setScanned(null)
+      // Save existing items before scanning (for "adding more" mode)
+      const existingItems = scanned?._isAddingMore ? (scanned?.items || []) : []
+      const isAddingMore = scanned?._isAddingMore || false
+      // Don't set scanned to null if we're adding more — keep showing items
+      if (!isAddingMore) {
+        setScanned(null)
+      }
       try {
         // Step 1: Upload to Cloudinary (gets a URL, stores image for future)
         const uploadRes = await offlineFetch('/api/upload-bill', {
@@ -111,12 +117,21 @@ export function BillScanner() {
             description: data.error,
             variant: 'destructive',
           })
-          if (data.rawContent) {
-            console.log('Raw AI output:', data.rawContent)
-          }
+          // Raw AI output logging removed — was leaking raw response to console
         } else {
-          setScanned(data.bill)
-          sonnerToast.success('Bill scanned! Review and verify the data.')
+          // If we're in "adding more" mode, append new items to existing
+          if (isAddingMore && existingItems.length > 0) {
+            const newItems = data.bill.items || []
+            setScanned({
+              ...data.bill,
+              items: [...existingItems, ...newItems],
+              _isAddingMore: false,
+            })
+            sonnerToast.success(`Added ${newItems.length} more items from second bill!`)
+          } else {
+            setScanned(data.bill)
+            sonnerToast.success('Bill scanned! Review and verify the data.')
+          }
         }
       } catch (e) {
         toast({
@@ -304,25 +319,28 @@ export function BillScanner() {
                   </div>
                 </>
               )}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
-              />
-              <input
-                ref={cameraInputRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                className="hidden"
-                onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
-              />
             </CardContent>
           </Card>
         </>
       )}
+
+      {/* Hidden file inputs — always rendered (outside conditional) so
+          'Scan More Items' can trigger them even when results are showing */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => { if (e.target.files?.[0]) handleFile(e.target.files[0]); e.target.value = '' }}
+      />
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(e) => { if (e.target.files?.[0]) handleFile(e.target.files[0]); e.target.value = '' }}
+      />
 
       {/* Verification & edit view */}
       {scanned && (
@@ -371,12 +389,30 @@ export function BillScanner() {
                   Items ({scanned.items.length})
                 </CardTitle>
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={() => setEditMode(!editMode)} className="gap-1">
-                    {editMode ? <Check className="w-3.5 h-3.5" /> : <FileText className="w-3.5 h-3.5" />}
-                    {editMode ? 'Done editing' : 'Edit items'}
+                  {/* Manual add — for adding a blank row by hand */}
+                  <Button variant="outline" size="sm" onClick={addItem} className="gap-1">
+                    <Plus className="w-3.5 h-3.5" /> Manual
                   </Button>
-                  <Button size="sm" onClick={addItem} className="bg-gradient-saffron gap-1">
-                    <ScanLine className="w-3.5 h-3.5" /> Add item
+                  {/* Scan more items — opens camera to scan another bill,
+                      new items get APPENDED to existing list */}
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      // Keep existing items, mark as "adding more"
+                      setScanned({ ...scanned, _isAddingMore: true })
+                      setPreview('')
+                      // Trigger file input using ref
+                      // Use camera input on mobile, file input on desktop
+                      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+                      if (isMobile) {
+                        cameraInputRef.current?.click()
+                      } else {
+                        fileInputRef.current?.click()
+                      }
+                    }}
+                    className="bg-gradient-saffron gap-1"
+                  >
+                    <ScanLine className="w-3.5 h-3.5" /> Scan More Items
                   </Button>
                 </div>
               </div>
@@ -395,57 +431,48 @@ export function BillScanner() {
 
                 {scanned.items.map((item: any, i: number) => (
                   <div key={i} className="grid grid-cols-12 gap-2 items-center p-2 rounded-lg bg-muted/30 hover:bg-muted/50 transition">
+                    {/* Product name — always editable */}
                     <div className="col-span-12 md:col-span-4">
-                      {editMode ? (
-                        <input
-                          value={item.name}
-                          onChange={(e) => updateItem(i, 'name', e.target.value)}
-                          className="w-full px-2 py-1.5 text-sm bg-background border border-border rounded-md"
-                        />
-                      ) : (
-                        <p className="text-sm font-medium truncate">{item.name || '—'}</p>
-                      )}
+                      <input
+                        value={item.name}
+                        onChange={(e) => updateItem(i, 'name', e.target.value)}
+                        className="w-full px-2 py-1.5 text-sm bg-transparent border border-transparent rounded-md focus:bg-background focus:border-border transition"
+                        placeholder="Product name"
+                      />
                     </div>
+                    {/* Quantity — always editable */}
                     <div className="col-span-3 md:col-span-2">
-                      {editMode ? (
-                        <input
-                          type="number"
-                          value={item.quantity}
-                          onChange={(e) => updateItem(i, 'quantity', Number(e.target.value))}
-                          className="w-full px-2 py-1.5 text-sm bg-background border border-border rounded-md"
-                        />
-                      ) : (
-                        <p className="text-sm">{item.quantity} {item.unit || 'pcs'}</p>
-                      )}
+                      <input
+                        type="number"
+                        value={item.quantity}
+                        onChange={(e) => updateItem(i, 'quantity', Number(e.target.value))}
+                        className="w-full px-2 py-1.5 text-sm bg-transparent border border-transparent rounded-md focus:bg-background focus:border-border transition"
+                      />
                     </div>
+                    {/* Unit price — always editable */}
                     <div className="col-span-4 md:col-span-2">
-                      {editMode ? (
-                        <input
-                          type="number"
-                          value={item.unitPrice}
-                          onChange={(e) => updateItem(i, 'unitPrice', Number(e.target.value))}
-                          className="w-full px-2 py-1.5 text-sm bg-background border border-border rounded-md"
-                        />
-                      ) : (
-                        <p className="text-sm">{formatINR(item.unitPrice || 0)}</p>
-                      )}
+                      <input
+                        type="number"
+                        value={item.unitPrice}
+                        onChange={(e) => updateItem(i, 'unitPrice', Number(e.target.value))}
+                        className="w-full px-2 py-1.5 text-sm bg-transparent border border-transparent rounded-md focus:bg-background focus:border-border transition"
+                      />
                     </div>
+                    {/* GST — always editable */}
                     <div className="col-span-2 md:col-span-1">
-                      {editMode ? (
-                        <select
-                          value={item.gstRate}
-                          onChange={(e) => updateItem(i, 'gstRate', Number(e.target.value))}
-                          className="w-full px-1 py-1.5 text-sm bg-background border border-border rounded-md"
-                        >
-                          {[0, 5, 12, 18, 28].map(r => <option key={r} value={r}>{r}%</option>)}
-                        </select>
-                      ) : (
-                        <p className="text-sm">{item.gstRate || 0}%</p>
-                      )}
+                      <select
+                        value={item.gstRate}
+                        onChange={(e) => updateItem(i, 'gstRate', Number(e.target.value))}
+                        className="w-full px-1 py-1.5 text-sm bg-transparent border border-transparent rounded-md focus:bg-background focus:border-border transition"
+                      >
+                        {[0, 5, 12, 18, 28].map(r => <option key={r} value={r}>{r}%</option>)}
+                      </select>
                     </div>
+                    {/* Total (auto-calculated, read-only) */}
                     <div className="col-span-2 md:col-span-2 text-right">
                       <p className="text-sm font-semibold">{formatINR(item.total || 0)}</p>
                     </div>
+                    {/* Delete */}
                     <div className="col-span-1 flex justify-end">
                       <Button
                         variant="ghost"

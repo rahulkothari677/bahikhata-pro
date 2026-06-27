@@ -18,7 +18,8 @@ import {
   Search, ShoppingCart, Truck, Receipt, IndianRupee,
   TrendingUp, Calendar, User, ScanLine, ChevronRight, Plus, X,
 } from 'lucide-react'
-import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
+import { offlineFetch, isQueuedResponse, isOnline, OfflineError } from '@/lib/offline-fetch'
+import { OfflineNoData } from '@/components/common/OfflineNoData'
 import { useSetting } from '@/hooks/use-setting'
 import { toast as sonnerToast } from 'sonner'
 
@@ -89,11 +90,17 @@ export function Ledger({ type }: { type: LedgerType }) {
     queryParams.set('to', dateRange.to.toISOString())
   }
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ['transactions', type, refreshKey, dateRange?.from.toISOString() || 'all', dateRange?.to.toISOString() || 'all'],
     queryFn: async () => {
       const r = await offlineFetch(`/api/transactions?${queryParams.toString()}`)
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
       return r.json()
+    },
+    retry: (count, err) => {
+      if (err instanceof OfflineError) return false
+      if (err instanceof TypeError) return false
+      return count < 2
     },
   })
 
@@ -272,7 +279,17 @@ export function Ledger({ type }: { type: LedgerType }) {
       </Card>
 
       {/* Transactions list */}
-      {isLoading ? (
+      {!isOnline() && !!error && !data ? (
+        <Card className="shadow-card border-border/60">
+          <CardContent className="p-0">
+            <OfflineNoData
+              title={`No cached ${isSale ? 'sales' : 'purchases'}`}
+              message={`You're offline and your ${isSale ? 'sales' : 'purchases'} list hasn't been cached yet. Connect to internet once to load it — after that, it works offline.`}
+              onRetry={() => triggerRefresh()}
+            />
+          </CardContent>
+        </Card>
+      ) : isLoading ? (
         <div className="space-y-2">
           {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}
         </div>

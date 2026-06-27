@@ -3,16 +3,19 @@
 /**
  * OnboardingTour — first-time user tour that highlights 3 key features.
  *
- * Shows automatically on first login (when no Setting.shopName is set, or
- * when 'onboarding-tour-seen' flag is not in localStorage).
+ * Shows automatically on first login (when 'bahikhata-tour-seen' flag is not
+ * in localStorage).
+ *
+ * IMPORTANT: This modal uses z-[100] which is higher than Radix Dialog's z-50.
+ * To avoid focus-trap conflicts, the ConsentModal must NOT be open at the same
+ * time. The page.tsx gates ConsentModal on `!showTour` so they never overlap.
  *
  * Tour steps:
  *   1. New Sale button (top right) — record your first sale
  *   2. AI Bill Scanner — snap a bill, we auto-fill
  *   3. Dashboard insights — track revenue, profit, stock
  *
- * Uses a spotlight overlay + tooltip. Dismissed with 'Skip tour' or
- * 'Got it' buttons. Persisted in localStorage so it never shows again.
+ * Dismissed with 'Skip tour' or 'Got it' buttons. Persisted in localStorage.
  */
 
 import { useState, useEffect, useRef } from 'react'
@@ -25,9 +28,6 @@ interface TourStep {
   title: string
   description: string
   icon: typeof Plus
-  // CSS selector for the element to highlight (informational — we don't actually
-  // move the tooltip to point at it for simplicity; instead we show a centered
-  // modal with the icon and a hint about where to find the feature)
   hint: string
 }
 
@@ -52,7 +52,7 @@ const STEPS: TourStep[] = [
   },
 ]
 
-export function OnboardingTour() {
+export function OnboardingTour({ onDone }: { onDone?: () => void }) {
   const [visible, setVisible] = useState(false)
   const [step, setStep] = useState(0)
   const mountedRef = useRef(false)
@@ -61,24 +61,29 @@ export function OnboardingTour() {
     if (mountedRef.current) return
     mountedRef.current = true
 
-    // Check if user has seen the tour
     try {
       const seen = localStorage.getItem(STORAGE_KEY)
-      if (seen === 'true') return
+      if (seen === 'true') {
+        // Already seen — notify parent so it can show the next modal
+        onDone?.()
+        return
+      }
 
       // Delay slightly so the app finishes loading
-      const timer = setTimeout(() => setVisible(true), 1500)
+      const timer = setTimeout(() => setVisible(true), 800)
       return () => clearTimeout(timer)
     } catch {
-      // localStorage might not be available — skip tour
+      onDone?.()
     }
-  }, [])
+  }, [onDone])
 
   const handleDismiss = () => {
     setVisible(false)
     try {
       localStorage.setItem(STORAGE_KEY, 'true')
     } catch {}
+    // Notify parent so it can show the ConsentModal next
+    onDone?.()
   }
 
   const handleNext = () => {

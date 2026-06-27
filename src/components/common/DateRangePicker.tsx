@@ -163,14 +163,14 @@ export function DateRangePicker({
     <div className={cn('relative', className)} ref={ref}>
       <Button
         variant="outline"
-        size="sm"
+        size="touch"
         onClick={() => setOpen(!open)}
-        className="gap-2 h-9 font-medium"
+        className="gap-2 font-medium lg:h-9"
       >
-        <Calendar className="w-3.5 h-3.5" />
+        <Calendar className="w-4 h-4 lg:w-3.5 lg:h-3.5" />
         <span className="hidden sm:inline">{currentPresetLabel}</span>
         <span className="sm:hidden">Date</span>
-        <ChevronDown className="w-3 h-3" />
+        <ChevronDown className="w-3.5 h-3.5 lg:w-3 lg:h-3" />
       </Button>
 
       {open && (

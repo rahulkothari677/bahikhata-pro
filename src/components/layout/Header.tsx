@@ -8,6 +8,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useSession, signOut } from 'next-auth/react'
 import { clearAllOfflineData } from '@/lib/offline-db'
 import { offlineFetch } from '@/lib/offline-fetch'
+import { useFeatureFlags } from '@/hooks/use-feature-flags'
 
 const viewTitleKeys: Record<string, { titleKey: string; subtitleKey: string }> = {
   dashboard: { titleKey: 'nav.dashboard', subtitleKey: 'nav.dashboard' },
@@ -30,6 +31,7 @@ const dialogViews: ViewType[] = ['dashboard', 'inventory', 'sales', 'purchases',
 
 export function Header() {
   const { currentView, setSidebarOpen, setView, fireTriggerNewEntry, previousView, setPreviousView, features, setFeature, setSearchOpen, selectedTransactionType } = useAppStore()
+  const { isFlagEnabled } = useFeatureFlags()
   const { data: session } = useSession()
   const { t } = useTranslation()
   const titleKeys = viewTitleKeys[currentView] || { titleKey: 'nav.dashboard', subtitleKey: 'nav.dashboard' }
@@ -101,9 +103,9 @@ export function Header() {
           {isDetailView && (
             <button
               onClick={handleBack}
-              className="p-2 -ml-2 rounded-lg hover:bg-muted flex items-center gap-1 text-sm font-medium"
+              className="p-2.5 -ml-2 rounded-lg hover:bg-muted flex items-center gap-1 text-sm font-medium min-h-[44px]"
             >
-              <ArrowLeft className="w-4 h-4" />
+              <ArrowLeft className="w-5 h-5" />
               <span className="hidden sm:inline">Back</span>
             </button>
           )}
@@ -131,39 +133,60 @@ export function Header() {
           {/* Dark mode toggle */}
           {features?.darkMode !== undefined && (
             <Button
-              size="sm"
+              size="iconTouch"
               variant="ghost"
               onClick={() => setFeature('darkMode', !features?.darkMode)}
-              className="h-9 w-9 p-0"
+              className="lg:size-9 lg:h-9"
               title={features?.darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
             >
-              {features?.darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              {features?.darkMode ? <Sun className="w-5 h-5 lg:w-4 lg:h-4" /> : <Moon className="w-5 h-5 lg:w-4 lg:h-4" />}
             </Button>
           )}
 
-          {/* Quick action: AI Scan - hide on scanner page */}
-          {currentView !== 'scanner' && (
+          {/* Quick action: AI Scan - desktop only (mobile uses dashboard hero button) */}
+          {currentView !== 'scanner' && isFlagEnabled('ai_scanner') && (
             <Button
               size="sm"
               variant="outline"
               onClick={() => setView('scanner')}
-              className="hidden sm:flex gap-2 border-primary/30 text-primary hover:bg-primary/10"
+              className="hidden lg:flex gap-2 border-primary/30 text-primary hover:bg-primary/10"
             >
               <Sparkles className="w-4 h-4" />
-              <span className="hidden md:inline">{t('action.scan_bill')}</span>
+              <span className="hidden xl:inline">{t('action.scan_bill')}</span>
             </Button>
           )}
 
-          {/* New Entry button - context aware */}
+          {/* New Entry button — context-aware.
+              Desktop: full button with label (hidden on mobile, mobile uses bottom nav +).
+              Mobile: icon-only button shown on Inventory, Parties, Income/Expense views
+              (where there's no other quick-add affordance).
+              Hidden on Dashboard (has hero buttons), Sales (has bottom nav +),
+              and detail/form views. */}
           {showNewEntry && (
-            <Button
-              size="sm"
-              onClick={handleNewEntry}
-              className="bg-gradient-saffron gap-2 shadow-md hover:opacity-90"
-            >
-              <Plus className="w-4 h-4" />
-              <span className="hidden sm:inline">{newEntryLabel}</span>
-            </Button>
+            <>
+              {/* Desktop: full button */}
+              <Button
+                size="sm"
+                onClick={handleNewEntry}
+                className="hidden lg:flex bg-gradient-saffron gap-2 shadow-md hover:opacity-90"
+              >
+                <Plus className="w-4 h-4" />
+                <span className="hidden xl:inline">{newEntryLabel}</span>
+              </Button>
+
+              {/* Mobile: icon-only button for non-Sales/Dashboard views */}
+              {currentView !== 'dashboard' && currentView !== 'sales' && (
+                <Button
+                  size="iconTouch"
+                  onClick={handleNewEntry}
+                  className="lg:hidden bg-gradient-saffron shadow-md hover:opacity-90"
+                  title={newEntryLabel}
+                  aria-label={newEntryLabel}
+                >
+                  <Plus className="w-5 h-5" />
+                </Button>
+              )}
+            </>
           )}
 
           {/* Shop name badge + user menu */}
@@ -189,12 +212,12 @@ export function Header() {
           {/* Mobile logout button */}
           <Button
             variant="ghost"
-            size="sm"
-            className="lg:hidden h-9 w-9 p-0"
+            size="iconTouch"
+            className="lg:hidden"
             onClick={async () => { await clearAllOfflineData(); signOut({ callbackUrl: '/' }) }}
             title={t('action.sign_out')}
           >
-            <LogOut className="w-4 h-4" />
+            <LogOut className="w-5 h-5" />
           </Button>
         </div>
       </div>

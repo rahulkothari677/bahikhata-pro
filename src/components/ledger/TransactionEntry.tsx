@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useAppStore } from '@/store/app-store'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -15,12 +15,18 @@ import { useToast } from '@/hooks/use-toast'
 import { toast as sonnerToast } from 'sonner'
 import { formatINR, cn, getInitials } from '@/lib/utils'
 import {
-  ArrowLeft, ShoppingCart, Truck, Plus, X, Search, ChevronDown,
+  ArrowLeft, ShoppingCart, Truck, Plus, X, Search, ChevronDown, ChevronRight,
   TrendingUp, Calendar, User, ScanLine, Folder, FolderOpen,
-  Package, Phone, IndianRupee, Save, Trash2, Check, AlertCircle, Mic,
+  Package, Phone, IndianRupee, Save, Trash2, Check, AlertCircle, Mic, Clock,
 } from 'lucide-react'
 import { VoiceEntry } from '@/components/common/VoiceEntry'
+import { DraftManagerModal } from '@/components/common/DraftManagerModal'
+import { BarcodeScanner } from '@/components/common/BarcodeScanner'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
+import { useDrafts } from '@/hooks/use-drafts'
+import { haptic } from '@/lib/haptic'
+import { trackRecentProduct, getRecentProductIds } from '@/lib/recent-products'
+import { useRatePrompt } from '@/hooks/use-rate-prompt'
 
 const PAYMENT_MODES = [
   { value: 'cash', label: 'Cash' },
@@ -43,7 +49,7 @@ type ItemRow = {
 
 export function TransactionEntry({ type }: { type: LedgerType }) {
   const isSale = type === 'sale'
-  const { setView, triggerRefresh, setScannerBillType, previousView, setPreviousView } = useAppStore()
+  const { setView, triggerRefresh, setScannerBillType, previousView, setPreviousView, features } = useAppStore()
   const { toast } = useToast()
   const queryClient = useQueryClient()
 
@@ -67,6 +73,85 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
 
   const [saving, setSaving] = useState(false)
   const [showVoiceEntry, setShowVoiceEntry] = useState(false)
+  const [draftModalOpen, setDraftModalOpen] = useState(false)
+  const [barcodeOpen, setBarcodeOpen] = useState(false)
+
+  // Multi-draft autosave — supports multiple saved drafts per form type.
+  // Each draft has a unique ID; the hook tracks which draft is "active" (currently being edited).
+  const draftFormType = `txn-${type}`
+  const { drafts, activeDraftId, save, restoreDraft, deleteDraft, clearActive, hasDrafts } = useDrafts<{
+    partyId: string
+    date: string
+    invoiceNo: string
+    isInterState: boolean
+    paymentMode: string
+    paidAmount: string
+    discountAmount: string
+    notes: string
+    items: ItemRow[]
+  }>(draftFormType)
+
+  // Rate prompt — increments counter after each successful transaction
+  const { increment: incrementRateCount } = useRatePrompt()
+
+  const handleRestoreDraft = useCallback((id: string) => {
+    if (typeof restoreDraft !== 'function') {
+      console.error('[TransactionEntry] restoreDraft is not a function:', typeof restoreDraft)
+      sonnerToast.error('Unable to restore — please refresh the page')
+      return
+    }
+    const draft = restoreDraft(id)
+    if (!draft) {
+      sonnerToast.error('Draft not found — it may have expired')
+      return
+    }
+    if (draft.partyId) setPartyId(draft.partyId)
+    if (draft.date) {
+      try {
+        const d = new Date(draft.date)
+        if (!isNaN(d.getTime())) setDate(d.toISOString().slice(0, 10))
+      } catch {}
+    }
+    if (draft.invoiceNo !== undefined) setInvoiceNo(draft.invoiceNo)
+    if (typeof draft.isInterState === 'boolean') setIsInterState(draft.isInterState)
+    if (draft.paymentMode) setPaymentMode(draft.paymentMode)
+    if (draft.paidAmount !== undefined) setPaidAmount(draft.paidAmount)
+    if (draft.discountAmount !== undefined) setDiscountAmount(draft.discountAmount)
+    if (draft.notes !== undefined) setNotes(draft.notes)
+    // CRITICAL: Normalize item fields — drafts may have string quantities
+    // or missing fields if saved from an older version. Without this,
+    // restored items don't render in the form.
+    if (draft.items?.length > 0) {
+      setItems(draft.items.map((item: any) => ({
+        productId: item.productId || '',
+        productName: item.productName || item.name || '',
+        quantity: Number(item.quantity) || 1,
+        unitPrice: Number(item.unitPrice) || 0,
+        gstRate: Number(item.gstRate) || 0,
+        unit: item.unit || 'pcs',
+      })))
+    }
+    try { haptic.success() } catch {}
+    sonnerToast.success(`Draft restored — ${draft.items?.length || 0} item${(draft.items?.length || 0) === 1 ? '' : 's'}`)
+  }, [restoreDraft])
+
+  // Autosave on form changes (debounced inside the hook).
+  // save() is now stable (uses refs internally), so it's safe to exclude
+  // from the dependency array — the effect fires on form state changes only.
+  useEffect(() => {
+    save({
+      partyId,
+      date,
+      invoiceNo,
+      isInterState,
+      paymentMode,
+      paidAmount,
+      discountAmount,
+      notes,
+      items,
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [partyId, date, invoiceNo, isInterState, paymentMode, paidAmount, discountAmount, notes, items])
 
   // Fetch products
   const { data: productsData } = useQuery({
@@ -77,7 +162,8 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
     },
   })
   const products: any[] = productsData?.products || []
-  const productMap = new Map(products.map(p => [p.id, p]))
+  // Memoize productMap — only rebuilds when products array changes
+  const productMap = useMemo(() => new Map(products.map(p => [p.id, p])), [products])
 
   // Fetch parties
   const { data: partiesData, refetch: refetchParties } = useQuery({
@@ -88,26 +174,43 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
     },
   })
   const allParties: any[] = partiesData?.parties || []
-  const filteredParties = allParties.filter(p =>
+  // Memoize filtered parties — only recomputes when allParties, isSale, or partySearch changes
+  const filteredParties = useMemo(() => allParties.filter(p =>
     (p.type === (isSale ? 'customer' : 'supplier') || p.type === 'both') &&
     (!partySearch ||
       p.name?.toLowerCase().includes(partySearch.toLowerCase()) ||
       p.phone?.includes(partySearch))
+  ), [allParties, isSale, partySearch])
+
+  // Memoize categories — only rebuilds when products change
+  const categories = useMemo(() =>
+    Array.from(new Set(products.map(p => p.category || 'Uncategorized'))).sort(),
+    [products]
+  )
+  // Recently used products — most recently used first.
+  // Only show products that exist in current inventory (in case product was deleted).
+  // Memoized: only recomputes when products array changes (not on every keystroke).
+  const recentProducts = useMemo(() => {
+    const recentIds = getRecentProductIds()
+    return recentIds
+      .map((id) => products.find((p) => p.id === id))
+      .filter((p): p is NonNullable<typeof p> => !!p)
+      .slice(0, 6)
+  }, [products])
+  const productsInCategory = useMemo(() =>
+    selectedCategory
+      ? products.filter(p => (p.category || 'Uncategorized') === selectedCategory)
+      : products,
+    [products, selectedCategory]
   )
 
-  // Build categories
-  const categories = Array.from(new Set(products.map(p => p.category || 'Uncategorized'))).sort()
-  const productsInCategory = selectedCategory
-    ? products.filter(p => (p.category || 'Uncategorized') === selectedCategory)
-    : products
-
-  const filteredProducts = productsInCategory.filter(p => {
+  const filteredProducts = useMemo(() => productsInCategory.filter(p => {
     if (!productSearch) return true
     const q = productSearch.toLowerCase()
     return p.name?.toLowerCase().includes(q) ||
       p.sku?.toLowerCase().includes(q) ||
       p.hsn?.toLowerCase().includes(q)
-  })
+  }), [productsInCategory, productSearch])
 
   // Check for preset data (from scanner or party profile)
   useEffect(() => {
@@ -247,11 +350,24 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
       } else {
         sonnerToast.success(`${isSale ? 'Sale' : 'Purchase'} recorded successfully!`)
       }
+      haptic.success()
+      // Clear the active draft now that the transaction is saved
+      if (activeDraftId) {
+        deleteDraft(activeDraftId)
+      }
+      clearActive()
+      // Track recently used products for quick-pick next time
+      items.forEach((i) => {
+        if (i.productId) trackRecentProduct(i.productId, i.productName)
+      })
+      // Increment rate-prompt counter (shows rating modal at milestones)
+      incrementRateCount()
       queryClient.invalidateQueries({ queryKey: ['transactions'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       triggerRefresh()
       setView(isSale ? 'sales' : 'purchases')
     } catch (e) {
+      haptic.error()
       toast({ title: 'Failed to save transaction', variant: 'destructive' })
     } finally {
       setSaving(false)
@@ -273,6 +389,60 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
 
   return (
     <div className="space-y-4 pb-24 lg:pb-4">
+      {/* Drafts button — opens modal showing all saved drafts from last 24h.
+          Shows a badge with the count if there are any drafts. */}
+      {hasDrafts && (
+        <button
+          onClick={() => { haptic.click(); setDraftModalOpen(true) }}
+          className="w-full flex items-center justify-between gap-2 p-3 rounded-xl border border-primary/30 bg-primary/5 hover:bg-primary/10 transition text-left"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+              <Clock className="w-4 h-4 text-primary" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-primary">
+                {drafts.length} saved draft{drafts.length === 1 ? '' : 's'}
+              </p>
+              <p className="text-[11px] text-muted-foreground truncate">
+                {activeDraftId ? 'Editing a restored draft' : 'Tap to restore or delete previous drafts'}
+              </p>
+            </div>
+          </div>
+          <ChevronRight className="w-4 h-4 text-primary flex-shrink-0" />
+        </button>
+      )}
+
+      {/* Draft manager modal */}
+      <DraftManagerModal
+        open={draftModalOpen}
+        onOpenChange={setDraftModalOpen}
+        drafts={drafts}
+        activeDraftId={activeDraftId}
+        onRestore={handleRestoreDraft}
+        onDelete={deleteDraft}
+      />
+
+      {/* Barcode scanner — scan to find and add product */}
+      {barcodeOpen && (
+        <BarcodeScanner
+          onScan={(code) => {
+            setBarcodeOpen(false)
+            // Match scanned code against product SKU or name
+            const match = products.find((p) =>
+              p.sku === code || p.name?.toLowerCase() === code.toLowerCase()
+            )
+            if (match) {
+              handleAddProduct(match)
+            } else {
+              // No match — put the code in the search field so user can see it
+              setProductSearch(code)
+            }
+          }}
+          onClose={() => setBarcodeOpen(false)}
+        />
+      )}
+
       {/* Top action bar */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-3">
@@ -310,10 +480,11 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
             <p className="text-xs text-muted-foreground mb-3">
               Speak naturally: &quot;Sold 2 kg sugar to Ramesh at 50 rupees cash&quot;
             </p>
-            <VoiceEntry onTransactionParsed={(data) => {
+            <VoiceEntry
+              products={products}
+              onTransactionParsed={(data) => {
               // Apply parsed data to the form
               if (data.partyName) {
-                // Find matching party
                 const matched = allParties.find(p =>
                   p.name.toLowerCase().includes(data.partyName.toLowerCase()) ||
                   data.partyName.toLowerCase().includes(p.name.toLowerCase())
@@ -322,20 +493,37 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
               }
               if (data.paymentMode) setPaymentMode(data.paymentMode)
               if (data.items?.length > 0) {
-                setItems(data.items.map((item: any) => {
+                // APPEND items instead of replacing (so "Add More" works)
+                const newItems = data.items.map((item: any) => {
+                  // If price already filled by VoiceEntry, use it
+                  if (item.unitPrice && item.unitPrice > 0) {
+                    return {
+                      productId: item.productId || '',
+                      productName: item.productName || item.name,
+                      quantity: Number(item.quantity) || 1,
+                      unitPrice: Number(item.unitPrice) || 0,
+                      gstRate: Number(item.gstRate) || 0,
+                      unit: item.unit || 'pcs',
+                    }
+                  }
+                  // Otherwise try to match from inventory
+                  const itemName = (item.productName || item.name || '').toLowerCase()
                   const product = products.find(p =>
-                    p.name.toLowerCase().includes(item.name.toLowerCase()) ||
-                    item.name.toLowerCase().includes(p.name.toLowerCase())
+                    p.name?.toLowerCase() === itemName
+                  ) || products.find(p =>
+                    p.name?.toLowerCase().includes(itemName) || itemName.includes(p.name?.toLowerCase())
                   )
                   return {
                     productId: product?.id || '',
-                    productName: item.name,
-                    quantity: item.quantity,
-                    unitPrice: item.unitPrice || (product ? (isSale ? product.salePrice : product.purchasePrice) : 0),
+                    productName: item.productName || item.name,
+                    quantity: Number(item.quantity) || 1,
+                    unitPrice: product ? (isSale ? product.salePrice : product.purchasePrice) : (Number(item.unitPrice) || 0),
                     gstRate: product?.gstRate || 0,
                     unit: product?.unit || item.unit || 'pcs',
                   }
-                }))
+                })
+                setItems(prev => [...prev, ...newItems])
+                sonnerToast.success(`Added ${newItems.length} items to sale`)
               }
               setShowVoiceEntry(false)
               sonnerToast.success('Voice entry applied! Review and save.')
@@ -387,14 +575,55 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
                   <div className="relative mt-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
-                      placeholder="Type name, SKU or HSN..."
+                      placeholder="Type name, SKU, HSN, or scan barcode..."
                       value={productSearch}
                       onChange={(e) => setProductSearch(e.target.value)}
-                      className="pl-9"
+                      className="pl-9 pr-12"
                     />
+                    {features?.barcodeScanner && (
+                      <button
+                        type="button"
+                        onClick={() => setBarcodeOpen(true)}
+                        className="absolute right-1.5 top-1/2 -translate-y-1/2 p-2 rounded-md hover:bg-muted text-primary"
+                        aria-label="Scan barcode"
+                        title="Scan barcode to find product"
+                      >
+                        <ScanLine className="w-5 h-5" />
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
+
+              {/* Recently used products — quick-pick chips */}
+              {!productSearch && !selectedCategory && recentProducts.length > 0 && (
+                <div className="mt-3">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1.5 flex items-center gap-1">
+                    <Clock className="w-3 h-3" /> Recently Used
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {recentProducts.map((p) => {
+                      const inList = items.find((i) => i.productId === p.id)
+                      return (
+                        <button
+                          key={p.id}
+                          onClick={() => handleAddProduct(p)}
+                          className={cn(
+                            'px-2.5 py-1.5 rounded-lg text-xs font-medium border transition flex items-center gap-1.5',
+                            inList
+                              ? 'bg-emerald-100 dark:bg-emerald-950/40 border-emerald-300 text-emerald-700'
+                              : 'bg-muted/50 border-border hover:bg-muted hover:border-primary/30'
+                          )}
+                        >
+                          <Package className="w-3 h-3" />
+                          <span className="truncate max-w-[100px]">{p.name}</span>
+                          {inList && <Check className="w-3 h-3" />}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Product list - clickable to add */}
               {filteredProducts.length > 0 && (
@@ -465,7 +694,67 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
                   <ShoppingCart className="w-4 h-4" /> Selected Items
                   {items.length > 0 && <Badge variant="secondary">{items.length}</Badge>}
                 </h3>
+                {items.length > 0 && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowVoiceEntry(!showVoiceEntry)}
+                    className="gap-1.5 text-xs"
+                  >
+                    <Mic className="w-3.5 h-3.5" /> {showVoiceEntry ? 'Close Voice' : 'Add via Voice'}
+                  </Button>
+                )}
               </div>
+
+              {/* Inline voice entry for adding more items */}
+              {showVoiceEntry && items.length > 0 && (
+                <Card className="shadow-card border-border/60 border-primary/30 mb-3">
+                  <CardContent className="p-4">
+                    <h3 className="font-semibold text-sm flex items-center gap-2 mb-3">
+                      <Mic className="w-4 h-4 text-primary" /> Add More Items via Voice
+                    </h3>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Speak items to ADD to the existing sale. Previous items will not be removed.
+                    </p>
+                    <VoiceEntry
+                      products={products}
+                      onTransactionParsed={(data) => {
+                        if (data.items?.length > 0) {
+                          const newItems = data.items.map((item: any) => {
+                            if (item.unitPrice && item.unitPrice > 0) {
+                              return {
+                                productId: item.productId || '',
+                                productName: item.productName || item.name,
+                                quantity: Number(item.quantity) || 1,
+                                unitPrice: Number(item.unitPrice) || 0,
+                                gstRate: Number(item.gstRate) || 0,
+                                unit: item.unit || 'pcs',
+                              }
+                            }
+                            const itemName = (item.productName || item.name || '').toLowerCase()
+                            const product = products.find(p =>
+                              p.name?.toLowerCase() === itemName
+                            ) || products.find(p =>
+                              p.name?.toLowerCase().includes(itemName) || itemName.includes(p.name?.toLowerCase())
+                            )
+                            return {
+                              productId: product?.id || '',
+                              productName: item.productName || item.name,
+                              quantity: Number(item.quantity) || 1,
+                              unitPrice: product ? (isSale ? product.salePrice : product.purchasePrice) : (Number(item.unitPrice) || 0),
+                              gstRate: product?.gstRate || 0,
+                              unit: product?.unit || item.unit || 'pcs',
+                            }
+                          })
+                          setItems(prev => [...prev, ...newItems])
+                          sonnerToast.success(`Added ${newItems.length} items to sale`)
+                        }
+                        setShowVoiceEntry(false)
+                      }}
+                    />
+                  </CardContent>
+                </Card>
+              )}
 
               {items.length === 0 ? (
                 <div className="text-center py-8 text-sm text-muted-foreground border border-dashed border-border rounded-lg">

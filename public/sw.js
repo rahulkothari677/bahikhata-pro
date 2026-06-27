@@ -14,8 +14,8 @@
  *  - For mutations (POST/PUT/DELETE): passthrough (offlineFetch handles queueing).
  */
 
-const CACHE_VERSION = 'bahikhata-pro-v6'
-const STATIC_CACHE = 'bahikhata-static-v6'
+const CACHE_VERSION = 'bahikhata-pro-v7'
+const STATIC_CACHE = 'bahikhata-static-v7'
 const APP_SHELL = [
   '/',
   '/manifest.json',

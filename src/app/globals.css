@@ -69,6 +69,12 @@
   --chart-3: oklch(0.72 0.16 80);
   --chart-4: oklch(0.6 0.12 200);
   --chart-5: oklch(0.65 0.22 15);
+  /* Chart text + grid — light mode */
+  --chart-tick: oklch(0.52 0.02 30);
+  --chart-grid: oklch(0.91 0.01 60);
+  --chart-tooltip-bg: oklch(1 0 0);
+  --chart-tooltip-border: oklch(0.91 0.01 60);
+  --chart-tooltip-text: oklch(0.18 0.02 30);
   --sidebar: oklch(0.18 0.02 30);
   --sidebar-foreground: oklch(0.96 0 0);
   --sidebar-primary: oklch(0.62 0.18 42);
@@ -103,12 +109,18 @@
   --chart-3: oklch(0.78 0.18 80);
   --chart-4: oklch(0.68 0.14 200);
   --chart-5: oklch(0.72 0.22 15);
-  /* Dark mode sidebar - proper dark gray, not brown */
-  --sidebar: oklch(0.16 0.01 260);
+  /* Chart text + grid — dark mode (lighter ticks, darker grid) */
+  --chart-tick: oklch(0.7 0.01 30);
+  --chart-grid: oklch(1 0 0 / 8%);
+  --chart-tooltip-bg: oklch(0.22 0.01 30);
+  --chart-tooltip-border: oklch(1 0 0 / 12%);
+  --chart-tooltip-text: oklch(0.96 0 0);
+  /* Dark mode sidebar - aligns with body's warm hue 30 for consistency */
+  --sidebar: oklch(0.16 0.01 30);
   --sidebar-foreground: oklch(0.96 0 0);
   --sidebar-primary: oklch(0.7 0.18 42);
   --sidebar-primary-foreground: oklch(0.99 0 0);
-  --sidebar-accent: oklch(0.22 0.01 260);
+  --sidebar-accent: oklch(0.22 0.01 30);
   --sidebar-accent-foreground: oklch(0.96 0 0);
   --sidebar-border: oklch(1 0 0 / 8%);
   --sidebar-ring: oklch(0.7 0.18 42);
@@ -118,9 +130,15 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    /* Disables browser's native pull-to-refresh on mobile Chrome.
+       'none' is stronger than 'contain' — also blocks the bounce effect. */
+    overscroll-behavior-y: none;
+  }
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
+    overscroll-behavior-y: none;
   }
 }
 
@@ -154,6 +172,9 @@
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
+.dark .glass {
+  background: oklch(0.18 0.01 30 / 0.7);
+}
 
 /* Subtle shadow */
 .shadow-soft {
@@ -161,6 +182,9 @@
 }
 .shadow-card {
   box-shadow: 0 4px 16px oklch(0.18 0.02 30 / 0.06), 0 1px 4px oklch(0.18 0.02 30 / 0.04);
+}
+.dark .shadow-card {
+  box-shadow: 0 4px 16px oklch(0 0 0 / 0.3), 0 1px 4px oklch(0 0 0 / 0.2);
 }
 
 /* Animations */
@@ -173,6 +197,10 @@
   background-size: 1000px 100%;
   animation: shimmer 2s infinite;
 }
+.dark .shimmer {
+  background: linear-gradient(90deg, oklch(0.26 0 0) 0%, oklch(0.32 0 0) 50%, oklch(0.26 0 0) 100%);
+  background-size: 1000px 100%;
+}
 
 @keyframes pulse-ring {
   0% { box-shadow: 0 0 0 0 oklch(0.62 0.18 42 / 0.4); }
@@ -182,6 +210,45 @@
 .pulse-ring {
   animation: pulse-ring 2s infinite;
 }
+
+/* ============================================================
+   Dark-mode-aware colored chips
+   Components across the app use Tailwind's hardcoded
+   bg-{color}-100 and text-{color}-600 for icon chips.
+   These overrides adapt them for dark mode automatically,
+   so we don't need to add dark: variants in 174+ places.
+   ============================================================ */
+.dark .bg-amber-50  { background-color: oklch(0.3 0.06 60 / 0.25); }
+.dark .bg-amber-100 { background-color: oklch(0.32 0.07 60 / 0.4); }
+.dark .bg-emerald-50  { background-color: oklch(0.3 0.06 155 / 0.25); }
+.dark .bg-emerald-100 { background-color: oklch(0.32 0.07 155 / 0.4); }
+.dark .bg-rose-50  { background-color: oklch(0.3 0.06 25 / 0.25); }
+.dark .bg-rose-100 { background-color: oklch(0.32 0.07 25 / 0.4); }
+.dark .bg-rose-500\/10 { background-color: oklch(0.6 0.18 25 / 0.15); }
+.dark .bg-blue-50  { background-color: oklch(0.3 0.06 250 / 0.25); }
+.dark .bg-blue-100 { background-color: oklch(0.32 0.07 250 / 0.4); }
+.dark .bg-violet-50  { background-color: oklch(0.3 0.06 295 / 0.25); }
+.dark .bg-violet-100 { background-color: oklch(0.32 0.07 295 / 0.4); }
+
+.dark .text-amber-600  { color: oklch(0.78 0.15 60); }
+.dark .text-amber-700  { color: oklch(0.82 0.14 60); }
+.dark .text-emerald-600 { color: oklch(0.78 0.15 155); }
+.dark .text-emerald-700 { color: oklch(0.82 0.14 155); }
+.dark .text-rose-600  { color: oklch(0.78 0.16 25); }
+.dark .text-rose-700  { color: oklch(0.82 0.15 25); }
+.dark .text-blue-600  { color: oklch(0.78 0.15 250); }
+.dark .text-blue-700  { color: oklch(0.82 0.14 250); }
+.dark .text-violet-600 { color: oklch(0.78 0.16 295); }
+.dark .text-violet-700 { color: oklch(0.82 0.15 295); }
+
+/* Border color adaptations for dark mode */
+.dark .border-rose-100 { border-color: oklch(0.32 0.07 25 / 0.3); }
+.dark .border-rose-200 { border-color: oklch(0.35 0.08 25 / 0.4); }
+.dark .border-rose-300 { border-color: oklch(0.55 0.18 25 / 0.5); }
+.dark .border-emerald-300 { border-color: oklch(0.55 0.18 155 / 0.5); }
+.dark .border-amber-300 { border-color: oklch(0.55 0.18 60 / 0.5); }
+.dark .border-emerald-100 { border-color: oklch(0.32 0.07 155 / 0.3); }
+.dark .border-emerald-200 { border-color: oklch(0.35 0.08 155 / 0.4); }
 
 /* Print styles - hide app chrome, show only invoice */
 @media print {

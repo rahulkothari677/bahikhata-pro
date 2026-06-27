@@ -13,16 +13,17 @@ import { DateRangePicker, getPresetRange, getPresetLabel, type DateRange, type D
 import {
   TrendingUp, TrendingDown, Wallet, Package,
   ArrowUpRight, ArrowDownRight, AlertTriangle, IndianRupee,
-  Receipt, Boxes, PiggyBank, ScanLine, ArrowRight, Plus,
+  Receipt, Boxes, PiggyBank, ScanLine, ArrowRight, Plus, CloudOff,
 } from 'lucide-react'
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell,
   Pie, PieChart, ResponsiveContainer, Tooltip,
   XAxis, YAxis,
 } from 'recharts'
+import { chartColors } from '@/lib/chart-theme'
 import { formatINR, formatINRCompact, relativeTime, cn } from '@/lib/utils'
 import { motion } from 'framer-motion'
-import { offlineFetch } from '@/lib/offline-fetch'
+import { offlineFetch, isOnline, OfflineError } from '@/lib/offline-fetch'
 import { useSetting } from '@/hooks/use-setting'
 
 const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)']
@@ -34,11 +35,18 @@ export function Dashboard() {
   const [dateRange, setDateRange] = useState<DateRange>(() => getPresetRange('thisMonth'))
   const [datePreset, setDatePreset] = useState<DatePreset>('thisMonth')
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ['dashboard', refreshKey, dateRange.from.toISOString(), dateRange.to.toISOString()],
     queryFn: async () => {
       const r = await offlineFetch(`/api/dashboard?from=${dateRange.from.toISOString()}&to=${dateRange.to.toISOString()}`)
+      if (!r.ok) throw new Error(`HTTP ${r.status}`)
       return r.json()
+    },
+    // Don't retry when offline or on network errors — fail fast
+    retry: (count, err) => {
+      if (err instanceof OfflineError) return false
+      if (err instanceof TypeError) return false // Network failure
+      return count < 2
     },
   })
 
@@ -62,6 +70,51 @@ export function Dashboard() {
   const todayStart = new Date()
   todayStart.setHours(0, 0, 0, 0)
 
+  // Show offline-no-data state if: offline AND query failed (any error) AND no cached data
+  const isOfflineNoData = !isOnline() && !!error && !data
+
+  if (isOfflineNoData) {
+    return (
+      <div className="space-y-5">
+        <DateRangeHeader
+          dateRange={dateRange}
+          datePreset={datePreset}
+          onChange={handleDateChange}
+          onPresetChange={setDatePreset}
+        />
+        <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+          <div className="w-16 h-16 rounded-full bg-amber-100 dark:bg-amber-950/40 flex items-center justify-center mb-4">
+            <CloudOff className="w-8 h-8 text-amber-600" />
+          </div>
+          <h3 className="text-lg font-semibold mb-2">No cached data</h3>
+          <p className="text-sm text-muted-foreground max-w-sm mb-4">
+            You&apos;re offline and the dashboard data hasn&apos;t been cached yet.
+            Connect to internet once to load your data — after that, it works offline.
+          </p>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { setView('sales') }}
+              className="gap-2"
+            >
+              View Sales Ledger
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { setView('new-sale') }}
+              className="gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              New Sale
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (isLoading || !data) {
     return (
       <div className="space-y-5">
@@ -79,6 +132,82 @@ export function Dashboard() {
   const { kpis, salesTrend, topProducts, categoryBreakdown, paymentModeSplit, lowStockProducts, gstSummary, recentTransactions, setting } = data
 
   const rangeLabel = datePreset === 'custom' ? 'Selected Period' : getPresetLabel(datePreset)
+
+  // Empty state for new users (0 transactions)
+  const isNewUser = kpis.totalStockValue === 0 && kpis.productCount === 0 && kpis.rangeTxnCount === 0 && recentTransactions.length === 0
+
+  if (isNewUser) {
+    return (
+      <div className="space-y-5">
+        <DateRangeHeader
+          dateRange={dateRange}
+          datePreset={datePreset}
+          onChange={handleDateChange}
+          onPresetChange={setDatePreset}
+        />
+        {/* Empty state hero */}
+        <div className="rounded-2xl bg-gradient-saffron p-8 lg:p-12 text-white shadow-lg relative overflow-hidden text-center">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32" />
+          <div className="relative z-10">
+            <div className="text-5xl mb-4">🏪</div>
+            <h2 className="text-2xl font-bold mb-2">Welcome to BahiKhata Pro!</h2>
+            <p className="text-white/80 text-sm max-w-md mx-auto mb-6">
+              Your dashboard will come alive once you start recording sales. Here's how to get started in 2 minutes:
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl mx-auto">
+              <button
+                onClick={() => setView('new-sale')}
+                className="bg-white/20 hover:bg-white/30 rounded-xl p-4 text-left transition active:scale-95"
+              >
+                <Plus className="w-6 h-6 mb-2" />
+                <p className="font-semibold text-sm">1. Record a Sale</p>
+                <p className="text-xs text-white/70 mt-1">Tap here to create your first sale entry</p>
+              </button>
+              <button
+                onClick={() => setView('inventory')}
+                className="bg-white/20 hover:bg-white/30 rounded-xl p-4 text-left transition active:scale-95"
+              >
+                <Package className="w-6 h-6 mb-2" />
+                <p className="font-semibold text-sm">2. Add Products</p>
+                <p className="text-xs text-white/70 mt-1">Add your inventory items with prices</p>
+              </button>
+              <button
+                onClick={() => setView('scanner')}
+                className="bg-white/20 hover:bg-white/30 rounded-xl p-4 text-left transition active:scale-95"
+              >
+                <ScanLine className="w-6 h-6 mb-2" />
+                <p className="font-semibold text-sm">3. Scan a Bill</p>
+                <p className="text-xs text-white/70 mt-1">AI scans any bill automatically</p>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Quick stats (all zeros but shows the layout) */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {[
+            { label: "Today's Revenue", value: '₹0', icon: IndianRupee, color: 'text-amber-600 bg-amber-100' },
+            { label: "Today's Profit", value: '₹0', icon: TrendingUp, color: 'text-emerald-600 bg-emerald-100' },
+            { label: 'Products', value: '0', icon: Package, color: 'text-blue-600 bg-blue-100' },
+            { label: 'Customers', value: '0', icon: Wallet, color: 'text-violet-600 bg-violet-100' },
+          ].map((stat, i) => {
+            const Icon = stat.icon
+            return (
+              <Card key={i} className="shadow-card border-border/60">
+                <CardContent className="p-4">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-2 ${stat.color}`}>
+                    <Icon className="w-5 h-5" />
+                  </div>
+                  <p className="text-2xl font-bold">{stat.value}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{stat.label}</p>
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-5">
@@ -118,8 +247,8 @@ export function Dashboard() {
         </div>
       </motion.div>
 
-      {/* Date range selector + KPI header */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
+      {/* Date range selector + KPI header — sticky on desktop so user can change dates without scrolling back to top */}
+      <div className="flex items-center justify-between gap-3 flex-wrap lg:sticky lg:top-3 lg:z-20 lg:bg-background/80 lg:backdrop-blur-md lg:py-2 lg:-mx-2 lg:px-2 lg:rounded-lg">
         <div>
           <h3 className="text-base font-semibold">{t('dash.business_overview')}</h3>
           <p className="text-xs text-muted-foreground">{t('dash.filter_hint')}</p>
@@ -223,16 +352,17 @@ export function Dashboard() {
                   <stop offset="0%" stopColor="oklch(0.62 0.18 42)" stopOpacity={0.4} />
                   <stop offset="100%" stopColor="oklch(0.62 0.18 42)" stopOpacity={0} />
                 </linearGradient>
-                <linearGradient id="color{t('common.profit')}" x1="0" y1="0" x2="0" y2="1">
+                <linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="oklch(0.62 0.15 155)" stopOpacity={0.4} />
                   <stop offset="100%" stopColor="oklch(0.62 0.15 155)" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.91 0.01 60)" vertical={false} />
-              <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'oklch(0.52 0.02 30)' }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: 'oklch(0.52 0.02 30)' }} axisLine={false} tickLine={false} tickFormatter={(v) => formatINRCompact(v)} />
+              <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} vertical={false} />
+              <XAxis dataKey="label" tick={{ fontSize: 11, fill: chartColors.tick }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 11, fill: chartColors.tick }} axisLine={false} tickLine={false} tickFormatter={(v) => formatINRCompact(v)} />
               <Tooltip
-                contentStyle={{ borderRadius: '12px', border: '1px solid oklch(0.91 0.01 60)', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+                cursor={{ stroke: chartColors.grid, strokeWidth: 1, strokeDasharray: '3 3' }}
+                contentStyle={chartColors.tooltipStyle}
                 formatter={(v: number) => formatINR(v)}
               />
               <Area type="monotone" dataKey="revenue" stroke="oklch(0.62 0.18 42)" strokeWidth={2} fill="url(#colorRev)" name="Revenue" />
@@ -265,16 +395,19 @@ export function Dashboard() {
             ) : (
               <ResponsiveContainer width="100%" height={260}>
                 <BarChart data={topProducts} layout="vertical" margin={{ top: 0, right: 10, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.91 0.01 60)" horizontal={false} />
-                  <XAxis type="number" tick={{ fontSize: 11, fill: 'oklch(0.52 0.02 30)' }} axisLine={false} tickLine={false} tickFormatter={(v) => formatINRCompact(v)} />
-                  <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: 'oklch(0.18 0.02 30)' }} axisLine={false} tickLine={false} width={130}
+                  <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} horizontal={false} />
+                  <XAxis type="number" tick={{ fontSize: 11, fill: chartColors.tick }} axisLine={false} tickLine={false} tickFormatter={(v) => formatINRCompact(v)} />
+                  <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: chartColors.tick }} axisLine={false} tickLine={false} width={130}
                     tickFormatter={(v) => v.length > 18 ? v.slice(0, 18) + '…' : v}
                   />
                   <Tooltip
-                    contentStyle={{ borderRadius: '12px', border: '1px solid oklch(0.91 0.01 60)', fontSize: 12 }}
+                    cursor={{ fill: 'transparent' }}
+                    contentStyle={chartColors.tooltipStyle}
                     formatter={(v: number, name: string) => name === 'revenue' ? [formatINR(v), 'Revenue'] : [formatINR(v), 'Profit']}
                   />
-                  <Bar dataKey="revenue" fill="oklch(0.62 0.18 42)" radius={[0, 6, 6, 0]} barSize={18} name="revenue" />
+                  <Bar dataKey="revenue" fill="oklch(0.62 0.18 42)" radius={[0, 6, 6, 0]} barSize={18} name="revenue"
+                    activeBar={{ fill: 'oklch(0.68 0.20 42)', barSize: 24 }}
+                  />
                 </BarChart>
               </ResponsiveContainer>
             )}
@@ -301,12 +434,23 @@ export function Dashboard() {
                       cx="50%" cy="50%"
                       innerRadius={45} outerRadius={70}
                       paddingAngle={2}
+                      isAnimationActive
+                      animationDuration={300}
                     >
                       {paymentModeSplit.map((_, i) => (
-                        <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                        <Cell
+                          key={i}
+                          fill={COLORS[i % COLORS.length]}
+                          stroke="var(--background)"
+                          strokeWidth={2}
+                        />
                       ))}
                     </Pie>
-                    <Tooltip formatter={(v: number) => formatINR(v)} contentStyle={{ borderRadius: 12, fontSize: 12 }} />
+                    <Tooltip
+                      cursor={{ stroke: 'transparent', strokeWidth: 0 }}
+                      formatter={(v: number) => formatINR(v)}
+                      contentStyle={chartColors.tooltipStyle}
+                    />
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="grid grid-cols-2 gap-2 mt-3">
