@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
 import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
+import { DEFAULT_STAFF_PERMISSIONS, parsePermissions, type StaffPermissions } from '@/lib/staff-permissions'
 
 // GET /api/staff - list all staff members for the current owner
 export async function GET() {
@@ -16,11 +17,18 @@ export async function GET() {
         name: true,
         email: true,
         role: true,
+        permissions: true,
         createdAt: true,
       },
     })
 
-    return NextResponse.json({ staff })
+    // Parse permissions for each staff member
+    const staffWithPerms = staff.map((s) => ({
+      ...s,
+      permissions: parsePermissions(s.permissions),
+    }))
+
+    return NextResponse.json({ staff: staffWithPerms })
   } catch (error) {
     console.error('Staff GET error:', error)
     return NextResponse.json({ error: 'Failed to fetch staff', detail: String(error) }, { status: 500 })
@@ -33,18 +41,17 @@ export async function POST(req: NextRequest) {
     const { userId, error } = await getAuthUserId()
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    // Verify the current user is an owner (null role = owner for existing users)
+    // Verify the current user is an owner
     const owner = await db.user.findUnique({ where: { id: userId } })
     if (!owner) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
-    // Allow if role is 'owner' OR null/undefined (existing users created before role field)
     if (owner.role === 'staff') {
       return NextResponse.json({ error: 'Only owners can add staff' }, { status: 403 })
     }
 
     const body = await req.json()
-    const { name, email, password } = body
+    const { name, email, password, permissions } = body
 
     if (!email || !password) {
       return NextResponse.json({ error: 'Email and password are required' }, { status: 400 })
@@ -64,7 +71,9 @@ export async function POST(req: NextRequest) {
 
     const hashedPassword = await bcrypt.hash(password, 12)
 
-    // Create staff account linked to owner
+    // Create staff account with default permissions (or custom if provided)
+    const perms = permissions || DEFAULT_STAFF_PERMISSIONS
+
     const staff = await db.user.create({
       data: {
         email: emailLower,
@@ -72,23 +81,69 @@ export async function POST(req: NextRequest) {
         name: name || null,
         role: 'staff',
         ownerId: userId,
+        permissions: perms,
       },
       select: {
         id: true,
         name: true,
         email: true,
         role: true,
+        permissions: true,
         createdAt: true,
       },
     })
 
-    return NextResponse.json({ staff })
+    return NextResponse.json({ staff: { ...staff, permissions: parsePermissions(staff.permissions) } })
   } catch (error) {
     console.error('Staff POST error:', error)
-    return NextResponse.json({ 
-      error: 'Failed to create staff account', 
-      detail: String(error instanceof Error ? error.message : error) 
+    return NextResponse.json({
+      error: 'Failed to create staff account',
+      detail: String(error instanceof Error ? error.message : error)
     }, { status: 500 })
+  }
+}
+
+// PATCH /api/staff?id=xxx - update staff permissions
+export async function PATCH(req: NextRequest) {
+  try {
+    const { userId, error } = await getAuthUserId()
+    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const { searchParams } = new URL(req.url)
+    const id = searchParams.get('id')
+    if (!id) return NextResponse.json({ error: 'ID required' }, { status: 400 })
+
+    // Verify the staff member belongs to this owner
+    const staff = await db.user.findFirst({ where: { id, ownerId: userId, role: 'staff' } })
+    if (!staff) return NextResponse.json({ error: 'Staff not found' }, { status: 404 })
+
+    const body = await req.json()
+    const { permissions } = body as { permissions: StaffPermissions }
+
+    if (!permissions || typeof permissions !== 'object') {
+      return NextResponse.json({ error: 'Permissions object required' }, { status: 400 })
+    }
+
+    // Merge with defaults to ensure all keys are present
+    const mergedPerms = { ...DEFAULT_STAFF_PERMISSIONS, ...permissions }
+
+    const updated = await db.user.update({
+      where: { id },
+      data: { permissions: mergedPerms },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        permissions: true,
+        createdAt: true,
+      },
+    })
+
+    return NextResponse.json({ staff: { ...updated, permissions: parsePermissions(updated.permissions) } })
+  } catch (error) {
+    console.error('Staff PATCH error:', error)
+    return NextResponse.json({ error: 'Failed to update staff permissions' }, { status: 500 })
   }
 }
 

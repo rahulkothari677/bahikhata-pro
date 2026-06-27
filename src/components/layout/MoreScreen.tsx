@@ -22,6 +22,7 @@ import { useSession, signOut } from 'next-auth/react'
 import { useAppStore } from '@/store/app-store'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { clearAllOfflineData } from '@/lib/offline-db'
+import { useStaffPermissions } from '@/hooks/use-staff-permissions'
 import { haptic } from '@/lib/haptic'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { getInitials, cn } from '@/lib/utils'
@@ -76,6 +77,7 @@ const SECTIONS: MenuSection[] = [
 export function MoreScreen() {
   const { setView, previousView, setPreviousView } = useAppStore()
   const { data: session } = useSession()
+  const { canAccess } = useStaffPermissions()
 
   // Fetch settings for profile header
   const { data: settingData } = useQuery({
@@ -160,8 +162,23 @@ export function MoreScreen() {
           </div>
         </button>
 
-        {/* Menu Sections */}
-        {SECTIONS.map((section, idx) => (
+        {/* Menu Sections — filtered by staff permissions */}
+        {SECTIONS.map((section, idx) => {
+          const visibleItems = section.items.filter((item) => {
+            const moduleMap: Record<string, string> = {
+              'reports': 'reports',
+              'purchases': 'purchases',
+              'income-expense': 'incomeExpense',
+              'parties': 'parties',
+              'scanner': 'scanner',
+              'settings': 'settings',
+            }
+            const moduleKey = moduleMap[item.view]
+            if (moduleKey) return canAccess(moduleKey as any)
+            return true
+          })
+          if (visibleItems.length === 0) return null
+          return (
           <div key={idx}>
             {section.title && (
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-2 mb-2">
@@ -169,7 +186,7 @@ export function MoreScreen() {
               </p>
             )}
             <div className="bg-card rounded-2xl shadow-sm border border-border/60 overflow-hidden">
-              {section.items.map((item, i) => {
+              {visibleItems.map((item, i) => {
                 const Icon = item.icon
                 return (
                   <button
@@ -195,7 +212,8 @@ export function MoreScreen() {
               })}
             </div>
           </div>
-        ))}
+          )
+        })}
 
         {/* Premium Banner — links to Plans & Pricing view */}
         <button

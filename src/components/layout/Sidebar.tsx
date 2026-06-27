@@ -10,6 +10,7 @@ import { clearAllOfflineData } from '@/lib/offline-db'
 import { clearRecentProducts } from '@/lib/recent-products'
 import { toast as sonnerToast } from 'sonner'
 import { useFeatureFlags } from '@/hooks/use-feature-flags'
+import { useStaffPermissions } from '@/hooks/use-staff-permissions'
 import {
   LayoutDashboard,
   Package,
@@ -56,7 +57,7 @@ export function Sidebar() {
   const { t } = useTranslation()
   const { data: session } = useSession()
   const isStaff = session?.user?.role === 'staff'
-  const staffHiddenItems: ViewType[] = isStaff ? ['reports'] : []
+  const { canAccess } = useStaffPermissions()
   const { isFlagEnabled } = useFeatureFlags()
 
   // Fetch settings for profile section
@@ -149,7 +150,24 @@ export function Sidebar() {
         <nav className={cn('flex-1 overflow-y-auto px-3 py-4 space-y-1', sidebarCollapsed && 'lg:px-2')}>
           {navItems.filter(item => {
             if (item.id === 'scanner' && !isFlagEnabled('ai_scanner')) return false
-            return !staffHiddenItems.includes(item.id)
+            // Gate by staff permissions — map ViewType to ModuleKey
+            const moduleMap: Record<string, string> = {
+              'dashboard': 'dashboard',
+              'sales': 'sales',
+              'purchases': 'purchases',
+              'inventory': 'inventory',
+              'scanner': 'scanner',
+              'reports': 'reports',
+              'income-expense': 'incomeExpense',
+              'parties': 'parties',
+              'settings': 'settings',
+              'pricing': 'pricing', // pricing is always visible (owner only feature)
+            }
+            const moduleKey = moduleMap[item.id]
+            if (moduleKey && moduleKey !== 'pricing') {
+              return canAccess(moduleKey as any)
+            }
+            return true
           }).map((item) => {
             const Icon = item.icon
             const active = currentView === item.id ||

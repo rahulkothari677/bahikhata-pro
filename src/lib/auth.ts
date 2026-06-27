@@ -48,6 +48,7 @@ export const authOptions: NextAuthOptions = {
             name: user.name,
             role: user.role || 'owner',
             ownerId: user.ownerId,
+            permissions: user.permissions,
           }
         } catch (error) {
           console.error('Auth error:', error)
@@ -73,6 +74,7 @@ export const authOptions: NextAuthOptions = {
         token.id = user.id
         token.role = (user as any).role
         token.ownerId = (user as any).ownerId
+        token.permissions = (user as any).permissions
       }
       return token
     },
@@ -81,6 +83,7 @@ export const authOptions: NextAuthOptions = {
         session.user.id = token.id as string
         session.user.role = (token.role as string) || 'owner'
         session.user.ownerId = token.ownerId as string | null
+        ;(session.user as any).permissions = token.permissions
       }
       return session
     },

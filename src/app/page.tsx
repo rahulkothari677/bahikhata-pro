@@ -29,6 +29,7 @@ import { OnboardingTour } from '@/components/common/OnboardingTour'
 import { ConsentModal } from '@/components/common/ConsentModal'
 import { RatePromptModal } from '@/components/common/RatePromptModal'
 import { useRatePrompt } from '@/hooks/use-rate-prompt'
+import { useStaffPermissions } from '@/hooks/use-staff-permissions'
 
 // Lazy-load heavy components that are only used occasionally.
 // This splits them into separate JS chunks, loaded on-demand when the user
@@ -46,10 +47,35 @@ export default function Home() {
   const { currentView, features, triggerRefresh, setView } = useAppStore()
   useBrowserBackButton() // Enable browser back button to navigate within app
   const { shouldShowRatePrompt, onRated, onDismiss } = useRatePrompt()
+  const { canAccess } = useStaffPermissions()
   const queryClient = useQueryClient()
   const [onboardingDismissed, setOnboardingDismissed] = useState(false)
   const [tourDone, setTourDone] = useState(false)
   const [mounted, setMounted] = useState(false)
+
+  // Redirect staff to their first allowed view if they try to access a blocked module
+  useEffect(() => {
+    if (status !== 'authenticated' || !session) return
+    const moduleMap: Record<string, string> = {
+      'dashboard': 'dashboard',
+      'sales': 'sales',
+      'purchases': 'purchases',
+      'inventory': 'inventory',
+      'scanner': 'scanner',
+      'reports': 'reports',
+      'income-expense': 'incomeExpense',
+      'parties': 'parties',
+      'settings': 'settings',
+    }
+    const moduleKey = moduleMap[currentView]
+    if (moduleKey && !canAccess(moduleKey as any)) {
+      // Redirect to first allowed view
+      const firstAllowed = ['sales', 'purchases', 'inventory', 'scanner', 'dashboard'].find(
+        (v) => canAccess(v as any)
+      )
+      setView((firstAllowed || 'sales') as any)
+    }
+  }, [currentView, session, status, canAccess, setView])
 
   useEffect(() => {
     Promise.resolve().then(() => setMounted(true))

@@ -25,6 +25,11 @@ model User {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
+  // Staff permissions — JSON object controlling which modules staff can access.
+  // Only applies when role = 'staff'. Owner always has full access.
+  // Default: sales, purchases, inventory, scanner = true; everything else = false
+  permissions   Json?
+
   // Subscription / plan (built earlier — restored from DB)
   cancelledAt   DateTime?
   plan          String    @default("free") // free | pro | elite

@@ -22,6 +22,7 @@ import { LayoutDashboard, ShoppingCart, Package, Menu, Plus } from 'lucide-react
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/hooks/use-translation'
 import { haptic } from '@/lib/haptic'
+import { useStaffPermissions } from '@/hooks/use-staff-permissions'
 
 interface Tab {
   view: ViewType
@@ -41,11 +42,24 @@ const TABS: Tab[] = [
 export function MobileBottomNav() {
   const { currentView, setView } = useAppStore()
   const { t } = useTranslation()
+  const { canAccess } = useStaffPermissions()
 
   // Don't show on auth screen or new entry/detail pages (those have their own back button)
   // The More screen KEEPS the bottom nav so users can switch tabs without going back
   const hideOnViews: ViewType[] = ['new-sale', 'new-purchase', 'transaction-detail', 'party-profile']
   if (hideOnViews.includes(currentView)) return null
+
+  // Filter tabs by staff permissions
+  const visibleTabs = TABS.filter(tab => {
+    const moduleMap: Record<string, string> = {
+      'dashboard': 'dashboard',
+      'sales': 'sales',
+      'inventory': 'inventory',
+    }
+    const moduleKey = moduleMap[tab.view]
+    if (moduleKey) return canAccess(moduleKey as any)
+    return true
+  })
 
   // 'More' tab is active when on the More screen OR any secondary view reached from More
   const isMoreActive = currentView === 'more' || ['purchases', 'income-expense', 'parties', 'scanner', 'reports', 'settings'].includes(currentView)
@@ -65,7 +79,7 @@ export function MobileBottomNav() {
       >
         <div className="flex items-center justify-around h-16 px-2 relative">
           {/* Left side: Dashboard + Sales */}
-          {TABS.slice(0, 2).map((tab) => {
+          {visibleTabs.slice(0, 2).map((tab) => {
             const Icon = tab.icon
             const isActive = currentView === tab.view
             return (
@@ -96,7 +110,7 @@ export function MobileBottomNav() {
           </div>
 
           {/* Right side: Inventory + More */}
-          {TABS.slice(2).map((tab) => {
+          {visibleTabs.slice(2).map((tab) => {
             const Icon = tab.icon
             const isActive = currentView === tab.view
             return (
