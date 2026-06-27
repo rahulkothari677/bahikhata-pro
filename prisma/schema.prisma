@@ -168,6 +168,10 @@ model Setting {
   email     String?
   currency  String   @default("INR")
   language  String   @default("en")
+  // Privacy: when true, profit figures are hidden from all UI (dashboard,
+  // ledger, transaction detail). Data is still calculated and stored —
+  // only the display is hidden. Owner controls this; staff inherits.
+  hideProfit Boolean @default(false)
 }
 
 // ==================== AUDIT LOG (security & compliance) ====================

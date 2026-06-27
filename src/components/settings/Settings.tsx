@@ -18,7 +18,7 @@ import { THEME_OPTIONS } from '@/components/providers/ThemeProvider'
 import {
   Store, Save, Database, Trash2, AlertTriangle, Moon, Keyboard,
   Search, MessageCircle, Sparkles, Bell, Repeat, FileSpreadsheet,
-  Users, Package, ScanLine, TrendingUp, Smartphone, RotateCcw, Palette, Check, Globe, Shield,
+  Users, Package, ScanLine, TrendingUp, Smartphone, RotateCcw, Palette, Check, Globe, Shield, EyeOff,
 } from 'lucide-react'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 
@@ -80,6 +80,7 @@ export function Settings() {
     shopName: '', ownerName: '', phone: '', email: '',
     gstin: '', state: '', address: '',
   })
+  const [hideProfit, setHideProfit] = useState(false)
   const [saving, setSaving] = useState(false)
 
   const { data } = useQuery({
@@ -101,6 +102,7 @@ export function Settings() {
         state: data.setting.state || '',
         address: data.setting.address || '',
       })
+      setHideProfit(data.setting.hideProfit === true)
     }
   }, [data])
 
@@ -114,7 +116,7 @@ export function Settings() {
       const r = await offlineFetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, hideProfit }),
         offline: { invalidate: ['/api/settings', '/api/dashboard'] },
       })
       if (!r.ok) throw new Error('Failed')
@@ -384,6 +386,26 @@ export function Settings() {
                 हिंदी
               </button>
             </div>
+          </div>
+
+          {/* Hide Profit Toggle */}
+          <div className="mt-3 flex items-center justify-between rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 p-3">
+            <div className="flex items-center gap-2">
+              <EyeOff className="w-4 h-4 text-amber-600" />
+              <div>
+                <p className="text-sm font-medium">Hide Profit</p>
+                <p className="text-[11px] text-muted-foreground">
+                  Hide profit figures from dashboard, ledger, and transaction details. Useful when staff or customers are looking at your screen. Profit is still calculated — just hidden from view.
+                </p>
+              </div>
+            </div>
+            <Switch
+              checked={hideProfit}
+              onCheckedChange={(checked) => {
+                setHideProfit(checked)
+                sonnerToast.success(`Profit ${checked ? 'hidden' : 'visible'}`)
+              }}
+            />
           </div>
         </CardContent>
       </Card>

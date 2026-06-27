@@ -33,6 +33,7 @@ export async function PUT(req: NextRequest) {
         gstin: body.gstin,
         state: body.state,
         email: body.email,
+        hideProfit: body.hideProfit,
       },
       create: {
         userId,
@@ -43,6 +44,7 @@ export async function PUT(req: NextRequest) {
         gstin: body.gstin,
         state: body.state,
         email: body.email,
+        hideProfit: body.hideProfit ?? false,
       },
     })
     return NextResponse.json({ setting })

@@ -24,12 +24,14 @@ import { chartColors } from '@/lib/chart-theme'
 import { formatINR, formatINRCompact, relativeTime, cn } from '@/lib/utils'
 import { motion } from 'framer-motion'
 import { offlineFetch, isOnline, OfflineError } from '@/lib/offline-fetch'
+import { useSetting } from '@/hooks/use-setting'
 
 const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)']
 
 export function Dashboard() {
   const { setView, refreshKey, setSelectedTransactionId, setPreviousView, setPendingDateRange } = useAppStore()
   const { t, language } = useTranslation()
+  const { hideProfit } = useSetting()
   const [dateRange, setDateRange] = useState<DateRange>(() => getPresetRange('thisMonth'))
   const [datePreset, setDatePreset] = useState<DatePreset>('thisMonth')
 
@@ -255,7 +257,7 @@ export function Dashboard() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
+      <div className={`grid grid-cols-2 ${hideProfit ? 'lg:grid-cols-2' : 'lg:grid-cols-4'} gap-3 lg:gap-4`}>
         <KPICard
           title={t('dash.today_revenue')}
           value={formatINR(kpis.todayRevenue)}
@@ -264,14 +266,16 @@ export function Dashboard() {
           subtitle={`${kpis.todayTxnCount} ${t('dash.sales_word')}`}
           onClick={() => navigateToSalesWithDate(todayStart, new Date(), 'Today')}
         />
-        <KPICard
-          title={t('dash.today_profit')}
-          value={formatINR(kpis.todayProfit)}
-          icon={TrendingUp}
-          gradient="from-emerald-500 to-teal-600"
-          subtitle={`${t('stat.margin')} ${kpis.todayRevenue > 0 ? ((kpis.todayProfit / kpis.todayRevenue) * 100).toFixed(1) : 0}%`}
-          onClick={() => navigateToSalesWithDate(todayStart, new Date(), 'Today')}
-        />
+        {!hideProfit && (
+          <KPICard
+            title={t('dash.today_profit')}
+            value={formatINR(kpis.todayProfit)}
+            icon={TrendingUp}
+            gradient="from-emerald-500 to-teal-600"
+            subtitle={`${t('stat.margin')} ${kpis.todayRevenue > 0 ? ((kpis.todayProfit / kpis.todayRevenue) * 100).toFixed(1) : 0}%`}
+            onClick={() => navigateToSalesWithDate(todayStart, new Date(), 'Today')}
+          />
+        )}
         <KPICard
           title={`${rangeLabel} Revenue`}
           value={formatINR(kpis.rangeRevenue)}
@@ -281,15 +285,17 @@ export function Dashboard() {
           trend={kpis.revenueGrowth >= 0 ? 'up' : 'down'}
           onClick={() => navigateToSalesWithDate(dateRange.from, dateRange.to, rangeLabel)}
         />
-        <KPICard
-          title={`${t('dash.net_profit')} (${rangeLabel})`}
-          value={formatINR(kpis.netProfit)}
-          icon={PiggyBank}
-          gradient="from-violet-500 to-purple-600"
-          subtitle={`${kpis.profitGrowth >= 0 ? '↑' : '↓'} ${Math.abs(kpis.profitGrowth).toFixed(1)}% profit trend`}
-          trend={kpis.profitGrowth >= 0 ? 'up' : 'down'}
-          onClick={() => navigateToSalesWithDate(dateRange.from, dateRange.to, rangeLabel)}
-        />
+        {!hideProfit && (
+          <KPICard
+            title={`${t('dash.net_profit')} (${rangeLabel})`}
+            value={formatINR(kpis.netProfit)}
+            icon={PiggyBank}
+            gradient="from-violet-500 to-purple-600"
+            subtitle={`${kpis.profitGrowth >= 0 ? '↑' : '↓'} ${Math.abs(kpis.profitGrowth).toFixed(1)}% profit trend`}
+            trend={kpis.profitGrowth >= 0 ? 'up' : 'down'}
+            onClick={() => navigateToSalesWithDate(dateRange.from, dateRange.to, rangeLabel)}
+          />
+        )}
       </div>
 
       {/* Secondary KPIs */}
@@ -360,7 +366,9 @@ export function Dashboard() {
                 formatter={(v: number) => formatINR(v)}
               />
               <Area type="monotone" dataKey="revenue" stroke="oklch(0.62 0.18 42)" strokeWidth={2} fill="url(#colorRev)" name="Revenue" />
-              <Area type="monotone" dataKey="profit" stroke="oklch(0.62 0.15 155)" strokeWidth={2} fill="url(#colorProfit)" name={t('common.profit')} />
+              {!hideProfit && (
+                <Area type="monotone" dataKey="profit" stroke="oklch(0.62 0.15 155)" strokeWidth={2} fill="url(#colorProfit)" name={t('common.profit')} />
+              )}
             </AreaChart>
           </ResponsiveContainer>
         </CardContent>
@@ -605,7 +613,7 @@ export function Dashboard() {
                         <p className={cn('text-sm font-semibold', isInflow ? 'text-emerald-600' : 'text-rose-600')}>
                           {isInflow ? '+' : '-'}{formatINRCompact(txn.totalAmount)}
                         </p>
-                        {isSale && txn.profit !== undefined && (
+                        {isSale && txn.profit !== undefined && !hideProfit && (
                           <p className="text-[10px] text-muted-foreground">
                             {t('common.profit')} {formatINRCompact(txn.profit)}
                           </p>
