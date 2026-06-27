@@ -80,8 +80,10 @@ export function Settings() {
     shopName: '', ownerName: '', phone: '', email: '',
     gstin: '', state: '', address: '',
   })
-  const [hideProfit, setHideProfit] = useState(false)
   const [saving, setSaving] = useState(false)
+
+  // useSetting hook — provides hideProfit + updateHideProfit (persists instantly)
+  const { hideProfit, updateHideProfit } = useSetting()
 
   const { data } = useQuery({
     queryKey: ['setting'],
@@ -102,7 +104,7 @@ export function Settings() {
         state: data.setting.state || '',
         address: data.setting.address || '',
       })
-      setHideProfit(data.setting.hideProfit === true)
+      // hideProfit is now managed by useSetting() hook — no need to sync here
     }
   }, [data])
 
@@ -402,7 +404,7 @@ export function Settings() {
             <Switch
               checked={hideProfit}
               onCheckedChange={(checked) => {
-                setHideProfit(checked)
+                updateHideProfit(checked)
                 sonnerToast.success(`Profit ${checked ? 'hidden' : 'visible'}`)
               }}
             />
