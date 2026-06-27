@@ -151,7 +151,6 @@ export default function Home() {
       </div>
 
       <MobileBottomNav />
-      <FloatingActionButton />
 
       <OfflineIndicator />
       <Onboarding open={showOnboarding} onDone={() => setOnboardingDismissed(true)} />

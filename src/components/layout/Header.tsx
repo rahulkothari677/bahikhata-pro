@@ -141,28 +141,28 @@ export function Header() {
             </Button>
           )}
 
-          {/* Quick action: AI Scan - hide on scanner page */}
-          {currentView !== 'scanner' && (
+          {/* Quick action: AI Scan - desktop only (mobile uses dashboard hero button) */}
+          {currentView !== 'scanner' && isFlagEnabled('ai_scanner') && (
             <Button
               size="sm"
               variant="outline"
               onClick={() => setView('scanner')}
-              className="hidden sm:flex gap-2 border-primary/30 text-primary hover:bg-primary/10"
+              className="hidden lg:flex gap-2 border-primary/30 text-primary hover:bg-primary/10"
             >
               <Sparkles className="w-4 h-4" />
-              <span className="hidden md:inline">{t('action.scan_bill')}</span>
+              <span className="hidden xl:inline">{t('action.scan_bill')}</span>
             </Button>
           )}
 
-          {/* New Entry button - context aware */}
+          {/* New Entry button - desktop only (mobile uses bottom nav center +) */}
           {showNewEntry && (
             <Button
               size="sm"
               onClick={handleNewEntry}
-              className="bg-gradient-saffron gap-2 shadow-md hover:opacity-90"
+              className="hidden lg:flex bg-gradient-saffron gap-2 shadow-md hover:opacity-90"
             >
               <Plus className="w-4 h-4" />
-              <span className="hidden sm:inline">{newEntryLabel}</span>
+              <span className="hidden xl:inline">{newEntryLabel}</span>
             </Button>
           )}
 

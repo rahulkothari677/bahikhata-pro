@@ -2,8 +2,13 @@
 
 import { useAppStore, type ViewType } from '@/store/app-store'
 import { useTranslation } from '@/hooks/use-translation'
-import { useSession } from 'next-auth/react'
-import { cn } from '@/lib/utils'
+import { useSession, signOut } from 'next-auth/react'
+import { cn, getInitials } from '@/lib/utils'
+import { useQuery } from '@tanstack/react-query'
+import { offlineFetch } from '@/lib/offline-fetch'
+import { clearAllOfflineData } from '@/lib/offline-db'
+import { toast as sonnerToast } from 'sonner'
+import { useFeatureFlags } from '@/hooks/use-feature-flags'
 import {
   LayoutDashboard,
   Package,
@@ -19,6 +24,13 @@ import {
   Sparkles,
   ChevronLeft,
   ChevronRight,
+  Crown,
+  HelpCircle,
+  Info,
+  Star,
+  LogOut,
+  Download,
+  Pencil,
 } from 'lucide-react'
 
 const navItems: { id: ViewType; labelKey: string; descKey: string; icon: any; badge?: string }[] = [
@@ -38,8 +50,37 @@ export function Sidebar() {
   const { t } = useTranslation()
   const { data: session } = useSession()
   const isStaff = session?.user?.role === 'staff'
-  // Staff can't see: reports, settings (except theme)
   const staffHiddenItems: ViewType[] = isStaff ? ['reports'] : []
+  const { isFlagEnabled } = useFeatureFlags()
+
+  // Fetch settings for profile section
+  const { data: settingData } = useQuery({
+    queryKey: ['setting'],
+    queryFn: async () => {
+      const r = await offlineFetch('/api/settings')
+      return r.json()
+    },
+  })
+  const setting = settingData?.setting || {}
+  const userName = setting.ownerName || session?.user?.name || 'Shop Owner'
+  const shopName = setting.shopName || 'My Shop'
+
+  const handleLogout = async () => {
+    if (!confirm('Are you sure you want to logout?')) return
+    try {
+      await clearAllOfflineData()
+      signOut({ callbackUrl: '/' })
+    } catch {
+      sonnerToast.error('Failed to logout')
+    }
+  }
+
+  const handleInstallApp = () => {
+    sonnerToast.info('Install BahiKhata Pro as an app', {
+      description: 'Click the install icon in your browser address bar, or use "Install app" from the browser menu.',
+      duration: 6000,
+    })
+  }
 
   return (
     <>
@@ -99,7 +140,10 @@ export function Sidebar() {
 
         {/* Navigation */}
         <nav className={cn('flex-1 overflow-y-auto px-3 py-4 space-y-1', sidebarCollapsed && 'lg:px-2')}>
-          {navItems.filter(item => !staffHiddenItems.includes(item.id)).map((item) => {
+          {navItems.filter(item => {
+            if (item.id === 'scanner' && !isFlagEnabled('ai_scanner')) return false
+            return !staffHiddenItems.includes(item.id)
+          }).map((item) => {
             const Icon = item.icon
             const active = currentView === item.id ||
               (currentView === 'transaction-detail' && ((selectedTransactionType === 'purchase' && item.id === 'purchases') || (selectedTransactionType !== 'purchase' && item.id === 'sales'))) ||
@@ -152,18 +196,74 @@ export function Sidebar() {
           })}
         </nav>
 
-        {/* Footer */}
-        {!sidebarCollapsed && (
-          <div className="p-4 border-t border-sidebar-border">
-            <div className="rounded-lg bg-sidebar-accent p-3 flex items-start gap-2">
-              <Sparkles className="w-4 h-4 text-sidebar-primary flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="text-xs font-semibold text-sidebar-accent-foreground">{t('nav.pro_tip')}</p>
-                <p className="text-[11px] text-sidebar-foreground/60 mt-0.5 leading-snug">
-                  {t('nav.pro_tip_desc')}
-                </p>
+        {/* Footer — Clean, organized sections */}
+        {!sidebarCollapsed ? (
+          <div className="border-t border-sidebar-border">
+            {/* Upgrade banner (only for non-staff) */}
+            {!isStaff && (
+              <div className="px-3 pt-3">
+                <button
+                  onClick={() => setView('pricing')}
+                  className="w-full p-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 text-white text-left hover:shadow-lg transition flex items-center gap-2"
+                >
+                  <Crown className="w-4 h-4 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold">Upgrade to Pro</p>
+                    <p className="text-[10px] text-white/80">Unlock AI scans, GST & more</p>
+                  </div>
+                </button>
               </div>
+            )}
+
+            {/* Support links — compact icon row */}
+            <div className="px-3 py-2 flex items-center gap-3 text-sidebar-foreground/50">
+              <button onClick={() => sonnerToast.info('Help center coming soon!')} className="hover:text-sidebar-foreground transition" title="Help">
+                <HelpCircle className="w-3.5 h-3.5" />
+              </button>
+              <button onClick={() => sonnerToast.info('Contact us at support@bahikhata.pro')} className="hover:text-sidebar-foreground transition" title="Contact">
+                <Info className="w-3.5 h-3.5" />
+              </button>
+              <button onClick={() => sonnerToast.info('BahiKhata Pro v1.0')} className="hover:text-sidebar-foreground transition" title="About">
+                <Star className="w-3.5 h-3.5" />
+              </button>
+              <button onClick={handleInstallApp} className="hover:text-sidebar-foreground transition" title="Install App">
+                <Download className="w-3.5 h-3.5" />
+              </button>
+              <div className="flex-1" />
+              <button onClick={handleLogout} className="text-rose-400/70 hover:text-rose-400 transition" title="Logout">
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
             </div>
+
+            {/* Profile section — always at bottom */}
+            <button
+              onClick={() => setView('settings')}
+              className="w-full p-3 border-t border-sidebar-border flex items-center gap-3 hover:bg-sidebar-accent transition"
+            >
+              <div className="w-9 h-9 rounded-full bg-gradient-saffron flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+                {getInitials(userName)}
+              </div>
+              <div className="flex-1 min-w-0 text-left">
+                <p className="text-xs font-semibold text-sidebar-foreground truncate">{userName}</p>
+                <p className="text-[10px] text-sidebar-foreground/50 truncate">{shopName}</p>
+              </div>
+              <Pencil className="w-3 h-3 text-sidebar-foreground/40 flex-shrink-0" />
+            </button>
+          </div>
+        ) : (
+          /* Collapsed mode — icons only */
+          <div className="border-t border-sidebar-border py-2 flex flex-col items-center gap-2">
+            {!isStaff && (
+              <button onClick={() => setView('pricing')} className="w-8 h-8 rounded-lg bg-gradient-to-r from-amber-500 to-orange-600 flex items-center justify-center" title="Upgrade to Pro">
+                <Crown className="w-4 h-4 text-white" />
+              </button>
+            )}
+            <button onClick={handleInstallApp} className="w-8 h-8 rounded-lg flex items-center justify-center text-sidebar-foreground/70 hover:bg-sidebar-accent" title="Install App">
+              <Download className="w-4 h-4" />
+            </button>
+            <button onClick={handleLogout} className="w-8 h-8 rounded-lg flex items-center justify-center text-rose-400 hover:bg-rose-500/10" title="Logout">
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
         )}
       </aside>
