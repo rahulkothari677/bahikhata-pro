@@ -114,7 +114,8 @@ export default function Home() {
         <OfflineIndicator />
         <Onboarding open={showOnboarding} onDone={() => setOnboardingDismissed(true)} />
         {features?.pwaInstall && <PWAInstallPrompt />}
-        <OnboardingTour />
+        {!showOnboarding && <OnboardingTour />}
+        {!showOnboarding && <ConsentModal />}
       </div>
     )
   }
@@ -156,8 +157,9 @@ export default function Home() {
       <Onboarding open={showOnboarding} onDone={() => setOnboardingDismissed(true)} />
 
       {features?.pwaInstall && <PWAInstallPrompt />}
-      <OnboardingTour />
-      <ConsentModal />
+      {/* Only show tour + consent AFTER onboarding is dismissed */}
+      {!showOnboarding && <OnboardingTour />}
+      {!showOnboarding && <ConsentModal />}
     </div>
   )
 }
