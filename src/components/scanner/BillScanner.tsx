@@ -13,7 +13,7 @@ import { toast as sonnerToast } from 'sonner'
 import { formatINR, cn } from '@/lib/utils'
 import {
   ScanLine, Upload, Camera, Sparkles, X, Check, Loader2,
-  ImageIcon, FileText, ArrowRight, Trash2, ShoppingCart, Truck,
+  ImageIcon, FileText, ArrowRight, Trash2, ShoppingCart, Truck, Plus,
 } from 'lucide-react'
 import { offlineFetch } from '@/lib/offline-fetch'
 
@@ -87,7 +87,13 @@ export function BillScanner() {
       const base64 = await compressImage(file)
       setPreview(base64)
       setScanning(true)
-      setScanned(null)
+      // Save existing items before scanning (for "adding more" mode)
+      const existingItems = scanned?._isAddingMore ? (scanned?.items || []) : []
+      const isAddingMore = scanned?._isAddingMore || false
+      // Don't set scanned to null if we're adding more — keep showing items
+      if (!isAddingMore) {
+        setScanned(null)
+      }
       try {
         // Step 1: Upload to Cloudinary (gets a URL, stores image for future)
         const uploadRes = await offlineFetch('/api/upload-bill', {
@@ -116,11 +122,11 @@ export function BillScanner() {
           }
         } else {
           // If we're in "adding more" mode, append new items to existing
-          if (scanned?._isAddingMore && scanned?.items) {
+          if (isAddingMore && existingItems.length > 0) {
             const newItems = data.bill.items || []
             setScanned({
               ...data.bill,
-              items: [...scanned.items, ...newItems],
+              items: [...existingItems, ...newItems],
               _isAddingMore: false,
             })
             sonnerToast.success(`Added ${newItems.length} more items from second bill!`)
@@ -382,12 +388,24 @@ export function BillScanner() {
                   Items ({scanned.items.length})
                 </CardTitle>
                 <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={() => setEditMode(!editMode)} className="gap-1">
-                    {editMode ? <Check className="w-3.5 h-3.5" /> : <FileText className="w-3.5 h-3.5" />}
-                    {editMode ? 'Done editing' : 'Edit items'}
+                  {/* Manual add — for adding a blank row by hand */}
+                  <Button variant="outline" size="sm" onClick={addItem} className="gap-1">
+                    <Plus className="w-3.5 h-3.5" /> Manual
                   </Button>
-                  <Button size="sm" onClick={addItem} className="bg-gradient-saffron gap-1">
-                    <ScanLine className="w-3.5 h-3.5" /> Add item
+                  {/* Scan more items — opens camera to scan another bill,
+                      new items get APPENDED to existing list */}
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      // Keep existing items, mark as "adding more"
+                      setScanned({ ...scanned, _isAddingMore: true })
+                      setPreview('')
+                      // Trigger file input using ref
+                      fileInputRef.current?.click()
+                    }}
+                    className="bg-gradient-saffron gap-1"
+                  >
+                    <ScanLine className="w-3.5 h-3.5" /> Scan More Items
                   </Button>
                 </div>
               </div>
@@ -510,23 +528,6 @@ export function BillScanner() {
               <div className="flex flex-col sm:flex-row gap-3">
                 <Button variant="outline" className="flex-1 gap-2" onClick={handleReset}>
                   <X className="w-4 h-4" /> {t('scanner.discard')}
-                </Button>
-                {/* Scan another bill — keeps existing items, adds new ones */}
-                <Button
-                  variant="outline"
-                  className="flex-1 gap-2 border-primary/30 text-primary hover:bg-primary/10"
-                  onClick={() => {
-                    // Keep existing items, just reset to scan another image
-                    setPreview('')
-                    setScanning(false)
-                    // Move items to a temp storage so next scan appends
-                    const existingItems = scanned?.items || []
-                    setScanned({ ...scanned, items: existingItems, _isAddingMore: true })
-                    // Trigger file input click
-                    document.getElementById('bill-file-input')?.click()
-                  }}
-                >
-                  <ScanLine className="w-4 h-4" /> Scan Another Bill
                 </Button>
                 <Button
                   className="flex-1 gap-2 bg-gradient-saffron shadow-md"
