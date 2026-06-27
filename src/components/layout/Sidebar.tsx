@@ -7,6 +7,7 @@ import { cn, getInitials } from '@/lib/utils'
 import { useQuery } from '@tanstack/react-query'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { clearAllOfflineData } from '@/lib/offline-db'
+import { clearRecentProducts } from '@/lib/recent-products'
 import { toast as sonnerToast } from 'sonner'
 import { useFeatureFlags } from '@/hooks/use-feature-flags'
 import {
@@ -72,6 +73,7 @@ export function Sidebar() {
     if (!confirm('Are you sure you want to logout?')) return
     try {
       await clearAllOfflineData()
+      clearRecentProducts()
       signOut({ callbackUrl: '/' })
     } catch {
       sonnerToast.error('Failed to logout')

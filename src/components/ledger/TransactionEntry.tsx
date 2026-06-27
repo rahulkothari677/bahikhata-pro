@@ -17,10 +17,14 @@ import { formatINR, cn, getInitials } from '@/lib/utils'
 import {
   ArrowLeft, ShoppingCart, Truck, Plus, X, Search, ChevronDown,
   TrendingUp, Calendar, User, ScanLine, Folder, FolderOpen,
-  Package, Phone, IndianRupee, Save, Trash2, Check, AlertCircle, Mic,
+  Package, Phone, IndianRupee, Save, Trash2, Check, AlertCircle, Mic, Clock,
 } from 'lucide-react'
 import { VoiceEntry } from '@/components/common/VoiceEntry'
+import { DraftRestoreBanner } from '@/components/common/DraftRestoreBanner'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
+import { useAutosaveDraft } from '@/hooks/use-autosave-draft'
+import { haptic } from '@/lib/haptic'
+import { trackRecentProduct, getRecentProductIds } from '@/lib/recent-products'
 
 const PAYMENT_MODES = [
   { value: 'cash', label: 'Cash' },
@@ -67,6 +71,61 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
 
   const [saving, setSaving] = useState(false)
   const [showVoiceEntry, setShowVoiceEntry] = useState(false)
+  const [draftDismissed, setDraftDismissed] = useState(false)
+
+  // Autosave draft — restores on mount if user navigates back/refreshes
+  const draftId = `txn-${type}`
+  const { saveDraft, restoreDraft, clearDraft, hasDraft, savedAt } = useAutosaveDraft<{
+    partyId: string
+    date: string
+    invoiceNo: string
+    isInterState: boolean
+    paymentMode: string
+    paidAmount: string
+    discountAmount: string
+    notes: string
+    items: ItemRow[]
+  }>(draftId)
+
+  const handleRestoreDraft = () => {
+    const draft = restoreDraft()
+    if (!draft) return
+    if (draft.partyId) setPartyId(draft.partyId)
+    if (draft.date) setDate(draft.date)
+    if (draft.invoiceNo) setInvoiceNo(draft.invoiceNo)
+    if (typeof draft.isInterState === 'boolean') setIsInterState(draft.isInterState)
+    if (draft.paymentMode) setPaymentMode(draft.paymentMode)
+    if (draft.paidAmount !== undefined) setPaidAmount(draft.paidAmount)
+    if (draft.discountAmount !== undefined) setDiscountAmount(draft.discountAmount)
+    if (draft.notes !== undefined) setNotes(draft.notes)
+    if (draft.items?.length > 0) setItems(draft.items)
+    setDraftDismissed(true)
+    haptic.success()
+    sonnerToast.success('Draft restored')
+  }
+
+  const handleDiscardDraft = () => {
+    clearDraft()
+    setDraftDismissed(true)
+    haptic.click()
+  }
+
+  // Autosave on form changes (debounced inside the hook)
+  useEffect(() => {
+    // Don't save if user already dismissed the draft restore prompt and form is empty
+    if (draftDismissed && items.length === 0 && !partyId && !invoiceNo && !notes) return
+    saveDraft({
+      partyId,
+      date,
+      invoiceNo,
+      isInterState,
+      paymentMode,
+      paidAmount,
+      discountAmount,
+      notes,
+      items,
+    })
+  }, [partyId, date, invoiceNo, isInterState, paymentMode, paidAmount, discountAmount, notes, items, draftDismissed, saveDraft])
 
   // Fetch products
   const { data: productsData } = useQuery({
@@ -97,6 +156,13 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
 
   // Build categories
   const categories = Array.from(new Set(products.map(p => p.category || 'Uncategorized'))).sort()
+  // Recently used products — most recently used first.
+  // Only show products that exist in current inventory (in case product was deleted).
+  const recentProductIds = getRecentProductIds()
+  const recentProducts = recentProductIds
+    .map((id) => products.find((p) => p.id === id))
+    .filter((p): p is NonNullable<typeof p> => !!p)
+    .slice(0, 6)
   const productsInCategory = selectedCategory
     ? products.filter(p => (p.category || 'Uncategorized') === selectedCategory)
     : products
@@ -247,11 +313,19 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
       } else {
         sonnerToast.success(`${isSale ? 'Sale' : 'Purchase'} recorded successfully!`)
       }
+      haptic.success()
+      // Clear the autosaved draft now that the transaction is saved
+      clearDraft()
+      // Track recently used products for quick-pick next time
+      items.forEach((i) => {
+        if (i.productId) trackRecentProduct(i.productId, i.productName)
+      })
       queryClient.invalidateQueries({ queryKey: ['transactions'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       triggerRefresh()
       setView(isSale ? 'sales' : 'purchases')
     } catch (e) {
+      haptic.error()
       toast({ title: 'Failed to save transaction', variant: 'destructive' })
     } finally {
       setSaving(false)
@@ -273,6 +347,14 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
 
   return (
     <div className="space-y-4 pb-24 lg:pb-4">
+      {/* Draft restore banner — only shows if there's an autosaved draft from a previous session */}
+      <DraftRestoreBanner
+        show={hasDraft && !draftDismissed}
+        savedAt={savedAt}
+        onRestore={handleRestoreDraft}
+        onDiscard={handleDiscardDraft}
+      />
+
       {/* Top action bar */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div className="flex items-center gap-3">
@@ -413,6 +495,36 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
                   </div>
                 </div>
               </div>
+
+              {/* Recently used products — quick-pick chips */}
+              {!productSearch && !selectedCategory && recentProducts.length > 0 && (
+                <div className="mt-3">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1.5 flex items-center gap-1">
+                    <Clock className="w-3 h-3" /> Recently Used
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {recentProducts.map((p) => {
+                      const inList = items.find((i) => i.productId === p.id)
+                      return (
+                        <button
+                          key={p.id}
+                          onClick={() => handleAddProduct(p)}
+                          className={cn(
+                            'px-2.5 py-1.5 rounded-lg text-xs font-medium border transition flex items-center gap-1.5',
+                            inList
+                              ? 'bg-emerald-100 dark:bg-emerald-950/40 border-emerald-300 text-emerald-700'
+                              : 'bg-muted/50 border-border hover:bg-muted hover:border-primary/30'
+                          )}
+                        >
+                          <Package className="w-3 h-3" />
+                          <span className="truncate max-w-[100px]">{p.name}</span>
+                          {inList && <Check className="w-3 h-3" />}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Product list - clickable to add */}
               {filteredProducts.length > 0 && (

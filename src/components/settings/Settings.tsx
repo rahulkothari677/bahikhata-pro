@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { StaffManagement } from '@/components/settings/StaffManagement'
 import { useToast } from '@/hooks/use-toast'
 import { toast as sonnerToast } from 'sonner'
+import { haptic } from '@/lib/haptic'
 import { useAppStore, type FeatureKey } from '@/store/app-store'
 import { THEME_OPTIONS } from '@/components/providers/ThemeProvider'
 import {
@@ -118,8 +119,10 @@ export function Settings() {
       })
       if (!r.ok) throw new Error('Failed')
       sonnerToast.success(isQueuedResponse(r) ? 'Saved offline — will sync when online' : 'Settings saved')
+      haptic.success()
       queryClient.invalidateQueries({ queryKey: ['setting'] })
     } catch {
+      haptic.error()
       toast({ title: 'Failed to save settings', variant: 'destructive' })
     } finally {
       setSaving(false)
@@ -133,10 +136,12 @@ export function Settings() {
       // Delete via prisma - we'll do this via a special endpoint
       const r = await offlineFetch('/api/seed', { method: 'DELETE', offline: { queueable: false, invalidate: ['/api/products', '/api/parties', '/api/transactions', '/api/dashboard', '/api/settings'] } })
       if (r.ok) {
+        haptic.error()
         sonnerToast.success('All data deleted. Refreshing...')
         setTimeout(() => window.location.reload(), 1500)
       }
     } catch {
+      haptic.error()
       toast({ title: 'Failed to reset data', variant: 'destructive' })
     }
   }

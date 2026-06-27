@@ -23,6 +23,7 @@ import {
 } from 'lucide-react'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { amountToWords } from '@/lib/amount-to-words'
+import { haptic } from '@/lib/haptic'
 
 const PAYMENT_MODES = [
   { value: 'cash', label: 'Cash' },
@@ -64,6 +65,7 @@ export function TransactionDetail() {
     if (!confirm('Delete this transaction? This cannot be undone.')) return
     const r = await offlineFetch(`/api/transactions/${txn.id}`, { method: 'DELETE', offline: { invalidate: ['/api/transactions', '/api/dashboard', '/api/products', '/api/parties'] } })
     if (r.ok) {
+      haptic.warning()
       sonnerToast.success(isQueuedResponse(r) ? 'Will delete when online' : 'Transaction deleted')
       queryClient.invalidateQueries({ queryKey: ['transactions'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
@@ -525,9 +527,11 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
       })
       if (!r.ok) throw new Error('Failed')
       sonnerToast.success(isQueuedResponse(r) ? 'Saved offline — will sync when online' : 'Transaction updated')
+      haptic.success()
       onSuccess?.()
       onOpenChange(false)
     } catch (e) {
+      haptic.error()
       toast({ title: 'Failed to update', variant: 'destructive' })
     } finally {
       setSaving(false)

@@ -23,6 +23,7 @@ import {
   Building2, ChevronRight, Receipt,
 } from 'lucide-react'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
+import { haptic } from '@/lib/haptic'
 
 export function Parties() {
   const {
@@ -361,9 +362,11 @@ function PartyDialog({ open, onOpenChange, onSuccess }: {
       } else {
         sonnerToast.success('Party added successfully')
       }
+      haptic.success()
       onSuccess?.()
       onOpenChange(false)
     } catch {
+      haptic.error()
       toast({ title: 'Failed to save party', variant: 'destructive' })
     } finally {
       setSaving(false)

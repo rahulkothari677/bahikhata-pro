@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast'
 import { toast as sonnerToast } from 'sonner'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
+import { haptic } from '@/lib/haptic'
 import { TrendingUp } from 'lucide-react'
 import { formatINR } from '@/lib/utils'
 
@@ -76,9 +77,11 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
       } else {
         sonnerToast.success(product ? 'Product updated' : 'Product added successfully')
       }
+      haptic.success()
       onSuccess?.()
       onOpenChange(false)
     } catch (e) {
+      haptic.error()
       toast({ title: 'Failed to save product', variant: 'destructive' })
     } finally {
       setSaving(false)

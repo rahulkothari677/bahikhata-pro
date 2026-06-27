@@ -24,6 +24,7 @@ import { chartColors } from '@/lib/chart-theme'
 import { formatINR, formatINRCompact, relativeTime, cn } from '@/lib/utils'
 import { motion } from 'framer-motion'
 import { offlineFetch } from '@/lib/offline-fetch'
+import { PullToRefresh } from '@/hooks/use-pull-to-refresh'
 
 const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)']
 
@@ -156,6 +157,7 @@ export function Dashboard() {
   }
 
   return (
+    <PullToRefresh onRefresh={async () => { triggerRefresh(); await new Promise((r) => setTimeout(r, 600)); }}>
     <div className="space-y-5">
       {/* Greeting banner */}
       <motion.div
@@ -576,6 +578,7 @@ export function Dashboard() {
       {/* {t('dash.smart_insights')} - AI-powered alerts */}
       {kpis && <SmartInsights />}
     </div>
+    </PullToRefresh>
   )
 }
 
