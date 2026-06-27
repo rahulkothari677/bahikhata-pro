@@ -250,10 +250,14 @@ async function handleGet(url: string, fetchOpts: RequestInit): Promise<Response>
       if (ct.includes('application/json')) {
         try {
           const body = await res.clone().json()
-          // Cache with NORMALIZED key so it's findable offline
-          await cacheResponse(cacheKey, body)
-          // Also clean up old entries with the same prefix (keep only latest 3)
-          await trimCacheByPrefix(cacheKey.split('?')[0], 3)
+          // Fire-and-forget the cache write — don't block the response.
+          // The cache is for offline fallback only; if it fails, no harm.
+          // trimCacheByPrefix is expensive (full IDB scan) so defer it
+          // to a microtask so it runs after the response is returned.
+          cacheResponse(cacheKey, body).catch(() => {})
+          setTimeout(() => {
+            trimCacheByPrefix(cacheKey.split('?')[0], 3).catch(() => {})
+          }, 0)
         } catch {
           /* not JSON or caching failed — ignore */
         }

@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useAppStore } from '@/store/app-store'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -160,7 +160,8 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
     },
   })
   const products: any[] = productsData?.products || []
-  const productMap = new Map(products.map(p => [p.id, p]))
+  // Memoize productMap — only rebuilds when products array changes
+  const productMap = useMemo(() => new Map(products.map(p => [p.id, p])), [products])
 
   // Fetch parties
   const { data: partiesData, refetch: refetchParties } = useQuery({
@@ -171,33 +172,43 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
     },
   })
   const allParties: any[] = partiesData?.parties || []
-  const filteredParties = allParties.filter(p =>
+  // Memoize filtered parties — only recomputes when allParties, isSale, or partySearch changes
+  const filteredParties = useMemo(() => allParties.filter(p =>
     (p.type === (isSale ? 'customer' : 'supplier') || p.type === 'both') &&
     (!partySearch ||
       p.name?.toLowerCase().includes(partySearch.toLowerCase()) ||
       p.phone?.includes(partySearch))
-  )
+  ), [allParties, isSale, partySearch])
 
-  // Build categories
-  const categories = Array.from(new Set(products.map(p => p.category || 'Uncategorized'))).sort()
+  // Memoize categories — only rebuilds when products change
+  const categories = useMemo(() =>
+    Array.from(new Set(products.map(p => p.category || 'Uncategorized'))).sort(),
+    [products]
+  )
   // Recently used products — most recently used first.
   // Only show products that exist in current inventory (in case product was deleted).
-  const recentProductIds = getRecentProductIds()
-  const recentProducts = recentProductIds
-    .map((id) => products.find((p) => p.id === id))
-    .filter((p): p is NonNullable<typeof p> => !!p)
-    .slice(0, 6)
-  const productsInCategory = selectedCategory
-    ? products.filter(p => (p.category || 'Uncategorized') === selectedCategory)
-    : products
+  // Memoized: only recomputes when products array changes (not on every keystroke).
+  const recentProducts = useMemo(() => {
+    const recentIds = getRecentProductIds()
+    return recentIds
+      .map((id) => products.find((p) => p.id === id))
+      .filter((p): p is NonNullable<typeof p> => !!p)
+      .slice(0, 6)
+  }, [products])
+  const productsInCategory = useMemo(() =>
+    selectedCategory
+      ? products.filter(p => (p.category || 'Uncategorized') === selectedCategory)
+      : products,
+    [products, selectedCategory]
+  )
 
-  const filteredProducts = productsInCategory.filter(p => {
+  const filteredProducts = useMemo(() => productsInCategory.filter(p => {
     if (!productSearch) return true
     const q = productSearch.toLowerCase()
     return p.name?.toLowerCase().includes(q) ||
       p.sku?.toLowerCase().includes(q) ||
       p.hsn?.toLowerCase().includes(q)
-  })
+  }), [productsInCategory, productSearch])
 
   // Check for preset data (from scanner or party profile)
   useEffect(() => {

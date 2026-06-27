@@ -346,7 +346,7 @@ export function Dashboard() {
                   <stop offset="0%" stopColor="oklch(0.62 0.18 42)" stopOpacity={0.4} />
                   <stop offset="100%" stopColor="oklch(0.62 0.18 42)" stopOpacity={0} />
                 </linearGradient>
-                <linearGradient id="color{t('common.profit')}" x1="0" y1="0" x2="0" y2="1">
+                <linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="0%" stopColor="oklch(0.62 0.15 155)" stopOpacity={0.4} />
                   <stop offset="100%" stopColor="oklch(0.62 0.15 155)" stopOpacity={0} />
                 </linearGradient>

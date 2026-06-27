@@ -153,6 +153,13 @@ export function useDrafts<T>(formType: string) {
     const store = read<T>(formType)
     const draft = store.drafts.find((d) => d.id === id)
     if (!draft) return null
+    // CRITICAL: Cancel any pending autosave timer before flipping the active
+    // draft ID. Otherwise, a stale timer could fire and write the OLD form
+    // state (pre-restore) to the NEW active draft, clobbering it.
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current)
+      debounceRef.current = null
+    }
     // Set BOTH ref and state immediately so the next save() call
     // updates this draft instead of creating a new one.
     activeDraftIdRef.current = id

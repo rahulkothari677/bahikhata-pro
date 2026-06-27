@@ -18,15 +18,17 @@ import { ViewModeToggle } from '@/components/common/ViewModeToggle'
 import { EmptyState } from '@/components/common/EmptyState'
 import {
   Plus, Search, Package, AlertTriangle, Edit2, TrendingUp, IndianRupee,
-  ChevronRight, Folder, FolderOpen, LayoutGrid, List, X,
+  ChevronRight, Folder, FolderOpen, LayoutGrid, List, X, ScanLine,
 } from 'lucide-react'
 import { offlineFetch, isOnline, OfflineError } from '@/lib/offline-fetch'
 import { OfflineNoData } from '@/components/common/OfflineNoData'
+import { BarcodeScanner } from '@/components/common/BarcodeScanner'
 
 export function Inventory() {
   const {
     refreshKey, triggerRefresh, inventoryViewMode, setInventoryViewMode,
     inventoryCategory, setInventoryCategory, triggerNewEntry, triggerNewEntryView,
+    features,
   } = useAppStore()
   const { t } = useTranslation()
   const [search, setSearch] = useState('')
@@ -34,6 +36,7 @@ export function Inventory() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingProduct, setEditingProduct] = useState<any>(null)
   const [subCategory, setSubCategory] = useState<string | null>(null)
+  const [barcodeOpen, setBarcodeOpen] = useState(false)
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['products', refreshKey],
@@ -199,8 +202,18 @@ export function Inventory() {
                 placeholder={t('inv.search_placeholder')}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="pl-9"
+                className="pl-9 pr-12"
               />
+              {features?.barcodeScanner && (
+                <button
+                  onClick={() => setBarcodeOpen(true)}
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 p-2 rounded-md hover:bg-muted text-primary"
+                  aria-label="Scan barcode"
+                  title="Scan barcode"
+                >
+                  <ScanLine className="w-5 h-5" />
+                </button>
+              )}
             </div>
             <Select value={filter} onValueChange={(v) => setFilter(v as any)}>
               <SelectTrigger className="w-full sm:w-40">
@@ -354,6 +367,27 @@ export function Inventory() {
         product={editingProduct}
         onSuccess={() => triggerRefresh()}
       />
+
+      {/* Barcode scanner — scan to search products by SKU/barcode */}
+      {barcodeOpen && (
+        <BarcodeScanner
+          onScan={(code) => {
+            // Search for the scanned code in the product list
+            setSearch(code)
+            setBarcodeOpen(false)
+            // Check if any product matches
+            const match = products.find((p: any) =>
+              p.sku === code || p.barcode === code || p.name?.toLowerCase() === code.toLowerCase()
+            )
+            if (match) {
+              sonnerToast.success(`Found: ${match.name}`)
+            } else {
+              sonnerToast.info(`No product matches barcode ${code}. You can add it as a new product.`)
+            }
+          }}
+          onClose={() => setBarcodeOpen(false)}
+        />
+      )}
     </div>
   )
 }

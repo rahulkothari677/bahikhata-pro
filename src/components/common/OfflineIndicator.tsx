@@ -17,7 +17,7 @@
  */
 
 import { useEffect, useState, useCallback } from 'react'
-import { WifiOff, CheckCircle, Loader2, RefreshCw, Clock, CloudOff, Cloud } from 'lucide-react'
+import { CheckCircle, Loader2, RefreshCw, Clock, CloudOff, Cloud } from 'lucide-react'
 import {
   isOnline,
   onOnlineChange,
@@ -67,7 +67,9 @@ export function OfflineIndicator() {
   useEffect(() => {
     if (online && pendingCount > 0 && !syncing) {
       setSyncing(true)
-      syncPendingWrites().catch(() => setSyncing(false))
+      syncPendingWrites()
+        .catch(() => {})
+        .finally(() => setSyncing(false))
     }
   }, [online, pendingCount, syncing])
 

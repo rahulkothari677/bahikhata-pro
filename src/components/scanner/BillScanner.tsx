@@ -117,9 +117,7 @@ export function BillScanner() {
             description: data.error,
             variant: 'destructive',
           })
-          if (data.rawContent) {
-            console.log('Raw AI output:', data.rawContent)
-          }
+          // Raw AI output logging removed — was leaking raw response to console
         } else {
           // If we're in "adding more" mode, append new items to existing
           if (isAddingMore && existingItems.length > 0) {

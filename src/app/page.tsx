@@ -26,7 +26,6 @@ import { GlobalSearch } from '@/components/common/GlobalSearch'
 import { OfflineIndicator } from '@/components/common/OfflineIndicator'
 import { PWAInstallPrompt } from '@/components/common/PWAInstallPrompt'
 import { OnboardingTour } from '@/components/common/OnboardingTour'
-import { AnnouncementBanner } from '@/components/common/AnnouncementBanner'
 import { ConsentModal } from '@/components/common/ConsentModal'
 import { RatePromptModal } from '@/components/common/RatePromptModal'
 import { useRatePrompt } from '@/hooks/use-rate-prompt'
@@ -114,10 +113,10 @@ export default function Home() {
       <div className="flex min-h-screen bg-background">
         {features?.keyboardShortcuts && <KeyboardShortcuts />}
         {features?.globalSearch && <GlobalSearch />}
-        <div className="fixed top-0 left-0 right-0 z-50">
+        <div className="flex-1 flex flex-col min-w-0">
           <OfflineIndicator />
+          <MoreScreen />
         </div>
-        <MoreScreen />
         <MobileBottomNav />
         <Onboarding open={showOnboarding} onDone={() => setOnboardingDismissed(true)} />
         {features?.pwaInstall && <PWAInstallPrompt />}
@@ -144,11 +143,13 @@ export default function Home() {
               views where pull-down might interfere with scrolling. */}
           <PullToRefresh
             onRefresh={async () => {
-              triggerRefresh()
-              // Invalidate all queries so they refetch fresh data
-              queryClient.invalidateQueries()
-              // Give queries a moment to refetch before hiding the spinner
-              await new Promise((r) => setTimeout(r, 800))
+              // Use refetchQueries with 'active' type — waits for active
+              // queries to refetch and resolves when done. No fixed timeout.
+              // Cap with a 3s timeout in case a query hangs.
+              await Promise.race([
+                queryClient.refetchQueries({ type: 'active' }),
+                new Promise((r) => setTimeout(r, 3000)),
+              ])
             }}
             enabled={!['new-sale', 'new-purchase', 'transaction-detail', 'party-profile', 'scanner', 'pricing'].includes(currentView)}
           >

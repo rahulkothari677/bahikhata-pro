@@ -5,9 +5,11 @@ import { useQuery } from '@tanstack/react-query'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { Search, Package, ChevronDown, X, Folder } from 'lucide-react'
+import { Search, Package, ChevronDown, X, Folder, ScanLine } from 'lucide-react'
 import { cn, formatINR } from '@/lib/utils'
 import { offlineFetch } from '@/lib/offline-fetch'
+import { useAppStore } from '@/store/app-store'
+import { BarcodeScanner } from '@/components/common/BarcodeScanner'
 
 export type ProductSelectValue = {
   productId: string
@@ -30,7 +32,9 @@ export function ProductPicker({
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState<string | null>(null)
+  const [barcodeOpen, setBarcodeOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const { features } = useAppStore()
 
   const { data: productsData } = useQuery({
     queryKey: ['products', 'for-picker'],
@@ -142,9 +146,41 @@ export function ProductPicker({
             value={search}
             onChange={(e) => { setSearch(e.target.value); setOpen(true) }}
             onFocus={() => setOpen(true)}
-            className="pl-9"
+            className="pl-9 pr-12"
           />
+          {features?.barcodeScanner && (
+            <button
+              type="button"
+              onClick={() => setBarcodeOpen(true)}
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 p-2 rounded-md hover:bg-muted text-primary"
+              aria-label="Scan barcode"
+              title="Scan barcode to find product"
+            >
+              <ScanLine className="w-5 h-5" />
+            </button>
+          )}
         </div>
+      )}
+
+      {/* Barcode scanner — scan to auto-select product */}
+      {barcodeOpen && (
+        <BarcodeScanner
+          onScan={(code) => {
+            setBarcodeOpen(false)
+            // Match scanned code against product SKU or barcode
+            const match = products.find((p) =>
+              p.sku === code || p.barcode === code
+            )
+            if (match) {
+              handleSelect(match)
+            } else {
+              // No match — put the code in the search field so user can add it manually
+              setSearch(code)
+              setOpen(true)
+            }
+          }}
+          onClose={() => setBarcodeOpen(false)}
+        />
       )}
 
       {/* Dropdown with category filter */}
