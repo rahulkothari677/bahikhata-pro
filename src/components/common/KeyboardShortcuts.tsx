@@ -1,10 +1,12 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useAppStore } from '@/store/app-store'
+import { ShortcutsHelp } from '@/components/common/ShortcutsHelp'
 
 export function KeyboardShortcuts() {
   const { features, setView, setPreviousView, setSearchOpen, currentView, fireTriggerNewEntry } = useAppStore()
+  const [showHelp, setShowHelp] = useState(false)
 
   useEffect(() => {
     if (!features.keyboardShortcuts) return
@@ -13,7 +15,6 @@ export function KeyboardShortcuts() {
       // Skip if typing in input/textarea/select
       const target = e.target as HTMLElement
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') {
-        // Allow Escape to blur
         if (e.key === 'Escape') {
           target.blur()
         }
@@ -24,6 +25,13 @@ export function KeyboardShortcuts() {
       if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
         e.preventDefault()
         if (features.globalSearch) setSearchOpen(true)
+        return
+      }
+
+      // ? → Show shortcuts help
+      if (e.key === '?') {
+        e.preventDefault()
+        setShowHelp(true)
         return
       }
 
@@ -101,6 +109,27 @@ export function KeyboardShortcuts() {
         return
       }
 
+      // E → Income & Expense
+      if (e.key === 'e' || e.key === 'E') {
+        e.preventDefault()
+        setView('income-expense')
+        return
+      }
+
+      // C → Customers & Suppliers
+      if (e.key === 'c' || e.key === 'C') {
+        e.preventDefault()
+        setView('parties')
+        return
+      }
+
+      // T → Settings
+      if (e.key === 't' || e.key === 'T') {
+        e.preventDefault()
+        setView('settings')
+        return
+      }
+
       // / → Focus search (dispatch custom event that pages listen to)
       if (e.key === '/') {
         e.preventDefault()
@@ -113,5 +142,5 @@ export function KeyboardShortcuts() {
     return () => window.removeEventListener('keydown', handler)
   }, [features.keyboardShortcuts, features.globalSearch, currentView, setView, setPreviousView, setSearchOpen, fireTriggerNewEntry])
 
-  return null
+  return <ShortcutsHelp open={showHelp} onClose={() => setShowHelp(false)} />
 }

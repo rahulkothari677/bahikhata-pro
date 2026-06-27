@@ -78,6 +78,82 @@ export function Dashboard() {
 
   const rangeLabel = datePreset === 'custom' ? 'Selected Period' : getPresetLabel(datePreset)
 
+  // Empty state for new users (0 transactions)
+  const isNewUser = kpis.totalStockValue === 0 && kpis.productCount === 0 && kpis.rangeTxnCount === 0 && recentTransactions.length === 0
+
+  if (isNewUser) {
+    return (
+      <div className="space-y-5">
+        <DateRangeHeader
+          dateRange={dateRange}
+          datePreset={datePreset}
+          onChange={handleDateChange}
+          onPresetChange={setDatePreset}
+        />
+        {/* Empty state hero */}
+        <div className="rounded-2xl bg-gradient-saffron p-8 lg:p-12 text-white shadow-lg relative overflow-hidden text-center">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32" />
+          <div className="relative z-10">
+            <div className="text-5xl mb-4">🏪</div>
+            <h2 className="text-2xl font-bold mb-2">Welcome to BahiKhata Pro!</h2>
+            <p className="text-white/80 text-sm max-w-md mx-auto mb-6">
+              Your dashboard will come alive once you start recording sales. Here's how to get started in 2 minutes:
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl mx-auto">
+              <button
+                onClick={() => setView('new-sale')}
+                className="bg-white/20 hover:bg-white/30 rounded-xl p-4 text-left transition active:scale-95"
+              >
+                <Plus className="w-6 h-6 mb-2" />
+                <p className="font-semibold text-sm">1. Record a Sale</p>
+                <p className="text-xs text-white/70 mt-1">Tap here to create your first sale entry</p>
+              </button>
+              <button
+                onClick={() => setView('inventory')}
+                className="bg-white/20 hover:bg-white/30 rounded-xl p-4 text-left transition active:scale-95"
+              >
+                <Package className="w-6 h-6 mb-2" />
+                <p className="font-semibold text-sm">2. Add Products</p>
+                <p className="text-xs text-white/70 mt-1">Add your inventory items with prices</p>
+              </button>
+              <button
+                onClick={() => setView('scanner')}
+                className="bg-white/20 hover:bg-white/30 rounded-xl p-4 text-left transition active:scale-95"
+              >
+                <ScanLine className="w-6 h-6 mb-2" />
+                <p className="font-semibold text-sm">3. Scan a Bill</p>
+                <p className="text-xs text-white/70 mt-1">AI scans any bill automatically</p>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Quick stats (all zeros but shows the layout) */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {[
+            { label: "Today's Revenue", value: '₹0', icon: IndianRupee, color: 'text-amber-600 bg-amber-100' },
+            { label: "Today's Profit", value: '₹0', icon: TrendingUp, color: 'text-emerald-600 bg-emerald-100' },
+            { label: 'Products', value: '0', icon: Package, color: 'text-blue-600 bg-blue-100' },
+            { label: 'Customers', value: '0', icon: Wallet, color: 'text-violet-600 bg-violet-100' },
+          ].map((stat, i) => {
+            const Icon = stat.icon
+            return (
+              <Card key={i} className="shadow-card border-border/60">
+                <CardContent className="p-4">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-2 ${stat.color}`}>
+                    <Icon className="w-5 h-5" />
+                  </div>
+                  <p className="text-2xl font-bold">{stat.value}</p>
+                  <p className="text-xs text-muted-foreground mt-1">{stat.label}</p>
+                </CardContent>
+              </Card>
+            )
+          })}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-5">
       {/* Greeting banner */}
