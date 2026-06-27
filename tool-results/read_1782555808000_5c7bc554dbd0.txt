@@ -1,0 +1,513 @@
+     1→'use client'
+     2→
+     3→import { useTranslation } from '@/hooks/use-translation'
+     4→import { useQuery } from '@tanstack/react-query'
+     5→import { useState } from 'react'
+     6→import { useAppStore } from '@/store/app-store'
+     7→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+     8→import { Button } from '@/components/ui/button'
+     9→import { Badge } from '@/components/ui/badge'
+    10→import { Skeleton } from '@/components/ui/skeleton'
+    11→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+    12→import { DateRangePicker, getPresetRange, type DateRange, type DatePreset } from '@/components/common/DateRangePicker'
+    13→import {
+    14→  AreaChart, Area, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
+    15→  CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer,
+    16→} from 'recharts'
+    17→import { formatINR, formatINRCompact, cn, formatDate } from '@/lib/utils'
+    18→import {
+    19→  FileBarChart, TrendingUp, Receipt, Package, Users, Calendar,
+    20→  ArrowDownRight, ArrowUpRight, IndianRupee, Percent, FileText,
+    21→  FileSpreadsheet, Loader2,
+    22→} from 'lucide-react'
+    23→import { toast as sonnerToast } from 'sonner'
+    24→import { offlineFetch } from '@/lib/offline-fetch'
+    25→
+    26→const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)', 'oklch(0.7 0.16 250)']
+    27→
+    28→export function Reports() {
+    29→  const { t } = useTranslation()
+    30→  const { features } = useAppStore()
+    31→  const [reportType, setReportType] = useState<'pl' | 'gst' | 'stock' | 'party'>('pl')
+    32→  const [dateRange, setDateRange] = useState<DateRange>(() => getPresetRange('thisMonth'))
+    33→  const [datePreset, setDatePreset] = useState<DatePreset>('thisMonth')
+    34→  const [exportingGstr, setExportingGstr] = useState(false)
+    35→
+    36→  const handleDateChange = (range: DateRange, preset: DatePreset) => {
+    37→    setDateRange(range)
+    38→    setDatePreset(preset)
+    39→  }
+    40→
+    41→  const handleGstrExport = async () => {
+    42→    setExportingGstr(true)
+    43→    try {
+    44→      const r = await offlineFetch(`/api/gstr-export?from=${dateRange.from.toISOString()}&to=${dateRange.to.toISOString()}&format=csv`)
+    45→      if (!r.ok) throw new Error('Export failed')
+    46→      const blob = await r.blob()
+    47→      const url = URL.createObjectURL(blob)
+    48→      const a = document.createElement('a')
+    49→      a.href = url
+    50→      a.download = `GSTR1_${dateRange.from.toISOString().slice(0, 7)}.csv`
+    51→      a.click()
+    52→      URL.revokeObjectURL(url)
+    53→      sonnerToast.success('GSTR-1 exported! Upload this to GST portal.')
+    54→    } catch {
+    55→      sonnerToast.error('Failed to export GSTR-1')
+    56→    } finally {
+    57→      setExportingGstr(false)
+    58→    }
+    59→  }
+    60→
+    61→  const { data, isLoading } = useQuery({
+    62→    queryKey: ['report', reportType, dateRange.from.toISOString(), dateRange.to.toISOString()],
+    63→    queryFn: async () => {
+    64→      const r = await offlineFetch(`/api/reports?type=${reportType}&from=${dateRange.from.toISOString()}&to=${dateRange.to.toISOString()}`)
+    65→      return r.json()
+    66→    },
+    67→  })
+    68→
+    69→  return (
+    70→    <div className="space-y-4">
+    71→      {/* Period selector */}
+    72→      <Card className="shadow-card border-border/60">
+    73→        <CardContent className="p-3 lg:p-4">
+    74→          <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+    75→            <div className="flex items-center gap-2">
+    76→              <Calendar className="w-4 h-4 text-muted-foreground" />
+    77→              <span className="text-sm font-medium">Report Period:</span>
+    78→            </div>
+    79→            <div className="flex items-center gap-3">
+    80→              <DateRangePicker value={dateRange} onChange={handleDateChange} preset={datePreset} onPresetChange={setDatePreset} align="right" />
+    81→              <p className="text-xs text-muted-foreground hidden sm:block">
+    82→                {formatDate(dateRange.from)} — {formatDate(dateRange.to)}
+    83→              </p>
+    84→              {features?.gstrExport && (
+    85→                <Button
+    86→                  size="sm"
+    87→                  variant="outline"
+    88→                  onClick={handleGstrExport}
+    89→                  disabled={exportingGstr}
+    90→                  className="gap-2 border-primary/30 text-primary hover:bg-primary/10"
+    91→                >
+    92→                  {exportingGstr ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileSpreadsheet className="w-3.5 h-3.5" />}
+    93→                  <span className="hidden sm:inline">{t('reports.export_gstr')}</span>
+    94→                </Button>
+    95→              )}
+    96→            </div>
+    97→          </div>
+    98→        </CardContent>
+    99→      </Card>
+   100→
+   101→      {/* Report type tabs */}
+   102→      <Tabs value={reportType} onValueChange={(v) => setReportType(v as any)}>
+   103→        <TabsList className="grid grid-cols-2 lg:grid-cols-4 w-full h-auto">
+   104→          <TabsTrigger value="pl" className="gap-1.5 py-2">
+   105→            <TrendingUp className="w-3.5 h-3.5" /> {t('reports.pl')}
+   106→          </TabsTrigger>
+   107→          <TabsTrigger value="gst" className="gap-1.5 py-2">
+   108→            <Receipt className="w-3.5 h-3.5" /> GST
+   109→          </TabsTrigger>
+   110→          <TabsTrigger value="stock" className="gap-1.5 py-2">
+   111→            <Package className="w-3.5 h-3.5" /> Stock
+   112→          </TabsTrigger>
+   113→          <TabsTrigger value="party" className="gap-1.5 py-2">
+   114→            <Users className="w-3.5 h-3.5" /> Party
+   115→          </TabsTrigger>
+   116→        </TabsList>
+   117→
+   118→        <TabsContent value="pl" className="mt-4">
+   119→          {isLoading || !data ? <ReportSkeleton /> : <PLReport data={data} />}
+   120→        </TabsContent>
+   121→        <TabsContent value="gst" className="mt-4">
+   122→          {isLoading || !data ? <ReportSkeleton /> : <GSTReport data={data} />}
+   123→        </TabsContent>
+   124→        <TabsContent value="stock" className="mt-4">
+   125→          {isLoading || !data ? <ReportSkeleton /> : <StockReport data={data} />}
+   126→        </TabsContent>
+   127→        <TabsContent value="party" className="mt-4">
+   128→          {isLoading || !data ? <ReportSkeleton /> : <PartyReport data={data} />}
+   129→        </TabsContent>
+   130→      </Tabs>
+   131→    </div>
+   132→  )
+   133→}
+   134→
+   135→function PLReport({ data }: { data: any }) {
+   136→  const { t } = useTranslation()
+   137→  const { summary, expensesByCategory, incomeByCategory } = data
+   138→  return (
+   139→    <div className="space-y-4">
+   140→      {/* Top metrics */}
+   141→      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+   142→        <ReportStatCard label="Revenue (Sales)" value={formatINR(summary.totalRevenue)} icon={IndianRupee} color="text-amber-600" bg="bg-amber-100" />
+   143→        <ReportStatCard label="Gross Profit" value={formatINR(summary.grossProfit)} icon={TrendingUp} color="text-emerald-600" bg="bg-emerald-100" />
+   144→        <ReportStatCard label="Total Expenses" value={formatINR(summary.totalExpenses)} icon={ArrowUpRight} color="text-rose-600" bg="bg-rose-100" />
+   145→        <ReportStatCard label="Net Profit" value={formatINR(summary.netProfit)} icon={Percent} color={summary.netProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'} bg={summary.netProfit >= 0 ? 'bg-emerald-100' : 'bg-rose-100'} />
+   146→      </div>
+   147→
+   148→      {/* {t('reports.pl')} breakdown */}
+   149→      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+   150→        <Card className="shadow-card border-border/60">
+   151→          <CardHeader className="pb-2">
+   152→            <CardTitle className="text-base flex items-center gap-2">
+   153→              <ArrowUpRight className="w-4 h-4 text-rose-600" /> Expenses Breakdown
+   154→            </CardTitle>
+   155→          </CardHeader>
+   156→          <CardContent>
+   157→            {expensesByCategory.length === 0 ? (
+   158→              <p className="text-sm text-muted-foreground text-center py-8">No expenses in this period</p>
+   159→            ) : (
+   160→              <div className="space-y-2">
+   161→                {expensesByCategory.map((e, i) => {
+   162→                  const pct = summary.totalExpenses > 0 ? (e.value / summary.totalExpenses) * 100 : 0
+   163→                  return (
+   164→                    <div key={e.name}>
+   165→                      <div className="flex items-center justify-between text-sm mb-1">
+   166→                        <span className="font-medium">{e.name}</span>
+   167→                        <span className="text-muted-foreground">{formatINR(e.value)} ({pct.toFixed(0)}%)</span>
+   168→                      </div>
+   169→                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+   170→                        <div className="h-full bg-gradient-to-r from-rose-400 to-rose-600" style={{ width: `${pct}%` }} />
+   171→                      </div>
+   172→                    </div>
+   173→                  )
+   174→                })}
+   175→              </div>
+   176→            )}
+   177→          </CardContent>
+   178→        </Card>
+   179→
+   180→        <Card className="shadow-card border-border/60">
+   181→          <CardHeader className="pb-2">
+   182→            <CardTitle className="text-base flex items-center gap-2">
+   183→              <ArrowDownRight className="w-4 h-4 text-emerald-600" /> Other Income
+   184→            </CardTitle>
+   185→          </CardHeader>
+   186→          <CardContent>
+   187→            {incomeByCategory.length === 0 ? (
+   188→              <p className="text-sm text-muted-foreground text-center py-8">No other income in this period</p>
+   189→            ) : (
+   190→              <div className="space-y-2">
+   191→                {incomeByCategory.map((e, i) => {
+   192→                  const pct = summary.otherIncome > 0 ? (e.value / summary.otherIncome) * 100 : 0
+   193→                  return (
+   194→                    <div key={e.name}>
+   195→                      <div className="flex items-center justify-between text-sm mb-1">
+   196→                        <span className="font-medium">{e.name}</span>
+   197→                        <span className="text-muted-foreground">{formatINR(e.value)}</span>
+   198→                      </div>
+   199→                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+   200→                        <div className="h-full bg-gradient-to-r from-emerald-400 to-emerald-600" style={{ width: `${pct}%` }} />
+   201→                      </div>
+   202→                    </div>
+   203→                  )
+   204→                })}
+   205→              </div>
+   206→            )}
+   207→          </CardContent>
+   208→        </Card>
+   209→      </div>
+   210→
+   211→      {/* Summary statement */}
+   212→      <Card className="shadow-card border-border/60">
+   213→        <CardHeader className="pb-2">
+   214→          <CardTitle className="text-base flex items-center gap-2">
+   215→            <FileText className="w-4 h-4" /> Profit & Loss Statement
+   216→          </CardTitle>
+   217→        </CardHeader>
+   218→        <CardContent>
+   219→          <div className="space-y-2 text-sm">
+   220→            <div className="flex justify-between py-1.5 border-b border-border">
+   221→              <span className="text-muted-foreground">Revenue (Sales Subtotal)</span>
+   222→              <span className="font-medium">{formatINR(summary.totalRevenue)}</span>
+   223→            </div>
+   224→            <div className="flex justify-between py-1.5 border-b border-border">
+   225→              <span className="text-muted-foreground">Less: Cost of Goods Sold</span>
+   226→              <span className="font-medium text-rose-600">-{formatINR(summary.totalRevenue - summary.grossProfit)}</span>
+   227→            </div>
+   228→            <div className="flex justify-between py-1.5 border-b border-border">
+   229→              <span className="font-semibold">Gross Profit</span>
+   230→              <span className="font-bold text-emerald-600">{formatINR(summary.grossProfit)}</span>
+   231→            </div>
+   232→            <div className="flex justify-between py-1.5 border-b border-border">
+   233→              <span className="text-muted-foreground">Add: Other Income</span>
+   234→              <span className="font-medium text-emerald-600">+{formatINR(summary.otherIncome)}</span>
+   235→            </div>
+   236→            <div className="flex justify-between py-1.5 border-b border-border">
+   237→              <span className="text-muted-foreground">Less: Operating Expenses</span>
+   238→              <span className="font-medium text-rose-600">-{formatINR(summary.totalExpenses)}</span>
+   239→            </div>
+   240→            <div className="flex justify-between py-2 text-base">
+   241→              <span className="font-bold">Net Profit</span>
+   242→              <span className={cn('font-bold', summary.netProfit >= 0 ? 'text-emerald-600' : 'text-rose-600')}>
+   243→                {formatINR(summary.netProfit)}
+   244→              </span>
+   245→            </div>
+   246→            <div className="flex justify-between text-xs text-muted-foreground">
+   247→              <span>Profit Margin</span>
+   248→              <span>{summary.profitMargin.toFixed(1)}%</span>
+   249→            </div>
+   250→          </div>
+   251→        </CardContent>
+   252→      </Card>
+   253→    </div>
+   254→  )
+   255→}
+   256→
+   257→function GSTReport({ data }: { data: any }) {
+   258→  const { t } = useTranslation()
+   259→  const { outputSales, inputPurchases, netGSTPayable } = data
+   260→  return (
+   261→    <div className="space-y-4">
+   262→      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+   263→        <ReportStatCard label="Output Tax (Sales)" value={formatINR(outputSales.outputTax)} icon={ArrowUpRight} color="text-rose-600" bg="bg-rose-100" />
+   264→        <ReportStatCard label="Input Tax (Purchases)" value={formatINR(inputPurchases.inputTax)} icon={ArrowDownRight} color="text-emerald-600" bg="bg-emerald-100" />
+   265→        <ReportStatCard label="Net GST Payable" value={formatINR(netGSTPayable)} icon={Receipt} color={netGSTPayable >= 0 ? 'text-rose-600' : 'text-emerald-600'} bg={netGSTPayable >= 0 ? 'bg-rose-100' : 'bg-emerald-100'} />
+   266→        <ReportStatCard label="Total Invoices" value={String(data.totalInvoices)} icon={FileText} color="text-amber-600" bg="bg-amber-100" />
+   267→      </div>
+   268→
+   269→      {/* By slab */}
+   270→      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+   271→        <Card className="shadow-card border-border/60">
+   272→          <CardHeader className="pb-2">
+   273→            <CardTitle className="text-base">Output Tax by GST Slab (Sales)</CardTitle>
+   274→            <p className="text-xs text-muted-foreground">GST collected from customers</p>
+   275→          </CardHeader>
+   276→          <CardContent>
+   277→            {outputSales.bySlab.length === 0 ? (
+   278→              <p className="text-sm text-muted-foreground text-center py-8">No sales in this period</p>
+   279→            ) : (
+   280→              <ResponsiveContainer width="100%" height={220}>
+   281→                <BarChart data={outputSales.bySlab}>
+   282→                  <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.91 0.01 60)" vertical={false} />
+   283→                  <XAxis dataKey="rate" tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11 }} />
+   284→                  <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => formatINRCompact(v)} />
+   285→                  <Tooltip formatter={(v: number) => formatINR(v)} contentStyle={{ borderRadius: 12, fontSize: 12 }} />
+   286→                  <Bar dataKey="taxable" name="Taxable Value" fill="oklch(0.62 0.18 42)" radius={[6, 6, 0, 0]} />
+   287→                  <Bar dataKey="cgst" name="CGST" fill="oklch(0.62 0.15 155)" radius={[6, 6, 0, 0]} />
+   288→                  <Bar dataKey="sgst" name="SGST" fill="oklch(0.72 0.16 80)" radius={[6, 6, 0, 0]} />
+   289→                </BarChart>
+   290→              </ResponsiveContainer>
+   291→            )}
+   292→          </CardContent>
+   293→        </Card>
+   294→
+   295→        <Card className="shadow-card border-border/60">
+   296→          <CardHeader className="pb-2">
+   297→            <CardTitle className="text-base">Input Tax by GST Slab (Purchases)</CardTitle>
+   298→            <p className="text-xs text-muted-foreground">GST paid to suppliers</p>
+   299→          </CardHeader>
+   300→          <CardContent>
+   301→            {inputPurchases.bySlab.length === 0 ? (
+   302→              <p className="text-sm text-muted-foreground text-center py-8">No purchases in this period</p>
+   303→            ) : (
+   304→              <ResponsiveContainer width="100%" height={220}>
+   305→                <BarChart data={inputPurchases.bySlab}>
+   306→                  <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.91 0.01 60)" vertical={false} />
+   307→                  <XAxis dataKey="rate" tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11 }} />
+   308→                  <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => formatINRCompact(v)} />
+   309→                  <Tooltip formatter={(v: number) => formatINR(v)} contentStyle={{ borderRadius: 12, fontSize: 12 }} />
+   310→                  <Bar dataKey="taxable" name="Taxable Value" fill="oklch(0.6 0.12 200)" radius={[6, 6, 0, 0]} />
+   311→                  <Bar dataKey="cgst" name="CGST" fill="oklch(0.62 0.15 155)" radius={[6, 6, 0, 0]} />
+   312→                  <Bar dataKey="sgst" name="SGST" fill="oklch(0.72 0.16 80)" radius={[6, 6, 0, 0]} />
+   313→                </BarChart>
+   314→              </ResponsiveContainer>
+   315→            )}
+   316→          </CardContent>
+   317→        </Card>
+   318→      </div>
+   319→
+   320→      {/* Slab table */}
+   321→      <Card className="shadow-card border-border/60">
+   322→        <CardHeader className="pb-2">
+   323→          <CardTitle className="text-base">GST Slab-wise Summary</CardTitle>
+   324→        </CardHeader>
+   325→        <CardContent>
+   326→          <div className="overflow-x-auto">
+   327→            <table className="w-full text-sm">
+   328→              <thead>
+   329→                <tr className="border-b border-border text-left">
+   330→                  <th className="py-2 px-2 font-medium text-muted-foreground">GST Rate</th>
+   331→                  <th className="py-2 px-2 font-medium text-muted-foreground text-right">Sales Taxable</th>
+   332→                  <th className="py-2 px-2 font-medium text-muted-foreground text-right">Output Tax</th>
+   333→                  <th className="py-2 px-2 font-medium text-muted-foreground text-right">Purchase Taxable</th>
+   334→                  <th className="py-2 px-2 font-medium text-muted-foreground text-right">Input Tax</th>
+   335→                  <th className="py-2 px-2 font-medium text-muted-foreground text-right">Net Tax</th>
+   336→                </tr>
+   337→              </thead>
+   338→              <tbody>
+   339→                {[0, 5, 12, 18, 28].map(rate => {
+   340→                  const o = outputSales.bySlab.find((s: any) => s.rate === rate)
+   341→                  const i = inputPurchases.bySlab.find((s: any) => s.rate === rate)
+   342→                  const out = o ? o.cgst + o.sgst + o.igst : 0
+   343→                  const inp = i ? i.cgst + i.sgst + i.igst : 0
+   344→                  if (!o && !i) return null
+   345→                  return (
+   346→                    <tr key={rate} className="border-b border-border/50">
+   347→                      <td className="py-2 px-2 font-medium">{rate}%</td>
+   348→                      <td className="py-2 px-2 text-right">{o ? formatINR(o.taxable) : '—'}</td>
+   349→                      <td className="py-2 px-2 text-right text-rose-600">{out > 0 ? formatINR(out) : '—'}</td>
+   350→                      <td className="py-2 px-2 text-right">{i ? formatINR(i.taxable) : '—'}</td>
+   351→                      <td className="py-2 px-2 text-right text-emerald-600">{inp > 0 ? formatINR(inp) : '—'}</td>
+   352→                      <td className="py-2 px-2 text-right font-semibold">{formatINR(out - inp)}</td>
+   353→                    </tr>
+   354→                  )
+   355→                })}
+   356→              </tbody>
+   357→              <tfoot>
+   358→                <tr className="border-t-2 border-border font-semibold">
+   359→                  <td className="py-2 px-2">Total</td>
+   360→                  <td className="py-2 px-2 text-right">{formatINR(outputSales.taxableValue)}</td>
+   361→                  <td className="py-2 px-2 text-right text-rose-600">{formatINR(outputSales.outputTax)}</td>
+   362→                  <td className="py-2 px-2 text-right">{formatINR(inputPurchases.taxableValue)}</td>
+   363→                  <td className="py-2 px-2 text-right text-emerald-600">{formatINR(inputPurchases.inputTax)}</td>
+   364→                  <td className="py-2 px-2 text-right">{formatINR(netGSTPayable)}</td>
+   365→                </tr>
+   366→              </tfoot>
+   367→            </table>
+   368→          </div>
+   369→        </CardContent>
+   370→      </Card>
+   371→    </div>
+   372→  )
+   373→}
+   374→
+   375→function StockReport({ data }: { data: any }) {
+   376→  const { t } = useTranslation()
+   377→  return (
+   378→    <div className="space-y-4">
+   379→      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+   380→        <ReportStatCard label="Total Stock Value" value={formatINR(data.totalStockValue)} icon={Package} color="text-amber-600" bg="bg-amber-100" />
+   381→        <ReportStatCard label="Potential Sale Value" value={formatINR(data.totalPotentialValue)} icon={IndianRupee} color="text-emerald-600" bg="bg-emerald-100" />
+   382→        <ReportStatCard label="Potential Profit" value={formatINR(data.potentialProfit)} icon={TrendingUp} color="text-violet-600" bg="bg-violet-100" />
+   383→        <ReportStatCard label="Low Stock Items" value={String(data.lowStockCount)} icon={ArrowUpRight} color="text-rose-600" bg="bg-rose-100" />
+   384→      </div>
+   385→
+   386→      <Card className="shadow-card border-border/60">
+   387→        <CardHeader className="pb-2">
+   388→          <CardTitle className="text-base">Stock Valuation by Product</CardTitle>
+   389→        </CardHeader>
+   390→        <CardContent>
+   391→          <div className="overflow-x-auto">
+   392→            <table className="w-full text-sm">
+   393→              <thead>
+   394→                <tr className="border-b border-border text-left">
+   395→                  <th className="py-2 px-2 font-medium text-muted-foreground">Product</th>
+   396→                  <th className="py-2 px-2 font-medium text-muted-foreground">Category</th>
+   397→                  <th className="py-2 px-2 font-medium text-muted-foreground text-right">Stock</th>
+   398→                  <th className="py-2 px-2 font-medium text-muted-foreground text-right">Buy Price</th>
+   399→                  <th className="py-2 px-2 font-medium text-muted-foreground text-right">Sale Price</th>
+   400→                  <th className="py-2 px-2 font-medium text-muted-foreground text-right">Stock Value</th>
+   401→                  <th className="py-2 px-2 font-medium text-muted-foreground text-right">Sale Value</th>
+   402→                  <th className="py-2 px-2 font-medium text-muted-foreground text-center">Status</th>
+   403→                </tr>
+   404→              </thead>
+   405→              <tbody>
+   406→                {(data?.products || []).slice(0, 20).map((p: any) => (
+   407→                  <tr key={p.id} className="border-b border-border/50 hover:bg-muted/30">
+   408→                    <td className="py-2 px-2 font-medium">{p.name}</td>
+   409→                    <td className="py-2 px-2 text-muted-foreground">{p.category || '—'}</td>
+   410→                    <td className="py-2 px-2 text-right">{p.currentStock} {p.unit}</td>
+   411→                    <td className="py-2 px-2 text-right">{formatINR(p.purchasePrice)}</td>
+   412→                    <td className="py-2 px-2 text-right">{formatINR(p.salePrice)}</td>
+   413→                    <td className="py-2 px-2 text-right font-medium">{formatINR(p.stockValue)}</td>
+   414→                    <td className="py-2 px-2 text-right">{formatINR(p.potentialSaleValue)}</td>
+   415→                    <td className="py-2 px-2 text-center">
+   416→                      {p.isLowStock ? (
+   417→                        <Badge variant="destructive" className="text-[10px]">Low</Badge>
+   418→                      ) : (
+   419→                        <Badge variant="secondary" className="text-[10px] bg-emerald-100 text-emerald-700">OK</Badge>
+   420→                      )}
+   421→                    </td>
+   422→                  </tr>
+   423→                ))}
+   424→              </tbody>
+   425→            </table>
+   426→            {(data?.products?.length || 0) > 20 && (
+   427→              <p className="text-xs text-muted-foreground text-center mt-3">Showing top 20 of {data.products.length} products</p>
+   428→            )}
+   429→          </div>
+   430→        </CardContent>
+   431→      </Card>
+   432→    </div>
+   433→  )
+   434→}
+   435→
+   436→function PartyReport({ data }: { data: any }) {
+   437→  const { t } = useTranslation()
+   438→  return (
+   439→    <div className="space-y-4">
+   440→      <Card className="shadow-card border-border/60">
+   441→        <CardHeader className="pb-2">
+   442→          <CardTitle className="text-base">Party-wise Statement</CardTitle>
+   443→          <p className="text-xs text-muted-foreground">Showing all parties with activity or opening balance</p>
+   444→        </CardHeader>
+   445→        <CardContent>
+   446→          <div className="overflow-x-auto">
+   447→            <table className="w-full text-sm">
+   448→              <thead>
+   449→                <tr className="border-b border-border text-left">
+   450→                  <th className="py-2 px-2 font-medium text-muted-foreground">Party Name</th>
+   451→                  <th className="py-2 px-2 font-medium text-muted-foreground">Type</th>
+   452→                  <th className="py-2 px-2 font-medium text-muted-foreground text-right">Sales</th>
+   453→                  <th className="py-2 px-2 font-medium text-muted-foreground text-right">Purchases</th>
+   454→                  <th className="py-2 px-2 font-medium text-muted-foreground text-right">Paid</th>
+   455→                  <th className="py-2 px-2 font-medium text-muted-foreground text-right">Received</th>
+   456→                  <th className="py-2 px-2 font-medium text-muted-foreground text-right">Balance</th>
+   457→                </tr>
+   458→              </thead>
+   459→              <tbody>
+   460→                {(data?.parties || []).map((p: any) => (
+   461→                  <tr key={p.party.id} className="border-b border-border/50 hover:bg-muted/30">
+   462→                    <td className="py-2 px-2 font-medium">{p.party.name}</td>
+   463→                    <td className="py-2 px-2">
+   464→                      <Badge variant="outline" className="text-[10px] capitalize">{p.party.type}</Badge>
+   465→                    </td>
+   466→                    <td className="py-2 px-2 text-right text-emerald-600">{p.totalSales > 0 ? formatINR(p.totalSales) : '—'}</td>
+   467→                    <td className="py-2 px-2 text-right text-amber-600">{p.totalPurchases > 0 ? formatINR(p.totalPurchases) : '—'}</td>
+   468→                    <td className="py-2 px-2 text-right">{p.totalPaid > 0 ? formatINR(p.totalPaid) : '—'}</td>
+   469→                    <td className="py-2 px-2 text-right">{p.totalReceived > 0 ? formatINR(p.totalReceived) : '—'}</td>
+   470→                    <td className={cn('py-2 px-2 text-right font-semibold', p.balance > 0 ? 'text-emerald-600' : p.balance < 0 ? 'text-rose-600' : 'text-muted-foreground')}>
+   471→                      {p.balance > 0 ? `+${formatINR(p.balance)}` : p.balance < 0 ? `-${formatINR(Math.abs(p.balance))}` : 'Settled'}
+   472→                    </td>
+   473→                  </tr>
+   474→                ))}
+   475→              </tbody>
+   476→            </table>
+   477→            {(!data?.parties || data.parties.length === 0) && (
+   478→              <p className="text-center py-8 text-sm text-muted-foreground">No party activity in this period</p>
+   479→            )}
+   480→          </div>
+   481→        </CardContent>
+   482→      </Card>
+   483→    </div>
+   484→  )
+   485→}
+   486→
+   487→function ReportStatCard({ label, value, icon: Icon, color, bg }: { label: string; value: string; icon: any; color: string; bg: string }) {
+   488→  return (
+   489→    <Card className="shadow-card border-border/60">
+   490→      <CardContent className="p-4">
+   491→        <div className="flex items-center gap-2 mb-1">
+   492→          <div className={cn('w-7 h-7 rounded-lg flex items-center justify-center', bg)}>
+   493→            <Icon className={cn('w-3.5 h-3.5', color)} />
+   494→          </div>
+   495→          <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">{label}</p>
+   496→        </div>
+   497→        <p className="text-lg font-bold">{value}</p>
+   498→      </CardContent>
+   499→    </Card>
+   500→  )
+   501→}
+   502→
+   503→function ReportSkeleton() {
+   504→  return (
+   505→    <div className="space-y-4">
+   506→      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+   507→        {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}
+   508→      </div>
+   509→      <Skeleton className="h-72 w-full rounded-xl" />
+   510→    </div>
+   511→  )
+   512→}
+   513→
