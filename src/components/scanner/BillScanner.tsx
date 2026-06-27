@@ -395,57 +395,48 @@ export function BillScanner() {
 
                 {scanned.items.map((item: any, i: number) => (
                   <div key={i} className="grid grid-cols-12 gap-2 items-center p-2 rounded-lg bg-muted/30 hover:bg-muted/50 transition">
+                    {/* Product name — always editable */}
                     <div className="col-span-12 md:col-span-4">
-                      {editMode ? (
-                        <input
-                          value={item.name}
-                          onChange={(e) => updateItem(i, 'name', e.target.value)}
-                          className="w-full px-2 py-1.5 text-sm bg-background border border-border rounded-md"
-                        />
-                      ) : (
-                        <p className="text-sm font-medium truncate">{item.name || '—'}</p>
-                      )}
+                      <input
+                        value={item.name}
+                        onChange={(e) => updateItem(i, 'name', e.target.value)}
+                        className="w-full px-2 py-1.5 text-sm bg-transparent border border-transparent rounded-md focus:bg-background focus:border-border transition"
+                        placeholder="Product name"
+                      />
                     </div>
+                    {/* Quantity — always editable */}
                     <div className="col-span-3 md:col-span-2">
-                      {editMode ? (
-                        <input
-                          type="number"
-                          value={item.quantity}
-                          onChange={(e) => updateItem(i, 'quantity', Number(e.target.value))}
-                          className="w-full px-2 py-1.5 text-sm bg-background border border-border rounded-md"
-                        />
-                      ) : (
-                        <p className="text-sm">{item.quantity} {item.unit || 'pcs'}</p>
-                      )}
+                      <input
+                        type="number"
+                        value={item.quantity}
+                        onChange={(e) => updateItem(i, 'quantity', Number(e.target.value))}
+                        className="w-full px-2 py-1.5 text-sm bg-transparent border border-transparent rounded-md focus:bg-background focus:border-border transition"
+                      />
                     </div>
+                    {/* Unit price — always editable */}
                     <div className="col-span-4 md:col-span-2">
-                      {editMode ? (
-                        <input
-                          type="number"
-                          value={item.unitPrice}
-                          onChange={(e) => updateItem(i, 'unitPrice', Number(e.target.value))}
-                          className="w-full px-2 py-1.5 text-sm bg-background border border-border rounded-md"
-                        />
-                      ) : (
-                        <p className="text-sm">{formatINR(item.unitPrice || 0)}</p>
-                      )}
+                      <input
+                        type="number"
+                        value={item.unitPrice}
+                        onChange={(e) => updateItem(i, 'unitPrice', Number(e.target.value))}
+                        className="w-full px-2 py-1.5 text-sm bg-transparent border border-transparent rounded-md focus:bg-background focus:border-border transition"
+                      />
                     </div>
+                    {/* GST — always editable */}
                     <div className="col-span-2 md:col-span-1">
-                      {editMode ? (
-                        <select
-                          value={item.gstRate}
-                          onChange={(e) => updateItem(i, 'gstRate', Number(e.target.value))}
-                          className="w-full px-1 py-1.5 text-sm bg-background border border-border rounded-md"
-                        >
-                          {[0, 5, 12, 18, 28].map(r => <option key={r} value={r}>{r}%</option>)}
-                        </select>
-                      ) : (
-                        <p className="text-sm">{item.gstRate || 0}%</p>
-                      )}
+                      <select
+                        value={item.gstRate}
+                        onChange={(e) => updateItem(i, 'gstRate', Number(e.target.value))}
+                        className="w-full px-1 py-1.5 text-sm bg-transparent border border-transparent rounded-md focus:bg-background focus:border-border transition"
+                      >
+                        {[0, 5, 12, 18, 28].map(r => <option key={r} value={r}>{r}%</option>)}
+                      </select>
                     </div>
+                    {/* Total (auto-calculated, read-only) */}
                     <div className="col-span-2 md:col-span-2 text-right">
                       <p className="text-sm font-semibold">{formatINR(item.total || 0)}</p>
                     </div>
+                    {/* Delete */}
                     <div className="col-span-1 flex justify-end">
                       <Button
                         variant="ghost"

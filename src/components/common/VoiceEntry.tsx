@@ -230,11 +230,16 @@ export function VoiceEntry({ onTransactionParsed }: VoiceEntryProps) {
         </div>
       )}
 
-      {/* Accumulated transcript (after stopping) */}
+      {/* Accumulated transcript (after stopping) — EDITABLE */}
       {!isRecording && accumulatedTranscript && !parsed && (
         <div className="p-3 rounded-lg bg-muted border border-border">
-          <p className="text-xs text-muted-foreground mb-1">Transcript (tap Record More to add):</p>
-          <p className="text-sm text-foreground">{accumulatedTranscript}</p>
+          <p className="text-xs text-muted-foreground mb-1">Transcript (tap to edit any word):</p>
+          <textarea
+            value={accumulatedTranscript}
+            onChange={(e) => setAccumulatedTranscript(e.target.value)}
+            className="w-full bg-transparent text-sm text-foreground resize-none focus:outline-none"
+            rows={3}
+          />
         </div>
       )}
 
@@ -260,26 +265,55 @@ export function VoiceEntry({ onTransactionParsed }: VoiceEntryProps) {
             {parsed.items && parsed.items.length > 0 ? (
               <div className="space-y-1.5">
                 {parsed.items.map((item: any, i: number) => (
-                  <div key={i} className="flex items-center justify-between p-2 rounded-lg bg-muted/50 text-sm group">
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">
-                        {item.productName || item.name || 'Unknown product'}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {item.quantity} {item.unit || 'pcs'} x ₹{item.unitPrice || 0}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <p className="font-semibold">₹{((Number(item.quantity) || 0) * (Number(item.unitPrice) || 0)).toFixed(0)}</p>
-                      {/* Delete button — remove wrong item */}
-                      <button
-                        onClick={() => handleDeleteItem(i)}
-                        className="p-1 rounded-lg text-rose-500 hover:bg-rose-100 dark:hover:bg-rose-900/30 transition"
-                        title="Remove this item"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
+                  <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-muted/50 text-sm">
+                    {/* Editable product name */}
+                    <input
+                      type="text"
+                      value={item.productName || item.name || ''}
+                      onChange={(e) => {
+                        const newItems = [...parsed.items]
+                        newItems[i] = { ...newItems[i], productName: e.target.value }
+                        setParsed({ ...parsed, items: newItems })
+                      }}
+                      className="flex-1 min-w-0 bg-transparent font-medium focus:outline-none focus:bg-background focus:px-1 focus:rounded transition"
+                      placeholder="Product name"
+                    />
+                    {/* Editable quantity */}
+                    <input
+                      type="number"
+                      value={item.quantity || ''}
+                      onChange={(e) => {
+                        const newItems = [...parsed.items]
+                        newItems[i] = { ...newItems[i], quantity: Number(e.target.value) }
+                        setParsed({ ...parsed, items: newItems })
+                      }}
+                      className="w-12 bg-transparent text-center text-xs focus:outline-none focus:bg-background focus:px-1 focus:rounded transition"
+                      placeholder="Qty"
+                    />
+                    <span className="text-xs text-muted-foreground">{item.unit || 'pcs'}</span>
+                    {/* Editable price */}
+                    <span className="text-xs text-muted-foreground">x ₹</span>
+                    <input
+                      type="number"
+                      value={item.unitPrice || ''}
+                      onChange={(e) => {
+                        const newItems = [...parsed.items]
+                        newItems[i] = { ...newItems[i], unitPrice: Number(e.target.value) }
+                        setParsed({ ...parsed, items: newItems })
+                      }}
+                      className="w-16 bg-transparent text-right text-xs focus:outline-none focus:bg-background focus:px-1 focus:rounded transition"
+                      placeholder="Price"
+                    />
+                    {/* Total (auto-calculated) */}
+                    <p className="font-semibold w-14 text-right">₹{((Number(item.quantity) || 0) * (Number(item.unitPrice) || 0)).toFixed(0)}</p>
+                    {/* Delete button */}
+                    <button
+                      onClick={() => handleDeleteItem(i)}
+                      className="p-1 rounded-lg text-rose-500 hover:bg-rose-100 dark:hover:bg-rose-900/30 transition flex-shrink-0"
+                      title="Remove this item"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
                   </div>
                 ))}
               </div>
