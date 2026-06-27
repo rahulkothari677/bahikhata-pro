@@ -60,21 +60,14 @@ function write<T>(formType: string, store: Store<T>) {
 
 function isEmptyDraft(data: any): boolean {
   if (data === null || data === undefined) return true
-  if (typeof data !== 'object') return !data
-  for (const v of Object.values(data)) {
-    if (v === null || v === undefined) continue
-    if (Array.isArray(v)) {
-      if (v.length > 0) return false
-      continue
-    }
-    if (typeof v === 'object') {
-      if (!isEmptyDraft(v)) return false
-      continue
-    }
-    if (typeof v === 'string' && v.trim() !== '') return false
-    if (typeof v === 'number' && v !== 0) return false
-    if (typeof v === 'boolean' && v === true) return false
-  }
+  if (typeof data !== 'object') return true
+  // Only count user-entered content as "meaningful":
+  // items, partyId, invoiceNo, notes.
+  // Default form values (date=today, paymentMode='cash') do NOT count.
+  if (Array.isArray(data.items) && data.items.length > 0) return false
+  if (typeof data.partyId === 'string' && data.partyId.trim() !== '') return false
+  if (typeof data.invoiceNo === 'string' && data.invoiceNo.trim() !== '') return false
+  if (typeof data.notes === 'string' && data.notes.trim() !== '') return false
   return true
 }
 

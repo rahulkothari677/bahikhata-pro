@@ -130,14 +130,15 @@
   * {
     @apply border-border outline-ring/50;
   }
+  html {
+    /* Disables browser's native pull-to-refresh on mobile Chrome.
+       'none' is stronger than 'contain' — also blocks the bounce effect. */
+    overscroll-behavior-y: none;
+  }
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
-    /* Disable browser's native pull-to-refresh on mobile.
-       Our custom PullToRefresh component handles this inside the app.
-       Without this, pulling down on any non-dashboard view reloads the
-       page and resets the app to the dashboard view. */
-    overscroll-behavior-y: contain;
+    overscroll-behavior-y: none;
   }
 }
 
