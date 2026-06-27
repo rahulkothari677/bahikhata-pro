@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { ArrowLeft } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
 import { useOfflineSession } from '@/hooks/use-offline-session'
 import { useBrowserBackButton } from '@/hooks/use-browser-back-button'
@@ -37,10 +38,11 @@ const PartyProfile = dynamic(() => import('@/components/parties/PartyProfile').t
 const BillScanner = dynamic(() => import('@/components/scanner/BillScanner').then(m => ({ default: m.BillScanner })), { ssr: false })
 const Reports = dynamic(() => import('@/components/reports/Reports').then(m => ({ default: m.Reports })), { ssr: false })
 const Settings = dynamic(() => import('@/components/settings/Settings').then(m => ({ default: m.Settings })), { ssr: false })
+const PricingPlans = dynamic(() => import('@/components/subscription/PricingPlans').then(m => ({ default: m.PricingPlans })), { ssr: false })
 
 export default function Home() {
   const { session, status, isOfflineSession } = useOfflineSession()
-  const { currentView, features, triggerRefresh } = useAppStore()
+  const { currentView, features, triggerRefresh, setView } = useAppStore()
   useBrowserBackButton() // Enable browser back button to navigate within app
   const queryClient = useQueryClient()
   const [onboardingDismissed, setOnboardingDismissed] = useState(false)
@@ -140,6 +142,20 @@ export default function Home() {
           {currentView === 'scanner' && <BillScanner />}
           {currentView === 'reports' && <Reports />}
           {currentView === 'settings' && <Settings />}
+          {currentView === 'pricing' && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <button onClick={() => setView('more')} className="p-2 -ml-2 rounded-lg hover:bg-muted">
+                  <ArrowLeft className="w-5 h-5" />
+                </button>
+                <div>
+                  <h2 className="text-xl font-bold">Plans &amp; Pricing</h2>
+                  <p className="text-xs text-muted-foreground">Choose the plan that fits your business</p>
+                </div>
+              </div>
+              <PricingPlans />
+            </div>
+          )}
           {currentView === 'transaction-detail' && <TransactionDetail />}
           {currentView === 'party-profile' && <PartyProfile />}
           {currentView === 'new-sale' && <TransactionEntry type="sale" />}

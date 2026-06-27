@@ -31,6 +31,7 @@ import {
   LogOut,
   Download,
   Pencil,
+  MoreHorizontal,
 } from 'lucide-react'
 
 const navItems: { id: ViewType; labelKey: string; descKey: string; icon: any; badge?: string }[] = [
@@ -42,7 +43,9 @@ const navItems: { id: ViewType; labelKey: string; descKey: string; icon: any; ba
   { id: 'income-expense', labelKey: 'nav.income', descKey: 'nav.income', icon: Wallet },
   { id: 'parties', labelKey: 'nav.parties', descKey: 'nav.parties', icon: Users },
   { id: 'reports', labelKey: 'nav.reports', descKey: 'nav.reports', icon: FileBarChart },
+  { id: 'pricing', labelKey: 'Plans & Pricing', descKey: 'Upgrade or manage subscription', icon: Crown },
   { id: 'settings', labelKey: 'nav.settings', descKey: 'nav.settings', icon: Settings },
+  { id: 'more', labelKey: 'More', descKey: 'Help, about, referrals & more', icon: MoreHorizontal },
 ]
 
 export function Sidebar() {
@@ -215,23 +218,14 @@ export function Sidebar() {
               </div>
             )}
 
-            {/* Support links — compact icon row */}
-            <div className="px-3 py-2 flex items-center gap-3 text-sidebar-foreground/50">
-              <button onClick={() => sonnerToast.info('Help center coming soon!')} className="hover:text-sidebar-foreground transition" title="Help">
-                <HelpCircle className="w-3.5 h-3.5" />
-              </button>
-              <button onClick={() => sonnerToast.info('Contact us at support@bahikhata.pro')} className="hover:text-sidebar-foreground transition" title="Contact">
-                <Info className="w-3.5 h-3.5" />
-              </button>
-              <button onClick={() => sonnerToast.info('BahiKhata Pro v1.0')} className="hover:text-sidebar-foreground transition" title="About">
-                <Star className="w-3.5 h-3.5" />
-              </button>
-              <button onClick={handleInstallApp} className="hover:text-sidebar-foreground transition" title="Install App">
-                <Download className="w-3.5 h-3.5" />
-              </button>
-              <div className="flex-1" />
-              <button onClick={handleLogout} className="text-rose-400/70 hover:text-rose-400 transition" title="Logout">
-                <LogOut className="w-3.5 h-3.5" />
+            {/* Logout button — clean, full width */}
+            <div className="px-3 py-2">
+              <button
+                onClick={handleLogout}
+                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-rose-500 hover:bg-rose-500/10 transition text-sm"
+              >
+                <LogOut className="w-4 h-4" />
+                Logout
               </button>
             </div>
 
