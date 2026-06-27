@@ -90,18 +90,38 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
 
   const handleRestoreDraft = (id: string) => {
     const draft = restoreDraft(id)
-    if (!draft) return
+    if (!draft) {
+      sonnerToast.error('Draft not found — it may have expired')
+      return
+    }
     if (draft.partyId) setPartyId(draft.partyId)
-    if (draft.date) setDate(draft.date)
-    if (draft.invoiceNo) setInvoiceNo(draft.invoiceNo)
+    if (draft.date) {
+      try {
+        const d = new Date(draft.date)
+        if (!isNaN(d.getTime())) setDate(d.toISOString().slice(0, 10))
+      } catch {}
+    }
+    if (draft.invoiceNo !== undefined) setInvoiceNo(draft.invoiceNo)
     if (typeof draft.isInterState === 'boolean') setIsInterState(draft.isInterState)
     if (draft.paymentMode) setPaymentMode(draft.paymentMode)
     if (draft.paidAmount !== undefined) setPaidAmount(draft.paidAmount)
     if (draft.discountAmount !== undefined) setDiscountAmount(draft.discountAmount)
     if (draft.notes !== undefined) setNotes(draft.notes)
-    if (draft.items?.length > 0) setItems(draft.items)
+    // CRITICAL: Normalize item fields — drafts may have string quantities
+    // or missing fields if saved from an older version. Without this,
+    // restored items don't render in the form.
+    if (draft.items?.length > 0) {
+      setItems(draft.items.map((item: any) => ({
+        productId: item.productId || '',
+        productName: item.productName || item.name || '',
+        quantity: Number(item.quantity) || 1,
+        unitPrice: Number(item.unitPrice) || 0,
+        gstRate: Number(item.gstRate) || 0,
+        unit: item.unit || 'pcs',
+      })))
+    }
     haptic.success()
-    sonnerToast.success('Draft restored')
+    sonnerToast.success(`Draft restored — ${draft.items?.length || 0} item${(draft.items?.length || 0) === 1 ? '' : 's'}`)
   }
 
   // Autosave on form changes (debounced inside the hook).
