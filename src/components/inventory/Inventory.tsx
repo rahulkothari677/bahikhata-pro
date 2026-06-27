@@ -20,7 +20,8 @@ import {
   Plus, Search, Package, AlertTriangle, Edit2, TrendingUp, IndianRupee,
   ChevronRight, Folder, FolderOpen, LayoutGrid, List, X,
 } from 'lucide-react'
-import { offlineFetch } from '@/lib/offline-fetch'
+import { offlineFetch, isOnline, OfflineError } from '@/lib/offline-fetch'
+import { OfflineNoData } from '@/components/common/OfflineNoData'
 
 export function Inventory() {
   const {
@@ -34,12 +35,13 @@ export function Inventory() {
   const [editingProduct, setEditingProduct] = useState<any>(null)
   const [subCategory, setSubCategory] = useState<string | null>(null)
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ['products', refreshKey],
     queryFn: async () => {
       const r = await offlineFetch('/api/products')
       return r.json()
     },
+    retry: (count, err) => !(err instanceof OfflineError) && count < 3,
   })
 
   const products: any[] = data?.products || []
@@ -226,7 +228,17 @@ export function Inventory() {
       </Card>
 
       {/* Products - Grid or List */}
-      {isLoading ? (
+      {!isOnline() && error instanceof OfflineError && !data ? (
+        <Card className="shadow-card border-border/60">
+          <CardContent className="p-0">
+            <OfflineNoData
+              title="No cached inventory"
+              message="You're offline and your product list hasn't been cached yet. Connect to internet once to load it — after that, inventory works offline."
+              onRetry={() => triggerRefresh()}
+            />
+          </CardContent>
+        </Card>
+      ) : isLoading ? (
         <div className="space-y-2">
           {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-16 w-full rounded-xl" />)}
         </div>

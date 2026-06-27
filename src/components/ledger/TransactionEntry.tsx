@@ -15,14 +15,14 @@ import { useToast } from '@/hooks/use-toast'
 import { toast as sonnerToast } from 'sonner'
 import { formatINR, cn, getInitials } from '@/lib/utils'
 import {
-  ArrowLeft, ShoppingCart, Truck, Plus, X, Search, ChevronDown,
+  ArrowLeft, ShoppingCart, Truck, Plus, X, Search, ChevronDown, ChevronRight,
   TrendingUp, Calendar, User, ScanLine, Folder, FolderOpen,
   Package, Phone, IndianRupee, Save, Trash2, Check, AlertCircle, Mic, Clock,
 } from 'lucide-react'
 import { VoiceEntry } from '@/components/common/VoiceEntry'
-import { DraftRestoreBanner } from '@/components/common/DraftRestoreBanner'
+import { DraftManagerModal } from '@/components/common/DraftManagerModal'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
-import { useAutosaveDraft } from '@/hooks/use-autosave-draft'
+import { useDrafts } from '@/hooks/use-drafts'
 import { haptic } from '@/lib/haptic'
 import { trackRecentProduct, getRecentProductIds } from '@/lib/recent-products'
 
@@ -71,11 +71,12 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
 
   const [saving, setSaving] = useState(false)
   const [showVoiceEntry, setShowVoiceEntry] = useState(false)
-  const [draftDismissed, setDraftDismissed] = useState(false)
+  const [draftModalOpen, setDraftModalOpen] = useState(false)
 
-  // Autosave draft — restores on mount if user navigates back/refreshes
-  const draftId = `txn-${type}`
-  const { saveDraft, restoreDraft, clearDraft, hasDraft, savedAt } = useAutosaveDraft<{
+  // Multi-draft autosave — supports multiple saved drafts per form type.
+  // Each draft has a unique ID; the hook tracks which draft is "active" (currently being edited).
+  const draftFormType = `txn-${type}`
+  const { drafts, activeDraftId, save, restoreDraft, deleteDraft, clearActive, hasDrafts } = useDrafts<{
     partyId: string
     date: string
     invoiceNo: string
@@ -85,10 +86,10 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
     discountAmount: string
     notes: string
     items: ItemRow[]
-  }>(draftId)
+  }>(draftFormType)
 
-  const handleRestoreDraft = () => {
-    const draft = restoreDraft()
+  const handleRestoreDraft = (id: string) => {
+    const draft = restoreDraft(id)
     if (!draft) return
     if (draft.partyId) setPartyId(draft.partyId)
     if (draft.date) setDate(draft.date)
@@ -99,22 +100,15 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
     if (draft.discountAmount !== undefined) setDiscountAmount(draft.discountAmount)
     if (draft.notes !== undefined) setNotes(draft.notes)
     if (draft.items?.length > 0) setItems(draft.items)
-    setDraftDismissed(true)
     haptic.success()
     sonnerToast.success('Draft restored')
   }
 
-  const handleDiscardDraft = () => {
-    clearDraft()
-    setDraftDismissed(true)
-    haptic.click()
-  }
-
-  // Autosave on form changes (debounced inside the hook)
+  // Autosave on form changes (debounced inside the hook).
+  // The hook skips the very first render (hasInteractedRef) so we don't
+  // wipe an existing draft with the initial empty form state.
   useEffect(() => {
-    // Don't save if user already dismissed the draft restore prompt and form is empty
-    if (draftDismissed && items.length === 0 && !partyId && !invoiceNo && !notes) return
-    saveDraft({
+    save({
       partyId,
       date,
       invoiceNo,
@@ -125,7 +119,7 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
       notes,
       items,
     })
-  }, [partyId, date, invoiceNo, isInterState, paymentMode, paidAmount, discountAmount, notes, items, draftDismissed, saveDraft])
+  }, [partyId, date, invoiceNo, isInterState, paymentMode, paidAmount, discountAmount, notes, items, save])
 
   // Fetch products
   const { data: productsData } = useQuery({
@@ -314,8 +308,11 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
         sonnerToast.success(`${isSale ? 'Sale' : 'Purchase'} recorded successfully!`)
       }
       haptic.success()
-      // Clear the autosaved draft now that the transaction is saved
-      clearDraft()
+      // Clear the active draft now that the transaction is saved
+      if (activeDraftId) {
+        deleteDraft(activeDraftId)
+      }
+      clearActive()
       // Track recently used products for quick-pick next time
       items.forEach((i) => {
         if (i.productId) trackRecentProduct(i.productId, i.productName)
@@ -347,12 +344,38 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
 
   return (
     <div className="space-y-4 pb-24 lg:pb-4">
-      {/* Draft restore banner — only shows if there's an autosaved draft from a previous session */}
-      <DraftRestoreBanner
-        show={hasDraft && !draftDismissed}
-        savedAt={savedAt}
+      {/* Drafts button — opens modal showing all saved drafts from last 24h.
+          Shows a badge with the count if there are any drafts. */}
+      {hasDrafts && (
+        <button
+          onClick={() => { haptic.click(); setDraftModalOpen(true) }}
+          className="w-full flex items-center justify-between gap-2 p-3 rounded-xl border border-primary/30 bg-primary/5 hover:bg-primary/10 transition text-left"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+              <Clock className="w-4 h-4 text-primary" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-primary">
+                {drafts.length} saved draft{drafts.length === 1 ? '' : 's'}
+              </p>
+              <p className="text-[11px] text-muted-foreground truncate">
+                {activeDraftId ? 'Editing a restored draft' : 'Tap to restore or delete previous drafts'}
+              </p>
+            </div>
+          </div>
+          <ChevronRight className="w-4 h-4 text-primary flex-shrink-0" />
+        </button>
+      )}
+
+      {/* Draft manager modal */}
+      <DraftManagerModal
+        open={draftModalOpen}
+        onOpenChange={setDraftModalOpen}
+        drafts={drafts}
+        activeDraftId={activeDraftId}
         onRestore={handleRestoreDraft}
-        onDiscard={handleDiscardDraft}
+        onDelete={deleteDraft}
       />
 
       {/* Top action bar */}

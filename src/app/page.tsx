@@ -7,6 +7,7 @@ import { ArrowLeft } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
 import { useOfflineSession } from '@/hooks/use-offline-session'
 import { useBrowserBackButton } from '@/hooks/use-browser-back-button'
+import { PullToRefresh } from '@/hooks/use-pull-to-refresh'
 import { isOnline, onSyncComplete } from '@/lib/offline-fetch'
 import { precacheData } from '@/lib/precache'
 import { AuthScreen } from '@/components/auth/AuthScreen'
@@ -136,33 +137,46 @@ export default function Home() {
         <Header />
 
         <main className="flex-1 p-4 lg:p-6 max-w-7xl mx-auto w-full">
-          {currentView === 'dashboard' && <Dashboard />}
-          {currentView === 'inventory' && <Inventory />}
-          {currentView === 'sales' && <Ledger type="sale" />}
-          {currentView === 'purchases' && <Ledger type="purchase" />}
-          {currentView === 'income-expense' && <IncomeExpense />}
-          {currentView === 'parties' && <Parties />}
-          {currentView === 'scanner' && <BillScanner />}
-          {currentView === 'reports' && <Reports />}
-          {currentView === 'settings' && <Settings />}
-          {currentView === 'pricing' && (
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <button onClick={() => setView('more')} className="p-2 -ml-2 rounded-lg hover:bg-muted">
-                  <ArrowLeft className="w-5 h-5" />
-                </button>
-                <div>
-                  <h2 className="text-xl font-bold">Plans &amp; Pricing</h2>
-                  <p className="text-xs text-muted-foreground">Choose the plan that fits your business</p>
+          {/* PullToRefresh wraps all main content views. Disabled on form/detail
+              views where pull-down might interfere with scrolling. */}
+          <PullToRefresh
+            onRefresh={async () => {
+              triggerRefresh()
+              // Invalidate all queries so they refetch fresh data
+              queryClient.invalidateQueries()
+              // Give queries a moment to refetch before hiding the spinner
+              await new Promise((r) => setTimeout(r, 800))
+            }}
+            enabled={!['new-sale', 'new-purchase', 'transaction-detail', 'party-profile', 'scanner', 'pricing'].includes(currentView)}
+          >
+            {currentView === 'dashboard' && <Dashboard />}
+            {currentView === 'inventory' && <Inventory />}
+            {currentView === 'sales' && <Ledger type="sale" />}
+            {currentView === 'purchases' && <Ledger type="purchase" />}
+            {currentView === 'income-expense' && <IncomeExpense />}
+            {currentView === 'parties' && <Parties />}
+            {currentView === 'scanner' && <BillScanner />}
+            {currentView === 'reports' && <Reports />}
+            {currentView === 'settings' && <Settings />}
+            {currentView === 'pricing' && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <button onClick={() => setView('more')} className="p-2 -ml-2 rounded-lg hover:bg-muted">
+                    <ArrowLeft className="w-5 h-5" />
+                  </button>
+                  <div>
+                    <h2 className="text-xl font-bold">Plans &amp; Pricing</h2>
+                    <p className="text-xs text-muted-foreground">Choose the plan that fits your business</p>
+                  </div>
                 </div>
+                <PricingPlans />
               </div>
-              <PricingPlans />
-            </div>
-          )}
-          {currentView === 'transaction-detail' && <TransactionDetail />}
-          {currentView === 'party-profile' && <PartyProfile />}
-          {currentView === 'new-sale' && <TransactionEntry type="sale" />}
-          {currentView === 'new-purchase' && <TransactionEntry type="purchase" />}
+            )}
+            {currentView === 'transaction-detail' && <TransactionDetail />}
+            {currentView === 'party-profile' && <PartyProfile />}
+            {currentView === 'new-sale' && <TransactionEntry type="sale" />}
+            {currentView === 'new-purchase' && <TransactionEntry type="purchase" />}
+          </PullToRefresh>
         </main>
 
         <footer className="mt-auto border-t border-border py-3 px-4 lg:px-6 text-center text-[11px] text-muted-foreground no-print hidden lg:block">

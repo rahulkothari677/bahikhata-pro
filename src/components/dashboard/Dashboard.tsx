@@ -13,7 +13,7 @@ import { DateRangePicker, getPresetRange, getPresetLabel, type DateRange, type D
 import {
   TrendingUp, TrendingDown, Wallet, Package,
   ArrowUpRight, ArrowDownRight, AlertTriangle, IndianRupee,
-  Receipt, Boxes, PiggyBank, ScanLine, ArrowRight, Plus,
+  Receipt, Boxes, PiggyBank, ScanLine, ArrowRight, Plus, CloudOff,
 } from 'lucide-react'
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell,
@@ -23,8 +23,7 @@ import {
 import { chartColors } from '@/lib/chart-theme'
 import { formatINR, formatINRCompact, relativeTime, cn } from '@/lib/utils'
 import { motion } from 'framer-motion'
-import { offlineFetch } from '@/lib/offline-fetch'
-import { PullToRefresh } from '@/hooks/use-pull-to-refresh'
+import { offlineFetch, isOnline, OfflineError } from '@/lib/offline-fetch'
 
 const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)']
 
@@ -34,12 +33,14 @@ export function Dashboard() {
   const [dateRange, setDateRange] = useState<DateRange>(() => getPresetRange('thisMonth'))
   const [datePreset, setDatePreset] = useState<DatePreset>('thisMonth')
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ['dashboard', refreshKey, dateRange.from.toISOString(), dateRange.to.toISOString()],
     queryFn: async () => {
       const r = await offlineFetch(`/api/dashboard?from=${dateRange.from.toISOString()}&to=${dateRange.to.toISOString()}`)
       return r.json()
     },
+    // Don't retry when offline — fail fast so we can show the right UI
+    retry: (count, err) => !(err instanceof OfflineError) && count < 3,
   })
 
   const handleDateChange = (range: DateRange, preset: DatePreset) => {
@@ -61,6 +62,52 @@ export function Dashboard() {
   // Today's date range for "today" KPIs
   const todayStart = new Date()
   todayStart.setHours(0, 0, 0, 0)
+
+  // Show offline-no-data state if: offline AND query failed with OfflineError
+  // (means no cached data exists for this endpoint)
+  const isOfflineNoData = !isOnline() && error instanceof OfflineError && !data
+
+  if (isOfflineNoData) {
+    return (
+      <div className="space-y-5">
+        <DateRangeHeader
+          dateRange={dateRange}
+          datePreset={datePreset}
+          onChange={handleDateChange}
+          onPresetChange={setDatePreset}
+        />
+        <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+          <div className="w-16 h-16 rounded-full bg-amber-100 dark:bg-amber-950/40 flex items-center justify-center mb-4">
+            <CloudOff className="w-8 h-8 text-amber-600" />
+          </div>
+          <h3 className="text-lg font-semibold mb-2">No cached data</h3>
+          <p className="text-sm text-muted-foreground max-w-sm mb-4">
+            You&apos;re offline and the dashboard data hasn&apos;t been cached yet.
+            Connect to internet once to load your data — after that, it works offline.
+          </p>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { setView('sales') }}
+              className="gap-2"
+            >
+              View Sales Ledger
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { setView('new-sale') }}
+              className="gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              New Sale
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   if (isLoading || !data) {
     return (
@@ -157,7 +204,6 @@ export function Dashboard() {
   }
 
   return (
-    <PullToRefresh onRefresh={async () => { triggerRefresh(); await new Promise((r) => setTimeout(r, 600)); }}>
     <div className="space-y-5">
       {/* Greeting banner */}
       <motion.div
@@ -578,7 +624,6 @@ export function Dashboard() {
       {/* {t('dash.smart_insights')} - AI-powered alerts */}
       {kpis && <SmartInsights />}
     </div>
-    </PullToRefresh>
   )
 }
 

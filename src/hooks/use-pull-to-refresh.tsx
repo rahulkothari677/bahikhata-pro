@@ -168,18 +168,30 @@ export function PullToRefresh({
 }) {
   const { pullDistance, isRefreshing, handlers } = usePullToRefresh({ onRefresh, enabled })
 
+  // When there's no pull activity and not refreshing, render a simple div
+  // with the touch handlers attached but no transforms (zero layout impact).
+  const isActive = pullDistance > 0 || isRefreshing
+
+  if (!isActive) {
+    return (
+      <div {...handlers} className="relative">
+        {children}
+      </div>
+    )
+  }
+
   return (
     <div {...handlers} className={cn('relative', isRefreshing && 'overflow-hidden')}>
       <div
         className="absolute top-0 left-0 right-0 z-10 pointer-events-none"
-        style={{ transform: `translateY(${isRefreshing ? 0 : -threshold + pullDistance}px)` }}
+        style={{ transform: `translateY(${isRefreshing ? 0 : -THRESHOLD + pullDistance}px)` }}
       >
-        <PullToRefreshIndicator pullDistance={pullDistance} isRefreshing={isRefreshing} threshold={threshold} />
+        <PullToRefreshIndicator pullDistance={pullDistance} isRefreshing={isRefreshing} threshold={THRESHOLD} />
       </div>
       <div
         style={{
-          transform: `translateY(${isRefreshing ? threshold : pullDistance}px)`,
-          transition: pullDistance === 0 || isRefreshing ? 'transform 0.2s ease-out' : 'none',
+          transform: `translateY(${isRefreshing ? THRESHOLD : pullDistance}px)`,
+          transition: isRefreshing ? 'transform 0.2s ease-out' : 'none',
         }}
       >
         {children}
@@ -187,5 +199,3 @@ export function PullToRefresh({
     </div>
   )
 }
-
-const threshold = THRESHOLD
