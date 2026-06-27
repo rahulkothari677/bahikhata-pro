@@ -321,25 +321,28 @@ export function BillScanner() {
                   </div>
                 </>
               )}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
-              />
-              <input
-                ref={cameraInputRef}
-                type="file"
-                accept="image/*"
-                capture="environment"
-                className="hidden"
-                onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
-              />
             </CardContent>
           </Card>
         </>
       )}
+
+      {/* Hidden file inputs — always rendered (outside conditional) so
+          'Scan More Items' can trigger them even when results are showing */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => { if (e.target.files?.[0]) handleFile(e.target.files[0]); e.target.value = '' }}
+      />
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(e) => { if (e.target.files?.[0]) handleFile(e.target.files[0]); e.target.value = '' }}
+      />
 
       {/* Verification & edit view */}
       {scanned && (
@@ -401,7 +404,13 @@ export function BillScanner() {
                       setScanned({ ...scanned, _isAddingMore: true })
                       setPreview('')
                       // Trigger file input using ref
-                      fileInputRef.current?.click()
+                      // Use camera input on mobile, file input on desktop
+                      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+                      if (isMobile) {
+                        cameraInputRef.current?.click()
+                      } else {
+                        fileInputRef.current?.click()
+                      }
                     }}
                     className="bg-gradient-saffron gap-1"
                   >
