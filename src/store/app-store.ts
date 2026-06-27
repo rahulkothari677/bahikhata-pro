@@ -33,6 +33,12 @@ export type FeatureKey =
   | 'lowStockAlerts'
   | 'profitTracking'
   | 'pwaInstall'
+  | 'barcodeScanner'
+  | 'analyticsTracking'
+  | 'offlineMode'
+  | 'autoSaveDrafts'
+  | 'dailySummary'
+  | 'announcementBanners'
 
 export type FeatureFlags = Record<FeatureKey, boolean>
 
@@ -53,6 +59,12 @@ const DEFAULT_FEATURES: FeatureFlags = {
   lowStockAlerts: true,
   profitTracking: true,
   pwaInstall: true,
+  barcodeScanner: true,
+  analyticsTracking: true,
+  offlineMode: true,
+  autoSaveDrafts: true,
+  dailySummary: false,
+  announcementBanners: true,
 }
 
 interface AppState {
