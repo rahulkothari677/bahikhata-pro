@@ -115,8 +115,19 @@ export function BillScanner() {
             console.log('Raw AI output:', data.rawContent)
           }
         } else {
-          setScanned(data.bill)
-          sonnerToast.success('Bill scanned! Review and verify the data.')
+          // If we're in "adding more" mode, append new items to existing
+          if (scanned?._isAddingMore && scanned?.items) {
+            const newItems = data.bill.items || []
+            setScanned({
+              ...data.bill,
+              items: [...scanned.items, ...newItems],
+              _isAddingMore: false,
+            })
+            sonnerToast.success(`Added ${newItems.length} more items from second bill!`)
+          } else {
+            setScanned(data.bill)
+            sonnerToast.success('Bill scanned! Review and verify the data.')
+          }
         }
       } catch (e) {
         toast({
@@ -499,6 +510,23 @@ export function BillScanner() {
               <div className="flex flex-col sm:flex-row gap-3">
                 <Button variant="outline" className="flex-1 gap-2" onClick={handleReset}>
                   <X className="w-4 h-4" /> {t('scanner.discard')}
+                </Button>
+                {/* Scan another bill — keeps existing items, adds new ones */}
+                <Button
+                  variant="outline"
+                  className="flex-1 gap-2 border-primary/30 text-primary hover:bg-primary/10"
+                  onClick={() => {
+                    // Keep existing items, just reset to scan another image
+                    setPreview('')
+                    setScanning(false)
+                    // Move items to a temp storage so next scan appends
+                    const existingItems = scanned?.items || []
+                    setScanned({ ...scanned, items: existingItems, _isAddingMore: true })
+                    // Trigger file input click
+                    document.getElementById('bill-file-input')?.click()
+                  }}
+                >
+                  <ScanLine className="w-4 h-4" /> Scan Another Bill
                 </Button>
                 <Button
                   className="flex-1 gap-2 bg-gradient-saffron shadow-md"

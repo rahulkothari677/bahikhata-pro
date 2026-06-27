@@ -487,13 +487,63 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setShowVoiceEntry(true)}
+                    onClick={() => setShowVoiceEntry(!showVoiceEntry)}
                     className="gap-1.5 text-xs"
                   >
-                    <Mic className="w-3.5 h-3.5" /> Add via Voice
+                    <Mic className="w-3.5 h-3.5" /> {showVoiceEntry ? 'Close Voice' : 'Add via Voice'}
                   </Button>
                 )}
               </div>
+
+              {/* Inline voice entry for adding more items */}
+              {showVoiceEntry && items.length > 0 && (
+                <Card className="shadow-card border-border/60 border-primary/30 mb-3">
+                  <CardContent className="p-4">
+                    <h3 className="font-semibold text-sm flex items-center gap-2 mb-3">
+                      <Mic className="w-4 h-4 text-primary" /> Add More Items via Voice
+                    </h3>
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Speak items to ADD to the existing sale. Previous items will not be removed.
+                    </p>
+                    <VoiceEntry
+                      products={products}
+                      onTransactionParsed={(data) => {
+                        if (data.items?.length > 0) {
+                          const newItems = data.items.map((item: any) => {
+                            if (item.unitPrice && item.unitPrice > 0) {
+                              return {
+                                productId: item.productId || '',
+                                productName: item.productName || item.name,
+                                quantity: Number(item.quantity) || 1,
+                                unitPrice: Number(item.unitPrice) || 0,
+                                gstRate: Number(item.gstRate) || 0,
+                                unit: item.unit || 'pcs',
+                              }
+                            }
+                            const itemName = (item.productName || item.name || '').toLowerCase()
+                            const product = products.find(p =>
+                              p.name?.toLowerCase() === itemName
+                            ) || products.find(p =>
+                              p.name?.toLowerCase().includes(itemName) || itemName.includes(p.name?.toLowerCase())
+                            )
+                            return {
+                              productId: product?.id || '',
+                              productName: item.productName || item.name,
+                              quantity: Number(item.quantity) || 1,
+                              unitPrice: product ? (isSale ? product.salePrice : product.purchasePrice) : (Number(item.unitPrice) || 0),
+                              gstRate: product?.gstRate || 0,
+                              unit: product?.unit || item.unit || 'pcs',
+                            }
+                          })
+                          setItems(prev => [...prev, ...newItems])
+                          sonnerToast.success(`Added ${newItems.length} items to sale`)
+                        }
+                        setShowVoiceEntry(false)
+                      }}
+                    />
+                  </CardContent>
+                </Card>
+              )}
 
               {items.length === 0 ? (
                 <div className="text-center py-8 text-sm text-muted-foreground border border-dashed border-border rounded-lg">
