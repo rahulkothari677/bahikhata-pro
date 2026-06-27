@@ -33,6 +33,8 @@ export function Ledger({ type }: { type: LedgerType }) {
   } = useAppStore()
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
+  const [sortBy, setSortBy] = useState<'date' | 'amount' | 'party' | 'status'>('date')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const { t } = useTranslation()
   const { hideProfit } = useSetting()
 
@@ -113,6 +115,33 @@ export function Ledger({ type }: { type: LedgerType }) {
       t.party?.name?.toLowerCase().includes(q) ||
       t.notes?.toLowerCase().includes(q)
   })
+
+  // Sort filtered transactions
+  const sorted = [...filtered].sort((a, b) => {
+    let cmp = 0
+    if (sortBy === 'date') {
+      cmp = new Date(a.date).getTime() - new Date(b.date).getTime()
+    } else if (sortBy === 'amount') {
+      cmp = a.totalAmount - b.totalAmount
+    } else if (sortBy === 'party') {
+      cmp = (a.party?.name || '').localeCompare(b.party?.name || '')
+    } else if (sortBy === 'status') {
+      // Sort by due amount (largest due first)
+      const aDue = a.totalAmount - a.paidAmount
+      const bDue = b.totalAmount - b.paidAmount
+      cmp = bDue - aDue
+    }
+    return sortOrder === 'asc' ? cmp : -cmp
+  })
+
+  const toggleSort = (field: 'date' | 'amount' | 'party' | 'status') => {
+    if (sortBy === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSortBy(field)
+      setSortOrder('desc')
+    }
+  }
 
   const totalAmount = filtered.reduce((s, t) => s + t.totalAmount, 0)
   const totalProfit = filtered.reduce((s, t) => s + (t.grossProfit || 0), 0)
@@ -263,6 +292,35 @@ export function Ledger({ type }: { type: LedgerType }) {
             </Button>
           </div>
 
+          {/* Sort buttons row */}
+          {sorted.length > 0 && (
+            <div className="mt-3 flex items-center gap-2 flex-wrap">
+              <span className="text-[11px] text-muted-foreground font-medium">Sort by:</span>
+              {([
+                { key: 'date', label: 'Date', icon: Calendar },
+                { key: 'amount', label: 'Amount', icon: IndianRupee },
+                { key: 'party', label: 'Party', icon: User },
+                { key: 'status', label: 'Payment', icon: Receipt },
+              ] as const).map(({ key, label, icon: Icon }) => (
+                <button
+                  key={key}
+                  onClick={() => toggleSort(key)}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition ${
+                    sortBy === key
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted/60 text-muted-foreground hover:bg-muted'
+                  }`}
+                >
+                  <Icon className="w-3 h-3" />
+                  {label}
+                  {sortBy === key && (
+                    <span className="ml-0.5">{sortOrder === 'asc' ? '↑' : '↓'}</span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* Active filter indicator */}
           {dateRange && (
             <div className="mt-2 flex items-center gap-2 text-xs">
@@ -318,7 +376,7 @@ export function Ledger({ type }: { type: LedgerType }) {
         </Card>
       ) : transactionsViewMode === 'list' ? (
         <div className="space-y-2">
-          {filtered.map((t) => {
+          {sorted.map((t) => {
             const due = t.totalAmount - t.paidAmount
             return (
               <SwipeToDelete
@@ -353,6 +411,16 @@ export function Ledger({ type }: { type: LedgerType }) {
                             <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{formatDateTime(t.date)}</span>
                             <span className="flex items-center gap-1"><User className="w-3 h-3" />{t.items?.length || 0} items</span>
                             <Badge variant="secondary" className="text-[10px] py-0 uppercase">{t.paymentMode}</Badge>
+                            {/* Payment status badge */}
+                            {due > 0 ? (
+                              <Badge variant="destructive" className="text-[9px] py-0">
+                                {due === t.totalAmount ? 'Unpaid' : 'Partial'}
+                              </Badge>
+                            ) : (
+                              <Badge className="text-[9px] py-0 bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
+                                Paid
+                              </Badge>
+                            )}
                           </div>
                         </div>
                         <div className="text-right flex-shrink-0">
@@ -389,7 +457,7 @@ export function Ledger({ type }: { type: LedgerType }) {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-          {filtered.map((t) => {
+          {sorted.map((t) => {
             const due = t.totalAmount - t.paidAmount
             return (
               <Card
