@@ -241,6 +241,19 @@ export function PartyProfile() {
     setTimeout(() => window.print(), 500)
   }
 
+  // Send WhatsApp payment link with UPI deep link
+  const handleSendPaymentLink = () => {
+    if (!party || stats.balance <= 0) return
+    const shopName = setting?.shopName || 'My Shop'
+    const shopPhone = setting?.phone || ''
+    const upiId = setting?.upiId || '' // Future: add UPI ID to settings
+    const message = `Dear ${party.name},\n\nYou have an outstanding balance of Rs. ${stats.balance.toFixed(2)} with ${shopName}.\nPlease clear the payment at your earliest convenience.\n${upiId ? `\nPay via UPI: upi://pay?pa=${upiId}&pn=${encodeURIComponent(shopName)}&am=${stats.balance.toFixed(2)}&cu=INR&tn=${encodeURIComponent('Payment to ' + shopName)}\n` : ''}Thank you for your business!`
+    const text = encodeURIComponent(message)
+    const phone = party.phone ? `91${party.phone.replace(/\D/g, '')}` : ''
+    window.open(`https://wa.me/${phone}?text=${text}`, '_blank')
+    sonnerToast.success('Opening WhatsApp with payment reminder...')
+  }
+
   const isCustomer = party.type === 'customer' || party.type === 'both'
   const isSupplier = party.type === 'supplier' || party.type === 'both'
 
@@ -310,6 +323,19 @@ export function PartyProfile() {
             >
               {sendingReminder ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageCircle className="w-4 h-4" />}
               Send Reminder
+            </Button>
+          )}
+          {/* WhatsApp Payment Link — sends UPI payment link for outstanding dues */}
+          {isCustomer && stats.balance > 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={handleSendPaymentLink}
+              className="gap-2 border-violet-300 text-violet-700 hover:bg-violet-50"
+              title="Send WhatsApp message with payment details"
+            >
+              <IndianRupee className="w-4 h-4" />
+              Payment Link
             </Button>
           )}
           {/* Download Statement — generates a printable HTML statement */}

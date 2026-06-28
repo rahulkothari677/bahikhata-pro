@@ -24,6 +24,7 @@ import {
 import { toast as sonnerToast } from 'sonner'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { exportPLReportCSV, exportGSTReportCSV, exportStockReportCSV, exportPartyReportCSV } from '@/lib/csv-export'
+import { exportToTally } from '@/lib/tally-export'
 import { DebtAgingReport } from '@/components/reports/DebtAgingReport'
 import { InventoryAgingReport } from '@/components/reports/InventoryAgingReport'
 
@@ -95,6 +96,19 @@ export function Reports() {
     window.print()
   }
 
+  const handleTallyExport = async () => {
+    try {
+      // Fetch transactions for Tally export
+      const r = await offlineFetch(`/api/transactions?limit=500`)
+      const txnData = await r.json()
+      const setting = (await offlineFetch('/api/settings').then(r => r.json())).setting
+      exportToTally(txnData.transactions || [], setting, 'all')
+      sonnerToast.success('Tally XML exported! Import this in Tally → Gateway of Tally → Import Data')
+    } catch {
+      sonnerToast.error('Failed to export Tally XML')
+    }
+  }
+
   return (
     <div className="space-y-4">
       {/* Print-only header — visible only when printing */}
@@ -150,6 +164,17 @@ export function Reports() {
                   <span className="hidden sm:inline">{t('reports.export_gstr')}</span>
                 </Button>
               )}
+              {/* Tally Export — generates XML for Tally import */}
+              <Button
+                size="touch"
+                variant="outline"
+                onClick={handleTallyExport}
+                className="gap-2 lg:h-9"
+                title="Export to Tally XML format"
+              >
+                <FileText className="w-4 h-4 lg:w-3.5 lg:h-3.5" />
+                <span className="hidden sm:inline">Tally</span>
+              </Button>
             </div>
           </div>
         </CardContent>
