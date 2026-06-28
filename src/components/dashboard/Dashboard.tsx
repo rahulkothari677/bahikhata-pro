@@ -26,6 +26,7 @@ import { formatINR, formatINRCompact, relativeTime, cn } from '@/lib/utils'
 import { motion } from 'framer-motion'
 import { offlineFetch, isOnline, OfflineError } from '@/lib/offline-fetch'
 import { useSetting } from '@/hooks/use-setting'
+import { useRecurringEntries } from '@/hooks/use-recurring-entries'
 import { toast as sonnerToast } from 'sonner'
 
 const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)']
@@ -34,9 +35,17 @@ export function Dashboard() {
   const { setView, refreshKey, setSelectedTransactionId, setPreviousView, setPendingDateRange, features } = useAppStore()
   const { t, language } = useTranslation()
   const { hideProfit } = useSetting()
+  const { checkAndCreate: checkRecurring } = useRecurringEntries()
   const [dateRange, setDateRange] = useState<DateRange>(() => getPresetRange('thisMonth'))
   const [datePreset, setDatePreset] = useState<DatePreset>('thisMonth')
   const [repeating, setRepeating] = useState(false)
+
+  // Check for due recurring entries on mount (auto-create monthly rent, salary, etc.)
+  useEffect(() => {
+    if (features?.recurringEntries) {
+      checkRecurring()
+    }
+  }, [features?.recurringEntries, checkRecurring])
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['dashboard', refreshKey, dateRange.from.toISOString(), dateRange.to.toISOString()],

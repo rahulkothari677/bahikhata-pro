@@ -15,9 +15,13 @@ import { useTranslation } from '@/hooks/use-translation'
 import { useToast } from '@/hooks/use-toast'
 import { toast as sonnerToast } from 'sonner'
 import { formatINR, formatDate, cn } from '@/lib/utils'
-import { Plus, Wallet, Trash2, ArrowDownRight, ArrowUpRight, Receipt, Target, Edit2, X } from 'lucide-react'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { useExpenseBudgets } from '@/hooks/use-expense-budgets'
+import { useRecurringEntries, type RecurringEntry } from '@/hooks/use-recurring-entries'
+import {
+  Plus, Wallet, Trash2, ArrowDownRight, ArrowUpRight, Receipt,
+  Target, Edit2, X, Repeat, Calendar,
+} from 'lucide-react'
 
 const EXPENSE_CATEGORIES = ['Rent', 'Salary', 'Electricity', 'Water', 'Telephone', 'Internet', 'Transport', 'Packaging', 'Marketing', 'Maintenance', 'Bank Charges', 'Insurance', 'Taxes', 'Miscellaneous']
 const INCOME_CATEGORIES = ['Commission', 'Interest', 'Rent Received', 'Scrap Sale', 'Discount Received', 'Refund', 'Miscellaneous']
@@ -28,9 +32,17 @@ export function IncomeExpense() {
   const { t } = useTranslation()
   const { features } = useAppStore()
   const { getProgress, setBudget, removeBudget } = useExpenseBudgets()
+  const { entries: recurringEntries, addEntry: addRecurring, removeEntry: removeRecurring } = useRecurringEntries()
   const [budgetDialogOpen, setBudgetDialogOpen] = useState(false)
   const [budgetCategory, setBudgetCategory] = useState('')
   const [budgetAmount, setBudgetAmount] = useState('')
+  const [recurringDialogOpen, setRecurringDialogOpen] = useState(false)
+  const [recurType, setRecurType] = useState<'expense' | 'income'>('expense')
+  const [recurCategory, setRecurCategory] = useState('')
+  const [recurAmount, setRecurAmount] = useState('')
+  const [recurDay, setRecurDay] = useState('1')
+  const [recurPaymentMode, setRecurPaymentMode] = useState('bank')
+  const [recurNotes, setRecurNotes] = useState('')
   const [filter, setFilter] = useState<'all' | 'income' | 'expense'>('all')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [dialogType, setDialogType] = useState<'income' | 'expense'>('expense')
@@ -187,6 +199,73 @@ export function IncomeExpense() {
                 </p>
               )}
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Recurring entries — auto-create monthly rent, salary, etc. */}
+      {features?.recurringEntries && (
+        <Card className="shadow-card border-border/60">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Repeat className="w-4 h-4 text-primary" />
+                <p className="text-sm font-semibold">Recurring Entries</p>
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => { setRecurType('expense'); setRecurCategory(''); setRecurAmount(''); setRecurDay('1'); setRecurNotes(''); setRecurringDialogOpen(true) }}
+                className="gap-1.5 text-xs h-7"
+              >
+                <Plus className="w-3 h-3" /> Add Recurring
+              </Button>
+            </div>
+            {recurringEntries.length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-3">
+                No recurring entries set. Automate monthly rent, salary, and other fixed expenses.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {recurringEntries.map((entry) => (
+                  <div key={entry.id} className="flex items-center gap-3 p-2.5 rounded-lg bg-muted/30 border border-border/50">
+                    <div className={cn(
+                      'w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0',
+                      entry.type === 'expense' ? 'bg-rose-100 dark:bg-rose-950/40' : 'bg-emerald-100 dark:bg-emerald-950/40'
+                    )}>
+                      {entry.type === 'expense'
+                        ? <ArrowUpRight className="w-4 h-4 text-rose-600" />
+                        : <ArrowDownRight className="w-4 h-4 text-emerald-600" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{entry.category}</p>
+                      <p className="text-[11px] text-muted-foreground flex items-center gap-2">
+                        <span className="flex items-center gap-0.5"><Calendar className="w-3 h-3" /> Day {entry.dayOfMonth}</span>
+                        <span>·</span>
+                        <span className="capitalize">{entry.type}</span>
+                        <span>·</span>
+                        <span className="uppercase">{entry.paymentMode}</span>
+                      </p>
+                    </div>
+                    <div className="text-right flex-shrink-0">
+                      <p className={cn('text-sm font-semibold', entry.type === 'expense' ? 'text-rose-600' : 'text-emerald-600')}>
+                        {formatINR(entry.amount)}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">per month</p>
+                    </div>
+                    <button
+                      onClick={() => { removeRecurring(entry.id); sonnerToast.success('Recurring entry removed') }}
+                      className="p-1.5 rounded-md hover:bg-rose-50 text-rose-600 flex-shrink-0"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <p className="text-[10px] text-muted-foreground mt-2">
+              Entries are created automatically on the specified day each month when you open the app.
+            </p>
           </CardContent>
         </Card>
       )}
@@ -404,6 +483,125 @@ export function IncomeExpense() {
               className="bg-gradient-saffron gap-2"
             >
               <Target className="w-4 h-4" /> Save Budget
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Recurring entry dialog */}
+      <Dialog open={recurringDialogOpen} onOpenChange={setRecurringDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Repeat className="w-5 h-5 text-primary" /> Add Recurring Entry
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                variant={recurType === 'expense' ? 'destructive' : 'outline'}
+                size="sm"
+                onClick={() => { setRecurType('expense'); setRecurCategory('') }}
+                className="gap-2"
+              >
+                <ArrowUpRight className="w-4 h-4" /> Expense
+              </Button>
+              <Button
+                variant={recurType === 'income' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => { setRecurType('income'); setRecurCategory('') }}
+                className="gap-2 bg-gradient-emerald"
+              >
+                <ArrowDownRight className="w-4 h-4" /> Income
+              </Button>
+            </div>
+            <div>
+              <Label>Category</Label>
+              <Select value={recurCategory} onValueChange={setRecurCategory}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(recurType === 'expense' ? EXPENSE_CATEGORIES : INCOME_CATEGORIES).map(cat => (
+                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label>Amount (₹)</Label>
+                <Input
+                  type="number"
+                  value={recurAmount}
+                  onChange={(e) => setRecurAmount(e.target.value)}
+                  placeholder="e.g. 15000"
+                  className="mt-1"
+                />
+              </div>
+              <div>
+                <Label>Day of Month</Label>
+                <Select value={recurDay} onValueChange={setRecurDay}>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: 28 }, (_, i) => i + 1).map(d => (
+                      <SelectItem key={d} value={String(d)}>{d}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div>
+              <Label>Payment Mode</Label>
+              <Select value={recurPaymentMode} onValueChange={setRecurPaymentMode}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PAYMENT_MODES.map(mode => (
+                    <SelectItem key={mode} value={mode} className="capitalize">{mode}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Notes (optional)</Label>
+              <Input
+                value={recurNotes}
+                onChange={(e) => setRecurNotes(e.target.value)}
+                placeholder="e.g. Monthly shop rent"
+                className="mt-1"
+              />
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              This entry will be created automatically on day {recurDay} of every month when you open the app.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRecurringDialogOpen(false)}>Cancel</Button>
+            <Button
+              onClick={() => {
+                const amt = parseFloat(recurAmount)
+                if (!recurCategory || isNaN(amt) || amt <= 0) {
+                  sonnerToast.error('Enter a valid category and amount')
+                  return
+                }
+                addRecurring({
+                  type: recurType,
+                  category: recurCategory,
+                  amount: amt,
+                  paymentMode: recurPaymentMode,
+                  notes: recurNotes,
+                  dayOfMonth: parseInt(recurDay),
+                })
+                sonnerToast.success(`Recurring ${recurType} added: ${recurCategory} ${formatINR(amt)}/month`)
+                setRecurringDialogOpen(false)
+              }}
+              className="bg-gradient-saffron gap-2"
+            >
+              <Repeat className="w-4 h-4" /> Add Recurring
             </Button>
           </DialogFooter>
         </DialogContent>
