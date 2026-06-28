@@ -82,7 +82,7 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
   // Multi-draft autosave — supports multiple saved drafts per form type.
   // Each draft has a unique ID; the hook tracks which draft is "active" (currently being edited).
   const draftFormType = `txn-${type}`
-  const { drafts, activeDraftId, save, restoreDraft, deleteDraft, clearActive, hasDrafts } = useDrafts<{
+  const { drafts, activeDraftId, save, restoreDraft, deleteDraft, clearActive, refresh: refreshDrafts, hasDrafts } = useDrafts<{
     partyId: string
     date: string
     invoiceNo: string
@@ -223,7 +223,19 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
       const stored = (window as any).__ledgerPreset
       if (!stored || stored.type !== type) return
 
-      console.log('[TransactionEntry] Loading preset:', stored.data?.items?.length || 0, 'items')
+      // If preset has items, clear any existing drafts first — we're starting
+      // a fresh form with pre-filled data, so old drafts are stale.
+      if (stored.data.items?.length > 0) {
+        clearActive()
+        // Also clear all existing drafts for this form type to prevent
+        // accumulation of duplicate drafts from repeated "Repeat Last Sale" clicks
+        try {
+          const KEY = `bahikhata:drafts:txn-${type}:v2`
+          localStorage.removeItem(KEY)
+        } catch {}
+        // Refresh the hook's state so it picks up the cleared localStorage
+        refreshDrafts()
+      }
 
       if (stored.data.partyId) setPartyId(stored.data.partyId)
       if (stored.data.invoiceNo) setInvoiceNo(stored.data.invoiceNo)
@@ -242,7 +254,6 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
           gstRate: Number(item.gstRate) || 0,
           unit: item.unit || 'pcs',
         }))
-        console.log('[TransactionEntry] Setting items:', newItems)
         setItems(newItems)
       }
       if (stored.data.totalAmount) setPaidAmount(String(stored.data.totalAmount))
@@ -255,7 +266,7 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
       setPresetChecked(true)
     }, 100)
     return () => clearTimeout(timer)
-  }, [type])
+  }, [type, clearActive, refreshDrafts])
 
   const partyDropdownRef = useRef<HTMLDivElement>(null)
   useEffect(() => {

@@ -194,6 +194,16 @@ export function useDrafts<T>(formType: string) {
     }
   }, [])
 
+  // Refresh drafts from localStorage (used after external clearing)
+  const refresh = useCallback(() => {
+    const store = read<T>(formType)
+    setDrafts([...store.drafts])
+    if (activeDraftIdRef.current && !store.drafts.find(d => d.id === activeDraftIdRef.current)) {
+      activeDraftIdRef.current = null
+      setActiveDraftId(null)
+    }
+  }, [formType])
+
   return {
     drafts,
     activeDraftId,
@@ -203,6 +213,7 @@ export function useDrafts<T>(formType: string) {
     restoreDraft: restore,
     deleteDraft,
     clearActive,
+    refresh,
     hasDrafts: drafts.length > 0,
   }
 }
