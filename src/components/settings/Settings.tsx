@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import { StaffManagement } from '@/components/settings/StaffManagement'
+import { useShops } from '@/hooks/use-shops'
 import { useToast } from '@/hooks/use-toast'
 import { toast as sonnerToast } from 'sonner'
 import { haptic } from '@/lib/haptic'
@@ -18,7 +19,7 @@ import { THEME_OPTIONS } from '@/components/providers/ThemeProvider'
 import {
   Store, Save, Database, Trash2, AlertTriangle, Moon, Keyboard,
   Search, MessageCircle, Sparkles, Bell, Repeat, FileSpreadsheet,
-  Users, Package, ScanLine, TrendingUp, Smartphone, RotateCcw, Palette, Check, Globe, Shield, EyeOff,
+  Users, Package, ScanLine, TrendingUp, Smartphone, RotateCcw, Palette, Check, Globe, Shield, EyeOff, Plus,
 } from 'lucide-react'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { useSetting } from '@/hooks/use-setting'
@@ -86,6 +87,9 @@ export function Settings() {
 
   // useSetting hook — provides hideProfit + updateHideProfit (persists instantly)
   const { hideProfit, updateHideProfit } = useSetting()
+  const { shops, activeShop, switchShop, createShop } = useShops()
+  const [newShopOpen, setNewShopOpen] = useState(false)
+  const [newShopName, setNewShopName] = useState('')
 
   const { data } = useQuery({
     queryKey: ['setting'],
@@ -260,6 +264,84 @@ export function Settings() {
           </div>
         </CardContent>
       </Card>
+      )}
+
+      {/* Manage Shops — shows all shops, add new, switch between them */}
+      {settingsTab === 'profile' && (
+        <Card className="shadow-card border-border/60">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Store className="w-5 h-5 text-primary" /> Manage Shops
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">Create and switch between multiple shops</p>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {shops.map(shop => (
+                <div key={shop.id} className={`flex items-center gap-3 p-3 rounded-lg border transition ${activeShop?.id === shop.id ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/30'}`}>
+                  <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <Store className="w-4 h-4 text-primary" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{shop.name}</p>
+                    <p className="text-[11px] text-muted-foreground truncate">
+                      {shop.gstin ? `GSTIN: ${shop.gstin}` : 'No GSTIN'} {shop.isDefault ? ' · Default' : ''}
+                    </p>
+                  </div>
+                  {activeShop?.id === shop.id ? (
+                    <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 text-[10px]">Active</Badge>
+                  ) : (
+                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => switchShop(shop.id)}>
+                      Switch
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Add new shop */}
+            {newShopOpen ? (
+              <div className="mt-3 p-3 rounded-lg border border-primary/30 bg-primary/5 space-y-2">
+                <Label>New Shop Name</Label>
+                <Input
+                  value={newShopName}
+                  onChange={(e) => setNewShopName(e.target.value)}
+                  placeholder="e.g. Sharma Kirana Store - Branch 2"
+                  autoFocus
+                />
+                <div className="flex gap-2">
+                  <Button size="sm" variant="outline" className="flex-1" onClick={() => { setNewShopOpen(false); setNewShopName('') }}>Cancel</Button>
+                  <Button
+                    size="sm"
+                    className="flex-1 bg-gradient-saffron gap-2"
+                    onClick={async () => {
+                      if (!newShopName.trim()) {
+                        sonnerToast.error('Enter a shop name')
+                        return
+                      }
+                      const shop = await createShop({ name: newShopName.trim() })
+                      if (shop) {
+                        setNewShopOpen(false)
+                        setNewShopName('')
+                      }
+                    }}
+                  >
+                    <Plus className="w-4 h-4" /> Create Shop
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-3 w-full gap-2 border-dashed"
+                onClick={() => setNewShopOpen(true)}
+              >
+                <Plus className="w-4 h-4" /> Add New Shop
+              </Button>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {/* ── DATA TAB ────────────────────────────────────────────────── */}
