@@ -2,6 +2,7 @@
 
 import { useAppStore, type ViewType } from '@/store/app-store'
 import { useTranslation } from '@/hooks/use-translation'
+import { useState } from 'react'
 import { useSession, signOut } from 'next-auth/react'
 import { cn, getInitials } from '@/lib/utils'
 import { useQuery } from '@tanstack/react-query'
@@ -11,6 +12,8 @@ import { clearRecentProducts } from '@/lib/recent-products'
 import { toast as sonnerToast } from 'sonner'
 import { useFeatureFlags } from '@/hooks/use-feature-flags'
 import { useStaffPermissions } from '@/hooks/use-staff-permissions'
+import { useShops } from '@/hooks/use-shops'
+import { Store, Plus, ChevronDown, Check } from 'lucide-react'
 import {
   LayoutDashboard,
   Package,
@@ -59,6 +62,8 @@ export function Sidebar() {
   const isStaff = session?.user?.role === 'staff'
   const { canAccess } = useStaffPermissions()
   const { isFlagEnabled } = useFeatureFlags()
+  const { shops, activeShop, switchShop } = useShops()
+  const [shopDropdownOpen, setShopDropdownOpen] = useState(false)
 
   // Fetch settings for profile section
   const { data: settingData } = useQuery({
@@ -145,6 +150,51 @@ export function Sidebar() {
         >
           {sidebarCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
         </button>
+
+        {/* Shop switcher — shows current shop, dropdown to switch */}
+        {!sidebarCollapsed && shops.length > 0 && (
+          <div className="px-3 py-2 border-b border-sidebar-border relative">
+            <button
+              onClick={() => setShopDropdownOpen(!shopDropdownOpen)}
+              className="w-full flex items-center gap-2 p-2 rounded-lg bg-sidebar-accent/50 hover:bg-sidebar-accent transition text-left"
+            >
+              <Store className="w-4 h-4 text-sidebar-primary flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] text-sidebar-foreground/50 uppercase tracking-wide font-medium">Current Shop</p>
+                <p className="text-xs font-semibold text-sidebar-foreground truncate">{activeShop?.name || 'All Shops'}</p>
+              </div>
+              <ChevronDown className={cn('w-3.5 h-3.5 text-sidebar-foreground/50 transition-transform', shopDropdownOpen && 'rotate-180')} />
+            </button>
+
+            {/* Shop dropdown */}
+            {shopDropdownOpen && (
+              <div className="absolute top-full left-3 right-3 mt-1 bg-sidebar-accent border border-sidebar-border rounded-lg shadow-lg z-50 overflow-hidden">
+                {shops.map(shop => (
+                  <button
+                    key={shop.id}
+                    onClick={() => { switchShop(shop.id); setShopDropdownOpen(false) }}
+                    className={cn(
+                      'w-full flex items-center gap-2 p-2 hover:bg-sidebar-primary/20 transition text-left',
+                      activeShop?.id === shop.id && 'bg-sidebar-primary/10'
+                    )}
+                  >
+                    <Store className="w-3.5 h-3.5 text-sidebar-foreground/70 flex-shrink-0" />
+                    <span className="text-xs font-medium text-sidebar-foreground flex-1 truncate">{shop.name}</span>
+                    {activeShop?.id === shop.id && <Check className="w-3.5 h-3.5 text-sidebar-primary" />}
+                  </button>
+                ))}
+                {/* Add new shop */}
+                <button
+                  onClick={() => { setView('settings'); setShopDropdownOpen(false) }}
+                  className="w-full flex items-center gap-2 p-2 hover:bg-sidebar-primary/20 transition text-left border-t border-sidebar-border"
+                >
+                  <Plus className="w-3.5 h-3.5 text-sidebar-primary flex-shrink-0" />
+                  <span className="text-xs font-medium text-sidebar-foreground">Add New Shop</span>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Navigation */}
         <nav className={cn('flex-1 overflow-y-auto px-3 py-4 space-y-1', sidebarCollapsed && 'lg:px-2')}>

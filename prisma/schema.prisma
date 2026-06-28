@@ -26,17 +26,15 @@ model User {
   updatedAt     DateTime  @updatedAt
 
   // Staff permissions — JSON object controlling which modules staff can access.
-  // Only applies when role = 'staff'. Owner always has full access.
-  // Default: sales, purchases, inventory, scanner = true; everything else = false
   permissions   Json?
 
-  // Subscription / plan (built earlier — restored from DB)
+  // Subscription / plan
   cancelledAt   DateTime?
   plan          String    @default("free") // free | pro | elite
   renewsAt      DateTime?
   trialEndsAt   DateTime?
 
-  // Relations — every user has their own shop data
+  // Relations
   products      Product[]
   parties       Party[]
   transactions  Transaction[]
@@ -47,6 +45,26 @@ model User {
   referralReceived Referral? @relation("Referral_referredIdToUser")
   subscriptions Subscription[]
   usageTracking  UsageTracking[]
+  shops         Shop[]
+}
+
+// ==================== SHOPS (Multi-shop support) ====================
+// Each owner can have multiple shops. Products, transactions, parties
+// can be tagged with a shopId. When null, shows in all shops (backward compatible).
+model Shop {
+  id          String   @id @default(cuid())
+  userId      String   // owner of this shop
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String   // e.g. "Sharma Kirana Store"
+  gstin       String?
+  address     String?
+  phone       String?
+  state       String?
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
 }
 
 // ==================== PRODUCTS / INVENTORY ====================
@@ -54,6 +72,7 @@ model Product {
   id                String   @id @default(cuid())
   userId            String   // owner of this product
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shopId            String?  // multi-shop: null = all shops (backward compatible)
   name              String
   sku               String?
   hsn               String?  // HSN/SAC code for GST
@@ -76,6 +95,7 @@ model Product {
   // Performance: list products per user, search by name within user
   @@index([userId, name])
   @@index([userId, category])
+  @@index([userId, shopId])
 }
 
 // ==================== PARTIES (Customers & Suppliers) ====================
@@ -83,6 +103,7 @@ model Party {
   id              String   @id @default(cuid())
   userId          String   // owner of this party
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shopId          String?  // multi-shop: null = all shops (backward compatible)
   name            String
   type            String   @default("customer") // customer | supplier | both
   phone           String?
@@ -103,6 +124,7 @@ model Transaction {
   id             String   @id @default(cuid())
   userId         String   // owner of this transaction
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shopId         String?  // multi-shop: null = all shops (backward compatible)
   invoiceNo      String?  // bill/invoice number from bill
   type           String   // sale | purchase | income | expense
   partyId        String?  // customer for sale, supplier for purchase
