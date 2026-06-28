@@ -755,6 +755,46 @@ export function Dashboard() {
         </Card>
       </div>
 
+      {/* Day-end summary card — shows after 6 PM with today's business summary */}
+      {kpis && kpis.todayTxnCount > 0 && new Date().getHours() >= 18 && (
+        <Card className="shadow-card border-border/60 overflow-hidden">
+          <div className="bg-gradient-to-r from-indigo-500 to-purple-600 p-4 text-white">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Calendar className="w-5 h-5" />
+                <h3 className="text-base font-bold">Day-End Summary</h3>
+              </div>
+              <span className="text-xs text-white/70">{new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
+            </div>
+            <div className="grid grid-cols-3 gap-3 text-center">
+              <div>
+                <p className="text-2xl font-bold">{kpis.todayTxnCount}</p>
+                <p className="text-[11px] text-white/80 uppercase tracking-wide">Sales</p>
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{formatINRCompact(kpis.todayRevenue)}</p>
+                <p className="text-[11px] text-white/80 uppercase tracking-wide">Revenue</p>
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{formatINRCompact(kpis.totalReceivable)}</p>
+                <p className="text-[11px] text-white/80 uppercase tracking-wide">Receivable</p>
+              </div>
+            </div>
+            {features?.whatsappSharing && (
+              <Button
+                onClick={handleShareSummary}
+                size="sm"
+                variant="outline"
+                className="mt-3 w-full bg-white/10 text-white border-white/30 hover:bg-white/20 gap-2"
+              >
+                <Share2 className="w-4 h-4" />
+                Share on WhatsApp
+              </Button>
+            )}
+          </div>
+        </Card>
+      )}
+
       {/* {t('dash.smart_insights')} - AI-powered alerts */}
       {kpis && <SmartInsights />}
     </div>

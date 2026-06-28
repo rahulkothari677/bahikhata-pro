@@ -37,6 +37,8 @@ export function Ledger({ type }: { type: LedgerType }) {
   const [search, setSearch] = useState('')
   const [sortBy, setSortBy] = useState<'date' | 'amount' | 'party' | 'status'>('date')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [bulkMode, setBulkMode] = useState(false)
   const { t } = useTranslation()
   const { hideProfit } = useSetting()
 
@@ -143,6 +145,67 @@ export function Ledger({ type }: { type: LedgerType }) {
       setSortBy(field)
       setSortOrder('desc')
     }
+  }
+
+  // Bulk operations
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const selectAll = () => {
+    setSelectedIds(new Set(sorted.map(t => t.id)))
+  }
+
+  const clearSelection = () => {
+    setSelectedIds(new Set())
+    setBulkMode(false)
+  }
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return
+    if (!confirm(`Delete ${selectedIds.size} transactions? This cannot be undone.`)) return
+    let success = 0
+    for (const id of selectedIds) {
+      const r = await offlineFetch(`/api/transactions?id=${id}`, {
+        method: 'DELETE',
+        offline: { invalidate: ['/api/transactions', '/api/dashboard'] },
+      })
+      if (r.ok) success++
+    }
+    sonnerToast.success(`${success} transactions deleted`)
+    clearSelection()
+    triggerRefresh()
+  }
+
+  const handleBulkExport = () => {
+    if (selectedIds.size === 0) return
+    const selectedTxns = sorted.filter(t => selectedIds.has(t.id))
+    const headers = ['Date', 'Invoice', 'Party', 'Type', 'Amount', 'Paid', 'Due', 'Payment Mode']
+    const rows = selectedTxns.map(t => [
+      formatDate(t.date),
+      t.invoiceNo || '',
+      t.party?.name || 'Walk-in',
+      t.type,
+      t.totalAmount,
+      t.paidAmount,
+      t.totalAmount - t.paidAmount,
+      t.paymentMode,
+    ])
+    const csv = [headers.join(','), ...rows.map(r => r.map(c => `"${c}"`).join(','))].join('\n')
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `transactions_export_${formatDate(new Date()).replace(/\//g, '-')}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+    sonnerToast.success(`${selectedTxns.length} transactions exported`)
+    clearSelection()
   }
 
   const totalAmount = filtered.reduce((s, t) => s + t.totalAmount, 0)
@@ -300,6 +363,46 @@ export function Ledger({ type }: { type: LedgerType }) {
             </Button>
           </div>
 
+          {/* Bulk action bar — shows when in bulk mode or items selected */}
+          {bulkMode && (
+            <div className="mt-3 flex items-center gap-2 flex-wrap p-3 rounded-lg bg-primary/5 border border-primary/20">
+              <span className="text-xs font-medium text-primary">
+                {selectedIds.size} selected
+              </span>
+              <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={selectAll}>Select All</Button>
+              <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={clearSelection}>Clear</Button>
+              <div className="flex-1" />
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs gap-1.5"
+                onClick={handleBulkExport}
+                disabled={selectedIds.size === 0}
+              >
+                Export CSV
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                className="h-7 text-xs gap-1.5"
+                onClick={handleBulkDelete}
+                disabled={selectedIds.size === 0}
+              >
+                Delete
+              </Button>
+            </div>
+          )}
+
+          {/* Bulk mode toggle — small button to enter/exit bulk select */}
+          {sorted.length > 0 && !bulkMode && (
+            <button
+              onClick={() => setBulkMode(true)}
+              className="mt-2 text-[11px] text-muted-foreground hover:text-primary transition"
+            >
+              Select multiple →
+            </button>
+          )}
+
           {/* Sort buttons row */}
           {sorted.length > 0 && (
             <div className="mt-3 flex items-center gap-2 flex-wrap">
@@ -411,11 +514,25 @@ export function Ledger({ type }: { type: LedgerType }) {
               >
               <ContextMenu items={contextMenuItems}>
               <Card
-                className="shadow-card border-border/60 hover:shadow-md hover:border-primary/30 transition group cursor-pointer"
-                onClick={() => handleViewTransaction(t.id)}
+                className={cn(
+                  "shadow-card border-border/60 hover:shadow-md hover:border-primary/30 transition group",
+                  bulkMode ? "cursor-default" : "cursor-pointer",
+                  selectedIds.has(t.id) && "ring-2 ring-primary"
+                )}
+                onClick={() => bulkMode ? toggleSelect(t.id) : handleViewTransaction(t.id)}
               >
                 <CardContent className="p-3 lg:p-4">
                   <div className="flex items-start gap-3">
+                    {/* Checkbox — only visible in bulk mode */}
+                    {bulkMode && (
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(t.id)}
+                        onChange={() => toggleSelect(t.id)}
+                        className="w-5 h-5 mt-2 rounded cursor-pointer flex-shrink-0"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    )}
                     <div className={cn('w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0', accentBg)}>
                       {isSale
                         ? <ShoppingCart className={cn('w-5 h-5', accentColor)} />

@@ -282,4 +282,33 @@
     padding: 0 !important;
     max-width: none !important;
   }
+  /* Reports: expand tables, remove card shadows/borders */
+  .print\:block { display: block !important; }
+  .print\:full { width: 100% !important; max-width: none !important; }
+  table { font-size: 11px !important; }
+  thead { display: table-header-group !important; }
+  tr { page-break-inside: avoid !important; }
+  .shadow-card, .shadow-sm, .shadow-lg, .shadow-md {
+    box-shadow: none !important;
+  }
+  .rounded-xl, .rounded-2xl, .rounded-lg {
+    border-radius: 4px !important;
+  }
+  /* Hide sidebar, header, nav, bottom nav when printing */
+  aside, header, nav, footer {
+    display: none !important;
+  }
+  /* Ensure colors print correctly */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  /* Remove background colors for print (save ink) */
+  .bg-muted\/50, .bg-muted\/30, .bg-muted\/20 {
+    background: transparent !important;
+  }
+  /* Page margins */
+  @page {
+    margin: 1.5cm;
+  }
 }
