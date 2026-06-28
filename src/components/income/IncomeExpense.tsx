@@ -15,8 +15,9 @@ import { useTranslation } from '@/hooks/use-translation'
 import { useToast } from '@/hooks/use-toast'
 import { toast as sonnerToast } from 'sonner'
 import { formatINR, formatDate, cn } from '@/lib/utils'
-import { Plus, Wallet, Trash2, ArrowDownRight, ArrowUpRight, Receipt } from 'lucide-react'
+import { Plus, Wallet, Trash2, ArrowDownRight, ArrowUpRight, Receipt, Target, Edit2, X } from 'lucide-react'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
+import { useExpenseBudgets } from '@/hooks/use-expense-budgets'
 
 const EXPENSE_CATEGORIES = ['Rent', 'Salary', 'Electricity', 'Water', 'Telephone', 'Internet', 'Transport', 'Packaging', 'Marketing', 'Maintenance', 'Bank Charges', 'Insurance', 'Taxes', 'Miscellaneous']
 const INCOME_CATEGORIES = ['Commission', 'Interest', 'Rent Received', 'Scrap Sale', 'Discount Received', 'Refund', 'Miscellaneous']
@@ -25,6 +26,11 @@ const PAYMENT_MODES = ['cash', 'upi', 'card', 'bank']
 export function IncomeExpense() {
   const { refreshKey, triggerRefresh, triggerNewEntry, triggerNewEntryView, setSelectedTransactionId, setView, setPreviousView } = useAppStore()
   const { t } = useTranslation()
+  const { features } = useAppStore()
+  const { getProgress, setBudget, removeBudget } = useExpenseBudgets()
+  const [budgetDialogOpen, setBudgetDialogOpen] = useState(false)
+  const [budgetCategory, setBudgetCategory] = useState('')
+  const [budgetAmount, setBudgetAmount] = useState('')
   const [filter, setFilter] = useState<'all' | 'income' | 'expense'>('all')
   const [dialogOpen, setDialogOpen] = useState(false)
   const [dialogType, setDialogType] = useState<'income' | 'expense'>('expense')
@@ -74,6 +80,7 @@ export function IncomeExpense() {
   }
 
   return (
+    <>
     <div className="space-y-4">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
         <Card className="shadow-card border-border/60">
@@ -104,6 +111,85 @@ export function IncomeExpense() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Budget tracking — shows progress bars for expense categories with budgets */}
+      {features?.reorderAlerts && topExpenses.length > 0 && (
+        <Card className="shadow-card border-border/60">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Target className="w-4 h-4 text-primary" />
+                <p className="text-sm font-semibold">Monthly Budgets</p>
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => { setBudgetCategory(topExpenses[0]?.[0] || 'Rent'); setBudgetAmount(''); setBudgetDialogOpen(true) }}
+                className="gap-1.5 text-xs h-7"
+              >
+                <Plus className="w-3 h-3" /> Set Budget
+              </Button>
+            </div>
+            <div className="space-y-3">
+              {topExpenses.map(([cat, spent]) => {
+                const progress = getProgress(cat, spent)
+                if (!progress) return null
+                const pctColor = progress.exceeded
+                  ? 'bg-rose-500'
+                  : progress.pct > 80
+                    ? 'bg-amber-500'
+                    : 'bg-emerald-500'
+                return (
+                  <div key={cat}>
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium">{cat}</span>
+                        {progress.exceeded && (
+                          <Badge variant="destructive" className="text-[9px] py-0">Over budget</Badge>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-muted-foreground">
+                          {formatINR(progress.spent)} / {formatINR(progress.budget)}
+                        </span>
+                        <button
+                          onClick={() => { setBudgetCategory(cat); setBudgetAmount(String(progress.budget)); setBudgetDialogOpen(true) }}
+                          className="p-0.5 rounded hover:bg-muted text-muted-foreground"
+                        >
+                          <Edit2 className="w-3 h-3" />
+                        </button>
+                        <button
+                          onClick={() => { removeBudget(cat); sonnerToast.success(`Budget removed for ${cat}`) }}
+                          className="p-0.5 rounded hover:bg-muted text-muted-foreground"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                      <div
+                        className={cn('h-full rounded-full transition-all', pctColor)}
+                        style={{ width: `${Math.min(100, progress.pct)}%` }}
+                      />
+                    </div>
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      {progress.exceeded
+                        ? `${formatINR(progress.spent - progress.budget)} over budget`
+                        : `${formatINR(progress.remaining)} remaining (${progress.pct.toFixed(0)}% used)`}
+                    </p>
+                  </div>
+                )
+              })}
+              {/* Show categories with budgets but no spending this month */}
+              {Object.entries(getProgress('', 0) || {}).length === 0 && topExpenses.length === 0 && (
+                <p className="text-xs text-muted-foreground text-center py-4">
+                  No budgets set. Click "Set Budget" to track monthly spending limits.
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Toolbar - removed duplicate Add Income/Expense buttons (header has "Add Entry") */}
       <Card className="shadow-card border-border/60">
@@ -265,7 +351,65 @@ export function IncomeExpense() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Budget setting dialog */}
+      <Dialog open={budgetDialogOpen} onOpenChange={setBudgetDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Target className="w-5 h-5 text-primary" /> Set Monthly Budget
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div>
+              <Label>Category</Label>
+              <Select value={budgetCategory} onValueChange={setBudgetCategory}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Select expense category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {EXPENSE_CATEGORIES.map(cat => (
+                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Monthly Budget Amount (₹)</Label>
+              <Input
+                type="number"
+                value={budgetAmount}
+                onChange={(e) => setBudgetAmount(e.target.value)}
+                placeholder="e.g. 15000"
+                className="mt-1"
+              />
+              <p className="text-[11px] text-muted-foreground mt-1">
+                You'll see a progress bar on this page showing how much you've spent vs budget.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBudgetDialogOpen(false)}>Cancel</Button>
+            <Button
+              onClick={() => {
+                const amt = parseFloat(budgetAmount)
+                if (!budgetCategory || isNaN(amt) || amt <= 0) {
+                  sonnerToast.error('Enter a valid amount')
+                  return
+                }
+                setBudget(budgetCategory, amt)
+                sonnerToast.success(`Budget set: ${budgetCategory} = ${formatINR(amt)}/month`)
+                setBudgetDialogOpen(false)
+              }}
+              className="bg-gradient-saffron gap-2"
+            >
+              <Target className="w-4 h-4" /> Save Budget
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
+    </>
   )
 }
 
