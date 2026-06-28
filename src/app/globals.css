@@ -142,20 +142,39 @@
   }
 }
 
-/* Custom scrollbar */
+/* Custom scrollbar — thin and subtle globally */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: oklch(0.8 0.02 30);
-  border-radius: 4px;
+  background: oklch(0.85 0.01 30);
+  border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: oklch(0.7 0.02 30);
+  background: oklch(0.75 0.02 30);
+}
+
+/* Extra-thin scrollbar for split-view panels — almost invisible */
+.thin-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.thin-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.thin-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.thin-scrollbar::-webkit-scrollbar-thumb {
+  background: oklch(0.85 0.01 30);
+  border-radius: 2px;
+}
+.thin-scrollbar:hover::-webkit-scrollbar-thumb {
+  background: oklch(0.75 0.02 30);
 }
 
 /* Gradient utility */

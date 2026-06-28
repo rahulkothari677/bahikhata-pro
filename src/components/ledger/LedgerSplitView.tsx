@@ -10,6 +10,10 @@
  *
  * On mobile:
  *   Full-page navigation (unchanged — list → detail → back)
+ *
+ * Uses CSS flexbox with proper width calculation to avoid blank space
+ * when the sidebar is collapsed/expanded. Scrollbars are styled thin
+ * via the .thin-scrollbar utility class.
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
@@ -48,7 +52,6 @@ export function LedgerSplitView({ type }: { type: 'sale' | 'purchase' }) {
       if (!isDragging.current || !containerRef.current) return
       const rect = containerRef.current.getBoundingClientRect()
       const pct = ((e.clientX - rect.left) / rect.width) * 100
-      // Clamp between 25% and 75%
       setLeftWidth(Math.min(75, Math.max(25, pct)))
     }
 
@@ -69,52 +72,51 @@ export function LedgerSplitView({ type }: { type: 'sale' | 'purchase' }) {
   }, [])
 
   return (
-    <div ref={containerRef} className="flex gap-0 lg:gap-0 h-full">
-      {/* Left: Ledger list */}
+    <div ref={containerRef} className="flex h-full w-full">
+      {/* Left: Ledger list — flex-1 so it auto-fills available space */}
       <div
         className={cn(
-          'flex-shrink-0 min-w-0 overflow-y-auto',
+          'thin-scrollbar min-w-0 overflow-y-auto',
           showDetail
-            ? 'hidden lg:block'
+            ? 'hidden lg:block lg:overflow-y-auto'
             : 'w-full'
         )}
-        style={showDetail ? { width: `${leftWidth}%` } : undefined}
+        style={showDetail ? { flex: `0 0 ${leftWidth}%` } : undefined}
       >
         <Ledger type={type} />
       </div>
 
-      {/* Draggable divider — desktop only, only when detail is showing */}
+      {/* Draggable divider */}
       {showDetail && (
         <div
           onMouseDown={handleMouseDown}
-          className="hidden lg:block w-1.5 bg-border hover:bg-primary/40 cursor-col-resize flex-shrink-0 transition-colors relative group"
+          className="hidden lg:block w-1 bg-border hover:bg-primary/40 cursor-col-resize flex-shrink-0 transition-colors relative group"
         >
-          {/* Visual grip handle */}
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-1 h-12 bg-muted-foreground/30 group-hover:bg-primary/60 rounded-full transition-colors" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-0.5 h-10 bg-muted-foreground/20 group-hover:bg-primary/60 rounded-full transition-colors" />
         </div>
       )}
 
-      {/* Right: Transaction detail */}
+      {/* Right: Transaction detail — flex-1 so it auto-fills remaining space */}
       {showDetail && (
         <div
-          className="fixed inset-0 z-50 bg-background lg:sticky lg:top-0 lg:z-auto lg:inset-auto lg:overflow-y-auto lg:h-[calc(100vh-3.5rem)]"
-          style={{ width: `calc(${100 - leftWidth}% - 6px)` }}
+          className="fixed inset-0 z-50 bg-background lg:sticky lg:top-0 lg:z-auto lg:inset-auto thin-scrollbar lg:overflow-y-auto lg:h-[calc(100vh-3.5rem)]"
+          style={{ flex: '1 1 0%' }}
           ref={detailRef}
         >
-          {/* Close button */}
-          <div className="sticky top-0 z-10 flex justify-end p-2 bg-background/80 backdrop-blur-sm">
+          {/* Close button bar */}
+          <div className="sticky top-0 z-10 flex justify-end p-2 bg-background/80 backdrop-blur-sm border-b border-border/50">
             <button
               onClick={() => {
                 setSelectedTransactionId(null)
                 setPreviousView(null)
               }}
-              className="p-2 rounded-lg hover:bg-muted text-muted-foreground"
+              className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground"
               aria-label="Close detail"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
           </div>
-          <div className="px-4 pb-8">
+          <div className="p-4 pb-8">
             <TransactionDetail />
           </div>
         </div>
