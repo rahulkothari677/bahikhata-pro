@@ -78,6 +78,11 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
   // Prevents autosave until preset check is complete (avoids creating
   // empty drafts when "Repeat Last Sale" or scanner pre-fills the form)
   const [presetChecked, setPresetChecked] = useState(false)
+  // When true, the form was filled by a preset (Repeat Last Sale / Scanner).
+  // Suppresses autosave until the user MANUALLY modifies the form.
+  // This prevents draft creation for deliberate actions where the user
+  // intends to save immediately, not come back later.
+  const [presetLoaded, setPresetLoaded] = useState(false)
 
   // Multi-draft autosave — supports multiple saved drafts per form type.
   // Each draft has a unique ID; the hook tracks which draft is "active" (currently being edited).
@@ -139,10 +144,14 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
   }, [restoreDraft])
 
   // Autosave on form changes (debounced inside the hook).
-  // Skip autosave until preset check is complete — prevents creating
-  // empty drafts when "Repeat Last Sale" or scanner pre-fills the form.
+  // Skip autosave when:
+  // - preset check hasn't completed yet (avoid empty drafts during mount)
+  // - form was filled by a preset (Repeat Last Sale / Scanner) — the user
+  //   intends to save immediately, not come back later. Autosave resumes
+  //   once the user manually modifies the form (presetLoaded cleared).
   useEffect(() => {
     if (!presetChecked) return
+    if (presetLoaded) return // Don't autosave preset-filled forms
     save({
       partyId,
       date,
@@ -155,7 +164,7 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
       items,
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [partyId, date, invoiceNo, isInterState, paymentMode, paidAmount, discountAmount, notes, items, presetChecked])
+  }, [partyId, date, invoiceNo, isInterState, paymentMode, paidAmount, discountAmount, notes, items, presetChecked, presetLoaded])
 
   // Fetch products
   const { data: productsData } = useQuery({
@@ -255,6 +264,9 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
           unit: item.unit || 'pcs',
         }))
         setItems(newItems)
+        // Mark that form was filled by a preset — suppresses autosave
+        // until the user manually modifies the form
+        setPresetLoaded(true)
       }
       if (stored.data.totalAmount) setPaidAmount(String(stored.data.totalAmount))
       ;(window as any).__ledgerPreset = null
@@ -282,6 +294,8 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
   const selectedParty = allParties.find(p => p.id === partyId)
 
   const handleAddProduct = (product: any) => {
+    // User manually added a product — clear presetLoaded so autosave resumes
+    setPresetLoaded(false)
     // Check if product already in list
     const existing = items.find(i => i.productId === product.id)
     if (existing) {
@@ -305,12 +319,14 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
   }
 
   const handleUpdateItem = (index: number, field: keyof ItemRow, value: any) => {
+    setPresetLoaded(false) // User manually edited — resume autosave
     const newItems = [...items]
     newItems[index] = { ...newItems[index], [field]: value }
     setItems(newItems)
   }
 
   const handleRemoveItem = (index: number) => {
+    setPresetLoaded(false) // User manually removed — resume autosave
     setItems(items.filter((_, i) => i !== index))
   }
 
