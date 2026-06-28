@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- App name shown on Play Store and device -->
+    <string name="app_name">BahiKhata Pro</string>
+    <string name="title_activity_main">BahiKhata Pro</string>
+    <string name="package_name">pro.bahikhata.app</string>
+    <string name="custom_url_scheme">pro.bahikhata.app</string>
+    <string name="server_url">https://bahikhata-pro.vercel.app</string>
+</resources>

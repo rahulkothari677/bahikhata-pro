@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Primary theme color — saffron orange -->
+    <color name="colorPrimary">#d97706</color>
+    <color name="colorPrimaryDark">#b45309</color>
+    <color name="colorAccent">#d97706</color>
+    <color name="background">#FFF8F0</color>
+    <color name="ic_launcher_background">#d97706</color>
+</resources>
