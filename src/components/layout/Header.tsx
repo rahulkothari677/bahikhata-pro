@@ -9,6 +9,7 @@ import { useSession, signOut } from 'next-auth/react'
 import { clearAllOfflineData } from '@/lib/offline-db'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { useFeatureFlags } from '@/hooks/use-feature-flags'
+import { NotificationCenter } from '@/components/common/NotificationCenter'
 
 const viewTitleKeys: Record<string, { titleKey: string; subtitleKey: string }> = {
   dashboard: { titleKey: 'nav.dashboard', subtitleKey: 'nav.dashboard' },
@@ -129,6 +130,9 @@ export function Header() {
               <span className="hidden lg:inline text-xs text-muted-foreground">Ctrl+K</span>
             </Button>
           )}
+
+          {/* Notification center — bell icon with alerts */}
+          <NotificationCenter />
 
           {/* Dark mode toggle */}
           {features?.darkMode !== undefined && (

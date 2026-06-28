@@ -375,9 +375,9 @@ function GSTReport({ data }: { data: any }) {
           <CardTitle className="text-base">GST Slab-wise Summary</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
+          <div className="overflow-auto max-h-[60vh]">
             <table className="w-full text-sm">
-              <thead>
+              <thead className="sticky top-0 bg-card z-10">
                 <tr className="border-b border-border text-left">
                   <th className="py-2 px-2 font-medium text-muted-foreground">GST Rate</th>
                   <th className="py-2 px-2 font-medium text-muted-foreground text-right">Sales Taxable</th>
@@ -440,9 +440,9 @@ function StockReport({ data }: { data: any }) {
           <CardTitle className="text-base">Stock Valuation by Product</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
+          <div className="overflow-auto max-h-[60vh]">
             <table className="w-full text-sm">
-              <thead>
+              <thead className="sticky top-0 bg-card z-10">
                 <tr className="border-b border-border text-left">
                   <th className="py-2 px-2 font-medium text-muted-foreground">Product</th>
                   <th className="py-2 px-2 font-medium text-muted-foreground">Category</th>
@@ -495,9 +495,9 @@ function PartyReport({ data }: { data: any }) {
           <p className="text-xs text-muted-foreground">Showing all parties with activity or opening balance</p>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
+          <div className="overflow-auto max-h-[60vh]">
             <table className="w-full text-sm">
-              <thead>
+              <thead className="sticky top-0 bg-card z-10">
                 <tr className="border-b border-border text-left">
                   <th className="py-2 px-2 font-medium text-muted-foreground">Party Name</th>
                   <th className="py-2 px-2 font-medium text-muted-foreground">Type</th>
