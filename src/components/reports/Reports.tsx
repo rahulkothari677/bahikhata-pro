@@ -151,8 +151,8 @@ export function Reports() {
       </Card>
 
       {/* Report type tabs */}
-      <Tabs value={reportType} onValueChange={(v) => setReportType(v as any)} className="no-print">
-        <TabsList className="grid grid-cols-2 lg:grid-cols-4 w-full h-auto">
+      <Tabs value={reportType} onValueChange={(v) => setReportType(v as any)}>
+        <TabsList className="grid grid-cols-2 lg:grid-cols-4 w-full h-auto no-print">
           <TabsTrigger value="pl" className="gap-1.5 py-2">
             <TrendingUp className="w-3.5 h-3.5" /> {t('reports.pl')}
           </TabsTrigger>
