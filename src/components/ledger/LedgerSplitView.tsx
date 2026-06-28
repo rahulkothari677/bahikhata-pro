@@ -24,13 +24,21 @@ import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export function LedgerSplitView({ type }: { type: 'sale' | 'purchase' }) {
-  const { selectedTransactionId, setSelectedTransactionId, setPreviousView, currentView } = useAppStore()
+  const { selectedTransactionId, setSelectedTransactionId, setPreviousView, currentView, selectedTransactionType } = useAppStore()
   const detailRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [leftWidth, setLeftWidth] = useState<number>(50) // percentage
   const isDragging = useRef(false)
 
-  const showDetail = !!selectedTransactionId && (currentView === 'sales' || currentView === 'purchases')
+  // Only show detail if:
+  // 1. A transaction is selected
+  // 2. We're on the sales or purchases view
+  // 3. The selected transaction type matches the current ledger type
+  //    (prevents a sale bill from showing in the purchase ledger and vice versa)
+  const expectedType = type === 'sale' ? 'sale' : 'purchase'
+  const showDetail = !!selectedTransactionId
+    && (currentView === 'sales' || currentView === 'purchases')
+    && (selectedTransactionType === expectedType)
 
   // Auto-scroll the detail panel to top when a new transaction is selected
   useEffect(() => {
