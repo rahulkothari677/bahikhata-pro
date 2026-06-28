@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react'
 import { useAppStore } from '@/store/app-store'
 import { useTranslation } from '@/hooks/use-translation'
 import { SmartInsights } from '@/components/dashboard/SmartInsights'
+import { BusinessHealthScore } from '@/components/dashboard/BusinessHealthScore'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -794,6 +795,9 @@ export function Dashboard() {
           </div>
         </Card>
       )}
+
+      {/* Business Health Score — overall wellness indicator */}
+      {kpis && kpis.rangeTxnCount > 0 && <BusinessHealthScore kpis={kpis} />}
 
       {/* {t('dash.smart_insights')} - AI-powered alerts */}
       {kpis && <SmartInsights />}
