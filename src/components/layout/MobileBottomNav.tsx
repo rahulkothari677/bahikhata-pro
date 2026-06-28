@@ -67,8 +67,8 @@ export function MobileBottomNav() {
   return (
     <>
       {/* Spacer to prevent content from being hidden behind the nav.
-          Includes safe-area padding for phones with home indicators (iPhone X+). */}
-      <div className="h-16 lg:hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }} />
+          Extra height for safe-area + bottom nav (64px nav + safe area). */}
+      <div className="lg:hidden" style={{ height: 'calc(4rem + env(safe-area-inset-bottom))' }} />
 
       {/* Bottom nav bar.
           safe-area-inset-bottom prevents the nav from being hidden behind

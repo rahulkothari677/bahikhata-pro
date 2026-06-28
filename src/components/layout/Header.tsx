@@ -101,7 +101,7 @@ export function Header() {
   })()
 
   return (
-    <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-md border-b border-border">
+    <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-md border-b border-border" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
       <div className="flex items-center justify-between gap-3 px-4 lg:px-6 py-3">
         <div className="flex items-center gap-3 min-w-0">
           {/* Hamburger menu hidden on mobile — use "More" tab in bottom nav instead.
