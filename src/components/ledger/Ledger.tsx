@@ -182,7 +182,13 @@ export function Ledger({ type }: { type: LedgerType }) {
     setSelectedTransactionId(txnId)
     setSelectedTransactionType(type)
     setPreviousView(isSale ? 'sales' : 'purchases')
-    setView('transaction-detail')
+    // On desktop (lg+), the LedgerSplitView will show the detail inline.
+    // On mobile, we navigate to the full-page transaction-detail view.
+    if (window.matchMedia('(max-width: 1023px)').matches) {
+      setView('transaction-detail')
+    }
+    // On desktop, we stay on the sales/purchases view — the split view
+    // detects selectedTransactionId and shows the detail panel on the right.
   }
 
   const handleNewEntry = () => {

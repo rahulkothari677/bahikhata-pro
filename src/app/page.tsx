@@ -19,6 +19,7 @@ import { Onboarding } from '@/components/layout/Onboarding'
 import { Dashboard } from '@/components/dashboard/Dashboard'
 import { Inventory } from '@/components/inventory/Inventory'
 import { Ledger } from '@/components/ledger/Ledger'
+import { LedgerSplitView } from '@/components/ledger/LedgerSplitView'
 import { IncomeExpense } from '@/components/income/IncomeExpense'
 import { Parties } from '@/components/parties/Parties'
 import { KeyboardShortcuts } from '@/components/common/KeyboardShortcuts'
@@ -182,8 +183,8 @@ export default function Home() {
           >
             {currentView === 'dashboard' && <Dashboard />}
             {currentView === 'inventory' && <Inventory />}
-            {currentView === 'sales' && <Ledger type="sale" />}
-            {currentView === 'purchases' && <Ledger type="purchase" />}
+            {currentView === 'sales' && <LedgerSplitView type="sale" />}
+            {currentView === 'purchases' && <LedgerSplitView type="purchase" />}
             {currentView === 'income-expense' && <IncomeExpense />}
             {currentView === 'parties' && <Parties />}
             {currentView === 'scanner' && <BillScanner />}
