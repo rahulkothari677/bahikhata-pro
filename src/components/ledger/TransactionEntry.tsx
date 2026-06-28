@@ -75,6 +75,9 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
   const [showVoiceEntry, setShowVoiceEntry] = useState(false)
   const [draftModalOpen, setDraftModalOpen] = useState(false)
   const [barcodeOpen, setBarcodeOpen] = useState(false)
+  // Prevents autosave until preset check is complete (avoids creating
+  // empty drafts when "Repeat Last Sale" or scanner pre-fills the form)
+  const [presetChecked, setPresetChecked] = useState(false)
 
   // Multi-draft autosave — supports multiple saved drafts per form type.
   // Each draft has a unique ID; the hook tracks which draft is "active" (currently being edited).
@@ -136,9 +139,10 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
   }, [restoreDraft])
 
   // Autosave on form changes (debounced inside the hook).
-  // save() is now stable (uses refs internally), so it's safe to exclude
-  // from the dependency array — the effect fires on form state changes only.
+  // Skip autosave until preset check is complete — prevents creating
+  // empty drafts when "Repeat Last Sale" or scanner pre-fills the form.
   useEffect(() => {
+    if (!presetChecked) return
     save({
       partyId,
       date,
@@ -151,7 +155,7 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
       items,
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [partyId, date, invoiceNo, isInterState, paymentMode, paidAmount, discountAmount, notes, items])
+  }, [partyId, date, invoiceNo, isInterState, paymentMode, paidAmount, discountAmount, notes, items, presetChecked])
 
   // Fetch products
   const { data: productsData } = useQuery({
@@ -246,7 +250,10 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
     }
 
     // Small delay to ensure component is fully mounted after lazy-load
-    const timer = setTimeout(checkPreset, 100)
+    const timer = setTimeout(() => {
+      checkPreset()
+      setPresetChecked(true)
+    }, 100)
     return () => clearTimeout(timer)
   }, [type])
 
