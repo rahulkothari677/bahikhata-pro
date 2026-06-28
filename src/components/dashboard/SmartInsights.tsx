@@ -64,7 +64,7 @@ export function SmartInsights() {
       </div>
 
       {expanded && (
-        <CardContent className="p-3 space-y-2">
+        <CardContent className="p-2 space-y-1.5">
           {insights.map((insight, i) => {
             const Icon = insight.icon
             return (

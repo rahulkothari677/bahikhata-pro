@@ -131,13 +131,8 @@
     @apply border-border outline-ring/50;
   }
   html {
-    /* Disables browser's native pull-to-refresh on mobile Chrome.
-       'none' is stronger than 'contain' — also blocks the bounce effect. */
+    /* Disables browser's native pull-to-refresh on mobile Chrome. */
     overscroll-behavior-y: none;
-    /* Safe area for Capacitor native app — prevents content from going
-       under the status bar (top) and home indicator (bottom) */
-    padding-top: env(safe-area-inset-top);
-    padding-bottom: env(safe-area-inset-bottom);
   }
   body {
     @apply bg-background text-foreground;

@@ -78,7 +78,7 @@ export function BusinessHealthScore({ kpis }: { kpis: any }) {
 
   return (
     <Card className="shadow-card border-border/60 overflow-hidden">
-      <CardContent className="p-4">
+      <CardContent className="p-3">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
             <Activity className="w-5 h-5 text-primary" />

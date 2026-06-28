@@ -760,8 +760,8 @@ export function Dashboard() {
 
       {/* Day-end summary card — shows after 6 PM with today's business summary */}
       {kpis && kpis.todayTxnCount > 0 && new Date().getHours() >= 18 && (
-        <Card className="shadow-card border-border/60 overflow-hidden">
-          <div className="bg-gradient-to-r from-indigo-500 to-purple-600 p-4 text-white">
+        <Card className="shadow-card border-border/60 overflow-hidden p-0">
+          <div className="bg-gradient-to-r from-indigo-500 to-purple-600 p-3 text-white">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <Calendar className="w-5 h-5" />

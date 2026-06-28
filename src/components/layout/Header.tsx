@@ -101,7 +101,7 @@ export function Header() {
   })()
 
   return (
-    <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-md border-b border-border" style={{ paddingTop: 'env(safe-area-inset-top)' }}>
+    <header className="sticky top-0 z-30 bg-background/95 backdrop-blur-md border-b border-border" style={{ paddingTop: 'env(safe-area-inset-top)', minHeight: 'calc(3.5rem + env(safe-area-inset-top))' }}>
       <div className="flex items-center justify-between gap-3 px-4 lg:px-6 py-3">
         <div className="flex items-center gap-3 min-w-0">
           {/* Hamburger menu hidden on mobile — use "More" tab in bottom nav instead.
@@ -181,16 +181,16 @@ export function Header() {
                 title="Search & Commands"
                 aria-label="Search"
               >
-                <Search className="w-5 h-5" />
+                <Search className="w-6 h-6" />
               </Button>
             </>
           )}
 
-          {/* Notification center — bell icon with alerts */}
-          <NotificationCenter />
+          {/* Notification center — only on Dashboard */}
+          {currentView === 'dashboard' && <NotificationCenter />}
 
-          {/* Dark mode toggle */}
-          {features?.darkMode !== undefined && (
+          {/* Dark mode toggle — only on Dashboard */}
+          {features?.darkMode !== undefined && currentView === 'dashboard' && (
             <Button
               size="iconTouch"
               variant="ghost"
@@ -198,7 +198,7 @@ export function Header() {
               className="lg:size-9 lg:h-9"
               title={features?.darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
             >
-              {features?.darkMode ? <Sun className="w-5 h-5 lg:w-4 lg:h-4" /> : <Moon className="w-5 h-5 lg:w-4 lg:h-4" />}
+              {features?.darkMode ? <Sun className="w-6 h-6 lg:w-4 lg:h-4" /> : <Moon className="w-6 h-6 lg:w-4 lg:h-4" />}
             </Button>
           )}
 
@@ -268,16 +268,18 @@ export function Header() {
             </Button>
           </div>
 
-          {/* Mobile logout button */}
-          <Button
-            variant="ghost"
-            size="iconTouch"
-            className="lg:hidden"
-            onClick={async () => { await clearAllOfflineData(); signOut({ callbackUrl: '/' }) }}
-            title={t('action.sign_out')}
-          >
-            <LogOut className="w-5 h-5" />
-          </Button>
+          {/* Mobile logout button — only on Dashboard */}
+          {currentView === 'dashboard' && (
+            <Button
+              variant="ghost"
+              size="iconTouch"
+              className="lg:hidden"
+              onClick={async () => { await clearAllOfflineData(); signOut({ callbackUrl: '/' }) }}
+              title={t('action.sign_out')}
+            >
+              <LogOut className="w-6 h-6" />
+            </Button>
+          )}
         </div>
       </div>
     </header>
