@@ -29,7 +29,7 @@ import { useSetting } from '@/hooks/use-setting'
 const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)']
 
 export function Dashboard() {
-  const { setView, refreshKey, setSelectedTransactionId, setPreviousView, setPendingDateRange } = useAppStore()
+  const { setView, refreshKey, setSelectedTransactionId, setPreviousView, setPendingDateRange, features } = useAppStore()
   const { t, language } = useTranslation()
   const { hideProfit } = useSetting()
   const [dateRange, setDateRange] = useState<DateRange>(() => getPresetRange('thisMonth'))
@@ -261,7 +261,7 @@ export function Dashboard() {
               New Sale
             </Button>
             {/* Repeat Last Sale — loads the last sale's items into a new sale form */}
-            {lastSale && (
+            {lastSale && features?.repeatLastSale && (
               <Button
                 onClick={handleRepeatLastSale}
                 variant="outline"

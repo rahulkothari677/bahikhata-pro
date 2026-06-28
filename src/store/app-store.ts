@@ -39,6 +39,8 @@ export type FeatureKey =
   | 'autoSaveDrafts'
   | 'dailySummary'
   | 'announcementBanners'
+  | 'repeatLastSale'
+  | 'quickActions'
 
 export type FeatureFlags = Record<FeatureKey, boolean>
 
@@ -65,6 +67,8 @@ const DEFAULT_FEATURES: FeatureFlags = {
   autoSaveDrafts: true,
   dailySummary: false,
   announcementBanners: true,
+  repeatLastSale: true,
+  quickActions: true,
 }
 
 interface AppState {
