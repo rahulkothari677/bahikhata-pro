@@ -755,7 +755,7 @@ function PrintInvoiceContent({ txn, setting }: { txn: any; setting: any }) {
             <div className="flex justify-between"><span className="text-gray-500">GST Type:</span><span className="font-medium">{txn.isInterState ? 'IGST (Inter-state)' : 'CGST + SGST'}</span></div>
             <div className="flex justify-between"><span className="text-gray-500">Items:</span><span className="font-medium">{txn.items.length}</span></div>
             {isSale && txn.grossProfit !== undefined && (
-              <div className="flex justify-between"><span className="text-gray-500">Profit:</span><span className="font-medium text-emerald-700">Rs.{txn.grossProfit.toFixed(2)}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Profit:</span><span className="font-medium text-emerald-700">₹{txn.grossProfit.toFixed(2)}</span></div>
             )}
           </div>
         </div>
@@ -781,9 +781,9 @@ function PrintInvoiceContent({ txn, setting }: { txn: any; setting: any }) {
               <td className="py-2 px-2 font-medium">{item.productName}</td>
               <td className="py-2 px-2 text-right text-gray-600">{item.hsnCode || '\u2014'}</td>
               <td className="py-2 px-2 text-right">{item.quantity}</td>
-              <td className="py-2 px-2 text-right">Rs.{item.unitPrice.toFixed(2)}</td>
+              <td className="py-2 px-2 text-right">₹{item.unitPrice.toFixed(2)}</td>
               <td className="py-2 px-2 text-right">{item.gstRate}%</td>
-              <td className="py-2 px-2 text-right font-semibold">Rs.{item.total.toFixed(2)}</td>
+              <td className="py-2 px-2 text-right font-semibold">₹{item.total.toFixed(2)}</td>
             </tr>
           ))}
         </tbody>
@@ -796,17 +796,17 @@ function PrintInvoiceContent({ txn, setting }: { txn: any; setting: any }) {
           <p className="text-xs italic font-medium text-gray-800 max-w-xs">{amountToWords(txn.totalAmount)}</p>
         </div>
         <div className="w-72 text-xs space-y-1">
-          <div className="flex justify-between"><span className="text-gray-600">Subtotal</span><span className="font-medium">Rs.{txn.subtotal.toFixed(2)}</span></div>
-          {txn.discountAmount > 0 && <div className="flex justify-between"><span className="text-gray-600">Discount</span><span className="font-medium text-rose-700">-Rs.{txn.discountAmount.toFixed(2)}</span></div>}
-          {txn.cgst > 0 && <div className="flex justify-between"><span className="text-gray-600">CGST</span><span className="font-medium">Rs.{txn.cgst.toFixed(2)}</span></div>}
-          {txn.sgst > 0 && <div className="flex justify-between"><span className="text-gray-600">SGST</span><span className="font-medium">Rs.{txn.sgst.toFixed(2)}</span></div>}
-          {txn.igst > 0 && <div className="flex justify-between"><span className="text-gray-600">IGST</span><span className="font-medium">Rs.{txn.igst.toFixed(2)}</span></div>}
+          <div className="flex justify-between"><span className="text-gray-600">Subtotal</span><span className="font-medium">₹{txn.subtotal.toFixed(2)}</span></div>
+          {txn.discountAmount > 0 && <div className="flex justify-between"><span className="text-gray-600">Discount</span><span className="font-medium text-rose-700">-₹{txn.discountAmount.toFixed(2)}</span></div>}
+          {txn.cgst > 0 && <div className="flex justify-between"><span className="text-gray-600">CGST</span><span className="font-medium">₹{txn.cgst.toFixed(2)}</span></div>}
+          {txn.sgst > 0 && <div className="flex justify-between"><span className="text-gray-600">SGST</span><span className="font-medium">₹{txn.sgst.toFixed(2)}</span></div>}
+          {txn.igst > 0 && <div className="flex justify-between"><span className="text-gray-600">IGST</span><span className="font-medium">₹{txn.igst.toFixed(2)}</span></div>}
           <div className="flex justify-between text-base font-bold border-t-2 border-black pt-2 mt-1">
-            <span>Total</span><span>Rs.{txn.totalAmount.toFixed(2)}</span>
+            <span>Total</span><span>₹{txn.totalAmount.toFixed(2)}</span>
           </div>
-          <div className="flex justify-between text-emerald-700"><span>Paid</span><span className="font-medium">Rs.{txn.paidAmount.toFixed(2)}</span></div>
+          <div className="flex justify-between text-emerald-700"><span>Paid</span><span className="font-medium">₹{txn.paidAmount.toFixed(2)}</span></div>
           {due > 0 && (
-            <div className="flex justify-between text-rose-700 font-semibold"><span>Balance Due</span><span>Rs.{due.toFixed(2)}</span></div>
+            <div className="flex justify-between text-rose-700 font-semibold"><span>Balance Due</span><span>₹{due.toFixed(2)}</span></div>
           )}
         </div>
       </div>
@@ -852,9 +852,9 @@ function generateInvoiceHTML(txn: any, setting: any): string {
       <td>${item.productName}</td>
       <td style="text-align:right">${item.hsnCode || '\u2014'}</td>
       <td style="text-align:right">${item.quantity}</td>
-      <td style="text-align:right">Rs.${item.unitPrice.toFixed(2)}</td>
+      <td style="text-align:right">₹${item.unitPrice.toFixed(2)}</td>
       <td style="text-align:right">${item.gstRate}%</td>
-      <td style="text-align:right">Rs.${item.total.toFixed(2)}</td>
+      <td style="text-align:right">₹${item.total.toFixed(2)}</td>
     </tr>
   `).join('')
 
@@ -948,7 +948,7 @@ function generateInvoiceHTML(txn: any, setting: any): string {
       <p class="label">Supply Details</p>
       <p style="margin:3px 0;"><span style="color:#888;">GST Type:</span> <strong>${txn.isInterState ? 'IGST (Inter-state)' : 'CGST + SGST'}</strong></p>
       <p style="margin:3px 0;"><span style="color:#888;">Items:</span> <strong>${txn.items.length}</strong></p>
-      ${isSale && txn.grossProfit !== undefined ? `<p style="margin:3px 0;"><span style="color:#888;">Profit:</span> <strong style="color:#059669;">Rs.${txn.grossProfit.toFixed(2)}</strong></p>` : ''}
+      ${isSale && txn.grossProfit !== undefined ? `<p style="margin:3px 0;"><span style="color:#888;">Profit:</span> <strong style="color:#059669;">₹${txn.grossProfit.toFixed(2)}</strong></p>` : ''}
     </div>
   </div>
 
@@ -973,14 +973,14 @@ function generateInvoiceHTML(txn: any, setting: any): string {
       <p class="value">${amountInWords}</p>
     </div>
     <div class="totals">
-      <div class="row"><span>Subtotal</span><span>Rs.${txn.subtotal.toFixed(2)}</span></div>
-      ${txn.discountAmount > 0 ? `<div class="row"><span>Discount</span><span style="color:#dc2626;">-Rs.${txn.discountAmount.toFixed(2)}</span></div>` : ''}
-      ${txn.cgst > 0 ? `<div class="row"><span>CGST</span><span>Rs.${txn.cgst.toFixed(2)}</span></div>` : ''}
-      ${txn.sgst > 0 ? `<div class="row"><span>SGST</span><span>Rs.${txn.sgst.toFixed(2)}</span></div>` : ''}
-      ${txn.igst > 0 ? `<div class="row"><span>IGST</span><span>Rs.${txn.igst.toFixed(2)}</span></div>` : ''}
-      <div class="row grand"><span>Total</span><span>Rs.${txn.totalAmount.toFixed(2)}</span></div>
-      <div class="row paid"><span>Paid</span><span>Rs.${txn.paidAmount.toFixed(2)}</span></div>
-      ${due > 0 ? `<div class="row due"><span>Balance Due</span><span>Rs.${due.toFixed(2)}</span></div>` : ''}
+      <div class="row"><span>Subtotal</span><span>₹${txn.subtotal.toFixed(2)}</span></div>
+      ${txn.discountAmount > 0 ? `<div class="row"><span>Discount</span><span style="color:#dc2626;">-₹${txn.discountAmount.toFixed(2)}</span></div>` : ''}
+      ${txn.cgst > 0 ? `<div class="row"><span>CGST</span><span>₹${txn.cgst.toFixed(2)}</span></div>` : ''}
+      ${txn.sgst > 0 ? `<div class="row"><span>SGST</span><span>₹${txn.sgst.toFixed(2)}</span></div>` : ''}
+      ${txn.igst > 0 ? `<div class="row"><span>IGST</span><span>₹${txn.igst.toFixed(2)}</span></div>` : ''}
+      <div class="row grand"><span>Total</span><span>₹${txn.totalAmount.toFixed(2)}</span></div>
+      <div class="row paid"><span>Paid</span><span>₹${txn.paidAmount.toFixed(2)}</span></div>
+      ${due > 0 ? `<div class="row due"><span>Balance Due</span><span>₹${due.toFixed(2)}</span></div>` : ''}
     </div>
   </div>
 

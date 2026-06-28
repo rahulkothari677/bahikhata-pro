@@ -6,7 +6,8 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-// Indian Rupee formatting
+// Indian Rupee formatting — full amount with proper grouping
+// e.g. ₹1,23,456.78 (Indian numbering: lakhs, not millions)
 export function formatINR(amount: number, withSymbol = true): string {
   const formatter = new Intl.NumberFormat('en-IN', {
     style: withSymbol ? 'currency' : 'decimal',
@@ -17,13 +18,25 @@ export function formatINR(amount: number, withSymbol = true): string {
   return formatter.format(amount)
 }
 
-// Compact Indian format - 1.2L, 1.5Cr
+// Compact Indian format for charts/tooltips/badges
+// e.g. ₹84, ₹1.2K, ₹12.5L, ₹1.5Cr
+// Removes trailing zeros for cleaner display (₹1.2K not ₹1.20K)
 export function formatINRCompact(amount: number): string {
   const abs = Math.abs(amount)
   const sign = amount < 0 ? '-' : ''
-  if (abs >= 10000000) return `${sign}₹${(abs / 10000000).toFixed(2)}Cr`
-  if (abs >= 100000) return `${sign}₹${(abs / 100000).toFixed(2)}L`
-  if (abs >= 1000) return `${sign}₹${(abs / 1000).toFixed(1)}K`
+  if (abs === 0) return '₹0'
+  if (abs >= 10000000) {
+    const val = abs / 10000000
+    return `${sign}₹${val.toFixed(val >= 10 ? 1 : 2).replace(/\.?0+$/, '')}Cr`
+  }
+  if (abs >= 100000) {
+    const val = abs / 100000
+    return `${sign}₹${val.toFixed(val >= 10 ? 1 : 2).replace(/\.?0+$/, '')}L`
+  }
+  if (abs >= 1000) {
+    const val = abs / 1000
+    return `${sign}₹${val.toFixed(val >= 10 ? 1 : 2).replace(/\.?0+$/, '')}K`
+  }
   return `${sign}₹${abs.toFixed(0)}`
 }
 
