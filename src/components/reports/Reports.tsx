@@ -19,18 +19,20 @@ import { formatINR, formatINRCompact, cn, formatDate } from '@/lib/utils'
 import {
   FileBarChart, TrendingUp, Receipt, Package, Users, Calendar,
   ArrowDownRight, ArrowUpRight, IndianRupee, Percent, FileText,
-  FileSpreadsheet, Loader2, Download, Printer,
+  FileSpreadsheet, Loader2, Download, Printer, Clock, AlertTriangle,
 } from 'lucide-react'
 import { toast as sonnerToast } from 'sonner'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { exportPLReportCSV, exportGSTReportCSV, exportStockReportCSV, exportPartyReportCSV } from '@/lib/csv-export'
+import { DebtAgingReport } from '@/components/reports/DebtAgingReport'
+import { InventoryAgingReport } from '@/components/reports/InventoryAgingReport'
 
 const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)', 'oklch(0.7 0.16 250)']
 
 export function Reports() {
   const { t } = useTranslation()
   const { features } = useAppStore()
-  const [reportType, setReportType] = useState<'pl' | 'gst' | 'stock' | 'party'>('pl')
+  const [reportType, setReportType] = useState<'pl' | 'gst' | 'stock' | 'party' | 'debt-aging' | 'inventory-aging'>('pl')
   const [dateRange, setDateRange] = useState<DateRange>(() => getPresetRange('thisMonth'))
   const [datePreset, setDatePreset] = useState<DatePreset>('thisMonth')
   const [exportingGstr, setExportingGstr] = useState(false)
@@ -63,7 +65,10 @@ export function Reports() {
   const { data, isLoading } = useQuery({
     queryKey: ['report', reportType, dateRange.from.toISOString(), dateRange.to.toISOString()],
     queryFn: async () => {
-      const r = await offlineFetch(`/api/reports?type=${reportType}&from=${dateRange.from.toISOString()}&to=${dateRange.to.toISOString()}`)
+      // Debt aging uses party report data (includes transactions per party)
+      // Inventory aging uses stock report data (includes products with createdAt)
+      const apiType = reportType === 'debt-aging' ? 'party' : reportType === 'inventory-aging' ? 'stock' : reportType
+      const r = await offlineFetch(`/api/reports?type=${apiType}&from=${dateRange.from.toISOString()}&to=${dateRange.to.toISOString()}`)
       return r.json()
     },
   })
@@ -152,7 +157,7 @@ export function Reports() {
 
       {/* Report type tabs */}
       <Tabs value={reportType} onValueChange={(v) => setReportType(v as any)}>
-        <TabsList className="grid grid-cols-2 lg:grid-cols-4 w-full h-auto no-print">
+        <TabsList className="grid grid-cols-2 lg:grid-cols-6 w-full h-auto no-print">
           <TabsTrigger value="pl" className="gap-1.5 py-2">
             <TrendingUp className="w-3.5 h-3.5" /> {t('reports.pl')}
           </TabsTrigger>
@@ -164,6 +169,12 @@ export function Reports() {
           </TabsTrigger>
           <TabsTrigger value="party" className="gap-1.5 py-2">
             <Users className="w-3.5 h-3.5" /> Party
+          </TabsTrigger>
+          <TabsTrigger value="debt-aging" className="gap-1.5 py-2">
+            <Clock className="w-3.5 h-3.5" /> Debt Aging
+          </TabsTrigger>
+          <TabsTrigger value="inventory-aging" className="gap-1.5 py-2">
+            <AlertTriangle className="w-3.5 h-3.5" /> Inv Aging
           </TabsTrigger>
         </TabsList>
 
@@ -178,6 +189,12 @@ export function Reports() {
         </TabsContent>
         <TabsContent value="party" className="mt-4">
           {isLoading || !data ? <ReportSkeleton /> : <PartyReport data={data} />}
+        </TabsContent>
+        <TabsContent value="debt-aging" className="mt-4">
+          {isLoading || !data ? <ReportSkeleton /> : <DebtAgingReport data={data} />}
+        </TabsContent>
+        <TabsContent value="inventory-aging" className="mt-4">
+          {isLoading || !data ? <ReportSkeleton /> : <InventoryAgingReport data={data} />}
         </TabsContent>
       </Tabs>
     </div>
