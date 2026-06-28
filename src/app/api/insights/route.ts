@@ -142,7 +142,7 @@ export async function GET() {
           id: 'margin-up',
           type: 'success',
           category: 'profit',
-          title: `Profit margin improved ${marginChange.toFixed(1)}% 🎉`,
+          title: `Profit margin improved ${marginChange.toFixed(1)}%`,
           description: `Current: ${lastMargin.toFixed(1)}% vs previous: ${prevMargin.toFixed(1)}%. Keep it up!`,
           action: 'reports',
           actionLabel: 'View Details',

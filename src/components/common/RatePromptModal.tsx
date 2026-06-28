@@ -100,7 +100,7 @@ export function RatePromptModal({
 
           {selectedRating > 0 && (
             <p className="text-xs text-muted-foreground mb-3">
-              {selectedRating === 5 && '🎉 Awesome! Thank you!'}
+              {selectedRating === 5 && 'Awesome! Thank you!'}
               {selectedRating === 4 && '😊 Great! We appreciate it.'}
               {selectedRating === 3 && '👍 Thanks for the feedback!'}
               {selectedRating === 2 && '🙏 Thanks — we\'ll keep improving.'}

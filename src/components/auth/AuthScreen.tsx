@@ -79,7 +79,7 @@ export function AuthScreen() {
         sonnerToast.error('Invalid email or password')
         setLoading(false)
       } else if (result?.ok) {
-        sonnerToast.success(mode === 'signup' ? 'Account created! Welcome to BahiKhata Pro 🎉' : 'Welcome back! 👋')
+        sonnerToast.success(mode === 'signup' ? 'Account created! Welcome to BahiKhata Pro.' : 'Welcome back!')
         // Small delay to let session propagate
         setTimeout(() => window.location.reload(), 500)
       } else {

@@ -14,6 +14,7 @@ import {
   TrendingUp, TrendingDown, Wallet, Package,
   ArrowUpRight, ArrowDownRight, AlertTriangle, IndianRupee,
   Receipt, Boxes, PiggyBank, ScanLine, ArrowRight, Plus, CloudOff, Repeat, Loader2,
+  BookOpenText,
 } from 'lucide-react'
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell,
@@ -195,7 +196,7 @@ export function Dashboard() {
         <div className="rounded-2xl bg-gradient-saffron p-8 lg:p-12 text-white shadow-lg relative overflow-hidden text-center">
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32" />
           <div className="relative z-10">
-            <div className="text-5xl mb-4">🏪</div>
+            <BookOpenText className="w-12 h-12 text-white mb-4" />
             <h2 className="text-2xl font-bold mb-2">Welcome to BahiKhata Pro!</h2>
             <p className="text-white/80 text-sm max-w-md mx-auto mb-6">
               Your dashboard will come alive once you start recording sales. Here's how to get started in 2 minutes:
@@ -267,7 +268,7 @@ export function Dashboard() {
         <div className="absolute bottom-0 right-20 w-40 h-40 bg-white/5 rounded-full -mb-20" />
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
-            <p className="text-white/80 text-sm font-medium">{t('dash.greeting')}, {setting?.ownerName || 'Shop Owner'} 🙏</p>
+            <p className="text-white/80 text-sm font-medium">{t('dash.greeting')}, {setting?.ownerName || 'Shop Owner'}</p>
             <h2 className="text-2xl lg:text-3xl font-bold mt-1">{setting?.shopName || 'My Shop'}</h2>
             <p className="text-white/80 text-sm mt-1">
               {t('dash.today_made')} <span className="font-bold text-white">{formatINR(kpis.todayRevenue)}</span> {t('dash.from')} <span className="font-bold text-white">{kpis.todayTxnCount}</span> {t('dash.sales_word')}

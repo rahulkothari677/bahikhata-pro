@@ -136,7 +136,7 @@ export function Settings() {
   }
 
   const handleResetData = async () => {
-    if (!confirm('⚠️ This will DELETE ALL your data (products, transactions, parties). This cannot be undone. Are you absolutely sure?')) return
+    if (!confirm('This will DELETE ALL your data (products, transactions, parties). This cannot be undone. Are you absolutely sure?')) return
     if (!confirm('Last confirmation: All data will be permanently deleted. Continue?')) return
     try {
       // Delete via prisma - we'll do this via a special endpoint
