@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { useAppStore, type ViewType } from '@/store/app-store'
 import { useTranslation } from '@/hooks/use-translation'
 import { Menu, Plus, Sparkles, ScanLine, ArrowLeft, Search, Sun, Moon, LogOut } from 'lucide-react'
@@ -10,6 +11,8 @@ import { clearAllOfflineData } from '@/lib/offline-db'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { useFeatureFlags } from '@/hooks/use-feature-flags'
 import { NotificationCenter } from '@/components/common/NotificationCenter'
+import { useShops } from '@/hooks/use-shops'
+import { Store, ChevronDown, Check } from 'lucide-react'
 
 const viewTitleKeys: Record<string, { titleKey: string; subtitleKey: string }> = {
   dashboard: { titleKey: 'nav.dashboard', subtitleKey: 'nav.dashboard' },
@@ -35,6 +38,8 @@ export function Header() {
   const { isFlagEnabled } = useFeatureFlags()
   const { data: session } = useSession()
   const { t } = useTranslation()
+  const { shops, activeShop, switchShop } = useShops()
+  const [shopDropdownOpen, setShopDropdownOpen] = useState(false)
   const titleKeys = viewTitleKeys[currentView] || { titleKey: 'nav.dashboard', subtitleKey: 'nav.dashboard' }
   // Override for transaction detail - show Purchase Ledger if it's a purchase
   if (currentView === 'transaction-detail' && selectedTransactionType === 'purchase') {
@@ -114,6 +119,42 @@ export function Header() {
             <h2 className="text-lg lg:text-xl font-bold tracking-tight truncate">{info.title}</h2>
             <p className="text-xs text-muted-foreground truncate hidden sm:block">{info.subtitle}</p>
           </div>
+
+          {/* Mobile shop switcher — shows current shop name, tap to switch */}
+          {shops.length > 1 && (
+            <div className="relative lg:hidden">
+              <button
+                onClick={() => setShopDropdownOpen(!shopDropdownOpen)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-muted/50 hover:bg-muted transition"
+              >
+                <Store className="w-4 h-4 text-primary flex-shrink-0" />
+                <span className="text-xs font-semibold truncate max-w-[80px]">{activeShop?.name || 'Shop'}</span>
+                <ChevronDown className={`w-3 h-3 text-muted-foreground transition-transform flex-shrink-0 ${shopDropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {shopDropdownOpen && (
+                <div className="absolute top-full left-0 mt-1 w-56 bg-popover border border-border rounded-lg shadow-lg z-50 overflow-hidden">
+                  {shops.map(shop => (
+                    <button
+                      key={shop.id}
+                      onClick={() => { switchShop(shop.id); setShopDropdownOpen(false) }}
+                      className={`w-full flex items-center gap-2 p-2.5 hover:bg-muted transition text-left ${activeShop?.id === shop.id ? 'bg-primary/5' : ''}`}
+                    >
+                      <Store className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" />
+                      <span className="text-xs font-medium flex-1 truncate">{shop.name}</span>
+                      {activeShop?.id === shop.id && <Check className="w-3.5 h-3.5 text-primary" />}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => { setView('settings'); setShopDropdownOpen(false) }}
+                    className="w-full flex items-center gap-2 p-2.5 hover:bg-muted transition text-left border-t border-border"
+                  >
+                    <Plus className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                    <span className="text-xs font-medium">Add New Shop</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
