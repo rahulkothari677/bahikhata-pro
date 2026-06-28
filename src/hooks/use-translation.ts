@@ -17,7 +17,8 @@ export function useTranslation() {
       const saved = localStorage.getItem('bahikhata-language')
       if (saved) {
         const parsed = JSON.parse(saved)
-        if (parsed === 'hi' || parsed === 'en') {
+        const validLangs = ['en', 'hi', 'gu', 'mr', 'ta', 'te']
+        if (validLangs.includes(parsed)) {
           if (parsed !== language) {
             setLanguage(parsed)
           }

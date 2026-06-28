@@ -367,28 +367,32 @@ export function Settings() {
             />
           </div>
 
-          {/* Language Toggle */}
-          <div className="mt-3 flex items-center justify-between rounded-lg bg-muted/50 p-3">
+          {/* Language Toggle — 6 languages */}
+          <div className="mt-3 flex items-center justify-between rounded-lg bg-muted/50 p-3 flex-wrap gap-2">
             <div className="flex items-center gap-2">
               <Globe className="w-4 h-4 text-muted-foreground" />
               <div>
-                <p className="text-sm font-medium">Language / भाषा</p>
+                <p className="text-sm font-medium">Language / ભાષા / भाषा / மொழி / భాష</p>
                 <p className="text-[11px] text-muted-foreground">Choose your preferred language</p>
               </div>
             </div>
-            <div className="flex gap-1 bg-background rounded-lg p-0.5">
-              <button
-                onClick={() => { setLanguage('en'); sonnerToast.success('Language: English') }}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${language === 'en' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}
-              >
-                English
-              </button>
-              <button
-                onClick={() => { setLanguage('hi'); sonnerToast.success('भाषा: हिंदी') }}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${language === 'hi' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}
-              >
-                हिंदी
-              </button>
+            <div className="flex gap-1 bg-background rounded-lg p-0.5 flex-wrap">
+              {[
+                { code: 'en', label: 'English', toast: 'Language: English' },
+                { code: 'hi', label: 'हिंदी', toast: 'भाषा: हिंदी' },
+                { code: 'gu', label: 'ગુજરાતી', toast: 'ભાષા: ગુજરાતી' },
+                { code: 'mr', label: 'मराठी', toast: 'भाषा: मराठी' },
+                { code: 'ta', label: 'தமிழ்', toast: 'மொழி: தமிழ்' },
+                { code: 'te', label: 'తెలుగు', toast: 'భాష: తెలుగు' },
+              ].map((lang) => (
+                <button
+                  key={lang.code}
+                  onClick={() => { setLanguage(lang.code as any); sonnerToast.success(lang.toast) }}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${language === lang.code ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}
+                >
+                  {lang.label}
+                </button>
+              ))}
             </div>
           </div>
 
