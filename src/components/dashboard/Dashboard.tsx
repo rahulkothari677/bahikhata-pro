@@ -35,6 +35,7 @@ export function Dashboard() {
   const { hideProfit } = useSetting()
   const [dateRange, setDateRange] = useState<DateRange>(() => getPresetRange('thisMonth'))
   const [datePreset, setDatePreset] = useState<DatePreset>('thisMonth')
+  const [repeating, setRepeating] = useState(false)
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['dashboard', refreshKey, dateRange.from.toISOString(), dateRange.to.toISOString()],
@@ -139,7 +140,6 @@ export function Dashboard() {
 
   // Repeat last sale — fetches the ACTUAL latest sale (bypassing cache)
   // then pre-fills the New Sale form with its items
-  const [repeating, setRepeating] = useState(false)
   const handleRepeatLastSale = async () => {
     setRepeating(true)
     try {
