@@ -6,6 +6,7 @@ import { useAppStore } from '@/store/app-store'
 import { useTranslation } from '@/hooks/use-translation'
 import { SmartInsights } from '@/components/dashboard/SmartInsights'
 import { BusinessHealthScore } from '@/components/dashboard/BusinessHealthScore'
+import { useBusinessGoals } from '@/hooks/use-business-goals'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -15,7 +16,7 @@ import {
   TrendingUp, TrendingDown, Wallet, Package,
   ArrowUpRight, ArrowDownRight, AlertTriangle, IndianRupee,
   Receipt, Boxes, PiggyBank, ScanLine, ArrowRight, Plus, CloudOff, Repeat, Loader2,
-  BookOpenText, Share2, Calendar,
+  BookOpenText, Share2, Calendar, Target,
 } from 'lucide-react'
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell,
@@ -36,6 +37,7 @@ export function Dashboard() {
   const { setView, refreshKey, setSelectedTransactionId, setPreviousView, setPendingDateRange, features } = useAppStore()
   const { t, language } = useTranslation()
   const { hideProfit } = useSetting()
+  const { revenueTarget, expenseBudget } = useBusinessGoals()
   const { checkAndCreate: checkRecurring } = useRecurringEntries()
   const [dateRange, setDateRange] = useState<DateRange>(() => getPresetRange('thisMonth'))
   const [datePreset, setDatePreset] = useState<DatePreset>('thisMonth')
@@ -793,6 +795,41 @@ export function Dashboard() {
               </Button>
             )}
           </div>
+        </Card>
+      )}
+
+      {/* Business Goals — monthly revenue/expense targets with progress */}
+      {(revenueTarget || expenseBudget) && kpis && (
+        <Card className="shadow-card border-border/60">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Target className="w-4 h-4 text-primary" />
+              <p className="text-sm font-semibold">Monthly Goals</p>
+            </div>
+            <div className="space-y-3">
+              {revenueTarget && (
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-xs font-medium">Revenue Target</span>
+                    <span className="text-xs text-muted-foreground">
+                      {formatINRCompact(kpis.rangeRevenue)} / {formatINRCompact(revenueTarget)}
+                    </span>
+                  </div>
+                  <div className="h-2.5 bg-muted rounded-full overflow-hidden">
+                    <div
+                      className={cn('h-full rounded-full transition-all', kpis.rangeRevenue >= revenueTarget ? 'bg-emerald-500' : 'bg-primary')}
+                      style={{ width: `${Math.min(100, (kpis.rangeRevenue / revenueTarget) * 100)}%` }}
+                    />
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    {kpis.rangeRevenue >= revenueTarget
+                      ? 'Target achieved!'
+                      : `${((kpis.rangeRevenue / revenueTarget) * 100).toFixed(0)}% — ${formatINRCompact(revenueTarget - kpis.rangeRevenue)} to go`}
+                  </p>
+                </div>
+              )}
+            </div>
+          </CardContent>
         </Card>
       )}
 

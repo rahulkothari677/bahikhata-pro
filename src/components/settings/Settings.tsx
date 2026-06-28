@@ -11,6 +11,9 @@ import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import { StaffManagement } from '@/components/settings/StaffManagement'
 import { useShops } from '@/hooks/use-shops'
+import { exportBackup } from '@/lib/data-backup'
+import { useBusinessGoals } from '@/hooks/use-business-goals'
+import { Target, Download, Upload, Calendar } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { toast as sonnerToast } from 'sonner'
 import { haptic } from '@/lib/haptic'
@@ -88,8 +91,11 @@ export function Settings() {
   // useSetting hook — provides hideProfit + updateHideProfit (persists instantly)
   const { hideProfit, updateHideProfit } = useSetting()
   const { shops, activeShop, switchShop, createShop } = useShops()
+  const { revenueTarget, expenseBudget, setRevenueTarget, setExpenseBudget } = useBusinessGoals()
   const [newShopOpen, setNewShopOpen] = useState(false)
   const [newShopName, setNewShopName] = useState('')
+  const [revenueGoal, setRevenueGoal] = useState('')
+  const [expenseGoal, setExpenseGoal] = useState('')
 
   const { data } = useQuery({
     queryKey: ['setting'],
@@ -344,6 +350,82 @@ export function Settings() {
         </Card>
       )}
 
+      {/* Business Goals — monthly revenue/expense targets */}
+      {settingsTab === 'profile' && (
+        <Card className="shadow-card border-border/60">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Target className="w-5 h-5 text-primary" /> Monthly Business Goals
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">Set targets for this month and track progress on dashboard</p>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div>
+              <Label>Revenue Target (₹)</Label>
+              <div className="flex gap-2 mt-1">
+                <Input
+                  type="number"
+                  value={revenueGoal}
+                  onChange={(e) => setRevenueGoal(e.target.value)}
+                  placeholder={revenueTarget ? String(revenueTarget) : 'e.g. 500000'}
+                  className="flex-1"
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    const amt = parseFloat(revenueGoal) || 0
+                    setRevenueTarget(amt)
+                    sonnerToast.success(amt > 0 ? `Revenue target set: ${amt}` : 'Revenue target removed')
+                    setRevenueGoal('')
+                  }}
+                >
+                  Set
+                </Button>
+              </div>
+              {revenueTarget ? (
+                <p className="text-[11px] text-emerald-600 mt-1">
+                  Current target: {revenueTarget} — track progress on dashboard
+                </p>
+              ) : (
+                <p className="text-[11px] text-muted-foreground mt-1">No target set</p>
+              )}
+            </div>
+            <div>
+              <Label>Expense Budget (₹)</Label>
+              <div className="flex gap-2 mt-1">
+                <Input
+                  type="number"
+                  value={expenseGoal}
+                  onChange={(e) => setExpenseGoal(e.target.value)}
+                  placeholder={expenseBudget ? String(expenseBudget) : 'e.g. 100000'}
+                  className="flex-1"
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    const amt = parseFloat(expenseGoal) || 0
+                    setExpenseBudget(amt)
+                    sonnerToast.success(amt > 0 ? `Expense budget set: ${amt}` : 'Expense budget removed')
+                    setExpenseGoal('')
+                  }}
+                >
+                  Set
+                </Button>
+              </div>
+              {expenseBudget ? (
+                <p className="text-[11px] text-amber-600 mt-1">
+                  Current budget: {expenseBudget} — track on Income & Expense page
+                </p>
+              ) : (
+                <p className="text-[11px] text-muted-foreground mt-1">No budget set</p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* ── DATA TAB ────────────────────────────────────────────────── */}
       {settingsTab === 'data' && isOwner && (
       <Card className="shadow-card border-border/60">
@@ -384,7 +466,34 @@ export function Settings() {
                 <p className="text-xs text-rose-700 mt-1">
                   This will permanently delete all products, transactions, parties and settings. Useful if you want to start fresh.
                 </p>
-                <Button variant="destructive" size="sm" className="mt-3 gap-2" onClick={handleResetData}>
+              {/* Data Backup — export all data to JSON */}
+              <div className="flex items-start gap-3 mb-4">
+                <Download className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <p className="font-semibold text-sm">Backup Your Data</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Download all your products, transactions, parties, and settings as a JSON file.
+                    Use this to migrate to a new device or keep a safe copy.
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-2 gap-2 border-blue-300 text-blue-700 hover:bg-blue-100"
+                    onClick={async () => {
+                      try {
+                        await exportBackup()
+                        sonnerToast.success('Backup downloaded!')
+                      } catch {
+                        sonnerToast.error('Failed to create backup')
+                      }
+                    }}
+                  >
+                    <Download className="w-4 h-4" /> Download Backup
+                  </Button>
+                </div>
+              </div>
+
+              <Button variant="destructive" size="sm" className="mt-3 gap-2" onClick={handleResetData}>
                   <Trash2 className="w-4 h-4" /> Reset All Data
                 </Button>
               </div>
