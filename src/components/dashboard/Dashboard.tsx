@@ -13,7 +13,7 @@ import { DateRangePicker, getPresetRange, getPresetLabel, type DateRange, type D
 import {
   TrendingUp, TrendingDown, Wallet, Package,
   ArrowUpRight, ArrowDownRight, AlertTriangle, IndianRupee,
-  Receipt, Boxes, PiggyBank, ScanLine, ArrowRight, Plus, CloudOff, Repeat,
+  Receipt, Boxes, PiggyBank, ScanLine, ArrowRight, Plus, CloudOff, Repeat, Loader2,
 } from 'lucide-react'
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell,
@@ -25,6 +25,7 @@ import { formatINR, formatINRCompact, relativeTime, cn } from '@/lib/utils'
 import { motion } from 'framer-motion'
 import { offlineFetch, isOnline, OfflineError } from '@/lib/offline-fetch'
 import { useSetting } from '@/hooks/use-setting'
+import { toast as sonnerToast } from 'sonner'
 
 const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)']
 
@@ -136,26 +137,46 @@ export function Dashboard() {
   // Find the last sale transaction (for "Repeat Last Sale" feature)
   const lastSale = recentTransactions.find((t: any) => t.type === 'sale')
 
-  // Repeat last sale — pre-fills the New Sale form with the last sale's items
-  const handleRepeatLastSale = () => {
-    if (!lastSale) return
-    // Pass the last sale's items to the New Sale form via the global preset
-    ;(window as any).__ledgerPreset = {
-      type: 'sale',
-      data: {
-        partyId: lastSale.partyId,
-        items: (lastSale.items || []).map((item: any) => ({
-          productId: item.productId || '',
-          name: item.productName,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          gstRate: item.gstRate,
-          unit: item.unit || 'pcs',
-        })),
-      },
+  // Repeat last sale — fetches the ACTUAL latest sale (bypassing cache)
+  // then pre-fills the New Sale form with its items
+  const [repeating, setRepeating] = useState(false)
+  const handleRepeatLastSale = async () => {
+    setRepeating(true)
+    try {
+      // Fetch the latest sale transaction directly (cache: 'no-store' to bypass browser cache)
+      const r = await fetch('/api/transactions?limit=1&type=sale', { cache: 'no-store' })
+      const data = await r.json()
+      const latestSale = data?.transactions?.[0]
+
+      if (!latestSale || !latestSale.items || latestSale.items.length === 0) {
+        sonnerToast.error('No sale found to repeat')
+        return
+      }
+
+      sonnerToast.success(`Loading sale: ${latestSale.items.length} items`)
+
+      // Pass the latest sale's items to the New Sale form via the global preset
+      ;(window as any).__ledgerPreset = {
+        type: 'sale',
+        data: {
+          partyId: latestSale.partyId,
+          items: latestSale.items.map((item: any) => ({
+            productId: item.productId || '',
+            name: item.productName,
+            quantity: item.quantity,
+            unitPrice: item.unitPrice,
+            gstRate: item.gstRate,
+            unit: item.unit || 'pcs',
+          })),
+        },
+      }
+      setPreviousView('dashboard')
+      setView('new-sale')
+    } catch (err) {
+      sonnerToast.error('Failed to load last sale')
+    } finally {
+      setRepeating(false)
     }
-    setPreviousView('dashboard')
-    setView('new-sale')
   }
 
   // Empty state for new users (0 transactions)
@@ -261,15 +282,16 @@ export function Dashboard() {
               New Sale
             </Button>
             {/* Repeat Last Sale — loads the last sale's items into a new sale form */}
-            {lastSale && features?.repeatLastSale && (
+            {features?.repeatLastSale && (
               <Button
                 onClick={handleRepeatLastSale}
+                disabled={repeating}
                 variant="outline"
                 className="bg-white/10 text-white border-white/30 hover:bg-white/20 hover:text-white gap-2"
-                title={`Repeat last sale: ${lastSale.party?.name || 'Walk-in'} · ${formatINRCompact(lastSale.totalAmount)}`}
+                title={`Repeat your most recent sale`}
               >
-                <Repeat className="w-4 h-4" />
-                <span className="hidden sm:inline">Repeat Last Sale</span>
+                {repeating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Repeat className="w-4 h-4" />}
+                <span className="hidden sm:inline">{repeating ? 'Loading...' : 'Repeat Last Sale'}</span>
               </Button>
             )}
             <Button
