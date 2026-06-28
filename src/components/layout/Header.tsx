@@ -117,18 +117,32 @@ export function Header() {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Global Search button (Ctrl+K) */}
+          {/* Global Search / Command Palette button */}
           {features?.globalSearch && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setSearchOpen(true)}
-              className="hidden sm:flex gap-2"
-              title="Search (Ctrl+K)"
-            >
-              <Search className="w-4 h-4" />
-              <span className="hidden lg:inline text-xs text-muted-foreground">Ctrl+K</span>
-            </Button>
+            <>
+              {/* Desktop: full button with label */}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setSearchOpen(true)}
+                className="hidden sm:flex gap-2"
+                title="Search & Commands (Ctrl+K)"
+              >
+                <Search className="w-4 h-4" />
+                <span className="hidden lg:inline text-xs text-muted-foreground">Ctrl+K</span>
+              </Button>
+              {/* Mobile: icon-only button */}
+              <Button
+                size="iconTouch"
+                variant="ghost"
+                onClick={() => setSearchOpen(true)}
+                className="sm:hidden"
+                title="Search & Commands"
+                aria-label="Search"
+              >
+                <Search className="w-5 h-5" />
+              </Button>
+            </>
           )}
 
           {/* Notification center — bell icon with alerts */}

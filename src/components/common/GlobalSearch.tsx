@@ -181,7 +181,7 @@ export function GlobalSearch() {
 
   return (
     <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
-      <DialogContent className="max-w-2xl p-0 gap-0 overflow-hidden">
+      <DialogContent className="max-w-2xl w-[95vw] sm:w-full p-0 gap-0 overflow-hidden">
         <DialogTitle className="sr-only">Global Search</DialogTitle>
         <DialogDescription className="sr-only">Search products, parties, and transactions</DialogDescription>
         {/* Search input */}

@@ -14,9 +14,11 @@ import { ViewModeToggle } from '@/components/common/ViewModeToggle'
 import { DateRangePicker, getPresetRange, getPresetLabel, type DateRange, type DatePreset } from '@/components/common/DateRangePicker'
 import { EmptyState } from '@/components/common/EmptyState'
 import { SwipeToDelete } from '@/components/common/SwipeToDelete'
+import { ContextMenu, type ContextMenuItem } from '@/components/common/ContextMenu'
 import {
   Search, ShoppingCart, Truck, Receipt, IndianRupee,
   TrendingUp, Calendar, User, ScanLine, ChevronRight, Plus, X,
+  Edit2, Trash2, Eye, Printer,
 } from 'lucide-react'
 import { offlineFetch, isQueuedResponse, isOnline, OfflineError } from '@/lib/offline-fetch'
 import { OfflineNoData } from '@/components/common/OfflineNoData'
@@ -378,12 +380,30 @@ export function Ledger({ type }: { type: LedgerType }) {
         <div className="space-y-2">
           {sorted.map((t) => {
             const due = t.totalAmount - t.paidAmount
+            const contextMenuItems: ContextMenuItem[] = [
+              { label: 'View Details', icon: Eye, onClick: () => handleViewTransaction(t.id) },
+              { label: 'Edit', icon: Edit2, onClick: () => {
+                setSelectedTransactionId(t.id)
+                setPreviousView(isSale ? 'sales' : 'purchases')
+                setView('transaction-detail')
+              }},
+              { separator: true, label: '', onClick: () => {} },
+              { label: 'Print Invoice', icon: Printer, onClick: () => {
+                setSelectedTransactionId(t.id)
+                setPreviousView(isSale ? 'sales' : 'purchases')
+                setView('transaction-detail')
+                setTimeout(() => window.print(), 500)
+              }},
+              { separator: true, label: '', onClick: () => {} },
+              { label: 'Delete', icon: Trash2, onClick: () => handleDeleteTransaction(t.id), danger: true },
+            ]
             return (
               <SwipeToDelete
                 key={t.id}
                 onDelete={() => handleDeleteTransaction(t.id)}
                 confirmMessage={`Delete this ${isSale ? 'sale' : 'purchase'}? This cannot be undone.`}
               >
+              <ContextMenu items={contextMenuItems}>
               <Card
                 className="shadow-card border-border/60 hover:shadow-md hover:border-primary/30 transition group cursor-pointer"
                 onClick={() => handleViewTransaction(t.id)}
@@ -451,6 +471,7 @@ export function Ledger({ type }: { type: LedgerType }) {
                   </div>
                 </CardContent>
               </Card>
+              </ContextMenu>
               </SwipeToDelete>
             )
           })}
