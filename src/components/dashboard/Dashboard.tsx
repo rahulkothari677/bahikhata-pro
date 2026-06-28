@@ -13,7 +13,7 @@ import { DateRangePicker, getPresetRange, getPresetLabel, type DateRange, type D
 import {
   TrendingUp, TrendingDown, Wallet, Package,
   ArrowUpRight, ArrowDownRight, AlertTriangle, IndianRupee,
-  Receipt, Boxes, PiggyBank, ScanLine, ArrowRight, Plus, CloudOff,
+  Receipt, Boxes, PiggyBank, ScanLine, ArrowRight, Plus, CloudOff, Repeat,
 } from 'lucide-react'
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell,
@@ -133,6 +133,31 @@ export function Dashboard() {
 
   const rangeLabel = datePreset === 'custom' ? 'Selected Period' : getPresetLabel(datePreset)
 
+  // Find the last sale transaction (for "Repeat Last Sale" feature)
+  const lastSale = recentTransactions.find((t: any) => t.type === 'sale')
+
+  // Repeat last sale — pre-fills the New Sale form with the last sale's items
+  const handleRepeatLastSale = () => {
+    if (!lastSale) return
+    // Pass the last sale's items to the New Sale form via the global preset
+    ;(window as any).__ledgerPreset = {
+      type: 'sale',
+      data: {
+        partyId: lastSale.partyId,
+        items: (lastSale.items || []).map((item: any) => ({
+          productId: item.productId || '',
+          name: item.productName,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          gstRate: item.gstRate,
+          unit: item.unit || 'pcs',
+        })),
+      },
+    }
+    setPreviousView('dashboard')
+    setView('new-sale')
+  }
+
   // Empty state for new users (0 transactions)
   const isNewUser = kpis.totalStockValue === 0 && kpis.productCount === 0 && kpis.rangeTxnCount === 0 && recentTransactions.length === 0
 
@@ -235,6 +260,18 @@ export function Dashboard() {
               <Plus className="w-4 h-4" />
               New Sale
             </Button>
+            {/* Repeat Last Sale — loads the last sale's items into a new sale form */}
+            {lastSale && (
+              <Button
+                onClick={handleRepeatLastSale}
+                variant="outline"
+                className="bg-white/10 text-white border-white/30 hover:bg-white/20 hover:text-white gap-2"
+                title={`Repeat last sale: ${lastSale.party?.name || 'Walk-in'} · ${formatINRCompact(lastSale.totalAmount)}`}
+              >
+                <Repeat className="w-4 h-4" />
+                <span className="hidden sm:inline">Repeat Last Sale</span>
+              </Button>
+            )}
             <Button
               onClick={() => setView('scanner')}
               variant="outline"
