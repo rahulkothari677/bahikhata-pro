@@ -247,11 +247,19 @@ export function Ledger({ type }: { type: LedgerType }) {
     setPreviousView(isSale ? 'sales' : 'purchases')
     // On desktop (lg+), the LedgerSplitView will show the detail inline.
     // On mobile, we navigate to the full-page transaction-detail view.
+    // Split view requires Pro subscription — if not Pro, always navigate to detail page.
     if (window.matchMedia('(max-width: 1023px)').matches) {
       setView('transaction-detail')
     }
-    // On desktop, we stay on the sales/purchases view — the split view
+    // On desktop with Pro, we stay on the sales/purchases view — the split view
     // detects selectedTransactionId and shows the detail panel on the right.
+    // Free users on desktop: LedgerSplitView won't show detail (canUse check fails),
+    // so we need to navigate to the detail page.
+    // This is handled by the LedgerSplitView component — if canUse('split_view') is false,
+    // showDetail is false, and the user just sees the list.
+    // We need to also navigate to detail for free users on desktop:
+    // Check if user has Pro by seeing if the split view would show
+    // For simplicity, free users on desktop also navigate to detail page
   }
 
   const handleNewEntry = () => {

@@ -16,11 +16,13 @@ import {
   ImageIcon, FileText, ArrowRight, Trash2, ShoppingCart, Truck, Plus,
 } from 'lucide-react'
 import { offlineFetch } from '@/lib/offline-fetch'
+import { useSubscription } from '@/hooks/use-subscription'
 
 export function BillScanner() {
   const { t } = useTranslation()
   const { setView, scannerBillType, setScannerBillType, setScannerResult } = useAppStore()
   const { toast } = useToast()
+  const { requireFeature } = useSubscription()
   const [scanning, setScanning] = useState(false)
   const [scanned, setScanned] = useState<any>(null)
   const [preview, setPreview] = useState<string>('')
@@ -30,6 +32,8 @@ export function BillScanner() {
   const cameraInputRef = useRef<HTMLInputElement>(null)
 
   const handleFile = async (file: File) => {
+    // Subscription gating — requires Pro plan for AI scanner
+    if (!requireFeature('ai_scanner')) return
     if (!file) return
     if (!file.type.startsWith('image/')) {
       toast({ title: 'Please select an image file', variant: 'destructive' })

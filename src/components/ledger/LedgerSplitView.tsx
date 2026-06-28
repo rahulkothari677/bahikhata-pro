@@ -22,9 +22,11 @@ import { Ledger } from '@/components/ledger/Ledger'
 import { TransactionDetail } from '@/components/ledger/TransactionDetail'
 import { X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useSubscription } from '@/hooks/use-subscription'
 
 export function LedgerSplitView({ type }: { type: 'sale' | 'purchase' }) {
   const { selectedTransactionId, setSelectedTransactionId, setPreviousView, currentView, selectedTransactionType } = useAppStore()
+  const { canUse } = useSubscription()
   const detailRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [leftWidth, setLeftWidth] = useState<number>(50) // percentage
@@ -34,11 +36,12 @@ export function LedgerSplitView({ type }: { type: 'sale' | 'purchase' }) {
   // 1. A transaction is selected
   // 2. We're on the sales or purchases view
   // 3. The selected transaction type matches the current ledger type
-  //    (prevents a sale bill from showing in the purchase ledger and vice versa)
+  // 4. User has Pro plan (split view is a Pro feature)
   const expectedType = type === 'sale' ? 'sale' : 'purchase'
   const showDetail = !!selectedTransactionId
     && (currentView === 'sales' || currentView === 'purchases')
     && (selectedTransactionType === expectedType)
+    && canUse('split_view')
 
   // Auto-scroll the detail panel to top when a new transaction is selected
   useEffect(() => {
