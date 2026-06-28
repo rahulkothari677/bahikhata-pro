@@ -212,34 +212,42 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
       p.hsn?.toLowerCase().includes(q)
   }), [productsInCategory, productSearch])
 
-  // Check for preset data (from scanner or party profile)
+  // Check for preset data (from scanner, party profile, or repeat last sale)
+  // Uses a small delay to ensure the component is fully mounted (it's lazy-loaded)
   useEffect(() => {
     const checkPreset = () => {
       const stored = (window as any).__ledgerPreset
-      if (stored && stored.type === type) {
-        if (stored.data.partyId) setPartyId(stored.data.partyId)
-        if (stored.data.invoiceNo) setInvoiceNo(stored.data.invoiceNo)
-        if (stored.data.date) {
-          try {
-            const d = new Date(stored.data.date)
-            if (!isNaN(d.getTime())) setDate(d.toISOString().slice(0, 10))
-          } catch {}
-        }
-        if (stored.data.items?.length > 0) {
-          setItems(stored.data.items.map((item: any) => ({
-            productId: item.productId || '',
-            productName: item.name || item.productName,
-            quantity: Number(item.quantity) || 1,
-            unitPrice: Number(item.unitPrice) || 0,
-            gstRate: Number(item.gstRate) || 0,
-            unit: item.unit || 'pcs',
-          })))
-        }
-        if (stored.data.totalAmount) setPaidAmount(String(stored.data.totalAmount))
-        ;(window as any).__ledgerPreset = null
+      if (!stored || stored.type !== type) return
+
+      console.log('[TransactionEntry] Loading preset:', stored.data?.items?.length || 0, 'items')
+
+      if (stored.data.partyId) setPartyId(stored.data.partyId)
+      if (stored.data.invoiceNo) setInvoiceNo(stored.data.invoiceNo)
+      if (stored.data.date) {
+        try {
+          const d = new Date(stored.data.date)
+          if (!isNaN(d.getTime())) setDate(d.toISOString().slice(0, 10))
+        } catch {}
       }
+      if (stored.data.items?.length > 0) {
+        const newItems = stored.data.items.map((item: any) => ({
+          productId: item.productId || '',
+          productName: item.name || item.productName || '',
+          quantity: Number(item.quantity) || 1,
+          unitPrice: Number(item.unitPrice) || 0,
+          gstRate: Number(item.gstRate) || 0,
+          unit: item.unit || 'pcs',
+        }))
+        console.log('[TransactionEntry] Setting items:', newItems)
+        setItems(newItems)
+      }
+      if (stored.data.totalAmount) setPaidAmount(String(stored.data.totalAmount))
+      ;(window as any).__ledgerPreset = null
     }
-    checkPreset()
+
+    // Small delay to ensure component is fully mounted after lazy-load
+    const timer = setTimeout(checkPreset, 100)
+    return () => clearTimeout(timer)
   }, [type])
 
   const partyDropdownRef = useRef<HTMLDivElement>(null)

@@ -277,16 +277,27 @@ export async function GET(req: NextRequest) {
     // === Recent transactions (not range-dependent, always latest) ===
     // Use the dedicated recentTransactions fetch (only 8 rows, always latest)
     // instead of slicing from allTransactions which may be limited to 13 months.
+    // Include full items array + partyId for "Repeat Last Sale" feature.
     const recentTransactionsData = recentTransactions.map(t => ({
       id: t.id,
       type: t.type,
       invoiceNo: t.invoiceNo,
       date: t.date,
+      partyId: t.partyId,
       partyName: t.party?.name || 'Walk-in Customer',
       totalAmount: t.totalAmount,
+      paidAmount: t.paidAmount,
       profit: t.grossProfit,
       paymentMode: t.paymentMode,
       itemsCount: t.items.length,
+      items: t.items.map(item => ({
+        productId: item.productId,
+        productName: item.productName,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        gstRate: item.gstRate,
+        unit: item.unit || 'pcs',
+      })),
     }))
 
     return withCache({
