@@ -12,7 +12,7 @@ import { formatINR, formatDate, formatDateTime, cn, getInitials } from '@/lib/ut
 import {
   Phone, Building2, MapPin, User, Plus, ShoppingCart, Truck,
   ArrowDownRight, ArrowUpRight, IndianRupee, Calendar, TrendingUp,
-  Receipt, Edit2, Trash2, MessageCircle, Loader2,
+  Receipt, Edit2, Trash2, MessageCircle, Loader2, FileDown, Printer,
 } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -34,6 +34,16 @@ export function PartyProfile() {
     },
     enabled: !!selectedPartyId,
   })
+
+  // Fetch shop settings for statement header
+  const { data: settingData } = useQuery({
+    queryKey: ['setting'],
+    queryFn: async () => {
+      const r = await offlineFetch('/api/settings')
+      return r.json()
+    },
+  })
+  const setting = settingData?.setting || {}
 
   if (isLoading || !data) {
     return (
@@ -99,6 +109,136 @@ export function PartyProfile() {
     } finally {
       setSendingReminder(false)
     }
+  }
+
+  // Generate a printable statement HTML for this party
+  const handleDownloadStatement = () => {
+    if (!party || !transactions) return
+
+    const shopName = setting?.shopName || 'My Shop'
+    const shopAddress = setting?.address || ''
+    const shopPhone = setting?.phone || ''
+    const shopGstin = setting?.gstin || ''
+
+    const rows = transactions.map((t: any, i: number) => {
+      const isInflow = t.type === 'sale' || t.type === 'income'
+      const amount = isInflow ? t.totalAmount : -t.totalAmount
+      const paid = t.paidAmount || 0
+      const due = t.totalAmount - paid
+      return `
+        <tr>
+          <td style="text-align:center">${i + 1}</td>
+          <td>${formatDate(t.date)}</td>
+          <td>${t.invoiceNo || '—'}</td>
+          <td style="text-transform:capitalize">${t.type}</td>
+          <td style="text-align:right">${t.totalAmount.toFixed(2)}</td>
+          <td style="text-align:right">${paid.toFixed(2)}</td>
+          <td style="text-align:right; color:${due > 0 ? '#dc2626' : '#059669'}">${due.toFixed(2)}</td>
+        </tr>
+      `
+    }).join('')
+
+    const totalAmount = transactions.reduce((s: number, t: any) => s + t.totalAmount, 0)
+    const totalPaid = transactions.reduce((s: number, t: any) => s + (t.paidAmount || 0), 0)
+    const totalDue = totalAmount - totalPaid
+
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Statement - ${party.name}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 40px; color: #1a1a1a; }
+    .header { display: flex; justify-content: space-between; align-items: start; border-bottom: 3px solid #d97706; padding-bottom: 20px; margin-bottom: 30px; }
+    .shop-info h1 { margin: 0; font-size: 22px; color: #1a1a1a; }
+    .shop-info p { margin: 3px 0; font-size: 12px; color: #555; }
+    .statement-title { text-align: right; }
+    .statement-title h2 { margin: 0; font-size: 18px; text-transform: uppercase; letter-spacing: 1px; }
+    .statement-title p { margin: 3px 0; font-size: 12px; color: #555; }
+    .party-box { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 15px; margin-bottom: 25px; display: flex; justify-content: space-between; }
+    .party-box .label { font-size: 10px; text-transform: uppercase; color: #888; font-weight: 600; }
+    .party-box .value { font-size: 14px; font-weight: 600; margin-top: 2px; }
+    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+    th { background: #fef3e6; padding: 10px; font-size: 12px; font-weight: 600; color: #444; text-align: left; border-bottom: 2px solid #d97706; }
+    td { padding: 8px 10px; font-size: 13px; border-bottom: 1px solid #e5e7eb; }
+    .totals { margin-left: auto; width: 300px; }
+    .totals .row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; }
+    .totals .grand { font-size: 16px; font-weight: bold; border-top: 2px solid #1a1a1a; padding-top: 10px; margin-top: 5px; }
+    .footer { margin-top: 40px; padding-top: 15px; border-top: 1px solid #e5e7eb; text-align: center; font-size: 11px; color: #888; }
+    @media print { body { padding: 20px; } }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="shop-info">
+      <h1>${shopName}</h1>
+      ${shopAddress ? `<p>${shopAddress}</p>` : ''}
+      <p>${shopPhone ? 'Phone: ' + shopPhone : ''} ${shopGstin ? ' | GSTIN: ' + shopGstin : ''}</p>
+    </div>
+    <div class="statement-title">
+      <h2>Account Statement</h2>
+      <p>Generated on ${formatDate(new Date())}</p>
+    </div>
+  </div>
+
+  <div class="party-box">
+    <div>
+      <p class="label">Party Name</p>
+      <p class="value">${party.name}</p>
+      ${party.phone ? `<p style="font-size:12px;color:#555;margin-top:4px;">${party.phone}</p>` : ''}
+      ${party.gstin ? `<p style="font-size:12px;color:#555;font-family:monospace;">GSTIN: ${party.gstin}</p>` : ''}
+    </div>
+    <div style="text-align:right">
+      <p class="label">Party Type</p>
+      <p class="value" style="text-transform:capitalize">${party.type}</p>
+      <p style="font-size:12px;color:#555;margin-top:4px;">${transactions.length} transactions</p>
+    </div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:40px">#</th>
+        <th>Date</th>
+        <th>Invoice</th>
+        <th>Type</th>
+        <th style="text-align:right">Amount</th>
+        <th style="text-align:right">Paid</th>
+        <th style="text-align:right">Due</th>
+      </tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table>
+
+  <div class="totals">
+    <div class="row"><span>Total Amount:</span><span>₹${totalAmount.toFixed(2)}</span></div>
+    <div class="row"><span>Total Paid:</span><span style="color:#059669">₹${totalPaid.toFixed(2)}</span></div>
+    <div class="row grand"><span>Balance Due:</span><span style="color:${totalDue > 0 ? '#dc2626' : '#059669'}">₹${totalDue.toFixed(2)}</span></div>
+  </div>
+
+  <div class="footer">
+    <p>This is a computer-generated statement from BahiKhata Pro.</p>
+    <p>For any discrepancies, please contact ${shopPhone || 'the shop'} within 7 days.</p>
+  </div>
+</body>
+</html>`
+
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `Statement_${party.name.replace(/\s+/g, '_')}_${formatDate(new Date()).replace(/\//g, '-')}.html`
+    a.click()
+    URL.revokeObjectURL(url)
+    sonnerToast.success('Statement downloaded')
+  }
+
+  // Print statement directly
+  const handlePrintStatement = () => {
+    if (!party || !transactions) return
+    handleDownloadStatement()
+    setTimeout(() => window.print(), 500)
   }
 
   const isCustomer = party.type === 'customer' || party.type === 'both'
@@ -172,6 +312,17 @@ export function PartyProfile() {
               Send Reminder
             </Button>
           )}
+          {/* Download Statement — generates a printable HTML statement */}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleDownloadStatement}
+            className="gap-2"
+            title="Download account statement as HTML"
+          >
+            <FileDown className="w-4 h-4" />
+            Statement
+          </Button>
           <Button size="sm" variant="outline" onClick={() => setView('parties')} className="gap-2">
             <User className="w-4 h-4" /> All Parties
           </Button>
