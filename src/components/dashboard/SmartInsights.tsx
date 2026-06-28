@@ -21,10 +21,12 @@ import {
   ShoppingCart, Calendar, User, ArrowRight, Percent, Clock,
 } from 'lucide-react'
 import { useAppStore } from '@/store/app-store'
+import { useQuery } from '@tanstack/react-query'
+import { offlineFetch } from '@/lib/offline-fetch'
 import { useState } from 'react'
 
 export function SmartInsights() {
-  const { setView, setPreviousView } = useAppStore()
+  const { setView, setPreviousView, refreshKey } = useAppStore()
   const { data } = useDashboardData()
   const [expanded, setExpanded] = useState(true)
 
@@ -150,7 +152,6 @@ function computeInsights(data: any): Insight[] {
         action: {
           label: 'Create Purchase',
           onClick: () => {
-            const { useAppStore } = require('@/store/app-store')
             useAppStore.getState().setPreviousView('dashboard')
             useAppStore.getState().setView('new-purchase')
           },
@@ -245,7 +246,6 @@ function computeInsights(data: any): Insight[] {
         action: {
           label: 'Send Reminders',
           onClick: () => {
-            const { useAppStore } = require('@/store/app-store')
             useAppStore.getState().setPreviousView('dashboard')
             useAppStore.getState().setView('parties')
           },
@@ -271,8 +271,6 @@ function computeInsights(data: any): Insight[] {
 
 function useDashboardData() {
   const { refreshKey } = useAppStore()
-  const { useQuery } = require('@tanstack/react-query')
-  const { offlineFetch } = require('@/lib/offline-fetch')
 
   return useQuery({
     queryKey: ['dashboard', refreshKey],
