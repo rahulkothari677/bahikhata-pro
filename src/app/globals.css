@@ -133,6 +133,11 @@
   html {
     /* Disables browser's native pull-to-refresh on mobile Chrome. */
     overscroll-behavior-y: none;
+    /* Force light color-scheme on the root element.
+       This prevents Android's WebView from auto-darkening the status bar
+       based on the .dark class. Our Capacitor StatusBar plugin controls
+       the status bar color directly, so we don't want the OS overriding it. */
+    color-scheme: light;
   }
   body {
     @apply bg-background text-foreground;
