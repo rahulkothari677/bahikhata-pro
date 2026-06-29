@@ -483,7 +483,10 @@ export function PartyProfile() {
         </Card>
       )}
 
-      {/* Transaction history */}
+      {/* Transaction history — WhatsApp-style chat view
+          Sales (inflow) = right-aligned green bubbles (like sent messages)
+          Purchases (outflow) = left-aligned saffron bubbles (like received messages)
+          Date separators between days, running balance sticky at top */}
       <Card className="shadow-card border-border/60">
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
@@ -497,43 +500,90 @@ export function PartyProfile() {
           {transactions.length === 0 ? (
             <p className="text-center py-8 text-sm text-muted-foreground">No transactions yet with this party</p>
           ) : (
-            <div className="space-y-2 max-h-96 overflow-y-auto">
-              {transactions.map((txn: any) => {
+            <div className="max-h-[500px] overflow-y-auto rounded-xl bg-muted/20 p-3 space-y-1">
+              {/* Running balance banner at top */}
+              <div className="sticky top-0 z-10 -mx-3 px-3 py-2 mb-2 bg-primary/10 backdrop-blur-sm border-y border-primary/20 text-center">
+                <span className="text-xs text-muted-foreground">Current Balance: </span>
+                <span className={cn('text-xs font-bold', stats.balance > 0 ? 'text-emerald-600' : stats.balance < 0 ? 'text-rose-600' : 'text-muted-foreground')}>
+                  {stats.balance >= 0 ? '+' : ''}{formatINR(stats.balance)}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {' '}· {stats.balance > 0 ? 'They owe you' : stats.balance < 0 ? 'You owe them' : 'Settled'}
+                </span>
+              </div>
+
+              {transactions.map((txn: any, index: number) => {
                 const isSale = txn.type === 'sale'
                 const isPurchase = txn.type === 'purchase'
                 const isInflow = isSale
                 const due = txn.totalAmount - txn.paidAmount
+                const txnDate = new Date(txn.date)
+                const prevTxn = transactions[index - 1]
+                const showDateSeparator = !prevTxn || new Date(prevTxn.date).toDateString() !== txnDate.toDateString()
+
                 return (
-                  <button
-                    key={txn.id}
-                    onClick={() => handleViewTransaction(txn.id)}
-                    className="w-full flex items-center gap-3 p-3 rounded-lg hover:bg-muted/50 transition text-left border border-transparent hover:border-border"
-                  >
-                    <div className={cn(
-                      'w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0',
-                      isInflow ? 'bg-emerald-100' : 'bg-rose-100'
-                    )}>
-                      {isInflow
-                        ? <ArrowDownRight className="w-4 h-4 text-emerald-600" />
-                        : <ArrowUpRight className="w-4 h-4 text-rose-600" />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-medium text-sm capitalize">{txn.type}</p>
-                        {txn.invoiceNo && <Badge variant="outline" className="text-[10px] py-0">{txn.invoiceNo}</Badge>}
-                        <span className="text-[11px] text-muted-foreground">{txn.items?.length || 0} items</span>
+                  <div key={txn.id}>
+                    {/* Date separator — shows when the day changes */}
+                    {showDateSeparator && (
+                      <div className="flex justify-center my-3">
+                        <span className="text-[10px] font-medium text-muted-foreground bg-background px-3 py-1 rounded-full border border-border">
+                          {formatDate(txn.date)}
+                        </span>
                       </div>
-                      <p className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1">
-                        <Calendar className="w-3 h-3" /> {formatDateTime(txn.date)}
-                      </p>
-                    </div>
-                    <div className="text-right flex-shrink-0">
-                      <p className={cn('font-semibold text-sm', isInflow ? 'text-emerald-600' : 'text-rose-600')}>
-                        {isInflow ? '+' : '-'}{formatINR(txn.totalAmount)}
-                      </p>
-                      {due > 0 && <p className="text-[10px] text-rose-600">Due: {formatINR(due)}</p>}
-                    </div>
-                  </button>
+                    )}
+
+                    {/* Chat bubble — right-aligned for sales, left-aligned for purchases */}
+                    <button
+                      onClick={() => handleViewTransaction(txn.id)}
+                      className={cn(
+                        'flex w-full group',
+                        isInflow ? 'justify-end' : 'justify-start',
+                      )}
+                    >
+                      <div
+                        className={cn(
+                          'max-w-[80%] rounded-2xl px-3 py-2 shadow-sm transition group-hover:shadow-md group-active:scale-95',
+                          isInflow
+                            ? 'bg-emerald-500 text-white rounded-br-md'
+                            : 'bg-amber-500 text-white rounded-bl-md'
+                        )}
+                      >
+                        {/* Header row: type + invoice */}
+                        <div className="flex items-center gap-1.5 mb-0.5">
+                          <span className="text-[10px] font-semibold uppercase tracking-wide opacity-90">
+                            {txn.type}
+                          </span>
+                          {txn.invoiceNo && (
+                            <span className="text-[10px] opacity-75 bg-white/20 px-1.5 py-0.5 rounded">
+                              {txn.invoiceNo}
+                            </span>
+                          )}
+                          <span className="text-[10px] opacity-75">
+                            {txn.items?.length || 0} items
+                          </span>
+                        </div>
+
+                        {/* Amount — big and bold */}
+                        <p className="text-base font-bold tabular-nums">
+                          {isInflow ? '+' : '-'}{formatINR(txn.totalAmount)}
+                        </p>
+
+                        {/* Due amount + time */}
+                        <div className="flex items-center justify-between gap-2 mt-1">
+                          {due > 0 ? (
+                            <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded">
+                              Due: {formatINR(due)}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] opacity-75">✓ Paid</span>
+                          )}
+                          <span className="text-[10px] opacity-75">
+                            {txnDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                      </div>
+                    </button>
+                  </div>
                 )
               })}
             </div>
