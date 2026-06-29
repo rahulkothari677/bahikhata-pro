@@ -189,18 +189,7 @@ export function Header() {
           {/* Notification center — only on Dashboard */}
           {currentView === 'dashboard' && <NotificationCenter />}
 
-          {/* Dark mode toggle — only on Dashboard */}
-          {features?.darkMode !== undefined && currentView === 'dashboard' && (
-            <Button
-              size="iconTouch"
-              variant="ghost"
-              onClick={() => setFeature('darkMode', !features?.darkMode)}
-              className="lg:size-9 lg:h-9"
-              title={features?.darkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-            >
-              {features?.darkMode ? <Sun className="w-6 h-6 lg:w-4 lg:h-4" /> : <Moon className="w-6 h-6 lg:w-4 lg:h-4" />}
-            </Button>
-          )}
+          {/* Dark mode toggle — removed from header, now in Settings */}
 
           {/* Quick action: AI Scan - desktop only (mobile uses dashboard hero button) */}
           {currentView !== 'scanner' && isFlagEnabled('ai_scanner') && (
@@ -268,18 +257,7 @@ export function Header() {
             </Button>
           </div>
 
-          {/* Mobile logout button — only on Dashboard */}
-          {currentView === 'dashboard' && (
-            <Button
-              variant="ghost"
-              size="iconTouch"
-              className="lg:hidden"
-              onClick={async () => { await clearAllOfflineData(); signOut({ callbackUrl: '/' }) }}
-              title={t('action.sign_out')}
-            >
-              <LogOut className="w-6 h-6" />
-            </Button>
-          )}
+          {/* Logout button — removed from header, now in Settings/More */}
         </div>
       </div>
     </header>

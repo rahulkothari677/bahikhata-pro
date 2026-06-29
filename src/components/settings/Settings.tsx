@@ -587,6 +587,40 @@ export function Settings() {
             </div>
           </div>
 
+          {/* Day-End Summary Time setting */}
+          <div className="mt-3 flex items-center justify-between rounded-lg bg-muted/50 p-3">
+            <div className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-muted-foreground" />
+              <div>
+                <p className="text-sm font-medium">Day-End Summary Time</p>
+                <p className="text-[11px] text-muted-foreground">When to show daily summary card on dashboard</p>
+              </div>
+            </div>
+            <Select value={typeof window !== 'undefined' ? (localStorage.getItem('bahikhata:day-end-time') || '18') : '18'} onValueChange={(v) => { localStorage.setItem('bahikhata:day-end-time', v); sonnerToast.success(`Summary shows at ${v}:00`) }}>
+              <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {Array.from({ length: 12 }, (_, i) => i + 10).map(h => (
+                  <SelectItem key={h} value={String(h)}>{h}:00</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Dark Mode Toggle (moved from header) */}
+          <div className="mt-3 flex items-center justify-between rounded-lg bg-muted/50 p-3">
+            <div className="flex items-center gap-2">
+              <Moon className="w-4 h-4 text-muted-foreground" />
+              <div>
+                <p className="text-sm font-medium">Dark Mode</p>
+                <p className="text-[11px] text-muted-foreground">Switch between light and dark themes</p>
+              </div>
+            </div>
+            <Switch
+              checked={features.darkMode}
+              onCheckedChange={(checked) => { setFeature('darkMode', checked); sonnerToast.success(`Dark mode ${checked ? 'enabled' : 'disabled'}`) }}
+            />
+          </div>
+
           {/* Hide Profit Toggle */}
           <div className="mt-3 flex items-center justify-between rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 p-3">
             <div className="flex items-center gap-2">

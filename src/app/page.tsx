@@ -170,7 +170,7 @@ export default function Home() {
         <OfflineIndicator />
         <Header />
 
-        <main className="flex-1 p-4 lg:p-6 w-full min-w-0">
+        <main className="flex-1 p-4 lg:p-6 w-full min-w-0 pb-28 lg:pb-6">
           {/* PullToRefresh wraps all main content views. Disabled on form/detail
               views where pull-down might interfere with scrolling. */}
           <PullToRefresh
