@@ -15,8 +15,8 @@
  * - Haptic feedback at threshold
  */
 
-import { useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
-import { Loader2, RefreshCw, ArrowDown } from 'lucide-react'
+import { useState, useEffect, useRef, type ReactNode } from 'react'
+import { RefreshCw, ArrowDown } from 'lucide-react'
 import { haptic } from '@/lib/haptic'
 import { cn } from '@/lib/utils'
 
@@ -147,24 +147,77 @@ export function PullToRefreshIndicator({
   const progress = Math.min(1, pullDistance / threshold)
   const ready = pullDistance >= threshold || isRefreshing
 
+  // SVG circle parameters for the progress ring
+  const size = 32
+  const strokeWidth = 3
+  const radius = (size - strokeWidth) / 2
+  const circumference = 2 * Math.PI * radius
+  // Stroke dashoffset controls how much of the ring is filled.
+  // 0 = full circle, circumference = empty circle.
+  const dashOffset = isRefreshing ? 0 : circumference * (1 - progress)
+
   return (
     <div
       className="flex items-center justify-center transition-opacity lg:hidden"
       style={{
         height: isRefreshing ? threshold : pullDistance,
-        opacity: isRefreshing ? 1 : progress,
+        opacity: isRefreshing ? 1 : Math.max(0.3, progress),
       }}
     >
-      {isRefreshing ? (
-        <Loader2 className="w-5 h-5 animate-spin text-primary" />
-      ) : ready ? (
-        <RefreshCw className="w-5 h-5 text-primary" style={{ transform: `rotate(${progress * 360}deg)` }} />
-      ) : (
-        <ArrowDown
-          className="w-5 h-5 text-muted-foreground"
-          style={{ transform: `rotate(${progress * 180}deg)` }}
-        />
-      )}
+      <div
+        className="relative flex items-center justify-center rounded-full bg-primary/10 backdrop-blur-sm"
+        style={{
+          width: size + 8,
+          height: size + 8,
+          transform: isRefreshing ? 'scale(1)' : `scale(${0.8 + progress * 0.2})`,
+          transition: 'transform 0.1s ease-out',
+        }}
+      >
+        {/* SVG progress ring — fills as the user pulls down.
+            When refreshing, the whole ring spins. */}
+        <svg
+          width={size}
+          height={size}
+          className={isRefreshing ? 'animate-spin' : ''}
+          style={{ transform: 'rotate(-90deg)' }} /* start from top */
+        >
+          {/* Background track — faint circle */}
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={strokeWidth}
+            className="text-primary/20"
+          />
+          {/* Progress arc — saffron, fills with pull progress */}
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+            className="text-primary"
+            strokeDasharray={circumference}
+            strokeDashoffset={dashOffset}
+            style={{ transition: isRefreshing ? 'none' : 'stroke-dashoffset 0.1s ease-out' }}
+          />
+        </svg>
+        {/* Center icon — arrow down (pulling) or check (ready/refreshing) */}
+        {isRefreshing ? (
+          <RefreshCw className="absolute w-3.5 h-3.5 text-primary animate-spin" />
+        ) : ready ? (
+          <ArrowDown className="absolute w-3.5 h-3.5 text-primary rotate-180" />
+        ) : (
+          <ArrowDown
+            className="absolute w-3.5 h-3.5 text-primary"
+            style={{ transform: `rotate(${progress * 180}deg)` }}
+          />
+        )}
+      </div>
     </div>
   )
 }
