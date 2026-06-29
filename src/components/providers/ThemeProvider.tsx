@@ -17,6 +17,21 @@ export type ThemePalette = {
   background: string
   charts: [string, string, string, string, string]
   swatch: string
+  // Dark mode palette — warm-tinted dark, not pure black.
+  // Each theme uses its own hue so dark mode feels "cozy and themed"
+  // instead of "cold and black".
+  dark: {
+    primary: string         // more vibrant than light mode primary
+    background: string      // app body — deep but warm
+    card: string            // slightly lighter than bg for separation
+    popover: string         // matches card
+    secondary: string       // muted buttons
+    muted: string           // muted backgrounds
+    accent: string          // accent tinted with theme hue
+    sidebar: string         // sidebar slightly darker than body
+    sidebarAccent: string
+    border: string          // subtle white border
+  }
 }
 
 const THEMES: Record<ThemeColor, ThemePalette> = {
@@ -34,6 +49,18 @@ const THEMES: Record<ThemeColor, ThemePalette> = {
     background: 'oklch(0.99 0.005 60)',
     charts: ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)'],
     swatch: 'linear-gradient(135deg, oklch(0.62 0.18 42), oklch(0.65 0.2 25))',
+    dark: {
+      primary: 'oklch(0.75 0.20 42)',     // brighter saffron in dark
+      background: 'oklch(0.14 0.015 30)',  // warm dark brown-black
+      card: 'oklch(0.19 0.015 30)',       // slightly lighter for separation
+      popover: 'oklch(0.21 0.015 30)',
+      secondary: 'oklch(0.25 0.015 30)',
+      muted: 'oklch(0.25 0.015 30)',
+      accent: 'oklch(0.28 0.04 42)',
+      sidebar: 'oklch(0.16 0.015 30)',
+      sidebarAccent: 'oklch(0.22 0.015 30)',
+      border: 'oklch(1 0 0 / 10%)',
+    },
   },
   emerald: {
     primary: 'oklch(0.55 0.15 155)',
@@ -49,6 +76,18 @@ const THEMES: Record<ThemeColor, ThemePalette> = {
     background: 'oklch(0.99 0.005 160)',
     charts: ['oklch(0.55 0.15 155)', 'oklch(0.62 0.18 42)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)'],
     swatch: 'linear-gradient(135deg, oklch(0.55 0.15 155), oklch(0.50 0.13 170))',
+    dark: {
+      primary: 'oklch(0.68 0.17 155)',    // brighter emerald in dark
+      background: 'oklch(0.14 0.015 160)', // deep forest-green-black
+      card: 'oklch(0.19 0.015 160)',
+      popover: 'oklch(0.21 0.015 160)',
+      secondary: 'oklch(0.25 0.015 160)',
+      muted: 'oklch(0.25 0.015 160)',
+      accent: 'oklch(0.28 0.04 155)',
+      sidebar: 'oklch(0.16 0.015 160)',
+      sidebarAccent: 'oklch(0.22 0.015 160)',
+      border: 'oklch(1 0 0 / 10%)',
+    },
   },
   blue: {
     primary: 'oklch(0.55 0.18 250)',
@@ -64,6 +103,18 @@ const THEMES: Record<ThemeColor, ThemePalette> = {
     background: 'oklch(0.99 0.005 250)',
     charts: ['oklch(0.55 0.18 250)', 'oklch(0.55 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.62 0.18 42)', 'oklch(0.65 0.22 15)'],
     swatch: 'linear-gradient(135deg, oklch(0.55 0.18 250), oklch(0.50 0.16 260))',
+    dark: {
+      primary: 'oklch(0.68 0.20 250)',    // brighter blue in dark
+      background: 'oklch(0.14 0.015 250)', // deep navy-black
+      card: 'oklch(0.19 0.015 250)',
+      popover: 'oklch(0.21 0.015 250)',
+      secondary: 'oklch(0.25 0.015 250)',
+      muted: 'oklch(0.25 0.015 250)',
+      accent: 'oklch(0.28 0.04 250)',
+      sidebar: 'oklch(0.16 0.015 250)',
+      sidebarAccent: 'oklch(0.22 0.015 250)',
+      border: 'oklch(1 0 0 / 10%)',
+    },
   },
   violet: {
     primary: 'oklch(0.55 0.2 290)',
@@ -79,6 +130,18 @@ const THEMES: Record<ThemeColor, ThemePalette> = {
     background: 'oklch(0.99 0.005 290)',
     charts: ['oklch(0.55 0.2 290)', 'oklch(0.55 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.55 0.18 250)', 'oklch(0.65 0.22 15)'],
     swatch: 'linear-gradient(135deg, oklch(0.55 0.2 290), oklch(0.50 0.18 300))',
+    dark: {
+      primary: 'oklch(0.68 0.22 290)',    // brighter violet in dark
+      background: 'oklch(0.14 0.015 290)', // deep purple-black
+      card: 'oklch(0.19 0.015 290)',
+      popover: 'oklch(0.21 0.015 290)',
+      secondary: 'oklch(0.25 0.015 290)',
+      muted: 'oklch(0.25 0.015 290)',
+      accent: 'oklch(0.28 0.04 290)',
+      sidebar: 'oklch(0.16 0.015 290)',
+      sidebarAccent: 'oklch(0.22 0.015 290)',
+      border: 'oklch(1 0 0 / 10%)',
+    },
   },
   rose: {
     primary: 'oklch(0.62 0.22 15)',
@@ -94,6 +157,18 @@ const THEMES: Record<ThemeColor, ThemePalette> = {
     background: 'oklch(0.99 0.005 15)',
     charts: ['oklch(0.62 0.22 15)', 'oklch(0.55 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.55 0.18 250)', 'oklch(0.62 0.18 42)'],
     swatch: 'linear-gradient(135deg, oklch(0.62 0.22 15), oklch(0.58 0.2 350))',
+    dark: {
+      primary: 'oklch(0.75 0.24 15)',     // brighter rose in dark
+      background: 'oklch(0.14 0.015 15)',  // deep warm rose-black
+      card: 'oklch(0.19 0.015 15)',
+      popover: 'oklch(0.21 0.015 15)',
+      secondary: 'oklch(0.25 0.015 15)',
+      muted: 'oklch(0.25 0.015 15)',
+      accent: 'oklch(0.28 0.04 15)',
+      sidebar: 'oklch(0.16 0.015 15)',
+      sidebarAccent: 'oklch(0.22 0.015 15)',
+      border: 'oklch(1 0 0 / 10%)',
+    },
   },
   teal: {
     primary: 'oklch(0.6 0.12 200)',
@@ -109,6 +184,18 @@ const THEMES: Record<ThemeColor, ThemePalette> = {
     background: 'oklch(0.99 0.005 200)',
     charts: ['oklch(0.6 0.12 200)', 'oklch(0.55 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.55 0.18 250)', 'oklch(0.65 0.22 15)'],
     swatch: 'linear-gradient(135deg, oklch(0.6 0.12 200), oklch(0.55 0.1 210))',
+    dark: {
+      primary: 'oklch(0.72 0.14 200)',    // brighter teal in dark
+      background: 'oklch(0.14 0.015 200)', // deep cyan-black
+      card: 'oklch(0.19 0.015 200)',
+      popover: 'oklch(0.21 0.015 200)',
+      secondary: 'oklch(0.25 0.015 200)',
+      muted: 'oklch(0.25 0.015 200)',
+      accent: 'oklch(0.28 0.04 200)',
+      sidebar: 'oklch(0.16 0.015 200)',
+      sidebarAccent: 'oklch(0.22 0.015 200)',
+      border: 'oklch(1 0 0 / 10%)',
+    },
   },
 }
 
@@ -162,11 +249,16 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       root.classList.remove('dark')
     }
 
-    root.style.setProperty('--primary', palette.primary)
-    root.style.setProperty('--ring', palette.ring)
-
     if (!darkMode) {
+      // Light mode — use light palette
+      root.style.setProperty('--primary', palette.primary)
+      root.style.setProperty('--ring', palette.ring)
       root.style.setProperty('--background', palette.background)
+      root.style.setProperty('--card', 'oklch(0.99 0 0)')
+      root.style.setProperty('--popover', 'oklch(0.99 0 0)')
+      root.style.setProperty('--secondary', 'oklch(0.96 0.005 60)')
+      root.style.setProperty('--muted', 'oklch(0.96 0.005 60)')
+      root.style.setProperty('--accent', palette.sidebarAccent)
       root.style.setProperty('--sidebar', palette.sidebar)
       root.style.setProperty('--sidebar-foreground', palette.sidebarForeground)
       root.style.setProperty('--sidebar-primary', palette.sidebarPrimary)
@@ -175,14 +267,23 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       root.style.setProperty('--sidebar-accent-foreground', palette.sidebarAccentForeground)
       root.style.setProperty('--sidebar-border', palette.sidebarBorder)
     } else {
-      root.style.removeProperty('--background')
-      root.style.removeProperty('--sidebar')
-      root.style.removeProperty('--sidebar-foreground')
-      root.style.removeProperty('--sidebar-primary')
-      root.style.removeProperty('--sidebar-primary-foreground')
-      root.style.removeProperty('--sidebar-accent')
-      root.style.removeProperty('--sidebar-accent-foreground')
-      root.style.removeProperty('--sidebar-border')
+      // Dark mode — use per-theme dark palette (warm-tinted, not pure black)
+      const d = palette.dark
+      root.style.setProperty('--primary', d.primary)
+      root.style.setProperty('--ring', d.primary)
+      root.style.setProperty('--background', d.background)
+      root.style.setProperty('--card', d.card)
+      root.style.setProperty('--popover', d.popover)
+      root.style.setProperty('--secondary', d.secondary)
+      root.style.setProperty('--muted', d.muted)
+      root.style.setProperty('--accent', d.accent)
+      root.style.setProperty('--sidebar', d.sidebar)
+      root.style.setProperty('--sidebar-foreground', 'oklch(0.96 0 0)')
+      root.style.setProperty('--sidebar-primary', d.primary)
+      root.style.setProperty('--sidebar-primary-foreground', 'oklch(0.99 0 0)')
+      root.style.setProperty('--sidebar-accent', d.sidebarAccent)
+      root.style.setProperty('--sidebar-accent-foreground', 'oklch(0.96 0 0)')
+      root.style.setProperty('--sidebar-border', d.border)
     }
     root.style.setProperty('--chart-1', palette.charts[0])
     root.style.setProperty('--chart-2', palette.charts[1])
