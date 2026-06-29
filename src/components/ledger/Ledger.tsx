@@ -541,49 +541,58 @@ export function Ledger({ type }: { type: LedgerType }) {
                         onClick={(e) => e.stopPropagation()}
                       />
                     )}
-                    <div className={cn('w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0', accentBg)}>
-                      {isSale
-                        ? <ShoppingCart className={cn('w-5 h-5', accentColor)} />
-                        : <Truck className={cn('w-5 h-5', accentColor)} />}
+                    {/* Circular avatar — shows first letter of party name,
+                        or a shopping cart / truck icon for walk-in customers.
+                        Tinted with the accent color for visual distinction. */}
+                    <div className={cn('w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-sm', accentBg, accentColor)}>
+                      {t.party?.name
+                        ? t.party.name.charAt(0).toUpperCase()
+                        : isSale
+                          ? <ShoppingCart className="w-5 h-5" />
+                          : <Truck className="w-5 h-5" />}
                     </div>
 
                     <div className="flex-1 min-w-0">
+                      {/* Top row: party name + amount (the two most important things) */}
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <p className="font-semibold text-sm">
-                              {t.party?.name || 'Walk-in Customer'}
-                            </p>
-                            {t.invoiceNo && (
-                              <Badge variant="outline" className="text-[10px] py-0">{t.invoiceNo}</Badge>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-3 mt-1 text-[11px] text-muted-foreground flex-wrap">
+                          <p className="font-semibold text-sm truncate">
+                            {t.party?.name || 'Walk-in Customer'}
+                          </p>
+                          {/* Secondary info — smaller, muted */}
+                          <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted-foreground flex-wrap">
                             <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{formatDateTime(t.date)}</span>
                             <span className="flex items-center gap-1"><User className="w-3 h-3" />{t.items?.length || 0} items</span>
-                            <Badge variant="secondary" className="text-[10px] py-0 uppercase">{t.paymentMode}</Badge>
-                            {/* Payment status badge */}
-                            {due > 0 ? (
-                              <Badge variant="destructive" className="text-[9px] py-0">
-                                {due === t.totalAmount ? 'Unpaid' : 'Partial'}
-                              </Badge>
-                            ) : (
-                              <Badge className="text-[9px] py-0 bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
-                                Paid
-                              </Badge>
-                            )}
                           </div>
                         </div>
+                        {/* Amount — larger, bolder, tabular nums for alignment */}
                         <div className="text-right flex-shrink-0">
-                          <p className={cn('font-bold text-sm', accentColor)}>{formatINR(t.totalAmount)}</p>
+                          <p className={cn('font-bold text-base tabular-nums', accentColor)}>{formatINR(t.totalAmount)}</p>
                           {due > 0 && (
-                            <p className="text-[11px] text-rose-600 mt-0.5">Due: {formatINR(due)}</p>
+                            <p className="text-[11px] text-rose-600 mt-0.5 tabular-nums">Due: {formatINR(due)}</p>
                           )}
                           {isSale && !hideProfit && (
-                            <p className="text-[11px] text-emerald-600 mt-0.5">Profit: {formatINR(t.grossProfit)}</p>
+                            <p className="text-[11px] text-emerald-600 mt-0.5 tabular-nums">+{formatINR(t.grossProfit)}</p>
                           )}
                         </div>
-                        <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary mt-1 flex-shrink-0" />
+                      </div>
+
+                      {/* Bottom row: invoice no, payment mode, status badges + item chips */}
+                      <div className="flex items-center gap-2 mt-2 flex-wrap">
+                        {t.invoiceNo && (
+                          <Badge variant="outline" className="text-[10px] py-0">{t.invoiceNo}</Badge>
+                        )}
+                        <Badge variant="secondary" className="text-[10px] py-0 uppercase">{t.paymentMode}</Badge>
+                        {/* Payment status badge */}
+                        {due > 0 ? (
+                          <Badge variant="destructive" className="text-[9px] py-0">
+                            {due === t.totalAmount ? 'Unpaid' : 'Partial'}
+                          </Badge>
+                        ) : (
+                          <Badge className="text-[9px] py-0 bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
+                            Paid
+                          </Badge>
+                        )}
                       </div>
 
                       {t.items?.length > 0 && (
@@ -599,6 +608,8 @@ export function Ledger({ type }: { type: LedgerType }) {
                         </div>
                       )}
                     </div>
+
+                    <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary mt-1 flex-shrink-0" />
                   </div>
                 </CardContent>
               </Card>
