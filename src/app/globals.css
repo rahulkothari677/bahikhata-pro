@@ -255,12 +255,28 @@
   100% { background-position: 1000px 0; }
 }
 .shimmer {
-  background: linear-gradient(90deg, oklch(0.96 0 0) 0%, oklch(0.92 0 0) 50%, oklch(0.96 0 0) 100%);
+  /* Premium skeleton loading — gradient wave that sweeps across the block.
+     Uses the theme's muted color (set by ThemeProvider) so it adapts to
+     each theme. Falls back to a neutral gray if --muted isn't set. */
+  background: linear-gradient(
+    90deg,
+    var(--muted, oklch(0.96 0 0)) 0%,
+    color-mix(in oklch, var(--muted, oklch(0.96 0 0)), white 4%) 50%,
+    var(--muted, oklch(0.96 0 0)) 100%
+  );
   background-size: 1000px 100%;
-  animation: shimmer 2s infinite;
+  animation: shimmer 1.8s infinite linear;
 }
 .dark .shimmer {
-  background: linear-gradient(90deg, oklch(0.26 0 0) 0%, oklch(0.32 0 0) 50%, oklch(0.26 0 0) 100%);
+  /* Dark mode — use a lighter wave over the dark muted background
+     for visible contrast. color-mix lightens the muted color by 6% in
+     the middle of the wave. */
+  background: linear-gradient(
+    90deg,
+    var(--muted, oklch(0.26 0 0)) 0%,
+    color-mix(in oklch, var(--muted, oklch(0.26 0 0)), white 6%) 50%,
+    var(--muted, oklch(0.26 0 0)) 100%
+  );
   background-size: 1000px 100%;
 }
 
