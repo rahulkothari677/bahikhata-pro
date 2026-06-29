@@ -177,6 +177,15 @@
   width: 6px;
   height: 6px;
 }
+
+/* Hide scrollbar but keep scrollable — for horizontal pill tab strips */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
 ::-webkit-scrollbar-track {
   background: transparent;
 }

@@ -180,9 +180,22 @@ export function Reports() {
         </CardContent>
       </Card>
 
-      {/* Report type tabs */}
+      {/* Report type tabs — horizontally scrollable on mobile, grid on desktop */}
       <Tabs value={reportType} onValueChange={(v) => setReportType(v as any)}>
-        <TabsList className="grid grid-cols-2 lg:grid-cols-6 w-full h-auto no-print">
+        {/* Mobile: horizontal scroll pills (single row, swipe to see more) */}
+        <div className="lg:hidden no-print">
+          <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-hide">
+            <ReportTabButton value="pl" active={reportType === 'pl'} icon={TrendingUp} label={t('reports.pl')} onClick={() => setReportType('pl')} />
+            <ReportTabButton value="gst" active={reportType === 'gst'} icon={Receipt} label="GST" onClick={() => setReportType('gst')} />
+            <ReportTabButton value="stock" active={reportType === 'stock'} icon={Package} label="Stock" onClick={() => setReportType('stock')} />
+            <ReportTabButton value="party" active={reportType === 'party'} icon={Users} label="Party" onClick={() => setReportType('party')} />
+            <ReportTabButton value="debt-aging" active={reportType === 'debt-aging'} icon={Clock} label="Debt Aging" onClick={() => setReportType('debt-aging')} />
+            <ReportTabButton value="inventory-aging" active={reportType === 'inventory-aging'} icon={AlertTriangle} label="Inv Aging" onClick={() => setReportType('inventory-aging')} />
+          </div>
+        </div>
+
+        {/* Desktop: full grid (all 6 tabs visible) */}
+        <TabsList className="hidden lg:grid lg:grid-cols-6 w-full h-auto no-print">
           <TabsTrigger value="pl" className="gap-1.5 py-2">
             <TrendingUp className="w-3.5 h-3.5" /> {t('reports.pl')}
           </TabsTrigger>
@@ -223,6 +236,34 @@ export function Reports() {
         </TabsContent>
       </Tabs>
     </div>
+  )
+}
+
+/**
+ * ReportTabButton — pill-style tab button for mobile horizontal scroll.
+ * Active state: primary background + white text.
+ * Inactive: muted background + dark text.
+ */
+function ReportTabButton({ active, icon: Icon, label, onClick }: {
+  value: string
+  active: boolean
+  icon: any
+  label: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={cn(
+        'flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all flex-shrink-0',
+        active
+          ? 'bg-primary text-primary-foreground shadow-md'
+          : 'bg-muted text-muted-foreground hover:bg-muted/80'
+      )}
+    >
+      <Icon className="w-3.5 h-3.5" />
+      {label}
+    </button>
   )
 }
 
