@@ -33,6 +33,26 @@ async function takePhotoNative(): Promise<File | null> {
   if (Capacitor.isNativePlatform()) {
     try {
       const { Camera, CameraResultType, CameraSource } = await import('@capacitor/camera')
+
+      // Explicitly request camera permission before calling getPhoto.
+      // On Android, the plugin should do this automatically, but some
+      // devices/versions need an explicit request.
+      try {
+        const permStatus = await Camera.checkPermissions()
+        console.log('[Camera] Permission status:', permStatus)
+        if (permStatus.camera !== 'granted') {
+          const reqResult = await Camera.requestPermissions({ permissions: ['camera'] })
+          console.log('[Camera] Request result:', reqResult)
+          if (reqResult.camera !== 'granted') {
+            console.warn('[Camera] Camera permission not granted')
+            return null
+          }
+        }
+      } catch (permErr) {
+        console.warn('[Camera] Permission check/request failed (continuing anyway):', permErr)
+        // Continue — some plugin versions don't support checkPermissions
+      }
+
       const photo = await Camera.getPhoto({
         quality: 85,
         allowEditing: false,
@@ -54,10 +74,12 @@ async function takePhotoNative(): Promise<File | null> {
       // User cancelled or permission denied — these are expected, don't log as errors
       const msg = String(err?.message || err || '').toLowerCase()
       if (msg.includes('cancelled') || msg.includes('user denied') || msg.includes('canceled')) {
+        console.log('[Camera] User cancelled camera')
         return null
       }
       console.error('[Camera] Native capture failed:', err)
-      return null
+      // Return the error message so the caller can show it to the user
+      throw new Error(err?.message || String(err))
     }
   }
   // On web — can't open camera directly from JS, return null (caller falls back to input)
@@ -72,6 +94,19 @@ async function pickPhotoNative(): Promise<File | null> {
   if (Capacitor.isNativePlatform()) {
     try {
       const { Camera, CameraResultType, CameraSource } = await import('@capacitor/camera')
+
+      // Check/request photo library permission
+      try {
+        const permStatus = await Camera.checkPermissions()
+        console.log('[Camera] Photos permission status:', permStatus)
+        if (permStatus.photos !== 'granted' && permStatus.photos !== 'limited') {
+          const reqResult = await Camera.requestPermissions({ permissions: ['photos'] })
+          console.log('[Camera] Photos request result:', reqResult)
+        }
+      } catch (permErr) {
+        console.warn('[Camera] Photos permission check failed (continuing):', permErr)
+      }
+
       const photo = await Camera.getPhoto({
         quality: 85,
         allowEditing: false,
@@ -90,10 +125,11 @@ async function pickPhotoNative(): Promise<File | null> {
     } catch (err: any) {
       const msg = String(err?.message || err || '').toLowerCase()
       if (msg.includes('cancelled') || msg.includes('user denied') || msg.includes('canceled')) {
+        console.log('[Camera] User cancelled photo pick')
         return null
       }
       console.error('[Camera] Native pick failed:', err)
-      return null
+      throw new Error(err?.message || String(err))
     }
   }
   return null
@@ -247,18 +283,27 @@ export function BillScanner() {
   // fall back to the hidden <input capture> element (web browser).
   const handleTakePhoto = async () => {
     console.log('[Scanner] Take Photo clicked, native:', Capacitor.isNativePlatform())
-    const file = await takePhotoNative()
-    console.log('[Scanner] takePhotoNative returned:', file ? `${file.name} (${file.size} bytes)` : 'null')
-    if (file) {
-      handleFile(file)
-    } else if (!Capacitor.isNativePlatform()) {
-      // Web fallback — trigger the hidden input with capture attribute
-      cameraInputRef.current?.click()
-    } else {
-      // On native, if user cancelled or it failed, show a hint
+    try {
+      const file = await takePhotoNative()
+      console.log('[Scanner] takePhotoNative returned:', file ? `${file.name} (${file.size} bytes)` : 'null')
+      if (file) {
+        handleFile(file)
+      } else if (!Capacitor.isNativePlatform()) {
+        // Web fallback — trigger the hidden input with capture attribute
+        cameraInputRef.current?.click()
+      } else {
+        // On native, null means user cancelled or permission denied (already logged)
+        toast({
+          title: 'Camera unavailable',
+          description: 'Camera may be in use by another app, or permission was denied. Check Android Settings → Apps → BahiKhata Pro → Permissions.',
+          variant: 'destructive',
+        })
+      }
+    } catch (err: any) {
+      console.error('[Scanner] handleTakePhoto error:', err)
       toast({
-        title: 'Camera cancelled or unavailable',
-        description: 'If the camera did not open, check app permissions in Android Settings.',
+        title: 'Camera error',
+        description: String(err?.message || err),
         variant: 'destructive',
       })
     }
@@ -268,17 +313,26 @@ export function BillScanner() {
   // fall back to the hidden <input> element (web browser).
   const handlePickPhoto = async () => {
     console.log('[Scanner] Pick Photo clicked, native:', Capacitor.isNativePlatform())
-    const file = await pickPhotoNative()
-    console.log('[Scanner] pickPhotoNative returned:', file ? `${file.name} (${file.size} bytes)` : 'null')
-    if (file) {
-      handleFile(file)
-    } else if (!Capacitor.isNativePlatform()) {
-      // Web fallback — trigger the hidden file input
-      fileInputRef.current?.click()
-    } else {
+    try {
+      const file = await pickPhotoNative()
+      console.log('[Scanner] pickPhotoNative returned:', file ? `${file.name} (${file.size} bytes)` : 'null')
+      if (file) {
+        handleFile(file)
+      } else if (!Capacitor.isNativePlatform()) {
+        // Web fallback — trigger the hidden file input
+        fileInputRef.current?.click()
+      } else {
+        toast({
+          title: 'Photo picker unavailable',
+          description: 'Could not open photo gallery. Check storage permissions in Android Settings.',
+          variant: 'destructive',
+        })
+      }
+    } catch (err: any) {
+      console.error('[Scanner] handlePickPhoto error:', err)
       toast({
-        title: 'Photo picker cancelled or unavailable',
-        description: 'If the gallery did not open, check app permissions in Android Settings.',
+        title: 'Photo picker error',
+        description: String(err?.message || err),
         variant: 'destructive',
       })
     }
