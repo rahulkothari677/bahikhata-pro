@@ -15,8 +15,34 @@
 
 import { useEffect } from 'react'
 import { Capacitor } from '@capacitor/core'
+import { useAppStore } from '@/store/app-store'
 
 export function CapacitorBridge() {
+  const darkMode = useAppStore((s) => s.features?.darkMode ?? false)
+
+  // Effect 1: Status bar — reactive to dark mode changes
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return
+
+    async function applyStatusBar() {
+      try {
+        const { StatusBar, Style } = await import('@capacitor/status-bar')
+        await StatusBar.setOverlaysWebView({ overlay: false })
+        // Style.Light = white text/icons (visible on both saffron and dark backgrounds)
+        await StatusBar.setStyle({ style: Style.Light })
+        // Background matches app theme so there's no harsh color seam
+        await StatusBar.setBackgroundColor({
+          color: darkMode ? '#1a1815' : '#d97706'
+        })
+      } catch (err) {
+        console.log('[Capacitor] Status bar plugin not available')
+      }
+    }
+
+    applyStatusBar()
+  }, [darkMode])
+
+  // Effect 2: App lifecycle — mount-only
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return
 
@@ -24,12 +50,6 @@ export function CapacitorBridge() {
 
     async function initNative() {
       try {
-        // Status Bar
-        const { StatusBar, Style } = await import('@capacitor/status-bar')
-        await StatusBar.setStyle({ style: Style.Light })
-        await StatusBar.setBackgroundColor({ color: '#d97706' })
-        await StatusBar.setOverlaysWebView({ overlay: false })
-
         // Splash Screen
         const { SplashScreen } = await import('@capacitor/splash-screen')
         await SplashScreen.hide()
