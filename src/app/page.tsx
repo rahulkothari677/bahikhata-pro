@@ -16,6 +16,7 @@ import { Header } from '@/components/layout/Header'
 import { MobileBottomNav } from '@/components/layout/MobileBottomNav'
 import { MoreScreen } from '@/components/layout/MoreScreen'
 import { Onboarding } from '@/components/layout/Onboarding'
+import { ThemePicker } from '@/components/common/ThemePicker'
 import { Dashboard } from '@/components/dashboard/Dashboard'
 import { Inventory } from '@/components/inventory/Inventory'
 import { Ledger } from '@/components/ledger/Ledger'
@@ -55,6 +56,7 @@ export default function Home() {
   const queryClient = useQueryClient()
   const [onboardingDismissed, setOnboardingDismissed] = useState(false)
   const [tourDone, setTourDone] = useState(false)
+  const [themePickerDone, setThemePickerDone] = useState(false)
   const [mounted, setMounted] = useState(false)
 
   // Redirect staff to their first allowed view if they try to access a blocked module
@@ -84,6 +86,18 @@ export default function Home() {
   useEffect(() => {
     Promise.resolve().then(() => setMounted(true))
   }, [])
+
+  // Check if theme picker has been completed (first-run only)
+  useEffect(() => {
+    if (mounted && session) {
+      try {
+        const done = localStorage.getItem('bahikhata-theme-picker-done') === 'true'
+        setThemePickerDone(done)
+      } catch {
+        setThemePickerDone(true)
+      }
+    }
+  }, [mounted, session])
 
   // When sync completes (after coming back online), invalidate all queries
   // so components refetch fresh data from the server.
@@ -136,7 +150,8 @@ export default function Home() {
     return <AuthScreen />
   }
 
-  const showOnboarding = !onboardingDismissed && !isOfflineSession && seedStatus !== undefined && !seedStatus.seeded
+  const showOnboarding = !onboardingDismissed && !isOfflineSession && seedStatus !== undefined && !seedStatus.seeded && themePickerDone
+  const showThemePicker = !themePickerDone && !!session
 
   // More screen renders full-screen (no sidebar, no regular header)
   if (currentView === 'more') {
@@ -149,6 +164,7 @@ export default function Home() {
           <MoreScreen />
         </div>
         <MobileBottomNav />
+        <ThemePicker open={showThemePicker} onDone={() => setThemePickerDone(true)} />
         <Onboarding open={showOnboarding} onDone={() => setOnboardingDismissed(true)} />
         {features?.pwaInstall && <PWAInstallPrompt />}
         {!showOnboarding && <OnboardingTour onDone={() => setTourDone(true)} />}
@@ -222,6 +238,7 @@ export default function Home() {
 
       <MobileBottomNav />
 
+      <ThemePicker open={showThemePicker} onDone={() => setThemePickerDone(true)} />
       <Onboarding open={showOnboarding} onDone={() => setOnboardingDismissed(true)} />
 
       {features?.pwaInstall && <PWAInstallPrompt />}
