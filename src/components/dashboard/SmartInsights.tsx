@@ -12,7 +12,7 @@
  * All computed client-side from existing dashboard data — no extra API calls.
  */
 
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn, formatINR, formatINRCompact } from '@/lib/utils'
@@ -24,29 +24,42 @@ import { useAppStore } from '@/store/app-store'
 import { useQuery } from '@tanstack/react-query'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { useState } from 'react'
+import { motion } from 'framer-motion'
 
 export function SmartInsights() {
   const { setView, setPreviousView, refreshKey } = useAppStore()
   const { data } = useDashboardData()
   const [expanded, setExpanded] = useState(true)
+  const [dismissed, setDismissed] = useState<Set<number>>(new Set())
 
   if (!data) return null
 
-  const insights = computeInsights(data)
+  const allInsights = computeInsights(data)
+  // Filter out dismissed insights (by index in the original array)
+  const insights = allInsights.filter((_, i) => !dismissed.has(i))
 
   if (insights.length === 0) return null
 
   const criticalCount = insights.filter(i => i.severity === 'critical').length
   const warningCount = insights.filter(i => i.severity === 'warning').length
 
+  const dismissInsight = (originalIndex: number) => {
+    setDismissed(prev => new Set(prev).add(originalIndex))
+  }
+
   return (
     <Card className="shadow-card border-border/60 overflow-hidden">
-      <div className="bg-gradient-to-r from-violet-500 to-purple-600 p-4 text-white">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-5 h-5" />
+      {/* Header — gradient with AI branding */}
+      <div className="bg-gradient-to-r from-violet-500 to-purple-600 p-4 text-white relative overflow-hidden">
+        {/* Decorative pattern */}
+        <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 pointer-events-none" />
+        <div className="relative flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
+              <Sparkles className="w-5 h-5" />
+            </div>
             <div>
-              <h3 className="text-base font-bold">Smart Insights</h3>
+              <h3 className="text-base font-bold font-heading tracking-tight">Smart Insights</h3>
               <p className="text-[11px] text-white/80">
                 {criticalCount > 0 && `${criticalCount} critical · `}
                 {warningCount > 0 && `${warningCount} warnings · `}
@@ -56,7 +69,7 @@ export function SmartInsights() {
           </div>
           <button
             onClick={() => setExpanded(!expanded)}
-            className="text-white/80 hover:text-white text-xs"
+            className="text-white/80 hover:text-white text-xs font-medium bg-white/10 hover:bg-white/20 rounded-full px-3 py-1.5 transition"
           >
             {expanded ? 'Hide' : 'Show all'}
           </button>
@@ -65,13 +78,18 @@ export function SmartInsights() {
 
       {expanded && (
         <CardContent className="p-2 space-y-1.5">
-          {insights.map((insight, i) => {
+          {insights.map((insight, displayIndex) => {
+            // Find the original index for dismissal tracking
+            const originalIndex = allInsights.indexOf(insight)
             const Icon = insight.icon
             return (
-              <div
-                key={i}
+              <motion.div
+                key={originalIndex}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: displayIndex * 0.05 }}
                 className={cn(
-                  'flex items-start gap-3 p-3 rounded-lg border transition',
+                  'flex items-start gap-3 p-3 rounded-xl border transition group',
                   insight.severity === 'critical' && 'bg-rose-50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/50',
                   insight.severity === 'warning' && 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/50',
                   insight.severity === 'info' && 'bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900/50',
@@ -79,7 +97,7 @@ export function SmartInsights() {
                 )}
               >
                 <div className={cn(
-                  'w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0',
+                  'w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0',
                   insight.severity === 'critical' && 'bg-rose-100 dark:bg-rose-900/40',
                   insight.severity === 'warning' && 'bg-amber-100 dark:bg-amber-900/40',
                   insight.severity === 'info' && 'bg-blue-100 dark:bg-blue-900/40',
@@ -94,19 +112,37 @@ export function SmartInsights() {
                   )} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium">{insight.title}</p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">{insight.description}</p>
+                  <p className="text-sm font-semibold">{insight.title}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">{insight.description}</p>
                   {insight.action && (
                     <button
                       onClick={insight.action.onClick}
-                      className="text-[11px] text-primary font-medium mt-1.5 hover:underline flex items-center gap-1"
+                      className={cn(
+                        'text-[11px] font-semibold mt-2 hover:underline flex items-center gap-1 rounded-full px-2.5 py-1 transition',
+                        insight.severity === 'critical' && 'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300 hover:bg-rose-200 dark:hover:bg-rose-900/60',
+                        insight.severity === 'warning' && 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/60',
+                        insight.severity === 'info' && 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/60',
+                        insight.severity === 'positive' && 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-900/60',
+                      )}
                     >
                       {insight.action.label}
                       <ArrowRight className="w-3 h-3" />
                     </button>
                   )}
                 </div>
-              </div>
+                {/* Dismiss button — appears on hover */}
+                <button
+                  onClick={() => dismissInsight(originalIndex)}
+                  className="text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition flex-shrink-0 -mt-1 -mr-1 p-1"
+                  aria-label="Dismiss insight"
+                  title="Dismiss"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                  </svg>
+                </button>
+              </motion.div>
             )
           })}
         </CardContent>
@@ -140,15 +176,15 @@ function computeInsights(data: any): Insight[] {
 
       insights.push({
         title: p.currentStock <= 0
-          ? `${p.name} is OUT OF STOCK`
+          ? `📦 ${p.name} is OUT OF STOCK`
           : daysLeft <= 7
-            ? `${p.name} will run out in ~${daysLeft} days`
-            : `${p.name} is running low (${p.currentStock} ${p.unit} left)`,
+            ? `📦 ${p.name} runs out in ~${daysLeft} days`
+            : `📦 ${p.name} is running low`,
         description: p.currentStock <= 0
           ? `Stock: ${p.currentStock} ${p.unit}. Restock immediately — you're losing sales.`
-          : `Stock: ${p.currentStock} ${p.unit} · Threshold: ${p.lowStockThreshold} ${p.unit}. Consider reordering soon.`,
+          : `${p.currentStock} ${p.unit} left · threshold: ${p.lowStockThreshold} ${p.unit}. Consider reordering soon.`,
         icon: Package,
-        severity: p.currentStock <= 0 ? 'critical' : daysLeft <= 7 ? 'warning' : 'warning',
+        severity: p.currentStock <= 0 ? 'critical' : 'warning',
         action: {
           label: 'Create Purchase',
           onClick: () => {
@@ -165,15 +201,15 @@ function computeInsights(data: any): Insight[] {
     const margin = kpis.todayRevenue > 0 ? (kpis.todayProfit / kpis.todayRevenue) * 100 : 0
     if (kpis.todayRevenue > 0 && margin < 10 && margin >= 0) {
       insights.push({
-        title: `Profit margin is low (${margin.toFixed(1)}%)`,
-        description: `Today's profit margin is below 10%. Revenue: ${formatINR(kpis.todayRevenue)}, Profit: ${formatINR(kpis.todayProfit)}. Consider reviewing your pricing.`,
+        title: `📊 Profit margin is thin (${margin.toFixed(1)}%)`,
+        description: `Today's margin is below 10%. Revenue: ${formatINR(kpis.todayRevenue)}, Profit: ${formatINR(kpis.todayProfit)}. Consider reviewing your pricing.`,
         icon: Percent,
         severity: 'warning',
       })
     }
     if (kpis.todayProfit < 0 && kpis.todayRevenue > 0) {
       insights.push({
-        title: `Selling at a LOSS today!`,
+        title: `⚠️ Selling at a LOSS today`,
         description: `Today's profit is negative (${formatINR(kpis.todayProfit)}). You're selling below cost price. Review your prices immediately.`,
         icon: TrendingDown,
         severity: 'critical',
@@ -182,8 +218,8 @@ function computeInsights(data: any): Insight[] {
     // Margin trend
     if (kpis.profitGrowth < -10) {
       insights.push({
-        title: `Profit declining (${kpis.profitGrowth.toFixed(1)}% vs last period)`,
-        description: `Your profit has dropped significantly compared to the previous period. Check if costs have increased or if you're discounting too much.`,
+        title: `📉 Profit down ${kpis.profitGrowth.toFixed(1)}% vs last period`,
+        description: `Your profit has dropped significantly. Check if costs have increased or if you're discounting too much.`,
         icon: TrendingDown,
         severity: 'warning',
       })
@@ -212,8 +248,8 @@ function computeInsights(data: any): Insight[] {
     if (avgWeekend > avgWeekday * 1.3 && avgWeekday > 0) {
       const pct = ((avgWeekend / avgWeekday - 1) * 100).toFixed(0)
       insights.push({
-        title: `Weekend sales are ${pct}% higher than weekdays`,
-        description: `Your average weekend revenue (${formatINRCompact(avgWeekend)}) is significantly higher than weekdays (${formatINRCompact(avgWeekday)}). Consider stocking up before weekends.`,
+        title: `🗓️ Weekends bring ${pct}% more sales`,
+        description: `Weekend avg: ${formatINRCompact(avgWeekend)} vs weekday: ${formatINRCompact(avgWeekday)}. Consider stocking up before weekends.`,
         icon: Calendar,
         severity: 'info',
       })
@@ -225,7 +261,7 @@ function computeInsights(data: any): Insight[] {
       const daysSinceLastSale = Math.floor((Date.now() - new Date(lastSale.date).getTime()) / (1000 * 60 * 60 * 24))
       if (daysSinceLastSale >= 3) {
         insights.push({
-          title: `No sales in ${daysSinceLastSale} days`,
+          title: `🔕 No sales in ${daysSinceLastSale} days`,
           description: `It's been ${daysSinceLastSale} days since your last sale. Consider reaching out to regular customers or running a promotion.`,
           icon: ShoppingCart,
           severity: daysSinceLastSale >= 7 ? 'critical' : 'warning',
@@ -239,8 +275,8 @@ function computeInsights(data: any): Insight[] {
     const receivablePct = kpis.rangeRevenue > 0 ? (kpis.totalReceivable / kpis.rangeRevenue) * 100 : 0
     if (receivablePct > 30) {
       insights.push({
-        title: `High receivable ratio (${receivablePct.toFixed(0)}% of revenue)`,
-        description: `Customers owe you ${formatINR(kpis.totalReceivable)} — that's ${receivablePct.toFixed(0)}% of your total revenue. Consider sending payment reminders via WhatsApp.`,
+        title: `💰 Customers owe you ${formatINR(kpis.totalReceivable)}`,
+        description: `That's ${receivablePct.toFixed(0)}% of your total revenue. Consider sending payment reminders via WhatsApp.`,
         icon: User,
         severity: receivablePct > 50 ? 'critical' : 'warning',
         action: {
@@ -257,8 +293,8 @@ function computeInsights(data: any): Insight[] {
   // ─── Positive insight ────────────────────────────────────────
   if (kpis && kpis.revenueGrowth > 20) {
     insights.push({
-      title: `Revenue growing ${kpis.revenueGrowth.toFixed(0)}% vs last period`,
-      description: `Great job! Your revenue is trending up significantly. Keep up the momentum.`,
+      title: `🚀 Revenue up ${kpis.revenueGrowth.toFixed(0)}% vs last period`,
+      description: `Great work! Your revenue is trending up significantly. Keep up the momentum.`,
       icon: TrendingUp,
       severity: 'positive',
     })
@@ -283,3 +319,4 @@ function useDashboardData() {
     staleTime: 60 * 1000,
   })
 }
+
