@@ -40,29 +40,71 @@ export function EmptyState({
         className,
       )}
     >
-      <div
+      {/* Illustration container — gradient bg with decorative rings.
+          The icon sits in the center of a layered composition:
+          - Outer faint ring (largest, lowest opacity)
+          - Middle ring (medium opacity)
+          - Inner solid circle with the icon (gradient bg)
+          This gives a sense of depth and "illustration" rather than
+          just a flat icon in a box. */}
+      <div className={cn('relative flex items-center justify-center', isCompact ? 'mb-3' : 'mb-6')}>
+        {/* Outer ring — faint */}
+        <div
+          className={cn(
+            'absolute rounded-full bg-primary/5',
+            isCompact ? 'w-20 h-20' : 'w-32 h-32',
+          )}
+        />
+        {/* Middle ring — slightly more visible */}
+        <div
+          className={cn(
+            'absolute rounded-full bg-primary/10',
+            isCompact ? 'w-16 h-16' : 'w-24 h-24',
+          )}
+        />
+        {/* Inner circle with gradient + icon */}
+        <div
+          className={cn(
+            'relative rounded-2xl flex items-center justify-center bg-gradient-to-br from-primary/15 to-primary/5 border border-primary/20',
+            isCompact ? 'w-12 h-12' : 'w-20 h-20',
+          )}
+        >
+          <Icon
+            className={cn(
+              'text-primary',
+              isCompact ? 'w-6 h-6' : 'w-10 h-10',
+            )}
+            strokeWidth={1.5}
+          />
+        </div>
+      </div>
+
+      <h3
         className={cn(
-          'rounded-2xl flex items-center justify-center bg-muted',
-          isCompact ? 'w-12 h-12 mb-3' : 'w-20 h-20 mb-5',
+          'font-semibold text-foreground font-heading tracking-tight',
+          isCompact ? 'text-sm' : 'text-lg',
         )}
       >
-        <Icon className={cn('text-muted-foreground', isCompact ? 'w-6 h-6' : 'w-10 h-10')} />
-      </div>
-      <h3 className={cn('font-semibold text-foreground', isCompact ? 'text-sm' : 'text-lg')}>
         {title}
       </h3>
       {description && (
-        <p className={cn(
-          'text-muted-foreground mt-1 max-w-md',
-          isCompact ? 'text-xs' : 'text-sm',
-        )}>
+        <p
+          className={cn(
+            'text-muted-foreground mt-1.5 max-w-md leading-relaxed',
+            isCompact ? 'text-xs' : 'text-sm',
+          )}
+        >
           {description}
         </p>
       )}
       {(action || secondaryAction) && (
-        <div className="flex gap-2 mt-4 flex-wrap justify-center">
+        <div className="flex gap-2 mt-5 flex-wrap justify-center">
           {action && (
-            <Button onClick={action.onClick} size={isCompact ? 'sm' : 'default'} className="gap-2">
+            <Button
+              onClick={action.onClick}
+              size={isCompact ? 'sm' : 'default'}
+              className="gap-2 bg-gradient-saffron shadow-md"
+            >
               {action.label}
             </Button>
           )}
