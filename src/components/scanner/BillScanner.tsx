@@ -53,7 +53,7 @@ async function takePhotoNative(): Promise<File | null> {
 
       sonnerToast.info('DEBUG: Opening camera...')
       const photo = await Camera.getPhoto({
-        quality: 85,
+        quality: 60,
         allowEditing: false,
         resultType: CameraResultType.Uri,
         source: CameraSource.Camera,
@@ -212,6 +212,8 @@ export function BillScanner() {
 
     // Compress and resize image on client side before sending to API
     // This prevents Vercel serverless timeout on large phone photos
+    // Made more aggressive (smaller dimensions + lower quality) to handle
+    // large phone photos that were causing timeouts/failures
     const compressImage = (file: File): Promise<string> => {
       return new Promise((resolve, reject) => {
         const reader = new FileReader()
@@ -220,9 +222,10 @@ export function BillScanner() {
           const img = new Image()
           img.onload = () => {
             sonnerToast.info('DEBUG: Image loaded', { description: `${img.width}x${img.height}` })
-            // Max dimensions: 1200x1600 (enough for AI to read, small enough for API)
-            const MAX_WIDTH = 1200
-            const MAX_HEIGHT = 1600
+            // Reduced max dimensions for more aggressive compression
+            // 800x1000 is still enough for AI to read text on bills
+            const MAX_WIDTH = 800
+            const MAX_HEIGHT = 1000
             let width = img.width
             let height = img.height
 
@@ -231,6 +234,7 @@ export function BillScanner() {
               width = Math.round(width * ratio)
               height = Math.round(height * ratio)
             }
+            sonnerToast.info('DEBUG: Resizing to', { description: `${width}x${height}` })
 
             const canvas = document.createElement('canvas')
             canvas.width = width
@@ -243,9 +247,11 @@ export function BillScanner() {
             }
             ctx.drawImage(img, 0, 0, width, height)
 
-            // Compress as JPEG with quality 0.85
-            const compressed = canvas.toDataURL('image/jpeg', 0.85)
-            sonnerToast.info('DEBUG: Compressed', { description: `${compressed.length} chars` })
+            // Lower quality (0.7 = 70%) for more aggressive compression
+            // JPEG at 70% quality on an 800x1000 image is usually under 200KB
+            const compressed = canvas.toDataURL('image/jpeg', 0.7)
+            const sizeKB = Math.round(compressed.length / 1024)
+            sonnerToast.info('DEBUG: Compressed', { description: `${sizeKB} KB` })
             resolve(compressed)
           }
           img.onerror = () => {
@@ -262,10 +268,40 @@ export function BillScanner() {
       })
     }
 
+    // Fallback compression for Capacitor WebView — if FileReader/Image fails,
+    // convert the file to base64 directly without going through Image/canvas
+    const compressImageFallback = (file: File): Promise<string> => {
+      return new Promise((resolve, reject) => {
+        sonnerToast.info('DEBUG: Using fallback compression')
+        const reader = new FileReader()
+        reader.onload = (e) => {
+          const result = e.target?.result as string
+          if (result) {
+            sonnerToast.info('DEBUG: Fallback got base64', { description: `${Math.round(result.length / 1024)} KB` })
+            resolve(result)
+          } else {
+            sonnerToast.error('DEBUG: Fallback failed — no result')
+            reject(new Error('FileReader returned no result'))
+          }
+        }
+        reader.onerror = () => {
+          sonnerToast.error('DEBUG: Fallback FileReader failed')
+          reject(new Error('FileReader failed'))
+        }
+        reader.readAsDataURL(file)
+      })
+    }
+
     try {
-      // Compress the image first
-      const base64 = await compressImage(file)
-      sonnerToast.info('DEBUG: Compression done', { description: `${base64.length} chars` })
+      // Compress the image first — try main method, fall back to direct base64
+      let base64: string
+      try {
+        base64 = await compressImage(file)
+      } catch (compressErr) {
+        sonnerToast.info('DEBUG: Main compression failed, trying fallback')
+        base64 = await compressImageFallback(file)
+      }
+      sonnerToast.info('DEBUG: Compression done', { description: `${Math.round(base64.length / 1024)} KB` })
       setPreview(base64)
       setScanning(true)
       sonnerToast.info('DEBUG: Scanning started, calling API...')
