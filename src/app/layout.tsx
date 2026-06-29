@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { Inter, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
@@ -6,6 +7,23 @@ import { Providers } from "@/components/providers";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+
+// Inter — body text. Clean, modern, very readable at small sizes.
+// Has tabular-nums feature for aligned number columns (amounts, quantities).
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-sans",
+  display: "swap",
+});
+
+// Plus Jakarta Sans — headings. Geometric, friendly, bold.
+// Gives the app a more designed/premium feel vs system default.
+const jakarta = Plus_Jakarta_Sans({
+  subsets: ["latin"],
+  variable: "--font-heading",
+  weight: ["600", "700", "800"],
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "BahiKhata Pro — India's Smartest Ledger App",
@@ -43,8 +61,8 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className="antialiased bg-background text-foreground">
+    <html lang="en" suppressHydrationWarning className={`${inter.variable} ${jakarta.variable}`}>
+      <body className="antialiased bg-background text-foreground font-sans">
         <ErrorBoundary>
           <Providers>
             {children}
