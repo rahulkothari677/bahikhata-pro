@@ -23,6 +23,9 @@ import { Capacitor } from '@capacitor/core'
  * takePhotoNative — uses Capacitor Camera plugin on native (Android app)
  * to open the camera directly. Falls back to <input capture> on web.
  *
+ * Uses CameraResultType.Base64 (more reliable than DataUrl on some Android
+ * devices where DataUrl comes back empty after the user confirms the photo).
+ *
  * Returns a File object or null if cancelled/failed.
  */
 async function takePhotoNative(): Promise<File | null> {
@@ -33,18 +36,24 @@ async function takePhotoNative(): Promise<File | null> {
       const photo = await Camera.getPhoto({
         quality: 85,
         allowEditing: false,
-        resultType: CameraResultType.DataUrl,
+        resultType: CameraResultType.Base64,
         source: CameraSource.Camera,
         saveToGallery: false,
       })
-      if (!photo.dataUrl) return null
-      // Convert base64 data URL to File object
-      const res = await fetch(photo.dataUrl)
+      if (!photo.base64String) {
+        console.warn('[Camera] No base64String returned from camera')
+        return null
+      }
+      // Build a data URL from the base64 string (the API expects this format)
+      const format = photo.format || 'jpeg'
+      const dataUrl = `data:image/${format};base64,${photo.base64String}`
+      const res = await fetch(dataUrl)
       const blob = await res.blob()
-      return new File([blob], `bill_${Date.now()}.jpg`, { type: 'image/jpeg' })
+      return new File([blob], `bill_${Date.now()}.${format}`, { type: `image/${format}` })
     } catch (err: any) {
-      // User cancelled or permission denied
-      if (err?.message?.includes('cancelled') || err?.message?.includes('User denied')) {
+      // User cancelled or permission denied — these are expected, don't log as errors
+      const msg = String(err?.message || err || '').toLowerCase()
+      if (msg.includes('cancelled') || msg.includes('user denied') || msg.includes('canceled')) {
         return null
       }
       console.error('[Camera] Native capture failed:', err)
@@ -66,15 +75,21 @@ async function pickPhotoNative(): Promise<File | null> {
       const photo = await Camera.getPhoto({
         quality: 85,
         allowEditing: false,
-        resultType: CameraResultType.DataUrl,
+        resultType: CameraResultType.Base64,
         source: CameraSource.Photos,
       })
-      if (!photo.dataUrl) return null
-      const res = await fetch(photo.dataUrl)
+      if (!photo.base64String) {
+        console.warn('[Camera] No base64String returned from gallery')
+        return null
+      }
+      const format = photo.format || 'jpeg'
+      const dataUrl = `data:image/${format};base64,${photo.base64String}`
+      const res = await fetch(dataUrl)
       const blob = await res.blob()
-      return new File([blob], `bill_${Date.now()}.jpg`, { type: 'image/jpeg' })
+      return new File([blob], `bill_${Date.now()}.${format}`, { type: `image/${format}` })
     } catch (err: any) {
-      if (err?.message?.includes('cancelled') || err?.message?.includes('User denied')) {
+      const msg = String(err?.message || err || '').toLowerCase()
+      if (msg.includes('cancelled') || msg.includes('user denied') || msg.includes('canceled')) {
         return null
       }
       console.error('[Camera] Native pick failed:', err)
