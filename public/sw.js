@@ -14,8 +14,8 @@
  *  - For mutations (POST/PUT/DELETE): passthrough (offlineFetch handles queueing).
  */
 
-const CACHE_VERSION = 'bahikhata-pro-v7'
-const STATIC_CACHE = 'bahikhata-static-v7'
+const CACHE_VERSION = 'bahikhata-pro-v8'
+const STATIC_CACHE = 'bahikhata-static-v8'
 const APP_SHELL = [
   '/',
   '/manifest.json',
@@ -40,6 +40,9 @@ self.addEventListener('activate', (event) => {
       .keys()
       .then((names) =>
         Promise.all(
+          // Delete ALL old caches (both v7 and any other older versions)
+          // This ensures stale HTML and JS chunks from the previous version
+          // are purged, forcing the app to fetch fresh code from Vercel.
           names
             .filter((n) => n !== CACHE_VERSION && n !== STATIC_CACHE)
             .map((n) => caches.delete(n)),
@@ -150,4 +153,14 @@ self.addEventListener('fetch', (event) => {
 // Allow page to trigger manual sync
 self.addEventListener('message', (event) => {
   if (event.data === 'skip-waiting') self.skipWaiting()
+})
+
+// When a new SW takes control, force all clients to reload so they
+// get the new HTML + new JS chunks. Without this, the old HTML stays
+// loaded and references old JS chunk hashes — even though the new SW
+// is active.
+self.addEventListener('controllerchange', (event) => {
+  // This fires in the page (not the SW) when a new SW takes control.
+  // We don't need to do anything here — the page's SW registration
+  // code handles the reload.
 })
