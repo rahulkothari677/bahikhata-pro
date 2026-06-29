@@ -391,14 +391,31 @@ export function BillScanner() {
     // VISIBLE DEBUG TOAST — shows on screen so we can see what's happening
     sonnerToast.info('DEBUG: Take Photo clicked', { description: `Native: ${Capacitor.isNativePlatform()}` })
     try {
+      // On web (not native), skip the native plugin entirely and go straight to input
+      if (!Capacitor.isNativePlatform()) {
+        console.log('[Scanner] Web platform — triggering camera input directly')
+        sonnerToast.info('DEBUG: Web platform, opening file picker...')
+        if (cameraInputRef.current) {
+          console.log('[Scanner] cameraInputRef.current exists, clicking')
+          cameraInputRef.current.click()
+        } else {
+          console.error('[Scanner] cameraInputRef.current is null!')
+          sonnerToast.error('DEBUG: cameraInputRef is null')
+          // Try fileInputRef as fallback
+          if (fileInputRef.current) {
+            console.log('[Scanner] Using fileInputRef as fallback')
+            fileInputRef.current.click()
+          }
+        }
+        return
+      }
+
+      // Native platform — use Capacitor Camera plugin
       const file = await takePhotoNative()
       console.log('[Scanner] takePhotoNative returned:', file ? `${file.name} (${file.size} bytes)` : 'null')
       sonnerToast.info('DEBUG: Photo result', { description: file ? `Got file: ${file.name} (${file.size} bytes)` : 'Returned null — camera failed or cancelled' })
       if (file) {
         handleFile(file)
-      } else if (!Capacitor.isNativePlatform()) {
-        // Web fallback — trigger the hidden input with capture attribute
-        cameraInputRef.current?.click()
       } else {
         toast({
           title: 'Camera unavailable',
@@ -423,14 +440,26 @@ export function BillScanner() {
     console.log('[Scanner] Pick Photo clicked, native:', Capacitor.isNativePlatform())
     sonnerToast.info('DEBUG: Upload Image clicked', { description: `Native: ${Capacitor.isNativePlatform()}` })
     try {
+      // On web (not native), skip the native plugin entirely
+      if (!Capacitor.isNativePlatform()) {
+        console.log('[Scanner] Web platform — triggering file input directly')
+        sonnerToast.info('DEBUG: Web platform, opening file picker...')
+        if (fileInputRef.current) {
+          console.log('[Scanner] fileInputRef.current exists, clicking')
+          fileInputRef.current.click()
+        } else {
+          console.error('[Scanner] fileInputRef.current is null!')
+          sonnerToast.error('DEBUG: fileInputRef is null')
+        }
+        return
+      }
+
+      // Native platform — use Capacitor Camera plugin
       const file = await pickPhotoNative()
       console.log('[Scanner] pickPhotoNative returned:', file ? `${file.name} (${file.size} bytes)` : 'null')
       sonnerToast.info('DEBUG: Pick result', { description: file ? `Got file: ${file.name} (${file.size} bytes)` : 'Returned null' })
       if (file) {
         handleFile(file)
-      } else if (!Capacitor.isNativePlatform()) {
-        // Web fallback — trigger the hidden file input
-        fileInputRef.current?.click()
       } else {
         toast({
           title: 'Photo picker unavailable',
