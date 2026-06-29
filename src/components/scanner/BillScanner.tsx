@@ -33,24 +33,25 @@ async function takePhotoNative(): Promise<File | null> {
   if (Capacitor.isNativePlatform()) {
     try {
       const { Camera, CameraResultType, CameraSource } = await import('@capacitor/camera')
+      sonnerToast.info('DEBUG: Camera plugin loaded')
 
       // Explicitly request camera permission before calling getPhoto.
       try {
         const permStatus = await Camera.checkPermissions()
-        console.log('[Camera] Permission status:', permStatus)
+        sonnerToast.info('DEBUG: Permission', { description: `camera: ${permStatus.camera}` })
         if (permStatus.camera !== 'granted') {
           const reqResult = await Camera.requestPermissions({ permissions: ['camera'] })
-          console.log('[Camera] Request result:', reqResult)
+          sonnerToast.info('DEBUG: After request', { description: `camera: ${reqResult.camera}` })
           if (reqResult.camera !== 'granted') {
-            console.warn('[Camera] Camera permission not granted')
+            sonnerToast.error('DEBUG: Permission denied')
             return null
           }
         }
       } catch (permErr) {
-        console.warn('[Camera] Permission check/request failed (continuing anyway):', permErr)
+        sonnerToast.info('DEBUG: Permission check failed', { description: String(permErr) })
       }
 
-      console.log('[Camera] Opening camera...')
+      sonnerToast.info('DEBUG: Opening camera...')
       const photo = await Camera.getPhoto({
         quality: 85,
         allowEditing: false,
@@ -58,25 +59,18 @@ async function takePhotoNative(): Promise<File | null> {
         source: CameraSource.Camera,
         saveToGallery: false,
       })
-      console.log('[Camera] Photo received:', JSON.stringify({
-        path: photo.path,
-        webPath: photo.webPath,
-        format: photo.format,
-        saved: photo.saved,
-      }))
+      sonnerToast.info('DEBUG: Photo received', { description: `path: ${photo.path}, webPath: ${photo.webPath ? 'yes' : 'no'}, format: ${photo.format}` })
 
       // Read the file from the URI using Capacitor Filesystem API
-      // This is more reliable than Base64/DataUrl on Android
       if (photo.path) {
         try {
           const { Filesystem } = await import('@capacitor/filesystem')
-          console.log('[Camera] Reading file from path:', photo.path)
+          sonnerToast.info('DEBUG: Reading file...')
           const fileResult = await Filesystem.readFile({ path: photo.path })
-          console.log('[Camera] File read, size:', fileResult.data?.length || 'unknown')
+          sonnerToast.info('DEBUG: File read', { description: `data length: ${fileResult.data?.length || 0}` })
 
           let blob: Blob
           if (typeof fileResult.data === 'string') {
-            // base64 string
             const format = photo.format || 'jpeg'
             const byteCharacters = atob(fileResult.data)
             const byteNumbers = new Array(byteCharacters.length)
@@ -86,17 +80,17 @@ async function takePhotoNative(): Promise<File | null> {
             const byteArray = new Uint8Array(byteNumbers)
             blob = new Blob([byteArray], { type: `image/${format}` })
           } else {
-            // Already a Blob
             blob = fileResult.data as Blob
           }
 
           const format = photo.format || 'jpeg'
-          return new File([blob], `bill_${Date.now()}.${format}`, { type: `image/${format}` })
+          const file = new File([blob], `bill_${Date.now()}.${format}`, { type: `image/${format}` })
+          sonnerToast.success('DEBUG: File created', { description: `${file.name} (${file.size} bytes)` })
+          return file
         } catch (fsErr) {
-          console.error('[Camera] Filesystem read failed, trying webPath fallback:', fsErr)
-          // Fallback: try fetching from webPath
+          sonnerToast.error('DEBUG: Filesystem failed', { description: String(fsErr) })
           if (photo.webPath) {
-            console.log('[Camera] Fetching from webPath:', photo.webPath)
+            sonnerToast.info('DEBUG: Trying webPath fallback')
             const res = await fetch(photo.webPath)
             const blob = await res.blob()
             const format = photo.format || 'jpeg'
@@ -106,27 +100,27 @@ async function takePhotoNative(): Promise<File | null> {
         }
       }
 
-      // Fallback: try webPath directly
       if (photo.webPath) {
-        console.log('[Camera] No path, using webPath:', photo.webPath)
+        sonnerToast.info('DEBUG: Using webPath only')
         const res = await fetch(photo.webPath)
         const blob = await res.blob()
         const format = photo.format || 'jpeg'
         return new File([blob], `bill_${Date.now()}.${format}`, { type: `image/${format}` })
       }
 
-      console.warn('[Camera] No path or webPath returned from camera')
+      sonnerToast.error('DEBUG: No path or webPath')
       return null
     } catch (err: any) {
       const msg = String(err?.message || err || '').toLowerCase()
       if (msg.includes('cancelled') || msg.includes('user denied') || msg.includes('canceled')) {
-        console.log('[Camera] User cancelled camera')
+        sonnerToast.info('DEBUG: User cancelled')
         return null
       }
-      console.error('[Camera] Native capture failed:', err)
+      sonnerToast.error('DEBUG: Camera failed', { description: String(err?.message || err) })
       throw new Error(err?.message || String(err))
     }
   }
+  sonnerToast.info('DEBUG: Not native platform')
   return null
 }
 
@@ -327,16 +321,18 @@ export function BillScanner() {
   // fall back to the hidden <input capture> element (web browser).
   const handleTakePhoto = async () => {
     console.log('[Scanner] Take Photo clicked, native:', Capacitor.isNativePlatform())
+    // VISIBLE DEBUG TOAST — shows on screen so we can see what's happening
+    sonnerToast.info('DEBUG: Take Photo clicked', { description: `Native: ${Capacitor.isNativePlatform()}` })
     try {
       const file = await takePhotoNative()
       console.log('[Scanner] takePhotoNative returned:', file ? `${file.name} (${file.size} bytes)` : 'null')
+      sonnerToast.info('DEBUG: Photo result', { description: file ? `Got file: ${file.name} (${file.size} bytes)` : 'Returned null — camera failed or cancelled' })
       if (file) {
         handleFile(file)
       } else if (!Capacitor.isNativePlatform()) {
         // Web fallback — trigger the hidden input with capture attribute
         cameraInputRef.current?.click()
       } else {
-        // On native, null means user cancelled or permission denied (already logged)
         toast({
           title: 'Camera unavailable',
           description: 'Camera may be in use by another app, or permission was denied. Check Android Settings → Apps → BahiKhata Pro → Permissions.',
@@ -345,6 +341,7 @@ export function BillScanner() {
       }
     } catch (err: any) {
       console.error('[Scanner] handleTakePhoto error:', err)
+      sonnerToast.error('DEBUG: Error', { description: String(err?.message || err) })
       toast({
         title: 'Camera error',
         description: String(err?.message || err),
@@ -357,9 +354,11 @@ export function BillScanner() {
   // fall back to the hidden <input> element (web browser).
   const handlePickPhoto = async () => {
     console.log('[Scanner] Pick Photo clicked, native:', Capacitor.isNativePlatform())
+    sonnerToast.info('DEBUG: Upload Image clicked', { description: `Native: ${Capacitor.isNativePlatform()}` })
     try {
       const file = await pickPhotoNative()
       console.log('[Scanner] pickPhotoNative returned:', file ? `${file.name} (${file.size} bytes)` : 'null')
+      sonnerToast.info('DEBUG: Pick result', { description: file ? `Got file: ${file.name} (${file.size} bytes)` : 'Returned null' })
       if (file) {
         handleFile(file)
       } else if (!Capacitor.isNativePlatform()) {
@@ -374,6 +373,7 @@ export function BillScanner() {
       }
     } catch (err: any) {
       console.error('[Scanner] handlePickPhoto error:', err)
+      sonnerToast.error('DEBUG: Error', { description: String(err?.message || err) })
       toast({
         title: 'Photo picker error',
         description: String(err?.message || err),
