@@ -35,8 +35,6 @@ async function takePhotoNative(): Promise<File | null> {
       const { Camera, CameraResultType, CameraSource } = await import('@capacitor/camera')
 
       // Explicitly request camera permission before calling getPhoto.
-      // On Android, the plugin should do this automatically, but some
-      // devices/versions need an explicit request.
       try {
         const permStatus = await Camera.checkPermissions()
         console.log('[Camera] Permission status:', permStatus)
@@ -50,39 +48,85 @@ async function takePhotoNative(): Promise<File | null> {
         }
       } catch (permErr) {
         console.warn('[Camera] Permission check/request failed (continuing anyway):', permErr)
-        // Continue — some plugin versions don't support checkPermissions
       }
 
+      console.log('[Camera] Opening camera...')
       const photo = await Camera.getPhoto({
         quality: 85,
         allowEditing: false,
-        resultType: CameraResultType.Base64,
+        resultType: CameraResultType.Uri,
         source: CameraSource.Camera,
         saveToGallery: false,
       })
-      if (!photo.base64String) {
-        console.warn('[Camera] No base64String returned from camera')
-        return null
+      console.log('[Camera] Photo received:', JSON.stringify({
+        path: photo.path,
+        webPath: photo.webPath,
+        format: photo.format,
+        saved: photo.saved,
+      }))
+
+      // Read the file from the URI using Capacitor Filesystem API
+      // This is more reliable than Base64/DataUrl on Android
+      if (photo.path) {
+        try {
+          const { Filesystem } = await import('@capacitor/filesystem')
+          console.log('[Camera] Reading file from path:', photo.path)
+          const fileResult = await Filesystem.readFile({ path: photo.path })
+          console.log('[Camera] File read, size:', fileResult.data?.length || 'unknown')
+
+          let blob: Blob
+          if (typeof fileResult.data === 'string') {
+            // base64 string
+            const format = photo.format || 'jpeg'
+            const byteCharacters = atob(fileResult.data)
+            const byteNumbers = new Array(byteCharacters.length)
+            for (let i = 0; i < byteCharacters.length; i++) {
+              byteNumbers[i] = byteCharacters.charCodeAt(i)
+            }
+            const byteArray = new Uint8Array(byteNumbers)
+            blob = new Blob([byteArray], { type: `image/${format}` })
+          } else {
+            // Already a Blob
+            blob = fileResult.data as Blob
+          }
+
+          const format = photo.format || 'jpeg'
+          return new File([blob], `bill_${Date.now()}.${format}`, { type: `image/${format}` })
+        } catch (fsErr) {
+          console.error('[Camera] Filesystem read failed, trying webPath fallback:', fsErr)
+          // Fallback: try fetching from webPath
+          if (photo.webPath) {
+            console.log('[Camera] Fetching from webPath:', photo.webPath)
+            const res = await fetch(photo.webPath)
+            const blob = await res.blob()
+            const format = photo.format || 'jpeg'
+            return new File([blob], `bill_${Date.now()}.${format}`, { type: `image/${format}` })
+          }
+          throw fsErr
+        }
       }
-      // Build a data URL from the base64 string (the API expects this format)
-      const format = photo.format || 'jpeg'
-      const dataUrl = `data:image/${format};base64,${photo.base64String}`
-      const res = await fetch(dataUrl)
-      const blob = await res.blob()
-      return new File([blob], `bill_${Date.now()}.${format}`, { type: `image/${format}` })
+
+      // Fallback: try webPath directly
+      if (photo.webPath) {
+        console.log('[Camera] No path, using webPath:', photo.webPath)
+        const res = await fetch(photo.webPath)
+        const blob = await res.blob()
+        const format = photo.format || 'jpeg'
+        return new File([blob], `bill_${Date.now()}.${format}`, { type: `image/${format}` })
+      }
+
+      console.warn('[Camera] No path or webPath returned from camera')
+      return null
     } catch (err: any) {
-      // User cancelled or permission denied — these are expected, don't log as errors
       const msg = String(err?.message || err || '').toLowerCase()
       if (msg.includes('cancelled') || msg.includes('user denied') || msg.includes('canceled')) {
         console.log('[Camera] User cancelled camera')
         return null
       }
       console.error('[Camera] Native capture failed:', err)
-      // Return the error message so the caller can show it to the user
       throw new Error(err?.message || String(err))
     }
   }
-  // On web — can't open camera directly from JS, return null (caller falls back to input)
   return null
 }
 
