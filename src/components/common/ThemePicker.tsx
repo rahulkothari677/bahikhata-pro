@@ -11,8 +11,9 @@
  * After they pick, the choice is saved and this screen never shows again.
  * Users can still change their theme later in Settings.
  *
- * The picker itself uses the currently-selected theme for its own styling,
- * so users see live previews as they tap different swatches.
+ * Design: compact dialog that fits within viewport on all screen sizes.
+ * Uses max-h-[90vh] + overflow-y-auto to prevent cutoff on small screens
+ * or when desktop taskbar reduces available height.
  */
 
 import { useState, useEffect } from 'react'
@@ -20,7 +21,7 @@ import { useAppStore, type ThemeColor } from '@/store/app-store'
 import { THEME_OPTIONS } from '@/components/providers/ThemeProvider'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Check, Sun, Moon, Sparkles, ArrowRight } from 'lucide-react'
+import { Check, Sun, Moon, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { haptic } from '@/lib/haptic'
 
@@ -49,46 +50,52 @@ export function ThemePicker({ open, onDone }: { open: boolean; onDone: () => voi
 
   return (
     <Dialog open={open} onOpenChange={() => { /* don't allow closing by clicking outside */ }}>
-      <DialogContent className="max-w-md p-0 overflow-hidden" showCloseButton={false}>
-        {/* Header — gradient banner */}
-        <div className="bg-gradient-saffron p-6 text-white text-center relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 pointer-events-none" />
-          <div className="relative">
-            <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center mx-auto mb-3">
-              <Sparkles className="w-7 h-7" />
+      <DialogContent
+        className="max-w-sm p-0 overflow-hidden gap-0 max-h-[90vh] flex flex-col"
+        showCloseButton={false}
+      >
+        {/* Header — compact gradient banner */}
+        <div className="bg-gradient-saffron px-5 py-4 text-white relative overflow-hidden flex-shrink-0">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -mr-12 -mt-12 pointer-events-none" />
+          <div className="relative flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
+              <Sparkles className="w-5 h-5" />
             </div>
-            <h2 className="text-xl font-bold font-heading tracking-tight">Choose Your Theme</h2>
-            <p className="text-white/80 text-sm mt-1">
-              Pick a color you love. You can change it anytime in Settings.
-            </p>
+            <div className="min-w-0">
+              <h2 className="text-base font-bold font-heading tracking-tight">Choose Your Theme</h2>
+              <p className="text-white/80 text-xs mt-0.5 leading-tight">
+                Pick a color you love. Change anytime in Settings.
+              </p>
+            </div>
           </div>
         </div>
 
-        <div className="p-6 space-y-6">
-          {/* Color swatches */}
+        {/* Body — scrollable if needed, but compact enough to fit most screens */}
+        <div className="p-4 space-y-4 overflow-y-auto flex-1">
+          {/* Color swatches — compact grid */}
           <div>
-            <p className="text-sm font-semibold mb-3">Color</p>
-            <div className="grid grid-cols-3 gap-3">
+            <p className="text-xs font-semibold mb-2 text-muted-foreground uppercase tracking-wide">Color</p>
+            <div className="grid grid-cols-3 gap-2">
               {THEME_OPTIONS.map((theme) => (
                 <button
                   key={theme.id}
                   onClick={() => { haptic.click(); setSelectedColor(theme.id) }}
                   className={cn(
-                    'relative rounded-2xl p-3 border-2 transition-all active:scale-95',
+                    'relative rounded-xl p-2 border-2 transition-all active:scale-95',
                     selectedColor === theme.id
-                      ? 'border-primary shadow-md'
-                      : 'border-border hover:border-primary/40'
+                      ? 'border-primary shadow-sm'
+                      : 'border-transparent hover:border-border'
                   )}
                 >
-                  {/* Swatch — gradient preview */}
+                  {/* Swatch — smaller, circular for premium feel */}
                   <div
-                    className="w-full aspect-square rounded-xl mb-2"
+                    className="w-full aspect-square rounded-lg mb-1.5"
                     style={{ background: theme.swatch }}
                   />
-                  <p className="text-xs font-medium text-center">{theme.label}</p>
+                  <p className="text-[10px] font-medium text-center leading-tight">{theme.label}</p>
                   {selectedColor === theme.id && (
-                    <div className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-primary flex items-center justify-center">
-                      <Check className="w-3 h-3 text-primary-foreground" strokeWidth={3} />
+                    <div className="absolute top-1 right-1 w-4 h-4 rounded-full bg-primary flex items-center justify-center">
+                      <Check className="w-2.5 h-2.5 text-primary-foreground" strokeWidth={3} />
                     </div>
                   )}
                 </button>
@@ -96,50 +103,47 @@ export function ThemePicker({ open, onDone }: { open: boolean; onDone: () => voi
             </div>
           </div>
 
-          {/* Light / Dark toggle */}
+          {/* Light / Dark toggle — compact horizontal pills */}
           <div>
-            <p className="text-sm font-semibold mb-3">Mode</p>
-            <div className="grid grid-cols-2 gap-3">
+            <p className="text-xs font-semibold mb-2 text-muted-foreground uppercase tracking-wide">Mode</p>
+            <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={() => { haptic.click(); setSelectedDark(false) }}
                 className={cn(
-                  'rounded-2xl p-4 border-2 transition-all active:scale-95 flex flex-col items-center gap-2',
+                  'rounded-xl px-3 py-2.5 border-2 transition-all active:scale-95 flex items-center justify-center gap-2',
                   !selectedDark
-                    ? 'border-primary shadow-md bg-primary/5'
+                    ? 'border-primary bg-primary/5'
                     : 'border-border hover:border-primary/40'
                 )}
               >
-                <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
-                  <Sun className="w-5 h-5 text-amber-600" />
-                </div>
+                <Sun className="w-4 h-4 text-amber-500" />
                 <span className="text-sm font-medium">Light</span>
               </button>
               <button
                 onClick={() => { haptic.click(); setSelectedDark(true) }}
                 className={cn(
-                  'rounded-2xl p-4 border-2 transition-all active:scale-95 flex flex-col items-center gap-2',
+                  'rounded-xl px-3 py-2.5 border-2 transition-all active:scale-95 flex items-center justify-center gap-2',
                   selectedDark
-                    ? 'border-primary shadow-md bg-primary/5'
+                    ? 'border-primary bg-primary/5'
                     : 'border-border hover:border-primary/40'
                 )}
               >
-                <div className="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center">
-                  <Moon className="w-5 h-5 text-slate-200" />
-                </div>
+                <Moon className="w-4 h-4 text-slate-600 dark:text-slate-300" />
                 <span className="text-sm font-medium">Dark</span>
               </button>
             </div>
           </div>
+        </div>
 
-          {/* Confirm button */}
+        {/* Footer — Confirm button, always visible (not scrolled away) */}
+        <div className="p-4 pt-0 flex-shrink-0">
           <Button
             onClick={handleConfirm}
-            className="w-full bg-gradient-saffron shadow-md gap-2 h-11"
-            size="lg"
+            className="w-full bg-gradient-saffron shadow-md gap-2 h-10"
+            size="default"
           >
             <Check className="w-4 h-4" />
             Confirm Theme
-            <ArrowRight className="w-4 h-4" />
           </Button>
         </div>
       </DialogContent>
