@@ -296,75 +296,23 @@ export function Dashboard() {
 
   return (
     <div className="space-y-5">
-      {/* Hero greeting card — premium gradient with wave pattern.
-          Mobile: vertical stack, big revenue number.
-          Desktop: horizontal layout with stats on left, actions on right. */}
+      {/* Greeting banner */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="rounded-2xl bg-gradient-saffron p-5 lg:p-7 text-white shadow-card relative overflow-hidden"
+        className="rounded-2xl bg-gradient-saffron p-5 lg:p-6 text-white shadow-lg relative overflow-hidden"
       >
-        {/* Decorative wave pattern at the bottom — subtle SVG overlay */}
-        <svg
-          className="absolute bottom-0 left-0 w-full h-24 opacity-20"
-          viewBox="0 0 400 80"
-          preserveAspectRatio="none"
-          fill="none"
-        >
-          <path
-            d="M0,40 C100,80 200,0 400,40 L400,80 L0,80 Z"
-            fill="white"
-          />
-          <path
-            d="M0,50 C100,20 200,70 400,30 L400,80 L0,80 Z"
-            fill="white"
-            opacity="0.5"
-          />
-        </svg>
-        {/* Decorative circles — kept for extra depth */}
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32 pointer-events-none" />
-        <div className="absolute bottom-0 right-20 w-40 h-40 bg-white/5 rounded-full -mb-20 pointer-events-none" />
-
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
-          {/* Left: greeting + hero revenue number */}
-          <div className="flex-1 min-w-0">
-            <p className="text-white/80 text-sm font-medium">
-              {t('dash.greeting')}, {setting?.ownerName || 'Shop Owner'} 👋
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32" />
+        <div className="absolute bottom-0 right-20 w-40 h-40 bg-white/5 rounded-full -mb-20" />
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div>
+            <p className="text-white/80 text-sm font-medium">{t('dash.greeting')}, {setting?.ownerName || 'Shop Owner'}</p>
+            <h2 className="text-2xl lg:text-3xl font-bold mt-1">{setting?.shopName || 'My Shop'}</h2>
+            <p className="text-white/80 text-sm mt-1">
+              {t('dash.today_made')} <span className="font-bold text-white">{formatINR(kpis.todayRevenue)}</span> {t('dash.from')} <span className="font-bold text-white">{kpis.todayTxnCount}</span> {t('dash.sales_word')}
             </p>
-            <h2 className="text-xl lg:text-2xl font-bold mt-0.5 font-heading tracking-tight">
-              {setting?.shopName || 'My Shop'}
-            </h2>
-
-            {/* Hero revenue number — big, bold, tabular nums for alignment */}
-            <div className="mt-3 flex items-baseline gap-2 flex-wrap">
-              <span className="text-white/70 text-sm font-medium">{t('dash.today_made')}</span>
-            </div>
-            <div className="flex items-baseline gap-3 mt-1 flex-wrap">
-              <span className="text-4xl lg:text-5xl font-extrabold tabular-nums tracking-tight font-heading">
-                {formatINR(kpis.todayRevenue)}
-              </span>
-              <span className="text-white/80 text-sm">
-                {t('dash.from')} <span className="font-bold text-white">{kpis.todayTxnCount}</span> {t('dash.sales_word')}
-              </span>
-            </div>
-
-            {/* Profit indicator — small pill below revenue */}
-            {!hideProfit && kpis.todayProfit !== 0 && (
-              <div className="mt-2 inline-flex items-center gap-1.5 bg-white/15 backdrop-blur-sm rounded-full px-3 py-1">
-                {kpis.todayProfit > 0 ? (
-                  <TrendingUp className="w-3.5 h-3.5" />
-                ) : (
-                  <TrendingDown className="w-3.5 h-3.5" />
-                )}
-                <span className="text-xs font-semibold tabular-nums">
-                  {kpis.todayProfit > 0 ? '+' : ''}{formatINR(kpis.todayProfit)} profit
-                </span>
-              </div>
-            )}
           </div>
-
-          {/* Right: action buttons */}
-          <div className="flex gap-2 flex-wrap lg:flex-nowrap lg:flex-col lg:items-end">
+          <div className="flex gap-2 flex-wrap">
             <Button
               onClick={() => setView('new-sale')}
               className="bg-white text-primary hover:bg-white/90 gap-2 shadow-md"
@@ -372,41 +320,39 @@ export function Dashboard() {
               <Plus className="w-4 h-4" />
               New Sale
             </Button>
-            <div className="flex gap-2 flex-wrap">
-              {/* Repeat Last Sale — loads the last sale's items into a new sale form */}
-              {features?.repeatLastSale && (
-                <Button
-                  onClick={handleRepeatLastSale}
-                  disabled={repeating}
-                  variant="outline"
-                  className="bg-white/10 text-white border-white/30 hover:bg-white/20 hover:text-white gap-2"
-                  title={`Repeat your most recent sale`}
-                >
-                  {repeating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Repeat className="w-4 h-4" />}
-                  <span className="hidden sm:inline">{repeating ? 'Loading...' : 'Repeat Last Sale'}</span>
-                </Button>
-              )}
+            {/* Repeat Last Sale — loads the last sale's items into a new sale form */}
+            {features?.repeatLastSale && (
               <Button
-                onClick={() => setView('scanner')}
+                onClick={handleRepeatLastSale}
+                disabled={repeating}
                 variant="outline"
                 className="bg-white/10 text-white border-white/30 hover:bg-white/20 hover:text-white gap-2"
+                title={`Repeat your most recent sale`}
               >
-                <ScanLine className="w-4 h-4" />
-                {t('dash.scan_bill')}
+                {repeating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Repeat className="w-4 h-4" />}
+                <span className="hidden sm:inline">{repeating ? 'Loading...' : 'Repeat Last Sale'}</span>
               </Button>
-              {/* Share Today's Summary via WhatsApp */}
-              {features?.whatsappSharing && kpis.todayTxnCount > 0 && (
-                <Button
-                  onClick={handleShareSummary}
-                  variant="outline"
-                  className="bg-white/10 text-white border-white/30 hover:bg-white/20 hover:text-white gap-2"
-                  title="Share today's summary on WhatsApp"
-                >
-                  <Share2 className="w-4 h-4" />
-                  <span className="hidden sm:inline">Share Summary</span>
-                </Button>
-              )}
-            </div>
+            )}
+            <Button
+              onClick={() => setView('scanner')}
+              variant="outline"
+              className="bg-white/10 text-white border-white/30 hover:bg-white/20 hover:text-white gap-2"
+            >
+              <ScanLine className="w-4 h-4" />
+              {t('dash.scan_bill')}
+            </Button>
+            {/* Share Today's Summary via WhatsApp */}
+            {features?.whatsappSharing && kpis.todayTxnCount > 0 && (
+              <Button
+                onClick={handleShareSummary}
+                variant="outline"
+                className="bg-white/10 text-white border-white/30 hover:bg-white/20 hover:text-white gap-2"
+                title="Share today's summary on WhatsApp"
+              >
+                <Share2 className="w-4 h-4" />
+                <span className="hidden sm:inline">Share Summary</span>
+              </Button>
+            )}
           </div>
         </div>
       </motion.div>
