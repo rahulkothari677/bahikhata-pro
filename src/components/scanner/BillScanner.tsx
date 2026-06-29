@@ -246,25 +246,41 @@ export function BillScanner() {
   // Try native camera first (Capacitor plugin). If unavailable or cancelled,
   // fall back to the hidden <input capture> element (web browser).
   const handleTakePhoto = async () => {
+    console.log('[Scanner] Take Photo clicked, native:', Capacitor.isNativePlatform())
     const file = await takePhotoNative()
+    console.log('[Scanner] takePhotoNative returned:', file ? `${file.name} (${file.size} bytes)` : 'null')
     if (file) {
       handleFile(file)
     } else if (!Capacitor.isNativePlatform()) {
       // Web fallback — trigger the hidden input with capture attribute
       cameraInputRef.current?.click()
+    } else {
+      // On native, if user cancelled or it failed, show a hint
+      toast({
+        title: 'Camera cancelled or unavailable',
+        description: 'If the camera did not open, check app permissions in Android Settings.',
+        variant: 'destructive',
+      })
     }
-    // On native, if user cancelled, do nothing (no fallback to gallery)
   }
 
   // Try native photo picker first (Capacitor plugin). If unavailable,
   // fall back to the hidden <input> element (web browser).
   const handlePickPhoto = async () => {
+    console.log('[Scanner] Pick Photo clicked, native:', Capacitor.isNativePlatform())
     const file = await pickPhotoNative()
+    console.log('[Scanner] pickPhotoNative returned:', file ? `${file.name} (${file.size} bytes)` : 'null')
     if (file) {
       handleFile(file)
     } else if (!Capacitor.isNativePlatform()) {
       // Web fallback — trigger the hidden file input
       fileInputRef.current?.click()
+    } else {
+      toast({
+        title: 'Photo picker cancelled or unavailable',
+        description: 'If the gallery did not open, check app permissions in Android Settings.',
+        variant: 'destructive',
+      })
     }
   }
 
