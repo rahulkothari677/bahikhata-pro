@@ -30,6 +30,7 @@ import { offlineFetch, isOnline, OfflineError } from '@/lib/offline-fetch'
 import { useSetting } from '@/hooks/use-setting'
 import { useRecurringEntries } from '@/hooks/use-recurring-entries'
 import { toast as sonnerToast } from 'sonner'
+import { useCountUp } from '@/hooks/use-count-up'
 
 const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)']
 
@@ -371,6 +372,7 @@ export function Dashboard() {
         <KPICard
           title={t('dash.today_revenue')}
           value={formatINR(kpis.todayRevenue)}
+          animateValue={kpis.todayRevenue}
           icon={IndianRupee}
           gradient="from-amber-500 to-orange-600"
           subtitle={`${kpis.todayTxnCount} ${t('dash.sales_word')}`}
@@ -380,6 +382,7 @@ export function Dashboard() {
           <KPICard
             title={t('dash.today_profit')}
             value={formatINR(kpis.todayProfit)}
+            animateValue={kpis.todayProfit}
             icon={TrendingUp}
             gradient="from-emerald-500 to-teal-600"
             subtitle={`${t('stat.margin')} ${kpis.todayRevenue > 0 ? ((kpis.todayProfit / kpis.todayRevenue) * 100).toFixed(1) : 0}%`}
@@ -389,6 +392,7 @@ export function Dashboard() {
         <KPICard
           title={`${rangeLabel} Revenue`}
           value={formatINR(kpis.rangeRevenue)}
+          animateValue={kpis.rangeRevenue}
           icon={Wallet}
           gradient="from-rose-500 to-pink-600"
           subtitle={`${kpis.rangeTxnCount} ${t('dash.sales_word')} • ${kpis.revenueGrowth >= 0 ? '↑' : '↓'} ${Math.abs(kpis.revenueGrowth).toFixed(1)}% vs prev`}
@@ -399,6 +403,7 @@ export function Dashboard() {
           <KPICard
             title={`${t('dash.net_profit')} (${rangeLabel})`}
             value={formatINR(kpis.netProfit)}
+            animateValue={kpis.netProfit}
             icon={PiggyBank}
             gradient="from-violet-500 to-purple-600"
             subtitle={`${kpis.profitGrowth >= 0 ? '↑' : '↓'} ${Math.abs(kpis.profitGrowth).toFixed(1)}% profit trend`}
@@ -842,7 +847,7 @@ export function Dashboard() {
   )
 }
 
-function KPICard({ title, value, icon: Icon, gradient, subtitle, trend, onClick }: {
+function KPICard({ title, value, icon: Icon, gradient, subtitle, trend, onClick, animateValue }: {
   title: string
   value: string
   icon: any
@@ -850,7 +855,16 @@ function KPICard({ title, value, icon: Icon, gradient, subtitle, trend, onClick 
   subtitle?: string
   trend?: 'up' | 'down'
   onClick?: () => void
+  // If provided, the card animates from 0 to this number on first load
+  // and formats it using formatINR. Overrides `value` for the display.
+  animateValue?: number
 }) {
+  // Only animate if a numeric value is provided AND it's positive.
+  // Negative values (e.g., loss) don't animate — they just show directly.
+  const shouldAnimate = animateValue !== undefined && animateValue > 0
+  const animatedNum = useCountUp(shouldAnimate ? animateValue! : 0)
+  const displayValue = shouldAnimate ? formatINR(animatedNum) : value
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -873,7 +887,7 @@ function KPICard({ title, value, icon: Icon, gradient, subtitle, trend, onClick 
             )}
           </div>
           <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">{title}</p>
-          <p className="text-xl lg:text-2xl font-bold mt-0.5 tracking-tight">{value}</p>
+          <p className="text-xl lg:text-2xl font-bold mt-0.5 tracking-tight tabular-nums">{displayValue}</p>
           {subtitle && <p className="text-[11px] text-muted-foreground mt-1">{subtitle}</p>}
         </CardContent>
       </Card>
