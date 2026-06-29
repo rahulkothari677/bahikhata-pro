@@ -445,6 +445,101 @@ export function Dashboard() {
         />
       </div>
 
+      {/* Mini-charts row — quick visual insights at a glance.
+          Sparkline: last 7 days sales trend (no axes, just the line)
+          Donut: sales vs purchases split for the selected range */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 lg:gap-4">
+        {/* Sparkline card — 7-day sales trend */}
+        <Card className="shadow-card border-border/60 overflow-hidden">
+          <CardContent className="p-4">
+            <div className="flex items-start justify-between mb-2">
+              <div>
+                <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">Sales Trend</p>
+                <p className="text-lg font-bold tabular-nums mt-0.5">{formatINR(kpis.rangeRevenue)}</p>
+              </div>
+              {kpis.revenueGrowth !== 0 && (
+                <div className={cn(
+                  'flex items-center gap-1 text-xs font-semibold rounded-full px-2 py-0.5',
+                  kpis.revenueGrowth > 0 ? 'text-emerald-600 bg-emerald-100 dark:bg-emerald-950/40' : 'text-rose-600 bg-rose-100 dark:bg-rose-950/40'
+                )}>
+                  {kpis.revenueGrowth > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+                  {Math.abs(kpis.revenueGrowth).toFixed(0)}%
+                </div>
+              )}
+            </div>
+            {/* Sparkline — no axes, just the line with gradient fill */}
+            <ResponsiveContainer width="100%" height={56}>
+              <AreaChart data={salesTrend.slice(-14)} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
+                <defs>
+                  <linearGradient id="sparklineGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="oklch(0.62 0.18 42)" stopOpacity={0.4} />
+                    <stop offset="100%" stopColor="oklch(0.62 0.18 42)" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <Area
+                  type="monotone"
+                  dataKey="revenue"
+                  stroke="oklch(0.62 0.18 42)"
+                  strokeWidth={2}
+                  fill="url(#sparklineGrad)"
+                  isAnimationActive={true}
+                  animationDuration={600}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        {/* Donut card — sales vs purchases split */}
+        <Card className="shadow-card border-border/60 overflow-hidden">
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between gap-3">
+              {/* Donut chart */}
+              <ResponsiveContainer width={80} height={80}>
+                <PieChart>
+                  <Pie
+                    data={[
+                      { name: 'Sales', value: kpis.rangeRevenue || 0, fill: 'oklch(0.62 0.15 155)' },
+                      { name: 'Purchases', value: kpis.totalPayable || 0, fill: 'oklch(0.62 0.18 42)' },
+                    ]}
+                    dataKey="value"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={26}
+                    outerRadius={38}
+                    paddingAngle={2}
+                    isAnimationActive={true}
+                    animationDuration={600}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+              {/* Legend + values */}
+              <div className="flex-1 space-y-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-2.5 h-2.5 rounded-full" style={{ background: 'oklch(0.62 0.15 155)' }} />
+                  <span className="text-xs text-muted-foreground flex-1">Sales</span>
+                  <span className="text-sm font-bold tabular-nums">{formatINRCompact(kpis.rangeRevenue || 0)}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="w-2.5 h-2.5 rounded-full" style={{ background: 'oklch(0.62 0.18 42)' }} />
+                  <span className="text-xs text-muted-foreground flex-1">Purchases</span>
+                  <span className="text-sm font-bold tabular-nums">{formatINRCompact(kpis.totalPayable || 0)}</span>
+                </div>
+                <div className="flex items-center gap-2 pt-1 border-t border-border/40">
+                  <span className="text-xs text-muted-foreground flex-1">Net</span>
+                  <span className={cn(
+                    'text-sm font-bold tabular-nums',
+                    (kpis.rangeRevenue - (kpis.totalPayable || 0)) >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                  )}>
+                    {formatINRCompact(kpis.rangeRevenue - (kpis.totalPayable || 0))}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
       {/* Sales trend chart - full width */}
       <Card className="shadow-card border-border/60">
         <CardHeader className="pb-2">
