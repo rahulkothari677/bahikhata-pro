@@ -187,17 +187,28 @@ export function BillScanner() {
   const cameraInputRef = useRef<HTMLInputElement>(null)
 
   const handleFile = async (file: File) => {
+    sonnerToast.info('DEBUG: handleFile started', { description: `file: ${file.name}, size: ${file.size}, type: ${file.type}` })
     // Subscription gating — requires Pro plan for AI scanner
-    if (!requireFeature('ai_scanner')) return
-    if (!file) return
+    if (!requireFeature('ai_scanner')) {
+      sonnerToast.error('DEBUG: requireFeature returned false — subscription blocked')
+      return
+    }
+    sonnerToast.info('DEBUG: Subscription OK')
+    if (!file) {
+      sonnerToast.error('DEBUG: No file')
+      return
+    }
     if (!file.type.startsWith('image/')) {
+      sonnerToast.error('DEBUG: Not an image', { description: file.type })
       toast({ title: 'Please select an image file', variant: 'destructive' })
       return
     }
     if (file.size > 10 * 1024 * 1024) {
+      sonnerToast.error('DEBUG: Too large', { description: `${file.size} bytes` })
       toast({ title: 'Image too large. Max 10MB', variant: 'destructive' })
       return
     }
+    sonnerToast.info('DEBUG: File valid, compressing...')
 
     // Compress and resize image on client side before sending to API
     // This prevents Vercel serverless timeout on large phone photos
@@ -205,8 +216,10 @@ export function BillScanner() {
       return new Promise((resolve, reject) => {
         const reader = new FileReader()
         reader.onload = (e) => {
+          sonnerToast.info('DEBUG: FileReader loaded')
           const img = new Image()
           img.onload = () => {
+            sonnerToast.info('DEBUG: Image loaded', { description: `${img.width}x${img.height}` })
             // Max dimensions: 1200x1600 (enough for AI to read, small enough for API)
             const MAX_WIDTH = 1200
             const MAX_HEIGHT = 1600
@@ -224,6 +237,7 @@ export function BillScanner() {
             canvas.height = height
             const ctx = canvas.getContext('2d')
             if (!ctx) {
+              sonnerToast.error('DEBUG: Canvas not supported')
               reject(new Error('Canvas not supported'))
               return
             }
@@ -231,12 +245,19 @@ export function BillScanner() {
 
             // Compress as JPEG with quality 0.85
             const compressed = canvas.toDataURL('image/jpeg', 0.85)
+            sonnerToast.info('DEBUG: Compressed', { description: `${compressed.length} chars` })
             resolve(compressed)
           }
-          img.onerror = () => reject(new Error('Failed to load image'))
+          img.onerror = () => {
+            sonnerToast.error('DEBUG: Image load failed')
+            reject(new Error('Failed to load image'))
+          }
           img.src = e.target?.result as string
         }
-        reader.onerror = () => reject(new Error('Failed to read file'))
+        reader.onerror = () => {
+          sonnerToast.error('DEBUG: FileReader failed')
+          reject(new Error('Failed to read file'))
+        }
         reader.readAsDataURL(file)
       })
     }
@@ -244,8 +265,10 @@ export function BillScanner() {
     try {
       // Compress the image first
       const base64 = await compressImage(file)
+      sonnerToast.info('DEBUG: Compression done', { description: `${base64.length} chars` })
       setPreview(base64)
       setScanning(true)
+      sonnerToast.info('DEBUG: Scanning started, calling API...')
       // Save existing items before scanning (for "adding more" mode)
       const existingItems = scanned?._isAddingMore ? (scanned?.items || []) : []
       const isAddingMore = scanned?._isAddingMore || false
@@ -255,22 +278,27 @@ export function BillScanner() {
       }
       try {
         // Step 1: Upload to Cloudinary (gets a URL, stores image for future)
+        sonnerToast.info('DEBUG: Uploading to Cloudinary...')
         const uploadRes = await offlineFetch('/api/upload-bill', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ imageBase64: base64 }),
         })
         const uploadData = await uploadRes.json()
+        sonnerToast.info('DEBUG: Upload result', { description: `success: ${uploadData.success}, url: ${uploadData.url ? 'yes' : 'no'}` })
 
         // Step 2: Send to AI scanner (use Cloudinary URL if upload succeeded, else base64)
         const imageUrl = uploadData.success ? uploadData.url : null
+        sonnerToast.info('DEBUG: Calling scan API...', { description: imageUrl ? 'with URL' : 'with base64' })
         const scanRes = await offlineFetch('/api/scan-bill', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(imageUrl ? { imageUrl, billType } : { imageBase64: base64, billType }),
         })
         const data = await scanRes.json()
+        sonnerToast.info('DEBUG: Scan API response', { description: `error: ${data.error || 'none'}, bill: ${data.bill ? 'yes' : 'no'}, items: ${data.bill?.items?.length || 0}` })
         if (data.error) {
+          sonnerToast.error('DEBUG: Scan failed', { description: data.error })
           toast({
             title: 'Scan failed',
             description: data.error,
@@ -278,6 +306,7 @@ export function BillScanner() {
           })
           // Raw AI output logging removed — was leaking raw response to console
         } else {
+          sonnerToast.success('DEBUG: Scan success!', { description: `${data.bill?.items?.length || 0} items found` })
           // If we're in "adding more" mode, append new items to existing
           if (isAddingMore && existingItems.length > 0) {
             const newItems = data.bill.items || []
@@ -292,7 +321,8 @@ export function BillScanner() {
             sonnerToast.success('Bill scanned! Review and verify the data.')
           }
         }
-      } catch (e) {
+      } catch (e: any) {
+        sonnerToast.error('DEBUG: API error', { description: String(e?.message || e) })
         toast({
           title: 'Scan failed',
           description: 'Please try again or enter manually',
@@ -301,7 +331,8 @@ export function BillScanner() {
       } finally {
         setScanning(false)
       }
-    } catch (compressError) {
+    } catch (compressError: any) {
+      sonnerToast.error('DEBUG: Compression error', { description: String(compressError?.message || compressError) })
       toast({
         title: 'Failed to process image',
         description: 'Please try a different image',
