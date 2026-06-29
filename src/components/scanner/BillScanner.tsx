@@ -17,6 +17,72 @@ import {
 } from 'lucide-react'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { useSubscription } from '@/hooks/use-subscription'
+import { Capacitor } from '@capacitor/core'
+
+/**
+ * takePhotoNative — uses Capacitor Camera plugin on native (Android app)
+ * to open the camera directly. Falls back to <input capture> on web.
+ *
+ * Returns a File object or null if cancelled/failed.
+ */
+async function takePhotoNative(): Promise<File | null> {
+  // On native platform, use Capacitor Camera plugin
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const { Camera, CameraResultType, CameraSource } = await import('@capacitor/camera')
+      const photo = await Camera.getPhoto({
+        quality: 85,
+        allowEditing: false,
+        resultType: CameraResultType.DataUrl,
+        source: CameraSource.Camera,
+        saveToGallery: false,
+      })
+      if (!photo.dataUrl) return null
+      // Convert base64 data URL to File object
+      const res = await fetch(photo.dataUrl)
+      const blob = await res.blob()
+      return new File([blob], `bill_${Date.now()}.jpg`, { type: 'image/jpeg' })
+    } catch (err: any) {
+      // User cancelled or permission denied
+      if (err?.message?.includes('cancelled') || err?.message?.includes('User denied')) {
+        return null
+      }
+      console.error('[Camera] Native capture failed:', err)
+      return null
+    }
+  }
+  // On web — can't open camera directly from JS, return null (caller falls back to input)
+  return null
+}
+
+/**
+ * pickPhotoNative — uses Capacitor Camera plugin on native (Android app)
+ * to open the photo gallery. Falls back to <input> on web.
+ */
+async function pickPhotoNative(): Promise<File | null> {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const { Camera, CameraResultType, CameraSource } = await import('@capacitor/camera')
+      const photo = await Camera.getPhoto({
+        quality: 85,
+        allowEditing: false,
+        resultType: CameraResultType.DataUrl,
+        source: CameraSource.Photos,
+      })
+      if (!photo.dataUrl) return null
+      const res = await fetch(photo.dataUrl)
+      const blob = await res.blob()
+      return new File([blob], `bill_${Date.now()}.jpg`, { type: 'image/jpeg' })
+    } catch (err: any) {
+      if (err?.message?.includes('cancelled') || err?.message?.includes('User denied')) {
+        return null
+      }
+      console.error('[Camera] Native pick failed:', err)
+      return null
+    }
+  }
+  return null
+}
 
 export function BillScanner() {
   const { t } = useTranslation()
@@ -162,6 +228,31 @@ export function BillScanner() {
     if (file) handleFile(file)
   }
 
+  // Try native camera first (Capacitor plugin). If unavailable or cancelled,
+  // fall back to the hidden <input capture> element (web browser).
+  const handleTakePhoto = async () => {
+    const file = await takePhotoNative()
+    if (file) {
+      handleFile(file)
+    } else if (!Capacitor.isNativePlatform()) {
+      // Web fallback — trigger the hidden input with capture attribute
+      cameraInputRef.current?.click()
+    }
+    // On native, if user cancelled, do nothing (no fallback to gallery)
+  }
+
+  // Try native photo picker first (Capacitor plugin). If unavailable,
+  // fall back to the hidden <input> element (web browser).
+  const handlePickPhoto = async () => {
+    const file = await pickPhotoNative()
+    if (file) {
+      handleFile(file)
+    } else if (!Capacitor.isNativePlatform()) {
+      // Web fallback — trigger the hidden file input
+      fileInputRef.current?.click()
+    }
+  }
+
   const updateItem = (index: number, field: string, value: any) => {
     if (!scanned) return
     const newItems = [...scanned.items]
@@ -285,7 +376,7 @@ export function BillScanner() {
                   <div className="flex flex-col sm:flex-row gap-3 justify-center mt-6">
                     <Button
                       size="lg"
-                      onClick={() => cameraInputRef.current?.click()}
+                      onClick={handleTakePhoto}
                       className="bg-gradient-saffron gap-2 shadow-lg"
                     >
                       <Camera className="w-5 h-5" /> {t('scanner.take_photo')}
@@ -293,7 +384,7 @@ export function BillScanner() {
                     <Button
                       size="lg"
                       variant="outline"
-                      onClick={() => fileInputRef.current?.click()}
+                      onClick={handlePickPhoto}
                       className="gap-2"
                     >
                       <Upload className="w-5 h-5" /> {t('scanner.upload_image')}
@@ -405,13 +496,16 @@ export function BillScanner() {
                       // Keep existing items, mark as "adding more"
                       setScanned({ ...scanned, _isAddingMore: true })
                       setPreview('')
-                      // Trigger file input using ref
-                      // Use camera input on mobile, file input on desktop
-                      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
-                      if (isMobile) {
-                        cameraInputRef.current?.click()
+                      // Use native camera on Capacitor, otherwise the hidden input
+                      if (Capacitor.isNativePlatform()) {
+                        handleTakePhoto()
                       } else {
-                        fileInputRef.current?.click()
+                        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+                        if (isMobile) {
+                          cameraInputRef.current?.click()
+                        } else {
+                          fileInputRef.current?.click()
+                        }
                       }
                     }}
                     className="bg-gradient-saffron gap-1"
