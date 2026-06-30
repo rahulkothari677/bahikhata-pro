@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useAppStore, type ViewType } from '@/store/app-store'
 import { useTranslation } from '@/hooks/use-translation'
-import { Menu, Plus, Sparkles, ScanLine, ArrowLeft, Search, Sun, Moon, LogOut } from 'lucide-react'
+import { Menu, Plus, Sparkles, ScanLine, ArrowLeft, Search, LogOut, Store, ChevronDown, Check } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useQuery } from '@tanstack/react-query'
 import { useSession, signOut } from 'next-auth/react'
@@ -12,7 +12,6 @@ import { offlineFetch } from '@/lib/offline-fetch'
 import { useFeatureFlags } from '@/hooks/use-feature-flags'
 import { NotificationCenter } from '@/components/common/NotificationCenter'
 import { useShops } from '@/hooks/use-shops'
-import { Store, ChevronDown, Check } from 'lucide-react'
 
 const viewTitleKeys: Record<string, { titleKey: string; subtitleKey: string }> = {
   dashboard: { titleKey: 'nav.dashboard', subtitleKey: 'nav.dashboard' },
