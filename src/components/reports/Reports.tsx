@@ -299,10 +299,10 @@ function PLReport({ data }: { data: any }) {
                     <div key={e.name}>
                       <div className="flex items-center justify-between text-sm mb-1">
                         <span className="font-medium">{e.name}</span>
-                        <span className="text-muted-foreground">{formatINR(e.value)} ({pct.toFixed(0)}%)</span>
+                        <span className="text-muted-foreground tabular-nums">{formatINR(e.value)} ({pct.toFixed(0)}%)</span>
                       </div>
                       <div className="h-2 bg-muted rounded-full overflow-hidden">
-                        <div className="h-full bg-gradient-to-r from-rose-400 to-rose-600" style={{ width: `${pct}%` }} />
+                        <div className="h-full bg-gradient-to-r from-rose-400 to-rose-600 transition-all duration-500" style={{ width: `${pct}%` }} />
                       </div>
                     </div>
                   )
@@ -329,10 +329,10 @@ function PLReport({ data }: { data: any }) {
                     <div key={e.name}>
                       <div className="flex items-center justify-between text-sm mb-1">
                         <span className="font-medium">{e.name}</span>
-                        <span className="text-muted-foreground">{formatINR(e.value)}</span>
+                        <span className="text-muted-foreground tabular-nums">{formatINR(e.value)}</span>
                       </div>
                       <div className="h-2 bg-muted rounded-full overflow-hidden">
-                        <div className="h-full bg-gradient-to-r from-emerald-400 to-emerald-600" style={{ width: `${pct}%` }} />
+                        <div className="h-full bg-gradient-to-r from-emerald-400 to-emerald-600 transition-all duration-500" style={{ width: `${pct}%` }} />
                       </div>
                     </div>
                   )
@@ -620,19 +620,25 @@ function PartyReport({ data }: { data: any }) {
 }
 
 function ReportStatCard({ label, value, icon: Icon, color, bg }: { label: string; value: string; icon: any; color: string; bg: string }) {
+  // Map bg to gradient for premium look
+  const gradient = bg.includes('amber') ? 'from-amber-500 to-orange-600'
+    : bg.includes('emerald') ? 'from-emerald-500 to-teal-600'
+    : bg.includes('rose') ? 'from-rose-500 to-red-600'
+    : 'from-violet-500 to-purple-600'
+
   return (
-    <Card className="shadow-card border-border/60 overflow-hidden relative">
-      <div className={cn('absolute top-0 right-0 w-16 h-16 rounded-full -mr-6 -mt-6 opacity-30', bg)} />
-      <CardContent className="p-4 relative">
+    <div className={`rounded-2xl bg-gradient-to-br ${gradient} p-4 text-white shadow-card relative overflow-hidden`}>
+      <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -mr-12 -mt-12 pointer-events-none" />
+      <div className="relative">
         <div className="flex items-center gap-2.5 mb-2">
-          <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center', bg)}>
-            <Icon className={cn('w-4 h-4', color)} />
+          <div className="w-9 h-9 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
+            <Icon className="w-4 h-4 text-white" />
           </div>
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold leading-tight">{label}</p>
+          <p className="text-[10px] text-white/70 uppercase tracking-wide font-semibold leading-tight">{label}</p>
         </div>
-        <p className="text-xl font-bold tracking-tight">{value}</p>
-      </CardContent>
-    </Card>
+        <p className="text-xl font-bold tracking-tight tabular-nums">{value}</p>
+      </div>
+    </div>
   )
 }
 

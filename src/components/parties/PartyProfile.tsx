@@ -259,24 +259,27 @@ export function PartyProfile() {
 
   return (
     <div className="space-y-4">
-      {/* Profile header */}
-      <Card className="shadow-card border-border/60 overflow-hidden">
-        <div className={cn(
-          'p-5 text-white',
-          party.type === 'customer' ? 'bg-gradient-to-br from-emerald-500 to-teal-600' :
-          party.type === 'supplier' ? 'bg-gradient-to-br from-amber-500 to-orange-600' :
-          'bg-gradient-to-br from-violet-500 to-purple-600'
-        )}>
+      {/* Profile header — premium gradient banner */}
+      <div className={cn(
+        'rounded-2xl shadow-card overflow-hidden text-white relative',
+        party.type === 'customer' ? 'bg-gradient-to-br from-emerald-500 to-teal-600' :
+        party.type === 'supplier' ? 'bg-gradient-to-br from-amber-500 to-orange-600' :
+        'bg-gradient-to-br from-violet-500 to-purple-600'
+      )}>
+        {/* Decorative circles */}
+        <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 pointer-events-none" />
+        <div className="absolute bottom-0 right-20 w-24 h-24 bg-white/5 rounded-full -mb-12 pointer-events-none" />
+        <div className="relative p-5">
           <div className="flex items-start gap-4 flex-wrap">
-            <Avatar className="w-16 h-16 border-4 border-white/30">
-              <AvatarFallback className="bg-white/20 text-white text-xl font-bold">
+            <Avatar className="w-16 h-16 border-4 border-white/30 flex-shrink-0">
+              <AvatarFallback className="bg-white/20 backdrop-blur-sm text-white text-xl font-bold">
                 {getInitials(party.name)}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0">
-              <h2 className="text-2xl font-bold truncate">{party.name}</h2>
+              <h2 className="text-2xl font-bold font-heading tracking-tight truncate">{party.name}</h2>
               <div className="flex items-center gap-2 mt-1 flex-wrap">
-                <Badge className="bg-white/20 text-white border-0 capitalize">{party.type}</Badge>
+                <span className="text-[10px] font-medium bg-white/20 backdrop-blur-sm rounded-full px-2 py-0.5 capitalize">{party.type}</span>
                 {party.phone && (
                   <span className="text-white/80 text-sm flex items-center gap-1">
                     <Phone className="w-3 h-3" /> {party.phone}
@@ -290,8 +293,8 @@ export function PartyProfile() {
               </div>
             </div>
             <div className="text-right">
-              <p className="text-white/70 text-xs uppercase">Outstanding Balance</p>
-              <p className={cn('text-2xl font-bold', stats.balance >= 0 ? 'text-white' : 'text-red-200')}>
+              <p className="text-white/70 text-xs uppercase">Outstanding</p>
+              <p className={cn('text-2xl font-bold tabular-nums', stats.balance >= 0 ? 'text-white' : 'text-red-200')}>
                 {stats.balance >= 0 ? '+' : ''}{formatINR(stats.balance)}
               </p>
               <p className="text-white/70 text-xs mt-0.5">
@@ -300,9 +303,10 @@ export function PartyProfile() {
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Quick actions */}
-        <div className="p-3 flex flex-wrap gap-2">
+      {/* Quick actions */}
+      <div className="flex flex-wrap gap-2">
           {isCustomer && (
             <Button size="sm" onClick={() => handleNewTransaction('sale')} className="bg-gradient-emerald gap-2">
               <Plus className="w-4 h-4" /> New Sale
@@ -356,8 +360,7 @@ export function PartyProfile() {
           <Button size="sm" variant="outline" onClick={handleDelete} className="gap-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50">
             <Trash2 className="w-4 h-4" /> Delete
           </Button>
-        </div>
-      </Card>
+      </div>
 
       {/* Stats grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
