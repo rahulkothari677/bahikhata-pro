@@ -87,7 +87,7 @@ export function Reports() {
       else if (reportType === 'gst') await exportGSTReportCSV(data, periodLabel)
       else if (reportType === 'stock') await exportStockReportCSV(data)
       else if (reportType === 'party') await exportPartyReportCSV(data)
-      sonnerToast.success('CSV exported to Documents folder')
+      sonnerToast.success('CSV ready — save or share from the popup')
     } catch {
       sonnerToast.error('Failed to export CSV')
     }
@@ -105,7 +105,7 @@ export function Reports() {
       const txnData = await r.json()
       const setting = (await offlineFetch('/api/settings').then(r => r.json())).setting
       await exportToTally(txnData.transactions || [], setting, 'all')
-      sonnerToast.success('Tally XML saved to Documents folder')
+      sonnerToast.success('Tally XML ready — save or share from the popup')
     } catch {
       sonnerToast.error('Failed to export Tally XML')
     }
