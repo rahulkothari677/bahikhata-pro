@@ -1,7 +1,10 @@
 /**
  * CSV export utility for reports.
  * Handles proper escaping (quotes, commas, newlines) per RFC 4180.
+ * Uses Capacitor Filesystem on native (Android) to save to Downloads folder.
  */
+
+import { Capacitor } from '@capacitor/core'
 
 function escapeCSV(value: any): string {
   if (value === null || value === undefined) return ''
@@ -13,21 +16,42 @@ function escapeCSV(value: any): string {
   return str
 }
 
-export function exportCSV(filename: string, headers: string[], rows: (string | number | null | undefined)[][]) {
+export async function exportCSV(filename: string, headers: string[], rows: (string | number | null | undefined)[][]) {
   const csv = [
     headers.map(escapeCSV).join(','),
     ...rows.map((row) => row.map(escapeCSV).join(',')),
   ].join('\n')
 
   // Prepend BOM so Excel detects UTF-8 (handles ₹ symbol correctly)
-  // Use 'application/octet-stream' to force download on mobile browsers
-  // (some mobile browsers try to open 'text/csv' in a new tab instead of downloading)
-  const blob = new Blob(['\uFEFF' + csv], { type: 'application/octet-stream' })
+  const csvContent = '\uFEFF' + csv
+  const cleanFilename = filename.endsWith('.csv') ? filename : `${filename}.csv`
+
+  // Check if running on Capacitor (native Android app)
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const { Filesystem, Directory } = await import('@capacitor/filesystem')
+      // Convert to base64
+      const base64Data = btoa(unescape(encodeURIComponent(csvContent)))
+      // Write to Documents directory (accessible in Files app)
+      await Filesystem.writeFile({
+        path: cleanFilename,
+        data: base64Data,
+        directory: Directory.Documents,
+        encoding: 'base64',
+      })
+      return // Success — file saved to Documents folder
+    } catch (err) {
+      console.error('[CSV] Filesystem write failed, falling back to browser download:', err)
+      // Fall through to browser download method
+    }
+  }
+
+  // Web browser fallback (desktop)
+  const blob = new Blob([csvContent], { type: 'application/octet-stream' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = filename.endsWith('.csv') ? filename : `${filename}.csv`
-  // Append to DOM — required for programmatic download on some mobile browsers
+  a.download = cleanFilename
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
@@ -37,7 +61,7 @@ export function exportCSV(filename: string, headers: string[], rows: (string | n
 /**
  * Export P&L report data to CSV.
  */
-export function exportPLReportCSV(data: any, periodLabel: string) {
+export async function exportPLReportCSV(data: any, periodLabel: string) {
   const { summary, expensesByCategory, incomeByCategory } = data
   const headers = ['Metric', 'Amount (INR)']
   const rows: (string | number)[][] = [
@@ -58,13 +82,13 @@ export function exportPLReportCSV(data: any, periodLabel: string) {
     ['OTHER INCOME BREAKDOWN', ''],
     ...incomeByCategory.map((e: any) => [e.name, e.value]),
   ]
-  exportCSV(`PnL_Report_${periodLabel.replace(/\s+/g, '_')}`, headers, rows)
+  await exportCSV(`PnL_Report_${periodLabel.replace(/\s+/g, '_')}`, headers, rows)
 }
 
 /**
  * Export GST report data to CSV.
  */
-export function exportGSTReportCSV(data: any, periodLabel: string) {
+export async function exportGSTReportCSV(data: any, periodLabel: string) {
   const { outputSales, inputPurchases, netGSTPayable, totalInvoices } = data
   const headers = ['GST Slab (%)', 'Sales Taxable', 'CGST', 'SGST', 'IGST', 'Purchase Taxable', 'Input CGST', 'Input SGST', 'Input IGST']
   const slabs = [0, 5, 12, 18, 28]
@@ -94,13 +118,13 @@ export function exportGSTReportCSV(data: any, periodLabel: string) {
       ]
     }),
   ]
-  exportCSV(`GST_Report_${periodLabel.replace(/\s+/g, '_')}`, headers, rows)
+  await exportCSV(`GST_Report_${periodLabel.replace(/\s+/g, '_')}`, headers, rows)
 }
 
 /**
  * Export Stock report data to CSV.
  */
-export function exportStockReportCSV(data: any) {
+export async function exportStockReportCSV(data: any) {
   const headers = ['Product', 'Category', 'Stock', 'Unit', 'Buy Price', 'Sale Price', 'Stock Value', 'Sale Value', 'Status']
   const rows: (string | number)[][] = (data.products || []).map((p: any) => [
     p.name,
@@ -113,13 +137,13 @@ export function exportStockReportCSV(data: any) {
     p.potentialSaleValue,
     p.isLowStock ? 'Low Stock' : 'OK',
   ])
-  exportCSV('Stock_Report', headers, rows)
+  await exportCSV('Stock_Report', headers, rows)
 }
 
 /**
  * Export Party-wise report data to CSV.
  */
-export function exportPartyReportCSV(data: any) {
+export async function exportPartyReportCSV(data: any) {
   const headers = ['Party Name', 'Type', 'Sales', 'Purchases', 'Paid', 'Received', 'Balance']
   const rows: (string | number)[][] = (data.parties || []).map((p: any) => [
     p.party.name,
@@ -130,5 +154,5 @@ export function exportPartyReportCSV(data: any) {
     p.totalReceived,
     p.balance,
   ])
-  exportCSV('Party_Report', headers, rows)
+  await exportCSV('Party_Report', headers, rows)
 }

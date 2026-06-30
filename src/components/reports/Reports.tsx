@@ -76,17 +76,18 @@ export function Reports() {
 
   const periodLabel = `${formatDate(dateRange.from)} to ${formatDate(dateRange.to)}`
 
-  const handleCSVExport = () => {
+  const handleCSVExport = async () => {
     if (!data) {
       sonnerToast.error('Report data not loaded yet')
       return
     }
     try {
-      if (reportType === 'pl') exportPLReportCSV(data, periodLabel)
-      else if (reportType === 'gst') exportGSTReportCSV(data, periodLabel)
-      else if (reportType === 'stock') exportStockReportCSV(data)
-      else if (reportType === 'party') exportPartyReportCSV(data)
-      sonnerToast.success('CSV exported successfully')
+      sonnerToast.loading('Exporting CSV...')
+      if (reportType === 'pl') await exportPLReportCSV(data, periodLabel)
+      else if (reportType === 'gst') await exportGSTReportCSV(data, periodLabel)
+      else if (reportType === 'stock') await exportStockReportCSV(data)
+      else if (reportType === 'party') await exportPartyReportCSV(data)
+      sonnerToast.success('CSV exported to Documents folder')
     } catch {
       sonnerToast.error('Failed to export CSV')
     }
@@ -98,12 +99,13 @@ export function Reports() {
 
   const handleTallyExport = async () => {
     try {
+      sonnerToast.loading('Exporting Tally XML...')
       // Fetch transactions for Tally export
       const r = await offlineFetch(`/api/transactions?limit=500`)
       const txnData = await r.json()
       const setting = (await offlineFetch('/api/settings').then(r => r.json())).setting
-      exportToTally(txnData.transactions || [], setting, 'all')
-      sonnerToast.success('Tally XML exported! Import this in Tally → Gateway of Tally → Import Data')
+      await exportToTally(txnData.transactions || [], setting, 'all')
+      sonnerToast.success('Tally XML saved to Documents folder')
     } catch {
       sonnerToast.error('Failed to export Tally XML')
     }

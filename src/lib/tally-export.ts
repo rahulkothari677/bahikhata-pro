@@ -13,8 +13,9 @@
 
 import { formatINR } from './utils'
 import { formatDate } from './utils'
+import { Capacitor } from '@capacitor/core'
 
-export function exportToTally(
+export async function exportToTally(
   transactions: any[],
   setting: any,
   type: 'sale' | 'purchase' | 'all'
@@ -92,12 +93,31 @@ export function exportToTally(
   </BODY>
 </ENVELOPE>`
 
-  // Download as XML file (force download, don't open in browser)
+  // Save file — use Capacitor Filesystem on native, browser download on web
+  const cleanFilename = `Tally_Export_${type}_${formatDate(new Date()).replace(/\//g, '-')}.xml`
+
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const { Filesystem, Directory } = await import('@capacitor/filesystem')
+      const base64Data = btoa(unescape(encodeURIComponent(xml)))
+      await Filesystem.writeFile({
+        path: cleanFilename,
+        data: base64Data,
+        directory: Directory.Documents,
+        encoding: 'base64',
+      })
+      return
+    } catch (err) {
+      console.error('[Tally] Filesystem write failed:', err)
+    }
+  }
+
+  // Web browser fallback
   const blob = new Blob([xml], { type: 'application/octet-stream' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `Tally_Export_${type}_${formatDate(new Date()).replace(/\//g, '-')}.xml`
+  a.download = cleanFilename
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
