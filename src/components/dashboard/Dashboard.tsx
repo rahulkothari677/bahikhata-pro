@@ -962,12 +962,8 @@ function KPICard({ title, value, icon: Icon, gradient, subtitle, trend, onClick,
   subtitle?: string
   trend?: 'up' | 'down'
   onClick?: () => void
-  // If provided, the card animates from 0 to this number on first load
-  // and formats it using formatINR. Overrides `value` for the display.
   animateValue?: number
 }) {
-  // Only animate if a numeric value is provided AND it's positive.
-  // Negative values (e.g., loss) don't animate — they just show directly.
   const shouldAnimate = animateValue !== undefined && animateValue > 0
   const animatedNum = useCountUp(shouldAnimate ? animateValue! : 0)
   const displayValue = shouldAnimate ? formatINR(animatedNum) : value
@@ -979,25 +975,27 @@ function KPICard({ title, value, icon: Icon, gradient, subtitle, trend, onClick,
       className={onClick ? 'cursor-pointer' : ''}
       onClick={onClick}
     >
-      {/* Premium gradient card — matches Income/Expense summary cards */}
-      <div className={`rounded-2xl bg-gradient-to-br ${gradient} p-4 lg:p-5 text-white shadow-card relative overflow-hidden h-full transition hover:shadow-lg ${onClick ? 'hover:scale-[1.02]' : ''}`}>
-        {/* Decorative circle */}
-        <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -mr-12 -mt-12 pointer-events-none" />
-        <div className="relative h-full flex flex-col">
+      {/* Tier 2: White card with colored accent — gradient only on icon + top border */}
+      <div className={`rounded-2xl bg-card border border-border/60 shadow-card relative overflow-hidden h-full transition hover:shadow-lg ${onClick ? 'hover:scale-[1.02]' : ''}`}>
+        {/* Colored top border accent — connects card to theme */}
+        <div className={`h-1 bg-gradient-to-r ${gradient}`} />
+        <div className="p-4 lg:p-5 relative">
+          <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br ${gradient} opacity-[0.04] rounded-full -mr-8 -mt-8 pointer-events-none" style={{ background: 'transparent' }} />
           <div className="flex items-start justify-between mb-3">
-            <div className="w-9 h-9 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
+            <div className={`w-9 h-9 rounded-lg bg-gradient-to-br ${gradient} flex items-center justify-center shadow-md flex-shrink-0`}>
               <Icon className="w-4 h-4 text-white" />
             </div>
             {trend && (
-              <div className="flex items-center text-xs font-bold bg-white/20 backdrop-blur-sm rounded-full px-2 py-0.5">
+              <div className={cn('flex items-center text-xs font-bold rounded-full px-2 py-0.5',
+                trend === 'up' ? 'text-emerald-600 bg-emerald-100 dark:bg-emerald-950/40' : 'text-rose-600 bg-rose-100 dark:bg-rose-950/40'
+              )}>
                 {trend === 'up' ? <TrendingUp className="w-3 h-3 mr-0.5" /> : <TrendingDown className="w-3 h-3 mr-0.5" />}
-                <span className="tabular-nums">·</span>
               </div>
             )}
           </div>
-          <p className="text-[11px] text-white/70 font-medium uppercase tracking-wide">{title}</p>
+          <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">{title}</p>
           <p className="text-xl lg:text-2xl font-bold mt-0.5 tracking-tight tabular-nums">{displayValue}</p>
-          {subtitle && <p className="text-[11px] text-white/60 mt-1 truncate">{subtitle}</p>}
+          {subtitle && <p className="text-[11px] text-muted-foreground mt-1 truncate">{subtitle}</p>}
         </div>
       </div>
     </motion.div>
