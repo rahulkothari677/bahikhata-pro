@@ -21,10 +21,8 @@ export async function exportCSV(filename: string, headers: string[], rows: (stri
     ...rows.map((row) => row.map(escapeCSV).join(',')),
   ].join('\n')
 
-  const csvContent = csv  // No BOM — causes issues with Capacitor Filesystem UTF-8 writing
   const cleanFilename = filename.endsWith('.csv') ? filename : `${filename}.csv`
-
-  await shareOrDownload(csvContent, cleanFilename, 'text/csv')
+  await shareOrDownload(csv, cleanFilename, 'text/csv')
 }
 
 /**
@@ -49,7 +47,6 @@ export async function shareOrDownload(content: string, filename: string, mimeTyp
         const reader = new FileReader()
         reader.onload = () => {
           const result = reader.result as string
-          // Remove "data:text/plain;base64," prefix
           const base64 = result.split(',')[1]
           resolve(base64)
         }
