@@ -157,61 +157,62 @@ export function TransactionDetail() {
 
       {/* Income/Expense simple view */}
       {(isIncome || isExpense) ? (
-        <Card className="shadow-card border-border/60">
-          <CardContent className="p-6">
-            <div className="flex items-center gap-4 mb-6">
-              <div className={cn(
-                'w-14 h-14 rounded-xl flex items-center justify-center',
-                isIncome ? 'bg-emerald-100' : 'bg-rose-100'
-              )}>
+        <div className="rounded-2xl shadow-card border border-border/60 overflow-hidden">
+          <div className={cn('p-5 text-white relative overflow-hidden', isIncome ? 'bg-gradient-to-br from-emerald-500 to-teal-600' : 'bg-gradient-to-br from-rose-500 to-red-600')}>
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 pointer-events-none" />
+            <div className="relative flex items-center gap-4">
+              <div className="w-14 h-14 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
                 {isIncome
-                  ? <ArrowDownRight className="w-7 h-7 text-emerald-600" />
-                  : <ArrowUpRight className="w-7 h-7 text-rose-600" />}
+                  ? <ArrowDownRight className="w-7 h-7" />
+                  : <ArrowUpRight className="w-7 h-7" />}
               </div>
-              <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wide">{isIncome ? 'Income' : 'Expense'}</p>
-                <h2 className="text-2xl font-bold">{txn.category || 'Other'}</h2>
-                <p className="text-sm text-muted-foreground">{formatDateTime(txn.date)}</p>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-white/70 uppercase tracking-wide">{isIncome ? 'Income' : 'Expense'}</p>
+                <h2 className="text-2xl font-bold font-heading tracking-tight truncate">{txn.category || 'Other'}</h2>
+                <p className="text-sm text-white/70">{formatDateTime(txn.date)}</p>
               </div>
-              <div className="ml-auto text-right">
-                <p className={cn('text-2xl font-bold', isIncome ? 'text-emerald-600' : 'text-rose-600')}>
+              <div className="text-right flex-shrink-0">
+                <p className="text-2xl font-bold tabular-nums">
                   {isIncome ? '+' : '-'}{formatINR(txn.totalAmount)}
                 </p>
-                <Badge variant="secondary" className="mt-1 uppercase">{txn.paymentMode}</Badge>
+                <span className="inline-block mt-1 text-[10px] font-medium bg-white/20 backdrop-blur-sm rounded-full px-2 py-0.5 uppercase">{txn.paymentMode}</span>
               </div>
             </div>
-            {txn.notes && (
+          </div>
+          {txn.notes && (
+            <div className="p-4">
               <div className="rounded-lg bg-muted/50 p-3">
                 <p className="text-xs text-muted-foreground uppercase mb-1">Notes</p>
                 <p className="text-sm">{txn.notes}</p>
               </div>
-            )}
-          </CardContent>
-        </Card>
+            </div>
+          )}
+        </div>
       ) : (
         <>
-          {/* Invoice-style header card */}
-          <Card className="shadow-card border-border/60 overflow-hidden">
-            <div className={cn('p-5 text-white', isSale ? 'bg-gradient-emerald' : 'bg-gradient-saffron')}>
-              <div className="flex items-start justify-between flex-wrap gap-3">
+          {/* Invoice-style header card — full-width gradient */}
+          <div className={cn('rounded-2xl shadow-card overflow-hidden text-white', isSale ? 'bg-gradient-emerald' : 'bg-gradient-saffron')}>
+            <div className="p-5 relative">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 pointer-events-none" />
+              <div className="relative flex items-start justify-between flex-wrap gap-3">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center">
+                  <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
                     {isSale ? <ShoppingCart className="w-6 h-6" /> : <Truck className="w-6 h-6" />}
                   </div>
                   <div>
-                    <p className="text-white/80 text-xs uppercase tracking-wide">{isSale ? 'Sales Invoice' : 'Purchase Bill'}</p>
-                    <h2 className="text-xl font-bold">{txn.invoiceNo || `TXN-${txn.id.slice(-6)}`}</h2>
+                    <p className="text-white/70 text-xs uppercase tracking-wide">{isSale ? 'Sales Invoice' : 'Purchase Bill'}</p>
+                    <h2 className="text-xl font-bold font-heading tracking-tight">{txn.invoiceNo || `TXN-${txn.id.slice(-6)}`}</h2>
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="text-3xl font-bold">{formatINR(txn.totalAmount)}</p>
+                  <p className="text-3xl font-bold tabular-nums">{formatINR(txn.totalAmount)}</p>
                   {due > 0 && (
-                    <p className="text-white/80 text-sm mt-1">Due: {formatINR(due)}</p>
+                    <span className="inline-block mt-1 text-xs bg-white/20 backdrop-blur-sm rounded-full px-2 py-0.5">Due: {formatINR(due)}</span>
                   )}
                 </div>
               </div>
             </div>
-          </Card>
+          </div>
 
           {/* Party + meta info */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
