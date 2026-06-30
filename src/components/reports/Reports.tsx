@@ -88,8 +88,11 @@ export function Reports() {
       else if (reportType === 'stock') await exportStockReportCSV(data)
       else if (reportType === 'party') await exportPartyReportCSV(data)
       sonnerToast.success('CSV ready — save or share from the popup')
-    } catch {
-      sonnerToast.error('Failed to export CSV')
+    } catch (err: any) {
+      sonnerToast.error('CSV export failed', {
+        description: String(err?.message || err).slice(0, 200),
+        duration: 10000,
+      })
     }
   }
 
