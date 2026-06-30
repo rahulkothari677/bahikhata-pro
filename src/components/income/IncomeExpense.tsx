@@ -94,34 +94,48 @@ export function IncomeExpense() {
   return (
     <>
     <div className="space-y-4">
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-        <Card className="shadow-card border-border/60">
-          <CardContent className="p-4">
+      {/* Summary cards — gradient backgrounds + count-up animation */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {/* Income card — emerald gradient */}
+        <div className="rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 p-4 text-white shadow-card relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -mr-12 -mt-12 pointer-events-none" />
+          <div className="relative">
             <div className="flex items-center gap-2 mb-1">
-              <ArrowDownRight className="w-4 h-4 text-emerald-600" />
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">{t('stat.total_income')}</p>
+              <ArrowDownRight className="w-4 h-4" />
+              <p className="text-[11px] text-white/80 uppercase tracking-wide font-medium">Income</p>
             </div>
-            <p className="text-2xl font-bold text-emerald-600">{formatINR(totalIncome)}</p>
-          </CardContent>
-        </Card>
-        <Card className="shadow-card border-border/60">
-          <CardContent className="p-4">
+            <p className="text-2xl font-bold tabular-nums">{formatINR(totalIncome)}</p>
+          </div>
+        </div>
+        {/* Expense card — rose gradient */}
+        <div className="rounded-2xl bg-gradient-to-br from-rose-500 to-red-600 p-4 text-white shadow-card relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -mr-12 -mt-12 pointer-events-none" />
+          <div className="relative">
             <div className="flex items-center gap-2 mb-1">
-              <ArrowUpRight className="w-4 h-4 text-rose-600" />
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">{t('stat.total_expenses')}</p>
+              <ArrowUpRight className="w-4 h-4" />
+              <p className="text-[11px] text-white/80 uppercase tracking-wide font-medium">Expenses</p>
             </div>
-            <p className="text-2xl font-bold text-rose-600">{formatINR(totalExpense)}</p>
-          </CardContent>
-        </Card>
-        <Card className="shadow-card border-border/60">
-          <CardContent className="p-4">
+            <p className="text-2xl font-bold tabular-nums">{formatINR(totalExpense)}</p>
+          </div>
+        </div>
+        {/* Net cashflow card — violet or rose based on positive/negative */}
+        <div className={cn(
+          'rounded-2xl p-4 text-white shadow-card relative overflow-hidden',
+          netCashflow >= 0
+            ? 'bg-gradient-to-br from-violet-500 to-purple-600'
+            : 'bg-gradient-to-br from-amber-500 to-orange-600'
+        )}>
+          <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -mr-12 -mt-12 pointer-events-none" />
+          <div className="relative">
             <div className="flex items-center gap-2 mb-1">
-              <Wallet className="w-4 h-4 text-violet-600" />
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">{t('stat.net_cashflow')}</p>
+              <Wallet className="w-4 h-4" />
+              <p className="text-[11px] text-white/80 uppercase tracking-wide font-medium">Net Cashflow</p>
             </div>
-            <p className={cn('text-2xl font-bold', netCashflow >= 0 ? 'text-emerald-600' : 'text-rose-600')}>{formatINR(netCashflow)}</p>
-          </CardContent>
-        </Card>
+            <p className="text-2xl font-bold tabular-nums">
+              {netCashflow >= 0 ? '+' : ''}{formatINR(netCashflow)}
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Budget tracking — shows progress bars for expense categories with budgets */}
