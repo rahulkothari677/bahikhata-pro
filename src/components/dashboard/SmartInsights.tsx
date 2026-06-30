@@ -48,19 +48,19 @@ export function SmartInsights() {
   }
 
   return (
-    <Card className="shadow-card border-border/60 overflow-hidden">
+    <div className="rounded-2xl shadow-card border border-border/60 overflow-hidden">
       {/* Header — gradient with AI branding */}
-      <div className="bg-gradient-to-r from-violet-500 to-purple-600 p-4 text-white relative overflow-hidden">
+      <div className="bg-gradient-to-r from-violet-500 to-purple-600 p-3 text-white relative overflow-hidden">
         {/* Decorative pattern */}
-        <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 pointer-events-none" />
+        <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -mr-12 -mt-12 pointer-events-none" />
         <div className="relative flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
-              <Sparkles className="w-5 h-5" />
+            <div className="w-8 h-8 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
+              <Sparkles className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-base font-bold font-heading tracking-tight">Smart Insights</h3>
-              <p className="text-[11px] text-white/80">
+              <h3 className="text-sm font-bold font-heading tracking-tight">Smart Insights</h3>
+              <p className="text-[10px] text-white/80">
                 {criticalCount > 0 && `${criticalCount} critical · `}
                 {warningCount > 0 && `${warningCount} warnings · `}
                 AI-powered business intelligence
@@ -77,7 +77,7 @@ export function SmartInsights() {
       </div>
 
       {expanded && (
-        <CardContent className="p-2 space-y-1.5">
+        <div className="p-1.5 space-y-1">
           {insights.map((insight, displayIndex) => {
             // Find the original index for dismissal tracking
             const originalIndex = allInsights.indexOf(insight)
@@ -145,9 +145,9 @@ export function SmartInsights() {
               </motion.div>
             )
           })}
-        </CardContent>
+        </div>
       )}
-    </Card>
+    </div>
   )
 }
 

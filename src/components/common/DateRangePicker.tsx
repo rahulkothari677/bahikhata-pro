@@ -175,8 +175,9 @@ export function DateRangePicker({
 
       {open && (
         <div className={cn(
-          'absolute top-full mt-2 z-50 bg-popover border border-border rounded-xl shadow-lg p-3 w-72',
-          align === 'right' ? 'right-0' : 'left-0'
+          'fixed sm:absolute z-50 bg-popover border border-border rounded-xl shadow-lg p-3 w-[calc(100vw-2rem)] sm:w-72 max-h-[80vh] overflow-y-auto',
+          'top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 sm:translate-x-0 sm:translate-y-0 sm:top-full sm:left-auto sm:mt-2',
+          align === 'right' ? 'sm:right-0' : 'sm:left-0'
         )}>
           <div className="space-y-1">
             {PRESETS.map(p => (

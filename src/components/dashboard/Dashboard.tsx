@@ -556,28 +556,28 @@ export function Dashboard() {
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={280}>
-            <AreaChart data={salesTrend} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+            <AreaChart data={salesTrend} margin={{ top: 5, right: 5, left: -10, bottom: 0 }}>
               <defs>
                 <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="oklch(0.62 0.18 42)" stopOpacity={0.4} />
-                  <stop offset="100%" stopColor="oklch(0.62 0.18 42)" stopOpacity={0} />
+                  <stop offset="0%" stopColor="oklch(0.55 0.19 42)" stopOpacity={0.4} />
+                  <stop offset="100%" stopColor="oklch(0.55 0.19 42)" stopOpacity={0} />
                 </linearGradient>
                 <linearGradient id="colorProfit" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="oklch(0.62 0.15 155)" stopOpacity={0.4} />
-                  <stop offset="100%" stopColor="oklch(0.62 0.15 155)" stopOpacity={0} />
+                  <stop offset="0%" stopColor="oklch(0.55 0.16 155)" stopOpacity={0.4} />
+                  <stop offset="100%" stopColor="oklch(0.55 0.16 155)" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} vertical={false} />
-              <XAxis dataKey="label" tick={{ fontSize: 11, fill: chartColors.tick }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 11, fill: chartColors.tick }} axisLine={false} tickLine={false} tickFormatter={(v) => formatINRCompact(v)} />
+              <XAxis dataKey="label" tick={{ fontSize: 10, fill: chartColors.tick }} axisLine={false} tickLine={false} minTickGap={20} />
+              <YAxis tick={{ fontSize: 10, fill: chartColors.tick }} axisLine={false} tickLine={false} tickFormatter={(v) => formatINRCompact(v)} width={45} />
               <Tooltip
                 cursor={{ stroke: chartColors.grid, strokeWidth: 1, strokeDasharray: '3 3' }}
                 contentStyle={chartColors.tooltipStyle}
                 formatter={(v: number) => formatINR(v)}
               />
-              <Area type="monotone" dataKey="revenue" stroke="oklch(0.62 0.18 42)" strokeWidth={2} fill="url(#colorRev)" name="Revenue" />
+              <Area type="monotone" dataKey="revenue" stroke="oklch(0.55 0.19 42)" strokeWidth={2} fill="url(#colorRev)" name="Revenue" />
               {!hideProfit && (
-                <Area type="monotone" dataKey="profit" stroke="oklch(0.62 0.15 155)" strokeWidth={2} fill="url(#colorProfit)" name={t('common.profit')} />
+                <Area type="monotone" dataKey="profit" stroke="oklch(0.55 0.16 155)" strokeWidth={2} fill="url(#colorProfit)" name={t('common.profit')} />
               )}
             </AreaChart>
           </ResponsiveContainer>
@@ -604,19 +604,19 @@ export function Dashboard() {
               <div className="text-center py-10 text-sm text-muted-foreground">No {t('dash.sales_word')} in selected range</div>
             ) : (
               <ResponsiveContainer width="100%" height={260}>
-                <BarChart data={topProducts} layout="vertical" margin={{ top: 0, right: 10, left: 0, bottom: 0 }}>
+                <BarChart data={topProducts} layout="vertical" margin={{ top: 0, right: 10, left: -10, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} horizontal={false} />
-                  <XAxis type="number" tick={{ fontSize: 11, fill: chartColors.tick }} axisLine={false} tickLine={false} tickFormatter={(v) => formatINRCompact(v)} />
-                  <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: chartColors.tick }} axisLine={false} tickLine={false} width={130}
-                    tickFormatter={(v) => v.length > 18 ? v.slice(0, 18) + '…' : v}
+                  <XAxis type="number" tick={{ fontSize: 10, fill: chartColors.tick }} axisLine={false} tickLine={false} tickFormatter={(v) => formatINRCompact(v)} />
+                  <YAxis type="category" dataKey="name" tick={{ fontSize: 10, fill: chartColors.tick }} axisLine={false} tickLine={false} width={90}
+                    tickFormatter={(v) => v.length > 12 ? v.slice(0, 12) + '…' : v}
                   />
                   <Tooltip
-                    cursor={{ fill: 'transparent' }}
+                    cursor={{ fill: 'oklch(0.55 0.19 42 / 0.05)' }}
                     contentStyle={chartColors.tooltipStyle}
                     formatter={(v: number, name: string) => name === 'revenue' ? [formatINR(v), 'Revenue'] : [formatINR(v), 'Profit']}
                   />
-                  <Bar dataKey="revenue" fill="oklch(0.62 0.18 42)" radius={[0, 6, 6, 0]} barSize={18} name="revenue"
-                    activeBar={{ fill: 'oklch(0.68 0.20 42)', barSize: 24 }}
+                  <Bar dataKey="revenue" fill="oklch(0.55 0.19 42)" radius={[0, 6, 6, 0]} barSize={16} name="revenue"
+                    activeBar={{ fill: 'oklch(0.65 0.22 42)', barSize: 22 }}
                   />
                 </BarChart>
               </ResponsiveContainer>
