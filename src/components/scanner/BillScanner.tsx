@@ -632,37 +632,37 @@ export function BillScanner() {
 
       {/* Verification & edit view */}
       {scanned && (
-        <div className="space-y-4">
-          {/* Header with bill summary */}
+        <div className="space-y-3">
+          {/* Header with bill summary — compact */}
           <Card className="shadow-card border-border/60 overflow-hidden">
-            <div className={cn('p-4 text-white', billType === 'sale' ? 'bg-gradient-emerald' : 'bg-gradient-saffron')}>
-              <div className="flex items-center justify-between">
+            <div className={cn('p-3 text-white', billType === 'sale' ? 'bg-gradient-emerald' : 'bg-gradient-saffron')}>
+              <div className="flex items-center justify-between mb-2">
                 <div className="flex items-center gap-2">
-                  <Badge className="bg-white/20 text-white border-0 gap-1">
-                    <Sparkles className="w-3 h-3" /> {t('scanner.ai_extracted')}
+                  <Badge className="bg-white/20 text-white border-0 gap-1 text-[10px] py-0">
+                    <Sparkles className="w-3 h-3" /> AI
                   </Badge>
-                  <span className="text-sm font-medium">{billType === 'sale' ? t('scanner.sales_bill') : t('scanner.purchase_bill')}</span>
+                  <span className="text-xs font-medium">{billType === 'sale' ? 'Sales Bill' : 'Purchase Bill'}</span>
                 </div>
-                <Button variant="ghost" size="sm" className="text-white hover:bg-white/20" onClick={handleReset}>
-                  <X className="w-4 h-4" /> Start Over
+                <Button variant="ghost" size="sm" className="text-white hover:bg-white/20 h-7 text-xs" onClick={handleReset}>
+                  <X className="w-3.5 h-3.5" /> Reset
                 </Button>
               </div>
-              <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="grid grid-cols-4 gap-2 text-[10px]">
                 <div>
-                  <p className="text-[10px] text-white/70 uppercase">Invoice No.</p>
-                  <p className="font-semibold text-sm">{scanned.invoiceNo || '—'}</p>
+                  <p className="text-white/60 uppercase">Inv</p>
+                  <p className="font-semibold truncate">{scanned.invoiceNo || '—'}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-white/70 uppercase">Date</p>
-                  <p className="font-semibold text-sm">{scanned.date || '—'}</p>
+                  <p className="text-white/60 uppercase">Date</p>
+                  <p className="font-semibold truncate">{scanned.date || '—'}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-white/70 uppercase">Party</p>
-                  <p className="font-semibold text-sm truncate">{scanned.sellerName || 'Walk-in'}</p>
+                  <p className="text-white/60 uppercase">Party</p>
+                  <p className="font-semibold truncate">{scanned.sellerName || 'Walk-in'}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-white/70 uppercase">Payment</p>
-                  <p className="font-semibold text-sm capitalize">{scanned.paymentMode || 'cash'}</p>
+                  <p className="text-white/60 uppercase">Pay</p>
+                  <p className="font-semibold capitalize">{scanned.paymentMode || 'cash'}</p>
                 </div>
               </div>
             </div>
@@ -670,16 +670,16 @@ export function BillScanner() {
 
           {/* Items table - editable */}
           <Card className="shadow-card border-border/60">
-            <CardHeader className="pb-3">
+            <CardHeader className="pb-2">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <ImageIcon className="w-4 h-4" />
+                <CardTitle className="text-sm flex items-center gap-1.5">
+                  <ImageIcon className="w-3.5 h-3.5" />
                   Items ({scanned.items.length})
                 </CardTitle>
-                <div className="flex gap-2">
+                <div className="flex gap-1.5">
                   {/* Manual add — for adding a blank row by hand */}
-                  <Button variant="outline" size="sm" onClick={addItem} className="gap-1">
-                    <Plus className="w-3.5 h-3.5" /> Manual
+                  <Button variant="outline" size="sm" onClick={addItem} className="gap-1 h-7 text-xs">
+                    <Plus className="w-3 h-3" /> Add
                   </Button>
                   {/* Scan more items — opens camera to scan another bill,
                       new items get APPENDED to existing list */}
@@ -701,83 +701,67 @@ export function BillScanner() {
                         }
                       }
                     }}
-                    className="bg-gradient-saffron gap-1"
+                    className="bg-gradient-saffron gap-1 h-7 text-xs"
                   >
-                    <ScanLine className="w-3.5 h-3.5" /> Scan More Items
+                    <ScanLine className="w-3 h-3" /> Scan More
                   </Button>
                 </div>
               </div>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2">
+              <div className="space-y-1">
                 {scanned.items.map((item: any, i: number) => (
-                  <div key={i} className="group rounded-xl bg-muted/30 hover:bg-muted/50 transition p-3 space-y-2">
-                    {/* Mobile layout: stacked, Desktop: grid */}
-                    {/* Row 1: Product name (full width on mobile) */}
-                    <div className="flex items-center gap-2">
-                      <div className="w-7 h-7 rounded-lg bg-primary/10 text-primary text-xs font-bold flex items-center justify-center flex-shrink-0">
-                        {i + 1}
-                      </div>
+                  <div key={i} className="group rounded-lg bg-muted/20 hover:bg-muted/40 transition p-2">
+                    {/* Compact 2-row layout — fits ~3x more items per screen */}
+                    {/* Row 1: Number + Name + Delete */}
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-bold text-muted-foreground w-4 text-center flex-shrink-0">{i + 1}</span>
                       <input
                         value={item.name}
                         onChange={(e) => updateItem(i, 'name', e.target.value)}
-                        className="flex-1 px-2 py-1.5 text-sm bg-transparent border border-transparent rounded-md focus:bg-background focus:border-border transition font-medium"
+                        className="flex-1 min-w-0 px-1.5 py-1 text-sm bg-transparent border border-transparent rounded focus:bg-background focus:border-border transition font-medium"
                         placeholder="Product name"
                       />
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 w-7 p-0 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 flex-shrink-0"
+                      <span className="text-xs font-bold tabular-nums text-foreground flex-shrink-0 w-16 text-right">{formatINR(item.total || 0)}</span>
+                      <button
+                        className="p-1 rounded text-muted-foreground hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition flex-shrink-0"
                         onClick={() => removeItem(i)}
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
+                        <Trash2 className="w-3 h-3" />
+                      </button>
                     </div>
-
-                    {/* Row 2: Qty, Unit, Price, GST, Total */}
-                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pl-9">
-                      <div>
-                        <label className="text-[10px] text-muted-foreground uppercase tracking-wide">Qty</label>
-                        <input
-                          type="number"
-                          value={item.quantity}
-                          onChange={(e) => updateItem(i, 'quantity', Number(e.target.value))}
-                          className="w-full px-2 py-1 text-sm bg-background border border-border rounded-md focus:ring-1 focus:ring-primary transition tabular-nums"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-muted-foreground uppercase tracking-wide">Unit</label>
-                        <select
-                          value={item.unit || 'pcs'}
-                          onChange={(e) => updateItem(i, 'unit', e.target.value)}
-                          className="w-full px-1 py-1 text-sm bg-background border border-border rounded-md focus:ring-1 focus:ring-primary transition"
-                        >
-                          {['pcs', 'kg', 'gm', 'ltr', 'ml', 'box', 'dozen', 'packet', 'set'].map(u => <option key={u} value={u}>{u}</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-muted-foreground uppercase tracking-wide">Price ₹</label>
-                        <input
-                          type="number"
-                          value={item.unitPrice}
-                          onChange={(e) => updateItem(i, 'unitPrice', Number(e.target.value))}
-                          className="w-full px-2 py-1 text-sm bg-background border border-border rounded-md focus:ring-1 focus:ring-primary transition tabular-nums"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-muted-foreground uppercase tracking-wide">GST</label>
-                        <select
-                          value={item.gstRate}
-                          onChange={(e) => updateItem(i, 'gstRate', Number(e.target.value))}
-                          className="w-full px-1 py-1 text-sm bg-background border border-border rounded-md focus:ring-1 focus:ring-primary transition"
-                        >
-                          {[0, 5, 12, 18, 28].map(r => <option key={r} value={r}>{r}%</option>)}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-muted-foreground uppercase tracking-wide">Total</label>
-                        <p className="text-sm font-bold tabular-nums py-1">{formatINR(item.total || 0)}</p>
-                      </div>
+                    {/* Row 2: Qty + Unit + Price + GST (compact inline, no labels) */}
+                    <div className="flex items-center gap-1 pl-5 mt-0.5">
+                      <input
+                        type="number"
+                        value={item.quantity}
+                        onChange={(e) => updateItem(i, 'quantity', Number(e.target.value))}
+                        className="w-12 px-1 py-0.5 text-xs bg-background border border-border rounded tabular-nums focus:ring-1 focus:ring-primary"
+                        placeholder="Qty"
+                      />
+                      <select
+                        value={item.unit || 'pcs'}
+                        onChange={(e) => updateItem(i, 'unit', e.target.value)}
+                        className="px-0.5 py-0.5 text-xs bg-background border border-border rounded focus:ring-1 focus:ring-primary"
+                      >
+                        {['pcs', 'kg', 'gm', 'ltr', 'ml', 'box', 'dozen', 'packet', 'set'].map(u => <option key={u} value={u}>{u}</option>)}
+                      </select>
+                      <span className="text-[10px] text-muted-foreground">×</span>
+                      <span className="text-[10px] text-muted-foreground">₹</span>
+                      <input
+                        type="number"
+                        value={item.unitPrice}
+                        onChange={(e) => updateItem(i, 'unitPrice', Number(e.target.value))}
+                        className="w-16 px-1 py-0.5 text-xs bg-background border border-border rounded tabular-nums focus:ring-1 focus:ring-primary"
+                        placeholder="Price"
+                      />
+                      <select
+                        value={item.gstRate}
+                        onChange={(e) => updateItem(i, 'gstRate', Number(e.target.value))}
+                        className="px-0.5 py-0.5 text-xs bg-background border border-border rounded focus:ring-1 focus:ring-primary ml-auto"
+                      >
+                        {[0, 5, 12, 18, 28].map(r => <option key={r} value={r}>{r}%</option>)}
+                      </select>
                     </div>
                   </div>
                 ))}
@@ -789,59 +773,59 @@ export function BillScanner() {
                 )}
               </div>
 
-              {/* Totals */}
-              <div className="mt-4 pt-4 border-t border-border space-y-1.5">
-                <div className="flex justify-between text-sm">
+              {/* Totals — compact */}
+              <div className="mt-3 pt-3 border-t border-border space-y-1">
+                <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">Subtotal</span>
-                  <span className="font-medium">{formatINR(subtotal)}</span>
+                  <span className="font-medium tabular-nums">{formatINR(subtotal)}</span>
                 </div>
                 {scanned.discountAmount > 0 && (
-                  <div className="flex justify-between text-sm">
+                  <div className="flex justify-between text-xs">
                     <span className="text-muted-foreground">Discount</span>
-                    <span className="font-medium text-rose-600">-{formatINR(scanned.discountAmount)}</span>
+                    <span className="font-medium text-rose-600 tabular-nums">-{formatINR(scanned.discountAmount)}</span>
                   </div>
                 )}
-                <div className="flex justify-between text-sm">
+                <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">GST Total</span>
-                  <span className="font-medium">{formatINR(totalGst)}</span>
+                  <span className="font-medium tabular-nums">{formatINR(totalGst)}</span>
                 </div>
                 {(scanned.cgst > 0 || scanned.sgst > 0) && (
-                  <div className="flex justify-between text-xs text-muted-foreground pl-4">
+                  <div className="flex justify-between text-[11px] text-muted-foreground pl-4">
                     <span>CGST + SGST</span>
-                    <span>{formatINR(scanned.cgst)} + {formatINR(scanned.sgst)}</span>
+                    <span className="tabular-nums">{formatINR(scanned.cgst)} + {formatINR(scanned.sgst)}</span>
                   </div>
                 )}
                 {scanned.igst > 0 && (
-                  <div className="flex justify-between text-xs text-muted-foreground pl-4">
+                  <div className="flex justify-between text-[11px] text-muted-foreground pl-4">
                     <span>IGST</span>
-                    <span>{formatINR(scanned.igst)}</span>
+                    <span className="tabular-nums">{formatINR(scanned.igst)}</span>
                   </div>
                 )}
-                <div className="flex justify-between pt-2 border-t border-border">
-                  <span className="font-semibold">Grand Total</span>
-                  <span className="text-lg font-bold">{formatINR(grandTotal)}</span>
+                <div className="flex justify-between pt-1.5 border-t border-border">
+                  <span className="font-semibold text-sm">Grand Total</span>
+                  <span className="text-base font-bold tabular-nums">{formatINR(grandTotal)}</span>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* Action buttons */}
+          {/* Action buttons — compact */}
           <Card className="shadow-card border-border/60">
-            <CardContent className="p-4">
-              <div className="flex flex-col sm:flex-row gap-3">
-                <Button variant="outline" className="flex-1 gap-2" onClick={handleReset}>
-                  <X className="w-4 h-4" /> {t('scanner.discard')}
+            <CardContent className="p-3">
+              <div className="flex gap-2">
+                <Button variant="outline" className="flex-1 gap-1.5 h-9" onClick={handleReset}>
+                  <X className="w-3.5 h-3.5" /> Discard
                 </Button>
                 <Button
-                  className="flex-1 gap-2 bg-gradient-saffron shadow-md"
+                  className="flex-1 gap-1.5 bg-gradient-saffron shadow-md h-9"
                   onClick={handleProceedToSave}
                 >
-                  <Check className="w-4 h-4" /> {t('scanner.verify_save')}
-                  <ArrowRight className="w-4 h-4" />
+                  <Check className="w-3.5 h-3.5" /> Verify & Save
+                  <ArrowRight className="w-3.5 h-3.5" />
                 </Button>
               </div>
-              <p className="text-[11px] text-muted-foreground text-center mt-2">
-                You&apos;ll be taken to the {billType === 'sale' ? 'sales' : 'purchase'} form with everything pre-filled. Just review and save!
+              <p className="text-[10px] text-muted-foreground text-center mt-1.5">
+                Pre-fills the {billType === 'sale' ? 'sales' : 'purchase'} form — just review and save!
               </p>
             </CardContent>
           </Card>
