@@ -20,12 +20,17 @@ export function exportCSV(filename: string, headers: string[], rows: (string | n
   ].join('\n')
 
   // Prepend BOM so Excel detects UTF-8 (handles ₹ symbol correctly)
-  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
+  // Use 'application/octet-stream' to force download on mobile browsers
+  // (some mobile browsers try to open 'text/csv' in a new tab instead of downloading)
+  const blob = new Blob(['\uFEFF' + csv], { type: 'application/octet-stream' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
   a.download = filename.endsWith('.csv') ? filename : `${filename}.csv`
+  // Append to DOM — required for programmatic download on some mobile browsers
+  document.body.appendChild(a)
   a.click()
+  document.body.removeChild(a)
   URL.revokeObjectURL(url)
 }
 
