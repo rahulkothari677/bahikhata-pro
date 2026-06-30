@@ -11,9 +11,10 @@
  * - Footer with thank you message
  *
  * Returns a Blob that can be shared via WhatsApp or downloaded.
+ *
+ * NOTE: jsPDF is dynamically imported to avoid loading ~300KB on every page.
+ * It only loads when the user actually generates a PDF.
  */
-
-import { jsPDF } from 'jspdf'
 
 interface InvoiceItem {
   productName: string
@@ -54,7 +55,8 @@ interface ShopSetting {
   state?: string
 }
 
-export function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting): Blob {
+export async function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting): Promise<Blob> {
+  const { jsPDF } = await import('jspdf')
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
   const pageWidth = 210
   const pageHeight = 297

@@ -14,11 +14,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
       new QueryClient({
         defaultOptions: {
           queries: {
-            // 60s stale time — balances freshness with reduced server load.
+            // 2 min stale time — balances freshness with reduced server load.
+            // Most data (products, parties, transactions) doesn't change every second.
             // User-triggered refreshes (manual button, post-mutation invalidate)
             // still fetch immediately. Only background refetches are throttled.
-            staleTime: 60 * 1000,
-            gcTime: 5 * 60 * 1000, // keep unused data in cache 5 min (was default 5 min, made explicit)
+            staleTime: 2 * 60 * 1000,
+            gcTime: 10 * 60 * 1000, // keep unused data in cache 10 min
             refetchOnWindowFocus: false,
             refetchOnReconnect: true, // refetch when coming back online (after offline mode)
             // Don't retry on OfflineError — it will keep failing until the

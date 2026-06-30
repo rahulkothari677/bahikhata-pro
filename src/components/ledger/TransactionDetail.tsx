@@ -89,8 +89,9 @@ export function TransactionDetail() {
 
   const handleDownload = () => {
     if (!txn) return
-    // Generate professional PDF
-    const pdfBlob = generateInvoicePDF(txn, {
+    sonnerToast.loading('Generating PDF...')
+    // Generate professional PDF (async — jsPDF is dynamically imported)
+    generateInvoicePDF(txn, {
       shopName: setting?.shopName || 'My Shop',
       ownerName: setting?.ownerName,
       phone: setting?.phone,
@@ -98,14 +99,17 @@ export function TransactionDetail() {
       gstin: setting?.gstin,
       address: setting?.address,
       state: setting?.state,
+    }).then((pdfBlob) => {
+      const url = URL.createObjectURL(pdfBlob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `invoice-${txn.invoiceNo || txn.id.slice(-6)}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+      sonnerToast.success('Invoice PDF downloaded')
+    }).catch(() => {
+      sonnerToast.error('Failed to generate PDF')
     })
-    const url = URL.createObjectURL(pdfBlob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `invoice-${txn.invoiceNo || txn.id.slice(-6)}.pdf`
-    a.click()
-    URL.revokeObjectURL(url)
-    sonnerToast.success('Invoice PDF downloaded')
   }
 
   const handleWhatsAppShare = async () => {
@@ -113,8 +117,8 @@ export function TransactionDetail() {
     haptic.click()
 
     try {
-      // Generate PDF invoice
-      const pdfBlob = generateInvoicePDF(txn, {
+      // Generate PDF invoice (async — jsPDF is dynamically imported)
+      const pdfBlob = await generateInvoicePDF(txn, {
         shopName: setting?.shopName || 'My Shop',
         ownerName: setting?.ownerName,
         phone: setting?.phone,
