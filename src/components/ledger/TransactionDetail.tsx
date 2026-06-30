@@ -124,28 +124,65 @@ export function TransactionDetail() {
         state: setting?.state,
       })
 
-      // Try to share as file (works on mobile via Web Share API)
-      const file = new File([pdfBlob], `invoice-${txn.invoiceNo || txn.id.slice(-6)}.pdf`, { type: 'application/pdf' })
+      const fileName = `invoice-${txn.invoiceNo || txn.id.slice(-6)}.pdf`
+      const shareText = `Invoice from ${setting?.shopName || 'My Shop'} — Total: Rs. ${txn.totalAmount.toFixed(2)}`
 
-      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-        // Mobile: use Web Share API to share PDF via WhatsApp
+      // Check if running on Capacitor (native app)
+      const { Capacitor } = await import('@capacitor/core')
+      if (Capacitor.isNativePlatform()) {
+        // Native: use Capacitor Share plugin (supports file sharing)
+        const { Share } = await import('@capacitor/share')
+        const { Filesystem, Directory } = await import('@capacitor/filesystem')
+
+        // Convert blob to base64
+        const reader = new FileReader()
+        const base64Promise = new Promise<string>((resolve, reject) => {
+          reader.onload = () => {
+            const result = reader.result as string
+            // Remove data URL prefix
+            const base64 = result.split(',')[1]
+            resolve(base64)
+          }
+          reader.onerror = reject
+          reader.readAsDataURL(pdfBlob)
+        })
+        const base64Data = await base64Promise
+
+        // Write file to temp directory
+        const fileResult = await Filesystem.writeFile({
+          path: fileName,
+          data: base64Data,
+          directory: Directory.Cache,
+        })
+
+        // Share the file
+        await Share.share({
+          title: `Invoice ${txn.invoiceNo || ''}`,
+          text: shareText,
+          url: fileResult.uri,
+          dialogTitle: 'Send Invoice via',
+        })
+        sonnerToast.success('Invoice shared!')
+      } else if (navigator.share && navigator.canShare && navigator.canShare({ files: [new File([pdfBlob], fileName, { type: 'application/pdf' })] })) {
+        // Web browser with file share support
+        const file = new File([pdfBlob], fileName, { type: 'application/pdf' })
         await navigator.share({
           files: [file],
           title: `Invoice ${txn.invoiceNo || ''}`,
-          text: `Invoice from ${setting?.shopName || 'My Shop'} — Total: Rs. ${txn.totalAmount.toFixed(2)}`,
+          text: shareText,
         })
         sonnerToast.success('Invoice shared!')
       } else {
-        // Desktop/fallback: download the PDF
+        // Fallback: download PDF + open WhatsApp text
         const url = URL.createObjectURL(pdfBlob)
         const a = document.createElement('a')
         a.href = url
-        a.download = `invoice-${txn.invoiceNo || txn.id.slice(-6)}.pdf`
+        a.download = fileName
         a.click()
         URL.revokeObjectURL(url)
-        sonnerToast.success('Invoice PDF downloaded — share it manually via WhatsApp')
+        sonnerToast.success('Invoice PDF downloaded')
 
-        // Also open WhatsApp with text message (as fallback)
+        // Open WhatsApp with text message
         const r = await offlineFetch('/api/whatsapp-invoice', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -157,7 +194,6 @@ export function TransactionDetail() {
         }
       }
     } catch (err: any) {
-      // If sharing was cancelled, don't show error
       if (err?.name === 'AbortError') return
       sonnerToast.error('Failed to share invoice')
     }
