@@ -174,7 +174,7 @@ Return JSON only, no commentary, no markdown formatting.`
     }
 
     // Try to parse JSON from response
-    let parsed = null
+    let parsed: any = null
     try {
       parsed = JSON.parse(content)
     } catch {

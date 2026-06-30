@@ -28,9 +28,9 @@ import { haptic } from '@/lib/haptic'
 const STORAGE_KEY = 'bahikhata-theme-picker-done'
 
 export function ThemePicker({ open, onDone }: { open: boolean; onDone: () => void }) {
-  const { themeColor, darkMode, setThemeColor, setFeature } = useAppStore()
+  const { themeColor, setThemeColor, setFeature } = useAppStore()
   const [selectedColor, setSelectedColor] = useState<ThemeColor>(themeColor)
-  const [selectedDark, setSelectedDark] = useState<boolean>(darkMode)
+  const [selectedDark, setSelectedDark] = useState<boolean>(false)
 
   // Apply the user's selection live as they tap (so they see previews)
   useEffect(() => {

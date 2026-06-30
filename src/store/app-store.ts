@@ -15,6 +15,7 @@ export type ViewType =
   | 'party-profile'
   | 'new-sale'
   | 'new-purchase'
+  | 'pricing'
 
 export type ViewMode = 'grid' | 'list'
 

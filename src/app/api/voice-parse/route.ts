@@ -96,7 +96,7 @@ Return JSON only, no commentary.`
     let content = data.choices?.[0]?.message?.content || ''
 
     // Parse JSON from response
-    let parsed = null
+    let parsed: any = null
     try {
       parsed = JSON.parse(content)
     } catch {
