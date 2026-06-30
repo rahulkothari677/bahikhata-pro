@@ -141,7 +141,7 @@ export function IncomeExpense() {
 
       {/* Budget tracking — shows progress bars for expense categories with budgets */}
       {features?.reorderAlerts && topExpenses.length > 0 && (
-        <Card className="shadow-card border-border/60">
+        <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
           <CardContent className="p-4">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
@@ -220,7 +220,7 @@ export function IncomeExpense() {
 
       {/* Recurring entries — auto-create monthly rent, salary, etc. */}
       {features?.recurringEntries && (
-        <Card className="shadow-card border-border/60">
+        <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
           <CardContent className="p-4">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
@@ -286,7 +286,7 @@ export function IncomeExpense() {
       )}
 
       {/* Toolbar - removed duplicate Add Income/Expense buttons (header has "Add Entry") */}
-      <Card className="shadow-card border-border/60">
+      <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
         <CardContent className="p-3 lg:p-4">
           <div className="flex flex-col sm:flex-row gap-3">
             <Select value={filter} onValueChange={(v) => setFilter(v as any)}>
@@ -311,7 +311,7 @@ export function IncomeExpense() {
               {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-16 w-full rounded-xl" />)}
             </div>
           ) : filtered.length === 0 ? (
-            <Card className="shadow-card border-border/60">
+            <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
               <CardContent className="py-16 text-center">
                 <Wallet className="w-12 h-12 mx-auto text-muted-foreground/50 mb-3" />
                 <p className="text-sm font-medium">{t('ie.no_entries')}</p>

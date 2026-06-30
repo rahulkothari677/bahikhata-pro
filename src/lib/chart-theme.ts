@@ -27,6 +27,20 @@ export const chartColors = {
       zIndex: 1000,
     }
   },
+  // Item style for individual tooltip items — forces text color to match tooltip
+  get tooltipItemStyle() {
+    return {
+      color: 'var(--chart-tooltip-text)',
+    }
+  },
+  // Label style for tooltip header (e.g., date or category name)
+  get tooltipLabelStyle() {
+    return {
+      color: 'var(--chart-tooltip-text)',
+      fontWeight: 600,
+      marginBottom: '4px',
+    }
+  },
 }
 
 /**

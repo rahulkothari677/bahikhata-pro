@@ -271,7 +271,7 @@ export function Ledger({ type }: { type: LedgerType }) {
     <div className="space-y-4">
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Card className="shadow-card border-border/60">
+        <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <Receipt className={cn('w-4 h-4', accentColor)} />
@@ -282,7 +282,7 @@ export function Ledger({ type }: { type: LedgerType }) {
           </CardContent>
         </Card>
         {isSale && !hideProfit && (
-          <Card className="shadow-card border-border/60">
+          <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
             <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-1">
                 <TrendingUp className="w-4 h-4 text-emerald-600" />
@@ -293,7 +293,7 @@ export function Ledger({ type }: { type: LedgerType }) {
             </CardContent>
           </Card>
         )}
-        <Card className="shadow-card border-border/60">
+        <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <IndianRupee className="w-4 h-4 text-violet-600" />
@@ -302,7 +302,7 @@ export function Ledger({ type }: { type: LedgerType }) {
             <p className="text-xl font-bold">{formatINR(totalPaid)}</p>
           </CardContent>
         </Card>
-        <Card className="shadow-card border-border/60">
+        <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <IndianRupee className="w-4 h-4 text-rose-600" />
@@ -314,7 +314,7 @@ export function Ledger({ type }: { type: LedgerType }) {
       </div>
 
       {/* Toolbar */}
-      <Card className="shadow-card border-border/60">
+      <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
         <CardContent className="p-3 lg:p-4">
           <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
             <div className="relative flex-1 w-full">
@@ -457,7 +457,7 @@ export function Ledger({ type }: { type: LedgerType }) {
 
       {/* Transactions list */}
       {!isOnline() && !!error && !data ? (
-        <Card className="shadow-card border-border/60">
+        <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
           <CardContent className="p-0">
             <OfflineNoData
               title={`No cached ${isSale ? 'sales' : 'purchases'}`}
@@ -471,7 +471,7 @@ export function Ledger({ type }: { type: LedgerType }) {
           {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}
         </div>
       ) : filtered.length === 0 ? (
-        <Card className="shadow-card border-border/60">
+        <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
           <CardContent className="p-0">
             <EmptyState
               icon={isSale ? ShoppingCart : Truck}

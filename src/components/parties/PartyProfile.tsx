@@ -398,7 +398,7 @@ export function PartyProfile() {
 
       {/* Contact details */}
       {(party.gstin || party.email || party.address) && (
-        <Card className="shadow-card border-border/60">
+        <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Contact & GST Details</CardTitle>
           </CardHeader>
@@ -437,7 +437,7 @@ export function PartyProfile() {
       )}
 
       {/* Monthly activity chart */}
-      <Card className="shadow-card border-border/60">
+      <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2">
             <TrendingUp className="w-4 h-4" /> 6-Month Activity
@@ -460,7 +460,7 @@ export function PartyProfile() {
 
       {/* Top products */}
       {topProducts.length > 0 && (
-        <Card className="shadow-card border-border/60">
+        <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Top Products</CardTitle>
             <p className="text-xs text-muted-foreground">Most frequently transacted</p>
@@ -490,7 +490,7 @@ export function PartyProfile() {
           Sales (inflow) = right-aligned green bubbles (like sent messages)
           Purchases (outflow) = left-aligned saffron bubbles (like received messages)
           Date separators between days, running balance sticky at top */}
-      <Card className="shadow-card border-border/60">
+      <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
             <CardTitle className="text-base flex items-center gap-2">
@@ -606,7 +606,7 @@ function StatCard({ label, value, icon: Icon, color, bg, sub }: {
   sub?: string
 }) {
   return (
-    <Card className="shadow-card border-border/60">
+    <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
       <CardContent className="p-4">
         <div className="flex items-center gap-2 mb-1">
           <div className={cn('w-7 h-7 rounded-lg flex items-center justify-center', bg)}>

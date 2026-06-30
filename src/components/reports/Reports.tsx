@@ -282,7 +282,7 @@ function PLReport({ data }: { data: any }) {
 
       {/* {t('reports.pl')} breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card className="shadow-card border-border/60">
+        <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
               <ArrowUpRight className="w-4 h-4 text-rose-600" /> Expenses Breakdown
@@ -312,7 +312,7 @@ function PLReport({ data }: { data: any }) {
           </CardContent>
         </Card>
 
-        <Card className="shadow-card border-border/60">
+        <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
               <ArrowDownRight className="w-4 h-4 text-emerald-600" /> Other Income
@@ -344,7 +344,7 @@ function PLReport({ data }: { data: any }) {
       </div>
 
       {/* Summary statement */}
-      <Card className="shadow-card border-border/60">
+      <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2">
             <FileText className="w-4 h-4" /> Profit & Loss Statement
@@ -403,7 +403,7 @@ function GSTReport({ data }: { data: any }) {
 
       {/* By slab */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Card className="shadow-card border-border/60">
+        <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Output Tax by GST Slab (Sales)</CardTitle>
             <p className="text-xs text-muted-foreground">GST collected from customers</p>
@@ -417,7 +417,7 @@ function GSTReport({ data }: { data: any }) {
                   <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} vertical={false} />
                   <XAxis dataKey="rate" tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11 }} />
                   <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => formatINRCompact(v)} />
-                  <Tooltip cursor={{ fill: "transparent" }} formatter={(v: number) => formatINR(v)} contentStyle={chartColors.tooltipStyle} />
+                  <Tooltip cursor={{ fill: "transparent" }} formatter={(v: number) => formatINR(v)} contentStyle={chartColors.tooltipStyle} itemStyle={chartColors.tooltipItemStyle} labelStyle={chartColors.tooltipLabelStyle} />
                   <Bar dataKey="taxable" name="Taxable Value" fill="oklch(0.62 0.18 42)" radius={[6, 6, 0, 0]} />
                   <Bar dataKey="cgst" name="CGST" fill="oklch(0.62 0.15 155)" radius={[6, 6, 0, 0]} />
                   <Bar dataKey="sgst" name="SGST" fill="oklch(0.72 0.16 80)" radius={[6, 6, 0, 0]} />
@@ -427,7 +427,7 @@ function GSTReport({ data }: { data: any }) {
           </CardContent>
         </Card>
 
-        <Card className="shadow-card border-border/60">
+        <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Input Tax by GST Slab (Purchases)</CardTitle>
             <p className="text-xs text-muted-foreground">GST paid to suppliers</p>
@@ -441,7 +441,7 @@ function GSTReport({ data }: { data: any }) {
                   <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} vertical={false} />
                   <XAxis dataKey="rate" tickFormatter={(v) => `${v}%`} tick={{ fontSize: 11 }} />
                   <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => formatINRCompact(v)} />
-                  <Tooltip cursor={{ fill: "transparent" }} formatter={(v: number) => formatINR(v)} contentStyle={chartColors.tooltipStyle} />
+                  <Tooltip cursor={{ fill: "transparent" }} formatter={(v: number) => formatINR(v)} contentStyle={chartColors.tooltipStyle} itemStyle={chartColors.tooltipItemStyle} labelStyle={chartColors.tooltipLabelStyle} />
                   <Bar dataKey="taxable" name="Taxable Value" fill="oklch(0.6 0.12 200)" radius={[6, 6, 0, 0]} />
                   <Bar dataKey="cgst" name="CGST" fill="oklch(0.62 0.15 155)" radius={[6, 6, 0, 0]} />
                   <Bar dataKey="sgst" name="SGST" fill="oklch(0.72 0.16 80)" radius={[6, 6, 0, 0]} />
@@ -453,7 +453,7 @@ function GSTReport({ data }: { data: any }) {
       </div>
 
       {/* Slab table */}
-      <Card className="shadow-card border-border/60">
+      <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
         <CardHeader className="pb-2">
           <CardTitle className="text-base">GST Slab-wise Summary</CardTitle>
         </CardHeader>
@@ -518,7 +518,7 @@ function StockReport({ data }: { data: any }) {
         <ReportStatCard label="Low Stock Items" value={String(data.lowStockCount)} icon={ArrowUpRight} color="text-rose-600" bg="bg-rose-100" />
       </div>
 
-      <Card className="shadow-card border-border/60">
+      <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Stock Valuation by Product</CardTitle>
         </CardHeader>
@@ -572,7 +572,7 @@ function PartyReport({ data }: { data: any }) {
   const { t } = useTranslation()
   return (
     <div className="space-y-4">
-      <Card className="shadow-card border-border/60">
+      <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Party-wise Statement</CardTitle>
           <p className="text-xs text-muted-foreground">Showing all parties with activity or opening balance</p>

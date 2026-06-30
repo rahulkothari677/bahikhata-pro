@@ -279,7 +279,7 @@ export function Dashboard() {
           ].map((stat, i) => {
             const Icon = stat.icon
             return (
-              <Card key={i} className="shadow-card border-border/60">
+              <Card key={i} className="shadow-card border-border/60 border-t-2 border-t-primary/10">
                 <CardContent className="p-4">
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-2 ${stat.color}`}>
                     <Icon className="w-5 h-5" />
@@ -541,7 +541,7 @@ export function Dashboard() {
       </div>
 
       {/* Sales trend chart - full width */}
-      <Card className="shadow-card border-border/60">
+      <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
             <div>
@@ -572,7 +572,7 @@ export function Dashboard() {
               <YAxis tick={{ fontSize: 10, fill: chartColors.tick }} axisLine={false} tickLine={false} tickFormatter={(v) => formatINRCompact(v)} width={45} />
               <Tooltip
                 cursor={{ stroke: chartColors.grid, strokeWidth: 1, strokeDasharray: '3 3' }}
-                contentStyle={chartColors.tooltipStyle}
+                contentStyle={chartColors.tooltipStyle} itemStyle={chartColors.tooltipItemStyle} labelStyle={chartColors.tooltipLabelStyle}
                 formatter={(v: number) => formatINR(v)}
               />
               <Area type="monotone" dataKey="revenue" stroke="oklch(0.55 0.19 42)" strokeWidth={2} fill="url(#colorRev)" name="Revenue" />
@@ -612,7 +612,7 @@ export function Dashboard() {
                   />
                   <Tooltip
                     cursor={{ fill: 'oklch(0.55 0.19 42 / 0.05)' }}
-                    contentStyle={chartColors.tooltipStyle}
+                    contentStyle={chartColors.tooltipStyle} itemStyle={chartColors.tooltipItemStyle} labelStyle={chartColors.tooltipLabelStyle}
                     formatter={(v: number, name: string) => name === 'revenue' ? [formatINR(v), 'Revenue'] : [formatINR(v), 'Profit']}
                   />
                   <Bar dataKey="revenue" fill="oklch(0.55 0.19 42)" radius={[0, 6, 6, 0]} barSize={16} name="revenue"
@@ -625,7 +625,7 @@ export function Dashboard() {
         </Card>
 
         {/* Payment mode pie */}
-        <Card className="shadow-card border-border/60">
+        <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
           <CardHeader className="pb-2">
             <CardTitle className="text-base font-semibold">{t('dash.payment_modes')}</CardTitle>
             <p className="text-xs text-muted-foreground">For selected date range</p>
@@ -659,7 +659,7 @@ export function Dashboard() {
                     <Tooltip
                       cursor={{ stroke: 'transparent', strokeWidth: 0 }}
                       formatter={(v: number) => formatINR(v)}
-                      contentStyle={chartColors.tooltipStyle}
+                      contentStyle={chartColors.tooltipStyle} itemStyle={chartColors.tooltipItemStyle} labelStyle={chartColors.tooltipLabelStyle}
                     />
                   </PieChart>
                 </ResponsiveContainer>
@@ -719,7 +719,7 @@ export function Dashboard() {
         </Card>
 
         {/* {t('dash.low_stock_short')} stock alerts */}
-        <Card className="shadow-card border-border/60">
+        <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -764,7 +764,7 @@ export function Dashboard() {
       {/* Recent transactions & {t('dash.gst_summary')} summary */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Recent transactions */}
-        <Card className="shadow-card border-border/60">
+        <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -850,7 +850,7 @@ export function Dashboard() {
         </Card>
 
         {/* {t('dash.gst_summary')} summary */}
-        <Card className="shadow-card border-border/60">
+        <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base font-semibold">{t('dash.gst_summary')} ({rangeLabel})</CardTitle>
@@ -912,7 +912,7 @@ export function Dashboard() {
 
       {/* Business Goals — monthly revenue/expense targets with progress */}
       {(revenueTarget || expenseBudget) && kpis && (
-        <Card className="shadow-card border-border/60">
+        <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-3">
               <Target className="w-4 h-4 text-primary" />
