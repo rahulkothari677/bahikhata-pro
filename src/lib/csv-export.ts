@@ -21,7 +21,7 @@ export async function exportCSV(filename: string, headers: string[], rows: (stri
     ...rows.map((row) => row.map(escapeCSV).join(',')),
   ].join('\n')
 
-  const csvContent = '\uFEFF' + csv
+  const csvContent = csv  // No BOM — causes issues with Capacitor Filesystem UTF-8 writing
   const cleanFilename = filename.endsWith('.csv') ? filename : `${filename}.csv`
 
   await shareOrDownload(csvContent, cleanFilename, 'text/csv')
@@ -39,15 +39,12 @@ export async function shareOrDownload(content: string, filename: string, mimeTyp
       const { Filesystem, Directory } = await import('@capacitor/filesystem')
       const { Share } = await import('@capacitor/share')
 
-      // Convert content to base64
-      const base64Data = btoa(unescape(encodeURIComponent(content)))
-
-      // Write to temp cache directory
+      // Write content as UTF-8 string (NOT base64 — base64 causes encoding issues)
       const fileResult = await Filesystem.writeFile({
         path: filename,
-        data: base64Data,
+        data: content,
         directory: Directory.Cache,
-        encoding: 'base64',
+        encoding: 'utf8',
       })
 
       // Open Android share sheet — user can save to Downloads or share
@@ -60,8 +57,8 @@ export async function shareOrDownload(content: string, filename: string, mimeTyp
     } catch (err: any) {
       // If user cancelled share, don't show error
       if (err?.name === 'AbortError' || String(err?.message || '').includes('cancel')) return
-      console.error('[Export] Share failed:', err)
-      // Fall through to browser download
+      // Show visible error so we know what failed
+      throw new Error(`Export failed: ${err?.message || err}`)
     }
   }
 
