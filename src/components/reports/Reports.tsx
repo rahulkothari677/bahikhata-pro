@@ -620,23 +620,29 @@ function PartyReport({ data }: { data: any }) {
 }
 
 function ReportStatCard({ label, value, icon: Icon, color, bg }: { label: string; value: string; icon: any; color: string; bg: string }) {
-  // Map bg to gradient for premium look
+  // Map bg to gradient for icon
   const gradient = bg.includes('amber') ? 'from-amber-500 to-orange-600'
     : bg.includes('emerald') ? 'from-emerald-500 to-teal-600'
     : bg.includes('rose') ? 'from-rose-500 to-red-600'
     : 'from-violet-500 to-purple-600'
 
+  const textColor = color.includes('amber') ? 'text-amber-600'
+    : color.includes('emerald') ? 'text-emerald-600'
+    : color.includes('rose') ? 'text-rose-600'
+    : 'text-violet-600'
+
   return (
-    <div className={`rounded-2xl bg-gradient-to-br ${gradient} p-4 text-white shadow-card relative overflow-hidden`}>
-      <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -mr-12 -mt-12 pointer-events-none" />
-      <div className="relative">
+    <div className="rounded-2xl bg-card border border-border/60 shadow-card relative overflow-hidden">
+      {/* Colored top border accent */}
+      <div className={`h-1 bg-gradient-to-r ${gradient}`} />
+      <div className="p-4 relative">
         <div className="flex items-center gap-2.5 mb-2">
-          <div className="w-9 h-9 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
+          <div className={`w-9 h-9 rounded-lg bg-gradient-to-br ${gradient} flex items-center justify-center shadow-md flex-shrink-0`}>
             <Icon className="w-4 h-4 text-white" />
           </div>
-          <p className="text-[10px] text-white/70 uppercase tracking-wide font-semibold leading-tight">{label}</p>
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold leading-tight">{label}</p>
         </div>
-        <p className="text-xl font-bold tracking-tight tabular-nums">{value}</p>
+        <p className={cn('text-xl font-bold tracking-tight tabular-nums', textColor)}>{value}</p>
       </div>
     </div>
   )

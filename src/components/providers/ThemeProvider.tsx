@@ -46,7 +46,7 @@ const THEMES: Record<ThemeColor, ThemePalette> = {
     sidebarAccent: 'oklch(0.93 0.02 60)',
     sidebarAccentForeground: 'oklch(0.25 0.02 30)',
     sidebarBorder: 'oklch(0.90 0.01 60)',
-    background: 'oklch(0.99 0.005 60)',
+    background: 'oklch(0.98 0.008 60)',
     charts: ['oklch(0.55 0.19 42)', 'oklch(0.55 0.16 155)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)'],
     swatch: 'linear-gradient(135deg, oklch(0.55 0.19 42), oklch(0.58 0.21 25))',
     dark: {
@@ -73,7 +73,7 @@ const THEMES: Record<ThemeColor, ThemePalette> = {
     sidebarAccent: 'oklch(0.93 0.03 160)',
     sidebarAccentForeground: 'oklch(0.22 0.03 160)',
     sidebarBorder: 'oklch(0.90 0.01 160)',
-    background: 'oklch(0.99 0.005 160)',
+    background: 'oklch(0.98 0.008 160)',
     charts: ['oklch(0.50 0.16 155)', 'oklch(0.55 0.19 42)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)'],
     swatch: 'linear-gradient(135deg, oklch(0.50 0.16 155), oklch(0.46 0.14 170))',
     dark: {
@@ -100,7 +100,7 @@ const THEMES: Record<ThemeColor, ThemePalette> = {
     sidebarAccent: 'oklch(0.93 0.03 250)',
     sidebarAccentForeground: 'oklch(0.22 0.03 250)',
     sidebarBorder: 'oklch(0.90 0.01 250)',
-    background: 'oklch(0.99 0.005 250)',
+    background: 'oklch(0.98 0.008 250)',
     charts: ['oklch(0.50 0.19 250)', 'oklch(0.50 0.16 155)', 'oklch(0.72 0.16 80)', 'oklch(0.55 0.19 42)', 'oklch(0.65 0.22 15)'],
     swatch: 'linear-gradient(135deg, oklch(0.50 0.19 250), oklch(0.46 0.17 260))',
     dark: {
@@ -127,7 +127,7 @@ const THEMES: Record<ThemeColor, ThemePalette> = {
     sidebarAccent: 'oklch(0.93 0.03 290)',
     sidebarAccentForeground: 'oklch(0.22 0.03 290)',
     sidebarBorder: 'oklch(0.90 0.01 290)',
-    background: 'oklch(0.99 0.005 290)',
+    background: 'oklch(0.98 0.008 290)',
     charts: ['oklch(0.50 0.21 290)', 'oklch(0.50 0.16 155)', 'oklch(0.72 0.16 80)', 'oklch(0.50 0.19 250)', 'oklch(0.65 0.22 15)'],
     swatch: 'linear-gradient(135deg, oklch(0.50 0.21 290), oklch(0.46 0.19 300))',
     dark: {
@@ -154,7 +154,7 @@ const THEMES: Record<ThemeColor, ThemePalette> = {
     sidebarAccent: 'oklch(0.93 0.03 15)',
     sidebarAccentForeground: 'oklch(0.22 0.03 15)',
     sidebarBorder: 'oklch(0.90 0.01 15)',
-    background: 'oklch(0.99 0.005 15)',
+    background: 'oklch(0.98 0.008 15)',
     charts: ['oklch(0.58 0.23 15)', 'oklch(0.50 0.16 155)', 'oklch(0.72 0.16 80)', 'oklch(0.50 0.19 250)', 'oklch(0.55 0.19 42)'],
     swatch: 'linear-gradient(135deg, oklch(0.58 0.23 15), oklch(0.54 0.21 350))',
     dark: {
@@ -181,7 +181,7 @@ const THEMES: Record<ThemeColor, ThemePalette> = {
     sidebarAccent: 'oklch(0.93 0.03 200)',
     sidebarAccentForeground: 'oklch(0.22 0.03 200)',
     sidebarBorder: 'oklch(0.90 0.01 200)',
-    background: 'oklch(0.99 0.005 200)',
+    background: 'oklch(0.98 0.008 200)',
     charts: ['oklch(0.55 0.13 200)', 'oklch(0.50 0.16 155)', 'oklch(0.72 0.16 80)', 'oklch(0.50 0.19 250)', 'oklch(0.65 0.22 15)'],
     swatch: 'linear-gradient(135deg, oklch(0.55 0.13 200), oklch(0.50 0.11 210))',
     dark: {

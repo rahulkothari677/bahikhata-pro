@@ -975,12 +975,11 @@ function KPICard({ title, value, icon: Icon, gradient, subtitle, trend, onClick,
       className={onClick ? 'cursor-pointer' : ''}
       onClick={onClick}
     >
-      {/* Tier 2: White card with colored accent — gradient only on icon + top border */}
+      {/* White card with colored gradient icon + subtle colored top border */}
       <div className={`rounded-2xl bg-card border border-border/60 shadow-card relative overflow-hidden h-full transition hover:shadow-lg ${onClick ? 'hover:scale-[1.02]' : ''}`}>
-        {/* Colored top border accent — connects card to theme */}
+        {/* Subtle colored top border — connects card to theme */}
         <div className={`h-1 bg-gradient-to-r ${gradient}`} />
         <div className="p-4 lg:p-5 relative">
-          <div className="absolute top-0 right-0 w-20 h-20 bg-gradient-to-br ${gradient} opacity-[0.04] rounded-full -mr-8 -mt-8 pointer-events-none" style={{ background: 'transparent' }} />
           <div className="flex items-start justify-between mb-3">
             <div className={`w-9 h-9 rounded-lg bg-gradient-to-br ${gradient} flex items-center justify-center shadow-md flex-shrink-0`}>
               <Icon className="w-4 h-4 text-white" />

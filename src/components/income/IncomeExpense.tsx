@@ -94,44 +94,45 @@ export function IncomeExpense() {
   return (
     <>
     <div className="space-y-4">
-      {/* Summary cards — gradient backgrounds + count-up animation */}
+      {/* Summary cards — white with colored accents */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {/* Income card — emerald gradient */}
-        <div className="rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 p-4 text-white shadow-card relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -mr-12 -mt-12 pointer-events-none" />
-          <div className="relative">
+        {/* Income card — emerald accent */}
+        <div className="rounded-2xl bg-card border border-border/60 shadow-card relative overflow-hidden">
+          <div className="h-1 bg-gradient-to-r from-emerald-500 to-teal-600" />
+          <div className="p-4 relative">
             <div className="flex items-center gap-2 mb-1">
-              <ArrowDownRight className="w-4 h-4" />
-              <p className="text-[11px] text-white/80 uppercase tracking-wide font-medium">Income</p>
+              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-md">
+                <ArrowDownRight className="w-4 h-4 text-white" />
+              </div>
+              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Income</p>
             </div>
-            <p className="text-2xl font-bold tabular-nums">{formatINR(totalIncome)}</p>
+            <p className="text-2xl font-bold tabular-nums text-emerald-600">{formatINR(totalIncome)}</p>
           </div>
         </div>
-        {/* Expense card — rose gradient */}
-        <div className="rounded-2xl bg-gradient-to-br from-rose-500 to-red-600 p-4 text-white shadow-card relative overflow-hidden">
-          <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -mr-12 -mt-12 pointer-events-none" />
-          <div className="relative">
+        {/* Expense card — rose accent */}
+        <div className="rounded-2xl bg-card border border-border/60 shadow-card relative overflow-hidden">
+          <div className="h-1 bg-gradient-to-r from-rose-500 to-red-600" />
+          <div className="p-4 relative">
             <div className="flex items-center gap-2 mb-1">
-              <ArrowUpRight className="w-4 h-4" />
-              <p className="text-[11px] text-white/80 uppercase tracking-wide font-medium">Expenses</p>
+              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-rose-500 to-red-600 flex items-center justify-center shadow-md">
+                <ArrowUpRight className="w-4 h-4 text-white" />
+              </div>
+              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Expenses</p>
             </div>
-            <p className="text-2xl font-bold tabular-nums">{formatINR(totalExpense)}</p>
+            <p className="text-2xl font-bold tabular-nums text-rose-600">{formatINR(totalExpense)}</p>
           </div>
         </div>
-        {/* Net cashflow card — violet or rose based on positive/negative */}
-        <div className={cn(
-          'rounded-2xl p-4 text-white shadow-card relative overflow-hidden',
-          netCashflow >= 0
-            ? 'bg-gradient-to-br from-violet-500 to-purple-600'
-            : 'bg-gradient-to-br from-amber-500 to-orange-600'
-        )}>
-          <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -mr-12 -mt-12 pointer-events-none" />
-          <div className="relative">
+        {/* Net cashflow card — violet or amber accent */}
+        <div className="rounded-2xl bg-card border border-border/60 shadow-card relative overflow-hidden">
+          <div className={cn('h-1 bg-gradient-to-r', netCashflow >= 0 ? 'from-violet-500 to-purple-600' : 'from-amber-500 to-orange-600')} />
+          <div className="p-4 relative">
             <div className="flex items-center gap-2 mb-1">
-              <Wallet className="w-4 h-4" />
-              <p className="text-[11px] text-white/80 uppercase tracking-wide font-medium">Net Cashflow</p>
+              <div className={cn('w-9 h-9 rounded-lg bg-gradient-to-br flex items-center justify-center shadow-md', netCashflow >= 0 ? 'from-violet-500 to-purple-600' : 'from-amber-500 to-orange-600')}>
+                <Wallet className="w-4 h-4 text-white" />
+              </div>
+              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Net Cashflow</p>
             </div>
-            <p className="text-2xl font-bold tabular-nums">
+            <p className={cn('text-2xl font-bold tabular-nums', netCashflow >= 0 ? 'text-violet-600' : 'text-amber-600')}>
               {netCashflow >= 0 ? '+' : ''}{formatINR(netCashflow)}
             </p>
           </div>

@@ -50,9 +50,10 @@
 
 :root {
   --radius: 0.75rem;
-  /* Warm cream/off-white background */
-  --background: oklch(0.99 0.005 60);
+  /* Subtle warm tint background — barely visible warmth, like cream paper */
+  --background: oklch(0.98 0.008 60);
   --foreground: oklch(0.18 0.02 30);
+  /* Pure white cards — they 'float' above the tinted background */
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.18 0.02 30);
   --popover: oklch(1 0 0);
