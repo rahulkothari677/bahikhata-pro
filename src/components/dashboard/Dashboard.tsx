@@ -785,7 +785,7 @@ export function Dashboard() {
             {recentTransactions.length === 0 ? (
               <div className="text-center py-8 text-sm text-muted-foreground">No transactions yet</div>
             ) : (
-              <div className="space-y-2 max-h-72 overflow-y-auto">
+              <div className="space-y-1.5 max-h-72 overflow-y-auto">
                 {recentTransactions.map((txn: any) => {
                   const isSale = txn.type === 'sale'
                   const isIncome = txn.type === 'income'
@@ -798,34 +798,46 @@ export function Dashboard() {
                         setPreviousView('dashboard')
                         setView('transaction-detail')
                       }}
-                      className="w-full flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted/50 transition text-left"
+                      className="w-full flex items-center gap-2.5 p-2 rounded-lg hover:bg-muted/50 transition text-left"
                     >
+                      {/* Circular avatar — shows first letter of party name,
+                          or icon for walk-in. Tinted with accent color. */}
                       <div className={cn(
-                        'w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0',
-                        isInflow ? 'bg-emerald-100' : 'bg-rose-100'
+                        'w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-sm',
+                        isInflow ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600' : 'bg-rose-100 dark:bg-rose-900/40 text-rose-600'
                       )}>
-                        {isInflow ? (
-                          <ArrowDownRight className="w-4 h-4 text-emerald-600" />
-                        ) : (
-                          <ArrowUpRight className="w-4 h-4 text-rose-600" />
-                        )}
+                        {txn.partyName
+                          ? txn.partyName.charAt(0).toUpperCase()
+                          : isInflow
+                            ? <ArrowDownRight className="w-4 h-4" />
+                            : <ArrowUpRight className="w-4 h-4" />}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">
-                          {txn.partyName}
-                          {txn.invoiceNo && <span className="text-muted-foreground text-xs ml-1">• {txn.invoiceNo}</span>}
+                        <p className="text-sm font-semibold truncate">
+                          {txn.partyName || 'Walk-in Customer'}
                         </p>
-                        <p className="text-[11px] text-muted-foreground capitalize">
-                          {txn.type} • {relativeTime(txn.date)} • {txn.paymentMode}
+                        <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+                          <span className="capitalize">{txn.type}</span>
+                          <span>•</span>
+                          <span>{relativeTime(txn.date)}</span>
+                          {txn.invoiceNo && (
+                            <>
+                              <span>•</span>
+                              <span className="truncate">{txn.invoiceNo}</span>
+                            </>
+                          )}
                         </p>
                       </div>
                       <div className="text-right flex-shrink-0">
-                        <p className={cn('text-sm font-semibold', isInflow ? 'text-emerald-600' : 'text-rose-600')}>
+                        <p className={cn(
+                          'text-sm font-bold tabular-nums',
+                          isInflow ? 'text-emerald-600' : 'text-rose-600'
+                        )}>
                           {isInflow ? '+' : '-'}{formatINRCompact(txn.totalAmount)}
                         </p>
                         {isSale && txn.profit !== undefined && !hideProfit && (
-                          <p className="text-[10px] text-muted-foreground">
-                            {t('common.profit')} {formatINRCompact(txn.profit)}
+                          <p className="text-[10px] text-muted-foreground tabular-nums">
+                            +{formatINRCompact(txn.profit)}
                           </p>
                         )}
                       </div>
