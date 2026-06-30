@@ -506,15 +506,51 @@ export function BillScanner() {
           >
             <CardContent className="p-8 lg:p-12 text-center">
               {scanning ? (
-                <div className="py-8">
-                  <div className="relative w-20 h-20 mx-auto mb-4">
+                <div className="py-12">
+                  {/* Animated scanning visualization */}
+                  <div className="relative w-24 h-24 mx-auto mb-6">
+                    {/* Outer pulsing ring */}
                     <div className="absolute inset-0 rounded-full bg-primary/10 animate-ping" />
-                    <div className="absolute inset-2 rounded-full bg-primary/20 flex items-center justify-center">
-                      <Loader2 className="w-8 h-8 text-primary animate-spin" />
+                    {/* Middle ring */}
+                    <div className="absolute inset-2 rounded-full bg-primary/15" />
+                    {/* Inner circle with icon */}
+                    <div className="absolute inset-4 rounded-full bg-gradient-saffron flex items-center justify-center shadow-lg">
+                      <ScanLine className="w-8 h-8 text-white animate-pulse" />
+                    </div>
+                    {/* Scanning line animation */}
+                    <div className="absolute inset-0 rounded-full overflow-hidden">
+                      <div
+                        className="absolute left-0 right-0 h-0.5 bg-primary/60"
+                        style={{
+                          animation: 'scanline 1.5s ease-in-out infinite',
+                        }}
+                      />
                     </div>
                   </div>
-                  <h3 className="font-semibold text-lg">{t('scanner.scanning')}</h3>
+
+                  <h3 className="font-semibold text-lg font-heading">{t('scanner.scanning')}</h3>
                   <p className="text-sm text-muted-foreground mt-1">{t('scanner.extracting')}</p>
+
+                  {/* Animated tips — cycle through while scanning */}
+                  <div className="mt-6 max-w-xs mx-auto">
+                    <div className="flex items-center gap-2 justify-center text-xs text-muted-foreground">
+                      <Sparkles className="w-3.5 h-3.5 text-primary animate-pulse" />
+                      <span className="animate-pulse">Reading text with AI vision...</span>
+                    </div>
+                  </div>
+
+                  {/* Progress steps */}
+                  <div className="mt-4 flex items-center justify-center gap-1.5">
+                    {[0, 1, 2, 3].map((i) => (
+                      <div
+                        key={i}
+                        className="w-1.5 h-1.5 rounded-full bg-primary"
+                        style={{
+                          animation: `pulse 1s ease-in-out ${i * 0.2}s infinite`,
+                        }}
+                      />
+                    ))}
+                  </div>
                 </div>
               ) : preview ? (
                 <div className="space-y-3">
@@ -674,69 +710,74 @@ export function BillScanner() {
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
-                {/* Header row */}
-                <div className="hidden md:grid grid-cols-12 gap-2 text-[10px] uppercase font-medium text-muted-foreground px-2">
-                  <div className="col-span-4">Product Name</div>
-                  <div className="col-span-2">Qty</div>
-                  <div className="col-span-2">Unit Price</div>
-                  <div className="col-span-1">GST%</div>
-                  <div className="col-span-2 text-right">Total</div>
-                  <div className="col-span-1"></div>
-                </div>
-
                 {scanned.items.map((item: any, i: number) => (
-                  <div key={i} className="grid grid-cols-12 gap-2 items-center p-2 rounded-lg bg-muted/30 hover:bg-muted/50 transition">
-                    {/* Product name — always editable */}
-                    <div className="col-span-12 md:col-span-4">
+                  <div key={i} className="group rounded-xl bg-muted/30 hover:bg-muted/50 transition p-3 space-y-2">
+                    {/* Mobile layout: stacked, Desktop: grid */}
+                    {/* Row 1: Product name (full width on mobile) */}
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-primary/10 text-primary text-xs font-bold flex items-center justify-center flex-shrink-0">
+                        {i + 1}
+                      </div>
                       <input
                         value={item.name}
                         onChange={(e) => updateItem(i, 'name', e.target.value)}
-                        className="w-full px-2 py-1.5 text-sm bg-transparent border border-transparent rounded-md focus:bg-background focus:border-border transition"
+                        className="flex-1 px-2 py-1.5 text-sm bg-transparent border border-transparent rounded-md focus:bg-background focus:border-border transition font-medium"
                         placeholder="Product name"
                       />
-                    </div>
-                    {/* Quantity — always editable */}
-                    <div className="col-span-3 md:col-span-2">
-                      <input
-                        type="number"
-                        value={item.quantity}
-                        onChange={(e) => updateItem(i, 'quantity', Number(e.target.value))}
-                        className="w-full px-2 py-1.5 text-sm bg-transparent border border-transparent rounded-md focus:bg-background focus:border-border transition"
-                      />
-                    </div>
-                    {/* Unit price — always editable */}
-                    <div className="col-span-4 md:col-span-2">
-                      <input
-                        type="number"
-                        value={item.unitPrice}
-                        onChange={(e) => updateItem(i, 'unitPrice', Number(e.target.value))}
-                        className="w-full px-2 py-1.5 text-sm bg-transparent border border-transparent rounded-md focus:bg-background focus:border-border transition"
-                      />
-                    </div>
-                    {/* GST — always editable */}
-                    <div className="col-span-2 md:col-span-1">
-                      <select
-                        value={item.gstRate}
-                        onChange={(e) => updateItem(i, 'gstRate', Number(e.target.value))}
-                        className="w-full px-1 py-1.5 text-sm bg-transparent border border-transparent rounded-md focus:bg-background focus:border-border transition"
-                      >
-                        {[0, 5, 12, 18, 28].map(r => <option key={r} value={r}>{r}%</option>)}
-                      </select>
-                    </div>
-                    {/* Total (auto-calculated, read-only) */}
-                    <div className="col-span-2 md:col-span-2 text-right">
-                      <p className="text-sm font-semibold">{formatINR(item.total || 0)}</p>
-                    </div>
-                    {/* Delete */}
-                    <div className="col-span-1 flex justify-end">
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-7 w-7 p-0 text-rose-600 hover:bg-rose-50"
+                        className="h-7 w-7 p-0 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 flex-shrink-0"
                         onClick={() => removeItem(i)}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </Button>
+                    </div>
+
+                    {/* Row 2: Qty, Unit, Price, GST, Total */}
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pl-9">
+                      <div>
+                        <label className="text-[10px] text-muted-foreground uppercase tracking-wide">Qty</label>
+                        <input
+                          type="number"
+                          value={item.quantity}
+                          onChange={(e) => updateItem(i, 'quantity', Number(e.target.value))}
+                          className="w-full px-2 py-1 text-sm bg-background border border-border rounded-md focus:ring-1 focus:ring-primary transition tabular-nums"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-muted-foreground uppercase tracking-wide">Unit</label>
+                        <select
+                          value={item.unit || 'pcs'}
+                          onChange={(e) => updateItem(i, 'unit', e.target.value)}
+                          className="w-full px-1 py-1 text-sm bg-background border border-border rounded-md focus:ring-1 focus:ring-primary transition"
+                        >
+                          {['pcs', 'kg', 'gm', 'ltr', 'ml', 'box', 'dozen', 'packet', 'set'].map(u => <option key={u} value={u}>{u}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-muted-foreground uppercase tracking-wide">Price ₹</label>
+                        <input
+                          type="number"
+                          value={item.unitPrice}
+                          onChange={(e) => updateItem(i, 'unitPrice', Number(e.target.value))}
+                          className="w-full px-2 py-1 text-sm bg-background border border-border rounded-md focus:ring-1 focus:ring-primary transition tabular-nums"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-muted-foreground uppercase tracking-wide">GST</label>
+                        <select
+                          value={item.gstRate}
+                          onChange={(e) => updateItem(i, 'gstRate', Number(e.target.value))}
+                          className="w-full px-1 py-1 text-sm bg-background border border-border rounded-md focus:ring-1 focus:ring-primary transition"
+                        >
+                          {[0, 5, 12, 18, 28].map(r => <option key={r} value={r}>{r}%</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-muted-foreground uppercase tracking-wide">Total</label>
+                        <p className="text-sm font-bold tabular-nums py-1">{formatINR(item.total || 0)}</p>
+                      </div>
                     </div>
                   </div>
                 ))}

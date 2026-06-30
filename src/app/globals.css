@@ -298,6 +298,14 @@
   animation: pulse-ring 2s infinite;
 }
 
+/* Scanline animation for bill scanner loading state */
+@keyframes scanline {
+  0% { top: 0%; opacity: 0; }
+  20% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { top: 100%; opacity: 0; }
+}
+
 /* ============================================================
    Dark-mode-aware colored chips
    Components across the app use Tailwind's hardcoded
