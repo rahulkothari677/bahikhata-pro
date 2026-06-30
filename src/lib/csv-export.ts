@@ -29,25 +29,43 @@ export async function exportCSV(filename: string, headers: string[], rows: (stri
 
 /**
  * Universal file save/share — works on both mobile and desktop.
- * On mobile: writes to temp file → opens Android share sheet (user can save to Downloads)
+ * On mobile: creates Blob → FileReader to base64 → Filesystem → Share sheet
  * On desktop: downloads file directly
+ * 
+ * Uses the SAME approach as PDF sharing (which works perfectly).
  */
 export async function shareOrDownload(content: string, filename: string, mimeType: string = 'text/plain') {
   // Check if running on Capacitor (native Android app)
   if (Capacitor.isNativePlatform()) {
     try {
-      const { Filesystem, Directory } = await import('@capacitor/filesystem')
+      const { Filesystem, Directory, Encoding } = await import('@capacitor/filesystem')
       const { Share } = await import('@capacitor/share')
 
-      // Write content as UTF-8 string (NOT base64 — base64 causes encoding issues)
-      const fileResult = await Filesystem.writeFile({
-        path: filename,
-        data: content,
-        directory: Directory.Cache,
-        encoding: 'utf8',
+      // Step 1: Create a Blob from the string content (handles Unicode/₹ correctly)
+      const blob = new Blob([content], { type: mimeType })
+
+      // Step 2: Convert Blob to base64 using FileReader (same as PDF sharing)
+      const base64Data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => {
+          const result = reader.result as string
+          // Remove "data:text/plain;base64," prefix
+          const base64 = result.split(',')[1]
+          resolve(base64)
+        }
+        reader.onerror = reject
+        reader.readAsDataURL(blob)
       })
 
-      // Open Android share sheet — user can save to Downloads or share
+      // Step 3: Write to temp cache directory with base64 encoding
+      const fileResult = await Filesystem.writeFile({
+        path: filename,
+        data: base64Data,
+        directory: Directory.Cache,
+        encoding: Encoding.Base64,
+      })
+
+      // Step 4: Open Android share sheet
       await Share.share({
         title: filename,
         url: fileResult.uri,
@@ -55,9 +73,7 @@ export async function shareOrDownload(content: string, filename: string, mimeTyp
       })
       return
     } catch (err: any) {
-      // If user cancelled share, don't show error
       if (err?.name === 'AbortError' || String(err?.message || '').includes('cancel')) return
-      // Show visible error so we know what failed
       throw new Error(`Export failed: ${err?.message || err}`)
     }
   }
