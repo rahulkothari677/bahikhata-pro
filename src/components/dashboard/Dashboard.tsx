@@ -912,37 +912,71 @@ export function Dashboard() {
 
       {/* Business Goals — monthly revenue/expense targets with progress */}
       {(revenueTarget || expenseBudget) && kpis && (
-        <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <Target className="w-4 h-4 text-primary" />
-              <p className="text-sm font-semibold">Monthly Goals</p>
+        <div className="rounded-2xl bg-card border border-border/60 border-t-2 border-t-primary/10 shadow-card overflow-hidden">
+          <div className="bg-gradient-to-r from-violet-500 to-purple-600 p-3 text-white relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -mr-10 -mt-10 pointer-events-none" />
+            <div className="relative flex items-center gap-2">
+              <div className="w-7 h-7 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center">
+                <Target className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="text-sm font-bold font-heading">Monthly Goals</p>
+                <p className="text-[10px] text-white/80">Track your progress this month</p>
+              </div>
             </div>
-            <div className="space-y-3">
-              {revenueTarget && (
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-medium">Revenue Target</span>
-                    <span className="text-xs text-muted-foreground">
-                      {formatINRCompact(kpis.rangeRevenue)} / {formatINRCompact(revenueTarget)}
-                    </span>
-                  </div>
-                  <div className="h-2.5 bg-muted rounded-full overflow-hidden">
-                    <div
-                      className={cn('h-full rounded-full transition-all', kpis.rangeRevenue >= revenueTarget ? 'bg-emerald-500' : 'bg-primary')}
-                      style={{ width: `${Math.min(100, (kpis.rangeRevenue / revenueTarget) * 100)}%` }}
-                    />
-                  </div>
-                  <p className="text-[10px] text-muted-foreground mt-0.5">
-                    {kpis.rangeRevenue >= revenueTarget
-                      ? 'Target achieved!'
-                      : `${((kpis.rangeRevenue / revenueTarget) * 100).toFixed(0)}% — ${formatINRCompact(revenueTarget - kpis.rangeRevenue)} to go`}
-                  </p>
+          </div>
+          <div className="p-3 space-y-3">
+            {revenueTarget && (
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-semibold">Revenue Target</span>
+                  <span className="text-xs font-bold tabular-nums">
+                    {formatINRCompact(kpis.rangeRevenue)} / {formatINRCompact(revenueTarget)}
+                  </span>
                 </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+                <div className="h-2.5 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className={cn('h-full rounded-full transition-all duration-500', kpis.rangeRevenue >= revenueTarget ? 'bg-emerald-500' : 'bg-primary')}
+                    style={{ width: `${Math.min(100, (kpis.rangeRevenue / revenueTarget) * 100)}%` }}
+                  />
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-0.5 tabular-nums">
+                  {kpis.rangeRevenue >= revenueTarget
+                    ? '🎉 Target achieved!'
+                    : `${((kpis.rangeRevenue / revenueTarget) * 100).toFixed(0)}% — ${formatINRCompact(revenueTarget - kpis.rangeRevenue)} to go`}
+                </p>
+              </div>
+            )}
+            {expenseBudget && (
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs font-semibold">Expense Budget</span>
+                  <span className="text-xs font-bold tabular-nums">
+                    {formatINRCompact(kpis.totalExpenses || 0)} / {formatINRCompact(expenseBudget)}
+                  </span>
+                </div>
+                <div className="h-2.5 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className={cn('h-full rounded-full transition-all duration-500',
+                      (kpis.totalExpenses || 0) > expenseBudget ? 'bg-rose-500' : 'bg-amber-500'
+                    )}
+                    style={{ width: `${Math.min(100, ((kpis.totalExpenses || 0) / expenseBudget) * 100)}%` }}
+                  />
+                </div>
+                <p className="text-[10px] text-muted-foreground mt-0.5 tabular-nums">
+                  {(kpis.totalExpenses || 0) > expenseBudget
+                    ? `⚠️ Over budget by ${formatINRCompact((kpis.totalExpenses || 0) - expenseBudget)}`
+                    : `${formatINRCompact(expenseBudget - (kpis.totalExpenses || 0))} remaining`}
+                </p>
+              </div>
+            )}
+            {(!revenueTarget && !expenseBudget) && (
+              <p className="text-xs text-muted-foreground text-center py-2">
+                No goals set. Go to Settings → Business Goals to set targets.
+              </p>
+            )}
+          </div>
+        </div>
       )}
 
       {/* Business Health Score — overall wellness indicator */}
