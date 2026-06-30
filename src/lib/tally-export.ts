@@ -92,13 +92,15 @@ export function exportToTally(
   </BODY>
 </ENVELOPE>`
 
-  // Download as XML
-  const blob = new Blob([xml], { type: 'application/xml;charset=utf-8' })
+  // Download as XML file (force download, don't open in browser)
+  const blob = new Blob([xml], { type: 'application/octet-stream' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
   a.download = `Tally_Export_${type}_${formatDate(new Date()).replace(/\//g, '-')}.xml`
+  document.body.appendChild(a)
   a.click()
+  document.body.removeChild(a)
   URL.revokeObjectURL(url)
 }
 
