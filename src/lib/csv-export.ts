@@ -55,11 +55,13 @@ export async function shareOrDownload(content: string, filename: string, mimeTyp
       })
 
       // Step 3: Write to temp cache directory with base64 encoding
+      // recursive: true creates the directory if it doesn't exist
       const fileResult = await Filesystem.writeFile({
         path: filename,
         data: base64Data,
         directory: Directory.Cache,
         encoding: Encoding.Base64,
+        recursive: true,
       })
 
       // Step 4: Open Android share sheet
