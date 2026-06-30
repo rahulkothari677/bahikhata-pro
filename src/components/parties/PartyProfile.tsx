@@ -248,8 +248,8 @@ export function PartyProfile() {
     haptic.click()
     try {
       // Generate PDF using jsPDF (same logic as handleDownloadStatement but output as blob)
-      const { jsPDF } = await import('jspdf')
-      const doc = new jsPDF({ unit: 'mm', format: 'a4' })
+      const jsPDFMod: any = await import("jspdf")
+      const doc = new jsPDFMod.jsPDF()({ unit: 'mm', format: 'a4' })
       const pageWidth = 210, pageHeight = 297, margin = 15
       let y = 20
 

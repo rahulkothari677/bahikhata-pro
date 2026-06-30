@@ -213,8 +213,8 @@ export async function GET(req: NextRequest) {
         const key = item.productId || item.productName
         const existing = productSalesMap.get(key) || { name: item.productName, quantity: 0, revenue: 0, profit: 0 }
         existing.quantity += item.quantity
-        existing.revenue += item.unitPrice * item.quantity
-        existing.profit += (item.unitPrice - (allProducts.find(p => p.id === item.productId)?.purchasePrice || 0)) * item.quantity
+        existing.revenue += item?.unitPrice * item.quantity
+        existing.profit += (item?.unitPrice - (allProducts.find(p => p.id === item.productId)?.purchasePrice || 0)) * item.quantity
         productSalesMap.set(key, existing)
       })
     })
@@ -228,7 +228,7 @@ export async function GET(req: NextRequest) {
       t.items.forEach(item => {
         const product = allProducts.find(p => p.id === item.productId)
         const category = product?.category || 'Other'
-        categoryMap.set(category, (categoryMap.get(category) || 0) + item.unitPrice * item.quantity)
+        categoryMap.set(category, (categoryMap.get(category) || 0) + item?.unitPrice * item.quantity)
       })
     })
     const categoryBreakdown = Array.from(categoryMap.entries())
@@ -294,9 +294,9 @@ export async function GET(req: NextRequest) {
         productId: item.productId,
         productName: item.productName,
         quantity: item.quantity,
-        unitPrice: item.unitPrice,
+        unitPrice: item?.unitPrice,
         gstRate: item.gstRate,
-        unit: item.unit || 'pcs',
+        unit: (item as any)?.unit || 'pcs',
       })),
     }))
 

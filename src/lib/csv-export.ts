@@ -60,7 +60,7 @@ export async function shareOrDownload(content: string, filename: string, mimeTyp
         path: filename,
         data: base64Data,
         directory: Directory.Cache,
-        encoding: Encoding.Base64,
+        encoding: 'base64' as any,  // Type cast — Capacitor accepts 'base64' string at runtime
         recursive: true,
       })
 

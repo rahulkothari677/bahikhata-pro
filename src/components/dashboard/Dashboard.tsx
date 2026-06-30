@@ -615,8 +615,8 @@ export function Dashboard() {
                     contentStyle={chartColors.tooltipStyle} itemStyle={chartColors.tooltipItemStyle} labelStyle={chartColors.tooltipLabelStyle}
                     formatter={(v: number, name: string) => name === 'revenue' ? [formatINR(v), 'Revenue'] : [formatINR(v), 'Profit']}
                   />
-                  <Bar dataKey="revenue" fill="oklch(0.55 0.19 42)" radius={[0, 6, 6, 0]} barSize={16} name="revenue"
-                    activeBar={{ fill: 'oklch(0.65 0.22 42)', barSize: 22 }}
+                  <Bar dataKey="revenue" fill="oklch(0.55 0.19 42)" radius={[0, 6, 6, 0]} name="revenue"
+                    activeBar={{ fill: 'oklch(0.65 0.22 42)' }}
                   />
                 </BarChart>
               </ResponsiveContainer>

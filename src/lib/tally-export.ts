@@ -49,7 +49,7 @@ export async function exportToTally(
           : `<LEDGERNAME>${escapeXml(t.category || 'Indirect Expenses')}</LEDGERNAME><ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE><AMOUNT>${t.totalAmount.toFixed(2)}</AMOUNT>`
 
     // Tax ledgers
-    const taxLedgers = []
+    const taxLedgers: string[] = [] as string[]
     if (t.cgst > 0) taxLedgers.push(`<LEDGERNAME>CGST</LEDGERNAME><ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE><AMOUNT>${t.cgst.toFixed(2)}</AMOUNT>`)
     if (t.sgst > 0) taxLedgers.push(`<LEDGERNAME>SGST</LEDGERNAME><ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE><AMOUNT>${t.sgst.toFixed(2)}</AMOUNT>`)
     if (t.igst > 0) taxLedgers.push(`<LEDGERNAME>IGST</LEDGERNAME><ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE><AMOUNT>${t.igst.toFixed(2)}</AMOUNT>`)

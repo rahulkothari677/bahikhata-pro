@@ -1,3 +1,4 @@
+type OfflineFetchInit = RequestInit & { offline?: { queueable?: boolean; invalidate?: string[] } }
 /**
  * offlineFetch — drop-in replacement for fetch() that adds offline intelligence.
  *
@@ -147,7 +148,7 @@ export async function offlineFetch(
     | 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'
 
   // Strip the offline key before passing to native fetch
-  const fetchOpts: RequestInit = { ...options, offline: undefined }
+  const fetchOpts = { ...options } as RequestInit
   delete (fetchOpts as any).offline
 
   // Only intercept same-origin /api/ calls

@@ -112,7 +112,7 @@ export function daysAgo(n: number): Date {
 }
 
 // Compute current stock for a product
-export async function computeProductStock(productId: string, openingStock: number, transactions: any[]): number {
+export function computeProductStock(productId: string, openingStock: number, transactions: any[]): number {
   let stock = openingStock
   for (const t of transactions) {
     for (const item of t.items || []) {

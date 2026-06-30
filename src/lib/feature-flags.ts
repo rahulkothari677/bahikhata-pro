@@ -16,7 +16,7 @@ export async function seedFeatureFlags() {
     for (const flag of DEFAULT_FLAGS) {
       const existing = await db.featureFlag.findUnique({ where: { key: flag.key } }).catch(() => null)
       if (!existing) {
-        await db.featureFlag.create({ data: flag }).catch(() => {})
+        await db.featureFlag.create({ data: flag } as any).catch(() => {})
       }
     }
   } catch {}

@@ -37,7 +37,6 @@ export function initAnalytics() {
       autocapture: false,
       opt_out_capturing_by_default: true,
       request_batching: true,
-      flush_at: 10,
       property_denylist: ['$ip', 'email', 'phone', 'password'],
     })
     isInitialized = true

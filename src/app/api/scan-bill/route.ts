@@ -103,7 +103,7 @@ Return JSON only, no commentary, no markdown formatting.`
       try {
         const ZAI = (await import('z-ai-web-dev-sdk')).default
         const zai = await ZAI.create()
-        const vlm = await zai.images.vlm.create()
+        const vlm = await (zai as any).images.vlm.create()
 
         const response = await vlm.invoke({
           messages: [
