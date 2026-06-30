@@ -18,7 +18,6 @@ import {
 import { offlineFetch } from '@/lib/offline-fetch'
 import { useSubscription } from '@/hooks/use-subscription'
 import { Capacitor } from '@capacitor/core'
-import { CameraPreviewModal } from '@/components/scanner/CameraPreviewModal'
 
 /**
  * takePhotoNative — uses Capacitor Camera plugin on native (Android app)
@@ -164,7 +163,6 @@ export function BillScanner() {
   const [preview, setPreview] = useState<string>('')
   const [billType, setBillType] = useState<'sale' | 'purchase'>(scannerBillType)
   const [editMode, setEditMode] = useState(false)
-  const [cameraModalOpen, setCameraModalOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
 
@@ -356,15 +354,16 @@ export function BillScanner() {
         return
       }
 
-      // Native platform — use custom camera modal (with flash + grid)
-      // Falls back to takePhotoNative if camera-preview not available
-      if (Capacitor.isNativePlatform()) {
-        setCameraModalOpen(true)
+      // Native platform — use native Android camera (reliable, has built-in flash + grid)
+      const file = await takePhotoNative()
+      if (file) {
+        handleFile(file)
       } else {
-        const file = await takePhotoNative()
-        if (file) {
-          handleFile(file)
-        }
+        toast({
+          title: 'Camera unavailable',
+          description: 'Camera may be in use by another app, or permission was denied. Check Android Settings → Apps → BahiKhata Pro → Permissions.',
+          variant: 'destructive',
+        })
       }
     } catch (err: any) {
       console.error('[Scanner] handleTakePhoto error:', err)
@@ -876,16 +875,6 @@ export function BillScanner() {
           </Card>
         </div>
       )}
-
-      {/* Custom camera modal with flash + grid overlay */}
-      <CameraPreviewModal
-        open={cameraModalOpen}
-        onClose={() => setCameraModalOpen(false)}
-        onCapture={(file) => {
-          setCameraModalOpen(false)
-          handleFile(file)
-        }}
-      />
     </div>
   )
 }
