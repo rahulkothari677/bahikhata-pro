@@ -805,81 +805,59 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
                   <p className="text-[11px] mt-1">Click products above to add them here</p>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {/* Header row */}
-                  <div className="hidden sm:grid grid-cols-12 gap-2 text-[10px] uppercase text-muted-foreground font-medium px-2">
-                    <div className="col-span-5">Product</div>
-                    <div className="col-span-2 text-center">Qty</div>
-                    <div className="col-span-2 text-right">Price ₹</div>
-                    <div className="col-span-1 text-center">GST</div>
-                    <div className="col-span-2 text-right">Total</div>
-                  </div>
-
-                  {items.map((item, i) => (
-                    <div key={i} className="grid grid-cols-12 gap-2 items-center p-2.5 rounded-lg bg-muted/30 border border-border/50">
-                      {/* Product name */}
-                      <div className="col-span-12 sm:col-span-5">
-                        <p className="text-sm font-medium truncate">{item.productName}</p>
-                        <p className="text-[10px] text-muted-foreground">{item.unit} • GST {item.gstRate}%</p>
+                <div className="space-y-1.5">
+                  {items.map((item, i) => {
+                    const itemTotal = item.quantity * item.unitPrice * (1 + item.gstRate / 100)
+                    return (
+                      <div key={i} className="rounded-lg bg-muted/20 border border-border/40 p-2 transition hover:bg-muted/30">
+                        {/* Row 1: Number + Product name + Total + Delete */}
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] font-bold text-muted-foreground w-4 text-center flex-shrink-0">{i + 1}</span>
+                          <p className="flex-1 min-w-0 text-sm font-medium truncate">{item.productName}</p>
+                          <span className="text-xs font-bold tabular-nums flex-shrink-0">{formatINR(itemTotal)}</span>
+                          <button
+                            className="p-1 rounded text-muted-foreground hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition flex-shrink-0"
+                            onClick={() => handleRemoveItem(i)}
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        {/* Row 2: Qty + Unit + Price + GST — fills FULL width */}
+                        <div className="flex items-center gap-1 pl-5 mt-1">
+                          <Input
+                            type="number"
+                            value={item.quantity}
+                            onChange={(e) => handleUpdateItem(i, 'quantity', parseFloat(e.target.value) || 0)}
+                            className="flex-1 min-w-0 h-8 text-center text-sm tabular-nums"
+                            min="0"
+                            step="0.01"
+                          />
+                          <span className="text-[10px] text-muted-foreground flex-shrink-0">{item.unit}</span>
+                          <span className="text-[10px] text-muted-foreground flex-shrink-0">×</span>
+                          <span className="text-[10px] text-muted-foreground flex-shrink-0">₹</span>
+                          <Input
+                            type="number"
+                            value={item.unitPrice}
+                            onChange={(e) => handleUpdateItem(i, 'unitPrice', parseFloat(e.target.value) || 0)}
+                            className="flex-1 min-w-0 h-8 text-center text-sm tabular-nums"
+                            min="0"
+                            step="0.01"
+                          />
+                          <Select
+                            value={String(item.gstRate)}
+                            onValueChange={(v) => handleUpdateItem(i, 'gstRate', parseFloat(v))}
+                          >
+                            <SelectTrigger className="w-14 h-8 text-xs px-1 flex-shrink-0">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {[0, 5, 12, 18, 28].map(r => <SelectItem key={r} value={String(r)}>{r}%</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                        </div>
                       </div>
-
-                      {/* Quantity */}
-                      <div className="col-span-4 sm:col-span-2">
-                        <label className="sm:hidden text-[10px] text-muted-foreground">Qty</label>
-                        <Input
-                          type="number"
-                          value={item.quantity}
-                          onChange={(e) => handleUpdateItem(i, 'quantity', parseFloat(e.target.value) || 0)}
-                          className="h-8 text-center"
-                          min="0"
-                          step="0.01"
-                        />
-                      </div>
-
-                      {/* Unit price */}
-                      <div className="col-span-4 sm:col-span-2">
-                        <label className="sm:hidden text-[10px] text-muted-foreground">Price ₹</label>
-                        <Input
-                          type="number"
-                          value={item.unitPrice}
-                          onChange={(e) => handleUpdateItem(i, 'unitPrice', parseFloat(e.target.value) || 0)}
-                          className="h-8 text-right"
-                          min="0"
-                          step="0.01"
-                        />
-                      </div>
-
-                      {/* GST */}
-                      <div className="col-span-3 sm:col-span-1">
-                        <Select
-                          value={String(item.gstRate)}
-                          onValueChange={(v) => handleUpdateItem(i, 'gstRate', parseFloat(v))}
-                        >
-                          <SelectTrigger className="h-8 text-center text-xs px-1">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {[0, 5, 12, 18, 28].map(r => <SelectItem key={r} value={String(r)}>{r}%</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {/* Total + delete */}
-                      <div className="col-span-1 flex justify-end items-center gap-1">
-                        <span className="text-sm font-semibold hidden sm:inline">
-                          {formatINR(item.quantity * item.unitPrice * (1 + item.gstRate / 100))}
-                        </span>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 w-7 p-0 text-rose-600 hover:bg-rose-50"
-                          onClick={() => handleRemoveItem(i)}
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </div>
