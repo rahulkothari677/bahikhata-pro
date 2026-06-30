@@ -1011,19 +1011,27 @@ function MiniStatCard({ label, value, icon: Icon, color, onClick }: {
   color: string
   onClick?: () => void
 }) {
+  // Map text color to bg color for the glass icon container
+  const bgClass = color.includes('emerald') ? 'bg-emerald-500/10'
+    : color.includes('rose') ? 'bg-rose-500/10'
+    : color.includes('amber') ? 'bg-amber-500/10'
+    : 'bg-violet-500/10'
+
   return (
-    <Card
-      className="shadow-card border-border/60 hover:shadow-md transition cursor-pointer"
+    <div
+      className={`rounded-2xl bg-card border border-border/60 shadow-card hover:shadow-md transition cursor-pointer ${onClick ? 'hover:scale-[1.02]' : ''}`}
       onClick={onClick}
     >
-      <CardContent className="p-3 lg:p-4">
+      <div className="p-3 lg:p-4">
         <div className="flex items-center gap-2 mb-1">
-          <Icon className={cn('w-3.5 h-3.5', color)} />
-          <p className="text-[10px] lg:text-[11px] text-muted-foreground font-medium uppercase tracking-wide leading-tight">{label}</p>
+          <div className={cn('w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0', bgClass)}>
+            <Icon className={cn('w-3.5 h-3.5', color)} />
+          </div>
+          <p className="text-[10px] lg:text-[11px] text-muted-foreground font-medium uppercase tracking-wide leading-tight truncate">{label}</p>
         </div>
-        <p className="text-base lg:text-lg font-bold tracking-tight">{value}</p>
-      </CardContent>
-    </Card>
+        <p className="text-base lg:text-lg font-bold tracking-tight tabular-nums">{value}</p>
+      </div>
+    </div>
   )
 }
 
