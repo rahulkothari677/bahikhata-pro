@@ -142,23 +142,30 @@ export function MoreScreen() {
         className="max-w-2xl mx-auto px-4 py-4 space-y-4 pb-24"
         style={{ paddingBottom: 'calc(6rem + env(safe-area-inset-bottom))' }}
       >
-        {/* Profile Header */}
+        {/* Profile Header — premium gradient banner */}
         <button
           onClick={handleEditProfile}
-          className="w-full bg-card rounded-2xl p-4 shadow-sm border border-border/60 flex items-center gap-4 hover:shadow-md transition text-left active:scale-[0.98]"
+          className="w-full rounded-2xl shadow-card relative overflow-hidden text-white active:scale-[0.98] transition"
         >
-          <Avatar className="w-16 h-16 border-2 border-primary/20">
-            <AvatarFallback className="bg-gradient-saffron text-white text-xl font-bold">
-              {getInitials(userName)}
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex-1 min-w-0">
-            <p className="font-bold text-lg truncate">{userName}</p>
-            <p className="text-sm text-muted-foreground truncate">{shopName}</p>
-            {email && <p className="text-xs text-muted-foreground truncate">{email}</p>}
-          </div>
-          <div className="flex items-center gap-1 text-primary">
-            <Pencil className="w-4 h-4" />
+          <div className="bg-gradient-saffron p-5 relative">
+            {/* Decorative circles */}
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 pointer-events-none" />
+            <div className="absolute bottom-0 right-20 w-24 h-24 bg-white/5 rounded-full -mb-12 pointer-events-none" />
+            <div className="relative flex items-center gap-4">
+              <Avatar className="w-16 h-16 border-4 border-white/30 flex-shrink-0">
+                <AvatarFallback className="bg-white/20 backdrop-blur-sm text-white text-xl font-bold">
+                  {getInitials(userName)}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-lg font-heading tracking-tight truncate">{userName}</p>
+                <p className="text-sm text-white/80 truncate">{shopName}</p>
+                {email && <p className="text-xs text-white/70 truncate">{email}</p>}
+              </div>
+              <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
+                <Pencil className="w-4 h-4" />
+              </div>
+            </div>
           </div>
         </button>
 
@@ -193,11 +200,14 @@ export function MoreScreen() {
                     key={item.view}
                     onClick={() => handleItemClick(item.view)}
                     className={cn(
-                      'w-full flex items-center gap-3 p-3 hover:bg-muted/50 transition text-left active:bg-muted',
+                      'w-full flex items-center gap-3 p-3 hover:bg-muted/50 transition text-left active:bg-muted group',
                       i > 0 && 'border-t border-border/40',
                     )}
                   >
-                    <div className={cn('w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0', item.iconBg)}>
+                    <div className={cn(
+                      'w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition group-hover:scale-105',
+                      item.iconBg
+                    )}>
                       <Icon className={cn('w-5 h-5', item.iconColor)} />
                     </div>
                     <div className="flex-1 min-w-0">
@@ -206,7 +216,7 @@ export function MoreScreen() {
                         <p className="text-xs text-muted-foreground truncate">{item.description}</p>
                       )}
                     </div>
-                    <ChevronRight className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                    <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition flex-shrink-0" />
                   </button>
                 )
               })}
