@@ -18,6 +18,7 @@ import {
 import { offlineFetch } from '@/lib/offline-fetch'
 import { useSubscription } from '@/hooks/use-subscription'
 import { Capacitor } from '@capacitor/core'
+import { CameraPreviewModal } from '@/components/scanner/CameraPreviewModal'
 
 /**
  * takePhotoNative — uses Capacitor Camera plugin on native (Android app)
@@ -163,6 +164,7 @@ export function BillScanner() {
   const [preview, setPreview] = useState<string>('')
   const [billType, setBillType] = useState<'sale' | 'purchase'>(scannerBillType)
   const [editMode, setEditMode] = useState(false)
+  const [cameraModalOpen, setCameraModalOpen] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
 
@@ -354,16 +356,15 @@ export function BillScanner() {
         return
       }
 
-      // Native platform — use Capacitor Camera plugin
-      const file = await takePhotoNative()
-      if (file) {
-        handleFile(file)
+      // Native platform — use custom camera modal (with flash + grid)
+      // Falls back to takePhotoNative if camera-preview not available
+      if (Capacitor.isNativePlatform()) {
+        setCameraModalOpen(true)
       } else {
-        toast({
-          title: 'Camera unavailable',
-          description: 'Camera may be in use by another app, or permission was denied. Check Android Settings → Apps → BahiKhata Pro → Permissions.',
-          variant: 'destructive',
-        })
+        const file = await takePhotoNative()
+        if (file) {
+          handleFile(file)
+        }
       }
     } catch (err: any) {
       console.error('[Scanner] handleTakePhoto error:', err)
@@ -643,7 +644,12 @@ export function BillScanner() {
                   </div>
                   <div>
                     <p className="text-sm font-bold font-heading">{billType === 'sale' ? 'Sales Bill' : 'Purchase Bill'}</p>
-                    <p className="text-[10px] text-white/70">AI Extracted</p>
+                    <p className="text-[10px] text-white/70">
+                      AI Extracted
+                      {scanned.overallConfidence !== undefined && (
+                        <span className="ml-1">· {Math.round(scanned.overallConfidence * 100)}% confidence</span>
+                      )}
+                    </p>
                   </div>
                 </div>
                 <Button variant="ghost" size="sm" className="text-white hover:bg-white/20 h-8" onClick={handleReset}>
@@ -729,6 +735,17 @@ export function BillScanner() {
                           )}
                           placeholder="Product name"
                         />
+                        {/* Confidence dot — green=high, amber=medium, red=low */}
+                        {item.confidence !== undefined && (
+                          <span
+                            className={cn(
+                              'w-1.5 h-1.5 rounded-full flex-shrink-0',
+                              item.confidence >= 0.8 ? 'bg-emerald-500' :
+                              item.confidence >= 0.5 ? 'bg-amber-500' : 'bg-rose-500'
+                            )}
+                            title={`AI confidence: ${Math.round(item.confidence * 100)}%`}
+                          />
+                        )}
                         <span className={cn(
                           'font-bold tabular-nums flex-shrink-0',
                           isCompact ? 'text-xs' : 'text-sm'
@@ -859,6 +876,16 @@ export function BillScanner() {
           </Card>
         </div>
       )}
+
+      {/* Custom camera modal with flash + grid overlay */}
+      <CameraPreviewModal
+        open={cameraModalOpen}
+        onClose={() => setCameraModalOpen(false)}
+        onCapture={(file) => {
+          setCameraModalOpen(false)
+          handleFile(file)
+        }}
+      />
     </div>
   )
 }

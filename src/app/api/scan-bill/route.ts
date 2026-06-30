@@ -42,6 +42,7 @@ This image may be:
 - A mix of printed and handwritten text
 - Written in English, Hindi, or regional languages
 - Written in any handwriting style (neat or messy)
+- Rotated or sideways (handle any orientation)
 
 Analyze the image carefully and extract all information.
 
@@ -59,7 +60,8 @@ Return ONLY a valid JSON object with this exact structure (no markdown, no extra
       "unit": "unit if visible (pcs/kg/ltr/box/gm/ml/dozen/packet) else 'pcs'",
       "unitPrice": number (price per unit if visible, else calculate from total ÷ quantity),
       "gstRate": number (GST % if visible, else 0),
-      "total": number (line total — if only total is written, use that; if only unit price and qty, multiply them)
+      "total": number (line total — if only total is written, use that; if only unit price and qty, multiply them),
+      "confidence": number (0-1, how confident you are about this item's extraction)
     }
   ],
   "subtotal": number (sum of all item totals before tax/discount),
@@ -68,7 +70,8 @@ Return ONLY a valid JSON object with this exact structure (no markdown, no extra
   "sgst": number,
   "igst": number,
   "totalAmount": number (final payable — if written on paper, use that; else calculate subtotal - discount + tax),
-  "paymentMode": "cash|upi|card|bank|credit - infer from text (if 'cash' written = cash, 'upi' or 'qr' = upi, 'card' = card, 'udhaar' or 'credit' or 'baad mein' = credit, else cash)"
+  "paymentMode": "cash|upi|card|bank|credit - infer from text (if 'cash' written = cash, 'upi' or 'qr' = upi, 'card' = card, 'udhaar' or 'credit' or 'baad mein' = credit, else cash)",
+  "overallConfidence": number (0-1, overall confidence in the extraction)
 }
 
 CRITICAL RULES FOR HANDWRITTEN NOTES:
@@ -82,6 +85,10 @@ CRITICAL RULES FOR HANDWRITTEN NOTES:
 8. Product names may be abbreviated: "atta" = flour, "tel" = oil, "chai" = tea, "namak" = salt, "chini" = sugar, etc.
 9. "Udhaar" or "Baad mein" or "credit" = payment mode "credit".
 10. If the word "total" or "jama" is visible, the number after it is the totalAmount.
+11. Handle Hinglish: "do kilo" = 2 kg, "paanch" = 5, "sau" = 100, "hazaar" = 1000.
+12. If the image is sideways or upside down, rotate it mentally and read the text correctly.
+13. For messy handwriting, try your best to read each character. If uncertain, set confidence to 0.5-0.7.
+14. For clearly printed bills, set confidence to 0.9-1.0.
 
 For printed bills:
 - Extract all items, GST breakdown, and totals exactly as shown.
@@ -203,7 +210,14 @@ Return JSON only, no commentary, no markdown formatting.`
       unitPrice: Number(item.unitPrice) || 0,
       gstRate: Number(item.gstRate) || 0,
       total: Number(item.total) || (Number(item.quantity) || 1) * (Number(item.unitPrice) || 0),
+      confidence: typeof item.confidence === 'number' ? Math.min(1, Math.max(0, item.confidence)) : 0.8,
     }))
+    // Ensure overallConfidence exists
+    if (typeof parsed.overallConfidence !== 'number') {
+      parsed.overallConfidence = parsed.items.length > 0
+        ? parsed.items.reduce((s: number, i: any) => s + (i.confidence || 0.8), 0) / parsed.items.length
+        : 0.5
+    }
 
     return NextResponse.json({ success: true, bill: parsed })
   } catch (error) {
