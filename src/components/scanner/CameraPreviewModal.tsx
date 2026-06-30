@@ -213,7 +213,7 @@ export function CameraPreviewModal({ open, onClose, onCapture }: CameraPreviewMo
                 torchOn ? 'bg-amber-400 text-black' : 'bg-black/50 text-white'
               )}
             >
-              {torchOn ? <Zap className="w-5 h-5' /> : <ZapOff className="w-5 h-5" />}
+              {torchOn ? <Zap className="w-5 h-5" /> : <ZapOff className="w-5 h-5" />}
             </button>
           )}
         </div>
