@@ -23,6 +23,7 @@ import {
 } from 'lucide-react'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { amountToWords } from '@/lib/amount-to-words'
+import { generateInvoicePDF } from '@/lib/invoice-pdf'
 import { haptic } from '@/lib/haptic'
 import { useSetting } from '@/hooks/use-setting'
 
@@ -88,32 +89,77 @@ export function TransactionDetail() {
 
   const handleDownload = () => {
     if (!txn) return
-    const html = generateInvoiceHTML(txn, setting)
-    const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
+    // Generate professional PDF
+    const pdfBlob = generateInvoicePDF(txn, {
+      shopName: setting?.shopName || 'My Shop',
+      ownerName: setting?.ownerName,
+      phone: setting?.phone,
+      email: setting?.email,
+      gstin: setting?.gstin,
+      address: setting?.address,
+      state: setting?.state,
+    })
+    const url = URL.createObjectURL(pdfBlob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `invoice-${txn.invoiceNo || txn.id}.html`
+    a.download = `invoice-${txn.invoiceNo || txn.id.slice(-6)}.pdf`
     a.click()
     URL.revokeObjectURL(url)
-    sonnerToast.success('Invoice downloaded')
+    sonnerToast.success('Invoice PDF downloaded')
   }
 
   const handleWhatsAppShare = async () => {
     if (!txn) return
+    haptic.click()
+
     try {
-      const r = await offlineFetch('/api/whatsapp-invoice', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transactionId: txn.id }),
+      // Generate PDF invoice
+      const pdfBlob = generateInvoicePDF(txn, {
+        shopName: setting?.shopName || 'My Shop',
+        ownerName: setting?.ownerName,
+        phone: setting?.phone,
+        email: setting?.email,
+        gstin: setting?.gstin,
+        address: setting?.address,
+        state: setting?.state,
       })
-      const data = await r.json()
-      if (data.whatsappUrl) {
-        window.open(data.whatsappUrl, '_blank')
-        sonnerToast.success('Opening WhatsApp...')
+
+      // Try to share as file (works on mobile via Web Share API)
+      const file = new File([pdfBlob], `invoice-${txn.invoiceNo || txn.id.slice(-6)}.pdf`, { type: 'application/pdf' })
+
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        // Mobile: use Web Share API to share PDF via WhatsApp
+        await navigator.share({
+          files: [file],
+          title: `Invoice ${txn.invoiceNo || ''}`,
+          text: `Invoice from ${setting?.shopName || 'My Shop'} — Total: Rs. ${txn.totalAmount.toFixed(2)}`,
+        })
+        sonnerToast.success('Invoice shared!')
+      } else {
+        // Desktop/fallback: download the PDF
+        const url = URL.createObjectURL(pdfBlob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `invoice-${txn.invoiceNo || txn.id.slice(-6)}.pdf`
+        a.click()
+        URL.revokeObjectURL(url)
+        sonnerToast.success('Invoice PDF downloaded — share it manually via WhatsApp')
+
+        // Also open WhatsApp with text message (as fallback)
+        const r = await offlineFetch('/api/whatsapp-invoice', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ transactionId: txn.id }),
+        })
+        const data = await r.json()
+        if (data.whatsappUrl) {
+          window.open(data.whatsappUrl, '_blank')
+        }
       }
-    } catch {
-      sonnerToast.error('Failed to generate invoice')
+    } catch (err: any) {
+      // If sharing was cancelled, don't show error
+      if (err?.name === 'AbortError') return
+      sonnerToast.error('Failed to share invoice')
     }
   }
 
@@ -144,10 +190,10 @@ export function TransactionDetail() {
           <Printer className="w-4 h-4" /> Print
         </Button>
         <Button variant="outline" size="touch" onClick={handleDownload} className="gap-2">
-          <Download className="w-4 h-4" /> Download
+          <Download className="w-4 h-4" /> PDF
         </Button>
         <Button variant="outline" size="touch" onClick={handleWhatsAppShare} className="gap-2 border-emerald-300 text-emerald-700 hover:bg-emerald-50">
-          <MessageCircle className="w-4 h-4" /> WhatsApp
+          <MessageCircle className="w-4 h-4" /> Send PDF
         </Button>
         <div className="flex-1" />
         <Button variant="outline" size="touch" onClick={handleDelete} className="gap-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50">
