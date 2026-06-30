@@ -304,7 +304,7 @@ export function IncomeExpense() {
               </CardContent>
             </Card>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {filtered.map((t) => {
                 const isIncome = t.type === 'income'
                 return (
@@ -317,34 +317,48 @@ export function IncomeExpense() {
                       setView('transaction-detail')
                     }}
                   >
-                    <CardContent className="p-3 lg:p-4">
-                      <div className="flex items-center gap-3">
+                    <CardContent className="p-3">
+                      <div className="flex items-center gap-2.5">
+                        {/* Circular avatar with category initial, tinted by type */}
                         <div className={cn(
-                          'w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0',
-                          isIncome ? 'bg-emerald-100' : 'bg-rose-100'
+                          'w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-sm',
+                          isIncome
+                            ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600'
+                            : 'bg-rose-100 dark:bg-rose-900/40 text-rose-600'
                         )}>
-                          {isIncome
-                            ? <ArrowDownRight className="w-5 h-5 text-emerald-600" />
-                            : <ArrowUpRight className="w-5 h-5 text-rose-600" />}
+                          {(t.category || 'O').charAt(0).toUpperCase()}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <p className="font-semibold text-sm group-hover:text-primary transition">{t.category || 'Other'}</p>
-                            <Badge variant="secondary" className="text-[10px] py-0 uppercase">{t.paymentMode}</Badge>
-                          </div>
-                          <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-0.5">
+                          <p className="font-semibold text-sm truncate group-hover:text-primary transition">
+                            {t.category || 'Other'}
+                          </p>
+                          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mt-0.5">
                             <span>{formatDate(t.date)}</span>
-                            {t.payeeName && <span>• {isIncome ? 'From' : 'To'}: {t.payeeName}</span>}
-                            {t.notes && <span>• {t.notes}</span>}
+                            <span>•</span>
+                            <span className="uppercase">{t.paymentMode}</span>
+                            {t.payeeName && (
+                              <>
+                                <span>•</span>
+                                <span className="truncate">{isIncome ? 'From' : 'To'}: {t.payeeName}</span>
+                              </>
+                            )}
                           </div>
+                          {t.notes && (
+                            <p className="text-[10px] text-muted-foreground mt-0.5 truncate italic">{t.notes}</p>
+                          )}
                         </div>
-                        <p className={cn('font-bold text-sm', isIncome ? 'text-emerald-600' : 'text-rose-600')}>
-                          {isIncome ? '+' : '-'}{formatINR(t.totalAmount)}
-                        </p>
+                        <div className="text-right flex-shrink-0">
+                          <p className={cn(
+                            'font-bold text-sm tabular-nums',
+                            isIncome ? 'text-emerald-600' : 'text-rose-600'
+                          )}>
+                            {isIncome ? '+' : '-'}{formatINR(t.totalAmount)}
+                          </p>
+                        </div>
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 text-rose-600 hover:text-rose-700 hover:bg-rose-50"
+                          className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-900/30 flex-shrink-0"
                           onClick={(e) => { e.stopPropagation(); handleDelete(t.id) }}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
