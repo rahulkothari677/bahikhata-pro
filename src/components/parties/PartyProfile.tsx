@@ -737,18 +737,26 @@ function StatCard({ label, value, icon: Icon, color, bg, sub }: {
   bg: string
   sub?: string
 }) {
+  // Map bg to gradient for top accent
+  const gradient = bg.includes('emerald') ? 'from-emerald-500 to-teal-600'
+    : bg.includes('amber') ? 'from-amber-500 to-orange-600'
+    : bg.includes('violet') ? 'from-violet-500 to-purple-600'
+    : bg.includes('rose') ? 'from-rose-500 to-red-600'
+    : 'from-blue-500 to-indigo-600'
+
   return (
-    <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
-      <CardContent className="p-4">
+    <div className="rounded-2xl bg-card border border-border/60 shadow-card overflow-hidden">
+      <div className={`h-1 bg-gradient-to-r ${gradient}`} />
+      <div className="p-4">
         <div className="flex items-center gap-2 mb-1">
           <div className={cn('w-7 h-7 rounded-lg flex items-center justify-center', bg)}>
             <Icon className={cn('w-3.5 h-3.5', color)} />
           </div>
           <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">{label}</p>
         </div>
-        <p className="text-lg font-bold">{value}</p>
+        <p className="text-lg font-bold tabular-nums">{value}</p>
         {sub && <p className="text-[11px] text-muted-foreground mt-0.5">{sub}</p>}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 }

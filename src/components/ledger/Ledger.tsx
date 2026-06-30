@@ -269,48 +269,60 @@ export function Ledger({ type }: { type: LedgerType }) {
 
   return (
     <div className="space-y-4">
-      {/* Stats */}
+      {/* Stats — with colored top accent bars like KPI cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
-          <CardContent className="p-4">
+        <div className="rounded-2xl bg-card border border-border/60 shadow-card overflow-hidden">
+          <div className="h-1 bg-gradient-to-r from-amber-500 to-orange-600" />
+          <div className="p-4">
             <div className="flex items-center gap-2 mb-1">
-              <Receipt className={cn('w-4 h-4', accentColor)} />
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">{isSale ? 'Total Sales' : 'Total Purchases'}</p>
-            </div>
-            <p className="text-xl font-bold">{formatINR(totalAmount)}</p>
-            <p className="text-[11px] text-muted-foreground">{filtered.length} transactions</p>
-          </CardContent>
-        </Card>
-        {isSale && !hideProfit && (
-          <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 mb-1">
-                <TrendingUp className="w-4 h-4 text-emerald-600" />
-                <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">{t('stat.gross_profit')}</p>
+              <div className="w-7 h-7 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                <Receipt className="w-3.5 h-3.5 text-amber-600" />
               </div>
-              <p className="text-xl font-bold text-emerald-600">{formatINR(totalProfit)}</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">{isSale ? 'Total Sales' : 'Total Purchases'}</p>
+            </div>
+            <p className="text-xl font-bold tabular-nums">{formatINR(totalAmount)}</p>
+            <p className="text-[11px] text-muted-foreground">{filtered.length} transactions</p>
+          </div>
+        </div>
+        {isSale && !hideProfit && (
+          <div className="rounded-2xl bg-card border border-border/60 shadow-card overflow-hidden">
+            <div className="h-1 bg-gradient-to-r from-emerald-500 to-teal-600" />
+            <div className="p-4">
+              <div className="flex items-center gap-2 mb-1">
+                <div className="w-7 h-7 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+                  <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
+                </div>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">{t('stat.gross_profit')}</p>
+              </div>
+              <p className="text-xl font-bold text-emerald-600 tabular-nums">{formatINR(totalProfit)}</p>
               <p className="text-[11px] text-muted-foreground">{totalAmount > 0 ? ((totalProfit / totalAmount) * 100).toFixed(1) : 0}% margin</p>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         )}
-        <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
-          <CardContent className="p-4">
+        <div className="rounded-2xl bg-card border border-border/60 shadow-card overflow-hidden">
+          <div className="h-1 bg-gradient-to-r from-violet-500 to-purple-600" />
+          <div className="p-4">
             <div className="flex items-center gap-2 mb-1">
-              <IndianRupee className="w-4 h-4 text-violet-600" />
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">{t('stat.paid')}</p>
+              <div className="w-7 h-7 rounded-lg bg-violet-500/10 flex items-center justify-center">
+                <IndianRupee className="w-3.5 h-3.5 text-violet-600" />
+              </div>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">{t('stat.paid')}</p>
             </div>
-            <p className="text-xl font-bold">{formatINR(totalPaid)}</p>
-          </CardContent>
-        </Card>
-        <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
-          <CardContent className="p-4">
+            <p className="text-xl font-bold tabular-nums">{formatINR(totalPaid)}</p>
+          </div>
+        </div>
+        <div className="rounded-2xl bg-card border border-border/60 shadow-card overflow-hidden">
+          <div className="h-1 bg-gradient-to-r from-rose-500 to-red-600" />
+          <div className="p-4">
             <div className="flex items-center gap-2 mb-1">
-              <IndianRupee className="w-4 h-4 text-rose-600" />
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">{isSale ? 'Outstanding' : 'Pending Payment'}</p>
+              <div className="w-7 h-7 rounded-lg bg-rose-500/10 flex items-center justify-center">
+                <IndianRupee className="w-3.5 h-3.5 text-rose-600" />
+              </div>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">{isSale ? 'Outstanding' : 'Pending Payment'}</p>
             </div>
-            <p className="text-xl font-bold text-rose-600">{formatINR(totalDue)}</p>
-          </CardContent>
-        </Card>
+            <p className="text-xl font-bold text-rose-600 tabular-nums">{formatINR(totalDue)}</p>
+          </div>
+        </div>
       </div>
 
       {/* Toolbar */}
