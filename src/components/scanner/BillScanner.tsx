@@ -633,40 +633,44 @@ export function BillScanner() {
       {/* Verification & edit view */}
       {scanned && (
         <div className="space-y-3">
-          {/* Header with bill summary — compact */}
-          <Card className="shadow-card border-border/60 overflow-hidden">
-            <div className={cn('p-3 text-white', billType === 'sale' ? 'bg-gradient-emerald' : 'bg-gradient-saffron')}>
-              <div className="flex items-center justify-between mb-2">
+          {/* Header banner — full width, no card padding around it */}
+          <div className={cn('rounded-xl overflow-hidden shadow-card text-white', billType === 'sale' ? 'bg-gradient-emerald' : 'bg-gradient-saffron')}>
+            <div className="p-4">
+              <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
-                  <Badge className="bg-white/20 text-white border-0 gap-1 text-[10px] py-0">
-                    <Sparkles className="w-3 h-3" /> AI
-                  </Badge>
-                  <span className="text-xs font-medium">{billType === 'sale' ? 'Sales Bill' : 'Purchase Bill'}</span>
+                  <div className="w-8 h-8 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold font-heading">{billType === 'sale' ? 'Sales Bill' : 'Purchase Bill'}</p>
+                    <p className="text-[10px] text-white/70">AI Extracted</p>
+                  </div>
                 </div>
-                <Button variant="ghost" size="sm" className="text-white hover:bg-white/20 h-7 text-xs" onClick={handleReset}>
-                  <X className="w-3.5 h-3.5" /> Reset
+                <Button variant="ghost" size="sm" className="text-white hover:bg-white/20 h-8" onClick={handleReset}>
+                  <X className="w-4 h-4" /> Reset
                 </Button>
               </div>
-              <div className="grid grid-cols-4 gap-2 text-[10px]">
+              {/* 2 rows, 2 columns each — bigger text, clearly visible */}
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2">
                 <div>
-                  <p className="text-white/60 uppercase">Inv</p>
-                  <p className="font-semibold truncate">{scanned.invoiceNo || '—'}</p>
+                  <p className="text-[10px] text-white/60 uppercase tracking-wide">Invoice</p>
+                  <p className="font-semibold text-sm">{scanned.invoiceNo || '—'}</p>
                 </div>
                 <div>
-                  <p className="text-white/60 uppercase">Date</p>
-                  <p className="font-semibold truncate">{scanned.date || '—'}</p>
+                  <p className="text-[10px] text-white/60 uppercase tracking-wide">Date</p>
+                  <p className="font-semibold text-sm">{scanned.date || '—'}</p>
                 </div>
                 <div>
-                  <p className="text-white/60 uppercase">Party</p>
-                  <p className="font-semibold truncate">{scanned.sellerName || 'Walk-in'}</p>
+                  <p className="text-[10px] text-white/60 uppercase tracking-wide">Party</p>
+                  <p className="font-semibold text-sm truncate">{scanned.sellerName || 'Walk-in'}</p>
                 </div>
                 <div>
-                  <p className="text-white/60 uppercase">Pay</p>
-                  <p className="font-semibold capitalize">{scanned.paymentMode || 'cash'}</p>
+                  <p className="text-[10px] text-white/60 uppercase tracking-wide">Payment</p>
+                  <p className="font-semibold text-sm capitalize">{scanned.paymentMode || 'cash'}</p>
                 </div>
               </div>
             </div>
-          </Card>
+          </div>
 
           {/* Items table - editable */}
           <Card className="shadow-card border-border/60">
@@ -677,19 +681,14 @@ export function BillScanner() {
                   Items ({scanned.items.length})
                 </CardTitle>
                 <div className="flex gap-1.5">
-                  {/* Manual add — for adding a blank row by hand */}
                   <Button variant="outline" size="sm" onClick={addItem} className="gap-1 h-7 text-xs">
                     <Plus className="w-3 h-3" /> Add
                   </Button>
-                  {/* Scan more items — opens camera to scan another bill,
-                      new items get APPENDED to existing list */}
                   <Button
                     size="sm"
                     onClick={() => {
-                      // Keep existing items, mark as "adding more"
                       setScanned({ ...scanned, _isAddingMore: true })
                       setPreview('')
-                      // Use native camera on Capacitor, otherwise the hidden input
                       if (Capacitor.isNativePlatform()) {
                         handleTakePhoto()
                       } else {
@@ -710,65 +709,130 @@ export function BillScanner() {
             </CardHeader>
             <CardContent>
               <div className="space-y-1">
-                {scanned.items.map((item: any, i: number) => (
-                  <div key={i} className="group rounded-lg bg-muted/20 hover:bg-muted/40 transition p-2">
-                    {/* Compact 2-row layout — fits ~3x more items per screen */}
-                    {/* Row 1: Number + Name + Delete */}
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] font-bold text-muted-foreground w-4 text-center flex-shrink-0">{i + 1}</span>
-                      <input
-                        value={item.name}
-                        onChange={(e) => updateItem(i, 'name', e.target.value)}
-                        className="flex-1 min-w-0 px-1.5 py-1 text-sm bg-transparent border border-transparent rounded focus:bg-background focus:border-border transition font-medium"
-                        placeholder="Product name"
-                      />
-                      <span className="text-xs font-bold tabular-nums text-foreground flex-shrink-0 w-16 text-right">{formatINR(item.total || 0)}</span>
-                      <button
-                        className="p-1 rounded text-muted-foreground hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition flex-shrink-0"
-                        onClick={() => removeItem(i)}
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
+                {scanned.items.map((item: any, i: number) => {
+                  const isCompact = scanned.items.length > 8
+                  return (
+                    <div key={i} className="group rounded-lg bg-muted/20 hover:bg-muted/40 transition p-2">
+                      {isCompact ? (
+                        /* COMPACT layout for 9+ items — number above, name full width */
+                        <>
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] font-bold text-muted-foreground w-4 text-center flex-shrink-0">{i + 1}</span>
+                            <input
+                              value={item.name}
+                              onChange={(e) => updateItem(i, 'name', e.target.value)}
+                              className="flex-1 min-w-0 px-1.5 py-0.5 text-sm bg-transparent border border-transparent rounded focus:bg-background focus:border-border transition font-medium"
+                              placeholder="Product name"
+                            />
+                            <span className="text-xs font-bold tabular-nums flex-shrink-0">{formatINR(item.total || 0)}</span>
+                            <button
+                              className="p-1 rounded text-muted-foreground hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition flex-shrink-0"
+                              onClick={() => removeItem(i)}
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                          <div className="flex items-center gap-1 pl-5 mt-0.5">
+                            <input
+                              type="number"
+                              value={item.quantity}
+                              onChange={(e) => updateItem(i, 'quantity', Number(e.target.value))}
+                              className="w-12 px-1 py-0.5 text-xs bg-background border border-border rounded tabular-nums focus:ring-1 focus:ring-primary"
+                            />
+                            <select
+                              value={item.unit || 'pcs'}
+                              onChange={(e) => updateItem(i, 'unit', e.target.value)}
+                              className="px-0.5 py-0.5 text-xs bg-background border border-border rounded focus:ring-1 focus:ring-primary"
+                            >
+                              {['pcs', 'kg', 'gm', 'ltr', 'ml', 'box', 'dozen', 'packet', 'set'].map(u => <option key={u} value={u}>{u}</option>)}
+                            </select>
+                            <span className="text-[10px] text-muted-foreground">×</span>
+                            <span className="text-[10px] text-muted-foreground">₹</span>
+                            <input
+                              type="number"
+                              value={item.unitPrice}
+                              onChange={(e) => updateItem(i, 'unitPrice', Number(e.target.value))}
+                              className="w-16 px-1 py-0.5 text-xs bg-background border border-border rounded tabular-nums focus:ring-1 focus:ring-primary"
+                            />
+                            <select
+                              value={item.gstRate}
+                              onChange={(e) => updateItem(i, 'gstRate', Number(e.target.value))}
+                              className="px-0.5 py-0.5 text-xs bg-background border border-border rounded focus:ring-1 focus:ring-primary ml-auto"
+                            >
+                              {[0, 5, 12, 18, 28].map(r => <option key={r} value={r}>{r}%</option>)}
+                            </select>
+                          </div>
+                        </>
+                      ) : (
+                        /* PREMIUM layout for 8 or fewer items — bigger, with labels, full width name */
+                        <>
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 rounded-md bg-primary/10 text-primary text-[10px] font-bold flex items-center justify-center flex-shrink-0">
+                              {i + 1}
+                            </div>
+                            <input
+                              value={item.name}
+                              onChange={(e) => updateItem(i, 'name', e.target.value)}
+                              className="flex-1 min-w-0 px-2 py-1 text-sm bg-transparent border border-transparent rounded focus:bg-background focus:border-border transition font-medium"
+                              placeholder="Product name"
+                            />
+                            <span className="text-sm font-bold tabular-nums flex-shrink-0">{formatINR(item.total || 0)}</span>
+                            <button
+                              className="p-1 rounded text-muted-foreground hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition flex-shrink-0"
+                              onClick={() => removeItem(i)}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          <div className="grid grid-cols-4 gap-2 pl-8 mt-1">
+                            <div>
+                              <label className="text-[9px] text-muted-foreground uppercase">Qty</label>
+                              <input
+                                type="number"
+                                value={item.quantity}
+                                onChange={(e) => updateItem(i, 'quantity', Number(e.target.value))}
+                                className="w-full px-1.5 py-1 text-xs bg-background border border-border rounded tabular-nums focus:ring-1 focus:ring-primary"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[9px] text-muted-foreground uppercase">Unit</label>
+                              <select
+                                value={item.unit || 'pcs'}
+                                onChange={(e) => updateItem(i, 'unit', e.target.value)}
+                                className="w-full px-1 py-1 text-xs bg-background border border-border rounded focus:ring-1 focus:ring-primary"
+                              >
+                                {['pcs', 'kg', 'gm', 'ltr', 'ml', 'box', 'dozen', 'packet', 'set'].map(u => <option key={u} value={u}>{u}</option>)}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="text-[9px] text-muted-foreground uppercase">Price ₹</label>
+                              <input
+                                type="number"
+                                value={item.unitPrice}
+                                onChange={(e) => updateItem(i, 'unitPrice', Number(e.target.value))}
+                                className="w-full px-1.5 py-1 text-xs bg-background border border-border rounded tabular-nums focus:ring-1 focus:ring-primary"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[9px] text-muted-foreground uppercase">GST</label>
+                              <select
+                                value={item.gstRate}
+                                onChange={(e) => updateItem(i, 'gstRate', Number(e.target.value))}
+                                className="w-full px-1 py-1 text-xs bg-background border border-border rounded focus:ring-1 focus:ring-primary"
+                              >
+                                {[0, 5, 12, 18, 28].map(r => <option key={r} value={r}>{r}%</option>)}
+                              </select>
+                            </div>
+                          </div>
+                        </>
+                      )}
                     </div>
-                    {/* Row 2: Qty + Unit + Price + GST (compact inline, no labels) */}
-                    <div className="flex items-center gap-1 pl-5 mt-0.5">
-                      <input
-                        type="number"
-                        value={item.quantity}
-                        onChange={(e) => updateItem(i, 'quantity', Number(e.target.value))}
-                        className="w-12 px-1 py-0.5 text-xs bg-background border border-border rounded tabular-nums focus:ring-1 focus:ring-primary"
-                        placeholder="Qty"
-                      />
-                      <select
-                        value={item.unit || 'pcs'}
-                        onChange={(e) => updateItem(i, 'unit', e.target.value)}
-                        className="px-0.5 py-0.5 text-xs bg-background border border-border rounded focus:ring-1 focus:ring-primary"
-                      >
-                        {['pcs', 'kg', 'gm', 'ltr', 'ml', 'box', 'dozen', 'packet', 'set'].map(u => <option key={u} value={u}>{u}</option>)}
-                      </select>
-                      <span className="text-[10px] text-muted-foreground">×</span>
-                      <span className="text-[10px] text-muted-foreground">₹</span>
-                      <input
-                        type="number"
-                        value={item.unitPrice}
-                        onChange={(e) => updateItem(i, 'unitPrice', Number(e.target.value))}
-                        className="w-16 px-1 py-0.5 text-xs bg-background border border-border rounded tabular-nums focus:ring-1 focus:ring-primary"
-                        placeholder="Price"
-                      />
-                      <select
-                        value={item.gstRate}
-                        onChange={(e) => updateItem(i, 'gstRate', Number(e.target.value))}
-                        className="px-0.5 py-0.5 text-xs bg-background border border-border rounded focus:ring-1 focus:ring-primary ml-auto"
-                      >
-                        {[0, 5, 12, 18, 28].map(r => <option key={r} value={r}>{r}%</option>)}
-                      </select>
-                    </div>
-                  </div>
-                ))}
+                  )
+                })}
 
                 {scanned.items.length === 0 && (
                   <div className="py-8 text-center text-sm text-muted-foreground">
-                    No items. Click &quot;Add item&quot; to add manually.
+                    No items. Click &quot;Add&quot; to add manually.
                   </div>
                 )}
               </div>
