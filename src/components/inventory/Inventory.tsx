@@ -401,22 +401,34 @@ export function Inventory() {
 function ProductGridCard({ product: p, onEdit }: { product: any; onEdit: () => void }) {
   const profit = (p.salePrice || 0) - (p.purchasePrice || 0)
   const margin = p.salePrice > 0 ? (profit / p.salePrice) * 100 : 0
+  const stockPct = p.lowStockThreshold > 0
+    ? Math.min(100, Math.max(0, (p.currentStock / (p.lowStockThreshold * 2)) * 100))
+    : p.currentStock > 0 ? 100 : 0
   return (
     <Card className="shadow-card border-border/60 hover:shadow-md transition group cursor-pointer" onClick={onEdit}>
-      <CardContent className="p-4">
-        <div className="flex items-start justify-between gap-2 mb-2">
+      <CardContent className="p-3">
+        {/* Top row: Product icon + name + edit */}
+        <div className="flex items-start gap-2.5 mb-3">
+          {/* Product icon — colored circle with first letter */}
+          <div className={cn(
+            'w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 font-bold text-sm text-white',
+            p.currentStock <= 0 ? 'bg-gradient-to-br from-rose-500 to-red-600' :
+            p.isLowStock ? 'bg-gradient-to-br from-amber-500 to-orange-600' :
+            'bg-gradient-to-br from-blue-500 to-indigo-600'
+          )}>
+            {p.name?.charAt(0).toUpperCase() || <Package className="w-5 h-5" />}
+          </div>
           <div className="min-w-0 flex-1">
             <h3 className="font-semibold text-sm truncate">{p.name}</h3>
             <div className="flex flex-wrap items-center gap-1 mt-0.5">
-              {p.sku && <Badge variant="outline" className="text-[10px] py-0">{p.sku}</Badge>}
               {p.category && <Badge variant="secondary" className="text-[10px] py-0">{p.category}</Badge>}
-              <Badge variant="outline" className="text-[10px] py-0">GST {p.gstRate}%</Badge>
+              {p.sku && <span className="text-[10px] text-muted-foreground font-mono">{p.sku}</span>}
             </div>
           </div>
           <Button
             variant="ghost"
             size="iconTouch"
-            className="lg:size-8 lg:p-0 opacity-100 lg:opacity-0 lg:group-hover:opacity-100"
+            className="lg:size-8 lg:p-0 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 flex-shrink-0"
             onClick={(e) => { e.stopPropagation(); onEdit() }}
             aria-label="Edit product"
           >
@@ -424,41 +436,51 @@ function ProductGridCard({ product: p, onEdit }: { product: any; onEdit: () => v
           </Button>
         </div>
 
-        <div className="grid grid-cols-2 gap-2 text-xs mt-3">
-          <div className="rounded-lg bg-muted/50 p-2">
-            <p className="text-[10px] text-muted-foreground uppercase">Buy Price</p>
-            <p className="font-semibold mt-0.5">{formatINR(p.purchasePrice)}</p>
-          </div>
-          <div className="rounded-lg bg-muted/50 p-2">
+        {/* Price row — sale price prominent, buy price secondary */}
+        <div className="flex items-baseline justify-between mb-2">
+          <div>
             <p className="text-[10px] text-muted-foreground uppercase">Sale Price</p>
-            <p className="font-semibold mt-0.5">{formatINR(p.salePrice)}</p>
+            <p className="text-lg font-bold tabular-nums">{formatINR(p.salePrice)}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-[10px] text-muted-foreground uppercase">Profit</p>
+            <p className="text-sm font-semibold text-emerald-600 tabular-nums">
+              +{formatINR(profit)}
+              <span className="text-[10px] text-muted-foreground ml-0.5">({margin.toFixed(0)}%)</span>
+            </p>
           </div>
         </div>
 
-        <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
-          <div>
-            <p className="text-[10px] text-muted-foreground uppercase">Stock</p>
-            <p className={cn(
-              'text-sm font-semibold',
+        {/* Stock indicator — visual bar */}
+        <div className="mt-2 pt-2 border-t border-border">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[10px] text-muted-foreground uppercase">Stock</span>
+            <span className={cn(
+              'text-xs font-bold tabular-nums',
               p.currentStock <= 0 ? 'text-rose-600' :
               p.isLowStock ? 'text-amber-600' : 'text-emerald-600'
             )}>
               {p.currentStock} {p.unit}
-            </p>
+            </span>
           </div>
-          <div className="text-right">
-            <p className="text-[10px] text-muted-foreground uppercase">Profit / unit</p>
-            <p className="text-sm font-semibold text-emerald-600">
-              {formatINR(profit)}
-              <span className="text-[10px] text-muted-foreground ml-1">({margin.toFixed(0)}%)</span>
-            </p>
+          {/* Stock level bar — visual indicator */}
+          <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+            <div
+              className={cn(
+                'h-full rounded-full transition-all',
+                p.currentStock <= 0 ? 'bg-rose-500' :
+                p.isLowStock ? 'bg-amber-500' : 'bg-emerald-500'
+              )}
+              style={{ width: `${stockPct}%` }}
+            />
           </div>
         </div>
 
+        {/* Low stock alert */}
         {p.isLowStock && (
-          <div className="mt-2 flex items-center gap-1.5 text-xs text-rose-600 bg-rose-50 rounded-md px-2 py-1">
-            <AlertTriangle className="w-3 h-3" />
-            <span>{p.currentStock <= 0 ? 'Out of stock! Restock immediately' : `Below threshold (${p.lowStockThreshold} ${p.unit})`}</span>
+          <div className="mt-2 flex items-center gap-1.5 text-xs text-rose-600 bg-rose-50 dark:bg-rose-950/30 rounded-md px-2 py-1">
+            <AlertTriangle className="w-3 h-3 flex-shrink-0" />
+            <span className="truncate">{p.currentStock <= 0 ? 'Out of stock!' : `Low stock (threshold: ${p.lowStockThreshold} ${p.unit})`}</span>
           </div>
         )}
       </CardContent>
