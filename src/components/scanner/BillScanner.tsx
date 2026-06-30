@@ -673,8 +673,8 @@ export function BillScanner() {
           </div>
 
           {/* Items table - editable */}
-          <Card className="shadow-card border-border/60">
-            <CardHeader className="pb-2">
+          <Card className="shadow-card border-border/60 py-3 gap-2">
+            <CardHeader className="pb-1 px-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-sm flex items-center gap-1.5">
                   <ImageIcon className="w-3.5 h-3.5" />
@@ -707,125 +707,89 @@ export function BillScanner() {
                 </div>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="px-2">
               <div className="space-y-1">
                 {scanned.items.map((item: any, i: number) => {
                   const isCompact = scanned.items.length > 8
                   return (
-                    <div key={i} className="group rounded-lg bg-muted/20 hover:bg-muted/40 transition p-2">
-                      {isCompact ? (
-                        /* COMPACT layout for 9+ items — number above, name full width */
-                        <>
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-[10px] font-bold text-muted-foreground w-4 text-center flex-shrink-0">{i + 1}</span>
-                            <input
-                              value={item.name}
-                              onChange={(e) => updateItem(i, 'name', e.target.value)}
-                              className="flex-1 min-w-0 px-1.5 py-0.5 text-sm bg-transparent border border-transparent rounded focus:bg-background focus:border-border transition font-medium"
-                              placeholder="Product name"
-                            />
-                            <span className="text-xs font-bold tabular-nums flex-shrink-0">{formatINR(item.total || 0)}</span>
-                            <button
-                              className="p-1 rounded text-muted-foreground hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition flex-shrink-0"
-                              onClick={() => removeItem(i)}
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          </div>
-                          <div className="flex items-center gap-1 pl-5 mt-0.5">
-                            <input
-                              type="number"
-                              value={item.quantity}
-                              onChange={(e) => updateItem(i, 'quantity', Number(e.target.value))}
-                              className="w-12 px-1 py-0.5 text-xs bg-background border border-border rounded tabular-nums focus:ring-1 focus:ring-primary"
-                            />
-                            <select
-                              value={item.unit || 'pcs'}
-                              onChange={(e) => updateItem(i, 'unit', e.target.value)}
-                              className="px-0.5 py-0.5 text-xs bg-background border border-border rounded focus:ring-1 focus:ring-primary"
-                            >
-                              {['pcs', 'kg', 'gm', 'ltr', 'ml', 'box', 'dozen', 'packet', 'set'].map(u => <option key={u} value={u}>{u}</option>)}
-                            </select>
-                            <span className="text-[10px] text-muted-foreground">×</span>
-                            <span className="text-[10px] text-muted-foreground">₹</span>
-                            <input
-                              type="number"
-                              value={item.unitPrice}
-                              onChange={(e) => updateItem(i, 'unitPrice', Number(e.target.value))}
-                              className="w-16 px-1 py-0.5 text-xs bg-background border border-border rounded tabular-nums focus:ring-1 focus:ring-primary"
-                            />
-                            <select
-                              value={item.gstRate}
-                              onChange={(e) => updateItem(i, 'gstRate', Number(e.target.value))}
-                              className="px-0.5 py-0.5 text-xs bg-background border border-border rounded focus:ring-1 focus:ring-primary ml-auto"
-                            >
-                              {[0, 5, 12, 18, 28].map(r => <option key={r} value={r}>{r}%</option>)}
-                            </select>
-                          </div>
-                        </>
-                      ) : (
-                        /* PREMIUM layout for 8 or fewer items — bigger, with labels, full width name */
-                        <>
-                          <div className="flex items-center gap-2">
-                            <div className="w-6 h-6 rounded-md bg-primary/10 text-primary text-[10px] font-bold flex items-center justify-center flex-shrink-0">
-                              {i + 1}
-                            </div>
-                            <input
-                              value={item.name}
-                              onChange={(e) => updateItem(i, 'name', e.target.value)}
-                              className="flex-1 min-w-0 px-2 py-1 text-sm bg-transparent border border-transparent rounded focus:bg-background focus:border-border transition font-medium"
-                              placeholder="Product name"
-                            />
-                            <span className="text-sm font-bold tabular-nums flex-shrink-0">{formatINR(item.total || 0)}</span>
-                            <button
-                              className="p-1 rounded text-muted-foreground hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition flex-shrink-0"
-                              onClick={() => removeItem(i)}
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                          <div className="grid grid-cols-4 gap-2 pl-8 mt-1">
-                            <div>
-                              <label className="text-[9px] text-muted-foreground uppercase">Qty</label>
-                              <input
-                                type="number"
-                                value={item.quantity}
-                                onChange={(e) => updateItem(i, 'quantity', Number(e.target.value))}
-                                className="w-full px-1.5 py-1 text-xs bg-background border border-border rounded tabular-nums focus:ring-1 focus:ring-primary"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-[9px] text-muted-foreground uppercase">Unit</label>
-                              <select
-                                value={item.unit || 'pcs'}
-                                onChange={(e) => updateItem(i, 'unit', e.target.value)}
-                                className="w-full px-1 py-1 text-xs bg-background border border-border rounded focus:ring-1 focus:ring-primary"
-                              >
-                                {['pcs', 'kg', 'gm', 'ltr', 'ml', 'box', 'dozen', 'packet', 'set'].map(u => <option key={u} value={u}>{u}</option>)}
-                              </select>
-                            </div>
-                            <div>
-                              <label className="text-[9px] text-muted-foreground uppercase">Price ₹</label>
-                              <input
-                                type="number"
-                                value={item.unitPrice}
-                                onChange={(e) => updateItem(i, 'unitPrice', Number(e.target.value))}
-                                className="w-full px-1.5 py-1 text-xs bg-background border border-border rounded tabular-nums focus:ring-1 focus:ring-primary"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-[9px] text-muted-foreground uppercase">GST</label>
-                              <select
-                                value={item.gstRate}
-                                onChange={(e) => updateItem(i, 'gstRate', Number(e.target.value))}
-                                className="w-full px-1 py-1 text-xs bg-background border border-border rounded focus:ring-1 focus:ring-primary"
-                              >
-                                {[0, 5, 12, 18, 28].map(r => <option key={r} value={r}>{r}%</option>)}
-                              </select>
-                            </div>
-                          </div>
-                        </>
-                      )}
+                    <div key={i} className="group rounded-lg bg-muted/20 hover:bg-muted/40 transition px-2 py-1.5">
+                      {/* Row 1: Number + Name + Total + Delete — full width, no labels */}
+                      <div className="flex items-center gap-1.5">
+                        <span className={cn(
+                          'font-bold text-muted-foreground flex-shrink-0 w-4 text-center',
+                          isCompact ? 'text-[10px]' : 'text-xs'
+                        )}>{i + 1}</span>
+                        <input
+                          value={item.name}
+                          onChange={(e) => updateItem(i, 'name', e.target.value)}
+                          className={cn(
+                            'flex-1 min-w-0 bg-transparent border border-transparent rounded font-medium transition',
+                            isCompact ? 'px-1 py-0.5 text-xs' : 'px-1.5 py-1 text-sm',
+                            'focus:bg-background focus:border-border'
+                          )}
+                          placeholder="Product name"
+                        />
+                        <span className={cn(
+                          'font-bold tabular-nums flex-shrink-0',
+                          isCompact ? 'text-xs' : 'text-sm'
+                        )}>{formatINR(item.total || 0)}</span>
+                        <button
+                          className="p-1 rounded text-muted-foreground hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition flex-shrink-0"
+                          onClick={() => removeItem(i)}
+                        >
+                          <Trash2 className={isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
+                        </button>
+                      </div>
+                      {/* Row 2: Qty + Unit + Price + GST — fills FULL width, no labels, bigger inputs */}
+                      <div className={cn(
+                        'flex items-center gap-1 mt-1',
+                        isCompact ? 'pl-5' : 'pl-5.5'
+                      )}>
+                        {/* Qty — flex-1 so it expands to fill available space */}
+                        <input
+                          type="number"
+                          value={item.quantity}
+                          onChange={(e) => updateItem(i, 'quantity', Number(e.target.value))}
+                          className={cn(
+                            'flex-1 min-w-0 bg-background border border-border rounded tabular-nums focus:ring-1 focus:ring-primary text-center',
+                            isCompact ? 'px-1 py-0.5 text-xs' : 'px-1 py-1.5 text-sm'
+                          )}
+                        />
+                        {/* Unit — auto width, just fits content */}
+                        <select
+                          value={item.unit || 'pcs'}
+                          onChange={(e) => updateItem(i, 'unit', e.target.value)}
+                          className={cn(
+                            'bg-background border border-border rounded focus:ring-1 focus:ring-primary flex-shrink-0',
+                            isCompact ? 'px-0.5 py-0.5 text-xs' : 'px-1 py-1.5 text-sm'
+                          )}
+                        >
+                          {['pcs', 'kg', 'gm', 'ltr', 'ml', 'box', 'dozen', 'packet', 'set'].map(u => <option key={u} value={u}>{u}</option>)}
+                        </select>
+                        {/* × separator */}
+                        <span className={cn('text-muted-foreground flex-shrink-0', isCompact ? 'text-[10px]' : 'text-xs')}>×</span>
+                        {/* Price — flex-1 so it expands */}
+                        <input
+                          type="number"
+                          value={item.unitPrice}
+                          onChange={(e) => updateItem(i, 'unitPrice', Number(e.target.value))}
+                          className={cn(
+                            'flex-1 min-w-0 bg-background border border-border rounded tabular-nums focus:ring-1 focus:ring-primary text-center',
+                            isCompact ? 'px-1 py-0.5 text-xs' : 'px-1 py-1.5 text-sm'
+                          )}
+                        />
+                        {/* GST — auto width */}
+                        <select
+                          value={item.gstRate}
+                          onChange={(e) => updateItem(i, 'gstRate', Number(e.target.value))}
+                          className={cn(
+                            'bg-background border border-border rounded focus:ring-1 focus:ring-primary flex-shrink-0',
+                            isCompact ? 'px-0.5 py-0.5 text-xs' : 'px-1 py-1.5 text-sm'
+                          )}
+                        >
+                          {[0, 5, 12, 18, 28].map(r => <option key={r} value={r}>{r}%</option>)}
+                        </select>
+                      </div>
                     </div>
                   )
                 })}
