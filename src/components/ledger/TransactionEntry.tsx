@@ -15,7 +15,7 @@ import { useToast } from '@/hooks/use-toast'
 import { toast as sonnerToast } from 'sonner'
 import { formatINR, cn, getInitials } from '@/lib/utils'
 import {
-  ArrowLeft, ShoppingCart, Truck, Plus, X, Search, ChevronDown, ChevronRight,
+  ShoppingCart, Truck, Plus, X, Search, ChevronDown, ChevronRight,
   TrendingUp, Calendar, User, ScanLine, Folder, FolderOpen,
   Package, Phone, IndianRupee, Save, Trash2, Check, AlertCircle, Mic, Clock,
 } from 'lucide-react'
@@ -485,29 +485,28 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
         />
       )}
 
-      {/* Top action bar */}
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={handleCancel} className="gap-2">
-            <ArrowLeft className="w-4 h-4" /> Back
-          </Button>
+      {/* Top action bar — no Back button (app header has it) and no Save button (bottom bar has it) */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <div className={cn(
+            'w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0',
+            isSale ? 'bg-emerald-100 dark:bg-emerald-900/40' : 'bg-amber-100 dark:bg-amber-900/40'
+          )}>
+            {isSale
+              ? <ShoppingCart className="w-5 h-5 text-emerald-600" />
+              : <Truck className="w-5 h-5 text-amber-600" />}
+          </div>
           <div>
-            <h2 className="text-xl font-bold flex items-center gap-2">
-              {isSale ? <ShoppingCart className="w-5 h-5 text-emerald-600" /> : <Truck className="w-5 h-5 text-amber-600" />}
-              New {isSale ? 'Sale' : 'Purchase'}
-            </h2>
+            <h2 className="text-lg font-bold font-heading tracking-tight">New {isSale ? 'Sale' : 'Purchase'}</h2>
             <p className="text-xs text-muted-foreground">Fill in the details below</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setShowVoiceEntry(!showVoiceEntry)} className="gap-2">
-            <Mic className="w-4 h-4" /> Voice
+        <div className="flex items-center gap-1.5">
+          <Button variant="outline" size="sm" onClick={() => setShowVoiceEntry(!showVoiceEntry)} className="gap-1.5">
+            <Mic className="w-4 h-4" /> <span className="hidden sm:inline">Voice</span>
           </Button>
-          <Button variant="outline" size="sm" onClick={() => { setScannerBillType(type); setView('scanner') }} className="gap-2">
-            <ScanLine className="w-4 h-4" /> Scan Bill
-          </Button>
-          <Button size="sm" onClick={handleSave} disabled={saving} className={`${accentGradient} gap-2 shadow-md`}>
-            <Save className="w-4 h-4" /> {saving ? 'Saving...' : `Save ${isSale ? 'Sale' : 'Purchase'}`}
+          <Button variant="outline" size="sm" onClick={() => { setScannerBillType(type); setView('scanner') }} className="gap-1.5">
+            <ScanLine className="w-4 h-4" /> <span className="hidden sm:inline">Scan Bill</span>
           </Button>
         </div>
       </div>
@@ -1101,11 +1100,17 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
         </div>
       </div>
 
-      {/* Mobile sticky save bar */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-background border-t border-border p-3 flex gap-2 z-30">
-        <Button variant="outline" className="flex-1" onClick={handleCancel}>Cancel</Button>
-        <Button className={`flex-1 ${accentGradient} gap-2`} onClick={handleSave} disabled={saving}>
-          <Save className="w-4 h-4" /> {saving ? 'Saving...' : `Save ${formatINR(totalAmount)}`}
+      {/* Mobile sticky save bar — shows total + save */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t border-border p-2.5 flex items-center gap-2 z-30" style={{ paddingBottom: 'calc(0.625rem + env(safe-area-inset-bottom))' }}>
+        <div className="flex-1">
+          <p className="text-[10px] text-muted-foreground uppercase">Total</p>
+          <p className="text-lg font-bold tabular-nums">{formatINR(totalAmount)}</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={handleCancel} className="h-10 px-4">
+          Cancel
+        </Button>
+        <Button className="bg-gradient-saffron gap-2 shadow-md h-10 px-6" onClick={handleSave} disabled={saving}>
+          <Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save'}
         </Button>
       </div>
 
