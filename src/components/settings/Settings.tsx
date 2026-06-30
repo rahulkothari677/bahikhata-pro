@@ -719,6 +719,36 @@ export function Settings() {
               <p className="text-muted-foreground">Indian Shop Owners</p>
             </div>
           </div>
+
+          {/* Quick actions */}
+          <div className="mt-4 pt-4 border-t border-border flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-xs"
+              onClick={() => {
+                try {
+                  localStorage.removeItem('bahikhata-tour-seen')
+                  sonnerToast.success('Tour reset! It will show next time you reload.')
+                } catch {}
+              }}
+            >
+              <RotateCcw className="w-3.5 h-3.5" /> Replay Tour
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-xs"
+              onClick={() => {
+                try {
+                  localStorage.removeItem('bahikhata-theme-picker-done')
+                  sonnerToast.success('Theme picker reset! It will show next time you reload.')
+                } catch {}
+              }}
+            >
+              <Palette className="w-3.5 h-3.5" /> Replay Theme Picker
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>
