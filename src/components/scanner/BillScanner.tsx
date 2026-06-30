@@ -33,41 +33,32 @@ async function takePhotoNative(): Promise<File | null> {
   if (Capacitor.isNativePlatform()) {
     try {
       const { Camera, CameraResultType, CameraSource } = await import('@capacitor/camera')
-      sonnerToast.info('DEBUG: Camera plugin loaded')
 
       // Explicitly request camera permission before calling getPhoto.
       try {
         const permStatus = await Camera.checkPermissions()
-        sonnerToast.info('DEBUG: Permission', { description: `camera: ${permStatus.camera}` })
         if (permStatus.camera !== 'granted') {
           const reqResult = await Camera.requestPermissions({ permissions: ['camera'] })
-          sonnerToast.info('DEBUG: After request', { description: `camera: ${reqResult.camera}` })
           if (reqResult.camera !== 'granted') {
-            sonnerToast.error('DEBUG: Permission denied')
             return null
           }
         }
       } catch (permErr) {
-        sonnerToast.info('DEBUG: Permission check failed', { description: String(permErr) })
       }
 
-      sonnerToast.info('DEBUG: Opening camera...')
       const photo = await Camera.getPhoto({
-        quality: 60,
+        quality: 80,
         allowEditing: false,
         resultType: CameraResultType.Uri,
         source: CameraSource.Camera,
         saveToGallery: false,
       })
-      sonnerToast.info('DEBUG: Photo received', { description: `path: ${photo.path}, webPath: ${photo.webPath ? 'yes' : 'no'}, format: ${photo.format}` })
 
       // Read the file from the URI using Capacitor Filesystem API
       if (photo.path) {
         try {
           const { Filesystem } = await import('@capacitor/filesystem')
-          sonnerToast.info('DEBUG: Reading file...')
           const fileResult = await Filesystem.readFile({ path: photo.path })
-          sonnerToast.info('DEBUG: File read', { description: `data length: ${fileResult.data?.length || 0}` })
 
           let blob: Blob
           if (typeof fileResult.data === 'string') {
@@ -85,12 +76,9 @@ async function takePhotoNative(): Promise<File | null> {
 
           const format = photo.format || 'jpeg'
           const file = new File([blob], `bill_${Date.now()}.${format}`, { type: `image/${format}` })
-          sonnerToast.success('DEBUG: File created', { description: `${file.name} (${file.size} bytes)` })
           return file
         } catch (fsErr) {
-          sonnerToast.error('DEBUG: Filesystem failed', { description: String(fsErr) })
           if (photo.webPath) {
-            sonnerToast.info('DEBUG: Trying webPath fallback')
             const res = await fetch(photo.webPath)
             const blob = await res.blob()
             const format = photo.format || 'jpeg'
@@ -101,26 +89,21 @@ async function takePhotoNative(): Promise<File | null> {
       }
 
       if (photo.webPath) {
-        sonnerToast.info('DEBUG: Using webPath only')
         const res = await fetch(photo.webPath)
         const blob = await res.blob()
         const format = photo.format || 'jpeg'
         return new File([blob], `bill_${Date.now()}.${format}`, { type: `image/${format}` })
       }
 
-      sonnerToast.error('DEBUG: No path or webPath')
       return null
     } catch (err: any) {
       const msg = String(err?.message || err || '').toLowerCase()
       if (msg.includes('cancelled') || msg.includes('user denied') || msg.includes('canceled')) {
-        sonnerToast.info('DEBUG: User cancelled')
         return null
       }
-      sonnerToast.error('DEBUG: Camera failed', { description: String(err?.message || err) })
       throw new Error(err?.message || String(err))
     }
   }
-  sonnerToast.info('DEBUG: Not native platform')
   return null
 }
 
@@ -136,10 +119,8 @@ async function pickPhotoNative(): Promise<File | null> {
       // Check/request photo library permission
       try {
         const permStatus = await Camera.checkPermissions()
-        console.log('[Camera] Photos permission status:', permStatus)
         if (permStatus.photos !== 'granted' && permStatus.photos !== 'limited') {
           const reqResult = await Camera.requestPermissions({ permissions: ['photos'] })
-          console.log('[Camera] Photos request result:', reqResult)
         }
       } catch (permErr) {
         console.warn('[Camera] Photos permission check failed (continuing):', permErr)
@@ -163,7 +144,6 @@ async function pickPhotoNative(): Promise<File | null> {
     } catch (err: any) {
       const msg = String(err?.message || err || '').toLowerCase()
       if (msg.includes('cancelled') || msg.includes('user denied') || msg.includes('canceled')) {
-        console.log('[Camera] User cancelled photo pick')
         return null
       }
       console.error('[Camera] Native pick failed:', err)
@@ -187,28 +167,22 @@ export function BillScanner() {
   const cameraInputRef = useRef<HTMLInputElement>(null)
 
   const handleFile = async (file: File) => {
-    sonnerToast.info('DEBUG: handleFile started', { description: `file: ${file.name}, size: ${file.size}, type: ${file.type}` })
     // Subscription gating — TEMPORARILY DISABLED for debugging
     // if (!requireFeature('ai_scanner')) {
     //   sonnerToast.error('DEBUG: requireFeature returned false — subscription blocked')
     //   return
     // }
-    sonnerToast.info('DEBUG: Subscription check skipped (temporarily disabled)')
     if (!file) {
-      sonnerToast.error('DEBUG: No file')
       return
     }
     if (!file.type.startsWith('image/')) {
-      sonnerToast.error('DEBUG: Not an image', { description: file.type })
       toast({ title: 'Please select an image file', variant: 'destructive' })
       return
     }
     if (file.size > 10 * 1024 * 1024) {
-      sonnerToast.error('DEBUG: Too large', { description: `${file.size} bytes` })
       toast({ title: 'Image too large. Max 10MB', variant: 'destructive' })
       return
     }
-    sonnerToast.info('DEBUG: File valid, compressing...')
 
     // Compress and resize image on client side before sending to API
     // This prevents Vercel serverless timeout on large phone photos
@@ -218,14 +192,12 @@ export function BillScanner() {
       return new Promise((resolve, reject) => {
         const reader = new FileReader()
         reader.onload = (e) => {
-          sonnerToast.info('DEBUG: FileReader loaded')
           const img = new Image()
           img.onload = () => {
-            sonnerToast.info('DEBUG: Image loaded', { description: `${img.width}x${img.height}` })
             // Reduced max dimensions for more aggressive compression
             // 800x1000 is still enough for AI to read text on bills
-            const MAX_WIDTH = 800
-            const MAX_HEIGHT = 1000
+            const MAX_WIDTH = 1000
+            const MAX_HEIGHT = 1400
             let width = img.width
             let height = img.height
 
@@ -234,34 +206,29 @@ export function BillScanner() {
               width = Math.round(width * ratio)
               height = Math.round(height * ratio)
             }
-            sonnerToast.info('DEBUG: Resizing to', { description: `${width}x${height}` })
 
             const canvas = document.createElement('canvas')
             canvas.width = width
             canvas.height = height
             const ctx = canvas.getContext('2d')
             if (!ctx) {
-              sonnerToast.error('DEBUG: Canvas not supported')
               reject(new Error('Canvas not supported'))
               return
             }
             ctx.drawImage(img, 0, 0, width, height)
 
-            // Lower quality (0.7 = 70%) for more aggressive compression
-            // JPEG at 70% quality on an 800x1000 image is usually under 200KB
-            const compressed = canvas.toDataURL('image/jpeg', 0.7)
+            // JPEG at 75% quality on a 1000x1400 image — good text readability
+            // while keeping file size reasonable (~200-300KB for upload)
+            const compressed = canvas.toDataURL('image/jpeg', 0.75)
             const sizeKB = Math.round(compressed.length / 1024)
-            sonnerToast.info('DEBUG: Compressed', { description: `${sizeKB} KB` })
             resolve(compressed)
           }
           img.onerror = () => {
-            sonnerToast.error('DEBUG: Image load failed')
             reject(new Error('Failed to load image'))
           }
           img.src = e.target?.result as string
         }
         reader.onerror = () => {
-          sonnerToast.error('DEBUG: FileReader failed')
           reject(new Error('Failed to read file'))
         }
         reader.readAsDataURL(file)
@@ -272,20 +239,16 @@ export function BillScanner() {
     // convert the file to base64 directly without going through Image/canvas
     const compressImageFallback = (file: File): Promise<string> => {
       return new Promise((resolve, reject) => {
-        sonnerToast.info('DEBUG: Using fallback compression')
         const reader = new FileReader()
         reader.onload = (e) => {
           const result = e.target?.result as string
           if (result) {
-            sonnerToast.info('DEBUG: Fallback got base64', { description: `${Math.round(result.length / 1024)} KB` })
             resolve(result)
           } else {
-            sonnerToast.error('DEBUG: Fallback failed — no result')
             reject(new Error('FileReader returned no result'))
           }
         }
         reader.onerror = () => {
-          sonnerToast.error('DEBUG: Fallback FileReader failed')
           reject(new Error('FileReader failed'))
         }
         reader.readAsDataURL(file)
@@ -298,13 +261,10 @@ export function BillScanner() {
       try {
         base64 = await compressImage(file)
       } catch (compressErr) {
-        sonnerToast.info('DEBUG: Main compression failed, trying fallback')
         base64 = await compressImageFallback(file)
       }
-      sonnerToast.info('DEBUG: Compression done', { description: `${Math.round(base64.length / 1024)} KB` })
       setPreview(base64)
       setScanning(true)
-      sonnerToast.info('DEBUG: Scanning started, calling API...')
       // Save existing items before scanning (for "adding more" mode)
       const existingItems = scanned?._isAddingMore ? (scanned?.items || []) : []
       const isAddingMore = scanned?._isAddingMore || false
@@ -314,27 +274,22 @@ export function BillScanner() {
       }
       try {
         // Step 1: Upload to Cloudinary (gets a URL, stores image for future)
-        sonnerToast.info('DEBUG: Uploading to Cloudinary...')
         const uploadRes = await offlineFetch('/api/upload-bill', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ imageBase64: base64 }),
         })
         const uploadData = await uploadRes.json()
-        sonnerToast.info('DEBUG: Upload result', { description: `success: ${uploadData.success}, url: ${uploadData.url ? 'yes' : 'no'}` })
 
         // Step 2: Send to AI scanner (use Cloudinary URL if upload succeeded, else base64)
         const imageUrl = uploadData.success ? uploadData.url : null
-        sonnerToast.info('DEBUG: Calling scan API...', { description: imageUrl ? 'with URL' : 'with base64' })
         const scanRes = await offlineFetch('/api/scan-bill', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(imageUrl ? { imageUrl, billType } : { imageBase64: base64, billType }),
         })
         const data = await scanRes.json()
-        sonnerToast.info('DEBUG: Scan API response', { description: `error: ${data.error || 'none'}, bill: ${data.bill ? 'yes' : 'no'}, items: ${data.bill?.items?.length || 0}` })
         if (data.error) {
-          sonnerToast.error('DEBUG: Scan failed', { description: data.error })
           toast({
             title: 'Scan failed',
             description: data.error,
@@ -342,7 +297,6 @@ export function BillScanner() {
           })
           // Raw AI output logging removed — was leaking raw response to console
         } else {
-          sonnerToast.success('DEBUG: Scan success!', { description: `${data.bill?.items?.length || 0} items found` })
           // If we're in "adding more" mode, append new items to existing
           if (isAddingMore && existingItems.length > 0) {
             const newItems = data.bill.items || []
@@ -358,7 +312,6 @@ export function BillScanner() {
           }
         }
       } catch (e: any) {
-        sonnerToast.error('DEBUG: API error', { description: String(e?.message || e) })
         toast({
           title: 'Scan failed',
           description: 'Please try again or enter manually',
@@ -368,7 +321,6 @@ export function BillScanner() {
         setScanning(false)
       }
     } catch (compressError: any) {
-      sonnerToast.error('DEBUG: Compression error', { description: String(compressError?.message || compressError) })
       toast({
         title: 'Failed to process image',
         description: 'Please try a different image',
@@ -387,23 +339,15 @@ export function BillScanner() {
   // Try native camera first (Capacitor plugin). If unavailable or cancelled,
   // fall back to the hidden <input capture> element (web browser).
   const handleTakePhoto = async () => {
-    console.log('[Scanner] Take Photo clicked, native:', Capacitor.isNativePlatform())
-    // VISIBLE DEBUG TOAST — shows on screen so we can see what's happening
-    sonnerToast.info('DEBUG: Take Photo clicked', { description: `Native: ${Capacitor.isNativePlatform()}` })
     try {
       // On web (not native), skip the native plugin entirely and go straight to input
       if (!Capacitor.isNativePlatform()) {
-        console.log('[Scanner] Web platform — triggering camera input directly')
-        sonnerToast.info('DEBUG: Web platform, opening file picker...')
         if (cameraInputRef.current) {
-          console.log('[Scanner] cameraInputRef.current exists, clicking')
           cameraInputRef.current.click()
         } else {
           console.error('[Scanner] cameraInputRef.current is null!')
-          sonnerToast.error('DEBUG: cameraInputRef is null')
           // Try fileInputRef as fallback
           if (fileInputRef.current) {
-            console.log('[Scanner] Using fileInputRef as fallback')
             fileInputRef.current.click()
           }
         }
@@ -412,8 +356,6 @@ export function BillScanner() {
 
       // Native platform — use Capacitor Camera plugin
       const file = await takePhotoNative()
-      console.log('[Scanner] takePhotoNative returned:', file ? `${file.name} (${file.size} bytes)` : 'null')
-      sonnerToast.info('DEBUG: Photo result', { description: file ? `Got file: ${file.name} (${file.size} bytes)` : 'Returned null — camera failed or cancelled' })
       if (file) {
         handleFile(file)
       } else {
@@ -425,7 +367,6 @@ export function BillScanner() {
       }
     } catch (err: any) {
       console.error('[Scanner] handleTakePhoto error:', err)
-      sonnerToast.error('DEBUG: Error', { description: String(err?.message || err) })
       toast({
         title: 'Camera error',
         description: String(err?.message || err),
@@ -437,27 +378,19 @@ export function BillScanner() {
   // Try native photo picker first (Capacitor plugin). If unavailable,
   // fall back to the hidden <input> element (web browser).
   const handlePickPhoto = async () => {
-    console.log('[Scanner] Pick Photo clicked, native:', Capacitor.isNativePlatform())
-    sonnerToast.info('DEBUG: Upload Image clicked', { description: `Native: ${Capacitor.isNativePlatform()}` })
     try {
       // On web (not native), skip the native plugin entirely
       if (!Capacitor.isNativePlatform()) {
-        console.log('[Scanner] Web platform — triggering file input directly')
-        sonnerToast.info('DEBUG: Web platform, opening file picker...')
         if (fileInputRef.current) {
-          console.log('[Scanner] fileInputRef.current exists, clicking')
           fileInputRef.current.click()
         } else {
           console.error('[Scanner] fileInputRef.current is null!')
-          sonnerToast.error('DEBUG: fileInputRef is null')
         }
         return
       }
 
       // Native platform — use Capacitor Camera plugin
       const file = await pickPhotoNative()
-      console.log('[Scanner] pickPhotoNative returned:', file ? `${file.name} (${file.size} bytes)` : 'null')
-      sonnerToast.info('DEBUG: Pick result', { description: file ? `Got file: ${file.name} (${file.size} bytes)` : 'Returned null' })
       if (file) {
         handleFile(file)
       } else {
@@ -469,7 +402,6 @@ export function BillScanner() {
       }
     } catch (err: any) {
       console.error('[Scanner] handlePickPhoto error:', err)
-      sonnerToast.error('DEBUG: Error', { description: String(err?.message || err) })
       toast({
         title: 'Photo picker error',
         description: String(err?.message || err),
