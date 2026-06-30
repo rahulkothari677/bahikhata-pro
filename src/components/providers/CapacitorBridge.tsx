@@ -16,7 +16,7 @@
 import { useEffect } from 'react'
 import { Capacitor } from '@capacitor/core'
 
-const SAFFRON = '#d97706'
+const SAFFRON = '#c2410c'
 
 async function applySaffronStatusBar() {
   try {

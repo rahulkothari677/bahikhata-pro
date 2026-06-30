@@ -36,23 +36,23 @@ export type ThemePalette = {
 
 const THEMES: Record<ThemeColor, ThemePalette> = {
   saffron: {
-    primary: 'oklch(0.62 0.18 42)',
-    ring: 'oklch(0.62 0.18 42)',
-    gradient: 'linear-gradient(135deg, oklch(0.62 0.18 42) 0%, oklch(0.65 0.2 25) 100%)',
+    primary: 'oklch(0.55 0.19 42)',
+    ring: 'oklch(0.55 0.19 42)',
+    gradient: 'linear-gradient(135deg, oklch(0.55 0.19 42) 0%, oklch(0.58 0.21 25) 100%)',
     sidebar: 'oklch(0.97 0.01 60)',
     sidebarForeground: 'oklch(0.25 0.02 30)',
-    sidebarPrimary: 'oklch(0.62 0.18 42)',
+    sidebarPrimary: 'oklch(0.55 0.19 42)',
     sidebarPrimaryForeground: 'oklch(0.99 0 0)',
     sidebarAccent: 'oklch(0.93 0.02 60)',
     sidebarAccentForeground: 'oklch(0.25 0.02 30)',
     sidebarBorder: 'oklch(0.90 0.01 60)',
     background: 'oklch(0.99 0.005 60)',
-    charts: ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)'],
-    swatch: 'linear-gradient(135deg, oklch(0.62 0.18 42), oklch(0.65 0.2 25))',
+    charts: ['oklch(0.55 0.19 42)', 'oklch(0.55 0.16 155)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)'],
+    swatch: 'linear-gradient(135deg, oklch(0.55 0.19 42), oklch(0.58 0.21 25))',
     dark: {
-      primary: 'oklch(0.75 0.20 42)',     // brighter saffron in dark
-      background: 'oklch(0.14 0.015 30)',  // warm dark brown-black
-      card: 'oklch(0.19 0.015 30)',       // slightly lighter for separation
+      primary: 'oklch(0.75 0.21 42)',
+      background: 'oklch(0.14 0.015 30)',
+      card: 'oklch(0.19 0.015 30)',
       popover: 'oklch(0.21 0.015 30)',
       secondary: 'oklch(0.25 0.015 30)',
       muted: 'oklch(0.25 0.015 30)',
@@ -63,22 +63,22 @@ const THEMES: Record<ThemeColor, ThemePalette> = {
     },
   },
   emerald: {
-    primary: 'oklch(0.55 0.15 155)',
-    ring: 'oklch(0.55 0.15 155)',
-    gradient: 'linear-gradient(135deg, oklch(0.55 0.15 155) 0%, oklch(0.50 0.13 170) 100%)',
+    primary: 'oklch(0.50 0.16 155)',
+    ring: 'oklch(0.50 0.16 155)',
+    gradient: 'linear-gradient(135deg, oklch(0.50 0.16 155) 0%, oklch(0.46 0.14 170) 100%)',
     sidebar: 'oklch(0.97 0.01 160)',
     sidebarForeground: 'oklch(0.22 0.03 160)',
-    sidebarPrimary: 'oklch(0.55 0.15 155)',
+    sidebarPrimary: 'oklch(0.50 0.16 155)',
     sidebarPrimaryForeground: 'oklch(0.99 0 0)',
     sidebarAccent: 'oklch(0.93 0.03 160)',
     sidebarAccentForeground: 'oklch(0.22 0.03 160)',
     sidebarBorder: 'oklch(0.90 0.01 160)',
     background: 'oklch(0.99 0.005 160)',
-    charts: ['oklch(0.55 0.15 155)', 'oklch(0.62 0.18 42)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)'],
-    swatch: 'linear-gradient(135deg, oklch(0.55 0.15 155), oklch(0.50 0.13 170))',
+    charts: ['oklch(0.50 0.16 155)', 'oklch(0.55 0.19 42)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)'],
+    swatch: 'linear-gradient(135deg, oklch(0.50 0.16 155), oklch(0.46 0.14 170))',
     dark: {
-      primary: 'oklch(0.68 0.17 155)',    // brighter emerald in dark
-      background: 'oklch(0.14 0.015 160)', // deep forest-green-black
+      primary: 'oklch(0.70 0.18 155)',
+      background: 'oklch(0.14 0.015 160)',
       card: 'oklch(0.19 0.015 160)',
       popover: 'oklch(0.21 0.015 160)',
       secondary: 'oklch(0.25 0.015 160)',
@@ -90,21 +90,21 @@ const THEMES: Record<ThemeColor, ThemePalette> = {
     },
   },
   blue: {
-    primary: 'oklch(0.55 0.18 250)',
-    ring: 'oklch(0.55 0.18 250)',
-    gradient: 'linear-gradient(135deg, oklch(0.55 0.18 250) 0%, oklch(0.50 0.16 260) 100%)',
+    primary: 'oklch(0.50 0.19 250)',
+    ring: 'oklch(0.50 0.19 250)',
+    gradient: 'linear-gradient(135deg, oklch(0.50 0.19 250) 0%, oklch(0.46 0.17 260) 100%)',
     sidebar: 'oklch(0.97 0.01 250)',
     sidebarForeground: 'oklch(0.22 0.03 250)',
-    sidebarPrimary: 'oklch(0.55 0.18 250)',
+    sidebarPrimary: 'oklch(0.50 0.19 250)',
     sidebarPrimaryForeground: 'oklch(0.99 0 0)',
     sidebarAccent: 'oklch(0.93 0.03 250)',
     sidebarAccentForeground: 'oklch(0.22 0.03 250)',
     sidebarBorder: 'oklch(0.90 0.01 250)',
     background: 'oklch(0.99 0.005 250)',
-    charts: ['oklch(0.55 0.18 250)', 'oklch(0.55 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.62 0.18 42)', 'oklch(0.65 0.22 15)'],
-    swatch: 'linear-gradient(135deg, oklch(0.55 0.18 250), oklch(0.50 0.16 260))',
+    charts: ['oklch(0.50 0.19 250)', 'oklch(0.50 0.16 155)', 'oklch(0.72 0.16 80)', 'oklch(0.55 0.19 42)', 'oklch(0.65 0.22 15)'],
+    swatch: 'linear-gradient(135deg, oklch(0.50 0.19 250), oklch(0.46 0.17 260))',
     dark: {
-      primary: 'oklch(0.68 0.20 250)',    // brighter blue in dark
+      primary: 'oklch(0.70 0.21 250)',    // brighter blue in dark
       background: 'oklch(0.14 0.015 250)', // deep navy-black
       card: 'oklch(0.19 0.015 250)',
       popover: 'oklch(0.21 0.015 250)',
@@ -117,21 +117,21 @@ const THEMES: Record<ThemeColor, ThemePalette> = {
     },
   },
   violet: {
-    primary: 'oklch(0.55 0.2 290)',
-    ring: 'oklch(0.55 0.2 290)',
-    gradient: 'linear-gradient(135deg, oklch(0.55 0.2 290) 0%, oklch(0.50 0.18 300) 100%)',
+    primary: 'oklch(0.50 0.21 290)',
+    ring: 'oklch(0.50 0.21 290)',
+    gradient: 'linear-gradient(135deg, oklch(0.50 0.21 290) 0%, oklch(0.46 0.19 300) 100%)',
     sidebar: 'oklch(0.97 0.01 290)',
     sidebarForeground: 'oklch(0.22 0.03 290)',
-    sidebarPrimary: 'oklch(0.55 0.2 290)',
+    sidebarPrimary: 'oklch(0.50 0.21 290)',
     sidebarPrimaryForeground: 'oklch(0.99 0 0)',
     sidebarAccent: 'oklch(0.93 0.03 290)',
     sidebarAccentForeground: 'oklch(0.22 0.03 290)',
     sidebarBorder: 'oklch(0.90 0.01 290)',
     background: 'oklch(0.99 0.005 290)',
-    charts: ['oklch(0.55 0.2 290)', 'oklch(0.55 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.55 0.18 250)', 'oklch(0.65 0.22 15)'],
-    swatch: 'linear-gradient(135deg, oklch(0.55 0.2 290), oklch(0.50 0.18 300))',
+    charts: ['oklch(0.50 0.21 290)', 'oklch(0.50 0.16 155)', 'oklch(0.72 0.16 80)', 'oklch(0.50 0.19 250)', 'oklch(0.65 0.22 15)'],
+    swatch: 'linear-gradient(135deg, oklch(0.50 0.21 290), oklch(0.46 0.19 300))',
     dark: {
-      primary: 'oklch(0.68 0.22 290)',    // brighter violet in dark
+      primary: 'oklch(0.70 0.23 290)',    // brighter violet in dark
       background: 'oklch(0.14 0.015 290)', // deep purple-black
       card: 'oklch(0.19 0.015 290)',
       popover: 'oklch(0.21 0.015 290)',
@@ -144,21 +144,21 @@ const THEMES: Record<ThemeColor, ThemePalette> = {
     },
   },
   rose: {
-    primary: 'oklch(0.62 0.22 15)',
-    ring: 'oklch(0.62 0.22 15)',
-    gradient: 'linear-gradient(135deg, oklch(0.62 0.22 15) 0%, oklch(0.58 0.2 350) 100%)',
+    primary: 'oklch(0.58 0.23 15)',
+    ring: 'oklch(0.58 0.23 15)',
+    gradient: 'linear-gradient(135deg, oklch(0.58 0.23 15) 0%, oklch(0.54 0.21 350) 100%)',
     sidebar: 'oklch(0.97 0.01 15)',
     sidebarForeground: 'oklch(0.22 0.03 15)',
-    sidebarPrimary: 'oklch(0.62 0.22 15)',
+    sidebarPrimary: 'oklch(0.58 0.23 15)',
     sidebarPrimaryForeground: 'oklch(0.99 0 0)',
     sidebarAccent: 'oklch(0.93 0.03 15)',
     sidebarAccentForeground: 'oklch(0.22 0.03 15)',
     sidebarBorder: 'oklch(0.90 0.01 15)',
     background: 'oklch(0.99 0.005 15)',
-    charts: ['oklch(0.62 0.22 15)', 'oklch(0.55 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.55 0.18 250)', 'oklch(0.62 0.18 42)'],
-    swatch: 'linear-gradient(135deg, oklch(0.62 0.22 15), oklch(0.58 0.2 350))',
+    charts: ['oklch(0.58 0.23 15)', 'oklch(0.50 0.16 155)', 'oklch(0.72 0.16 80)', 'oklch(0.50 0.19 250)', 'oklch(0.55 0.19 42)'],
+    swatch: 'linear-gradient(135deg, oklch(0.58 0.23 15), oklch(0.54 0.21 350))',
     dark: {
-      primary: 'oklch(0.75 0.24 15)',     // brighter rose in dark
+      primary: 'oklch(0.75 0.25 15)',     // brighter rose in dark
       background: 'oklch(0.14 0.015 15)',  // deep warm rose-black
       card: 'oklch(0.19 0.015 15)',
       popover: 'oklch(0.21 0.015 15)',
@@ -171,21 +171,21 @@ const THEMES: Record<ThemeColor, ThemePalette> = {
     },
   },
   teal: {
-    primary: 'oklch(0.6 0.12 200)',
-    ring: 'oklch(0.6 0.12 200)',
-    gradient: 'linear-gradient(135deg, oklch(0.6 0.12 200) 0%, oklch(0.55 0.1 210) 100%)',
+    primary: 'oklch(0.55 0.13 200)',
+    ring: 'oklch(0.55 0.13 200)',
+    gradient: 'linear-gradient(135deg, oklch(0.55 0.13 200) 0%, oklch(0.50 0.11 210) 100%)',
     sidebar: 'oklch(0.97 0.01 200)',
     sidebarForeground: 'oklch(0.22 0.03 200)',
-    sidebarPrimary: 'oklch(0.6 0.12 200)',
+    sidebarPrimary: 'oklch(0.55 0.13 200)',
     sidebarPrimaryForeground: 'oklch(0.99 0 0)',
     sidebarAccent: 'oklch(0.93 0.03 200)',
     sidebarAccentForeground: 'oklch(0.22 0.03 200)',
     sidebarBorder: 'oklch(0.90 0.01 200)',
     background: 'oklch(0.99 0.005 200)',
-    charts: ['oklch(0.6 0.12 200)', 'oklch(0.55 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.55 0.18 250)', 'oklch(0.65 0.22 15)'],
-    swatch: 'linear-gradient(135deg, oklch(0.6 0.12 200), oklch(0.55 0.1 210))',
+    charts: ['oklch(0.55 0.13 200)', 'oklch(0.50 0.16 155)', 'oklch(0.72 0.16 80)', 'oklch(0.50 0.19 250)', 'oklch(0.65 0.22 15)'],
+    swatch: 'linear-gradient(135deg, oklch(0.55 0.13 200), oklch(0.50 0.11 210))',
     dark: {
-      primary: 'oklch(0.72 0.14 200)',    // brighter teal in dark
+      primary: 'oklch(0.72 0.15 200)',    // brighter teal in dark
       background: 'oklch(0.14 0.015 200)', // deep cyan-black
       card: 'oklch(0.19 0.015 200)',
       popover: 'oklch(0.21 0.015 200)',

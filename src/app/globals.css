@@ -57,8 +57,8 @@
   --card-foreground: oklch(0.18 0.02 30);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.18 0.02 30);
-  /* Saffron-orange primary - Indian theme */
-  --primary: oklch(0.62 0.18 42);
+  /* Deep saffron primary - Indian theme */
+  --primary: oklch(0.55 0.19 42);
   --primary-foreground: oklch(0.99 0 0);
   --secondary: oklch(0.96 0.01 60);
   --secondary-foreground: oklch(0.25 0.02 30);
@@ -69,9 +69,9 @@
   --destructive: oklch(0.58 0.22 25);
   --border: oklch(0.91 0.01 60);
   --input: oklch(0.91 0.01 60);
-  --ring: oklch(0.62 0.18 42);
+  --ring: oklch(0.55 0.19 42);
   /* Chart palette: saffron, emerald, amber, teal, rose */
-  --chart-1: oklch(0.62 0.18 42);
+  --chart-1: oklch(0.55 0.19 42);
   --chart-2: oklch(0.62 0.15 155);
   --chart-3: oklch(0.72 0.16 80);
   --chart-4: oklch(0.6 0.12 200);
@@ -84,12 +84,12 @@
   --chart-tooltip-text: oklch(0.18 0.02 30);
   --sidebar: oklch(0.18 0.02 30);
   --sidebar-foreground: oklch(0.96 0 0);
-  --sidebar-primary: oklch(0.62 0.18 42);
+  --sidebar-primary: oklch(0.55 0.19 42);
   --sidebar-primary-foreground: oklch(0.99 0 0);
   --sidebar-accent: oklch(0.25 0.02 30);
   --sidebar-accent-foreground: oklch(0.96 0 0);
   --sidebar-border: oklch(0.3 0.02 30);
-  --sidebar-ring: oklch(0.62 0.18 42);
+  --sidebar-ring: oklch(0.55 0.19 42);
 }
 
 .dark {
@@ -218,7 +218,7 @@
 
 /* Gradient utility */
 .bg-gradient-saffron {
-  background: linear-gradient(135deg, oklch(0.62 0.18 42) 0%, oklch(0.65 0.2 25) 100%);
+  background: linear-gradient(135deg, oklch(0.55 0.19 42) 0%, oklch(0.58 0.21 25) 100%);
 }
 .bg-gradient-emerald {
   background: linear-gradient(135deg, oklch(0.62 0.15 155) 0%, oklch(0.55 0.13 170) 100%);
