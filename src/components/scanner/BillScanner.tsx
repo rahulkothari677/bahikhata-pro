@@ -188,12 +188,12 @@ export function BillScanner() {
 
   const handleFile = async (file: File) => {
     sonnerToast.info('DEBUG: handleFile started', { description: `file: ${file.name}, size: ${file.size}, type: ${file.type}` })
-    // Subscription gating — requires Pro plan for AI scanner
-    if (!requireFeature('ai_scanner')) {
-      sonnerToast.error('DEBUG: requireFeature returned false — subscription blocked')
-      return
-    }
-    sonnerToast.info('DEBUG: Subscription OK')
+    // Subscription gating — TEMPORARILY DISABLED for debugging
+    // if (!requireFeature('ai_scanner')) {
+    //   sonnerToast.error('DEBUG: requireFeature returned false — subscription blocked')
+    //   return
+    // }
+    sonnerToast.info('DEBUG: Subscription check skipped (temporarily disabled)')
     if (!file) {
       sonnerToast.error('DEBUG: No file')
       return
