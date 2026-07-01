@@ -107,14 +107,47 @@ export function TransactionDetail() {
       gstin: setting?.gstin,
       address: setting?.address,
       state: setting?.state,
-    }).then((pdfBlob) => {
-      const url = URL.createObjectURL(pdfBlob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `invoice-${txn.invoiceNo || txn.id.slice(-6)}.pdf`
-      a.click()
-      URL.revokeObjectURL(url)
-      sonnerToast.success('Invoice PDF downloaded', { id: toastId })
+    }).then(async (pdfBlob) => {
+      // On mobile (Capacitor), use Share plugin to save/share the PDF
+      const { Capacitor } = await import('@capacitor/core')
+      if (Capacitor.isNativePlatform()) {
+        const { Filesystem, Directory, Encoding } = await import('@capacitor/filesystem')
+        const { Share } = await import('@capacitor/share')
+
+        const reader = new FileReader()
+        const base64Data = await new Promise<string>((resolve, reject) => {
+          reader.onload = () => {
+            const result = reader.result as string
+            resolve(result.split(',')[1])
+          }
+          reader.onerror = reject
+          reader.readAsDataURL(pdfBlob)
+        })
+
+        const fileName = `invoice-${txn.invoiceNo || txn.id.slice(-6)}.pdf`
+        const fileResult = await Filesystem.writeFile({
+          path: fileName,
+          data: base64Data,
+          directory: Directory.Cache,
+          recursive: true,
+        })
+
+        await Share.share({
+          title: fileName,
+          url: fileResult.uri,
+          dialogTitle: 'Save or Share PDF',
+        })
+        sonnerToast.success('PDF ready — save or share from the popup', { id: toastId })
+      } else {
+        // Desktop: direct download
+        const url = URL.createObjectURL(pdfBlob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `invoice-${txn.invoiceNo || txn.id.slice(-6)}.pdf`
+        a.click()
+        URL.revokeObjectURL(url)
+        sonnerToast.success('Invoice PDF downloaded', { id: toastId })
+      }
     }).catch((err) => {
       sonnerToast.error('Failed to generate PDF', {
         description: String(err?.message || err).slice(0, 200),

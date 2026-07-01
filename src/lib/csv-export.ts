@@ -39,32 +39,16 @@ export async function shareOrDownload(content: string, filename: string, mimeTyp
       const { Filesystem, Directory, Encoding } = await import('@capacitor/filesystem')
       const { Share } = await import('@capacitor/share')
 
-      // Step 1: Create a Blob from the string content (handles Unicode/₹ correctly)
-      const blob = new Blob([content], { type: mimeType })
-
-      // Step 2: Convert Blob to base64 using FileReader (same as PDF sharing)
-      const base64Data = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => {
-          const result = reader.result as string
-          const base64 = result.split(',')[1]
-          resolve(base64)
-        }
-        reader.onerror = reject
-        reader.readAsDataURL(blob)
-      })
-
-      // Step 3: Write to temp cache directory with base64 encoding
-      // recursive: true creates the directory if it doesn't exist
+      // Write as UTF-8 text (not base64) — avoids garbled output
       const fileResult = await Filesystem.writeFile({
         path: filename,
-        data: base64Data,
+        data: content,
         directory: Directory.Cache,
-        encoding: 'base64' as any,  // Type cast — Capacitor accepts 'base64' string at runtime
+        encoding: Encoding.UTF8,
         recursive: true,
       })
 
-      // Step 4: Open Android share sheet
+      // Open Android share sheet
       await Share.share({
         title: filename,
         url: fileResult.uri,
@@ -78,7 +62,7 @@ export async function shareOrDownload(content: string, filename: string, mimeTyp
   }
 
   // Web browser fallback (desktop)
-  const blob = new Blob([content], { type: 'application/octet-stream' })
+  const blob = new Blob([content], { type: mimeType })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
