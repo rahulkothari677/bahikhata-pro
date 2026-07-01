@@ -101,15 +101,41 @@ function nextDayReset(): Date {
 /**
  * Fetches the user's plan from the User table.
  * Falls back to 'free' if user not found or plan is invalid.
+ *
+ * FOUNDER MODE: If the user's email is in the FOUNDERS list, they get
+ * 'elite' plan (all features unlocked, highest limits). This lets the
+ * founder test everything without paying or running scripts.
  */
+export const FOUNDERS = [
+  'rahulkothari677@gmail.com',
+]
+
 export async function getUserPlan(userId: string): Promise<Plan> {
   const user = await db.user.findUnique({
     where: { id: userId },
-    select: { plan: true },
+    select: { plan: true, email: true },
   })
+
+  // Founder bypass — always elite, regardless of DB plan field
+  if (user?.email && FOUNDERS.includes(user.email.toLowerCase())) {
+    return 'elite'
+  }
+
   const plan = user?.plan as Plan
   if (plan === 'pro' || plan === 'elite') return plan
   return 'free'
+}
+
+/**
+ * Returns true if the user is a founder (gets unlimited access).
+ * Used to skip rate limiting entirely for founder accounts.
+ */
+export async function isFounder(userId: string): Promise<boolean> {
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: { email: true },
+  })
+  return !!user?.email && FOUNDERS.includes(user.email.toLowerCase())
 }
 
 /**
@@ -147,6 +173,21 @@ export async function checkUsage(
 ): Promise<UsageCheckResult> {
   const plan = await getUserPlan(userId)
   const limits = PLAN_LIMITS[plan]
+
+  // FOUNDER BYPASS: Founders get unlimited access — skip all rate limiting.
+  // Returns allowed=true with infinite remaining so the UI shows "∞" and
+  // the user never hits a paywall. This is for testing/dev only.
+  if (await isFounder(userId)) {
+    return {
+      allowed: true,
+      plan: 'elite',
+      used: 0,
+      limit: Infinity,
+      remaining: Infinity,
+      resetAt: nextDayReset(),
+      period: 'daily',
+    }
+  }
 
   // Non-AI types — only Free has limits, monthly DB counter
   if (type === 'transactions' || type === 'products') {
