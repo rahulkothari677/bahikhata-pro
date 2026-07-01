@@ -114,7 +114,7 @@ export function Inventory() {
           [...Array(4)].map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)
         ) : (
           <>
-        <Card className="shadow-card border-border/60">
+        <Card className="shadow-card border-border/60 border-t-4 border-t-amber-500">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <Package className="w-4 h-4 text-amber-600" />
@@ -123,7 +123,7 @@ export function Inventory() {
             <p className="text-xl font-bold">{products.length}</p>
           </CardContent>
         </Card>
-        <Card className="shadow-card border-border/60">
+        <Card className="shadow-card border-border/60 border-t-4 border-t-emerald-500">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <IndianRupee className="w-4 h-4 text-emerald-600" />
@@ -132,7 +132,7 @@ export function Inventory() {
             <p className="text-xl font-bold">{formatINR(totalStockValue)}</p>
           </CardContent>
         </Card>
-        <Card className="shadow-card border-border/60">
+        <Card className="shadow-card border-border/60 border-t-4 border-t-violet-500">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <TrendingUp className="w-4 h-4 text-violet-600" />
@@ -141,7 +141,7 @@ export function Inventory() {
             <p className="text-xl font-bold">{formatINR(totalPotentialProfit)}</p>
           </CardContent>
         </Card>
-        <Card className="shadow-card border-border/60">
+        <Card className="shadow-card border-border/60 border-t-4 border-t-rose-500">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <AlertTriangle className="w-4 h-4 text-rose-600" />

@@ -82,12 +82,12 @@ export function Reports() {
       return
     }
     try {
-      sonnerToast.loading('Exporting CSV...')
+      const toastId = sonnerToast.loading('Exporting CSV...')
       if (reportType === 'pl') await exportPLReportCSV(data, periodLabel)
       else if (reportType === 'gst') await exportGSTReportCSV(data, periodLabel)
       else if (reportType === 'stock') await exportStockReportCSV(data)
       else if (reportType === 'party') await exportPartyReportCSV(data)
-      sonnerToast.success('CSV ready — save or share from the popup')
+      sonnerToast.success('CSV ready — save or share from the popup', { id: toastId })
     } catch (err: any) {
       sonnerToast.error('CSV export failed', {
         description: String(err?.message || err).slice(0, 200),
@@ -102,15 +102,17 @@ export function Reports() {
 
   const handleTallyExport = async () => {
     try {
-      sonnerToast.loading('Exporting Tally XML...')
-      // Fetch transactions for Tally export
+      const toastId = sonnerToast.loading('Exporting Tally XML...')
       const r = await offlineFetch(`/api/transactions?limit=500`)
       const txnData = await r.json()
       const setting = (await offlineFetch('/api/settings').then(r => r.json())).setting
       await exportToTally(txnData.transactions || [], setting, 'all')
-      sonnerToast.success('Tally XML ready — save or share from the popup')
-    } catch {
-      sonnerToast.error('Failed to export Tally XML')
+      sonnerToast.success('Tally XML ready — save or share from the popup', { id: toastId })
+    } catch (err: any) {
+      sonnerToast.error('Failed to export Tally XML', {
+        description: String(err?.message || err).slice(0, 200),
+        duration: 10000,
+      })
     }
   }
 

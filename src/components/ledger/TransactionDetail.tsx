@@ -98,8 +98,7 @@ export function TransactionDetail() {
 
   const handleDownload = () => {
     if (!txn) return
-    sonnerToast.loading('Generating PDF...')
-    // Generate professional PDF (async — jsPDF is dynamically imported)
+    const toastId = sonnerToast.loading('Generating PDF...')
     generateInvoicePDF(txn, {
       shopName: setting?.shopName || 'My Shop',
       ownerName: setting?.ownerName,
@@ -115,18 +114,22 @@ export function TransactionDetail() {
       a.download = `invoice-${txn.invoiceNo || txn.id.slice(-6)}.pdf`
       a.click()
       URL.revokeObjectURL(url)
-      sonnerToast.success('Invoice PDF downloaded')
-    }).catch(() => {
-      sonnerToast.error('Failed to generate PDF')
+      sonnerToast.success('Invoice PDF downloaded', { id: toastId })
+    }).catch((err) => {
+      sonnerToast.error('Failed to generate PDF', {
+        description: String(err?.message || err).slice(0, 200),
+        id: toastId,
+        duration: 8000,
+      })
     })
   }
 
   const handleWhatsAppShare = async () => {
     if (!txn) return
     haptic.click()
+    const toastId = sonnerToast.loading('Generating PDF...')
 
     try {
-      // Generate PDF invoice (async — jsPDF is dynamically imported)
       const pdfBlob = await generateInvoicePDF(txn, {
         shopName: setting?.shopName || 'My Shop',
         ownerName: setting?.ownerName,
@@ -143,16 +146,13 @@ export function TransactionDetail() {
       // Check if running on Capacitor (native app)
       const { Capacitor } = await import('@capacitor/core')
       if (Capacitor.isNativePlatform()) {
-        // Native: use Capacitor Share plugin (supports file sharing)
         const { Share } = await import('@capacitor/share')
         const { Filesystem, Directory } = await import('@capacitor/filesystem')
 
-        // Convert blob to base64
         const reader = new FileReader()
         const base64Promise = new Promise<string>((resolve, reject) => {
           reader.onload = () => {
             const result = reader.result as string
-            // Remove data URL prefix
             const base64 = result.split(',')[1]
             resolve(base64)
           }
@@ -161,41 +161,36 @@ export function TransactionDetail() {
         })
         const base64Data = await base64Promise
 
-        // Write file to temp directory
         const fileResult = await Filesystem.writeFile({
           path: fileName,
           data: base64Data,
           directory: Directory.Cache,
         })
 
-        // Share the file
         await Share.share({
           title: `Invoice ${txn.invoiceNo || ''}`,
           text: shareText,
           url: fileResult.uri,
           dialogTitle: 'Send Invoice via',
         })
-        sonnerToast.success('Invoice shared!')
+        sonnerToast.success('Invoice shared!', { id: toastId })
       } else if (navigator.share && navigator.canShare && navigator.canShare({ files: [new File([pdfBlob], fileName, { type: 'application/pdf' })] })) {
-        // Web browser with file share support
         const file = new File([pdfBlob], fileName, { type: 'application/pdf' })
         await navigator.share({
           files: [file],
           title: `Invoice ${txn.invoiceNo || ''}`,
           text: shareText,
         })
-        sonnerToast.success('Invoice shared!')
+        sonnerToast.success('Invoice shared!', { id: toastId })
       } else {
-        // Fallback: download PDF + open WhatsApp text
         const url = URL.createObjectURL(pdfBlob)
         const a = document.createElement('a')
         a.href = url
         a.download = fileName
         a.click()
         URL.revokeObjectURL(url)
-        sonnerToast.success('Invoice PDF downloaded')
+        sonnerToast.success('Invoice PDF downloaded', { id: toastId })
 
-        // Open WhatsApp with text message
         const r = await offlineFetch('/api/whatsapp-invoice', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -207,8 +202,15 @@ export function TransactionDetail() {
         }
       }
     } catch (err: any) {
-      if (err?.name === 'AbortError') return
-      sonnerToast.error('Failed to share invoice')
+      if (err?.name === 'AbortError') {
+        sonnerToast.dismiss(toastId)
+        return
+      }
+      sonnerToast.error('Failed to share invoice', {
+        description: String(err?.message || err).slice(0, 200),
+        id: toastId,
+        duration: 8000,
+      })
     }
   }
 
