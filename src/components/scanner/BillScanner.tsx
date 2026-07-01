@@ -790,98 +790,89 @@ export function BillScanner() {
               </div>
             </CardHeader>
             <CardContent className="px-2">
-              <div className="space-y-1">
+              <div className="space-y-2">
                 {scanned.items.map((item: any, i: number) => {
-                  const isCompact = scanned.items.length > 8
                   return (
-                    <div key={i} className="group rounded-lg bg-muted/20 hover:bg-muted/40 transition px-2 py-1.5">
-                      {/* Row 1: Number + Name + Total + Delete — full width, no labels */}
-                      <div className="flex items-center gap-1.5">
-                        <span className={cn(
-                          'font-bold text-muted-foreground flex-shrink-0 w-4 text-center',
-                          isCompact ? 'text-[10px]' : 'text-xs'
-                        )}>{i + 1}</span>
+                    <div key={i} className="group rounded-lg bg-muted/20 hover:bg-muted/40 transition p-2.5 border border-transparent hover:border-border/50">
+                      {/* Row 1: Item number + Product name (full width) + Delete button */}
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="font-bold text-muted-foreground flex-shrink-0 w-5 h-5 rounded-full bg-primary/10 text-primary text-[10px] flex items-center justify-center">
+                          {i + 1}
+                        </span>
                         <input
                           value={item.name}
                           onChange={(e) => updateItem(i, 'name', e.target.value)}
-                          className={cn(
-                            'flex-1 min-w-0 bg-transparent border border-transparent rounded font-medium transition',
-                            isCompact ? 'px-1 py-0.5 text-xs' : 'px-1.5 py-1 text-sm',
-                            'focus:bg-background focus:border-border'
-                          )}
+                          className="flex-1 min-w-0 bg-transparent border border-transparent rounded font-medium text-sm transition px-1 py-1 focus:bg-background focus:border-border focus:px-2"
                           placeholder="Product name"
                         />
                         {/* Confidence dot — green=high, amber=medium, red=low */}
                         {item.confidence !== undefined && (
                           <span
                             className={cn(
-                              'w-1.5 h-1.5 rounded-full flex-shrink-0',
+                              'w-2 h-2 rounded-full flex-shrink-0',
                               item.confidence >= 0.8 ? 'bg-emerald-500' :
                               item.confidence >= 0.5 ? 'bg-amber-500' : 'bg-rose-500'
                             )}
                             title={`AI confidence: ${Math.round(item.confidence * 100)}%`}
                           />
                         )}
-                        <span className={cn(
-                          'font-bold tabular-nums flex-shrink-0',
-                          isCompact ? 'text-xs' : 'text-sm'
-                        )}>{formatINR(item.total || 0)}</span>
+                        <span className="font-bold tabular-nums flex-shrink-0 text-sm text-primary">
+                          {formatINR(item.total || 0)}
+                        </span>
                         <button
-                          className="p-1 rounded text-muted-foreground hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition flex-shrink-0"
+                          className="p-1.5 rounded text-muted-foreground hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition flex-shrink-0"
                           onClick={() => removeItem(i)}
+                          title="Remove this item"
                         >
-                          <Trash2 className={isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
-                      {/* Row 2: Qty + Unit + Price + GST — fills FULL width, no labels, bigger inputs */}
-                      <div className={cn(
-                        'flex items-center gap-1 mt-1',
-                        isCompact ? 'pl-5' : 'pl-5.5'
-                      )}>
-                        {/* Qty — flex-1 so it expands to fill available space */}
-                        <input
-                          type="number"
-                          value={item.quantity}
-                          onChange={(e) => updateItem(i, 'quantity', Number(e.target.value))}
-                          className={cn(
-                            'flex-1 min-w-0 bg-background border border-border rounded tabular-nums focus:ring-1 focus:ring-primary text-center',
-                            isCompact ? 'px-1 py-0.5 text-xs' : 'px-1 py-1.5 text-sm'
-                          )}
-                        />
-                        {/* Unit — auto width, just fits content */}
-                        <select
-                          value={item.unit || 'pcs'}
-                          onChange={(e) => updateItem(i, 'unit', e.target.value)}
-                          className={cn(
-                            'bg-background border border-border rounded focus:ring-1 focus:ring-primary flex-shrink-0',
-                            isCompact ? 'px-0.5 py-0.5 text-xs' : 'px-1 py-1.5 text-sm'
-                          )}
-                        >
-                          {['pcs', 'kg', 'gm', 'ltr', 'ml', 'box', 'dozen', 'packet', 'set'].map(u => <option key={u} value={u}>{u}</option>)}
-                        </select>
+                      {/* Row 2: Qty + Unit + Price + GST — labeled, evenly spaced, full width */}
+                      <div className="flex items-center gap-1.5 pl-7">
+                        {/* Qty */}
+                        <div className="flex-1 min-w-0">
+                          <label className="text-[9px] text-muted-foreground uppercase tracking-wide block mb-0.5">Qty</label>
+                          <input
+                            type="number"
+                            value={item.quantity}
+                            onChange={(e) => updateItem(i, 'quantity', Number(e.target.value))}
+                            className="w-full min-w-0 bg-background border border-border rounded tabular-nums focus:ring-1 focus:ring-primary text-center text-sm px-1 py-1.5"
+                          />
+                        </div>
+                        {/* Unit */}
+                        <div className="flex-shrink-0 w-14">
+                          <label className="text-[9px] text-muted-foreground uppercase tracking-wide block mb-0.5">Unit</label>
+                          <select
+                            value={item.unit || 'pcs'}
+                            onChange={(e) => updateItem(i, 'unit', e.target.value)}
+                            className="w-full bg-background border border-border rounded focus:ring-1 focus:ring-primary text-sm px-1 py-1.5"
+                          >
+                            {['pcs', 'kg', 'gm', 'ltr', 'ml', 'box', 'dozen', 'packet', 'set'].map(u => <option key={u} value={u}>{u}</option>)}
+                          </select>
+                        </div>
                         {/* × separator */}
-                        <span className={cn('text-muted-foreground flex-shrink-0', isCompact ? 'text-[10px]' : 'text-xs')}>×</span>
-                        {/* Price — flex-1 so it expands */}
-                        <input
-                          type="number"
-                          value={item.unitPrice}
-                          onChange={(e) => updateItem(i, 'unitPrice', Number(e.target.value))}
-                          className={cn(
-                            'flex-1 min-w-0 bg-background border border-border rounded tabular-nums focus:ring-1 focus:ring-primary text-center',
-                            isCompact ? 'px-1 py-0.5 text-xs' : 'px-1 py-1.5 text-sm'
-                          )}
-                        />
-                        {/* GST — auto width */}
-                        <select
-                          value={item.gstRate}
-                          onChange={(e) => updateItem(i, 'gstRate', Number(e.target.value))}
-                          className={cn(
-                            'bg-background border border-border rounded focus:ring-1 focus:ring-primary flex-shrink-0',
-                            isCompact ? 'px-0.5 py-0.5 text-xs' : 'px-1 py-1.5 text-sm'
-                          )}
-                        >
-                          {[0, 5, 12, 18, 28].map(r => <option key={r} value={r}>{r}%</option>)}
-                        </select>
+                        <span className="text-muted-foreground flex-shrink-0 text-xs self-end pb-2">×</span>
+                        {/* Price */}
+                        <div className="flex-1 min-w-0">
+                          <label className="text-[9px] text-muted-foreground uppercase tracking-wide block mb-0.5">Price ₹</label>
+                          <input
+                            type="number"
+                            value={item.unitPrice}
+                            onChange={(e) => updateItem(i, 'unitPrice', Number(e.target.value))}
+                            className="w-full min-w-0 bg-background border border-border rounded tabular-nums focus:ring-1 focus:ring-primary text-center text-sm px-1 py-1.5"
+                          />
+                        </div>
+                        {/* GST */}
+                        <div className="flex-shrink-0 w-14">
+                          <label className="text-[9px] text-muted-foreground uppercase tracking-wide block mb-0.5">GST</label>
+                          <select
+                            value={item.gstRate}
+                            onChange={(e) => updateItem(i, 'gstRate', Number(e.target.value))}
+                            className="w-full bg-background border border-border rounded focus:ring-1 focus:ring-primary text-sm px-1 py-1.5"
+                          >
+                            {[0, 5, 12, 18, 28].map(r => <option key={r} value={r}>{r}%</option>)}
+                          </select>
+                        </div>
                       </div>
                     </div>
                   )
