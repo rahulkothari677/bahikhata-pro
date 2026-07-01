@@ -314,12 +314,86 @@ Return JSON only, no commentary.`
         model,
         errText: errText.slice(0, 500),
       })
-      // Build a detailed error message that will show in the toast
+
+      // If VLM_API_KEY failed (e.g., 429 quota), try Groq as fallback
+      const groqKey = process.env.GROQ_API_KEY
+      if (groqKey && response.status === 429) {
+        console.warn('[voice-parse] VLM quota exceeded (429), falling back to Groq...')
+        try {
+          const groqStart = Date.now()
+          const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${groqKey}`,
+            },
+            body: JSON.stringify({
+              model: 'llama-3.3-70b-versatile',
+              messages: [
+                { role: 'system', content: systemPrompt },
+                { role: 'user', content: transcript },
+              ],
+              max_tokens: 1000,
+              temperature: 0.1,
+            }),
+          })
+          const groqDurationMs = Date.now() - groqStart
+
+          if (groqResponse.ok) {
+            const groqData = await groqResponse.json()
+            const groqContent = groqData.choices?.[0]?.message?.content || ''
+            const groqInputTokens = groqData.usage?.prompt_tokens || 0
+            const groqOutputTokens = groqData.usage?.completion_tokens || 0
+            const groqTotalTokens = groqData.usage?.total_tokens || (groqInputTokens + groqOutputTokens)
+
+            let groqParsed: any = null
+            try { groqParsed = JSON.parse(groqContent) } catch {
+              const jsonMatch = groqContent.match(/```(?:json)?\s*([\s\S]*?)```/)
+              if (jsonMatch) { try { groqParsed = JSON.parse(jsonMatch[1]) } catch {} }
+              if (!groqParsed) {
+                const objMatch = groqContent.match(/\{[\s\S]*\}/)
+                if (objMatch) { try { groqParsed = JSON.parse(objMatch[0]) } catch {} }
+              }
+            }
+
+            if (groqParsed) {
+              if (!groqParsed.items) groqParsed.items = []
+              groqParsed.items = groqParsed.items.map((item: any) => ({
+                name: String(item.name || 'Unknown Product'),
+                quantity: Number(item.quantity) || 1,
+                unit: String(item.unit || 'pcs'),
+                unitPrice: Number(item.unitPrice) || 0,
+              }))
+
+              await incrementUsage(userId, 'voiceParses')
+              const { calculateCostInr } = await import('@/lib/ai-pricing')
+              const { db } = await import('@/lib/db')
+              const costInr = calculateCostInr('groq', 'llama-3.3-70b-versatile', groqInputTokens, groqOutputTokens)
+              db.aiUsageLog.create({
+                data: {
+                  userId, feature: 'voice-parse', provider: 'groq', model: 'llama-3.3-70b-versatile',
+                  inputTokens: groqInputTokens, outputTokens: groqOutputTokens, totalTokens: groqTotalTokens,
+                  costInr, durationMs: groqDurationMs, success: true,
+                },
+              }).catch(() => {})
+
+              return NextResponse.json({
+                success: true,
+                transaction: groqParsed,
+                _source: 'llm',
+                aiUsage: { provider: 'groq', model: 'llama-3.3-70b-versatile', inputTokens: groqInputTokens, outputTokens: groqOutputTokens, totalTokens: groqTotalTokens, costInr: Math.round(costInr * 100) / 100, durationMs: groqDurationMs },
+              })
+            }
+          }
+        } catch (groqErr) {
+          console.error('[voice-parse] Groq fallback also failed:', groqErr)
+        }
+      }
+
       const errorDetail = errText
         ? `HTTP ${response.status} ${response.statusText}: ${errText.slice(0, 300)}`
         : `HTTP ${response.status} ${response.statusText} (provider: ${baseUrl.includes('generativelanguage') ? 'Gemini' : baseUrl.includes('groq') ? 'Groq' : 'OpenAI'}, model: ${model}). Provider returned empty error body — check if the model name is valid for this provider.`
 
-      // Log the failed attempt
       ;(await import('@/lib/db')).db.aiUsageLog.create({
         data: {
           userId,

@@ -338,8 +338,9 @@ interface FallbackResult {
 
 async function callWithFallback(prompt: string, imageSource: string): Promise<FallbackResult> {
   // Build the fallback chain in priority order.
-  // 1. If VLM_API_KEY is set, use it as the SOLE provider (legacy/single-provider mode).
-  // 2. Otherwise, try Gemini → OpenAI → Groq in that order.
+  // 1. If VLM_API_KEY is set, try it FIRST. If it fails (e.g., 429 quota),
+  //    fall through to the multi-provider chain.
+  // 2. Try Gemini → OpenAI → Groq in that order.
   if (process.env.VLM_API_KEY) {
     const result = await callSingleProvider(
       {
@@ -351,17 +352,21 @@ async function callWithFallback(prompt: string, imageSource: string): Promise<Fa
       prompt,
       imageSource,
     )
-    return {
-      success: result.success,
-      content: result.content,
-      error: result.error,
-      providerUsed: 'vlm',
-      modelUsed: process.env.VLM_MODEL || 'gpt-4o-mini',
-      inputTokens: result.inputTokens,
-      outputTokens: result.outputTokens,
-      totalTokens: result.totalTokens,
-      durationMs: result.durationMs,
+    if (result.success) {
+      return {
+        success: true,
+        content: result.content,
+        providerUsed: 'vlm',
+        modelUsed: process.env.VLM_MODEL || 'gpt-4o-mini',
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
+        totalTokens: result.totalTokens,
+        durationMs: result.durationMs,
+      }
     }
+    // VLM_API_KEY failed (e.g., 429 quota exceeded) — fall through to
+    // the multi-provider chain below (Gemini → OpenAI → Groq)
+    console.warn(`[scan-bill] VLM provider failed (${result.error?.slice(0, 100)}), trying fallback chain...`)
   }
 
   const chain: FallbackProvider[] = [
