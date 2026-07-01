@@ -1,17 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUserId } from '@/lib/get-auth'
 import { rateLimit, rateLimitedResponse } from '@/lib/rate-limit'
+import { checkUsage, incrementUsage } from '@/lib/usage-limits'
 
 // POST /api/voice-parse - parse voice transcript into transaction data
 // Rate limited: 50 per user per day (same as scan-bill — protects Groq quota)
+// Tier limits: free=5/mo, pro=150/mo (FUP), elite=500/mo (FUP)
 export async function POST(req: NextRequest) {
   try {
     const { userId, error } = await getAuthUserId()
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    // Rate limit by user
+    // Rate limit by user (daily anti-abuse)
     const rl = rateLimit(`voice:user:${userId}`, { limit: 50, windowSec: 86400 })
     if (!rl.success) return rateLimitedResponse(rl)
+
+    // Tier-based monthly quota check (free=5, pro=150, elite=500 per month).
+    // Check without incrementing — only increment after successful parse so
+    // users don't lose credits on failed voice entries.
+    const usageCheck = await checkUsage(userId, 'voiceParses')
+    if (!usageCheck.allowed) {
+      return NextResponse.json({
+        error: 'quota_exceeded',
+        message: usageCheck.upgradeMessage,
+        used: usageCheck.used,
+        limit: usageCheck.limit,
+        remaining: usageCheck.remaining,
+        resetAt: usageCheck.resetAt.toISOString(),
+        plan: usageCheck.plan,
+      }, { status: 402 })
+    }
 
     const { transcript } = await req.json()
 
@@ -126,6 +144,9 @@ Return JSON only, no commentary.`
       unit: String(item.unit || 'pcs'),
       unitPrice: Number(item.unitPrice) || 0,
     }))
+
+    // Record successful voice parse in usage tracking (after AI succeeded).
+    await incrementUsage(userId, 'voiceParses')
 
     return NextResponse.json({ success: true, transaction: parsed })
   } catch (error) {

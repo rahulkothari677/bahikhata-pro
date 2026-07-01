@@ -2,19 +2,20 @@
 
 /**
  * PaywallModal — shows when a user tries to access a gated feature
- * without the required plan.
+ * without the required plan, OR when they've hit their monthly quota.
  *
  * Shows:
  * - The feature name they tried to access
  * - Which plan is required (Pro or Elite)
+ * - Current usage ("You've used 5/5 free scans this month")
  * - What else is included in that plan
  * - Upgrade button (links to Pricing page)
  */
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
-import { Crown, Lock, Check, Sparkles } from 'lucide-react'
-import { FEATURE_LABELS, type GatedFeature } from '@/hooks/use-subscription'
+import { Crown, Lock, Check, Sparkles, TrendingUp } from 'lucide-react'
+import { FEATURE_LABELS, type GatedFeature, useSubscription } from '@/hooks/use-subscription'
 import { useAppStore } from '@/store/app-store'
 
 export function PaywallModal({
@@ -27,12 +28,17 @@ export function PaywallModal({
   onClose: () => void
 }) {
   const { setView } = useAppStore()
+  const { usage, plan: currentPlan } = useSubscription()
 
   if (!feature) return null
 
   const info = FEATURE_LABELS[feature]
   const requiredPlan = info.plan
   const isElite = requiredPlan === 'elite'
+
+  // Determine which usage stat to show based on the feature
+  const usageStat = feature === 'ai_scanner' ? usage?.aiScans : feature === 'voice_entry' ? usage?.voiceEntries : null
+  const usageLabel = feature === 'ai_scanner' ? 'AI scans' : feature === 'voice_entry' ? 'voice entries' : ''
 
   const planFeatures = isElite
     ? ['Everything in Pro', 'Smart AI Insights', 'Advanced Reports', 'Staff Accounts', 'Priority Support']
@@ -57,6 +63,47 @@ export function PaywallModal({
           </p>
         </DialogHeader>
 
+        {/* Usage stats — only show if the user has a relevant quota */}
+        {usageStat && (
+          <div className="rounded-xl bg-muted/50 border border-border p-3 my-2">
+            <div className="flex items-center gap-2 mb-1.5">
+              <TrendingUp className="w-4 h-4 text-muted-foreground" />
+              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                Your usage this month
+              </p>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-foreground">
+                {usageStat.used} / {usageStat.limit === Infinity ? '∞' : usageStat.limit} {usageLabel}
+              </span>
+              <span className={`font-bold ${usageStat.remaining === 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                {usageStat.remaining === 0 ? 'Limit reached' : `${usageStat.remaining} left`}
+              </span>
+            </div>
+            {/* Progress bar */}
+            <div className="mt-2 h-2 bg-background rounded-full overflow-hidden">
+              <div
+                className={`h-full transition-all ${
+                  usageStat.remaining === 0
+                    ? 'bg-red-500'
+                    : usageStat.used / usageStat.limit > 0.8
+                    ? 'bg-amber-500'
+                    : 'bg-emerald-500'
+                }`}
+                style={{
+                  width: usageStat.limit === Infinity ? '20%' : `${Math.min(100, (usageStat.used / usageStat.limit) * 100)}%`,
+                }}
+              />
+            </div>
+            {usageStat.remaining === 0 && (
+              <p className="text-[11px] text-muted-foreground mt-1.5">
+                Resets on {new Date(usageStat.resetAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}.
+                Upgrade now to get more {usageLabel} immediately.
+              </p>
+            )}
+          </div>
+        )}
+
         <div className="rounded-xl bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/20 border border-amber-200 dark:border-amber-900/40 p-4 my-2">
           <div className="flex items-center gap-2 mb-3">
             <Crown className="w-5 h-5 text-amber-600" />
@@ -75,7 +122,7 @@ export function PaywallModal({
         <DialogFooter className="flex-col gap-2">
           <Button onClick={handleUpgrade} className="w-full bg-gradient-to-r from-amber-500 to-orange-600 gap-2 shadow-lg">
             <Crown className="w-4 h-4" />
-            Upgrade to {isElite ? 'Elite' : 'Pro'}
+            {currentPlan === 'free' ? `Upgrade to ${isElite ? 'Elite' : 'Pro'}` : 'Manage Subscription'}
           </Button>
           <Button variant="ghost" onClick={onClose} className="w-full text-muted-foreground">
             Maybe later

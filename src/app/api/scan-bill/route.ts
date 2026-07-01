@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUserId } from '@/lib/get-auth'
 import { rateLimit, getClientIP, rateLimitedResponse } from '@/lib/rate-limit'
+import { checkUsage, incrementUsage } from '@/lib/usage-limits'
 
 // POST /api/scan-bill - uses VLM to extract bill data from image
 // Supports two modes:
@@ -9,6 +10,7 @@ import { rateLimit, getClientIP, rateLimitedResponse } from '@/lib/rate-limit'
 //
 // Rate limited: 30 scans per user per day (protects Groq API quota)
 // Plus 10 scans per IP per hour (prevents account sharing abuse)
+// Tier limits: free=5/mo, pro=150/mo (FUP), elite=500/mo (FUP)
 export async function POST(req: NextRequest) {
   try {
     const { userId, error } = await getAuthUserId()
@@ -22,6 +24,22 @@ export async function POST(req: NextRequest) {
     const ip = getClientIP(req)
     const ipRL = rateLimit(`scan:ip:${ip}`, { limit: 10, windowSec: 3600 })
     if (!ipRL.success) return rateLimitedResponse(ipRL)
+
+    // Tier-based monthly quota check (free=5, pro=150, elite=500 per month).
+    // We check WITHOUT incrementing first — only increment after the AI call
+    // succeeds. This way users don't lose credits when the scan fails.
+    const usageCheck = await checkUsage(userId, 'aiScans')
+    if (!usageCheck.allowed) {
+      return NextResponse.json({
+        error: 'quota_exceeded',
+        message: usageCheck.upgradeMessage,
+        used: usageCheck.used,
+        limit: usageCheck.limit,
+        remaining: usageCheck.remaining,
+        resetAt: usageCheck.resetAt.toISOString(),
+        plan: usageCheck.plan,
+      }, { status: 402 })
+    }
 
     const body = await req.json()
     const { imageBase64, imageUrl, billType = 'purchase' } = body
@@ -201,6 +219,10 @@ Return JSON only, no commentary, no markdown formatting.`
         ? parsed.items.reduce((s: number, i: any) => s + (i.confidence || 0.8), 0) / parsed.items.length
         : 0.5
     }
+
+    // Record successful scan in usage tracking (after AI succeeded, so users
+    // don't lose credits on failed scans).
+    await incrementUsage(userId, 'aiScans')
 
     return NextResponse.json({ success: true, bill: parsed })
   } catch (error) {

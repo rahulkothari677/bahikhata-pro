@@ -7,6 +7,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { toast as sonnerToast } from 'sonner'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { useToast } from '@/hooks/use-toast'
+import { useSubscription } from '@/hooks/use-subscription'
 import { haptic } from '@/lib/haptic'
 import { motion, AnimatePresence } from 'framer-motion'
 import { cn } from '@/lib/utils'
@@ -49,6 +50,7 @@ export function VoiceEntry({ onTransactionParsed, products = [] }: VoiceEntryPro
   const processedFinalsRef = useRef<Set<number>>(new Set())
   const isRecordingRef = useRef(false)
   const { toast } = useToast()
+  const { requireFeature } = useSubscription()
 
   useEffect(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
@@ -135,6 +137,12 @@ export function VoiceEntry({ onTransactionParsed, products = [] }: VoiceEntryPro
       return
     }
 
+    // Subscription gating — free users get 5 voice entries/month, Pro gets 150, Elite gets 500.
+    // The hook shows the PaywallModal automatically if the feature is gated.
+    if (!requireFeature('voice_entry')) {
+      return
+    }
+
     setProcessing(true)
     try {
       const r = await offlineFetch('/api/voice-parse', {
@@ -142,9 +150,15 @@ export function VoiceEntry({ onTransactionParsed, products = [] }: VoiceEntryPro
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ transcript: fullTranscript, lang }),
       })
+
+      // Handle 402 quota exceeded — show upgrade prompt instead of generic error
       if (r.status === 402) {
-        const errData = await r.json().catch(() => ({}))
-        toast({ title: 'Pro Feature', description: errData.message || 'Voice entry requires Pro plan', variant: 'destructive' })
+        const quotaData = await r.json().catch(() => ({}))
+        sonnerToast.error('Voice entry limit reached', {
+          description: quotaData.message || 'Upgrade to Pro for more voice entries',
+          duration: 6000,
+        })
+        requireFeature('voice_entry')
         return
       }
       const data = await r.json()

@@ -101,6 +101,9 @@ export function useSubscription() {
 
   const plan: Plan = (data?.current?.plan as Plan) || 'free'
 
+  // Usage info — null if not yet loaded
+  const usage = data?.usage ?? null
+
   const canUse = useCallback((feature: GatedFeature): boolean => {
     const allowed = PLAN_FEATURES[plan] || []
     return allowed.includes(feature)
@@ -130,6 +133,7 @@ export function useSubscription() {
     paywallFeature,
     closePaywall,
     refresh,
+    usage,
     isFree: plan === 'free',
     isPro: plan === 'pro',
     isElite: plan === 'elite',

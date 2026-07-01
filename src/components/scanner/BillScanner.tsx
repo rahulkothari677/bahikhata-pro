@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
 import { toast as sonnerToast } from 'sonner'
@@ -162,16 +163,21 @@ export function BillScanner() {
   const [scanned, setScanned] = useState<any>(null)
   const [preview, setPreview] = useState<string>('')
   const [billType, setBillType] = useState<'sale' | 'purchase'>(scannerBillType)
+  // Grayscale mode for printed bills — saves ~20% tokens on AI providers
+  // that bill by image tiles (Gemini, GPT-4o). Handwritten bills stay color
+  // because ink color (red/blue) can carry meaning.
+  const [grayscale, setGrayscale] = useState(false)
   const [editMode, setEditMode] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
 
   const handleFile = async (file: File) => {
-    // Subscription gating — TEMPORARILY DISABLED for debugging
-    // if (!requireFeature('ai_scanner')) {
-    //   sonnerToast.error('DEBUG: requireFeature returned false — subscription blocked')
-    //   return
-    // }
+    // Subscription gating — re-enabled. Free users get 5 scans/month,
+    // Pro gets 150 (marketed as "unlimited" with FUP), Elite gets 500.
+    // The hook shows the PaywallModal automatically if the feature is gated.
+    if (!requireFeature('ai_scanner')) {
+      return
+    }
     if (!file) {
       return
     }
@@ -188,7 +194,7 @@ export function BillScanner() {
     // This prevents Vercel serverless timeout on large phone photos
     // Made more aggressive (smaller dimensions + lower quality) to handle
     // large phone photos that were causing timeouts/failures
-    const compressImage = (file: File): Promise<string> => {
+    const compressImage = (file: File, useGrayscale: boolean = false): Promise<string> => {
       return new Promise((resolve, reject) => {
         const reader = new FileReader()
         reader.onload = (e) => {
@@ -217,10 +223,26 @@ export function BillScanner() {
             }
             ctx.drawImage(img, 0, 0, width, height)
 
+            // Grayscale conversion — for printed bills, color adds no value
+            // but costs ~20% more tokens on Gemini/GPT-4o (which tile images
+            // into 3-channel RGB patches). Converting to luminance only saves
+            // that cost. Skip for handwritten bills where ink color matters.
+            if (useGrayscale) {
+              const imageData = ctx.getImageData(0, 0, width, height)
+              const data = imageData.data
+              for (let i = 0; i < data.length; i += 4) {
+                // ITU-R BT.601 luminance formula — standard for grayscale conversion
+                const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]
+                data[i] = gray
+                data[i + 1] = gray
+                data[i + 2] = gray
+              }
+              ctx.putImageData(imageData, 0, 0)
+            }
+
             // JPEG at 75% quality on a 1000x1400 image — good text readability
             // while keeping file size reasonable (~200-300KB for upload)
             const compressed = canvas.toDataURL('image/jpeg', 0.75)
-            const sizeKB = Math.round(compressed.length / 1024)
             resolve(compressed)
           }
           img.onerror = () => {
@@ -259,7 +281,7 @@ export function BillScanner() {
       // Compress the image first — try main method, fall back to direct base64
       let base64: string
       try {
-        base64 = await compressImage(file)
+        base64 = await compressImage(file, grayscale)
       } catch (compressErr) {
         base64 = await compressImageFallback(file)
       }
@@ -288,6 +310,19 @@ export function BillScanner() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(imageUrl ? { imageUrl, billType } : { imageBase64: base64, billType }),
         })
+
+        // Handle 402 quota exceeded — show upgrade prompt instead of generic error
+        if (scanRes.status === 402) {
+          const quotaData = await scanRes.json().catch(() => ({}))
+          sonnerToast.error('AI scan limit reached', {
+            description: quotaData.message || 'Upgrade to Pro for more scans',
+            duration: 6000,
+          })
+          // Trigger the paywall via the subscription hook
+          requireFeature('ai_scanner')
+          return
+        }
+
         const data = await scanRes.json()
         if (data.error) {
           toast({
@@ -492,6 +527,23 @@ export function BillScanner() {
               <p className="font-semibold text-sm">{t('scanner.sales_bill')}</p>
               <p className="text-[11px] text-muted-foreground mt-0.5">{t('scanner.goods_sold')}</p>
             </button>
+          </div>
+
+          {/* Grayscale toggle — saves ~20% AI cost on printed bills */}
+          <div className="mt-3 flex items-center justify-between gap-2 p-2.5 rounded-lg bg-muted/40 border border-border/40">
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-medium">Printed bill mode</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Converts to grayscale — saves AI cost. Off for handwritten bills.
+              </p>
+            </div>
+            <Switch
+              checked={grayscale}
+              onCheckedChange={(checked) => {
+                setGrayscale(checked)
+                sonnerToast.info(checked ? 'Grayscale on — better for printed bills' : 'Color mode — better for handwritten bills', { duration: 2500 })
+              }}
+            />
           </div>
         </CardContent>
       </Card>

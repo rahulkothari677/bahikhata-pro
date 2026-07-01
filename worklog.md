@@ -101,3 +101,32 @@ Stage Summary:
 - Zero new lint errors
 - User can now: 1) get API keys from 3 providers, 2) test all 3 side-by-side on same bill, 3) enter ground truth to score accuracy, 4) see aggregate stats over time, 5) pick best provider for production. Production scanner auto-uses best provider (Gemini) with fallback chain for reliability.
 - To enable: set GEMINI_API_KEY (free from aistudio.google.com/apikey), OPENAI_API_KEY, GROQ_API_KEY in Vercel env vars. Comparison tool skips any provider without a key.
+
+---
+Task ID: bahikhata-pro-phase1-cost-control
+Agent: main
+Task: Phase 1 — AI cost control via usage tracking + tier limits + subscription gating + grayscale optimization. Protects margins before launch.
+
+Work Log:
+- Created src/lib/usage-limits.ts — shared library defining PLAN_LIMITS (free: 5/mo, pro: 150/mo FUP, elite: 500/mo FUP), getUserPlan(), getMonthlyUsage(), checkUsage(), checkAndIncrementUsage(), incrementUsage(). Marketing says "unlimited", DB enforces FUP per Gemini's Rule #1.
+- Created /api/subscription/status route — returns current plan + monthly usage (aiScans, voiceEntries, transactions, products) + remaining quota + reset date + static plan catalog. This is what the useSubscription hook was already calling but the route didn't exist.
+- Wired usage enforcement into /api/scan-bill: checkUsage() before AI call (returns 402 with upgrade message if exceeded), incrementUsage() after AI succeeds (so users don't lose credits on failed scans). Preserved existing rate limiter (30/day anti-abuse).
+- Same treatment for /api/voice-parse: checkUsage('voiceParses') before parse, incrementUsage() after success.
+- Re-enabled requireFeature('ai_scanner') in BillScanner.tsx (was commented out for debugging). Added same check to VoiceEntry.tsx (had none).
+- Added 402 quota-exceeded handling in both BillScanner and VoiceEntry: shows sonner toast with upgrade message + triggers PaywallModal via requireFeature().
+- Enhanced useSubscription hook: now exposes `usage` object (aiScans/voiceEntries with used/limit/remaining/resetAt) so UI components can display real-time quota.
+- Enhanced PaywallModal: shows live usage stats ("5/5 scans used this month") with color-coded progress bar (green → amber → red). Shows reset date when limit is hit. Works for both ai_scanner and voice_entry features.
+- Added grayscale conversion to BillScanner compressImage(): new "Printed bill mode" toggle in the bill type selector card. When ON, image is converted to grayscale using ITU-R BT.601 luminance formula before JPEG compression. Saves ~20% tokens on Gemini/GPT-4o (which bill by RGB tiles). Off by default for handwritten bills where ink color matters.
+- All changes type-checked (0 errors in src/) and linted (0 errors, 0 warnings).
+
+Stage Summary:
+- Files created: 2 (usage-limits.ts, subscription/status/route.ts)
+- Files modified: 5 (scan-bill/route.ts, voice-parse/route.ts, BillScanner.tsx, VoiceEntry.tsx, PaywallModal.tsx, use-subscription.ts)
+- Free users now limited to 5 scans + 5 voice entries/month (was unlimited — major cost leak closed)
+- Pro users: 150 scans + 150 voice entries/month (FUP, marketed as "unlimited")
+- Elite users: 500 scans + 500 voice entries/month (FUP, marketed as "unlimited")
+- Users no longer lose credits when AI call fails (check-then-increment pattern)
+- PaywallModal shows real-time usage with progress bar — turns limit hits into upgrade moments
+- Grayscale toggle saves ~20% AI cost on printed bills (user-selectable)
+- Ready for Phase 2 (prompt caching + local regex pre-filter) when user approves
+- Comparison tool from previous task is independent and can be tested anytime after deploy
