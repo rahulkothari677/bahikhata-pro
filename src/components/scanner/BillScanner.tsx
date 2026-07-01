@@ -338,8 +338,9 @@ export function BillScanner() {
         // Handle non-200 responses with visible error details
         if (!scanRes.ok) {
           const errData = await scanRes.json().catch(() => ({}))
+          const errorDetail = errData.detail || errData.error || errData.message || scanRes.statusText || 'Unknown server error'
           sonnerToast.error(`Scan failed (HTTP ${scanRes.status})`, {
-            description: errData.error || errData.detail || errData.message || scanRes.statusText || 'Unknown server error',
+            description: errorDetail,
             duration: 10000,
           })
           return
