@@ -8,26 +8,23 @@ import { checkUsage, incrementUsage } from '@/lib/usage-limits'
 // 1. Z.AI SDK (for sandbox/dev - auto-configured)
 // 2. OpenAI-compatible API (for production - set VLM_API_KEY & VLM_BASE_URL env vars)
 //
-// Rate limited: 30 scans per user per day (protects Groq API quota)
-// Plus 10 scans per IP per hour (prevents account sharing abuse)
-// Tier limits: free=5/mo, pro=150/mo (FUP), elite=500/mo (FUP)
+// Tier limits (FUP):
+//   Free:  20 scans/month (DB-backed, resets monthly)
+//   Pro:   50 scans/day (in-memory, resets daily) — marketed as "Unlimited"
+//   Elite: 100 scans/day (in-memory, resets daily) — marketed as "Truly Unlimited"
+// Plus 10 scans per IP per hour (anti-abuse — prevents account sharing)
 export async function POST(req: NextRequest) {
   try {
     const { userId, error } = await getAuthUserId()
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-    // Rate limit by user (daily quota)
-    const userRL = rateLimit(`scan:user:${userId}`, { limit: 30, windowSec: 86400 })
-    if (!userRL.success) return rateLimitedResponse(userRL)
 
     // Rate limit by IP (anti-abuse — prevents one user from logging in from many IPs)
     const ip = getClientIP(req)
     const ipRL = rateLimit(`scan:ip:${ip}`, { limit: 10, windowSec: 3600 })
     if (!ipRL.success) return rateLimitedResponse(ipRL)
 
-    // Tier-based monthly quota check (free=5, pro=150, elite=500 per month).
-    // We check WITHOUT incrementing first — only increment after the AI call
-    // succeeds. This way users don't lose credits when the scan fails.
+    // Tier-based quota check. For Free: monthly DB counter. For Pro/Elite:
+    // daily in-memory limiter. Returns 402 with upgrade message if exceeded.
     const usageCheck = await checkUsage(userId, 'aiScans')
     if (!usageCheck.allowed) {
       return NextResponse.json({
@@ -38,6 +35,7 @@ export async function POST(req: NextRequest) {
         remaining: usageCheck.remaining,
         resetAt: usageCheck.resetAt.toISOString(),
         plan: usageCheck.plan,
+        period: usageCheck.period,
       }, { status: 402 })
     }
 

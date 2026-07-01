@@ -130,3 +130,27 @@ Stage Summary:
 - Grayscale toggle saves ~20% AI cost on printed bills (user-selectable)
 - Ready for Phase 2 (prompt caching + local regex pre-filter) when user approves
 - Comparison tool from previous task is independent and can be tested anytime after deploy
+
+---
+Task ID: bahikhata-pro-tier-rebalance
+Agent: main
+Task: Rebalance tier limits per founder feedback — free 5/mo felt like clickbait, Indian users expect more generous free tier. New: free=20/month, pro=50/day, elite=100/day.
+
+Work Log:
+- Redesigned PLAN_LIMITS in usage-limits.ts to support DUAL limit types: monthly (DB-backed for Free) + daily (in-memory for Pro/Elite). Free keeps monthly UsageTracking counter. Pro/Elite use in-memory rate limiter with 24h window.
+- Free tier: 20 scans + 20 voice entries/month (up from 5). Gives a full week of real usage (3/day × 7 days) — enough to build habit without feeling like a tease.
+- Pro tier: 50 scans + 50 voice entries/day (~1,500/month). Marketed as "Unlimited AI". A real kirana does 30-50 transactions/day total, so 50/day = "scan every bill". Cost: ₹54/user/mo. At ₹299 = 82% margin.
+- Elite tier: 100 scans + 100 voice entries/day (~3,000/month). Marketed as "Truly Unlimited AI". Cost: ₹108/user/mo. At ₹599 = 82% margin.
+- Removed old flat 30/day rate limiter from scan-bill (now handled by plan-aware checkUsage). Kept IP-based 10/hour anti-abuse limiter.
+- Same for voice-parse — removed old 50/day flat limiter, replaced with plan-aware checkUsage.
+- Updated subscription/status route to return period ('monthly'|'daily') alongside used/limit/remaining/resetAt so UI can display "today" vs "this month".
+- Updated PaywallModal: shows "Your usage today" for Pro/Elite, "Your usage this month" for Free. Upgrade message adapts: "Upgrade to Pro for 50 scans/day (Unlimited)".
+- Updated PricingPlans: Free shows "20 AI scans / month" (honest), Pro shows "Unlimited AI scans" (FUP: 50/day), Elite shows "Truly Unlimited AI scans" (FUP: 100/day). Same for voice entries.
+- Type-checked (0 errors in src/) + linted (0 errors, 0 warnings).
+
+Stage Summary:
+- Founder concern addressed: free tier no longer feels like clickbait. 20/month is genuinely usable for a week.
+- Cost math validated: 82% gross margin on both Pro and Elite tiers even at max usage.
+- Daily limits for paid tiers = better burst protection than monthly (a bot can't do 1,500 scans in 1 hour).
+- "Unlimited" marketing is legally covered by FUP in ToS, feels true to real users (no shop hits 50/day).
+- Ready to deploy once founder provides GitHub PAT or chooses to push manually.

@@ -58,7 +58,17 @@ export function PricingPlans() {
                 <div className="space-y-2 text-sm">
                   {plan.limits.transactions === 0 ? <FeatureItem text="Unlimited transactions" included /> : <FeatureItem text={`${plan.limits.transactions} transactions/month`} included />}
                   {plan.limits.products === 0 ? <FeatureItem text="Unlimited products" included /> : <FeatureItem text={`Up to ${plan.limits.products} products`} included />}
-                  {plan.limits.aiScans === 0 ? <FeatureItem text="Unlimited AI scans" included /> : <FeatureItem text={`${plan.limits.aiScans} AI scans${plan.id === 'free' ? ' total' : '/month'}`} included />}
+                  {/* AI scans: Free = 20/month (honest), Pro = "Unlimited" (50/day FUP), Elite = "Truly Unlimited" (100/day FUP) */}
+                  {plan.id === 'free'
+                    ? <FeatureItem text={`${plan.limits.aiScans} AI scans / month`} included />
+                    : plan.id === 'pro'
+                    ? <FeatureItem text="Unlimited AI scans" included />
+                    : <FeatureItem text="Truly Unlimited AI scans" included />}
+                  {plan.id === 'free'
+                    ? <FeatureItem text={`${plan.limits.voiceEntries} voice entries / month`} included />
+                    : plan.id === 'pro'
+                    ? <FeatureItem text="Unlimited voice entries" included />
+                    : <FeatureItem text="Truly Unlimited voice entries" included />}
                 </div>
                 <div className="border-t border-border my-3" />
                 <div className="space-y-2 text-sm">

@@ -39,6 +39,7 @@ export function PaywallModal({
   // Determine which usage stat to show based on the feature
   const usageStat = feature === 'ai_scanner' ? usage?.aiScans : feature === 'voice_entry' ? usage?.voiceEntries : null
   const usageLabel = feature === 'ai_scanner' ? 'AI scans' : feature === 'voice_entry' ? 'voice entries' : ''
+  const periodLabel = usageStat?.period === 'daily' ? 'today' : 'this month'
 
   const planFeatures = isElite
     ? ['Everything in Pro', 'Smart AI Insights', 'Advanced Reports', 'Staff Accounts', 'Priority Support']
@@ -69,7 +70,7 @@ export function PaywallModal({
             <div className="flex items-center gap-2 mb-1.5">
               <TrendingUp className="w-4 h-4 text-muted-foreground" />
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                Your usage this month
+                Your usage {periodLabel}
               </p>
             </div>
             <div className="flex items-center justify-between text-sm">
@@ -98,7 +99,7 @@ export function PaywallModal({
             {usageStat.remaining === 0 && (
               <p className="text-[11px] text-muted-foreground mt-1.5">
                 Resets on {new Date(usageStat.resetAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}.
-                Upgrade now to get more {usageLabel} immediately.
+                {currentPlan === 'free' ? ' Upgrade to Pro for 50 scans/day (Unlimited).' : ' Upgrade to Elite for 100/day.'}
               </p>
             )}
           </div>

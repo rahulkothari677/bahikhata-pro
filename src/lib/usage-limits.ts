@@ -1,23 +1,37 @@
 /**
  * Usage limits — shared between API routes and the subscription status endpoint.
  *
- * Defines the plan tier limits and provides a helper to atomically check +
- * increment usage counters stored in the UsageTracking table.
+ * Two types of limits:
+ *   1. MONTHLY (UsageTracking DB table): For Free tier — 20 scans + 20 voice/month.
+ *      Resets on the 1st of each month.
+ *   2. DAILY (in-memory rate limiter): For Pro (50/day) and Elite (100/day).
+ *      Resets every 24h. Marketed as "Unlimited" — no real user hits 50/day.
+ *
+ * Why split?
+ *   - Monthly DB tracking is persistent across server restarts (important for
+ *     free users who get a hard monthly cap).
+ *   - Daily in-memory is faster and auto-resets (important for paid tiers
+ *     where the limit is really just burst protection against bots).
  *
  * MARKETING vs REALITY:
- *   - Marketing says: "Unlimited AI scans on Pro and Elite"
- *   - Reality (FUP):   Pro = 150/month, Elite = 500/month
- *   - This protects against bots/account-sharing while 99% of real users
- *     never hit the limit. Per Gemini's Rule #1: "Market Unlimited, Code FUP".
+ *   - Free:  "20 free AI scans + 20 voice entries per month" (honest)
+ *   - Pro:   "Unlimited AI scans" (FUP: 50/day — no real shop exceeds this)
+ *   - Elite: "Truly unlimited AI" (FUP: 100/day — for multi-shop power users)
  */
 
 import { db } from '@/lib/db'
+import { rateLimit } from '@/lib/rate-limit'
 
 export type Plan = 'free' | 'pro' | 'elite'
 
 export interface PlanLimits {
-  aiScans: number          // per month; 0 = unlimited (we don't use this — FUP caps everything)
-  voiceEntries: number     // per month
+  // Monthly limits (Free tier only). 0 = unlimited (paid tiers use daily instead)
+  monthlyAiScans: number
+  monthlyVoiceEntries: number
+  // Daily limits (Pro + Elite tiers). 0 = no daily limit (Free uses monthly)
+  dailyAiScans: number
+  dailyVoiceEntries: number
+  // Other limits
   transactions: number     // per month; 0 = unlimited
   products: number         // total; 0 = unlimited
   shops: number            // 1 for free, 3 for pro, Infinity for elite
@@ -27,35 +41,45 @@ export interface PlanLimits {
 /**
  * Fair Use Policy limits per plan.
  *
- * Free: 5 scans + 5 voice entries/month — enough to try the AI features,
- *       not enough to run a business on. Drives upgrades.
+ * Free: 20 scans + 20 voice entries/month — enough for a week of real usage
+ *       (3/day for 7 days). Builds the habit without feeling like a "tease".
+ *       Indian users expect generous free tiers — 5/month felt like clickbait.
  *
- * Pro:  150 scans + 150 voice entries/month — ~5/day each. Covers a busy
- *       kirana store. Marketed as "Unlimited AI" with FUP in ToS.
+ * Pro:  50 scans/day + 50 voice entries/day — ~1,500/month each.
+ *       Marketed as "Unlimited AI". A real kirana store does 30-50 transactions
+ *       per day total, so 50/day scans = "scan every bill". No real user hits this.
+ *       Cost: ~₹54/month/user. At ₹299 revenue = 82% margin.
  *
- * Elite: 500 scans + 500 voice entries/month — ~17/day each. For multi-shop
- *        owners with high volume. Marketed as "Unlimited AI" with FUP.
+ * Elite: 100 scans/day + 100 voice entries/day — ~3,000/month each.
+ *        Marketed as "Truly Unlimited AI". For multi-shop power users.
+ *        Cost: ~₹108/month/user. At ₹599 revenue = 82% margin.
  */
 export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
   free: {
-    aiScans: 5,
-    voiceEntries: 5,
-    transactions: 0,    // unlimited
+    monthlyAiScans: 20,
+    monthlyVoiceEntries: 20,
+    dailyAiScans: 0,      // no daily limit — free uses monthly only
+    dailyVoiceEntries: 0,
+    transactions: 0,      // unlimited
     products: 50,
     shops: 1,
     staffAccounts: 0,
   },
   pro: {
-    aiScans: 150,
-    voiceEntries: 150,
+    monthlyAiScans: 0,    // no monthly limit — pro uses daily
+    monthlyVoiceEntries: 0,
+    dailyAiScans: 50,
+    dailyVoiceEntries: 50,
     transactions: 0,
-    products: 0,        // unlimited
+    products: 0,          // unlimited
     shops: 3,
     staffAccounts: 0,
   },
   elite: {
-    aiScans: 500,
-    voiceEntries: 500,
+    monthlyAiScans: 0,
+    monthlyVoiceEntries: 0,
+    dailyAiScans: 100,
+    dailyVoiceEntries: 100,
     transactions: 0,
     products: 0,
     shops: Infinity,
@@ -68,17 +92,16 @@ export type UsageType = 'aiScans' | 'voiceParses' | 'transactions' | 'products'
 export interface UsageCheckResult {
   allowed: boolean
   plan: Plan
-  used: number
-  limit: number
+  used: number          // current period usage (monthly for free, daily for paid)
+  limit: number         // current period limit
   remaining: number
-  resetAt: Date  // first day of next month
+  resetAt: Date         // when the current period resets
+  period: 'monthly' | 'daily'
   upgradeMessage?: string
 }
 
 /**
- * Gets the current YYYY-MM string for the user's local time.
- * We use UTC to keep server-side logic simple — the day boundary doesn't
- * matter much for monthly quotas.
+ * Gets the current YYYY-MM string for monthly tracking.
  */
 function currentMonth(): string {
   const now = new Date()
@@ -86,11 +109,21 @@ function currentMonth(): string {
 }
 
 /**
- * Returns the first moment of next month (when quotas reset).
+ * Returns the first moment of next month (when monthly quotas reset).
  */
 function nextMonthReset(): Date {
   const now = new Date()
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1))
+}
+
+/**
+ * Returns when the daily quota resets (next midnight UTC).
+ * We use UTC for consistency — the exact local midnight doesn't matter
+ * for a 24h rolling window.
+ */
+function nextDayReset(): Date {
+  const now = new Date()
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1))
 }
 
 /**
@@ -108,9 +141,8 @@ export async function getUserPlan(userId: string): Promise<Plan> {
 }
 
 /**
- * Gets the user's current usage for the month. Returns 0 for all counters
- * if no UsageTracking row exists yet (which is fine — we create one on
- * first increment).
+ * Gets the user's current monthly usage (for Free tier display).
+ * Returns 0 for all counters if no UsageTracking row exists yet.
  */
 export async function getMonthlyUsage(userId: string, month = currentMonth()) {
   const row = await db.usageTracking.findUnique({
@@ -125,11 +157,12 @@ export async function getMonthlyUsage(userId: string, month = currentMonth()) {
 }
 
 /**
- * Checks whether the user can perform the given action WITHOUT incrementing.
- * Use this for display purposes (e.g. "5/5 scans used") and pre-flight checks.
+ * Checks whether the user can perform the given action.
  *
- * If you need to actually consume a unit, use `checkAndIncrementUsage()`
- * instead — it's atomic.
+ * For FREE users: checks monthly usage against monthly limit (DB-backed).
+ * For PRO/ELITE users: checks daily rate limit (in-memory, auto-resets).
+ *
+ * Does NOT increment — use `incrementUsage()` after the action succeeds.
  */
 export async function checkUsage(
   userId: string,
@@ -137,101 +170,112 @@ export async function checkUsage(
 ): Promise<UsageCheckResult> {
   const plan = await getUserPlan(userId)
   const limits = PLAN_LIMITS[plan]
-  const usage = await getMonthlyUsage(userId)
-  const used = usage[type]
 
-  // Map 'voiceEntries' limit to 'voiceParses' counter (DB column name)
-  const limit = type === 'voiceParses' ? limits.voiceEntries : limits[type]
+  // Map UsageType to the limit fields
+  const isScan = type === 'aiScans'
+  const isVoice = type === 'voiceParses'
 
-  // limit === 0 means "unlimited" — but for AI features we always enforce FUP
-  // (the 0 case is only for transactions/products on paid plans, which we don't gate)
-  const enforceLimit = type === 'aiScans' || type === 'voiceParses'
-    ? limit
-    : (limit === 0 ? Infinity : limit)
-
-  const remaining = Math.max(0, enforceLimit - used)
-  const allowed = used < enforceLimit
-
-  let upgradeMessage: string | undefined
-  if (!allowed) {
-    if (plan === 'free') {
-      upgradeMessage = `You've used all ${limit} free ${type === 'aiScans' ? 'AI scans' : 'voice entries'} this month. Upgrade to Pro for ${PLAN_LIMITS.pro[type === 'aiScans' ? 'aiScans' : 'voiceEntries']} per month.`
-    } else if (plan === 'pro') {
-      upgradeMessage = `You've reached your Pro plan limit of ${limit} ${type === 'aiScans' ? 'AI scans' : 'voice entries'} this month. Upgrade to Elite for ${PLAN_LIMITS.elite[type === 'aiScans' ? 'aiScans' : 'voiceEntries']} per month, or wait until next month.`
-    } else {
-      upgradeMessage = `You've reached your Elite plan FUP limit of ${limit} ${type === 'aiScans' ? 'AI scans' : 'voice entries'} this month. This limit resets on ${nextMonthReset().toLocaleDateString('en-IN')}.`
+  // Non-AI types (transactions, products) — only Free has limits, and they're monthly
+  if (!isScan && !isVoice) {
+    const monthlyLimit = type === 'transactions' ? limits.transactions : limits.products
+    if (monthlyLimit === 0) {
+      return {
+        allowed: true,
+        plan,
+        used: 0,
+        limit: 0,
+        remaining: Infinity,
+        resetAt: nextMonthReset(),
+        period: 'monthly',
+      }
+    }
+    const usage = await getMonthlyUsage(userId)
+    const used = usage[type]
+    return {
+      allowed: used < monthlyLimit,
+      plan,
+      used,
+      limit: monthlyLimit,
+      remaining: Math.max(0, monthlyLimit - used),
+      resetAt: nextMonthReset(),
+      period: 'monthly',
+      upgradeMessage: used >= monthlyLimit
+        ? `You've reached the ${plan === 'free' ? 'Free' : plan} plan limit. Upgrade for more.`
+        : undefined,
     }
   }
 
+  // AI types (scans, voice) — different logic per plan
+  if (plan === 'free') {
+    // Free: monthly DB-backed limit
+    const monthlyLimit = isScan ? limits.monthlyAiScans : limits.monthlyVoiceEntries
+    const usage = await getMonthlyUsage(userId)
+    const used = isScan ? usage.aiScans : usage.voiceParses
+    const allowed = used < monthlyLimit
+
+    return {
+      allowed,
+      plan,
+      used,
+      limit: monthlyLimit,
+      remaining: Math.max(0, monthlyLimit - used),
+      resetAt: nextMonthReset(),
+      period: 'monthly',
+      upgradeMessage: !allowed
+        ? `You've used all ${monthlyLimit} free ${isScan ? 'AI scans' : 'voice entries'} this month. Upgrade to Pro for 50 per day (marketed as "Unlimited").`
+        : undefined,
+    }
+  }
+
+  // Pro / Elite: daily in-memory rate limit
+  const dailyLimit = isScan ? limits.dailyAiScans : limits.dailyVoiceEntries
+  const rateKey = `${isScan ? 'scan' : 'voice'}:daily:user:${userId}`
+  const rl = rateLimit(rateKey, { limit: dailyLimit, windowSec: 86400 })
+
+  // The rate limiter already decremented on this check — so if it failed,
+  // the user is over their daily limit.
   return {
-    allowed,
+    allowed: rl.success,
     plan,
-    used,
-    limit,
-    remaining,
-    resetAt: nextMonthReset(),
-    upgradeMessage,
-  }
-}
-
-/**
- * Atomically checks whether the user can perform the action AND increments
- * the counter if so. Returns the check result + whether the increment happened.
- *
- * Uses Prisma upsert with the unique (userId, month) constraint to ensure
- * atomicity even if two requests race.
- *
- * ⚠️ Use this only when the action is guaranteed to succeed after the check.
- * For AI calls that might fail, use `checkUsage()` + `incrementUsage()` instead
- * so users don't lose credits on failed scans.
- *
- * Usage:
- *   const check = await checkAndIncrementUsage(userId, 'aiScans')
- *   if (!check.allowed) {
- *     return NextResponse.json({ error: check.upgradeMessage }, { status: 402 })
- *   }
- *   // ... proceed with action ...
- */
-export async function checkAndIncrementUsage(
-  userId: string,
-  type: UsageType,
-): Promise<UsageCheckResult> {
-  // First check (without incrementing) so we can return a clean 402 if over limit
-  const check = await checkUsage(userId, type)
-  if (!check.allowed) {
-    return check
-  }
-
-  // Atomically increment the counter. Upsert handles the case where no row
-  // exists yet for this month.
-  await incrementUsage(userId, type)
-
-  return {
-    ...check,
-    used: check.used + 1,
-    remaining: Math.max(0, check.remaining - 1),
+    used: dailyLimit - rl.remaining,
+    limit: dailyLimit,
+    remaining: rl.remaining,
+    resetAt: new Date(Date.now() + rl.retryAfterSec * 1000),
+    period: 'daily',
+    upgradeMessage: !rl.success
+      ? `You've reached today's limit of ${dailyLimit} ${isScan ? 'AI scans' : 'voice entries'} on the ${plan === 'pro' ? 'Pro' : 'Elite'} plan. This resets in ${Math.ceil(rl.retryAfterSec / 3600)} hours.${plan === 'pro' ? ' Upgrade to Elite for 100/day.' : ''}`
+      : undefined,
   }
 }
 
 /**
  * Increments the usage counter WITHOUT checking the limit first.
- * Use this AFTER a successful AI call (or other gated action) to record usage.
  *
- * Pair with `checkUsage()` for the pre-flight check:
+ * For FREE users: increments the monthly DB counter (UsageTracking table).
+ * For PRO/ELITE users: NO-OP — the daily rate limiter already counted the
+ * request in `checkUsage()`. This is because the in-memory limiter is
+ * decrement-on-check, not decrement-on-success.
  *
- *   const check = await checkUsage(userId, 'aiScans')
- *   if (!check.allowed) return 402
- *   const result = await callAI()
- *   if (result.success) {
- *     await incrementUsage(userId, 'aiScans')
- *   }
+ * ⚠️ Important difference from the old behavior:
+ *   - Free users: counter increments AFTER success (failed scans don't count)
+ *   - Pro/Elite users: counter increments ON CHECK (failed scans DO count)
  *
- * This way users don't lose credits when the AI fails.
+ * This is acceptable for Pro/Elite because:
+ *   1. Their limits are so high (50-100/day) that one failed scan is negligible
+ *   2. The in-memory limiter can't "undo" a decrement — it's not transactional
+ *   3. If we didn't count on check, a user could burst 200 requests in 1 second
+ *      (all passing the check) before any of them increment
  */
 export async function incrementUsage(
   userId: string,
   type: UsageType,
 ): Promise<void> {
+  const plan = await getUserPlan(userId)
+
+  // Pro/Elite: daily limiter already counted it in checkUsage(). Nothing to do.
+  if (plan !== 'free') return
+
+  // Free: increment the monthly DB counter
   const month = currentMonth()
   const incrementField: Record<UsageType, any> = {
     aiScans: { aiScans: { increment: 1 } },
@@ -254,4 +298,22 @@ export async function incrementUsage(
       updatedAt: new Date(),
     },
   })
+}
+
+/**
+ * @deprecated Use `checkUsage()` + `incrementUsage()` instead.
+ * Kept for backward compatibility — will be removed in a future cleanup.
+ */
+export async function checkAndIncrementUsage(
+  userId: string,
+  type: UsageType,
+): Promise<UsageCheckResult> {
+  const check = await checkUsage(userId, type)
+  if (!check.allowed) return check
+  await incrementUsage(userId, type)
+  return {
+    ...check,
+    used: check.used + 1,
+    remaining: Math.max(0, check.remaining - 1),
+  }
 }
