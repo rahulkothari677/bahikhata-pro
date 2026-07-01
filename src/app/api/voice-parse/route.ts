@@ -303,8 +303,19 @@ Return JSON only, no commentary.`
     const aiDurationMs = Date.now() - aiStart
 
     if (!response.ok) {
-      const errText = await response.text()
-      console.error('Voice parse API error:', errText)
+      const errText = await response.text().catch(() => '')
+      console.error('Voice parse API error:', {
+        status: response.status,
+        statusText: response.statusText,
+        baseUrl,
+        model,
+        errText: errText.slice(0, 500),
+      })
+      // Build a detailed error message that will show in the toast
+      const errorDetail = errText
+        ? `HTTP ${response.status} ${response.statusText}: ${errText.slice(0, 300)}`
+        : `HTTP ${response.status} ${response.statusText} (provider: ${baseUrl.includes('generativelanguage') ? 'Gemini' : baseUrl.includes('groq') ? 'Groq' : 'OpenAI'}, model: ${model}). Provider returned empty error body — check if the model name is valid for this provider.`
+
       // Log the failed attempt
       ;(await import('@/lib/db')).db.aiUsageLog.create({
         data: {
@@ -318,12 +329,12 @@ Return JSON only, no commentary.`
           costInr: 0,
           durationMs: aiDurationMs,
           success: false,
-          errorMessage: `HTTP ${response.status}: ${errText.slice(0, 300)}`,
+          errorMessage: errorDetail.slice(0, 500),
         },
       }).catch(() => {})
       return NextResponse.json({
         error: 'Failed to parse voice entry',
-        detail: errText,
+        detail: errorDetail,
       }, { status: 502 })
     }
 
