@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import * as Sentry from '@sentry/nextjs'
 
 export class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
@@ -19,6 +20,18 @@ export class ErrorBoundary extends React.Component<
     this.setState({ errorInfo })
     console.error('ErrorBoundary caught:', error)
     console.error('Component stack:', errorInfo?.componentStack)
+
+    // Send to Sentry for production error tracking
+    Sentry.captureException(error, {
+      contexts: {
+        react: {
+          componentStack: errorInfo?.componentStack,
+        },
+      },
+      tags: {
+        source: 'ErrorBoundary',
+      },
+    })
   }
 
   handleClearAndReload = async () => {
