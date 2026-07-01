@@ -985,59 +985,59 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
             </div>
           </Card>
 
-          {/* Transaction details */}
-          <Card className="shadow-card border-border/60">
-            <div className="p-4 space-y-3">
-              <h3 className="font-semibold text-sm flex items-center gap-2">
+          {/* Transaction details — gradient header */}
+          <div className={cn('rounded-2xl shadow-card overflow-hidden', accentGradient)}>
+            <div className="p-4 text-white">
+              <h3 className="font-semibold text-sm flex items-center gap-2 mb-3">
                 <Calendar className="w-4 h-4" /> Details
               </h3>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label>Date</Label>
-                  <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="mt-1" />
+                  <Label className="text-white/80">Date</Label>
+                  <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="mt-1 bg-white/20 border-white/30 text-white placeholder-white/50" />
                 </div>
                 <div>
-                  <Label>Invoice No.</Label>
-                  <Input value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} placeholder="Optional" className="mt-1" />
+                  <Label className="text-white/80">Invoice No.</Label>
+                  <Input value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} placeholder="Optional" className="mt-1 bg-white/20 border-white/30 text-white placeholder-white/50" />
                 </div>
               </div>
 
-              <div className="flex items-center justify-between rounded-lg bg-muted/50 p-3">
+              <div className="flex items-center justify-between rounded-lg bg-white/10 p-3 mt-3">
                 <div>
-                  <Label className="cursor-pointer text-sm">Inter-state (IGST)</Label>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">ON if other state</p>
+                  <Label className="cursor-pointer text-sm text-white">Inter-state (IGST)</Label>
+                  <p className="text-[11px] text-white/70 mt-0.5">ON if other state</p>
                 </div>
                 <Switch checked={isInterState} onCheckedChange={setIsInterState} />
               </div>
 
-              <div>
-                <Label>Discount (₹)</Label>
-                <Input type="number" value={discountAmount} onChange={(e) => setDiscountAmount(e.target.value)} placeholder="0" className="mt-1" />
+              <div className="mt-3">
+                <Label className="text-white/80">Discount (₹)</Label>
+                <Input type="number" value={discountAmount} onChange={(e) => setDiscountAmount(e.target.value)} placeholder="0" className="mt-1 bg-white/20 border-white/30 text-white placeholder-white/50" />
               </div>
 
-              <div>
-                <Label>Payment Mode</Label>
+              <div className="mt-3">
+                <Label className="text-white/80">Payment Mode</Label>
                 <Select value={paymentMode} onValueChange={setPaymentMode}>
-                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="mt-1 bg-white/20 border-white/30 text-white"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {PAYMENT_MODES.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
 
-              <div>
-                <Label>Paid Amount (₹)</Label>
+              <div className="mt-3">
+                <Label className="text-white/80">Paid Amount (₹)</Label>
                 <Input
                   type="number"
                   value={paidAmount}
                   onChange={(e) => setPaidAmount(e.target.value)}
                   placeholder={`Full: ${totalAmount.toFixed(0)}`}
-                  className="mt-1"
+                  className="mt-1 bg-white/20 border-white/30 text-white placeholder-white/50"
                 />
-                <p className="text-[10px] text-muted-foreground mt-1">Leave empty for full payment</p>
+                <p className="text-[10px] text-white/70 mt-1">Leave empty for full payment</p>
               </div>
             </div>
-          </Card>
+          </div>
 
           {/* Live summary */}
           <Card className="shadow-card border-border/60 sticky top-20">

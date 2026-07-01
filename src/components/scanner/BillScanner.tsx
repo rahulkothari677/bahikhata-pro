@@ -790,22 +790,21 @@ export function BillScanner() {
               </div>
             </CardHeader>
             <CardContent className="px-2">
-              <div className="space-y-2">
+              <div className="space-y-1">
                 {scanned.items.map((item: any, i: number) => {
                   return (
-                    <div key={i} className="group rounded-lg bg-muted/20 hover:bg-muted/40 transition p-2.5 border border-transparent hover:border-border/50">
-                      {/* Row 1: Item number + Product name (full width) + Delete button */}
-                      <div className="flex items-center gap-2 mb-2">
+                    <div key={i} className="group rounded-lg bg-muted/20 hover:bg-muted/40 transition px-3 py-2">
+                      {/* Row 1: Number + Name (full width) + Total + Delete */}
+                      <div className="flex items-center gap-2 mb-1">
                         <span className="font-bold text-muted-foreground flex-shrink-0 w-5 h-5 rounded-full bg-primary/10 text-primary text-[10px] flex items-center justify-center">
                           {i + 1}
                         </span>
                         <input
                           value={item.name}
                           onChange={(e) => updateItem(i, 'name', e.target.value)}
-                          className="flex-1 min-w-0 bg-transparent border border-transparent rounded font-medium text-sm transition px-1 py-1 focus:bg-background focus:border-border focus:px-2"
+                          className="flex-1 min-w-0 bg-transparent border border-transparent rounded font-medium text-sm transition px-1 py-0.5 focus:bg-background focus:border-border focus:px-2"
                           placeholder="Product name"
                         />
-                        {/* Confidence dot — green=high, amber=medium, red=low */}
                         {item.confidence !== undefined && (
                           <span
                             className={cn(
@@ -820,55 +819,48 @@ export function BillScanner() {
                           {formatINR(item.total || 0)}
                         </span>
                         <button
-                          className="p-1.5 rounded text-muted-foreground hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition flex-shrink-0"
+                          className="p-1 rounded text-muted-foreground hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition flex-shrink-0"
                           onClick={() => removeItem(i)}
                           title="Remove this item"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
-                      {/* Row 2: Qty + Unit + Price + GST — labeled, evenly spaced, full width */}
-                      <div className="flex items-center gap-1.5 pl-7">
-                        {/* Qty */}
-                        <div className="flex-1 min-w-0">
-                          <label className="text-[9px] text-muted-foreground uppercase tracking-wide block mb-0.5">Qty</label>
+                      {/* Row 2: Qty + Unit + Price + GST — flat, no inner boxes, bigger */}
+                      <div className="flex items-center gap-2 pl-7">
+                        <div className="flex-1 min-w-0 flex items-center gap-1">
+                          <span className="text-[10px] text-muted-foreground w-7">Qty</span>
                           <input
                             type="number"
                             value={item.quantity}
                             onChange={(e) => updateItem(i, 'quantity', Number(e.target.value))}
-                            className="w-full min-w-0 bg-background border border-border rounded tabular-nums focus:ring-1 focus:ring-primary text-center text-sm px-1 py-1.5"
+                            className="w-full min-w-0 bg-background border border-border rounded tabular-nums focus:ring-1 focus:ring-primary text-center text-sm px-1 py-1"
                           />
                         </div>
-                        {/* Unit */}
-                        <div className="flex-shrink-0 w-14">
-                          <label className="text-[9px] text-muted-foreground uppercase tracking-wide block mb-0.5">Unit</label>
+                        <div className="flex-shrink-0 flex items-center gap-1 w-16">
                           <select
                             value={item.unit || 'pcs'}
                             onChange={(e) => updateItem(i, 'unit', e.target.value)}
-                            className="w-full bg-background border border-border rounded focus:ring-1 focus:ring-primary text-sm px-1 py-1.5"
+                            className="w-full bg-background border border-border rounded focus:ring-1 focus:ring-primary text-sm px-1 py-1"
                           >
                             {['pcs', 'kg', 'gm', 'ltr', 'ml', 'box', 'dozen', 'packet', 'set'].map(u => <option key={u} value={u}>{u}</option>)}
                           </select>
                         </div>
-                        {/* × separator */}
-                        <span className="text-muted-foreground flex-shrink-0 text-xs self-end pb-2">×</span>
-                        {/* Price */}
-                        <div className="flex-1 min-w-0">
-                          <label className="text-[9px] text-muted-foreground uppercase tracking-wide block mb-0.5">Price ₹</label>
+                        <span className="text-muted-foreground flex-shrink-0 text-xs">×</span>
+                        <div className="flex-1 min-w-0 flex items-center gap-1">
+                          <span className="text-[10px] text-muted-foreground w-8">₹</span>
                           <input
                             type="number"
                             value={item.unitPrice}
                             onChange={(e) => updateItem(i, 'unitPrice', Number(e.target.value))}
-                            className="w-full min-w-0 bg-background border border-border rounded tabular-nums focus:ring-1 focus:ring-primary text-center text-sm px-1 py-1.5"
+                            className="w-full min-w-0 bg-background border border-border rounded tabular-nums focus:ring-1 focus:ring-primary text-center text-sm px-1 py-1"
                           />
                         </div>
-                        {/* GST */}
                         <div className="flex-shrink-0 w-14">
-                          <label className="text-[9px] text-muted-foreground uppercase tracking-wide block mb-0.5">GST</label>
                           <select
                             value={item.gstRate}
                             onChange={(e) => updateItem(i, 'gstRate', Number(e.target.value))}
-                            className="w-full bg-background border border-border rounded focus:ring-1 focus:ring-primary text-sm px-1 py-1.5"
+                            className="w-full bg-background border border-border rounded focus:ring-1 focus:ring-primary text-sm px-1 py-1"
                           >
                             {[0, 5, 12, 18, 28].map(r => <option key={r} value={r}>{r}%</option>)}
                           </select>

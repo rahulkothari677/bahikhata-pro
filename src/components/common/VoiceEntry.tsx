@@ -395,11 +395,11 @@ export function VoiceEntry({ onTransactionParsed, products = [] }: VoiceEntryPro
             </div>
 
             {parsed.items && parsed.items.length > 0 ? (
-              <div className="space-y-2">
+              <div className="space-y-1">
                 {parsed.items.map((item: any, i: number) => (
-                  <div key={i} className="rounded-lg bg-muted/40 hover:bg-muted/60 transition p-2.5 border border-transparent hover:border-border/50">
+                  <div key={i} className="rounded-lg bg-muted/40 hover:bg-muted/60 transition px-3 py-2">
                     {/* Row 1: Item number + Product name (full width) + Total + Delete */}
-                    <div className="flex items-center gap-2 mb-2">
+                    <div className="flex items-center gap-2 mb-1">
                       <span className="font-bold text-muted-foreground flex-shrink-0 w-5 h-5 rounded-full bg-primary/10 text-primary text-[10px] flex items-center justify-center">
                         {i + 1}
                       </span>
@@ -411,7 +411,7 @@ export function VoiceEntry({ onTransactionParsed, products = [] }: VoiceEntryPro
                           newItems[i] = { ...newItems[i], productName: e.target.value }
                           setParsed({ ...parsed, items: newItems })
                         }}
-                        className="flex-1 min-w-0 bg-transparent font-medium text-sm focus:outline-none focus:bg-background focus:px-2 focus:py-1 focus:rounded transition border border-transparent focus:border-border"
+                        className="flex-1 min-w-0 bg-transparent font-medium text-sm focus:outline-none focus:bg-background focus:px-2 focus:py-0.5 focus:rounded transition border border-transparent focus:border-border"
                         placeholder="Product name"
                       />
                       <span className="font-bold tabular-nums flex-shrink-0 text-sm text-primary w-16 text-right">
@@ -419,16 +419,16 @@ export function VoiceEntry({ onTransactionParsed, products = [] }: VoiceEntryPro
                       </span>
                       <button
                         onClick={() => handleDeleteItem(i)}
-                        className="p-1.5 rounded-lg text-muted-foreground hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition flex-shrink-0"
+                        className="p-1 rounded-lg text-muted-foreground hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30 transition flex-shrink-0"
                         title="Remove this item"
                       >
                         <X className="w-4 h-4" />
                       </button>
                     </div>
-                    {/* Row 2: Qty + Unit + Price — labeled, evenly spaced */}
-                    <div className="flex items-center gap-1.5 pl-7">
-                      <div className="flex-1 min-w-0">
-                        <label className="text-[9px] text-muted-foreground uppercase tracking-wide block mb-0.5">Qty</label>
+                    {/* Row 2: Qty + Unit + Price — flat, no inner boxes */}
+                    <div className="flex items-center gap-2 pl-7">
+                      <div className="flex-1 min-w-0 flex items-center gap-1">
+                        <span className="text-[10px] text-muted-foreground w-7">Qty</span>
                         <input
                           type="number"
                           value={item.quantity || ''}
@@ -437,19 +437,19 @@ export function VoiceEntry({ onTransactionParsed, products = [] }: VoiceEntryPro
                             newItems[i] = { ...newItems[i], quantity: Number(e.target.value) }
                             setParsed({ ...parsed, items: newItems })
                           }}
-                          className="w-full min-w-0 bg-background border border-border rounded tabular-nums focus:ring-1 focus:ring-primary text-center text-sm px-1 py-1.5"
+                          className="w-full min-w-0 bg-background border border-border rounded tabular-nums focus:ring-1 focus:ring-primary text-center text-sm px-1 py-1"
                           placeholder="0"
                         />
                       </div>
-                      <div className="flex-shrink-0 w-16">
-                        <label className="text-[9px] text-muted-foreground uppercase tracking-wide block mb-0.5">Unit</label>
-                        <span className="block w-full bg-muted/50 border border-border rounded text-center text-sm px-1 py-1.5 text-muted-foreground">
+                      <div className="flex-shrink-0 flex items-center gap-1 w-16">
+                        <span className="text-[10px] text-muted-foreground w-6">Unit</span>
+                        <span className="block flex-1 bg-muted/50 border border-border rounded text-center text-sm px-1 py-1 text-muted-foreground">
                           {item.unit || 'pcs'}
                         </span>
                       </div>
-                      <span className="text-muted-foreground flex-shrink-0 text-xs self-end pb-2">×</span>
-                      <div className="flex-1 min-w-0">
-                        <label className="text-[9px] text-muted-foreground uppercase tracking-wide block mb-0.5">Price ₹</label>
+                      <span className="text-muted-foreground flex-shrink-0 text-xs">×</span>
+                      <div className="flex-1 min-w-0 flex items-center gap-1">
+                        <span className="text-[10px] text-muted-foreground w-4">₹</span>
                         <input
                           type="number"
                           value={item.unitPrice || ''}
@@ -458,7 +458,7 @@ export function VoiceEntry({ onTransactionParsed, products = [] }: VoiceEntryPro
                             newItems[i] = { ...newItems[i], unitPrice: Number(e.target.value) }
                             setParsed({ ...parsed, items: newItems })
                           }}
-                          className="w-full min-w-0 bg-background border border-border rounded tabular-nums focus:ring-1 focus:ring-primary text-center text-sm px-1 py-1.5"
+                          className="w-full min-w-0 bg-background border border-border rounded tabular-nums focus:ring-1 focus:ring-primary text-center text-sm px-1 py-1"
                           placeholder="0"
                         />
                       </div>
