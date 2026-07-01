@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUserId } from '@/lib/get-auth'
 import { rateLimit, rateLimitedResponse } from '@/lib/rate-limit'
 import { db as prisma } from '@/lib/db'
+import { compressImageForAI } from '@/lib/image-compress'
 
 /**
  * POST /api/scan-bill/compare
@@ -125,6 +126,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Image is required' }, { status: 400 })
     }
 
+    // Compress the image server-side before sending to AI providers.
+    // Phone HDR photos are 3-5MB → Groq rejects with HTTP 413 (>3.5MB limit).
+    // This brings it down to ~200-500KB, well under all providers' limits.
+    const compressedImage = await compressImageForAI(imageBase64)
+
     // Build the list of providers to test (skip any with missing API keys)
     const providers: ProviderConfig[] = [
       {
@@ -158,7 +164,7 @@ export async function POST(req: NextRequest) {
     // one provider failing doesn't kill the others (key requirement for
     // comparison: see all results, even failures).
     const results = await Promise.allSettled(
-      configuredProviders.map((p) => callProvider(p, imageBase64, SHARED_PROMPT))
+      configuredProviders.map((p) => callProvider(p, compressedImage, SHARED_PROMPT))
     )
 
     // Assemble the result object
@@ -182,13 +188,9 @@ export async function POST(req: NextRequest) {
       }
     })
 
-    // Build a small thumbnail preview (max ~50KB) for the history list
-    // We store the full image for now — for typical phone photos this is
-    // ~200-500KB which is fine for an admin tool. If it grows too big we
-    // can downscale before storing.
-    const imagePreview = imageBase64.length > 100_000
-      ? imageBase64.slice(0, 100_000) // truncate very large images for storage
-      : imageBase64
+    // Build a small thumbnail preview for the history list.
+    // We use the compressed image since it's already small (~200-500KB).
+    const imagePreview = compressedImage
 
     // Save to DB so admin can review history and we can compute averages
     const comparison = await prisma.scanComparison.create({
