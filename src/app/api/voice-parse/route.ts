@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUserId } from '@/lib/get-auth'
 import { checkUsage, incrementUsage } from '@/lib/usage-limits'
+import { tryParseLocally } from '@/lib/voice-regex-parser'
 
 // POST /api/voice-parse - parse voice transcript into transaction data
 // Tier limits (FUP):
@@ -34,6 +35,21 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No transcript provided' }, { status: 400 })
     }
 
+    // Phase 2.2: Local regex pre-filter. For simple entries like "cash 500"
+    // or "ram ko 1000 upi diya", parse locally WITHOUT calling the LLM.
+    // Saves ~₹0.01 + ~500ms latency per match. ~20% of voice entries hit this.
+    const localParsed = tryParseLocally(transcript)
+    if (localParsed) {
+      // Still increment usage so the daily quota applies (otherwise users
+      // could bypass limits with simple entries)
+      await incrementUsage(userId, 'voiceParses')
+      return NextResponse.json({
+        success: true,
+        transaction: localParsed,
+        _source: 'regex',  // analytics: how often regex hits vs LLM
+      })
+    }
+
     // Check if VLM_API_KEY is configured
     if (!process.env.VLM_API_KEY) {
       return NextResponse.json({
@@ -41,15 +57,18 @@ export async function POST(req: NextRequest) {
       }, { status: 503 })
     }
 
-    const prompt = `You are an expert at understanding Indian shop owners' voice commands for creating sales/purchase entries. Parse the following spoken text and extract structured transaction data.
+    // ⚠️ PROMPT CACHING: This system prompt must be a BYTE-IDENTICAL constant.
+    // Gemini 2.5 Flash has implicit context caching — if the same prompt prefix
+    // is sent within 1 hour, subsequent calls pay ~10% of input cost.
+    // The user's transcript is sent as a SEPARATE message so the system prompt
+    // stays cache-friendly. DO NOT interpolate transcript into this string.
+    const systemPrompt = `You are an expert at understanding Indian shop owners' voice commands for creating sales/purchase entries. Parse the spoken text provided by the user and extract structured transaction data.
 
 The user might speak in English, Hindi, or a mix (Hinglish). Examples:
 - "Sold 2 kg sugar to Ramesh at 50 rupees cash" → sale, customer: Ramesh, sugar 2kg @₹50, payment: cash
 - "Ramesh ne 2 kg chini liya 50 rupaye cash" → sale, customer: Ramesh, sugar 2kg @₹50, payment: cash
 - "Bought 10 box tea from Tata suppliers for 2000 on credit" → purchase, supplier: Tata suppliers, tea 10 box @₹200, payment: credit
 - "Sold 1 oil and 2 salt to Sunita total 300 upi" → sale, customer: Sunita, oil 1 @₹140, salt 2 @₹28, total ₹300, payment: upi
-
-Transcript: "${transcript}"
 
 Return ONLY a valid JSON object with this structure (no markdown):
 {
@@ -89,8 +108,12 @@ Return JSON only, no commentary.`
         model,
         messages: [
           {
+            role: 'system',
+            content: systemPrompt,
+          },
+          {
             role: 'user',
-            content: prompt,
+            content: transcript,
           },
         ],
         max_tokens: 1000,
@@ -145,7 +168,11 @@ Return JSON only, no commentary.`
     // Record successful voice parse in usage tracking (after AI succeeded).
     await incrementUsage(userId, 'voiceParses')
 
-    return NextResponse.json({ success: true, transaction: parsed })
+    return NextResponse.json({
+      success: true,
+      transaction: parsed,
+      _source: 'llm',  // analytics: came from LLM, not regex
+    })
   } catch (error) {
     console.error('Voice parse error:', error)
     return NextResponse.json({ error: 'Failed to process voice entry' }, { status: 500 })

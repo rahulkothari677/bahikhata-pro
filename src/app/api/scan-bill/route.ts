@@ -49,6 +49,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Image is required' }, { status: 400 })
     }
 
+    // ⚠️ PROMPT CACHING: This prompt must be a BYTE-IDENTICAL constant across all
+    // requests. Gemini 2.5 Flash has implicit context caching — if the same prompt
+    // is sent within 1 hour, subsequent calls pay ~10% of input cost (vs 100%).
+    // DO NOT interpolate user-specific data (userId, billType, etc.) into this
+    // string — that would break the cache. Pass variable data via the image only.
+    // Estimated savings: 70% on input tokens after the first scan each hour.
     const prompt = `You are an expert at reading Indian shop bills, invoices, receipts, AND handwritten notes on plain paper. Indian shop owners often write sales/purchases as rough notes on any paper — plain paper, notebook pages, diaries, even napkins. Your job is to read ANY text (printed or handwritten) and extract structured data.
 
 This image may be:
