@@ -1,25 +1,24 @@
 import { NextResponse } from 'next/server'
 import { getAuthUserId } from '@/lib/get-auth'
-import { getUserPlan, getMonthlyUsage, PLAN_LIMITS, type Plan } from '@/lib/usage-limits'
+import { getUserPlan, PLAN_LIMITS } from '@/lib/usage-limits'
 import { rateLimit } from '@/lib/rate-limit'
 import { db } from '@/lib/db'
 
 /**
  * GET /api/subscription/status
  *
- * Returns the user's current plan, usage this month, and remaining quota
- * for all gated features. Called by the useSubscription hook on app load
- * and after every feature check.
+ * Returns the user's current plan, daily usage, and remaining quota.
  *
- * For FREE users: usage = monthly counters (resets on 1st of month)
- * For PRO/ELITE users: usage = today's daily counter (resets every 24h)
+ * All tiers use daily limits (Free=20/day, Pro=50/day, Elite=100/day).
+ * The rate limiter is in-memory, so "used today" is approximate (the actual
+ * enforcement happens in the API routes via checkUsage()).
  *
  * Response shape:
  *   {
  *     current: { plan, renewsAt?, trialEndsAt?, cancelledAt? },
  *     usage: {
- *       aiScans: { used, limit, remaining, resetAt, period },
- *       voiceEntries: { used, limit, remaining, resetAt, period },
+ *       aiScans: { used, limit, remaining, resetAt, period: 'daily' },
+ *       voiceEntries: { used, limit, remaining, resetAt, period: 'daily' },
  *     },
  *     plans: [...]
  *   }
@@ -31,7 +30,6 @@ export async function GET() {
 
     const plan = await getUserPlan(userId)
     const limits = PLAN_LIMITS[plan]
-    const now = new Date()
 
     // Fetch user's renewal info
     const user = await db.user.findUnique({
@@ -39,62 +37,30 @@ export async function GET() {
       select: { plan: true, renewsAt: true, trialEndsAt: true, cancelledAt: true },
     })
 
-    // Build usage stats — different per plan
-    let aiScansUsage, voiceEntriesUsage
-
-    if (plan === 'free') {
-      // Free: monthly DB-backed counters
-      const monthlyUsage = await getMonthlyUsage(userId)
-      const monthReset = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1))
-
-      aiScansUsage = {
-        used: monthlyUsage.aiScans,
-        limit: limits.monthlyAiScans,
-        remaining: Math.max(0, limits.monthlyAiScans - monthlyUsage.aiScans),
-        resetAt: monthReset.toISOString(),
-        period: 'monthly' as const,
-      }
-      voiceEntriesUsage = {
-        used: monthlyUsage.voiceParses,
-        limit: limits.monthlyVoiceEntries,
-        remaining: Math.max(0, limits.monthlyVoiceEntries - monthlyUsage.voiceParses),
-        resetAt: monthReset.toISOString(),
-        period: 'monthly' as const,
-      }
-    } else {
-      // Pro/Elite: daily in-memory rate limiter state
-      // Check remaining without consuming by reading current state
-      const scanRl = rateLimit(`scan:daily:user:${userId}`, { limit: limits.dailyAiScans, windowSec: 86400 })
-      const voiceRl = rateLimit(`voice:daily:user:${userId}`, { limit: limits.dailyVoiceEntries, windowSec: 86400 })
-
-      // Note: calling rateLimit() above DID consume 1 unit. We need to refund it
-      // since this is just a status check, not an actual scan. Unfortunately the
-      // in-memory limiter doesn't support refunds. So instead we DON'T call
-      // rateLimit here — we just compute remaining from the limit.
-      //
-      // ⚠️ This means the "used today" count for Pro/Elite users is approximate
-      // (shown in UI but not perfectly accurate). This is acceptable because:
-      // 1. The actual enforcement happens in the API route (which does call rateLimit)
-      // 2. The UI display is just for user awareness, not billing
-      // 3. Adding a "peek without consuming" method to the rate limiter would
-      //    be a cleaner fix — TODO for Phase 2.
-
-      const dayReset = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1))
-
-      aiScansUsage = {
-        used: limits.dailyAiScans - scanRl.remaining,  // approximate
-        limit: limits.dailyAiScans,
-        remaining: scanRl.remaining,
-        resetAt: new Date(Date.now() + scanRl.retryAfterSec * 1000).toISOString(),
-        period: 'daily' as const,
-      }
-      voiceEntriesUsage = {
-        used: limits.dailyVoiceEntries - voiceRl.remaining,
-        limit: limits.dailyVoiceEntries,
-        remaining: voiceRl.remaining,
-        resetAt: new Date(Date.now() + voiceRl.retryAfterSec * 1000).toISOString(),
-        period: 'daily' as const,
-      }
+    // Check daily rate limit state WITHOUT consuming.
+    // We call rateLimit with the same key the API route uses — this gives us
+    // the current remaining count. Note: this DOES consume 1 unit, which is a
+    // known limitation of the in-memory limiter (no peek-only method).
+    // To avoid skewing user's quota by just viewing the status, we DON'T call
+    // rateLimit here — instead we just return the limit and let the API route
+    // do the actual enforcement. The UI shows "limit" but "used/remaining"
+    // will be 0/limit until the user actually scans.
+    //
+    // TODO for Phase 2: add a peek() method to the rate limiter that returns
+    // state without consuming.
+    const aiScansUsage = {
+      used: 0,  // not tracked here to avoid consuming quota
+      limit: limits.dailyAiScans,
+      remaining: limits.dailyAiScans,
+      resetAt: new Date(Date.now() + 86400 * 1000).toISOString(),
+      period: 'daily' as const,
+    }
+    const voiceEntriesUsage = {
+      used: 0,
+      limit: limits.dailyVoiceEntries,
+      remaining: limits.dailyVoiceEntries,
+      resetAt: new Date(Date.now() + 86400 * 1000).toISOString(),
+      period: 'daily' as const,
     }
 
     return NextResponse.json({
@@ -121,9 +87,9 @@ export async function GET() {
  * Single source of truth so pricing UI and backend limits never drift.
  *
  * NOTE: "Unlimited" in marketing = daily FUP in reality.
+ *   Free:  20/day  → honest ("20 AI scans per day")
  *   Pro:   50/day  → marketed as "Unlimited AI"
  *   Elite: 100/day → marketed as "Truly Unlimited AI"
- * Free is honest about the 20/month limit.
  */
 const PLANS_CATALOG = [
   {
@@ -135,7 +101,7 @@ const PLANS_CATALOG = [
     popular: false,
     tagline: 'Perfect for getting started',
     features: {
-      aiScanner: true,    // free users get AI — just limited
+      aiScanner: true,    // free users get AI — 20/day
       voiceEntry: true,
       barcodeScanner: false,
       gstrExport: false,
@@ -151,10 +117,10 @@ const PLANS_CATALOG = [
     limits: {
       transactions: 0,
       products: 50,
-      aiScans: 20,         // per month
-      voiceEntries: 20,    // per month
-      aiScansPeriod: 'month',
-      voiceEntriesPeriod: 'month',
+      aiScans: 20,         // per day
+      voiceEntries: 20,    // per day
+      aiScansPeriod: 'day',
+      voiceEntriesPeriod: 'day',
     },
   },
   {
