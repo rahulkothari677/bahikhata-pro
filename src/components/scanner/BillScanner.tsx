@@ -296,12 +296,24 @@ export function BillScanner() {
       }
       try {
         // Step 1: Upload to Cloudinary (gets a URL, stores image for future)
+        sonnerToast.info('Uploading image...', { description: 'Step 1 of 2', duration: 2000 })
         const uploadRes = await offlineFetch('/api/upload-bill', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ imageBase64: base64 }),
         })
+
+        if (!uploadRes.ok) {
+          const uploadErr = await uploadRes.json().catch(() => ({}))
+          sonnerToast.error('Image upload failed', {
+            description: `HTTP ${uploadRes.status}: ${uploadErr.error || uploadRes.statusText || 'Unknown error'}`,
+            duration: 8000,
+          })
+          return
+        }
+
         const uploadData = await uploadRes.json()
+        sonnerToast.info('Image uploaded! Scanning with AI...', { description: 'Step 2 of 2', duration: 2000 })
 
         // Step 2: Send to AI scanner (use Cloudinary URL if upload succeeded, else base64)
         const imageUrl = uploadData.success ? uploadData.url : null
@@ -323,14 +335,27 @@ export function BillScanner() {
           return
         }
 
+        // Handle non-200 responses with visible error details
+        if (!scanRes.ok) {
+          const errData = await scanRes.json().catch(() => ({}))
+          sonnerToast.error(`Scan failed (HTTP ${scanRes.status})`, {
+            description: errData.error || errData.detail || errData.message || scanRes.statusText || 'Unknown server error',
+            duration: 10000,
+          })
+          return
+        }
+
         const data = await scanRes.json()
         if (data.error) {
-          toast({
-            title: 'Scan failed',
-            description: data.error,
-            variant: 'destructive',
+          sonnerToast.error('AI scan error', {
+            description: `${data.error}${data.detail ? ': ' + data.detail : ''}`,
+            duration: 10000,
           })
-          // Raw AI output logging removed — was leaking raw response to console
+        } else if (!data.bill || !data.bill.items || data.bill.items.length === 0) {
+          sonnerToast.warning('Scan returned no items', {
+            description: 'AI could not detect any items in this image. Try a clearer photo.',
+            duration: 8000,
+          })
         } else {
           // If we're in "adding more" mode, append new items to existing
           if (isAddingMore && existingItems.length > 0) {
@@ -343,23 +368,22 @@ export function BillScanner() {
             sonnerToast.success(`Added ${newItems.length} more items from second bill!`)
           } else {
             setScanned(data.bill)
-            sonnerToast.success('Bill scanned! Review and verify the data.')
+            sonnerToast.success(`Bill scanned! Found ${data.bill.items?.length || 0} items.`)
           }
         }
       } catch (e: any) {
-        toast({
-          title: 'Scan failed',
-          description: 'Please try again or enter manually',
-          variant: 'destructive',
+        // Network error, fetch failed, JSON parse error, etc.
+        sonnerToast.error('Scan request failed', {
+          description: `${e?.name || 'Error'}: ${e?.message || String(e)}. Check your internet connection and try again.`,
+          duration: 10000,
         })
       } finally {
         setScanning(false)
       }
     } catch (compressError: any) {
-      toast({
-        title: 'Failed to process image',
-        description: 'Please try a different image',
-        variant: 'destructive',
+      sonnerToast.error('Failed to process image', {
+        description: `${compressError?.name || 'Error'}: ${compressError?.message || 'Could not read the image file'}. Try a different image (PNG/JPG under 10MB).`,
+        duration: 10000,
       })
       setScanning(false)
     }
