@@ -20,6 +20,23 @@ export type ViewType =
 
 export type ViewMode = 'grid' | 'list'
 
+// Paywall feature type — must match GatedFeature in use-subscription.ts
+export type PaywallFeature =
+  | 'ai_scanner'
+  | 'barcode_scanner'
+  | 'gstr_export'
+  | 'whatsapp_sharing'
+  | 'voice_entry'
+  | 'recurring_entries'
+  | 'smart_insights'
+  | 'advanced_reports'
+  | 'staff_accounts'
+  | 'split_view'
+  | 'customer_statement'
+  | 'expense_budgets'
+  | 'repeat_last_sale'
+  | 'share_summary'
+
 export type FeatureKey =
   | 'darkMode'
   | 'keyboardShortcuts'
@@ -117,6 +134,13 @@ interface AppState {
   setLanguage: (l: 'en' | 'hi') => void
   searchOpen: boolean
   setSearchOpen: (open: boolean) => void
+  // Global paywall state — shared across all components via Zustand.
+  // Previously useSubscription used local useState, which meant the PaywallModal
+  // in page.tsx never saw state changes from BillScanner/VoiceEntry.
+  paywallOpen: boolean
+  paywallFeature: PaywallFeature | null
+  openPaywall: (feature: PaywallFeature) => void
+  closePaywall: () => void
 }
 
 
@@ -165,6 +189,10 @@ export const useAppStore = create<AppState>()(
       setLanguage: (l) => set({ language: l }),
       searchOpen: false,
       setSearchOpen: (open) => set({ searchOpen: open }),
+      paywallOpen: false,
+      paywallFeature: null,
+      openPaywall: (feature) => set({ paywallOpen: true, paywallFeature: feature }),
+      closePaywall: () => set({ paywallOpen: false, paywallFeature: null }),
     }),
   )
 

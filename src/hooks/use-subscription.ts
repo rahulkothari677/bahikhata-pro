@@ -8,32 +8,19 @@
  *   pro    — AI scanner, barcode, GST reports, WhatsApp, voice, recurring
  *   elite  — Smart insights, advanced analytics, staff accounts, priority support
  *
- * Usage:
- *   const { plan, canUse, upgrade } = useSubscription()
- *   if (!canUse('ai_scanner')) { showPaywall() }
+ * Paywall state is stored GLOBALLY in Zustand (app-store.ts) so that
+ * requireFeature() called from any component (BillScanner, VoiceEntry, etc.)
+ * correctly opens the PaywallModal rendered in page.tsx.
  */
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback } from 'react'
 import { offlineFetch } from '@/lib/offline-fetch'
-import { useState, useCallback } from 'react'
+import { useAppStore, type PaywallFeature } from '@/store/app-store'
 
 export type Plan = 'free' | 'pro' | 'elite'
 
-export type GatedFeature =
-  | 'ai_scanner'
-  | 'barcode_scanner'
-  | 'gstr_export'
-  | 'whatsapp_sharing'
-  | 'voice_entry'
-  | 'recurring_entries'
-  | 'smart_insights'
-  | 'advanced_reports'
-  | 'staff_accounts'
-  | 'split_view'
-  | 'customer_statement'
-  | 'expense_budgets'
-  | 'repeat_last_sale'
-  | 'share_summary'
+export type GatedFeature = PaywallFeature
 
 const PLAN_FEATURES: Record<Plan, GatedFeature[]> = {
   free: [],
@@ -87,8 +74,9 @@ export const FEATURE_LABELS: Record<GatedFeature, { label: string; plan: Plan }>
 
 export function useSubscription() {
   const queryClient = useQueryClient()
-  const [showPaywall, setShowPaywall] = useState(false)
-  const [paywallFeature, setPaywallFeature] = useState<GatedFeature | null>(null)
+  // Paywall state is GLOBAL via Zustand — BillScanner calling requireFeature()
+  // will correctly show the PaywallModal in page.tsx.
+  const { paywallOpen: showPaywall, paywallFeature, openPaywall, closePaywall } = useAppStore()
 
   const { data } = useQuery({
     queryKey: ['subscription-status'],
@@ -111,15 +99,9 @@ export function useSubscription() {
 
   const requireFeature = useCallback((feature: GatedFeature): boolean => {
     if (canUse(feature)) return true
-    setPaywallFeature(feature)
-    setShowPaywall(true)
+    openPaywall(feature)
     return false
-  }, [canUse])
-
-  const closePaywall = useCallback(() => {
-    setShowPaywall(false)
-    setPaywallFeature(null)
-  }, [])
+  }, [canUse, openPaywall])
 
   const refresh = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['subscription-status'] })

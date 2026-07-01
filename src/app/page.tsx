@@ -32,7 +32,6 @@ import { ConsentModal } from '@/components/common/ConsentModal'
 import { RatePromptModal } from '@/components/common/RatePromptModal'
 import { PaywallModal } from '@/components/common/PaywallModal'
 import { useRatePrompt } from '@/hooks/use-rate-prompt'
-import { useSubscription } from '@/hooks/use-subscription'
 import { useStaffPermissions } from '@/hooks/use-staff-permissions'
 
 // Lazy-load heavy components that are only used occasionally.
@@ -53,7 +52,7 @@ export default function Home() {
   useBrowserBackButton() // Enable browser back button to navigate within app
   const { shouldShowRatePrompt, onRated, onDismiss } = useRatePrompt()
   const { canAccess } = useStaffPermissions()
-  const { showPaywall, paywallFeature, closePaywall } = useSubscription()
+  const { paywallOpen, paywallFeature, closePaywall } = useAppStore()
   const queryClient = useQueryClient()
   const [onboardingDismissed, setOnboardingDismissed] = useState(false)
   const [tourDone, setTourDone] = useState(false)
@@ -171,7 +170,7 @@ export default function Home() {
         {!showOnboarding && <OnboardingTour onDone={() => setTourDone(true)} />}
         {!showOnboarding && tourDone && <ConsentModal />}
         <RatePromptModal open={shouldShowRatePrompt} onRated={onRated} onDismiss={onDismiss} />
-        <PaywallModal feature={paywallFeature} open={showPaywall} onClose={closePaywall} />
+        <PaywallModal feature={paywallFeature} open={paywallOpen} onClose={closePaywall} />
       </div>
     )
   }
@@ -251,7 +250,7 @@ export default function Home() {
       {!showOnboarding && <OnboardingTour onDone={() => setTourDone(true)} />}
       {!showOnboarding && tourDone && <ConsentModal />}
       <RatePromptModal open={shouldShowRatePrompt} onRated={onRated} onDismiss={onDismiss} />
-      <PaywallModal feature={paywallFeature} open={showPaywall} onClose={closePaywall} />
+      <PaywallModal feature={paywallFeature} open={paywallOpen} onClose={closePaywall} />
     </div>
   )
 }
