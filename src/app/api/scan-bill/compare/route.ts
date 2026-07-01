@@ -68,7 +68,7 @@ Return ONLY a valid JSON object with this exact structure (no markdown, no extra
   "cgst": number,
   "sgst": number,
   "igst": number,
-  "totalAmount": number (MANDATORY: final payable amount. If written on the bill, use that. If NOT written, you MUST calculate it: sum all item totals + cgst + sgst + igst - discountAmount. NEVER return 0 unless the bill is genuinely for ₹0.),
+  "totalAmount": number (final payable amount. Logic: 1) If a total is explicitly written on the bill, use that number. 2) If NO total is written but item prices ARE visible, calculate it: sum all item totals + cgst + sgst + igst - discountAmount. 3) If NO prices are visible anywhere on the bill (e.g., a handwritten note with only product names and quantities), return 0. Never fabricate prices that aren't on the bill.),
   "paymentMode": "cash|upi|card|bank|credit - infer from text (if 'cash' written = cash, 'upi' or 'qr' = upi, 'card' = card, 'udhaar' or 'credit' or 'baad mein' = credit, else cash)",
   "overallConfidence": number (0-1, overall confidence in the extraction)
 }
