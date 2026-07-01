@@ -15,6 +15,7 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback } from 'react'
+import { toast as sonnerToast } from 'sonner'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { useAppStore, type PaywallFeature } from '@/store/app-store'
 
@@ -99,9 +100,44 @@ export function useSubscription() {
 
   const requireFeature = useCallback((feature: GatedFeature): boolean => {
     if (canUse(feature)) return true
+
+    // Show a visible toast FIRST so the user knows exactly why they're blocked.
+    // The PaywallModal opens after, giving them the upgrade path.
+    const info = FEATURE_LABELS[feature]
+    const requiredPlan = info.plan
+
+    if (plan === 'free') {
+      // Free user — feature not in their plan at all
+      sonnerToast.error(`${info.label} requires ${requiredPlan === 'elite' ? 'Elite' : 'Pro'} plan`, {
+        description: `This feature isn't available on the Free plan. Upgrade to unlock it.`,
+        duration: 5000,
+      })
+    } else if (plan === 'pro' && requiredPlan === 'elite') {
+      // Pro user trying Elite feature
+      sonnerToast.error(`${info.label} requires Elite plan`, {
+        description: `This feature isn't available on your Pro plan. Upgrade to Elite to unlock it.`,
+        duration: 5000,
+      })
+    } else {
+      // User has the feature in their plan but hit the daily limit (e.g. 20/20 scans today)
+      const usageInfo = usage as any
+      const featureUsage = feature === 'ai_scanner' ? usageInfo?.aiScans : feature === 'voice_entry' ? usageInfo?.voiceEntries : null
+      if (featureUsage && featureUsage.remaining === 0) {
+        sonnerToast.error(`Daily limit reached for ${info.label}`, {
+          description: `You've used all ${featureUsage.limit} ${feature === 'ai_scanner' ? 'AI scans' : 'voice entries'} today. Come back tomorrow or upgrade for more.`,
+          duration: 6000,
+        })
+      } else {
+        sonnerToast.error(`${info.label} not available`, {
+          description: `Upgrade your plan to unlock this feature.`,
+          duration: 5000,
+        })
+      }
+    }
+
     openPaywall(feature)
     return false
-  }, [canUse, openPaywall])
+  }, [canUse, openPaywall, plan, usage])
 
   const refresh = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['subscription-status'] })
