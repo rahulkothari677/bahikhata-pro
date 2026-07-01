@@ -6,7 +6,7 @@ import { Loader2, Crown, CheckCircle2 } from 'lucide-react'
 import { toast as sonnerToast } from 'sonner'
 
 interface CheckoutButtonProps {
-  planId: 'pro' | 'business'
+  planId: 'pro' | 'elite'
   planName: string
   price: number
   billingCycle: 'monthly' | 'yearly'
