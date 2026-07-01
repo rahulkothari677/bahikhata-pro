@@ -14,7 +14,7 @@ import { StaffManagement } from '@/components/settings/StaffManagement'
 import { useShops } from '@/hooks/use-shops'
 import { exportBackup } from '@/lib/data-backup'
 import { useBusinessGoals } from '@/hooks/use-business-goals'
-import { Target, Download, Upload, Calendar, Clock } from 'lucide-react'
+import { Target, Download, Upload, Calendar, Clock, Coins } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { toast as sonnerToast } from 'sonner'
 import { haptic } from '@/lib/haptic'
@@ -706,16 +706,20 @@ export function Settings() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
               <Sparkles className="w-4 h-4 text-primary" />
-              AI Scanner Comparison Tool
+              AI Tools
             </CardTitle>
             <p className="text-xs text-muted-foreground">
-              Test Gemini, OpenAI, and Groq side-by-side on the same bill. Find the most accurate provider for Hindi bills.
+              Compare AI providers and track real-time token usage & costs
             </p>
           </CardHeader>
-          <CardContent>
-            <Button onClick={() => setView('ai-comparison')} className="gap-2">
+          <CardContent className="flex flex-col sm:flex-row gap-2">
+            <Button onClick={() => setView('ai-comparison')} className="gap-2 flex-1">
               <Sparkles className="w-4 h-4" />
-              Open AI Comparison
+              Compare Providers
+            </Button>
+            <Button onClick={() => setView('ai-usage')} variant="outline" className="gap-2 flex-1">
+              <Coins className="w-4 h-4" />
+              Usage & Cost Dashboard
             </Button>
           </CardContent>
         </Card>

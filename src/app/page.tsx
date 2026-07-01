@@ -45,6 +45,7 @@ const Reports = dynamic(() => import('@/components/reports/Reports').then(m => (
 const Settings = dynamic(() => import('@/components/settings/Settings').then(m => ({ default: m.Settings })), { ssr: false })
 const PricingPlans = dynamic(() => import('@/components/subscription/PricingPlans').then(m => ({ default: m.PricingPlans })), { ssr: false })
 const AIComparison = dynamic(() => import('@/components/settings/AIComparison').then(m => ({ default: m.AIComparison })), { ssr: false })
+const AIUsage = dynamic(() => import('@/components/settings/AIUsage').then(m => ({ default: m.AIUsage })), { ssr: false })
 
 export default function Home() {
   const { session, status, isOfflineSession } = useOfflineSession()
@@ -199,7 +200,7 @@ export default function Home() {
                 new Promise((r) => setTimeout(r, 3000)),
               ])
             }}
-            enabled={!['new-sale', 'new-purchase', 'transaction-detail', 'party-profile', 'scanner', 'pricing', 'ai-comparison'].includes(currentView)}
+            enabled={!['new-sale', 'new-purchase', 'transaction-detail', 'party-profile', 'scanner', 'pricing', 'ai-comparison', 'ai-usage'].includes(currentView)}
           >
             {currentView === 'dashboard' && <Dashboard />}
             {currentView === 'inventory' && <Inventory />}
@@ -225,6 +226,7 @@ export default function Home() {
               </div>
             )}
             {currentView === 'ai-comparison' && <AIComparison />}
+            {currentView === 'ai-usage' && <AIUsage />}
             {currentView === 'transaction-detail' && <TransactionDetail />}
             {currentView === 'party-profile' && <PartyProfile />}
             {currentView === 'new-sale' && <TransactionEntry type="sale" />}

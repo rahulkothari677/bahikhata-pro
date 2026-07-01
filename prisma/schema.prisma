@@ -47,6 +47,7 @@ model User {
   usageTracking  UsageTracking[]
   shops         Shop[]
   scanComparisons ScanComparison[]
+  aiUsageLogs    AiUsageLog[]
 }
 
 // ==================== SHOPS (Multi-shop support) ====================
@@ -345,5 +346,39 @@ model ScanComparison {
 
   @@index([userId, createdAt])
   @@index([createdAt])
+}
+
+// ==================== AI USAGE LOG (cost tracking) ====================
+// Every AI call (scan-bill, voice-parse) gets logged here with exact token
+// counts and calculated cost. Used by the /settings/ai-usage dashboard to
+// show the founder exactly how much each feature costs to run.
+model AiUsageLog {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  feature       String   // 'scan-bill' | 'voice-parse' | 'scan-compare'
+  provider      String   // 'gemini' | 'openai' | 'groq' | 'vlm' | 'zai-sdk'
+  model         String   // e.g. 'gemini-2.5-flash', 'llama-4-scout-17b-16e-instruct'
+
+  // Token counts from the AI provider's response
+  inputTokens   Int      @default(0)
+  outputTokens  Int      @default(0)
+  totalTokens   Int      @default(0)
+
+  // Cost in INR (calculated at time of call using current pricing)
+  // Stored per-call so historical costs are preserved even if prices change
+  costInr       Float    @default(0)
+
+  // Performance + result
+  durationMs    Int      @default(0)
+  success       Boolean  @default(true)
+  errorMessage  String?  // null if success, error text if failed
+
+  createdAt     DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([feature, createdAt])
+  @@index([provider, createdAt])
 }
 

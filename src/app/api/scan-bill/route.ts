@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUserId } from '@/lib/get-auth'
 import { rateLimit, getClientIP, rateLimitedResponse } from '@/lib/rate-limit'
 import { checkUsage, incrementUsage } from '@/lib/usage-limits'
+import { calculateCostInr } from '@/lib/ai-pricing'
+import { db } from '@/lib/db'
 
 // POST /api/scan-bill - uses VLM to extract bill data from image
 // Supports two modes:
@@ -120,6 +122,15 @@ Return JSON only, no commentary, no markdown formatting.`
 
     let content = ''
 
+    // AI metadata for cost tracking — populated by the provider call,
+    // logged to AiUsageLog after successful parse
+    let aiProviderUsed = 'zai-sdk'
+    let aiModelUsed = 'zai-sdk'
+    let aiInputTokens = 0
+    let aiOutputTokens = 0
+    let aiTotalTokens = 0
+    let aiDurationMs = 0
+
     // Mode 1: Try Z.AI SDK first (works in sandbox/dev)
     if (!process.env.VLM_API_KEY && !process.env.GEMINI_API_KEY && !process.env.OPENAI_API_KEY && !process.env.GROQ_API_KEY) {
       try {
@@ -170,12 +181,42 @@ Return JSON only, no commentary, no markdown formatting.`
       const fallbackResult = await callWithFallback(prompt, imageSource)
 
       if (!fallbackResult.success) {
+        // Log the failed attempt for cost tracking (failed calls still
+        // consume tokens on the provider side, so we track them too)
+        await db.aiUsageLog.create({
+          data: {
+            userId,
+            feature: 'scan-bill',
+            provider: fallbackResult.providerUsed || 'unknown',
+            model: fallbackResult.modelUsed || 'unknown',
+            inputTokens: fallbackResult.inputTokens || 0,
+            outputTokens: fallbackResult.outputTokens || 0,
+            totalTokens: fallbackResult.totalTokens || 0,
+            costInr: calculateCostInr(
+              fallbackResult.providerUsed || 'unknown',
+              fallbackResult.modelUsed || '',
+              fallbackResult.inputTokens || 0,
+              fallbackResult.outputTokens || 0,
+            ),
+            durationMs: fallbackResult.durationMs || 0,
+            success: false,
+            errorMessage: fallbackResult.error?.slice(0, 500),
+          },
+        }).catch(() => {}) // don't fail the request if logging fails
+
         return NextResponse.json({
           error: 'All AI providers failed',
           detail: fallbackResult.error,
         }, { status: 502 })
       }
       content = fallbackResult.content!
+      // Save metadata for logging after successful parse
+      aiProviderUsed = fallbackResult.providerUsed || 'unknown'
+      aiModelUsed = fallbackResult.modelUsed || 'unknown'
+      aiInputTokens = fallbackResult.inputTokens || 0
+      aiOutputTokens = fallbackResult.outputTokens || 0
+      aiTotalTokens = fallbackResult.totalTokens || 0
+      aiDurationMs = fallbackResult.durationMs || 0
     }
 
     // Try to parse JSON from response
@@ -228,7 +269,38 @@ Return JSON only, no commentary, no markdown formatting.`
     // don't lose credits on failed scans).
     await incrementUsage(userId, 'aiScans')
 
-    return NextResponse.json({ success: true, bill: parsed })
+    // Log the AI call with token counts + cost for the usage dashboard.
+    // Fire-and-forget (non-blocking) so the user doesn't wait for the log write.
+    const costInr = calculateCostInr(aiProviderUsed, aiModelUsed, aiInputTokens, aiOutputTokens)
+    db.aiUsageLog.create({
+      data: {
+        userId,
+        feature: 'scan-bill',
+        provider: aiProviderUsed,
+        model: aiModelUsed,
+        inputTokens: aiInputTokens,
+        outputTokens: aiOutputTokens,
+        totalTokens: aiTotalTokens,
+        costInr,
+        durationMs: aiDurationMs,
+        success: true,
+      },
+    }).catch(() => {}) // don't fail the request if logging fails
+
+    // Include token usage in the response so the client can display it
+    return NextResponse.json({
+      success: true,
+      bill: parsed,
+      aiUsage: {
+        provider: aiProviderUsed,
+        model: aiModelUsed,
+        inputTokens: aiInputTokens,
+        outputTokens: aiOutputTokens,
+        totalTokens: aiTotalTokens,
+        costInr: Math.round(costInr * 100) / 100,
+        durationMs: aiDurationMs,
+      },
+    })
   } catch (error) {
     console.error('Scan bill error:', error)
     return NextResponse.json({
@@ -257,6 +329,11 @@ interface FallbackResult {
   content?: string
   error?: string
   providerUsed?: string
+  modelUsed?: string
+  inputTokens?: number
+  outputTokens?: number
+  totalTokens?: number
+  durationMs?: number
 }
 
 async function callWithFallback(prompt: string, imageSource: string): Promise<FallbackResult> {
@@ -279,6 +356,11 @@ async function callWithFallback(prompt: string, imageSource: string): Promise<Fa
       content: result.content,
       error: result.error,
       providerUsed: 'vlm',
+      modelUsed: process.env.VLM_MODEL || 'gpt-4o-mini',
+      inputTokens: result.inputTokens,
+      outputTokens: result.outputTokens,
+      totalTokens: result.totalTokens,
+      durationMs: result.durationMs,
     }
   }
 
@@ -319,6 +401,11 @@ async function callWithFallback(prompt: string, imageSource: string): Promise<Fa
         success: true,
         content: result.content,
         providerUsed: provider.name,
+        modelUsed: provider.model,
+        inputTokens: result.inputTokens,
+        outputTokens: result.outputTokens,
+        totalTokens: result.totalTokens,
+        durationMs: result.durationMs,
       }
     }
     console.warn(`[scan-bill] Provider ${provider.name} failed: ${result.error?.slice(0, 150)}`)
@@ -333,13 +420,23 @@ async function callWithFallback(prompt: string, imageSource: string): Promise<Fa
 
 /**
  * Calls a single OpenAI-compatible VLM provider. Returns the raw text
- * response (which should be JSON containing the parsed bill data).
+ * response (which should be JSON containing the parsed bill data) plus
+ * token usage info for cost tracking.
  */
 async function callSingleProvider(
   provider: FallbackProvider,
   prompt: string,
   imageSource: string,
-): Promise<{ success: boolean; content?: string; error?: string }> {
+): Promise<{
+  success: boolean
+  content?: string
+  error?: string
+  inputTokens?: number
+  outputTokens?: number
+  totalTokens?: number
+  durationMs?: number
+}> {
+  const start = Date.now()
   try {
     const response = await fetch(`${provider.baseUrl}chat/completions`, {
       method: 'POST',
@@ -362,18 +459,27 @@ async function callSingleProvider(
       }),
     })
 
+    const durationMs = Date.now() - start
+
     if (!response.ok) {
       const errText = await response.text()
-      return { success: false, error: `HTTP ${response.status}: ${errText.slice(0, 200)}` }
+      return { success: false, error: `HTTP ${response.status}: ${errText.slice(0, 200)}`, durationMs }
     }
 
     const data = await response.json()
     const content = data.choices?.[0]?.message?.content || ''
     if (!content) {
-      return { success: false, error: 'Empty response from provider' }
+      return { success: false, error: 'Empty response from provider', durationMs }
     }
-    return { success: true, content }
+
+    // Extract token usage from the provider's response.
+    // OpenAI-compatible APIs return: { usage: { prompt_tokens, completion_tokens, total_tokens } }
+    const inputTokens = data.usage?.prompt_tokens || 0
+    const outputTokens = data.usage?.completion_tokens || 0
+    const totalTokens = data.usage?.total_tokens || (inputTokens + outputTokens)
+
+    return { success: true, content, inputTokens, outputTokens, totalTokens, durationMs }
   } catch (error) {
-    return { success: false, error: String(error).slice(0, 200) }
+    return { success: false, error: String(error).slice(0, 200), durationMs: Date.now() - start }
   }
 }

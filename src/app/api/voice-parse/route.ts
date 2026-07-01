@@ -98,6 +98,7 @@ Return JSON only, no commentary.`
     const baseUrl = process.env.VLM_BASE_URL || 'https://api.groq.com/openai/v1'
     const model = process.env.VLM_MODEL || 'llama-3.3-70b-versatile'
 
+    const aiStart = Date.now()
     const response = await fetch(`${baseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
@@ -120,10 +121,27 @@ Return JSON only, no commentary.`
         temperature: 0.1, // Low temperature for consistent parsing
       }),
     })
+    const aiDurationMs = Date.now() - aiStart
 
     if (!response.ok) {
       const errText = await response.text()
       console.error('Voice parse API error:', errText)
+      // Log the failed attempt
+      ;(await import('@/lib/db')).db.aiUsageLog.create({
+        data: {
+          userId,
+          feature: 'voice-parse',
+          provider: 'vlm',
+          model,
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+          costInr: 0,
+          durationMs: aiDurationMs,
+          success: false,
+          errorMessage: `HTTP ${response.status}: ${errText.slice(0, 300)}`,
+        },
+      }).catch(() => {})
       return NextResponse.json({
         error: 'Failed to parse voice entry',
         detail: errText,
@@ -132,6 +150,11 @@ Return JSON only, no commentary.`
 
     const data = await response.json()
     let content = data.choices?.[0]?.message?.content || ''
+
+    // Extract token usage from the provider's response
+    const inputTokens = data.usage?.prompt_tokens || 0
+    const outputTokens = data.usage?.completion_tokens || 0
+    const totalTokens = data.usage?.total_tokens || (inputTokens + outputTokens)
 
     // Parse JSON from response
     let parsed: any = null
@@ -168,10 +191,38 @@ Return JSON only, no commentary.`
     // Record successful voice parse in usage tracking (after AI succeeded).
     await incrementUsage(userId, 'voiceParses')
 
+    // Log the AI call with token counts + cost for the usage dashboard.
+    const { calculateCostInr } = await import('@/lib/ai-pricing')
+    const { db } = await import('@/lib/db')
+    const costInr = calculateCostInr('vlm', model, inputTokens, outputTokens)
+    db.aiUsageLog.create({
+      data: {
+        userId,
+        feature: 'voice-parse',
+        provider: 'vlm',
+        model,
+        inputTokens,
+        outputTokens,
+        totalTokens,
+        costInr,
+        durationMs: aiDurationMs,
+        success: true,
+      },
+    }).catch(() => {})
+
     return NextResponse.json({
       success: true,
       transaction: parsed,
       _source: 'llm',  // analytics: came from LLM, not regex
+      aiUsage: {
+        provider: 'vlm',
+        model,
+        inputTokens,
+        outputTokens,
+        totalTokens,
+        costInr: Math.round(costInr * 100) / 100,
+        durationMs: aiDurationMs,
+      },
     })
   } catch (error) {
     console.error('Voice parse error:', error)
