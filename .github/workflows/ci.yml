@@ -23,15 +23,16 @@ jobs:
 
       - name: Run ESLint
         run: npx next lint
-        continue-on-error: true # Lint warnings shouldn't block the build
+        continue-on-error: true # Lint warnings are non-blocking (style only)
 
       - name: Run TypeScript type check
         run: npx tsc --noEmit
-        continue-on-error: true # We have ignoreBuildErrors: true in next.config, so let's not block CI yet
+        # BLOCKING — type errors indicate real bugs and must not reach production.
+        # Previously had continue-on-error: true, removed per Phase 1 audit.
 
       - name: Run Jest tests
         run: npx jest
-        continue-on-error: true # Tests are nice-to-have, not blocking yet
+        # BLOCKING — unit tests must pass before merge.
 
       - name: Build Next.js project
         run: npx next build
@@ -39,3 +40,38 @@ jobs:
           NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           NEXTAUTH_URL: ${{ secrets.NEXTAUTH_URL }}
+
+  e2e-tests:
+    runs-on: ubuntu-latest
+    needs: quality-check
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright E2E tests
+        run: npx playwright test
+        env:
+          # Use a dummy DATABASE_URL for E2E — tests use mock data
+          DATABASE_URL: 'file:./e2e-test.db'
+          NEXTAUTH_SECRET: 'e2e-test-secret'
+          NEXTAUTH_URL: 'http://localhost:3000'
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

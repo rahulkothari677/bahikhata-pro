@@ -69,3 +69,10 @@ worklog.md
 
 # Z scripts
 /.zscripts/
+# Playwright
+/playwright-report/
+/test-results/
+/blob-report/
+/playwright/.cache/
+/e2e-test.db
+

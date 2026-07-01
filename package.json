@@ -9,6 +9,9 @@
     "test": "jest",
     "test:verbose": "jest --verbose",
     "test:watch": "jest --watch",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:report": "playwright show-report",
     "lint": "eslint .",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
@@ -67,6 +70,7 @@
     "zustand": "^5.0.6"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@tailwindcss/postcss": "^4",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
