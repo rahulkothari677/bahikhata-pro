@@ -268,7 +268,7 @@ async function callWithFallback(prompt: string, imageSource: string): Promise<Fa
       {
         name: 'vlm',
         apiKey: process.env.VLM_API_KEY,
-        baseUrl: process.env.VLM_BASE_URL || 'https://api.openai.com/v1',
+        baseUrl: process.env.VLM_BASE_URL || 'https://api.openai.com/v1/',
         model: process.env.VLM_MODEL || 'gpt-4o-mini',
       },
       prompt,
@@ -292,13 +292,13 @@ async function callWithFallback(prompt: string, imageSource: string): Promise<Fa
     {
       name: 'openai',
       apiKey: process.env.OPENAI_API_KEY,
-      baseUrl: 'https://api.openai.com/v1',
+      baseUrl: 'https://api.openai.com/v1/',
       model: 'gpt-4o-mini',
     },
     {
       name: 'groq',
       apiKey: process.env.GROQ_API_KEY,
-      baseUrl: 'https://api.groq.com/openai/v1',
+      baseUrl: 'https://api.groq.com/openai/v1/',
       model: 'llama-3.2-90b-vision-preview',
     },
   ].filter((p) => p.apiKey) // skip providers with no key

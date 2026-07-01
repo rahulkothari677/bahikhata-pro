@@ -142,13 +142,13 @@ export async function POST(req: NextRequest) {
       {
         name: 'openai',
         apiKey: process.env.OPENAI_API_KEY,
-        baseUrl: 'https://api.openai.com/v1',
+        baseUrl: 'https://api.openai.com/v1/',
         model: 'gpt-4o-mini',
       },
       {
         name: 'groq',
         apiKey: process.env.GROQ_API_KEY,
-        baseUrl: 'https://api.groq.com/openai/v1',
+        baseUrl: 'https://api.groq.com/openai/v1/',
         model: 'llama-3.2-90b-vision-preview',
       },
     ]
