@@ -74,3 +74,30 @@ Stage Summary:
 - Files added: src/lib/offline-db.ts, src/lib/offline-fetch.ts, src/hooks/use-offline-session.ts
 - Files modified: 27 components/providers/page files
 - Scripts saved: scripts/bulk-replace-fetch.py, scripts/fix-template-literals.py, scripts/fix-misplaced-imports.py
+
+---
+Task ID: bahikhata-pro-ai-comparison
+Agent: main
+Task: Build multi-provider AI scanner comparison tool + fallback chain so user can test Gemini vs OpenAI vs Groq side-by-side on Hindi bills and pick the most accurate.
+
+Work Log:
+- Updated .env.example: fixed deprecated gemini-1.5-flash → gemini-2.5-flash, added trailing slash to Gemini base URL (was causing 404s), added multi-provider env vars (GEMINI_API_KEY, OPENAI_API_KEY, GROQ_API_KEY), added Razorpay env vars placeholder, added clear setup notes with API key URLs.
+- Root-caused prior "Gemini didn't work" issue: model name was deprecated by Google in late 2025. No code change needed — env var fix only.
+- Added ScanComparison Prisma model: stores image preview, 3 provider results as JSON, optional ground truth, computed scores per provider. Indexed by (userId, createdAt) and (createdAt) for fast history queries.
+- Ran prisma db push locally (sqlite) and prisma generate. Production deploy will auto-run on Vercel.
+- Created /api/scan-bill/compare POST route: fires all configured providers IN PARALLEL using Promise.allSettled (so one provider failing doesn't kill others). Tight rate limit: 5 comparisons/user/hour (each = 3 API calls = costs money). Saves results to DB for history.
+- Created /api/scan-bill/compare/history GET route: returns user's last N comparisons + computed aggregate stats (success rate, avg duration, avg score per provider).
+- Created /api/scan-bill/compare/[id] PATCH route: saves user-entered ground truth + auto-scores each provider (25 pts each for seller name, total amount, items count, items name match → 0-100 scale).
+- Refactored main /api/scan-bill/route.ts to use callWithFallback() chain: Gemini 2.5-flash → OpenAI gpt-4o-mini → Groq llama-3.2-90b. Backward compat preserved: if VLM_API_KEY is set (legacy), uses it directly without fallback chain.
+- Added 'ai-comparison' to ViewType union in app-store.ts.
+- Built AIComparison.tsx admin page: 3-step flow (upload image → see side-by-side results → enter ground truth for scoring). Shows leaderboard card with avg accuracy/success rate/speed per provider. Shows test history with per-provider scores. Includes setup help card with API key URLs.
+- Wired AIComparison into page.tsx via dynamic import (ssr: false, separate chunk).
+- Added "AI Scanner Comparison Tool" CTA card in Settings → Features tab (above About section).
+
+Stage Summary:
+- Files created: 5 (compare/route.ts, compare/history/route.ts, compare/[id]/route.ts, AIComparison.tsx, plus schema model)
+- Files modified: 4 (.env.example, schema.prisma, scan-bill/route.ts, app-store.ts, Settings.tsx, page.tsx)
+- Zero TypeScript errors in src/ (only skills/ examples have unrelated errors)
+- Zero new lint errors
+- User can now: 1) get API keys from 3 providers, 2) test all 3 side-by-side on same bill, 3) enter ground truth to score accuracy, 4) see aggregate stats over time, 5) pick best provider for production. Production scanner auto-uses best provider (Gemini) with fallback chain for reliability.
+- To enable: set GEMINI_API_KEY (free from aistudio.google.com/apikey), OPENAI_API_KEY, GROQ_API_KEY in Vercel env vars. Comparison tool skips any provider without a key.

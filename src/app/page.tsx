@@ -45,6 +45,7 @@ const BillScanner = dynamic(() => import('@/components/scanner/BillScanner').the
 const Reports = dynamic(() => import('@/components/reports/Reports').then(m => ({ default: m.Reports })), { ssr: false })
 const Settings = dynamic(() => import('@/components/settings/Settings').then(m => ({ default: m.Settings })), { ssr: false })
 const PricingPlans = dynamic(() => import('@/components/subscription/PricingPlans').then(m => ({ default: m.PricingPlans })), { ssr: false })
+const AIComparison = dynamic(() => import('@/components/settings/AIComparison').then(m => ({ default: m.AIComparison })), { ssr: false })
 
 export default function Home() {
   const { session, status, isOfflineSession } = useOfflineSession()
@@ -199,7 +200,7 @@ export default function Home() {
                 new Promise((r) => setTimeout(r, 3000)),
               ])
             }}
-            enabled={!['new-sale', 'new-purchase', 'transaction-detail', 'party-profile', 'scanner', 'pricing'].includes(currentView)}
+            enabled={!['new-sale', 'new-purchase', 'transaction-detail', 'party-profile', 'scanner', 'pricing', 'ai-comparison'].includes(currentView)}
           >
             {currentView === 'dashboard' && <Dashboard />}
             {currentView === 'inventory' && <Inventory />}
@@ -224,6 +225,7 @@ export default function Home() {
                 <PricingPlans />
               </div>
             )}
+            {currentView === 'ai-comparison' && <AIComparison />}
             {currentView === 'transaction-detail' && <TransactionDetail />}
             {currentView === 'party-profile' && <PartyProfile />}
             {currentView === 'new-sale' && <TransactionEntry type="sale" />}

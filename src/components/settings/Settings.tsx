@@ -81,7 +81,7 @@ export function Settings() {
   const { toast } = useToast()
   const queryClient = useQueryClient()
   const { data: session } = useSession()
-  const { features, setFeature, resetFeatures, themeColor, setThemeColor, language, setLanguage } = useAppStore()
+  const { features, setFeature, resetFeatures, themeColor, setThemeColor, language, setLanguage, setView } = useAppStore()
   const isOwner = session?.user?.role !== 'staff'
   const [form, setForm] = useState({
     shopName: '', ownerName: '', phone: '', email: '',
@@ -698,6 +698,27 @@ export function Settings() {
           ))}
         </CardContent>
       </Card>
+      )}
+
+      {/* AI Provider Comparison tool — admin only */}
+      {settingsTab === 'features' && (
+        <Card className="shadow-card border-primary/30 bg-primary/5">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Sparkles className="w-4 h-4 text-primary" />
+              AI Scanner Comparison Tool
+            </CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Test Gemini, OpenAI, and Groq side-by-side on the same bill. Find the most accurate provider for Hindi bills.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <Button onClick={() => setView('ai-comparison')} className="gap-2">
+              <Sparkles className="w-4 h-4" />
+              Open AI Comparison
+            </Button>
+          </CardContent>
+        </Card>
       )}
 
       {/* About card — always visible at bottom */}

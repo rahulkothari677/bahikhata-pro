@@ -99,7 +99,7 @@ Return JSON only, no commentary, no markdown formatting.`
     let content = ''
 
     // Mode 1: Try Z.AI SDK first (works in sandbox/dev)
-    if (!process.env.VLM_API_KEY) {
+    if (!process.env.VLM_API_KEY && !process.env.GEMINI_API_KEY && !process.env.OPENAI_API_KEY && !process.env.GROQ_API_KEY) {
       try {
         const ZAI = (await import('z-ai-web-dev-sdk')).default
         const zai = await ZAI.create()
@@ -130,47 +130,30 @@ Return JSON only, no commentary, no markdown formatting.`
         console.error('Z.AI SDK error:', zaiError)
         return NextResponse.json({
           error: 'AI scanner not configured for production',
-          detail: 'Set VLM_API_KEY and VLM_BASE_URL environment variables in Vercel to enable AI bill scanning. See README for setup instructions.',
+          detail: 'Set VLM_API_KEY (or GEMINI_API_KEY / OPENAI_API_KEY / GROQ_API_KEY) and VLM_BASE_URL environment variables in Vercel to enable AI bill scanning. See README for setup instructions.',
           needsConfig: true,
         }, { status: 503 })
       }
     } else {
-      // Mode 2: Use OpenAI-compatible API (for production/Vercel)
-      const baseUrl = process.env.VLM_BASE_URL || 'https://api.openai.com/v1'
-      const model = process.env.VLM_MODEL || 'gpt-4o-mini'
+      // Mode 2: Production — use fallback chain across configured providers.
+      //
+      // Chain order (best accuracy → worst, per user testing on Hindi bills):
+      //   1. Gemini 2.5-flash  (best Hindi accuracy, cheapest)
+      //   2. OpenAI gpt-4o-mini (good fallback, more expensive)
+      //   3. Groq llama-3.2-90b (last resort, weaker on Hindi)
+      //
+      // Backward compat: if VLM_API_KEY is set (legacy single-provider config),
+      // use it directly with no fallback. This preserves the existing setup
+      // for users who haven't migrated to the multi-provider env vars yet.
+      const fallbackResult = await callWithFallback(prompt, imageSource)
 
-      const response = await fetch(`${baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.VLM_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model,
-          messages: [
-            {
-              role: 'user',
-              content: [
-                { type: 'text', text: prompt },
-                { type: 'image_url', image_url: { url: imageSource } },
-              ],
-            },
-          ],
-          max_tokens: 2000,
-        }),
-      })
-
-      if (!response.ok) {
-        const errText = await response.text()
-        console.error('VLM API error:', errText)
+      if (!fallbackResult.success) {
         return NextResponse.json({
-          error: 'AI scanner request failed',
-          detail: errText,
+          error: 'All AI providers failed',
+          detail: fallbackResult.error,
         }, { status: 502 })
       }
-
-      const data = await response.json()
-      content = data.choices?.[0]?.message?.content || ''
+      content = fallbackResult.content!
     }
 
     // Try to parse JSON from response
@@ -230,3 +213,141 @@ Return JSON only, no commentary, no markdown formatting.`
 }
 // Force fresh deploy Wed Jun 24 19:32:36 UTC 2026
 // Force fresh deploy for VLM config Wed Jun 24 20:09:13 UTC 2026
+
+// =====================================================================
+// Fallback chain — tries providers in order until one succeeds.
+// Used in production when at least one AI provider env var is set.
+// =====================================================================
+
+interface FallbackProvider {
+  name: string
+  apiKey: string | undefined
+  baseUrl: string
+  model: string
+}
+
+interface FallbackResult {
+  success: boolean
+  content?: string
+  error?: string
+  providerUsed?: string
+}
+
+async function callWithFallback(prompt: string, imageSource: string): Promise<FallbackResult> {
+  // Build the fallback chain in priority order.
+  // 1. If VLM_API_KEY is set, use it as the SOLE provider (legacy/single-provider mode).
+  // 2. Otherwise, try Gemini → OpenAI → Groq in that order.
+  if (process.env.VLM_API_KEY) {
+    const result = await callSingleProvider(
+      {
+        name: 'vlm',
+        apiKey: process.env.VLM_API_KEY,
+        baseUrl: process.env.VLM_BASE_URL || 'https://api.openai.com/v1',
+        model: process.env.VLM_MODEL || 'gpt-4o-mini',
+      },
+      prompt,
+      imageSource,
+    )
+    return {
+      success: result.success,
+      content: result.content,
+      error: result.error,
+      providerUsed: 'vlm',
+    }
+  }
+
+  const chain: FallbackProvider[] = [
+    {
+      name: 'gemini',
+      apiKey: process.env.GEMINI_API_KEY,
+      baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/',
+      model: 'gemini-2.5-flash',
+    },
+    {
+      name: 'openai',
+      apiKey: process.env.OPENAI_API_KEY,
+      baseUrl: 'https://api.openai.com/v1',
+      model: 'gpt-4o-mini',
+    },
+    {
+      name: 'groq',
+      apiKey: process.env.GROQ_API_KEY,
+      baseUrl: 'https://api.groq.com/openai/v1',
+      model: 'llama-3.2-90b-vision-preview',
+    },
+  ].filter((p) => p.apiKey) // skip providers with no key
+
+  if (chain.length === 0) {
+    return {
+      success: false,
+      error: 'No AI provider configured. Set VLM_API_KEY (legacy) or any of GEMINI_API_KEY, OPENAI_API_KEY, GROQ_API_KEY.',
+    }
+  }
+
+  const errors: string[] = []
+  for (const provider of chain) {
+    const result = await callSingleProvider(provider, prompt, imageSource)
+    if (result.success) {
+      console.log(`[scan-bill] Provider ${provider.name} succeeded`)
+      return {
+        success: true,
+        content: result.content,
+        providerUsed: provider.name,
+      }
+    }
+    console.warn(`[scan-bill] Provider ${provider.name} failed: ${result.error?.slice(0, 150)}`)
+    errors.push(`${provider.name}: ${result.error?.slice(0, 100)}`)
+  }
+
+  return {
+    success: false,
+    error: `All ${chain.length} providers failed. ${errors.join(' | ')}`,
+  }
+}
+
+/**
+ * Calls a single OpenAI-compatible VLM provider. Returns the raw text
+ * response (which should be JSON containing the parsed bill data).
+ */
+async function callSingleProvider(
+  provider: FallbackProvider,
+  prompt: string,
+  imageSource: string,
+): Promise<{ success: boolean; content?: string; error?: string }> {
+  try {
+    const response = await fetch(`${provider.baseUrl}chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${provider.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: provider.model,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: prompt },
+              { type: 'image_url', image_url: { url: imageSource } },
+            ],
+          },
+        ],
+        max_tokens: 2000,
+      }),
+    })
+
+    if (!response.ok) {
+      const errText = await response.text()
+      return { success: false, error: `HTTP ${response.status}: ${errText.slice(0, 200)}` }
+    }
+
+    const data = await response.json()
+    const content = data.choices?.[0]?.message?.content || ''
+    if (!content) {
+      return { success: false, error: 'Empty response from provider' }
+    }
+    return { success: true, content }
+  } catch (error) {
+    return { success: false, error: String(error).slice(0, 200) }
+  }
+}

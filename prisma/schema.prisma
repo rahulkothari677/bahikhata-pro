@@ -46,6 +46,7 @@ model User {
   subscriptions Subscription[]
   usageTracking  UsageTracking[]
   shops         Shop[]
+  scanComparisons ScanComparison[]
 }
 
 // ==================== SHOPS (Multi-shop support) ====================
@@ -310,3 +311,39 @@ model AuditLog {
   @@index([userId, createdAt])
   @@index([action, createdAt])
 }
+
+// ==================== AI SCAN COMPARISONS ====================
+// Stores results of side-by-side AI provider tests. Each record is one
+// bill image scanned by 1-3 providers (Gemini, OpenAI, Groq). Admins use
+// the /settings/ai-comparison page to compare accuracy and pick the best.
+model ScanComparison {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // The bill image that was scanned
+  imageName     String?  // filename or label, if user provided one
+  imagePreview  String   // base64 thumbnail (max ~50KB) for display in history
+
+  // Bill type the user said it was
+  billType      String   @default("purchase") // sale | purchase
+
+  // Results from each provider (null if that provider wasn't tested)
+  geminiResult  Json?    // { success, parsed, error, durationMs, tokensUsed }
+  openaiResult  Json?
+  groqResult    Json?
+
+  // Ground truth (what the user manually entered as the correct answer)
+  groundTruth   Json?    // { sellerName, totalAmount, itemsCount, items: [...] }
+
+  // Computed scores per provider (0-100, null if not tested or no ground truth)
+  geminiScore   Float?
+  openaiScore   Float?
+  groqScore     Float?
+
+  createdAt     DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
+}
+

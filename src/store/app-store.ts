@@ -16,6 +16,7 @@ export type ViewType =
   | 'new-sale'
   | 'new-purchase'
   | 'pricing'
+  | 'ai-comparison'
 
 export type ViewMode = 'grid' | 'list'
 
