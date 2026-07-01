@@ -36,7 +36,7 @@ const PAYMENT_MODES = [
 ]
 
 export function TransactionDetail() {
-  const { selectedTransactionId, setView, triggerRefresh, previousView, setPreviousView } = useAppStore()
+  const { selectedTransactionId, setSelectedTransactionId, setView, triggerRefresh, previousView, setPreviousView, selectedTransactionType, setSelectedTransactionType } = useAppStore()
   const { hideProfit } = useSetting()
   const [editOpen, setEditOpen] = useState(false)
   const [printing, setPrinting] = useState(false)
@@ -63,6 +63,17 @@ export function TransactionDetail() {
 
   const txn = data?.transaction
 
+  const goBack = () => {
+    // Clear the selected transaction so it doesn't reopen
+    setSelectedTransactionId(null)
+    setSelectedTransactionType(null)
+    // Go back to the previous view, or infer from transaction type
+    const targetView = previousView || (selectedTransactionType === 'sale' || data?.type === 'sale' ? 'sales' : selectedTransactionType === 'purchase' || data?.type === 'purchase' ? 'purchases' : 'income-expense')
+    setView(targetView)
+    setPreviousView(null)
+    triggerRefresh()
+  }
+
   const handleDelete = async () => {
     if (!txn) return
     if (!confirm('Delete this transaction? This cannot be undone.')) return
@@ -73,9 +84,7 @@ export function TransactionDetail() {
       queryClient.invalidateQueries({ queryKey: ['transactions'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       // Go back to ledger
-      setView(previousView || (txn.type === 'sale' ? 'sales' : txn.type === 'purchase' ? 'purchases' : 'income-expense'))
-      setPreviousView(null)
-      triggerRefresh()
+      goBack()
     }
   }
 

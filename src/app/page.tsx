@@ -200,7 +200,7 @@ export default function Home() {
                 new Promise((r) => setTimeout(r, 3000)),
               ])
             }}
-            enabled={!['new-sale', 'new-purchase', 'transaction-detail', 'party-profile', 'scanner', 'pricing', 'ai-comparison', 'ai-usage'].includes(currentView)}
+            enabled={!['new-sale', 'new-purchase', 'transaction-detail', 'party-profile', 'scanner', 'pricing', 'reports', 'settings', 'ai-comparison', 'ai-usage'].includes(currentView)}
           >
             {currentView === 'dashboard' && <Dashboard />}
             {currentView === 'inventory' && <Inventory />}

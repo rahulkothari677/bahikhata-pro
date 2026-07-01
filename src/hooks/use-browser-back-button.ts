@@ -53,7 +53,7 @@ const MAX_STACK_DEPTH = 15
 const ROOT_VIEWS: ViewType[] = ['dashboard', 'sales', 'inventory', 'more']
 
 export function useBrowserBackButton() {
-  const { currentView, setView } = useAppStore()
+  const { currentView, setView, setSelectedTransactionId, setSelectedTransactionType, setSelectedPartyId } = useAppStore()
   const viewStackRef = useRef<ViewType[]>([])
   const generationRef = useRef(0)
   const isPopstateRef = useRef(false)
@@ -184,6 +184,10 @@ export function useBrowserBackButton() {
         const previousView = viewStackRef.current[viewStackRef.current.length - 1]
         isPopstateRef.current = true
         lastPushedViewRef.current = previousView
+        // Clear any selected items when going back so they don't reopen
+        setSelectedTransactionId(null)
+        setSelectedTransactionType(null)
+        setSelectedPartyId(null)
         setView(previousView)
       }
       // If stack is just [dashboard], don't pop — next back press exits

@@ -57,7 +57,7 @@ interface ShopSetting {
 
 export async function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting): Promise<Blob> {
   const jsPDFMod: any = await import("jspdf")
-  const doc = new jsPDFMod.jsPDF()({ unit: 'mm', format: 'a4' })
+  const doc = new jsPDFMod.jsPDF({ unit: 'mm', format: 'a4' })
   const pageWidth = 210
   const pageHeight = 297
   const margin = 15
