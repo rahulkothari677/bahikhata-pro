@@ -278,7 +278,10 @@ Return JSON only, no commentary.`
 
     // VLM_API_KEY is set — use the legacy single-provider path
     const aiStart = Date.now()
-    const response = await fetch(`${baseUrl}/chat/completions`, {
+    // Ensure baseUrl ends with exactly one slash so we don't get double slashes
+    // (e.g. '.../openai//' → 404). If baseUrl already ends with '/', don't add another.
+    const normalizedBaseUrl = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`
+    const response = await fetch(`${normalizedBaseUrl}chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
