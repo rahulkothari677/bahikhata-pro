@@ -299,7 +299,7 @@ async function callWithFallback(prompt: string, imageSource: string): Promise<Fa
       name: 'groq',
       apiKey: process.env.GROQ_API_KEY,
       baseUrl: 'https://api.groq.com/openai/v1/',
-      model: 'llama-3.2-90b-vision-preview',
+      model: 'meta-llama/llama-4-scout-17b-16e-instruct',
     },
   ].filter((p) => p.apiKey) // skip providers with no key
 
