@@ -1,0 +1,55 @@
+/**
+ * SIGNING CONFIG FOR ANDROID RELEASE BUILD
+ *
+ * Copy this code into android/app/build.gradle, inside the `android { }` block.
+ * It reads keystore credentials from android/keystore.properties (which should
+ * NOT be committed to git — it's in .gitignore).
+ *
+ * After adding this, run: ./scripts/build-release-apk.sh
+ */
+
+// Add this at the TOP of android/app/build.gradle (before android { } block):
+//
+// def keystoreProperties = new Properties()
+// def keystorePropertiesFile = rootProject.file('keystore.properties')
+// if (keystorePropertiesFile.exists()) {
+//     keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+// }
+//
+// Then inside the android { } block, add:
+//
+// signingConfigs {
+//     release {
+//         if (keystoreProperties['storeFile'] != null) {
+//             storeFile file(keystoreProperties['storeFile'])
+//             storePassword keystoreProperties['storePassword']
+//             keyAlias keystoreProperties['keyAlias']
+//             keyPassword keystoreProperties['keyPassword']
+//         }
+//     }
+// }
+//
+// buildTypes {
+//     release {
+//         signingConfig signingConfigs.release
+//         minifyEnabled false
+//         proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+//     }
+// }
+//
+
+// TEMPLATE: android/keystore.properties
+// Create this file in the android/ directory with your actual credentials:
+//
+// storeFile=bahikhata-release.keystore
+// storePassword=your_keystore_password_here
+// keyAlias=bahikhata
+// keyPassword=your_key_password_here
+//
+
+// TEMPLATE: android/.gitignore additions
+// Add these lines to android/.gitignore to never commit secrets:
+//
+// *.keystore
+// keystore.properties
+//
