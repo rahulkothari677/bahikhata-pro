@@ -161,7 +161,26 @@ export function VoiceEntry({ onTransactionParsed, products = [] }: VoiceEntryPro
         requireFeature('voice_entry')
         return
       }
+
+      // Handle non-200 responses with visible error details
+      if (!r.ok) {
+        const errData = await r.json().catch(() => ({}))
+        sonnerToast.error(`Voice parse failed (HTTP ${r.status})`, {
+          description: errData.error || errData.detail || errData.message || r.statusText || 'Unknown server error',
+          duration: 10000,
+        })
+        return
+      }
+
       const data = await r.json()
+
+      if (!data.success) {
+        sonnerToast.error('AI parse error', {
+          description: `${data.error || 'Unknown error'}${data.detail ? ': ' + data.detail : ''}`,
+          duration: 10000,
+        })
+        return
+      }
 
       if (data.success) {
         const enrichedItems = (data.transaction.items || []).map((item: any) => {
@@ -193,9 +212,12 @@ export function VoiceEntry({ onTransactionParsed, products = [] }: VoiceEntryPro
         haptic.error()
         toast({ title: 'Could not parse voice entry', description: data.error, variant: 'destructive' })
       }
-    } catch (e) {
+    } catch (e: any) {
       haptic.error()
-      toast({ title: 'Failed to process voice', variant: 'destructive' })
+      sonnerToast.error('Voice request failed', {
+        description: `${e?.name || 'Error'}: ${e?.message || String(e)}. Check your internet connection.`,
+        duration: 10000,
+      })
     } finally {
       setProcessing(false)
     }

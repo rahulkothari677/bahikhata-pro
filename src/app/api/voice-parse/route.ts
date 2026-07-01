@@ -95,9 +95,188 @@ Rules:
 
 Return JSON only, no commentary.`
 
-    const baseUrl = process.env.VLM_BASE_URL || 'https://api.groq.com/openai/v1'
-    const model = process.env.VLM_MODEL || 'llama-3.3-70b-versatile'
+    const baseUrl = process.env.VLM_BASE_URL || 'https://api.groq.com/openai/v1/'
 
+    // Smart default model: if VLM_MODEL isn't set, infer from the base URL.
+    // This prevents the bug where VLM_BASE_URL points to Gemini but VLM_MODEL
+    // defaults to a Groq model (llama-3.3-70b-versatile) → 404 error.
+    const defaultModel = baseUrl.includes('generativelanguage')
+      ? 'gemini-2.5-flash'
+      : baseUrl.includes('api.openai.com')
+      ? 'gpt-4o-mini'
+      : 'llama-3.3-70b-versatile'
+    const model = process.env.VLM_MODEL || defaultModel
+
+    // If VLM_API_KEY is not set, try the fallback chain (same as scan-bill)
+    if (!process.env.VLM_API_KEY) {
+      // Try Gemini → OpenAI → Groq using their dedicated env vars
+      const geminiKey = process.env.GEMINI_API_KEY
+      const groqKey = process.env.GROQ_API_KEY
+
+      if (geminiKey) {
+        // Use Gemini for voice parsing
+        const aiStart = Date.now()
+        const geminiResponse = await fetch('https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${geminiKey}`,
+          },
+          body: JSON.stringify({
+            model: 'gemini-2.5-flash',
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: transcript },
+            ],
+            max_tokens: 1000,
+            temperature: 0.1,
+          }),
+        })
+        const aiDurationMs = Date.now() - aiStart
+
+        if (geminiResponse.ok) {
+          const data = await geminiResponse.json()
+          const content = data.choices?.[0]?.message?.content || ''
+          const inputTokens = data.usage?.prompt_tokens || 0
+          const outputTokens = data.usage?.completion_tokens || 0
+          const totalTokens = data.usage?.total_tokens || (inputTokens + outputTokens)
+
+          // Try to parse JSON
+          let parsed: any = null
+          try {
+            parsed = JSON.parse(content)
+          } catch {
+            const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/)
+            if (jsonMatch) { try { parsed = JSON.parse(jsonMatch[1]) } catch {} }
+            if (!parsed) {
+              const objMatch = content.match(/\{[\s\S]*\}/)
+              if (objMatch) { try { parsed = JSON.parse(objMatch[0]) } catch {} }
+            }
+          }
+
+          if (parsed) {
+            // Sanitize
+            if (!parsed.items) parsed.items = []
+            parsed.items = parsed.items.map((item: any) => ({
+              name: String(item.name || 'Unknown Product'),
+              quantity: Number(item.quantity) || 1,
+              unit: String(item.unit || 'pcs'),
+              unitPrice: Number(item.unitPrice) || 0,
+            }))
+
+            await incrementUsage(userId, 'voiceParses')
+
+            // Log usage
+            const { calculateCostInr } = await import('@/lib/ai-pricing')
+            const { db } = await import('@/lib/db')
+            const costInr = calculateCostInr('gemini', 'gemini-2.5-flash', inputTokens, outputTokens)
+            db.aiUsageLog.create({
+              data: {
+                userId, feature: 'voice-parse', provider: 'gemini', model: 'gemini-2.5-flash',
+                inputTokens, outputTokens, totalTokens, costInr, durationMs: aiDurationMs, success: true,
+              },
+            }).catch(() => {})
+
+            return NextResponse.json({
+              success: true,
+              transaction: parsed,
+              _source: 'llm',
+              aiUsage: { provider: 'gemini', model: 'gemini-2.5-flash', inputTokens, outputTokens, totalTokens, costInr: Math.round(costInr * 100) / 100, durationMs: aiDurationMs },
+            })
+          }
+        } else {
+          const errText = await geminiResponse.text()
+          return NextResponse.json({
+            error: 'Gemini voice parse failed',
+            detail: `HTTP ${geminiResponse.status}: ${errText.slice(0, 300)}`,
+          }, { status: 502 })
+        }
+      }
+
+      if (groqKey) {
+        // Fall back to Groq with llama-3.3-70b (text-only, fine for voice parsing)
+        const aiStart = Date.now()
+        const groqResponse = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${groqKey}`,
+          },
+          body: JSON.stringify({
+            model: 'llama-3.3-70b-versatile',
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: transcript },
+            ],
+            max_tokens: 1000,
+            temperature: 0.1,
+          }),
+        })
+        const aiDurationMs = Date.now() - aiStart
+
+        if (groqResponse.ok) {
+          const data = await groqResponse.json()
+          const content = data.choices?.[0]?.message?.content || ''
+          const inputTokens = data.usage?.prompt_tokens || 0
+          const outputTokens = data.usage?.completion_tokens || 0
+          const totalTokens = data.usage?.total_tokens || (inputTokens + outputTokens)
+
+          let parsed: any = null
+          try {
+            parsed = JSON.parse(content)
+          } catch {
+            const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/)
+            if (jsonMatch) { try { parsed = JSON.parse(jsonMatch[1]) } catch {} }
+            if (!parsed) {
+              const objMatch = content.match(/\{[\s\S]*\}/)
+              if (objMatch) { try { parsed = JSON.parse(objMatch[0]) } catch {} }
+            }
+          }
+
+          if (parsed) {
+            if (!parsed.items) parsed.items = []
+            parsed.items = parsed.items.map((item: any) => ({
+              name: String(item.name || 'Unknown Product'),
+              quantity: Number(item.quantity) || 1,
+              unit: String(item.unit || 'pcs'),
+              unitPrice: Number(item.unitPrice) || 0,
+            }))
+
+            await incrementUsage(userId, 'voiceParses')
+
+            const { calculateCostInr } = await import('@/lib/ai-pricing')
+            const { db } = await import('@/lib/db')
+            const costInr = calculateCostInr('groq', 'llama-3.3-70b-versatile', inputTokens, outputTokens)
+            db.aiUsageLog.create({
+              data: {
+                userId, feature: 'voice-parse', provider: 'groq', model: 'llama-3.3-70b-versatile',
+                inputTokens, outputTokens, totalTokens, costInr, durationMs: aiDurationMs, success: true,
+              },
+            }).catch(() => {})
+
+            return NextResponse.json({
+              success: true,
+              transaction: parsed,
+              _source: 'llm',
+              aiUsage: { provider: 'groq', model: 'llama-3.3-70b-versatile', inputTokens, outputTokens, totalTokens, costInr: Math.round(costInr * 100) / 100, durationMs: aiDurationMs },
+            })
+          }
+        } else {
+          const errText = await groqResponse.text()
+          return NextResponse.json({
+            error: 'Groq voice parse failed',
+            detail: `HTTP ${groqResponse.status}: ${errText.slice(0, 300)}`,
+          }, { status: 502 })
+        }
+      }
+
+      return NextResponse.json({
+        error: 'AI not configured',
+        detail: 'Set VLM_API_KEY (or GEMINI_API_KEY / GROQ_API_KEY) in environment variables.',
+      }, { status: 503 })
+    }
+
+    // VLM_API_KEY is set — use the legacy single-provider path
     const aiStart = Date.now()
     const response = await fetch(`${baseUrl}/chat/completions`, {
       method: 'POST',
