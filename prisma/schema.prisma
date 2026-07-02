@@ -724,3 +724,29 @@ model FraudAlert {
   @@index([ruleId, detectedAt])
   @@index([userId, detectedAt])
 }
+
+// ==================== PARTNER MANAGEMENT (shared with admin) ====================
+model Partner {
+  id                  String   @id @default(cuid())
+  name                String
+  type                String   @default("nbfc")
+  status              String   @default("onboarding")
+  contactName         String?
+  contactEmail        String?
+  contactPhone        String?
+  website             String?
+  apiBaseUrl          String?
+  webhookUrl          String?
+  revenueSharePct     Float    @default(0)
+  totalLeadsSent      Int      @default(0)
+  totalRevenueShared  Float    @default(0)
+  contractStartAt     DateTime?
+  contractEndAt       DateTime?
+  notes               String?  @db.Text
+  createdBy           String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([type, status])
+  @@index([status])
+}
