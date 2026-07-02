@@ -1351,3 +1351,45 @@ Stage Summary:
 - Total LOC: ~1,800 insertions
 - Scalability checklist satisfied: #1 (paginated 20/page), #2 (bulk groupBy), #3 (pre-computed), #7 (risk+plan filters), #8 (2 tabs), #9 (5s timeout + Neon retry), #10 (.catch), #12 (transparency card)
 - Phase 3 page 1 of 5 COMPLETE (20%). Next: Supplier Intelligence (#2 — anonymized market data reports for FMCG partners).
+
+---
+Task ID: bahikhata-admin-phase-3.2-supplier-intelligence
+Agent: main
+Task: Phase 3 (2/5) — Supplier Intelligence: anonymized market data reports for FMCG partners.
+
+Work Log:
+- Added SupplierReport model to both schemas: name, type (4 types), partnerId, status (generated/delivered/archived), summary, data (JSON), dataPoints, userCount, priceInr, period, timestamps. Indexed on type+status, partnerId+status.
+- Created src/lib/supplier-intelligence.ts with 4 report generators:
+  * product_trends: groupBy on Product by name (top 50, storeCount + avgSalePrice)
+  * transaction_volume: raw SQL DATE_TRUNC monthly aggregation (count + totalAmount + avgAmount, last 6 months)
+  * payment_patterns: groupBy on Transaction by paymentMode (count + pct + totalAmount)
+  * category_analysis: groupBy on Product by category (count + salePrice + purchasePrice + estimatedMargin)
+  * All use bulk groupBy/raw SQL (not per-user queries) — scales to millions
+  * All data AGGREGATED — no user IDs, emails, or PII in output
+- Created 2 API routes:
+  * GET/POST /api/admin/supplier-intelligence: overview (4 parallel count + aggregate + groupBy) + list (findMany) + generate (calls generator, creates report, logs to AdminAction)
+- Created /supplier-intelligence page with 2 tabs (Overview / All Reports):
+  * Overview: 4 KPI cards (total reports, revenue potential, report types, delivered) + Available Report Types card (4 types with descriptions + suggested prices ₹30K-₹100K) + 'How it works' transparency card with privacy/compliance info
+  * All Reports: list with name, status badge, type badge, summary, data points, user count, price, time + expandable JSON data viewer
+- Built Report Editor Modal: type selector (4 types with prices), name, partner ID, price (auto-filled suggested)
+- All data is fully anonymized (DPDP compliant)
+- Added 'Supplier Intelligence' to sidebar Intelligence group (Package icon, 3rd item)
+- Created phase-3.2-supplier-intelligence.md test guide with 4 types table, privacy guarantees table
+- Updated README.md index
+- Verified: tsc 0 errors, npm run build exit 0 (✓ Compiled successfully in 6.8s, 104/104 pages)
+- Committed + pushed to both repos:
+  * bahikhata-admin: commit 4e5d52d
+  * bahikhata-pro (main app): commit dec6825 (schema only — prevents table drop)
+
+Stage Summary:
+- Anonymized market intelligence reports for FMCG partner monetization
+- 4 report types: product trends, transaction volume, payment patterns, category analysis
+- All data aggregated (no PII) — DPDP compliant
+- Suggested pricing: ₹30K-₹100K per report
+- Uses bulk groupBy/raw SQL — scales to millions of users
+- Integration: connects to Partner Management (partnerId) + Revenue Recognition (report revenue)
+- Files created: 4 (supplier-intelligence.ts, API route, page.tsx, test guide)
+- Files modified: 2 (sidebar, README index)
+- Total LOC: ~1,500 insertions
+- Scalability checklist satisfied: #1 (N/A — all reports listed at once), #2 (bulk groupBy), #3 (aggregates), #8 (2 tabs), #9 (5s timeout + Neon retry), #10 (.catch), #11 (white modal), #12 (transparency card + privacy guarantees)
+- Phase 3 page 2 of 5 COMPLETE (40%). Next: Lending Pipeline (#3 — lead scoring + delivery to NBFC partners via webhooks).
