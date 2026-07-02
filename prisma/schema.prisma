@@ -682,3 +682,45 @@ model Anomaly {
   @@index([metric, detectedAt])
   @@index([detectedAt])
 }
+
+// ==================== CONFIGURABLE FRAUD RULES (shared with admin) ====================
+model FraudRule {
+  id              String   @id @default(cuid())
+  name            String
+  description     String?  @db.Text
+  metric          String
+  operator        String
+  threshold       Float
+  windowMinutes   Int?
+  userAgeMinutes  Int?
+  enabled         Boolean  @default(true)
+  severity        String   @default("medium")
+  createdBy       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  alerts          FraudAlert[]
+
+  @@index([enabled, metric])
+}
+
+model FraudAlert {
+  id              String   @id @default(cuid())
+  ruleId          String
+  rule            FraudRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  userId          String
+  userName        String?
+  userEmail       String?
+  metricValue     Float
+  threshold       Float
+  status          String   @default("open")
+  adminNote       String?  @db.Text
+  detectedAt      DateTime @default(now())
+  acknowledgedBy  String?
+  acknowledgedAt  DateTime?
+  resolvedBy      String?
+  resolvedAt      DateTime?
+
+  @@index([status, detectedAt])
+  @@index([ruleId, detectedAt])
+  @@index([userId, detectedAt])
+}
