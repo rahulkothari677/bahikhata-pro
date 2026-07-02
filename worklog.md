@@ -1179,3 +1179,42 @@ Stage Summary:
 - Total LOC: ~1,400 insertions
 - Scalability checklist satisfied: #1 (N/A — <10 configs), #2 (bulk count + aggregate), #3 (aggregates), #7 (N/A), #8 (2 tabs), #9 (5s timeout + Neon retry), #10 (.catch), #11 (white modal), #12 (transparency card)
 - Phase 2 page 19 of 22 COMPLETE (86%). Next: Data Export Center (#20 — GDPR/DPDP-compliant data exports).
+
+---
+Task ID: bahikhata-admin-phase-2.20-data-export-center
+Agent: main
+Task: Phase 2 (20/22) — Data Export Center: GDPR/DPDP-compliant data exports with 6 types.
+
+Work Log:
+- Added DataExportRequest model to both schemas: type (6 types), format, status (pending/processing/completed/failed), userId, customQuery, fileName, fileSizeBytes, rowCount, errorMessage, requestedBy, processedBy, createdAt, completedAt, expiresAt (24h). Indexed on status+createdAt, type+status.
+- Created 3 API routes:
+  * GET/POST /api/admin/data-exports: overview (5 parallel count + aggregate) + list (paginated 20/page + status filter) + create (validates type, creates request, auto-generates)
+  * DELETE /api/admin/data-exports/[id]: delete export request
+  * POST /api/admin/data-exports/generate: processes pending request → fetches data → generates CSV → returns as downloadable file (Content-Disposition: attachment). Handles 6 types: user_data (profile + transactions + products + parties), all_users (up to 10K), transactions (up to 10K), subscriptions, ai_usage, custom (validated via safe query runner)
+- Created /data-exports page with 2 tabs (Overview / All Exports):
+  * Overview: 4 KPI cards (pending, completed, failed, total rows) + 'How it works' card with 6 types + compliance info
+  * All Exports: status filter + list with type, status, format, file name, row count, file size, created time + generate/delete buttons
+- Built Export Editor Modal: type selector (6 types), format (CSV), user ID input (for user_data), SQL textarea (for custom)
+- Auto-generate on create: file downloads immediately as CSV
+- Max 10,000 rows per export (prevents memory exhaustion)
+- 24-hour link expiry
+- All exports logged to AdminAction audit trail
+- Added 'Data Exports' to sidebar System group (FileBarChart icon)
+- Created phase-2.20-data-export-center.md test guide with 6 types table, compliance info
+- Updated README.md index
+- Verified: tsc 0 errors, npm run build exit 0 (✓ Compiled successfully in 6.4s, 95/95 pages)
+- Committed + pushed to both repos:
+  * bahikhata-admin: commit 37b61f2
+  * bahikhata-pro (main app): commit efa705c (schema only — prevents table drop)
+
+Stage Summary:
+- GDPR Article 20 (data portability) + DPDP Act compliant data exports
+- 6 export types covering all common use cases (user data, bulk data, custom SQL)
+- Auto-generate + immediate download (no waiting for background job)
+- Safe query runner for custom exports (SELECT only, 15 blocked keywords)
+- Full audit trail: all requests + completions logged
+- Files created: 5 (3 API routes, page.tsx, test guide)
+- Files modified: 2 (sidebar, README index)
+- Total LOC: ~1,600 insertions
+- Scalability checklist satisfied: #1 (paginated 20/page), #2 (bulk count + aggregate), #3 (aggregates), #7 (status filter + pagination), #8 (2 tabs), #9 (5-10s timeout + Neon retry), #10 (.catch), #11 (white modal), #12 (transparency card + compliance info)
+- Phase 2 page 20 of 22 COMPLETE (91%). Next: Admin Team Management (#21 — multi-admin with role permissions).
