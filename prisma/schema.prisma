@@ -870,3 +870,37 @@ model ExperimentAssignment {
   @@index([userId, experimentId])
   @@index([convertedAt])
 }
+
+// ==================== COMPETITOR MONITORING (shared with admin) ====================
+model Competitor {
+  id              String   @id @default(cuid())
+  name            String
+  website         String?
+  description     String?  @db.Text
+  freePrice       String?
+  proPrice        String?
+  elitePrice      String?
+  features        String   @default("{}") @db.Text
+  targetMarket    String?
+  usp             String?  @db.Text
+  weaknesses      String?  @db.Text
+  status          String   @default("active")
+  createdBy       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([status])
+}
+
+model CompetitorUpdate {
+  id              String   @id @default(cuid())
+  competitorId    String
+  field           String
+  oldValue        String?  @db.Text
+  newValue        String?  @db.Text
+  note            String?  @db.Text
+  updatedBy       String?
+  createdAt       DateTime @default(now())
+
+  @@index([competitorId, createdAt])
+}
