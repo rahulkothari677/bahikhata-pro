@@ -535,3 +535,58 @@ Stage Summary:
 - Total LOC: ~1,500 insertions
 - Scalability checklist satisfied: #1, #2, #3, #7, #8, #9, #10, #11, #12
 - Phase 2 page 3 of 22 COMPLETE. Next: Status Page (#4 — public uptime/incident page).
+
+---
+Task ID: bahikhata-admin-phase-2.4-status-page
+Agent: main
+Task: Phase 2 (4/22) — Status Page: public uptime + incident management (investor-facing trust signal).
+
+Work Log:
+- Added Incident + IncidentUpdate models to both schemas:
+  * Incident: title, description, severity (minor/major/critical/maintenance), status (investigating/identified/monitoring/resolved), service (api/database/ai_providers/payments/all), startedAt, resolvedAt, timestamps
+  * IncidentUpdate: incidentId, message, status snapshot, createdBy, createdAt (timeline of updates per incident)
+  * Indexed on status+startedAt, service+status
+  * Cascade delete: deleting an incident deletes all its updates
+- Updated middleware.ts: added /status and /api/status to PUBLIC_PATHS (no auth required — accessible by anyone)
+- Created 3 admin API routes (auth required):
+  * GET/POST /api/admin/incidents: overview (5 parallel count) + list (paginated 20/page) + create (validates fields, auto-creates first update)
+  * GET/PATCH/DELETE /api/admin/incidents/[id]: single incident with updates + update fields + delete (cascade)
+  * POST /api/admin/incidents/[id]/updates: add timeline update (optionally updates incident status)
+- Created 1 public API route (NO auth required):
+  * GET /api/status: returns overall status + 4 service health checks + active incidents + recent history
+    - Service checks: DB ping (checkDbHealth), API response time, AI provider config check, payment config check
+    - Overall computed from: active incident severity + service statuses
+    - Cached for 60s (Cache-Control: public, s-maxage=60, stale-while-revalidate=120)
+    - Always returns 200 even on error (status page must never crash)
+- Created admin /incidents page (2 tabs: Overview / All Incidents):
+  * Overview: 4 KPI cards + public status page link + 'How incidents work' card
+  * List: status + severity filters + expandable rows + paginated (20/page)
+  * Expanded detail: quick status change buttons + add update form + timeline
+  * Incident Editor Modal (white background — Chrome force-dark fix)
+- Created PUBLIC /status page (no auth, no admin sidebar):
+  * Clean investor-facing design (white background, no admin chrome)
+  * Overall status banner (green/amber/orange/red/blue)
+  * Service status grid (4 services with icon + status + response time)
+  * Active incidents section with latest update shown
+  * Incident history (last 10 resolved)
+  * Auto-refreshes every 60 seconds (React Query refetchInterval)
+  * Manual refresh button
+  * Footer with last updated time
+- Added 'Status Page' to admin sidebar System group (Activity icon) → links to /incidents for management
+- Verified: tsc 0 errors, npm run build exit 0 (✓ Compiled successfully in 5.3s, 58/58 pages)
+- Committed + pushed to both repos:
+  * bahikhata-admin: commit 8c5ab72
+  * bahikhata-pro (main app): commit dea5603 (schema only — prevents table drop)
+
+Stage Summary:
+- Public status page at /status — no login required, accessible by investors, users, monitoring tools
+- 4 service health checks: API response time, DB ping, AI provider config, payment config
+- Incident lifecycle: create → add timeline updates → resolve → moves to history
+- Auto-refresh every 60s on public page
+- Admin can create incidents, add updates, change status quickly
+- All actions logged to AdminAction audit trail
+- Files created: 6 (incidents/route.ts, [id]/route.ts, [id]/updates/route.ts, status/route.ts, incidents/page.tsx, status/page.tsx)
+- Files modified: 2 (middleware.ts, sidebar)
+- Total LOC: ~1,600 insertions
+- Scalability checklist satisfied: #1, #2, #3, #7, #8, #9, #10, #11, #12
+- Phase 2 page 4 of 22 COMPLETE. Next: Anomaly Detection (#5 — auto-detect metric spikes/drops).
