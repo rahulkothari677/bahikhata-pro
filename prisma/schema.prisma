@@ -48,6 +48,7 @@ model User {
   shops         Shop[]
   scanComparisons ScanComparison[]
   aiUsageLogs    AiUsageLog[]
+  supportTickets SupportTicket[]
 }
 
 // ==================== SHOPS (Multi-shop support) ====================
@@ -382,3 +383,74 @@ model AiUsageLog {
   @@index([provider, createdAt])
 }
 
+
+// ==================== ADMIN PANEL TABLES ====================
+// These tables are owned by the admin panel (bahikhata-admin repo) but
+// MUST exist in the main app's schema too. Otherwise, when the main app
+// runs `prisma db push` during Vercel builds, it drops these tables —
+// wiping all admin accounts on every deploy.
+//
+// DO NOT remove these models from this file.
+
+model AdminUser {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String
+  password      String
+  role          String    @default("admin")
+  totpSecret    String?
+  totpEnabled   Boolean   @default(false)
+  isActive      Boolean   @default(true)
+  lastLoginAt   DateTime?
+  lastLoginIp   String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  adminActions  AdminAction[]
+
+  @@index([email])
+  @@index([isActive])
+}
+
+model AdminAction {
+  id            String   @id @default(cuid())
+  adminId       String
+  admin         AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  action        String
+  targetType    String?
+  targetId      String?
+  description   String
+  metadata      Json?
+  ip            String?
+  userAgent     String?
+  createdAt     DateTime @default(now())
+
+  @@index([adminId, createdAt])
+  @@index([action, createdAt])
+  @@index([targetType, targetId])
+}
+
+// ==================== SUPPORT TICKETS (admin panel) ====================
+model SupportTicket {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject     String
+  message     String
+  category    String    @default("general")
+  priority    String    @default("medium")
+  status      String    @default("open")
+  assignedTo  String?
+  response    String?
+  resolvedAt  DateTime?
+  resolvedBy  String?
+  userEmail   String?
+  userAgent   String?
+  appVersion  String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([status, priority, createdAt])
+  @@index([userId, createdAt])
+  @@index([assignedTo, status])
+}
