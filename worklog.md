@@ -1141,3 +1141,41 @@ Stage Summary:
 - Total LOC: ~198 insertions, 12 deletions
 - Scalability checklist satisfied: #2 (groupBy), #3 (pre-computed cache), #7 (dropdown), #8 (organized editor), #9 (5s timeout), #10 (.catch), #12 (user count visibility)
 - Phase 2 page 18 of 22 COMPLETE (82%). Next: NPS Survey Builder (#19 — configurable survey triggers).
+
+---
+Task ID: bahikhata-admin-phase-2.19-nps-survey-builder
+Agent: main
+Task: Phase 2 (19/22) — NPS Survey Builder: configurable survey triggers (when to show NPS survey to users).
+
+Work Log:
+- Added NpsSurveyConfig model to both schemas: name, triggerType (5 types), triggerValue, question, cooldownDays, targetPlans, enabled, priority, timesShown, timesResponded, timestamps. Indexed on enabled+triggerType.
+- Created 2 API routes:
+  * GET/POST /api/admin/nps-config: overview (4 parallel count + aggregate for shown/responded/responseRate) + list (findMany) + create (validates triggerType)
+  * PATCH/DELETE /api/admin/nps-config/[id]: update + delete with audit logging
+- Created /nps-config page with 2 tabs (Overview / All Configs):
+  * Overview: 4 KPI cards (active configs, times shown, times responded, response rate %) + 'How it works' transparency card
+  * All Configs: list with star icon, name, enabled/disabled badge, trigger type badge, priority badge, trigger description, cooldown, target, stats + edit/delete buttons
+- Built Config Editor Modal: name, trigger type selector (5 types), trigger value, survey question, cooldown days, target plans, priority, enabled toggle
+- 5 trigger types: days_after_signup, transaction_count, days_since_last_survey, plan_upgrade, manual
+- Cooldown protection: don't re-show for X days after response (default: 90)
+- Target by plan: all, free, pro, elite
+- Added 'NPS Survey Builder' to sidebar Growth group (Star icon, between Feedback and A/B Testing)
+- Created phase-2.19-nps-survey-builder.md test guide with 5 trigger types table
+- Updated README.md index
+- Verified: tsc 0 errors, npm run build exit 0 (✓ Compiled successfully in 6.2s, 92/92 pages)
+- Committed + pushed to both repos:
+  * bahikhata-admin: commit 5bc0375
+  * bahikhata-pro (main app): commit 5e4d10c (schema only — prevents table drop)
+
+Stage Summary:
+- Admin can now configure when NPS surveys appear (5 trigger types)
+- Cooldown prevents survey fatigue (90-day default)
+- Target by plan tier (survey free users differently than elite)
+- Priority system for multiple matching triggers
+- Stats: times shown vs responded → response rate
+- Main app (future) checks these configs on page load and shows survey when trigger matches
+- Files created: 4 (2 API routes, page.tsx, test guide)
+- Files modified: 2 (sidebar, README index)
+- Total LOC: ~1,400 insertions
+- Scalability checklist satisfied: #1 (N/A — <10 configs), #2 (bulk count + aggregate), #3 (aggregates), #7 (N/A), #8 (2 tabs), #9 (5s timeout + Neon retry), #10 (.catch), #11 (white modal), #12 (transparency card)
+- Phase 2 page 19 of 22 COMPLETE (86%). Next: Data Export Center (#20 — GDPR/DPDP-compliant data exports).
