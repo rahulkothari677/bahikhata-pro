@@ -622,3 +622,34 @@ model CampaignStep {
   @@index([campaignId, stepNumber])
   @@index([status, scheduledAt])
 }
+
+// ==================== STATUS PAGE / INCIDENTS (shared with admin) ====================
+model Incident {
+  id          String   @id @default(cuid())
+  title       String
+  description String   @db.Text
+  severity    String   @default("minor")
+  status      String   @default("investigating")
+  service     String   @default("all")
+  startedAt   DateTime @default(now())
+  resolvedAt  DateTime?
+  createdBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  updates     IncidentUpdate[]
+
+  @@index([status, startedAt])
+  @@index([service, status])
+}
+
+model IncidentUpdate {
+  id          String   @id @default(cuid())
+  incidentId  String
+  incident    Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  message     String   @db.Text
+  status      String
+  createdBy   String?
+  createdAt   DateTime @default(now())
+
+  @@index([incidentId, createdAt])
+}
