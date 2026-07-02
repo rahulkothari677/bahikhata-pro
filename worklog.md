@@ -761,3 +761,53 @@ Stage Summary:
 - Total LOC: ~1,800 insertions
 - Scalability checklist satisfied: #1, #2, #3, #7, #8, #9, #10, #11, #12
 - Phase 2 page 8 of 22 COMPLETE. Next: Webhook Management (#9 — partner webhook endpoints + delivery logs).
+
+---
+Task ID: bahikhata-admin-phase-2.9-webhook-management
+Agent: main
+Task: Phase 2 (9/22) — Webhook Management: partner webhook endpoints + delivery logs with retry logic + HMAC signing.
+
+Work Log:
+- Added WebhookEndpoint + WebhookDelivery models to both schemas:
+  * WebhookEndpoint: partnerId, url, secret (HMAC), events (JSON), status (active/disabled), stats (totalSent/Success/Failed), lastSentAt, timestamps
+  * WebhookDelivery: endpointId, eventType, payload, status (pending/success/failed/retrying), attemptCount, maxAttempts, responseStatus, responseBody, errorMessage, first/lastAttemptAt, nextRetryAt, deliveredAt, createdAt
+  * Indexed on endpointId+status+createdAt, status+nextRetryAt, createdAt
+- Added webhookEndpoints relation on Partner model
+- Created src/lib/webhook-engine.ts:
+  * 6 event types: lead.created, lead.updated, payment.received, user.churned, campaign.completed, anomaly.detected
+  * dispatchEvent(): creates delivery records for all active endpoints subscribed to event
+  * sendDelivery(): sends HTTP POST with HMAC-SHA256 signature in X-Webhook-Signature header, 10s timeout via AbortController, exponential backoff retry (immediate → 1m → 5m → 25m, 4 attempts max)
+  * processPendingDeliveries(): batch processes 50 pending/retrying deliveries
+  * Updates endpoint stats (totalSent/Success/Failed) on each attempt
+- Created 4 API routes:
+  * GET/POST /api/admin/webhooks: overview (6 parallel count + aggregate) + list (paginated) + create (validates URL, events, partner; generates HMAC secret)
+  * PATCH/DELETE /api/admin/webhooks/[id]: update + delete (cascade deliveries)
+  * POST /api/admin/webhooks/deliver: manual trigger with 1-min cooldown
+  * GET /api/admin/webhooks/deliveries: paginated delivery logs with status filter + payload preview
+- Created /webhooks page with 3 tabs (Overview / Endpoints / Delivery Logs):
+  * Overview: 4 KPI cards (active, delivered, failed, pending) + Available Events card (6 types) + 'How it works' card
+  * Endpoints: status filter + paginated table (URL, partner, events badges, status, stats, last sent, actions)
+  * Delivery Logs: status filter + expandable list with status icon, event badge, attempt count, HTTP status, error message, next retry time, expandable payload
+- Built Webhook Editor Modal: partner ID, URL, event checkboxes, description, HMAC secret generation option, status
+- "Deliver Now" button to manually trigger pending deliveries (with 1-min cooldown)
+- All actions logged to AdminAction audit trail
+- Added 'Webhooks' to sidebar Intelligence group (Webhook icon)
+- Created phase-2.9-webhook-management.md test guide with 6 events table, HMAC verification Python code example, retry schedule, integration points
+- Updated README.md index
+- Verified: tsc 0 errors, npm run build exit 0 (✓ Compiled successfully in 6.0s, 73/73 pages)
+- Committed + pushed to both repos:
+  * bahikhata-admin: commit 52cf96c
+  * bahikhata-pro (main app): commit 7cd35f5 (schema only — prevents table drop)
+
+Stage Summary:
+- Complete webhook delivery system: create endpoints → subscribe to events → dispatch on event → send with HMAC → retry on failure → log everything
+- HMAC-SHA256 signature prevents spoofing (partner verifies requests came from us)
+- Exponential backoff prevents hammering endpoints that are down
+- Full delivery log with payload + response body for debugging
+- Production: cron job runs every 1 minute to process pending deliveries
+- Integration points: Partners (via partnerId), Data Monetization (lead.created), Subscriptions (payment.received, user.churned), Campaigns (campaign.completed), Anomaly Detection (anomaly.detected)
+- Files created: 5 (webhook-engine.ts, 4 API routes, page.tsx, test guide)
+- Files modified: 2 (sidebar, README index)
+- Total LOC: ~2,100 insertions
+- Scalability checklist satisfied: #1, #2, #3, #7, #8, #9, #10, #11, #12
+- Phase 2 page 9 of 22 COMPLETE. Next: Revenue Recognition (#10 — accrual-based revenue tracking).
