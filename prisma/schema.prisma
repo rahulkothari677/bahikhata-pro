@@ -904,3 +904,28 @@ model CompetitorUpdate {
 
   @@index([competitorId, createdAt])
 }
+
+// ==================== BULK OPERATIONS v2 (shared with admin) ====================
+model BulkJob {
+  id              String   @id @default(cuid())
+  name            String
+  action          String
+  targetType      String   @default("user")
+  targetCriteria  String   @default("{}") @db.Text
+  actionParams    String   @default("{}") @db.Text
+  status          String   @default("scheduled")
+  scheduledAt     DateTime
+  startedAt       DateTime?
+  completedAt     DateTime?
+  totalTargets    Int      @default(0)
+  processedCount  Int      @default(0)
+  successCount    Int      @default(0)
+  failedCount     Int      @default(0)
+  errorMessage    String?  @db.Text
+  createdBy       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([status, scheduledAt])
+  @@index([action, status])
+}
