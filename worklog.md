@@ -1218,3 +1218,38 @@ Stage Summary:
 - Total LOC: ~1,600 insertions
 - Scalability checklist satisfied: #1 (paginated 20/page), #2 (bulk count + aggregate), #3 (aggregates), #7 (status filter + pagination), #8 (2 tabs), #9 (5-10s timeout + Neon retry), #10 (.catch), #11 (white modal), #12 (transparency card + compliance info)
 - Phase 2 page 20 of 22 COMPLETE (91%). Next: Admin Team Management (#21 — multi-admin with role permissions).
+
+---
+Task ID: bahikhata-admin-phase-2.21-admin-team-management
+Agent: main
+Task: Phase 2 (21/22) — Admin Team Management: multi-admin with 3 role levels (founder/admin/viewer).
+
+Work Log:
+- No schema changes needed — uses existing AdminUser model (already has role field: founder | admin | viewer, isActive, totpEnabled, lastLoginAt, lastLoginIp)
+- Created 2 API routes:
+  * GET/POST /api/admin/admin-users: overview (6 parallel count) + list (findMany with select, excludes password) + create (founder only, validates email uniqueness, bcrypt 12 rounds, role must be admin/viewer)
+  * PATCH/DELETE /api/admin/admin-users/[id]: update role/isActive + delete. Security: founder-only, cannot modify other founders, cannot self-deactivate, cannot delete self/founders, cannot assign founder role via API
+- Created /admin-users page with 2 tabs (Overview / All Admins):
+  * Overview: 4 KPI cards (founders, admins, viewers, 2FA enabled) + Role Permissions card (explains what each role can do) + Security Best Practices amber card
+  * All Admins: table with name+email, role (dropdown for non-founders, badge for founders), active toggle, 2FA badge, last login (time+IP), delete button
+- Built Admin Editor Modal: email, name, password (min 8 chars), role dropdown (admin/viewer only — founders cannot be created via API)
+- Access denial: non-founder users see "Access Denied" page (API returns 403, page shows lock icon)
+- Inline role change: dropdown on non-founder admins to switch between admin/viewer
+- Inline active toggle: click to activate/deactivate (founders can't be toggled)
+- Added 'Admin Team' to sidebar Users group (UsersIcon)
+- Created phase-2.21-admin-team-management.md test guide with 3-role permission table, security features list
+- Updated README.md index
+- Verified: tsc 0 errors, npm run build exit 0 (✓ Compiled successfully in 6.6s, 97/97 pages)
+- Committed + pushed to GitHub: commit f691ebd (admin only — no schema change needed)
+
+Stage Summary:
+- Multi-admin team management now available
+- 3 roles: founder (irrevocable full access), admin (full access, no team mgmt), viewer (read-only for auditors/investors)
+- Security: 6 protections (founder-only API access, cannot create founder via API, cannot modify other founders, cannot self-deactivate, cannot delete self, cannot delete founders)
+- Password hashing: bcrypt 12 rounds
+- 2FA + last login visibility for security monitoring
+- Files created: 3 (2 API routes, page.tsx, test guide)
+- Files modified: 2 (sidebar, README index)
+- Total LOC: ~1,500 insertions
+- Scalability checklist satisfied: #2 (bulk count), #3 (aggregates), #8 (2 tabs + role cards), #9 (5s timeout + Neon retry), #10 (.catch), #11 (white modal), #12 (role permissions transparency)
+- Phase 2 page 21 of 22 COMPLETE (95%). Next: Impersonation Audit (#22 — enhanced user impersonation with full audit trail).
