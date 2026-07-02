@@ -993,3 +993,24 @@ model ChurnPrediction {
   @@index([riskLevel, riskScore])
   @@index([userPlan, riskLevel])
 }
+
+// ==================== SUPPLIER INTELLIGENCE (shared with admin) ====================
+model SupplierReport {
+  id              String   @id @default(cuid())
+  name            String
+  type            String
+  partnerId       String?
+  status          String   @default("generated")
+  summary         String?  @db.Text
+  data            String   @default("{}") @db.Text
+  dataPoints      Int      @default(0)
+  userCount       Int      @default(0)
+  priceInr        Float    @default(0)
+  period          String?
+  generatedBy     String?
+  createdAt       DateTime @default(now())
+  deliveredAt     DateTime?
+
+  @@index([type, status])
+  @@index([partnerId, status])
+}
