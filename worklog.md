@@ -680,3 +680,41 @@ Stage Summary:
 - Total LOC: ~1,800 insertions
 - Scalability checklist satisfied: #1, #2, #3, #7, #8, #9, #10, #11, #12
 - Phase 2 page 6 of 22 COMPLETE. Next: Partner Management (#7 — NBFC/FMCG partner directory).
+
+---
+Task ID: bahikhata-admin-phase-2.7-partner-management
+Agent: main
+Task: Phase 2 (7/22) — Partner Management: NBFC/FMCG/fintech partner directory for lending + data monetization pipeline. Also created 4 foundational reference docs.
+
+Work Log:
+- Added Partner model to both schemas: name, type (nbfc/fmcg/fintech/other), status (onboarding/active/inactive/terminated), contact info, API base URL, webhook URL, revenue share %, total leads sent, total revenue shared, contract dates, notes. Indexed on type+status, status.
+- Created 2 API routes:
+  * GET/POST /api/admin/partners: overview (7 parallel count + aggregate + groupBy) + list (paginated 20/page + search + type/status filters) + create
+  * GET/PATCH/DELETE /api/admin/partners/[id]: CRUD with audit logging
+- Created /partners page with 2 tabs (Overview / All Partners):
+  * Overview: 4 KPI cards + Active Partners by Type card (4 type cards with leads + revenue) + 'How it works' transparency card
+  * List: search + type filter pills + status filter pills + paginated table (name, type, status, contact, leads, revenue, actions)
+- Built Partner Editor Modal: name, type, status, contact info (name/email/phone/website), integration (API base URL, webhook URL, revenue share %), contract dates, notes
+- Added 'Partners' to sidebar Intelligence group (Handshake icon)
+- Created 4 foundational reference docs in /docs/how-to-test/:
+  * architecture-overview.md: two-repo structure, tech stack, design system, file structure
+  * environment-variables.md: all env vars for admin + main app with examples
+  * deployment-guide.md: step-by-step Vercel + Neon setup + troubleshooting + security checklist
+  * scalability-principles.md: the 13-point checklist explained with code examples
+- Created phase-2.7-partner-management.md test guide
+- Updated README.md index with new feature + foundational docs section
+- Verified: tsc 0 errors, npm run build exit 0 (✓ Compiled successfully in 5.7s, 67/67 pages)
+- Committed + pushed to both repos:
+  * bahikhata-admin: commit f3c8827
+  * bahikhata-pro (main app): commit 998540d (schema only — prevents table drop)
+
+Stage Summary:
+- Partner directory for lending + data monetization pipeline
+- 4 partner types with different revenue models (per-lead, per-report, revenue share %)
+- Integration points for future features: API Key Management (#8), Webhook Management (#9), Revenue Recognition (#10)
+- Foundational docs created for future reference (architecture, env vars, deployment, scalability)
+- Files created: 3 API routes, 1 page, 5 docs (4 foundational + 1 test guide)
+- Files modified: 2 (sidebar, README index)
+- Total LOC: ~2,200 insertions
+- Scalability checklist satisfied: #1, #2, #3, #7, #8, #9, #10, #11, #12
+- Phase 2 page 7 of 22 COMPLETE. Next: API Key Management (#8 — partner API keys with scopes).
