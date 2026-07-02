@@ -632,3 +632,51 @@ Stage Summary:
 - Total LOC: ~1,300 insertions
 - Scalability checklist satisfied: #1, #2, #3, #7, #8, #9, #10, #11, #12
 - Phase 2 page 5 of 22 COMPLETE. Next: Configurable Fraud Rules (#6 — extend Risk page with custom rules).
+
+---
+Task ID: bahikhata-admin-phase-2.6-configurable-fraud-rules
+Agent: main
+Task: Phase 2 (6/22) — Configurable Fraud Rules: admins define custom rules that auto-generate fraud alerts.
+
+Work Log:
+- Added FraudRule + FraudAlert models to both schemas:
+  * FraudRule: name, description, metric, operator, threshold, windowMinutes, userAgeMinutes, enabled, severity, createdBy, timestamps
+  * FraudAlert: ruleId, userId, userName/Email snapshot, metricValue, threshold, status (open/acknowledged/resolved/false_positive), adminNote, detectedAt, acknowledgedBy/At, resolvedBy/At
+  * Indexed on enabled+metric (rules), status+detectedAt, ruleId+detectedAt, userId+detectedAt (alerts)
+  * Cascade delete: deleting a rule deletes all its alerts
+- Created src/lib/fraud-rules-engine.ts — bulk groupBy based evaluation:
+  * 5 metric evaluators: transaction_count, transaction_amount, ai_call_count, login_failure_count, new_user_with_activity
+  * All use bulk groupBy (NOT per-user queries) — at 100K users with 10 rules = 10 groupBy queries total
+  * 5 operators: gt, gte, lt, lte, eq
+  * Deduplication: skips if alert already open for user+rule
+  * 10s timeout per rule + .catch() fallback (one failure doesn't stop others)
+- Created 5 API routes:
+  * GET/POST /api/admin/fraud-rules: overview (5 parallel count) + list + create (validates metric/operator)
+  * PATCH/DELETE /api/admin/fraud-rules/[id]: update + delete (cascade)
+  * POST/GET /api/admin/fraud-rules/evaluate: trigger evaluateAllRules() with 5-min cooldown
+  * GET /api/admin/fraud-alerts: paginated (20/page) + status/severity/ruleId filters
+  * PATCH /api/admin/fraud-alerts/[id]: update status + admin note (auto-sets acknowledgedBy/At + resolvedBy/At, logs to AdminAction)
+- Created /fraud-rules page with 3 tabs (Overview / All Rules / Fraud Alerts):
+  * Overview: 4 KPI cards + 'How it works' transparency card
+  * Rules: table with inline enable/disable toggle + open alert count + edit button
+  * Alerts: status + severity filters + paginated list with action buttons (Acknowledge/Resolve/False Positive) + user link
+- Built Rule Editor Modal: name, description, metric selector (5 options), operator, threshold, window minutes, user age minutes (required for new_user_with_activity), severity, enabled toggle
+- Built Note Modal for resolve/false_positive with explanation textarea
+- 'Evaluate Now' button in header (with 5-min cooldown)
+- Added 'Fraud Rules' to sidebar System group (ShieldAlert icon)
+- Verified: tsc 0 errors, npm run build exit 0 (✓ Compiled successfully in 5.3s, 65/65 pages)
+- Committed + pushed to both repos:
+  * bahikhata-admin: commit df5b5a7
+  * bahikhata-pro (main app): commit 35b7974 (schema only — prevents table drop)
+
+Stage Summary:
+- Admins can now define custom fraud detection rules without code changes
+- 5 metric types cover most fraud scenarios: excessive transactions, large amounts, AI abuse, brute force, bot accounts
+- Bulk groupBy evaluation scales to millions of users (10 queries for 10 rules, not 10M queries)
+- Deduplication prevents alert spam (same user+rule only alerted once until resolved)
+- Production: should run via cron every 15 minutes
+- Files created: 6 (fraud-rules-engine.ts, 5 API routes, page.tsx)
+- Files modified: 1 (sidebar)
+- Total LOC: ~1,800 insertions
+- Scalability checklist satisfied: #1, #2, #3, #7, #8, #9, #10, #11, #12
+- Phase 2 page 6 of 22 COMPLETE. Next: Partner Management (#7 — NBFC/FMCG partner directory).
