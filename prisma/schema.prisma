@@ -551,3 +551,27 @@ model NotificationTemplate {
   @@index([category, status])
   @@index([status])
 }
+
+// ==================== NOTIFICATION LOG (shared with admin) ====================
+model NotificationLog {
+  id            String   @id @default(cuid())
+  userId        String?
+  recipient     String
+  templateId    String?
+  templateName  String?
+  channel       String
+  subject       String?
+  body          String   @db.Text
+  status        String   @default("pending")
+  provider      String?
+  providerMessageId String?
+  errorMessage  String?
+  sentBy        String?
+  sentAt        DateTime @default(now())
+  category      String   @default("general")
+
+  @@index([userId, sentAt])
+  @@index([channel, status, sentAt])
+  @@index([status, sentAt])
+  @@index([sentAt])
+}
