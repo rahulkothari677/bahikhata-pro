@@ -1393,3 +1393,39 @@ Stage Summary:
 - Total LOC: ~1,500 insertions
 - Scalability checklist satisfied: #1 (N/A — all reports listed at once), #2 (bulk groupBy), #3 (aggregates), #8 (2 tabs), #9 (5s timeout + Neon retry), #10 (.catch), #11 (white modal), #12 (transparency card + privacy guarantees)
 - Phase 3 page 2 of 5 COMPLETE (40%). Next: Lending Pipeline (#3 — lead scoring + delivery to NBFC partners via webhooks).
+
+---
+Task ID: bahikhata-admin-phase-3.3-lending-pipeline
+Agent: main
+Task: Phase 3 (3/5) — Lending Pipeline: deliver credit-scored leads to NBFC partners via webhooks.
+
+Work Log:
+- No schema changes needed — uses existing CreditScoreCache + Partner + WebhookEndpoint + WebhookDelivery
+- Created src/lib/lending-pipeline.ts:
+  * deliverLeadsToPartners(): fetches eligible candidates (score >= 550) from CreditScoreCache, dispatches 'lead.created' webhook event with lead payload (userId, score, band, monthlySales, collectionRate, businessAgeDays, productCount, partyCount, recommendedLoanAmount). Revenue: excellent ₹200, good ₹150, fair ₹100 per lead. Max 100 leads per delivery.
+  * getLendingPipelineOverview(): 7 parallel count/aggregate queries (excellent/good/fair/poor counts, total delivered, potential revenue, active NBFC partners)
+  * Recommended loan: 5x/3x/1.5x monthly sales by band
+- Created 2 API routes:
+  * GET /api/admin/lending-pipeline: overview (7 parallel count + findMany for recent deliveries) + leads tab (top 50 candidates with score/band/loan/revenue)
+  * POST /api/admin/lending-pipeline/deliver: triggers deliverLeadsToPartners() with 5-min cooldown, logs to AdminAction
+- Created /lending-pipeline page with 2 tabs (Overview / Top Leads):
+  * Overview: 4 KPI cards (eligible leads, potential revenue, delivered, active NBFC partners) + lead distribution by band (4 colored cards with count + revenue) + recent deliveries list (partner + status + HTTP code) + 'How it works' transparency card
+  * Top Leads: table of 50 candidates with rank, user (→links to /users/[id]), score/900, band badge, monthly sales, recommended loan, revenue/lead + total potential revenue footer
+- 'Deliver Leads Now' button (green, 5-min cooldown)
+- Added 'Lending Pipeline' to sidebar Intelligence group (Banknote icon, 4th item)
+- Created phase-3.3-lending-pipeline.md test guide with revenue model table, integration points
+- Updated README.md index
+- Verified: tsc 0 errors, npm run build exit 0 (✓ Compiled successfully in 6.7s, 107/107 pages)
+- Committed + pushed to GitHub: commit 0e111c3 (admin only — no schema change needed)
+
+Stage Summary:
+- Complete lending pipeline: credit scores → eligible leads → webhook delivery → NBFC partner → revenue
+- Revenue model: ₹200/₹150/₹100 per lead by band (excellent/good/fair)
+- Connects 4 existing features: Data Monetization (scores) + Partners (NBFC) + Webhooks (delivery) + Revenue Recognition (tracking)
+- Max 100 leads per synchronous delivery (production: background job for larger batches)
+- 5-minute cooldown prevents abuse
+- Files created: 4 (lending-pipeline.ts, 2 API routes, page.tsx, test guide)
+- Files modified: 2 (sidebar, README index)
+- Total LOC: ~1,400 insertions
+- Scalability checklist satisfied: #1 (top 50 leads only), #2 (bulk count + aggregate), #3 (pre-computed CreditScoreCache), #7 (N/A — overview only), #8 (2 tabs), #9 (5s timeout + Neon retry), #10 (.catch), #12 (transparency card)
+- Phase 3 page 3 of 5 COMPLETE (60%). Next: GST Filing Service (#4 — help users prepare + file GST returns).
