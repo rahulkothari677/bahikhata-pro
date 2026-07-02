@@ -1012,3 +1012,33 @@ Stage Summary:
 - Files modified: 2 (sidebar, README index)
 - Total LOC: ~1,500 insertions
 - Phase 2 page 14 of 22 COMPLETE (64%). Next: Audit Log Explorer (#15 — searchable audit trail enhancement).
+
+---
+Task ID: bahikhata-admin-phase-2.15-audit-log-explorer
+Agent: main
+Task: Phase 2 (15/22) — Audit Log Explorer: server-side search + filters + stats. Complete redesign of existing audit-log page.
+
+Work Log:
+- No schema changes needed — uses existing AdminAction model
+- Rewrote /api/admin/audit-log with tab-based architecture:
+  * tab=overview: 6 parallel count + groupBy (todayCount, weekCount, monthCount, totalCount, topActions by action type, topTargetTypes)
+  * tab=list: server-side search (description OR admin email OR action type) + action filter + targetType filter + date range (from/to) + pagination (20/page) + returns actionTypes for filter dropdown (groupBy with counts)
+  * All queries wrapped in withNeonRetry + withTimeout(5s) + .catch() fallback
+- Redesigned /audit-log page with 2 tabs (Overview / All Actions):
+  * Overview: 4 KPI cards (today, week, month, total) + Top Actions bar chart (last 30 days, horizontal bars proportional to max) + Top Target Types grid + DPDP compliance amber note
+  * All Actions: search bar + action dropdown (auto-populated with counts) + target type dropdown (15 options) + date range pickers (from/to + Clear dates) + expandable rows (click to see JSON metadata with before/after values, IP, user agent)
+- Used full design system: PageHeader, KPIGrid, KPICard, ContentCard, EmptyState, Pagination, SearchBar, LoadingSkeleton, Badge
+- Created phase-2.15-audit-log-explorer.md test guide with old vs new comparison table, filter options list, performance metrics
+- Updated README.md index
+- Verified: tsc 0 errors, npm run build exit 0 (✓ Compiled successfully in 6.1s, 86/86 pages)
+- Committed + pushed to GitHub: commit d8a427d (admin only — no schema change needed)
+
+Stage Summary:
+- Complete redesign: findMany(500) + JS-side filter → findMany(20) + server-side where clause
+- Now scales to millions of audit entries
+- Added: overview tab with KPIs, action type filter dropdown, target type filter, date range, expandable metadata
+- DPDP compliance: logs permanent, cannot be deleted, required for security forensics + investor due diligence
+- Files modified: 2 (API route, page.tsx, test guide, README index)
+- Total LOC: ~574 insertions, 126 deletions
+- Scalability checklist satisfied: #1 (paginated 20/page), #2 (bulk count + groupBy), #3 (aggregates), #7 (search + 3 filters + date range + pagination), #8 (2 tabs), #9 (5s timeout + Neon retry), #10 (.catch fallbacks), #12 (investor-readable)
+- Phase 2 page 15 of 22 COMPLETE (68%). Next: Bulk Operations v2 (#16 — extend existing bulk ops with scheduling).
