@@ -530,3 +530,24 @@ model CreditScoreCache {
   @@index([score])
   @@index([band])
 }
+
+// ==================== NOTIFICATION TEMPLATES (shared with admin) ====================
+model NotificationTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  category    String   @default("general")
+  channel     String                          // sms | email | push
+  subject     String?
+  body        String   @db.Text
+  variables   String   @default("[]") @db.Text
+  language    String   @default("en")
+  status      String   @default("draft")
+  version     Int      @default(1)
+  createdBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([channel, status])
+  @@index([category, status])
+  @@index([status])
+}
