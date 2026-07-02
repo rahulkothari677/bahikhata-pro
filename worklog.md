@@ -1253,3 +1253,56 @@ Stage Summary:
 - Total LOC: ~1,500 insertions
 - Scalability checklist satisfied: #2 (bulk count), #3 (aggregates), #8 (2 tabs + role cards), #9 (5s timeout + Neon retry), #10 (.catch), #11 (white modal), #12 (role permissions transparency)
 - Phase 2 page 21 of 22 COMPLETE (95%). Next: Impersonation Audit (#22 — enhanced user impersonation with full audit trail).
+
+---
+Task ID: bahikhata-admin-phase-2.22-impersonation-audit
+Agent: main
+Task: Phase 2 (22/22) — Impersonation Audit: enhanced user impersonation with full audit trail. FINAL PHASE 2 FEATURE.
+
+Work Log:
+- No schema changes needed — reads from existing AdminAction (action=user_impersonate, already logged by existing /api/admin/impersonate endpoint)
+- Created GET /api/admin/impersonation-log: overview (5 parallel count + groupBy for unique admins/users) + list (paginated 20/page with admin join). Founder-only (403 for non-founders).
+- Created /impersonation-log page with 2 tabs (Overview / All Sessions):
+  * Overview: 4 KPI cards (total sessions, today, week, unique admins + users) + Security & Compliance red card (7 protections: founder-only, reason required, 5-min expiry, single-use, full audit, DPDP compliant, token hash only) + 'How it works' transparency card (process + use cases)
+  * All Sessions: paginated list with expandable rows. Each row: admin name → target email + plan badge, reason, time + IP. Expanded: admin email, target user ID/email/name/plan, token expiry, IP, user agent, token hash (SHA-256), full description
+- Founder-only access: non-founders see "Access Denied" page (API returns 403)
+- Added 'Impersonation Log' to sidebar System group (UserCheck icon)
+- Created phase-2.22-impersonation-audit.md test guide with security features table
+- Updated README.md index
+- Verified: tsc 0 errors, npm run build exit 0 (✓ Compiled successfully in 6.6s, 99/99 pages)
+- Committed + pushed to GitHub: commit 229ffc7 (admin only — no schema change needed)
+
+=== PHASE 2 COMPLETE ===
+All 22 features built:
+1. Notification Templates (commit 375bc16)
+2. Multi-channel Notifications (commit 355b5a2)
+3. Campaign Management (commit 6ef0e8b)
+4. Status Page (commit 8c5ab72)
+5. Anomaly Detection (commit 2a4e186)
+6. Configurable Fraud Rules (commit df5b5a7)
+7. Partner Management (commit f3c8827)
+8. API Key Management (commit 5947ece)
+9. Webhook Management (commit 52cf96c)
+10. Revenue Recognition (commit d288281)
+11. Financial Reports (commit dc03e8e)
+12. A/B Testing (commit 3b328c8)
+13. Database Admin Tools (commit e4f8f5e)
+14. Competitor Monitoring (commit ffffd36)
+15. Audit Log Explorer (commit d8a427d)
+16. Bulk Operations v2 (commit 72086ec)
+17. Feature Flag Analytics (commit 54b0260)
+18. Segment-to-Campaign (commit c66cae6)
+19. NPS Survey Builder (commit 5bc0375)
+20. Data Export Center (commit 37b61f2)
+21. Admin Team Management (commit f691ebd)
+22. Impersonation Audit (commit 229ffc7)
+
+Plus Phase 1.5 (Credit Scoring) + Phase 1.6 (5 page redesigns) = 28 total features
+Plus Neon DB connection fix (commit 771729d)
+Plus modal dark mode fix (commits 9b1824c, 25449f9)
+Plus docs folder with 28 test guides + 4 foundational reference docs
+
+Total admin panel pages: 99 (was 46 at start of Phase 2)
+Total schema models added: 15+ (NotificationTemplate, NotificationLog, Campaign, CampaignStep, Incident, IncidentUpdate, Anomaly, FraudRule, FraudAlert, Partner, ApiKey, WebhookEndpoint, WebhookDelivery, RevenueSchedule, Experiment, ExperimentAssignment, BulkJob, Competitor, CompetitorUpdate, NpsSurveyConfig, DataExportRequest)
+All shared with main app schema to prevent table drops.
+Ready for Phase 3: Advanced intelligence (Predictive churn ML, Supplier intelligence, Lending pipeline, GST filing, Account Aggregator).
