@@ -718,3 +718,46 @@ Stage Summary:
 - Total LOC: ~2,200 insertions
 - Scalability checklist satisfied: #1, #2, #3, #7, #8, #9, #10, #11, #12
 - Phase 2 page 7 of 22 COMPLETE. Next: API Key Management (#8 — partner API keys with scopes).
+
+---
+Task ID: bahikhata-admin-phase-2.8-api-key-management
+Agent: main
+Task: Phase 2 (8/22) — API Key Management: partner API keys with scoped permissions, SHA-256 hashed storage.
+
+Work Log:
+- Added ApiKey model to both schemas: partnerId, name, keyHash (SHA-256, unique), keyPrefix (first 12 chars), scopes (JSON), status (active/revoked/expired), expiresAt, lastUsedAt, usageCount, createdBy, timestamps. Added apiKeys relation on Partner model (admin schema). Indexed on partnerId+status, status, keyHash.
+- Created src/lib/api-key-utils.ts:
+  * generateApiKey(): 32 random bytes via crypto.randomBytes → base64url → prefix 'bkh_live_' (~52 chars total, 256-bit entropy)
+  * hashApiKey(): SHA-256 hash (never store raw key)
+  * verifyApiKey(): timing-safe comparison via crypto.timingSafeEqual (prevents timing attacks)
+  * 6 scope configs: read_leads, write_leads, read_analytics, read_users, read_revenue, admin
+  * hasScope(), parseScopes(), serializeScopes() helpers
+- Created 2 API routes:
+  * GET/POST /api/admin/api-keys: overview (6 parallel count + aggregate) + list (paginated 20/page + search + status filter) + create (generates key, returns rawKey ONCE)
+  * GET/PATCH/DELETE /api/admin/api-keys/[id]: CRUD (never returns keyHash or rawKey in responses)
+- Created /api-keys page with 2 tabs (Overview / All Keys):
+  * Overview: 4 KPI cards (active, total calls, revoked, expired) + Available Scopes card (6 permissions with admin=DANGEROUS badge) + Security Best Practices amber card (6 tips) + 'How it works' transparency card (key generation + storage explanation)
+  * List: search + status filter pills + paginated table (name, key prefix, partner, scopes badges, status, usage, last used, actions: revoke/edit/delete)
+- Built API Key Editor Modal: name, partner ID input, scope checkboxes (with admin scope confirmation dialog), expiration date, status (edit mode)
+- Built Raw Key Modal (shown ONCE after creation): amber warning header, full key in readonly input + Copy button, 'I've Saved the Key' confirmation
+- Revoke = soft delete (status=revoked, key disabled but kept for audit); Delete = hard delete (permanent)
+- All key actions logged to AdminAction audit trail (descriptions include key prefix for identification)
+- Added 'API Keys' to sidebar Intelligence group (Key icon)
+- Created phase-2.8-api-key-management.md test guide with security model diagram, 6 scopes table, security best practices, API usage example for partners
+- Updated README.md index
+- Verified: tsc 0 errors, npm run build exit 0 (✓ Compiled successfully in 5.6s, 69/69 pages)
+- Committed + pushed to both repos:
+  * bahikhata-admin: commit 5947ece
+  * bahikhata-pro (main app): commit 68284a0 (schema only — prevents table drop)
+
+Stage Summary:
+- Partner API key management with industry-standard security (SHA-256 hashing, timing-safe comparison, scoped permissions)
+- Keys shown ONCE on creation (admin must save immediately)
+- 6 scopes enable least-privilege access (partners only get what they need)
+- Revoke (soft) + Delete (hard) for flexible key lifecycle management
+- Integration points: Partner Management (link via partnerId), Webhook Management (#9), Lead Delivery + Analytics API (Phase 3)
+- Files created: 4 (api-key-utils.ts, 2 API routes, page.tsx, test guide)
+- Files modified: 2 (sidebar, README index)
+- Total LOC: ~1,800 insertions
+- Scalability checklist satisfied: #1, #2, #3, #7, #8, #9, #10, #11, #12
+- Phase 2 page 8 of 22 COMPLETE. Next: Webhook Management (#9 — partner webhook endpoints + delivery logs).
