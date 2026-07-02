@@ -929,3 +929,23 @@ model BulkJob {
   @@index([status, scheduledAt])
   @@index([action, status])
 }
+
+// ==================== NPS SURVEY CONFIG (shared with admin) ====================
+model NpsSurveyConfig {
+  id              String   @id @default(cuid())
+  name            String
+  triggerType     String
+  triggerValue    Int
+  question        String   @default("How likely are you to recommend BahiKhata Pro to a friend or colleague?")
+  cooldownDays    Int      @default(90)
+  targetPlans     String   @default("all")
+  enabled         Boolean  @default(true)
+  priority        Int      @default(1)
+  timesShown      Int      @default(0)
+  timesResponded  Int      @default(0)
+  createdBy       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([enabled, triggerType])
+}
