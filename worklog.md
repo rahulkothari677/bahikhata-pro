@@ -891,3 +891,46 @@ Stage Summary:
 - Total LOC: ~1,500 insertions
 - Scalability checklist satisfied: #1, #2, #3, #7, #8, #9, #10, #11, #12
 - Phase 2 page 11 of 22 COMPLETE (50%!). Next: A/B Testing (#12 — experiment framework with metrics).
+
+---
+Task ID: bahikhata-admin-phase-2.12-ab-testing
+Agent: main
+Task: Phase 2 (12/22) — A/B Testing: experiment framework with control/treatment groups + conversion tracking + statistical significance.
+
+Work Log:
+- Added Experiment + ExperimentAssignment models to both schemas:
+  * Experiment: name, description, status (draft/running/completed/cancelled), metric (conversion/revenue/retention), metricGoal (increase/decrease), targetEvent, trafficPct (0-100), variants (JSON array of {key, name, weight}), schedule (startAt/endAt), winnerVariant, conclusion, timestamps
+  * ExperimentAssignment: experimentId, userId, variantKey, assignedAt, convertedAt, conversionValue. Unique constraint on experimentId+userId (one assignment per user per experiment). Indexed on experimentId+variantKey, userId+experimentId, convertedAt.
+- Created src/lib/ab-testing.ts:
+  * assignUser(): deterministic assignment via SHA-256 hash(userId + experimentId). Traffic check: hash % 100 < trafficPct → included. Variant selection: hash % 100 < cumulative weight. Idempotent (checks existing assignment first, unique constraint prevents race conditions).
+  * trackConversion(): marks assignment as converted, sets conversionValue (only if not already converted).
+  * getExperimentResults(): 2 groupBy queries (all assignments + converted only), calculates conversion rate per variant, totalValue, avgValue. Determines winner (highest conversion rate with min 30 users per variant).
+  * calculatePValue(): Z-test for proportions (compares two conversion rates, returns p-value). Thresholds: p<0.05 = significant, p<0.01 = strong, p<0.001 = very strong.
+- Created 2 API routes:
+  * GET/POST /api/admin/experiments: overview (6 parallel count + findMany for running) + list (paginated with inline results per experiment) + create (validates: min 2 variants, must have control, weights sum to 100, valid metric)
+  * GET/PATCH/DELETE /api/admin/experiments/[id]: CRUD. PATCH auto-determines winner on status=completed if not provided.
+- Created /experiments page with 2 tabs (Overview / All Experiments):
+  * Overview: 4 KPI cards (running, completed, total assignments, total) + running experiments list + 'How it works' card
+  * List: status filter pills + expandable rows. Each row expands to show: per-variant result cards (assigned, converted, conversion rate %, revenue if applicable) with winner trophy + progress bars + significance note (amber ⚠ if < 30 users, green ✓ if significant)
+- Built Experiment Editor Modal: name, description, metric selector (3 types), goal (increase/decrease), target event, traffic %, schedule (startAt/endAt), variant builder (add/remove/edit with weight validation must sum to 100). Control variant can't be removed.
+- Action buttons per experiment: Start (draft→running), Complete & Pick Winner (running→completed, optional conclusion prompt), Cancel (running→cancelled), Delete
+- Added 'A/B Testing' to sidebar Growth group (FlaskConical icon)
+- Created phase-2.12-ab-testing.md test guide with: lifecycle diagram, variant requirements, metric types table, statistical significance thresholds, performance metrics, integration points
+- Updated README.md index
+- Verified: tsc 0 errors, npm run build exit 0 (✓ Compiled successfully in 5.9s, 80/80 pages)
+- Committed + pushed to both repos:
+  * bahikhata-admin: commit 3b328c8
+  * bahikhata-pro (main app): commit d2d6017 (schema only — prevents table drop)
+
+Stage Summary:
+- Complete A/B testing framework: create experiments → assign users deterministically → track conversions → view results with statistical significance → pick winner
+- Deterministic assignment: same user always gets same variant (via hash) — no flipping on refresh
+- 3 metric types: conversion (binary), revenue (₹ amount), retention (binary)
+- Statistical rigor: min 30 users per variant, Z-test for proportions, p-value thresholds
+- Variant builder: control (required) + 1+ treatments, weights must sum to 100
+- Inline results: per-variant cards with conversion rate, winner trophy, progress bars
+- Files created: 4 (ab-testing.ts, 2 API routes, page.tsx, test guide)
+- Files modified: 2 (sidebar, README index)
+- Total LOC: ~1,900 insertions
+- Scalability checklist satisfied: #1, #2, #3, #7, #8, #9, #10, #11, #12
+- Phase 2 page 12 of 22 COMPLETE (55%). Next: Database Admin Tools (#13 — safe query runner, export, backup status).
