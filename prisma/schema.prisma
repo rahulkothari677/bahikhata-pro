@@ -949,3 +949,25 @@ model NpsSurveyConfig {
 
   @@index([enabled, triggerType])
 }
+
+// ==================== DATA EXPORT CENTER (shared with admin) ====================
+model DataExportRequest {
+  id              String   @id @default(cuid())
+  type            String
+  format          String   @default("csv")
+  status          String   @default("pending")
+  userId          String?
+  customQuery     String?  @db.Text
+  fileName        String?
+  fileSizeBytes   Int      @default(0)
+  rowCount        Int      @default(0)
+  errorMessage    String?  @db.Text
+  requestedBy     String?
+  processedBy     String?
+  createdAt       DateTime @default(now())
+  completedAt     DateTime?
+  expiresAt       DateTime?
+
+  @@index([status, createdAt])
+  @@index([type, status])
+}
