@@ -750,3 +750,24 @@ model Partner {
   @@index([type, status])
   @@index([status])
 }
+
+// ==================== API KEYS (shared with admin) ====================
+model ApiKey {
+  id            String    @id @default(cuid())
+  partnerId     String?
+  name          String
+  keyHash       String   @unique
+  keyPrefix     String
+  scopes        String   @default("[]") @db.Text
+  status        String   @default("active")
+  expiresAt     DateTime?
+  lastUsedAt    DateTime?
+  usageCount    Int      @default(0)
+  createdBy     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([partnerId, status])
+  @@index([status])
+  @@index([keyHash])
+}
