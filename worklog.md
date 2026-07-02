@@ -975,3 +975,40 @@ Stage Summary:
 - Total LOC: ~1,400 insertions
 - Scalability checklist satisfied: #1 (max 1000 rows), #2 (single query), #7 (N/A), #8 (3 tabs), #9 (10s timeout), #10 (error handling), #12 (audit trail)
 - Phase 2 page 13 of 22 COMPLETE (59%). Next: Competitor Monitoring (#14 — track competing apps' pricing/features).
+
+---
+Task ID: bahikhata-admin-phase-2.14-competitor-monitoring
+Agent: main
+Task: Phase 2 (14/22) — Competitor Monitoring: track competing apps' pricing, features, market positioning.
+
+Work Log:
+- Added Competitor + CompetitorUpdate models to both schemas:
+  * Competitor: name, website, description, freePrice/proPrice/elitePrice, features (JSON), targetMarket, usp, weaknesses, status, timestamps
+  * CompetitorUpdate: competitorId, field, oldValue, newValue, note, updatedBy, createdAt (field-level change tracking)
+  * Indexed on competitorId+createdAt
+- Created 2 API routes:
+  * GET/POST /api/admin/competitors: overview (4 parallel count + findMany for pricing comparison) + list (with _count updates) + create
+  * GET/PATCH/DELETE /api/admin/competitors/[id]: CRUD with auto-change-tracking (PATCH creates CompetitorUpdate entries for each changed field, logs to AdminAction)
+- Created /competitors page with 2 tabs (Overview / All Competitors):
+  * Overview: 4 KPI cards (active, updates 30d, total, Bahikhata Pro = You) + Pricing Comparison table (Bahikhata Pro at top with green highlight as benchmark, all competitors' Free/Pro/Elite prices) + 'How it works' card
+  * List: status filter + expandable rows. Each row expands to show: 10-feature grid (green=has, strikethrough=missing) + USP blue card + Weaknesses green card (our opportunities)
+- Built Competitor Editor Modal: name, website, target market, description, 3 pricing tiers, 10 feature checkboxes, USP, weaknesses, status
+- 10 standard features tracked: AI Bill Scanner, Voice Entry, GST Filing, Credit Scoring, Multi-language, Offline Mode, Inventory, WhatsApp Integration, Payment Reminders, Profit Tracking
+- Added 'Competitors' to sidebar Growth group (Swords icon)
+- Created phase-2.14-competitor-monitoring.md test guide
+- Updated README.md index
+- Verified: tsc 0 errors, npm run build exit 0 (✓ Compiled successfully in 6.0s, 86/86 pages)
+- Committed + pushed to both repos:
+  * bahikhata-admin: commit ffffd36
+  * bahikhata-pro (main app): commit 4700406 (schema only — prevents table drop)
+
+Stage Summary:
+- Competitor monitoring with pricing comparison, feature tracking, market positioning
+- Every field change tracked as CompetitorUpdate (timeline of changes)
+- Pricing comparison table with Bahikhata Pro as benchmark (green highlight)
+- Feature comparison grid (10 standard features, green/missing)
+- USP + Weaknesses cards (weaknesses = our opportunities)
+- Files created: 4 (2 API routes, page.tsx, test guide)
+- Files modified: 2 (sidebar, README index)
+- Total LOC: ~1,500 insertions
+- Phase 2 page 14 of 22 COMPLETE (64%). Next: Audit Log Explorer (#15 — searchable audit trail enhancement).
