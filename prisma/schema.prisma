@@ -653,3 +653,32 @@ model IncidentUpdate {
 
   @@index([incidentId, createdAt])
 }
+
+// ==================== ANOMALY DETECTION (shared with admin) ====================
+model Anomaly {
+  id            String   @id @default(cuid())
+  metric        String
+  metricLabel   String
+  direction     String
+  severity      String   @default("medium")
+  status        String   @default("open")
+  currentValue  Float
+  baselineValue Float
+  baselineStdDev Float
+  zScore        Float
+  baselineDays  Int      @default(30)
+  detectedAt    DateTime @default(now())
+  windowStart   DateTime
+  windowEnd     DateTime
+  acknowledgedBy String?
+  acknowledgedAt DateTime?
+  resolvedBy     String?
+  resolvedAt     DateTime?
+  adminNote      String?  @db.Text
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([status, detectedAt])
+  @@index([metric, detectedAt])
+  @@index([detectedAt])
+}
