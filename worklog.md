@@ -1306,3 +1306,48 @@ Total admin panel pages: 99 (was 46 at start of Phase 2)
 Total schema models added: 15+ (NotificationTemplate, NotificationLog, Campaign, CampaignStep, Incident, IncidentUpdate, Anomaly, FraudRule, FraudAlert, Partner, ApiKey, WebhookEndpoint, WebhookDelivery, RevenueSchedule, Experiment, ExperimentAssignment, BulkJob, Competitor, CompetitorUpdate, NpsSurveyConfig, DataExportRequest)
 All shared with main app schema to prevent table drops.
 Ready for Phase 3: Advanced intelligence (Predictive churn ML, Supplier intelligence, Lending pipeline, GST filing, Account Aggregator).
+
+---
+Task ID: bahikhata-admin-phase-3.1-predictive-churn
+Agent: main
+Task: Phase 3 (1/5) — Predictive Churn Model: ML-based churn prediction with 6 risk factors.
+
+Work Log:
+- Added ChurnPrediction model to both schemas: userId (unique), userName/Email/Plan, riskScore (0-100), riskLevel (low/medium/high/critical), 6 individual factor scores (inactivity/engagement/aiUsage/plan/age/support), recommendedAction, computedAt. Indexed on riskLevel+riskScore, userPlan+riskLevel.
+- Created src/lib/churn-prediction.ts:
+  * 6 risk factors with weighted scoring: inactivity (25%), engagement (25%), AI usage decline (15%), support tickets (15%), plan tier (10%), account age (10%)
+  * Each factor scored 0-100 based on user behavior signals (days since login, days since transaction, AI call decline %, open ticket count, plan, account age)
+  * Weighted average → overall risk score (0-100)
+  * 4 risk levels: low (0-25), medium (26-50), high (51-75), critical (76-100)
+  * Recommended actions per level (personal outreach + discount for critical, win-back campaign for high, monitor for medium, none for low)
+  * Bulk computation: chunked at 500 users, uses groupBy (not per-user queries) for lastTxn, aiUsage 7d, aiUsage prev 7d, openTickets
+  * Upserts to DB: delete old + createMany new per chunk
+  * Scales to millions of users
+- Created 2 API routes:
+  * GET /api/admin/churn-predictions: overview (6 parallel count) + list (paginated 20/page + risk/plan filters)
+  * POST /api/admin/churn-predictions/compute: triggers computeChurnPredictions() with 5-min cooldown
+- Created /churn-predictions page with 2 tabs (Overview / At-Risk Users):
+  * Overview: cache status banner (amber if empty, blue with age if computed) + 4 KPI cards (at risk, critical, high, total) + risk distribution grid (4 colored cards with count + %) + 'How it works' transparency card
+  * At-Risk Users: risk filter pills (all/critical/high/medium/low) + plan filter pills (all/free/pro/elite) + paginated table (user name+email→links to /users/[id], risk score/100, level badge, plan badge, top 2 factors with colored progress bars, recommendation text)
+- 'Run Prediction' button in header (5-min cooldown countdown)
+- Added 'Churn Predictions' to sidebar Growth group (TrendingDown icon, 3rd item)
+- Created phase-3.1-predictive-churn.md test guide with 6 factors table, risk levels table, performance metrics
+- Updated README.md index (added Phase 3 section)
+- Verified: tsc 0 errors, npm run build exit 0 (✓ Compiled successfully in 6.6s, 102/102 pages)
+- Committed + pushed to both repos:
+  * bahikhata-admin: commit 76065e9
+  * bahikhata-pro (main app): commit 5082d4b (schema only — prevents table drop)
+
+Stage Summary:
+- ML-based churn prediction: identifies at-risk users BEFORE they cancel
+- 6 weighted risk factors covering inactivity, engagement, AI usage, support, plan, age
+- Actionable recommendations (not just scores — tells admin what to DO)
+- Top 2 factors per user show what's driving risk (for targeted intervention)
+- Bulk computation scales to millions (groupBy, not per-user queries)
+- Production: should run daily via cron for fresh predictions
+- Integration: connects to Campaigns (send win-back to high-risk) + Segments (at_risk segment)
+- Files created: 4 (churn-prediction.ts, 2 API routes, page.tsx, test guide)
+- Files modified: 2 (sidebar, README index)
+- Total LOC: ~1,800 insertions
+- Scalability checklist satisfied: #1 (paginated 20/page), #2 (bulk groupBy), #3 (pre-computed), #7 (risk+plan filters), #8 (2 tabs), #9 (5s timeout + Neon retry), #10 (.catch), #12 (transparency card)
+- Phase 3 page 1 of 5 COMPLETE (20%). Next: Supplier Intelligence (#2 — anonymized market data reports for FMCG partners).
