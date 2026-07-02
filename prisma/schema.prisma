@@ -814,3 +814,22 @@ model WebhookDelivery {
   @@index([status, nextRetryAt])
   @@index([createdAt])
 }
+
+// ==================== REVENUE RECOGNITION (shared with admin) ====================
+model RevenueSchedule {
+  id              String   @id @default(cuid())
+  subscriptionId  String
+  userId          String
+  plan            String
+  amount          Float
+  periodStart     DateTime
+  periodEnd       DateTime
+  status          String   @default("pending")
+  recognizedAt    DateTime?
+  createdAt       DateTime @default(now())
+
+  @@index([status, periodStart])
+  @@index([userId, periodStart])
+  @@index([subscriptionId])
+  @@index([periodStart])
+}
