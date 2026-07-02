@@ -590,3 +590,45 @@ Stage Summary:
 - Total LOC: ~1,600 insertions
 - Scalability checklist satisfied: #1, #2, #3, #7, #8, #9, #10, #11, #12
 - Phase 2 page 4 of 22 COMPLETE. Next: Anomaly Detection (#5 — auto-detect metric spikes/drops).
+
+---
+Task ID: bahikhata-admin-phase-2.5-anomaly-detection
+Agent: main
+Task: Phase 2 (5/22) — Anomaly Detection: auto-detect metric spikes/drops using z-score statistics.
+
+Work Log:
+- Added Anomaly model to both schemas: metric, metricLabel, direction (spike/drop), severity (low/medium/high/critical), status (open/acknowledged/resolved), currentValue, baselineValue, baselineStdDev, zScore, baselineDays, detectedAt, windowStart/End, acknowledgedBy/At, resolvedBy/At, adminNote, timestamps. Indexed on status+detectedAt, metric+detectedAt, detectedAt.
+- Created src/lib/anomaly-detection.ts — z-score based statistical anomaly detection:
+  * 7 tracked metrics: new_signups, revenue, ai_cost, ai_calls, failed_logins, new_transactions, support_tickets
+  * Algorithm: 30-day baseline → compute mean (μ) + stdDev (σ) → z-score = (current - μ) / σ
+  * Threshold: |z| > 2.5 = anomaly
+  * Severity: low (2.5-3), medium (3-4), high (4-5), critical (5+)
+  * Deduplication: skips if same metric already open in last 24h
+  * Uses raw SQL ($queryRaw) for efficient daily aggregation (single GROUP BY query per metric)
+  * All queries wrapped in withTimeout(10s) + .catch() fallback (one metric failure doesn't stop others)
+- Created 3 API routes:
+  * GET /api/admin/anomalies: tab=overview (6 parallel count + groupBy) | tab=list (paginated 20/page + status/severity/metric filters)
+  * POST /api/admin/anomalies/detect: triggers detectAnomalies() with 5-min cooldown
+  * PATCH /api/admin/anomalies/[id]: update status (acknowledge/resolve) + admin note (auto-sets acknowledgedBy/At + resolvedBy/At, logs to AdminAction)
+- Created /anomalies page with 2 tabs (Overview / All Anomalies):
+  * Overview: 4 KPI cards + open anomalies by metric + tracked metrics card + 'How it works' transparency card + 'Run Detection' button (with cooldown)
+  * List: status/severity/metric filters + each anomaly shows direction icon + z-score + current vs baseline vs stdDev + action buttons (Acknowledge / Resolve with Note)
+  * Resolve Note Modal: textarea for resolution explanation
+- Added 'Anomaly Detection' to sidebar Intelligence group (Activity icon)
+- Verified: tsc 0 errors, npm run build exit 0 (✓ Compiled successfully in 5.4s, 61/61 pages)
+- Committed + pushed to both repos:
+  * bahikhata-admin: commit 2a4e186
+  * bahikhata-pro (main app): commit 1fab5da (schema only — prevents table drop)
+
+Stage Summary:
+- 7 critical business metrics now monitored for anomalies
+- Z-score statistics: mathematically sound (not arbitrary thresholds)
+- Production: should run via daily cron (e.g. Vercel Cron at 2 AM IST)
+- Deduplication prevents spam (same metric only flagged once per 24h)
+- Admin can acknowledge (reviewing) or resolve with note (fixed/false-positive)
+- All actions logged to AdminAction audit trail
+- Files created: 4 (anomaly-detection.ts, 3 API routes, page.tsx)
+- Files modified: 1 (sidebar)
+- Total LOC: ~1,300 insertions
+- Scalability checklist satisfied: #1, #2, #3, #7, #8, #9, #10, #11, #12
+- Phase 2 page 5 of 22 COMPLETE. Next: Configurable Fraud Rules (#6 — extend Risk page with custom rules).
