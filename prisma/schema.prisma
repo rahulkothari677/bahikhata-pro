@@ -771,3 +771,46 @@ model ApiKey {
   @@index([status])
   @@index([keyHash])
 }
+
+// ==================== WEBHOOK MANAGEMENT (shared with admin) ====================
+model WebhookEndpoint {
+  id            String   @id @default(cuid())
+  partnerId     String
+  url           String
+  secret        String?
+  events        String   @default("[]") @db.Text
+  status        String   @default("active")
+  description   String?
+  totalSent     Int      @default(0)
+  totalSuccess  Int      @default(0)
+  totalFailed   Int      @default(0)
+  lastSentAt    DateTime?
+  createdBy     String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([partnerId, status])
+  @@index([status])
+}
+
+model WebhookDelivery {
+  id              String   @id @default(cuid())
+  endpointId      String
+  eventType       String
+  payload         String   @db.Text
+  status          String   @default("pending")
+  attemptCount    Int      @default(0)
+  maxAttempts     Int      @default(3)
+  responseStatus  Int?
+  responseBody    String?  @db.Text
+  errorMessage    String?
+  firstAttemptAt  DateTime?
+  lastAttemptAt   DateTime?
+  nextRetryAt     DateTime?
+  deliveredAt     DateTime?
+  createdAt       DateTime @default(now())
+
+  @@index([endpointId, status, createdAt])
+  @@index([status, nextRetryAt])
+  @@index([createdAt])
+}
