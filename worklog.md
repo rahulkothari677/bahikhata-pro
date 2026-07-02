@@ -811,3 +811,46 @@ Stage Summary:
 - Total LOC: ~2,100 insertions
 - Scalability checklist satisfied: #1, #2, #3, #7, #8, #9, #10, #11, #12
 - Phase 2 page 9 of 22 COMPLETE. Next: Revenue Recognition (#10 — accrual-based revenue tracking).
+
+---
+Task ID: bahikhata-admin-phase-2.10-revenue-recognition
+Agent: main
+Task: Phase 2 (10/22) — Revenue Recognition: accrual-based revenue tracking (GAAP/Ind AS 115 compliant) — deferred → recognized over subscription period.
+
+Work Log:
+- Added RevenueSchedule model to both schemas: subscriptionId, userId, plan, amount, periodStart/End, status (pending/current/recognized), recognizedAt, createdAt. Indexed on status+periodStart, userId+periodStart, subscriptionId, periodStart.
+- Created src/lib/revenue-recognition.ts:
+  * computeRevenueSchedule(): splits a subscription into monthly recognition entries (₹2,988 yearly → 12 entries × ₹249/month). Calculates numMonths from startDate-endDate diff, divides amount, creates entries with correct status (pending/current/recognized based on current date).
+  * computeAllRevenueSchedules(): bulk recompute for ALL subscriptions (chunked at 100 to avoid memory spikes). Deletes existing schedules + recreates from scratch.
+  * getRevenueOverview(): 6 parallel aggregate queries (deferred sum, recognized sum, current month sum, pending count, recognized count, total sum) — all O(1).
+  * getMonthlyBreakdown(): last N months with recognized + deferred amounts per month (for bar charts).
+- Created 2 API routes:
+  * GET /api/admin/revenue-recognition: 3 tabs (overview with KPIs + month-over-month delta, schedules with paginated list + status filter, monthly with last 12 months breakdown)
+  * POST/GET /api/admin/revenue-recognition/recompute: triggers computeAllRevenueSchedules() with 10-min cooldown
+- Created /revenue-recognition page with 3 tabs:
+  * Overview: 4 KPI cards (recognized revenue, deferred revenue, current month, total scheduled) + Month-over-Month comparison card with delta % badge + 'How it works' transparency card (accrual accounting principles)
+  * Schedule Entries: status filter pills (all/pending/current/recognized) + paginated table (period, plan badge, status icon+badge, amount, recognized at)
+  * Monthly Breakdown: 2 horizontal bar charts (recognized revenue green bars, deferred revenue amber bars) with ₹ amounts at bar ends + summary table (month, recognized, deferred, entries count)
+- 'Recompute Schedules' button in header (with 10-min cooldown countdown)
+- Added 'Revenue Recognition' to sidebar Revenue group (FileBarChart icon)
+- Created phase-2.10-revenue-recognition.md test guide with: accrual vs cash accounting explanation, GAAP/Ind AS compliance notes, example calculation table (₹2,988 yearly → 12 × ₹249), schedule lifecycle, integration points
+- Updated README.md index
+- Verified: tsc 0 errors, npm run build exit 0 (✓ Compiled successfully in 5.7s, 76/76 pages)
+- Committed + pushed to both repos:
+  * bahikhata-admin: commit d288281
+  * bahikhata-pro (main app): commit 7d2b741 (schema only — prevents table drop)
+
+Stage Summary:
+- Accrual-based revenue tracking now available for investor financials
+- Compliant with ASC 606 (US GAAP) and Ind AS 115 (India)
+- Deferred revenue = liability (unearned, future periods)
+- Recognized revenue = income (earned, past periods)
+- Monthly entries: one per subscription per month
+- Bulk recompute: regenerates all schedules from subscriptions (chunked at 100)
+- Monthly breakdown: last 12 months with bar charts for visual trend analysis
+- Integration points: Subscriptions (source data), MRR & Forecast (uses recognized revenue), Partner Management (revenue share), Financial Reporting (Phase 2.11 — future)
+- Files created: 4 (revenue-recognition.ts, 2 API routes, page.tsx, test guide)
+- Files modified: 2 (sidebar, README index)
+- Total LOC: ~1,900 insertions
+- Scalability checklist satisfied: #1, #2, #3, #7, #8, #9, #10, #11, #12
+- Phase 2 page 10 of 22 COMPLETE. Next: Financial Reporting (#11 — P&L, balance sheet, cash flow).
