@@ -404,3 +404,52 @@ All 5 pages redesigned with design system + scalability patterns:
 Total LOC across Phase 1.6: ~3,329 insertions, ~1,113 deletions
 All pages now satisfy the 13-point scalability checklist + design system.
 Ready for Phase 2: Build remaining 22 features (Campaign management, A/B testing, Notification templates, etc.)
+
+---
+Task ID: bahikhata-admin-phase-2.1-notification-templates
+Agent: main
+Task: Phase 2 (1/22) — Notification Templates: CRUD with design system. First feature of Phase 2 (22 features total).
+
+Work Log:
+- Added NotificationTemplate model to both schemas (admin + main app — critical to prevent table drops on prisma db push):
+  * Fields: id, name, category (general/payment/onboarding/churn/promotional), channel (sms/email/push), subject (email only), body (Text), variables (JSON array), language (en/hi/bilingual), status (draft/active/archived), version (int), createdBy, timestamps
+  * Indexes: channel+status, category+status, status
+- Ran prisma generate in both repos
+- Created /api/admin/notification-templates (GET list + POST create):
+  * tab=overview: 4 parallel count() + groupBy(channel) for KPIs
+  * tab=list: paginated (20/page) + server-side search by name/body + channel/category/status filters
+  * POST: validates required fields, auto-detects {{variables}} from body via regex, logs to AuditLog
+- Created /api/admin/notification-templates/[id] (GET single + PATCH update + DELETE):
+  * PATCH: bumps version on each edit, re-detects variables, logs to AuditLog
+  * DELETE: hard delete with audit log
+  * Next.js 16 async params pattern (Promise<{id}>)
+  * All queries wrapped in withTimeout(5000ms) + .catch() fallback
+- Created /notification-templates page with 2 tabs (Overview / All Templates):
+  * Overview: 4 KPI cards (total, active, drafts, archived) + channel distribution with colored bars + 'How templates work' transparency card
+  * List: search + channel filter pills + status filter pills + paginated table (20/page) with Edit/Duplicate/Delete actions
+- Built Template Editor Modal:
+  * Name, channel, category, language, status selects
+  * Subject field (email only, required)
+  * Body textarea with {{variable}} syntax + auto-detected vars display
+  * Live Preview toggle (substitutes sample values: userName→Rahul, amount→1,500, etc.)
+  * Save button with loading state + validation
+- Added 'Engagement' group to sidebar (pink megaphone icon) with Notification Templates menu item (bell icon)
+- Fixed TypeScript issues:
+  * matchAll returns unknown[] in strict mode — cast to IterableIterator<RegExpMatchArray>
+  * Next.js 16 requires Promise<{id}> for dynamic route params (was {id: string})
+- Verified: tsc 0 errors, npm run build exit 0 (✓ Compiled successfully in 4.7s, 48/48 pages)
+- Committed + pushed to both repos:
+  * bahikhata-admin: commit 375bc16
+  * bahikhata-pro (main app): commit 660b77f (schema only — prevents table drop)
+
+Stage Summary:
+- First Phase 2 feature complete — foundational for Campaign Management (#3) and Multi-channel Notifications (#2)
+- Variable substitution: {{userName}}, {{amount}}, {{plan}}, {{dueDate}}, etc. auto-detected from body
+- Versioning: each edit bumps version (v1 → v2 → v3...) for audit trail
+- 3 channels supported: SMS (160 char limit), Email (with subject), Push (short notification)
+- 5 categories: general, payment, onboarding, churn win-back, promotional
+- 3 languages: en, hi, bilingual (for Hindi-speaking shop owners)
+- Files created: 4 (route.ts, [id]/route.ts, page.tsx, + schema additions to both repos)
+- Total LOC: ~1,100 insertions
+- Scalability checklist satisfied: #1 (paginated), #2 (no N+1), #3 (aggregates), #7 (search+filter+pagination), #8 (2 tabs), #9 (5s timeout), #10 (.catch fallbacks), #12 (transparency card)
+- Phase 2 page 1 of 22 COMPLETE. Next: Multi-channel Notifications (send via SMS/Email/Push using these templates).
