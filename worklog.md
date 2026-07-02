@@ -1078,3 +1078,33 @@ Stage Summary:
 - Total LOC: ~1,800 insertions
 - Scalability checklist satisfied: #1 (paginated 20/page), #2 (bulk count + aggregate), #3 (aggregates), #7 (status filter + pagination), #8 (2 tabs), #9 (5s timeout + Neon retry), #10 (.catch fallbacks), #11 (white modal), #12 (transparency card)
 - Phase 2 page 16 of 22 COMPLETE (73%). Next: Feature Flag Analytics (#17 — adoption tracking per flag).
+
+---
+Task ID: bahikhata-admin-phase-2.17-feature-flag-analytics
+Agent: main
+Task: Phase 2 (17/22) — Feature Flag Analytics: adoption tracking + toggle history. Complete redesign of existing features page.
+
+Work Log:
+- No schema changes needed — uses existing FeatureFlag + AdminAction models
+- Enhanced /api/admin/features with tab-based architecture:
+  * tab=overview: 4 parallel count (enabled, disabled, total, toggles-30d) + findMany for recent 10 toggle history from AdminAction (action=feature_toggle or feature_create)
+  * tab=list: findMany all flags + groupBy(targetId) on AdminAction for toggle count per flag
+  * All queries wrapped in withNeonRetry + withTimeout(5s) + .catch()
+- Redesigned /features page with 2 tabs (Overview / All Flags):
+  * Overview: 4 KPI cards (enabled, total, toggles-30d, disabled) + Recent Toggle History card (last 10 changes with admin name + time) + info card
+  * All Flags: search bar + list with key code, ENABLED/DISABLED badge, toggle count badge, label, description, last updated, inline toggle switch + create new flag form
+- Used full design system: PageHeader, KPIGrid, KPICard, ContentCard, EmptyState, SearchBar, LoadingSkeleton, Badge
+- Created phase-2.17-feature-flag-analytics.md test guide with old vs new comparison
+- Updated README.md index
+- Verified: tsc 0 errors, npm run build exit 0 (✓ Compiled successfully in 6.3s, 89/89 pages)
+- Committed + pushed to GitHub: commit 54b0260 (admin only — no schema change needed)
+
+Stage Summary:
+- Feature flags now have analytics: toggle count per flag, recent toggle history, KPIs
+- Uses AdminAction audit log for toggle history (no new tables needed)
+- Design system applied (was inline styles before)
+- Resilience layer added (withNeonRetry + withTimeout)
+- Files modified: 2 (API route, page.tsx, test guide, README index)
+- Total LOC: ~423 insertions, 119 deletions
+- Scalability checklist satisfied: #2 (bulk count + groupBy), #3 (aggregates), #7 (search), #8 (2 tabs), #9 (5s timeout + Neon retry), #10 (.catch fallbacks), #12 (investor-readable)
+- Phase 2 page 17 of 22 COMPLETE (77%). Next: Segment-to-Campaign (#18 — send campaigns to segments).
