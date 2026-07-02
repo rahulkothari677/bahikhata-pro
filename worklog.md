@@ -1108,3 +1108,36 @@ Stage Summary:
 - Total LOC: ~423 insertions, 119 deletions
 - Scalability checklist satisfied: #2 (bulk count + groupBy), #3 (aggregates), #7 (search), #8 (2 tabs), #9 (5s timeout + Neon retry), #10 (.catch fallbacks), #12 (investor-readable)
 - Phase 2 page 17 of 22 COMPLETE (77%). Next: Segment-to-Campaign (#18 — send campaigns to segments).
+
+---
+Task ID: bahikhata-admin-phase-2.18-segment-to-campaign
+Agent: main
+Task: Phase 2 (18/22) — Segment-to-Campaign: connect user segments with campaigns for targeted outreach. No new schema.
+
+Work Log:
+- No schema changes needed — uses existing UserSegmentCache + Campaign.targetSegmentId
+- Created GET /api/admin/campaigns/segments: groupBy on UserSegmentCache by segmentId, returns [{ segmentId, name (with emoji), userCount }]. 10 segment names mapped (power_users → ⚡ Power Users, etc.).
+- Enhanced Campaign Editor modal in /campaigns page:
+  * Replaced text input for segment ID with <select> dropdown showing segment name + user count
+  * Blue info banner when segment selected: "✓ Targeting segment: ⚡ Power Users (150 users will receive campaign notifications)"
+  * Falls back to user ID textarea when "Manual user IDs" option selected
+  * Added useQuery to fetch segments (5-min staleTime cache)
+- Added "Create Campaign" button on Segment detail page (/segments/[segmentId]):
+  * Megaphone icon, navigates to /campaigns?segment=<segmentId>
+  * URL param support: useEffect reads ?segment=X, auto-opens editor
+  * CampaignEditor accepts initialSegmentId prop for pre-selection
+- Imported Megaphone icon + useSearchParams + useEffect in campaigns page
+- Created phase-2.18-segment-to-campaign.md test guide with 10 segments table, two test flows (via segments page + via campaigns page)
+- Updated README.md index
+- Verified: tsc 0 errors, npm run build exit 0 (✓ Compiled successfully in 6.5s, 90/90 pages)
+- Committed + pushed to GitHub: commit c66cae6 (admin only — no schema change)
+
+Stage Summary:
+- Segments now connect to campaigns via dropdown (was manual text input)
+- User counts visible in dropdown (admin knows how many recipients before creating)
+- One-click from segment detail → campaign editor with segment pre-selected
+- Files created: 2 (segments API route, test guide)
+- Files modified: 3 (campaigns page, segments detail page, README index)
+- Total LOC: ~198 insertions, 12 deletions
+- Scalability checklist satisfied: #2 (groupBy), #3 (pre-computed cache), #7 (dropdown), #8 (organized editor), #9 (5s timeout), #10 (.catch), #12 (user count visibility)
+- Phase 2 page 18 of 22 COMPLETE (82%). Next: NPS Survey Builder (#19 — configurable survey triggers).
