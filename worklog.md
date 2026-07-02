@@ -494,3 +494,44 @@ Stage Summary:
 - Total LOC: ~1,400 insertions
 - Scalability checklist satisfied: #1, #2, #3, #7, #8, #9, #10, #12
 - Phase 2 page 2 of 22 COMPLETE. Next: Campaign Management (#3 — orchestrates multi-step campaigns using templates + notifications).
+
+---
+Task ID: bahikhata-admin-phase-2.3-campaign-management
+Agent: main
+Task: Phase 2 (3/22) — Campaign Management: multi-step notification sequences (e.g. Day 0: Welcome SMS → Day 3: Tips Email → Day 7: Discount Push).
+
+Work Log:
+- Added Campaign + CampaignStep models to both schemas:
+  * Campaign: name, description, status (draft/scheduled/running/paused/completed/cancelled), targetSegmentId, targetUserIds (JSON), startAt, endAt, totalRecipients/Sent/Failed/Skipped, currentStep, createdBy, timestamps
+  * CampaignStep: campaignId, stepNumber, templateId, templateName, delayMinutes (after campaign start), status, scheduledAt, sentAt, recipientCount/Sent/Failed/Skipped, errorMessage
+  * Indexed on campaignId+stepNumber, status+scheduledAt
+  * Cascade delete: deleting a campaign deletes all its steps
+- Created 4 API routes:
+  * GET/POST /api/admin/campaigns: overview (7 parallel count + aggregate) + list (paginated) + create (validates templates, auto-computes endAt + scheduledAt)
+  * GET/PATCH/DELETE /api/admin/campaigns/[id]: single campaign with steps + update + delete (with status guards)
+  * POST /api/admin/campaigns/[id]/action: start | pause | resume | cancel | run-step
+    - run-step: manually trigger a step NOW (fetches recipients, sends via notification-providers, logs to NotificationLog, updates stats)
+    - Caps at 1000 recipients for synchronous execution (production: background cron job)
+- Created /campaigns page with 2 tabs (Overview / All Campaigns):
+  * Overview: 4 KPI cards + 'How campaigns work' transparency card
+  * List: search + 7 status filter pills + expandable rows + paginated (20/page)
+- Expanded detail shows: action buttons (context-aware: Start/Pause/Resume/Cancel) + steps timeline with step number, template name, delay, status, stats + 'Run Now' button on pending steps
+- Built Campaign Editor Modal: name, description, target audience (segment ID or user IDs), startAt, steps builder (add/remove, template selector, delay in minutes with live display)
+- All queries wrapped in withTimeout(5000ms) + .catch() fallback
+- Modal uses explicit white background (Chrome force-dark fix from Phase 2.1)
+- Verified: tsc 0 errors, npm run build exit 0 (✓ Compiled successfully in 4.8s, 55/55 pages)
+- Committed + pushed to both repos:
+  * bahikhata-admin: commit 6ef0e8b
+  * bahikhata-pro (main app): commit cdf7612 (schema only — prevents table drop)
+
+Stage Summary:
+- Multi-step campaigns now possible: e.g. "Onboarding Drip" with 4 steps (Day 0, Day 3, Day 7, Day 14)
+- Target audience: segment ID (uses pre-computed UserSegmentCache) OR manual user ID list
+- Lifecycle: draft → scheduled → running → completed | paused | cancelled
+- Manual step trigger ('Run Now') for testing without waiting for schedule
+- Production note: a cron job should poll CampaignStep where status=pending AND scheduledAt <= now, then execute via background job (current implementation does this synchronously for immediate feedback, capped at 1000 recipients)
+- Files created: 4 (campaigns/route.ts, [id]/route.ts, [id]/action/route.ts, page.tsx)
+- Files modified: 1 (sidebar)
+- Total LOC: ~1,500 insertions
+- Scalability checklist satisfied: #1, #2, #3, #7, #8, #9, #10, #11, #12
+- Phase 2 page 3 of 22 COMPLETE. Next: Status Page (#4 — public uptime/incident page).
