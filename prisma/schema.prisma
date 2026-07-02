@@ -50,6 +50,10 @@ model User {
   aiUsageLogs    AiUsageLog[]
   supportTickets SupportTicket[]
   npsFeedback   NpsFeedback[]
+
+  @@index([plan])
+  @@index([createdAt])
+  @@index([updatedAt])
 }
 
 // ==================== SHOPS (Multi-shop support) ====================
@@ -382,6 +386,8 @@ model AiUsageLog {
   @@index([userId, createdAt])
   @@index([feature, createdAt])
   @@index([provider, createdAt])
+  @@index([createdAt])
+  @@index([feature, provider, createdAt])
 }
 
 
@@ -468,4 +474,59 @@ model NpsFeedback {
 
   @@index([userId, createdAt])
   @@index([score])
+}
+
+// ==================== DAILY STATS (admin panel — pre-computed KPIs) ====================
+model DailyStats {
+  id              String   @id @default(cuid())
+  date            DateTime @unique
+  totalUsers      Int      @default(0)
+  newUsers        Int      @default(0)
+  activeUsers     Int      @default(0)
+  payingUsers     Int      @default(0)
+  mrr             Float    @default(0)
+  newMrr          Float    @default(0)
+  churnedMrr      Float    @default(0)
+  arr             Float    @default(0)
+  totalGmv        Float    @default(0)
+  totalTxns       Int      @default(0)
+  salesCount      Int      @default(0)
+  purchasesCount  Int      @default(0)
+  aiCalls         Int      @default(0)
+  aiCostInr       Float    @default(0)
+  aiScans         Int      @default(0)
+  voiceParses     Int      @default(0)
+  computedAt      DateTime @default(now())
+  @@index([date])
+}
+
+// ==================== USER SEGMENTS CACHE (admin panel) ====================
+model UserSegmentCache {
+  id          String   @id @default(cuid())
+  userId      String
+  segmentId   String
+  computedAt  DateTime @default(now())
+  @@unique([userId, segmentId])
+  @@index([segmentId])
+  @@index([userId])
+}
+
+// ==================== CREDIT SCORE CACHE (admin panel) ====================
+model CreditScoreCache {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  score           Int
+  band            String
+  avgMonthlySales Float    @default(0)
+  totalSales6Mo   Float    @default(0)
+  activeMonths    Int      @default(0)
+  collectionRate  Float    @default(0)
+  businessAgeDays Int      @default(0)
+  productCount    Int      @default(0)
+  partyCount      Int      @default(0)
+  hasGstData      Boolean  @default(false)
+  recommendation  String?
+  computedAt      DateTime @default(now())
+  @@index([score])
+  @@index([band])
 }
