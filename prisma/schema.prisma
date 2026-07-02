@@ -833,3 +833,40 @@ model RevenueSchedule {
   @@index([subscriptionId])
   @@index([periodStart])
 }
+
+// ==================== A/B TESTING (shared with admin) ====================
+model Experiment {
+  id              String   @id @default(cuid())
+  name            String
+  description     String?  @db.Text
+  status          String   @default("draft")
+  metric          String
+  metricGoal      String  @default("increase")
+  targetEvent     String?
+  trafficPct      Int      @default(100)
+  variants        String   @default("[]") @db.Text
+  startAt         DateTime?
+  endAt           DateTime?
+  winnerVariant   String?
+  conclusion      String?  @db.Text
+  createdBy       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([status, startAt])
+}
+
+model ExperimentAssignment {
+  id              String   @id @default(cuid())
+  experimentId    String
+  userId          String
+  variantKey      String
+  assignedAt      DateTime @default(now())
+  convertedAt     DateTime?
+  conversionValue Float    @default(0)
+
+  @@unique([experimentId, userId])
+  @@index([experimentId, variantKey])
+  @@index([userId, experimentId])
+  @@index([convertedAt])
+}
