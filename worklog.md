@@ -934,3 +934,44 @@ Stage Summary:
 - Total LOC: ~1,900 insertions
 - Scalability checklist satisfied: #1, #2, #3, #7, #8, #9, #10, #11, #12
 - Phase 2 page 12 of 22 COMPLETE (55%). Next: Database Admin Tools (#13 — safe query runner, export, backup status).
+
+---
+Task ID: bahikhata-admin-phase-2.13-database-admin
+Agent: main
+Task: Phase 2 (13/22) — Database Admin Tools: safe read-only query runner + table stats + CSV export. No new schema.
+
+Work Log:
+- No schema changes needed — operates on existing tables via PostgreSQL system catalogs
+- Created src/lib/database-admin.ts:
+  * getTableStats(): queries pg_stat_user_tables for row count + pg_total_relation_size for disk size per table
+  * getDatabaseOverview(): aggregates total tables, rows, size, identifies largest table
+  * validateQuery(): security validation — must start with SELECT/WITH, blocks 15 dangerous keywords (INSERT/UPDATE/DELETE/DROP/TRUNCATE/ALTER/CREATE/GRANT/REVOKE/COPY/VACUUM/REINDEX/CLUSTER/COMMENT/EXECUTE/MERGE/REFRESH/REASSIGN/SECURITY) via word-boundary regex, blocks semicolons (prevents multiple statements)
+  * executeSafeQuery(): validates + appends LIMIT 1001 + executes via $queryRawUnsafe + 10s timeout + returns columns/rows/truncated/duration
+  * exportToCsv(): converts QueryResult to CSV with proper escaping (quotes, commas, newlines)
+- Created 3 API routes:
+  * GET /api/admin/database: overview (KPIs + top 10 tables) + tables tab (all tables)
+  * POST /api/admin/database/query: validates SQL → executes → logs to AdminAction → returns columns + rows + truncated + duration
+  * POST /api/admin/database/export: validates SQL → executes → converts to CSV → returns as downloadable file (Content-Disposition: attachment) → logs to AdminAction
+- Created /database page with 3 tabs:
+  * Overview: 4 KPI cards (total tables, total rows, DB size, largest table) + Top 10 tables by size card + Read-Only Safety Guarantees green card
+  * Query Runner: SQL textarea (monospace) + Run Query button + Export CSV button + 5 example query buttons (click to fill) + results table (columns + rows with NULL highlighting) + query safety warning amber card
+  * All Tables: full table list with row count + size badge + "Browse →" link (switches to Query Runner with SELECT * FROM "table" LIMIT 10 pre-filled)
+- All queries + exports logged to AdminAction audit trail (SQL text + row count + duration + admin who ran it)
+- Added 'Database Admin' to sidebar System group (Database icon)
+- Created phase-2.13-database-admin.md test guide with: security guarantees table, 5 example SQL queries, important notes (case-sensitive table names, capital column names need double quotes)
+- Updated README.md index
+- Verified: tsc 0 errors, npm run build exit 0 (✓ Compiled successfully in 6.1s, 84/84 pages)
+- Committed + pushed to GitHub: commit e4f8f5e (admin only — no schema change needed)
+
+Stage Summary:
+- Safe read-only SQL query runner for data investigation + debugging
+- Table statistics for monitoring database growth
+- CSV export for data analysis in Excel/Google Sheets
+- 5-layer security: SELECT-only validation, 15 blocked keywords, semicolon blocking, 1000-row limit, 10s timeout
+- Full audit trail: every query + export logged with SQL text + admin + duration
+- Example queries: count users by plan, recent users, AI cost last 7 days, active subscriptions, table row counts
+- Files created: 4 (database-admin.ts, 3 API routes, page.tsx, test guide)
+- Files modified: 2 (sidebar, README index)
+- Total LOC: ~1,400 insertions
+- Scalability checklist satisfied: #1 (max 1000 rows), #2 (single query), #7 (N/A), #8 (3 tabs), #9 (10s timeout), #10 (error handling), #12 (audit trail)
+- Phase 2 page 13 of 22 COMPLETE (59%). Next: Competitor Monitoring (#14 — track competing apps' pricing/features).
