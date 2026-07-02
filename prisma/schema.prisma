@@ -575,3 +575,50 @@ model NotificationLog {
   @@index([status, sentAt])
   @@index([sentAt])
 }
+
+// ==================== CAMPAIGNS (shared with admin) ====================
+model Campaign {
+  id              String   @id @default(cuid())
+  name            String
+  description     String?  @db.Text
+  status          String   @default("draft")
+  targetSegmentId String?
+  targetUserIds   String   @default("[]") @db.Text
+  startAt         DateTime?
+  endAt           DateTime?
+  totalRecipients Int      @default(0)
+  totalSent       Int      @default(0)
+  totalFailed     Int      @default(0)
+  totalSkipped    Int      @default(0)
+  currentStep     Int      @default(0)
+  createdBy       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  startedAt       DateTime?
+  completedAt     DateTime?
+  steps           CampaignStep[]
+
+  @@index([status, startAt])
+  @@index([createdBy])
+}
+
+model CampaignStep {
+  id              String   @id @default(cuid())
+  campaignId      String
+  campaign        Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  stepNumber      Int
+  templateId      String
+  templateName    String?
+  delayMinutes    Int      @default(0)
+  status          String   @default("pending")
+  scheduledAt     DateTime?
+  sentAt          DateTime?
+  recipientCount  Int      @default(0)
+  sentCount       Int      @default(0)
+  failedCount     Int      @default(0)
+  skippedCount    Int      @default(0)
+  errorMessage    String?
+
+  @@index([campaignId, stepNumber])
+  @@index([status, scheduledAt])
+}
