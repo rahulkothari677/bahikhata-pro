@@ -453,3 +453,44 @@ Stage Summary:
 - Total LOC: ~1,100 insertions
 - Scalability checklist satisfied: #1 (paginated), #2 (no N+1), #3 (aggregates), #7 (search+filter+pagination), #8 (2 tabs), #9 (5s timeout), #10 (.catch fallbacks), #12 (transparency card)
 - Phase 2 page 1 of 22 COMPLETE. Next: Multi-channel Notifications (send via SMS/Email/Push using these templates).
+
+---
+Task ID: bahikhata-admin-phase-2.2-multi-channel-notifications
+Agent: main
+Task: Phase 2 (2/22) — Multi-channel Notifications: send via SMS/Email/Push using templates.
+
+Work Log:
+- Added NotificationLog model to both schemas (admin + main app): id, userId, recipient, templateId, templateName, channel, subject, body, status, provider, providerMessageId, errorMessage, sentBy, sentAt, category. Indexed on userId+sentAt, channel+status+sentAt, status+sentAt, sentAt.
+- Created src/lib/notification-providers.ts — provider-agnostic send layer:
+  * SMS via MSG91 (env: MSG91_AUTH_KEY, MSG91_SENDER_ID, MSG91_ROUTE)
+  * Email via Resend (env: RESEND_API_KEY, EMAIL_FROM)
+  * Push via Firebase Cloud Messaging (env: FCM_SERVER_KEY)
+  * DRY-RUN FALLBACK: if no env var set, sends are logged with status=skipped + provider=dry-run (lets admin test entire flow without spending money)
+  * sendNotification() dispatcher, substituteVariables() for {{var}} replacement, getProviderStatus() for UI display
+- Created 4 API routes:
+  * POST /api/admin/notifications/send: 2 modes (template | direct), max 1000 recipients, sequential sending (avoids rate-limit bans), logs every send to NotificationLog + AdminAction
+  * GET /api/admin/notifications/log: tab=overview (6 parallel count+groupBy) | tab=list (paginated 20/page + search + channel/status filters)
+  * GET /api/admin/notifications/status: returns provider config status (instant, no DB query)
+  * GET /api/admin/notifications/templates: returns active templates for compose dropdown
+- Created /notifications page with 3 tabs (Overview / Compose & Send / Send History):
+  * Overview: provider status banner (3 cards) + 4 KPI cards + channel distribution + 'How sending works' card
+  * Compose: mode toggle (template | direct) + template selector + userIds textarea + preview OR channel selector + subject + body + recipients textarea + preview
+  * History: search + channel filter pills + status filter pills + paginated table
+- Added 'Send Notifications' to sidebar Engagement group (Send icon)
+- Verified: tsc 0 errors, npm run build exit 0 (✓ Compiled successfully in 5.0s, 53/53 pages)
+- Committed + pushed to both repos:
+  * bahikhata-admin: commit 355b5a2
+  * bahikhata-pro (main app): commit 1662f9f (schema only — prevents table drop)
+
+Stage Summary:
+- Provider-agnostic: works in dry-run mode out of the box (no API keys needed)
+- To enable real sending: add MSG91_AUTH_KEY (SMS), RESEND_API_KEY (Email), or FCM_SERVER_KEY (Push) to env vars
+- Auto-substitutes {{userName}}, {{userEmail}}, {{plan}}, {{dueDate}}, etc. from user data in template mode
+- Every send logged to NotificationLog (success/failure/skip) + AdminAction audit trail
+- Max 1000 recipients per send (safety limit prevents accidental mass send)
+- Sequential sending (avoids MSG91/Resend/FCM rate-limit bans)
+- Files created: 6 (notification-providers.ts, 4 API routes, 1 page)
+- Files modified: 1 (sidebar)
+- Total LOC: ~1,400 insertions
+- Scalability checklist satisfied: #1, #2, #3, #7, #8, #9, #10, #12
+- Phase 2 page 2 of 22 COMPLETE. Next: Campaign Management (#3 — orchestrates multi-step campaigns using templates + notifications).
