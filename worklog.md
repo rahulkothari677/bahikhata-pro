@@ -1429,3 +1429,40 @@ Stage Summary:
 - Total LOC: ~1,400 insertions
 - Scalability checklist satisfied: #1 (top 50 leads only), #2 (bulk count + aggregate), #3 (pre-computed CreditScoreCache), #7 (N/A — overview only), #8 (2 tabs), #9 (5s timeout + Neon retry), #10 (.catch), #12 (transparency card)
 - Phase 3 page 3 of 5 COMPLETE (60%). Next: GST Filing Service (#4 — help users prepare + file GST returns).
+
+---
+Task ID: bahikhata-admin-phase-3.4-gst-filing
+Agent: main
+Task: Phase 3 (4/5) — GST Filing Service: prepare GST returns from transaction data (CGST/SGST/IGST, GSTR-1/GSTR-3B).
+
+Work Log:
+- No schema changes needed — reads existing Transaction data (cgst, sgst, igst fields)
+- Created src/lib/gst-filing.ts:
+  * generateGstReport(year, month): fetches sale transactions for period (up to 50K), aggregates total taxable value + GST, splits CGST+SGST (intra-state) vs IGST (inter-state), groups by tax slab (0/5/12/18/28% — reverse calculated from GST rate), generates GSTR-1 + GSTR-3B format summaries, counts eligible users
+  * getGstOverview(): 4 parallel aggregate queries (this month GST, last month GST, total GST users, total GST collected)
+- Created GET /api/admin/gst-filing API: overview tab (KPIs) + report tab (year + month params → generates full report)
+- Created /gst-filing page:
+  * 4 KPI cards at top (GST this month, last month, total collected, eligible users)
+  * Period selector: year dropdown + month buttons (Jan-Dec)
+  * Summary cards: Taxable Value, CGST+SGST (Intra-state), IGST (Inter-state), Total GST
+  * GST Breakdown by Tax Slab table: slab badge, taxable value, CGST, SGST, IGST, count per slab
+  * GSTR-3B Summary card: outward supplies, IGST, CGST, SGST, total tax liability + eligible users + invoice count
+  * CSV download button (generates CSV with summary + slab breakdown + GSTR-3B)
+  * "How GST filing works" transparency card with revenue opportunity calculation (eligible users × ₹1,000/filing)
+- Added 'GST Filing' to sidebar Revenue group (FileText icon, 5th item)
+- Created phase-3.4-gst-filing.md test guide with GST slabs table, revenue opportunity
+- Updated README.md index
+- Verified: tsc 0 errors, npm run build exit 0 (✓ Compiled successfully in 6.9s, 109/109 pages)
+- Committed + pushed to GitHub: commit 8fcf7ad (admin only — no schema change needed)
+
+Stage Summary:
+- GST filing service: aggregates transaction data into GST return format
+- 5 tax slabs (0/5/12/18/28%) with reverse calculation from transaction GST amounts
+- GSTR-1 (outward supplies) + GSTR-3B (monthly summary) formats
+- CSV download for uploading to GST portal
+- Revenue opportunity: ₹500-₹2,000 per filing × eligible users
+- Files created: 3 (gst-filing.ts, API route, page.tsx, test guide)
+- Files modified: 2 (sidebar, README index)
+- Total LOC: ~1,400 insertions
+- Scalability checklist satisfied: #1 (max 50K transactions per report), #2 (bulk aggregate), #3 (aggregates), #8 (organized sections), #9 (5s timeout + Neon retry), #10 (.catch), #12 (transparency card + revenue calculation)
+- Phase 3 page 4 of 5 COMPLETE (80%). Next: Account Aggregator (#5 — integrate with India's AA framework for bank data).
