@@ -971,3 +971,25 @@ model DataExportRequest {
   @@index([status, createdAt])
   @@index([type, status])
 }
+
+// ==================== PREDICTIVE CHURN MODEL (shared with admin) ====================
+model ChurnPrediction {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  userName        String?
+  userEmail       String?
+  userPlan        String?
+  riskScore       Int
+  riskLevel       String
+  inactivityScore Int      @default(0)
+  engagementScore Int      @default(0)
+  aiUsageScore    Int      @default(0)
+  planScore       Int      @default(0)
+  ageScore        Int      @default(0)
+  supportScore    Int      @default(0)
+  recommendedAction String?
+  computedAt      DateTime @default(now())
+
+  @@index([riskLevel, riskScore])
+  @@index([userPlan, riskLevel])
+}
