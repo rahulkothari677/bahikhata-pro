@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Mic, Square, Loader2, X, Plus, Check, RefreshCw, Sparkles, Languages } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -20,13 +21,61 @@ import { cn } from '@/lib/utils'
  * 2. Product names shown in parsed result
  * 3. Delete (X) button on each parsed item
  * 4. Animated waveform during recording (visual feedback)
- * 5. Hinglish language support (hi-IN for Hindi + en-IN fallback)
- * 6. Example phrases users can tap to see how it works
+ * 5. Multi-language support — reads `voiceLang` from user settings and maps
+ *    it to a BCP-47 locale for the Web Speech API (hi-IN, mr-IN, ta-IN, etc.).
+ * 6. Quick toggle between the selected language and English (for translation).
+ * 7. Example phrases users can tap to see how it works
  */
 
 interface VoiceEntryProps {
   onTransactionParsed: (data: any) => void
   products?: any[]  // Pass products so we can auto-fill prices
+}
+
+// Map the user's voiceLang setting code → BCP-47 locale for Web Speech API.
+// 'original' defaults to hi-IN (Hindi) because the browser cannot auto-detect
+// the spoken language — the user must pick one. Hindi is the most common for
+// Indian shop owners and also handles Hinglish reasonably well.
+const VOICE_LANG_TO_LOCALE: Record<string, string> = {
+  original: 'hi-IN',
+  en: 'en-IN',
+  hi: 'hi-IN',
+  ta: 'ta-IN',
+  gu: 'gu-IN',
+  mr: 'mr-IN',
+  bn: 'bn-IN',
+  te: 'te-IN',
+  kn: 'kn-IN',
+  ml: 'ml-IN',
+  pa: 'pa-IN',
+}
+
+// Human-readable label for each locale, shown in the "Listening in X..." banner
+const LOCALE_TO_LABEL: Record<string, string> = {
+  'hi-IN': 'Hindi',
+  'en-IN': 'English',
+  'ta-IN': 'Tamil',
+  'gu-IN': 'Gujarati',
+  'mr-IN': 'Marathi',
+  'bn-IN': 'Bengali',
+  'te-IN': 'Telugu',
+  'kn-IN': 'Kannada',
+  'ml-IN': 'Malayalam',
+  'pa-IN': 'Punjabi',
+}
+
+// Short chip label for the toggle button (native script)
+const LOCALE_TO_CHIP: Record<string, string> = {
+  'hi-IN': 'हिं',
+  'en-IN': 'EN',
+  'ta-IN': 'த',
+  'gu-IN': 'ગુ',
+  'mr-IN': 'मरा',
+  'bn-IN': 'বাং',
+  'te-IN': 'తె',
+  'kn-IN': 'ಕ',
+  'ml-IN': 'മ',
+  'pa-IN': 'ਪੰ',
 }
 
 // Example phrases shown when user hasn't recorded yet
@@ -45,12 +94,49 @@ export function VoiceEntry({ onTransactionParsed, products = [] }: VoiceEntryPro
   const [parsed, setParsed] = useState<any>(null)
   const [error, setError] = useState('')
   const [supported, setSupported] = useState(true)
-  const [lang, setLang] = useState<'en-IN' | 'hi-IN'>('hi-IN') // Default to Hindi (supports Hinglish)
+  // `lang` is the BCP-47 locale currently active for recognition. It starts
+  // as hi-IN (sensible default) and is synced to the user's voiceLang setting
+  // once settings load. The user can toggle between this language and English.
+  const [lang, setLang] = useState<string>('hi-IN')
+  // `voiceLangCode` is the user's setting code ('original' | 'en' | 'hi' | …).
+  // Sent to /api/voice-parse so the LLM knows whether to translate or keep
+  // the spoken language in the parsed output.
+  const [voiceLangCode, setVoiceLangCode] = useState<string>('original')
   const recognitionRef = useRef<any>(null)
   const processedFinalsRef = useRef<Set<number>>(new Set())
   const isRecordingRef = useRef(false)
   const { toast } = useToast()
   const { requireFeature } = useSubscription()
+
+  // Fetch user settings to get voiceLang (and stay in sync if changed elsewhere)
+  const { data: settingsData } = useQuery({
+    queryKey: ['user-settings'],
+    queryFn: async () => {
+      const r = await fetch('/api/settings')
+      if (!r.ok) return null
+      return r.json()
+    },
+    staleTime: 5 * 60 * 1000,
+  })
+
+  // Sync `lang` + `voiceLangCode` from settings whenever voiceLang changes.
+  // The user's selected language becomes the DEFAULT recognition locale; the
+  // toggle button lets them temporarily switch to English for that session.
+  useEffect(() => {
+    const code = settingsData?.setting?.voiceLang || 'original'
+    setVoiceLangCode(code)
+    const locale = VOICE_LANG_TO_LOCALE[code] || 'hi-IN'
+    // Only override the active locale if the user hasn't toggled to English
+    // mid-session. We detect this by checking if the current locale matches
+    // the previous setting's locale OR is the default hi-IN (initial state).
+    setLang(prevLocale => {
+      // If currently on English due to a manual toggle but the setting is
+      // not English, keep English until the user toggles back. Otherwise,
+      // follow the setting.
+      if (prevLocale === 'en-IN' && code !== 'en') return prevLocale
+      return locale
+    })
+  }, [settingsData])
 
   useEffect(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
@@ -145,10 +231,15 @@ export function VoiceEntry({ onTransactionParsed, products = [] }: VoiceEntryPro
 
     setProcessing(true)
     try {
+      // Compute the effective voice language for the API. If the user toggled
+      // to English mid-session (lang === 'en-IN'), the spoken language is
+      // English, so the output should be English too — regardless of the
+      // user's setting. Otherwise, use the user's voiceLang setting.
+      const effectiveVoiceLang = lang === 'en-IN' ? 'en' : voiceLangCode
       const r = await offlineFetch('/api/voice-parse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transcript: fullTranscript, lang }),
+        body: JSON.stringify({ transcript: fullTranscript, lang, voiceLang: effectiveVoiceLang }),
       })
 
       // Handle 402 quota exceeded — show upgrade prompt instead of generic error
@@ -271,21 +362,29 @@ export function VoiceEntry({ onTransactionParsed, products = [] }: VoiceEntryPro
     <div className="space-y-3">
       {/* Language toggle + Recording controls */}
       <div className="flex items-center gap-2">
-        {/* Language toggle */}
+        {/* Language toggle — switches between the user's selected voice language
+            and English. If the selected language IS English, the toggle is a
+            no-op (disabled) since both sides would be English. */}
         <button
-          onClick={() => { haptic.click(); setLang(lang === 'hi-IN' ? 'en-IN' : 'hi-IN') }}
-          disabled={isRecording}
+          onClick={() => {
+            haptic.click()
+            // If currently on the user's selected language, switch to English
+            // (for translation). If on English, switch back to the selected.
+            const selectedLocale = VOICE_LANG_TO_LOCALE[voiceLangCode] || 'hi-IN'
+            setLang(lang === 'en-IN' ? selectedLocale : 'en-IN')
+          }}
+          disabled={isRecording || voiceLangCode === 'en'}
           className={cn(
             'flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition flex-shrink-0',
-            lang === 'hi-IN'
+            lang !== 'en-IN'
               ? 'bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300'
               : 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300',
-            isRecording && 'opacity-50 cursor-not-allowed'
+            (isRecording || voiceLangCode === 'en') && 'opacity-50 cursor-not-allowed'
           )}
-          title="Toggle between Hindi and English recognition"
+          title={voiceLangCode === 'en' ? 'English is your default voice language' : `Toggle between ${LOCALE_TO_LABEL[VOICE_LANG_TO_LOCALE[voiceLangCode] || 'hi-IN']} and English`}
         >
           <Languages className="w-3.5 h-3.5" />
-          {lang === 'hi-IN' ? 'हिं' : 'EN'}
+          {lang === 'en-IN' ? 'EN' : (LOCALE_TO_CHIP[lang] || 'हिं')}
         </button>
 
         {!isRecording ? (
@@ -348,7 +447,7 @@ export function VoiceEntry({ onTransactionParsed, products = [] }: VoiceEntryPro
                 >
                   ●
                 </motion.span>
-                Listening in {lang === 'hi-IN' ? 'Hindi' : 'English'}...
+                Listening in {LOCALE_TO_LABEL[lang] || 'Hindi'}...
               </span>
             </div>
             <p className="text-sm text-foreground min-h-[20px]">

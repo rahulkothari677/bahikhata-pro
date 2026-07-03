@@ -219,6 +219,11 @@ model Setting {
   hideProfit Boolean @default(false)
   // AI Bill Scanner output language: 'original' (keep bill language) | 'en' | 'hi' | 'ta' | 'gu' | 'mr' | 'bn' | 'te' | 'kn' | 'ml' | 'pa'
   scanLang String   @default("original")
+  // AI Voice Entry language: 'original' (keep spoken language, don't translate) | 'en' | 'hi' | 'ta' | 'gu' | 'mr' | 'bn' | 'te' | 'kn' | 'ml' | 'pa'
+  // Controls BOTH the speech-recognition locale (e.g. mr-IN) AND the parsed
+  // output language. 'original' listens in hi-IN (default) and keeps the
+  // spoken language in the parsed result (no English translation).
+  voiceLang String  @default("original")
 }
 
 // ==================== ANNOUNCEMENTS (broadcast messages) ====================

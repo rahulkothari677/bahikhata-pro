@@ -23,7 +23,7 @@ import { THEME_OPTIONS } from '@/components/providers/ThemeProvider'
 import {
   Store, Save, Database, Trash2, AlertTriangle, Moon, Keyboard,
   Search, MessageCircle, Sparkles, Bell, Repeat, FileSpreadsheet,
-  Users, Package, ScanLine, TrendingUp, Smartphone, RotateCcw, Palette, Check, Globe, Shield, EyeOff, Plus,
+  Users, Package, ScanLine, TrendingUp, Smartphone, RotateCcw, Palette, Check, Globe, Shield, EyeOff, Plus, Mic,
 } from 'lucide-react'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { useSetting } from '@/hooks/use-setting'
@@ -690,6 +690,57 @@ export function Settings() {
               </select>
               <p className="text-[11px] text-muted-foreground">
                 "Original" keeps the item names in whatever language the bill is written in (Hindi bill → Hindi names, English bill → English names).
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── AI VOICE ENTRY LANGUAGE (in Profile tab) ────────────────── */}
+      {settingsTab === 'profile' && (
+        <Card className="shadow-card border-border/60">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Mic className="w-5 h-5 text-primary" /> AI Voice Entry Language
+            </CardTitle>
+            <CardDescription>Choose the language for voice recognition &amp; parsed item names</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                When you record a voice entry, the app listens in the selected language and the AI parses item names in that same language. Pick the language you normally speak in:
+              </p>
+              <select
+                value={(form as any).voiceLang || 'original'}
+                onChange={(e) => {
+                  setForm({ ...form, voiceLang: e.target.value } as any)
+                  // Save immediately
+                  fetch('/api/settings', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ...form, voiceLang: e.target.value }),
+                  }).then(() => {
+                    sonnerToast.success('Voice entry language updated')
+                  }).catch(() => {
+                    sonnerToast.error('Failed to update language')
+                  })
+                }}
+                className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="original">Original (keep spoken language, no translation)</option>
+                <option value="en">English (translate to English)</option>
+                <option value="hi">हिन्दी (Hindi)</option>
+                <option value="ta">தமிழ் (Tamil)</option>
+                <option value="gu">ગુજરાતી (Gujarati)</option>
+                <option value="mr">मराठी (Marathi)</option>
+                <option value="bn">বাংলা (Bengali)</option>
+                <option value="te">తెలుగు (Telugu)</option>
+                <option value="kn">ಕನ್ನಡ (Kannada)</option>
+                <option value="ml">മലയാളം (Malayalam)</option>
+                <option value="pa">ਪੰਜਾਬੀ (Punjabi)</option>
+              </select>
+              <p className="text-[11px] text-muted-foreground">
+                "Original" listens in Hindi (default) and keeps the spoken language in the parsed result — e.g. if you speak Marathi, item names stay in Marathi. Pick "English" if you want the AI to translate spoken words into English item names.
               </p>
             </div>
           </CardContent>

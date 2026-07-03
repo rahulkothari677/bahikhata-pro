@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
       }, { status: 402 })
     }
 
-    const { transcript } = await req.json()
+    const { transcript, voiceLang } = await req.json()
 
     if (!transcript || !transcript.trim()) {
       return NextResponse.json({ error: 'No transcript provided' }, { status: 400 })
@@ -57,14 +57,16 @@ export async function POST(req: NextRequest) {
       }, { status: 503 })
     }
 
-    // ⚠️ PROMPT CACHING: This system prompt must be a BYTE-IDENTICAL constant.
-    // Gemini 2.5 Flash has implicit context caching — if the same prompt prefix
-    // is sent within 1 hour, subsequent calls pay ~10% of input cost.
-    // The user's transcript is sent as a SEPARATE message so the system prompt
-    // stays cache-friendly. DO NOT interpolate transcript into this string.
-    const systemPrompt = `You are an expert at understanding Indian shop owners' voice commands for creating sales/purchase entries. Parse the spoken text provided by the user and extract structured transaction data.
+    // ⚠️ PROMPT CACHING: The base system prompt below must stay BYTE-IDENTICAL
+    // across calls so Gemini 2.5 Flash's implicit context caching works (same
+    // prefix within 1 hour → ~10% of input cost). The language instruction is
+    // appended AFTER the base prompt — this slightly breaks the cache, but
+    // language control is important (same trade-off as scan-bill). The user's
+    // transcript is sent as a SEPARATE message so the system prompt stays
+    // cache-friendly. DO NOT interpolate transcript into this string.
+    const baseSystemPrompt = `You are an expert at understanding Indian shop owners' voice commands for creating sales/purchase entries. Parse the spoken text provided by the user and extract structured transaction data.
 
-The user might speak in English, Hindi, or a mix (Hinglish). Examples:
+The user might speak in English, Hindi, Marathi, Tamil, Telugu, Gujarati, Bengali, Kannada, Malayalam, Punjabi, or a mix of these with English. Examples:
 - "Sold 2 kg sugar to Ramesh at 50 rupees cash" → sale, customer: Ramesh, sugar 2kg @₹50, payment: cash
 - "Ramesh ne 2 kg chini liya 50 rupaye cash" → sale, customer: Ramesh, sugar 2kg @₹50, payment: cash
 - "Bought 10 box tea from Tata suppliers for 2000 on credit" → purchase, supplier: Tata suppliers, tea 10 box @₹200, payment: credit
@@ -76,7 +78,7 @@ Return ONLY a valid JSON object with this structure (no markdown):
   "partyName": "customer or supplier name (null if not mentioned)",
   "items": [
     {
-      "name": "product name (clean up: chini=sugar, tel=oil, atta=flour, chai=tea, namak=salt)",
+      "name": "product name",
       "quantity": number,
       "unit": "kg|ltr|pcs|box|gm|ml|dozen|packet (default: pcs)",
       "unitPrice": number (price per unit, 0 if not mentioned)
@@ -90,10 +92,22 @@ Rules:
 - Default type is "sale" unless words like "bought", "khareeda", "purchase" are present
 - If quantity missing, default to 1
 - If unit missing, default to "pcs"
-- Convert Hindi words: chini=sugar, tel=oil, atta=flour, chai=tea, namak=salt, dudh=milk, dal=pulses, chawal=rice, sabzi=vegetables
-- Numbers like "pachaas" = 50, "sau" = 100, "do" = 2, "paanch" = 5
+- Numbers like "pachaas" = 50, "sau" = 100, "do" = 2, "paanch" = 5 (recognize Hindi number words)
 
 Return JSON only, no commentary.`
+
+    // LANGUAGE INSTRUCTION: controls the output language for product names.
+    //   voiceLang === 'original' → keep the spoken language as-is (NO translation).
+    //     e.g. if the user spoke Marathi ("2 kg sákhar"), the item name stays
+    //     "sákhar" (साखर) — do NOT translate to "sugar".
+    //   voiceLang === 'en' → output all item & party names in English. Translate
+    //     Hindi/regional words: chini=sugar, tel=oil, atta=flour, chai=tea,
+    //     namak=salt, dudh=milk, dal=pulses, chawal=rice, sabzi=vegetables.
+    //   voiceLang === 'hi'|'ta'|'gu'|'mr'|'bn'|'te'|'kn'|'ml'|'pa' → output all
+    //     item & party names in that specific language. Translate if the user
+    //     spoke in a different language.
+    const langInstruction = buildVoiceLangInstruction(voiceLang || 'original')
+    const systemPrompt = baseSystemPrompt + '\n\n' + langInstruction
 
     const baseUrl = process.env.VLM_BASE_URL || 'https://api.groq.com/openai/v1/'
 
@@ -495,4 +509,41 @@ Return JSON only, no commentary.`
     console.error('Voice parse error:', error)
     return NextResponse.json({ error: 'Failed to process voice entry' }, { status: 500 })
   }
+}
+
+// Helper: build the language instruction appended to the system prompt.
+// Mirrors the scan-bill approach — 'original' keeps the spoken language,
+// 'en' translates to English, specific codes output in that language.
+function buildVoiceLangInstruction(voiceLang: string): string {
+  if (voiceLang === 'original') {
+    return `IMPORTANT — OUTPUT LANGUAGE: Keep all item names and party names in the SAME language the user spoke in. Do NOT translate to English. If the user spoke Hindi, return Hindi names (e.g. चीनी, तेल, आटा). If Marathi, return Marathi (e.g. साखर, तेल, पीठ). If Tamil, return Tamil. Preserve the spoken language exactly. Only normalize obvious spelling/casing. Payment mode and unit values should still use the standard English enum values (cash/upi/card/bank/credit, kg/ltr/pcs/etc.).`
+  }
+
+  if (voiceLang === 'en') {
+    return `IMPORTANT — OUTPUT LANGUAGE: Return all item names and party names in ENGLISH. Translate Hindi/regional words to English: chini=sugar, tel=oil, atta=flour, chai=tea, namak=salt, dudh=milk, dal=pulses, chawal=rice, sabzi=vegetables, sákhar/sakkar=sugar, etc.`
+  }
+
+  const langName = getVoiceLanguageName(voiceLang)
+  if (langName) {
+    return `IMPORTANT — OUTPUT LANGUAGE: Return all item names and party names in ${langName}. If the user spoke in a different language, translate to ${langName}. Use native ${langName} script for the names (e.g. ${langName === 'Hindi' ? 'चीनी, तेल, आटा' : langName === 'Marathi' ? 'साखर, तेल, पीठ' : 'native script names'}).`
+  }
+
+  // Fallback — same as 'original'
+  return `IMPORTANT — OUTPUT LANGUAGE: Keep all item names and party names in the same language the user spoke in. Do NOT translate.`
+}
+
+// Helper: get language name from code (for AI prompt)
+function getVoiceLanguageName(code: string): string | null {
+  const names: Record<string, string> = {
+    'hi': 'Hindi',
+    'ta': 'Tamil',
+    'gu': 'Gujarati',
+    'mr': 'Marathi',
+    'bn': 'Bengali',
+    'te': 'Telugu',
+    'kn': 'Kannada',
+    'ml': 'Malayalam',
+    'pa': 'Punjabi',
+  }
+  return names[code] || null
 }
