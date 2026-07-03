@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
       }, { status: 402 })
     }
 
-    const { transcript, voiceLang } = await req.json()
+    const { transcript, voiceLang, langHint } = await req.json()
 
     if (!transcript || !transcript.trim()) {
       return NextResponse.json({ error: 'No transcript provided' }, { status: 400 })
@@ -106,8 +106,17 @@ Return JSON only, no commentary.`
     //   voiceLang === 'hi'|'ta'|'gu'|'mr'|'bn'|'te'|'kn'|'ml'|'pa' → output all
     //     item & party names in that specific language. Translate if the user
     //     spoke in a different language.
+    //
+    // SPOKEN LANGUAGE HINT: the client also sends a `langHint` string that
+    // explicitly tells Gemini which language the user is speaking in (e.g.
+    // "Marathi (Devanagari). Examples: sakhar=साखर, tel=तेल, pith=पीठ.").
+    // This makes the AI's job easier — it knows upfront what to expect, so it
+    // won't accidentally mis-parse regional words as Hindi or English.
     const langInstruction = buildVoiceLangInstruction(voiceLang || 'original')
-    const systemPrompt = baseSystemPrompt + '\n\n' + langInstruction
+    const spokenLangHint = (langHint && typeof langHint === 'string' && langHint.trim())
+      ? `\n\nSPOKEN LANGUAGE: The user is speaking in ${langHint.trim()} Expect words and product names in that language. Parse accordingly.`
+      : ''
+    const systemPrompt = baseSystemPrompt + '\n\n' + langInstruction + spokenLangHint
 
     const baseUrl = process.env.VLM_BASE_URL || 'https://api.groq.com/openai/v1/'
 

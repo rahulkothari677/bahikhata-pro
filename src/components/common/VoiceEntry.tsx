@@ -5,13 +5,13 @@ import { useQuery } from '@tanstack/react-query'
 import { Mic, Square, Loader2, X, Plus, Check, RefreshCw, Sparkles, Languages } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { toast as sonnerToast } from 'sonner'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { useToast } from '@/hooks/use-toast'
 import { useSubscription } from '@/hooks/use-subscription'
 import { haptic } from '@/lib/haptic'
 import { motion, AnimatePresence } from 'framer-motion'
-import { cn } from '@/lib/utils'
 
 /**
  * VoiceEntry — redesigned for continuous recording + add more.
@@ -21,10 +21,12 @@ import { cn } from '@/lib/utils'
  * 2. Product names shown in parsed result
  * 3. Delete (X) button on each parsed item
  * 4. Animated waveform during recording (visual feedback)
- * 5. Multi-language support — reads `voiceLang` from user settings and maps
- *    it to a BCP-47 locale for the Web Speech API (hi-IN, mr-IN, ta-IN, etc.).
- * 6. Quick toggle between the selected language and English (for translation).
- * 7. Example phrases users can tap to see how it works
+ * 5. Multi-language support — a dropdown next to the record button lets the
+ *    user pick from 11 languages (Original/Hindi/English/Marathi/Tamil/etc.).
+ *    The selected language controls BOTH the Web Speech API locale AND the
+ *    AI's output language. The language is also passed to the API as an
+ *    explicit hint so Gemini knows exactly what language to expect.
+ * 6. Example phrases users can tap to see how it works
  */
 
 interface VoiceEntryProps {
@@ -32,51 +34,50 @@ interface VoiceEntryProps {
   products?: any[]  // Pass products so we can auto-fill prices
 }
 
-// Map the user's voiceLang setting code → BCP-47 locale for Web Speech API.
-// 'original' defaults to hi-IN (Hindi) because the browser cannot auto-detect
-// the spoken language — the user must pick one. Hindi is the most common for
-// Indian shop owners and also handles Hinglish reasonably well.
-const VOICE_LANG_TO_LOCALE: Record<string, string> = {
-  original: 'hi-IN',
-  en: 'en-IN',
-  hi: 'hi-IN',
-  ta: 'ta-IN',
-  gu: 'gu-IN',
-  mr: 'mr-IN',
-  bn: 'bn-IN',
-  te: 'te-IN',
-  kn: 'kn-IN',
-  ml: 'ml-IN',
-  pa: 'pa-IN',
-}
+// All available voice languages. Each entry maps a setting code →
+// { locale, label, native, hint }.
+//   - locale: BCP-47 locale for the Web Speech API (e.g. 'mr-IN')
+//   - label: English name (shown in dropdown + sent to AI as a hint)
+//   - native: native-script name (shown in dropdown + chip on the trigger)
+//   - hint: short native phrase the AI can use as a reference
+//
+// 'original' is special — it means "keep the spoken language in the output,
+// don't translate". For speech recognition it defaults to hi-IN because the
+// browser cannot auto-detect the spoken language; the user must pick one
+// explicitly from the dropdown if they want a different recognition language.
+const VOICE_LANGUAGES: Array<{
+  code: string
+  locale: string
+  label: string
+  native: string
+  hint: string
+}> = [
+  { code: 'original', locale: 'hi-IN', label: 'Original', native: 'बोली', hint: 'Keep the spoken language as-is (no translation). Default recognition: Hindi.' },
+  { code: 'en',       locale: 'en-IN', label: 'English',  native: 'English', hint: 'English' },
+  { code: 'hi',       locale: 'hi-IN', label: 'Hindi',    native: 'हिन्दी',  hint: 'Hindi (Devanagari). Examples: chini=सफेद चीनी, tel=तेल, atta=आटा.' },
+  { code: 'mr',       locale: 'mr-IN', label: 'Marathi',  native: 'मराठी',  hint: 'Marathi (Devanagari). Examples: sakhar=साखर, tel=तेल, pith=पीठ.' },
+  { code: 'ta',       locale: 'ta-IN', label: 'Tamil',    native: 'தமிழ்',  hint: 'Tamil (Tamil script).' },
+  { code: 'te',       locale: 'te-IN', label: 'Telugu',   native: 'తెలుగు', hint: 'Telugu (Telugu script).' },
+  { code: 'gu',       locale: 'gu-IN', label: 'Gujarati', native: 'ગુજરાતી', hint: 'Gujarati (Gujarati script).' },
+  { code: 'bn',       locale: 'bn-IN', label: 'Bengali',  native: 'বাংলা',  hint: 'Bengali (Bengali script).' },
+  { code: 'kn',       locale: 'kn-IN', label: 'Kannada',  native: 'ಕನ್ನಡ',  hint: 'Kannada (Kannada script).' },
+  { code: 'ml',       locale: 'ml-IN', label: 'Malayalam',native: 'മലയാളം', hint: 'Malayalam (Malayalam script).' },
+  { code: 'pa',       locale: 'pa-IN', label: 'Punjabi',  native: 'ਪੰਜਾਬੀ',  hint: 'Punjabi (Gurmukhi script).' },
+]
 
-// Human-readable label for each locale, shown in the "Listening in X..." banner
-const LOCALE_TO_LABEL: Record<string, string> = {
-  'hi-IN': 'Hindi',
-  'en-IN': 'English',
-  'ta-IN': 'Tamil',
-  'gu-IN': 'Gujarati',
-  'mr-IN': 'Marathi',
-  'bn-IN': 'Bengali',
-  'te-IN': 'Telugu',
-  'kn-IN': 'Kannada',
-  'ml-IN': 'Malayalam',
-  'pa-IN': 'Punjabi',
-}
-
-// Short chip label for the toggle button (native script)
-const LOCALE_TO_CHIP: Record<string, string> = {
-  'hi-IN': 'हिं',
-  'en-IN': 'EN',
-  'ta-IN': 'த',
-  'gu-IN': 'ગુ',
-  'mr-IN': 'मरा',
-  'bn-IN': 'বাং',
-  'te-IN': 'తె',
-  'kn-IN': 'ಕ',
-  'ml-IN': 'മ',
-  'pa-IN': 'ਪੰ',
-}
+// Quick lookups derived from VOICE_LANGUAGES
+const CODE_TO_LOCALE: Record<string, string> = Object.fromEntries(
+  VOICE_LANGUAGES.map(l => [l.code, l.locale])
+)
+const CODE_TO_LABEL: Record<string, string> = Object.fromEntries(
+  VOICE_LANGUAGES.map(l => [l.code, l.label])
+)
+const CODE_TO_HINT: Record<string, string> = Object.fromEntries(
+  VOICE_LANGUAGES.map(l => [l.code, l.hint])
+)
+const LOCALE_TO_LABEL: Record<string, string> = Object.fromEntries(
+  VOICE_LANGUAGES.map(l => [l.locale, l.label])
+)
 
 // Example phrases shown when user hasn't recorded yet
 const EXAMPLE_PHRASES = [
@@ -96,11 +97,12 @@ export function VoiceEntry({ onTransactionParsed, products = [] }: VoiceEntryPro
   const [supported, setSupported] = useState(true)
   // `lang` is the BCP-47 locale currently active for recognition. It starts
   // as hi-IN (sensible default) and is synced to the user's voiceLang setting
-  // once settings load. The user can toggle between this language and English.
+  // once settings load. The user can override it any time via the dropdown.
   const [lang, setLang] = useState<string>('hi-IN')
-  // `voiceLangCode` is the user's setting code ('original' | 'en' | 'hi' | …).
-  // Sent to /api/voice-parse so the LLM knows whether to translate or keep
-  // the spoken language in the parsed output.
+  // `voiceLangCode` is the currently selected language code
+  // ('original' | 'en' | 'hi' | 'mr' | …). Sent to /api/voice-parse so the
+  // LLM knows (a) what language the user is speaking in, and (b) whether to
+  // translate the output or keep it in the spoken language.
   const [voiceLangCode, setVoiceLangCode] = useState<string>('original')
   const recognitionRef = useRef<any>(null)
   const processedFinalsRef = useRef<Set<number>>(new Set())
@@ -121,22 +123,23 @@ export function VoiceEntry({ onTransactionParsed, products = [] }: VoiceEntryPro
 
   // Sync `lang` + `voiceLangCode` from settings whenever voiceLang changes.
   // The user's selected language becomes the DEFAULT recognition locale; the
-  // toggle button lets them temporarily switch to English for that session.
+  // dropdown lets them switch to any other language on the fly.
   useEffect(() => {
     const code = settingsData?.setting?.voiceLang || 'original'
     setVoiceLangCode(code)
-    const locale = VOICE_LANG_TO_LOCALE[code] || 'hi-IN'
-    // Only override the active locale if the user hasn't toggled to English
-    // mid-session. We detect this by checking if the current locale matches
-    // the previous setting's locale OR is the default hi-IN (initial state).
-    setLang(prevLocale => {
-      // If currently on English due to a manual toggle but the setting is
-      // not English, keep English until the user toggles back. Otherwise,
-      // follow the setting.
-      if (prevLocale === 'en-IN' && code !== 'en') return prevLocale
-      return locale
-    })
+    const locale = CODE_TO_LOCALE[code] || 'hi-IN'
+    setLang(locale)
   }, [settingsData])
+
+  // Handle dropdown selection — updates BOTH the recognition locale and the
+  // code sent to the API. This is a per-session override (does not persist
+  // to settings; the user's default is still their Settings choice).
+  const handleLanguageChange = (code: string) => {
+    haptic.click()
+    setVoiceLangCode(code)
+    setLang(CODE_TO_LOCALE[code] || 'hi-IN')
+    sonnerToast.success(`Voice language: ${CODE_TO_LABEL[code] || 'Original'}`)
+  }
 
   useEffect(() => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
@@ -231,15 +234,20 @@ export function VoiceEntry({ onTransactionParsed, products = [] }: VoiceEntryPro
 
     setProcessing(true)
     try {
-      // Compute the effective voice language for the API. If the user toggled
-      // to English mid-session (lang === 'en-IN'), the spoken language is
-      // English, so the output should be English too — regardless of the
-      // user's setting. Otherwise, use the user's voiceLang setting.
-      const effectiveVoiceLang = lang === 'en-IN' ? 'en' : voiceLangCode
+      // `voiceLangCode` already reflects the user's current dropdown choice
+      // (synced from settings + any per-session override). Send it to the API
+      // along with the BCP-47 locale + a human-readable language hint so
+      // Gemini knows EXACTLY which language the user is speaking in (less
+      // chance of mis-parsing regional words).
       const r = await offlineFetch('/api/voice-parse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ transcript: fullTranscript, lang, voiceLang: effectiveVoiceLang }),
+        body: JSON.stringify({
+          transcript: fullTranscript,
+          lang,
+          voiceLang: voiceLangCode,
+          langHint: CODE_TO_HINT[voiceLangCode] || '',
+        }),
       })
 
       // Handle 402 quota exceeded — show upgrade prompt instead of generic error
@@ -360,32 +368,42 @@ export function VoiceEntry({ onTransactionParsed, products = [] }: VoiceEntryPro
 
   return (
     <div className="space-y-3">
-      {/* Language toggle + Recording controls */}
+      {/* Language dropdown + Recording controls */}
       <div className="flex items-center gap-2">
-        {/* Language toggle — switches between the user's selected voice language
-            and English. If the selected language IS English, the toggle is a
-            no-op (disabled) since both sides would be English. */}
-        <button
-          onClick={() => {
-            haptic.click()
-            // If currently on the user's selected language, switch to English
-            // (for translation). If on English, switch back to the selected.
-            const selectedLocale = VOICE_LANG_TO_LOCALE[voiceLangCode] || 'hi-IN'
-            setLang(lang === 'en-IN' ? selectedLocale : 'en-IN')
-          }}
-          disabled={isRecording || voiceLangCode === 'en'}
-          className={cn(
-            'flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition flex-shrink-0',
-            lang !== 'en-IN'
-              ? 'bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300'
-              : 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300',
-            (isRecording || voiceLangCode === 'en') && 'opacity-50 cursor-not-allowed'
-          )}
-          title={voiceLangCode === 'en' ? 'English is your default voice language' : `Toggle between ${LOCALE_TO_LABEL[VOICE_LANG_TO_LOCALE[voiceLangCode] || 'hi-IN']} and English`}
+        {/* Language dropdown — lets the user pick from all 11 supported
+            languages right next to the record button. Defaults to the user's
+            Settings choice; per-session overrides don't persist. */}
+        <Select
+          value={voiceLangCode}
+          onValueChange={handleLanguageChange}
+          disabled={isRecording}
         >
-          <Languages className="w-3.5 h-3.5" />
-          {lang === 'en-IN' ? 'EN' : (LOCALE_TO_CHIP[lang] || 'हिं')}
-        </button>
+          <SelectTrigger
+            className="w-[140px] flex-shrink-0 h-10 gap-1.5 px-3 text-xs font-medium bg-violet-50 dark:bg-violet-900/30 border-violet-200 dark:border-violet-800 text-violet-700 dark:text-violet-300 hover:bg-violet-100 dark:hover:bg-violet-900/50"
+            disabled={isRecording}
+          >
+            <Languages className="w-3.5 h-3.5 flex-shrink-0" />
+            <SelectValue placeholder="Language" />
+          </SelectTrigger>
+          <SelectContent className="max-h-[320px]">
+            {VOICE_LANGUAGES.map((l) => (
+              <SelectItem
+                key={l.code}
+                value={l.code}
+                className="flex items-center gap-2 py-2"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium" lang={l.code === 'original' ? 'hi' : l.code}>
+                    {l.native}
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    {l.code === 'original' ? '(keep spoken)' : l.label}
+                  </span>
+                </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
 
         {!isRecording ? (
           <Button onClick={startRecording} className="bg-rose-600 hover:bg-rose-700 gap-2 flex-1">
