@@ -51,17 +51,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Image is required' }, { status: 400 })
     }
 
-    // ⚠️ PROMPT CACHING: This prompt must be a BYTE-IDENTICAL constant across all
-    // requests. Gemini 2.5 Flash has implicit context caching — if the same prompt
-    // is sent within 1 hour, subsequent calls pay ~10% of input cost (vs 100%).
-    // DO NOT interpolate user-specific data (userId, billType, etc.) into this
-    // string — that would break the cache. Pass variable data via the image only.
-    // Estimated savings: 70% on input tokens after the first scan each hour.
+    // ⚠️ PROMPT CACHING NOTE: The base prompt below is a constant. Gemini 2.5
+    // Flash has implicit context caching — if the same prompt prefix is sent
+    // within 1 hour, subsequent calls pay ~10% of input cost. The language
+    // instruction is appended AFTER the base prompt (so the base stays
+    // cache-friendly). The image is sent as a separate content part.
     //
     // LANGUAGE: The scanLang parameter controls output language for item names.
     // 'original' = keep the bill's language, 'en' = English, 'hi' = Hindi, etc.
-    // This is appended to the prompt (breaks cache slightly, but language is important).
-    const basePrompt = `You are an expert at reading Indian shop bills, invoices, receipts, AND handwritten notes on plain paper. Indian shop owners often write sales/purchases as rough notes on any paper — plain paper, notebook pages, diaries, even napkins. Your job is to read ANY text (printed or handwritten) and extract structured data.
+    // The language rule is placed in a clearly delimited "HIGHEST PRIORITY"
+    // block at the end of the prompt so it overrides any normalization
+    // tendencies from the base prompt.
+    //
+    // CACHE BIAS: To prevent the model from being "primed" by a previous scan
+    // (e.g. scanning a Hindi bill first, then an English bill — the cached
+    // context might bias the model toward Hindi output), a per-scan unique ID
+    // is prepended to the prompt. This breaks the cache but prevents language
+    // bias between consecutive scans. The cost increase is small (~10-20% on
+    // input tokens) and accuracy is more important than micro-cost-savings.
+    const scanId = `scan-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const basePrompt = `[${scanId}] You are an expert at reading Indian shop bills, invoices, receipts, AND handwritten notes on plain paper. Indian shop owners often write sales/purchases as rough notes on any paper — plain paper, notebook pages, diaries, even napkins. Your job is to read ANY text (printed or handwritten) and extract structured data.
 
 This image may be:
 - A printed bill/invoice from a supplier
@@ -83,7 +92,7 @@ Return ONLY a valid JSON object with this exact structure (no markdown, no extra
   "sellerGSTIN": "GSTIN if visible else null",
   "items": [
     {
-      "name": "product name (clean up abbreviations - 'atta' = 'Wheat Flour', 'oil' = 'Cooking Oil', etc.)",
+      "name": "product name EXACTLY as written on the bill (same language, same script, same spelling). Only fix obvious typos within the same language.",
       "quantity": number,
       "unit": "unit if visible (pcs/kg/ltr/box/gm/ml/dozen/packet) else 'pcs'",
       "unitPrice": number (price per unit if visible, else calculate from total ÷ quantity),
@@ -110,10 +119,10 @@ CRITICAL RULES FOR HANDWRITTEN NOTES:
 5. If price is written as "100" next to "2kg sugar", the 100 might be total (not per kg) — use it as total, calculate unitPrice = total ÷ quantity.
 6. If only total is written (no per-unit price), set unitPrice = total ÷ quantity, and total = the written amount.
 7. Numbers may be written in Hindi numerals (०-९) — convert to Arabic (0-9).
-8. Product names may be abbreviated: "atta" = flour, "tel" = oil, "chai" = tea, "namak" = salt, "chini" = sugar, etc.
+8. PRODUCT NAMES: Return each name EXACTLY as written on the bill. Do NOT translate, normalize, or "clean up" names across languages. If the bill says "Potato", return "Potato" (NOT "आलू"). If the bill says "आलू", return "आलू" (NOT "Potato"). Only fix obvious spelling typos within the same language/script.
 9. "Udhaar" or "Baad mein" or "credit" = payment mode "credit".
 10. If the word "total" or "jama" is visible, the number after it is the totalAmount.
-11. Handle Hinglish: "do kilo" = 2 kg, "paanch" = 5, "sau" = 100, "hazaar" = 1000.
+11. Handle Hinglish numbers: "do kilo" = 2 kg, "paanch" = 5, "sau" = 100, "hazaar" = 1000.
 12. If the image is sideways or upside down, rotate it mentally and read the text correctly.
 13. For messy handwriting, try your best to read each character. If uncertain, set confidence to 0.5-0.7.
 14. For clearly printed bills, set confidence to 0.9-1.0.
@@ -124,12 +133,35 @@ For printed bills:
 
 Return JSON only, no commentary, no markdown formatting.`
 
-    // Language instruction (appended to prompt)
-    // 'original' = keep bill language, otherwise translate item names to selected language
+    // Language instruction (appended to prompt).
+    // This is the STRONGEST part of the prompt regarding language — it overrides
+    // any normalization tendencies from the base prompt.
+    //
+    // 'original' = keep bill language (NO translation in either direction)
+    // 'en'|'hi'|'mr'|... = translate item names to the selected language
     const scanLang = body.scanLang || 'original'
     const langInstruction = scanLang === 'original'
-      ? '\n\nIMPORTANT: Return item names in the SAME language as written on the bill. Do NOT translate.'
-      : `\n\nIMPORTANT: Return all item names in ${getLanguageName(scanLang)} language. Translate if the bill is in a different language.`
+      ? `\n\n=== LANGUAGE RULE (HIGHEST PRIORITY — OVERRIDES EVERYTHING ABOVE) ===
+You must return EVERY item name in EXACTLY the same language and script as written on the bill. This is the most important rule in this prompt.
+
+- If the bill says "Potato" (English) → return "Potato". Do NOT return "आलू" or "बटाटा".
+- If the bill says "आलू" (Hindi) → return "आलू". Do NOT return "Potato".
+- If the bill says "बटाटा" (Marathi) → return "बटाटा". Do NOT return "Potato" or "आलू".
+- If the bill says "Sugar" (English) → return "Sugar". Do NOT return "चीनी".
+- If the bill says "चीनी" (Hindi) → return "चीनी". Do NOT return "Sugar".
+- If the bill is in English, ALL item names must be in English.
+- If the bill is in Hindi, ALL item names must be in Hindi.
+- If the bill mixes languages (e.g. "Potato" and "जामुन"), keep each name in its original language.
+- NEVER translate from English to Hindi or from Hindi to English.
+- NEVER "normalize" or "clean up" product names by switching languages.
+- Only fix obvious spelling typos WITHIN the same language (e.g. "Potatro" → "Potato").
+=== END LANGUAGE RULE ===`
+      : `\n\n=== LANGUAGE RULE (HIGHEST PRIORITY — OVERRIDES EVERYTHING ABOVE) ===
+Return ALL item names in ${getLanguageName(scanLang)} language. If the bill is in a different language, translate each name to ${getLanguageName(scanLang)}.
+- If the bill says "Potato" and target is Hindi → return "आलू"
+- If the bill says "आलू" and target is English → return "Potato"
+- Keep the same language for ALL items (consistency).
+=== END LANGUAGE RULE ===`
 
     const prompt = basePrompt + langInstruction
 
@@ -474,9 +506,13 @@ async function callSingleProvider(
           },
         ],
         max_tokens: 2000,
-        // Disable Gemini "thinking" mode for faster response (1-3s vs 3-8s)
-        // Slight accuracy tradeoff, but much better UX
-        ...(provider.name === 'gemini' ? { thinking: { type: 'disabled' } } : {}),
+        // Gemini 2.5 Flash: thinking is ENABLED by default (not passing the
+        // thinking parameter lets Gemini use its default thinking mode).
+        // Thinking lets the model reason about the bill's language before
+        // extracting — critical for the "Original" language rule to work
+        // correctly (e.g. "this bill is in English, so I must output English
+        // item names, not translate to Hindi"). Tradeoff: 3-8s vs 1-3s
+        // response time, but accuracy is more important than speed for scans.
       }),
     })
 
