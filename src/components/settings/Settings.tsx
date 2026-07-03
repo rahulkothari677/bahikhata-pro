@@ -70,7 +70,7 @@ const FEATURE_CATEGORIES: { title: string; features: { key: FeatureKey; label: s
   {
     title: 'Data & Privacy',
     features: [
-      { key: 'analyticsTracking', label: 'Anonymous Analytics', description: 'Help improve BahiKhata Pro with anonymous usage data', icon: Shield },
+      { key: 'analyticsTracking', label: 'Anonymous Analytics', description: 'Help improve EkBook with anonymous usage data', icon: Shield },
       { key: 'offlineMode', label: 'Offline Mode', description: 'Use app without internet, sync when online', icon: Database },
       { key: 'autoSaveDrafts', label: 'Auto-Save Drafts', description: 'Automatically save sale/purchase forms while typing', icon: Save },
     ],
@@ -728,7 +728,7 @@ export function Settings() {
       {/* About card — always visible at bottom */}
       <Card className="shadow-card border-border/60">
         <CardHeader>
-          <CardTitle className="text-base">About BahiKhata Pro</CardTitle>
+          <CardTitle className="text-base">About EkBook</CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">

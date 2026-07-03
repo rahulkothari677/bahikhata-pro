@@ -1,5 +1,5 @@
 /**
- * IndexedDB wrapper for BahiKhata Pro offline support.
+ * IndexedDB wrapper for EkBook offline support.
  *
  * Stores:
  *  - session         → cached user session (single row, key='current')

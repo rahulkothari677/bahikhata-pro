@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
         userId,
         planId,
         billingCycle,
-        appName: 'BahiKhata Pro',
+        appName: 'EkBook',
       },
     })
 

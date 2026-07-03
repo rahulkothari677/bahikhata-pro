@@ -26,13 +26,13 @@ const jakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "BahiKhata Pro — India's Smartest Ledger App",
+  title: "EkBook — India's Smartest Ledger App",
   description: "Complete ledger, inventory, GST & AI bill scanner for Indian shop owners.",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "BahiKhata Pro",
+    title: "EkBook",
   },
   icons: {
     icon: [

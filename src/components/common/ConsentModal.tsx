@@ -45,7 +45,7 @@ export function ConsentModal() {
             </div>
             <div>
               <DialogTitle className="text-lg">Your Privacy Matters</DialogTitle>
-              <DialogDescription>Help us improve BahiKhata Pro</DialogDescription>
+              <DialogDescription>Help us improve EkBook</DialogDescription>
             </div>
           </div>
         </DialogHeader>

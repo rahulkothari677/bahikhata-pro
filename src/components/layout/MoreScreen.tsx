@@ -273,7 +273,7 @@ export function MoreScreen() {
               <ChevronRight className="w-4 h-4 text-muted-foreground" />
             </button>
             <button
-              onClick={() => { haptic.click(); sonnerToast.info('BahiKhata Pro v1.0 — Made in India 🇮🇳') }}
+              onClick={() => { haptic.click(); sonnerToast.info('EkBook v1.0 — Made in India 🇮🇳') }}
               className="w-full flex items-center gap-3 p-3 hover:bg-muted/50 transition text-left border-t border-border/40"
             >
               <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0">
@@ -293,7 +293,7 @@ export function MoreScreen() {
                 <Star className="w-5 h-5 text-amber-600" />
               </div>
               <div className="flex-1">
-                <p className="font-medium text-sm">Rate BahiKhata Pro</p>
+                <p className="font-medium text-sm">Rate EkBook</p>
                 <p className="text-xs text-muted-foreground">Help others discover us</p>
               </div>
               <ChevronRight className="w-4 h-4 text-muted-foreground" />
@@ -312,7 +312,7 @@ export function MoreScreen() {
 
         {/* Version footer */}
         <p className="text-center text-xs text-muted-foreground pt-2">
-          BahiKhata Pro v1.0 · Made with love for Bharat 🇮🇳
+          EkBook v1.0 · Made with love for Bharat 🇮🇳
         </p>
       </div>
     </div>

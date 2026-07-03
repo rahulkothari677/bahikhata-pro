@@ -89,7 +89,7 @@ export function Sidebar() {
   }
 
   const handleInstallApp = () => {
-    sonnerToast.info('Install BahiKhata Pro as an app', {
+    sonnerToast.info('Install EkBook as an app', {
       description: 'Click the install icon in your browser address bar, or use "Install app" from the browser menu.',
       duration: 6000,
     })
@@ -127,7 +127,7 @@ export function Sidebar() {
             </div>
             {!sidebarCollapsed && (
               <div>
-                <h1 className="text-lg font-bold text-sidebar-foreground tracking-tight">BahiKhata Pro</h1>
+                <h1 className="text-lg font-bold text-sidebar-foreground tracking-tight">EkBook</h1>
                 <p className="text-[10px] text-sidebar-foreground/50 font-medium tracking-wide">{t('nav.smart_ledger')}</p>
               </div>
             )}

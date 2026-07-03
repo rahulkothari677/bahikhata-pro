@@ -3,7 +3,7 @@
  * sales/purchase transactions into Tally.ERP 9 / Tally Prime.
  *
  * Format: Tally XML import format (Vouchers)
- * Indian accountants use Tally — this makes BahiKhata Pro the perfect
+ * Indian accountants use Tally — this makes EkBook the perfect
  * frontend that exports to their existing accounting system.
  *
  * Usage:

@@ -421,7 +421,7 @@ export function BillScanner() {
       } else {
         toast({
           title: 'Camera unavailable',
-          description: 'Camera may be in use by another app, or permission was denied. Check Android Settings → Apps → BahiKhata Pro → Permissions.',
+          description: 'Camera may be in use by another app, or permission was denied. Check Android Settings → Apps → EkBook → Permissions.',
           variant: 'destructive',
         })
       }

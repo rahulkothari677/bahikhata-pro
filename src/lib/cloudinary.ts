@@ -17,7 +17,7 @@ export async function uploadBillImage(base64Image: string, userId: string): Prom
     const dataUri = base64Image.startsWith('data:') ? base64Image : `data:image/jpeg;base64,${base64Image}`
 
     const result = await cloudinary.uploader.upload(dataUri, {
-      folder: `bahikhata-pro/bills/${userId}`,
+      folder: `ekbook/bills/${userId}`,
       resource_type: 'image',
       transformation: [
         { width: 1200, height: 1600, crop: 'limit' }, // Max 1200x1600, maintains aspect ratio

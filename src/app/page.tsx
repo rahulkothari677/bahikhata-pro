@@ -31,6 +31,7 @@ import { OnboardingTour } from '@/components/common/OnboardingTour'
 import { ConsentModal } from '@/components/common/ConsentModal'
 import { RatePromptModal } from '@/components/common/RatePromptModal'
 import { PaywallModal } from '@/components/common/PaywallModal'
+import { SplashScreen } from '@/components/common/SplashScreen'
 import { useRatePrompt } from '@/hooks/use-rate-prompt'
 import { useStaffPermissions } from '@/hooks/use-staff-permissions'
 
@@ -59,6 +60,7 @@ export default function Home() {
   const [tourDone, setTourDone] = useState(false)
   const [themePickerDone, setThemePickerDone] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [showSplash, setShowSplash] = useState(true)
 
   // Redirect staff to their first allowed view if they try to access a blocked module
   useEffect(() => {
@@ -177,7 +179,9 @@ export default function Home() {
   }
 
   return (
-    <div className="flex min-h-screen bg-background">
+    <>
+      {showSplash && <SplashScreen onFinish={() => setShowSplash(false)} />}
+      <div className="flex min-h-screen bg-background">
       {features?.keyboardShortcuts && <KeyboardShortcuts />}
       {features?.globalSearch && <GlobalSearch />}
 
@@ -235,7 +239,7 @@ export default function Home() {
         </main>
 
         <footer className="mt-auto border-t border-border py-3 px-4 lg:px-6 text-center text-[11px] text-muted-foreground no-print hidden lg:block">
-          <p>BahiKhata Pro — Made with love for Bharat</p>
+          <p>EkBook — Made with love for Bharat</p>
         </footer>
       </div>
 
@@ -253,6 +257,7 @@ export default function Home() {
       {!showOnboarding && tourDone && <ConsentModal />}
       <RatePromptModal open={shouldShowRatePrompt} onRated={onRated} onDismiss={onDismiss} />
       <PaywallModal feature={paywallFeature} open={paywallOpen} onClose={closePaywall} />
-    </div>
+      </div>
+    </>
   )
 }

@@ -54,7 +54,7 @@ export function Onboarding({ open, onDone }: { open: boolean; onDone: () => void
           <div className="flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-saffron mx-auto mb-2 shadow-lg">
             <BookOpenText className="w-8 h-8 text-white" />
           </div>
-          <DialogTitle className="text-center text-2xl">Welcome to BahiKhata Pro</DialogTitle>
+          <DialogTitle className="text-center text-2xl">Welcome to EkBook</DialogTitle>
           <DialogDescription className="text-center">
             India&apos;s smartest ledger app for small shop owners
           </DialogDescription>

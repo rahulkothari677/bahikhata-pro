@@ -1,6 +1,6 @@
 {
   "appId": "pro.bahikhata.app",
-  "appName": "BahiKhata Pro",
+  "appName": "EkBook",
   "webDir": "out",
   "bundledWebRuntime": false,
   "server": {
@@ -22,8 +22,7 @@
       "showSpinner": false,
       "androidSpinnerStyle": "large",
       "spinnerColor": "#ffffff",
-      "spinnerColorDark": "#ffffff",
-      "showSpinner": false
+      "spinnerColorDark": "#ffffff"
     },
     "StatusBar": {
       "style": "DARK",

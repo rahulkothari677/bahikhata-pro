@@ -88,5 +88,5 @@ export const authOptions: NextAuthOptions = {
       return session
     },
   },
-  secret: process.env.NEXTAUTH_SECRET || 'bahikhata-pro-dev-secret-change-in-production',
+  secret: process.env.NEXTAUTH_SECRET || 'ekbook-dev-secret-change-in-production',
 }

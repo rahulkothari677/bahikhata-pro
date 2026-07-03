@@ -38,7 +38,7 @@ export function CheckoutButton({ planId, planName, price, billingCycle, currentP
       }
       const options = {
         key: order.keyId, amount: order.amount, currency: order.currency,
-        name: 'BahiKhata Pro', description: `${planName} Plan — ${billingCycle === 'monthly' ? 'Monthly' : 'Yearly'}`,
+        name: 'EkBook', description: `${planName} Plan — ${billingCycle === 'monthly' ? 'Monthly' : 'Yearly'}`,
         image: '/logo.svg', order_id: order.orderId,
         theme: { color: '#d97706' },
         handler: async function (response: any) {

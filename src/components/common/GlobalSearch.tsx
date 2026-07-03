@@ -284,7 +284,7 @@ export function GlobalSearch() {
             <span>↵ Select</span>
             <span>Esc Close</span>
           </div>
-          <span className="px-2">Powered by BahiKhata Pro</span>
+          <span className="px-2">Powered by EkBook</span>
         </div>
       </DialogContent>
     </Dialog>

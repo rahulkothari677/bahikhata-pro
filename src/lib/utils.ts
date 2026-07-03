@@ -1,4 +1,4 @@
-// BahiKhata Pro - shared utility functions
+// EkBook - shared utility functions
 import { clsx, type ClassValue } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 

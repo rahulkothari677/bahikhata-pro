@@ -79,7 +79,7 @@ export function AuthScreen() {
         sonnerToast.error('Invalid email or password')
         setLoading(false)
       } else if (result?.ok) {
-        sonnerToast.success(mode === 'signup' ? 'Account created! Welcome to BahiKhata Pro.' : 'Welcome back!')
+        sonnerToast.success(mode === 'signup' ? 'Account created! Welcome to EkBook.' : 'Welcome back!')
         // Small delay to let session propagate
         setTimeout(() => window.location.reload(), 500)
       } else {
@@ -105,7 +105,7 @@ export function AuthScreen() {
           <div className="inline-flex w-16 h-16 rounded-2xl bg-gradient-saffron items-center justify-center shadow-lg mb-4">
             <BookOpenText className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-3xl font-bold tracking-tight">BahiKhata Pro</h1>
+          <h1 className="text-3xl font-bold tracking-tight">EkBook</h1>
           <p className="text-sm text-muted-foreground mt-1">India&apos;s Smartest Ledger App</p>
         </div>
 

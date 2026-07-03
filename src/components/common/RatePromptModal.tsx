@@ -67,7 +67,7 @@ export function RatePromptModal({
               <Star className="w-8 h-8 text-white fill-white" />
             </div>
           </div>
-          <DialogTitle className="text-center text-xl">Enjoying BahiKhata Pro?</DialogTitle>
+          <DialogTitle className="text-center text-xl">Enjoying EkBook?</DialogTitle>
         </DialogHeader>
 
         <div className="text-center">

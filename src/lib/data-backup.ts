@@ -30,7 +30,7 @@ export async function exportBackup(): Promise<void> {
 
   const backup = {
     version: 1,
-    app: 'BahiKhata Pro',
+    app: 'EkBook',
     exportedAt: new Date().toISOString(),
     data: {
       products: products.products || [],
