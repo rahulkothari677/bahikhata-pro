@@ -217,6 +217,8 @@ model Setting {
   // ledger, transaction detail). Data is still calculated and stored —
   // only the display is hidden. Owner controls this; staff inherits.
   hideProfit Boolean @default(false)
+  // AI Bill Scanner output language: 'original' (keep bill language) | 'en' | 'hi' | 'ta' | 'gu' | 'mr' | 'bn' | 'te' | 'kn' | 'ml' | 'pa'
+  scanLang String   @default("original")
 }
 
 // ==================== ANNOUNCEMENTS (broadcast messages) ====================

@@ -57,7 +57,11 @@ export async function POST(req: NextRequest) {
     // DO NOT interpolate user-specific data (userId, billType, etc.) into this
     // string — that would break the cache. Pass variable data via the image only.
     // Estimated savings: 70% on input tokens after the first scan each hour.
-    const prompt = `You are an expert at reading Indian shop bills, invoices, receipts, AND handwritten notes on plain paper. Indian shop owners often write sales/purchases as rough notes on any paper — plain paper, notebook pages, diaries, even napkins. Your job is to read ANY text (printed or handwritten) and extract structured data.
+    //
+    // LANGUAGE: The scanLang parameter controls output language for item names.
+    // 'original' = keep the bill's language, 'en' = English, 'hi' = Hindi, etc.
+    // This is appended to the prompt (breaks cache slightly, but language is important).
+    const basePrompt = `You are an expert at reading Indian shop bills, invoices, receipts, AND handwritten notes on plain paper. Indian shop owners often write sales/purchases as rough notes on any paper — plain paper, notebook pages, diaries, even napkins. Your job is to read ANY text (printed or handwritten) and extract structured data.
 
 This image may be:
 - A printed bill/invoice from a supplier
@@ -119,6 +123,15 @@ For printed bills:
 - If CGST+SGST shown, set both. If IGST shown, set only igst.
 
 Return JSON only, no commentary, no markdown formatting.`
+
+    // Language instruction (appended to prompt)
+    // 'original' = keep bill language, otherwise translate item names to selected language
+    const scanLang = body.scanLang || 'original'
+    const langInstruction = scanLang === 'original'
+      ? '\n\nIMPORTANT: Return item names in the SAME language as written on the bill. Do NOT translate.'
+      : `\n\nIMPORTANT: Return all item names in ${getLanguageName(scanLang)} language. Translate if the bill is in a different language.`
+
+    const prompt = basePrompt + langInstruction
 
     let content = ''
 
@@ -461,6 +474,9 @@ async function callSingleProvider(
           },
         ],
         max_tokens: 2000,
+        // Disable Gemini "thinking" mode for faster response (1-3s vs 3-8s)
+        // Slight accuracy tradeoff, but much better UX
+        ...(provider.name === 'gemini' ? { thinking: { type: 'disabled' } } : {}),
       }),
     })
 
@@ -487,4 +503,21 @@ async function callSingleProvider(
   } catch (error) {
     return { success: false, error: String(error).slice(0, 200), durationMs: Date.now() - start }
   }
+}
+
+// Helper: get language name from code for AI prompt
+function getLanguageName(code: string): string {
+  const names: Record<string, string> = {
+    'en': 'English',
+    'hi': 'Hindi',
+    'ta': 'Tamil',
+    'gu': 'Gujarati',
+    'mr': 'Marathi',
+    'bn': 'Bengali',
+    'te': 'Telugu',
+    'kn': 'Kannada',
+    'ml': 'Malayalam',
+    'pa': 'Punjabi',
+  }
+  return names[code] || 'English'
 }

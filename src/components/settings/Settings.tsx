@@ -3,7 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -643,6 +643,57 @@ export function Settings() {
           </div>
         </CardContent>
       </Card>
+      )}
+
+      {/* ── AI SCANNER LANGUAGE (in Profile tab) ─────────────────────── */}
+      {settingsTab === 'profile' && (
+        <Card className="shadow-card border-border/60">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ScanLine className="w-5 h-5 text-primary" /> AI Bill Scanner Language
+            </CardTitle>
+            <CardDescription>Choose the language for scanned item names</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                When you scan a bill, the AI extracts item names. Choose which language the item names should be in:
+              </p>
+              <select
+                value={(form as any).scanLang || 'original'}
+                onChange={(e) => {
+                  setForm({ ...form, scanLang: e.target.value } as any)
+                  // Save immediately
+                  fetch('/api/settings', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ...form, scanLang: e.target.value }),
+                  }).then(() => {
+                    sonnerToast.success('Scanner language updated')
+                  }).catch(() => {
+                    sonnerToast.error('Failed to update language')
+                  })
+                }}
+                className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="original">Original (keep bill's language)</option>
+                <option value="en">English</option>
+                <option value="hi">हिन्दी (Hindi)</option>
+                <option value="ta">தமிழ் (Tamil)</option>
+                <option value="gu">ગુજરાતી (Gujarati)</option>
+                <option value="mr">मराठी (Marathi)</option>
+                <option value="bn">বাংলা (Bengali)</option>
+                <option value="te">తెలుగు (Telugu)</option>
+                <option value="kn">ಕನ್ನಡ (Kannada)</option>
+                <option value="ml">മലയാളം (Malayalam)</option>
+                <option value="pa">ਪੰਜਾਬੀ (Punjabi)</option>
+              </select>
+              <p className="text-[11px] text-muted-foreground">
+                "Original" keeps the item names in whatever language the bill is written in (Hindi bill → Hindi names, English bill → English names).
+              </p>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* ── STAFF TAB ───────────────────────────────────────────────── */}

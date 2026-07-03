@@ -34,6 +34,7 @@ export async function PUT(req: NextRequest) {
         state: body.state,
         email: body.email,
         hideProfit: body.hideProfit,
+        scanLang: body.scanLang,
       },
       create: {
         userId,
@@ -45,6 +46,7 @@ export async function PUT(req: NextRequest) {
         state: body.state,
         email: body.email,
         hideProfit: body.hideProfit ?? false,
+        scanLang: body.scanLang || 'original',
       },
     })
     return NextResponse.json({ setting })

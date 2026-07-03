@@ -1,13 +1,13 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useTranslation } from '@/hooks/use-translation'
 import { useAppStore } from '@/store/app-store'
+import { useQuery } from '@tanstack/react-query'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { Switch } from '@/components/ui/switch'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
 import { toast as sonnerToast } from 'sonner'
@@ -163,13 +163,23 @@ export function BillScanner() {
   const [scanned, setScanned] = useState<any>(null)
   const [preview, setPreview] = useState<string>('')
   const [billType, setBillType] = useState<'sale' | 'purchase'>(scannerBillType)
-  // Grayscale mode for printed bills — saves ~20% tokens on AI providers
-  // that bill by image tiles (Gemini, GPT-4o). Handwritten bills stay color
-  // because ink color (red/blue) can carry meaning.
-  const [grayscale, setGrayscale] = useState(false)
+  // Grayscale removed from scanner UI — moved to Settings (default: off)
+  // Color photos give better accuracy. Grayscale doesn't save tokens.
   const [editMode, setEditMode] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
+
+  // Fetch user settings (for scanLang)
+  const { data: settingsData } = useQuery({
+    queryKey: ['user-settings'],
+    queryFn: async () => {
+      const r = await fetch('/api/settings')
+      if (!r.ok) return null
+      return r.json()
+    },
+    staleTime: 5 * 60 * 1000,
+  })
+  const scanLang = settingsData?.setting?.scanLang || 'original'
 
   const handleFile = async (file: File) => {
     // Subscription gating — re-enabled. Free users get 5 scans/month,
@@ -281,7 +291,7 @@ export function BillScanner() {
       // Compress the image first — try main method, fall back to direct base64
       let base64: string
       try {
-        base64 = await compressImage(file, grayscale)
+        base64 = await compressImage(file, false) // grayscale always off (color = better accuracy)
       } catch (compressErr) {
         base64 = await compressImageFallback(file)
       }
@@ -320,7 +330,7 @@ export function BillScanner() {
         const scanRes = await offlineFetch('/api/scan-bill', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(imageUrl ? { imageUrl, billType } : { imageBase64: base64, billType }),
+          body: JSON.stringify(imageUrl ? { imageUrl, billType, scanLang } : { imageBase64: base64, billType, scanLang }),
         })
 
         // Handle 402 quota exceeded — show upgrade prompt instead of generic error
@@ -554,22 +564,7 @@ export function BillScanner() {
             </button>
           </div>
 
-          {/* Grayscale toggle — saves ~20% AI cost on printed bills */}
-          <div className="mt-3 flex items-center justify-between gap-2 p-2.5 rounded-lg bg-muted/40 border border-border/40">
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium">Printed bill mode</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
-                Converts to grayscale — saves AI cost. Off for handwritten bills.
-              </p>
-            </div>
-            <Switch
-              checked={grayscale}
-              onCheckedChange={(checked) => {
-                setGrayscale(checked)
-                sonnerToast.info(checked ? 'Grayscale on — better for printed bills' : 'Color mode — better for handwritten bills', { duration: 2500 })
-              }}
-            />
-          </div>
+          {/* Grayscale toggle removed — moved to Settings. Color = better accuracy. */}
         </CardContent>
       </Card>
 
