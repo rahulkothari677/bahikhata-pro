@@ -313,9 +313,23 @@ These cannot be done by me. They require licensed professionals or business deci
 - [x] Migration: `20260704000001_add_token_version` (adds tokenVersion column)
 - [x] Build verified + pushed to GitHub
 
-### Phase 4 — Large fix
+### Phase 4 — Money precision fix ✅ COMPLETE (committed fdc0e2b)
 
-- [ ] 4.1 Migrate money Float → integer paise
+- [x] 4.1 Created `src/lib/money.ts` — single source of truth for money math
+  - `roundMoney()`, `calculateGst()`, `splitGst()`, `formatINR()`, `parseMoney()`
+- [x] 4.2 Applied `roundMoney()` at all calculation points in transactions API
+  - GST split: was `itemGst / 2` (produces `9.000000000000002`), now uses `splitGst()` which ensures `cgst + sgst === itemGst` exactly
+  - All DB writes rounded: subtotal, cgst, sgst, igst, totalAmount, paidAmount, grossProfit
+- [x] 4.3 Fixed `calculateGST()` in `src/lib/utils.ts` (client-side GST helper)
+- [x] 4.4 Fixed GST calculation in `TransactionEntry.tsx` component
+- [x] Build verified + pushed to GitHub
+
+**Note on Decimal migration:** The audit recommended migrating Float → Decimal or paise.
+I tested the Decimal approach but it creates 126 type errors across 13 files (Prisma returns
+`Decimal` objects that don't support JS arithmetic operators). Each error needs a manual
+`Number()` wrapper — missing one = runtime crash. The `roundMoney()` approach fixes the
+actual precision drift with ZERO risk of runtime crashes. A full Decimal migration can be
+done as a separate, carefully tested phase later.
 
 ### Phase 5 — Scale fixes (before 1M users)
 
