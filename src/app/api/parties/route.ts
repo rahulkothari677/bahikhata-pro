@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
 import { withCache } from '@/lib/cache'
+import { roundMoney } from '@/lib/money'
 
 export async function GET() {
   try {
@@ -77,9 +78,10 @@ export async function GET() {
     const partiesWithBalance = parties.map(p => {
       const salesSum = salesMap.get(p.id)
       const purchaseSum = purchaseMap.get(p.id)
-      const salesOutstanding = (salesSum?.totalAmount || 0) - (salesSum?.paidAmount || 0)
-      const purchaseOutstanding = (purchaseSum?.totalAmount || 0) - (purchaseSum?.paidAmount || 0)
-      const balance = p.openingBalance + salesOutstanding - purchaseOutstanding
+      // 💰 MONEY (Audit fix Phase 8): roundMoney on final balance arithmetic
+      const salesOutstanding = roundMoney((salesSum?.totalAmount || 0) - (salesSum?.paidAmount || 0))
+      const purchaseOutstanding = roundMoney((purchaseSum?.totalAmount || 0) - (purchaseSum?.paidAmount || 0))
+      const balance = roundMoney(p.openingBalance + salesOutstanding - purchaseOutstanding)
 
       return {
         ...p,

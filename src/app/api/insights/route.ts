@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
+import { roundMoney } from '@/lib/money'
 
 // ⏱️ Vercel serverless timeout — insights aggregates dashboard data and
 // may call AI for smart alerts. Set explicit maxDuration.
@@ -98,8 +99,9 @@ export async function GET() {
     parties.forEach(p => {
       const sales = transactions.filter(t => t.type === 'sale' && t.partyId === p.id)
       const purchases = transactions.filter(t => t.type === 'purchase' && t.partyId === p.id)
-      const salesOutstanding = sales.reduce((s, t) => s + (t.totalAmount - t.paidAmount), 0)
-      const purchaseOutstanding = purchases.reduce((s, t) => s + (t.totalAmount - t.paidAmount), 0)
+      // 💰 MONEY (Audit fix Phase 8): roundMoney on outstanding calculations
+      const salesOutstanding = roundMoney(sales.reduce((s, t) => s + (t.totalAmount - t.paidAmount), 0))
+      const purchaseOutstanding = roundMoney(purchases.reduce((s, t) => s + (t.totalAmount - t.paidAmount), 0))
       const balance = p.openingBalance + salesOutstanding - purchaseOutstanding
 
       if (balance > 500) {
@@ -197,7 +199,8 @@ export async function GET() {
     })
 
     if (deadStock.length > 0) {
-      const deadStockValue = deadStock.reduce((s, p) => s + (stockMap.get(p.id) || 0) * p.purchasePrice, 0)
+      // 💰 MONEY (Audit fix Phase 8): roundMoney on dead stock value
+      const deadStockValue = roundMoney(deadStock.reduce((s, p) => s + (stockMap.get(p.id) || 0) * p.purchasePrice, 0))
       insights.push({
         id: 'dead-stock',
         type: 'warning',

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
+import { roundMoney } from '@/lib/money'
 
 // POST /api/whatsapp-invoice - generate WhatsApp share link for an invoice
 export async function POST(req: NextRequest) {
@@ -55,7 +56,8 @@ export async function POST(req: NextRequest) {
     lines.push(`*Total: ₹${transaction.totalAmount.toFixed(2)}*`)
     lines.push(`Paid: ₹${transaction.paidAmount.toFixed(2)}`)
 
-    const due = transaction.totalAmount - transaction.paidAmount
+    // 💰 MONEY (Audit fix Phase 8): roundMoney on the due calculation
+    const due = roundMoney(transaction.totalAmount - transaction.paidAmount)
     if (due > 0) {
       lines.push(`*Balance Due: ₹${due.toFixed(2)}*`)
     }

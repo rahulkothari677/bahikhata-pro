@@ -1,9 +1,22 @@
 /**
  * Money helpers — the ONLY file that should do money conversion/rounding.
  *
- * Audit fix Phase 4: money fields migrated from Float to Decimal(18,2).
- * Prisma returns Decimal.js objects for Decimal columns. These helpers
- * safely convert to native number and perform rounded arithmetic.
+ * 🔒 HONEST STATUS (corrected per V6 audit):
+ * Money fields are STILL stored as Float (42 fields in schema.prisma).
+ * A full Decimal(18,2) migration was attempted but reverted because it
+ * created 126 type errors across 13 files (Prisma Decimal objects don't
+ * support JS arithmetic operators — each needs a manual Number() wrapper,
+ * and missing one = runtime crash in a financial app).
+ *
+ * Instead, these helpers apply roundMoney() at every calculation point to
+ * eliminate float precision drift (e.g. itemGst / 2 → 9.000000000000002
+ * becomes 9.00). This is a MITIGATION, not a structural fix.
+ *
+ * Phase 8 (this commit): Applied roundMoney()/splitGst() to ALL 15 money-
+ * handling routes (was only in 1 of 15 before — the V6 audit caught this).
+ *
+ * Future: A full Decimal/paise migration should be done as a separate,
+ * carefully tested phase with comprehensive test coverage.
  *
  * Rules:
  * 1. All money math must go through these helpers (not raw +/-/*)

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
+import { roundMoney } from '@/lib/money'
 
 // ⏱️ Vercel serverless timeout — reports can aggregate thousands of
 // transactions and generate large responses. Set explicit maxDuration.
@@ -37,11 +38,12 @@ export async function GET(req: NextRequest) {
       const incomes = transactions.filter(t => t.type === 'income')
       const expenses = transactions.filter(t => t.type === 'expense')
 
-      const grossProfit = sales.reduce((s, t) => s + t.grossProfit, 0)
-      const totalRevenue = sales.reduce((s, t) => s + t.subtotal - t.discountAmount, 0)
-      const totalExpenses = expenses.reduce((s, t) => s + t.totalAmount, 0)
-      const otherIncome = incomes.reduce((s, t) => s + t.totalAmount, 0)
-      const netProfit = grossProfit + otherIncome - totalExpenses
+      // 💰 MONEY (Audit fix Phase 8): roundMoney on all P&L totals
+      const grossProfit = roundMoney(sales.reduce((s, t) => s + t.grossProfit, 0))
+      const totalRevenue = roundMoney(sales.reduce((s, t) => s + t.subtotal - t.discountAmount, 0))
+      const totalExpenses = roundMoney(expenses.reduce((s, t) => s + t.totalAmount, 0))
+      const otherIncome = roundMoney(incomes.reduce((s, t) => s + t.totalAmount, 0))
+      const netProfit = roundMoney(grossProfit + otherIncome - totalExpenses)
 
       const expensesByCategory = new Map<string, number>()
       expenses.forEach(e => {
@@ -79,15 +81,18 @@ export async function GET(req: NextRequest) {
       const purchases = transactions.filter(t => t.type === 'purchase')
 
       // By GST rate slab
+      // 💰 MONEY (Audit fix Phase 8): roundMoney on all GST slab calculations
       const slabMap = new Map<number, { taxable: number; cgst: number; sgst: number; igst: number; quantity: number }>()
       sales.forEach(t => {
         t.items.forEach(item => {
           const rate = item.gstRate
           const existing = slabMap.get(rate) || { taxable: 0, cgst: 0, sgst: 0, igst: 0, quantity: 0 }
-          existing.taxable += item.quantity * item.unitPrice
-          existing.cgst += (item.quantity * item.unitPrice * rate / 100) * (t.isInterState ? 0 : 0.5)
-          existing.sgst += (item.quantity * item.unitPrice * rate / 100) * (t.isInterState ? 0 : 0.5)
-          existing.igst += (item.quantity * item.unitPrice * rate / 100) * (t.isInterState ? 1 : 0)
+          const taxable = roundMoney(item.quantity * item.unitPrice)
+          const gst = roundMoney(taxable * rate / 100)
+          existing.taxable = roundMoney(existing.taxable + taxable)
+          existing.cgst = roundMoney(existing.cgst + (t.isInterState ? 0 : gst / 2))
+          existing.sgst = roundMoney(existing.sgst + (t.isInterState ? 0 : gst / 2))
+          existing.igst = roundMoney(existing.igst + (t.isInterState ? gst : 0))
           existing.quantity += item.quantity
           slabMap.set(rate, existing)
         })
@@ -98,16 +103,18 @@ export async function GET(req: NextRequest) {
         t.items.forEach(item => {
           const rate = item.gstRate
           const existing = inputSlabMap.get(rate) || { taxable: 0, cgst: 0, sgst: 0, igst: 0 }
-          existing.taxable += item.quantity * item.unitPrice
-          existing.cgst += (item.quantity * item.unitPrice * rate / 100) * (t.isInterState ? 0 : 0.5)
-          existing.sgst += (item.quantity * item.unitPrice * rate / 100) * (t.isInterState ? 0 : 0.5)
-          existing.igst += (item.quantity * item.unitPrice * rate / 100) * (t.isInterState ? 1 : 0)
+          const taxable = roundMoney(item.quantity * item.unitPrice)
+          const gst = roundMoney(taxable * rate / 100)
+          existing.taxable = roundMoney(existing.taxable + taxable)
+          existing.cgst = roundMoney(existing.cgst + (t.isInterState ? 0 : gst / 2))
+          existing.sgst = roundMoney(existing.sgst + (t.isInterState ? 0 : gst / 2))
+          existing.igst = roundMoney(existing.igst + (t.isInterState ? gst : 0))
           inputSlabMap.set(rate, existing)
         })
       })
 
-      const outputTax = sales.reduce((s, t) => s + t.cgst + t.sgst + t.igst, 0)
-      const inputTax = purchases.reduce((s, t) => s + t.cgst + t.sgst + t.igst, 0)
+      const outputTax = roundMoney(sales.reduce((s, t) => s + t.cgst + t.sgst + t.igst, 0))
+      const inputTax = roundMoney(purchases.reduce((s, t) => s + t.cgst + t.sgst + t.igst, 0))
 
       return NextResponse.json({
         type: 'gst',
@@ -160,14 +167,15 @@ export async function GET(req: NextRequest) {
           salePrice: p.salePrice,
           mrp: p.mrp,
           gstRate: p.gstRate,
-          stockValue: stock * p.purchasePrice,
-          potentialSaleValue: stock * p.salePrice,
+          // 💰 MONEY (Audit fix Phase 8): roundMoney on stock values
+          stockValue: roundMoney(stock * p.purchasePrice),
+          potentialSaleValue: roundMoney(stock * p.salePrice),
           isLowStock: stock <= p.lowStockThreshold,
         }
       })
 
-      const totalStockValue = stockReport.reduce((s, p) => s + p.stockValue, 0)
-      const totalPotentialValue = stockReport.reduce((s, p) => s + p.potentialSaleValue, 0)
+      const totalStockValue = roundMoney(stockReport.reduce((s, p) => s + p.stockValue, 0))
+      const totalPotentialValue = roundMoney(stockReport.reduce((s, p) => s + p.potentialSaleValue, 0))
 
       return NextResponse.json({
         type: 'stock',

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
+import { roundMoney } from '@/lib/money'
 
 // GET /api/parties/[id] - get party with all transactions
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -26,13 +27,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const sales = party.transactions.filter(t => t.type === 'sale')
     const purchases = party.transactions.filter(t => t.type === 'purchase')
 
-    const totalSales = sales.reduce((s, t) => s + t.totalAmount, 0)
-    const totalPurchases = purchases.reduce((s, t) => s + t.totalAmount, 0)
-    const totalReceived = sales.reduce((s, t) => s + t.paidAmount, 0)
-    const totalPaid = purchases.reduce((s, t) => s + t.paidAmount, 0)
-    const salesOutstanding = sales.reduce((s, t) => s + (t.totalAmount - t.paidAmount), 0)
-    const purchaseOutstanding = purchases.reduce((s, t) => s + (t.totalAmount - t.paidAmount), 0)
-    const balance = party.openingBalance + salesOutstanding - purchaseOutstanding
+    // 💰 MONEY (Audit fix Phase 8): roundMoney on all balance calculations
+    const totalSales = roundMoney(sales.reduce((s, t) => s + t.totalAmount, 0))
+    const totalPurchases = roundMoney(purchases.reduce((s, t) => s + t.totalAmount, 0))
+    const totalReceived = roundMoney(sales.reduce((s, t) => s + t.paidAmount, 0))
+    const totalPaid = roundMoney(purchases.reduce((s, t) => s + t.paidAmount, 0))
+    const salesOutstanding = roundMoney(sales.reduce((s, t) => s + (t.totalAmount - t.paidAmount), 0))
+    const purchaseOutstanding = roundMoney(purchases.reduce((s, t) => s + (t.totalAmount - t.paidAmount), 0))
+    const balance = roundMoney(party.openingBalance + salesOutstanding - purchaseOutstanding)
 
     // Top products bought/sold to this party
     const productMap = new Map<string, { name: string; quantity: number; amount: number }>()

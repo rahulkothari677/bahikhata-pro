@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
+import { roundMoney } from '@/lib/money'
 
 // POST /api/whatsapp-reminder - generate WhatsApp reminder link for outstanding dues
 export async function POST(req: NextRequest) {
@@ -24,8 +25,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Party not found' }, { status: 404 })
     }
 
-    const salesOutstanding = party.transactions.reduce((s, t) => s + (t.totalAmount - t.paidAmount), 0)
-    const balance = party.openingBalance + salesOutstanding
+    // 💰 MONEY (Audit fix Phase 8): roundMoney on balance calculation
+    const salesOutstanding = roundMoney(party.transactions.reduce((s, t) => s + (t.totalAmount - t.paidAmount), 0))
+    const balance = roundMoney(party.openingBalance + salesOutstanding)
 
     if (balance <= 0) {
       return NextResponse.json({ error: 'No outstanding dues for this customer' }, { status: 400 })

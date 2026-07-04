@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
+import { roundMoney, calculateGst, splitGst } from '@/lib/money'
 
 // ⏱️ Vercel serverless timeout — GSTR export aggregates all transactions
 // in a period and generates CSV/JSON. Can take several seconds at scale.
@@ -48,14 +49,16 @@ export async function GET(req: NextRequest) {
           if (!itemsByRate[rate]) {
             itemsByRate[rate] = { taxableValue: 0, cgst: 0, sgst: 0, igst: 0, quantity: 0 }
           }
-          const taxable = item.quantity * item.unitPrice
-          itemsByRate[rate].taxableValue += taxable
-          const gst = taxable * rate / 100
+          // 💰 MONEY (Audit fix Phase 8): roundMoney to prevent drift in GST filings
+          const taxable = roundMoney(item.quantity * item.unitPrice)
+          itemsByRate[rate].taxableValue = roundMoney(itemsByRate[rate].taxableValue + taxable)
+          const gst = calculateGst(taxable, rate)
           if (t.isInterState) {
-            itemsByRate[rate].igst += gst
+            itemsByRate[rate].igst = roundMoney(itemsByRate[rate].igst + gst)
           } else {
-            itemsByRate[rate].cgst += gst / 2
-            itemsByRate[rate].sgst += gst / 2
+            const { cgst, sgst } = splitGst(gst)
+            itemsByRate[rate].cgst = roundMoney(itemsByRate[rate].cgst + cgst)
+            itemsByRate[rate].sgst = roundMoney(itemsByRate[rate].sgst + sgst)
           }
           itemsByRate[rate].quantity += item.quantity
         })
@@ -80,14 +83,16 @@ export async function GET(req: NextRequest) {
           if (!itemsByRate[rate]) {
             itemsByRate[rate] = { taxableValue: 0, cgst: 0, sgst: 0, igst: 0, quantity: 0 }
           }
-          const taxable = item.quantity * item.unitPrice
-          itemsByRate[rate].taxableValue += taxable
-          const gst = taxable * rate / 100
+          // 💰 MONEY (Audit fix Phase 8): roundMoney to prevent drift in GST filings
+          const taxable = roundMoney(item.quantity * item.unitPrice)
+          itemsByRate[rate].taxableValue = roundMoney(itemsByRate[rate].taxableValue + taxable)
+          const gst = calculateGst(taxable, rate)
           if (t.isInterState) {
-            itemsByRate[rate].igst += gst
+            itemsByRate[rate].igst = roundMoney(itemsByRate[rate].igst + gst)
           } else {
-            itemsByRate[rate].cgst += gst / 2
-            itemsByRate[rate].sgst += gst / 2
+            const { cgst, sgst } = splitGst(gst)
+            itemsByRate[rate].cgst = roundMoney(itemsByRate[rate].cgst + cgst)
+            itemsByRate[rate].sgst = roundMoney(itemsByRate[rate].sgst + sgst)
           }
           itemsByRate[rate].quantity += item.quantity
         })
@@ -121,12 +126,13 @@ export async function GET(req: NextRequest) {
       b2cs: b2cInvoices.filter(i => i.total < 100000), // B2C Small
       summary: {
         total_invoices: transactions.length,
-        total_taxable: transactions.reduce((s, t) => s + t.subtotal - t.discountAmount, 0),
-        total_cgst: transactions.reduce((s, t) => s + t.cgst, 0),
-        total_sgst: transactions.reduce((s, t) => s + t.sgst, 0),
-        total_igst: transactions.reduce((s, t) => s + t.igst, 0),
-        total_tax: transactions.reduce((s, t) => s + t.cgst + t.sgst + t.igst, 0),
-        total_amount: transactions.reduce((s, t) => s + t.totalAmount, 0),
+        // 💰 MONEY (Audit fix Phase 8): roundMoney on all summary totals
+        total_taxable: roundMoney(transactions.reduce((s, t) => s + t.subtotal - t.discountAmount, 0)),
+        total_cgst: roundMoney(transactions.reduce((s, t) => s + t.cgst, 0)),
+        total_sgst: roundMoney(transactions.reduce((s, t) => s + t.sgst, 0)),
+        total_igst: roundMoney(transactions.reduce((s, t) => s + t.igst, 0)),
+        total_tax: roundMoney(transactions.reduce((s, t) => s + t.cgst + t.sgst + t.igst, 0)),
+        total_amount: roundMoney(transactions.reduce((s, t) => s + t.totalAmount, 0)),
       },
       period: { from, to },
     }

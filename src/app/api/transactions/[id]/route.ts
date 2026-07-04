@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
+import { roundMoney, calculateGst, splitGst } from '@/lib/money'
 
 // GET /api/transactions/[id] - get single transaction with all details
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -80,20 +81,22 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     let grossProfit = 0
 
     const txItems = items.map((item: any) => {
-      const amount = item.quantity * item.unitPrice
-      const itemGst = amount * (item.gstRate || 0) / 100
-      const itemTotal = amount - (item.discountAmount || 0) + itemGst
-      subtotal += amount
+      // 💰 MONEY (Audit fix Phase 8): Use roundMoney/splitGst to prevent drift
+      const amount = roundMoney(item.quantity * item.unitPrice)
+      const itemGst = calculateGst(amount, item.gstRate || 0)
+      const itemTotal = roundMoney(amount - (item.discountAmount || 0) + itemGst)
+      subtotal = roundMoney(subtotal + amount)
       if (isInterState) {
-        igst += itemGst
+        igst = roundMoney(igst + itemGst)
       } else {
-        cgst += itemGst / 2
-        sgst += itemGst / 2
+        const { cgst: c, sgst: s } = splitGst(itemGst)
+        cgst = roundMoney(cgst + c)
+        sgst = roundMoney(sgst + s)
       }
       if (type === 'sale' && item.productId) {
         const product = productMap.get(item.productId)
         if (product) {
-          grossProfit += (item.unitPrice - product.purchasePrice) * item.quantity
+          grossProfit = roundMoney(grossProfit + (item.unitPrice - product.purchasePrice) * item.quantity)
         }
       }
       return {
@@ -108,7 +111,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     })
 
     const discount = parseFloat(discountAmount) || 0
-    const totalAmount = subtotal - discount + cgst + sgst + igst
+    const totalAmount = roundMoney(subtotal - discount + cgst + sgst + igst)
     const paid = parseFloat(paidAmount)
     const finalPaid = isNaN(paid) ? totalAmount : paid
 
@@ -121,13 +124,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         type,
         partyId: partyId || null,
         date: new Date(date || new Date()),
-        subtotal,
-        discountAmount: discount,
-        cgst,
-        sgst,
-        igst,
+        subtotal: roundMoney(subtotal),
+        discountAmount: roundMoney(discount),
+        cgst: roundMoney(cgst),
+        sgst: roundMoney(sgst),
+        igst: roundMoney(igst),
         totalAmount,
-        paidAmount: finalPaid,
+        paidAmount: roundMoney(finalPaid),
         paymentMode: paymentMode || 'cash',
         isInterState: !!isInterState,
         notes: notes || null,
