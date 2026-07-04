@@ -303,11 +303,15 @@ These cannot be done by me. They require licensed professionals or business deci
 - [x] 2.6 Update all 6 callers to use `await` (rateLimit is now async)
 - [x] Build verified + pushed to GitHub
 
-### Phase 3 — Medium fixes (after Phase 2)
+### Phase 3 — Medium fixes ✅ COMPLETE (committed 833fa54)
 
-- [ ] 3.1 Derive GST interstate split server-side
-- [ ] 3.2 Move party balances to SQL aggregates
-- [ ] 3.3 Shorten JWT + add tokenVersion
+- [x] 3.1 Derive GST interstate split server-side (from shop state vs party state)
+- [x] 3.2 Move party balances to SQL aggregates (groupBy instead of JS reduce)
+- [x] 3.3 Shorten JWT to 7 days + add `tokenVersion` for revocation
+- [x] New endpoint: `POST /api/auth/revoke-all` (logout all devices)
+- [x] Password reset now bumps `tokenVersion` (kills stolen sessions)
+- [x] Migration: `20260704000001_add_token_version` (adds tokenVersion column)
+- [x] Build verified + pushed to GitHub
 
 ### Phase 4 — Large fix
 
