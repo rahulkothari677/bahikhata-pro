@@ -57,6 +57,32 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Image is required' }, { status: 400 })
     }
 
+    // 🔒 AUDIT FIX H8: Image size + type guard (cost/DoS protection)
+    // Was: no limit — a user could send a 50MB image and burn AI budget.
+    // Now: reject images over 8MB; validate base64 is a valid image format.
+    const MAX_IMAGE_SIZE = 8 * 1024 * 1024 // 8 MB
+    if (imageBase64) {
+      // Base64 is ~33% larger than binary, so check decoded size
+      const decodedSize = Math.ceil(imageBase64.length * 0.75)
+      if (decodedSize > MAX_IMAGE_SIZE) {
+        return NextResponse.json({
+          error: 'Image too large',
+          message: `Image must be under 8MB. Yours is ${(decodedSize / 1024 / 1024).toFixed(1)}MB.`,
+        }, { status: 413 })
+      }
+      // Validate it looks like a base64 image (data URI or raw base64 of JPEG/PNG/WebP)
+      const isDataUri = imageBase64.startsWith('data:image/')
+      if (isDataUri) {
+        const mime = imageBase64.match(/^data:(image\/\w+)/)
+        if (mime && !['image/jpeg', 'image/png', 'image/webp', 'image/jpg'].includes(mime[1])) {
+          return NextResponse.json({
+            error: 'Unsupported image format',
+            message: `Only JPEG, PNG, and WebP are supported. Got: ${mime[1]}`,
+          }, { status: 400 })
+        }
+      }
+    }
+
     // ⚠️ PROMPT CACHING: This prompt must be a BYTE-IDENTICAL constant across all
     // requests. Gemini 2.5 Flash has implicit context caching — if the same prompt
     // is sent within 1 hour, subsequent calls pay ~10% of input cost (vs 100%).

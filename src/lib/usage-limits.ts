@@ -220,11 +220,14 @@ export async function checkUsage(
     }
   }
 
-  // AI scans + voice entries — daily in-memory rate limiter
+  // AI scans + voice entries — daily rate limiter
+  // 🔒 AUDIT FIX H9: failClosed=true for AI limits (cost-bearing). If Redis
+  // is configured but down, DENY the request instead of falling back to
+  // in-memory (which would allow unlimited scans per instance = unlimited AI cost).
   const isScan = type === 'aiScans'
   const dailyLimit = isScan ? limits.dailyAiScans : limits.dailyVoiceEntries
   const rateKey = `${isScan ? 'scan' : 'voice'}:daily:user:${userId}`
-  const rl = await rateLimit(rateKey, { limit: dailyLimit, windowSec: 86400 })
+  const rl = await rateLimit(rateKey, { limit: dailyLimit, windowSec: 86400 }, { failClosed: true })
 
   return {
     allowed: rl.success,
@@ -301,4 +304,79 @@ export async function checkAndIncrementUsage(
     used: check.used + 1,
     remaining: Math.max(0, check.remaining - 1),
   }
+}
+
+/**
+ * 🔒 AUDIT FIX H2 (v2 audit): Check entity limits (total count, not daily).
+ *
+ * Products, shops, and staff have TOTAL count limits per plan (not daily).
+ * The existing checkUsage() uses a monthly DB counter — wrong for these.
+ * This function counts actual entities in the DB and compares to PLAN_LIMITS.
+ *
+ * Returns allowed=true if under the limit, allowed=false with upgrade message
+ * if at/over the limit. Founders bypass all limits.
+ *
+ * @param userId - the user's ID
+ * @param entityType - 'products' | 'shops' | 'staff'
+ * @returns { allowed, plan, used, limit, remaining, upgradeMessage? }
+ */
+export async function checkEntityLimit(
+  userId: string,
+  entityType: 'products' | 'shops' | 'staff',
+): Promise<{
+  allowed: boolean
+  plan: Plan
+  used: number
+  limit: number
+  remaining: number
+  upgradeMessage?: string
+}> {
+  const plan = await getUserPlan(userId)
+  const limits = PLAN_LIMITS[plan]
+
+  // FOUNDER BYPASS
+  if (await isFounder(userId)) {
+    return { allowed: true, plan: 'elite', used: 0, limit: Infinity, remaining: Infinity }
+  }
+
+  // Get the limit for this entity type
+  const limit = entityType === 'products' ? limits.products
+    : entityType === 'shops' ? limits.shops
+    : limits.staffAccounts
+
+  // 0 = unlimited (Pro/Elite products, Elite shops)
+  if (limit === 0 || limit === Infinity) {
+    return { allowed: true, plan, used: 0, limit: Infinity, remaining: Infinity }
+  }
+
+  // Count existing entities
+  let used: number
+  try {
+    if (entityType === 'products') {
+      used = await db.product.count({ where: { userId } })
+    } else if (entityType === 'shops') {
+      // Count shops owned by this user (excluding the default shop)
+      used = await db.shop.count({ where: { userId } })
+    } else {
+      // Count staff accounts (users with role='staff' and ownerId=userId)
+      used = await db.user.count({ where: { ownerId: userId, role: 'staff' } })
+    }
+  } catch {
+    // If DB error, allow the request (better UX than blocking on transient error)
+    return { allowed: true, plan, used: 0, limit, remaining: limit }
+  }
+
+  if (used >= limit) {
+    const upgradePlan = plan === 'free' ? 'Pro' : 'Elite'
+    return {
+      allowed: false,
+      plan,
+      used,
+      limit,
+      remaining: 0,
+      upgradeMessage: `You've reached the ${plan.toUpperCase()} plan limit of ${limit} ${entityType}. Upgrade to ${upgradePlan} for more.`,
+    }
+  }
+
+  return { allowed: true, plan, used, limit, remaining: limit - used }
 }

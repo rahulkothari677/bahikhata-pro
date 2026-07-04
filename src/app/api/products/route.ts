@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
 import { withCache } from '@/lib/cache'
+import { checkEntityLimit } from '@/lib/usage-limits'
 
 export async function GET() {
   try {
@@ -56,6 +57,17 @@ export async function POST(req: NextRequest) {
   try {
     const { userId, error } = await getAuthUserId()
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    // 🔒 AUDIT FIX H2: Enforce plan limit on product count (was: no check)
+    const limitCheck = await checkEntityLimit(userId, 'products')
+    if (!limitCheck.allowed) {
+      return NextResponse.json({
+        error: 'plan_limit_reached',
+        message: limitCheck.upgradeMessage,
+        used: limitCheck.used,
+        limit: limitCheck.limit,
+      }, { status: 402 })
+    }
 
     const body = await req.json()
     const product = await db.product.create({

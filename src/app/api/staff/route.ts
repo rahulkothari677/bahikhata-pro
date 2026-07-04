@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs'
 import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
 import { DEFAULT_STAFF_PERMISSIONS, parsePermissions, type StaffPermissions } from '@/lib/staff-permissions'
+import { checkEntityLimit } from '@/lib/usage-limits'
 
 // GET /api/staff - list all staff members for the current owner
 export async function GET() {
@@ -48,6 +49,17 @@ export async function POST(req: NextRequest) {
     }
     if (owner.role === 'staff') {
       return NextResponse.json({ error: 'Only owners can add staff' }, { status: 403 })
+    }
+
+    // 🔒 AUDIT FIX H2: Enforce plan limit on staff count (was: no check)
+    const limitCheck = await checkEntityLimit(userId, 'staff')
+    if (!limitCheck.allowed) {
+      return NextResponse.json({
+        error: 'plan_limit_reached',
+        message: limitCheck.upgradeMessage,
+        used: limitCheck.used,
+        limit: limitCheck.limit,
+      }, { status: 402 })
     }
 
     const body = await req.json()

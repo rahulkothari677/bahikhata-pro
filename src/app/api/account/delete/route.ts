@@ -52,32 +52,27 @@ export async function DELETE() {
       console.error('[account/delete] Cloudinary cleanup failed:', e)
     }
 
-    // 3. Delete all user data (cascading deletes handle most of it)
-    // Order matters: delete children first, then parents
-    await db.transactionItem.deleteMany({
-      where: { transaction: { userId } },
-    })
-    await db.transaction.deleteMany({ where: { userId } })
-    await db.product.deleteMany({ where: { userId } })
-    await db.party.deleteMany({ where: { userId } })
-    await db.payment.deleteMany({ where: { userId } })
-    await db.setting.deleteMany({ where: { userId } })
-
-    // 4. Delete staff accounts (if this user is an owner)
-    await db.user.deleteMany({
-      where: { ownerId: userId },
-    })
-
-    // 5. Delete audit logs (EXCEPT the deletion request we just logged — keep for 7 years per tax law)
-    await db.auditLog.deleteMany({
-      where: {
-        userId,
-        action: { not: AUDIT_ACTIONS.DATA_RESET },
-      },
-    })
-
-    // 6. Finally, delete the user account itself
-    await db.user.delete({ where: { id: userId } })
+    // 3. Delete all user data ATOMICALLY (Audit fix H5)
+    // Was: 8 sequential deletes with no $transaction — failure midway = half-deleted account.
+    // Now: wrapped in $transaction — all succeed or all roll back.
+    // Note: most models have onDelete: Cascade, so deleting the user would cascade.
+    // But we delete children explicitly first to be safe + to control the order.
+    await db.$transaction([
+      db.transactionItem.deleteMany({ where: { transaction: { userId } } }),
+      db.transaction.deleteMany({ where: { userId } }),
+      db.product.deleteMany({ where: { userId } }),
+      db.party.deleteMany({ where: { userId } }),
+      db.payment.deleteMany({ where: { userId } }),
+      db.setting.deleteMany({ where: { userId } }),
+      // Delete staff accounts (if this user is an owner)
+      db.user.deleteMany({ where: { ownerId: userId } }),
+      // Delete audit logs (EXCEPT the deletion request — keep for 7 years per tax law)
+      db.auditLog.deleteMany({
+        where: { userId, action: { not: AUDIT_ACTIONS.DATA_RESET } },
+      }),
+      // Finally, delete the user account itself
+      db.user.delete({ where: { id: userId } }),
+    ])
 
     return NextResponse.json({
       success: true,

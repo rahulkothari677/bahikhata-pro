@@ -117,7 +117,15 @@ interface TokenBucketOpts {
 export async function rateLimit(
   key: string,
   opts: FixedWindowOpts | TokenBucketOpts,
+  options?: { failClosed?: boolean },
 ): Promise<RateLimitResult> {
+  // 🔒 AUDIT FIX H9: When failClosed=true and Redis is configured but down,
+  // DENY the request instead of falling back to in-memory. This prevents
+  // cost-bearing limits (AI scans) from being bypassed during a Redis outage.
+  // When failClosed=false (default), falls back to in-memory (for login,
+  // signup, reset — where availability matters more than exactness).
+  const failClosed = options?.failClosed ?? false
+
   // Convert token-bucket opts to equivalent fixed-window for both Redis
   // and in-memory paths (keeps behavior consistent)
   let limit: number
@@ -131,6 +139,7 @@ export async function rateLimit(
   }
 
   const limiter = getRatelimiter(limit, windowSec)
+  const isRedisConfigured = !!getRedis()
 
   // --- Redis-backed path (production) ---
   if (limiter) {
@@ -144,12 +153,25 @@ export async function rateLimit(
         retryAfterSec: result.success ? 0 : Math.ceil(((result.reset || (now + windowSec * 1000)) - now) / 1000),
       }
     } catch (err) {
-      // If Redis is down, fall back to in-memory rather than blocking all traffic
-      console.warn('[rate-limit] Upstash error, falling back to in-memory:', err)
+      console.warn('[rate-limit] Upstash error:', err)
+
+      // 🔒 H9: For cost-bearing limits (AI scans/voice), fail CLOSED when
+      // Redis is down. Deny the request to prevent unlimited AI spend.
+      if (failClosed && isRedisConfigured) {
+        console.error('[rate-limit] FAIL CLOSED — Redis is configured but unreachable. Denying request to protect AI budget.')
+        return {
+          success: false,
+          resetAt: Date.now() + windowSec * 1000,
+          remaining: 0,
+          retryAfterSec: windowSec,
+        }
+      }
+
+      // For non-cost-bearing limits, fall back to in-memory (better UX)
     }
   }
 
-  // --- In-memory fallback (dev or Redis down) ---
+  // --- In-memory fallback (dev or Redis down + not failClosed) ---
   return inMemoryRateLimit(key, { limit, windowSec })
 }
 
