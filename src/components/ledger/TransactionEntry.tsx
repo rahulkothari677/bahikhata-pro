@@ -347,13 +347,16 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
     }
   })
 
-  const totalAmount = subtotal - totalDiscount + totalGst
-  const cgst = isInterState ? 0 : totalGst / 2
-  const sgst = isInterState ? 0 : totalGst / 2
-  const igst = isInterState ? totalGst : 0
+  // 💰 MONEY (Audit fix Phase 4): Round all money to 2 decimal places to
+  // prevent float precision drift. Was: totalGst / 2 → 9.000000000000002
+  const r = (n: number) => Math.round(n * 100) / 100
+  const totalAmount = r(subtotal - totalDiscount + totalGst)
+  const cgst = isInterState ? 0 : r(totalGst / 2)
+  const sgst = isInterState ? 0 : r(totalGst - cgst)  // ensures cgst + sgst === totalGst exactly
+  const igst = isInterState ? r(totalGst) : 0
   const paid = parseFloat(paidAmount) || 0
   const finalPaid = paidAmount === '' ? totalAmount : paid
-  const due = totalAmount - finalPaid
+  const due = r(totalAmount - finalPaid)
 
   const handleSave = async () => {
     if (items.length === 0) {

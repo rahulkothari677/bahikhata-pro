@@ -72,13 +72,17 @@ export function relativeTime(date: Date | string): string {
   return 'just now'
 }
 
-// GST helpers
+// GST helpers — 💰 MONEY (Audit fix Phase 4): round to 2 decimal places
+// to prevent float precision drift (was: gst / 2 → 9.000000000000002)
 export function calculateGST(amount: number, gstRate: number, isInterState: boolean) {
-  const gst = amount * gstRate / 100
+  const gst = Math.round(amount * gstRate / 100 * 100) / 100
   if (isInterState) {
     return { cgst: 0, sgst: 0, igst: gst }
   }
-  return { cgst: gst / 2, sgst: gst / 2, igst: 0 }
+  // Split GST: ensure cgst + sgst === gst exactly (no drift)
+  const cgst = Math.round(gst / 2 * 100) / 100
+  const sgst = Math.round((gst - cgst) * 100) / 100
+  return { cgst, sgst, igst: 0 }
 }
 
 // Get start of today, this week, this month
