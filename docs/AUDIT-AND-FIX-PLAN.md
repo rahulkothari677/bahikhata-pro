@@ -275,7 +275,7 @@ These cannot be done by me. They require licensed professionals or business deci
 
 ## 5. Phase Tracker
 
-### Phase 1 — Quick Critical Fixes (I'm doing this now)
+### Phase 1 — Quick Critical Fixes ✅ COMPLETE (committed a2cfa61)
 
 - [x] 1.1 Remove `NEXTAUTH_SECRET` fallback
 - [x] 1.2 Fix Prisma production logging
@@ -285,6 +285,13 @@ These cannot be done by me. They require licensed professionals or business deci
 - [x] 1.6 Drop dormant `CreditScoreCache` + `Partner` models
 - [x] 1.7 Raise password minimum to 8 characters
 - [x] Build verified + pushed to GitHub
+
+**Bug fixes found during build verification (pre-existing issues also fixed):**
+- Renamed `use-paywall.ts` → `.tsx` (JSX in .ts file)
+- Fixed type errors in `use-paywall`, `admin/features`, `CameraPreviewModal`, `calendar`, `resizable`
+- Added `@default(cuid())` + `@updatedAt` to `Referral`, `UsageTracking`, `FeatureFlag` models
+- Excluded `bahikhata-admin/`, `tool-results/`, config files from `tsconfig`
+- Installed 20+ missing npm dependencies (radix-ui, react-day-picker, react-hook-form, etc.)
 
 ### Phase 2 — After you complete the 3 setup tasks
 
