@@ -8,7 +8,9 @@ const DEFAULT_FLAGS = [
   { key: 'smart_insights', label: 'Smart Insights', description: 'AI-powered business insights and alerts', enabled: true },
   { key: 'recurring_entries', label: 'Recurring Entries', description: 'Auto-create rent/salary entries monthly', enabled: true },
   { key: 'new_signups', label: 'New Signups', description: 'Allow new user registrations', enabled: true },
-  { key: 'payments', label: 'Payment Processing', description: 'Enable subscription payments (Razorpay)', enabled: false },
+  // 🔒 AUDIT FIX A1: Enabled payments flag — was false, blocking all Razorpay
+  // payments even though the integration is fully wired. Users can now pay.
+  { key: 'payments', label: 'Payment Processing', description: 'Enable subscription payments (Razorpay)', enabled: true },
 ]
 
 export async function seedFeatureFlags() {

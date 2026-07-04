@@ -14,8 +14,11 @@
  * Historical calls keep their original cost (stored in AiUsageLog.costInr).
  */
 
-// Current USD to INR exchange rate (update periodically)
-export const USD_TO_INR = 84.5
+// 💰 AUDIT FIX A2: USD to INR exchange rate is now configurable via env var.
+// Was hardcoded at 84.5 which drifts over time and makes cost tracking
+// inaccurate. Now reads from USD_TO_INR env var with 84.5 as fallback.
+// Update the env var in Vercel when the exchange rate changes significantly.
+export const USD_TO_INR = parseFloat(process.env.USD_TO_INR || '84.5')
 
 export interface ModelPricing {
   inputPer1M: number   // USD per 1 million input tokens
