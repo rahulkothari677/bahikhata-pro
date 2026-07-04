@@ -1,0 +1,695 @@
+     1→'use client'
+     2→
+     3→import { useQuery } from '@tanstack/react-query'
+     4→import { useState } from 'react'
+     5→import { useAppStore } from '@/store/app-store'
+     6→import { useTranslation } from '@/hooks/use-translation'
+     7→import { SmartInsights } from '@/components/dashboard/SmartInsights'
+     8→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+     9→import { Button } from '@/components/ui/button'
+    10→import { Badge } from '@/components/ui/badge'
+    11→import { Skeleton } from '@/components/ui/skeleton'
+    12→import { DateRangePicker, getPresetRange, getPresetLabel, type DateRange, type DatePreset } from '@/components/common/DateRangePicker'
+    13→import {
+    14→  TrendingUp, TrendingDown, Wallet, Package,
+    15→  ArrowUpRight, ArrowDownRight, AlertTriangle, IndianRupee,
+    16→  Receipt, Boxes, PiggyBank, ScanLine, ArrowRight, Plus,
+    17→} from 'lucide-react'
+    18→import {
+    19→  Area, AreaChart, Bar, BarChart, CartesianGrid, Cell,
+    20→  Pie, PieChart, ResponsiveContainer, Tooltip,
+    21→  XAxis, YAxis,
+    22→} from 'recharts'
+    23→import { formatINR, formatINRCompact, relativeTime, cn } from '@/lib/utils'
+    24→import { motion } from 'framer-motion'
+    25→import { offlineFetch } from '@/lib/offline-fetch'
+    26→
+    27→const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)']
+    28→
+    29→export function Dashboard() {
+    30→  const { setView, refreshKey, setSelectedTransactionId, setPreviousView, setPendingDateRange } = useAppStore()
+    31→  const { t, language } = useTranslation()
+    32→  const [dateRange, setDateRange] = useState<DateRange>(() => getPresetRange('thisMonth'))
+    33→  const [datePreset, setDatePreset] = useState<DatePreset>('thisMonth')
+    34→
+    35→  const { data, isLoading } = useQuery({
+    36→    queryKey: ['dashboard', refreshKey, dateRange.from.toISOString(), dateRange.to.toISOString()],
+    37→    queryFn: async () => {
+    38→      const r = await offlineFetch(`/api/dashboard?from=${dateRange.from.toISOString()}&to=${dateRange.to.toISOString()}`)
+    39→      return r.json()
+    40→    },
+    41→  })
+    42→
+    43→  const handleDateChange = (range: DateRange, preset: DatePreset) => {
+    44→    setDateRange(range)
+    45→    setDatePreset(preset)
+    46→  }
+    47→
+    48→  // Navigate to {t('dash.sales_word')} ledger with a date filter applied
+    49→  const navigateToSalesWithDate = (from: Date, to: Date, presetLabel: string) => {
+    50→    setPendingDateRange({
+    51→      from: from.toISOString(),
+    52→      to: to.toISOString(),
+    53→      preset: presetLabel,
+    54→    })
+    55→    setPreviousView('dashboard')
+    56→    setView('sales')
+    57→  }
+    58→
+    59→  // Today's date range for "today" KPIs
+    60→  const todayStart = new Date()
+    61→  todayStart.setHours(0, 0, 0, 0)
+    62→
+    63→  if (isLoading || !data) {
+    64→    return (
+    65→      <div className="space-y-5">
+    66→        <DateRangeHeader
+    67→          dateRange={dateRange}
+    68→          datePreset={datePreset}
+    69→          onChange={handleDateChange}
+    70→          onPresetChange={setDatePreset}
+    71→        />
+    72→        <DashboardSkeleton />
+    73→      </div>
+    74→    )
+    75→  }
+    76→
+    77→  const { kpis, salesTrend, topProducts, categoryBreakdown, paymentModeSplit, lowStockProducts, gstSummary, recentTransactions, setting } = data
+    78→
+    79→  const rangeLabel = datePreset === 'custom' ? 'Selected Period' : getPresetLabel(datePreset)
+    80→
+    81→  // Empty state for new users (0 transactions)
+    82→  const isNewUser = kpis.totalStockValue === 0 && kpis.productCount === 0 && kpis.rangeTxnCount === 0 && recentTransactions.length === 0
+    83→
+    84→  if (isNewUser) {
+    85→    return (
+    86→      <div className="space-y-5">
+    87→        <DateRangeHeader
+    88→          dateRange={dateRange}
+    89→          datePreset={datePreset}
+    90→          onChange={handleDateChange}
+    91→          onPresetChange={setDatePreset}
+    92→        />
+    93→        {/* Empty state hero */}
+    94→        <div className="rounded-2xl bg-gradient-saffron p-8 lg:p-12 text-white shadow-lg relative overflow-hidden text-center">
+    95→          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32" />
+    96→          <div className="relative z-10">
+    97→            <div className="text-5xl mb-4">🏪</div>
+    98→            <h2 className="text-2xl font-bold mb-2">Welcome to BahiKhata Pro!</h2>
+    99→            <p className="text-white/80 text-sm max-w-md mx-auto mb-6">
+   100→              Your dashboard will come alive once you start recording sales. Here's how to get started in 2 minutes:
+   101→            </p>
+   102→            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl mx-auto">
+   103→              <button
+   104→                onClick={() => setView('new-sale')}
+   105→                className="bg-white/20 hover:bg-white/30 rounded-xl p-4 text-left transition active:scale-95"
+   106→              >
+   107→                <Plus className="w-6 h-6 mb-2" />
+   108→                <p className="font-semibold text-sm">1. Record a Sale</p>
+   109→                <p className="text-xs text-white/70 mt-1">Tap here to create your first sale entry</p>
+   110→              </button>
+   111→              <button
+   112→                onClick={() => setView('inventory')}
+   113→                className="bg-white/20 hover:bg-white/30 rounded-xl p-4 text-left transition active:scale-95"
+   114→              >
+   115→                <Package className="w-6 h-6 mb-2" />
+   116→                <p className="font-semibold text-sm">2. Add Products</p>
+   117→                <p className="text-xs text-white/70 mt-1">Add your inventory items with prices</p>
+   118→              </button>
+   119→              <button
+   120→                onClick={() => setView('scanner')}
+   121→                className="bg-white/20 hover:bg-white/30 rounded-xl p-4 text-left transition active:scale-95"
+   122→              >
+   123→                <ScanLine className="w-6 h-6 mb-2" />
+   124→                <p className="font-semibold text-sm">3. Scan a Bill</p>
+   125→                <p className="text-xs text-white/70 mt-1">AI scans any bill automatically</p>
+   126→              </button>
+   127→            </div>
+   128→          </div>
+   129→        </div>
+   130→
+   131→        {/* Quick stats (all zeros but shows the layout) */}
+   132→        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+   133→          {[
+   134→            { label: "Today's Revenue", value: '₹0', icon: IndianRupee, color: 'text-amber-600 bg-amber-100' },
+   135→            { label: "Today's Profit", value: '₹0', icon: TrendingUp, color: 'text-emerald-600 bg-emerald-100' },
+   136→            { label: 'Products', value: '0', icon: Package, color: 'text-blue-600 bg-blue-100' },
+   137→            { label: 'Customers', value: '0', icon: Wallet, color: 'text-violet-600 bg-violet-100' },
+   138→          ].map((stat, i) => {
+   139→            const Icon = stat.icon
+   140→            return (
+   141→              <Card key={i} className="shadow-card border-border/60">
+   142→                <CardContent className="p-4">
+   143→                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-2 ${stat.color}`}>
+   144→                    <Icon className="w-5 h-5" />
+   145→                  </div>
+   146→                  <p className="text-2xl font-bold">{stat.value}</p>
+   147→                  <p className="text-xs text-muted-foreground mt-1">{stat.label}</p>
+   148→                </CardContent>
+   149→              </Card>
+   150→            )
+   151→          })}
+   152→        </div>
+   153→      </div>
+   154→    )
+   155→  }
+   156→
+   157→  return (
+   158→    <div className="space-y-5">
+   159→      {/* Greeting banner */}
+   160→      <motion.div
+   161→        initial={{ opacity: 0, y: -10 }}
+   162→        animate={{ opacity: 1, y: 0 }}
+   163→        className="rounded-2xl bg-gradient-saffron p-5 lg:p-6 text-white shadow-lg relative overflow-hidden"
+   164→      >
+   165→        <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32" />
+   166→        <div className="absolute bottom-0 right-20 w-40 h-40 bg-white/5 rounded-full -mb-20" />
+   167→        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+   168→          <div>
+   169→            <p className="text-white/80 text-sm font-medium">{t('dash.greeting')}, {setting?.ownerName || 'Shop Owner'} 🙏</p>
+   170→            <h2 className="text-2xl lg:text-3xl font-bold mt-1">{setting?.shopName || 'My Shop'}</h2>
+   171→            <p className="text-white/80 text-sm mt-1">
+   172→              {t('dash.today_made')} <span className="font-bold text-white">{formatINR(kpis.todayRevenue)}</span> {t('dash.from')} <span className="font-bold text-white">{kpis.todayTxnCount}</span> {t('dash.sales_word')}
+   173→            </p>
+   174→          </div>
+   175→          <div className="flex gap-2 flex-wrap">
+   176→            <Button
+   177→              onClick={() => setView('new-sale')}
+   178→              className="bg-white text-primary hover:bg-white/90 gap-2 shadow-md"
+   179→            >
+   180→              <Plus className="w-4 h-4" />
+   181→              New Sale
+   182→            </Button>
+   183→            <Button
+   184→              onClick={() => setView('scanner')}
+   185→              variant="outline"
+   186→              className="bg-white/10 text-white border-white/30 hover:bg-white/20 hover:text-white gap-2"
+   187→            >
+   188→              <ScanLine className="w-4 h-4" />
+   189→              {t('dash.scan_bill')}
+   190→            </Button>
+   191→          </div>
+   192→        </div>
+   193→      </motion.div>
+   194→
+   195→      {/* Date range selector + KPI header */}
+   196→      <div className="flex items-center justify-between gap-3 flex-wrap">
+   197→        <div>
+   198→          <h3 className="text-base font-semibold">{t('dash.business_overview')}</h3>
+   199→          <p className="text-xs text-muted-foreground">{t('dash.filter_hint')}</p>
+   200→        </div>
+   201→        <DateRangePicker value={dateRange} onChange={handleDateChange} preset={datePreset} onPresetChange={setDatePreset} />
+   202→      </div>
+   203→
+   204→      {/* KPI Cards */}
+   205→      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
+   206→        <KPICard
+   207→          title={t('dash.today_revenue')}
+   208→          value={formatINR(kpis.todayRevenue)}
+   209→          icon={IndianRupee}
+   210→          gradient="from-amber-500 to-orange-600"
+   211→          subtitle={`${kpis.todayTxnCount} ${t('dash.sales_word')}`}
+   212→          onClick={() => navigateToSalesWithDate(todayStart, new Date(), 'Today')}
+   213→        />
+   214→        <KPICard
+   215→          title={t('dash.today_profit')}
+   216→          value={formatINR(kpis.todayProfit)}
+   217→          icon={TrendingUp}
+   218→          gradient="from-emerald-500 to-teal-600"
+   219→          subtitle={`${t('stat.margin')} ${kpis.todayRevenue > 0 ? ((kpis.todayProfit / kpis.todayRevenue) * 100).toFixed(1) : 0}%`}
+   220→          onClick={() => navigateToSalesWithDate(todayStart, new Date(), 'Today')}
+   221→        />
+   222→        <KPICard
+   223→          title={`${rangeLabel} Revenue`}
+   224→          value={formatINR(kpis.rangeRevenue)}
+   225→          icon={Wallet}
+   226→          gradient="from-rose-500 to-pink-600"
+   227→          subtitle={`${kpis.rangeTxnCount} ${t('dash.sales_word')} • ${kpis.revenueGrowth >= 0 ? '↑' : '↓'} ${Math.abs(kpis.revenueGrowth).toFixed(1)}% vs prev`}
+   228→          trend={kpis.revenueGrowth >= 0 ? 'up' : 'down'}
+   229→          onClick={() => navigateToSalesWithDate(dateRange.from, dateRange.to, rangeLabel)}
+   230→        />
+   231→        <KPICard
+   232→          title={`${t('dash.net_profit')} (${rangeLabel})`}
+   233→          value={formatINR(kpis.netProfit)}
+   234→          icon={PiggyBank}
+   235→          gradient="from-violet-500 to-purple-600"
+   236→          subtitle={`${kpis.profitGrowth >= 0 ? '↑' : '↓'} ${Math.abs(kpis.profitGrowth).toFixed(1)}% profit trend`}
+   237→          trend={kpis.profitGrowth >= 0 ? 'up' : 'down'}
+   238→          onClick={() => navigateToSalesWithDate(dateRange.from, dateRange.to, rangeLabel)}
+   239→        />
+   240→      </div>
+   241→
+   242→      {/* Secondary KPIs */}
+   243→      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
+   244→        <MiniStatCard
+   245→          label={t('dash.receivable')}
+   246→          value={formatINR(kpis.totalReceivable)}
+   247→          icon={ArrowDownRight}
+   248→          color="text-emerald-600"
+   249→          onClick={() => setView('parties')}
+   250→        />
+   251→        <MiniStatCard
+   252→          label={t('dash.payable')}
+   253→          value={formatINR(kpis.totalPayable)}
+   254→          icon={ArrowUpRight}
+   255→          color="text-rose-600"
+   256→          onClick={() => setView('parties')}
+   257→        />
+   258→        <MiniStatCard
+   259→          label={t('dash.stock_value')}
+   260→          value={formatINR(kpis.totalStockValue)}
+   261→          icon={Boxes}
+   262→          color="text-amber-600"
+   263→          onClick={() => setView('inventory')}
+   264→        />
+   265→        <MiniStatCard
+   266→          label={`${t('dash.gst_summary')} (${rangeLabel})`}
+   267→          value={formatINR(gstSummary.netPayable)}
+   268→          icon={Receipt}
+   269→          color="text-violet-600"
+   270→          onClick={() => setView('reports')}
+   271→        />
+   272→      </div>
+   273→
+   274→      {/* Sales trend chart - full width */}
+   275→      <Card className="shadow-card border-border/60">
+   276→        <CardHeader className="pb-2">
+   277→          <div className="flex items-center justify-between">
+   278→            <div>
+   279→              <CardTitle className="text-base font-semibold">{t('dash.sales_trend')}</CardTitle>
+   280→              <p className="text-xs text-muted-foreground mt-0.5">For selected date range</p>
+   281→            </div>
+   282→            <Badge variant="secondary" className="gap-1">
+   283→              <TrendingUp className="w-3 h-3" />
+   284→              {salesTrend.length} points
+   285→            </Badge>
+   286→          </div>
+   287→        </CardHeader>
+   288→        <CardContent>
+   289→          <ResponsiveContainer width="100%" height={280}>
+   290→            <AreaChart data={salesTrend} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+   291→              <defs>
+   292→                <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
+   293→                  <stop offset="0%" stopColor="oklch(0.62 0.18 42)" stopOpacity={0.4} />
+   294→                  <stop offset="100%" stopColor="oklch(0.62 0.18 42)" stopOpacity={0} />
+   295→                </linearGradient>
+   296→                <linearGradient id="color{t('common.profit')}" x1="0" y1="0" x2="0" y2="1">
+   297→                  <stop offset="0%" stopColor="oklch(0.62 0.15 155)" stopOpacity={0.4} />
+   298→                  <stop offset="100%" stopColor="oklch(0.62 0.15 155)" stopOpacity={0} />
+   299→                </linearGradient>
+   300→              </defs>
+   301→              <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.91 0.01 60)" vertical={false} />
+   302→              <XAxis dataKey="label" tick={{ fontSize: 11, fill: 'oklch(0.52 0.02 30)' }} axisLine={false} tickLine={false} />
+   303→              <YAxis tick={{ fontSize: 11, fill: 'oklch(0.52 0.02 30)' }} axisLine={false} tickLine={false} tickFormatter={(v) => formatINRCompact(v)} />
+   304→              <Tooltip
+   305→                contentStyle={{ borderRadius: '12px', border: '1px solid oklch(0.91 0.01 60)', fontSize: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}
+   306→                formatter={(v: number) => formatINR(v)}
+   307→              />
+   308→              <Area type="monotone" dataKey="revenue" stroke="oklch(0.62 0.18 42)" strokeWidth={2} fill="url(#colorRev)" name="Revenue" />
+   309→              <Area type="monotone" dataKey="profit" stroke="oklch(0.62 0.15 155)" strokeWidth={2} fill="url(#colorProfit)" name={t('common.profit')} />
+   310→            </AreaChart>
+   311→          </ResponsiveContainer>
+   312→        </CardContent>
+   313→      </Card>
+   314→
+   315→      {/* 3-column row */}
+   316→      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+   317→        {/* Top products */}
+   318→        <Card className="shadow-card border-border/60 lg:col-span-2">
+   319→          <CardHeader className="pb-2">
+   320→            <div className="flex items-center justify-between">
+   321→              <div>
+   322→                <CardTitle className="text-base font-semibold">{t('dash.top_products')}</CardTitle>
+   323→                <p className="text-xs text-muted-foreground">For selected date range</p>
+   324→              </div>
+   325→              <Button variant="ghost" size="sm" className="text-xs h-7 gap-1" onClick={() => setView('inventory')}>
+   326→                {t('dash.view_all')} <ArrowRight className="w-3 h-3" />
+   327→              </Button>
+   328→            </div>
+   329→          </CardHeader>
+   330→          <CardContent>
+   331→            {topProducts.length === 0 ? (
+   332→              <div className="text-center py-10 text-sm text-muted-foreground">No {t('dash.sales_word')} in selected range</div>
+   333→            ) : (
+   334→              <ResponsiveContainer width="100%" height={260}>
+   335→                <BarChart data={topProducts} layout="vertical" margin={{ top: 0, right: 10, left: 0, bottom: 0 }}>
+   336→                  <CartesianGrid strokeDasharray="3 3" stroke="oklch(0.91 0.01 60)" horizontal={false} />
+   337→                  <XAxis type="number" tick={{ fontSize: 11, fill: 'oklch(0.52 0.02 30)' }} axisLine={false} tickLine={false} tickFormatter={(v) => formatINRCompact(v)} />
+   338→                  <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: 'oklch(0.18 0.02 30)' }} axisLine={false} tickLine={false} width={130}
+   339→                    tickFormatter={(v) => v.length > 18 ? v.slice(0, 18) + '…' : v}
+   340→                  />
+   341→                  <Tooltip
+   342→                    contentStyle={{ borderRadius: '12px', border: '1px solid oklch(0.91 0.01 60)', fontSize: 12 }}
+   343→                    formatter={(v: number, name: string) => name === 'revenue' ? [formatINR(v), 'Revenue'] : [formatINR(v), 'Profit']}
+   344→                  />
+   345→                  <Bar dataKey="revenue" fill="oklch(0.62 0.18 42)" radius={[0, 6, 6, 0]} barSize={18} name="revenue" />
+   346→                </BarChart>
+   347→              </ResponsiveContainer>
+   348→            )}
+   349→          </CardContent>
+   350→        </Card>
+   351→
+   352→        {/* Payment mode pie */}
+   353→        <Card className="shadow-card border-border/60">
+   354→          <CardHeader className="pb-2">
+   355→            <CardTitle className="text-base font-semibold">{t('dash.payment_modes')}</CardTitle>
+   356→            <p className="text-xs text-muted-foreground">For selected date range</p>
+   357→          </CardHeader>
+   358→          <CardContent>
+   359→            {paymentModeSplit.length === 0 ? (
+   360→              <div className="text-center py-10 text-sm text-muted-foreground">No data</div>
+   361→            ) : (
+   362→              <>
+   363→                <ResponsiveContainer width="100%" height={180}>
+   364→                  <PieChart>
+   365→                    <Pie
+   366→                      data={paymentModeSplit}
+   367→                      dataKey="value"
+   368→                      nameKey="name"
+   369→                      cx="50%" cy="50%"
+   370→                      innerRadius={45} outerRadius={70}
+   371→                      paddingAngle={2}
+   372→                    >
+   373→                      {paymentModeSplit.map((_, i) => (
+   374→                        <Cell key={i} fill={COLORS[i % COLORS.length]} />
+   375→                      ))}
+   376→                    </Pie>
+   377→                    <Tooltip formatter={(v: number) => formatINR(v)} contentStyle={{ borderRadius: 12, fontSize: 12 }} />
+   378→                  </PieChart>
+   379→                </ResponsiveContainer>
+   380→                <div className="grid grid-cols-2 gap-2 mt-3">
+   381→                  {paymentModeSplit.map((p, i) => (
+   382→                    <div key={p.name} className="flex items-center gap-2">
+   383→                      <div className="w-2.5 h-2.5 rounded-full" style={{ background: COLORS[i % COLORS.length] }} />
+   384→                      <div className="text-xs">
+   385→                        <span className="font-medium">{p.name}</span>
+   386→                        <span className="text-muted-foreground ml-1">{formatINRCompact(p.value)}</span>
+   387→                      </div>
+   388→                    </div>
+   389→                  ))}
+   390→                </div>
+   391→              </>
+   392→            )}
+   393→          </CardContent>
+   394→        </Card>
+   395→      </div>
+   396→
+   397→      {/* Category breakdown & low stock */}
+   398→      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+   399→        {/* Category breakdown */}
+   400→        <Card className="shadow-card border-border/60 lg:col-span-2">
+   401→          <CardHeader className="pb-2">
+   402→            <CardTitle className="text-base font-semibold">{t('dash.category_breakdown')}</CardTitle>
+   403→            <p className="text-xs text-muted-foreground">For selected date range</p>
+   404→          </CardHeader>
+   405→          <CardContent>
+   406→            {categoryBreakdown.length === 0 ? (
+   407→              <div className="text-center py-10 text-sm text-muted-foreground">No {t('dash.sales_word')} in selected range</div>
+   408→            ) : (
+   409→              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3">
+   410→                {(() => {
+   411→                  const total = categoryBreakdown.reduce((s: number, c: any) => s + c.value, 0)
+   412→                  return categoryBreakdown.slice(0, 8).map((cat: any, i: number) => {
+   413→                    const pct = (cat.value / total) * 100
+   414→                    return (
+   415→                      <div key={cat.name}>
+   416→                        <div className="flex items-center justify-between mb-1">
+   417→                          <span className="text-xs font-medium">{cat.name}</span>
+   418→                          <span className="text-xs text-muted-foreground">{formatINRCompact(cat.value)}</span>
+   419→                        </div>
+   420→                        <div className="h-2 rounded-full bg-muted overflow-hidden">
+   421→                          <div
+   422→                            className="h-full rounded-full transition-all"
+   423→                            style={{ width: `${pct}%`, background: COLORS[i % COLORS.length] }}
+   424→                          />
+   425→                        </div>
+   426→                      </div>
+   427→                    )
+   428→                  })
+   429→                })()}
+   430→              </div>
+   431→            )}
+   432→          </CardContent>
+   433→        </Card>
+   434→
+   435→        {/* {t('dash.low_stock_short')} stock alerts */}
+   436→        <Card className="shadow-card border-border/60">
+   437→          <CardHeader className="pb-2">
+   438→            <div className="flex items-center justify-between">
+   439→              <div className="flex items-center gap-2">
+   440→                <div className="w-8 h-8 rounded-lg bg-rose-100 flex items-center justify-center">
+   441→                  <AlertTriangle className="w-4 h-4 text-rose-600" />
+   442→                </div>
+   443→                <div>
+   444→                  <CardTitle className="text-base font-semibold">{t('dash.low_stock')}</CardTitle>
+   445→                  <p className="text-xs text-muted-foreground">{lowStockProducts.length} {t('dash.need_restock')}</p>
+   446→                </div>
+   447→              </div>
+   448→              <Button variant="ghost" size="sm" className="text-xs h-7 gap-1" onClick={() => setView('inventory')}>
+   449→                {t('dash.manage')} <ArrowRight className="w-3 h-3" />
+   450→              </Button>
+   451→            </div>
+   452→          </CardHeader>
+   453→          <CardContent>
+   454→            {lowStockProducts.length === 0 ? (
+   455→              <div className="text-center py-8 text-sm text-muted-foreground">
+   456→                <Package className="w-10 h-10 mx-auto mb-2 text-emerald-500" />
+   457→                All products well stocked!
+   458→              </div>
+   459→            ) : (
+   460→              <div className="space-y-2 max-h-72 overflow-y-auto">
+   461→                {lowStockProducts.slice(0, 6).map((p: any) => (
+   462→                  <div key={p.id} className="flex items-center justify-between p-2.5 rounded-lg bg-rose-50/50 dark:bg-rose-950/30 border border-rose-100 dark:border-rose-900">
+   463→                    <div className="min-w-0">
+   464→                      <p className="text-sm font-medium truncate">{p.name}</p>
+   465→                      <p className="text-[11px] text-muted-foreground">{p.category} • Stock: {p.currentStock} {p.unit}</p>
+   466→                    </div>
+   467→                    <Badge variant="destructive" className="text-[10px]">
+   468→                      {p.currentStock === 0 ? t('dash.out_of_stock') : t('dash.low_stock_short')}
+   469→                    </Badge>
+   470→                  </div>
+   471→                ))}
+   472→              </div>
+   473→            )}
+   474→          </CardContent>
+   475→        </Card>
+   476→      </div>
+   477→
+   478→      {/* Recent transactions & {t('dash.gst_summary')} summary */}
+   479→      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+   480→        {/* Recent transactions */}
+   481→        <Card className="shadow-card border-border/60">
+   482→          <CardHeader className="pb-2">
+   483→            <div className="flex items-center justify-between">
+   484→              <div className="flex items-center gap-2">
+   485→                <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center">
+   486→                  <Receipt className="w-4 h-4 text-amber-600" />
+   487→                </div>
+   488→                <div>
+   489→                  <CardTitle className="text-base font-semibold">{t('dash.recent_transactions')}</CardTitle>
+   490→                  <p className="text-xs text-muted-foreground">{t('dash.latest_activity')}</p>
+   491→                </div>
+   492→              </div>
+   493→              <Button variant="ghost" size="sm" className="text-xs h-7 gap-1" onClick={() => setView('sales')}>
+   494→                {t('dash.view_all')} <ArrowRight className="w-3 h-3" />
+   495→              </Button>
+   496→            </div>
+   497→          </CardHeader>
+   498→          <CardContent>
+   499→            {recentTransactions.length === 0 ? (
+   500→              <div className="text-center py-8 text-sm text-muted-foreground">No transactions yet</div>
+   501→            ) : (
+   502→              <div className="space-y-2 max-h-72 overflow-y-auto">
+   503→                {recentTransactions.map((txn: any) => {
+   504→                  const isSale = txn.type === 'sale'
+   505→                  const isIncome = txn.type === 'income'
+   506→                  const isInflow = isSale || isIncome
+   507→                  return (
+   508→                    <button
+   509→                      key={txn.id}
+   510→                      onClick={() => {
+   511→                        setSelectedTransactionId(txn.id)
+   512→                        setPreviousView('dashboard')
+   513→                        setView('transaction-detail')
+   514→                      }}
+   515→                      className="w-full flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted/50 transition text-left"
+   516→                    >
+   517→                      <div className={cn(
+   518→                        'w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0',
+   519→                        isInflow ? 'bg-emerald-100' : 'bg-rose-100'
+   520→                      )}>
+   521→                        {isInflow ? (
+   522→                          <ArrowDownRight className="w-4 h-4 text-emerald-600" />
+   523→                        ) : (
+   524→                          <ArrowUpRight className="w-4 h-4 text-rose-600" />
+   525→                        )}
+   526→                      </div>
+   527→                      <div className="flex-1 min-w-0">
+   528→                        <p className="text-sm font-medium truncate">
+   529→                          {txn.partyName}
+   530→                          {txn.invoiceNo && <span className="text-muted-foreground text-xs ml-1">• {txn.invoiceNo}</span>}
+   531→                        </p>
+   532→                        <p className="text-[11px] text-muted-foreground capitalize">
+   533→                          {txn.type} • {relativeTime(txn.date)} • {txn.paymentMode}
+   534→                        </p>
+   535→                      </div>
+   536→                      <div className="text-right flex-shrink-0">
+   537→                        <p className={cn('text-sm font-semibold', isInflow ? 'text-emerald-600' : 'text-rose-600')}>
+   538→                          {isInflow ? '+' : '-'}{formatINRCompact(txn.totalAmount)}
+   539→                        </p>
+   540→                        {isSale && txn.profit !== undefined && (
+   541→                          <p className="text-[10px] text-muted-foreground">
+   542→                            {t('common.profit')} {formatINRCompact(txn.profit)}
+   543→                          </p>
+   544→                        )}
+   545→                      </div>
+   546→                    </button>
+   547→                  )
+   548→                })}
+   549→              </div>
+   550→            )}
+   551→          </CardContent>
+   552→        </Card>
+   553→
+   554→        {/* {t('dash.gst_summary')} summary */}
+   555→        <Card className="shadow-card border-border/60">
+   556→          <CardHeader className="pb-2">
+   557→            <div className="flex items-center justify-between">
+   558→              <CardTitle className="text-base font-semibold">{t('dash.gst_summary')} ({rangeLabel})</CardTitle>
+   559→              <Button variant="ghost" size="sm" className="text-xs h-7 gap-1" onClick={() => setView('reports')}>
+   560→                {t('dash.full_report')} <ArrowRight className="w-3 h-3" />
+   561→              </Button>
+   562→            </div>
+   563→          </CardHeader>
+   564→          <CardContent>
+   565→            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+   566→              <GstMiniStat label="Output Tax (Sales)" value={gstSummary.outputTax} color="text-amber-600" />
+   567→              <GstMiniStat label="Input Tax (Purchase)" value={gstSummary.inputTax} color="text-emerald-600" />
+   568→              <GstMiniStat label="CGST + SGST" value={gstSummary.cgst + gstSummary.sgst} color="text-violet-600" />
+   569→              <GstMiniStat label="Net GST Payable" value={gstSummary.netPayable} color={gstSummary.netPayable >= 0 ? 'text-rose-600' : 'text-emerald-600'} highlight />
+   570→            </div>
+   571→          </CardContent>
+   572→        </Card>
+   573→      </div>
+   574→
+   575→      {/* {t('dash.smart_insights')} - AI-powered alerts */}
+   576→      {kpis && <SmartInsights />}
+   577→    </div>
+   578→  )
+   579→}
+   580→
+   581→function KPICard({ title, value, icon: Icon, gradient, subtitle, trend, onClick }: {
+   582→  title: string
+   583→  value: string
+   584→  icon: any
+   585→  gradient: string
+   586→  subtitle?: string
+   587→  trend?: 'up' | 'down'
+   588→  onClick?: () => void
+   589→}) {
+   590→  return (
+   591→    <motion.div
+   592→      initial={{ opacity: 0, y: 10 }}
+   593→      animate={{ opacity: 1, y: 0 }}
+   594→    >
+   595→      <Card
+   596→        className={`shadow-card border-border/60 overflow-hidden relative transition ${onClick ? 'cursor-pointer hover:shadow-md hover:border-primary/30' : ''}`}
+   597→        onClick={onClick}
+   598→      >
+   599→        <div className={`absolute top-0 right-0 w-20 h-20 bg-gradient-to-br ${gradient} opacity-10 rounded-full -mr-8 -mt-8`} />
+   600→        <CardContent className="p-4 lg:p-5 relative">
+   601→          <div className="flex items-start justify-between mb-3">
+   602→            <div className={`w-9 h-9 rounded-lg bg-gradient-to-br ${gradient} flex items-center justify-center shadow-md`}>
+   603→              <Icon className="w-4 h-4 text-white" />
+   604→            </div>
+   605→            {trend && (
+   606→              <div className={cn('flex items-center text-xs font-medium', trend === 'up' ? 'text-emerald-600' : 'text-rose-600')}>
+   607→                {trend === 'up' ? <TrendingUp className="w-3 h-3 mr-0.5" /> : <TrendingDown className="w-3 h-3 mr-0.5" />}
+   608→              </div>
+   609→            )}
+   610→          </div>
+   611→          <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">{title}</p>
+   612→          <p className="text-xl lg:text-2xl font-bold mt-0.5 tracking-tight">{value}</p>
+   613→          {subtitle && <p className="text-[11px] text-muted-foreground mt-1">{subtitle}</p>}
+   614→        </CardContent>
+   615→      </Card>
+   616→    </motion.div>
+   617→  )
+   618→}
+   619→
+   620→function MiniStatCard({ label, value, icon: Icon, color, onClick }: {
+   621→  label: string
+   622→  value: string
+   623→  icon: any
+   624→  color: string
+   625→  onClick?: () => void
+   626→}) {
+   627→  return (
+   628→    <Card
+   629→      className="shadow-card border-border/60 hover:shadow-md transition cursor-pointer"
+   630→      onClick={onClick}
+   631→    >
+   632→      <CardContent className="p-3 lg:p-4">
+   633→        <div className="flex items-center gap-2 mb-1">
+   634→          <Icon className={cn('w-3.5 h-3.5', color)} />
+   635→          <p className="text-[10px] lg:text-[11px] text-muted-foreground font-medium uppercase tracking-wide leading-tight">{label}</p>
+   636→        </div>
+   637→        <p className="text-base lg:text-lg font-bold tracking-tight">{value}</p>
+   638→      </CardContent>
+   639→    </Card>
+   640→  )
+   641→}
+   642→
+   643→function GstMiniStat({ label, value, color, highlight }: {
+   644→  label: string
+   645→  value: number
+   646→  color: string
+   647→  highlight?: boolean
+   648→}) {
+   649→  return (
+   650→    <div className={cn('rounded-lg p-3 border', highlight ? 'bg-muted/50 border-primary/30' : 'bg-card border-border')}>
+   651→      <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">{label}</p>
+   652→      <p className={cn('text-base font-bold mt-1', color)}>{formatINR(value)}</p>
+   653→    </div>
+   654→  )
+   655→}
+   656→
+   657→function DashboardSkeleton() {
+   658→  return (
+   659→    <div className="space-y-5">
+   660→      <Skeleton className="h-32 w-full rounded-2xl" />
+   661→      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+   662→        {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-32 rounded-xl" />)}
+   663→      </div>
+   664→      <Skeleton className="h-80 w-full rounded-xl" />
+   665→      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+   666→        <Skeleton className="h-72 rounded-xl lg:col-span-2" />
+   667→        <Skeleton className="h-72 rounded-xl" />
+   668→      </div>
+   669→    </div>
+   670→  )
+   671→}
+   672→
+   673→// Header with date range picker - shown even during loading so preset state persists
+   674→function DateRangeHeader({ dateRange, datePreset, onChange, onPresetChange }: {
+   675→  dateRange: DateRange
+   676→  datePreset: DatePreset
+   677→  onChange: (range: DateRange, preset: DatePreset) => void
+   678→  onPresetChange: (preset: DatePreset) => void
+   679→}) {
+   680→  return (
+   681→    <div className="flex items-center justify-between gap-3 flex-wrap">
+   682→      <div>
+   683→        <h3 className="text-base font-semibold">Business Overview</h3>
+   684→        <p className="text-xs text-muted-foreground">Filter all charts and stats by date range</p>
+   685→      </div>
+   686→      <DateRangePicker
+   687→        value={dateRange}
+   688→        onChange={onChange}
+   689→        preset={datePreset}
+   690→        onPresetChange={onPresetChange}
+   691→      />
+   692→    </div>
+   693→  )
+   694→}
+   695→

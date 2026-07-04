@@ -1,0 +1,289 @@
+// BahiKhata Pro — India's Best Ledger App
+// Database schema for shop owners: products, parties, transactions, GST, etc.
+// Multi-tenant: every model has userId for data isolation
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==================== USERS (Authentication) ====================
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String?
+  password      String    // hashed with bcrypt
+  phone         String?   // for future phone OTP
+  emailVerified DateTime? // for future email verification
+  image         String?   // profile picture URL
+  role          String    @default("owner") // owner | staff
+  ownerId       String?   // if staff, links to the owner's account
+
+  // Subscription fields (inline for fast access)
+  plan          String    @default("free") // free | pro | business | enterprise
+  trialEndsAt   DateTime? // when the free trial ends (null = no trial)
+  renewsAt      DateTime? // when the current plan renews (null = free plan)
+  cancelledAt   DateTime? // when user cancelled (still has access until renewsAt)
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations — every user has their own shop data
+  products      Product[]
+  parties       Party[]
+  transactions  Transaction[]
+  payments      Payment[]
+  settings      Setting[]
+  auditLogs     AuditLog[]
+  subscriptions Subscription[]
+  usageTracking UsageTracking[]
+  referralsMade      Referral[] @relation("ReferralsMade")
+  referralsReceived  Referral?  @relation("ReferralsReceived")
+}
+
+// ==================== PRODUCTS / INVENTORY ====================
+model Product {
+  id                String   @id @default(cuid())
+  userId            String   // owner of this product
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name              String
+  sku               String?
+  hsn               String?  // HSN/SAC code for GST
+  category          String?
+  unit              String   @default("pcs") // pcs, kg, ltr, m, box
+  purchasePrice     Float    @default(0)  // price at which shop owner buys
+  salePrice         Float    @default(0)  // price at which shop owner sells
+  mrp               Float?   // MRP printed on product
+  gstRate           Float    @default(0)  // 0, 5, 12, 18, 28
+  openingStock      Float    @default(0)
+  lowStockThreshold Float    @default(5)
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  transactionItems  TransactionItem[]
+
+  // Unique SKU per user (not globally)
+  @@unique([userId, sku])
+  // Performance: list products per user, search by name within user
+  @@index([userId, name])
+  @@index([userId, category])
+}
+
+// ==================== PARTIES (Customers & Suppliers) ====================
+model Party {
+  id              String   @id @default(cuid())
+  userId          String   // owner of this party
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name            String
+  type            String   @default("customer") // customer | supplier | both
+  phone           String?
+  email           String?
+  gstin           String?  // GST Identification Number
+  address         String?
+  state           String?  // for intra/inter state GST
+  openingBalance  Float    @default(0) // positive = they owe us; negative = we owe them
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  transactions    Transaction[]
+  payments        Payment[]
+}
+
+// ==================== TRANSACTIONS (Sales, Purchases, Income, Expense) ====================
+model Transaction {
+  id             String   @id @default(cuid())
+  userId         String   // owner of this transaction
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  invoiceNo      String?  // bill/invoice number from bill
+  type           String   // sale | purchase | income | expense
+  partyId        String?  // customer for sale, supplier for purchase
+  party          Party?   @relation(fields: [partyId], references: [id])
+  date           DateTime @default(now())
+  subtotal       Float    @default(0)  // before tax & discount
+  discountAmount Float    @default(0)
+  cgst           Float    @default(0)
+  sgst           Float    @default(0)
+  igst           Float    @default(0)
+  totalAmount    Float    @default(0)  // final payable
+  paidAmount     Float    @default(0)  // amount actually paid
+  paymentMode    String   @default("cash") // cash | upi | card | bank | credit
+  isInterState   Boolean  @default(false)
+  notes          String?
+  // For income/expense (no items)
+  category       String?  // e.g. rent, salary, electricity for expenses; commission etc for income
+  // Payee info for income/expense (who you paid or received from)
+  payeeName      String?  // name of person you paid / received from
+  payeePhone     String?  // mobile number of payee
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  items          TransactionItem[]
+
+  // Auto-computed gross profit when type=sale
+  grossProfit    Float    @default(0)
+
+  // Performance: list transactions per user filtered by date and/or type
+  // Used by: dashboard, ledger (sales/purchases), reports
+  @@index([userId, date])
+  @@index([userId, type, date])
+  @@index([userId, partyId])
+}
+
+model TransactionItem {
+  id             String   @id @default(cuid())
+  transactionId  String
+  transaction    Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  productId      String?
+  product        Product?  @relation(fields: [productId], references: [id])
+  productName    String   // snapshot of name at time of transaction
+  quantity       Float    @default(1)
+  unitPrice      Float    @default(0)  // price per unit (sale or purchase)
+  gstRate        Float    @default(0)
+  discountAmount Float    @default(0)
+  total          Float    @default(0)  // qty * unitPrice - discount + gst
+
+  createdAt      DateTime @default(now())
+}
+
+// ==================== PAYMENTS (separate from transaction totals) ====================
+model Payment {
+  id          String   @id @default(cuid())
+  userId      String   // owner of this payment
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  partyId     String
+  party       Party    @relation(fields: [partyId], references: [id])
+  amount      Float
+  date        DateTime @default(now())
+  mode        String   @default("cash") // cash | upi | card | bank
+  type        String   @default("received") // received (from customer) | paid (to supplier)
+  notes       String?
+  createdAt   DateTime @default(now())
+}
+
+// ==================== APP SETTINGS (per user) ====================
+model Setting {
+  id        String   @id @default(cuid())
+  userId    String   @unique // one setting per user
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shopName  String   @default("My Shop")
+  ownerName String?
+  address   String?
+  phone     String?
+  gstin     String?
+  state     String?
+  email     String?
+  currency  String   @default("INR")
+  language  String   @default("en")
+}
+
+// ==================== AUDIT LOG (security & compliance) ====================
+// Track every important action: logins, data exports, deletes, role changes.
+// Used for: security forensics, compliance (DPDP Act), dispute resolution.
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?  // user who performed the action (null = unauthenticated attempt)
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String   // login_success | login_failure | logout | data_export | data_delete | role_change | settings_update | etc.
+  entityType String?  // product | party | transaction | setting | user | staff
+  entityId   String?  // ID of the affected entity
+  ip         String?  // IP address of the actor
+  userAgent  String?  // browser/device info
+  metadata   Json?    // any extra context (what changed, what was exported, etc.)
+  createdAt  DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([action, createdAt])
+}
+
+// ==================== SUBSCRIPTIONS (Payment History) ====================
+model Subscription {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan            String   // pro | business | enterprise
+  status          String   @default("active") // active | cancelled | expired | failed
+  amount          Float    // amount paid in INR
+  paymentMode     String   @default("razorpay") // razorpay | manual | referral
+  paymentId       String?  // Razorpay payment ID
+  subscriptionId  String?  // Razorpay subscription ID
+  startDate       DateTime @default(now())
+  endDate         DateTime // when this billing period ends
+  createdAt       DateTime @default(now())
+
+  @@index([userId, status])
+  @@index([status, createdAt])
+}
+
+// ==================== USAGE TRACKING (Monthly) ====================
+// Tracks how many transactions + AI scans each user has done this month.
+// Used to enforce free tier limits.
+model UsageTracking {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  month           String   // YYYY-MM format (e.g. "2026-06")
+  transactions    Int      @default(0) // count of sales + purchases this month
+  aiScans         Int      @default(0) // count of AI bill scans this month
+  voiceParses     Int      @default(0) // count of voice entries this month
+  products        Int      @default(0) // count of products created this month
+  updatedAt       DateTime @updatedAt
+
+  @@unique([userId, month]) // one record per user per month
+  @@index([userId, month])
+}
+
+// ==================== FEATURE FLAGS (Remote Control) ====================
+// Admin can toggle features on/off globally without deploying new code.
+// Checked at runtime by the app before enabling a feature.
+model FeatureFlag {
+  id          String   @id @default(cuid())
+  key         String   @unique // e.g. "ai_scanner", "voice_entry", "gstr_export"
+  enabled     Boolean  @default(true) // global on/off
+  label       String   // human-readable name
+  description String?  // what this flag controls
+  updatedAt   DateTime @updatedAt
+  updatedBy   String?  // admin userId who last changed it
+
+  @@index([enabled])
+}
+
+// ==================== ANNOUNCEMENTS (Broadcast Messages) ====================
+// Admin can broadcast messages to all users (shown as banner in app).
+model Announcement {
+  id          String   @id @default(cuid())
+  title       String   // short title (e.g. "New Feature: Barcode Scanner!")
+  message     String   // detailed message
+  type        String   @default("info") // info | success | warning | error
+  link        String?  // optional URL to navigate to (e.g. "/#pricing")
+  isActive    Boolean  @default(true) // admin can deactivate
+  startsAt    DateTime @default(now()) // when to start showing
+  endsAt      DateTime? // when to stop showing (null = never expire)
+  createdAt   DateTime @default(now())
+  createdBy   String?  // admin userId
+
+  @@index([isActive, startsAt, endsAt])
+}
+
+// ==================== REFERRALS (Viral Growth Engine) ====================
+// Track referral codes + referral relationships.
+// Reward: refer 3 shops → get 1 year Pro free
+model Referral {
+  id              String   @id @default(cuid())
+  referrerId      String   // user who shared their code
+  referrer        User     @relation("ReferralsMade", fields: [referrerId], references: [id], onDelete: Cascade)
+  referredId      String?  @unique // user who signed up using the code (null = code not used yet)
+  referred        User?    @relation("ReferralsReceived", fields: [referredId], references: [id], onDelete: SetNull)
+  code            String   @unique // unique referral code (e.g. "RAHUL500")
+  status          String   @default("pending") // pending | completed | rewarded
+  rewardGiven     Boolean  @default(false) // true when referrer got their reward
+  createdAt       DateTime @default(now())
+  completedAt     DateTime? // when referred user signed up
+
+  @@index([referrerId, status])
+  @@index([referredId])
+}

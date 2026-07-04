@@ -1,0 +1,666 @@
+     1→'use client'
+     2→
+     3→import { useState, useRef } from 'react'
+     4→import { useTranslation } from '@/hooks/use-translation'
+     5→import { useAppStore } from '@/store/app-store'
+     6→import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+     7→import { Button } from '@/components/ui/button'
+     8→import { Label } from '@/components/ui/label'
+     9→import { Badge } from '@/components/ui/badge'
+    10→import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+    11→import { useToast } from '@/hooks/use-toast'
+    12→import { toast as sonnerToast } from 'sonner'
+    13→import { formatINR, cn } from '@/lib/utils'
+    14→import {
+    15→  ScanLine, Upload, Camera, Sparkles, X, Check, Loader2,
+    16→  ImageIcon, FileText, ArrowRight, Trash2, ShoppingCart, Truck, Plus,
+    17→} from 'lucide-react'
+    18→import { offlineFetch } from '@/lib/offline-fetch'
+    19→import { Capacitor } from '@capacitor/core'
+    20→
+    21→/**
+    22→ * takePhotoNative — uses Capacitor Camera plugin on native (Android app)
+    23→ * to open the camera directly. Falls back to <input capture> on web.
+    24→ *
+    25→ * Uses CameraResultType.Base64 (more reliable than DataUrl on some Android
+    26→ * devices where DataUrl comes back empty after the user confirms the photo).
+    27→ *
+    28→ * Returns a File object or null if cancelled/failed.
+    29→ */
+    30→async function takePhotoNative(): Promise<File | null> {
+    31→  // On native platform, use Capacitor Camera plugin
+    32→  if (Capacitor.isNativePlatform()) {
+    33→    try {
+    34→      const { Camera, CameraResultType, CameraSource } = await import('@capacitor/camera')
+    35→      const photo = await Camera.getPhoto({
+    36→        quality: 85,
+    37→        allowEditing: false,
+    38→        resultType: CameraResultType.Base64,
+    39→        source: CameraSource.Camera,
+    40→        saveToGallery: false,
+    41→      })
+    42→      if (!photo.base64String) {
+    43→        console.warn('[Camera] No base64String returned from camera')
+    44→        return null
+    45→      }
+    46→      // Build a data URL from the base64 string (the API expects this format)
+    47→      const format = photo.format || 'jpeg'
+    48→      const dataUrl = `data:image/${format};base64,${photo.base64String}`
+    49→      const res = await fetch(dataUrl)
+    50→      const blob = await res.blob()
+    51→      return new File([blob], `bill_${Date.now()}.${format}`, { type: `image/${format}` })
+    52→    } catch (err: any) {
+    53→      // User cancelled or permission denied — these are expected, don't log as errors
+    54→      const msg = String(err?.message || err || '').toLowerCase()
+    55→      if (msg.includes('cancelled') || msg.includes('user denied') || msg.includes('canceled')) {
+    56→        return null
+    57→      }
+    58→      console.error('[Camera] Native capture failed:', err)
+    59→      return null
+    60→    }
+    61→  }
+    62→  // On web — can't open camera directly from JS, return null (caller falls back to input)
+    63→  return null
+    64→}
+    65→
+    66→/**
+    67→ * pickPhotoNative — uses Capacitor Camera plugin on native (Android app)
+    68→ * to open the photo gallery. Falls back to <input> on web.
+    69→ */
+    70→async function pickPhotoNative(): Promise<File | null> {
+    71→  if (Capacitor.isNativePlatform()) {
+    72→    try {
+    73→      const { Camera, CameraResultType, CameraSource } = await import('@capacitor/camera')
+    74→      const photo = await Camera.getPhoto({
+    75→        quality: 85,
+    76→        allowEditing: false,
+    77→        resultType: CameraResultType.Base64,
+    78→        source: CameraSource.Photos,
+    79→      })
+    80→      if (!photo.base64String) {
+    81→        console.warn('[Camera] No base64String returned from gallery')
+    82→        return null
+    83→      }
+    84→      const format = photo.format || 'jpeg'
+    85→      const dataUrl = `data:image/${format};base64,${photo.base64String}`
+    86→      const res = await fetch(dataUrl)
+    87→      const blob = await res.blob()
+    88→      return new File([blob], `bill_${Date.now()}.${format}`, { type: `image/${format}` })
+    89→    } catch (err: any) {
+    90→      const msg = String(err?.message || err || '').toLowerCase()
+    91→      if (msg.includes('cancelled') || msg.includes('user denied') || msg.includes('canceled')) {
+    92→        return null
+    93→      }
+    94→      console.error('[Camera] Native pick failed:', err)
+    95→      return null
+    96→    }
+    97→  }
+    98→  return null
+    99→}
+   100→
+   101→export function BillScanner() {
+   102→  const { t } = useTranslation()
+   103→  const { setView, scannerBillType, setScannerBillType, setScannerResult } = useAppStore()
+   104→  const { toast } = useToast()
+   105→  const [scanning, setScanning] = useState(false)
+   106→  const [scanned, setScanned] = useState<any>(null)
+   107→  const [preview, setPreview] = useState<string>('')
+   108→  const [billType, setBillType] = useState<'sale' | 'purchase'>(scannerBillType)
+   109→  const [editMode, setEditMode] = useState(false)
+   110→  const fileInputRef = useRef<HTMLInputElement>(null)
+   111→  const cameraInputRef = useRef<HTMLInputElement>(null)
+   112→
+   113→  const handleFile = async (file: File) => {
+   114→    if (!file) return
+   115→    if (!file.type.startsWith('image/')) {
+   116→      toast({ title: 'Please select an image file', variant: 'destructive' })
+   117→      return
+   118→    }
+   119→    if (file.size > 10 * 1024 * 1024) {
+   120→      toast({ title: 'Image too large. Max 10MB', variant: 'destructive' })
+   121→      return
+   122→    }
+   123→
+   124→    // Compress and resize image on client side before sending to API
+   125→    // This prevents Vercel serverless timeout on large phone photos
+   126→    const compressImage = (file: File): Promise<string> => {
+   127→      return new Promise((resolve, reject) => {
+   128→        const reader = new FileReader()
+   129→        reader.onload = (e) => {
+   130→          const img = new Image()
+   131→          img.onload = () => {
+   132→            // Max dimensions: 1200x1600 (enough for AI to read, small enough for API)
+   133→            const MAX_WIDTH = 1200
+   134→            const MAX_HEIGHT = 1600
+   135→            let width = img.width
+   136→            let height = img.height
+   137→
+   138→            if (width > MAX_WIDTH || height > MAX_HEIGHT) {
+   139→              const ratio = Math.min(MAX_WIDTH / width, MAX_HEIGHT / height)
+   140→              width = Math.round(width * ratio)
+   141→              height = Math.round(height * ratio)
+   142→            }
+   143→
+   144→            const canvas = document.createElement('canvas')
+   145→            canvas.width = width
+   146→            canvas.height = height
+   147→            const ctx = canvas.getContext('2d')
+   148→            if (!ctx) {
+   149→              reject(new Error('Canvas not supported'))
+   150→              return
+   151→            }
+   152→            ctx.drawImage(img, 0, 0, width, height)
+   153→
+   154→            // Compress as JPEG with quality 0.85
+   155→            const compressed = canvas.toDataURL('image/jpeg', 0.85)
+   156→            resolve(compressed)
+   157→          }
+   158→          img.onerror = () => reject(new Error('Failed to load image'))
+   159→          img.src = e.target?.result as string
+   160→        }
+   161→        reader.onerror = () => reject(new Error('Failed to read file'))
+   162→        reader.readAsDataURL(file)
+   163→      })
+   164→    }
+   165→
+   166→    try {
+   167→      // Compress the image first
+   168→      const base64 = await compressImage(file)
+   169→      setPreview(base64)
+   170→      setScanning(true)
+   171→      // Save existing items before scanning (for "adding more" mode)
+   172→      const existingItems = scanned?._isAddingMore ? (scanned?.items || []) : []
+   173→      const isAddingMore = scanned?._isAddingMore || false
+   174→      // Don't set scanned to null if we're adding more — keep showing items
+   175→      if (!isAddingMore) {
+   176→        setScanned(null)
+   177→      }
+   178→      try {
+   179→        // Step 1: Upload to Cloudinary (gets a URL, stores image for future)
+   180→        const uploadRes = await offlineFetch('/api/upload-bill', {
+   181→          method: 'POST',
+   182→          headers: { 'Content-Type': 'application/json' },
+   183→          body: JSON.stringify({ imageBase64: base64 }),
+   184→        })
+   185→        const uploadData = await uploadRes.json()
+   186→
+   187→        // Step 2: Send to AI scanner (use Cloudinary URL if upload succeeded, else base64)
+   188→        const imageUrl = uploadData.success ? uploadData.url : null
+   189→        const scanRes = await offlineFetch('/api/scan-bill', {
+   190→          method: 'POST',
+   191→          headers: { 'Content-Type': 'application/json' },
+   192→          body: JSON.stringify(imageUrl ? { imageUrl, billType } : { imageBase64: base64, billType }),
+   193→        })
+   194→        const data = await scanRes.json()
+   195→        if (data.error) {
+   196→          toast({
+   197→            title: 'Scan failed',
+   198→            description: data.error,
+   199→            variant: 'destructive',
+   200→          })
+   201→          // Raw AI output logging removed — was leaking raw response to console
+   202→        } else {
+   203→          // If we're in "adding more" mode, append new items to existing
+   204→          if (isAddingMore && existingItems.length > 0) {
+   205→            const newItems = data.bill.items || []
+   206→            setScanned({
+   207→              ...data.bill,
+   208→              items: [...existingItems, ...newItems],
+   209→              _isAddingMore: false,
+   210→            })
+   211→            sonnerToast.success(`Added ${newItems.length} more items from second bill!`)
+   212→          } else {
+   213→            setScanned(data.bill)
+   214→            sonnerToast.success('Bill scanned! Review and verify the data.')
+   215→          }
+   216→        }
+   217→      } catch (e) {
+   218→        toast({
+   219→          title: 'Scan failed',
+   220→          description: 'Please try again or enter manually',
+   221→          variant: 'destructive',
+   222→        })
+   223→      } finally {
+   224→        setScanning(false)
+   225→      }
+   226→    } catch (compressError) {
+   227→      toast({
+   228→        title: 'Failed to process image',
+   229→        description: 'Please try a different image',
+   230→        variant: 'destructive',
+   231→      })
+   232→      setScanning(false)
+   233→    }
+   234→  }
+   235→
+   236→  const handleDrop = (e: React.DragEvent) => {
+   237→    e.preventDefault()
+   238→    const file = e.dataTransfer.files[0]
+   239→    if (file) handleFile(file)
+   240→  }
+   241→
+   242→  // Try native camera first (Capacitor plugin). If unavailable or cancelled,
+   243→  // fall back to the hidden <input capture> element (web browser).
+   244→  const handleTakePhoto = async () => {
+   245→    const file = await takePhotoNative()
+   246→    if (file) {
+   247→      handleFile(file)
+   248→    } else if (!Capacitor.isNativePlatform()) {
+   249→      // Web fallback — trigger the hidden input with capture attribute
+   250→      cameraInputRef.current?.click()
+   251→    }
+   252→    // On native, if user cancelled, do nothing (no fallback to gallery)
+   253→  }
+   254→
+   255→  // Try native photo picker first (Capacitor plugin). If unavailable,
+   256→  // fall back to the hidden <input> element (web browser).
+   257→  const handlePickPhoto = async () => {
+   258→    const file = await pickPhotoNative()
+   259→    if (file) {
+   260→      handleFile(file)
+   261→    } else if (!Capacitor.isNativePlatform()) {
+   262→      // Web fallback — trigger the hidden file input
+   263→      fileInputRef.current?.click()
+   264→    }
+   265→  }
+   266→
+   267→  const updateItem = (index: number, field: string, value: any) => {
+   268→    if (!scanned) return
+   269→    const newItems = [...scanned.items]
+   270→    newItems[index] = { ...newItems[index], [field]: value }
+   271→    // Recalculate item total
+   272→    if (['quantity', 'unitPrice'].includes(field)) {
+   273→      const item = newItems[index]
+   274→      newItems[index].total = (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0) * (1 + (Number(item.gstRate) || 0) / 100)
+   275→    }
+   276→    setScanned({ ...scanned, items: newItems })
+   277→  }
+   278→
+   279→  const removeItem = (index: number) => {
+   280→    if (!scanned) return
+   281→    setScanned({ ...scanned, items: scanned.items.filter((_: any, i: number) => i !== index) })
+   282→  }
+   283→
+   284→  const addItem = () => {
+   285→    if (!scanned) return
+   286→    setScanned({
+   287→      ...scanned,
+   288→      items: [...scanned.items, { name: '', quantity: 1, unit: 'pcs', unitPrice: 0, gstRate: 0, total: 0 }],
+   289→    })
+   290→  }
+   291→
+   292→  const handleProceedToSave = () => {
+   293→    if (!scanned) return
+   294→    // Pass data to ledger via window object (since both live in same SPA)
+   295→    ;(window as any).__ledgerPreset = { type: billType, data: scanned }
+   296→    setScannerBillType(billType)
+   297→    setView(billType === 'sale' ? 'sales' : 'purchases')
+   298→    sonnerToast.info('Review the auto-filled form and save')
+   299→  }
+   300→
+   301→  const handleReset = () => {
+   302→    setScanned(null)
+   303→    setPreview('')
+   304→    setScanning(false)
+   305→  }
+   306→
+   307→  // Totals
+   308→  let subtotal = 0, totalGst = 0
+   309→  scanned?.items?.forEach((item: any) => {
+   310→    const amt = (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0)
+   311→    subtotal += amt
+   312→    totalGst += amt * (Number(item.gstRate) || 0) / 100
+   313→  })
+   314→  const grandTotal = subtotal - (scanned?.discountAmount || 0) + totalGst
+   315→
+   316→  return (
+   317→    <div className="space-y-4">
+   318→      {/* Bill type selector */}
+   319→      <Card className="shadow-card border-border/60">
+   320→        <CardContent className="p-4">
+   321→          <Label className="text-xs uppercase tracking-wide text-muted-foreground">I am scanning a...</Label>
+   322→          <div className="grid grid-cols-2 gap-3 mt-2">
+   323→            <button
+   324→              onClick={() => setBillType('purchase')}
+   325→              className={cn(
+   326→                'rounded-xl p-4 border-2 transition text-left',
+   327→                billType === 'purchase'
+   328→                  ? 'border-amber-500 bg-amber-50 dark:bg-amber-950/30'
+   329→                  : 'border-border hover:border-amber-300 dark:hover:border-amber-700'
+   330→              )}
+   331→            >
+   332→              <Truck className={cn('w-6 h-6 mb-2', billType === 'purchase' ? 'text-amber-600' : 'text-muted-foreground')} />
+   333→              <p className="font-semibold text-sm">{t('scanner.purchase_bill')}</p>
+   334→              <p className="text-[11px] text-muted-foreground mt-0.5">{t('scanner.goods_bought')}</p>
+   335→            </button>
+   336→            <button
+   337→              onClick={() => setBillType('sale')}
+   338→              className={cn(
+   339→                'rounded-xl p-4 border-2 transition text-left',
+   340→                billType === 'sale'
+   341→                  ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30'
+   342→                  : 'border-border hover:border-emerald-300 dark:hover:border-emerald-700'
+   343→              )}
+   344→            >
+   345→              <ShoppingCart className={cn('w-6 h-6 mb-2', billType === 'sale' ? 'text-emerald-600' : 'text-muted-foreground')} />
+   346→              <p className="font-semibold text-sm">{t('scanner.sales_bill')}</p>
+   347→              <p className="text-[11px] text-muted-foreground mt-0.5">{t('scanner.goods_sold')}</p>
+   348→            </button>
+   349→          </div>
+   350→        </CardContent>
+   351→      </Card>
+   352→
+   353→      {!scanned && (
+   354→        <>
+   355→          {/* Upload area */}
+   356→          <Card
+   357→            className="shadow-card border-border/60 border-2 border-dashed hover:border-primary/50 transition"
+   358→            onDragOver={(e) => e.preventDefault()}
+   359→            onDrop={handleDrop}
+   360→          >
+   361→            <CardContent className="p-8 lg:p-12 text-center">
+   362→              {scanning ? (
+   363→                <div className="py-8">
+   364→                  <div className="relative w-20 h-20 mx-auto mb-4">
+   365→                    <div className="absolute inset-0 rounded-full bg-primary/10 animate-ping" />
+   366→                    <div className="absolute inset-2 rounded-full bg-primary/20 flex items-center justify-center">
+   367→                      <Loader2 className="w-8 h-8 text-primary animate-spin" />
+   368→                    </div>
+   369→                  </div>
+   370→                  <h3 className="font-semibold text-lg">{t('scanner.scanning')}</h3>
+   371→                  <p className="text-sm text-muted-foreground mt-1">{t('scanner.extracting')}</p>
+   372→                </div>
+   373→              ) : preview ? (
+   374→                <div className="space-y-3">
+   375→                  <img src={preview} alt="Bill preview" className="max-h-64 mx-auto rounded-lg shadow-md" />
+   376→                  <Button variant="outline" onClick={handleReset}>Choose another image</Button>
+   377→                </div>
+   378→              ) : (
+   379→                <>
+   380→                  <div className="w-20 h-20 mx-auto rounded-full bg-gradient-saffron flex items-center justify-center mb-4 shadow-lg">
+   381→                    <ScanLine className="w-10 h-10 text-white" />
+   382→                  </div>
+   383→                  <h3 className="text-lg lg:text-xl font-bold">{t('scanner.scan_bill')}</h3>
+   384→                  <p className="text-sm text-muted-foreground mt-1 max-w-md mx-auto">
+   385→                    Snap a photo of any bill, invoice or receipt. Our AI will extract every item, price, tax and party detail automatically.
+   386→                  </p>
+   387→                  <div className="flex flex-col sm:flex-row gap-3 justify-center mt-6">
+   388→                    <Button
+   389→                      size="lg"
+   390→                      onClick={handleTakePhoto}
+   391→                      className="bg-gradient-saffron gap-2 shadow-lg"
+   392→                    >
+   393→                      <Camera className="w-5 h-5" /> {t('scanner.take_photo')}
+   394→                    </Button>
+   395→                    <Button
+   396→                      size="lg"
+   397→                      variant="outline"
+   398→                      onClick={handlePickPhoto}
+   399→                      className="gap-2"
+   400→                    >
+   401→                      <Upload className="w-5 h-5" /> {t('scanner.upload_image')}
+   402→                    </Button>
+   403→                  </div>
+   404→                  <p className="text-[11px] text-muted-foreground mt-4">
+   405→                    Supports JPG, PNG • Max 10MB • Works best with clear photos
+   406→                  </p>
+   407→
+   408→                  {/* Feature highlights */}
+   409→                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-8 max-w-2xl mx-auto">
+   410→                    <div className="rounded-lg bg-muted/50 p-3 text-left">
+   411→                      <Sparkles className="w-4 h-4 text-primary mb-1" />
+   412→                      <p className="text-xs font-semibold">Auto-Extract Items</p>
+   413→                      <p className="text-[11px] text-muted-foreground mt-0.5">Name, qty, price, GST all filled</p>
+   414→                    </div>
+   415→                    <div className="rounded-lg bg-muted/50 p-3 text-left">
+   416→                      <FileText className="w-4 h-4 text-primary mb-1" />
+   417→                      <p className="text-xs font-semibold">Smart Tax Split</p>
+   418→                      <p className="text-[11px] text-muted-foreground mt-0.5">CGST/SGST/IGST auto-detected</p>
+   419→                    </div>
+   420→                    <div className="rounded-lg bg-muted/50 p-3 text-left">
+   421→                      <Check className="w-4 h-4 text-primary mb-1" />
+   422→                      <p className="text-xs font-semibold">Verify & Edit</p>
+   423→                      <p className="text-[11px] text-muted-foreground mt-0.5">Add, remove or change anything</p>
+   424→                    </div>
+   425→                  </div>
+   426→                </>
+   427→              )}
+   428→            </CardContent>
+   429→          </Card>
+   430→        </>
+   431→      )}
+   432→
+   433→      {/* Hidden file inputs — always rendered (outside conditional) so
+   434→          'Scan More Items' can trigger them even when results are showing */}
+   435→      <input
+   436→        ref={fileInputRef}
+   437→        type="file"
+   438→        accept="image/*"
+   439→        className="hidden"
+   440→        onChange={(e) => { if (e.target.files?.[0]) handleFile(e.target.files[0]); e.target.value = '' }}
+   441→      />
+   442→      <input
+   443→        ref={cameraInputRef}
+   444→        type="file"
+   445→        accept="image/*"
+   446→        capture="environment"
+   447→        className="hidden"
+   448→        onChange={(e) => { if (e.target.files?.[0]) handleFile(e.target.files[0]); e.target.value = '' }}
+   449→      />
+   450→
+   451→      {/* Verification & edit view */}
+   452→      {scanned && (
+   453→        <div className="space-y-4">
+   454→          {/* Header with bill summary */}
+   455→          <Card className="shadow-card border-border/60 overflow-hidden">
+   456→            <div className={cn('p-4 text-white', billType === 'sale' ? 'bg-gradient-emerald' : 'bg-gradient-saffron')}>
+   457→              <div className="flex items-center justify-between">
+   458→                <div className="flex items-center gap-2">
+   459→                  <Badge className="bg-white/20 text-white border-0 gap-1">
+   460→                    <Sparkles className="w-3 h-3" /> {t('scanner.ai_extracted')}
+   461→                  </Badge>
+   462→                  <span className="text-sm font-medium">{billType === 'sale' ? t('scanner.sales_bill') : t('scanner.purchase_bill')}</span>
+   463→                </div>
+   464→                <Button variant="ghost" size="sm" className="text-white hover:bg-white/20" onClick={handleReset}>
+   465→                  <X className="w-4 h-4" /> Start Over
+   466→                </Button>
+   467→              </div>
+   468→              <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
+   469→                <div>
+   470→                  <p className="text-[10px] text-white/70 uppercase">Invoice No.</p>
+   471→                  <p className="font-semibold text-sm">{scanned.invoiceNo || '—'}</p>
+   472→                </div>
+   473→                <div>
+   474→                  <p className="text-[10px] text-white/70 uppercase">Date</p>
+   475→                  <p className="font-semibold text-sm">{scanned.date || '—'}</p>
+   476→                </div>
+   477→                <div>
+   478→                  <p className="text-[10px] text-white/70 uppercase">Party</p>
+   479→                  <p className="font-semibold text-sm truncate">{scanned.sellerName || 'Walk-in'}</p>
+   480→                </div>
+   481→                <div>
+   482→                  <p className="text-[10px] text-white/70 uppercase">Payment</p>
+   483→                  <p className="font-semibold text-sm capitalize">{scanned.paymentMode || 'cash'}</p>
+   484→                </div>
+   485→              </div>
+   486→            </div>
+   487→          </Card>
+   488→
+   489→          {/* Items table - editable */}
+   490→          <Card className="shadow-card border-border/60">
+   491→            <CardHeader className="pb-3">
+   492→              <div className="flex items-center justify-between">
+   493→                <CardTitle className="text-base flex items-center gap-2">
+   494→                  <ImageIcon className="w-4 h-4" />
+   495→                  Items ({scanned.items.length})
+   496→                </CardTitle>
+   497→                <div className="flex gap-2">
+   498→                  {/* Manual add — for adding a blank row by hand */}
+   499→                  <Button variant="outline" size="sm" onClick={addItem} className="gap-1">
+   500→                    <Plus className="w-3.5 h-3.5" /> Manual
+   501→                  </Button>
+   502→                  {/* Scan more items — opens camera to scan another bill,
+   503→                      new items get APPENDED to existing list */}
+   504→                  <Button
+   505→                    size="sm"
+   506→                    onClick={() => {
+   507→                      // Keep existing items, mark as "adding more"
+   508→                      setScanned({ ...scanned, _isAddingMore: true })
+   509→                      setPreview('')
+   510→                      // Use native camera on Capacitor, otherwise the hidden input
+   511→                      if (Capacitor.isNativePlatform()) {
+   512→                        handleTakePhoto()
+   513→                      } else {
+   514→                        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+   515→                        if (isMobile) {
+   516→                          cameraInputRef.current?.click()
+   517→                        } else {
+   518→                          fileInputRef.current?.click()
+   519→                        }
+   520→                      }
+   521→                    }}
+   522→                    className="bg-gradient-saffron gap-1"
+   523→                  >
+   524→                    <ScanLine className="w-3.5 h-3.5" /> Scan More Items
+   525→                  </Button>
+   526→                </div>
+   527→              </div>
+   528→            </CardHeader>
+   529→            <CardContent>
+   530→              <div className="space-y-2">
+   531→                {/* Header row */}
+   532→                <div className="hidden md:grid grid-cols-12 gap-2 text-[10px] uppercase font-medium text-muted-foreground px-2">
+   533→                  <div className="col-span-4">Product Name</div>
+   534→                  <div className="col-span-2">Qty</div>
+   535→                  <div className="col-span-2">Unit Price</div>
+   536→                  <div className="col-span-1">GST%</div>
+   537→                  <div className="col-span-2 text-right">Total</div>
+   538→                  <div className="col-span-1"></div>
+   539→                </div>
+   540→
+   541→                {scanned.items.map((item: any, i: number) => (
+   542→                  <div key={i} className="grid grid-cols-12 gap-2 items-center p-2 rounded-lg bg-muted/30 hover:bg-muted/50 transition">
+   543→                    {/* Product name — always editable */}
+   544→                    <div className="col-span-12 md:col-span-4">
+   545→                      <input
+   546→                        value={item.name}
+   547→                        onChange={(e) => updateItem(i, 'name', e.target.value)}
+   548→                        className="w-full px-2 py-1.5 text-sm bg-transparent border border-transparent rounded-md focus:bg-background focus:border-border transition"
+   549→                        placeholder="Product name"
+   550→                      />
+   551→                    </div>
+   552→                    {/* Quantity — always editable */}
+   553→                    <div className="col-span-3 md:col-span-2">
+   554→                      <input
+   555→                        type="number"
+   556→                        value={item.quantity}
+   557→                        onChange={(e) => updateItem(i, 'quantity', Number(e.target.value))}
+   558→                        className="w-full px-2 py-1.5 text-sm bg-transparent border border-transparent rounded-md focus:bg-background focus:border-border transition"
+   559→                      />
+   560→                    </div>
+   561→                    {/* Unit price — always editable */}
+   562→                    <div className="col-span-4 md:col-span-2">
+   563→                      <input
+   564→                        type="number"
+   565→                        value={item.unitPrice}
+   566→                        onChange={(e) => updateItem(i, 'unitPrice', Number(e.target.value))}
+   567→                        className="w-full px-2 py-1.5 text-sm bg-transparent border border-transparent rounded-md focus:bg-background focus:border-border transition"
+   568→                      />
+   569→                    </div>
+   570→                    {/* GST — always editable */}
+   571→                    <div className="col-span-2 md:col-span-1">
+   572→                      <select
+   573→                        value={item.gstRate}
+   574→                        onChange={(e) => updateItem(i, 'gstRate', Number(e.target.value))}
+   575→                        className="w-full px-1 py-1.5 text-sm bg-transparent border border-transparent rounded-md focus:bg-background focus:border-border transition"
+   576→                      >
+   577→                        {[0, 5, 12, 18, 28].map(r => <option key={r} value={r}>{r}%</option>)}
+   578→                      </select>
+   579→                    </div>
+   580→                    {/* Total (auto-calculated, read-only) */}
+   581→                    <div className="col-span-2 md:col-span-2 text-right">
+   582→                      <p className="text-sm font-semibold">{formatINR(item.total || 0)}</p>
+   583→                    </div>
+   584→                    {/* Delete */}
+   585→                    <div className="col-span-1 flex justify-end">
+   586→                      <Button
+   587→                        variant="ghost"
+   588→                        size="sm"
+   589→                        className="h-7 w-7 p-0 text-rose-600 hover:bg-rose-50"
+   590→                        onClick={() => removeItem(i)}
+   591→                      >
+   592→                        <Trash2 className="w-3.5 h-3.5" />
+   593→                      </Button>
+   594→                    </div>
+   595→                  </div>
+   596→                ))}
+   597→
+   598→                {scanned.items.length === 0 && (
+   599→                  <div className="py-8 text-center text-sm text-muted-foreground">
+   600→                    No items. Click &quot;Add item&quot; to add manually.
+   601→                  </div>
+   602→                )}
+   603→              </div>
+   604→
+   605→              {/* Totals */}
+   606→              <div className="mt-4 pt-4 border-t border-border space-y-1.5">
+   607→                <div className="flex justify-between text-sm">
+   608→                  <span className="text-muted-foreground">Subtotal</span>
+   609→                  <span className="font-medium">{formatINR(subtotal)}</span>
+   610→                </div>
+   611→                {scanned.discountAmount > 0 && (
+   612→                  <div className="flex justify-between text-sm">
+   613→                    <span className="text-muted-foreground">Discount</span>
+   614→                    <span className="font-medium text-rose-600">-{formatINR(scanned.discountAmount)}</span>
+   615→                  </div>
+   616→                )}
+   617→                <div className="flex justify-between text-sm">
+   618→                  <span className="text-muted-foreground">GST Total</span>
+   619→                  <span className="font-medium">{formatINR(totalGst)}</span>
+   620→                </div>
+   621→                {(scanned.cgst > 0 || scanned.sgst > 0) && (
+   622→                  <div className="flex justify-between text-xs text-muted-foreground pl-4">
+   623→                    <span>CGST + SGST</span>
+   624→                    <span>{formatINR(scanned.cgst)} + {formatINR(scanned.sgst)}</span>
+   625→                  </div>
+   626→                )}
+   627→                {scanned.igst > 0 && (
+   628→                  <div className="flex justify-between text-xs text-muted-foreground pl-4">
+   629→                    <span>IGST</span>
+   630→                    <span>{formatINR(scanned.igst)}</span>
+   631→                  </div>
+   632→                )}
+   633→                <div className="flex justify-between pt-2 border-t border-border">
+   634→                  <span className="font-semibold">Grand Total</span>
+   635→                  <span className="text-lg font-bold">{formatINR(grandTotal)}</span>
+   636→                </div>
+   637→              </div>
+   638→            </CardContent>
+   639→          </Card>
+   640→
+   641→          {/* Action buttons */}
+   642→          <Card className="shadow-card border-border/60">
+   643→            <CardContent className="p-4">
+   644→              <div className="flex flex-col sm:flex-row gap-3">
+   645→                <Button variant="outline" className="flex-1 gap-2" onClick={handleReset}>
+   646→                  <X className="w-4 h-4" /> {t('scanner.discard')}
+   647→                </Button>
+   648→                <Button
+   649→                  className="flex-1 gap-2 bg-gradient-saffron shadow-md"
+   650→                  onClick={handleProceedToSave}
+   651→                >
+   652→                  <Check className="w-4 h-4" /> {t('scanner.verify_save')}
+   653→                  <ArrowRight className="w-4 h-4" />
+   654→                </Button>
+   655→              </div>
+   656→              <p className="text-[11px] text-muted-foreground text-center mt-2">
+   657→                You&apos;ll be taken to the {billType === 'sale' ? 'sales' : 'purchase'} form with everything pre-filled. Just review and save!
+   658→              </p>
+   659→            </CardContent>
+   660→          </Card>
+   661→        </div>
+   662→      )}
+   663→    </div>
+   664→  )
+   665→}
+   666→
