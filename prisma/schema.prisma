@@ -100,6 +100,13 @@ model Product {
   mrp               Float?   // MRP printed on product
   gstRate           Float    @default(0)  // 0, 5, 12, 18, 28
   openingStock      Float    @default(0)
+  // 🔒 AUDIT FIX H1: Authoritative stock count, maintained transactionally.
+  // Was: stock computed at read time (openingStock + purchases - sales) — no
+  // guard against overselling, no concurrency control.
+  // Now: currentStock is the cached running balance, updated atomically inside
+  // the same $transaction as the sale/purchase. On sale: decrement. On purchase:
+  // increment. The dashboard reads this directly (no JS recompute).
+  currentStock      Float    @default(0)
   lowStockThreshold Float    @default(5)
   notes             String?
   createdAt         DateTime @default(now())

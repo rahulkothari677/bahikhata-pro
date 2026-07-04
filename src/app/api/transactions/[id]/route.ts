@@ -119,16 +119,38 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const paid = parseFloat(paidAmount)
     const finalPaid = isNaN(paid) ? totalAmount : paid
 
-    // 🔒 ATOMICITY (Audit fix C3): Wrap delete + update in a $transaction
-    // so if either fails, both roll back. Was: non-atomic — if the update
-    // failed after the delete, the transaction was left with zero items
-    // but a stale total (silent ledger corruption).
+    // 🔒 ATOMICITY (Audit fix C3) + STOCK (Audit fix H1):
+    // Wrap delete + update + stock adjustments in $transaction.
+    // Step 1: Reverse old items' stock impact (add back sales, subtract purchases)
+    // Step 2: Delete old items
+    // Step 3: Update transaction + create new items
+    // Step 4: Apply new items' stock impact (decrement sales, increment purchases)
     const transaction = await db.$transaction(async (tx) => {
-      // Step 1: Delete old items
+      // Step 1: Reverse old items' stock impact
+      const oldItems = await tx.transactionItem.findMany({ where: { transactionId: id } })
+      for (const oldItem of oldItems) {
+        if (oldItem.productId) {
+          if (existing.type === 'sale') {
+            // Reverse sale: add stock back
+            await tx.product.update({
+              where: { id: oldItem.productId },
+              data: { currentStock: { increment: oldItem.quantity } },
+            })
+          } else if (existing.type === 'purchase') {
+            // Reverse purchase: subtract stock
+            await tx.product.update({
+              where: { id: oldItem.productId },
+              data: { currentStock: { decrement: oldItem.quantity } },
+            })
+          }
+        }
+      }
+
+      // Step 2: Delete old items
       await tx.transactionItem.deleteMany({ where: { transactionId: id } })
 
-      // Step 2: Update transaction + create new items (atomic)
-      return tx.transaction.update({
+      // Step 3: Update transaction + create new items
+      const txn = await tx.transaction.update({
         where: { id },
         data: {
           type,
@@ -145,11 +167,31 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           isInterState: !!isInterState,
           notes: notes || null,
           invoiceNo: invoiceNo || null,
-          grossProfit: roundMoney(grossProfit),  // 🔒 M3: round grossProfit too
+          grossProfit: roundMoney(grossProfit),
           items: { create: txItems },
         },
         include: { items: true, party: true },
       })
+
+      // Step 4: Apply new items' stock impact
+      for (const item of txItems) {
+        if (item.productId) {
+          const qty = item.quantity || 0
+          if (type === 'sale') {
+            await tx.product.update({
+              where: { id: item.productId },
+              data: { currentStock: { decrement: qty } },
+            })
+          } else if (type === 'purchase') {
+            await tx.product.update({
+              where: { id: item.productId },
+              data: { currentStock: { increment: qty } },
+            })
+          }
+        }
+      }
+
+      return txn
     })
 
     return NextResponse.json({ transaction })

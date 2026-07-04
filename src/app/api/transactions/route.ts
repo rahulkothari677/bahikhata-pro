@@ -160,28 +160,58 @@ export async function POST(req: NextRequest) {
     const paid = parseFloat(paidAmount)
     const finalPaid = isNaN(paid) ? totalAmount : paid
 
-    const transaction = await db.transaction.create({
-      data: {
-        userId,
-        type,
-        partyId: partyId || null,
-        date: new Date(date || new Date()),
-        subtotal: roundMoney(subtotal),
-        discountAmount: roundMoney(discount),
-        cgst: roundMoney(cgst),
-        sgst: roundMoney(sgst),
-        igst: roundMoney(igst),
-        totalAmount,
-        paidAmount: roundMoney(finalPaid),
-        paymentMode: paymentMode || 'cash',
-        isInterState: !!isInterState,
-        notes: notes || null,
-        invoiceNo: invoiceNo || null,
-        grossProfit: roundMoney(grossProfit),
-        clientMutationId: clientMutationId || null,  // 🔒 N1: save for idempotency
-        items: { create: txItems },
-      },
-      include: { items: true, party: true },
+    // 🔒 AUDIT FIX H1: Create transaction + update product stock atomically.
+    // Was: just db.transaction.create — no stock tracking.
+    // Now: wrapped in $transaction. For each item with a productId:
+    //   - Sale: decrement product.currentStock
+    //   - Purchase: increment product.currentStock
+    // Stock is tracked but NOT blocked on negative (many shopkeepers haven't
+    // set up openingStock — blocking would break their workflow). A per-shop
+    // "block negative stock" setting can be added later.
+    const transaction = await db.$transaction(async (tx) => {
+      const txn = await tx.transaction.create({
+        data: {
+          userId,
+          type,
+          partyId: partyId || null,
+          date: new Date(date || new Date()),
+          subtotal: roundMoney(subtotal),
+          discountAmount: roundMoney(discount),
+          cgst: roundMoney(cgst),
+          sgst: roundMoney(sgst),
+          igst: roundMoney(igst),
+          totalAmount,
+          paidAmount: roundMoney(finalPaid),
+          paymentMode: paymentMode || 'cash',
+          isInterState: !!isInterState,
+          notes: notes || null,
+          invoiceNo: invoiceNo || null,
+          grossProfit: roundMoney(grossProfit),
+          clientMutationId: clientMutationId || null,
+          items: { create: txItems },
+        },
+        include: { items: true, party: true },
+      })
+
+      // Update product stock for each item with a productId
+      for (const item of txItems) {
+        if (item.productId) {
+          const qty = item.quantity || 0
+          if (type === 'sale') {
+            await tx.product.update({
+              where: { id: item.productId },
+              data: { currentStock: { decrement: qty } },
+            })
+          } else if (type === 'purchase') {
+            await tx.product.update({
+              where: { id: item.productId },
+              data: { currentStock: { increment: qty } },
+            })
+          }
+        }
+      }
+
+      return txn
     })
 
     return NextResponse.json({ transaction })
