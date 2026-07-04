@@ -72,7 +72,9 @@ export const authOptions: NextAuthOptions = {
     maxAge: 7 * 24 * 60 * 60, // 7 days (was 30 days)
   },
   pages: {
-    signIn: '/login',
+    // The app uses AuthScreen component at / (not a separate /login route)
+    // NextAuth redirect callbacks go to / which renders the login form
+    signIn: '/',
   },
   callbacks: {
     async jwt({ token, user }) {

@@ -247,15 +247,13 @@ async function handleGet(url: string, fetchOpts: RequestInit): Promise<Response>
   try {
     const res = await fetch(url, fetchOpts)
 
-    // 🔒 AUDIT FIX V5: Auto-redirect to login on 401 (session expired/invalid)
-    // Was: 401 response returned as-is → components try to read data from error
-    // response → TypeError crash. Now: redirect to /login immediately.
+    // 🔒 AUDIT FIX V5: Auto-redirect on 401 (session expired/invalid)
+    // The app uses AuthScreen component at / (not a separate /login route)
+    // So we redirect to / which will show the login form when session is null
     if (res.status === 401 && !url.includes('/api/auth/')) {
-      // Don't redirect if already on login page
-      if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
-        // Use a small delay so the toast can show first
+      if (typeof window !== 'undefined' && window.location.pathname !== '/') {
         setTimeout(() => {
-          window.location.href = '/login?callbackUrl=' + encodeURIComponent(window.location.pathname)
+          window.location.href = '/'
         }, 100)
       }
     }

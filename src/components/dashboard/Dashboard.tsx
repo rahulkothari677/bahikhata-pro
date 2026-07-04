@@ -110,7 +110,7 @@ export function Dashboard() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => window.location.href = '/login'}
+            onClick={() => window.location.href = '/'}
             className="gap-2"
           >
             Go to Login
