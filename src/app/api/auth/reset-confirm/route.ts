@@ -38,11 +38,17 @@ export async function POST(req: NextRequest) {
     // Hash the new password
     const hashedPassword = await bcrypt.hash(password, 12)
 
-    // Update the user's password — defensive (DB schema might be old)
+    // Update the user's password AND bump tokenVersion (audit fix Phase 3.3).
+    // Bumping tokenVersion invalidates ALL existing JWTs for this user, so
+    // any attacker who stole a session token before the password reset is
+    // now logged out. The user must re-login with the new password.
     try {
       await db.user.update({
         where: { email: tokenData.email },
-        data: { password: hashedPassword },
+        data: {
+          password: hashedPassword,
+          tokenVersion: { increment: 1 },  // 🔒 revoke all existing sessions
+        },
       })
     } catch (dbError) {
       console.error('[reset-confirm] DB error:', dbError)

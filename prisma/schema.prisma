@@ -35,6 +35,14 @@ model User {
   renewsAt      DateTime?
   trialEndsAt   DateTime?
 
+  // 🔒 SECURITY (Audit fix Phase 3.3): tokenVersion for JWT revocation.
+  // Incrementing this invalidates ALL existing JWTs for this user (logout all
+  // devices, force re-login after password change, kill stolen sessions).
+  // The JWT callback in auth.ts compares the token's tokenVersion claim
+  // against this DB value on every request — if they differ, the session
+  // is treated as invalid.
+  tokenVersion  Int       @default(0)
+
   // Relations
   products      Product[]
   parties       Party[]

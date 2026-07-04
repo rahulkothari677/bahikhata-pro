@@ -49,6 +49,7 @@ export const authOptions: NextAuthOptions = {
             role: user.role || 'owner',
             ownerId: user.ownerId,
             permissions: user.permissions,
+            tokenVersion: user.tokenVersion,  // 🔒 captured at login
           }
         } catch (error) {
           console.error('Auth error:', error)
@@ -63,22 +64,66 @@ export const authOptions: NextAuthOptions = {
   ],
   session: {
     strategy: 'jwt',
-    maxAge: 30 * 24 * 60 * 60, // 30 days
+    // 🔒 SECURITY (Audit fix Phase 3.3): Shortened from 30 days to 7 days.
+    // A stolen JWT was previously valid for a month with no way to revoke it.
+    // 7 days balances security (shorter window if stolen) with UX (user
+    // doesn't have to re-login constantly). Combined with tokenVersion, we
+    // can now ALSO revoke sessions immediately by bumping tokenVersion.
+    maxAge: 7 * 24 * 60 * 60, // 7 days (was 30 days)
   },
   pages: {
     signIn: '/login',
   },
   callbacks: {
     async jwt({ token, user }) {
+      // Initial login: capture user fields + tokenVersion
       if (user) {
         token.id = user.id
         token.role = (user as any).role
         token.ownerId = (user as any).ownerId
         token.permissions = (user as any).permissions
+        token.tokenVersion = (user as any).tokenVersion
+        token.lastVersionCheck = Date.now()  // throttle DB checks (see below)
+        return token
       }
+
+      // 🔒 REVOCATION CHECK: On every subsequent request, check if the user's
+      // tokenVersion in the DB still matches the one in the JWT. If not, the
+      // user has been logged out (password changed, "logout all devices"
+      // clicked, or admin killed the session) → invalidate this JWT.
+      //
+      // To avoid a DB hit on EVERY request, we only check once every 5 minutes.
+      // The `lastVersionCheck` claim tracks when we last checked. If <5min ago,
+      // skip the check (the token is still "fresh enough"). If >5min, re-check.
+      // Worst case: a revoked session stays valid for up to 5 minutes after
+      // revocation — acceptable trade-off for not hammering the DB.
+      const lastCheck = (token.lastVersionCheck as number) || 0
+      const FIVE_MINUTES = 5 * 60 * 1000
+      if (Date.now() - lastCheck > FIVE_MINUTES) {
+        try {
+          const dbUser = await db.user.findUnique({
+            where: { id: token.id as string },
+            select: { tokenVersion: true },
+          })
+          if (!dbUser || dbUser.tokenVersion !== (token.tokenVersion as number)) {
+            // tokenVersion mismatch → session is revoked. Return a token with
+            // no user info, which NextAuth treats as logged-out.
+            return { ...token, id: undefined as any, tokenVersion: undefined as any }
+          }
+          token.lastVersionCheck = Date.now()
+        } catch {
+          // If the DB check fails (transient error), don't log the user out —
+          // let them keep their session and retry on the next check.
+        }
+      }
+
       return token
     },
     async session({ session, token }) {
+      // If the token was revoked (id set to undefined), treat as logged out
+      if (!token.id) {
+        return { ...session, user: undefined as any }
+      }
       if (session.user) {
         session.user.id = token.id as string
         session.user.role = (token.role as string) || 'owner'
