@@ -293,11 +293,15 @@ These cannot be done by me. They require licensed professionals or business deci
 - Excluded `bahikhata-admin/`, `tool-results/`, config files from `tsconfig`
 - Installed 20+ missing npm dependencies (radix-ui, react-day-picker, react-hook-form, etc.)
 
-### Phase 2 — After you complete the 3 setup tasks
+### Phase 2 — Migrate deploy + Redis rate limiting ✅ COMPLETE (committed 7d890a9)
 
-- [ ] 2.1 Switch build from `db push` to `migrate deploy` (needs Neon snapshot)
-- [ ] 2.2 Move rate limits to Redis (needs Upstash account)
-- [ ] 2.3 Configure Neon pooled endpoint (needs pooled URL)
+- [x] 2.1 Add `directUrl` to Prisma schema (DIRECT_URL for migrations, DATABASE_URL for runtime)
+- [x] 2.2 Generate baseline migration (`prisma/migrations/0_init/migration.sql`, 1196 lines)
+- [x] 2.3 Switch build from `db push --accept-data-loss` to `migrate deploy` (with baseline resolve)
+- [x] 2.4 Install `@upstash/ratelimit` + `@upstash/redis`
+- [x] 2.5 Rewrite `rate-limit.ts` to use Upstash Redis (with in-memory fallback)
+- [x] 2.6 Update all 6 callers to use `await` (rateLimit is now async)
+- [x] Build verified + pushed to GitHub
 
 ### Phase 3 — Medium fixes (after Phase 2)
 
