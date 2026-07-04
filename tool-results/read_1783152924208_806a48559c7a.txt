@@ -1,0 +1,1024 @@
+     1→// BahiKhata Pro — India's Best Ledger App
+     2→// Database schema for shop owners: products, parties, transactions, GST, etc.
+     3→// Multi-tenant: every model has userId for data isolation
+     4→
+     5→generator client {
+     6→  provider = "prisma-client-js"
+     7→}
+     8→
+     9→datasource db {
+    10→  provider = "postgresql"
+    11→  url      = env("DATABASE_URL")
+    12→}
+    13→
+    14→// ==================== USERS (Authentication) ====================
+    15→model User {
+    16→  id            String    @id @default(cuid())
+    17→  email         String    @unique
+    18→  name          String?
+    19→  password      String    // hashed with bcrypt
+    20→  phone         String?   // for future phone OTP
+    21→  emailVerified DateTime? // for future email verification
+    22→  image         String?   // profile picture URL
+    23→  role          String    @default("owner") // owner | staff
+    24→  ownerId       String?   // if staff, links to the owner's account
+    25→  createdAt     DateTime  @default(now())
+    26→  updatedAt     DateTime  @updatedAt
+    27→
+    28→  // Staff permissions — JSON object controlling which modules staff can access.
+    29→  permissions   Json?
+    30→
+    31→  // Subscription / plan
+    32→  cancelledAt   DateTime?
+    33→  plan          String    @default("free") // free | pro | elite
+    34→  renewsAt      DateTime?
+    35→  trialEndsAt   DateTime?
+    36→
+    37→  // Relations
+    38→  products      Product[]
+    39→  parties       Party[]
+    40→  transactions  Transaction[]
+    41→  payments      Payment[]
+    42→  settings      Setting[]
+    43→  auditLogs     AuditLog[]
+    44→  referralsMade Referral[] @relation("Referral_referrerIdToUser")
+    45→  referralReceived Referral? @relation("Referral_referredIdToUser")
+    46→  subscriptions Subscription[]
+    47→  usageTracking  UsageTracking[]
+    48→  shops         Shop[]
+    49→  scanComparisons ScanComparison[]
+    50→  aiUsageLogs    AiUsageLog[]
+    51→  supportTickets SupportTicket[]
+    52→  npsFeedback   NpsFeedback[]
+    53→
+    54→  @@index([plan])
+    55→  @@index([createdAt])
+    56→  @@index([updatedAt])
+    57→}
+    58→
+    59→// ==================== SHOPS (Multi-shop support) ====================
+    60→// Each owner can have multiple shops. Products, transactions, parties
+    61→// can be tagged with a shopId. When null, shows in all shops (backward compatible).
+    62→model Shop {
+    63→  id          String   @id @default(cuid())
+    64→  userId      String   // owner of this shop
+    65→  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    66→  name        String   // e.g. "Sharma Kirana Store"
+    67→  gstin       String?
+    68→  address     String?
+    69→  phone       String?
+    70→  state       String?
+    71→  isDefault   Boolean  @default(false)
+    72→  createdAt   DateTime @default(now())
+    73→  updatedAt   DateTime @updatedAt
+    74→
+    75→  @@index([userId])
+    76→}
+    77→
+    78→// ==================== PRODUCTS / INVENTORY ====================
+    79→model Product {
+    80→  id                String   @id @default(cuid())
+    81→  userId            String   // owner of this product
+    82→  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+    83→  shopId            String?  // multi-shop: null = all shops (backward compatible)
+    84→  name              String
+    85→  sku               String?
+    86→  hsn               String?  // HSN/SAC code for GST
+    87→  category          String?
+    88→  unit              String   @default("pcs") // pcs, kg, ltr, m, box
+    89→  purchasePrice     Float    @default(0)  // price at which shop owner buys
+    90→  salePrice         Float    @default(0)  // price at which shop owner sells
+    91→  mrp               Float?   // MRP printed on product
+    92→  gstRate           Float    @default(0)  // 0, 5, 12, 18, 28
+    93→  openingStock      Float    @default(0)
+    94→  lowStockThreshold Float    @default(5)
+    95→  notes             String?
+    96→  createdAt         DateTime @default(now())
+    97→  updatedAt         DateTime @updatedAt
+    98→
+    99→  transactionItems  TransactionItem[]
+   100→
+   101→  // Unique SKU per user (not globally)
+   102→  @@unique([userId, sku])
+   103→  // Performance: list products per user, search by name within user
+   104→  @@index([userId, name])
+   105→  @@index([userId, category])
+   106→  @@index([userId, shopId])
+   107→}
+   108→
+   109→// ==================== PARTIES (Customers & Suppliers) ====================
+   110→model Party {
+   111→  id              String   @id @default(cuid())
+   112→  userId          String   // owner of this party
+   113→  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+   114→  shopId          String?  // multi-shop: null = all shops (backward compatible)
+   115→  name            String
+   116→  type            String   @default("customer") // customer | supplier | both
+   117→  phone           String?
+   118→  email           String?
+   119→  gstin           String?  // GST Identification Number
+   120→  address         String?
+   121→  state           String?  // for intra/inter state GST
+   122→  openingBalance  Float    @default(0) // positive = they owe us; negative = we owe them
+   123→  createdAt       DateTime @default(now())
+   124→  updatedAt       DateTime @updatedAt
+   125→
+   126→  transactions    Transaction[]
+   127→  payments        Payment[]
+   128→}
+   129→
+   130→// ==================== TRANSACTIONS (Sales, Purchases, Income, Expense) ====================
+   131→model Transaction {
+   132→  id             String   @id @default(cuid())
+   133→  userId         String   // owner of this transaction
+   134→  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+   135→  shopId         String?  // multi-shop: null = all shops (backward compatible)
+   136→  invoiceNo      String?  // bill/invoice number from bill
+   137→  type           String   // sale | purchase | income | expense
+   138→  partyId        String?  // customer for sale, supplier for purchase
+   139→  party          Party?   @relation(fields: [partyId], references: [id])
+   140→  date           DateTime @default(now())
+   141→  subtotal       Float    @default(0)  // before tax & discount
+   142→  discountAmount Float    @default(0)
+   143→  cgst           Float    @default(0)
+   144→  sgst           Float    @default(0)
+   145→  igst           Float    @default(0)
+   146→  totalAmount    Float    @default(0)  // final payable
+   147→  paidAmount     Float    @default(0)  // amount actually paid
+   148→  paymentMode    String   @default("cash") // cash | upi | card | bank | credit
+   149→  isInterState   Boolean  @default(false)
+   150→  notes          String?
+   151→  // For income/expense (no items)
+   152→  category       String?  // e.g. rent, salary, electricity for expenses; commission etc for income
+   153→  // Payee info for income/expense (who you paid or received from)
+   154→  payeeName      String?  // name of person you paid / received from
+   155→  payeePhone     String?  // mobile number of payee
+   156→  createdAt      DateTime @default(now())
+   157→  updatedAt      DateTime @updatedAt
+   158→
+   159→  items          TransactionItem[]
+   160→
+   161→  // Auto-computed gross profit when type=sale
+   162→  grossProfit    Float    @default(0)
+   163→
+   164→  // Performance: list transactions per user filtered by date and/or type
+   165→  // Used by: dashboard, ledger (sales/purchases), reports
+   166→  @@index([userId, date])
+   167→  @@index([userId, type, date])
+   168→  @@index([userId, partyId])
+   169→}
+   170→
+   171→model TransactionItem {
+   172→  id             String   @id @default(cuid())
+   173→  transactionId  String
+   174→  transaction    Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+   175→  productId      String?
+   176→  product        Product?  @relation(fields: [productId], references: [id])
+   177→  productName    String   // snapshot of name at time of transaction
+   178→  quantity       Float    @default(1)
+   179→  unitPrice      Float    @default(0)  // price per unit (sale or purchase)
+   180→  gstRate        Float    @default(0)
+   181→  discountAmount Float    @default(0)
+   182→  total          Float    @default(0)  // qty * unitPrice - discount + gst
+   183→
+   184→  createdAt      DateTime @default(now())
+   185→}
+   186→
+   187→// ==================== PAYMENTS (separate from transaction totals) ====================
+   188→model Payment {
+   189→  id          String   @id @default(cuid())
+   190→  userId      String   // owner of this payment
+   191→  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+   192→  partyId     String
+   193→  party       Party    @relation(fields: [partyId], references: [id])
+   194→  amount      Float
+   195→  date        DateTime @default(now())
+   196→  mode        String   @default("cash") // cash | upi | card | bank
+   197→  type        String   @default("received") // received (from customer) | paid (to supplier)
+   198→  notes       String?
+   199→  createdAt   DateTime @default(now())
+   200→}
+   201→
+   202→// ==================== APP SETTINGS (per user) ====================
+   203→model Setting {
+   204→  id        String   @id @default(cuid())
+   205→  userId    String   @unique // one setting per user
+   206→  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+   207→  shopName  String   @default("My Shop")
+   208→  ownerName String?
+   209→  address   String?
+   210→  phone     String?
+   211→  gstin     String?
+   212→  state     String?
+   213→  email     String?
+   214→  currency  String   @default("INR")
+   215→  language  String   @default("en")
+   216→  // Privacy: when true, profit figures are hidden from all UI (dashboard,
+   217→  // ledger, transaction detail). Data is still calculated and stored —
+   218→  // only the display is hidden. Owner controls this; staff inherits.
+   219→  hideProfit Boolean @default(false)
+   220→  // AI Bill Scanner output language: 'original' (keep bill language) | 'en' | 'hi' | 'ta' | 'gu' | 'mr' | 'bn' | 'te' | 'kn' | 'ml' | 'pa'
+   221→  scanLang String   @default("original")
+   222→  // AI Voice Entry language: 'original' (keep spoken language, don't translate) | 'en' | 'hi' | 'ta' | 'gu' | 'mr' | 'bn' | 'te' | 'kn' | 'ml' | 'pa'
+   223→  // Controls BOTH the speech-recognition locale (e.g. mr-IN) AND the parsed
+   224→  // output language. 'original' listens in hi-IN (default) and keeps the
+   225→  // spoken language in the parsed result (no English translation).
+   226→  voiceLang String  @default("original")
+   227→}
+   228→
+   229→// ==================== ANNOUNCEMENTS (broadcast messages) ====================
+   230→model Announcement {
+   231→  id        String    @id
+   232→  title     String
+   233→  message   String
+   234→  type      String    @default("info") // info | warning | success | promo
+   235→  link      String?
+   236→  isActive  Boolean   @default(true)
+   237→  startsAt  DateTime  @default(now())
+   238→  endsAt    DateTime?
+   239→  createdAt DateTime  @default(now())
+   240→  createdBy String?
+   241→
+   242→  @@index([isActive, startsAt, endsAt])
+   243→}
+   244→
+   245→// ==================== FEATURE FLAGS (remote kill switches) ====================
+   246→model FeatureFlag {
+   247→  id          String   @id
+   248→  key         String   @unique
+   249→  enabled     Boolean  @default(true)
+   250→  label       String
+   251→  description String?
+   252→  updatedAt   DateTime
+   253→  updatedBy   String?
+   254→
+   255→  @@index([enabled])
+   256→}
+   257→
+   258→// ==================== REFERRALS (refer 3 = 1 year free Pro) ====================
+   259→model Referral {
+   260→  id          String    @id
+   261→  referrerId  String
+   262→  referredId  String?   @unique
+   263→  code        String    @unique
+   264→  status      String    @default("pending") // pending | completed | rewarded
+   265→  rewardGiven Boolean   @default(false)
+   266→  createdAt   DateTime  @default(now())
+   267→  completedAt DateTime?
+   268→  referrer    User      @relation("Referral_referrerIdToUser", fields: [referrerId], references: [id], onDelete: Cascade)
+   269→  referred    User?     @relation("Referral_referredIdToUser", fields: [referredId], references: [id])
+   270→
+   271→  @@index([referredId])
+   272→  @@index([referrerId, status])
+   273→}
+   274→
+   275→// ==================== SUBSCRIPTIONS (Razorpay payments) ====================
+   276→model Subscription {
+   277→  id             String   @id
+   278→  userId         String
+   279→  plan           String   // pro | elite
+   280→  status         String   @default("active") // active | cancelled | expired
+   281→  amount         Float
+   282→  paymentMode    String   @default("razorpay")
+   283→  paymentId      String?
+   284→  subscriptionId String?
+   285→  startDate      DateTime @default(now())
+   286→  endDate        DateTime
+   287→  createdAt      DateTime @default(now())
+   288→  User           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+   289→
+   290→  @@index([status, createdAt])
+   291→  @@index([userId, status])
+   292→}
+   293→
+   294→// ==================== USAGE TRACKING (plan limits) ====================
+   295→model UsageTracking {
+   296→  id           String   @id
+   297→  userId       String
+   298→  month        String   // YYYY-MM format
+   299→  transactions Int      @default(0)
+   300→  aiScans      Int      @default(0)
+   301→  voiceParses  Int      @default(0)
+   302→  products     Int      @default(0)
+   303→  updatedAt    DateTime
+   304→  User         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+   305→
+   306→  @@unique([userId, month])
+   307→  @@index([userId, month])
+   308→}
+   309→
+   310→// ==================== AUDIT LOG (security & compliance) ====================
+   311→// Track every important action: logins, data exports, deletes, role changes.
+   312→// Used for: security forensics, compliance (DPDP Act), dispute resolution.
+   313→model AuditLog {
+   314→  id         String   @id @default(cuid())
+   315→  userId     String?  // user who performed the action (null = unauthenticated attempt)
+   316→  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+   317→  action     String   // login_success | login_failure | logout | data_export | data_delete | role_change | settings_update | etc.
+   318→  entityType String?  // product | party | transaction | setting | user | staff
+   319→  entityId   String?  // ID of the affected entity
+   320→  ip         String?  // IP address of the actor
+   321→  userAgent  String?  // browser/device info
+   322→  metadata   Json?    // any extra context (what changed, what was exported, etc.)
+   323→  createdAt  DateTime @default(now())
+   324→
+   325→  @@index([userId, createdAt])
+   326→  @@index([action, createdAt])
+   327→}
+   328→
+   329→// ==================== AI SCAN COMPARISONS ====================
+   330→// Stores results of side-by-side AI provider tests. Each record is one
+   331→// bill image scanned by 1-3 providers (Gemini, OpenAI, Groq). Admins use
+   332→// the /settings/ai-comparison page to compare accuracy and pick the best.
+   333→model ScanComparison {
+   334→  id            String   @id @default(cuid())
+   335→  userId        String
+   336→  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+   337→
+   338→  // The bill image that was scanned
+   339→  imageName     String?  // filename or label, if user provided one
+   340→  imagePreview  String   // base64 thumbnail (max ~50KB) for display in history
+   341→
+   342→  // Bill type the user said it was
+   343→  billType      String   @default("purchase") // sale | purchase
+   344→
+   345→  // Results from each provider (null if that provider wasn't tested)
+   346→  geminiResult  Json?    // { success, parsed, error, durationMs, tokensUsed }
+   347→  openaiResult  Json?
+   348→  groqResult    Json?
+   349→
+   350→  // Ground truth (what the user manually entered as the correct answer)
+   351→  groundTruth   Json?    // { sellerName, totalAmount, itemsCount, items: [...] }
+   352→
+   353→  // Computed scores per provider (0-100, null if not tested or no ground truth)
+   354→  geminiScore   Float?
+   355→  openaiScore   Float?
+   356→  groqScore     Float?
+   357→
+   358→  createdAt     DateTime @default(now())
+   359→
+   360→  @@index([userId, createdAt])
+   361→  @@index([createdAt])
+   362→}
+   363→
+   364→// ==================== AI USAGE LOG (cost tracking) ====================
+   365→// Every AI call (scan-bill, voice-parse) gets logged here with exact token
+   366→// counts and calculated cost. Used by the /settings/ai-usage dashboard to
+   367→// show the founder exactly how much each feature costs to run.
+   368→model AiUsageLog {
+   369→  id            String   @id @default(cuid())
+   370→  userId        String
+   371→  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+   372→
+   373→  feature       String   // 'scan-bill' | 'voice-parse' | 'scan-compare'
+   374→  provider      String   // 'gemini' | 'openai' | 'groq' | 'vlm' | 'zai-sdk'
+   375→  model         String   // e.g. 'gemini-2.5-flash', 'llama-4-scout-17b-16e-instruct'
+   376→
+   377→  // Token counts from the AI provider's response
+   378→  inputTokens   Int      @default(0)
+   379→  outputTokens  Int      @default(0)
+   380→  totalTokens   Int      @default(0)
+   381→
+   382→  // Cost in INR (calculated at time of call using current pricing)
+   383→  // Stored per-call so historical costs are preserved even if prices change
+   384→  costInr       Float    @default(0)
+   385→
+   386→  // Performance + result
+   387→  durationMs    Int      @default(0)
+   388→  success       Boolean  @default(true)
+   389→  errorMessage  String?  // null if success, error text if failed
+   390→
+   391→  createdAt     DateTime @default(now())
+   392→
+   393→  @@index([userId, createdAt])
+   394→  @@index([feature, createdAt])
+   395→  @@index([provider, createdAt])
+   396→  @@index([createdAt])
+   397→  @@index([feature, provider, createdAt])
+   398→}
+   399→
+   400→
+   401→// ==================== ADMIN PANEL TABLES ====================
+   402→// These tables are owned by the admin panel (bahikhata-admin repo) but
+   403→// MUST exist in the main app's schema too. Otherwise, when the main app
+   404→// runs `prisma db push` during Vercel builds, it drops these tables —
+   405→// wiping all admin accounts on every deploy.
+   406→//
+   407→// DO NOT remove these models from this file.
+   408→
+   409→model AdminUser {
+   410→  id            String    @id @default(cuid())
+   411→  email         String    @unique
+   412→  name          String
+   413→  password      String
+   414→  role          String    @default("admin")
+   415→  totpSecret    String?
+   416→  totpEnabled   Boolean   @default(false)
+   417→  isActive      Boolean   @default(true)
+   418→  lastLoginAt   DateTime?
+   419→  lastLoginIp   String?
+   420→  createdAt     DateTime  @default(now())
+   421→  updatedAt     DateTime  @updatedAt
+   422→
+   423→  adminActions  AdminAction[]
+   424→
+   425→  @@index([email])
+   426→  @@index([isActive])
+   427→}
+   428→
+   429→model AdminAction {
+   430→  id            String   @id @default(cuid())
+   431→  adminId       String
+   432→  admin         AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
+   433→  action        String
+   434→  targetType    String?
+   435→  targetId      String?
+   436→  description   String
+   437→  metadata      Json?
+   438→  ip            String?
+   439→  userAgent     String?
+   440→  createdAt     DateTime @default(now())
+   441→
+   442→  @@index([adminId, createdAt])
+   443→  @@index([action, createdAt])
+   444→  @@index([targetType, targetId])
+   445→}
+   446→
+   447→// ==================== SUPPORT TICKETS (admin panel) ====================
+   448→model SupportTicket {
+   449→  id          String    @id @default(cuid())
+   450→  userId      String
+   451→  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+   452→  subject     String
+   453→  message     String
+   454→  category    String    @default("general")
+   455→  priority    String    @default("medium")
+   456→  status      String    @default("open")
+   457→  assignedTo  String?
+   458→  response    String?
+   459→  resolvedAt  DateTime?
+   460→  resolvedBy  String?
+   461→  userEmail   String?
+   462→  userAgent   String?
+   463→  appVersion  String?
+   464→  createdAt   DateTime  @default(now())
+   465→  updatedAt   DateTime  @updatedAt
+   466→
+   467→  @@index([status, priority, createdAt])
+   468→  @@index([userId, createdAt])
+   469→  @@index([assignedTo, status])
+   470→}
+   471→
+   472→// ==================== NPS FEEDBACK (admin panel) ====================
+   473→model NpsFeedback {
+   474→  id          String   @id @default(cuid())
+   475→  userId      String
+   476→  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+   477→  score       Int
+   478→  feedback    String?
+   479→  category    String?
+   480→  createdAt   DateTime @default(now())
+   481→
+   482→  @@index([userId, createdAt])
+   483→  @@index([score])
+   484→}
+   485→
+   486→// ==================== DAILY STATS (admin panel — pre-computed KPIs) ====================
+   487→model DailyStats {
+   488→  id              String   @id @default(cuid())
+   489→  date            DateTime @unique
+   490→  totalUsers      Int      @default(0)
+   491→  newUsers        Int      @default(0)
+   492→  activeUsers     Int      @default(0)
+   493→  payingUsers     Int      @default(0)
+   494→  mrr             Float    @default(0)
+   495→  newMrr          Float    @default(0)
+   496→  churnedMrr      Float    @default(0)
+   497→  arr             Float    @default(0)
+   498→  totalGmv        Float    @default(0)
+   499→  totalTxns       Int      @default(0)
+   500→  salesCount      Int      @default(0)
+   501→  purchasesCount  Int      @default(0)
+   502→  aiCalls         Int      @default(0)
+   503→  aiCostInr       Float    @default(0)
+   504→  aiScans         Int      @default(0)
+   505→  voiceParses     Int      @default(0)
+   506→  computedAt      DateTime @default(now())
+   507→  @@index([date])
+   508→}
+   509→
+   510→// ==================== USER SEGMENTS CACHE (admin panel) ====================
+   511→model UserSegmentCache {
+   512→  id          String   @id @default(cuid())
+   513→  userId      String
+   514→  segmentId   String
+   515→  computedAt  DateTime @default(now())
+   516→  @@unique([userId, segmentId])
+   517→  @@index([segmentId])
+   518→  @@index([userId])
+   519→}
+   520→
+   521→// ==================== CREDIT SCORE CACHE (admin panel) ====================
+   522→model CreditScoreCache {
+   523→  id              String   @id @default(cuid())
+   524→  userId          String   @unique
+   525→  score           Int
+   526→  band            String
+   527→  avgMonthlySales Float    @default(0)
+   528→  totalSales6Mo   Float    @default(0)
+   529→  activeMonths    Int      @default(0)
+   530→  collectionRate  Float    @default(0)
+   531→  businessAgeDays Int      @default(0)
+   532→  productCount    Int      @default(0)
+   533→  partyCount      Int      @default(0)
+   534→  hasGstData      Boolean  @default(false)
+   535→  recommendation  String?
+   536→  computedAt      DateTime @default(now())
+   537→  @@index([score])
+   538→  @@index([band])
+   539→}
+   540→
+   541→// ==================== NOTIFICATION TEMPLATES (shared with admin) ====================
+   542→model NotificationTemplate {
+   543→  id          String   @id @default(cuid())
+   544→  name        String
+   545→  category    String   @default("general")
+   546→  channel     String                          // sms | email | push
+   547→  subject     String?
+   548→  body        String   @db.Text
+   549→  variables   String   @default("[]") @db.Text
+   550→  language    String   @default("en")
+   551→  status      String   @default("draft")
+   552→  version     Int      @default(1)
+   553→  createdBy   String?
+   554→  createdAt   DateTime @default(now())
+   555→  updatedAt   DateTime @updatedAt
+   556→
+   557→  @@index([channel, status])
+   558→  @@index([category, status])
+   559→  @@index([status])
+   560→}
+   561→
+   562→// ==================== NOTIFICATION LOG (shared with admin) ====================
+   563→model NotificationLog {
+   564→  id            String   @id @default(cuid())
+   565→  userId        String?
+   566→  recipient     String
+   567→  templateId    String?
+   568→  templateName  String?
+   569→  channel       String
+   570→  subject       String?
+   571→  body          String   @db.Text
+   572→  status        String   @default("pending")
+   573→  provider      String?
+   574→  providerMessageId String?
+   575→  errorMessage  String?
+   576→  sentBy        String?
+   577→  sentAt        DateTime @default(now())
+   578→  category      String   @default("general")
+   579→
+   580→  @@index([userId, sentAt])
+   581→  @@index([channel, status, sentAt])
+   582→  @@index([status, sentAt])
+   583→  @@index([sentAt])
+   584→}
+   585→
+   586→// ==================== CAMPAIGNS (shared with admin) ====================
+   587→model Campaign {
+   588→  id              String   @id @default(cuid())
+   589→  name            String
+   590→  description     String?  @db.Text
+   591→  status          String   @default("draft")
+   592→  targetSegmentId String?
+   593→  targetUserIds   String   @default("[]") @db.Text
+   594→  startAt         DateTime?
+   595→  endAt           DateTime?
+   596→  totalRecipients Int      @default(0)
+   597→  totalSent       Int      @default(0)
+   598→  totalFailed     Int      @default(0)
+   599→  totalSkipped    Int      @default(0)
+   600→  currentStep     Int      @default(0)
+   601→  createdBy       String?
+   602→  createdAt       DateTime @default(now())
+   603→  updatedAt       DateTime @updatedAt
+   604→  startedAt       DateTime?
+   605→  completedAt     DateTime?
+   606→  steps           CampaignStep[]
+   607→
+   608→  @@index([status, startAt])
+   609→  @@index([createdBy])
+   610→}
+   611→
+   612→model CampaignStep {
+   613→  id              String   @id @default(cuid())
+   614→  campaignId      String
+   615→  campaign        Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+   616→  stepNumber      Int
+   617→  templateId      String
+   618→  templateName    String?
+   619→  delayMinutes    Int      @default(0)
+   620→  status          String   @default("pending")
+   621→  scheduledAt     DateTime?
+   622→  sentAt          DateTime?
+   623→  recipientCount  Int      @default(0)
+   624→  sentCount       Int      @default(0)
+   625→  failedCount     Int      @default(0)
+   626→  skippedCount    Int      @default(0)
+   627→  errorMessage    String?
+   628→
+   629→  @@index([campaignId, stepNumber])
+   630→  @@index([status, scheduledAt])
+   631→}
+   632→
+   633→// ==================== STATUS PAGE / INCIDENTS (shared with admin) ====================
+   634→model Incident {
+   635→  id          String   @id @default(cuid())
+   636→  title       String
+   637→  description String   @db.Text
+   638→  severity    String   @default("minor")
+   639→  status      String   @default("investigating")
+   640→  service     String   @default("all")
+   641→  startedAt   DateTime @default(now())
+   642→  resolvedAt  DateTime?
+   643→  createdBy   String?
+   644→  createdAt   DateTime @default(now())
+   645→  updatedAt   DateTime @updatedAt
+   646→  updates     IncidentUpdate[]
+   647→
+   648→  @@index([status, startedAt])
+   649→  @@index([service, status])
+   650→}
+   651→
+   652→model IncidentUpdate {
+   653→  id          String   @id @default(cuid())
+   654→  incidentId  String
+   655→  incident    Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+   656→  message     String   @db.Text
+   657→  status      String
+   658→  createdBy   String?
+   659→  createdAt   DateTime @default(now())
+   660→
+   661→  @@index([incidentId, createdAt])
+   662→}
+   663→
+   664→// ==================== ANOMALY DETECTION (shared with admin) ====================
+   665→model Anomaly {
+   666→  id            String   @id @default(cuid())
+   667→  metric        String
+   668→  metricLabel   String
+   669→  direction     String
+   670→  severity      String   @default("medium")
+   671→  status        String   @default("open")
+   672→  currentValue  Float
+   673→  baselineValue Float
+   674→  baselineStdDev Float
+   675→  zScore        Float
+   676→  baselineDays  Int      @default(30)
+   677→  detectedAt    DateTime @default(now())
+   678→  windowStart   DateTime
+   679→  windowEnd     DateTime
+   680→  acknowledgedBy String?
+   681→  acknowledgedAt DateTime?
+   682→  resolvedBy     String?
+   683→  resolvedAt     DateTime?
+   684→  adminNote      String?  @db.Text
+   685→  createdAt      DateTime @default(now())
+   686→  updatedAt      DateTime @updatedAt
+   687→
+   688→  @@index([status, detectedAt])
+   689→  @@index([metric, detectedAt])
+   690→  @@index([detectedAt])
+   691→}
+   692→
+   693→// ==================== CONFIGURABLE FRAUD RULES (shared with admin) ====================
+   694→model FraudRule {
+   695→  id              String   @id @default(cuid())
+   696→  name            String
+   697→  description     String?  @db.Text
+   698→  metric          String
+   699→  operator        String
+   700→  threshold       Float
+   701→  windowMinutes   Int?
+   702→  userAgeMinutes  Int?
+   703→  enabled         Boolean  @default(true)
+   704→  severity        String   @default("medium")
+   705→  createdBy       String?
+   706→  createdAt       DateTime @default(now())
+   707→  updatedAt       DateTime @updatedAt
+   708→  alerts          FraudAlert[]
+   709→
+   710→  @@index([enabled, metric])
+   711→}
+   712→
+   713→model FraudAlert {
+   714→  id              String   @id @default(cuid())
+   715→  ruleId          String
+   716→  rule            FraudRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+   717→  userId          String
+   718→  userName        String?
+   719→  userEmail       String?
+   720→  metricValue     Float
+   721→  threshold       Float
+   722→  status          String   @default("open")
+   723→  adminNote       String?  @db.Text
+   724→  detectedAt      DateTime @default(now())
+   725→  acknowledgedBy  String?
+   726→  acknowledgedAt  DateTime?
+   727→  resolvedBy      String?
+   728→  resolvedAt      DateTime?
+   729→
+   730→  @@index([status, detectedAt])
+   731→  @@index([ruleId, detectedAt])
+   732→  @@index([userId, detectedAt])
+   733→}
+   734→
+   735→// ==================== PARTNER MANAGEMENT (shared with admin) ====================
+   736→model Partner {
+   737→  id                  String   @id @default(cuid())
+   738→  name                String
+   739→  type                String   @default("nbfc")
+   740→  status              String   @default("onboarding")
+   741→  contactName         String?
+   742→  contactEmail        String?
+   743→  contactPhone        String?
+   744→  website             String?
+   745→  apiBaseUrl          String?
+   746→  webhookUrl          String?
+   747→  revenueSharePct     Float    @default(0)
+   748→  totalLeadsSent      Int      @default(0)
+   749→  totalRevenueShared  Float    @default(0)
+   750→  contractStartAt     DateTime?
+   751→  contractEndAt       DateTime?
+   752→  notes               String?  @db.Text
+   753→  createdBy           String?
+   754→  createdAt           DateTime @default(now())
+   755→  updatedAt           DateTime @updatedAt
+   756→
+   757→  @@index([type, status])
+   758→  @@index([status])
+   759→}
+   760→
+   761→// ==================== API KEYS (shared with admin) ====================
+   762→model ApiKey {
+   763→  id            String    @id @default(cuid())
+   764→  partnerId     String?
+   765→  name          String
+   766→  keyHash       String   @unique
+   767→  keyPrefix     String
+   768→  scopes        String   @default("[]") @db.Text
+   769→  status        String   @default("active")
+   770→  expiresAt     DateTime?
+   771→  lastUsedAt    DateTime?
+   772→  usageCount    Int      @default(0)
+   773→  createdBy     String?
+   774→  createdAt     DateTime @default(now())
+   775→  updatedAt     DateTime @updatedAt
+   776→
+   777→  @@index([partnerId, status])
+   778→  @@index([status])
+   779→  @@index([keyHash])
+   780→}
+   781→
+   782→// ==================== WEBHOOK MANAGEMENT (shared with admin) ====================
+   783→model WebhookEndpoint {
+   784→  id            String   @id @default(cuid())
+   785→  partnerId     String
+   786→  url           String
+   787→  secret        String?
+   788→  events        String   @default("[]") @db.Text
+   789→  status        String   @default("active")
+   790→  description   String?
+   791→  totalSent     Int      @default(0)
+   792→  totalSuccess  Int      @default(0)
+   793→  totalFailed   Int      @default(0)
+   794→  lastSentAt    DateTime?
+   795→  createdBy     String?
+   796→  createdAt     DateTime @default(now())
+   797→  updatedAt     DateTime @updatedAt
+   798→
+   799→  @@index([partnerId, status])
+   800→  @@index([status])
+   801→}
+   802→
+   803→model WebhookDelivery {
+   804→  id              String   @id @default(cuid())
+   805→  endpointId      String
+   806→  eventType       String
+   807→  payload         String   @db.Text
+   808→  status          String   @default("pending")
+   809→  attemptCount    Int      @default(0)
+   810→  maxAttempts     Int      @default(3)
+   811→  responseStatus  Int?
+   812→  responseBody    String?  @db.Text
+   813→  errorMessage    String?
+   814→  firstAttemptAt  DateTime?
+   815→  lastAttemptAt   DateTime?
+   816→  nextRetryAt     DateTime?
+   817→  deliveredAt     DateTime?
+   818→  createdAt       DateTime @default(now())
+   819→
+   820→  @@index([endpointId, status, createdAt])
+   821→  @@index([status, nextRetryAt])
+   822→  @@index([createdAt])
+   823→}
+   824→
+   825→// ==================== REVENUE RECOGNITION (shared with admin) ====================
+   826→model RevenueSchedule {
+   827→  id              String   @id @default(cuid())
+   828→  subscriptionId  String
+   829→  userId          String
+   830→  plan            String
+   831→  amount          Float
+   832→  periodStart     DateTime
+   833→  periodEnd       DateTime
+   834→  status          String   @default("pending")
+   835→  recognizedAt    DateTime?
+   836→  createdAt       DateTime @default(now())
+   837→
+   838→  @@index([status, periodStart])
+   839→  @@index([userId, periodStart])
+   840→  @@index([subscriptionId])
+   841→  @@index([periodStart])
+   842→}
+   843→
+   844→// ==================== A/B TESTING (shared with admin) ====================
+   845→model Experiment {
+   846→  id              String   @id @default(cuid())
+   847→  name            String
+   848→  description     String?  @db.Text
+   849→  status          String   @default("draft")
+   850→  metric          String
+   851→  metricGoal      String  @default("increase")
+   852→  targetEvent     String?
+   853→  trafficPct      Int      @default(100)
+   854→  variants        String   @default("[]") @db.Text
+   855→  startAt         DateTime?
+   856→  endAt           DateTime?
+   857→  winnerVariant   String?
+   858→  conclusion      String?  @db.Text
+   859→  createdBy       String?
+   860→  createdAt       DateTime @default(now())
+   861→  updatedAt       DateTime @updatedAt
+   862→
+   863→  @@index([status, startAt])
+   864→}
+   865→
+   866→model ExperimentAssignment {
+   867→  id              String   @id @default(cuid())
+   868→  experimentId    String
+   869→  userId          String
+   870→  variantKey      String
+   871→  assignedAt      DateTime @default(now())
+   872→  convertedAt     DateTime?
+   873→  conversionValue Float    @default(0)
+   874→
+   875→  @@unique([experimentId, userId])
+   876→  @@index([experimentId, variantKey])
+   877→  @@index([userId, experimentId])
+   878→  @@index([convertedAt])
+   879→}
+   880→
+   881→// ==================== COMPETITOR MONITORING (shared with admin) ====================
+   882→model Competitor {
+   883→  id              String   @id @default(cuid())
+   884→  name            String
+   885→  website         String?
+   886→  description     String?  @db.Text
+   887→  freePrice       String?
+   888→  proPrice        String?
+   889→  elitePrice      String?
+   890→  features        String   @default("{}") @db.Text
+   891→  targetMarket    String?
+   892→  usp             String?  @db.Text
+   893→  weaknesses      String?  @db.Text
+   894→  status          String   @default("active")
+   895→  createdBy       String?
+   896→  createdAt       DateTime @default(now())
+   897→  updatedAt       DateTime @updatedAt
+   898→
+   899→  @@index([status])
+   900→}
+   901→
+   902→model CompetitorUpdate {
+   903→  id              String   @id @default(cuid())
+   904→  competitorId    String
+   905→  field           String
+   906→  oldValue        String?  @db.Text
+   907→  newValue        String?  @db.Text
+   908→  note            String?  @db.Text
+   909→  updatedBy       String?
+   910→  createdAt       DateTime @default(now())
+   911→
+   912→  @@index([competitorId, createdAt])
+   913→}
+   914→
+   915→// ==================== BULK OPERATIONS v2 (shared with admin) ====================
+   916→model BulkJob {
+   917→  id              String   @id @default(cuid())
+   918→  name            String
+   919→  action          String
+   920→  targetType      String   @default("user")
+   921→  targetCriteria  String   @default("{}") @db.Text
+   922→  actionParams    String   @default("{}") @db.Text
+   923→  status          String   @default("scheduled")
+   924→  scheduledAt     DateTime
+   925→  startedAt       DateTime?
+   926→  completedAt     DateTime?
+   927→  totalTargets    Int      @default(0)
+   928→  processedCount  Int      @default(0)
+   929→  successCount    Int      @default(0)
+   930→  failedCount     Int      @default(0)
+   931→  errorMessage    String?  @db.Text
+   932→  createdBy       String?
+   933→  createdAt       DateTime @default(now())
+   934→  updatedAt       DateTime @updatedAt
+   935→
+   936→  @@index([status, scheduledAt])
+   937→  @@index([action, status])
+   938→}
+   939→
+   940→// ==================== NPS SURVEY CONFIG (shared with admin) ====================
+   941→model NpsSurveyConfig {
+   942→  id              String   @id @default(cuid())
+   943→  name            String
+   944→  triggerType     String
+   945→  triggerValue    Int
+   946→  question        String   @default("How likely are you to recommend BahiKhata Pro to a friend or colleague?")
+   947→  cooldownDays    Int      @default(90)
+   948→  targetPlans     String   @default("all")
+   949→  enabled         Boolean  @default(true)
+   950→  priority        Int      @default(1)
+   951→  timesShown      Int      @default(0)
+   952→  timesResponded  Int      @default(0)
+   953→  createdBy       String?
+   954→  createdAt       DateTime @default(now())
+   955→  updatedAt       DateTime @updatedAt
+   956→
+   957→  @@index([enabled, triggerType])
+   958→}
+   959→
+   960→// ==================== DATA EXPORT CENTER (shared with admin) ====================
+   961→model DataExportRequest {
+   962→  id              String   @id @default(cuid())
+   963→  type            String
+   964→  format          String   @default("csv")
+   965→  status          String   @default("pending")
+   966→  userId          String?
+   967→  customQuery     String?  @db.Text
+   968→  fileName        String?
+   969→  fileSizeBytes   Int      @default(0)
+   970→  rowCount        Int      @default(0)
+   971→  errorMessage    String?  @db.Text
+   972→  requestedBy     String?
+   973→  processedBy     String?
+   974→  createdAt       DateTime @default(now())
+   975→  completedAt     DateTime?
+   976→  expiresAt       DateTime?
+   977→
+   978→  @@index([status, createdAt])
+   979→  @@index([type, status])
+   980→}
+   981→
+   982→// ==================== PREDICTIVE CHURN MODEL (shared with admin) ====================
+   983→model ChurnPrediction {
+   984→  id              String   @id @default(cuid())
+   985→  userId          String   @unique
+   986→  userName        String?
+   987→  userEmail       String?
+   988→  userPlan        String?
+   989→  riskScore       Int
+   990→  riskLevel       String
+   991→  inactivityScore Int      @default(0)
+   992→  engagementScore Int      @default(0)
+   993→  aiUsageScore    Int      @default(0)
+   994→  planScore       Int      @default(0)
+   995→  ageScore        Int      @default(0)
+   996→  supportScore    Int      @default(0)
+   997→  recommendedAction String?
+   998→  computedAt      DateTime @default(now())
+   999→
+  1000→  @@index([riskLevel, riskScore])
+  1001→  @@index([userPlan, riskLevel])
+  1002→}
+  1003→
+  1004→// ==================== SUPPLIER INTELLIGENCE (shared with admin) ====================
+  1005→model SupplierReport {
+  1006→  id              String   @id @default(cuid())
+  1007→  name            String
+  1008→  type            String
+  1009→  partnerId       String?
+  1010→  status          String   @default("generated")
+  1011→  summary         String?  @db.Text
+  1012→  data            String   @default("{}") @db.Text
+  1013→  dataPoints      Int      @default(0)
+  1014→  userCount       Int      @default(0)
+  1015→  priceInr        Float    @default(0)
+  1016→  period          String?
+  1017→  generatedBy     String?
+  1018→  createdAt       DateTime @default(now())
+  1019→  deliveredAt     DateTime?
+  1020→
+  1021→  @@index([type, status])
+  1022→  @@index([partnerId, status])
+  1023→}
+  1024→
