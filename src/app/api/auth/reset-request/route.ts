@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
   try {
     // Rate limit: 3 per IP per hour
     const ip = getClientIP(req)
-    const rl = rateLimit(`reset-request:${ip}`, { limit: 3, windowSec: 3600 })
+    const rl = await rateLimit(`reset-request:${ip}`, { limit: 3, windowSec: 3600 })
     if (!rl.success) return rateLimitedResponse(rl)
 
     const { email } = await req.json()

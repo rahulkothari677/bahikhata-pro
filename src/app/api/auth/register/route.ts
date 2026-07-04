@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
   try {
     // Rate limit check
     const ip = getClientIP(req)
-    const rl = rateLimit(`signup:${ip}`, { limit: 5, windowSec: 3600 })
+    const rl = await rateLimit(`signup:${ip}`, { limit: 5, windowSec: 3600 })
     if (!rl.success) return rateLimitedResponse(rl)
 
     const { email, password, name } = await req.json()

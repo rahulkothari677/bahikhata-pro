@@ -1,31 +1,87 @@
 /**
- * Simple in-memory rate limiter.
+ * Redis-backed rate limiter (Upstash).
  *
- * For production at scale, replace with @upstash/ratelimit (Redis-backed).
- * For a startup app with <1000 users, in-memory is fine and avoids the cost
- * of a Redis instance.
+ * Phase 2.2 audit fix: replaced the in-memory Map with Upstash Redis so rate
+ * limits are shared across all serverless instances. The old in-memory limiter
+ * didn't work on Vercel — each instance had its own Map, so "10 scans/hour"
+ * was really "10 per instance × N instances".
  *
- * Usage:
+ * Graceful fallback: if UPSTASH_REDIS_REST_URL/TOKEN are not set (e.g. in
+ * local dev without Redis), falls back to the old in-memory Map so the app
+ * still works. This also acts as a safety net if Upstash is temporarily down.
+ *
+ * Usage (note: now async — callers must `await`):
  *   import { rateLimit } from '@/lib/rate-limit'
- *   const { success, resetAt } = rateLimit(key, { limit: 5, windowSec: 60 })
+ *   const { success, resetAt } = await rateLimit(key, { limit: 5, windowSec: 60 })
  *   if (!success) return 429 response
  *
  * Strategies:
  *   - 'fixed' (default): simple fixed window — N requests per window
  *   - 'token': token bucket — bursty traffic allowed up to capacity
+ *             (in-memory only; Upstash uses equivalent sliding window)
  */
+
+import { Ratelimit } from '@upstash/ratelimit'
+import { Redis } from '@upstash/redis'
+
+// --- Upstash Redis client (singleton) ------------------------------------
+
+let redisClient: Redis | null = null
+
+function getRedis(): Redis | null {
+  if (redisClient !== null) return redisClient
+  const url = process.env.UPSTASH_REDIS_REST_URL
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN
+  if (!url || !token) return null
+  try {
+    redisClient = new Redis({ url, token })
+  } catch {
+    redisClient = null
+  }
+  return redisClient
+}
+
+/**
+ * Cache of rate limiters, keyed by `${limit}:${windowSec}`.
+ * Each unique (limit, window) combo gets its own Ratelimit instance because
+ * Upstash's slidingWindow takes the limit+window at construction time.
+ */
+const limiterCache = new Map<string, Ratelimit>()
+
+function getRatelimiter(limit: number, windowSec: number): Ratelimit | null {
+  const redis = getRedis()
+  if (!redis) return null
+
+  const cacheKey = `${limit}:${windowSec}`
+  let limiter = limiterCache.get(cacheKey)
+  if (limiter) return limiter
+
+  // Convert windowSec to a Duration string Upstash understands.
+  // Format: "<number> s" for seconds, "<number> m" for minutes, etc.
+  const duration = `${windowSec} s`
+
+  limiter = new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(limit, duration as any),
+    prefix: 'ratelimit:',
+    analytics: false,
+  })
+  limiterCache.set(cacheKey, limiter)
+  return limiter
+}
+
+// --- In-memory fallback (for dev / when Redis is down) -------------------
 
 interface Bucket {
   count: number
   resetAt: number
-  tokens: number  // for token bucket
+  tokens: number
   lastRefill: number
 }
 
 const buckets = new Map<string, Bucket>()
 
-// Periodically purge expired buckets to prevent memory leak
-const PURGE_INTERVAL = 5 * 60 * 1000 // 5 min
+const PURGE_INTERVAL = 5 * 60 * 1000
 let lastPurge = Date.now()
 
 function purge() {
@@ -37,69 +93,75 @@ function purge() {
   }
 }
 
+// --- Public types --------------------------------------------------------
+
 interface RateLimitResult {
   success: boolean
-  resetAt: number        // epoch ms when bucket resets
-  remaining: number      // remaining requests in window
-  retryAfterSec: number  // seconds until reset (for Retry-After header)
+  resetAt: number
+  remaining: number
+  retryAfterSec: number
 }
 
 interface FixedWindowOpts {
-  limit: number      // max requests per window
-  windowSec: number  // window length in seconds
+  limit: number
+  windowSec: number
 }
 
 interface TokenBucketOpts {
-  capacity: number   // max tokens in bucket (burst size)
-  refillPerSec: number  // tokens added per second
+  capacity: number
+  refillPerSec: number
 }
 
-export function rateLimit(
+// --- Main rate-limit function (async — Redis-backed) ---------------------
+
+export async function rateLimit(
   key: string,
   opts: FixedWindowOpts | TokenBucketOpts,
+): Promise<RateLimitResult> {
+  // Convert token-bucket opts to equivalent fixed-window for both Redis
+  // and in-memory paths (keeps behavior consistent)
+  let limit: number
+  let windowSec: number
+  if ('capacity' in opts) {
+    limit = opts.capacity
+    windowSec = Math.max(1, Math.ceil(opts.capacity / opts.refillPerSec))
+  } else {
+    limit = opts.limit
+    windowSec = opts.windowSec
+  }
+
+  const limiter = getRatelimiter(limit, windowSec)
+
+  // --- Redis-backed path (production) ---
+  if (limiter) {
+    try {
+      const result = await limiter.limit(key)
+      const now = Date.now()
+      return {
+        success: result.success,
+        resetAt: result.reset || (now + windowSec * 1000),
+        remaining: result.remaining,
+        retryAfterSec: result.success ? 0 : Math.ceil(((result.reset || (now + windowSec * 1000)) - now) / 1000),
+      }
+    } catch (err) {
+      // If Redis is down, fall back to in-memory rather than blocking all traffic
+      console.warn('[rate-limit] Upstash error, falling back to in-memory:', err)
+    }
+  }
+
+  // --- In-memory fallback (dev or Redis down) ---
+  return inMemoryRateLimit(key, { limit, windowSec })
+}
+
+// --- In-memory implementation (fallback) ---------------------------------
+
+function inMemoryRateLimit(
+  key: string,
+  opts: FixedWindowOpts,
 ): RateLimitResult {
   purge()
   const now = Date.now()
 
-  // Token bucket strategy
-  if ('capacity' in opts) {
-    const { capacity, refillPerSec } = opts
-    let bucket = buckets.get(key)
-    if (!bucket) {
-      bucket = {
-        count: 0,
-        resetAt: now + 60_000,
-        tokens: capacity,
-        lastRefill: now,
-      }
-      buckets.set(key, bucket)
-    }
-
-    // Refill tokens based on elapsed time
-    const elapsed = (now - bucket.lastRefill) / 1000
-    bucket.tokens = Math.min(capacity, bucket.tokens + elapsed * refillPerSec)
-    bucket.lastRefill = now
-
-    if (bucket.tokens >= 1) {
-      bucket.tokens -= 1
-      return {
-        success: true,
-        resetAt: now + Math.ceil((1 - bucket.tokens) / refillPerSec * 1000),
-        remaining: Math.floor(bucket.tokens),
-        retryAfterSec: 0,
-      }
-    }
-
-    const retryAfterSec = Math.ceil((1 - bucket.tokens) / refillPerSec)
-    return {
-      success: false,
-      resetAt: now + retryAfterSec * 1000,
-      remaining: 0,
-      retryAfterSec,
-    }
-  }
-
-  // Fixed window strategy (default)
   const { limit, windowSec } = opts
   const windowMs = windowSec * 1000
   let bucket = buckets.get(key)

@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
 
     // Rate limit by IP (anti-abuse — prevents one user from logging in from many IPs)
     const ip = getClientIP(req)
-    const ipRL = rateLimit(`scan:ip:${ip}`, { limit: 10, windowSec: 3600 })
+    const ipRL = await rateLimit(`scan:ip:${ip}`, { limit: 10, windowSec: 3600 })
     if (!ipRL.success) return rateLimitedResponse(ipRL)
 
     // Tier-based quota check. For Free: monthly DB counter. For Pro/Elite:

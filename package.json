@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3000 2>&1 | tee dev.log",
-    "build": "prisma generate && prisma db push --accept-data-loss && next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/",
+    "build": "prisma generate && npx prisma migrate resolve --applied 0_init 2>/dev/null; npx prisma migrate deploy && next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/",
     "start": "NODE_ENV=production bun .next/standalone/server.js 2>&1 | tee server.log",
     "test": "jest",
     "test:verbose": "jest --verbose",
@@ -16,6 +16,8 @@
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:resolve-baseline": "prisma migrate resolve --applied 0_init",
     "db:reset": "prisma migrate reset",
     "postinstall": "prisma generate"
   },
@@ -62,6 +64,8 @@
     "@radix-ui/react-tooltip": "^1.2.11",
     "@sentry/nextjs": "^10.63.0",
     "@tanstack/react-query": "^5.82.0",
+    "@upstash/ratelimit": "^2.0.8",
+    "@upstash/redis": "^1.38.0",
     "@vercel/analytics": "^2.0.1",
     "@vercel/speed-insights": "^2.0.0",
     "@zxing/browser": "^0.1.5",

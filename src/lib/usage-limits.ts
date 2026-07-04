@@ -224,7 +224,7 @@ export async function checkUsage(
   const isScan = type === 'aiScans'
   const dailyLimit = isScan ? limits.dailyAiScans : limits.dailyVoiceEntries
   const rateKey = `${isScan ? 'scan' : 'voice'}:daily:user:${userId}`
-  const rl = rateLimit(rateKey, { limit: dailyLimit, windowSec: 86400 })
+  const rl = await rateLimit(rateKey, { limit: dailyLimit, windowSec: 86400 })
 
   return {
     allowed: rl.success,

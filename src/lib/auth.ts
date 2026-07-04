@@ -23,7 +23,7 @@ export const authOptions: NextAuthOptions = {
           const ip = (typeof forwarded === 'string' ? forwarded.split(',')[0].trim() : null)
             || (req as any)?.headers?.['x-real-ip']
             || 'unknown'
-          const rl = rateLimit(`login:${ip}`, { limit: 10, windowSec: 60 })
+          const rl = await rateLimit(`login:${ip}`, { limit: 10, windowSec: 60 })
           if (!rl.success) {
             throw new Error('Too many login attempts. Please wait a minute and try again.')
           }

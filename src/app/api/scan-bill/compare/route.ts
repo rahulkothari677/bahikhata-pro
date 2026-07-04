@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     // Tight rate limit — comparisons cost 3x the API budget
-    const rl = rateLimit(`scan-compare:user:${userId}`, { limit: 5, windowSec: 3600 })
+    const rl = await rateLimit(`scan-compare:user:${userId}`, { limit: 5, windowSec: 3600 })
     if (!rl.success) return rateLimitedResponse(rl)
 
     const body = await req.json()
