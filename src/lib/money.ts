@@ -64,12 +64,14 @@ export function toMoney(value: any): number {
  */
 export function roundMoney(value: number): number {
   if (isNaN(value) || !isFinite(value)) return 0
-  // 🔒 M0a+M0b: Symmetric rounding with epsilon correction
-  // Math.sign(v) * Math.round(Math.abs(v) * 100 + EPSILON) / 100
-  // - Math.abs() ensures we round the magnitude, not the signed value
-  // - Number.EPSILON corrects the float representation bug (1.005 → 1.01)
-  // - Math.sign() reapplies the original sign (symmetric: -2.005 → -2.01)
-  return Math.sign(value) * Math.round(Math.abs(value) * 100 + Number.EPSILON) / 100
+  // 🔒 M0a+M0b: Symmetric rounding with float correction
+  // The issue: 1.005 is stored as 1.00499999... in float → toFixed(2) gives "1.00"
+  // Fix: add a tiny epsilon (1e-9) before toFixed to nudge it past the .5 boundary
+  // For symmetric negative rounding: apply sign separately
+  const sign = value < 0 ? -1 : 1
+  const absVal = Math.abs(value)
+  const rounded = parseFloat((absVal + 1e-9).toFixed(2))
+  return sign * rounded
 }
 
 /**
