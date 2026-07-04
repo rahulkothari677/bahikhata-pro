@@ -106,9 +106,14 @@ function nextDayReset(): Date {
  * 'elite' plan (all features unlocked, highest limits). This lets the
  * founder test everything without paying or running scripts.
  */
-export const FOUNDERS = [
-  'rahulkothari677@gmail.com',
-]
+// 🔒 AUDIT FIX L4: Founder emails are now read from the FOUNDERS env var
+// (comma-separated). Was: hardcoded in source code — required a redeploy
+// to change. Now: update the env var in Vercel and it takes effect immediately.
+// Falls back to the original list if env var is not set (backward compat).
+export const FOUNDERS = (process.env.FOUNDERS || 'rahulkothari677@gmail.com')
+  .split(',')
+  .map(e => e.trim().toLowerCase())
+  .filter(Boolean)
 
 export async function getUserPlan(userId: string): Promise<Plan> {
   const user = await db.user.findUnique({

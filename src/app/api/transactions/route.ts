@@ -137,10 +137,15 @@ export async function POST(req: NextRequest) {
         cgst = roundMoney(cgst + c)
         sgst = roundMoney(sgst + s)
       }
-      // Profit calculation for sales
+      // 💰 MONEY + COGS (Audit fix M4): Profit calculation uses the product's
+      // CURRENT purchasePrice (snapshotted into purchasePriceAtSale for future
+      // reference). Historical profit is now immutable — changing the product's
+      // purchasePrice later won't distort old profit numbers.
+      let purchasePriceAtSale = 0
       if (type === 'sale' && item.productId) {
         const product = productMap.get(item.productId)
         if (product) {
+          purchasePriceAtSale = product.purchasePrice
           grossProfit = roundMoney(grossProfit + (item.unitPrice - product.purchasePrice) * item.quantity)
         }
       }
@@ -149,6 +154,7 @@ export async function POST(req: NextRequest) {
         productName: item.productName,
         quantity: parseFloat(item.quantity),
         unitPrice: parseFloat(item.unitPrice),
+        purchasePriceAtSale,  // 🔒 M4: COGS snapshot
         gstRate: parseFloat(item.gstRate) || 0,
         discountAmount: parseFloat(item.discountAmount) || 0,
         total: itemTotal,

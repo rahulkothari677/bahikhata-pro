@@ -97,9 +97,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         cgst = roundMoney(cgst + c)
         sgst = roundMoney(sgst + s)
       }
+      // 💰 MONEY + COGS (Audit fix M4): Snapshot purchasePrice at sale time
+      let purchasePriceAtSale = 0
       if (type === 'sale' && item.productId) {
         const product = productMap.get(item.productId)
         if (product) {
+          purchasePriceAtSale = product.purchasePrice
           grossProfit = roundMoney(grossProfit + (item.unitPrice - product.purchasePrice) * item.quantity)
         }
       }
@@ -108,6 +111,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         productName: item.productName,
         quantity: parseFloat(item.quantity),
         unitPrice: parseFloat(item.unitPrice),
+        purchasePriceAtSale,  // 🔒 M4: COGS snapshot
         gstRate: parseFloat(item.gstRate) || 0,
         discountAmount: parseFloat(item.discountAmount) || 0,
         total: itemTotal,

@@ -3,10 +3,10 @@ import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
   output: "standalone",
-  // TypeScript strict mode — build will FAIL on type errors.
-  // This catches bugs before they reach production.
-  // (Previously had ignoreBuildErrors: true — removed per Phase 1 audit.)
-  reactStrictMode: false,
+  // 🔒 AUDIT FIX L3: Enabled reactStrictMode — surfaces effect/concurrency
+  // bugs in development (double-invokes effects/renders). Was: false.
+  // Only affects development, not production builds.
+  reactStrictMode: true,
   // Disable source maps in production — saves ~5MB of transfer on first load.
   // Note: Sentry can still receive source maps if uploaded separately.
   productionBrowserSourceMaps: false,

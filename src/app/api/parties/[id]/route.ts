@@ -180,6 +180,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 // DELETE /api/parties/[id]
+// 🔒 AUDIT FIX M8 (v2 audit): Handle party with payments gracefully.
+// Was: db.party.delete threw a FK violation (Payment.partyId has no onDelete)
+// → generic 500 error. Now: checks for dependent records first, returns a
+// friendly 409 message if the party has payments/transactions.
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { userId, error } = await getAuthUserId()
@@ -189,6 +193,24 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     // Verify ownership
     const existing = await db.party.findFirst({ where: { id, userId } })
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+    // 🔒 M8: Check for dependent records before deleting
+    const [paymentCount, transactionCount] = await Promise.all([
+      db.payment.count({ where: { partyId: id } }).catch(() => 0),
+      db.transaction.count({ where: { partyId: id } }).catch(() => 0),
+    ])
+
+    if (paymentCount > 0 || transactionCount > 0) {
+      const parts: string[] = []
+      if (transactionCount > 0) parts.push(`${transactionCount} transaction(s)`)
+      if (paymentCount > 0) parts.push(`${paymentCount} payment(s)`)
+      return NextResponse.json({
+        error: 'Cannot delete party with existing records',
+        message: `This party has ${parts.join(' and ')}. Please delete or reassign those records first, or rename the party instead of deleting it.`,
+        transactionCount,
+        paymentCount,
+      }, { status: 409 })
+    }
 
     await db.party.delete({ where: { id } })
     return NextResponse.json({ success: true })

@@ -200,6 +200,11 @@ model TransactionItem {
   productName    String   // snapshot of name at time of transaction
   quantity       Float    @default(1)
   unitPrice      Float    @default(0)  // price per unit (sale or purchase)
+  // 🔒 AUDIT FIX M4: Snapshot of purchasePrice at time of sale (COGS).
+  // Was: profit calculated from the product's CURRENT purchasePrice —
+  // changing it later distorted historical profit. Now: the purchase price
+  // is snapshotted here at sale time, so historical profit is immutable.
+  purchasePriceAtSale Float  @default(0)  // cost at time of sale (for profit calc)
   gstRate        Float    @default(0)
   discountAmount Float    @default(0)
   total          Float    @default(0)  // qty * unitPrice - discount + gst
