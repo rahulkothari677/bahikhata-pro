@@ -20,7 +20,7 @@ Sentry is **fully configured** in the codebase — both client-side (browser err
 2. Sign up with Google or email
 3. Create a new project:
    - **Platform:** Next.js
-   - **Project name:** `bahikhata-pro`
+   - **Project name:** `ekbook-pro`
    - **Team:** (create a team or use default)
 4. After creating, go to **Settings** → **Client Keys (DSN)**
 5. Copy the **DSN** — it looks like:
@@ -30,7 +30,7 @@ Sentry is **fully configured** in the codebase — both client-side (browser err
 
 ## Step 2: Add to Vercel Environment Variables
 
-Go to Vercel → `bahikhata-pro` → Settings → Environment Variables
+Go to Vercel → `ekbook-pro` → Settings → Environment Variables
 
 Add these variables:
 
@@ -49,7 +49,7 @@ Add these variables:
 ## Step 4: Verify Sentry Is Working
 
 ### Test client-side error:
-1. Open your app in browser: https://bahikhata-pro.vercel.app
+1. Open your app in browser: https://ekbook-pro.vercel.app
 2. Open browser console (F12 → Console)
 3. Type: `throw new Error("Sentry test - client side")`
 4. Press Enter

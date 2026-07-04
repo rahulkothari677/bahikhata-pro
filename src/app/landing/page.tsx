@@ -27,7 +27,7 @@ export default function LandingPage() {
             <div className="w-9 h-9 rounded-xl bg-gradient-saffron flex items-center justify-center">
               <BookOpenText className="w-5 h-5 text-white" />
             </div>
-            <span className="font-bold text-lg">BahiKhata Pro</span>
+            <span className="font-bold text-lg">EkBook</span>
           </div>
           <div className="hidden md:flex items-center gap-6">
             <a href="#features" className="text-sm text-muted-foreground hover:text-foreground">Features</a>
@@ -64,7 +64,7 @@ export default function LandingPage() {
             Run your shop <span className="text-primary">smarter</span>,<br />not harder.
           </h1>
           <p className="text-lg md:text-xl text-muted-foreground mb-8 max-w-2xl mx-auto">
-            BahiKhata Pro is the complete business management app for Indian shop owners.
+            EkBook is the complete business management app for Indian shop owners.
             AI bill scanning, GST filing, inventory, voice entry — all in one app.
             Works offline. Free to start.
           </p>
@@ -113,7 +113,7 @@ export default function LandingPage() {
         <div className="max-w-6xl mx-auto">
           <h2 className="text-3xl md:text-4xl font-bold text-center mb-4">Everything your shop needs</h2>
           <p className="text-muted-foreground text-center mb-12 max-w-2xl mx-auto">
-            From billing to GST filing, BahiKhata Pro replaces 5+ apps with one smart platform.
+            From billing to GST filing, EkBook replaces 5+ apps with one smart platform.
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -204,12 +204,12 @@ export default function LandingPage() {
         <div className="max-w-3xl mx-auto">
           <h2 className="text-3xl font-bold text-center mb-12">Frequently Asked Questions</h2>
           <div className="space-y-6">
-            <FAQItem q="Is BahiKhata Pro really free?" a="Yes! The Free plan is free forever — 50 transactions/month, 50 products, 3 AI scans. No credit card needed. Upgrade to Pro only when you need more." />
-            <FAQItem q="Does it work without internet?" a="Yes! BahiKhata Pro works completely offline. You can create sales, add products, check inventory — everything works without internet. Data syncs automatically when you reconnect." />
+            <FAQItem q="Is EkBook really free?" a="Yes! The Free plan is free forever — 50 transactions/month, 50 products, 3 AI scans. No credit card needed. Upgrade to Pro only when you need more." />
+            <FAQItem q="Does it work without internet?" a="Yes! EkBook works completely offline. You can create sales, add products, check inventory — everything works without internet. Data syncs automatically when you reconnect." />
             <FAQItem q="Is my data safe?" a="Absolutely. Your data is encrypted, stored securely on cloud servers, and never sold. We comply with India's DPDP Act 2023. You can delete all your data anytime from Settings." />
-            <FAQItem q="Can I use it on my phone and computer?" a="Yes! BahiKhata Pro works on any device — mobile, tablet, desktop. It's a Progressive Web App (PWA), so you can install it on your phone like a native app." />
-            <FAQItem q="Do I need to know accounting?" a="No! BahiKhata Pro is designed for shop owners, not accountants. Just record your sales and purchases — we handle the math, GST, profit calculation, and reports automatically." />
-            <FAQItem q="What if I need help?" a="We're here for you. Email us at support@bahikhata.pro, and we'll respond within 24 hours. Pro and Business plan users get priority support." />
+            <FAQItem q="Can I use it on my phone and computer?" a="Yes! EkBook works on any device — mobile, tablet, desktop. It's a Progressive Web App (PWA), so you can install it on your phone like a native app." />
+            <FAQItem q="Do I need to know accounting?" a="No! EkBook is designed for shop owners, not accountants. Just record your sales and purchases — we handle the math, GST, profit calculation, and reports automatically." />
+            <FAQItem q="What if I need help?" a="We're here for you. Email us at support@ekbook.app, and we'll respond within 24 hours. Pro and Business plan users get priority support." />
           </div>
         </div>
       </section>
@@ -218,7 +218,7 @@ export default function LandingPage() {
       <section className="py-20 px-4 lg:px-6">
         <div className="max-w-3xl mx-auto text-center">
           <h2 className="text-3xl md:text-4xl font-bold mb-4">Ready to digitize your shop?</h2>
-          <p className="text-muted-foreground mb-8">Join thousands of Indian shop owners growing their business with BahiKhata Pro.</p>
+          <p className="text-muted-foreground mb-8">Join thousands of Indian shop owners growing their business with EkBook.</p>
           <a href="/" className="inline-flex items-center gap-2 px-8 py-4 rounded-xl bg-gradient-saffron text-white font-bold text-lg hover:opacity-90 transition shadow-lg">
             Start Free Now
             <ArrowRight className="w-5 h-5" />
@@ -234,12 +234,12 @@ export default function LandingPage() {
             <div className="w-7 h-7 rounded-lg bg-gradient-saffron flex items-center justify-center">
               <BookOpenText className="w-4 h-4 text-white" />
             </div>
-            <span className="font-medium">BahiKhata Pro</span>
+            <span className="font-medium">EkBook</span>
           </div>
           <div className="flex gap-6">
             <a href="/privacy" className="hover:text-foreground">Privacy Policy</a>
             <a href="/" className="hover:text-foreground">Open App</a>
-            <a href="mailto:support@bahikhata.pro" className="hover:text-foreground">Contact</a>
+            <a href="mailto:support@ekbook.app" className="hover:text-foreground">Contact</a>
           </div>
           <p>Made with love for Bharat</p>
         </div>

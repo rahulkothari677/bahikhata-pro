@@ -1,8 +1,8 @@
-# 🇮🇳 BahiKhata Pro — India's Smartest Ledger App
+# 🇮🇳 EkBook — India's Smartest Ledger App
 
 A world-class ledger, inventory & GST management app built specifically for Indian shop owners. Track sales, purchases, profit, taxes & inventory effortlessly — with AI-powered bill scanning.
 
-![BahiKhata Pro](https://img.shields.io/badge/Built%20for-🇮🇳%20Bharat-saffron)
+![EkBook](https://img.shields.io/badge/Built%20for-🇮🇳%20Bharat-saffron)
 ![Next.js 16](https://img.shields.io/badge/Next.js-16-black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue)
 ![Prisma](https://img.shields.io/badge/Prisma-ORM-indigo)

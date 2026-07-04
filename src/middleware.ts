@@ -12,7 +12,7 @@ import { NextRequest, NextResponse } from 'next/server'
 // 🔒 AUDIT FIX H6+L1 (v2 audit): Exact host matching only.
 // Was: `host.endsWith('.vercel.app')` allowed ANY *.vercel.app origin
 // (e.g. evil.vercel.app would pass CSRF). Now: only exact matches in the set.
-// Also fixed the typo: 'bahakhata' → 'bahikhata'
+// Also fixed the typo: 'bahakhata' → 'bahikhata' (kept for backward compat)
 const ALLOWED_HOSTS = new Set([
   'bahikhata-pro.vercel.app',  // 🔒 L1: was 'bahakhata-pro' (missing 'i')
   'localhost:3000',

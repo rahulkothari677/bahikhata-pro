@@ -36,7 +36,7 @@ Every number on our admin panel comes directly from the **live database** — no
 | Data Verification | Click "Verify" → cross-checks cached vs live database |
 | Audit Trail | Every admin action permanently logged (who, when, what, IP) |
 | Accrual Accounting | CA-approved revenue recognition (Ind AS 115) |
-| Public Status Page | Investors check `admin.bahikhata.pro/status` anytime |
+| Public Status Page | Investors check `admin.ekbook.app/status` anytime |
 | Anomaly Detection | Auto-flags revenue drops, signup spikes |
 
 ### What NBFCs Want vs What We Provide

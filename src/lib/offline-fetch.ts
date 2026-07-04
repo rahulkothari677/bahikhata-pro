@@ -227,7 +227,7 @@ async function handleGet(url: string, fetchOpts: RequestInit): Promise<Response>
     if (cached) {
       return new Response(JSON.stringify(cached.body), {
         status: 200,
-        headers: { 'Content-Type': 'application/json', 'X-EkBook-Source': 'offline-cache' },
+        headers: { 'Content-Type': 'application/json', 'X-bahikhata-Source': 'offline-cache' },
       })
     }
     // 2. Fall back to most recent cached entry for this path prefix
@@ -237,7 +237,7 @@ async function handleGet(url: string, fetchOpts: RequestInit): Promise<Response>
     if (fallback) {
       return new Response(JSON.stringify(fallback.body), {
         status: 200,
-        headers: { 'Content-Type': 'application/json', 'X-EkBook-Source': 'offline-cache-fallback' },
+        headers: { 'Content-Type': 'application/json', 'X-bahikhata-Source': 'offline-cache-fallback' },
       })
     }
     throw new OfflineError()
@@ -271,7 +271,7 @@ async function handleGet(url: string, fetchOpts: RequestInit): Promise<Response>
     if (cached) {
       return new Response(JSON.stringify(cached.body), {
         status: 200,
-        headers: { 'Content-Type': 'application/json', 'X-EkBook-Source': 'offline-cache-fallback' },
+        headers: { 'Content-Type': 'application/json', 'X-bahikhata-Source': 'offline-cache-fallback' },
       })
     }
     const prefix = cacheKey.split('?')[0]
@@ -279,7 +279,7 @@ async function handleGet(url: string, fetchOpts: RequestInit): Promise<Response>
     if (fallback) {
       return new Response(JSON.stringify(fallback.body), {
         status: 200,
-        headers: { 'Content-Type': 'application/json', 'X-EkBook-Source': 'offline-cache-fallback' },
+        headers: { 'Content-Type': 'application/json', 'X-bahikhata-Source': 'offline-cache-fallback' },
       })
     }
     throw err
@@ -335,7 +335,7 @@ function queuedResponse(): Response {
       message: 'Saved offline. Will sync when internet returns.',
       offlineQueuedAt: Date.now(),
     }),
-    { status: 202, headers: { 'Content-Type': 'application/json', 'X-EkBook-Source': 'offline-queue' } },
+    { status: 202, headers: { 'Content-Type': 'application/json', 'X-bahikhata-Source': 'offline-queue' } },
   )
 }
 
@@ -473,7 +473,7 @@ export {
 export function isQueuedResponse(r: Response): boolean {
   return (
     r.status === 202 &&
-    r.headers.get('X-EkBook-Source') === 'offline-queue'
+    r.headers.get('X-bahikhata-Source') === 'offline-queue'
   )
 }
 

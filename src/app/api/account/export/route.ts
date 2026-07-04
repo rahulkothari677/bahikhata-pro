@@ -71,7 +71,7 @@ export async function GET() {
         exportedAt: new Date().toISOString(),
         appVersion: '1.0',
         format: 'JSON',
-        note: 'This is a complete export of your data from BahiKhata Pro, per DPDP Act 2023 Right to Data Portability.',
+        note: 'This is a complete export of your data from EkBook, per DPDP Act 2023 Right to Data Portability.',
       },
       user,
       setting,

@@ -1,8 +1,8 @@
-# Play Store APK Build Guide — BahiKhata Pro
+# Play Store APK Build Guide — EkBook
 
 ## Overview
 
-This guide walks you through building an Android APK from the BahiKhata Pro web app using Capacitor 8.x, and uploading it to the Google Play Store.
+This guide walks you through building an Android APK from the EkBook web app using Capacitor 8.x, and uploading it to the Google Play Store.
 
 ## Architecture
 
@@ -10,7 +10,7 @@ This guide walks you through building an Android APK from the BahiKhata Pro web 
 Next.js Web App (Vercel)  →  Capacitor Wrapper (Android APK)
          ↑                           ↑
     Real app logic              Just a WebView wrapper
-    (database, AI, etc.)       (loads https://bahikhata-pro.vercel.app)
+    (database, AI, etc.)       (loads https://ekbook-pro.vercel.app)
 ```
 
 The APK is a **wrapper** — it loads the web app from Vercel inside a native Android WebView. This means:
@@ -94,7 +94,7 @@ Or:
 1. Copy the APK to your phone (email, Google Drive, etc.)
 2. Open the APK file on your phone
 3. Allow "Install from unknown sources" if prompted
-4. Open "BahiKhata Pro" from app drawer
+4. Open "EkBook" from app drawer
 
 ## Step 5: Create a Release Keystore (for Play Store)
 
@@ -105,7 +105,7 @@ Create a release keystore:
 ```bash
 keytool -genkey -v \
   -keystore release.keystore \
-  -alias bahikhata \
+  -alias ekbook \
   -keyalg RSA \
   -keysize 2048 \
   -validity 10000
@@ -127,7 +127,7 @@ signingConfigs {
     release {
         storeFile file('../../release.keystore')
         storePassword 'YOUR_PASSWORD'
-        keyAlias 'bahikhata'
+        keyAlias 'ekbook'
         keyPassword 'YOUR_PASSWORD'
     }
 }
@@ -162,8 +162,8 @@ android/app/build/outputs/apk/release/app-release.apk
 2. Pay the one-time ₹2,100 registration fee
 3. Click "Create App"
 4. Fill in app details:
-   - **App name:** BahiKhata Pro
-   - **Package name:** pro.bahikhata.app
+   - **App name:** EkBook
+   - **Package name:** pro.ekbook.app
    - **Category:** Business
    - **Target audience:** 18+ (business owners)
 5. Upload the signed APK
@@ -179,8 +179,8 @@ android/app/build/outputs/apk/release/app-release.apk
 ### App Identity
 | Property | Value |
 |----------|-------|
-| App ID | `pro.bahikhata.app` |
-| App Name | `BahiKhata Pro` |
+| App ID | `pro.ekbook.app` |
+| App Name | `EkBook` |
 | Version | 1.0.0 |
 | Version Code | 1 |
 | Min SDK | 24 (Android 7.0) |
@@ -227,7 +227,7 @@ Since the APK is a **web wrapper**, most updates don't require a new APK:
 This is normal — we use `server.url` (load from Vercel), not bundled web assets. The `out` directory doesn't need to exist.
 
 ### App shows blank white screen
-- Check if Vercel is accessible: open `https://bahikhata-pro.vercel.app` in phone browser
+- Check if Vercel is accessible: open `https://ekbook-pro.vercel.app` in phone browser
 - Check `capacitor.config.json` → `server.url` is correct
 - Check network security config allows the Vercel domain
 

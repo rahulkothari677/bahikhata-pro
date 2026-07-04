@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from '@capacitor/cli'
 
 const config: CapacitorConfig = {
-  appId: 'pro.bahikhata.app',
-  appName: 'BahiKhata Pro',
+  appId: 'pro.ekbook.app',
+  appName: 'EkBook',
   webDir: '.next/standalone/.next/static',
   bundledWebRuntime: false,
   server: {

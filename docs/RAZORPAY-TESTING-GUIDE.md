@@ -25,7 +25,7 @@ The Razorpay integration is **fully coded** — both frontend (CheckoutButton) a
 
 ## Step 2: Add Keys to Vercel
 
-1. Go to Vercel → `bahikhata-pro` → **Settings** → **Environment Variables**
+1. Go to Vercel → `ekbook-pro` → **Settings** → **Environment Variables**
 2. Add 2 variables:
 
 | Variable | Value |
@@ -42,7 +42,7 @@ The Razorpay integration is **fully coded** — both frontend (CheckoutButton) a
 
 Once keys are set and Vercel is redeployed:
 
-1. Open your app: https://bahikhata-pro.vercel.app
+1. Open your app: https://ekbook-pro.vercel.app
 2. Login with any user account
 3. Go to **Settings** → **Pricing Plans** (or wherever the upgrade button is)
 4. Click **"Upgrade to Pro"**

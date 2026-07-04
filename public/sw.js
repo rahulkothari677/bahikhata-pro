@@ -1,5 +1,5 @@
 /**
- * BahiKhata Pro Service Worker v6
+ * EkBook Service Worker v6
  *
  * PERFORMANCE: Aggressive static asset caching for instant repeat loads.
  *

@@ -33,7 +33,7 @@ export default function AdminDashboard() {
             </div>
             <div>
               <h1 className="text-xl font-bold">Admin Dashboard</h1>
-              <p className="text-xs text-muted-foreground">BahiKhata Pro — Business Intelligence</p>
+              <p className="text-xs text-muted-foreground">EkBook — Business Intelligence</p>
             </div>
           </div>
           <div className="flex items-center gap-2">

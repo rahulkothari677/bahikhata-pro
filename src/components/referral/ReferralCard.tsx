@@ -57,7 +57,7 @@ export function ReferralCard() {
     if (navigator.share) {
       try {
         await navigator.share({
-          title: 'BahiKhata Pro — India\'s Smartest Ledger App',
+          title: 'EkBook — India\'s Smartest Ledger App',
           text: codeData.whatsappText,
           url: codeData.shareUrl,
         })

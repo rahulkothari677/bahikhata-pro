@@ -1,4 +1,4 @@
-# BahiKhata Pro — Audit Analysis & Fix Plan
+# EkBook — Audit Analysis & Fix Plan
 
 **Date:** 4 July 2026
 **Based on:** Three external audit reports (V4 Complete Assessment, Code Audit, Launch Audit) verified against the actual codebase at this revision.
@@ -137,7 +137,7 @@ These three tasks unlock Phase 2. Do them in any order — all three are needed 
 **Step-by-step:**
 
 1. **Log in to Neon** at https://console.neon.tech
-2. **Select your project** (the one BahiKhata Pro uses)
+2. **Select your project** (the one EkBook uses)
 3. **Go to the "Branches" tab** in the left sidebar
 4. **Find your `main` branch** (or whatever your production branch is called)
 5. **Click on the branch name** to open it
@@ -168,7 +168,7 @@ These three tasks unlock Phase 2. Do them in any order — all three are needed 
 3. **Sign up with GitHub or Google** (easiest)
 4. **Once logged in, click "Create Database"**
 5. **Fill in:**
-   - **Name:** `bahikhata-ratelimit`
+   - **Name:** `ekbook-ratelimit`
    - **Primary Region:** `ap-south-1 (Mumbai)` — closest to your Indian users
    - **Type:** `Regional` (free tier, sufficient for now)
    - **TLS:** leave enabled (default)
@@ -181,7 +181,7 @@ These three tasks unlock Phase 2. Do them in any order — all three are needed 
     - `UPSTASH_REDIS_REST_TOKEN` — a long string of letters/numbers
 
 **Add them to Vercel:**
-1. Go to your Vercel project: https://vercel.com/rahulkothari677/bahikhata-pro
+1. Go to your Vercel project: https://vercel.com/rahulkothari677/ekbook-pro
 2. **Settings → Environment Variables**
 3. **Add two variables:**
    - Key: `UPSTASH_REDIS_REST_URL` | Value: (paste from Upstash) | Environments: Production + Preview
@@ -290,7 +290,7 @@ These cannot be done by me. They require licensed professionals or business deci
 - Renamed `use-paywall.ts` → `.tsx` (JSX in .ts file)
 - Fixed type errors in `use-paywall`, `admin/features`, `CameraPreviewModal`, `calendar`, `resizable`
 - Added `@default(cuid())` + `@updatedAt` to `Referral`, `UsageTracking`, `FeatureFlag` models
-- Excluded `bahikhata-admin/`, `tool-results/`, config files from `tsconfig`
+- Excluded `ekbook-admin/`, `tool-results/`, config files from `tsconfig`
 - Installed 20+ missing npm dependencies (radix-ui, react-day-picker, react-hook-form, etc.)
 
 ### Phase 2 — Migrate deploy + Redis rate limiting ✅ COMPLETE (committed 7d890a9)

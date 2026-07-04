@@ -2,8 +2,8 @@ import { Metadata } from 'next'
 import { Shield, Lock, Eye, Download, Trash2, FileText } from 'lucide-react'
 
 export const metadata: Metadata = {
-  title: 'Privacy Policy — BahiKhata Pro',
-  description: 'How BahiKhata Pro collects, uses, and protects your data.',
+  title: 'Privacy Policy — EkBook',
+  description: 'How EkBook collects, uses, and protects your data.',
 }
 
 export default function PrivacyPolicyPage() {
@@ -115,7 +115,7 @@ export default function PrivacyPolicyPage() {
             <li><b>Right to Withdraw Consent:</b> Revoke analytics consent anytime</li>
           </ul>
           <p className="text-sm mt-3">
-            To exercise any right, email: <a href="mailto:privacy@bahikhata.pro" className="text-primary underline">privacy@bahikhata.pro</a>
+            To exercise any right, email: <a href="mailto:privacy@ekbook.app" className="text-primary underline">privacy@ekbook.app</a>
           </p>
         </Section>
 
@@ -149,10 +149,10 @@ export default function PrivacyPolicyPage() {
             We're here to help. Reach out anytime.
           </p>
           <a
-            href="mailto:privacy@bahikhata.pro"
+            href="mailto:privacy@ekbook.app"
             className="inline-flex items-center gap-2 text-primary font-medium hover:underline"
           >
-            privacy@bahikhata.pro
+            privacy@ekbook.app
           </a>
           <p className="text-xs text-muted-foreground mt-4">
             Data Protection Officer: Rahul Kothari<br/>
@@ -161,7 +161,7 @@ export default function PrivacyPolicyPage() {
         </div>
 
         <div className="text-center mt-8 text-xs text-muted-foreground">
-          <p>© 2026 BahiKhata Pro. Made with love for Bharat.</p>
+          <p>© 2026 EkBook. Made with love for Bharat.</p>
           <p className="mt-1">This policy may be updated. Users will be notified 30 days before changes take effect.</p>
         </div>
       </div>
