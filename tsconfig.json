@@ -45,7 +45,6 @@
     "playwright-report",
     "test-results",
     "e2e",
-    "bahikhata-admin",
     "tool-results",
     "capacitor.config.ts",
     "instrumentation.ts",
