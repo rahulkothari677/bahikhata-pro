@@ -191,6 +191,13 @@ model TransactionItem {
   total          Float    @default(0)  // qty * unitPrice - discount + gst
 
   createdAt      DateTime @default(now())
+
+  // ⚡ PERFORMANCE (Audit fix Phase 5): Indexes on foreign keys.
+  // Without these, every `include: { items: true }` on Transaction does a
+  // FULL TABLE SCAN on TransactionItem. With the index, it's an instant
+  // index lookup. This is the #1 missing index in the schema.
+  @@index([transactionId])
+  @@index([productId])
 }
 
 // ==================== PAYMENTS (separate from transaction totals) ====================
@@ -206,6 +213,11 @@ model Payment {
   type        String   @default("received") // received (from customer) | paid (to supplier)
   notes       String?
   createdAt   DateTime @default(now())
+
+  // ⚡ PERFORMANCE (Audit fix Phase 5): Indexes on foreign keys + hot query
+  // patterns. Without these, every payment query does a full table scan.
+  @@index([userId, date])
+  @@index([partyId, date])
 }
 
 // ==================== APP SETTINGS (per user) ====================
