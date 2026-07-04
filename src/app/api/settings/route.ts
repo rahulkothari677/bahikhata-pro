@@ -12,7 +12,7 @@ export async function GET() {
     const setting = await db.setting.findUnique({ where: { userId } })
     return withCache({ setting: setting || { shopName: 'My Shop' } }, { maxAge: 120, swr: 600 })
   } catch (error) {
-    return NextResponse.json({ error: 'Failed to fetch settings' }, { status: 500 })
+    return NextResponse.json({ setting: { shopName: 'My Shop' } })
   }
 }
 

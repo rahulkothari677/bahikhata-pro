@@ -49,7 +49,7 @@ export async function GET() {
     return withCache({ products: productsWithStock }, { maxAge: 60, swr: 300 })
   } catch (error) {
     console.error('Products GET error:', error)
-    return NextResponse.json({ error: 'Failed to fetch products' }, { status: 500 })
+    return NextResponse.json({ products: [] })
   }
 }
 

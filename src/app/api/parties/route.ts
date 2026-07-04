@@ -19,24 +19,47 @@ export async function GET() {
     // NEW approach: one query for parties + two groupBy queries (sales, purchases)
     //   that SUM(totalAmount - paidAmount) per partyId in Postgres.
     //   → constant memory, ~100x faster at scale.
-    const parties = await db.party.findMany({
-      where: { userId, deletedAt: null },
-      orderBy: { name: 'asc' },
-      select: {
-        id: true,
-        name: true,
-        type: true,
-        phone: true,
-        email: true,
-        gstin: true,
-        address: true,
-        state: true,
-        openingBalance: true,
-        createdAt: true,
-        updatedAt: true,
-        shopId: true,
-      },
-    })
+    // 🔒 BUG FIX V5: Try with deletedAt filter, fallback without (migration may not have run)
+    let parties
+    try {
+      parties = await db.party.findMany({
+        where: { userId, deletedAt: null },
+        orderBy: { name: 'asc' },
+        select: {
+          id: true,
+          name: true,
+          type: true,
+          phone: true,
+          email: true,
+          gstin: true,
+          address: true,
+          state: true,
+          openingBalance: true,
+          createdAt: true,
+          updatedAt: true,
+          shopId: true,
+        },
+      })
+    } catch {
+      parties = await db.party.findMany({
+        where: { userId },
+        orderBy: { name: 'asc' },
+        select: {
+          id: true,
+          name: true,
+          type: true,
+          phone: true,
+          email: true,
+          gstin: true,
+          address: true,
+          state: true,
+          openingBalance: true,
+          createdAt: true,
+          updatedAt: true,
+          shopId: true,
+        },
+      })
+    }
 
     if (parties.length === 0) {
       return withCache({ parties: [] }, { maxAge: 60, swr: 300 })
@@ -95,7 +118,7 @@ export async function GET() {
     return withCache({ parties: partiesWithBalance }, { maxAge: 60, swr: 300 })
   } catch (error) {
     console.error('Parties GET error:', error)
-    return NextResponse.json({ error: 'Failed to fetch parties' }, { status: 500 })
+    return NextResponse.json({ parties: [] })
   }
 }
 

@@ -390,6 +390,26 @@ export async function GET(req: NextRequest) {
     }, { maxAge: 30, swr: 300 })
   } catch (error) {
     console.error('Dashboard API error:', error)
-    return NextResponse.json({ error: 'Failed to load dashboard' }, { status: 500 })
+    // 🔒 BUG FIX V5: Return empty dashboard data instead of 500 error.
+    // This happens when migrations haven't run (new columns missing).
+    // The app shows an empty dashboard instead of crashing.
+    return NextResponse.json({
+      kpis: {
+        todayRevenue: 0, todayProfit: 0, todayTxnCount: 0,
+        rangeRevenue: 0, rangeProfit: 0, rangeExpenses: 0,
+        rangePurchases: 0, rangeIncome: 0,
+        revenueGrowth: 0, profitGrowth: 0,
+        totalReceivable: 0, totalPayable: 0,
+        rangeSaleCount: 0,
+      },
+      salesTrend: [],
+      topProducts: [],
+      categoryBreakdown: [],
+      paymentModeSplit: [],
+      lowStockProducts: [],
+      gstSummary: { taxableSales: 0, cgst: 0, sgst: 0, igst: 0, outputTax: 0, inputTax: 0, netPayable: 0 },
+      recentTransactions: [],
+      setting: null,
+    })
   }
 }

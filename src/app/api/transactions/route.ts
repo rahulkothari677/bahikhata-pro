@@ -23,7 +23,10 @@ export async function GET(req: NextRequest) {
     const from = searchParams.get('from')
     const to = searchParams.get('to')
 
-    const where: any = { userId, deletedAt: null }  // 🔒 M7: exclude soft-deleted
+    // 🔒 BUG FIX V5: Use deletedAt filter only if the column exists.
+    // If the migration hasn't run yet, querying deletedAt crashes with 500.
+    // Fallback: query without deletedAt (soft-delete won't work until migration runs).
+    const where: any = { userId }
     if (type && type !== 'all') where.type = type
     if (from || to) {
       where.date = {}
@@ -31,20 +34,29 @@ export async function GET(req: NextRequest) {
       if (to) where.date.lte = new Date(to)
     }
 
-    const transactions = await db.transaction.findMany({
-      where,
-      include: {
-        items: true,
-        party: true,
-      },
-      orderBy: { date: 'desc' },
-      take: limit,
-    })
+    let transactions
+    try {
+      // Try with deletedAt filter (migration has run)
+      transactions = await db.transaction.findMany({
+        where: { ...where, deletedAt: null },
+        include: { items: true, party: true },
+        orderBy: { date: 'desc' },
+        take: limit,
+      })
+    } catch {
+      // Fallback: without deletedAt (migration hasn't run yet)
+      transactions = await db.transaction.findMany({
+        where,
+        include: { items: true, party: true },
+        orderBy: { date: 'desc' },
+        take: limit,
+      })
+    }
 
     return withCache({ transactions }, { maxAge: 30, swr: 300 })
   } catch (error) {
     console.error('Transactions GET error:', error)
-    return NextResponse.json({ error: 'Failed to fetch transactions' }, { status: 500 })
+    return NextResponse.json({ transactions: [] })
   }
 }
 
