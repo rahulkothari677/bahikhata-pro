@@ -23,10 +23,11 @@ export async function GET(req: NextRequest) {
     const from = searchParams.get('from')
     const to = searchParams.get('to')
 
-    // 🔒 BUG FIX V5: Use deletedAt filter only if the column exists.
-    // If the migration hasn't run yet, querying deletedAt crashes with 500.
-    // Fallback: query without deletedAt (soft-delete won't work until migration runs).
-    const where: any = { userId }
+    // 🔒 AUDIT FIX N7 (v3): Removed the deletedAt try/catch double-query.
+    // Was: try with deletedAt, catch → fallback without (double round-trip on
+    // every error, returns soft-deleted rows during the fallback path).
+    // Now: single query with deletedAt filter (migration confirmed applied).
+    const where: any = { userId, deletedAt: null }
     if (type && type !== 'all') where.type = type
     if (from || to) {
       where.date = {}
@@ -34,24 +35,12 @@ export async function GET(req: NextRequest) {
       if (to) where.date.lte = new Date(to)
     }
 
-    let transactions
-    try {
-      // Try with deletedAt filter (migration has run)
-      transactions = await db.transaction.findMany({
-        where: { ...where, deletedAt: null },
-        include: { items: true, party: true },
-        orderBy: { date: 'desc' },
-        take: limit,
-      })
-    } catch {
-      // Fallback: without deletedAt (migration hasn't run yet)
-      transactions = await db.transaction.findMany({
-        where,
-        include: { items: true, party: true },
-        orderBy: { date: 'desc' },
-        take: limit,
-      })
-    }
+    const transactions = await db.transaction.findMany({
+      where,
+      include: { items: true, party: true },
+      orderBy: { date: 'desc' },
+      take: limit,
+    })
 
     return withCache({ transactions }, { maxAge: 30, swr: 300 })
   } catch (error) {

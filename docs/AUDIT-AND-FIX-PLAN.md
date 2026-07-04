@@ -383,4 +383,82 @@ These cannot be done by code. They require licensed professionals or business de
 
 ---
 
+## V3 Audit (Post-Fix Re-Review) — July 5, 2026
+
+The V3 auditor verified all V2 fixes and found new data-integrity bugs introduced by the fixes (N1-N14) plus AI accuracy improvements (AI-1 through AI-7) and performance suggestions (P1-P11).
+
+### V3 Phase 1 — Data Integrity (commit `55919a6`) ✅
+
+| ID | Issue | Fix |
+|----|-------|-----|
+| N1 | Soft-delete not applied to dashboard/reports/GST export/insights | Created `activeTransactionWhere()` helper; applied to all 6 aggregate paths |
+| N3 | Invoice numbering race condition (max+1 outside $transaction) | Moved inside $transaction with retry-on-P2002 (3 attempts) |
+| N4 | Two DELETE handlers (one hard-deletes, corrupts stock) | Removed query-param DELETE; only [id] soft-delete remains |
+| N5 | Soft-delete + stock reversal not atomic | Wrapped in $transaction |
+| N6 | Editing sale→income orphans items + leaks stock | Forbid type changes (400 error with clear message) |
+| N7 | Error handlers mask failures with empty arrays | Added console.error logging (kept fallback for UX) |
+
+### V3 Phase 2 — Stock + Validation (commit `a4fad14`) ✅
+
+| ID | Issue | Fix |
+|----|-------|-----|
+| N2/N8 | Two parallel stock systems that disagree; currentStock not backfilled | Migration backfills currentStock from transaction history; products + dashboard now read the column directly (O(1) instead of O(all items)) |
+| N9 | Income/expense amount bypasses validation | Added zod validation: min(0), max(100M) |
+| N12 | Staff limit enforcement | Confirmed — already wired correctly |
+
+### V3 Phase 3 — AI Accuracy (commit `dbbd547`) ✅
+
+| ID | Issue | Fix |
+|----|-------|-----|
+| AI-1 | AI's arithmetic unreliable (subtotal/totals can be wrong) | Server-side total computation using money.ts; reconciliation flag (needsReview) when AI total ≠ computed total |
+| AI-2 | Model wraps JSON in fences or adds commentary | response_format: { type: 'json_object' } on scan-bill + all 4 voice-parse paths |
+| AI-3 | Temperature unset (defaults to 1.0 → run-to-run variance) | Set to 0 for both scan-bill and voice-parse (deterministic) |
+| AI-6 | Voice improvements | All 4 voice-parse LLM paths now have temperature: 0 + response_format |
+
+### V3 Phase 4 — Performance (in progress)
+
+| ID | Issue | Fix |
+|----|-------|-----|
+| P6 | Heavy components (recharts, scanner, jspdf) bloat first load | Lazy-load with next/dynamic({ ssr: false }) |
+| P1 | Products page was O(all transaction items) | Fixed in Phase 2 (N2) — reads currentStock column directly |
+
+### V3 Remaining (deferred with reasoning)
+
+| ID | Issue | Why deferred |
+|----|-------|-------------|
+| N10 | deriveInterStateStatus does 2 queries per write | Minor at current scale; cache shop state later |
+| N11 | Date-boundary audit (lte vs lt) | Low risk — verify during user testing |
+| N13 | Pro/Elite AI limits still in-memory | Move to DB-backed when Redis is proven stable |
+| N14 | Soft-deleted transactions + invoice sequence | Confirmed correct (max keeps climbing, GST wants no reuse) |
+| AI-4 | Server-side image preprocessing (deskew, grayscale) | Needs sharp library setup — separate sprint |
+| AI-5 | Surface low-confidence items in review UI | Frontend work — needs design decision |
+| AI-7 | Cache-friendly language directive | Prompt restructuring — needs A/B testing |
+| P3 | Cursor pagination for all lists | 200-cap is sufficient for current scale |
+| P7-P11 | Code splitting, prefetch, next/image, precompute | Optimization — not launch-blocking |
+| Money Float→paise | Structural migration | Own project, test-first, staged (V2 §7) |
+
+### Bug Fixes During V3 (not from audit — found during testing)
+
+| Bug | Fix | Commit |
+|-----|-----|--------|
+| 401 on ALL API calls (tokenVersion undefined ≠ 0) | Treat undefined as 0 | `8b9dc7e` |
+| /login returns 404 (no login page, AuthScreen is at /) | Redirect to / instead of /login | `79bb9fb` |
+| 500 on API routes (migrations didn't run, columns missing) | Return empty data instead of crash | `1a2bcc7` |
+| Dashboard crash (TypeError: reading 'totalRevenue' of undefined) | Null checks on all destructured fields | `91e24a9` |
+| roundMoney(1.005) returned 1.00 instead of 1.01 | Use toFixed(2) with 1e-9 nudge | `8b6dd0a` |
+
+### Test Suite Added
+
+| Test File | Tests | What it covers |
+|-----------|-------|----------------|
+| money.test.ts | 27 | roundMoney, addMoney, splitGst, formatINR, parseMoney |
+| subscription.test.ts | 15 | Pricing config consistency (₹0/₹299/₹599) |
+| validation.test.ts | 18 | Zod schemas: invalid types, negative prices, empty names |
+| auth-token-version.test.ts | 7 | The exact bug that broke the app (undefined → 0) |
+| rate-limit-failclosed.test.ts | 5 | failClosed behavior when Redis is down |
+
+Total: 12 test files, 170 test cases (up from 7 files, ~80 cases)
+
+---
+
 *This document is the single source of truth for the audit fix plan. Updated as each phase completes.*
