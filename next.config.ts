@@ -11,11 +11,9 @@ const nextConfig: NextConfig = {
   // Note: Sentry can still receive source maps if uploaded separately.
   productionBrowserSourceMaps: false,
 
-  // 🔒 SECURITY (Audit fix N3): Content-Security-Policy header.
-  // Starts in report-only mode so we can catch violations without breaking
-  // the app. Once verified (check browser console for CSP reports), switch
-  // to enforced mode by changing "Content-Security-Policy-Report-Only" to
-  // "Content-Security-Policy".
+  // 🔒 SECURITY (Audit fix N3 + M11): Content-Security-Policy header.
+  // Now ENFORCED (was report-only). Monitored for 1+ week with no violations.
+  // If issues arise, temporarily switch back to "Content-Security-Policy-Report-Only".
   //
   // What this policy allows:
   // - Scripts: only from self, Vercel, and inline (Next.js needs inline scripts)
@@ -34,7 +32,7 @@ const nextConfig: NextConfig = {
         source: "/(.*)",
         headers: [
           {
-            key: "Content-Security-Policy-Report-Only",
+            key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
               "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://vercel.live",

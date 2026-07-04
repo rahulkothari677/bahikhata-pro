@@ -174,6 +174,22 @@ export async function POST(req: NextRequest) {
     // Stock is tracked but NOT blocked on negative (many shopkeepers haven't
     // set up openingStock — blocking would break their workflow). A per-shop
     // "block negative stock" setting can be added later.
+    // 🔒 AUDIT FIX M6: Auto-generate sequential invoice number if not provided.
+    // GST requires unique, gap-free invoice numbers per business. If the user
+    // doesn't provide one, we generate one: INV-0001, INV-0002, etc.
+    let finalInvoiceNo = invoiceNo || null
+    let invoiceSequence: number | null = null
+    if (!finalInvoiceNo && (type === 'sale' || type === 'purchase')) {
+      // Find the highest existing sequence for this user
+      const lastTxn = await db.transaction.findFirst({
+        where: { userId, invoiceSequence: { not: null } },
+        orderBy: { invoiceSequence: 'desc' },
+        select: { invoiceSequence: true },
+      })
+      invoiceSequence = (lastTxn?.invoiceSequence || 0) + 1
+      finalInvoiceNo = `INV-${String(invoiceSequence).padStart(4, '0')}`
+    }
+
     const transaction = await db.$transaction(async (tx) => {
       const txn = await tx.transaction.create({
         data: {
@@ -191,7 +207,8 @@ export async function POST(req: NextRequest) {
           paymentMode: paymentMode || 'cash',
           isInterState: !!isInterState,
           notes: notes || null,
-          invoiceNo: invoiceNo || null,
+          invoiceNo: finalInvoiceNo,
+          invoiceSequence,  // 🔒 M6: sequential number for GST compliance
           grossProfit: roundMoney(grossProfit),
           clientMutationId: clientMutationId || null,
           items: { create: txItems },

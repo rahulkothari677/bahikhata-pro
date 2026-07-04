@@ -149,7 +149,11 @@ model Transaction {
   userId         String   // owner of this transaction
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   shopId         String?  // multi-shop: null = all shops (backward compatible)
-  invoiceNo      String?  // bill/invoice number from bill
+  invoiceNo      String?  // bill/invoice number from bill (user-provided OR auto-generated)
+  // 🔒 AUDIT FIX M6: Sequential invoice number per user (GST compliance).
+  // Auto-generated when the user doesn't provide one. Unique per user so
+  // no two transactions share the same invoice number.
+  invoiceSequence Int?     // auto-incremented per user (1, 2, 3, ...)
   type           String   // sale | purchase | income | expense
   partyId        String?  // customer for sale, supplier for purchase
   party          Party?   @relation(fields: [partyId], references: [id])
@@ -189,6 +193,8 @@ model Transaction {
   @@index([userId, date])
   @@index([userId, type, date])
   @@index([userId, partyId])
+  // 🔒 M6: Unique invoice number per user (GST compliance — no duplicates)
+  @@unique([userId, invoiceNo])
 }
 
 model TransactionItem {
