@@ -39,7 +39,9 @@ export async function GET() {
       })
     }
 
-    const shareUrl = `https://bahikhata-pro.vercel.app/?ref=${referral.code}`
+    // 🔒 AUDIT FIX V5: Use env var instead of hardcoded URL
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || 'https://bahikhata-pro.vercel.app'
+    const shareUrl = `${appUrl}/?ref=${referral.code}`
     const whatsappText = `🇮🇳 Check out BahiKhata Pro — India's smartest ledger app! AI bill scanning, GST filing, inventory management. Use my code ${referral.code} to get started! ${shareUrl}`
     const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(whatsappText)}`
 

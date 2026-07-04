@@ -137,8 +137,9 @@ export async function GET() {
       revenue: {
         MRR,
         ARPU,
-        payingUsers: 0, // TODO: when subscription launches
-        conversionRate: 0,
+        // 🔒 AUDIT FIX V5: Actually count paying users from Subscription table
+        payingUsers: await db.subscription.count({ where: { status: 'active' } }).catch(() => 0),
+        conversionRate: totalUsers > 0 ? (await db.subscription.count({ where: { status: 'active' } }).catch(() => 0)) / totalUsers * 100 : 0,
       },
       recentSignups,
       generatedAt: now.toISOString(),

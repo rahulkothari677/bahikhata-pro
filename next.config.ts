@@ -63,6 +63,11 @@ const nextConfig: NextConfig = {
             key: "X-DNS-Prefetch-Control",
             value: "on",
           },
+          {
+            // 🔒 AUDIT FIX V5: HSTS — forces HTTPS, prevents SSL stripping
+            key: "Strict-Transport-Security",
+            value: "max-age=31536000; includeSubDomains; preload",
+          },
         ],
       },
     ];

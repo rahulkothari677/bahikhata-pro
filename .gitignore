@@ -76,3 +76,4 @@ worklog.md
 /playwright/.cache/
 /e2e-test.db
 
+tool-results/

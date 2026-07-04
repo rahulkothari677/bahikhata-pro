@@ -22,8 +22,9 @@
 
 import { db } from '@/lib/db'
 import { rateLimit } from '@/lib/rate-limit'
+import { PRICING_CONFIG, type Plan, type PlanConfig } from '@/lib/subscription'
 
-export type Plan = 'free' | 'pro' | 'elite'
+export type { Plan, PlanConfig }
 
 export interface PlanLimits {
   dailyAiScans: number
@@ -32,55 +33,41 @@ export interface PlanLimits {
   products: number         // total; 0 = unlimited
   shops: number            // 1 for free, 3 for pro, Infinity for elite
   staffAccounts: number    // 0 for free+pro, 5 for elite
-  // 🔒 AUDIT FIX M12: Per-user monthly AI cost cap (in INR).
-  // If a user's AI usage exceeds this in a month, further AI calls are blocked.
-  // This protects your AI budget from a single user burning it all.
   monthlyAiCostCapInr: number
 }
 
 /**
- * Daily Fair Use Policy limits per plan.
- *
- * Free: 20 scans + 20 voice entries/day — enough to fully run a small shop
- *       on the free plan for a week. Founder's explicit strategy: lure users
- *       with generous free tier → drive viral referrals → reduce free limits
- *       later once user base is established.
- *       Cost: ₹10.80/user/mo. Cheaper than paid user acquisition.
- *
- * Pro:  50 scans + 50 voice entries/day — ~1,500/month each.
- *       Marketed as "Unlimited AI". A real kirana store does 30-50 transactions
- *       per day total, so 50/day scans = "scan every bill". No real user hits this.
- *
- * Elite: 100 scans + 100 voice entries/day — ~3,000/month each.
- *        Marketed as "Truly Unlimited AI". For multi-shop power users.
+ * 🔒 AUDIT FIX V5: PLAN_LIMITS is now derived from PRICING_CONFIG (single source
+ * of truth in subscription.ts). Was: duplicate config that drifted from the
+ * Razorpay pricing. Now: both systems read from the same place.
  */
 export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
   free: {
-    dailyAiScans: 20,
-    dailyVoiceEntries: 20,
-    transactions: 0,    // unlimited
-    products: 50,
-    shops: 1,
-    staffAccounts: 0,
-    monthlyAiCostCapInr: 15,    // ₹15/mo — ~120 scans at ₹0.12/scan
+    dailyAiScans: PRICING_CONFIG.free.limits.dailyAiScans,
+    dailyVoiceEntries: PRICING_CONFIG.free.limits.dailyVoiceEntries,
+    transactions: PRICING_CONFIG.free.limits.transactions,
+    products: PRICING_CONFIG.free.limits.products,
+    shops: PRICING_CONFIG.free.limits.shops,
+    staffAccounts: PRICING_CONFIG.free.limits.staff,
+    monthlyAiCostCapInr: PRICING_CONFIG.free.limits.monthlyAiCostCapInr,
   },
   pro: {
-    dailyAiScans: 50,
-    dailyVoiceEntries: 50,
-    transactions: 0,
-    products: 0,        // unlimited
-    shops: 3,
-    staffAccounts: 0,
-    monthlyAiCostCapInr: 75,    // ₹75/mo — ~600 scans (well under ₹299 revenue)
+    dailyAiScans: PRICING_CONFIG.pro.limits.dailyAiScans,
+    dailyVoiceEntries: PRICING_CONFIG.pro.limits.dailyVoiceEntries,
+    transactions: PRICING_CONFIG.pro.limits.transactions,
+    products: PRICING_CONFIG.pro.limits.products,
+    shops: PRICING_CONFIG.pro.limits.shops,
+    staffAccounts: PRICING_CONFIG.pro.limits.staff,
+    monthlyAiCostCapInr: PRICING_CONFIG.pro.limits.monthlyAiCostCapInr,
   },
   elite: {
-    dailyAiScans: 100,
-    dailyVoiceEntries: 100,
-    transactions: 0,
-    products: 0,
-    shops: Infinity,
-    staffAccounts: 5,
-    monthlyAiCostCapInr: 150,   // ₹150/mo — ~1200 scans (well under ₹599 revenue)
+    dailyAiScans: PRICING_CONFIG.elite.limits.dailyAiScans,
+    dailyVoiceEntries: PRICING_CONFIG.elite.limits.dailyVoiceEntries,
+    transactions: PRICING_CONFIG.elite.limits.transactions,
+    products: PRICING_CONFIG.elite.limits.products,
+    shops: PRICING_CONFIG.elite.limits.shops,
+    staffAccounts: PRICING_CONFIG.elite.limits.staff,
+    monthlyAiCostCapInr: PRICING_CONFIG.elite.limits.monthlyAiCostCapInr,
   },
 }
 

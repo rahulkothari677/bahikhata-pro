@@ -46,15 +46,18 @@ export async function POST(req: NextRequest) {
       }, { status: 503 })
     }
 
-    // Calculate amount in paise (₹1 = 100 paise)
-    // Pro: ₹299/month, ₹2999/year (save 16%)
-    // Elite: ₹599/month, ₹5999/year (save 16%)
-    const prices: Record<string, { monthly: number; yearly: number }> = {
-      pro: { monthly: 29900, yearly: 299900 },     // ₹299, ₹2999 in paise
-      elite: { monthly: 59900, yearly: 599900 },   // ₹599, ₹5999 in paise
+    // 🔒 AUDIT FIX V5: Use unified pricing from PRICING_CONFIG (single source of truth)
+    // Was: hardcoded prices that could drift from subscription.ts. Now: reads from
+    // the same config that the UI and usage-limits.ts use.
+    const { PRICING_CONFIG } = await import('@/lib/subscription')
+    const planConfig = PRICING_CONFIG[planId as 'pro' | 'elite']
+    if (!planConfig) {
+      return NextResponse.json({ error: `Invalid plan: ${planId}` }, { status: 400 })
     }
 
-    const amount = prices[planId][billingCycle]
+    const amount = billingCycle === 'yearly'
+      ? planConfig.priceInPaise.yearly
+      : planConfig.priceInPaise.monthly
 
     // Initialize Razorpay client
     const razorpay = new Razorpay({
