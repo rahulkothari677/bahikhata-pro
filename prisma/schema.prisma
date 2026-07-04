@@ -138,6 +138,8 @@ model Party {
   openingBalance  Float    @default(0) // positive = they owe us; negative = we owe them
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+  // 🔒 AUDIT FIX M7: Soft delete (same as Transaction)
+  deletedAt       DateTime?
 
   transactions    Transaction[]
   payments        Payment[]
@@ -187,6 +189,12 @@ model Transaction {
 
   // Auto-computed gross profit when type=sale
   grossProfit    Float    @default(0)
+
+  // 🔒 AUDIT FIX M7: Soft delete for ledger integrity. Was: hard DELETE
+  // (permanent, no audit trail). Now: set deletedAt = now() instead of
+  // deleting the row. Queries filter WHERE deletedAt IS NULL. This preserves
+  // the audit trail (required for GST/tax disputes) and allows "undo delete".
+  deletedAt      DateTime?
 
   // Performance: list transactions per user filtered by date and/or type
   // Used by: dashboard, ledger (sales/purchases), reports

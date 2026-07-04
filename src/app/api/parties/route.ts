@@ -20,7 +20,7 @@ export async function GET() {
     //   that SUM(totalAmount - paidAmount) per partyId in Postgres.
     //   → constant memory, ~100x faster at scale.
     const parties = await db.party.findMany({
-      where: { userId },
+      where: { userId, deletedAt: null },
       orderBy: { name: 'asc' },
       select: {
         id: true,

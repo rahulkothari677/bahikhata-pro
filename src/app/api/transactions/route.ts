@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
     const from = searchParams.get('from')
     const to = searchParams.get('to')
 
-    const where: any = { userId }
+    const where: any = { userId, deletedAt: null }  // 🔒 M7: exclude soft-deleted
     if (type && type !== 'all') where.type = type
     if (from || to) {
       where.date = {}

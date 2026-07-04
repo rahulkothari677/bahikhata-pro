@@ -212,8 +212,12 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       }, { status: 409 })
     }
 
-    await db.party.delete({ where: { id } })
-    return NextResponse.json({ success: true })
+    // 🔒 M7: Soft delete — set deletedAt, don't actually delete the row
+    await db.party.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    })
+    return NextResponse.json({ success: true, message: 'Party deleted (soft delete — can be restored)' })
   } catch (error) {
     console.error('Party DELETE error:', error)
     return NextResponse.json({ error: 'Failed to delete party' }, { status: 500 })

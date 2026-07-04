@@ -206,18 +206,45 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 // DELETE /api/transactions/[id]
+// 🔒 AUDIT FIX M7: Soft delete — sets deletedAt instead of hard DELETE.
+// Preserves audit trail for GST/tax disputes. Query filters exclude soft-deleted.
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { userId, error } = await getAuthUserId()
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const { id } = await params
-    // Verify ownership
-    const existing = await db.transaction.findFirst({ where: { id, userId } })
+    // Verify ownership (exclude already soft-deleted)
+    const existing = await db.transaction.findFirst({ where: { id, userId, deletedAt: null } })
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-    await db.transaction.delete({ where: { id } })
-    return NextResponse.json({ success: true })
+    // 🔒 M7: Soft delete — set deletedAt, don't actually delete the row
+    await db.transaction.update({
+      where: { id },
+      data: { deletedAt: new Date() },
+    })
+
+    // 🔒 H1: Reverse stock impact (same as edit — add back sales, subtract purchases)
+    if (existing.type === 'sale' || existing.type === 'purchase') {
+      const items = await db.transactionItem.findMany({ where: { transactionId: id } })
+      for (const item of items) {
+        if (item.productId) {
+          if (existing.type === 'sale') {
+            await db.product.update({
+              where: { id: item.productId },
+              data: { currentStock: { increment: item.quantity } },
+            })
+          } else {
+            await db.product.update({
+              where: { id: item.productId },
+              data: { currentStock: { decrement: item.quantity } },
+            })
+          }
+        }
+      }
+    }
+
+    return NextResponse.json({ success: true, message: 'Transaction deleted (soft delete — can be restored)' })
   } catch (error) {
     console.error('Transaction DELETE error:', error)
     return NextResponse.json({ error: 'Failed to delete transaction' }, { status: 500 })
