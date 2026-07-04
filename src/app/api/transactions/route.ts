@@ -55,6 +55,23 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const { type, partyId, date, items, discountAmount, paymentMode, notes, invoiceNo, category, paidAmount, payeeName, payeePhone } = body
 
+    // 🔒 IDEMPOTENCY (Audit fix N1): Check for clientMutationId to prevent
+    // duplicate transactions from offline sync replays. The client generates
+    // a UUID per logical mutation and sends it as a header. If we've already
+    // processed this mutation, return the existing transaction instead of
+    // creating a duplicate.
+    const clientMutationId = req.headers.get('x-client-mutation-id')
+    if (clientMutationId) {
+      const existing = await db.transaction.findUnique({
+        where: { clientMutationId },
+        include: { items: true, party: true },
+      })
+      if (existing) {
+        // Already processed — return the existing transaction (idempotent)
+        return NextResponse.json({ transaction: existing, idempotent: true })
+      }
+    }
+
     // 🔒 GST CORRECTNESS (Audit fix Phase 3.1): Derive isInterState server-side
     // from the shop's state (Setting.state) vs the party's state (Party.state),
     // instead of trusting the client-supplied flag. A wrong client flag = wrong
@@ -178,6 +195,7 @@ export async function POST(req: NextRequest) {
         notes: notes || null,
         invoiceNo: invoiceNo || null,
         grossProfit: roundMoney(grossProfit),
+        clientMutationId: clientMutationId || null,  // 🔒 N1: save for idempotency
         items: { create: txItems },
       },
       include: { items: true, party: true },

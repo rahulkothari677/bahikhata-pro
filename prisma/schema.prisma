@@ -165,6 +165,13 @@ model Transaction {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
+  // 🔒 IDEMPOTENCY (Audit fix N1): client-generated UUID to prevent duplicate
+  // transactions from offline sync replays. When the offline queue replays a
+  // mutation that already went through, the server sees the same
+  // clientMutationId and returns the existing transaction instead of creating
+  // a duplicate. Same pattern as payment idempotency (Phase 1.4).
+  clientMutationId String? @unique
+
   items          TransactionItem[]
 
   // Auto-computed gross profit when type=sale
@@ -420,12 +427,22 @@ model AiUsageLog {
 
 
 // ==================== ADMIN PANEL TABLES ====================
-// These tables are owned by the admin panel (bahikhata-admin repo) but
-// MUST exist in the main app's schema too. Otherwise, when the main app
-// runs `prisma db push` during Vercel builds, it drops these tables —
-// wiping all admin accounts on every deploy.
+// These tables are shared between the Pro app and the admin panel.
 //
-// DO NOT remove these models from this file.
+// 🔒 AUDIT FIX N5: The old comment said these MUST exist here because
+// `prisma db push --accept-data-loss` would drop them. But we've now
+// switched to `prisma migrate deploy` (Phase 2), which uses versioned
+// migration files and NEVER drops tables to "resolve" drift. So the
+// old hack is no longer needed.
+//
+// However, we're keeping these models here for now because:
+// 1. The admin panel's prisma client needs to know about these tables
+// 2. Both apps share the same database
+// 3. Removing them would require the admin panel to have its own
+//    separate prisma client + schema (a larger refactor)
+//
+// In the future, these should be moved to a shared @ekbook/prisma
+// package that both apps import. For now, they stay here safely.
 
 model AdminUser {
   id            String    @id @default(cuid())

@@ -11,6 +11,65 @@ const nextConfig: NextConfig = {
   // Note: Sentry can still receive source maps if uploaded separately.
   productionBrowserSourceMaps: false,
 
+  // 🔒 SECURITY (Audit fix N3): Content-Security-Policy header.
+  // Starts in report-only mode so we can catch violations without breaking
+  // the app. Once verified (check browser console for CSP reports), switch
+  // to enforced mode by changing "Content-Security-Policy-Report-Only" to
+  // "Content-Security-Policy".
+  //
+  // What this policy allows:
+  // - Scripts: only from self, Vercel, and inline (Next.js needs inline scripts)
+  // - Styles: self, inline (Tailwind/CSS modules need inline styles)
+  // - Images: self, data: (base64), blob: (camera), and common CDN domains
+  // - Fonts: self and Google Fonts CDN
+  // - API calls: self (same-origin API routes)
+  // - WebSocket: self (for HMR in dev, real-time features)
+  // - Frame-ancestors: 'none' (prevents clickjacking — no iframes allowed)
+  //
+  // If you add a third-party service (e.g., a CDN, analytics), add its domain
+  // to the relevant directive below.
+  async headers() {
+    return [
+      {
+        source: "/(.*)",
+        headers: [
+          {
+            key: "Content-Security-Policy-Report-Only",
+            value: [
+              "default-src 'self'",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://vercel.live",
+              "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+              "font-src 'self' https://fonts.gstatic.com data:",
+              "img-src 'self' data: blob: https: https://*.cloudinary.com https://res.cloudinary.com",
+              "media-src 'self' blob:",
+              "connect-src 'self' https://*.sentry.io https://*.posthog.com https://vitals.vercel-insights.com https://api.groq.com https://generativelanguage.googleapis.com https://api.openai.com",
+              "frame-ancestors 'none'",
+              "base-uri 'self'",
+              "form-action 'self'",
+              "object-src 'none'",
+            ].join("; "),
+          },
+          {
+            key: "X-Frame-Options",
+            value: "DENY",
+          },
+          {
+            key: "X-Content-Type-Options",
+            value: "nosniff",
+          },
+          {
+            key: "Referrer-Policy",
+            value: "strict-origin-when-cross-origin",
+          },
+          {
+            key: "X-DNS-Prefetch-Control",
+            value: "on",
+          },
+        ],
+      },
+    ];
+  },
+
   // Performance: tree-shake large icon/component libraries so only the icons
   // actually used are included in the bundle (instead of all 1,000+ lucide icons).
   experimental: {

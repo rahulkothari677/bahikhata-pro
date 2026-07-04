@@ -3,6 +3,13 @@ import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
 import { withCache } from '@/lib/cache'
 
+// ⚡ PERFORMANCE (Audit fix N2): KPIs are now computed via SQL aggregate
+// queries instead of loading 13 months of transactions into memory and
+// reducing in JavaScript. The chart data and top-products still use the
+// raw transaction fetch (they need the line items), but the KPI sums
+// (today, range, previous range) use db.transaction.aggregate() which
+// runs as a single SQL SUM query — much faster and constant memory.
+
 // GET /api/dashboard?from=&to= - returns aggregated stats for dashboard with date filtering
 export async function GET(req: NextRequest) {
   try {
@@ -116,27 +123,69 @@ export async function GET(req: NextRequest) {
     const incomes = allTransactions.filter(t => t.type === 'income')
     const expenses = allTransactions.filter(t => t.type === 'expense')
 
-    // === KPIs (Today is always "today", month KPIs respect the date range) ===
-    const todaySales = sales.filter(t => t.date >= startOfToday)
-    const todayRevenue = todaySales.reduce((s, t) => s + t.totalAmount, 0)
-    const todayProfit = todaySales.reduce((s, t) => s + t.grossProfit, 0)
-    const todayTxnCount = todaySales.length
-
-    // Range-filtered sales (for the main KPIs based on selected date range)
-    const rangeSales = sales.filter(t => t.date >= rangeFrom && t.date <= rangeTo)
-    const rangeRevenue = rangeSales.reduce((s, t) => s + t.totalAmount, 0)
-    const rangeProfit = rangeSales.reduce((s, t) => s + t.grossProfit, 0)
-    const rangeExpenses = expenses.filter(t => t.date >= rangeFrom && t.date <= rangeTo).reduce((s, t) => s + t.totalAmount, 0)
-    const rangePurchases = purchases.filter(t => t.date >= rangeFrom && t.date <= rangeTo).reduce((s, t) => s + t.totalAmount, 0)
-    const rangeIncome = incomes.filter(t => t.date >= rangeFrom && t.date <= rangeTo).reduce((s, t) => s + t.totalAmount, 0)
-
-    // Previous range for comparison (same length before rangeFrom)
-    const rangeDuration = rangeTo.getTime() - rangeFrom.getTime()
-    const prevRangeFrom = new Date(rangeFrom.getTime() - rangeDuration)
+    // === KPIs via SQL aggregates (Audit fix N2) ===
+    // Instead of loading all transactions and reducing in JS, run targeted
+    // SQL SUM queries for each KPI. This is much faster at scale.
+    const prevRangeDuration = rangeTo.getTime() - rangeFrom.getTime()
+    const prevRangeFrom = new Date(rangeFrom.getTime() - prevRangeDuration)
     const prevRangeTo = new Date(rangeFrom.getTime() - 1)
-    const prevRangeSales = sales.filter(t => t.date >= prevRangeFrom && t.date <= prevRangeTo)
-    const prevRangeRevenue = prevRangeSales.reduce((s, t) => s + t.totalAmount, 0)
-    const prevRangeProfit = prevRangeSales.reduce((s, t) => s + t.grossProfit, 0)
+
+    const [
+      todayAgg,
+      rangeSalesAgg,
+      rangeExpensesAgg,
+      rangePurchasesAgg,
+      rangeIncomeAgg,
+      prevRangeSalesAgg,
+    ] = await Promise.all([
+      // Today's sales: revenue + profit + count
+      db.transaction.aggregate({
+        where: { userId, type: 'sale', date: { gte: startOfToday } },
+        _sum: { totalAmount: true, grossProfit: true },
+        _count: true,
+      }),
+      // Range sales: revenue + profit
+      db.transaction.aggregate({
+        where: { userId, type: 'sale', date: { gte: rangeFrom, lte: rangeTo } },
+        _sum: { totalAmount: true, grossProfit: true },
+      }),
+      // Range expenses
+      db.transaction.aggregate({
+        where: { userId, type: 'expense', date: { gte: rangeFrom, lte: rangeTo } },
+        _sum: { totalAmount: true },
+      }),
+      // Range purchases
+      db.transaction.aggregate({
+        where: { userId, type: 'purchase', date: { gte: rangeFrom, lte: rangeTo } },
+        _sum: { totalAmount: true },
+      }),
+      // Range income
+      db.transaction.aggregate({
+        where: { userId, type: 'income', date: { gte: rangeFrom, lte: rangeTo } },
+        _sum: { totalAmount: true },
+      }),
+      // Previous range sales (for growth comparison)
+      db.transaction.aggregate({
+        where: { userId, type: 'sale', date: { gte: prevRangeFrom, lte: prevRangeTo } },
+        _sum: { totalAmount: true, grossProfit: true },
+      }),
+    ])
+
+    const todayRevenue = todayAgg._sum.totalAmount || 0
+    const todayProfit = todayAgg._sum.grossProfit || 0
+    const todayTxnCount = todayAgg._count || 0
+
+    const rangeRevenue = rangeSalesAgg._sum.totalAmount || 0
+    const rangeProfit = rangeSalesAgg._sum.grossProfit || 0
+    const rangeExpenses = rangeExpensesAgg._sum.totalAmount || 0
+    const rangePurchases = rangePurchasesAgg._sum.totalAmount || 0
+    const rangeIncome = rangeIncomeAgg._sum.totalAmount || 0
+
+    const prevRangeRevenue = prevRangeSalesAgg._sum.totalAmount || 0
+    const prevRangeProfit = prevRangeSalesAgg._sum.grossProfit || 0
+
+    // Still need filtered arrays for charts and top products
+    const rangeSales = sales.filter(t => t.date >= rangeFrom && t.date <= rangeTo)
 
     const revenueGrowth = prevRangeRevenue > 0
       ? ((rangeRevenue - prevRangeRevenue) / prevRangeRevenue) * 100

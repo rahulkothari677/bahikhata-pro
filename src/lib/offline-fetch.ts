@@ -354,6 +354,19 @@ async function queueForSync(
     const h = fetchOpts.headers as Record<string, string>
     Object.keys(h).forEach((k) => (headers[k] = h[k]))
   }
+
+  // 🔒 IDEMPOTENCY (Audit fix N1): Generate a clientMutationId for every
+  // queued mutation. This UUID is sent as the X-Client-Mutation-Id header.
+  // The server uses it to deduplicate — if the original request already went
+  // through AND the queue replay also goes through, the server sees the same
+  // UUID and returns the existing record instead of creating a duplicate.
+  //
+  // If the caller already provided an X-Client-Mutation-Id header, use that
+  // (they may want to control the ID themselves). Otherwise, generate one.
+  if (!headers['x-client-mutation-id'] && !headers['X-Client-Mutation-Id']) {
+    headers['x-client-mutation-id'] = generateMutationId()
+  }
+
   await queuePendingWrite({
     url,
     method,
@@ -361,6 +374,19 @@ async function queueForSync(
     headers,
     invalidates,
   })
+}
+
+/**
+ * Generate a UUID v4 for client mutation idempotency.
+ * Uses crypto.randomUUID() if available (modern browsers), falls back to
+ * a timestamp + random string for older browsers.
+ */
+function generateMutationId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID()
+  }
+  // Fallback: timestamp + random (not as unique as UUID, but sufficient)
+  return `mut-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
 }
 
 // ────────────────────────────────────────────────────────────────────────────
