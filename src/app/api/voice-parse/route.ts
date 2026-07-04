@@ -158,7 +158,8 @@ Return JSON only, no commentary.`
               { role: 'user', content: transcript },
             ],
             max_tokens: 1000,
-            temperature: 0.1,
+            temperature: 0,
+            response_format: { type: 'json_object' },
           }),
         })
         const aiDurationMs = Date.now() - aiStart
@@ -238,7 +239,8 @@ Return JSON only, no commentary.`
               { role: 'user', content: transcript },
             ],
             max_tokens: 1000,
-            temperature: 0.1,
+            temperature: 0,
+            response_format: { type: 'json_object' },
           }),
         })
         const aiDurationMs = Date.now() - aiStart
@@ -329,7 +331,7 @@ Return JSON only, no commentary.`
           },
         ],
         max_tokens: 1000,
-        temperature: 0.1, // Low temperature for consistent parsing
+        temperature: 0, // Low temperature for consistent parsing
       }),
     })
     const aiDurationMs = Date.now() - aiStart
@@ -363,7 +365,8 @@ Return JSON only, no commentary.`
                 { role: 'user', content: transcript },
               ],
               max_tokens: 1000,
-              temperature: 0.1,
+              temperature: 0,
+            response_format: { type: 'json_object' },
             }),
           })
           const groqDurationMs = Date.now() - groqStart

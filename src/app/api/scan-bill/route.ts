@@ -4,6 +4,7 @@ import { rateLimit, getClientIP, rateLimitedResponse } from '@/lib/rate-limit'
 import { checkUsage, incrementUsage } from '@/lib/usage-limits'
 import { calculateCostInr } from '@/lib/ai-pricing'
 import { db } from '@/lib/db'
+import { roundMoney, calculateGst, splitGst } from '@/lib/money'
 
 // ⏱️ Vercel serverless timeout — AI bill scanning can take 3-8s on big
 // handwritten images. Set explicit maxDuration so the route doesn't hit
@@ -310,6 +311,39 @@ Return JSON only, no commentary, no markdown formatting.`
         : 0.5
     }
 
+    // 🔒 AUDIT FIX AI-1 (v3): Compute totals server-side, don't trust AI's arithmetic.
+    // LLMs are unreliable at multi-number math. We recompute subtotal, GST, and
+    // total from the item-level data using money.ts helpers. If the AI's total
+    // doesn't match our computed total, we flag it as "needs review".
+    const aiTotalAmount = Number(parsed.totalAmount) || 0
+    const computedSubtotal = roundMoney(
+      parsed.items.reduce((s: number, i: any) => s + (i.quantity * i.unitPrice), 0)
+    )
+    const computedDiscount = Number(parsed.discountAmount) || 0
+    let computedGst = 0
+    parsed.items.forEach((item: any) => {
+      computedGst = roundMoney(computedGst + calculateGst(item.quantity * item.unitPrice, item.gstRate))
+    })
+    const { cgst: computedCgst, sgst: computedSgst } = splitGst(computedGst)
+    const computedTotal = roundMoney(computedSubtotal - computedDiscount + computedGst)
+
+    // Override AI's totals with computed values (more reliable)
+    parsed.subtotal = computedSubtotal
+    parsed.discountAmount = computedDiscount
+    parsed.cgst = computedCgst
+    parsed.sgst = computedSgst
+    parsed.igst = 0  // CGST+SGST is the default; inter-state is decided on save
+    parsed.totalAmount = computedTotal
+
+    // Reconciliation: if AI saw a total on the bill, compare with our computed total
+    parsed.needsReview = false
+    parsed.reviewReason = null
+    if (aiTotalAmount > 0 && Math.abs(aiTotalAmount - computedTotal) > 1) {
+      parsed.needsReview = true
+      parsed.reviewReason = `Bill shows ₹${aiTotalAmount.toFixed(2)} but calculated total is ₹${computedTotal.toFixed(2)}. Please verify.`
+      parsed.aiTotalAmount = aiTotalAmount  // keep the AI's number for display
+    }
+
     // Record successful scan in usage tracking (after AI succeeded, so users
     // don't lose credits on failed scans).
     await incrementUsage(userId, 'aiScans')
@@ -505,7 +539,17 @@ async function callSingleProvider(
             ],
           },
         ],
+        // 🔒 AUDIT FIX AI-2 (v3): Force JSON response format.
+        // Was: model wraps JSON in ```json fences, or adds commentary text
+        // → JSON.parse fails → fallback regex extraction → sometimes misses.
+        // Now: response_format tells the model to return pure JSON.
+        // Gemini's OpenAI-compatible endpoint supports this via response_format.
+        response_format: { type: 'json_object' },
         max_tokens: 2000,
+        // 🔒 AUDIT FIX AI-3 (v3): Temperature 0 for deterministic extraction.
+        // Was: no temperature set → defaults to 1.0 → run-to-run variance on
+        // the same bill. Now: 0 for extraction (no randomness).
+        temperature: 0,
         // Disable Gemini "thinking" mode for faster response (1-3s vs 3-8s)
         // Slight accuracy tradeoff, but much better UX
         ...(provider.name === 'gemini' ? { thinking: { type: 'disabled' } } : {}),
