@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
 import { roundMoney, calculateGst, splitGst } from '@/lib/money'
+import { activeTransactionWhere } from '@/lib/query-helpers'
 
 // ⏱️ Vercel serverless timeout — GSTR export aggregates all transactions
 // in a period and generates CSV/JSON. Can take several seconds at scale.
@@ -25,11 +26,10 @@ export async function GET(req: NextRequest) {
 
     const [transactions, setting] = await Promise.all([
       db.transaction.findMany({
-        where: {
-          userId,
+        where: activeTransactionWhere(userId, {
           type: 'sale',
           date: { gte: from, lte: to },
-        },
+        }),
         include: { items: true, party: true },
         orderBy: { date: 'asc' },
       }),

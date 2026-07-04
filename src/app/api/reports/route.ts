@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
 import { roundMoney } from '@/lib/money'
+import { activeTransactionWhere } from '@/lib/query-helpers'
 
 // ⏱️ Vercel serverless timeout — reports can aggregate thousands of
 // transactions and generate large responses. Set explicit maxDuration.
@@ -24,7 +25,7 @@ export async function GET(req: NextRequest) {
     const to = toStr ? new Date(toStr) : now
 
     const transactions = await db.transaction.findMany({
-      where: { userId, date: { gte: from, lte: to } },
+      where: activeTransactionWhere(userId, { date: { gte: from, lte: to } }),
       include: { items: true, party: true },
       orderBy: { date: 'asc' },
     })
@@ -138,7 +139,7 @@ export async function GET(req: NextRequest) {
     if (type === 'stock') {
       // Stock valuation report
       const allTxns = await db.transaction.findMany({
-        where: { userId, items: { some: {} } },
+        where: activeTransactionWhere(userId, { items: { some: {} } }),
         include: { items: true },
       })
 

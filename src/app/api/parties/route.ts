@@ -118,7 +118,7 @@ export async function GET() {
     return withCache({ parties: partiesWithBalance }, { maxAge: 60, swr: 300 })
   } catch (error) {
     console.error('Parties GET error:', error)
-    return NextResponse.json({ parties: [] })
+    console.error("[parties] DB error:", error); return NextResponse.json({ parties: [] })
   }
 }
 

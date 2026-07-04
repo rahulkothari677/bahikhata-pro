@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
 import { roundMoney } from '@/lib/money'
+import { activeTransactionWhere } from '@/lib/query-helpers'
 
 // ⏱️ Vercel serverless timeout — insights aggregates dashboard data and
 // may call AI for smart alerts. Set explicit maxDuration.
@@ -17,7 +18,7 @@ export async function GET() {
     const [products, parties, transactions] = await Promise.all([
       db.product.findMany({ where: { userId } }),
       db.party.findMany({ where: { userId } }),
-      db.transaction.findMany({ where: { userId }, include: { items: true, party: true } }),
+      db.transaction.findMany({ where: activeTransactionWhere(userId), include: { items: true, party: true } }),
     ])
 
     const insights: any[] = []

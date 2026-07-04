@@ -56,7 +56,7 @@ export async function GET(req: NextRequest) {
     return withCache({ transactions }, { maxAge: 30, swr: 300 })
   } catch (error) {
     console.error('Transactions GET error:', error)
-    return NextResponse.json({ transactions: [] })
+    console.error("[transactions] DB error:", error); return NextResponse.json({ transactions: [] })
   }
 }
 
@@ -188,31 +188,28 @@ export async function POST(req: NextRequest) {
     const paid = parseFloat(paidAmount)
     const finalPaid = isNaN(paid) ? totalAmount : paid
 
-    // 🔒 AUDIT FIX H1: Create transaction + update product stock atomically.
-    // Was: just db.transaction.create — no stock tracking.
-    // Now: wrapped in $transaction. For each item with a productId:
-    //   - Sale: decrement product.currentStock
-    //   - Purchase: increment product.currentStock
-    // Stock is tracked but NOT blocked on negative (many shopkeepers haven't
-    // set up openingStock — blocking would break their workflow). A per-shop
-    // "block negative stock" setting can be added later.
-    // 🔒 AUDIT FIX M6: Auto-generate sequential invoice number if not provided.
-    // GST requires unique, gap-free invoice numbers per business. If the user
-    // doesn't provide one, we generate one: INV-0001, INV-0002, etc.
-    let finalInvoiceNo = invoiceNo || null
-    let invoiceSequence: number | null = null
-    if (!finalInvoiceNo && (type === 'sale' || type === 'purchase')) {
-      // Find the highest existing sequence for this user
-      const lastTxn = await db.transaction.findFirst({
-        where: { userId, invoiceSequence: { not: null } },
-        orderBy: { invoiceSequence: 'desc' },
-        select: { invoiceSequence: true },
-      })
-      invoiceSequence = (lastTxn?.invoiceSequence || 0) + 1
-      finalInvoiceNo = `INV-${String(invoiceSequence).padStart(4, '0')}`
-    }
+    // 🔒 AUDIT FIX N3 (v3): Invoice sequence generation is now INSIDE the
+    // $transaction with retry-on-P2002. Was: max()+1 OUTSIDE the transaction
+    // → race condition → duplicate invoiceNo → P2002 → 500 → sale lost.
+    // Now: if invoiceNo is needed, generate it inside the transaction. If
+    // P2002 (duplicate), retry with next sequence number (up to 3 attempts).
 
-    const transaction = await db.$transaction(async (tx) => {
+    const createTransactionWithStock = async (tx: any, invoiceNoOverride?: string, seqOverride?: number) => {
+      let finalInvoiceNo = invoiceNo || invoiceNoOverride || null
+      let invoiceSequence: number | null = seqOverride || null
+
+      if (!finalInvoiceNo && (type === 'sale' || type === 'purchase')) {
+        // Find the highest existing sequence INSIDE the transaction
+        const lastTxn = await tx.transaction.findFirst({
+          where: { userId, invoiceSequence: { not: null } },
+          orderBy: { invoiceSequence: 'desc' },
+          select: { invoiceSequence: true },
+        })
+        invoiceSequence = (lastTxn?.invoiceSequence || 0) + 1
+        if (seqOverride) invoiceSequence = seqOverride
+        finalInvoiceNo = `INV-${String(invoiceSequence).padStart(4, '0')}`
+      }
+
       const txn = await tx.transaction.create({
         data: {
           userId,
@@ -230,7 +227,7 @@ export async function POST(req: NextRequest) {
           isInterState: !!isInterState,
           notes: notes || null,
           invoiceNo: finalInvoiceNo,
-          invoiceSequence,  // 🔒 M6: sequential number for GST compliance
+          invoiceSequence,
           grossProfit: roundMoney(grossProfit),
           clientMutationId: clientMutationId || null,
           items: { create: txItems },
@@ -257,7 +254,32 @@ export async function POST(req: NextRequest) {
       }
 
       return txn
-    })
+    }
+
+    // Try up to 3 times (in case of P2002 duplicate invoiceNo race condition)
+    let transaction
+    let lastSeq = 0
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        transaction = await db.$transaction(async (tx) => {
+          return createTransactionWithStock(tx, undefined, lastSeq || undefined)
+        })
+        break
+      } catch (err: any) {
+        // P2002 = unique constraint violation on invoiceNo
+        if (err?.code === 'P2002' && attempt < 2) {
+          // Get the current max sequence and try again with next number
+          const lastTxn = await db.transaction.findFirst({
+            where: { userId, invoiceSequence: { not: null } },
+            orderBy: { invoiceSequence: 'desc' },
+            select: { invoiceSequence: true },
+          })
+          lastSeq = (lastTxn?.invoiceSequence || 0) + attempt + 2
+          continue
+        }
+        throw err
+      }
+    }
 
     return NextResponse.json({ transaction })
   } catch (error) {
@@ -267,23 +289,13 @@ export async function POST(req: NextRequest) {
 }
 
 // DELETE /api/transactions?id=xxx
+// 🔒 AUDIT FIX N4 (v3): This query-param DELETE handler has been removed.
+// It was a HARD delete (db.transaction.delete) that bypassed soft-delete,
+// didn't reverse stock, and had no audit trail. The correct delete path
+// is /api/transactions/[id] DELETE which does soft-delete + stock reversal.
+// Any client calling this endpoint should be updated to use /api/transactions/[id].
 export async function DELETE(req: NextRequest) {
-  try {
-    const { userId, error } = await getAuthUserId()
-    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-
-    const { searchParams } = new URL(req.url)
-    const id = searchParams.get('id')
-    if (!id) return NextResponse.json({ error: 'ID required' }, { status: 400 })
-
-    // Verify ownership
-    const existing = await db.transaction.findFirst({ where: { id, userId } })
-    if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-
-    await db.transaction.delete({ where: { id } })
-    return NextResponse.json({ success: true })
-  } catch (error) {
-    console.error('Transactions DELETE error:', error)
-    return NextResponse.json({ error: 'Failed to delete transaction' }, { status: 500 })
-  }
+  return NextResponse.json({
+    error: 'This endpoint is deprecated. Use DELETE /api/transactions/[id] instead.',
+  }, { status: 410 })  // 410 Gone
 }

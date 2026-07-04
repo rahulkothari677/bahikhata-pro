@@ -50,6 +50,17 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const { type, partyId, date, items, discountAmount, paymentMode, notes, invoiceNo, category, paidAmount } = validation.data as any
 
+    // 🔒 AUDIT FIX N6 (v3): Forbid changing transaction type.
+    // Was: editing a sale→income would orphan items and leak stock (no reversal).
+    // Now: reject type changes with a clear error. Users must delete and re-create
+    // if they need a different type (the delete path handles stock reversal correctly).
+    if (existing.type !== type) {
+      return NextResponse.json({
+        error: 'Cannot change transaction type',
+        message: `This transaction is a ${existing.type}. To convert it to a ${type}, please delete this transaction and create a new one.`,
+      }, { status: 400 })
+    }
+
     // 🔒 GST CORRECTNESS (Audit fix H3 v2): Derive isInterState server-side
     // using the shared helper — same logic as POST. Was: trusted the client
     // isInterState flag (user could flip CGST/SGST ↔ IGST → wrong GST return).
@@ -214,8 +225,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 }
 
 // DELETE /api/transactions/[id]
-// 🔒 AUDIT FIX M7: Soft delete — sets deletedAt instead of hard DELETE.
-// Preserves audit trail for GST/tax disputes. Query filters exclude soft-deleted.
+// 🔒 AUDIT FIX M7+N5 (v3): Soft delete + stock reversal, wrapped in $transaction.
+// Was: soft-delete and stock reversal were separate awaits (not atomic).
+// Now: all operations in a single $transaction — all succeed or all roll back.
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { userId, error } = await getAuthUserId()
@@ -226,31 +238,34 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     const existing = await db.transaction.findFirst({ where: { id, userId, deletedAt: null } })
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-    // 🔒 M7: Soft delete — set deletedAt, don't actually delete the row
-    await db.transaction.update({
-      where: { id },
-      data: { deletedAt: new Date() },
-    })
+    // 🔒 N5: Wrap soft-delete + stock reversal in $transaction
+    await db.$transaction(async (tx) => {
+      // Step 1: Soft delete
+      await tx.transaction.update({
+        where: { id },
+        data: { deletedAt: new Date() },
+      })
 
-    // 🔒 H1: Reverse stock impact (same as edit — add back sales, subtract purchases)
-    if (existing.type === 'sale' || existing.type === 'purchase') {
-      const items = await db.transactionItem.findMany({ where: { transactionId: id } })
-      for (const item of items) {
-        if (item.productId) {
-          if (existing.type === 'sale') {
-            await db.product.update({
-              where: { id: item.productId },
-              data: { currentStock: { increment: item.quantity } },
-            })
-          } else {
-            await db.product.update({
-              where: { id: item.productId },
-              data: { currentStock: { decrement: item.quantity } },
-            })
+      // Step 2: Reverse stock impact (same as edit — add back sales, subtract purchases)
+      if (existing.type === 'sale' || existing.type === 'purchase') {
+        const items = await tx.transactionItem.findMany({ where: { transactionId: id } })
+        for (const item of items) {
+          if (item.productId) {
+            if (existing.type === 'sale') {
+              await tx.product.update({
+                where: { id: item.productId },
+                data: { currentStock: { increment: item.quantity } },
+              })
+            } else {
+              await tx.product.update({
+                where: { id: item.productId },
+                data: { currentStock: { decrement: item.quantity } },
+              })
+            }
           }
         }
       }
-    }
+    })
 
     return NextResponse.json({ success: true, message: 'Transaction deleted (soft delete — can be restored)' })
   } catch (error) {

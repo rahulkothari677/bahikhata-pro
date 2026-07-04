@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
 import { withCache } from '@/lib/cache'
+import { activeTransactionWhere } from '@/lib/query-helpers'
 
 // ⚡ PERFORMANCE (Audit fix N2): KPIs are now computed via SQL aggregate
 // queries instead of loading 13 months of transactions into memory and
@@ -45,7 +46,7 @@ export async function GET(req: NextRequest) {
       // Always fetch latest 8 transactions (for "recent transactions" widget)
       // Needs items + party for display
       db.transaction.findMany({
-        where: { userId },
+        where: activeTransactionWhere(userId),
         include: { items: true, party: true },
         orderBy: { date: 'desc' },
         take: 8,
@@ -56,10 +57,9 @@ export async function GET(req: NextRequest) {
       // and skip the items/party includes (we only need items for top products
       // + category breakdown, which we fetch separately below if in range).
       db.transaction.findMany({
-        where: {
-          userId,
+        where: activeTransactionWhere(userId, {
           date: { gte: thirteenMonthsAgo },
-        },
+        }),
         select: {
           id: true,
           type: true,
@@ -140,33 +140,33 @@ export async function GET(req: NextRequest) {
     ] = await Promise.all([
       // Today's sales: revenue + profit + count
       db.transaction.aggregate({
-        where: { userId, type: 'sale', date: { gte: startOfToday } },
+        where: activeTransactionWhere(userId, { type: 'sale', date: { gte: startOfToday } }),
         _sum: { totalAmount: true, grossProfit: true },
         _count: true,
       }),
       // Range sales: revenue + profit
       db.transaction.aggregate({
-        where: { userId, type: 'sale', date: { gte: rangeFrom, lte: rangeTo } },
+        where: activeTransactionWhere(userId, { type: 'sale', date: { gte: rangeFrom, lte: rangeTo } }),
         _sum: { totalAmount: true, grossProfit: true },
       }),
       // Range expenses
       db.transaction.aggregate({
-        where: { userId, type: 'expense', date: { gte: rangeFrom, lte: rangeTo } },
+        where: activeTransactionWhere(userId, { type: 'expense', date: { gte: rangeFrom, lte: rangeTo } }),
         _sum: { totalAmount: true },
       }),
       // Range purchases
       db.transaction.aggregate({
-        where: { userId, type: 'purchase', date: { gte: rangeFrom, lte: rangeTo } },
+        where: activeTransactionWhere(userId, { type: 'purchase', date: { gte: rangeFrom, lte: rangeTo } }),
         _sum: { totalAmount: true },
       }),
       // Range income
       db.transaction.aggregate({
-        where: { userId, type: 'income', date: { gte: rangeFrom, lte: rangeTo } },
+        where: activeTransactionWhere(userId, { type: 'income', date: { gte: rangeFrom, lte: rangeTo } }),
         _sum: { totalAmount: true },
       }),
       // Previous range sales (for growth comparison)
       db.transaction.aggregate({
-        where: { userId, type: 'sale', date: { gte: prevRangeFrom, lte: prevRangeTo } },
+        where: activeTransactionWhere(userId, { type: 'sale', date: { gte: prevRangeFrom, lte: prevRangeTo } }),
         _sum: { totalAmount: true, grossProfit: true },
       }),
     ])
