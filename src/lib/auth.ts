@@ -97,6 +97,13 @@ export const authOptions: NextAuthOptions = {
       // skip the check (the token is still "fresh enough"). If >5min, re-check.
       // Worst case: a revoked session stays valid for up to 5 minutes after
       // revocation — acceptable trade-off for not hammering the DB.
+      //
+      // 🔒 BUG FIX (V5): Old JWTs created BEFORE the tokenVersion feature don't
+      // have a tokenVersion claim (it's `undefined`). The DB default is `0`.
+      // The check `0 !== undefined` was `true` → session revoked → 401 on ALL
+      // API calls. Now: treat `undefined` as `0` (the DB default) so old JWTs
+      // continue to work. The next login will create a JWT with the proper
+      // tokenVersion claim.
       const lastCheck = (token.lastVersionCheck as number) || 0
       const FIVE_MINUTES = 5 * 60 * 1000
       if (Date.now() - lastCheck > FIVE_MINUTES) {
@@ -105,11 +112,16 @@ export const authOptions: NextAuthOptions = {
             where: { id: token.id as string },
             select: { tokenVersion: true },
           })
-          if (!dbUser || dbUser.tokenVersion !== (token.tokenVersion as number)) {
+          // 🔒 BUG FIX: treat undefined tokenVersion as 0 (DB default)
+          const jwtTokenVersion = (token.tokenVersion as number) ?? 0
+          if (!dbUser || dbUser.tokenVersion !== jwtTokenVersion) {
             // tokenVersion mismatch → session is revoked. Return a token with
             // no user info, which NextAuth treats as logged-out.
             return { ...token, id: undefined as any, tokenVersion: undefined as any }
           }
+          // 🔒 BUG FIX: update the token with the proper tokenVersion + lastVersionCheck
+          // so future checks work correctly even for old JWTs
+          token.tokenVersion = jwtTokenVersion
           token.lastVersionCheck = Date.now()
         } catch {
           // If the DB check fails (transient error), don't log the user out —
