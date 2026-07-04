@@ -39,7 +39,7 @@ export async function GET() {
       })
     }
 
-    const shareUrl = `https://bahakhata-pro.vercel.app/?ref=${referral.code}`
+    const shareUrl = `https://bahikhata-pro.vercel.app/?ref=${referral.code}`
     const whatsappText = `🇮🇳 Check out BahiKhata Pro — India's smartest ledger app! AI bill scanning, GST filing, inventory management. Use my code ${referral.code} to get started! ${shareUrl}`
     const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(whatsappText)}`
 

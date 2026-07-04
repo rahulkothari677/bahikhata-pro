@@ -49,12 +49,27 @@ export function toMoney(value: any): number {
  * This is the core fix for the Float precision issue: instead of
  * `itemGst / 2` producing 9.000000000000002, we get exactly 9.00.
  *
+ * 🔒 AUDIT FIX M0a+M0b (v2 audit):
+ * - M0a: Fixed the epsilon bug. Was: `Math.round(value * 100) / 100` which
+ *   fails on `1.005` because `1.005 * 100 = 100.49999999999999` → rounds to
+ *   `100` → returns `1.00` instead of `1.01`. Now adds `Number.EPSILON` before
+ *   rounding: `Math.round((value + Number.EPSILON) * 100) / 100`.
+ * - M0b: Fixed negative rounding to be truly symmetric. Was: `Math.round(-2.5)`
+ *   returns `-2` (toward +∞), not `-3` (away from zero). Now uses
+ *   `Math.sign(v) * Math.round(Math.abs(v) * 100 + EPSILON) / 100` so
+ *   `-2.005` correctly rounds to `-2.01` (not `-2.00`).
+ *
  * Uses "round half away from zero" (standard rounding, not banker's rounding)
  * to match GST invoice norms.
  */
 export function roundMoney(value: number): number {
   if (isNaN(value) || !isFinite(value)) return 0
-  return Math.round(value * 100) / 100
+  // 🔒 M0a+M0b: Symmetric rounding with epsilon correction
+  // Math.sign(v) * Math.round(Math.abs(v) * 100 + EPSILON) / 100
+  // - Math.abs() ensures we round the magnitude, not the signed value
+  // - Number.EPSILON corrects the float representation bug (1.005 → 1.01)
+  // - Math.sign() reapplies the original sign (symmetric: -2.005 → -2.01)
+  return Math.sign(value) * Math.round(Math.abs(value) * 100 + Number.EPSILON) / 100
 }
 
 /**

@@ -335,6 +335,22 @@ model UsageTracking {
   @@index([userId, month])
 }
 
+// ==================== PASSWORD RESET TOKENS (C2 audit fix) ====================
+// 🔒 SECURITY: Reset tokens are now stored in the DB (not in-memory Map) so
+// they survive serverless cold starts and are shared across instances.
+// Only the SHA-256 hash is stored — never the raw token.
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  email     String   // the user's email (lowercased)
+  tokenHash String   @unique // SHA-256 hash of the raw token (never store raw)
+  expiresAt DateTime // 1 hour from creation
+  usedAt    DateTime? // null = not yet used; set when consumed (single-use)
+  createdAt DateTime @default(now())
+
+  @@index([email, expiresAt])
+  @@index([tokenHash])
+}
+
 // ==================== AUDIT LOG (security & compliance) ====================
 // Track every important action: logins, data exports, deletes, role changes.
 // Used for: security forensics, compliance (DPDP Act), dispute resolution.

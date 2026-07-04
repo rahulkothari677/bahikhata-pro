@@ -9,8 +9,12 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 
+// 🔒 AUDIT FIX H6+L1 (v2 audit): Exact host matching only.
+// Was: `host.endsWith('.vercel.app')` allowed ANY *.vercel.app origin
+// (e.g. evil.vercel.app would pass CSRF). Now: only exact matches in the set.
+// Also fixed the typo: 'bahakhata' → 'bahikhata'
 const ALLOWED_HOSTS = new Set([
-  'bahakhata-pro.vercel.app',
+  'bahikhata-pro.vercel.app',  // 🔒 L1: was 'bahakhata-pro' (missing 'i')
   'localhost:3000',
   '127.0.0.1:3000',
 ])
@@ -91,8 +95,10 @@ export function middleware(req: NextRequest) {
   return res
 }
 
+// 🔒 AUDIT FIX H6: Exact host match only — no wildcards.
+// Was: `host.endsWith('.vercel.app')` allowed any *.vercel.app origin.
+// Now: only exact matches in ALLOWED_HOSTS pass.
 function isAllowedHost(host: string): boolean {
-  if (host.endsWith('.vercel.app')) return true
   return ALLOWED_HOSTS.has(host)
 }
 

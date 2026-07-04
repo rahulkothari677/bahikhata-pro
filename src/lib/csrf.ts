@@ -13,8 +13,9 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 
+// 🔒 AUDIT FIX H6+L1: Fixed typo 'bahakhata' → 'bahikhata' + exact match only
 const ALLOWED_HOSTS = [
-  'bahakhata-pro.vercel.app',
+  'bahikhata-pro.vercel.app',  // 🔒 L1: was 'bahakhata-pro' (missing 'i')
   'localhost:3000',
   '127.0.0.1:3000',
   // Add preview deployment hosts here as needed
@@ -81,9 +82,10 @@ export function checkCSRF(req: NextRequest): NextResponse | null {
   return null
 }
 
+// 🔒 AUDIT FIX H6: Exact host match only — no wildcards.
+// Was: `host.endsWith('.vercel.app')` allowed any *.vercel.app origin.
+// Now: only exact matches in ALLOWED_HOSTS pass.
 function isAllowedHost(host: string): boolean {
-  // Allow any Vercel preview deployment (*.vercel.app)
-  if (host.endsWith('.vercel.app')) return true
   return ALLOWED_HOSTS.includes(host)
 }
 

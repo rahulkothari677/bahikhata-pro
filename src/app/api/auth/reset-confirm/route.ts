@@ -1,13 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import bcrypt from 'bcryptjs'
-import { resetTokens } from '../reset-request/route'
+import crypto from 'crypto'
 
 /**
  * POST /api/auth/reset-confirm
  *
  * Confirms a password reset using the token from the email/link.
  * Updates the user's password.
+ *
+ * 🔒 AUDIT FIX C2 (v2 audit): Now uses DB-stored hashed tokens instead of
+ * the in-memory Map. The token is hashed (SHA-256) on the server and looked
+ * up by hash — the raw token is never stored.
  *
  * Body: { token: string, password: string }
  */
@@ -23,40 +27,62 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Password must be at least 8 characters' }, { status: 400 })
     }
 
-    // Find the token
-    const tokenData = resetTokens.get(token)
-    if (!tokenData) {
+    // 🔒 SECURITY (C2): Hash the token and look it up in the DB
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
+
+    let tokenRecord
+    try {
+      tokenRecord = await db.passwordResetToken.findUnique({
+        where: { tokenHash },
+      })
+    } catch (dbError) {
+      console.error('[reset-confirm] DB error looking up token:', dbError)
+      return NextResponse.json({ error: 'Database error. Please try again.' }, { status: 503 })
+    }
+
+    if (!tokenRecord) {
       return NextResponse.json({ error: 'Invalid or expired reset token' }, { status: 400 })
     }
 
+    // Check if token already used (single-use)
+    if (tokenRecord.usedAt) {
+      return NextResponse.json({ error: 'This reset token has already been used. Please request a new one.' }, { status: 400 })
+    }
+
     // Check if token expired
-    if (Date.now() > tokenData.expiresAt) {
-      resetTokens.delete(token)
+    if (new Date() > tokenRecord.expiresAt) {
+      // Clean up expired token
+      try {
+        await db.passwordResetToken.delete({ where: { id: tokenRecord.id } })
+      } catch {}
       return NextResponse.json({ error: 'Reset token has expired. Please request a new one.' }, { status: 400 })
     }
 
     // Hash the new password
     const hashedPassword = await bcrypt.hash(password, 12)
 
-    // Update the user's password AND bump tokenVersion (audit fix Phase 3.3).
-    // Bumping tokenVersion invalidates ALL existing JWTs for this user, so
-    // any attacker who stole a session token before the password reset is
-    // now logged out. The user must re-login with the new password.
+    // 🔒 ATOMICITY: Update password + bump tokenVersion + mark token as used
+    // in a single transaction. If any step fails, all roll back.
     try {
-      await db.user.update({
-        where: { email: tokenData.email },
-        data: {
-          password: hashedPassword,
-          tokenVersion: { increment: 1 },  // 🔒 revoke all existing sessions
-        },
-      })
+      await db.$transaction([
+        // Update password and revoke all sessions (tokenVersion bump)
+        db.user.update({
+          where: { email: tokenRecord.email },
+          data: {
+            password: hashedPassword,
+            tokenVersion: { increment: 1 },  // 🔒 revoke all existing sessions
+          },
+        }),
+        // Mark token as used (single-use enforcement)
+        db.passwordResetToken.update({
+          where: { id: tokenRecord.id },
+          data: { usedAt: new Date() },
+        }),
+      ])
     } catch (dbError) {
-      console.error('[reset-confirm] DB error:', dbError)
+      console.error('[reset-confirm] DB error updating password:', dbError)
       return NextResponse.json({ error: 'Database error. Please try again or contact support.' }, { status: 503 })
     }
-
-    // Delete the used token (one-time use)
-    resetTokens.delete(token)
 
     return NextResponse.json({
       success: true,

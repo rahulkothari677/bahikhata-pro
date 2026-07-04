@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
 import { roundMoney, calculateGst, splitGst } from '@/lib/money'
+import { deriveInterStateStatus } from '@/lib/gst'
 
 // GET /api/transactions/[id] - get single transaction with all details
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -39,12 +40,15 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     const body = await req.json()
-    const { type, partyId, date, items, discountAmount, paymentMode, isInterState, notes, invoiceNo, category, paidAmount } = body
+    const { type, partyId, date, items, discountAmount, paymentMode, notes, invoiceNo, category, paidAmount } = body
 
-    // Verify party ownership (if provided)
-    if (partyId) {
-      const party = await db.party.findFirst({ where: { id: partyId, userId } })
-      if (!party) return NextResponse.json({ error: 'Party not found' }, { status: 404 })
+    // 🔒 GST CORRECTNESS (Audit fix H3 v2): Derive isInterState server-side
+    // using the shared helper — same logic as POST. Was: trusted the client
+    // isInterState flag (user could flip CGST/SGST ↔ IGST → wrong GST return).
+    // Now: client flag is IGNORED, server derives from shop state vs party state.
+    const { isInterState, party } = await deriveInterStateStatus(userId, partyId)
+    if (partyId && !party) {
+      return NextResponse.json({ error: 'Party not found' }, { status: 404 })
     }
 
     // For income/expense - simple update
@@ -115,30 +119,37 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const paid = parseFloat(paidAmount)
     const finalPaid = isNaN(paid) ? totalAmount : paid
 
-    // Delete old items, then create new
-    await db.transactionItem.deleteMany({ where: { transactionId: id } })
+    // 🔒 ATOMICITY (Audit fix C3): Wrap delete + update in a $transaction
+    // so if either fails, both roll back. Was: non-atomic — if the update
+    // failed after the delete, the transaction was left with zero items
+    // but a stale total (silent ledger corruption).
+    const transaction = await db.$transaction(async (tx) => {
+      // Step 1: Delete old items
+      await tx.transactionItem.deleteMany({ where: { transactionId: id } })
 
-    const transaction = await db.transaction.update({
-      where: { id },
-      data: {
-        type,
-        partyId: partyId || null,
-        date: new Date(date || new Date()),
-        subtotal: roundMoney(subtotal),
-        discountAmount: roundMoney(discount),
-        cgst: roundMoney(cgst),
-        sgst: roundMoney(sgst),
-        igst: roundMoney(igst),
-        totalAmount,
-        paidAmount: roundMoney(finalPaid),
-        paymentMode: paymentMode || 'cash',
-        isInterState: !!isInterState,
-        notes: notes || null,
-        invoiceNo: invoiceNo || null,
-        grossProfit,
-        items: { create: txItems },
-      },
-      include: { items: true, party: true },
+      // Step 2: Update transaction + create new items (atomic)
+      return tx.transaction.update({
+        where: { id },
+        data: {
+          type,
+          partyId: partyId || null,
+          date: new Date(date || new Date()),
+          subtotal: roundMoney(subtotal),
+          discountAmount: roundMoney(discount),
+          cgst: roundMoney(cgst),
+          sgst: roundMoney(sgst),
+          igst: roundMoney(igst),
+          totalAmount,
+          paidAmount: roundMoney(finalPaid),
+          paymentMode: paymentMode || 'cash',
+          isInterState: !!isInterState,
+          notes: notes || null,
+          invoiceNo: invoiceNo || null,
+          grossProfit: roundMoney(grossProfit),  // 🔒 M3: round grossProfit too
+          items: { create: txItems },
+        },
+        include: { items: true, party: true },
+      })
     })
 
     return NextResponse.json({ transaction })

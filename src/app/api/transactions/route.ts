@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
 import { withCache } from '@/lib/cache'
 import { roundMoney, calculateGst, splitGst } from '@/lib/money'
+import { deriveInterStateStatus } from '@/lib/gst'
 
 // GET /api/transactions - list with filters (type, from, to, limit)
 export async function GET(req: NextRequest) {
@@ -72,32 +73,14 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 🔒 GST CORRECTNESS (Audit fix Phase 3.1): Derive isInterState server-side
-    // from the shop's state (Setting.state) vs the party's state (Party.state),
-    // instead of trusting the client-supplied flag. A wrong client flag = wrong
-    // GST return for the merchant.
-    //
-    // Rules:
-    // - If no party is selected (walk-in customer), default to intra-state
-    //   (CGST+SGST) — the shop's own state.
-    // - If the party has no state set, default to intra-state (safest assumption).
-    // - If both states are set and DIFFERENT → inter-state (IGST).
-    // - If both states are set and SAME → intra-state (CGST+SGST).
-    // - The client-supplied isInterState is IGNORED (kept only for backward
-    //   compat in the DB column, but the value is now server-derived).
-    let party: any = null
-    if (partyId) {
-      party = await db.party.findFirst({ where: { id: partyId, userId } })
-      if (!party) return NextResponse.json({ error: 'Party not found' }, { status: 404 })
+    // 🔒 GST CORRECTNESS (Audit fix H3 v2): Derive isInterState server-side
+    // using the shared helper (same logic for both POST and PUT).
+    // Was: POST derived it server-side, PUT trusted the client flag.
+    // Now: both use deriveInterStateStatus() from lib/gst.ts.
+    const { isInterState, party } = await deriveInterStateStatus(userId, partyId)
+    if (partyId && !party) {
+      return NextResponse.json({ error: 'Party not found' }, { status: 404 })
     }
-
-    // Fetch the shop's state from settings (one query, cached by Prisma)
-    const shopSetting = await db.setting.findUnique({ where: { userId }, select: { state: true } })
-    const shopState = shopSetting?.state?.trim() || null
-    const partyState = party?.state?.trim() || null
-
-    // Derive inter-state status: inter-state ONLY if both states are known and differ
-    const isInterState = !!(shopState && partyState && shopState.toLowerCase() !== partyState.toLowerCase())
 
     // Calculate totals
     let subtotal = 0
