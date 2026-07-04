@@ -5,6 +5,12 @@ import { checkUsage, incrementUsage } from '@/lib/usage-limits'
 import { calculateCostInr } from '@/lib/ai-pricing'
 import { db } from '@/lib/db'
 
+// ⏱️ Vercel serverless timeout — AI bill scanning can take 3-8s on big
+// handwritten images. Set explicit maxDuration so the route doesn't hit
+// the platform default (10s on Hobby) and fail with a 5xx.
+// (Audit fix Phase 1.3)
+export const maxDuration = 60
+
 // POST /api/scan-bill - uses VLM to extract bill data from image
 // Supports two modes:
 // 1. Z.AI SDK (for sandbox/dev - auto-configured)

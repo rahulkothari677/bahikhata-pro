@@ -201,7 +201,7 @@ export function AuthScreen() {
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder={mode === 'signup' ? 'Min 6 characters' : 'Your password'}
+                  placeholder={mode === 'signup' ? 'Min 8 characters' : 'Your password'}
                   className="pl-9 pr-10"
                   required
                   autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}

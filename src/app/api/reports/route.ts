@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
 
+// ⏱️ Vercel serverless timeout — reports can aggregate thousands of
+// transactions and generate large responses. Set explicit maxDuration.
+// (Audit fix Phase 1.3)
+export const maxDuration = 60
+
 // GET /api/reports?type=pl|gst|stock|party&from=&to=
 export async function GET(req: NextRequest) {
   try {

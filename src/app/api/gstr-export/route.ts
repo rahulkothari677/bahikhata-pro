@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
 
+// ⏱️ Vercel serverless timeout — GSTR export aggregates all transactions
+// in a period and generates CSV/JSON. Can take several seconds at scale.
+// (Audit fix Phase 1.3)
+export const maxDuration = 60
+
 // GET /api/gstr-export?from=&to= - generates GSTR-1 format data (JSON + CSV)
 export async function GET(req: NextRequest) {
   try {

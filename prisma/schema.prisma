@@ -244,12 +244,12 @@ model Announcement {
 
 // ==================== FEATURE FLAGS (remote kill switches) ====================
 model FeatureFlag {
-  id          String   @id
+  id          String   @id @default(cuid())
   key         String   @unique
   enabled     Boolean  @default(true)
   label       String
   description String?
-  updatedAt   DateTime
+  updatedAt   DateTime @updatedAt
   updatedBy   String?
 
   @@index([enabled])
@@ -257,7 +257,7 @@ model FeatureFlag {
 
 // ==================== REFERRALS (refer 3 = 1 year free Pro) ====================
 model Referral {
-  id          String    @id
+  id          String    @id @default(cuid())
   referrerId  String
   referredId  String?   @unique
   code        String    @unique
@@ -280,7 +280,7 @@ model Subscription {
   status         String   @default("active") // active | cancelled | expired
   amount         Float
   paymentMode    String   @default("razorpay")
-  paymentId      String?
+  paymentId      String?  @unique  // 🔒 IDEMPOTENCY: unique constraint prevents duplicate subscriptions from double-submitted payment verifications (Audit fix Phase 1.4)
   subscriptionId String?
   startDate      DateTime @default(now())
   endDate        DateTime
@@ -293,14 +293,14 @@ model Subscription {
 
 // ==================== USAGE TRACKING (plan limits) ====================
 model UsageTracking {
-  id           String   @id
+  id           String   @id @default(cuid())
   userId       String
   month        String   // YYYY-MM format
   transactions Int      @default(0)
   aiScans      Int      @default(0)
   voiceParses  Int      @default(0)
   products     Int      @default(0)
-  updatedAt    DateTime
+  updatedAt    DateTime @updatedAt
   User         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, month])
@@ -519,24 +519,19 @@ model UserSegmentCache {
 }
 
 // ==================== CREDIT SCORE CACHE (admin panel) ====================
-model CreditScoreCache {
-  id              String   @id @default(cuid())
-  userId          String   @unique
-  score           Int
-  band            String
-  avgMonthlySales Float    @default(0)
-  totalSales6Mo   Float    @default(0)
-  activeMonths    Int      @default(0)
-  collectionRate  Float    @default(0)
-  businessAgeDays Int      @default(0)
-  productCount    Int      @default(0)
-  partyCount      Int      @default(0)
-  hasGstData      Boolean  @default(false)
-  recommendation  String?
-  computedAt      DateTime @default(now())
-  @@index([score])
-  @@index([band])
-}
+// 🔒 REGULATORY (Audit fix Phase 1.6): This model was part of the dormant
+// lending/credit-score pipeline. The implementation code was never built
+// (or already removed) — only this schema model remained. Dropping it
+// eliminates the regulatory risk flagged in the audit reports (DPDP + RBI
+// Digital Lending Directions) until lending is built properly with:
+//   - Explicit merchant consent (consent flag on User model)
+//   - NBFC RE–LSP contract
+//   - CIMS registration
+//   - KFS at offer stage
+// If you build lending in the future, re-add this model WITH the consent
+// architecture. Do NOT re-enable without a fintech lawyer's review.
+//
+// model CreditScoreCache { ... }  ← removed 2026-07-04
 
 // ==================== NOTIFICATION TEMPLATES (shared with admin) ====================
 model NotificationTemplate {
@@ -733,30 +728,12 @@ model FraudAlert {
 }
 
 // ==================== PARTNER MANAGEMENT (shared with admin) ====================
-model Partner {
-  id                  String   @id @default(cuid())
-  name                String
-  type                String   @default("nbfc")
-  status              String   @default("onboarding")
-  contactName         String?
-  contactEmail        String?
-  contactPhone        String?
-  website             String?
-  apiBaseUrl          String?
-  webhookUrl          String?
-  revenueSharePct     Float    @default(0)
-  totalLeadsSent      Int      @default(0)
-  totalRevenueShared  Float    @default(0)
-  contractStartAt     DateTime?
-  contractEndAt       DateTime?
-  notes               String?  @db.Text
-  createdBy           String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-
-  @@index([type, status])
-  @@index([status])
-}
+// 🔒 REGULATORY (Audit fix Phase 1.6): This model was part of the dormant
+// NBFC partner / lending pipeline. Removed alongside CreditScoreCache to
+// eliminate the regulatory risk. See the comment above CreditScoreCache
+// for the full rationale and re-enable checklist.
+//
+// model Partner { ... }  ← removed 2026-07-04
 
 // ==================== API KEYS (shared with admin) ====================
 model ApiKey {

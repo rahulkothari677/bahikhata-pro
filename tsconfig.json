@@ -44,6 +44,12 @@
     "scripts",
     "playwright-report",
     "test-results",
-    "e2e"
+    "e2e",
+    "bahikhata-admin",
+    "tool-results",
+    "capacitor.config.ts",
+    "instrumentation.ts",
+    "sentry.client.config.ts",
+    "sentry.server.config.ts"
   ]
 }

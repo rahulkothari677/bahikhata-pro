@@ -2,6 +2,11 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
 
+// ⏱️ Vercel serverless timeout — insights aggregates dashboard data and
+// may call AI for smart alerts. Set explicit maxDuration.
+// (Audit fix Phase 1.3)
+export const maxDuration = 60
+
 // GET /api/insights - AI-powered smart insights and alerts
 export async function GET() {
   try {

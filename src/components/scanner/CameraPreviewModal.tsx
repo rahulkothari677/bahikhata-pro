@@ -39,9 +39,11 @@ export function CameraPreviewModal({ open, onClose, onCapture }: CameraPreviewMo
 
     async function startCamera() {
       try {
-        // Check torch support
+        // Check torch support — getFlashMode was removed in newer versions
+        // of @capacitor-community/camera-preview. We use setFlashMode with
+        // a try/catch to detect torch support instead.
         try {
-          const torchResult = await CameraPreview.getFlashMode()
+          await CameraPreview.setFlashMode({ flashMode: 'off' })
           setTorchSupported(true)
         } catch {
           setTorchSupported(false)
@@ -52,7 +54,6 @@ export function CameraPreviewModal({ open, onClose, onCapture }: CameraPreviewMo
           parent: 'camera-preview-container',
           className: 'camera-preview-element',
           toBack: true,
-          alpha: 1,
           storeToFile: true,
           width: window.screen.width,
           height: window.screen.height,
@@ -79,20 +80,20 @@ export function CameraPreviewModal({ open, onClose, onCapture }: CameraPreviewMo
     haptic.click()
     try {
       if (torchOn) {
-        await CameraPreview.setFlashMode('off')
+        await CameraPreview.setFlashMode({ flashMode: 'off' })
         setTorchOn(false)
       } else {
-        await CameraPreview.setFlashMode('on')
+        await CameraPreview.setFlashMode({ flashMode: 'on' })
         setTorchOn(true)
       }
     } catch {
       // Some devices use 'torch' mode instead
       try {
         if (!torchOn) {
-          await CameraPreview.setFlashMode('torch')
+          await CameraPreview.setFlashMode({ flashMode: 'torch' })
           setTorchOn(true)
         } else {
-          await CameraPreview.setFlashMode('off')
+          await CameraPreview.setFlashMode({ flashMode: 'off' })
           setTorchOn(false)
         }
       } catch {

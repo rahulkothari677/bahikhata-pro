@@ -11,7 +11,12 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url)
     const type = searchParams.get('type')
-    const limit = parseInt(searchParams.get('limit') || '100')
+    // 🔒 SECURITY (Audit fix Phase 1.5): Cap limit at 200 to prevent OOM.
+    // Without this, a client could request ?limit=99999999 and force the
+    // serverless function to load the entire table into memory → crash.
+    // 200 is enough for any realistic list view; longer lists use pagination.
+    const requestedLimit = parseInt(searchParams.get('limit') || '100')
+    const limit = Math.min(Math.max(1, isNaN(requestedLimit) ? 100 : requestedLimit), 200)
     const from = searchParams.get('from')
     const to = searchParams.get('to')
 

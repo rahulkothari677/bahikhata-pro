@@ -44,7 +44,7 @@ export async function GET() {
     // Feature usage by day (for trend chart) — top 5 features
     const topFeatures = featureUsage.slice(0, 5).map(f => f.action)
     const now = new Date()
-    const usageByDay: { date: string; [feature: string]: number }[] = []
+    const usageByDay: Array<Record<string, string | number>> = []
     for (let i = 29; i >= 0; i--) {
       const day = new Date(now)
       day.setDate(day.getDate() - i)

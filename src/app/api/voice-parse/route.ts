@@ -3,6 +3,12 @@ import { getAuthUserId } from '@/lib/get-auth'
 import { checkUsage, incrementUsage } from '@/lib/usage-limits'
 import { tryParseLocally } from '@/lib/voice-regex-parser'
 
+// ⏱️ Vercel serverless timeout — voice parsing calls the LLM which can
+// take 2-5s. Set explicit maxDuration so the route doesn't hit the
+// platform default and fail with a 5xx.
+// (Audit fix Phase 1.3)
+export const maxDuration = 60
+
 // POST /api/voice-parse - parse voice transcript into transaction data
 // Tier limits (FUP):
 //   Free:  20 voice entries/month (DB-backed, resets monthly)

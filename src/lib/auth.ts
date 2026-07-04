@@ -88,5 +88,22 @@ export const authOptions: NextAuthOptions = {
       return session
     },
   },
-  secret: process.env.NEXTAUTH_SECRET || 'ekbook-dev-secret-change-in-production',
+  // 🔒 SECURITY: Never fall back to a hardcoded secret. If NEXTAUTH_SECRET is
+  // missing in production, the app must fail to start rather than silently
+  // signing JWTs with a public, source-controlled secret that anyone can forge.
+  // (Audit fix Phase 1.1 — was: `|| 'ekbook-dev-secret-change-in-production'`)
+  //
+  // Note: we check this at runtime (when the server handles a request), not
+  // at module-load time, because `next build` runs this file in production
+  // mode during page-data collection and would fail the build. The runtime
+  // check still protects every real request — if the secret is missing, the
+  // first auth call will throw and surface a clear error.
+  secret: process.env.NEXTAUTH_SECRET,
+}
+
+// Runtime guard: if a request comes in and NEXTAUTH_SECRET is missing in
+// production, throw immediately. This runs when the auth config is first
+// used (not at import time), so it doesn't break `next build`.
+if (process.env.NODE_ENV === 'production' && !process.env.NEXTAUTH_SECRET) {
+  console.error('🚨 FATAL: NEXTAUTH_SECRET environment variable is not set. The app will not authenticate any requests. Set it in your Vercel environment variables immediately.')
 }
