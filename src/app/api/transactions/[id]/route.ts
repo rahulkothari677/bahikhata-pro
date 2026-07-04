@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
 import { roundMoney, calculateGst, splitGst } from '@/lib/money'
 import { deriveInterStateStatus } from '@/lib/gst'
+import { validateBody, updateTransactionSchema } from '@/lib/validation'
 
 // GET /api/transactions/[id] - get single transaction with all details
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -40,7 +41,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     const body = await req.json()
-    const { type, partyId, date, items, discountAmount, paymentMode, notes, invoiceNo, category, paidAmount } = body
+
+    // 🔒 AUDIT FIX H7: Validate request body with zod
+    const validation = validateBody(updateTransactionSchema, body)
+    if (!validation.success) {
+      return NextResponse.json({ error: 'Validation failed', detail: validation.error }, { status: 400 })
+    }
+
+    const { type, partyId, date, items, discountAmount, paymentMode, notes, invoiceNo, category, paidAmount } = validation.data as any
 
     // 🔒 GST CORRECTNESS (Audit fix H3 v2): Derive isInterState server-side
     // using the shared helper — same logic as POST. Was: trusted the client

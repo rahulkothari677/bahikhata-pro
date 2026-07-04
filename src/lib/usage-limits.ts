@@ -32,6 +32,10 @@ export interface PlanLimits {
   products: number         // total; 0 = unlimited
   shops: number            // 1 for free, 3 for pro, Infinity for elite
   staffAccounts: number    // 0 for free+pro, 5 for elite
+  // 🔒 AUDIT FIX M12: Per-user monthly AI cost cap (in INR).
+  // If a user's AI usage exceeds this in a month, further AI calls are blocked.
+  // This protects your AI budget from a single user burning it all.
+  monthlyAiCostCapInr: number
 }
 
 /**
@@ -58,6 +62,7 @@ export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
     products: 50,
     shops: 1,
     staffAccounts: 0,
+    monthlyAiCostCapInr: 15,    // ₹15/mo — ~120 scans at ₹0.12/scan
   },
   pro: {
     dailyAiScans: 50,
@@ -66,6 +71,7 @@ export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
     products: 0,        // unlimited
     shops: 3,
     staffAccounts: 0,
+    monthlyAiCostCapInr: 75,    // ₹75/mo — ~600 scans (well under ₹299 revenue)
   },
   elite: {
     dailyAiScans: 100,
@@ -74,6 +80,7 @@ export const PLAN_LIMITS: Record<Plan, PlanLimits> = {
     products: 0,
     shops: Infinity,
     staffAccounts: 5,
+    monthlyAiCostCapInr: 150,   // ₹150/mo — ~1200 scans (well under ₹599 revenue)
   },
 }
 
@@ -233,6 +240,48 @@ export async function checkUsage(
   const dailyLimit = isScan ? limits.dailyAiScans : limits.dailyVoiceEntries
   const rateKey = `${isScan ? 'scan' : 'voice'}:daily:user:${userId}`
   const rl = await rateLimit(rateKey, { limit: dailyLimit, windowSec: 86400 }, { failClosed: true })
+
+  if (!rl.success) {
+    return {
+      allowed: false,
+      plan,
+      used: dailyLimit - rl.remaining,
+      limit: dailyLimit,
+      remaining: rl.remaining,
+      resetAt: new Date(Date.now() + rl.retryAfterSec * 1000),
+      period: 'daily',
+      upgradeMessage: `You've reached today's limit of ${dailyLimit} ${isScan ? 'AI scans' : 'voice entries'} on the ${plan === 'free' ? 'Free' : plan === 'pro' ? 'Pro' : 'Elite'} plan. This resets in ${Math.ceil(rl.retryAfterSec / 3600)} hours.${plan === 'free' ? ' Upgrade to Pro for 50/day (Unlimited).' : plan === 'pro' ? ' Upgrade to Elite for 100/day.' : ''}`,
+    }
+  }
+
+  // 🔒 AUDIT FIX M12: Check monthly AI cost cap.
+  // Sum the user's AiUsageLog.costInr for this month. If over the cap, deny.
+  // This protects your AI budget — even with daily limits, a user doing max
+  // scans every day for a month could cost more than their subscription.
+  try {
+    const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+    const costAgg = await db.aiUsageLog.aggregate({
+      where: { userId, createdAt: { gte: monthStart } },
+      _sum: { costInr: true },
+    })
+    const monthlyCost = costAgg._sum.costInr || 0
+    const costCap = limits.monthlyAiCostCapInr
+
+    if (monthlyCost >= costCap) {
+      return {
+        allowed: false,
+        plan,
+        used: dailyLimit - rl.remaining,
+        limit: dailyLimit,
+        remaining: 0,
+        resetAt: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1),
+        period: 'daily' as const,
+        upgradeMessage: `You've reached your monthly AI cost limit (₹${costCap.toFixed(0)}) on the ${plan === 'free' ? 'Free' : plan === 'pro' ? 'Pro' : 'Elite'} plan. This resets next month. Upgrade for a higher limit.`,
+      }
+    }
+  } catch {
+    // If cost check fails (DB error), don't block — let the daily limit handle it
+  }
 
   return {
     allowed: rl.success,

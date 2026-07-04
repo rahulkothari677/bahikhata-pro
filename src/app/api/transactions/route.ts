@@ -4,6 +4,7 @@ import { getAuthUserId } from '@/lib/get-auth'
 import { withCache } from '@/lib/cache'
 import { roundMoney, calculateGst, splitGst } from '@/lib/money'
 import { deriveInterStateStatus } from '@/lib/gst'
+import { validateBody, createTransactionSchema } from '@/lib/validation'
 
 // GET /api/transactions - list with filters (type, from, to, limit)
 export async function GET(req: NextRequest) {
@@ -54,7 +55,16 @@ export async function POST(req: NextRequest) {
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const body = await req.json()
-    const { type, partyId, date, items, discountAmount, paymentMode, notes, invoiceNo, category, paidAmount, payeeName, payeePhone } = body
+
+    // 🔒 AUDIT FIX H7: Validate request body with zod before processing.
+    // Was: raw parseFloat on untrusted input — NaN prices, missing fields,
+    // 10MB notes could crash or store garbage.
+    const validation = validateBody(createTransactionSchema, body)
+    if (!validation.success) {
+      return NextResponse.json({ error: 'Validation failed', detail: validation.error }, { status: 400 })
+    }
+
+    const { type, partyId, date, items, discountAmount, paymentMode, notes, invoiceNo, category, paidAmount, payeeName, payeePhone } = validation.data as any
 
     // 🔒 IDEMPOTENCY (Audit fix N1): Check for clientMutationId to prevent
     // duplicate transactions from offline sync replays. The client generates
