@@ -99,6 +99,7 @@ export async function GET(req: NextRequest) {
           purchasePrice: true,
           salePrice: true,
           openingStock: true,
+          currentStock: true,  // 🔒 N2: read directly instead of re-deriving
           lowStockThreshold: true,
         },
       }),
@@ -293,26 +294,17 @@ export async function GET(req: NextRequest) {
       .map(([name, value]) => ({ name: name.toUpperCase(), value }))
 
     // === Inventory stats (not range-dependent) ===
-    const stockMap = new Map<string, number>()
-    allProducts.forEach(p => stockMap.set(p.id, p.openingStock))
-    allTransactions.forEach(t => {
-      t.items.forEach(item => {
-        if (item.productId) {
-          const current = stockMap.get(item.productId) || 0
-          if (t.type === 'purchase') stockMap.set(item.productId, current + item.quantity)
-          else if (t.type === 'sale') stockMap.set(item.productId, current - item.quantity)
-        }
-      })
-    })
-
+    // 🔒 AUDIT FIX N2 (v3): Read currentStock directly from the Product column
+    // instead of re-deriving from ALL transaction items. Was: O(all items)
+    // scan + counted soft-deleted transactions. Now: O(1) per product, read
+    // the column that's maintained atomically on every transaction write.
     const lowStockProducts = allProducts
-      .map(p => ({ ...p, currentStock: stockMap.get(p.id) || 0 }))
+      .map(p => ({ ...p, currentStock: p.currentStock }))
       .filter(p => p.currentStock <= p.lowStockThreshold)
       .sort((a, b) => a.currentStock - b.currentStock)
 
     const totalStockValue = allProducts.reduce((s, p) => {
-      const stock = stockMap.get(p.id) || 0
-      return s + stock * p.purchasePrice
+      return s + p.currentStock * p.purchasePrice
     }, 0)
 
     // === GST summary (within range) ===

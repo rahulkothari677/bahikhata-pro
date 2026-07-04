@@ -37,7 +37,7 @@ export const createTransactionSchema = z.object({
   paidAmount: z.number().min(0).optional(),
   payeeName: z.string().max(200).nullable().optional(),
   payeePhone: z.string().max(20).nullable().optional(),
-  totalAmount: z.number().optional(), // for income/expense only
+  totalAmount: z.number().min(0, 'Amount cannot be negative').max(100000000, 'Amount too large').optional(), // for income/expense only — 🔒 N9: validated
 })
 
 // Transaction update schema (same but all fields optional)

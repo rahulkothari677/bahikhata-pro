@@ -9,41 +9,21 @@ export async function GET() {
     const { userId, error } = await getAuthUserId()
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+    // 🔒 AUDIT FIX N2 (v3): Read currentStock directly from the Product column
+    // instead of re-deriving it from ALL transaction items on every page load.
+    // Was: O(all transaction items) per request — fetch all items, compute stock.
+    // Now: O(1) — just read the column. The column is maintained atomically
+    // on every transaction create/edit/delete (inside $transaction).
     const products = await db.product.findMany({
       where: { userId },
       orderBy: { name: 'asc' },
     })
 
-    // PERFORMANCE: fetch only transactionItems (not full transactions) for stock calc.
-    // Old code fetched ALL transactions with items include — huge payload.
-    // New code fetches only the items themselves, joined to user's transactions.
-    const allItems = await db.transactionItem.findMany({
-      where: {
-        transaction: { userId },
-        productId: { not: null },
-      },
-      select: {
-        productId: true,
-        quantity: true,
-        transaction: { select: { type: true } },
-      },
-    })
-
-    const stockMap = new Map<string, number>()
-    products.forEach(p => stockMap.set(p.id, p.openingStock))
-    allItems.forEach(item => {
-      if (item.productId) {
-        const current = stockMap.get(item.productId) || 0
-        if (item.transaction.type === 'purchase') stockMap.set(item.productId, current + item.quantity)
-        else if (item.transaction.type === 'sale') stockMap.set(item.productId, current - item.quantity)
-      }
-    })
-
     const productsWithStock = products.map(p => ({
       ...p,
-      currentStock: stockMap.get(p.id) || 0,
-      stockValue: (stockMap.get(p.id) || 0) * p.purchasePrice,
-      isLowStock: (stockMap.get(p.id) || 0) <= p.lowStockThreshold,
+      currentStock: p.currentStock,  // 🔒 N2: read directly from column
+      stockValue: p.currentStock * p.purchasePrice,
+      isLowStock: p.currentStock <= p.lowStockThreshold,
     }))
 
     return withCache({ products: productsWithStock }, { maxAge: 60, swr: 300 })
