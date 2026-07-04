@@ -246,6 +246,20 @@ async function handleGet(url: string, fetchOpts: RequestInit): Promise<Response>
   // Online: try network, fall back to cache on failure
   try {
     const res = await fetch(url, fetchOpts)
+
+    // 🔒 AUDIT FIX V5: Auto-redirect to login on 401 (session expired/invalid)
+    // Was: 401 response returned as-is → components try to read data from error
+    // response → TypeError crash. Now: redirect to /login immediately.
+    if (res.status === 401 && !url.includes('/api/auth/')) {
+      // Don't redirect if already on login page
+      if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+        // Use a small delay so the toast can show first
+        setTimeout(() => {
+          window.location.href = '/login?callbackUrl=' + encodeURIComponent(window.location.pathname)
+        }, 100)
+      }
+    }
+
     if (res.ok) {
       const ct = res.headers.get('content-type') || ''
       if (ct.includes('application/json')) {

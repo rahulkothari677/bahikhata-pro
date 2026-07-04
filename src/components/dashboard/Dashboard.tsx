@@ -89,6 +89,37 @@ export function Dashboard() {
   // Show offline-no-data state if: offline AND query failed (any error) AND no cached data
   const isOfflineNoData = !isOnline() && !!error && !data
 
+  // 🔒 BUG FIX V5: Show error state if query fails (e.g., 401) and no data
+  if (error && !data && !isLoading) {
+    return (
+      <div className="space-y-5">
+        <DateRangeHeader
+          dateRange={dateRange}
+          datePreset={datePreset}
+          onChange={handleDateChange}
+          onPresetChange={setDatePreset}
+        />
+        <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+          <div className="w-16 h-16 rounded-full bg-red-100 dark:bg-red-950/40 flex items-center justify-center mb-4">
+            <CloudOff className="w-8 h-8 text-red-600" />
+          </div>
+          <h3 className="text-lg font-semibold mb-2">Unable to load dashboard</h3>
+          <p className="text-sm text-muted-foreground max-w-sm mb-4">
+            Your session may have expired. Please refresh the page or log in again.
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.location.href = '/login'}
+            className="gap-2"
+          >
+            Go to Login
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
   if (isOfflineNoData) {
     return (
       <div className="space-y-5">
@@ -145,7 +176,18 @@ export function Dashboard() {
     )
   }
 
-  const { kpis, salesTrend, topProducts, categoryBreakdown, paymentModeSplit, lowStockProducts, gstSummary, recentTransactions, setting } = data
+  // 🔒 BUG FIX V5: Add null checks to prevent crash when API returns error
+  // Was: const { kpis, ... } = data → if data is partial/missing, crash
+  // Now: provide defaults for every field
+  const kpis = data.kpis || { todayRevenue: 0, todayProfit: 0, todayTxnCount: 0, rangeRevenue: 0, rangeProfit: 0, rangeExpenses: 0, rangePurchases: 0, rangeIncome: 0, revenueGrowth: 0, profitGrowth: 0, totalReceivable: 0, totalPayable: 0, rangeSaleCount: 0 }
+  const salesTrend = data.salesTrend || []
+  const topProducts = data.topProducts || []
+  const categoryBreakdown = data.categoryBreakdown || []
+  const paymentModeSplit = data.paymentModeSplit || []
+  const lowStockProducts = data.lowStockProducts || []
+  const gstSummary = data.gstSummary || { totalTaxableSales: 0, totalCGST: 0, totalSGST: 0, totalIGST: 0, totalTax: 0 }
+  const recentTransactions = data.recentTransactions || []
+  const setting = data.setting || { shopName: 'My Shop' }
 
   const rangeLabel = datePreset === 'custom' ? 'Selected Period' : getPresetLabel(datePreset)
 
