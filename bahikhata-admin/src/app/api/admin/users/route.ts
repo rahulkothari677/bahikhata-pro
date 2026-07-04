@@ -31,7 +31,7 @@ export async function GET() {
       })
     }
 
-    const signupsByDay = []
+    const signupsByDay: { date: string; count: number }[] = []
     for (let i = 29; i >= 0; i--) {
       const day = new Date(now)
       day.setDate(day.getDate() - i)

@@ -63,7 +63,7 @@ export async function GET() {
     const uniqueAIScanners = new Set(scansAttempted.map(e => e.userId).filter(Boolean)).size
     const uniqueVoiceUsers = new Set(voiceAttempted.map(e => e.userId).filter(Boolean)).size
 
-    const scansByDay = []
+    const scansByDay: { date: string; scans: number; success: number }[] = []
     for (let i = 29; i >= 0; i--) {
       const day = new Date(now)
       day.setDate(day.getDate() - i)
