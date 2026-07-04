@@ -220,9 +220,13 @@ export async function checkUsage(
   }
 
   // AI scans + voice entries — daily rate limiter
-  // 🔒 AUDIT FIX H9: failClosed=true for AI limits (cost-bearing). If Redis
-  // is configured but down, DENY the request instead of falling back to
-  // in-memory (which would allow unlimited scans per instance = unlimited AI cost).
+  // 🔒 AUDIT FIX H9+N13 (v3): Two-layer protection for cost-bearing limits:
+  //   Layer 1: Redis rate limiter (fast pre-check, failClosed=true)
+  //   Layer 2: DB-backed daily counter (authoritative, survives Redis outages)
+  // If Redis denies → deny immediately (fast path).
+  // If Redis allows but is potentially stale (Redis was down) → verify with DB.
+  // If DB denies → deny (authoritative).
+  // If both allow → allow.
   const isScan = type === 'aiScans'
   const dailyLimit = isScan ? limits.dailyAiScans : limits.dailyVoiceEntries
   const rateKey = `${isScan ? 'scan' : 'voice'}:daily:user:${userId}`
@@ -239,6 +243,38 @@ export async function checkUsage(
       period: 'daily',
       upgradeMessage: `You've reached today's limit of ${dailyLimit} ${isScan ? 'AI scans' : 'voice entries'} on the ${plan === 'free' ? 'Free' : plan === 'pro' ? 'Pro' : 'Elite'} plan. This resets in ${Math.ceil(rl.retryAfterSec / 3600)} hours.${plan === 'free' ? ' Upgrade to Pro for 50/day (Unlimited).' : plan === 'pro' ? ' Upgrade to Elite for 100/day.' : ''}`,
     }
+  }
+
+  // 🔒 N13: DB-backed daily counter as authoritative source of truth.
+  // Count today's AI usage from AiUsageLog. This survives Redis outages
+  // and is the real source of truth for billing/abuse detection.
+  try {
+    const todayStart = new Date()
+    todayStart.setHours(0, 0, 0, 0)
+    const dbCount = await db.aiUsageLog.count({
+      where: {
+        userId,
+        feature: isScan ? 'scan-bill' : 'voice-parse',
+        createdAt: { gte: todayStart },
+        success: true,
+      },
+    })
+
+    if (dbCount >= dailyLimit) {
+      return {
+        allowed: false,
+        plan,
+        used: dbCount,
+        limit: dailyLimit,
+        remaining: 0,
+        resetAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        period: 'daily' as const,
+        upgradeMessage: `You've reached today's limit of ${dailyLimit} ${isScan ? 'AI scans' : 'voice entries'} on the ${plan === 'free' ? 'Free' : plan === 'pro' ? 'Pro' : 'Elite'} plan. This resets at midnight.${plan === 'free' ? ' Upgrade to Pro for 50/day (Unlimited).' : plan === 'pro' ? ' Upgrade to Elite for 100/day.' : ''}`,
+      }
+    }
+  } catch {
+    // If DB check fails, the Redis check above is still authoritative.
+    // Don't block the user on a transient DB error — Redis already passed.
   }
 
   // 🔒 AUDIT FIX M12: Check monthly AI cost cap.

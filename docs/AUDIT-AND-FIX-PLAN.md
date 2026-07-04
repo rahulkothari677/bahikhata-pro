@@ -426,16 +426,16 @@ The V3 auditor verified all V2 fixes and found new data-integrity bugs introduce
 
 | ID | Issue | Why deferred |
 |----|-------|-------------|
-| N10 | deriveInterStateStatus does 2 queries per write | Minor at current scale; cache shop state later |
-| N11 | Date-boundary audit (lte vs lt) | Low risk — verify during user testing |
-| N13 | Pro/Elite AI limits still in-memory | Move to DB-backed when Redis is proven stable |
-| N14 | Soft-deleted transactions + invoice sequence | Confirmed correct (max keeps climbing, GST wants no reuse) |
-| AI-4 | Server-side image preprocessing (deskew, grayscale) | Needs sharp library setup — separate sprint |
-| AI-5 | Surface low-confidence items in review UI | Frontend work — needs design decision |
-| AI-7 | Cache-friendly language directive | Prompt restructuring — needs A/B testing |
-| P3 | Cursor pagination for all lists | 200-cap is sufficient for current scale |
-| P7-P11 | Code splitting, prefetch, next/image, precompute | Optimization — not launch-blocking |
-| Money Float→paise | Structural migration | Own project, test-first, staged (V2 §7) |
+| N11 | Date-boundary audit (lte vs lt) | ✅ AUDITED — all queries use `lte` (inclusive) which is correct. No off-by-one found. |
+| N14 | Soft-deleted transactions + invoice sequence | ✅ CONFIRMED — max keeps climbing (correct for GST, no reuse). Party balance calcs filter deletedAt. |
+| AI-4 | Server-side image preprocessing (deskew, grayscale) | Needs `sharp` library setup + server-side image pipeline. Separate sprint — not a correctness issue, just an accuracy enhancement. |
+| AI-7 | Cache-friendly language directive | Prompt restructuring needs A/B testing to measure cache hit rate improvement. Current approach works correctly (just slightly more expensive). |
+| P3 | Cursor pagination for all lists | 200-cap with `Math.min` is sufficient for current scale. Real shops have <200 transactions per view. Add cursor pagination when approaching 10K+ per user. |
+| P5 | Confirm connection pooling under load | Already configured (DATABASE_URL pooled + DIRECT_URL for migrations). Verify during load test — not a code change. |
+| P6 | Lazy-load recharts/scanner/jspdf | BillScanner already lazy-loaded with `next/dynamic`. Recharts is used on the main dashboard (first page after login) — lazy-loading it would show a blank chart area on first paint. Framer-motion is only 4 files. Not worth the refactor risk. |
+| P7-P9 | Code splitting, prefetch, next/image | Pure optimizations — not bugs. Add when profiling shows real bottlenecks. |
+| P11 | Per-user daily rollup for dashboard | Only needed at 10K+ transactions per user. Current SQL aggregates are fast enough. |
+| Money Float→paise | Structural migration | Own project, test-first, staged (V2 §7). Auditor agreed this should not be rushed. |
 
 ### Bug Fixes During V3 (not from audit — found during testing)
 

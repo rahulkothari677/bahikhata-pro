@@ -14,7 +14,7 @@ import { toast as sonnerToast } from 'sonner'
 import { formatINR, cn } from '@/lib/utils'
 import {
   ScanLine, Upload, Camera, Sparkles, X, Check, Loader2,
-  ImageIcon, FileText, ArrowRight, Trash2, ShoppingCart, Truck, Plus,
+  ImageIcon, FileText, ArrowRight, Trash2, ShoppingCart, Truck, Plus, AlertTriangle,
 } from 'lucide-react'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { useSubscription } from '@/hooks/use-subscription'
@@ -727,6 +727,17 @@ export function BillScanner() {
                   <X className="w-4 h-4" /> Reset
                 </Button>
               </div>
+
+              {/* 🔒 AI-5: Needs review banner (AI total ≠ computed total) */}
+              {scanned.needsReview && (
+                <div className="mt-2 p-2 rounded-lg bg-amber-500/20 border border-amber-400/40 flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-300 flex-shrink-0 mt-0.5" />
+                  <div className="text-xs text-amber-100">
+                    <span className="font-semibold">Check totals:</span> {scanned.reviewReason}
+                  </div>
+                </div>
+              )}
+
               {/* 2 rows, 2 columns each — bigger text, clearly visible */}
               <div className="grid grid-cols-2 gap-x-4 gap-y-2">
                 <div>
