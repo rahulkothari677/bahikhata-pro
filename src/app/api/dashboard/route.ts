@@ -51,25 +51,37 @@ export async function GET(req: NextRequest) {
     const prevRangeFrom = new Date(rangeFrom.getTime() - prevRangeDuration)
     const prevRangeTo = new Date(rangeFrom.getTime() - 1)
 
-    // 🔒 V7.5 PERFORMANCE FIX: Was running 10 queries in 3 sequential batches
-    // (V7.2 fix for connection pool timeout). That worked but was SLOW (20s).
+    // 🔒 V8 PERFORMANCE FIX: The 23s load was caused by 6 SEQUENTIAL queries
+    // after the initial batch. Each query paid ~1.5-2s on a cold Neon DB.
+    // 6 × 2s = 12s + 9s cold start = ~21s.
     //
-    // Root cause: with connection_limit=1, each query takes ~1-2s (cold Neon
-    // connection). 10 queries × 1.5s avg = ~15-20s. Parallel was faster but
-    // caused pool exhaustion.
+    // Fix: 2-BATCH strategy:
+    //   Batch 1: 4 small queries (wakes the DB if cold — ~9s on cold, ~1s warm)
+    //   Batch 2: 6 queries in ONE Promise.all (DB is warm, each ~200ms = ~1.2s)
+    //   Total: ~10s cold, ~2-3s warm
     //
-    // Fix: CONSOLIDATE. Replace 8 separate groupBy/aggregate queries with ONE
-    // raw SQL query that computes ALL KPIs + GST in a single pass using
-    // SUM(CASE WHEN ...) conditional aggregation. This is 1 round-trip instead
-    // of 8 — cutting the dashboard load time from ~20s back to ~4-5s.
+    // Why this doesn't cause the V7.2 timeout: V7.2 fired 10 queries at once
+    // on a COLD DB. The first query took 9s (waking Neon), and the other 9
+    // queued behind it. By the time the 7th query tried to acquire the
+    // connection, 10s+ had passed → pool timeout (10s).
     //
-    // Query breakdown:
-    //   - 1 raw SQL for ALL KPIs (today/range/prev-range) + GST (sale+purchase)
-    //   - 1 batch for static data (recent txns, products, parties, setting)
-    //   - 1 groupBy for payment mode (can't easily fold into the big query)
-    //   Total: 3 round-trips instead of 10
+    // With the 2-batch approach: Batch 1 wakes the DB. By the time Batch 2
+    // fires, the DB is warm. Each query in Batch 2 takes ~200ms, so the max
+    // wait for any query is 5 × 200ms = 1s — well within the 10s timeout.
 
-    // === BATCH 1: Static data (4 small, fast queries in parallel) ===
+    // Compute truncUnit BEFORE queries (it's just date math, no DB needed)
+    const daysInRange = Math.ceil((rangeTo.getTime() - rangeFrom.getTime()) / 86400000)
+    let truncUnit: 'day' | 'week' | 'month'
+    if (daysInRange <= 31) {
+      truncUnit = 'day'
+    } else if (daysInRange <= 180) {
+      truncUnit = 'week'
+    } else {
+      truncUnit = 'month'
+    }
+    const truncUnitLiteral = Prisma.raw(`'${truncUnit}'`)
+
+    // === BATCH 1: Static data (4 small queries — wakes the DB if cold) ===
     const [recentTransactions, allProducts, allParties, setting] = await Promise.all([
       db.transaction.findMany({
         where: activeTransactionWhere(userId),
@@ -92,54 +104,124 @@ export async function GET(req: NextRequest) {
       db.setting.findUnique({ where: { userId } }),
     ])
 
-    // === BATCH 2: ONE consolidated raw SQL query for ALL KPIs + GST ===
-    // Replaces 8 separate queries (3 KPI groupBy + 2 GST aggregate + 3 prev-range).
-    // Uses SUM(CASE WHEN ...) to compute everything in a single pass.
-    const kpiRows = await db.$queryRaw<Array<{
-      today_revenue: string; today_profit: string; today_count: bigint;
-      range_revenue: string; range_profit: string; range_expenses: string;
-      range_purchases: string; range_income: string; range_sale_count: bigint;
-      prev_revenue: string; prev_profit: string;
-      sale_subtotal: string; sale_discount: string;
-      sale_cgst: string; sale_sgst: string; sale_igst: string;
-      purchase_cgst: string; purchase_sgst: string; purchase_igst: string;
-    }>>`
-      SELECT
-        -- Today's KPIs
-        COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${startOfToday} AND "date" <= ${now} THEN "totalAmount" ELSE 0 END), 0)::numeric AS today_revenue,
-        COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${startOfToday} AND "date" <= ${now} THEN "grossProfit" ELSE 0 END), 0)::numeric AS today_profit,
-        COUNT(CASE WHEN "type" = 'sale' AND "date" >= ${startOfToday} AND "date" <= ${now} THEN 1 END) AS today_count,
+    // === BATCH 2: ALL remaining queries in ONE Promise.all (DB is warm) ===
+    // These 6 queries are independent of each other. On a warm DB, each takes
+    // ~200ms. With connection_limit=1, they serialize through 1 connection:
+    // 6 × 200ms = ~1.2s total. Max wait for any query: ~1s. No timeout.
+    const [
+      kpiRows,
+      receivablePayable,
+      rangePaymentAgg,
+      salesTrendRows,
+      topProductsRows,
+      categoryRows,
+    ] = await Promise.all([
+      // 1. ALL KPIs + GST in one raw SQL (SUM(CASE WHEN ...) conditional aggregation)
+      db.$queryRaw<Array<{
+        today_revenue: string; today_profit: string; today_count: bigint;
+        range_revenue: string; range_profit: string; range_expenses: string;
+        range_purchases: string; range_income: string; range_sale_count: bigint;
+        prev_revenue: string; prev_profit: string;
+        sale_subtotal: string; sale_discount: string;
+        sale_cgst: string; sale_sgst: string; sale_igst: string;
+        purchase_cgst: string; purchase_sgst: string; purchase_igst: string;
+      }>>`
+        SELECT
+          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${startOfToday} AND "date" <= ${now} THEN "totalAmount" ELSE 0 END), 0)::numeric AS today_revenue,
+          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${startOfToday} AND "date" <= ${now} THEN "grossProfit" ELSE 0 END), 0)::numeric AS today_profit,
+          COUNT(CASE WHEN "type" = 'sale' AND "date" >= ${startOfToday} AND "date" <= ${now} THEN 1 END) AS today_count,
+          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric AS range_revenue,
+          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "grossProfit" ELSE 0 END), 0)::numeric AS range_profit,
+          COALESCE(SUM(CASE WHEN "type" = 'expense' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric AS range_expenses,
+          COALESCE(SUM(CASE WHEN "type" = 'purchase' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric AS range_purchases,
+          COALESCE(SUM(CASE WHEN "type" = 'income' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric AS range_income,
+          COUNT(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN 1 END) AS range_sale_count,
+          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${prevRangeFrom} AND "date" <= ${prevRangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric AS prev_revenue,
+          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${prevRangeFrom} AND "date" <= ${prevRangeTo} THEN "grossProfit" ELSE 0 END), 0)::numeric AS prev_profit,
+          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "subtotal" ELSE 0 END), 0)::numeric AS sale_subtotal,
+          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "discountAmount" ELSE 0 END), 0)::numeric AS sale_discount,
+          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "cgst" ELSE 0 END), 0)::numeric AS sale_cgst,
+          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "sgst" ELSE 0 END), 0)::numeric AS sale_sgst,
+          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "igst" ELSE 0 END), 0)::numeric AS sale_igst,
+          COALESCE(SUM(CASE WHEN "type" = 'purchase' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "cgst" ELSE 0 END), 0)::numeric AS purchase_cgst,
+          COALESCE(SUM(CASE WHEN "type" = 'purchase' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "sgst" ELSE 0 END), 0)::numeric AS purchase_sgst,
+          COALESCE(SUM(CASE WHEN "type" = 'purchase' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "igst" ELSE 0 END), 0)::numeric AS purchase_igst
+        FROM "Transaction"
+        WHERE "userId" = ${userId}
+          AND "deletedAt" IS NULL
+          AND "date" >= ${prevRangeFrom}
+          AND "date" <= ${rangeTo}
+      `,
 
-        -- Range KPIs
-        COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric AS range_revenue,
-        COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "grossProfit" ELSE 0 END), 0)::numeric AS range_profit,
-        COALESCE(SUM(CASE WHEN "type" = 'expense' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric AS range_expenses,
-        COALESCE(SUM(CASE WHEN "type" = 'purchase' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric AS range_purchases,
-        COALESCE(SUM(CASE WHEN "type" = 'income' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric AS range_income,
-        COUNT(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN 1 END) AS range_sale_count,
+      // 2. Receivable/Payable (shared helper — 1 raw SQL with LEFT JOIN)
+      getReceivablePayable(userId),
 
-        -- Previous range KPIs (for growth %)
-        COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${prevRangeFrom} AND "date" <= ${prevRangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric AS prev_revenue,
-        COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${prevRangeFrom} AND "date" <= ${prevRangeTo} THEN "grossProfit" ELSE 0 END), 0)::numeric AS prev_profit,
+      // 3. Payment mode split (1 groupBy)
+      db.transaction.groupBy({
+        by: ['paymentMode'],
+        where: activeTransactionWhere(userId, {
+          type: 'sale',
+          date: { gte: rangeFrom, lte: rangeTo },
+        }),
+        _sum: { totalAmount: true },
+      }),
 
-        -- GST summary (sales, range-filtered)
-        COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "subtotal" ELSE 0 END), 0)::numeric AS sale_subtotal,
-        COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "discountAmount" ELSE 0 END), 0)::numeric AS sale_discount,
-        COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "cgst" ELSE 0 END), 0)::numeric AS sale_cgst,
-        COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "sgst" ELSE 0 END), 0)::numeric AS sale_sgst,
-        COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "igst" ELSE 0 END), 0)::numeric AS sale_igst,
+      // 4. Sales trend (raw SQL date_trunc)
+      db.$queryRaw<Array<{ bucketStart: Date; revenue: number; profit: number }>>`
+        SELECT
+          DATE_TRUNC(${truncUnitLiteral}, "date") AS "bucketStart",
+          COALESCE(SUM("totalAmount"), 0) AS revenue,
+          COALESCE(SUM("grossProfit"), 0) AS profit
+        FROM "Transaction"
+        WHERE "userId" = ${userId}
+          AND "deletedAt" IS NULL
+          AND "type" = 'sale'
+          AND "date" >= ${rangeFrom}
+          AND "date" <= ${rangeTo}
+        GROUP BY DATE_TRUNC(${truncUnitLiteral}, "date")
+        ORDER BY "bucketStart" ASC
+      `,
 
-        -- GST summary (purchases / input tax, range-filtered)
-        COALESCE(SUM(CASE WHEN "type" = 'purchase' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "cgst" ELSE 0 END), 0)::numeric AS purchase_cgst,
-        COALESCE(SUM(CASE WHEN "type" = 'purchase' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "sgst" ELSE 0 END), 0)::numeric AS purchase_sgst,
-        COALESCE(SUM(CASE WHEN "type" = 'purchase' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "igst" ELSE 0 END), 0)::numeric AS purchase_igst
-      FROM "Transaction"
-      WHERE "userId" = ${userId}
-        AND "deletedAt" IS NULL
-        AND "date" >= ${prevRangeFrom}
-        AND "date" <= ${rangeTo}
-    `
+      // 5. Top products (raw SQL)
+      db.$queryRaw<Array<{ productName: string; productId: string | null; totalQuantity: bigint; totalRevenue: string }>>`
+        SELECT
+          ti."productName",
+          ti."productId",
+          SUM(ti."quantity") AS "totalQuantity",
+          SUM(ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 2)) AS "totalRevenue"
+        FROM "TransactionItem" ti
+        JOIN "Transaction" t ON ti."transactionId" = t.id
+        WHERE t."userId" = ${userId}
+          AND t."deletedAt" IS NULL
+          AND t."type" = 'sale'
+          AND t."date" >= ${rangeFrom}
+          AND t."date" <= ${rangeTo}
+        GROUP BY ti."productName", ti."productId"
+        ORDER BY "totalRevenue" DESC
+        LIMIT 5
+      `,
 
+      // 6. Category breakdown (raw SQL)
+      db.$queryRaw<Array<{ category: string | null; totalValue: string }>>`
+        SELECT
+          COALESCE(p."category", 'Other') AS category,
+          SUM(ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 2)) AS "totalValue"
+        FROM "TransactionItem" ti
+        JOIN "Transaction" t ON ti."transactionId" = t.id
+        LEFT JOIN "Product" p ON ti."productId" = p.id
+        WHERE t."userId" = ${userId}
+          AND t."deletedAt" IS NULL
+          AND t."type" = 'sale'
+          AND t."date" >= ${rangeFrom}
+          AND t."date" <= ${rangeTo}
+        GROUP BY COALESCE(p."category", 'Other')
+        ORDER BY "totalValue" DESC
+      `,
+    ])
+
+    // === Process Batch 2 results (all in JS — no more DB queries) ===
+
+    // KPIs from the consolidated query
     const kpi = kpiRows[0]
     const todayRevenue = roundMoney(Number(kpi.today_revenue))
     const todayProfit = roundMoney(Number(kpi.today_profit))
@@ -160,10 +242,10 @@ export async function GET(req: NextRequest) {
       ? ((rangeProfit - prevRangeProfit) / prevRangeProfit) * 100
       : 0
 
-    // === Receivable/Payable (uses shared helper) ===
-    const { totalReceivable, totalPayable } = await getReceivablePayable(userId)
+    // Receivable/Payable
+    const { totalReceivable, totalPayable } = receivablePayable
 
-    // === GST summary from the consolidated query ===
+    // GST summary
     const rangeTaxableSales = roundMoney(Number(kpi.sale_subtotal) - Number(kpi.sale_discount))
     const rangeCGST = roundMoney(Number(kpi.sale_cgst))
     const rangeSGST = roundMoney(Number(kpi.sale_sgst))
@@ -173,67 +255,13 @@ export async function GET(req: NextRequest) {
     )
     const netGSTPayable = roundMoney((rangeCGST + rangeSGST + rangeIGST) - rangeInputTax)
 
-    // === Payment mode split (1 groupBy — can't easily fold into the big query) ===
-    const rangePaymentAgg = await db.transaction.groupBy({
-      by: ['paymentMode'],
-      where: activeTransactionWhere(userId, {
-        type: 'sale',
-        date: { gte: rangeFrom, lte: rangeTo },
-      }),
-      _sum: { totalAmount: true },
-    })
-
+    // Payment mode split
     const paymentModeSplit = rangePaymentAgg.map(r => ({
       name: (r.paymentMode || 'cash').toUpperCase(),
       value: roundMoney(r._sum.totalAmount || 0),
     }))
 
-    // === Sales trend via raw SQL date_trunc (O(buckets) memory, not O(rows)) ===
-    const daysInRange = Math.ceil((rangeTo.getTime() - rangeFrom.getTime()) / 86400000)
-    let truncUnit: 'day' | 'week' | 'month'
-    let maxBuckets: number
-    if (daysInRange <= 31) {
-      truncUnit = 'day'
-      maxBuckets = 14
-    } else if (daysInRange <= 180) {
-      truncUnit = 'week'
-      maxBuckets = 14
-    } else {
-      truncUnit = 'month'
-      maxBuckets = 12
-    }
-
-    // 🔒 V6.1 BUG FIX: All column names are now quoted. Was: `date` and `type`
-    // used unquoted — but `date` is also a PostgreSQL data type name, which
-    // caused ambiguity (Postgres could interpret `date` as the type, not the
-    // column). This caused a SQL error → catch block returned empty data →
-    // dashboard showed "Welcome to EkBook" empty state for existing users.
-    // 🔒 V7.1 BUG FIX: DATE_TRUNC's first argument must be a text literal,
-    // not a parameterized value. Prisma's $queryRaw treats ${truncUnit} as
-    // a parameter ($1), which causes: "function date_trunc(text, timestamp)
-    // does not exist" or similar errors. Use Prisma.raw to inline the unit
-    // safely (it's a hardcoded string — 'day'|'week'|'month' — not user input,
-    // so no SQL injection risk).
-    const truncUnitLiteral = Prisma.raw(`'${truncUnit}'`)  // quoted string literal, safe (hardcoded value)
-
-    const salesTrendRows = await db.$queryRaw<Array<{ bucketStart: Date; revenue: number; profit: number }>>`
-      SELECT
-        DATE_TRUNC(${truncUnitLiteral}, "date") AS "bucketStart",
-        COALESCE(SUM("totalAmount"), 0) AS revenue,
-        COALESCE(SUM("grossProfit"), 0) AS profit
-      FROM "Transaction"
-      WHERE "userId" = ${userId}
-        AND "deletedAt" IS NULL
-        AND "type" = 'sale'
-        AND "date" >= ${rangeFrom}
-        AND "date" <= ${rangeTo}
-      GROUP BY DATE_TRUNC(${truncUnitLiteral}, "date")
-      ORDER BY "bucketStart" ASC
-    `
-
-    // Build the chart data, filling missing buckets with zeros.
-    // We generate the bucket boundaries in JS (deterministic) and overlay
-    // the SQL rows (which only exist for buckets that have data).
+    // Sales trend (fill missing buckets with zeros)
     const salesTrend: { date: string; revenue: number; profit: number; label: string }[] = []
     const trendMap = new Map<string, { revenue: number; profit: number }>()
     for (const row of salesTrendRows) {
@@ -248,6 +276,7 @@ export async function GET(req: NextRequest) {
     const generateBuckets = (): { start: Date; label: string; key: string }[] => {
       const buckets: { start: Date; label: string; key: string }[] = []
       if (truncUnit === 'day') {
+        const maxBuckets = 14
         const days = Math.min(daysInRange + 1, maxBuckets)
         for (let i = days - 1; i >= 0; i--) {
           const start = new Date(rangeTo)
@@ -260,6 +289,7 @@ export async function GET(req: NextRequest) {
           })
         }
       } else if (truncUnit === 'week') {
+        const maxBuckets = 14
         const weeks = Math.min(Math.ceil(daysInRange / 7), maxBuckets)
         for (let i = weeks - 1; i >= 0; i--) {
           const end = new Date(rangeTo)
@@ -274,6 +304,7 @@ export async function GET(req: NextRequest) {
           })
         }
       } else {
+        const maxBuckets = 12
         const months = Math.min(Math.ceil(daysInRange / 30), maxBuckets)
         for (let i = months - 1; i >= 0; i--) {
           const start = new Date(rangeTo.getFullYear(), rangeTo.getMonth() - i, 1)
@@ -297,36 +328,12 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    // === Top products via raw SQL (O(top N) memory, not O(all items)) ===
-    // 🔒 V6.1 BUG FIX: Quote all column names (type, date, quantity, etc.)
-    // to avoid SQL ambiguity. `date` is a Postgres type name — unquoted use
-    // caused the dashboard to crash silently.
-    const topProductsRows = await db.$queryRaw<Array<{ productName: string; productId: string | null; totalQuantity: bigint; totalRevenue: string }>>`
-      SELECT
-        ti."productName",
-        ti."productId",
-        SUM(ti."quantity") AS "totalQuantity",
-        SUM(ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 2)) AS "totalRevenue"
-      FROM "TransactionItem" ti
-      JOIN "Transaction" t ON ti."transactionId" = t.id
-      WHERE t."userId" = ${userId}
-        AND t."deletedAt" IS NULL
-        AND t."type" = 'sale'
-        AND t."date" >= ${rangeFrom}
-        AND t."date" <= ${rangeTo}
-      GROUP BY ti."productName", ti."productId"
-      ORDER BY "totalRevenue" DESC
-      LIMIT 5
-    `
-
-    // Compute profit per top product (needs purchasePrice from the in-memory products list)
+    // Top products
     const topProducts = topProductsRows.map(row => {
       const product = row.productId ? allProducts.find(p => p.id === row.productId) : null
       const purchasePrice = product?.purchasePrice || 0
       const quantity = Number(row.totalQuantity)
       const revenue = roundMoney(Number(row.totalRevenue))
-      // Profit estimate: (unitPrice - purchasePrice) * qty. Since we don't have
-      // per-item unitPrice in the aggregate, we approximate using average unitPrice.
       const avgUnitPrice = quantity > 0 ? revenue / quantity : 0
       const profit = roundMoney((avgUnitPrice - purchasePrice) * quantity)
       return {
@@ -337,24 +344,7 @@ export async function GET(req: NextRequest) {
       }
     })
 
-    // === Category breakdown via raw SQL (JOIN Product, GROUP BY category) ===
-    // 🔒 V6.1 BUG FIX: Quote all column names.
-    const categoryRows = await db.$queryRaw<Array<{ category: string | null; totalValue: string }>>`
-      SELECT
-        COALESCE(p."category", 'Other') AS category,
-        SUM(ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 2)) AS "totalValue"
-      FROM "TransactionItem" ti
-      JOIN "Transaction" t ON ti."transactionId" = t.id
-      LEFT JOIN "Product" p ON ti."productId" = p.id
-      WHERE t."userId" = ${userId}
-        AND t."deletedAt" IS NULL
-        AND t."type" = 'sale'
-        AND t."date" >= ${rangeFrom}
-        AND t."date" <= ${rangeTo}
-      GROUP BY COALESCE(p."category", 'Other')
-      ORDER BY "totalValue" DESC
-    `
-
+    // Category breakdown
     const categoryBreakdown = categoryRows.map(row => ({
       name: row.category || 'Other',
       value: roundMoney(Number(row.totalValue)),
