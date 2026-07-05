@@ -78,10 +78,10 @@ export async function GET(req: NextRequest) {
         SELECT
           ti."transactionId",
           ti."gstRate",
-          SUM(ROUND(ti."quantity" * ti."unitPrice", 2)) AS "taxableValue",
-          SUM(CASE WHEN t."isInterState" THEN 0 ELSE ROUND(ti."quantity" * ti."unitPrice" * ti."gstRate" / 200, 2) END) AS cgst,
-          SUM(CASE WHEN t."isInterState" THEN 0 ELSE ROUND(ti."quantity" * ti."unitPrice" * ti."gstRate" / 200, 2) END) AS sgst,
-          SUM(CASE WHEN t."isInterState" THEN ROUND(ti."quantity" * ti."unitPrice" * ti."gstRate" / 100, 2) ELSE 0 END) AS igst,
+          SUM(ROUND(ti."quantity" * ti."unitPrice" - COALESCE(ti."discountAmount", 0), 2)) AS "taxableValue",
+          SUM(CASE WHEN t."isInterState" THEN 0 ELSE ROUND((ti."quantity" * ti."unitPrice" - COALESCE(ti."discountAmount", 0)) * ti."gstRate" / 200, 2) END) AS cgst,
+          SUM(CASE WHEN t."isInterState" THEN 0 ELSE ROUND((ti."quantity" * ti."unitPrice" - COALESCE(ti."discountAmount", 0)) * ti."gstRate" / 200, 2) END) AS sgst,
+          SUM(CASE WHEN t."isInterState" THEN ROUND((ti."quantity" * ti."unitPrice" - COALESCE(ti."discountAmount", 0)) * ti."gstRate" / 100, 2) ELSE 0 END) AS igst,
           SUM(ti."quantity") AS quantity
         FROM "TransactionItem" ti
         JOIN "Transaction" t ON ti."transactionId" = t.id
@@ -142,6 +142,7 @@ export async function GET(req: NextRequest) {
           inum: t.invoiceNo || t.id.slice(-8),
           idt: t.date.toISOString().slice(0, 10),
           taxablevalue: taxableTotal,
+          isInterState: t.isInterState,  // 🔒 V7 M2: needed for B2CL classification
           ...Object.fromEntries(
             Object.entries(itemsByRate).map(([rate, v]: [string, any]) => [
               `rate_${rate}`,
@@ -158,6 +159,7 @@ export async function GET(req: NextRequest) {
           ctin: t.party.gstin,
           in_date: t.date.toISOString().slice(0, 10),
           taxablevalue: taxableTotal,
+          isInterState: t.isInterState,  // 🔒 V7 M2: include for consistency
           items: Object.entries(itemsByRate).map(([rate, v]: [string, any]) => ({
             rate: parseFloat(rate),
             txval: v.taxableValue,
@@ -194,8 +196,11 @@ export async function GET(req: NextRequest) {
       gt: 0,
       cur_gt: 0,
       b2b: b2bInvoices,
-      b2cl: b2cInvoices.filter(i => i.total >= 100000), // B2C Large
-      b2cs: b2cInvoices.filter(i => i.total < 100000), // B2C Small
+      // 🔒 V7 M2: B2CL = inter-state B2C above threshold. Was: only filtered
+      // on total >= 100000, ignoring isInterState. Intra-state high-value
+      // B2C invoices were miscategorized as B2CL.
+      b2cl: b2cInvoices.filter(i => i.isInterState === true && i.total >= 100000), // B2C Large (inter-state only)
+      b2cs: b2cInvoices.filter(i => !(i.isInterState === true && i.total >= 100000)), // B2C Small (everything else)
       // 🔒 V6 SC1: flag if we hit the 10K cap — return is incomplete.
       // The UI must hard-block export when this is true (V6 PP1).
       truncated: hitCap,
@@ -209,6 +214,25 @@ export async function GET(req: NextRequest) {
         total_tax: roundMoney((summaryAgg._sum.cgst || 0) + (summaryAgg._sum.sgst || 0) + (summaryAgg._sum.igst || 0)),
         total_amount: roundMoney(summaryAgg._sum.totalAmount || 0),
       },
+      // 🔒 V7 H3: Reconciliation assertion — per-invoice taxable must equal
+      // summary taxable. If they don't, the export is internally inconsistent
+      // and the user (or their CA) will catch it during filing. We log a
+      // warning so the founder can see if the calculation drifts again.
+      reconciliation: (() => {
+        const perInvoiceTaxable = roundMoney(
+          [...b2bInvoices, ...b2cInvoices].reduce((s, inv) => s + (inv.taxablevalue || 0), 0)
+        )
+        const summaryTaxable = roundMoney((summaryAgg._sum.subtotal || 0) - (summaryAgg._sum.discountAmount || 0))
+        const matches = Math.abs(perInvoiceTaxable - summaryTaxable) < 1 // ₹1 tolerance for rounding
+        if (!matches) {
+          console.warn('[gstr-export] Reconciliation mismatch:', {
+            perInvoiceTaxable,
+            summaryTaxable,
+            difference: roundMoney(perInvoiceTaxable - summaryTaxable),
+          })
+        }
+        return { perInvoiceTaxable, summaryTaxable, matches }
+      })(),
       period: { from, to },
     }
 

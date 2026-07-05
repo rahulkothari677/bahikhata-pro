@@ -44,8 +44,18 @@ export async function GET(req: NextRequest) {
 
     return withCache({ transactions }, { maxAge: 30, swr: 300 })
   } catch (error) {
+    // 🔒 V7 H4: Return 503 on DB error, NOT an empty 200. Was: returned
+    // { transactions: [] } → user saw empty ledger during a DB blip and
+    // panicked, possibly re-entering data. Now: return error so UI shows
+    // retry state.
     console.error('Transactions GET error:', error)
-    console.error("[transactions] DB error:", error); return NextResponse.json({ transactions: [] })
+    return NextResponse.json(
+      {
+        error: 'Failed to load transactions',
+        message: 'Could not reach the database. Please retry.',
+      },
+      { status: 503 },
+    )
   }
 }
 

@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
 import { withCache } from '@/lib/cache'
 import { roundMoney } from '@/lib/money'
+import { getReceivablePayable } from '@/lib/party-balance'
 
 export async function GET() {
   try {
@@ -12,15 +13,17 @@ export async function GET() {
     // ⚡ PERFORMANCE (Audit fix Phase 3.2): Compute balances with SQL aggregates
     // instead of loading every transaction into memory and reducing in JS.
     //
-    // OLD approach: include: { transactions: ... } then .filter().reduce() in JS.
-    //   → pulled ALL transactions for ALL parties into function memory.
-    //   → at a merchant with 10k transactions × 100 parties = 1M rows in memory.
+    // 🔒 V7 H2: Was doing its own groupBy aggregates WITHOUT filtering
+    // deletedAt: null — so soft-deleted sales still inflated party-list
+    // balances. Now uses the shared getReceivablePayable() helper which
+    // filters deletedAt: null correctly. This is the SAME bug as V5-HA
+    // (fixed in parties/[id] but not here). Now fixed.
     //
-    // NEW approach: one query for parties + two groupBy queries (sales, purchases)
-    //   that SUM(totalAmount - paidAmount) per partyId in Postgres.
-    //   → constant memory, ~100x faster at scale.
-    // 🔒 AUDIT FIX N7 (v3): Removed the deletedAt try/catch double-query.
-    // Migration confirmed applied — single query with deletedAt filter.
+    // 🔒 V7 H4: Was returning { parties: [] } with HTTP 200 on DB error —
+    // the user saw an empty ledger during a blip. Now returns 503 so the
+    // UI shows a retry state.
+    //
+    // 🔒 V7 L7: Removed duplicated console.error.
     const parties = await db.party.findMany({
       where: { userId, deletedAt: null },
       orderBy: { name: 'asc' },
@@ -44,60 +47,44 @@ export async function GET() {
       return withCache({ parties: [] }, { maxAge: 60, swr: 300 })
     }
 
-    const partyIds = parties.map(p => p.id)
+    // 🔒 V7 H1+H2: Use the shared helper. This computes balances with
+    // deletedAt: null filtering AND gives us receivable/payable totals.
+    // One call, three benefits: correct balances, soft-delete filtering,
+    // and consistency with the dashboard.
+    const { partyBalances } = await getReceivablePayable(userId)
 
-    // Aggregate sales outstanding per party (SUM of totalAmount - paidAmount)
-    // grouped by partyId. Only sale-type transactions.
-    const salesAgg = await db.transaction.groupBy({
-      by: ['partyId'],
-      where: { userId, partyId: { in: partyIds }, type: 'sale' },
-      _sum: { totalAmount: true, paidAmount: true },
-    })
-
-    // Aggregate purchases outstanding per party
-    const purchaseAgg = await db.transaction.groupBy({
-      by: ['partyId'],
-      where: { userId, partyId: { in: partyIds }, type: 'purchase' },
-      _sum: { totalAmount: true, paidAmount: true },
-    })
-
-    // Count transactions per party (for the transactionCount field)
-    const countAgg = await db.transaction.groupBy({
-      by: ['partyId'],
-      where: { userId, partyId: { in: partyIds }, OR: [{ type: 'sale' }, { type: 'purchase' }] },
-      _count: { id: true },
-    })
-
-    // Build lookup maps for O(1) access
-    const salesMap = new Map(salesAgg.map(s => [s.partyId, s._sum]))
-    const purchaseMap = new Map(purchaseAgg.map(p => [p.partyId, p._sum]))
-    const countMap = new Map(countAgg.map(c => [c.partyId, c._count.id]))
-
-    // Compute balance per party in JS (cheap — just arithmetic on aggregates)
-    // positive openingBalance = they owe us (customer)
-    // For sales: totalAmount - paidAmount = outstanding (they owe us more)
-    // For purchases: totalAmount - paidAmount = we owe them more (subtract from balance)
+    // Attach balance + transactionCount to each party using the helper's results
     const partiesWithBalance = parties.map(p => {
-      const salesSum = salesMap.get(p.id)
-      const purchaseSum = purchaseMap.get(p.id)
-      // 💰 MONEY (Audit fix Phase 8): roundMoney on final balance arithmetic
-      const salesOutstanding = roundMoney((salesSum?.totalAmount || 0) - (salesSum?.paidAmount || 0))
-      const purchaseOutstanding = roundMoney((purchaseSum?.totalAmount || 0) - (purchaseSum?.paidAmount || 0))
-      const balance = roundMoney(p.openingBalance + salesOutstanding - purchaseOutstanding)
-
+      const balanceInfo = partyBalances.get(p.id) || {
+        balance: p.openingBalance,  // fallback to opening balance if no transactions
+        salesOutstanding: 0,
+        purchaseOutstanding: 0,
+        transactionCount: 0,
+      }
       return {
         ...p,
-        balance,
-        transactionCount: countMap.get(p.id) || 0,
+        balance: balanceInfo.balance,
+        transactionCount: balanceInfo.transactionCount,
         // positive = they owe us (receivable); negative = we owe them (payable)
-        isReceivable: balance > 0,
+        isReceivable: balanceInfo.balance > 0,
       }
     })
 
     return withCache({ parties: partiesWithBalance }, { maxAge: 60, swr: 300 })
   } catch (error) {
+    // 🔒 V7 H4: Return 503 (Service Unavailable) on DB error, NOT an empty
+    // 200. Was: `return NextResponse.json({ parties: [] })` → the user saw
+    // an empty ledger and panicked. Now: return an error so the UI shows a
+    // retry state. Empty array must mean "genuinely zero rows," never "the
+    // query failed."
     console.error('Parties GET error:', error)
-    console.error("[parties] DB error:", error); return NextResponse.json({ parties: [] })
+    return NextResponse.json(
+      {
+        error: 'Failed to load parties',
+        message: 'Could not reach the database. Please retry.',
+      },
+      { status: 503 },
+    )
   }
 }
 

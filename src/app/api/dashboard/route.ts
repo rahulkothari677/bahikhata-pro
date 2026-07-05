@@ -4,6 +4,7 @@ import { getAuthUserId } from '@/lib/get-auth'
 import { withCache } from '@/lib/cache'
 import { activeTransactionWhere } from '@/lib/query-helpers'
 import { roundMoney } from '@/lib/money'
+import { getReceivablePayable } from '@/lib/party-balance'
 
 // ⚡ PERFORMANCE (V6 SC3): KPIs + charts are now computed via SQL aggregate
 // queries. Was: a single findMany loaded range + previous-range transactions
@@ -83,10 +84,15 @@ export async function GET(req: NextRequest) {
           lowStockThreshold: true,
         },
       }),
-      // Parties: only fetch fields needed for receivable/payable calc.
+      // Parties: only fetch id for the partyCount KPI.
+      // 🔒 V7 H1: Was fetching only openingBalance and computing receivable/
+      // payable from it (WRONG — ignored all credit sales/purchases). Now
+      // we use the shared getReceivablePayable() helper which computes the
+      // correct balance from openingBalance + sales - purchases (filtered
+      // deletedAt: null). This fetch is just for the count.
       db.party.findMany({
         where: { userId, deletedAt: null },
-        select: { openingBalance: true },
+        select: { id: true },
       }),
       db.setting.findUnique({ where: { userId } }),
 
@@ -176,8 +182,13 @@ export async function GET(req: NextRequest) {
       ? ((rangeProfit - prevRangeProfit) / prevRangeProfit) * 100
       : 0
 
-    const totalReceivable = roundMoney(allParties.reduce((s, p) => s + (p.openingBalance > 0 ? p.openingBalance : 0), 0))
-    const totalPayable = roundMoney(allParties.reduce((s, p) => s + (p.openingBalance < 0 ? -p.openingBalance : 0), 0))
+    // 🔒 V7 H1: Use shared helper for receivable/payable. Was: only summed
+    // openingBalance (WRONG — ignored all credit sales/purchases). Now uses
+    // getReceivablePayable() which computes the correct balance from
+    // openingBalance + sales - purchases (filtered deletedAt: null).
+    // This is the SAME logic used by parties/route.ts and parties/[id]/route.ts
+    // so all three screens now agree.
+    const { totalReceivable, totalPayable } = await getReceivablePayable(userId)
 
     // === GST summary from aggregate results ===
     const rangeTaxableSales = roundMoney((saleGstAgg._sum.subtotal || 0) - (saleGstAgg._sum.discountAmount || 0))

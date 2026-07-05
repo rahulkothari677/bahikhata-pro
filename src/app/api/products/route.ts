@@ -28,8 +28,17 @@ export async function GET() {
 
     return withCache({ products: productsWithStock }, { maxAge: 60, swr: 300 })
   } catch (error) {
+    // 🔒 V7 H4: Return 503 on DB error, NOT an empty 200. Was: returned
+    // { products: [] } → user saw empty inventory during a DB blip and
+    // panicked. Now: return error so UI shows retry state.
     console.error('Products GET error:', error)
-    console.error("[products] DB error:", error); return NextResponse.json({ products: [] })
+    return NextResponse.json(
+      {
+        error: 'Failed to load products',
+        message: 'Could not reach the database. Please retry.',
+      },
+      { status: 503 },
+    )
   }
 }
 
