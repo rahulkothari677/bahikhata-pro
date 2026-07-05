@@ -181,19 +181,19 @@ export async function GET(req: NextRequest) {
         SELECT
           ti."gstRate",
           t."isInterState",
-          SUM(ROUND(ti.quantity * ti."unitPrice", 2)) AS taxable,
-          SUM(ROUND(ti.quantity * ti."unitPrice" * ti."gstRate" / 100, 2)) AS gst,
-          SUM(CASE WHEN t."isInterState" THEN 0 ELSE ROUND(ti.quantity * ti."unitPrice" * ti."gstRate" / 200, 2) END) AS cgst,
-          SUM(CASE WHEN t."isInterState" THEN 0 ELSE ROUND(ti.quantity * ti."unitPrice" * ti."gstRate" / 200, 2) END) AS sgst,
-          SUM(CASE WHEN t."isInterState" THEN ROUND(ti.quantity * ti."unitPrice" * ti."gstRate" / 100, 2) ELSE 0 END) AS igst,
-          SUM(ti.quantity) AS quantity
+          SUM(ROUND(ti."quantity" * ti."unitPrice", 2)) AS taxable,
+          SUM(ROUND(ti."quantity" * ti."unitPrice" * ti."gstRate" / 100, 2)) AS gst,
+          SUM(CASE WHEN t."isInterState" THEN 0 ELSE ROUND(ti."quantity" * ti."unitPrice" * ti."gstRate" / 200, 2) END) AS cgst,
+          SUM(CASE WHEN t."isInterState" THEN 0 ELSE ROUND(ti."quantity" * ti."unitPrice" * ti."gstRate" / 200, 2) END) AS sgst,
+          SUM(CASE WHEN t."isInterState" THEN ROUND(ti."quantity" * ti."unitPrice" * ti."gstRate" / 100, 2) ELSE 0 END) AS igst,
+          SUM(ti."quantity") AS quantity
         FROM "TransactionItem" ti
         JOIN "Transaction" t ON ti."transactionId" = t.id
         WHERE t."userId" = ${userId}
           AND t."deletedAt" IS NULL
-          AND t.type = 'sale'
-          AND t.date >= ${from}
-          AND t.date <= ${to}
+          AND t."type" = 'sale'
+          AND t."date" >= ${from}
+          AND t."date" <= ${to}
         GROUP BY ti."gstRate", t."isInterState"
         ORDER BY ti."gstRate" ASC
       `
@@ -221,17 +221,17 @@ export async function GET(req: NextRequest) {
       }>>`
         SELECT
           ti."gstRate",
-          SUM(ROUND(ti.quantity * ti."unitPrice", 2)) AS taxable,
-          SUM(CASE WHEN t."isInterState" THEN 0 ELSE ROUND(ti.quantity * ti."unitPrice" * ti."gstRate" / 200, 2) END) AS cgst,
-          SUM(CASE WHEN t."isInterState" THEN 0 ELSE ROUND(ti.quantity * ti."unitPrice" * ti."gstRate" / 200, 2) END) AS sgst,
-          SUM(CASE WHEN t."isInterState" THEN ROUND(ti.quantity * ti."unitPrice" * ti."gstRate" / 100, 2) ELSE 0 END) AS igst
+          SUM(ROUND(ti."quantity" * ti."unitPrice", 2)) AS taxable,
+          SUM(CASE WHEN t."isInterState" THEN 0 ELSE ROUND(ti."quantity" * ti."unitPrice" * ti."gstRate" / 200, 2) END) AS cgst,
+          SUM(CASE WHEN t."isInterState" THEN 0 ELSE ROUND(ti."quantity" * ti."unitPrice" * ti."gstRate" / 200, 2) END) AS sgst,
+          SUM(CASE WHEN t."isInterState" THEN ROUND(ti."quantity" * ti."unitPrice" * ti."gstRate" / 100, 2) ELSE 0 END) AS igst
         FROM "TransactionItem" ti
         JOIN "Transaction" t ON ti."transactionId" = t.id
         WHERE t."userId" = ${userId}
           AND t."deletedAt" IS NULL
-          AND t.type = 'purchase'
-          AND t.date >= ${from}
-          AND t.date <= ${to}
+          AND t."type" = 'purchase'
+          AND t."date" >= ${from}
+          AND t."date" <= ${to}
         GROUP BY ti."gstRate"
         ORDER BY ti."gstRate" ASC
       `

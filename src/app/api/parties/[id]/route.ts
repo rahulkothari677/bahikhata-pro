@@ -103,8 +103,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const topProductsAgg = await db.$queryRaw<Array<{ productName: string; totalQuantity: bigint; totalAmount: string }>>`
       SELECT
         ti."productName",
-        SUM(ti.quantity) AS "totalQuantity",
-        SUM(ROUND(ti.quantity * ti."unitPrice", 2)) AS "totalAmount"
+        SUM(ti."quantity") AS "totalQuantity",
+        SUM(ROUND(ti."quantity" * ti."unitPrice", 2)) AS "totalAmount"
       FROM "TransactionItem" ti
       JOIN "Transaction" t ON ti."transactionId" = t.id
       WHERE t."userId" = ${userId}

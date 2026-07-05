@@ -210,18 +210,23 @@ export async function GET(req: NextRequest) {
       maxBuckets = 12
     }
 
+    // 🔒 V6.1 BUG FIX: All column names are now quoted. Was: `date` and `type`
+    // used unquoted — but `date` is also a PostgreSQL data type name, which
+    // caused ambiguity (Postgres could interpret `date` as the type, not the
+    // column). This caused a SQL error → catch block returned empty data →
+    // dashboard showed "Welcome to EkBook" empty state for existing users.
     const salesTrendRows = await db.$queryRaw<Array<{ bucketStart: Date; revenue: number; profit: number }>>`
       SELECT
-        DATE_TRUNC(${truncUnit}, date) AS "bucketStart",
+        DATE_TRUNC(${truncUnit}, "date") AS "bucketStart",
         COALESCE(SUM("totalAmount"), 0) AS revenue,
         COALESCE(SUM("grossProfit"), 0) AS profit
       FROM "Transaction"
       WHERE "userId" = ${userId}
         AND "deletedAt" IS NULL
-        AND type = 'sale'
-        AND date >= ${rangeFrom}
-        AND date <= ${rangeTo}
-      GROUP BY DATE_TRUNC(${truncUnit}, date)
+        AND "type" = 'sale'
+        AND "date" >= ${rangeFrom}
+        AND "date" <= ${rangeTo}
+      GROUP BY DATE_TRUNC(${truncUnit}, "date")
       ORDER BY "bucketStart" ASC
     `
 
@@ -292,19 +297,22 @@ export async function GET(req: NextRequest) {
     }
 
     // === Top products via raw SQL (O(top N) memory, not O(all items)) ===
-    const topProductsRows = await db.$queryRaw<Array<{ productName: string; productId: string | null; totalQuantity: bigint; totalRevenue: number }>>`
+    // 🔒 V6.1 BUG FIX: Quote all column names (type, date, quantity, etc.)
+    // to avoid SQL ambiguity. `date` is a Postgres type name — unquoted use
+    // caused the dashboard to crash silently.
+    const topProductsRows = await db.$queryRaw<Array<{ productName: string; productId: string | null; totalQuantity: bigint; totalRevenue: string }>>`
       SELECT
         ti."productName",
         ti."productId",
-        SUM(ti.quantity) AS "totalQuantity",
-        SUM(ROUND(ti.quantity * ti."unitPrice", 2)) AS "totalRevenue"
+        SUM(ti."quantity") AS "totalQuantity",
+        SUM(ROUND(ti."quantity" * ti."unitPrice", 2)) AS "totalRevenue"
       FROM "TransactionItem" ti
       JOIN "Transaction" t ON ti."transactionId" = t.id
       WHERE t."userId" = ${userId}
         AND t."deletedAt" IS NULL
-        AND t.type = 'sale'
-        AND t.date >= ${rangeFrom}
-        AND t.date <= ${rangeTo}
+        AND t."type" = 'sale'
+        AND t."date" >= ${rangeFrom}
+        AND t."date" <= ${rangeTo}
       GROUP BY ti."productName", ti."productId"
       ORDER BY "totalRevenue" DESC
       LIMIT 5
@@ -329,19 +337,20 @@ export async function GET(req: NextRequest) {
     })
 
     // === Category breakdown via raw SQL (JOIN Product, GROUP BY category) ===
-    const categoryRows = await db.$queryRaw<Array<{ category: string | null; totalValue: number }>>`
+    // 🔒 V6.1 BUG FIX: Quote all column names.
+    const categoryRows = await db.$queryRaw<Array<{ category: string | null; totalValue: string }>>`
       SELECT
-        COALESCE(p.category, 'Other') AS category,
-        SUM(ROUND(ti.quantity * ti."unitPrice", 2)) AS "totalValue"
+        COALESCE(p."category", 'Other') AS category,
+        SUM(ROUND(ti."quantity" * ti."unitPrice", 2)) AS "totalValue"
       FROM "TransactionItem" ti
       JOIN "Transaction" t ON ti."transactionId" = t.id
       LEFT JOIN "Product" p ON ti."productId" = p.id
       WHERE t."userId" = ${userId}
         AND t."deletedAt" IS NULL
-        AND t.type = 'sale'
-        AND t.date >= ${rangeFrom}
-        AND t.date <= ${rangeTo}
-      GROUP BY COALESCE(p.category, 'Other')
+        AND t."type" = 'sale'
+        AND t."date" >= ${rangeFrom}
+        AND t."date" <= ${rangeTo}
+      GROUP BY COALESCE(p."category", 'Other')
       ORDER BY "totalValue" DESC
     `
 
@@ -421,7 +430,15 @@ export async function GET(req: NextRequest) {
       recentTransactions: recentTransactionsData,
     }, { maxAge: 30, swr: 300 })
   } catch (error) {
+    // 🔒 V6.1 BUG FIX: Log the FULL error so we can diagnose. Was: silent
+    // catch that returned empty data → dashboard showed "Welcome to EkBook"
+    // empty state for existing users, with no visible error. Now: log the
+    // full error + stack trace so the founder can see exactly what failed.
     console.error('Dashboard API error:', error)
+    if (error instanceof Error) {
+      console.error('Dashboard API error stack:', error.stack)
+      console.error('Dashboard API error message:', error.message)
+    }
     // 🔒 BUG FIX V5: Return empty dashboard data instead of 500 error.
     return NextResponse.json({
       kpis: {
