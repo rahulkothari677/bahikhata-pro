@@ -43,14 +43,44 @@ export function Ledger({ type }: { type: LedgerType }) {
   const { hideProfit } = useSetting()
 
   // Delete a transaction (used by SwipeToDelete)
+  // 🔒 AUDIT FIX V6 UX + N4: Use the correct /transactions/[id] path (the old
+  // /transactions?id= returns 410 Gone). Also add a 5-second Undo toast —
+  // since deletes are soft (deletedAt set), restoring is one POST to
+  // /transactions/[id]/restore.
   const handleDeleteTransaction = async (id: string) => {
     try {
-      const r = await offlineFetch(`/api/transactions?id=${id}`, {
+      const r = await offlineFetch(`/api/transactions/${id}`, {
         method: 'DELETE',
-        offline: { invalidate: ['/api/transactions', '/api/dashboard'] },
+        offline: { invalidate: ['/api/transactions', '/api/dashboard', '/api/products', '/api/parties'] },
       })
       if (r.ok) {
-        sonnerToast.success(isQueuedResponse(r) ? 'Will delete when online' : 'Transaction deleted')
+        const wasQueued = isQueuedResponse(r)
+        if (wasQueued) {
+          sonnerToast.success('Will delete when online')
+        } else {
+          // 🔒 V6 UX: 5-second Undo
+          sonnerToast.success('Transaction deleted', {
+            duration: 5000,
+            action: {
+              label: 'Undo',
+              onClick: async () => {
+                try {
+                  const restoreR = await offlineFetch(`/api/transactions/${id}/restore`, {
+                    method: 'POST',
+                    offline: { invalidate: ['/api/transactions', '/api/dashboard', '/api/products', '/api/parties'] },
+                  })
+                  if (restoreR.ok) {
+                    sonnerToast.success('Transaction restored')
+                  } else {
+                    sonnerToast.error('Could not restore — transaction may have been permanently removed.')
+                  }
+                } catch {
+                  sonnerToast.error('Could not restore — check your connection.')
+                }
+              },
+            },
+          })
+        }
         queryClient.invalidateQueries({ queryKey: ['transactions'] })
         queryClient.invalidateQueries({ queryKey: ['dashboard'] })
         triggerRefresh()

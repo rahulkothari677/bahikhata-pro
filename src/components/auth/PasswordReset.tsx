@@ -1,11 +1,12 @@
 'use client'
 
 import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { toast as sonnerToast } from 'sonner'
-import { Mail, ArrowLeft, Loader2, CheckCircle2 } from 'lucide-react'
+import { Mail, ArrowLeft, Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
 import { offlineFetch } from '@/lib/offline-fetch'
 
 /**
@@ -22,6 +23,11 @@ import { offlineFetch } from '@/lib/offline-fetch'
  * in the response so it can be shown in the UI for testing. The server logs
  * a founder alert if no provider is configured so the founder can manually
  * help the user.
+ *
+ * 🔒 AUDIT FIX V6 PP5: When no email provider is configured, the login screen
+ * honestly tells the user "contact support to reset" instead of pretending
+ * the email was sent. The `passwordResetEmailEnabled` flag is fetched from
+ * /api/feature-flags (public, no auth — it's not secret).
  */
 
 interface PasswordResetProps {
@@ -33,6 +39,19 @@ export function PasswordReset({ onBack }: PasswordResetProps) {
   const [loading, setLoading] = useState(false)
   const [sent, setSent] = useState(false)
   const [resetLink, setResetLink] = useState<string | null>(null)
+
+  // 🔒 V6 PP5: Fetch whether email is configured so we can show an honest
+  // message instead of pretending the reset email was sent.
+  const { data: flags } = useQuery({
+    queryKey: ['feature-flags'],
+    queryFn: async () => {
+      const r = await fetch('/api/feature-flags')
+      if (!r.ok) return null
+      return r.json()
+    },
+    staleTime: 5 * 60 * 1000,  // 5 min cache
+  })
+  const emailConfigured = flags?.passwordResetEmailEnabled === true
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -52,8 +71,14 @@ export function PasswordReset({ onBack }: PasswordResetProps) {
         if (data.resetLink) {
           setResetLink(data.resetLink)
           sonnerToast.success('Reset link generated (dev mode — see below)')
-        } else {
+        } else if (emailConfigured) {
           sonnerToast.success('Password reset link sent to your email')
+        } else {
+          // 🔒 V6 PP5: Email not configured — honest message.
+          sonnerToast.warning('Password reset request logged', {
+            description: 'Email sending is not yet configured. Our team will contact you to reset your password. For urgent access, email support with your registered email.',
+            duration: 10000,
+          })
         }
       } else {
         sonnerToast.error(data.error || 'Failed to send reset link')
@@ -76,7 +101,9 @@ export function PasswordReset({ onBack }: PasswordResetProps) {
           <p className="text-sm text-muted-foreground mt-1">
             {resetLink
               ? 'Dev mode: Click the link below to reset your password.'
-              : 'Check your email for a password reset link.'}
+              : emailConfigured
+                ? 'Check your email for a password reset link.'
+                : 'Reset request received — our team will contact you.'}
           </p>
         </div>
 
@@ -87,6 +114,21 @@ export function PasswordReset({ onBack }: PasswordResetProps) {
           >
             Reset My Password →
           </a>
+        )}
+
+        {/* 🔒 V6 PP5: Honest "contact support" message when email isn't configured. */}
+        {!resetLink && !emailConfigured && (
+          <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-3 text-xs text-amber-800 dark:text-amber-300 flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <div>
+              <p className="font-medium">Email sending is not yet configured.</p>
+              <p className="mt-1">
+                We&apos;ve logged your reset request. To reset your password now,
+                email <a href="mailto:support@bahikhata.app" className="underline font-medium">support@bahikhata.app</a> with
+                your registered email and we&apos;ll help you within 24 hours.
+              </p>
+            </div>
+          </div>
         )}
 
         <Button variant="outline" onClick={onBack} className="w-full gap-2">

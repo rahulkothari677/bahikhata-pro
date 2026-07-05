@@ -46,6 +46,22 @@ export function Reports() {
   const handleGstrExport = async () => {
     setExportingGstr(true)
     try {
+      // 🔒 V6 SC1/PP1: Before downloading CSV, fetch the JSON to check truncated flag.
+      // If truncated, hard-block the download with a loud warning — filing a
+      // truncated GST return is a compliance risk.
+      const checkR = await offlineFetch(`/api/gstr-export?from=${dateRange.from.toISOString()}&to=${dateRange.to.toISOString()}&format=json`)
+      if (!checkR.ok) throw new Error('Export check failed')
+      const checkData = await checkR.json()
+
+      if (checkData.truncated) {
+        sonnerToast.error('Cannot export GSTR-1 — too many invoices', {
+          description: checkData.truncatedHint || 'The selected period has too many invoices. Split the period into smaller ranges (e.g. weekly) and re-run.',
+          duration: 12000,
+        })
+        return  // Hard-block the CSV download
+      }
+
+      // Not truncated — proceed with CSV download
       const r = await offlineFetch(`/api/gstr-export?from=${dateRange.from.toISOString()}&to=${dateRange.to.toISOString()}&format=csv`)
       if (!r.ok) throw new Error('Export failed')
       const blob = await r.blob()
@@ -79,6 +95,16 @@ export function Reports() {
   const handleCSVExport = async () => {
     if (!data) {
       sonnerToast.error('Report data not loaded yet')
+      return
+    }
+    // 🔒 V6 SC1/PP1: Hard-block CSV export if the report is truncated.
+    // A truncated P&L or GST report is a compliance/trust risk — never let
+    // the user export approximate tax figures silently.
+    if (data.truncated === true) {
+      sonnerToast.error('Cannot export — report is incomplete', {
+        description: data.truncatedHint || 'The selected period has too many transactions. Narrow the date range and try again.',
+        duration: 12000,
+      })
       return
     }
     try {
@@ -118,6 +144,28 @@ export function Reports() {
 
   return (
     <div className="space-y-4">
+      {/* 🔒 V6 SC1/PP1: Loud truncation warning banner.
+          Shows when the report is truncated (data.truncated === true).
+          Never let a user mistake an approximate tax/P&L figure for the real one. */}
+      {data?.truncated === true && (
+        <div className="rounded-lg bg-rose-50 dark:bg-rose-950/30 border-2 border-rose-300 dark:border-rose-700 p-4 no-print">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-rose-600 dark:text-rose-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h3 className="font-bold text-rose-800 dark:text-rose-300 text-sm">
+                This report is INCOMPLETE — do not file or rely on these numbers
+              </h3>
+              <p className="text-xs text-rose-700 dark:text-rose-400 mt-1">
+                {data.truncatedHint || 'The selected period has too many transactions to display. The numbers below cover only part of the range.'}
+              </p>
+              <p className="text-xs text-rose-700 dark:text-rose-400 mt-2 font-medium">
+                → Narrow the date range (e.g. switch from "This Year" to "This Month") to get complete figures. Export is blocked until then.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Print-only header — visible only when printing */}
       <div className="hidden print:block mb-4 pb-3 border-b-2 border-black">
         <h1 className="text-2xl font-bold text-black capitalize">{reportType === 'pl' ? 'Profit & Loss Report' : reportType === 'gst' ? 'GST Report' : reportType === 'stock' ? 'Stock Report' : 'Party Statement'}</h1>

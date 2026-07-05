@@ -3,13 +3,27 @@ import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
 import { withCache } from '@/lib/cache'
 import { activeTransactionWhere } from '@/lib/query-helpers'
+import { roundMoney } from '@/lib/money'
 
-// ⚡ PERFORMANCE (Audit fix N2): KPIs are now computed via SQL aggregate
-// queries instead of loading 13 months of transactions into memory and
-// reducing in JavaScript. The chart data and top-products still use the
-// raw transaction fetch (they need the line items), but the KPI sums
-// (today, range, previous range) use db.transaction.aggregate() which
-// runs as a single SQL SUM query — much faster and constant memory.
+// ⚡ PERFORMANCE (V6 SC3): KPIs + charts are now computed via SQL aggregate
+// queries. Was: a single findMany loaded range + previous-range transactions
+// WITH ITEMS into memory and reduced in JS. At kirana scale that's fine, but
+// "This Year" or "All time" ranges on a busy shop loaded ~24 months of
+// transactions with line items into a serverless function → slow + memory
+// pressure. Now: constant memory regardless of range/volume. The DB returns
+// only the computed sums/totals, never the raw rows.
+//
+// We still fetch the latest 8 transactions (for the "recent" widget) with
+// items — that's bounded at 8 rows and never grows with scale.
+//
+// Aggregation strategy:
+//   - KPIs (today/range/prev-range): db.transaction.groupBy({ by: ['type'] })
+//     with date filters — one round-trip per date window, O(1) memory.
+//   - Sales trend: raw SQL date_trunc('day'|'week'|'month', date) GROUP BY.
+//   - Top products: raw SQL GROUP BY productId with SUM.
+//   - Category breakdown: raw SQL JOIN Product GROUP BY category.
+//   - Payment mode: db.transaction.groupBy({ by: ['paymentMode'] }).
+//   - GST summary: db.transaction.aggregate (sum of cgst/sgst/igst).
 
 // GET /api/dashboard?from=&to= - returns aggregated stats for dashboard with date filtering
 export async function GET(req: NextRequest) {
@@ -30,20 +44,33 @@ export async function GET(req: NextRequest) {
     const rangeFrom = fromStr ? new Date(fromStr) : startOfMonth
     const rangeTo = toStr ? new Date(toStr) : now
 
+    // Previous range (for growth % calculation)
+    const prevRangeDuration = rangeTo.getTime() - rangeFrom.getTime()
+    const prevRangeFrom = new Date(rangeFrom.getTime() - prevRangeDuration)
+    const prevRangeTo = new Date(rangeFrom.getTime() - 1)
+
+    // Parallel batch 1: bounded fetches + KPI aggregates (all SQL-side, O(1) memory each)
     const [
       recentTransactions,
       allProducts,
       allParties,
       setting,
+      todayKpiAgg,
+      rangeKpiAgg,
+      prevRangeKpiAgg,
+      saleGstAgg,
+      purchaseGstAgg,
+      rangePaymentAgg,
     ] = await Promise.all([
-      // Always fetch latest 8 transactions (for "recent transactions" widget)
+      // Always fetch latest 8 transactions (for "recent transactions" widget).
+      // Bounded at 8 rows — never grows with scale.
       db.transaction.findMany({
         where: activeTransactionWhere(userId),
         include: { items: true, party: true },
         orderBy: { date: 'desc' },
         take: 8,
       }),
-      // Products: only fetch fields needed for stock calc + category breakdown
+      // Products: only fetch fields needed for stock calc + low-stock list.
       db.product.findMany({
         where: { userId },
         select: {
@@ -52,95 +79,95 @@ export async function GET(req: NextRequest) {
           category: true,
           purchasePrice: true,
           salePrice: true,
-          openingStock: true,
           currentStock: true,
           lowStockThreshold: true,
         },
       }),
-      // Parties: only fetch fields needed for receivable/payable calc
+      // Parties: only fetch fields needed for receivable/payable calc.
       db.party.findMany({
-        where: { userId },
-        select: {
-          id: true,
-          openingBalance: true,
-        },
+        where: { userId, deletedAt: null },
+        select: { openingBalance: true },
       }),
       db.setting.findUnique({ where: { userId } }),
+
+      // === KPIs via SQL groupBy (O(1) memory, never loads rows) ===
+      // Today's KPIs — grouped by type, filtered to today + non-deleted.
+      db.transaction.groupBy({
+        by: ['type'],
+        where: activeTransactionWhere(userId, {
+          date: { gte: startOfToday, lte: now },
+        }),
+        _sum: { totalAmount: true, grossProfit: true },
+        _count: true,
+      }),
+      // Range KPIs — grouped by type, filtered to selected range.
+      db.transaction.groupBy({
+        by: ['type'],
+        where: activeTransactionWhere(userId, {
+          date: { gte: rangeFrom, lte: rangeTo },
+        }),
+        _sum: { totalAmount: true, grossProfit: true },
+        _count: true,
+      }),
+      // Previous-range KPIs (for growth %).
+      db.transaction.groupBy({
+        by: ['type'],
+        where: activeTransactionWhere(userId, {
+          date: { gte: prevRangeFrom, lte: prevRangeTo },
+        }),
+        _sum: { totalAmount: true, grossProfit: true },
+        _count: true,
+      }),
+
+      // === GST summary via SQL aggregate (sum of cgst/sgst/igst for sales + purchases) ===
+      db.transaction.aggregate({
+        where: activeTransactionWhere(userId, {
+          type: 'sale',
+          date: { gte: rangeFrom, lte: rangeTo },
+        }),
+        _sum: { subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true },
+      }),
+      db.transaction.aggregate({
+        where: activeTransactionWhere(userId, {
+          type: 'purchase',
+          date: { gte: rangeFrom, lte: rangeTo },
+        }),
+        _sum: { cgst: true, sgst: true, igst: true },
+      }),
+
+      // === Payment mode split via groupBy (O(1) memory) ===
+      db.transaction.groupBy({
+        by: ['paymentMode'],
+        where: activeTransactionWhere(userId, {
+          type: 'sale',
+          date: { gte: rangeFrom, lte: rangeTo },
+        }),
+        _sum: { totalAmount: true },
+      }),
     ])
 
-    // 🔒 PERFORMANCE FIX: Fetch transactions for range + previous range in ONE query.
-    // Was: 6 SQL aggregate queries + 1 range fetch = 7 DB round-trips.
-    // Now: 1 DB query that fetches both ranges, compute everything in JS.
-    const prevRangeDuration = rangeTo.getTime() - rangeFrom.getTime()
-    const prevRangeFrom = new Date(rangeFrom.getTime() - prevRangeDuration)
+    // Helper: extract a sum from a groupBy result for a specific type
+    const sumOf = (agg: Array<{ type: string; _sum: { totalAmount: number | null; grossProfit: number | null } }>, type: string) =>
+      agg.filter(r => r.type === type).reduce((s, r) => s + (r._sum.totalAmount || 0), 0)
+    const profitOf = (agg: Array<{ type: string; _sum: { totalAmount: number | null; grossProfit: number | null } }>, type: string) =>
+      agg.filter(r => r.type === type).reduce((s, r) => s + (r._sum.grossProfit || 0), 0)
+    const countOf = (agg: Array<{ type: string; _count: number }>, type: string) =>
+      agg.filter(r => r.type === type).reduce((s, r) => s + r._count, 0)
 
-    const rangeTransactions = await db.transaction.findMany({
-      where: activeTransactionWhere(userId, {
-        date: { gte: prevRangeFrom, lte: rangeTo },
-      }),
-      select: {
-        id: true,
-        type: true,
-        date: true,
-        subtotal: true,
-        discountAmount: true,
-        cgst: true,
-        sgst: true,
-        igst: true,
-        totalAmount: true,
-        paidAmount: true,
-        paymentMode: true,
-        grossProfit: true,
-        partyId: true,
-        items: {
-          select: {
-            productId: true,
-            productName: true,
-            quantity: true,
-            unitPrice: true,
-          },
-        },
-      },
-      orderBy: { date: 'desc' },
-    })
+    // === Compute KPIs from groupBy results ===
+    const todayRevenue = roundMoney(sumOf(todayKpiAgg as any, 'sale'))
+    const todayProfit = roundMoney(profitOf(todayKpiAgg as any, 'sale'))
+    const todayTxnCount = countOf(todayKpiAgg as any, 'sale')
 
-    // Combine: use rangeTransactions for analytics, but fall back to recentTransactions
-    // for the "recent" widget (in case some recent txns are outside the 13-month window,
-    // which shouldn't happen but just to be safe).
-    const allTransactions = rangeTransactions
+    const rangeRevenue = roundMoney(sumOf(rangeKpiAgg as any, 'sale'))
+    const rangeProfit = roundMoney(profitOf(rangeKpiAgg as any, 'sale'))
+    const rangeExpenses = roundMoney(sumOf(rangeKpiAgg as any, 'expense'))
+    const rangePurchases = roundMoney(sumOf(rangeKpiAgg as any, 'purchase'))
+    const rangeIncome = roundMoney(sumOf(rangeKpiAgg as any, 'income'))
+    const rangeTxnCount = countOf(rangeKpiAgg as any, 'sale')
 
-    const sales = allTransactions.filter(t => t.type === 'sale')
-    const purchases = allTransactions.filter(t => t.type === 'purchase')
-    const incomes = allTransactions.filter(t => t.type === 'income')
-    const expenses = allTransactions.filter(t => t.type === 'expense')
-
-    // 🔒 AUDIT FIX V5 MC: Removed dead `kpiAgg` groupBy + 3 unused helpers
-    // (getSum / getProfit / getCount). Was: a `db.transaction.groupBy` ran on
-    // every dashboard load but its result was NEVER used — the real KPIs are
-    // computed in JS from `rangeTransactions` below. The V5 auditor caught
-    // this as a wasted DB round-trip on every load (ironic, since it was
-    // added as a perf fix). Now: no wasted query.
-
-    // Note: KPIs (today/range/prev-range) are computed in JS from the
-    // rangeTransactions findMany above. At kirana scale (<10K txns/user)
-    // the in-memory reduce is fast enough (~50ms for 1K txns). SQL
-    // date_trunc aggregation is on the roadmap for when any user crosses
-    // ~5K monthly transactions.
-    const prevRangeTo = new Date(rangeFrom.getTime() - 1)
-    const todayRevenue = sales.filter(t => t.date >= startOfToday).reduce((s, t) => s + t.totalAmount, 0)
-    const todayProfit = sales.filter(t => t.date >= startOfToday).reduce((s, t) => s + t.grossProfit, 0)
-    const todayTxnCount = sales.filter(t => t.date >= startOfToday).length
-
-    const rangeSales = sales.filter(t => t.date >= rangeFrom && t.date <= rangeTo)
-    const rangeRevenue = rangeSales.reduce((s, t) => s + t.totalAmount, 0)
-    const rangeProfit = rangeSales.reduce((s, t) => s + t.grossProfit, 0)
-    const rangeExpenses = expenses.filter(t => t.date >= rangeFrom && t.date <= rangeTo).reduce((s, t) => s + t.totalAmount, 0)
-    const rangePurchases = purchases.filter(t => t.date >= rangeFrom && t.date <= rangeTo).reduce((s, t) => s + t.totalAmount, 0)
-    const rangeIncome = incomes.filter(t => t.date >= rangeFrom && t.date <= rangeTo).reduce((s, t) => s + t.totalAmount, 0)
-
-    const prevRangeSales = sales.filter(t => t.date >= prevRangeFrom && t.date <= prevRangeTo)
-    const prevRangeRevenue = prevRangeSales.reduce((s, t) => s + t.totalAmount, 0)
-    const prevRangeProfit = prevRangeSales.reduce((s, t) => s + t.grossProfit, 0)
+    const prevRangeRevenue = roundMoney(sumOf(prevRangeKpiAgg as any, 'sale'))
+    const prevRangeProfit = roundMoney(profitOf(prevRangeKpiAgg as any, 'sale'))
 
     const revenueGrowth = prevRangeRevenue > 0
       ? ((rangeRevenue - prevRangeRevenue) / prevRangeRevenue) * 100
@@ -149,130 +176,190 @@ export async function GET(req: NextRequest) {
       ? ((rangeProfit - prevRangeProfit) / prevRangeProfit) * 100
       : 0
 
-    const totalReceivable = allParties.reduce((s, p) => s + (p.openingBalance > 0 ? p.openingBalance : 0), 0)
-    const totalPayable = allParties.reduce((s, p) => s + (p.openingBalance < 0 ? -p.openingBalance : 0), 0)
+    const totalReceivable = roundMoney(allParties.reduce((s, p) => s + (p.openingBalance > 0 ? p.openingBalance : 0), 0))
+    const totalPayable = roundMoney(allParties.reduce((s, p) => s + (p.openingBalance < 0 ? -p.openingBalance : 0), 0))
 
-    // === Sales trend (within range, up to 14 data points) ===
-    const salesTrend: { date: string; revenue: number; profit: number; label: string }[] = []
+    // === GST summary from aggregate results ===
+    const rangeTaxableSales = roundMoney((saleGstAgg._sum.subtotal || 0) - (saleGstAgg._sum.discountAmount || 0))
+    const rangeCGST = roundMoney(saleGstAgg._sum.cgst || 0)
+    const rangeSGST = roundMoney(saleGstAgg._sum.sgst || 0)
+    const rangeIGST = roundMoney(saleGstAgg._sum.igst || 0)
+    const rangeInputTax = roundMoney(
+      (purchaseGstAgg._sum.cgst || 0) + (purchaseGstAgg._sum.sgst || 0) + (purchaseGstAgg._sum.igst || 0)
+    )
+    const netGSTPayable = roundMoney((rangeCGST + rangeSGST + rangeIGST) - rangeInputTax)
+
+    // === Payment mode split from groupBy ===
+    const paymentModeSplit = rangePaymentAgg.map(r => ({
+      name: (r.paymentMode || 'cash').toUpperCase(),
+      value: roundMoney(r._sum.totalAmount || 0),
+    }))
+
+    // === Sales trend via raw SQL date_trunc (O(buckets) memory, not O(rows)) ===
     const daysInRange = Math.ceil((rangeTo.getTime() - rangeFrom.getTime()) / 86400000)
-
-    // If range <= 31 days, show daily. Otherwise show weekly/monthly
+    let truncUnit: 'day' | 'week' | 'month'
+    let maxBuckets: number
     if (daysInRange <= 31) {
-      const days = Math.min(daysInRange + 1, 14)
-      // Take last 14 days of the range or the whole range if shorter
-      const trendStart = new Date(rangeTo)
-      trendStart.setDate(trendStart.getDate() - (days - 1))
-      trendStart.setHours(0, 0, 0, 0)
-
-      for (let i = 0; i < days; i++) {
-        const dayStart = new Date(trendStart)
-        dayStart.setDate(dayStart.getDate() + i)
-        const dayEnd = new Date(dayStart)
-        dayEnd.setDate(dayEnd.getDate() + 1)
-        const daySales = sales.filter(t => t.date >= dayStart && t.date < dayEnd)
-        salesTrend.push({
-          date: dayStart.toISOString(),
-          revenue: daySales.reduce((s, t) => s + t.totalAmount, 0),
-          profit: daySales.reduce((s, t) => s + t.grossProfit, 0),
-          label: dayStart.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }),
-        })
-      }
+      truncUnit = 'day'
+      maxBuckets = 14
     } else if (daysInRange <= 180) {
-      // Weekly buckets
-      const weeks = Math.min(Math.ceil(daysInRange / 7), 14)
-      for (let i = weeks - 1; i >= 0; i--) {
-        const weekEnd = new Date(rangeTo)
-        weekEnd.setDate(weekEnd.getDate() - i * 7)
-        const weekStart = new Date(weekEnd)
-        weekStart.setDate(weekStart.getDate() - 6)
-        weekStart.setHours(0, 0, 0, 0)
-        const weekSales = sales.filter(t => t.date >= weekStart && t.date <= weekEnd)
-        salesTrend.push({
-          date: weekStart.toISOString(),
-          revenue: weekSales.reduce((s, t) => s + t.totalAmount, 0),
-          profit: weekSales.reduce((s, t) => s + t.grossProfit, 0),
-          label: `${weekStart.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}`,
-        })
-      }
+      truncUnit = 'week'
+      maxBuckets = 14
     } else {
-      // Monthly buckets (up to 12 months)
-      const months = Math.min(Math.ceil(daysInRange / 30), 12)
-      for (let i = months - 1; i >= 0; i--) {
-        const monthEnd = new Date(rangeTo.getFullYear(), rangeTo.getMonth() - i + 1, 0)
-        const monthStart = new Date(rangeTo.getFullYear(), rangeTo.getMonth() - i, 1)
-        const mSales = sales.filter(t => t.date >= monthStart && t.date <= monthEnd)
-        salesTrend.push({
-          date: monthStart.toISOString(),
-          revenue: mSales.reduce((s, t) => s + t.totalAmount, 0),
-          profit: mSales.reduce((s, t) => s + t.grossProfit, 0),
-          label: monthStart.toLocaleDateString('en-IN', { month: 'short', year: '2-digit' }),
-        })
-      }
+      truncUnit = 'month'
+      maxBuckets = 12
     }
 
-    // === Top selling products (within range) ===
-    const productSalesMap = new Map<string, { name: string; quantity: number; revenue: number; profit: number }>()
-    rangeSales.forEach(t => {
-      t.items.forEach(item => {
-        const key = item.productId || item.productName
-        const existing = productSalesMap.get(key) || { name: item.productName, quantity: 0, revenue: 0, profit: 0 }
-        existing.quantity += item.quantity
-        existing.revenue += item?.unitPrice * item.quantity
-        existing.profit += (item?.unitPrice - (allProducts.find(p => p.id === item.productId)?.purchasePrice || 0)) * item.quantity
-        productSalesMap.set(key, existing)
+    const salesTrendRows = await db.$queryRaw<Array<{ bucketStart: Date; revenue: number; profit: number }>>`
+      SELECT
+        DATE_TRUNC(${truncUnit}, date) AS "bucketStart",
+        COALESCE(SUM("totalAmount"), 0) AS revenue,
+        COALESCE(SUM("grossProfit"), 0) AS profit
+      FROM "Transaction"
+      WHERE "userId" = ${userId}
+        AND "deletedAt" IS NULL
+        AND type = 'sale'
+        AND date >= ${rangeFrom}
+        AND date <= ${rangeTo}
+      GROUP BY DATE_TRUNC(${truncUnit}, date)
+      ORDER BY "bucketStart" ASC
+    `
+
+    // Build the chart data, filling missing buckets with zeros.
+    // We generate the bucket boundaries in JS (deterministic) and overlay
+    // the SQL rows (which only exist for buckets that have data).
+    const salesTrend: { date: string; revenue: number; profit: number; label: string }[] = []
+    const trendMap = new Map<string, { revenue: number; profit: number }>()
+    for (const row of salesTrendRows) {
+      const key = new Date(row.bucketStart).toISOString()
+      trendMap.set(key, {
+        revenue: roundMoney(Number(row.revenue)),
+        profit: roundMoney(Number(row.profit)),
       })
-    })
-    const topProducts = Array.from(productSalesMap.values())
-      .sort((a, b) => b.revenue - a.revenue)
-      .slice(0, 5)
+    }
 
-    // === Category breakdown (within range) ===
-    const categoryMap = new Map<string, number>()
-    rangeSales.forEach(t => {
-      t.items.forEach(item => {
-        const product = allProducts.find(p => p.id === item.productId)
-        const category = product?.category || 'Other'
-        categoryMap.set(category, (categoryMap.get(category) || 0) + item?.unitPrice * item.quantity)
+    // Generate bucket boundaries in JS
+    const generateBuckets = (): { start: Date; label: string; key: string }[] => {
+      const buckets: { start: Date; label: string; key: string }[] = []
+      if (truncUnit === 'day') {
+        const days = Math.min(daysInRange + 1, maxBuckets)
+        for (let i = days - 1; i >= 0; i--) {
+          const start = new Date(rangeTo)
+          start.setDate(start.getDate() - i)
+          start.setHours(0, 0, 0, 0)
+          buckets.push({
+            start,
+            label: start.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }),
+            key: start.toISOString(),
+          })
+        }
+      } else if (truncUnit === 'week') {
+        const weeks = Math.min(Math.ceil(daysInRange / 7), maxBuckets)
+        for (let i = weeks - 1; i >= 0; i--) {
+          const end = new Date(rangeTo)
+          end.setDate(end.getDate() - i * 7)
+          const start = new Date(end)
+          start.setDate(start.getDate() - 6)
+          start.setHours(0, 0, 0, 0)
+          buckets.push({
+            start,
+            label: start.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }),
+            key: start.toISOString(),
+          })
+        }
+      } else {
+        const months = Math.min(Math.ceil(daysInRange / 30), maxBuckets)
+        for (let i = months - 1; i >= 0; i--) {
+          const start = new Date(rangeTo.getFullYear(), rangeTo.getMonth() - i, 1)
+          buckets.push({
+            start,
+            label: start.toLocaleDateString('en-IN', { month: 'short', year: '2-digit' }),
+            key: start.toISOString(),
+          })
+        }
+      }
+      return buckets
+    }
+
+    for (const bucket of generateBuckets()) {
+      const data = trendMap.get(bucket.key) || { revenue: 0, profit: 0 }
+      salesTrend.push({
+        date: bucket.key,
+        revenue: data.revenue,
+        profit: data.profit,
+        label: bucket.label,
       })
-    })
-    const categoryBreakdown = Array.from(categoryMap.entries())
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value)
+    }
 
-    // === Payment mode split (within range) ===
-    const paymentModeMap = new Map<string, number>()
-    rangeSales.forEach(t => {
-      paymentModeMap.set(t.paymentMode, (paymentModeMap.get(t.paymentMode) || 0) + t.totalAmount)
-    })
-    const paymentModeSplit = Array.from(paymentModeMap.entries())
-      .map(([name, value]) => ({ name: name.toUpperCase(), value }))
+    // === Top products via raw SQL (O(top N) memory, not O(all items)) ===
+    const topProductsRows = await db.$queryRaw<Array<{ productName: string; productId: string | null; totalQuantity: bigint; totalRevenue: number }>>`
+      SELECT
+        ti."productName",
+        ti."productId",
+        SUM(ti.quantity) AS "totalQuantity",
+        SUM(ROUND(ti.quantity * ti."unitPrice", 2)) AS "totalRevenue"
+      FROM "TransactionItem" ti
+      JOIN "Transaction" t ON ti."transactionId" = t.id
+      WHERE t."userId" = ${userId}
+        AND t."deletedAt" IS NULL
+        AND t.type = 'sale'
+        AND t.date >= ${rangeFrom}
+        AND t.date <= ${rangeTo}
+      GROUP BY ti."productName", ti."productId"
+      ORDER BY "totalRevenue" DESC
+      LIMIT 5
+    `
 
-    // === Inventory stats (not range-dependent) ===
-    // 🔒 AUDIT FIX N2 (v3): Read currentStock directly from the Product column
-    // instead of re-deriving from ALL transaction items. Was: O(all items)
-    // scan + counted soft-deleted transactions. Now: O(1) per product, read
-    // the column that's maintained atomically on every transaction write.
+    // Compute profit per top product (needs purchasePrice from the in-memory products list)
+    const topProducts = topProductsRows.map(row => {
+      const product = row.productId ? allProducts.find(p => p.id === row.productId) : null
+      const purchasePrice = product?.purchasePrice || 0
+      const quantity = Number(row.totalQuantity)
+      const revenue = roundMoney(Number(row.totalRevenue))
+      // Profit estimate: (unitPrice - purchasePrice) * qty. Since we don't have
+      // per-item unitPrice in the aggregate, we approximate using average unitPrice.
+      const avgUnitPrice = quantity > 0 ? revenue / quantity : 0
+      const profit = roundMoney((avgUnitPrice - purchasePrice) * quantity)
+      return {
+        name: row.productName,
+        quantity,
+        revenue,
+        profit,
+      }
+    })
+
+    // === Category breakdown via raw SQL (JOIN Product, GROUP BY category) ===
+    const categoryRows = await db.$queryRaw<Array<{ category: string | null; totalValue: number }>>`
+      SELECT
+        COALESCE(p.category, 'Other') AS category,
+        SUM(ROUND(ti.quantity * ti."unitPrice", 2)) AS "totalValue"
+      FROM "TransactionItem" ti
+      JOIN "Transaction" t ON ti."transactionId" = t.id
+      LEFT JOIN "Product" p ON ti."productId" = p.id
+      WHERE t."userId" = ${userId}
+        AND t."deletedAt" IS NULL
+        AND t.type = 'sale'
+        AND t.date >= ${rangeFrom}
+        AND t.date <= ${rangeTo}
+      GROUP BY COALESCE(p.category, 'Other')
+      ORDER BY "totalValue" DESC
+    `
+
+    const categoryBreakdown = categoryRows.map(row => ({
+      name: row.category || 'Other',
+      value: roundMoney(Number(row.totalValue)),
+    }))
+
+    // === Inventory stats (not range-dependent) — read currentStock column directly (V3 N2) ===
     const lowStockProducts = allProducts
-      .map(p => ({ ...p, currentStock: p.currentStock }))
       .filter(p => p.currentStock <= p.lowStockThreshold)
       .sort((a, b) => a.currentStock - b.currentStock)
 
-    const totalStockValue = allProducts.reduce((s, p) => {
-      return s + p.currentStock * p.purchasePrice
-    }, 0)
-
-    // === GST summary (within range) ===
-    const rangeTaxableSales = rangeSales.reduce((s, t) => s + (t.subtotal - t.discountAmount), 0)
-    const rangeCGST = rangeSales.reduce((s, t) => s + t.cgst, 0)
-    const rangeSGST = rangeSales.reduce((s, t) => s + t.sgst, 0)
-    const rangeIGST = rangeSales.reduce((s, t) => s + t.igst, 0)
-    const rangeInputTax = purchases.filter(t => t.date >= rangeFrom && t.date <= rangeTo).reduce((s, t) => s + t.cgst + t.sgst + t.igst, 0)
-    const netGSTPayable = (rangeCGST + rangeSGST + rangeIGST) - rangeInputTax
+    const totalStockValue = roundMoney(
+      allProducts.reduce((s, p) => s + p.currentStock * p.purchasePrice, 0)
+    )
 
     // === Recent transactions (not range-dependent, always latest) ===
-    // Use the dedicated recentTransactions fetch (only 8 rows, always latest)
-    // instead of slicing from allTransactions which may be limited to 13 months.
-    // Include full items array + partyId for "Repeat Last Sale" feature.
     const recentTransactionsData = recentTransactions.map(t => ({
       id: t.id,
       type: t.type,
@@ -302,7 +389,6 @@ export async function GET(req: NextRequest) {
         todayRevenue,
         todayProfit,
         todayTxnCount,
-        // Range-based KPIs (replacing the old "month" KPIs)
         rangeRevenue,
         rangeProfit,
         rangeExpenses,
@@ -310,13 +396,13 @@ export async function GET(req: NextRequest) {
         rangeIncome,
         revenueGrowth,
         profitGrowth,
-        netProfit: rangeProfit + rangeIncome - rangeExpenses,
+        netProfit: roundMoney(rangeProfit + rangeIncome - rangeExpenses),
         totalReceivable,
         totalPayable,
         totalStockValue,
         productCount: allProducts.length,
         partyCount: allParties.length,
-        rangeTxnCount: rangeSales.length,
+        rangeTxnCount,
       },
       salesTrend,
       topProducts,
@@ -328,7 +414,7 @@ export async function GET(req: NextRequest) {
         cgst: rangeCGST,
         sgst: rangeSGST,
         igst: rangeIGST,
-        outputTax: rangeCGST + rangeSGST + rangeIGST,
+        outputTax: roundMoney(rangeCGST + rangeSGST + rangeIGST),
         inputTax: rangeInputTax,
         netPayable: netGSTPayable,
       },
@@ -337,16 +423,16 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     console.error('Dashboard API error:', error)
     // 🔒 BUG FIX V5: Return empty dashboard data instead of 500 error.
-    // This happens when migrations haven't run (new columns missing).
-    // The app shows an empty dashboard instead of crashing.
     return NextResponse.json({
       kpis: {
         todayRevenue: 0, todayProfit: 0, todayTxnCount: 0,
         rangeRevenue: 0, rangeProfit: 0, rangeExpenses: 0,
         rangePurchases: 0, rangeIncome: 0,
         revenueGrowth: 0, profitGrowth: 0,
+        netProfit: 0,
         totalReceivable: 0, totalPayable: 0,
-        rangeSaleCount: 0,
+        totalStockValue: 0, productCount: 0, partyCount: 0,
+        rangeTxnCount: 0,
       },
       salesTrend: [],
       topProducts: [],

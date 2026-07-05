@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { isEmailConfigured } from '@/lib/email'
 
 /**
  * GET /api/feature-flags
@@ -7,8 +8,15 @@ import { db } from '@/lib/db'
  * Returns all feature flags for the app.
  * Public endpoint (no auth needed — flags are not secret).
  * Used by the app to check if features should be shown/enabled.
+ *
+ * 🔒 V6 PP5: Also returns `passwordResetEmailEnabled` so the login screen
+ * can show an honest message ("contact support to reset") when no email
+ * provider is configured, instead of letting users think reset is broken.
  */
 export async function GET() {
+  // Email config is not secret — just whether RESEND_API_KEY is set.
+  const passwordResetEmailEnabled = isEmailConfigured()
+
   try {
     const flags = await db.featureFlag.findMany({
       select: { key: true, enabled: true },
@@ -29,10 +37,14 @@ export async function GET() {
         recurring_entries: true,
         new_signups: true,
         payments: false,
+        passwordResetEmailEnabled,  // 🔒 V6 PP5
       })
     }
 
-    return NextResponse.json(flagMap)
+    return NextResponse.json({
+      ...flagMap,
+      passwordResetEmailEnabled,  // 🔒 V6 PP5 — always included
+    })
   } catch {
     // Fail-open: all features enabled
     return NextResponse.json({
@@ -44,6 +56,7 @@ export async function GET() {
       recurring_entries: true,
       new_signups: true,
       payments: false,
+      passwordResetEmailEnabled,  // 🔒 V6 PP5
     })
   }
 }

@@ -76,11 +76,46 @@ export function TransactionDetail() {
 
   const handleDelete = async () => {
     if (!txn) return
-    if (!confirm('Delete this transaction? This cannot be undone.')) return
+    if (!confirm('Delete this transaction? You can undo this for 5 seconds.')) return
     const r = await offlineFetch(`/api/transactions/${txn.id}`, { method: 'DELETE', offline: { invalidate: ['/api/transactions', '/api/dashboard', '/api/products', '/api/parties'] } })
     if (r.ok) {
       haptic.warning()
-      sonnerToast.success(isQueuedResponse(r) ? 'Will delete when online' : 'Transaction deleted')
+      const deletedTxnId = txn.id
+      const wasQueued = isQueuedResponse(r)
+
+      // 🔒 AUDIT FIX V6 UX: 5-second Undo toast.
+      // Since deletes are soft (deletedAt set), restoring is trivial — just
+      // POST to /api/transactions/[id]/restore. The auditor called this
+      // "a huge perceived-safety win" — prevents accidental-delete panic.
+      // Only offer Undo for online deletes (queued offline deletes can't be
+      // undone until they sync, which is a different flow).
+      if (wasQueued) {
+        sonnerToast.success('Will delete when online')
+      } else {
+        sonnerToast.success('Transaction deleted', {
+          duration: 5000,
+          action: {
+            label: 'Undo',
+            onClick: async () => {
+              try {
+                const restoreR = await offlineFetch(`/api/transactions/${deletedTxnId}/restore`, {
+                  method: 'POST',
+                  offline: { invalidate: ['/api/transactions', '/api/dashboard', '/api/products', '/api/parties'] },
+                })
+                if (restoreR.ok) {
+                  sonnerToast.success('Transaction restored')
+                  queryClient.invalidateQueries({ queryKey: ['transactions'] })
+                  queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+                } else {
+                  sonnerToast.error('Could not restore — transaction may have been permanently removed.')
+                }
+              } catch {
+                sonnerToast.error('Could not restore — check your connection.')
+              }
+            },
+          },
+        })
+      }
       queryClient.invalidateQueries({ queryKey: ['transactions'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       // Go back to ledger
