@@ -1580,3 +1580,39 @@ Stage Summary:
 - No new dependencies added (sharp was already in package.json)
 - Build clean, types clean, no behavior change for happy path — only fixes for the edge cases the auditor identified.
 
+
+---
+Task ID: bahikhata-v5-audit-response
+Agent: main
+Task: V5 Verification Audit response — fix 8 new bugs (HA, HB, MA, MB, MC, MD, ME, MF) + implement AI-5 (per-item confidence UI) flagged by auditor's V5 verification.
+
+Work Log:
+- Read /home/z/my-project/upload/BahiKhata-Audit-V5-Verification.md — auditor verified V4 work, confirmed 22 fixes are real, but caught 8 new bugs + 1 feature gap.
+- HA (HIGH — money-correctness): Party endpoint didn't filter deletedAt: null on aggregates. Customer balances counted soft-deleted sales. This was a regression from H4 perf refactor — my V4 report claimed it was done; it wasn't. Fixed: every query in parties/[id]/route.ts now filters deletedAt: null (9 places).
+- HB (HIGH — users locked out): Password reset sent NO email in production. Created src/lib/email.ts (Resend integration, no new dep). When RESEND_API_KEY is set, reset email IS sent with styled HTML. When not set, founder alert is logged. Updated .env.example with RESEND_API_KEY, RESEND_FROM_EMAIL, FOUNDER_ALERT_EMAIL. Updated PasswordReset.tsx to remove stale TODO.
+- MA: Party 6-month chart hardcoded to zero (dead monthlyAgg query). Fixed: real SQL with date_trunc('month', date) grouped by type, joined to produce 6 rows with real sales + purchases.
+- MB: Party top-products amount always ₹0. Fixed: real _sum of (quantity * unitPrice) via raw SQL, rounded with roundMoney.
+- MC: Dashboard had dead kpiAgg groupBy + 3 unused helpers (getSum/getProfit/getCount) running on every load. Removed. V4 '6 aggregates → 1 groupBy' narrative was inaccurate.
+- MD: No oversell guard. Sales silently pushed currentStock negative. Fixed: server detects any sale item that would push stock below zero, returns stockWarnings[] in response. UI shows visible warning toast. Does NOT block the sale (kirana shops legitimately sell before recording purchases). confirmOversell:true skips the warning.
+- ME: Invoice retry used lastSeq + attempt + 2 → skipped invoice numbers under contention. Fixed: max+1, let unique constraint + loop handle collisions without inflating the number.
+- MF: Account deletion didn't cover newer tables (subscription, referral, usageTracking, aiUsageLog, scanComparison, supportTicket, npsFeedback, shop) and passwordResetToken (keyed by email). Also Referral.referredId had no onDelete → defaulted to Restrict → would block deletion of any referred user. Fixed: (1) migration 20260705000007 sets Referral.referredId ON DELETE SET NULL, (2) added explicit deletes for all 9 newer tables + passwordResetToken by email, (3) fetch user record upfront for email.
+- AI-5: Per-item confidence now surfaced in scan review UI. Low-confidence items (<0.6) get rose background + 'CHECK' badge + bordered input. Medium (0.6-0.8) get amber. Summary banner at top counts low-confidence items.
+- AI-6 remainder: VERIFIED ALREADY DONE. My V4 report misread it. recognition.lang IS set from voiceLang via CODE_TO_LOCALE map covering all 10 Indian languages. Re-initializes on dropdown change ([lang] dep).
+- MG: Verified the 4 admin routes in THIS repo (src/app/api/admin/*) all call requireAdmin(). The ~30 routes in the SEPARATE bahikhata-admin repo are out of scope — flagged for founder.
+- Verified: tsc 0 new errors, next build ✓ Compiled successfully in 40s, jest money tests 27/27 pass.
+- Committed as 435ee07 (12 files changed, 521 insertions, 111 deletions, 2 new files).
+- Pushed to origin/main — Vercel auto-deploying.
+- Wrote docs/Auditor-Response-V5.md — comprehensive response with file:line evidence + grep verification commands.
+
+Stage Summary:
+- 8 of 8 V5 bugs fixed: HA, HB, MA, MB, MC, MD, ME, MF
+- 1 of 1 V5 feature requests implemented: AI-5 (per-item confidence UI)
+- 1 of 1 V5 verifications corrected: AI-6 was already done (my V4 report was wrong)
+- 1 item noted for separate repo: MG (admin defense-in-depth — applies to bahikhata-admin repo)
+- 0 new dependencies (email.ts uses native fetch)
+- 1 new migration: 20260705000007_referral_referred_set_null
+- 2 new files: src/lib/email.ts, prisma/migrations/20260705000007_*/migration.sql
+- 10 files modified
+- Founder tasks remaining: (1) configure Resend env vars for password reset emails, (2) address MG in bahikhata-admin repo, (3) verify V5 fixes in production
+- All previously-deferred items remain deferred with auditor's agreement (AI-7, P6, P7-P11, N10/P4, CSP, Float→paise, server-side PDF, cursor pagination, table partitioning)
+- Honest acknowledgment: my V4 report claimed HA was done when it wasn't — should have verified by re-reading the file before claiming. MC (dead kpiAgg) was my own perf "fix" that left dead code behind — should have caught myself. Will be more careful in future reports: every claim backed by a fresh grep before writing.
