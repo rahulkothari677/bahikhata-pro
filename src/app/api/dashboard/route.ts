@@ -81,6 +81,13 @@ export async function GET(req: NextRequest) {
     }
     const truncUnitLiteral = Prisma.raw(`'${truncUnit}'`)
 
+    // 🔒 V8 M2: Compute the effective range end = GREATEST(rangeTo, now).
+    // If the user selects a past date range (e.g. "last month"), today's
+    // transactions fall outside the window and "Today's Revenue" shows ₹0.
+    // Using the greater of rangeTo/now ensures today's KPIs are always
+    // included in the query, regardless of the selected range.
+    const effectiveRangeEnd = rangeTo > now ? rangeTo : now
+
     // === BATCH 1: Static data (4 small queries — wakes the DB if cold) ===
     const [recentTransactions, allProducts, allParties, setting] = await Promise.all([
       db.transaction.findMany({
@@ -150,7 +157,7 @@ export async function GET(req: NextRequest) {
         WHERE "userId" = ${userId}
           AND "deletedAt" IS NULL
           AND "date" >= ${prevRangeFrom}
-          AND "date" <= ${rangeTo}
+          AND "date" <= ${effectiveRangeEnd}
       `,
 
       // 2. Receivable/Payable (shared helper — 1 raw SQL with LEFT JOIN)

@@ -29,6 +29,16 @@ import { db } from '@/lib/db'
 const shopStateCache = new Map<string, { state: string | null; expiresAt: number }>()
 const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
+/**
+ * 🔒 V8 M1: Invalidate the shop-state cache for a user.
+ * Call this when the user changes their shop state in Settings.
+ * Without this, sales created in the next 5 minutes would use the OLD
+ * state → wrong intra/inter-state GST split (CGST/SGST vs IGST).
+ */
+export function invalidateShopStateCache(userId: string): void {
+  shopStateCache.delete(userId)
+}
+
 async function getCachedShopState(userId: string): Promise<string | null> {
   const cached = shopStateCache.get(userId)
   if (cached && cached.expiresAt > Date.now()) {

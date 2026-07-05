@@ -51,6 +51,15 @@ export async function PUT(req: NextRequest) {
         voiceLang: body.voiceLang || 'original',
       },
     })
+
+    // 🔒 V8 M1: Invalidate the shop-state cache so the next sale uses the
+    // updated state for inter/intra-state GST derivation. Without this, the
+    // cached old state would persist for 5 minutes → wrong CGST/SGST vs IGST.
+    if (body.state !== undefined) {
+      const { invalidateShopStateCache } = await import('@/lib/gst')
+      invalidateShopStateCache(userId)
+    }
+
     return NextResponse.json({ setting })
   } catch (error) {
     console.error('Settings PUT error:', error)
