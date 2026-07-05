@@ -10,6 +10,7 @@ import { useBrowserBackButton } from '@/hooks/use-browser-back-button'
 import { PullToRefresh } from '@/hooks/use-pull-to-refresh'
 import { isOnline, onSyncComplete } from '@/lib/offline-fetch'
 import { precacheData } from '@/lib/precache'
+import { useDashboardThisMonth } from '@/hooks/use-dashboard'
 import { AuthScreen } from '@/components/auth/AuthScreen'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { Header } from '@/components/layout/Header'
@@ -162,16 +163,15 @@ export default function Home() {
   }, [status, session])
 
   // Skip the seed check entirely when offline (we can't reach the server, and
-  // returning undefined would incorrectly trigger onboarding).
-  const online = typeof window !== 'undefined' ? isOnline() : true
-  const { data: seedStatus } = useQuery({
-    queryKey: ['seed-status'],
-    enabled: status === 'authenticated' && !!session && online,
-    queryFn: async () => {
-      const r = await fetch('/api/seed')
-      return r.json()
-    },
-  })
+  // 🔒 V8 P3: Removed /api/seed from the initial load path. Was: 3 COUNT
+  // queries on every app open, on the critical path. Now: the dashboard API
+  // already returns productCount + partyCount — if both are 0, the user has
+  // no data and we show the onboarding modal. This saves 3 DB queries on
+  // every page load, and removes a request from the cold-start thundering
+  // herd.
+  // The /api/seed GET endpoint still exists for the Onboarding component to
+  // call explicitly (if needed), but it's no longer fired automatically on
+  // every app open.
 
   // During SSR and first client render, show loading
   // This prevents hydration mismatch
@@ -187,7 +187,14 @@ export default function Home() {
     return <AuthScreen />
   }
 
-  const showOnboarding = !onboardingDismissed && !isOfflineSession && seedStatus !== undefined && !seedStatus.seeded && themePickerDone
+  // 🔒 V8 P3: Use dashboard data (already fetched by the Dashboard component)
+  // to determine if the user has any data. Was: separate /api/seed call with
+  // 3 COUNT queries on every app open. Now: reuses the shared React Query
+  // cache — no extra DB queries.
+  const { data: dashboardData } = useDashboardThisMonth()
+  const hasNoData = dashboardData?.kpis?.productCount === 0 && dashboardData?.kpis?.partyCount === 0
+
+  const showOnboarding = !onboardingDismissed && !isOfflineSession && dashboardData !== undefined && hasNoData && themePickerDone
   const showThemePicker = !themePickerDone && !!session
 
   // More screen renders full-screen (no sidebar, no regular header)

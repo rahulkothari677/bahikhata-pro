@@ -219,7 +219,10 @@ export async function GET(req: NextRequest) {
       // 🔒 V7 M2: B2CL = inter-state B2C above threshold. Was: only filtered
       // on total >= 100000, ignoring isInterState. Intra-state high-value
       // B2C invoices were miscategorized as B2CL.
-      b2cl: b2cInvoices.filter(i => i.isInterState === true && i.total >= 100000), // B2C Large (inter-state only)
+      // 🔒 V8 M3: Verified the ₹1,00,000 threshold matches the current GST
+      // rule for B2CL (was ₹2,50,000 historically, reduced to ₹1,00,000).
+      // Correct for current filing periods.
+      b2cl: b2cInvoices.filter(i => i.isInterState === true && i.total >= 100000), // B2C Large (inter-state only, ₹1L threshold)
       b2cs: b2cInvoices.filter(i => !(i.isInterState === true && i.total >= 100000)), // B2C Small (everything else)
       // 🔒 V6 SC1: flag if we hit the 10K cap — return is incomplete.
       // The UI must hard-block export when this is true (V6 PP1).

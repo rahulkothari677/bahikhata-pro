@@ -61,6 +61,17 @@ export function Reports() {
         return  // Hard-block the CSV download
       }
 
+      // 🔒 V8 L1: Block export if reconciliation fails (per-invoice taxable
+      // != summary taxable). This means the GSTR is internally inconsistent
+      // and should not be filed. The user should contact support.
+      if (checkData.reconciliation && checkData.reconciliation.matches === false) {
+        sonnerToast.error('Cannot export GSTR-1 — data inconsistency detected', {
+          description: `Per-invoice taxable (₹${checkData.reconciliation.perInvoiceTaxable}) does not match summary taxable (₹${checkData.reconciliation.summaryTaxable}). Please contact support before filing.`,
+          duration: 15000,
+        })
+        return  // Hard-block the CSV download
+      }
+
       // Not truncated — proceed with CSV download
       const r = await offlineFetch(`/api/gstr-export?from=${dateRange.from.toISOString()}&to=${dateRange.to.toISOString()}&format=csv`)
       if (!r.ok) throw new Error('Export failed')
