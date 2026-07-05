@@ -38,56 +38,16 @@ export async function GET(req: NextRequest) {
 
     const [
       recentTransactions,
-      rangeTransactions,
       allProducts,
       allParties,
       setting,
     ] = await Promise.all([
       // Always fetch latest 8 transactions (for "recent transactions" widget)
-      // Needs items + party for display
       db.transaction.findMany({
         where: activeTransactionWhere(userId),
         include: { items: true, party: true },
         orderBy: { date: 'desc' },
         take: 8,
-      }),
-      // Fetch transactions in the last 13 months for KPIs, charts, comparisons.
-      // PERFORMANCE: only select fields we actually use for aggregation —
-      // skip notes, invoiceNo, payeeName, payeePhone, isInterState, etc.
-      // and skip the items/party includes (we only need items for top products
-      // + category breakdown, which we fetch separately below if in range).
-      db.transaction.findMany({
-        where: activeTransactionWhere(userId, {
-          date: { gte: thirteenMonthsAgo },
-        }),
-        select: {
-          id: true,
-          type: true,
-          date: true,
-          subtotal: true,
-          discountAmount: true,
-          cgst: true,
-          sgst: true,
-          igst: true,
-          totalAmount: true,
-          paidAmount: true,
-          paymentMode: true,
-          grossProfit: true,
-          partyId: true,
-          // Items: only fetch the fields needed for top-products + category breakdown
-          items: {
-            select: {
-              productId: true,
-              productName: true,
-              quantity: true,
-              unitPrice: true,
-              gstRate: true,
-              discountAmount: true,
-              total: true,
-            },
-          },
-        },
-        orderBy: { date: 'desc' },
       }),
       // Products: only fetch fields needed for stock calc + category breakdown
       db.product.findMany({
@@ -99,7 +59,7 @@ export async function GET(req: NextRequest) {
           purchasePrice: true,
           salePrice: true,
           openingStock: true,
-          currentStock: true,  // 🔒 N2: read directly instead of re-deriving
+          currentStock: true,
           lowStockThreshold: true,
         },
       }),
@@ -113,6 +73,39 @@ export async function GET(req: NextRequest) {
       }),
       db.setting.findUnique({ where: { userId } }),
     ])
+
+    // 🔒 PERFORMANCE FIX: Fetch range transactions ONLY for chart/top-products
+    // (not for KPIs — those use SQL aggregates now). Limit to the selected
+    // date range, not 13 months. This is much smaller than the old query.
+    const rangeTransactions = await db.transaction.findMany({
+      where: activeTransactionWhere(userId, {
+        date: { gte: rangeFrom, lte: rangeTo },
+      }),
+      select: {
+        id: true,
+        type: true,
+        date: true,
+        subtotal: true,
+        discountAmount: true,
+        cgst: true,
+        sgst: true,
+        igst: true,
+        totalAmount: true,
+        paidAmount: true,
+        paymentMode: true,
+        grossProfit: true,
+        partyId: true,
+        items: {
+          select: {
+            productId: true,
+            productName: true,
+            quantity: true,
+            unitPrice: true,
+          },
+        },
+      },
+      orderBy: { date: 'desc' },
+    })
 
     // Combine: use rangeTransactions for analytics, but fall back to recentTransactions
     // for the "recent" widget (in case some recent txns are outside the 13-month window,

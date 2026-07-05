@@ -94,11 +94,12 @@ export const authOptions: NextAuthOptions = {
       // user has been logged out (password changed, "logout all devices"
       // clicked, or admin killed the session) → invalidate this JWT.
       //
-      // To avoid a DB hit on EVERY request, we only check once every 5 minutes.
-      // The `lastVersionCheck` claim tracks when we last checked. If <5min ago,
-      // skip the check (the token is still "fresh enough"). If >5min, re-check.
-      // Worst case: a revoked session stays valid for up to 5 minutes after
-      // revocation — acceptable trade-off for not hammering the DB.
+      // To avoid a DB hit on EVERY request, we only check once every 30 minutes.
+      // The `lastVersionCheck` claim tracks when we last checked. If <30min ago,
+      // skip the check (the token is still "fresh enough"). If >30min, re-check.
+      // Worst case: a revoked session stays valid for up to 30 minutes after
+      // revocation — acceptable trade-off for not hammering the DB on every API call.
+      // (Was 5 min — too frequent, added a DB query to every API call every 5 min.)
       //
       // 🔒 BUG FIX (V5): Old JWTs created BEFORE the tokenVersion feature don't
       // have a tokenVersion claim (it's `undefined`). The DB default is `0`.
@@ -107,8 +108,8 @@ export const authOptions: NextAuthOptions = {
       // continue to work. The next login will create a JWT with the proper
       // tokenVersion claim.
       const lastCheck = (token.lastVersionCheck as number) || 0
-      const FIVE_MINUTES = 5 * 60 * 1000
-      if (Date.now() - lastCheck > FIVE_MINUTES) {
+      const THIRTY_MINUTES = 30 * 60 * 1000
+      if (Date.now() - lastCheck > THIRTY_MINUTES) {
         try {
           const dbUser = await db.user.findUnique({
             where: { id: token.id as string },
