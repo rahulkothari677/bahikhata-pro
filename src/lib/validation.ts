@@ -56,19 +56,19 @@ export const updateTransactionSchema = z.object({
   payeePhone: z.string().max(20).nullable().optional(),
 })
 
-// Product create schema
+// Product create schema (🔒 V7 M4: enhanced with clearer error messages)
 export const createProductSchema = z.object({
   name: z.string().min(1, 'Product name is required').max(200),
   sku: z.string().max(100).nullable().optional(),
   hsn: z.string().max(20).nullable().optional(),
   category: z.string().max(200).nullable().optional(),
   unit: z.string().max(20).optional().default('pcs'),
-  purchasePrice: z.number().min(0).optional().default(0),
-  salePrice: z.number().min(0).optional().default(0),
-  mrp: z.number().min(0).nullable().optional(),
-  gstRate: z.number().min(0).max(100).optional().default(0),
-  openingStock: z.number().min(0).optional().default(0),
-  lowStockThreshold: z.number().min(0).optional().default(5),
+  purchasePrice: z.number().min(0, 'Purchase price cannot be negative').optional().default(0),
+  salePrice: z.number().min(0, 'Sale price cannot be negative').optional().default(0),
+  mrp: z.number().min(0, 'MRP cannot be negative').nullable().optional(),
+  gstRate: z.number().min(0, 'GST rate cannot be negative').max(100, 'GST rate cannot exceed 100%').optional().default(0),
+  openingStock: z.number().min(0, 'Opening stock cannot be negative').optional().default(0),
+  lowStockThreshold: z.number().min(0, 'Low stock threshold cannot be negative').optional().default(5),
   notes: z.string().max(5000).nullable().optional(),
 })
 
@@ -82,6 +82,24 @@ export const createPartySchema = z.object({
   address: z.string().max(1000).nullable().optional(),
   state: z.string().max(100).nullable().optional(),
   openingBalance: z.number().optional().default(0),
+})
+
+// 🔒 AUDIT FIX V7 M4: Product update schema — all fields optional, but
+// any field that IS provided must pass the same validation as create
+// (no negative prices, no empty name, etc.).
+export const updateProductSchema = z.object({
+  name: z.string().min(1, 'Product name cannot be empty').max(200).optional(),
+  sku: z.string().max(100).nullable().optional(),
+  hsn: z.string().max(20).nullable().optional(),
+  category: z.string().max(200).nullable().optional(),
+  unit: z.string().max(20).optional(),
+  purchasePrice: z.number().min(0, 'Purchase price cannot be negative').optional(),
+  salePrice: z.number().min(0, 'Sale price cannot be negative').optional(),
+  mrp: z.number().min(0, 'MRP cannot be negative').nullable().optional(),
+  gstRate: z.number().min(0, 'GST rate cannot be negative').max(100, 'GST rate cannot exceed 100%').optional(),
+  openingStock: z.number().min(0, 'Opening stock cannot be negative').optional(),
+  lowStockThreshold: z.number().min(0, 'Low stock threshold cannot be negative').optional(),
+  notes: z.string().max(5000).nullable().optional(),
 })
 
 /**

@@ -306,37 +306,57 @@ export async function GET(req: NextRequest) {
 
     // =====================================================================
     // PARTY REPORT — bounded by party count (always small per shop)
+    // 🔒 V7 M3: Balance is now CUMULATIVE (all-time), not range-only.
+    // Was: balance computed from date-filtered transactions → selecting
+    // "This Month" excluded last month's unpaid invoices from the balance.
+    // The party detail page (correct) showed all-time balance, so the two
+    // screens disagreed. Now: balance uses all-time aggregates (no date
+    // filter), activity columns (totalSales, totalPurchases) stay date-
+    // filtered for the period summary.
     // =====================================================================
     if (type === 'party') {
-      // Aggregates per party — groupBy on partyId, then join with party records
       const parties = await db.party.findMany({ where: { userId, deletedAt: null } })
 
-      // Aggregates per party per type — one groupBy, O(parties × types) rows
-      const partyAgg = await db.transaction.groupBy({
-        by: ['partyId', 'type'],
-        where: activeTransactionWhere(userId, {
-          partyId: { not: null },
-          date: { gte: from, lte: to },
+      // Two groupBy queries:
+      // 1. Period activity (date-filtered) — for totalSales/totalPurchases columns
+      // 2. All-time aggregates (no date filter) — for the cumulative balance
+      const [periodPartyAgg, allTimePartyAgg] = await Promise.all([
+        db.transaction.groupBy({
+          by: ['partyId', 'type'],
+          where: activeTransactionWhere(userId, {
+            partyId: { not: null },
+            date: { gte: from, lte: to },
+          }),
+          _sum: { totalAmount: true, paidAmount: true },
+          _count: true,
         }),
-        _sum: { totalAmount: true, paidAmount: true },
-        _count: true,
-      })
+        // 🔒 V7 M3: All-time aggregates for the correct cumulative balance
+        db.transaction.groupBy({
+          by: ['partyId', 'type'],
+          where: activeTransactionWhere(userId, {
+            partyId: { not: null },
+          }),
+          _sum: { totalAmount: true, paidAmount: true },
+        }),
+      ])
 
       const partyMap = new Map<string, {
         party: any;
         transactions: any[];
-        balance: number;
-        totalSales: number;
-        totalPurchases: number;
-        totalPaid: number;
-        totalReceived: number;
+        balance: number;           // cumulative (all-time)
+        periodActivity: number;    // net activity in the selected period
+        totalSales: number;        // period sales
+        totalPurchases: number;    // period purchases
+        totalPaid: number;         // period paid
+        totalReceived: number;     // period received
       }>()
 
       parties.forEach(p => {
         partyMap.set(p.id, {
           party: p,
           transactions: [],
-          balance: p.openingBalance,
+          balance: p.openingBalance,  // start with opening; all-time agg adds to this
+          periodActivity: 0,
           totalSales: 0,
           totalPurchases: 0,
           totalPaid: 0,
@@ -344,8 +364,22 @@ export async function GET(req: NextRequest) {
         })
       })
 
-      // Apply aggregates from the groupBy result
-      for (const row of partyAgg) {
+      // Apply ALL-TIME aggregates → cumulative balance
+      for (const row of allTimePartyAgg) {
+        if (!row.partyId) continue
+        const entry = partyMap.get(row.partyId)
+        if (!entry) continue
+        const totalAmount = row._sum.totalAmount || 0
+        const paidAmount = row._sum.paidAmount || 0
+        if (row.type === 'sale') {
+          entry.balance = roundMoney(entry.balance + (totalAmount - paidAmount))
+        } else if (row.type === 'purchase') {
+          entry.balance = roundMoney(entry.balance - (totalAmount - paidAmount))
+        }
+      }
+
+      // Apply PERIOD aggregates → activity columns
+      for (const row of periodPartyAgg) {
         if (!row.partyId) continue
         const entry = partyMap.get(row.partyId)
         if (!entry) continue
@@ -353,11 +387,11 @@ export async function GET(req: NextRequest) {
         const paidAmount = row._sum.paidAmount || 0
         if (row.type === 'sale') {
           entry.totalSales = roundMoney(entry.totalSales + totalAmount)
-          entry.balance = roundMoney(entry.balance + (totalAmount - paidAmount))
+          entry.periodActivity = roundMoney(entry.periodActivity + (totalAmount - paidAmount))
           entry.totalReceived = roundMoney(entry.totalReceived + paidAmount)
         } else if (row.type === 'purchase') {
           entry.totalPurchases = roundMoney(entry.totalPurchases + totalAmount)
-          entry.balance = roundMoney(entry.balance - (totalAmount - paidAmount))
+          entry.periodActivity = roundMoney(entry.periodActivity - (totalAmount - paidAmount))
           entry.totalPaid = roundMoney(entry.totalPaid + paidAmount)
         }
       }
@@ -366,8 +400,10 @@ export async function GET(req: NextRequest) {
         type: 'party',
         period: { from, to },
         truncated: false,
+        // 🔒 V7 M3: balance is now cumulative (matches party detail page).
+        // periodActivity is the net change in the selected period.
         parties: Array.from(partyMap.values())
-          .filter(p => p.totalSales > 0 || p.totalPurchases > 0 || p.party.openingBalance !== 0)
+          .filter(p => p.totalSales > 0 || p.totalPurchases > 0 || p.party.openingBalance !== 0 || p.balance !== 0)
           .sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance)),
       })
     }

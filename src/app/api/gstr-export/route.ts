@@ -47,6 +47,26 @@ export async function GET(req: NextRequest) {
     const from = fromStr ? new Date(fromStr) : new Date(now.getFullYear(), now.getMonth(), 1)
     const to = toStr ? new Date(toStr) : now
 
+    // 🔒 V7 M5: GSTR-1 is a MONTHLY return. The `fp` (filing period) field
+    // is derived from `from` only, so a multi-month range produces a
+    // mislabeled return. Was: silently exported with `fp` = first month.
+    // Now: reject multi-month ranges with a clear 400 error so the user
+    // selects a single month (GSTR-1's required granularity).
+    const monthDiff =
+      (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth())
+    // Allow same month (monthDiff === 0) and the natural "first of month to
+    // end of month" case. monthDiff === 0 means same month. We also allow
+    // monthDiff === 1 if `to` is the 1st of the next month (common pattern:
+    // from = July 1, to = Aug 1, which is effectively all of July).
+    const isSingleMonth = monthDiff === 0 || (monthDiff === 1 && to.getDate() === 1)
+    if (!isSingleMonth) {
+      return NextResponse.json({
+        error: 'GSTR-1 export requires a single-month period',
+        message: `GSTR-1 is a monthly return. The selected range spans ${monthDiff + 1} months (${from.toLocaleDateString('en-IN')} to ${to.toLocaleDateString('en-IN')}). Please select a single month and try again.`,
+        hint: 'Use the date picker to select "This Month" or a specific month range.',
+      }, { status: 400 })
+    }
+
     // Defensive cap: 10K invoices per monthly return is a sane upper bound
     // (GSTN's own GSTR-1 portal caps a single upload at ~50K lines). If a
     // shop exceeds this, the user must split the period.

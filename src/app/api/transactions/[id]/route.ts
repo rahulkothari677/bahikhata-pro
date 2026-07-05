@@ -12,8 +12,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const { id } = await params
+    // 🔒 V7 L1: Filter deletedAt on GET so a soft-deleted transaction
+    // returns 404 (not the deleted record). Was: returned the deleted
+    // transaction by ID — viewing/editing a deleted txn would re-apply
+    // stock without un-deleting it.
     const transaction = await db.transaction.findFirst({
-      where: { id, userId },
+      where: { id, userId, deletedAt: null },
       include: {
         items: true,
         party: true,
@@ -36,8 +40,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const { id } = await params
-    // Verify ownership
-    const existing = await db.transaction.findFirst({ where: { id, userId } })
+    // Verify ownership + not soft-deleted (🔒 V7 L1)
+    const existing = await db.transaction.findFirst({ where: { id, userId, deletedAt: null } })
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     const body = await req.json()

@@ -11,9 +11,9 @@ export async function POST(req: NextRequest) {
 
     const { transactionId } = await req.json()
 
-    // Verify transaction belongs to this user
+    // Verify transaction belongs to this user + not soft-deleted (🔒 V7 L2)
     const transaction = await db.transaction.findFirst({
-      where: { id: transactionId, userId },
+      where: { id: transactionId, userId, deletedAt: null },
       include: { items: true, party: true },
     })
 

@@ -54,9 +54,10 @@ export async function GET() {
       db.user.count({ where: { role: 'owner' } }),
       db.user.count({ where: { role: 'staff' } }),
 
-      // Transaction stats
-      db.transaction.count(),
-      db.transaction.aggregate({ _sum: { totalAmount: true } }),
+      // Transaction stats (🔒 V7 L4: filter soft-deleted so admin metrics
+      // aren't inflated by deleted transactions)
+      db.transaction.count({ where: { deletedAt: null } }),
+      db.transaction.aggregate({ where: { deletedAt: null }, _sum: { totalAmount: true } }),
       db.product.count(),
       db.party.count(),
 

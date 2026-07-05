@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
 import { withCache } from '@/lib/cache'
 import { checkEntityLimit } from '@/lib/usage-limits'
+import { validateBody, createProductSchema, updateProductSchema } from '@/lib/validation'
 
 export async function GET() {
   try {
@@ -59,21 +60,32 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json()
+
+    // 🔒 AUDIT FIX V7 M4: Validate with zod. Was: parseFloat(body.x) || 0
+    // with no validation → negative prices accepted, missing name → 500.
+    // Now: zod rejects negative prices/stock/GST and missing name with 400.
+    const validation = validateBody(createProductSchema, body)
+    if (!validation.success) {
+      return NextResponse.json({ error: 'Validation failed', detail: validation.error }, { status: 400 })
+    }
+    const v = validation.data
+
     const product = await db.product.create({
       data: {
         userId,
-        name: body.name,
-        sku: body.sku || null,
-        hsn: body.hsn || null,
-        category: body.category || null,
-        unit: body.unit || 'pcs',
-        purchasePrice: parseFloat(body.purchasePrice) || 0,
-        salePrice: parseFloat(body.salePrice) || 0,
-        mrp: body.mrp ? parseFloat(body.mrp) : null,
-        gstRate: parseFloat(body.gstRate) || 0,
-        openingStock: parseFloat(body.openingStock) || 0,
-        lowStockThreshold: parseFloat(body.lowStockThreshold) || 5,
-        notes: body.notes || null,
+        name: v.name,
+        sku: v.sku || null,
+        hsn: v.hsn || null,
+        category: v.category || null,
+        unit: v.unit || 'pcs',
+        purchasePrice: v.purchasePrice,
+        salePrice: v.salePrice,
+        mrp: v.mrp ?? null,
+        gstRate: v.gstRate,
+        openingStock: v.openingStock,
+        currentStock: v.openingStock,  // currentStock starts at openingStock
+        lowStockThreshold: v.lowStockThreshold,
+        notes: v.notes || null,
       },
     })
     return NextResponse.json({ product })
@@ -97,22 +109,37 @@ export async function PUT(req: NextRequest) {
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     const body = await req.json()
+
+    // 🔒 AUDIT FIX V7 M4: Validate with zod on update too.
+    const validation = validateBody(updateProductSchema, body)
+    if (!validation.success) {
+      return NextResponse.json({ error: 'Validation failed', detail: validation.error }, { status: 400 })
+    }
+    const v = validation.data
+
+    // Only update fields that were actually provided (zod makes them optional)
+    const updateData: any = {}
+    if (v.name !== undefined) updateData.name = v.name
+    if (v.sku !== undefined) updateData.sku = v.sku
+    if (v.hsn !== undefined) updateData.hsn = v.hsn
+    if (v.category !== undefined) updateData.category = v.category
+    if (v.unit !== undefined) updateData.unit = v.unit
+    if (v.purchasePrice !== undefined) updateData.purchasePrice = v.purchasePrice
+    if (v.salePrice !== undefined) updateData.salePrice = v.salePrice
+    if (v.mrp !== undefined) updateData.mrp = v.mrp
+    if (v.gstRate !== undefined) updateData.gstRate = v.gstRate
+    if (v.openingStock !== undefined) {
+      updateData.openingStock = v.openingStock
+      // If openingStock changes, adjust currentStock by the same delta
+      const delta = v.openingStock - existing.openingStock
+      updateData.currentStock = { increment: delta }
+    }
+    if (v.lowStockThreshold !== undefined) updateData.lowStockThreshold = v.lowStockThreshold
+    if (v.notes !== undefined) updateData.notes = v.notes
+
     const product = await db.product.update({
       where: { id },
-      data: {
-        name: body.name,
-        sku: body.sku || null,
-        hsn: body.hsn || null,
-        category: body.category || null,
-        unit: body.unit || 'pcs',
-        purchasePrice: parseFloat(body.purchasePrice) || 0,
-        salePrice: parseFloat(body.salePrice) || 0,
-        mrp: body.mrp ? parseFloat(body.mrp) : null,
-        gstRate: parseFloat(body.gstRate) || 0,
-        openingStock: parseFloat(body.openingStock) || 0,
-        lowStockThreshold: parseFloat(body.lowStockThreshold) || 5,
-        notes: body.notes || null,
-      },
+      data: updateData,
     })
     return NextResponse.json({ product })
   } catch (error) {
