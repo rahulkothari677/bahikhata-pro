@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { db, withConnectionRetry } from '@/lib/db'
 import { Prisma } from '@prisma/client'
 import { getAuthUserId } from '@/lib/get-auth'
 import { withCache } from '@/lib/cache'
@@ -89,32 +89,35 @@ export async function GET(req: NextRequest) {
     const effectiveRangeEnd = rangeTo > now ? rangeTo : now
 
     // === BATCH 1: Static data (4 small queries — wakes the DB if cold) ===
-    const [recentTransactions, allProducts, allParties, setting] = await Promise.all([
-      db.transaction.findMany({
-        where: activeTransactionWhere(userId),
-        include: { items: true, party: true },
-        orderBy: { date: 'desc' },
-        take: 8,
-      }),
-      db.product.findMany({
-        where: { userId },
-        select: {
-          id: true, name: true, category: true,
-          purchasePrice: true, salePrice: true,
-          currentStock: true, lowStockThreshold: true,
-        },
-      }),
-      db.party.findMany({
-        where: { userId, deletedAt: null },
-        select: { id: true, openingBalance: true },
-      }),
-      db.setting.findUnique({ where: { userId } }),
-    ])
+    // 🔒 V8.1: Wrapped in withConnectionRetry — if the DB is cold (Neon
+    // scale-to-zero), the first query may timeout. Retrying after 2s gives
+    // Neon time to wake up.
+    const [recentTransactions, allProducts, allParties, setting] = await withConnectionRetry(() =>
+      Promise.all([
+        db.transaction.findMany({
+          where: activeTransactionWhere(userId),
+          include: { items: true, party: true },
+          orderBy: { date: 'desc' },
+          take: 8,
+        }),
+        db.product.findMany({
+          where: { userId },
+          select: {
+            id: true, name: true, category: true,
+            purchasePrice: true, salePrice: true,
+            currentStock: true, lowStockThreshold: true,
+          },
+        }),
+        db.party.findMany({
+          where: { userId, deletedAt: null },
+          select: { id: true, openingBalance: true },
+        }),
+        db.setting.findUnique({ where: { userId } }),
+      ])
+    )
 
     // === BATCH 2: ALL remaining queries in ONE Promise.all (DB is warm) ===
-    // These 6 queries are independent of each other. On a warm DB, each takes
-    // ~200ms. With connection_limit=1, they serialize through 1 connection:
-    // 6 × 200ms = ~1.2s total. Max wait for any query: ~1s. No timeout.
+    // 🔒 V8.1: Also wrapped in withConnectionRetry for safety.
     const [
       kpiRows,
       receivablePayable,
@@ -122,7 +125,7 @@ export async function GET(req: NextRequest) {
       salesTrendRows,
       topProductsRows,
       categoryRows,
-    ] = await Promise.all([
+    ] = await withConnectionRetry(() => Promise.all([
       // 1. ALL KPIs + GST in one raw SQL (SUM(CASE WHEN ...) conditional aggregation)
       db.$queryRaw<Array<{
         today_revenue: string; today_profit: string; today_count: bigint;
@@ -224,7 +227,7 @@ export async function GET(req: NextRequest) {
         GROUP BY COALESCE(p."category", 'Other')
         ORDER BY "totalValue" DESC
       `,
-    ])
+    ]))
 
     // === Process Batch 2 results (all in JS — no more DB queries) ===
 
