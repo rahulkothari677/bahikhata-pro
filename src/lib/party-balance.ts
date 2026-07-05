@@ -127,13 +127,34 @@ export async function getReceivablePayable(
     transactionCount: number
   }>
 }> {
-  // 1. Fetch all active parties (id + openingBalance)
-  const parties = await db.party.findMany({
-    where: { userId, deletedAt: null },
-    select: { id: true, openingBalance: true },
-  })
+  // 🔒 V7.5 PERFORMANCE: Was running 4 sequential queries (1 findMany + 3
+  // groupBy). Now uses ONE raw SQL query that joins Party + Transaction and
+  // computes everything in a single pass. This is 1 round-trip instead of 4.
 
-  if (parties.length === 0) {
+  const rows = await db.$queryRaw<Array<{
+    partyId: string
+    openingBalance: string
+    salesOutstanding: string
+    purchaseOutstanding: string
+    transactionCount: bigint
+  }>>`
+    SELECT
+      p."id" AS "partyId",
+      p."openingBalance"::numeric AS "openingBalance",
+      COALESCE(SUM(CASE WHEN t."type" = 'sale' THEN (t."totalAmount" - t."paidAmount")::numeric ELSE 0 END), 0) AS "salesOutstanding",
+      COALESCE(SUM(CASE WHEN t."type" = 'purchase' THEN (t."totalAmount" - t."paidAmount")::numeric ELSE 0 END), 0) AS "purchaseOutstanding",
+      COUNT(CASE WHEN t."type" IN ('sale', 'purchase') THEN 1 END) AS "transactionCount"
+    FROM "Party" p
+    LEFT JOIN "Transaction" t
+      ON t."partyId" = p."id"
+      AND t."deletedAt" IS NULL
+      AND t."userId" = ${userId}
+    WHERE p."userId" = ${userId}
+      AND p."deletedAt" IS NULL
+    GROUP BY p."id", p."openingBalance"
+  `
+
+  if (rows.length === 0) {
     return {
       totalReceivable: 0,
       totalPayable: 0,
@@ -141,41 +162,6 @@ export async function getReceivablePayable(
     }
   }
 
-  const partyIds = parties.map(p => p.id)
-  const partyOpeningMap = new Map(parties.map(p => [p.id, p.openingBalance]))
-
-  // 2. Aggregate sales + purchases + counts.
-  // 🔒 V7.2: Run SEQUENTIALLY (not Promise.all) to avoid Neon connection
-  // pool exhaustion. With connection_limit=1, parallel queries time out
-  // waiting for the single connection. Sequential is slightly slower but
-  // reliable. The parties fetch already completed, so the connection is free.
-  const salesAgg = await db.transaction.groupBy({
-    by: ['partyId'],
-    where: { userId, partyId: { in: partyIds }, type: 'sale', deletedAt: null },
-    _sum: { totalAmount: true, paidAmount: true },
-  })
-  const purchaseAgg = await db.transaction.groupBy({
-    by: ['partyId'],
-    where: { userId, partyId: { in: partyIds }, type: 'purchase', deletedAt: null },
-    _sum: { totalAmount: true, paidAmount: true },
-  })
-  const countAgg = await db.transaction.groupBy({
-    by: ['partyId'],
-    where: {
-      userId,
-      partyId: { in: partyIds },
-      OR: [{ type: 'sale' }, { type: 'purchase' }],
-      deletedAt: null,
-    },
-    _count: { id: true },
-  })
-
-  // Build lookup maps
-  const salesMap = new Map(salesAgg.map(s => [s.partyId, s._sum]))
-  const purchaseMap = new Map(purchaseAgg.map(p => [p.partyId, p._sum]))
-  const countMap = new Map(countAgg.map(c => [c.partyId, c._count.id]))
-
-  // 3. Compute balance per party
   const partyBalances = new Map<string, {
     balance: number
     salesOutstanding: number
@@ -186,21 +172,19 @@ export async function getReceivablePayable(
   let totalReceivable = 0
   let totalPayable = 0
 
-  for (const party of parties) {
-    const salesSum = salesMap.get(party.id)
-    const purchaseSum = purchaseMap.get(party.id)
-    const salesOutstanding = roundMoney((salesSum?.totalAmount || 0) - (salesSum?.paidAmount || 0))
-    const purchaseOutstanding = roundMoney((purchaseSum?.totalAmount || 0) - (purchaseSum?.paidAmount || 0))
-    const balance = roundMoney(party.openingBalance + salesOutstanding - purchaseOutstanding)
+  for (const row of rows) {
+    const openingBalance = roundMoney(Number(row.openingBalance))
+    const salesOutstanding = roundMoney(Number(row.salesOutstanding))
+    const purchaseOutstanding = roundMoney(Number(row.purchaseOutstanding))
+    const balance = roundMoney(openingBalance + salesOutstanding - purchaseOutstanding)
 
-    partyBalances.set(party.id, {
+    partyBalances.set(row.partyId, {
       balance,
       salesOutstanding,
       purchaseOutstanding,
-      transactionCount: countMap.get(party.id) || 0,
+      transactionCount: Number(row.transactionCount),
     })
 
-    // 4. Split into receivable (positive) vs payable (negative)
     if (balance > 0) {
       totalReceivable = roundMoney(totalReceivable + balance)
     } else if (balance < 0) {
