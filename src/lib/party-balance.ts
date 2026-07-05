@@ -144,29 +144,31 @@ export async function getReceivablePayable(
   const partyIds = parties.map(p => p.id)
   const partyOpeningMap = new Map(parties.map(p => [p.id, p.openingBalance]))
 
-  // 2. Aggregate sales + purchases + counts in parallel (ALL filtered deletedAt: null)
-  const [salesAgg, purchaseAgg, countAgg] = await Promise.all([
-    db.transaction.groupBy({
-      by: ['partyId'],
-      where: { userId, partyId: { in: partyIds }, type: 'sale', deletedAt: null },
-      _sum: { totalAmount: true, paidAmount: true },
-    }),
-    db.transaction.groupBy({
-      by: ['partyId'],
-      where: { userId, partyId: { in: partyIds }, type: 'purchase', deletedAt: null },
-      _sum: { totalAmount: true, paidAmount: true },
-    }),
-    db.transaction.groupBy({
-      by: ['partyId'],
-      where: {
-        userId,
-        partyId: { in: partyIds },
-        OR: [{ type: 'sale' }, { type: 'purchase' }],
-        deletedAt: null,
-      },
-      _count: { id: true },
-    }),
-  ])
+  // 2. Aggregate sales + purchases + counts.
+  // 🔒 V7.2: Run SEQUENTIALLY (not Promise.all) to avoid Neon connection
+  // pool exhaustion. With connection_limit=1, parallel queries time out
+  // waiting for the single connection. Sequential is slightly slower but
+  // reliable. The parties fetch already completed, so the connection is free.
+  const salesAgg = await db.transaction.groupBy({
+    by: ['partyId'],
+    where: { userId, partyId: { in: partyIds }, type: 'sale', deletedAt: null },
+    _sum: { totalAmount: true, paidAmount: true },
+  })
+  const purchaseAgg = await db.transaction.groupBy({
+    by: ['partyId'],
+    where: { userId, partyId: { in: partyIds }, type: 'purchase', deletedAt: null },
+    _sum: { totalAmount: true, paidAmount: true },
+  })
+  const countAgg = await db.transaction.groupBy({
+    by: ['partyId'],
+    where: {
+      userId,
+      partyId: { in: partyIds },
+      OR: [{ type: 'sale' }, { type: 'purchase' }],
+      deletedAt: null,
+    },
+    _count: { id: true },
+  })
 
   // Build lookup maps
   const salesMap = new Map(salesAgg.map(s => [s.partyId, s._sum]))

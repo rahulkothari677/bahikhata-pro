@@ -52,18 +52,23 @@ export async function GET(req: NextRequest) {
     const prevRangeTo = new Date(rangeFrom.getTime() - 1)
 
     // Parallel batch 1: bounded fetches + KPI aggregates (all SQL-side, O(1) memory each)
-    const [
-      recentTransactions,
-      allProducts,
-      allParties,
-      setting,
-      todayKpiAgg,
-      rangeKpiAgg,
-      prevRangeKpiAgg,
-      saleGstAgg,
-      purchaseGstAgg,
-      rangePaymentAgg,
-    ] = await Promise.all([
+    // 🔒 V7.2 BUG FIX: Connection pool exhaustion. Was running 10 queries in
+    // a single Promise.all, but Neon serverless uses connection_limit=1
+    // (correct for serverless — each function instance holds 1 connection).
+    // 10 parallel queries competing for 1 connection → "Timed out fetching
+    // a new connection from the connection pool" → HTTP 500.
+    //
+    // Now: run queries in SEQUENTIAL BATCHES of 2-3 at a time. Each batch
+    // waits for the previous to complete before starting. This keeps the
+    // connection pool happy (never more than 2-3 queries in flight) while
+    // still using parallelism within each batch for speed.
+    //
+    // Batch 1: Static data (recent txns, products, parties, setting) — 4 queries
+    // Batch 2: KPI aggregates (today, range, prev-range) — 3 queries
+    // Batch 3: GST + payment mode aggregates — 3 queries
+
+    // === BATCH 1: Static data ===
+    const [recentTransactions, allProducts, allParties, setting] = await Promise.all([
       // Always fetch latest 8 transactions (for "recent transactions" widget).
       // Bounded at 8 rows — never grows with scale.
       db.transaction.findMany({
@@ -86,18 +91,15 @@ export async function GET(req: NextRequest) {
         },
       }),
       // Parties: only fetch id for the partyCount KPI.
-      // 🔒 V7 H1: Was fetching only openingBalance and computing receivable/
-      // payable from it (WRONG — ignored all credit sales/purchases). Now
-      // we use the shared getReceivablePayable() helper which computes the
-      // correct balance from openingBalance + sales - purchases (filtered
-      // deletedAt: null). This fetch is just for the count.
       db.party.findMany({
         where: { userId, deletedAt: null },
         select: { id: true },
       }),
       db.setting.findUnique({ where: { userId } }),
+    ])
 
-      // === KPIs via SQL groupBy (O(1) memory, never loads rows) ===
+    // === BATCH 2: KPI aggregates (today / range / prev-range) ===
+    const [todayKpiAgg, rangeKpiAgg, prevRangeKpiAgg] = await Promise.all([
       // Today's KPIs — grouped by type, filtered to today + non-deleted.
       db.transaction.groupBy({
         by: ['type'],
@@ -125,8 +127,11 @@ export async function GET(req: NextRequest) {
         _sum: { totalAmount: true, grossProfit: true },
         _count: true,
       }),
+    ])
 
-      // === GST summary via SQL aggregate (sum of cgst/sgst/igst for sales + purchases) ===
+    // === BATCH 3: GST + payment mode aggregates ===
+    const [saleGstAgg, purchaseGstAgg, rangePaymentAgg] = await Promise.all([
+      // GST summary — sales
       db.transaction.aggregate({
         where: activeTransactionWhere(userId, {
           type: 'sale',
@@ -134,6 +139,7 @@ export async function GET(req: NextRequest) {
         }),
         _sum: { subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true },
       }),
+      // GST summary — purchases (input tax)
       db.transaction.aggregate({
         where: activeTransactionWhere(userId, {
           type: 'purchase',
@@ -141,8 +147,7 @@ export async function GET(req: NextRequest) {
         }),
         _sum: { cgst: true, sgst: true, igst: true },
       }),
-
-      // === Payment mode split via groupBy (O(1) memory) ===
+      // === Payment mode split via groupBy ===
       db.transaction.groupBy({
         by: ['paymentMode'],
         where: activeTransactionWhere(userId, {
