@@ -1616,3 +1616,36 @@ Stage Summary:
 - Founder tasks remaining: (1) configure Resend env vars for password reset emails, (2) address MG in bahikhata-admin repo, (3) verify V5 fixes in production
 - All previously-deferred items remain deferred with auditor's agreement (AI-7, P6, P7-P11, N10/P4, CSP, Float→paise, server-side PDF, cursor pagination, table partitioning)
 - Honest acknowledgment: my V4 report claimed HA was done when it wasn't — should have verified by re-reading the file before claiming. MC (dead kpiAgg) was my own perf "fix" that left dead code behind — should have caught myself. Will be more careful in future reports: every claim backed by a fresh grep before writing.
+
+---
+Task ID: bahikhata-v6-audit-response
+Agent: main
+Task: V6 Verification Audit response — fix CR1 (critical SQL syntax error) + SC1 (reports/GST SQL aggregation) + SC3 (dashboard SQL aggregation) + PP1/PP5/PP6 + UX Undo-on-delete.
+
+Work Log:
+- Read /home/z/my-project/upload/BahiKhata-Audit-V6-Verification.md — auditor verified V5 work, found 1 critical runtime bug (CR1) + 4 scale items (SC1-SC4) + polish items.
+- CR1 (CRITICAL): SQL syntax error SUM ROUND(...) → SUM(ROUND(...)) in parties/[id]/route.ts line 101. The party profile page 500'd for every user, every load. Build passed because raw $queryRaw strings aren't type-checked by tsc. Verified the bug, fixed (one char), grepped entire src/ for other FN FN( patterns — none found.
+- PP6: New raw-sql-smoke.test.ts (13 tests) extracts $queryRaw strings from 5 route files and validates: (a) no 'FN FN(' missing-paren pattern (CR1 class), (b) balanced parentheses. Verified the test catches the original CR1 bug (2 tests fail without the fix, all pass with it). Static syntax check, not full integration test — founder should add integration tests that hit real endpoints.
+- SC3: Rewrote dashboard/route.ts to use SQL aggregation. KPIs via db.transaction.groupBy by type (today/range/prev-range). Sales trend via raw SQL date_trunc. Top products via raw SQL GROUP BY productName. Category breakdown via raw SQL JOIN Product GROUP BY category. Payment mode via groupBy. GST summary via aggregate. Constant memory regardless of range/volume. The 'rangeTransactions' findMany that loaded transactions-with-items into memory is gone.
+- SC1: Rewrote reports/route.ts to use pure SQL aggregation. P&L uses groupBy by type + category. GST uses aggregate + raw SQL slab grouping. No row cap, no truncation — all 4 report types return truncated: false. GSTR export still needs invoice-level rows (GST portal expects per-invoice data) but computes per-invoice GST via SQL GROUP BY (transactionId, gstRate) — much smaller than loading all items. 10K invoice cap remains as defensive safety net with truncated flag.
+- PP1: UI hard-blocks export when truncated=true. Reports page shows loud rose warning banner: 'This report is INCOMPLETE — do not file or rely on these numbers'. CSV export button returns error toast instead of downloading. GSTR export checks JSON truncated flag before downloading CSV — if truncated, hard-blocks with clear message to split the period.
+- PP5: /api/feature-flags now returns passwordResetEmailEnabled (public, not secret). PasswordReset.tsx fetches this flag and shows honest amber 'Email sending is not yet configured. Email support@bahikhata.app with your registered email' message instead of pretending the email was sent. Toast says 'Password reset request logged' instead of 'sent to your email'.
+- UX: Undo on delete (5-sec toast). New POST /api/transactions/[id]/restore endpoint sets deletedAt back to null + re-applies stock impact atomically in $transaction. TransactionDetail and Ledger show sonner toast with 'Undo' button for 5 seconds after delete. Only for online deletes. Also fixed Ledger.tsx using the deprecated /api/transactions?id= path (returns 410) — now uses /api/transactions/[id] correctly.
+- SC2 + SC4: Noted for founder (separate bahikhata-admin repo, out of scope here). SC2: 13 admin list endpoints need pagination + caps. SC4: admin SQL console should fail-closed if READONLY_DATABASE_URL unset, plus create real read-only Postgres role.
+- Verified: tsc 0 new errors (5 pre-existing in validation.test.ts), next build ✓ Compiled successfully in 41s, jest 40/40 pass (money 27 + raw-sql-smoke 13).
+- Committed as 5074b3f (11 files changed, 1131 insertions, 402 deletions, 2 new files).
+- Pushed to origin/main — Vercel auto-deploying.
+- Wrote docs/Auditor-Response-V6.md — comprehensive response with file:line evidence + grep verification commands.
+
+Stage Summary:
+- 1 of 1 CRITICAL bug fixed: CR1 (party profile SQL syntax error)
+- 2 of 2 main-app scale items fixed: SC1 (reports/GST SQL aggregation), SC3 (dashboard SQL aggregation)
+- 2 of 2 admin-repo scale items noted for founder: SC2 (admin list pagination), SC4 (admin SQL console fail-closed)
+- 3 of 3 polish items fixed: PP1 (UI hard-block truncated), PP5 (login screen honesty), PP6 (raw SQL smoke test)
+- 3 of 3 polish items noted as low priority: PP2 (type annotation), PP3 (first/last date queries), PP4 (token cleanup cron)
+- 1 of 1 UX items implemented: Undo on delete (5-sec toast)
+- 9 UX items deferred to V7 with reasoning: voided trail, frequent-items, big keypad, per-entry offline status, WhatsApp reminders, inline badges, language toggle prominence, per-card skeletons, hover prefetch
+- 2 new files: raw-sql-smoke.test.ts, transactions/[id]/restore/route.ts
+- 9 files modified
+- Founder tasks remaining: (1) verify V6 fixes in production, (2) SC2 in admin repo, (3) SC4 in admin repo, (4) configure Resend (still pending from V5), (5) optionally add integration tests
+- Honest acknowledgment: CR1 was a one-char bug that crashed a core screen for every user. The V5 MB fix introduced it; the V5 report pasted the broken SQL and didn't notice. 'Build passes' ≠ 'works' — raw SQL isn't type-checked. Smoke test now in place to prevent recurrence. Will be more careful.
