@@ -320,7 +320,7 @@ model Referral {
   createdAt   DateTime  @default(now())
   completedAt DateTime?
   referrer    User      @relation("Referral_referrerIdToUser", fields: [referrerId], references: [id], onDelete: Cascade)
-  referred    User?     @relation("Referral_referredIdToUser", fields: [referredId], references: [id])
+  referred    User?     @relation("Referral_referredIdToUser", fields: [referredId], references: [id], onDelete: SetNull)
 
   @@index([referredId])
   @@index([referrerId, status])

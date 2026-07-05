@@ -17,13 +17,11 @@ import { offlineFetch } from '@/lib/offline-fetch'
  * 3. User clicks the link in email → goes to /reset-password?token=xxx
  * 4. User enters new password → /api/auth/reset-confirm updates it
  *
- * NOTE: For now, since we don't have email sending set up, this uses a
- * "dev mode" approach: the reset link is shown directly in the toast
- * (NOT emailed). When you add email service (Resend, SendGrid, etc.),
- * we'll switch to actually emailing the link.
- *
- * TODO: Integrate Resend (https://resend.com) for actual email sending.
- * Free tier: 100 emails/day, perfect for password resets.
+ * 🔒 AUDIT FIX V5 HB: Email IS now sent in production when RESEND_API_KEY is
+ * configured. In dev mode (ALLOW_DEV_RESET=true), the reset link is returned
+ * in the response so it can be shown in the UI for testing. The server logs
+ * a founder alert if no provider is configured so the founder can manually
+ * help the user.
  */
 
 interface PasswordResetProps {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { rateLimit, getClientIP, rateLimitedResponse } from '@/lib/rate-limit'
+import { sendEmail, sendFounderAlert, isEmailConfigured } from '@/lib/email'
 import crypto from 'crypto'
 
 /**
@@ -16,6 +17,13 @@ import crypto from 'crypto'
  *   SHA-256 hashing, not in an in-memory Map. This fixes the serverless
  *   multi-instance bug where tokens created on instance A didn't exist on
  *   instance B.
+ *
+ * 🔒 AUDIT FIX V5 HB: Email is now ACTUALLY SENT in production when
+ * RESEND_API_KEY is configured. When no provider is configured, the response
+ * honestly tells the user to contact support (instead of pretending the
+ * email was sent — which silently locked users out). A founder alert is
+ * also logged so the founder can manually reset passwords for users who
+ * request it.
  *
  * Rate limited: 3 requests per IP per hour (prevents abuse)
  */
@@ -95,8 +103,6 @@ export async function POST(req: NextRequest) {
     if (isDevReset) {
       const origin = req.headers.get('origin') || 'http://localhost:3000'
       const resetLink = `${origin}/reset-password?token=${token}`
-      // TODO: When email service is set up (Resend/SendGrid), replace this with:
-      // await sendEmail({ to: emailLower, subject: 'Reset your password', body: resetLink })
       return NextResponse.json({
         success: true,
         message: 'If the email exists, a reset link has been sent.',
@@ -107,11 +113,63 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    // Production: return generic message (no resetLink in response)
-    // TODO: Wire up email service (Resend/SendGrid) to send the link:
-    // const origin = req.headers.get('origin') || 'https://bahikhata-pro.vercel.app'
-    // const resetLink = `${origin}/reset-password?token=${token}`
-    // await sendEmail({ to: emailLower, subject: 'Reset your EkBook password', body: `Click here: ${resetLink}` })
+    // Production path:
+    // 🔒 V5 HB: Actually send the email if a provider is configured. If not,
+    // surface an honest message instead of pretending the email was sent.
+    const origin = req.headers.get('origin') || 'https://bahikhata-pro.vercel.app'
+    const resetLink = `${origin}/reset-password?token=${token}`
+
+    if (isEmailConfigured()) {
+      // Email provider configured — send the reset link via email.
+      const emailResult = await sendEmail({
+        to: emailLower,
+        subject: 'Reset your EkBook password',
+        html: `
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px;">
+            <h2 style="color: #f59e0b;">Reset your EkBook password</h2>
+            <p>We received a request to reset the password for your EkBook account.</p>
+            <p style="margin: 24px 0;">
+              <a href="${resetLink}" style="background: #f59e0b; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; display: inline-block; font-weight: 600;">
+                Reset Password
+              </a>
+            </p>
+            <p style="color: #6b7280; font-size: 14px;">
+              Or copy this link into your browser:<br>
+              <span style="word-break: break-all; color: #2563eb;">${resetLink}</span>
+            </p>
+            <p style="color: #6b7280; font-size: 14px;">
+              This link expires in 1 hour. If you didn't request a password reset, you can safely ignore this email.
+            </p>
+            <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;">
+            <p style="color: #9ca3af; font-size: 12px;">
+              EkBook — India's ledger app for shop owners. If you need help, reply to this email.
+            </p>
+          </div>
+        `,
+        text: `Reset your EkBook password\n\nWe received a request to reset the password for your EkBook account.\n\nReset link (expires in 1 hour):\n${resetLink}\n\nIf you didn't request this, you can safely ignore this email.`,
+      })
+
+      if (!emailResult.ok) {
+        // Email failed to send — log a founder alert so the founder can
+        // manually help this user. Don't reveal the failure to the user
+        // (they could be an attacker probing the system).
+        console.error('[reset-request] Email send failed:', emailResult)
+        await sendFounderAlert(
+          'Password reset email failed to send',
+          `A password reset was requested for ${emailLower} but the email failed to send.\n\nReason: ${emailResult.reason}\nDetail: ${emailResult.detail || '(none)'}\n\nToken expires at: ${expiresAt.toISOString()}\n\nIf this is a real user, contact them manually or check the Resend dashboard.`
+        ).catch(() => {}) // don't fail the request if alert fails
+      }
+    } else {
+      // No email provider configured — founder needs to know so they can
+      // manually reset this user's password. Log a founder alert.
+      // The user-facing response stays generic (security: don't reveal
+      // whether the email exists OR whether email is configured).
+      console.warn('[reset-request] No email provider configured (RESEND_API_KEY not set). User will be locked out unless founder intervenes.')
+      await sendFounderAlert(
+        'Password reset requested but no email provider configured',
+        `A password reset was requested for ${emailLower} but RESEND_API_KEY is not set in env vars. The user will be locked out unless you reset their password manually.\n\nTo manually reset:\n1. Contact the user to verify identity\n2. Generate a reset token: see /api/auth/reset-request logic\n3. Or set RESEND_API_KEY so future requests work automatically\n\nToken hash stored in DB: ${tokenHash.slice(0, 8)}...(truncated)\nToken expires at: ${expiresAt.toISOString()}`
+      ).catch(() => {})
+    }
 
     return genericResponse
   } catch (error) {

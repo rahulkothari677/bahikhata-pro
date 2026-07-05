@@ -796,10 +796,46 @@ export function BillScanner() {
               </div>
             </CardHeader>
             <CardContent className="px-2">
+              {/* 🔒 AUDIT FIX V5 AI-5: Low-confidence items summary banner.
+                  Counts items with confidence < 0.6 and shows a visible
+                  "N items need review" banner so the user knows to check them. */}
+              {(() => {
+                const lowConfidenceCount = (scanned.items || []).filter(
+                  (it: any) => typeof it.confidence === 'number' && it.confidence < 0.6
+                ).length
+                if (lowConfidenceCount === 0) return null
+                return (
+                  <div className="mb-2 px-3 py-2 rounded-lg bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-300 text-xs flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-rose-500 flex-shrink-0" />
+                    <span>
+                      <strong>{lowConfidenceCount}</strong> item{lowConfidenceCount === 1 ? '' : 's'} marked <strong>CHECK</strong> — the AI was unsure about these. Please verify the highlighted rows before saving.
+                    </span>
+                  </div>
+                )
+              })()}
               <div className="space-y-1">
                 {scanned.items.map((item: any, i: number) => {
+                  // 🔒 AUDIT FIX V5 AI-5: Highlight low-confidence items.
+                  // Auditor: "Surface low-confidence items (<0.6) in the review
+                  // UI highlighted, so the user checks exactly the risky lines
+                  // instead of the whole bill. Big trust win with zero extra AI cost."
+                  // We highlight the entire row with an amber/rose background +
+                  // a "Check this" badge, so the user knows to verify that item.
+                  const itemConfidence = typeof item.confidence === 'number' ? item.confidence : 0.8
+                  const isLowConfidence = itemConfidence < 0.6
+                  const isMediumConfidence = itemConfidence >= 0.6 && itemConfidence < 0.8
                   return (
-                    <div key={i} className="group rounded-lg bg-muted/20 hover:bg-muted/40 transition px-3 py-2">
+                    <div
+                      key={i}
+                      className={cn(
+                        'group rounded-lg transition px-3 py-2 border-l-2',
+                        isLowConfidence
+                          ? 'bg-rose-50 dark:bg-rose-950/30 border-l-rose-500'
+                          : isMediumConfidence
+                            ? 'bg-amber-50 dark:bg-amber-950/30 border-l-amber-500'
+                            : 'bg-muted/20 hover:bg-muted/40 border-l-transparent'
+                      )}
+                    >
                       {/* Row 1: Number + Name (full width) + Total + Delete */}
                       <div className="flex items-center gap-2 mb-1">
                         <span className="font-bold text-muted-foreground flex-shrink-0 w-5 h-5 rounded-full bg-primary/10 text-primary text-[10px] flex items-center justify-center">
@@ -808,18 +844,33 @@ export function BillScanner() {
                         <input
                           value={item.name}
                           onChange={(e) => updateItem(i, 'name', e.target.value)}
-                          className="flex-1 min-w-0 bg-transparent border border-transparent rounded font-medium text-sm transition px-1 py-0.5 focus:bg-background focus:border-border focus:px-2"
+                          className={cn(
+                            'flex-1 min-w-0 bg-transparent border border-transparent rounded font-medium text-sm transition px-1 py-0.5 focus:bg-background focus:border-border focus:px-2',
+                            // Visually emphasize low-confidence fields — the auditor
+                            // wants the user to "check exactly the risky lines."
+                            isLowConfidence && 'border-rose-300 dark:border-rose-700 bg-rose-100/50 dark:bg-rose-900/20',
+                            isMediumConfidence && 'border-amber-300 dark:border-amber-700 bg-amber-100/50 dark:bg-amber-900/20'
+                          )}
                           placeholder="Product name"
                         />
                         {item.confidence !== undefined && (
                           <span
                             className={cn(
-                              'w-2 h-2 rounded-full flex-shrink-0',
-                              item.confidence >= 0.8 ? 'bg-emerald-500' :
-                              item.confidence >= 0.5 ? 'bg-amber-500' : 'bg-rose-500'
+                              'flex-shrink-0 flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded',
+                              item.confidence >= 0.8 ? 'text-emerald-700 bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-400' :
+                              item.confidence >= 0.5 ? 'text-amber-700 bg-amber-100 dark:bg-amber-950/40 dark:text-amber-400' :
+                              'text-rose-700 bg-rose-100 dark:bg-rose-950/40 dark:text-rose-400'
                             )}
                             title={`AI confidence: ${Math.round(item.confidence * 100)}%`}
-                          />
+                          >
+                            {/* Tiny confidence dot + percentage — visible badge instead of just a dot */}
+                            <span className={cn(
+                              'w-1.5 h-1.5 rounded-full',
+                              item.confidence >= 0.8 ? 'bg-emerald-500' :
+                              item.confidence >= 0.5 ? 'bg-amber-500' : 'bg-rose-500'
+                            )} />
+                            {isLowConfidence ? 'CHECK' : `${Math.round(item.confidence * 100)}%`}
+                          </span>
                         )}
                         <span className="font-bold tabular-nums flex-shrink-0 text-sm text-primary">
                           {formatINR(item.total || 0)}

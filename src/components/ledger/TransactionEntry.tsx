@@ -393,7 +393,23 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
       if (isQueuedResponse(r)) {
         sonnerToast.success(`${isSale ? 'Sale' : 'Purchase'} saved offline — will sync when online`)
       } else {
+        const data = await r.json()
         sonnerToast.success(`${isSale ? 'Sale' : 'Purchase'} recorded successfully!`)
+
+        // 🔒 AUDIT FIX V5 MD: Surface negative-stock warnings from the API.
+        // The server returns `stockWarnings: [{ productName, currentStock,
+        // requestedQuantity, resultingStock }]` for any sale item that pushed
+        // stock below zero. Show a visible warning so the shopkeeper knows
+        // their stock went negative (and can record the missing purchase).
+        if (Array.isArray(data.stockWarnings) && data.stockWarnings.length > 0) {
+          const lines = data.stockWarnings.map((w: any) =>
+            `• ${w.productName}: had ${w.currentStock}, sold ${w.requestedQuantity}, now ${w.resultingStock}`
+          )
+          sonnerToast.warning(
+            `Stock went negative:\n${lines.join('\n')}\nRecord the missing purchase to fix this.`,
+            { duration: 8000 }
+          )
+        }
       }
       haptic.success()
       // Clear the active draft now that the transaction is saved

@@ -131,6 +131,50 @@ export async function POST(req: NextRequest) {
     const products = productIds.length > 0 ? await db.product.findMany({ where: { id: { in: productIds }, userId } }) : []
     const productMap = new Map(products.map(p => [p.id, p]))
 
+    // 🔒 AUDIT FIX V5 MD: Negative-stock warning.
+    // Was: sales decrement currentStock with no check — selling 100 units of
+    // a product with 2 in stock succeeded silently and left currentStock = -98.
+    // The auditor noted some kirana shops legitimately sell before recording
+    // purchases, so BLOCKING may be wrong — but silently going negative with
+    // no warning is also wrong for "the best ledger app."
+    //
+    // Approach: detect any sale item that would push stock below zero. Return
+    // a `stockWarnings` array in the response (not an error — the sale still
+    // goes through). The UI can show a visible warning toast/banner. The
+    // warning includes the product name, current stock, requested quantity,
+    // and the resulting (negative) stock — so the shopkeeper knows exactly
+    // what happened and can fix it (record the missing purchase, etc.).
+    //
+    // If the request body includes `confirmOversell: true` (e.g. the user
+    // clicked "Continue anyway" on a previous warning), we skip the warning
+    // generation for that request — no need to warn twice.
+    const stockWarnings: Array<{
+      productId: string
+      productName: string
+      currentStock: number
+      requestedQuantity: number
+      resultingStock: number
+    }> = []
+
+    if (type === 'sale' && !body.confirmOversell) {
+      for (const item of items) {
+        if (!item.productId) continue
+        const product = productMap.get(item.productId)
+        if (!product) continue
+        const requestedQty = Number(item.quantity) || 0
+        const resultingStock = product.currentStock - requestedQty
+        if (resultingStock < 0) {
+          stockWarnings.push({
+            productId: product.id,
+            productName: product.name,
+            currentStock: product.currentStock,
+            requestedQuantity: requestedQty,
+            resultingStock,
+          })
+        }
+      }
+    }
+
     const txItems = items.map((item: any) => {
       // 💰 MONEY (Audit fix Phase 4): Use roundMoney() at every calculation
       // step to prevent float precision drift. Was: raw arithmetic on Floats
@@ -257,20 +301,31 @@ export async function POST(req: NextRequest) {
       } catch (err: any) {
         // P2002 = unique constraint violation on invoiceNo
         if (err?.code === 'P2002' && attempt < 2) {
-          // Get the current max sequence and try again with next number
+          // 🔒 AUDIT FIX V5 ME: Was `+ attempt + 2` → skipped invoice numbers
+          // under contention (e.g. attempt=1 → +3, attempt=2 → +4). GST prefers
+          // gap-free per-series numbering; unexplained gaps invite scrutiny.
+          // Now: re-read max sequence + 1, let the unique constraint + loop
+          // handle collisions without inflating the number.
           const lastTxn = await db.transaction.findFirst({
             where: { userId, invoiceSequence: { not: null } },
             orderBy: { invoiceSequence: 'desc' },
             select: { invoiceSequence: true },
           })
-          lastSeq = (lastTxn?.invoiceSequence || 0) + attempt + 2
+          lastSeq = (lastTxn?.invoiceSequence || 0) + 1
           continue
         }
         throw err
       }
     }
 
-    return NextResponse.json({ transaction })
+    return NextResponse.json({
+      transaction,
+      // 🔒 V5 MD: Include stock warnings so the UI can surface them.
+      // Empty array = no warnings. Non-empty = the UI should show a visible
+      // banner ("⚠️ Sold 100 units of X but only 2 were in stock. Stock is
+      // now -98. Record the missing purchase?").
+      stockWarnings,
+    })
   } catch (error) {
     console.error('Transactions POST error:', error)
     return NextResponse.json({ error: 'Failed to create transaction' }, { status: 500 })
