@@ -104,7 +104,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       SELECT
         ti."productName",
         SUM(ti."quantity") AS "totalQuantity",
-        SUM(ROUND(ti."quantity"::numeric * ti."unitPrice", 2)) AS "totalAmount"
+        SUM(ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 2)) AS "totalAmount"
       FROM "TransactionItem" ti
       JOIN "Transaction" t ON ti."transactionId" = t.id
       WHERE t."userId" = ${userId}

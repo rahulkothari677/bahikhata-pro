@@ -330,7 +330,7 @@ export async function GET(req: NextRequest) {
         ti."productName",
         ti."productId",
         SUM(ti."quantity") AS "totalQuantity",
-        SUM(ROUND(ti."quantity"::numeric * ti."unitPrice", 2)) AS "totalRevenue"
+        SUM(ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 2)) AS "totalRevenue"
       FROM "TransactionItem" ti
       JOIN "Transaction" t ON ti."transactionId" = t.id
       WHERE t."userId" = ${userId}
@@ -366,7 +366,7 @@ export async function GET(req: NextRequest) {
     const categoryRows = await db.$queryRaw<Array<{ category: string | null; totalValue: string }>>`
       SELECT
         COALESCE(p."category", 'Other') AS category,
-        SUM(ROUND(ti."quantity"::numeric * ti."unitPrice", 2)) AS "totalValue"
+        SUM(ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 2)) AS "totalValue"
       FROM "TransactionItem" ti
       JOIN "Transaction" t ON ti."transactionId" = t.id
       LEFT JOIN "Product" p ON ti."productId" = p.id
