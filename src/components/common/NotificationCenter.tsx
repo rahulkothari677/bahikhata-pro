@@ -19,7 +19,6 @@
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { useQuery } from '@tanstack/react-query'
 import { Bell, AlertTriangle, IndianRupee, X, CheckCircle, Package, ArrowRight, Trash2, Inbox } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -33,6 +32,7 @@ import { cn, formatINR } from '@/lib/utils'
 import { useAppStore } from '@/store/app-store'
 import { offlineFetch, isOnline, getPendingWriteCount } from '@/lib/offline-fetch'
 import { useStaffPermissions } from '@/hooks/use-staff-permissions'
+import { useDashboardThisMonth } from '@/hooks/use-dashboard'
 import { haptic } from '@/lib/haptic'
 import { motion, AnimatePresence } from 'framer-motion'
 
@@ -68,18 +68,9 @@ export function NotificationCenter() {
     } catch {}
   }, [])
 
-  // 🔒 PERFORMANCE: Reuse the Dashboard's query key so React Query
-  // deduplicates. Was: separate key → extra API call. Now: shares cache.
-  const now = new Date()
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
-  const { data } = useQuery({
-    queryKey: ['dashboard', 0, monthStart.toISOString(), now.toISOString()],
-    queryFn: async () => {
-      const r = await offlineFetch(`/api/dashboard?from=${monthStart.toISOString()}&to=${now.toISOString()}`)
-      return r.json()
-    },
-    staleTime: 60 * 1000,
-  })
+  // 🔒 PERFORMANCE FIX (auditor P0): Use shared dashboard hook.
+  // Was: separate useQuery → extra API call. Now: shared cache → zero extra calls.
+  const { data } = useDashboardThisMonth()
 
   // Check pending writes (offline)
   useEffect(() => {

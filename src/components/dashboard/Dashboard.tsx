@@ -1,6 +1,7 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
+import { useDashboard } from '@/hooks/use-dashboard'
 import { useState, useEffect } from 'react'
 import { useAppStore } from '@/store/app-store'
 import { useTranslation } from '@/hooks/use-translation'
@@ -51,20 +52,10 @@ export function Dashboard() {
     }
   }, [features?.recurringEntries, checkRecurring])
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: ['dashboard', refreshKey, dateRange.from.toISOString(), dateRange.to.toISOString()],
-    queryFn: async () => {
-      const r = await offlineFetch(`/api/dashboard?from=${dateRange.from.toISOString()}&to=${dateRange.to.toISOString()}`)
-      if (!r.ok) throw new Error(`HTTP ${r.status}`)
-      return r.json()
-    },
-    // Don't retry when offline or on network errors — fail fast
-    retry: (count, err) => {
-      if (err instanceof OfflineError) return false
-      if (err instanceof TypeError) return false // Network failure
-      return count < 2
-    },
-  })
+  // 🔒 PERFORMANCE FIX (auditor P0): Use shared dashboard hook — one query,
+  // shared cache with SmartInsights + NotificationCenter. Was: inline useQuery
+  // with millisecond-precision timestamps → no dedup with other callers.
+  const { data, isLoading, error } = useDashboard(dateRange)
 
   const handleDateChange = (range: DateRange, preset: DatePreset) => {
     setDateRange(range)

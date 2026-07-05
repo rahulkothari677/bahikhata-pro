@@ -304,21 +304,12 @@ function computeInsights(data: any): Insight[] {
 }
 
 // ─── Dashboard data hook (reuses existing query) ─────────────────
-// 🔒 PERFORMANCE: Use the SAME query key as Dashboard.tsx so React Query
-// deduplicates the request. Was: separate query key → 2 API calls to /api/dashboard.
-// Now: shares the cache entry → 1 API call.
-function useDashboardData() {
-  const { refreshKey } = useAppStore()
-  const now = new Date()
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+// 🔒 PERFORMANCE FIX (auditor P0): Use the shared useDashboardThisMonth hook.
+// Was: separate useQuery with different key → extra API call.
+// Now: shares the exact same cache entry as Dashboard.tsx → zero extra calls.
+import { useDashboardThisMonth } from '@/hooks/use-dashboard'
 
-  return useQuery({
-    queryKey: ['dashboard', refreshKey, monthStart.toISOString(), now.toISOString()],
-    queryFn: async () => {
-      const r = await offlineFetch(`/api/dashboard?from=${monthStart.toISOString()}&to=${now.toISOString()}`)
-      return r.json()
-    },
-    staleTime: 60 * 1000,
-  })
+function useDashboardData() {
+  return useDashboardThisMonth()
 }
 

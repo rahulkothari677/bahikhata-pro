@@ -102,15 +102,31 @@ export default function Home() {
     }
   }, [mounted, session])
 
-  // When sync completes (after coming back online), invalidate all queries
-  // so components refetch fresh data from the server.
+  // 🔒 PERFORMANCE FIX (auditor P0): Targeted invalidation instead of blanket.
+  // Was: invalidateQueries() (no args) → refetches ALL active queries including
+  // dashboard → AND triggerRefresh() bumps refreshKey → dashboard refetches AGAIN.
+  // This cascade turned 3 dashboard calls into 15.
+  // Now: only invalidate specific keys that actually changed, and only
+  // trigger refresh if there were actually pending writes that synced.
   useEffect(() => {
-    const unsub = onSyncComplete(() => {
-      queryClient.invalidateQueries()
-      triggerRefresh()
+    const unsub = onSyncComplete(async () => {
+      // Check if there were actually pending writes
+      const { getPendingWriteCount } = await import('@/lib/offline-db')
+      const pending = await getPendingWriteCount()
+      if (pending === 0) return // no writes synced — don't invalidate anything
+
+      // Targeted invalidation — only refetch what might have changed
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      queryClient.invalidateQueries({ queryKey: ['transactions'] })
+      queryClient.invalidateQueries({ queryKey: ['parties'] })
+      queryClient.invalidateQueries({ queryKey: ['products'] })
+      // Note: triggerRefresh() is intentionally NOT called here — it bumps
+      // refreshKey which changes the dashboard query key → forces a NEW
+      // fetch even if the data is fresh. The targeted invalidation above
+      // already handles refetching with the SAME key (deduped).
     })
     return unsub
-  }, [queryClient, triggerRefresh])
+  }, [queryClient])
 
   // Pre-cache all key data right after login (only once per session, only online)
   // This populates IndexedDB so the user can go offline anytime.

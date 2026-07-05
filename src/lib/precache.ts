@@ -10,8 +10,11 @@
 
 import { offlineFetch } from './offline-fetch'
 
+// 🔒 PERFORMANCE FIX (auditor P0): Removed /api/dashboard from precache.
+// Was: fired a 3rd dashboard call with a different URL (different timestamp)
+// → couldn't deduplicate with the UI's dashboard query → extra DB load.
+// The UI fetches dashboard on its own via useDashboard() — no need to precache it.
 const PRECACHE_URLS = [
-  '/api/dashboard?from=__MONTH_START__&to=__NOW__',
   '/api/products',
   '/api/parties',
   '/api/transactions?limit=200',
