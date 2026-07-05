@@ -1,0 +1,18 @@
+name: Neon Warmup Ping
+
+# Pings /api/warmup every 5 minutes to keep Neon's free tier database awake.
+# Vercel Hobby plan only allows 1 cron job per day, so we use GitHub Actions
+# (free, 2000 min/month) for the frequent pings.
+
+on:
+  schedule:
+    # Every 5 minutes (GitHub Actions minimum interval)
+    - cron: '*/5 * * * *'
+
+jobs:
+  warmup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping warmup endpoint
+        run: |
+          curl -s -o /dev/null -w "%{http_code}" https://bahikhata-pro.vercel.app/api/warmup || true
