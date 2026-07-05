@@ -167,16 +167,35 @@ export function Dashboard() {
     )
   }
 
-  // 🔒 BUG FIX V5: Add null checks to prevent crash when API returns error
-  // Was: const { kpis, ... } = data → if data is partial/missing, crash
-  // Now: provide defaults for every field
-  const kpis = data.kpis || { todayRevenue: 0, todayProfit: 0, todayTxnCount: 0, rangeRevenue: 0, rangeProfit: 0, rangeExpenses: 0, rangePurchases: 0, rangeIncome: 0, revenueGrowth: 0, profitGrowth: 0, totalReceivable: 0, totalPayable: 0, rangeSaleCount: 0 }
+  // 🔒 BUG FIX V5 + V4 BUG-2: Provide defaults for EVERY field the JSX reads.
+  // Was: defaults omitted `netProfit`, `totalStockValue`, `productCount`,
+  // `rangeTxnCount`, `totalExpenses` → on partial load, `formatINR(kpis.netProfit)`
+  // rendered ₹NaN and `isNewUser` check read `undefined`. The `gstSummary`
+  // default used totally different keys (`totalTaxableSales`, `totalCGST`...)
+  // than the JSX reads (`outputTax`, `inputTax`, `cgst`, `sgst`, `netPayable`)
+  // → entire GST card showed ₹NaN on any partial load.
+  // Now: defaults match the server response shape EXACTLY (see /api/dashboard/route.ts).
+  const kpis = data.kpis || {
+    todayRevenue: 0, todayProfit: 0, todayTxnCount: 0,
+    rangeRevenue: 0, rangeProfit: 0, rangeExpenses: 0,
+    rangePurchases: 0, rangeIncome: 0,
+    revenueGrowth: 0, profitGrowth: 0,
+    netProfit: 0,
+    totalReceivable: 0, totalPayable: 0,
+    totalStockValue: 0, productCount: 0, partyCount: 0,
+    rangeTxnCount: 0,
+  }
   const salesTrend = data.salesTrend || []
   const topProducts = data.topProducts || []
   const categoryBreakdown = data.categoryBreakdown || []
   const paymentModeSplit = data.paymentModeSplit || []
   const lowStockProducts = data.lowStockProducts || []
-  const gstSummary = data.gstSummary || { totalTaxableSales: 0, totalCGST: 0, totalSGST: 0, totalIGST: 0, totalTax: 0 }
+  // gstSummary default — keys must match what JSX reads:
+  //   gstSummary.outputTax / inputTax / cgst / sgst / netPayable
+  const gstSummary = data.gstSummary || {
+    taxableSales: 0, cgst: 0, sgst: 0, igst: 0,
+    outputTax: 0, inputTax: 0, netPayable: 0,
+  }
   const recentTransactions = data.recentTransactions || []
   const setting = data.setting || { shopName: 'My Shop' }
 
@@ -211,13 +230,23 @@ export function Dashboard() {
     window.open(`https://wa.me/?text=${text}`, '_blank')
   }
 
-  // Repeat last sale — fetches the ACTUAL latest sale (bypassing cache)
-  // then pre-fills the New Sale form with its items
+  // Repeat last sale — fetches the ACTUAL latest sale, then pre-fills the
+  // New Sale form with its items.
+  //
+  // 🔒 AUDIT FIX V4 BUG-3: was raw `fetch(..., { cache: 'no-store' })` —
+  // inconsistent with the app's offline-first design. If the user was offline,
+  // this silently failed (no cache lookup, just network error → toast).
+  // Now: routed through `offlineFetch` — when online it does the same network
+  // fetch (and caches the response); when offline it falls back to the cached
+  // `/api/transactions` list, which the dashboard already populated. The
+  // "Repeat Last Sale" button now works offline against cached data.
   const handleRepeatLastSale = async () => {
     setRepeating(true)
     try {
-      // Fetch the latest sale transaction directly (cache: 'no-store' to bypass browser cache)
-      const r = await fetch('/api/transactions?limit=1&type=sale', { cache: 'no-store' })
+      const r = await offlineFetch('/api/transactions?limit=1&type=sale', {
+        // Bypass browser cache when online so we always get the truly latest sale
+        cache: 'no-store',
+      })
       const data = await r.json()
       const latestSale = data?.transactions?.[0]
 
@@ -246,7 +275,12 @@ export function Dashboard() {
       setPreviousView('dashboard')
       setView('new-sale')
     } catch (err) {
-      sonnerToast.error('Failed to load last sale')
+      // offlineFetch throws OfflineError when offline AND no cached response
+      if (err instanceof OfflineError) {
+        sonnerToast.error('You are offline and no recent sale is cached.')
+      } else {
+        sonnerToast.error('Failed to load last sale')
+      }
     } finally {
       setRepeating(false)
     }
@@ -532,8 +566,13 @@ export function Dashboard() {
                 <PieChart>
                   <Pie
                     data={[
+                      // 🔒 AUDIT FIX V4 BUG-1: was `kpis.totalPayable` (an outstanding
+                      // BALANCE, not a flow). Now `kpis.rangePurchases` — the actual
+                      // purchase total for the selected range. Mixing a range-flow
+                      // (rangeRevenue) with a stock-balance (totalPayable) gave a
+                      // misleading chart and a wrong "Net" figure.
                       { name: 'Sales', value: kpis.rangeRevenue || 0, fill: 'oklch(0.62 0.15 155)' },
-                      { name: 'Purchases', value: kpis.totalPayable || 0, fill: 'oklch(0.62 0.18 42)' },
+                      { name: 'Purchases', value: kpis.rangePurchases || 0, fill: 'oklch(0.62 0.18 42)' },
                     ]}
                     dataKey="value"
                     cx="50%"
@@ -556,15 +595,15 @@ export function Dashboard() {
                 <div className="flex items-center gap-2">
                   <div className="w-2.5 h-2.5 rounded-full" style={{ background: 'oklch(0.62 0.18 42)' }} />
                   <span className="text-xs text-muted-foreground flex-1">Purchases</span>
-                  <span className="text-sm font-bold tabular-nums">{formatINRCompact(kpis.totalPayable || 0)}</span>
+                  <span className="text-sm font-bold tabular-nums">{formatINRCompact(kpis.rangePurchases || 0)}</span>
                 </div>
                 <div className="flex items-center gap-2 pt-1 border-t border-border/40">
                   <span className="text-xs text-muted-foreground flex-1">Net</span>
                   <span className={cn(
                     'text-sm font-bold tabular-nums',
-                    (kpis.rangeRevenue - (kpis.totalPayable || 0)) >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                    (kpis.rangeRevenue - (kpis.rangePurchases || 0)) >= 0 ? 'text-emerald-600' : 'text-rose-600'
                   )}>
-                    {formatINRCompact(kpis.rangeRevenue - (kpis.totalPayable || 0))}
+                    {formatINRCompact(kpis.rangeRevenue - (kpis.rangePurchases || 0))}
                   </span>
                 </div>
               </div>

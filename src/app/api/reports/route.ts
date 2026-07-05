@@ -28,7 +28,22 @@ export async function GET(req: NextRequest) {
       where: activeTransactionWhere(userId, { date: { gte: from, lte: to } }),
       include: { items: true, party: true },
       orderBy: { date: 'asc' },
+      // 🔒 AUDIT FIX V4 P3: Defensive cap to prevent OOM on Vercel serverless.
+      // The list-endpoint 200-cap doesn't apply here — reports use `findMany`
+      // with no `take`, so a busy shop after a year could load 10K+ rows into
+      // a single serverless function → timeout / OOM. 5,000 transactions in
+      // a single period is a sane upper bound (a kirana shop doing 100 sales/
+      // day for 50 days = 5,000). Above this we'd return a 413 with a clear
+      // message asking the user to narrow the date range.
+      // Roadmap: replace with SQL aggregate queries (db.transaction.groupBy /
+      // $queryRaw) so we never load rows into JS at all — same pattern as
+      // /api/dashboard/route.ts. Until then, the cap prevents the worst case.
+      take: 5000,
     })
+
+    // If we hit the cap exactly, warn the client (but still return data —
+    // the report is approximate, not missing). User can narrow the range.
+    const hitCap = transactions.length === 5000
 
     const products = await db.product.findMany({ where: { userId } })
 
@@ -61,6 +76,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({
         type: 'pl',
         period: { from, to },
+        truncated: hitCap,  // true if we hit the 5K cap — report is approximate
         summary: {
           totalRevenue,
           grossProfit,
@@ -120,6 +136,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({
         type: 'gst',
         period: { from, to },
+        truncated: hitCap,  // true if we hit the 5K cap — report is approximate
         outputSales: {
           taxableValue: sales.reduce((s, t) => s + t.subtotal - t.discountAmount, 0),
           outputTax,
@@ -137,43 +154,31 @@ export async function GET(req: NextRequest) {
     }
 
     if (type === 'stock') {
-      // Stock valuation report
-      const allTxns = await db.transaction.findMany({
-        where: activeTransactionWhere(userId, { items: { some: {} } }),
-        include: { items: true },
-      })
-
-      const stockMap = new Map<string, number>()
-      products.forEach(p => stockMap.set(p.id, p.openingStock))
-      allTxns.forEach(t => {
-        t.items.forEach(item => {
-          if (item.productId) {
-            const cur = stockMap.get(item.productId) || 0
-            if (t.type === 'purchase') stockMap.set(item.productId, cur + item.quantity)
-            else if (t.type === 'sale') stockMap.set(item.productId, cur - item.quantity)
-          }
-        })
-      })
-
-      const stockReport = products.map(p => {
-        const stock = stockMap.get(p.id) || 0
-        return {
-          id: p.id,
-          name: p.name,
-          category: p.category,
-          hsn: p.hsn,
-          unit: p.unit,
-          currentStock: stock,
-          purchasePrice: p.purchasePrice,
-          salePrice: p.salePrice,
-          mrp: p.mrp,
-          gstRate: p.gstRate,
-          // 💰 MONEY (Audit fix Phase 8): roundMoney on stock values
-          stockValue: roundMoney(stock * p.purchasePrice),
-          potentialSaleValue: roundMoney(stock * p.salePrice),
-          isLowStock: stock <= p.lowStockThreshold,
-        }
-      })
+      // 🔒 AUDIT FIX V4 P3 + N2 (v3): Read `currentStock` directly from the
+      // Product column instead of re-deriving from ALL transactions.
+      // Was: an unbounded `findMany` of every transaction with items, then a
+      // JS reduce to recompute stock. That's (a) O(all items) for no reason
+      // — the column is maintained atomically on every transaction write —
+      // and (b) an OOM risk on Vercel serverless for shops with many txns.
+      // Now: O(1) per product, no second query.
+      // (Note: `products` was already fetched above with all fields, so
+      // currentStock is available without an extra DB call.)
+      const stockReport = products.map(p => ({
+        id: p.id,
+        name: p.name,
+        category: p.category,
+        hsn: p.hsn,
+        unit: p.unit,
+        currentStock: p.currentStock,
+        purchasePrice: p.purchasePrice,
+        salePrice: p.salePrice,
+        mrp: p.mrp,
+        gstRate: p.gstRate,
+        // 💰 MONEY (Audit fix Phase 8): roundMoney on stock values
+        stockValue: roundMoney(p.currentStock * p.purchasePrice),
+        potentialSaleValue: roundMoney(p.currentStock * p.salePrice),
+        isLowStock: p.currentStock <= p.lowStockThreshold,
+      }))
 
       const totalStockValue = roundMoney(stockReport.reduce((s, p) => s + p.stockValue, 0))
       const totalPotentialValue = roundMoney(stockReport.reduce((s, p) => s + p.potentialSaleValue, 0))
@@ -181,6 +186,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({
         type: 'stock',
         period: { from, to },
+        truncated: hitCap,  // true if we hit the 5K cap — report is approximate
         products: stockReport.sort((a, b) => b.stockValue - a.stockValue),
         totalStockValue,
         totalPotentialValue,
@@ -225,6 +231,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({
         type: 'party',
         period: { from, to },
+        truncated: hitCap,  // true if we hit the 5K cap — report is approximate
         parties: Array.from(partyMap.values())
           .filter(p => p.transactions.length > 0 || p.party.openingBalance !== 0)
           .sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance)),

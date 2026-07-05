@@ -32,9 +32,25 @@ export async function GET(req: NextRequest) {
         }),
         include: { items: true, party: true },
         orderBy: { date: 'asc' },
+        // 🔒 AUDIT FIX V4 P3: Defensive cap to prevent OOM on Vercel serverless.
+        // GST export is the ONE place a failure is unacceptable (tax filing).
+        // For a kirana shop today this is fine — but at scale (a busy
+        // distributor, or any user after a year), unbounded `findMany` would
+        // load the entire table into a serverless function → timeout / OOM.
+        // 10,000 invoices per monthly return is a sane upper bound (GSTN's
+        // own GSTR-1 portal caps a single upload at ~50K lines).
+        // Roadmap: stream/aggregate GSTR in SQL rather than loading all rows
+        // — use db.transaction.groupBy on (gstRate, isInterState) and
+        // db.transaction.aggregate for totals. Until then, this cap prevents
+        // the worst case.
+        take: 10000,
       }),
       db.setting.findUnique({ where: { userId } }),
     ])
+
+    // If we hit the cap exactly, flag in the response so the client can warn
+    // the user that the return is incomplete (they need to split the period).
+    const hitCap = transactions.length === 10000
 
     // Build GSTR-1 B2B section (invoices with GSTIN)
     const b2bInvoices: any[] = []
@@ -124,6 +140,9 @@ export async function GET(req: NextRequest) {
       b2b: b2bInvoices,
       b2cl: b2cInvoices.filter(i => i.total >= 100000), // B2C Large
       b2cs: b2cInvoices.filter(i => i.total < 100000), // B2C Small
+      // 🔒 AUDIT FIX V4 P3: flag if we hit the 10K cap — return is incomplete
+      truncated: hitCap,
+      truncatedHint: hitCap ? 'GSTR export capped at 10,000 invoices. Split the period into smaller ranges and re-run.' : null,
       summary: {
         total_invoices: transactions.length,
         // 💰 MONEY (Audit fix Phase 8): roundMoney on all summary totals
@@ -140,6 +159,10 @@ export async function GET(req: NextRequest) {
     if (format === 'csv') {
       // Generate CSV
       const csvLines: string[] = []
+      // 🔒 AUDIT FIX V4 P3: include truncation warning as the first CSV row
+      if (hitCap) {
+        csvLines.push('# WARNING: GSTR export capped at 10,000 invoices. Split the period into smaller ranges and re-run.')
+      }
       csvLines.push('Invoice No,Date,Party Name,GSTIN,Taxable Value,CGST,SGST,IGST,Total,Type')
       transactions.forEach(t => {
         csvLines.push([
