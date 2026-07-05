@@ -115,6 +115,24 @@ export default function Home() {
   // Pre-cache all key data right after login (only once per session, only online)
   // This populates IndexedDB so the user can go offline anytime.
   const precacheDone = useRef(false)
+
+  // 🔒 PERFORMANCE: Warm up Neon DB before any API calls.
+  // Neon's free tier auto-pauses after 5 min. This ping wakes it up so the
+  // real API calls (dashboard, settings, etc.) don't have to wait 10-20s
+  // for the cold start. Fire-and-forget — we don't block on it.
+  const warmupDone = useRef(false)
+  useEffect(() => {
+    if (
+      status === 'authenticated' &&
+      session &&
+      !warmupDone.current &&
+      isOnline()
+    ) {
+      warmupDone.current = true
+      fetch('/api/warmup').catch(() => {})
+    }
+  }, [status, session])
+
   useEffect(() => {
     if (
       status === 'authenticated' &&

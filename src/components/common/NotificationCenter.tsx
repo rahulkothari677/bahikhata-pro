@@ -68,11 +68,14 @@ export function NotificationCenter() {
     } catch {}
   }, [])
 
-  // Fetch dashboard data (uses cached data — no extra API call if already loaded)
+  // 🔒 PERFORMANCE: Reuse the Dashboard's query key so React Query
+  // deduplicates. Was: separate key → extra API call. Now: shares cache.
+  const now = new Date()
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
   const { data } = useQuery({
-    queryKey: ['dashboard-notifications'],
+    queryKey: ['dashboard', 0, monthStart.toISOString(), now.toISOString()],
     queryFn: async () => {
-      const r = await offlineFetch('/api/dashboard?from=' + new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString() + '&to=' + new Date().toISOString())
+      const r = await offlineFetch(`/api/dashboard?from=${monthStart.toISOString()}&to=${now.toISOString()}`)
       return r.json()
     },
     staleTime: 60 * 1000,
