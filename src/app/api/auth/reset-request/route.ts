@@ -116,7 +116,7 @@ export async function POST(req: NextRequest) {
     // Production path:
     // 🔒 V5 HB: Actually send the email if a provider is configured. If not,
     // surface an honest message instead of pretending the email was sent.
-    const origin = req.headers.get('origin') || 'https://bahikhata-pro.vercel.app'
+    const origin = req.headers.get('origin') || process.env.NEXTAUTH_URL || 'https://ekbook-pro.vercel.app'
     const resetLink = `${origin}/reset-password?token=${token}`
 
     if (isEmailConfigured()) {

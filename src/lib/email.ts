@@ -13,10 +13,10 @@
  *
  * Setup (founder task):
  *   1. Sign up at https://resend.com (free)
- *   2. Verify your sending domain (e.g. noreply@bahikhata.app)
+ *   2. Verify your sending domain (e.g. noreply@ekbook.app)
  *   3. Add to Vercel env vars:
  *        RESEND_API_KEY=re_xxx
- *        RESEND_FROM_EMAIL=BahiKhata <noreply@bahikhata.app>
+ *        RESEND_FROM_EMAIL=EkBook <noreply@ekbook.app>
  *        FOUNDER_ALERT_EMAIL=your@email.com   (for password-reset alerts)
  *   4. Until those are set, the reset endpoint will surface an honest
  *      "contact support" message instead of silently failing.
@@ -46,7 +46,7 @@ interface SendEmailParams {
  */
 export async function sendEmail(params: SendEmailParams): Promise<SendEmailResult> {
   const apiKey = process.env.RESEND_API_KEY
-  const fromEmail = process.env.RESEND_FROM_EMAIL || 'BahiKhata <noreply@bahikhata.app>'
+  const fromEmail = process.env.RESEND_FROM_EMAIL || 'EkBook <noreply@ekbook.app>'
 
   if (!apiKey) {
     return { ok: false, reason: 'no-provider' }

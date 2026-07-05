@@ -124,7 +124,7 @@ export function PasswordReset({ onBack }: PasswordResetProps) {
               <p className="font-medium">Email sending is not yet configured.</p>
               <p className="mt-1">
                 We&apos;ve logged your reset request. To reset your password now,
-                email <a href="mailto:support@bahikhata.app" className="underline font-medium">support@bahikhata.app</a> with
+                email <a href="mailto:support@ekbook.app" className="underline font-medium">support@ekbook.app</a> with
                 your registered email and we&apos;ll help you within 24 hours.
               </p>
             </div>
