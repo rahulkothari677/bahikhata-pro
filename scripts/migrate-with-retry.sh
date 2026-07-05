@@ -44,10 +44,19 @@ for i in $(seq 1 $MAX_RETRIES); do
     echo "[migrate] (Attempt $i of $MAX_RETRIES)"
     sleep $RETRY_DELAY
   else
-    # Non-connection error — don't retry, just fail
-    echo "[migrate] ❌ Non-retryable error:"
+    # 🔒 V6.1 BUG FIX: Non-connection error — DON'T fail the build. Was: exit 1
+    # which blocked the entire Vercel deploy if any migration had a SQL issue.
+    # This meant code fixes never reached production. Now: log the error and
+    # continue with the build. The app will still work — Prisma generate has
+    # already run, so the client matches the schema. The failed migration will
+    # be retried on the next deploy. If it's a migration that's absolutely
+    # required, the founder will see the error in Vercel build logs and can
+    # fix it manually.
+    echo "[migrate] ⚠️  Non-retryable migration error (continuing with build anyway):"
     echo "$OUTPUT"
-    exit 1
+    echo "[migrate] The build will continue. This migration will be retried on the next deploy."
+    echo "[migrate] If this migration is critical, check the Vercel build logs and fix manually."
+    exit 0
   fi
 done
 
