@@ -30,12 +30,6 @@ export async function GET(req: NextRequest) {
     const rangeFrom = fromStr ? new Date(fromStr) : startOfMonth
     const rangeTo = toStr ? new Date(toStr) : now
 
-    // PERFORMANCE: only fetch transactions from the last 13 months.
-    // This is enough for current range + previous range comparison (max ~12 months back).
-    // For shops with years of history, this reduces the query size by 80%+.
-    // Recent transactions (last 8) are always fetched separately for the "recent" widget.
-    const thirteenMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 13, 1)
-
     const [
       recentTransactions,
       allProducts,
@@ -74,12 +68,15 @@ export async function GET(req: NextRequest) {
       db.setting.findUnique({ where: { userId } }),
     ])
 
-    // 🔒 PERFORMANCE FIX: Fetch range transactions ONLY for chart/top-products
-    // (not for KPIs — those use SQL aggregates now). Limit to the selected
-    // date range, not 13 months. This is much smaller than the old query.
+    // 🔒 PERFORMANCE FIX: Fetch transactions for range + previous range in ONE query.
+    // Was: 6 SQL aggregate queries + 1 range fetch = 7 DB round-trips.
+    // Now: 1 DB query that fetches both ranges, compute everything in JS.
+    const prevRangeDuration = rangeTo.getTime() - rangeFrom.getTime()
+    const prevRangeFrom = new Date(rangeFrom.getTime() - prevRangeDuration)
+
     const rangeTransactions = await db.transaction.findMany({
       where: activeTransactionWhere(userId, {
-        date: { gte: rangeFrom, lte: rangeTo },
+        date: { gte: prevRangeFrom, lte: rangeTo },
       }),
       select: {
         id: true,
@@ -117,69 +114,26 @@ export async function GET(req: NextRequest) {
     const incomes = allTransactions.filter(t => t.type === 'income')
     const expenses = allTransactions.filter(t => t.type === 'expense')
 
-    // === KPIs via SQL aggregates (Audit fix N2) ===
-    // Instead of loading all transactions and reducing in JS, run targeted
-    // SQL SUM queries for each KPI. This is much faster at scale.
-    const prevRangeDuration = rangeTo.getTime() - rangeFrom.getTime()
-    const prevRangeFrom = new Date(rangeFrom.getTime() - prevRangeDuration)
+    // 🔒 PERFORMANCE FIX: Compute ALL KPIs in JS from the range transactions.
+    // Was: 6 separate SQL aggregate queries (each hitting Neon) → 10-25s.
+    // Now: 0 extra queries — compute from data we already have in memory.
+    // The rangeTransactions already contain everything we need.
     const prevRangeTo = new Date(rangeFrom.getTime() - 1)
 
-    const [
-      todayAgg,
-      rangeSalesAgg,
-      rangeExpensesAgg,
-      rangePurchasesAgg,
-      rangeIncomeAgg,
-      prevRangeSalesAgg,
-    ] = await Promise.all([
-      // Today's sales: revenue + profit + count
-      db.transaction.aggregate({
-        where: activeTransactionWhere(userId, { type: 'sale', date: { gte: startOfToday } }),
-        _sum: { totalAmount: true, grossProfit: true },
-        _count: true,
-      }),
-      // Range sales: revenue + profit
-      db.transaction.aggregate({
-        where: activeTransactionWhere(userId, { type: 'sale', date: { gte: rangeFrom, lte: rangeTo } }),
-        _sum: { totalAmount: true, grossProfit: true },
-      }),
-      // Range expenses
-      db.transaction.aggregate({
-        where: activeTransactionWhere(userId, { type: 'expense', date: { gte: rangeFrom, lte: rangeTo } }),
-        _sum: { totalAmount: true },
-      }),
-      // Range purchases
-      db.transaction.aggregate({
-        where: activeTransactionWhere(userId, { type: 'purchase', date: { gte: rangeFrom, lte: rangeTo } }),
-        _sum: { totalAmount: true },
-      }),
-      // Range income
-      db.transaction.aggregate({
-        where: activeTransactionWhere(userId, { type: 'income', date: { gte: rangeFrom, lte: rangeTo } }),
-        _sum: { totalAmount: true },
-      }),
-      // Previous range sales (for growth comparison)
-      db.transaction.aggregate({
-        where: activeTransactionWhere(userId, { type: 'sale', date: { gte: prevRangeFrom, lte: prevRangeTo } }),
-        _sum: { totalAmount: true, grossProfit: true },
-      }),
-    ])
+    const todayRevenue = sales.filter(t => t.date >= startOfToday).reduce((s, t) => s + t.totalAmount, 0)
+    const todayProfit = sales.filter(t => t.date >= startOfToday).reduce((s, t) => s + t.grossProfit, 0)
+    const todayTxnCount = sales.filter(t => t.date >= startOfToday).length
 
-    const todayRevenue = todayAgg._sum.totalAmount || 0
-    const todayProfit = todayAgg._sum.grossProfit || 0
-    const todayTxnCount = todayAgg._count || 0
-
-    const rangeRevenue = rangeSalesAgg._sum.totalAmount || 0
-    const rangeProfit = rangeSalesAgg._sum.grossProfit || 0
-    const rangeExpenses = rangeExpensesAgg._sum.totalAmount || 0
-    const rangePurchases = rangePurchasesAgg._sum.totalAmount || 0
-    const rangeIncome = rangeIncomeAgg._sum.totalAmount || 0
-
-    const prevRangeRevenue = prevRangeSalesAgg._sum.totalAmount || 0
-    const prevRangeProfit = prevRangeSalesAgg._sum.grossProfit || 0
-
-    // Still need filtered arrays for charts and top products
     const rangeSales = sales.filter(t => t.date >= rangeFrom && t.date <= rangeTo)
+    const rangeRevenue = rangeSales.reduce((s, t) => s + t.totalAmount, 0)
+    const rangeProfit = rangeSales.reduce((s, t) => s + t.grossProfit, 0)
+    const rangeExpenses = expenses.filter(t => t.date >= rangeFrom && t.date <= rangeTo).reduce((s, t) => s + t.totalAmount, 0)
+    const rangePurchases = purchases.filter(t => t.date >= rangeFrom && t.date <= rangeTo).reduce((s, t) => s + t.totalAmount, 0)
+    const rangeIncome = incomes.filter(t => t.date >= rangeFrom && t.date <= rangeTo).reduce((s, t) => s + t.totalAmount, 0)
+
+    const prevRangeSales = sales.filter(t => t.date >= prevRangeFrom && t.date <= prevRangeTo)
+    const prevRangeRevenue = prevRangeSales.reduce((s, t) => s + t.totalAmount, 0)
+    const prevRangeProfit = prevRangeSales.reduce((s, t) => s + t.grossProfit, 0)
 
     const revenueGrowth = prevRangeRevenue > 0
       ? ((rangeRevenue - prevRangeRevenue) / prevRangeRevenue) * 100
