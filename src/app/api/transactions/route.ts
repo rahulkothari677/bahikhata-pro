@@ -14,20 +14,19 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url)
     const type = searchParams.get('type')
+    const voided = searchParams.get('voided') === 'true'
     // 🔒 SECURITY (Audit fix Phase 1.5): Cap limit at 200 to prevent OOM.
-    // Without this, a client could request ?limit=99999999 and force the
-    // serverless function to load the entire table into memory → crash.
-    // 200 is enough for any realistic list view; longer lists use pagination.
     const requestedLimit = parseInt(searchParams.get('limit') || '100')
     const limit = Math.min(Math.max(1, isNaN(requestedLimit) ? 100 : requestedLimit), 200)
     const from = searchParams.get('from')
     const to = searchParams.get('to')
 
-    // 🔒 AUDIT FIX N7 (v3): Removed the deletedAt try/catch double-query.
-    // Was: try with deletedAt, catch → fallback without (double round-trip on
-    // every error, returns soft-deleted rows during the fallback path).
-    // Now: single query with deletedAt filter (migration confirmed applied).
-    const where: any = { userId, deletedAt: null }
+    // 🔒 V8 U1: Support fetching voided (soft-deleted) transactions for the
+    // "Voided" trail filter. Was: always filtered deletedAt: null. Now: if
+    // voided=true, fetch ONLY deleted transactions (deletedAt: { not: null }).
+    const where: any = voided
+      ? { userId, deletedAt: { not: null } }
+      : { userId, deletedAt: null }
     if (type && type !== 'all') where.type = type
     if (from || to) {
       where.date = {}

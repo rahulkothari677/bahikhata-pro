@@ -93,6 +93,8 @@ export function Ledger({ type }: { type: LedgerType }) {
   // Date range state - defaults to no filter (all transactions)
   const [dateRange, setDateRange] = useState<DateRange | null>(null)
   const [datePreset, setDatePreset] = useState<DatePreset>('thisMonth')
+  // 🔒 V8 U1: Voided trail filter — toggle to show soft-deleted transactions
+  const [showVoided, setShowVoided] = useState(false)
 
   // Pick up pending date range from store (when navigating from dashboard KPI click)
   useEffect(() => {
@@ -116,18 +118,19 @@ export function Ledger({ type }: { type: LedgerType }) {
   const accentColor = isSale ? 'text-emerald-600' : 'text-amber-600'
   const accentBg = isSale ? 'bg-emerald-100' : 'bg-amber-100'
 
-  // Build query with optional date filter
+  // Build query with optional date filter + voided filter
   const queryParams = new URLSearchParams({
     type,
     limit: '200',
   })
+  if (showVoided) queryParams.set('voided', 'true')
   if (dateRange) {
     queryParams.set('from', dateRange.from.toISOString())
     queryParams.set('to', dateRange.to.toISOString())
   }
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['transactions', type, refreshKey, dateRange?.from.toISOString() || 'all', dateRange?.to.toISOString() || 'all'],
+    queryKey: ['transactions', type, refreshKey, dateRange?.from.toISOString() || 'all', dateRange?.to.toISOString() || 'all', showVoided ? 'voided' : 'active'],
     queryFn: async () => {
       const r = await offlineFetch(`/api/transactions?${queryParams.toString()}`)
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
@@ -404,6 +407,17 @@ export function Ledger({ type }: { type: LedgerType }) {
               />
             )}
 
+            {/* 🔒 V8 U1: Voided trail toggle — show/hide soft-deleted transactions */}
+            <Button
+              variant={showVoided ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => { setShowVoided(!showVoided); setSearch('') }}
+              className="gap-1.5 flex-shrink-0"
+              title={showVoided ? 'Showing voided transactions' : 'Show voided transactions'}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">{showVoided ? 'Voided' : 'Show Voided'}</span>
+            </Button>
             <Button
               variant="outline"
               onClick={() => { setScannerBillType(type); setView('scanner') }}
@@ -621,6 +635,12 @@ export function Ledger({ type }: { type: LedgerType }) {
 
                       {/* Bottom row: invoice no, payment mode, status badges + item chips */}
                       <div className="flex items-center gap-2 mt-2 flex-wrap">
+                        {/* 🔒 V8 U1: Voided badge — shows when viewing soft-deleted transactions */}
+                        {showVoided && (
+                          <Badge className="text-[9px] py-0 bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 gap-1">
+                            <Trash2 className="w-2.5 h-2.5" /> Voided
+                          </Badge>
+                        )}
                         {t.invoiceNo && (
                           <Badge variant="outline" className="text-[10px] py-0">{t.invoiceNo}</Badge>
                         )}

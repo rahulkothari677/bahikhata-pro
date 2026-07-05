@@ -851,22 +851,26 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
                         <div className="flex items-center gap-1 pl-5 mt-1">
                           <Input
                             type="number"
+                            inputMode="decimal"
                             value={item.quantity}
                             onChange={(e) => handleUpdateItem(i, 'quantity', parseFloat(e.target.value) || 0)}
                             className="flex-1 min-w-0 h-8 text-center text-sm tabular-nums"
                             min="0"
                             step="0.01"
+                            placeholder="Qty"
                           />
                           <span className="text-[10px] text-muted-foreground flex-shrink-0">{item.unit}</span>
                           <span className="text-[10px] text-muted-foreground flex-shrink-0">×</span>
                           <span className="text-[10px] text-muted-foreground flex-shrink-0">₹</span>
                           <Input
                             type="number"
+                            inputMode="decimal"
                             value={item.unitPrice}
                             onChange={(e) => handleUpdateItem(i, 'unitPrice', parseFloat(e.target.value) || 0)}
                             className="flex-1 min-w-0 h-8 text-center text-sm tabular-nums"
                             min="0"
                             step="0.01"
+                            placeholder="Price"
                           />
                           <Select
                             value={String(item.gstRate)}
@@ -1038,7 +1042,7 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
 
               <div>
                 <Label>Discount (₹)</Label>
-                <Input type="number" value={discountAmount} onChange={(e) => setDiscountAmount(e.target.value)} placeholder="0" className="mt-1" />
+                <Input type="number" inputMode="decimal" value={discountAmount} onChange={(e) => setDiscountAmount(e.target.value)} placeholder="0" className="mt-1" onKeyDown={(e) => { if (e.key === 'Enter') handleSave() }} />
               </div>
 
               <div>
@@ -1055,10 +1059,12 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
                 <Label>Paid Amount (₹)</Label>
                 <Input
                   type="number"
+                  inputMode="decimal"
                   value={paidAmount}
                   onChange={(e) => setPaidAmount(e.target.value)}
                   placeholder={`Full: ${totalAmount.toFixed(0)}`}
                   className="mt-1"
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleSave() }}
                 />
                 <p className="text-[10px] text-muted-foreground mt-1">Leave empty for full payment</p>
               </div>
