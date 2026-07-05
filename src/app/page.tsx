@@ -63,6 +63,11 @@ export default function Home() {
   const [mounted, setMounted] = useState(false)
   const [showSplash, setShowSplash] = useState(true)
 
+  // 🔒 V8 P3: Fetch dashboard data (shared React Query cache) to check if the
+  // user has any data — replaces the separate /api/seed call. MUST be before
+  // any early returns (React Rules of Hooks — hooks can't be conditional).
+  const { data: dashboardData } = useDashboardThisMonth()
+
   // Redirect staff to their first allowed view if they try to access a blocked module
   useEffect(() => {
     if (status !== 'authenticated' || !session) return
@@ -187,11 +192,10 @@ export default function Home() {
     return <AuthScreen />
   }
 
-  // 🔒 V8 P3: Use dashboard data (already fetched by the Dashboard component)
+  // 🔒 V8 P3: Use dashboard data (already fetched above via useDashboardThisMonth)
   // to determine if the user has any data. Was: separate /api/seed call with
   // 3 COUNT queries on every app open. Now: reuses the shared React Query
   // cache — no extra DB queries.
-  const { data: dashboardData } = useDashboardThisMonth()
   const hasNoData = dashboardData?.kpis?.productCount === 0 && dashboardData?.kpis?.partyCount === 0
 
   const showOnboarding = !onboardingDismissed && !isOfflineSession && dashboardData !== undefined && hasNoData && themePickerDone
