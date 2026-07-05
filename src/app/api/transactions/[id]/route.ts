@@ -108,11 +108,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     let grossProfit = 0
 
     const txItems = items.map((item: any) => {
-      // 💰 MONEY (Audit fix Phase 8): Use roundMoney/splitGst to prevent drift
-      const amount = roundMoney(item.quantity * item.unitPrice)
-      const itemGst = calculateGst(amount, item.gstRate || 0)
-      const itemTotal = roundMoney(amount - (item.discountAmount || 0) + itemGst)
-      subtotal = roundMoney(subtotal + amount)
+      // 🔒 V8 H1 FIX: GST on POST-DISCOUNT taxable value (same as POST handler).
+      // Was: GST on pre-discount amount, matching neither GSTR nor GST law.
+      const grossAmount = roundMoney(item.quantity * item.unitPrice)
+      const itemDiscount = roundMoney(item.discountAmount || 0)
+      const taxableAmount = roundMoney(grossAmount - itemDiscount)
+      const itemGst = calculateGst(taxableAmount, item.gstRate || 0)
+      const itemTotal = roundMoney(taxableAmount + itemGst)
+      subtotal = roundMoney(subtotal + grossAmount)
       if (isInterState) {
         igst = roundMoney(igst + itemGst)
       } else {

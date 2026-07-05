@@ -189,10 +189,19 @@ export async function POST(req: NextRequest) {
       // 💰 MONEY (Audit fix Phase 4): Use roundMoney() at every calculation
       // step to prevent float precision drift. Was: raw arithmetic on Floats
       // which produced values like 9.000000000000002 from itemGst / 2.
-      const amount = roundMoney(item.quantity * item.unitPrice)
-      const itemGst = calculateGst(amount, item.gstRate || 0)
-      const itemTotal = roundMoney(amount - (item.discountAmount || 0) + itemGst)
-      subtotal = roundMoney(subtotal + amount)
+      //
+      // 🔒 V8 H1 FIX: GST is now computed on the POST-DISCOUNT taxable value.
+      // Was: GST on pre-discount amount (quantity * unitPrice), discount
+      // applied AFTER GST. This meant the stored cgst/sgst/igst didn't match
+      // the GSTR export (which computes GST post-discount). Per GST law, the
+      // taxable value is AFTER trade discount. Now: GST on (qty * unitPrice -
+      // discount), matching the GSTR/reports SQL. All screens now agree.
+      const grossAmount = roundMoney(item.quantity * item.unitPrice)
+      const itemDiscount = roundMoney(item.discountAmount || 0)
+      const taxableAmount = roundMoney(grossAmount - itemDiscount)  // post-discount
+      const itemGst = calculateGst(taxableAmount, item.gstRate || 0)  // GST on post-discount
+      const itemTotal = roundMoney(taxableAmount + itemGst)
+      subtotal = roundMoney(subtotal + grossAmount)  // subtotal stays pre-discount (list price total)
       if (isInterState) {
         igst = roundMoney(igst + itemGst)
       } else {
