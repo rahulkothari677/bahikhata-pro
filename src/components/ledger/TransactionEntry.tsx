@@ -716,6 +716,13 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
                           )}>
                             {p.currentStock} {p.unit}
                           </p>
+                          {/* 🔒 V8 U6: Inline stock badge for quick visibility while billing */}
+                          {p.currentStock <= 0 && (
+                            <span className="text-[9px] font-bold text-rose-600 bg-rose-50 dark:bg-rose-950/30 px-1.5 py-0.5 rounded-full">OUT</span>
+                          )}
+                          {p.currentStock > 0 && p.isLowStock && (
+                            <span className="text-[9px] font-bold text-amber-600 bg-amber-50 dark:bg-amber-950/30 px-1.5 py-0.5 rounded-full">LOW</span>
+                          )}
                         </div>
                         <div className="flex-shrink-0">
                           {inList ? (

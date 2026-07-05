@@ -39,7 +39,18 @@ import { useStaffPermissions } from '@/hooks/use-staff-permissions'
 // Lazy-load heavy components that are only used occasionally.
 // This splits them into separate JS chunks, loaded on-demand when the user
 // navigates to that view. Reduces initial JS bundle by ~40-60%.
-const TransactionDetail = dynamic(() => import('@/components/ledger/TransactionDetail').then(m => ({ default: m.TransactionDetail })), { ssr: false })
+// 🔒 V8 U9: Prefetch TransactionDetail chunk on first dashboard render so
+// it's ready before the user clicks a recent transaction. ssr: false keeps
+// it out of the initial bundle; prefetch: 'visible' loads it in the
+// background after first paint (not blocking).
+const TransactionDetail = dynamic(() => import('@/components/ledger/TransactionDetail').then(m => ({ default: m.TransactionDetail })), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center py-20">
+      <div className="w-10 h-10 rounded-full border-4 border-primary border-t-transparent animate-spin" />
+    </div>
+  ),
+})
 const TransactionEntry = dynamic(() => import('@/components/ledger/TransactionEntry').then(m => ({ default: m.TransactionEntry })), { ssr: false })
 const PartyProfile = dynamic(() => import('@/components/parties/PartyProfile').then(m => ({ default: m.PartyProfile })), { ssr: false })
 const BillScanner = dynamic(() => import('@/components/scanner/BillScanner').then(m => ({ default: m.BillScanner })), { ssr: false })

@@ -19,7 +19,7 @@ import { formatINR, formatINRCompact, cn, formatDate } from '@/lib/utils'
 import {
   FileBarChart, TrendingUp, Receipt, Package, Users, Calendar,
   ArrowDownRight, ArrowUpRight, IndianRupee, Percent, FileText,
-  FileSpreadsheet, Loader2, Download, Printer, Clock, AlertTriangle,
+  FileSpreadsheet, Loader2, Download, Printer, Clock, AlertTriangle, Info,
 } from 'lucide-react'
 import { toast as sonnerToast } from 'sonner'
 import { offlineFetch } from '@/lib/offline-fetch'
@@ -460,6 +460,20 @@ function GSTReport({ data }: { data: any }) {
   const { outputSales, inputPurchases, netGSTPayable } = data
   return (
     <div className="space-y-4">
+      {/* 🔒 V8 D5: Note about gt/cur_gt fields (gross turnover) */}
+      <div className="rounded-lg bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-3 text-xs text-blue-700 dark:text-blue-400 flex items-start gap-2">
+        <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
+        <div>
+          <p className="font-medium">GSTR-1 Export Note</p>
+          <p className="mt-1">
+            The exported CSV includes invoice-level data (B2B/B2C sections) ready for the GST portal.
+            Fields <code className="font-mono bg-blue-100 dark:bg-blue-900/50 px-1 rounded">gt</code> (gross turnover) and
+            <code className="font-mono bg-blue-100 dark:bg-blue-900/50 px-1 rounded ml-1">cur_gt</code> (current turnover)
+            are set to 0 — fill these manually on the GST portal from your books.
+          </p>
+        </div>
+      </div>
+
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <ReportStatCard label="Output Tax (Sales)" value={formatINR(outputSales.outputTax)} icon={ArrowUpRight} color="text-rose-600" bg="bg-rose-100" />
         <ReportStatCard label="Input Tax (Purchases)" value={formatINR(inputPurchases.inputTax)} icon={ArrowDownRight} color="text-emerald-600" bg="bg-emerald-100" />

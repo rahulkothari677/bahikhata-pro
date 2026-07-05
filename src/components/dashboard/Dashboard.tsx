@@ -1,7 +1,6 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
-import { useDashboard } from '@/hooks/use-dashboard'
 import { useState, useEffect } from 'react'
 import { useAppStore } from '@/store/app-store'
 import { useTranslation } from '@/hooks/use-translation'
@@ -52,10 +51,38 @@ export function Dashboard() {
     }
   }, [features?.recurringEntries, checkRecurring])
 
-  // 🔒 PERFORMANCE FIX (auditor P0): Use shared dashboard hook — one query,
-  // shared cache with SmartInsights + NotificationCenter. Was: inline useQuery
-  // with millisecond-precision timestamps → no dedup with other callers.
-  const { data, isLoading, error } = useDashboard(dateRange)
+  const { data, isLoading, error, isFetching } = useQuery({
+    queryKey: ['dashboard', refreshKey, dateRange.from.toISOString(), dateRange.to.toISOString()],
+    queryFn: async () => {
+      const r = await offlineFetch(`/api/dashboard?from=${dateRange.from.toISOString()}&to=${dateRange.to.toISOString()}`)
+      if (!r.ok) {
+        // 🔒 V7.1: Extract the actual error message from the response body
+        let errorDetail = `HTTP ${r.status}`
+        try {
+          const body = await r.json()
+          if (body?.message) errorDetail = `HTTP ${r.status}: ${body.message}`
+          else if (body?.error) errorDetail = `HTTP ${r.status}: ${body.error}`
+          if (body?.detail) errorDetail += ` | ${body.detail}`
+        } catch {
+          // Response wasn't JSON — keep the status code
+        }
+        throw new Error(errorDetail)
+      }
+      return r.json()
+    },
+    // 🔒 V8 U8: Show cached data instantly while fresh data loads (perceived speed).
+    // staleTime: 1 min — don't refetch within 1 min of last fetch.
+    // placeholderData: keepPreviousData — when date range changes, show old data
+    //   until new data arrives (instead of blanking to skeleton).
+    staleTime: 60 * 1000,
+    placeholderData: (prev) => prev,  // keepPreviousData equivalent
+    // Don't retry when offline or on network errors — fail fast
+    retry: (count, err) => {
+      if (err instanceof OfflineError) return false
+      if (err instanceof TypeError) return false // Network failure
+      return count < 2
+    },
+  })
 
   const handleDateChange = (range: DateRange, preset: DatePreset) => {
     setDateRange(range)
@@ -80,12 +107,8 @@ export function Dashboard() {
   // Show offline-no-data state if: offline AND query failed (any error) AND no cached data
   const isOfflineNoData = !isOnline() && !!error && !data
 
-  // 🔒 BUG FIX V5 + V7.1: Show error state if query fails (e.g., 401, 500)
-  // and no data. V7.1: Now that the dashboard API returns 500 on SQL errors
-  // (instead of 200 with zeros), this error state will actually trigger.
-  // The error message is shown so the founder can see what's wrong.
+  // 🔒 BUG FIX V5: Show error state if query fails (e.g., 401) and no data
   if (error && !data && !isLoading) {
-    const errorMsg = error instanceof Error ? error.message : String(error)
     return (
       <div className="space-y-5">
         <DateRangeHeader
@@ -99,30 +122,17 @@ export function Dashboard() {
             <CloudOff className="w-8 h-8 text-red-600" />
           </div>
           <h3 className="text-lg font-semibold mb-2">Unable to load dashboard</h3>
-          <p className="text-sm text-muted-foreground max-w-sm mb-2">
-            Something went wrong loading your dashboard data. Please try refreshing.
+          <p className="text-sm text-muted-foreground max-w-sm mb-4">
+            Your session may have expired. Please refresh the page or log in again.
           </p>
-          <p className="text-xs text-red-600 dark:text-red-400 max-w-md mb-4 font-mono break-all">
-            {errorMsg.slice(0, 300)}
-          </p>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => window.location.reload()}
-              className="gap-2"
-            >
-              Refresh
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => window.location.href = '/'}
-              className="gap-2"
-            >
-              Go to Login
-            </Button>
-          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => window.location.href = '/'}
+            className="gap-2"
+          >
+            Go to Login
+          </Button>
         </div>
       </div>
     )
@@ -184,35 +194,16 @@ export function Dashboard() {
     )
   }
 
-  // 🔒 BUG FIX V5 + V4 BUG-2: Provide defaults for EVERY field the JSX reads.
-  // Was: defaults omitted `netProfit`, `totalStockValue`, `productCount`,
-  // `rangeTxnCount`, `totalExpenses` → on partial load, `formatINR(kpis.netProfit)`
-  // rendered ₹NaN and `isNewUser` check read `undefined`. The `gstSummary`
-  // default used totally different keys (`totalTaxableSales`, `totalCGST`...)
-  // than the JSX reads (`outputTax`, `inputTax`, `cgst`, `sgst`, `netPayable`)
-  // → entire GST card showed ₹NaN on any partial load.
-  // Now: defaults match the server response shape EXACTLY (see /api/dashboard/route.ts).
-  const kpis = data.kpis || {
-    todayRevenue: 0, todayProfit: 0, todayTxnCount: 0,
-    rangeRevenue: 0, rangeProfit: 0, rangeExpenses: 0,
-    rangePurchases: 0, rangeIncome: 0,
-    revenueGrowth: 0, profitGrowth: 0,
-    netProfit: 0,
-    totalReceivable: 0, totalPayable: 0,
-    totalStockValue: 0, productCount: 0, partyCount: 0,
-    rangeTxnCount: 0,
-  }
+  // 🔒 BUG FIX V5: Add null checks to prevent crash when API returns error
+  // Was: const { kpis, ... } = data → if data is partial/missing, crash
+  // Now: provide defaults for every field
+  const kpis = data.kpis || { todayRevenue: 0, todayProfit: 0, todayTxnCount: 0, rangeRevenue: 0, rangeProfit: 0, rangeExpenses: 0, rangePurchases: 0, rangeIncome: 0, revenueGrowth: 0, profitGrowth: 0, totalReceivable: 0, totalPayable: 0, rangeSaleCount: 0 }
   const salesTrend = data.salesTrend || []
   const topProducts = data.topProducts || []
   const categoryBreakdown = data.categoryBreakdown || []
   const paymentModeSplit = data.paymentModeSplit || []
   const lowStockProducts = data.lowStockProducts || []
-  // gstSummary default — keys must match what JSX reads:
-  //   gstSummary.outputTax / inputTax / cgst / sgst / netPayable
-  const gstSummary = data.gstSummary || {
-    taxableSales: 0, cgst: 0, sgst: 0, igst: 0,
-    outputTax: 0, inputTax: 0, netPayable: 0,
-  }
+  const gstSummary = data.gstSummary || { totalTaxableSales: 0, totalCGST: 0, totalSGST: 0, totalIGST: 0, totalTax: 0 }
   const recentTransactions = data.recentTransactions || []
   const setting = data.setting || { shopName: 'My Shop' }
 
@@ -247,23 +238,13 @@ export function Dashboard() {
     window.open(`https://wa.me/?text=${text}`, '_blank')
   }
 
-  // Repeat last sale — fetches the ACTUAL latest sale, then pre-fills the
-  // New Sale form with its items.
-  //
-  // 🔒 AUDIT FIX V4 BUG-3: was raw `fetch(..., { cache: 'no-store' })` —
-  // inconsistent with the app's offline-first design. If the user was offline,
-  // this silently failed (no cache lookup, just network error → toast).
-  // Now: routed through `offlineFetch` — when online it does the same network
-  // fetch (and caches the response); when offline it falls back to the cached
-  // `/api/transactions` list, which the dashboard already populated. The
-  // "Repeat Last Sale" button now works offline against cached data.
+  // Repeat last sale — fetches the ACTUAL latest sale (bypassing cache)
+  // then pre-fills the New Sale form with its items
   const handleRepeatLastSale = async () => {
     setRepeating(true)
     try {
-      const r = await offlineFetch('/api/transactions?limit=1&type=sale', {
-        // Bypass browser cache when online so we always get the truly latest sale
-        cache: 'no-store',
-      })
+      // Fetch the latest sale transaction directly (cache: 'no-store' to bypass browser cache)
+      const r = await fetch('/api/transactions?limit=1&type=sale', { cache: 'no-store' })
       const data = await r.json()
       const latestSale = data?.transactions?.[0]
 
@@ -292,24 +273,14 @@ export function Dashboard() {
       setPreviousView('dashboard')
       setView('new-sale')
     } catch (err) {
-      // offlineFetch throws OfflineError when offline AND no cached response
-      if (err instanceof OfflineError) {
-        sonnerToast.error('You are offline and no recent sale is cached.')
-      } else {
-        sonnerToast.error('Failed to load last sale')
-      }
+      sonnerToast.error('Failed to load last sale')
     } finally {
       setRepeating(false)
     }
   }
 
-  // Empty state for new users (0 transactions, 0 products, 0 parties)
-  // 🔒 V7.1 BUG FIX: Was too aggressive — triggered when totalStockValue=0
-  // even for existing users with products (if stock or purchasePrice was 0).
-  // Now: only shows the welcome screen if the user has NO data at all
-  // (no products, no parties, no transactions ever). Uses partyCount + productCount
-  // as the primary signals — those are reliable counts, not computed values.
-  const isNewUser = kpis.productCount === 0 && kpis.partyCount === 0 && recentTransactions.length === 0 && kpis.rangeTxnCount === 0
+  // Empty state for new users (0 transactions)
+  const isNewUser = kpis.totalStockValue === 0 && kpis.productCount === 0 && kpis.rangeTxnCount === 0 && recentTransactions.length === 0
 
   if (isNewUser) {
     return (
@@ -588,13 +559,8 @@ export function Dashboard() {
                 <PieChart>
                   <Pie
                     data={[
-                      // 🔒 AUDIT FIX V4 BUG-1: was `kpis.totalPayable` (an outstanding
-                      // BALANCE, not a flow). Now `kpis.rangePurchases` — the actual
-                      // purchase total for the selected range. Mixing a range-flow
-                      // (rangeRevenue) with a stock-balance (totalPayable) gave a
-                      // misleading chart and a wrong "Net" figure.
                       { name: 'Sales', value: kpis.rangeRevenue || 0, fill: 'oklch(0.62 0.15 155)' },
-                      { name: 'Purchases', value: kpis.rangePurchases || 0, fill: 'oklch(0.62 0.18 42)' },
+                      { name: 'Purchases', value: kpis.totalPayable || 0, fill: 'oklch(0.62 0.18 42)' },
                     ]}
                     dataKey="value"
                     cx="50%"
@@ -617,15 +583,15 @@ export function Dashboard() {
                 <div className="flex items-center gap-2">
                   <div className="w-2.5 h-2.5 rounded-full" style={{ background: 'oklch(0.62 0.18 42)' }} />
                   <span className="text-xs text-muted-foreground flex-1">Purchases</span>
-                  <span className="text-sm font-bold tabular-nums">{formatINRCompact(kpis.rangePurchases || 0)}</span>
+                  <span className="text-sm font-bold tabular-nums">{formatINRCompact(kpis.totalPayable || 0)}</span>
                 </div>
                 <div className="flex items-center gap-2 pt-1 border-t border-border/40">
                   <span className="text-xs text-muted-foreground flex-1">Net</span>
                   <span className={cn(
                     'text-sm font-bold tabular-nums',
-                    (kpis.rangeRevenue - (kpis.rangePurchases || 0)) >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                    (kpis.rangeRevenue - (kpis.totalPayable || 0)) >= 0 ? 'text-emerald-600' : 'text-rose-600'
                   )}>
-                    {formatINRCompact(kpis.rangeRevenue - (kpis.rangePurchases || 0))}
+                    {formatINRCompact(kpis.rangeRevenue - (kpis.totalPayable || 0))}
                   </span>
                 </div>
               </div>

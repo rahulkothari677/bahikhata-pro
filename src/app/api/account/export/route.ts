@@ -72,17 +72,27 @@ export async function GET() {
         appVersion: '1.0',
         format: 'JSON',
         note: 'This is a complete export of your data from EkBook, per DPDP Act 2023 Right to Data Portability.',
+        // 🔒 V8 D4: Note about soft-deleted records in the export
+        softDeleteNote: 'Transactions with a non-null "deletedAt" field have been soft-deleted (voided) but are included in this export for completeness. Parties with a non-null "deletedAt" are similarly soft-deleted.',
       },
       user,
       setting,
       products,
-      parties,
-      transactions,
+      // 🔒 V8 D4: Mark soft-deleted parties — include all but flag them
+      parties: parties?.map(p => ({
+        ...p,
+        isDeleted: p.deletedAt !== null,
+      })),
+      // 🔒 V8 D4: Mark soft-deleted transactions — include all but flag them
+      transactions: transactions?.map(t => ({
+        ...t,
+        isDeleted: t.deletedAt !== null,
+      })),
       payments,
       auditLogs,
     }
 
-    const filename = `bahikhata-export-${new Date().toISOString().split('T')[0]}.json`
+    const filename = `ekbook-export-${new Date().toISOString().split('T')[0]}.json`
 
     return new NextResponse(JSON.stringify(exportData, null, 2), {
       status: 200,

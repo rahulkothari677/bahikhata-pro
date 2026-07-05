@@ -131,8 +131,8 @@ interface AppState {
   resetFeatures: () => void
   themeColor: ThemeColor
   setThemeColor: (c: ThemeColor) => void
-  language: 'en' | 'hi'
-  setLanguage: (l: 'en' | 'hi') => void
+  language: string
+  setLanguage: (l: string) => void
   searchOpen: boolean
   setSearchOpen: (open: boolean) => void
   // Global paywall state — shared across all components via Zustand.

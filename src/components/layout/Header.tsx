@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useAppStore, type ViewType } from '@/store/app-store'
 import { useTranslation } from '@/hooks/use-translation'
-import { Menu, Plus, Sparkles, ScanLine, ArrowLeft, Search, LogOut, Store, ChevronDown, Check } from 'lucide-react'
+import { Menu, Plus, Sparkles, ScanLine, ArrowLeft, Search, LogOut, Store, ChevronDown, Check, Globe } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useQuery } from '@tanstack/react-query'
 import { useSession, signOut } from 'next-auth/react'
@@ -188,6 +188,10 @@ export function Header() {
           {/* Notification center — only on Dashboard */}
           {currentView === 'dashboard' && <NotificationCenter />}
 
+          {/* 🔒 V8 U7: Language toggle — prominent in header for regional users.
+              Cycles through the available languages. Quick access from any screen. */}
+          <LanguageToggle />
+
           {/* Dark mode toggle — removed from header, now in Settings */}
 
           {/* Quick action: AI Scan - desktop only (mobile uses dashboard hero button) */}
@@ -260,5 +264,62 @@ export function Header() {
         </div>
       </div>
     </header>
+  )
+}
+
+/**
+ * 🔒 V8 U7: LanguageToggle — quick language switcher in the header.
+ * Cycles through available languages. Saves to Settings via PUT /api/settings.
+ */
+function LanguageToggle() {
+  const { language, setLanguage } = useTranslation()
+  const [saving, setSaving] = useState(false)
+
+  const LANGS = [
+    { code: 'en', label: 'EN', name: 'English' },
+    { code: 'hi', label: 'हि', name: 'हिन्दी' },
+    { code: 'mr', label: 'मर', name: 'मराठी' },
+    { code: 'ta', label: 'த', name: 'தமிழ்' },
+    { code: 'te', label: 'తె', name: 'తెలుగు' },
+    { code: 'gu', label: 'ગુ', name: 'ગુજરાતી' },
+    { code: 'bn', label: 'বাং', name: 'বাংলা' },
+    { code: 'kn', label: 'ಕ', name: 'ಕನ್ನಡ' },
+    { code: 'ml', label: 'മ', name: 'മലയാളം' },
+    { code: 'pa', label: 'ਪੰ', name: 'ਪੰਜਾਬੀ' },
+  ]
+
+  const currentLang = LANGS.find(l => l.code === language) || LANGS[0]
+
+  const cycle = async () => {
+    const currentIdx = LANGS.findIndex(l => l.code === language)
+    const nextLang = LANGS[(currentIdx + 1) % LANGS.length]
+    setLanguage(nextLang.code)
+    setSaving(true)
+    try {
+      await offlineFetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ voiceLang: nextLang.code }),
+        offline: { invalidate: ['/api/settings'] },
+      })
+    } catch {
+      // Non-critical — language is set locally even if save fails
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Button
+      size="iconTouch"
+      variant="ghost"
+      onClick={cycle}
+      disabled={saving}
+      className="flex-shrink-0"
+      title={`Language: ${currentLang.name} — click to switch`}
+      aria-label={`Switch language (current: ${currentLang.name})`}
+    >
+      <span className="text-sm font-bold">{currentLang.label}</span>
+    </Button>
   )
 }

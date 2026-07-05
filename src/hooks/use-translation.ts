@@ -42,5 +42,5 @@ export function useTranslation() {
     return getTranslation(language as Language, key)
   }
 
-  return { t, language }
+  return { t, language, setLanguage }
 }
