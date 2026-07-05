@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { Prisma } from '@prisma/client'
 import { getAuthUserId } from '@/lib/get-auth'
 import { withCache } from '@/lib/cache'
 import { activeTransactionWhere } from '@/lib/query-helpers'
@@ -226,9 +227,16 @@ export async function GET(req: NextRequest) {
     // caused ambiguity (Postgres could interpret `date` as the type, not the
     // column). This caused a SQL error → catch block returned empty data →
     // dashboard showed "Welcome to EkBook" empty state for existing users.
+    // 🔒 V7.1 BUG FIX: DATE_TRUNC's first argument must be a text literal,
+    // not a parameterized value. Prisma's $queryRaw treats ${truncUnit} as
+    // a parameter ($1), which causes: "function date_trunc(text, timestamp)
+    // does not exist" or similar errors. Use Prisma.sql to inline the unit
+    // safely (it's a hardcoded string, not user input — no SQL injection risk).
+    const truncUnitLiteral = Prisma.sql([`${truncUnit}`])  // safe — truncUnit is one of 'day'|'week'|'month'
+
     const salesTrendRows = await db.$queryRaw<Array<{ bucketStart: Date; revenue: number; profit: number }>>`
       SELECT
-        DATE_TRUNC(${truncUnit}, "date") AS "bucketStart",
+        DATE_TRUNC(${truncUnitLiteral}, "date") AS "bucketStart",
         COALESCE(SUM("totalAmount"), 0) AS revenue,
         COALESCE(SUM("grossProfit"), 0) AS profit
       FROM "Transaction"
@@ -237,7 +245,7 @@ export async function GET(req: NextRequest) {
         AND "type" = 'sale'
         AND "date" >= ${rangeFrom}
         AND "date" <= ${rangeTo}
-      GROUP BY DATE_TRUNC(${truncUnit}, "date")
+      GROUP BY DATE_TRUNC(${truncUnitLiteral}, "date")
       ORDER BY "bucketStart" ASC
     `
 
@@ -441,35 +449,23 @@ export async function GET(req: NextRequest) {
       recentTransactions: recentTransactionsData,
     }, { maxAge: 30, swr: 300 })
   } catch (error) {
-    // 🔒 V6.1 BUG FIX: Log the FULL error so we can diagnose. Was: silent
-    // catch that returned empty data → dashboard showed "Welcome to EkBook"
-    // empty state for existing users, with no visible error. Now: log the
-    // full error + stack trace so the founder can see exactly what failed.
+    // 🔒 V7.1 BUG FIX: Was returning all-zeros with HTTP 200 on ANY error →
+    // the dashboard showed the "Welcome to EkBook" empty state for existing
+    // users, hiding the real SQL/DB error. Now: return 500 with the error
+    // message so the founder can see exactly what failed in Vercel logs,
+    // and the UI shows an error state instead of a fake empty dashboard.
     console.error('Dashboard API error:', error)
     if (error instanceof Error) {
       console.error('Dashboard API error stack:', error.stack)
       console.error('Dashboard API error message:', error.message)
     }
-    // 🔒 BUG FIX V5: Return empty dashboard data instead of 500 error.
-    return NextResponse.json({
-      kpis: {
-        todayRevenue: 0, todayProfit: 0, todayTxnCount: 0,
-        rangeRevenue: 0, rangeProfit: 0, rangeExpenses: 0,
-        rangePurchases: 0, rangeIncome: 0,
-        revenueGrowth: 0, profitGrowth: 0,
-        netProfit: 0,
-        totalReceivable: 0, totalPayable: 0,
-        totalStockValue: 0, productCount: 0, partyCount: 0,
-        rangeTxnCount: 0,
+    return NextResponse.json(
+      {
+        error: 'Failed to load dashboard',
+        message: error instanceof Error ? error.message : 'Unknown error',
+        detail: error instanceof Error ? String(error).slice(0, 500) : String(error).slice(0, 500),
       },
-      salesTrend: [],
-      topProducts: [],
-      categoryBreakdown: [],
-      paymentModeSplit: [],
-      lowStockProducts: [],
-      gstSummary: { taxableSales: 0, cgst: 0, sgst: 0, igst: 0, outputTax: 0, inputTax: 0, netPayable: 0 },
-      recentTransactions: [],
-      setting: null,
-    })
+      { status: 500 },
+    )
   }
 }

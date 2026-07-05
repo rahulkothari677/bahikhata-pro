@@ -80,8 +80,12 @@ export function Dashboard() {
   // Show offline-no-data state if: offline AND query failed (any error) AND no cached data
   const isOfflineNoData = !isOnline() && !!error && !data
 
-  // 🔒 BUG FIX V5: Show error state if query fails (e.g., 401) and no data
+  // 🔒 BUG FIX V5 + V7.1: Show error state if query fails (e.g., 401, 500)
+  // and no data. V7.1: Now that the dashboard API returns 500 on SQL errors
+  // (instead of 200 with zeros), this error state will actually trigger.
+  // The error message is shown so the founder can see what's wrong.
   if (error && !data && !isLoading) {
+    const errorMsg = error instanceof Error ? error.message : String(error)
     return (
       <div className="space-y-5">
         <DateRangeHeader
@@ -95,17 +99,30 @@ export function Dashboard() {
             <CloudOff className="w-8 h-8 text-red-600" />
           </div>
           <h3 className="text-lg font-semibold mb-2">Unable to load dashboard</h3>
-          <p className="text-sm text-muted-foreground max-w-sm mb-4">
-            Your session may have expired. Please refresh the page or log in again.
+          <p className="text-sm text-muted-foreground max-w-sm mb-2">
+            Something went wrong loading your dashboard data. Please try refreshing.
           </p>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => window.location.href = '/'}
-            className="gap-2"
-          >
-            Go to Login
-          </Button>
+          <p className="text-xs text-red-600 dark:text-red-400 max-w-md mb-4 font-mono break-all">
+            {errorMsg.slice(0, 300)}
+          </p>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.location.reload()}
+              className="gap-2"
+            >
+              Refresh
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.location.href = '/'}
+              className="gap-2"
+            >
+              Go to Login
+            </Button>
+          </div>
         </div>
       </div>
     )
@@ -286,8 +303,13 @@ export function Dashboard() {
     }
   }
 
-  // Empty state for new users (0 transactions)
-  const isNewUser = kpis.totalStockValue === 0 && kpis.productCount === 0 && kpis.rangeTxnCount === 0 && recentTransactions.length === 0
+  // Empty state for new users (0 transactions, 0 products, 0 parties)
+  // 🔒 V7.1 BUG FIX: Was too aggressive — triggered when totalStockValue=0
+  // even for existing users with products (if stock or purchasePrice was 0).
+  // Now: only shows the welcome screen if the user has NO data at all
+  // (no products, no parties, no transactions ever). Uses partyCount + productCount
+  // as the primary signals — those are reliable counts, not computed values.
+  const isNewUser = kpis.productCount === 0 && kpis.partyCount === 0 && recentTransactions.length === 0 && kpis.rangeTxnCount === 0
 
   if (isNewUser) {
     return (
