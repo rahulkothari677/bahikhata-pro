@@ -42,8 +42,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     // 2. SQL aggregates for stats (O(1) memory regardless of transaction count)
-    // 🔒 V5 HA: All four queries now filter deletedAt: null.
-    const [salesAgg, purchaseAgg, countAgg, firstLastAgg, lastTxn] = await Promise.all([
+    // 🔒 V5 HA: All queries now filter deletedAt: null.
+    // 🔒 V6 PP3: Was 2 separate findFirst queries for first/last transaction date
+    // (orderBy asc + desc). Now: 1 aggregate query with _min + _max — same result,
+    // half the round-trips, simpler code.
+    const [salesAgg, purchaseAgg, countAgg, dateRangeAgg] = await Promise.all([
       db.transaction.aggregate({
         where: { userId, partyId: id, type: 'sale', deletedAt: null },
         _sum: { totalAmount: true, paidAmount: true },
@@ -55,15 +58,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         _count: true,
       }),
       db.transaction.count({ where: { userId, partyId: id, deletedAt: null } }),
-      db.transaction.findFirst({
+      // 🔒 V6 PP3: Single aggregate for first + last transaction date
+      // (replaces 2 separate findFirst queries)
+      db.transaction.aggregate({
         where: { userId, partyId: id, deletedAt: null },
-        orderBy: { date: 'asc' },
-        select: { date: true },
-      }),
-      db.transaction.findFirst({
-        where: { userId, partyId: id, deletedAt: null },
-        orderBy: { date: 'desc' },
-        select: { date: true },
+        _min: { date: true },
+        _max: { date: true },
       }),
     ])
 
@@ -94,7 +94,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     // 🔒 V5 MB: was `amount: 0` for every row. Now: real line-amount sum via
     // a raw SQL query that sums (quantity * unitPrice) per productName, filtered
     // to non-deleted transactions for this party.
-    const topProductsAgg = await db.$queryRaw<Array<{ productName: string; totalQuantity: bigint; totalAmount: number }>>`
+    //
+    // 🔒 AUDIT FIX V6 PP2: Type annotation is now accurate. Postgres SUM(numeric)
+    // returns a `string` (Prisma raw SQL deserializes numeric/decimal as strings
+    // to avoid precision loss). We convert with Number() below, which is safe for
+    // display. The previous `number` type annotation was misleading — it implied
+    // the value was already a number, but it was actually a string at runtime.
+    const topProductsAgg = await db.$queryRaw<Array<{ productName: string; totalQuantity: bigint; totalAmount: string }>>`
       SELECT
         ti."productName",
         SUM(ti.quantity) AS "totalQuantity",
@@ -109,7 +115,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       LIMIT 5
     `
 
-    // Normalize top products (Prisma raw returns bigint for SUM, convert to number)
+    // Normalize top products (Prisma raw returns bigint for SUM(quantity) and
+    // string for SUM(numeric) — convert both to number for the frontend)
     const topProducts = topProductsAgg.map(p => ({
       name: p.productName,
       quantity: Number(p.totalQuantity),
@@ -172,8 +179,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         transactionCount: countAgg,
         salesCount: salesAgg._count,
         purchasesCount: purchaseAgg._count,
-        firstTransactionDate: firstLastAgg?.date,
-        lastTransactionDate: lastTxn?.date,
+        firstTransactionDate: dateRangeAgg._min.date,
+        lastTransactionDate: dateRangeAgg._max.date,
       },
       topProducts,
       monthlyData,

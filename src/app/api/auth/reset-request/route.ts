@@ -84,12 +84,18 @@ export async function POST(req: NextRequest) {
       return genericResponse
     }
 
-    // Clean up expired tokens for this email (housekeeping, non-critical)
+    // 🔒 AUDIT FIX V6 PP4: Clean up ALL expired tokens (not just for this email).
+    // Was: only deleted expired tokens for the requesting email — so tokens for
+    // users who never completed reset would accumulate forever. The auditor
+    // flagged this as a low-priority item; a cron job would be cleaner, but
+    // running a global cleanup on every reset request is a simple, effective
+    // approximation (costs 1 extra query per request, no cron infrastructure
+    // needed). Tokens expire in 1 hour, so the accumulation rate is bounded,
+    // but this keeps the table tidy.
     try {
       await db.passwordResetToken.deleteMany({
         where: {
-          email: emailLower,
-          expiresAt: { lt: new Date() },
+          expiresAt: { lt: new Date() },  // global — not scoped to email
         },
       })
     } catch {
