@@ -230,9 +230,10 @@ export async function GET(req: NextRequest) {
     // 🔒 V7.1 BUG FIX: DATE_TRUNC's first argument must be a text literal,
     // not a parameterized value. Prisma's $queryRaw treats ${truncUnit} as
     // a parameter ($1), which causes: "function date_trunc(text, timestamp)
-    // does not exist" or similar errors. Use Prisma.sql to inline the unit
-    // safely (it's a hardcoded string, not user input — no SQL injection risk).
-    const truncUnitLiteral = Prisma.sql([`${truncUnit}`])  // safe — truncUnit is one of 'day'|'week'|'month'
+    // does not exist" or similar errors. Use Prisma.raw to inline the unit
+    // safely (it's a hardcoded string — 'day'|'week'|'month' — not user input,
+    // so no SQL injection risk).
+    const truncUnitLiteral = Prisma.raw(`'${truncUnit}'`)  // quoted string literal, safe (hardcoded value)
 
     const salesTrendRows = await db.$queryRaw<Array<{ bucketStart: Date; revenue: number; profit: number }>>`
       SELECT

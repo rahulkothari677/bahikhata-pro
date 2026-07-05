@@ -42,7 +42,20 @@ export function useDashboard(dateRange: DateRange) {
       const r = await offlineFetch(
         `/api/dashboard?from=${dateRange.from.toISOString()}&to=${dateRange.to.toISOString()}`
       )
-      if (!r.ok) throw new Error(`HTTP ${r.status}`)
+      if (!r.ok) {
+        // 🔒 V7.1: Extract the actual error message from the response body
+        // so the dashboard shows the real error, not just "HTTP 500".
+        let errorDetail = `HTTP ${r.status}`
+        try {
+          const body = await r.json()
+          if (body?.message) errorDetail = `HTTP ${r.status}: ${body.message}`
+          else if (body?.error) errorDetail = `HTTP ${r.status}: ${body.error}`
+          if (body?.detail) errorDetail += ` | ${body.detail}`
+        } catch {
+          // Response wasn't JSON — keep the status code
+        }
+        throw new Error(errorDetail)
+      }
       return r.json()
     },
     staleTime: 60 * 1000, // 1 min — don't refetch within 1 min
