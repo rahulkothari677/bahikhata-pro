@@ -15,35 +15,14 @@ const nextConfig: NextConfig = {
   // 🔒 SECURITY (Audit fix N3 + M11 + V9 2.6): Content-Security-Policy header.
   // Now ENFORCED (was report-only). Monitored for 1+ week with no violations.
   //
-  // 🔒 V9 2.6: Removed 'unsafe-eval' — was needed by some older libraries
-  // but is not required in production Next.js. Keeping 'unsafe-inline' because
-  // Next.js injects inline scripts for hydration. Moving to nonce-based CSP
-  // would remove the need for 'unsafe-inline' too, but that requires middleware
-  // changes and is a larger task.
-  //
-  // If issues arise after removing 'unsafe-eval', check the browser console
-  // for CSP violation reports. If a dependency genuinely needs it, re-add it.
+  // 🔒 V9 2.6: CSP is now set in middleware (nonce-based). These headers
+  // are a FALLBACK for static files (which middleware doesn't cover).
+  // CSP is NOT set here — middleware sets it per-request with a nonce.
   async headers() {
     return [
       {
         source: "/(.*)",
         headers: [
-          {
-            key: "Content-Security-Policy",
-            value: [
-              "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' https://vercel.live",
-              "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-              "font-src 'self' https://fonts.gstatic.com data:",
-              "img-src 'self' data: blob: https: https://*.cloudinary.com https://res.cloudinary.com",
-              "media-src 'self' blob:",
-              "connect-src 'self' https://*.sentry.io https://*.posthog.com https://vitals.vercel-insights.com https://api.groq.com https://generativelanguage.googleapis.com https://api.openai.com",
-              "frame-ancestors 'none'",
-              "base-uri 'self'",
-              "form-action 'self'",
-              "object-src 'none'",
-            ].join("; "),
-          },
           {
             key: "X-Frame-Options",
             value: "DENY",
@@ -61,7 +40,6 @@ const nextConfig: NextConfig = {
             value: "on",
           },
           {
-            // 🔒 AUDIT FIX V5: HSTS — forces HTTPS, prevents SSL stripping
             key: "Strict-Transport-Security",
             value: "max-age=31536000; includeSubDomains; preload",
           },

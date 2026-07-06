@@ -3,6 +3,9 @@
  *
  * 1. CSRF protection: verify Origin/Referer on POST/PUT/DELETE/PATCH
  * 2. Security headers: set on every response
+ * 3. 🔒 V9 2.6: Nonce-based CSP — generates a per-request nonce so inline
+ *    scripts can be validated. Uses `'unsafe-inline'` as a fallback for
+ *    browsers that don't support CSP Level 3 nonces.
  *
  * Skip: static files, Next.js internals (_next/*), auth callbacks
  */
@@ -10,11 +13,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 // 🔒 AUDIT FIX H6+L1 (v2 audit): Exact host matching only.
-// Was: `host.endsWith('.vercel.app')` allowed ANY *.vercel.app origin
-// (e.g. evil.vercel.app would pass CSRF). Now: only exact matches in the set.
-// Also fixed the typo: 'bahakhata' → 'bahikhata' (kept for backward compat)
 const ALLOWED_HOSTS = new Set([
-  'bahikhata-pro.vercel.app',  // 🔒 L1: was 'bahakhata-pro' (missing 'i')
+  'bahikhata-pro.vercel.app',
   'localhost:3000',
   '127.0.0.1:3000',
 ])
@@ -23,8 +23,43 @@ export function middleware(req: NextRequest) {
   const { method } = req
   const url = req.nextUrl
 
-  // Apply security headers to all responses
-  const res = NextResponse.next()
+  // 🔒 V9 2.6: Generate a per-request nonce for CSP.
+  // Next.js automatically applies this nonce to its own inline scripts
+  // (hydration, etc.) when it detects the x-nonce request header.
+  const nonce = Buffer.from(crypto.randomUUID().replaceAll('-', '')).toString('base64')
+
+  // Set the nonce on the request headers so Next.js can read it
+  const requestHeaders = new Headers(req.headers)
+  requestHeaders.set('x-nonce', nonce)
+
+  const res = NextResponse.next({
+    request: { headers: requestHeaders },
+  })
+
+  // 🔒 V9 2.6: Nonce-based CSP.
+  // - 'nonce-xxx': allows scripts with this specific nonce (Next.js inline scripts)
+  // - 'unsafe-inline': IGNORED by modern browsers when nonce is present, but
+  //   serves as a fallback for older browsers that don't support CSP Level 3
+  // - 'strict-dynamic': allows scripts loaded by nonced scripts to also execute
+  //   (so PostHog/Sentry loaded by the bundle can dynamically inject scripts)
+  // - https://vercel.live: Vercel's live preview toolbar
+  res.headers.set(
+    'Content-Security-Policy',
+    [
+      "default-src 'self'",
+      `script-src 'self' 'nonce-${nonce}' 'unsafe-inline' 'strict-dynamic' https://vercel.live`,
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+      "font-src 'self' https://fonts.gstatic.com data:",
+      "img-src 'self' data: blob: https: https://*.cloudinary.com https://res.cloudinary.com",
+      "media-src 'self' blob:",
+      "connect-src 'self' https://*.sentry.io https://*.posthog.com https://vitals.vercel-insights.com https://api.groq.com https://generativelanguage.googleapis.com https://api.openai.com",
+      "frame-ancestors 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+      "object-src 'none'",
+    ].join('; ')
+  )
+
   res.headers.set('X-Content-Type-Options', 'nosniff')
   res.headers.set('X-Frame-Options', 'DENY')
   res.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
@@ -96,13 +131,15 @@ export function middleware(req: NextRequest) {
 }
 
 // 🔒 AUDIT FIX H6: Exact host match only — no wildcards.
-// Was: `host.endsWith('.vercel.app')` allowed any *.vercel.app origin.
-// Now: only exact matches in ALLOWED_HOSTS pass.
 function isAllowedHost(host: string): boolean {
   return ALLOWED_HOSTS.has(host)
 }
 
+// 🔒 V9 2.6: Expanded matcher to include ALL routes (was: API only).
+// Needed so the nonce CSP is set on page responses too, not just API.
+// Excludes static files, images, and Next.js internals.
 export const config = {
-  // Run middleware on API routes only (skip static files, pages, etc.)
-  matcher: ['/api/:path*'],
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|manifest|woff|woff2|ttf|eot)$).*)',
+  ],
 }

@@ -1,8 +1,10 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
+import { useState, useEffect } from 'react'
 import { useAppStore } from '@/store/app-store'
 import { offlineFetch, OfflineError } from '@/lib/offline-fetch'
+import { getCachedResponse } from '@/lib/offline-db'
 import { getPresetRange, type DateRange, type DatePreset } from '@/components/common/DateRangePicker'
 
 /**
@@ -16,12 +18,13 @@ import { getPresetRange, type DateRange, type DatePreset } from '@/components/co
  * cached data. Date range is canonicalized to day granularity (not millisecond)
  * so identical ranges produce identical cache keys.
  *
- * Usage:
- *   const { data, isLoading, error } = useDashboard(dateRange)
+ * 🔒 V9 4.1/M8: On subsequent loads, reads from IndexedDB cache (~1ms) and
+ * shows it as placeholderData while the network response loads. This makes
+ * the dashboard feel instant on repeat visits — the user sees their data
+ * immediately, then it refreshes in the background.
  */
 
 // Canonicalize a date to day granularity (strips hours/minutes/seconds/ms)
-// This ensures the same logical date range always produces the same cache key
 function canonicalizeDate(d: Date): Date {
   const c = new Date(d)
   c.setHours(0, 0, 0, 0)
@@ -35,16 +38,32 @@ export function useDashboard(dateRange: DateRange) {
   const fromKey = canonicalizeDate(dateRange.from).toISOString()
   const toKey = canonicalizeDate(dateRange.to).toISOString()
 
+  // 🔒 V9 M8: Read from IndexedDB cache on mount for instant first paint.
+  // The cache key matches what offlineFetch uses to cache GET responses.
+  const cacheKey = `/api/dashboard?from=${dateRange.from.toISOString()}&to=${dateRange.to.toISOString()}`
+  const [cachedData, setCachedData] = useState<any>(undefined)
+
+  useEffect(() => {
+    let cancelled = false
+    getCachedResponse(cacheKey).then(cached => {
+      if (!cancelled && cached?.body) {
+        try {
+          setCachedData(JSON.parse(cached.body))
+        } catch {
+          // Cache corrupted — ignore, will fetch from network
+        }
+      }
+    })
+    return () => { cancelled = true }
+  }, [cacheKey])
+
   return useQuery({
     queryKey: ['dashboard', refreshKey, fromKey, toKey],
     queryFn: async () => {
-      // Use the actual (non-canonicalized) dates for the API call
       const r = await offlineFetch(
         `/api/dashboard?from=${dateRange.from.toISOString()}&to=${dateRange.to.toISOString()}`
       )
       if (!r.ok) {
-        // 🔒 V9 2.5: Don't leak DB internals. Extract only the generic message
-        // + errorId (if provided) so the user can report it to support.
         let errorDetail = `HTTP ${r.status}`
         try {
           const body = await r.json()
@@ -57,10 +76,11 @@ export function useDashboard(dateRange: DateRange) {
       }
       return r.json()
     },
-    staleTime: 60 * 1000, // 1 min — don't refetch within 1 min
-    // 🔒 V8 U8: Show cached data instantly while fresh data loads.
-    // When date range changes, old data stays visible until new data arrives.
-    placeholderData: (prev) => prev,  // keepPreviousData equivalent
+    staleTime: 60 * 1000,
+    // 🔒 V9 M8: Use IndexedDB cached data as placeholder on first load.
+    // Shows cached data instantly (~1ms from IndexedDB) while network loads.
+    // Combined with (prev) => prev for date-range changes (keepPreviousData).
+    placeholderData: (prev) => prev || cachedData,
     retry: (count, err) => {
       if (err instanceof OfflineError) return false
       if (err instanceof TypeError) return false
