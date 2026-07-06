@@ -351,7 +351,10 @@ function ReportTabButton({ active, icon: Icon, label, onClick }: {
 
 function PLReport({ data }: { data: any }) {
   const { t } = useTranslation()
-  const { summary, expensesByCategory, incomeByCategory } = data
+  // 🔒 V11 FIX: Defensive destructuring with defaults.
+  const summary = data?.summary || { totalRevenue: 0, grossProfit: 0, totalExpenses: 0, otherIncome: 0, netProfit: 0, profitMargin: 0 }
+  const expensesByCategory = data?.expensesByCategory || []
+  const incomeByCategory = data?.incomeByCategory || []
   return (
     <div className="space-y-4">
       {/* Top metrics */}
@@ -473,7 +476,13 @@ function PLReport({ data }: { data: any }) {
 
 function GSTReport({ data }: { data: any }) {
   const { t } = useTranslation()
-  const { outputSales, inputPurchases, netGSTPayable } = data
+  // 🔒 V11 FIX: Defensive destructuring with defaults. Was: `const { outputSales,
+  // inputPurchases, netGSTPayable } = data` — if any field was undefined (e.g.,
+  // partial API response, cache corruption, old cached data from a previous
+  // deploy), the component crashed on `outputSales.outputTax`.
+  const outputSales = data?.outputSales || { outputTax: 0, taxableValue: 0, bySlab: [] }
+  const inputPurchases = data?.inputPurchases || { inputTax: 0, taxableValue: 0, bySlab: [] }
+  const netGSTPayable = data?.netGSTPayable ?? 0
   return (
     <div className="space-y-4">
       {/* 🔒 V8 D5: Note about gt/cur_gt fields (gross turnover) */}
@@ -494,7 +503,7 @@ function GSTReport({ data }: { data: any }) {
         <ReportStatCard label="Output Tax (Sales)" value={formatINR(outputSales.outputTax)} icon={ArrowUpRight} color="text-rose-600" bg="bg-rose-100" />
         <ReportStatCard label="Input Tax (Purchases)" value={formatINR(inputPurchases.inputTax)} icon={ArrowDownRight} color="text-emerald-600" bg="bg-emerald-100" />
         <ReportStatCard label="Net GST Payable" value={formatINR(netGSTPayable)} icon={Receipt} color={netGSTPayable >= 0 ? 'text-rose-600' : 'text-emerald-600'} bg={netGSTPayable >= 0 ? 'bg-rose-100' : 'bg-emerald-100'} />
-        <ReportStatCard label="Total Invoices" value={String(data.totalInvoices)} icon={FileText} color="text-amber-600" bg="bg-amber-100" />
+        <ReportStatCard label="Total Invoices" value={String(data?.totalInvoices ?? 0)} icon={FileText} color="text-amber-600" bg="bg-amber-100" />
       </div>
 
       {/* By slab */}
@@ -605,13 +614,19 @@ function GSTReport({ data }: { data: any }) {
 
 function StockReport({ data }: { data: any }) {
   const { t } = useTranslation()
+  // 🔒 V11 FIX: Defensive defaults for all data fields.
+  const totalStockValue = data?.totalStockValue ?? 0
+  const totalPotentialValue = data?.totalPotentialValue ?? 0
+  const potentialProfit = data?.potentialProfit ?? 0
+  const lowStockCount = data?.lowStockCount ?? 0
+  const products = data?.products || []
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <ReportStatCard label="Total Stock Value" value={formatINR(data.totalStockValue)} icon={Package} color="text-amber-600" bg="bg-amber-100" />
-        <ReportStatCard label="Potential Sale Value" value={formatINR(data.totalPotentialValue)} icon={IndianRupee} color="text-emerald-600" bg="bg-emerald-100" />
-        <ReportStatCard label="Potential Profit" value={formatINR(data.potentialProfit)} icon={TrendingUp} color="text-violet-600" bg="bg-violet-100" />
-        <ReportStatCard label="Low Stock Items" value={String(data.lowStockCount)} icon={ArrowUpRight} color="text-rose-600" bg="bg-rose-100" />
+        <ReportStatCard label="Total Stock Value" value={formatINR(totalStockValue)} icon={Package} color="text-amber-600" bg="bg-amber-100" />
+        <ReportStatCard label="Potential Sale Value" value={formatINR(totalPotentialValue)} icon={IndianRupee} color="text-emerald-600" bg="bg-emerald-100" />
+        <ReportStatCard label="Potential Profit" value={formatINR(potentialProfit)} icon={TrendingUp} color="text-violet-600" bg="bg-violet-100" />
+        <ReportStatCard label="Low Stock Items" value={String(lowStockCount)} icon={ArrowUpRight} color="text-rose-600" bg="bg-rose-100" />
       </div>
 
       <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
@@ -654,8 +669,8 @@ function StockReport({ data }: { data: any }) {
                 ))}
               </tbody>
             </table>
-            {(data?.products?.length || 0) > 20 && (
-              <p className="text-xs text-muted-foreground text-center mt-3">Showing top 20 of {data.products.length} products</p>
+            {products.length > 20 && (
+              <p className="text-xs text-muted-foreground text-center mt-3">Showing top 20 of {products.length} products</p>
             )}
           </div>
         </CardContent>
@@ -666,6 +681,8 @@ function StockReport({ data }: { data: any }) {
 
 function PartyReport({ data }: { data: any }) {
   const { t } = useTranslation()
+  // 🔒 V11 FIX: Defensive default for parties array.
+  const parties = data?.parties || []
   return (
     <div className="space-y-4">
       <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
@@ -688,7 +705,7 @@ function PartyReport({ data }: { data: any }) {
                 </tr>
               </thead>
               <tbody>
-                {(data?.parties || []).map((p: any) => (
+                {parties.map((p: any) => (
                   <tr key={p.party.id} className="border-b border-border/50 hover:bg-muted/30">
                     <td className="py-2 px-2 font-medium">{p.party.name}</td>
                     <td className="py-2 px-2">
@@ -705,7 +722,7 @@ function PartyReport({ data }: { data: any }) {
                 ))}
               </tbody>
             </table>
-            {(!data?.parties || data.parties.length === 0) && (
+            {parties.length === 0 && (
               <p className="text-center py-8 text-sm text-muted-foreground">No party activity in this period</p>
             )}
           </div>
