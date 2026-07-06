@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useAppStore } from '@/store/app-store'
 import { useTranslation } from '@/hooks/use-translation'
 import { useDashboard } from '@/hooks/use-dashboard'
@@ -51,12 +51,32 @@ export function Dashboard() {
     }
   }, [features?.recurringEntries, checkRecurring])
 
+  // 🔒 V9 4.1: After 3 seconds of loading, show a friendly "waking up" message.
+  // Timer is cleared when loading completes (isLoading becomes false).
+  // Note: isLoading comes from useDashboard below — we use a ref + effect
+  // pattern to avoid the "used before declaration" error.
+  const [showWakingMessage, setShowWakingMessage] = useState(false)
+  const loadingRef = useRef(false)
+
   // 🔒 V9 1.2 FIX: Use the shared useDashboard hook (day-granular cache keys)
   // instead of an inline useQuery with millisecond-precision timestamps.
   // Was: two different cache keys (Dashboard.tsx inline + page.tsx shared hook)
   // → two full dashboard API calls on every page load (28s + 41s on cold DB).
   // Now: ONE hook, ONE cache key, ONE API call. React Query dedupes.
   const { data, isLoading, error } = useDashboard(dateRange)
+
+  // 🔒 V9 4.1: Track loading state in ref for the waking-message timer
+  useEffect(() => {
+    loadingRef.current = isLoading
+    if (isLoading) {
+      const timer = setTimeout(() => {
+        if (loadingRef.current) setShowWakingMessage(true)
+      }, 3000)
+      return () => clearTimeout(timer)
+    } else {
+      setShowWakingMessage(false)
+    }
+  }, [isLoading])
 
   const handleDateChange = (range: DateRange, preset: DatePreset) => {
     setDateRange(range)
@@ -164,6 +184,14 @@ export function Dashboard() {
           onPresetChange={setDatePreset}
         />
         <DashboardSkeleton />
+        {/* 🔒 V9 4.1: Friendly message after 3s so the user knows the app
+            is working, not broken. Especially important during Neon cold starts. */}
+        {showWakingMessage && (
+          <div className="flex items-center justify-center gap-2 py-2 text-sm text-muted-foreground">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span>Waking up your shop… almost there.</span>
+          </div>
+        )}
       </div>
     )
   }

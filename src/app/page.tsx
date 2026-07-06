@@ -145,14 +145,14 @@ export default function Home() {
     return unsub
   }, [queryClient])
 
-  // Pre-cache all key data right after login (only once per session, only online)
-  // This populates IndexedDB so the user can go offline anytime.
-  const precacheDone = useRef(false)
+  // precacheDone ref removed — precache is now gated behind warmup (V9 1.4)
 
-  // 🔒 PERFORMANCE: Warm up Neon DB before any API calls.
-  // Neon's free tier auto-pauses after 5 min. This ping wakes it up so the
-  // real API calls (dashboard, settings, etc.) don't have to wait 10-20s
-  // for the cold start. Fire-and-forget — we don't block on it.
+  // 🔒 V9 1.4 FIX: Gate precache behind warmup completing.
+  // Was: warmup + precache fired as independent effects → all 5 precache
+  // requests raced the warmup on a cold DB, adding to the thundering herd.
+  // Now: warmup fires first, then precache fires after it completes. This
+  // means the DB is awake by the time precache's 5 requests hit, so they
+  // complete quickly (~200ms each) instead of queueing behind the cold start.
   const warmupDone = useRef(false)
   useEffect(() => {
     if (
@@ -162,19 +162,13 @@ export default function Home() {
       isOnline()
     ) {
       warmupDone.current = true
-      fetch('/api/warmup').catch(() => {})
-    }
-  }, [status, session])
-
-  useEffect(() => {
-    if (
-      status === 'authenticated' &&
-      session &&
-      !precacheDone.current &&
-      isOnline()
-    ) {
-      precacheDone.current = true
-      precacheData().catch(() => {})
+      // Fire warmup, then precache after it completes
+      fetch('/api/warmup')
+        .then(() => precacheData())
+        .catch(() => {
+          // Warmup failed — still try precache (DB might wake up on its own)
+          precacheData().catch(() => {})
+        })
     }
   }, [status, session])
 
