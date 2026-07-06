@@ -23,31 +23,20 @@ export function middleware(req: NextRequest) {
   const { method } = req
   const url = req.nextUrl
 
-  // 🔒 V9 2.6: Generate a per-request nonce for CSP.
-  // Next.js automatically applies this nonce to its own inline scripts
-  // (hydration, etc.) when it detects the x-nonce request header.
-  const nonce = Buffer.from(crypto.randomUUID().replaceAll('-', '')).toString('base64')
+  const res = NextResponse.next()
 
-  // Set the nonce on the request headers so Next.js can read it
-  const requestHeaders = new Headers(req.headers)
-  requestHeaders.set('x-nonce', nonce)
-
-  const res = NextResponse.next({
-    request: { headers: requestHeaders },
-  })
-
-  // 🔒 V9 2.6: Nonce-based CSP.
-  // - 'nonce-xxx': allows scripts with this specific nonce (Next.js inline scripts)
-  // - 'unsafe-inline': IGNORED by modern browsers when nonce is present, but
-  //   serves as a fallback for older browsers that don't support CSP Level 3
-  // - 'strict-dynamic': allows scripts loaded by nonced scripts to also execute
-  //   (so PostHog/Sentry loaded by the bundle can dynamically inject scripts)
-  // - https://vercel.live: Vercel's live preview toolbar
+  // 🔒 V9 2.6 (revised): CSP without nonce — 'unsafe-inline' is kept because:
+  // 1. Next.js injects inline scripts for hydration (can't be nonced reliably)
+  // 2. Third-party scripts (PostHog, Sentry, Vercel Analytics) load dynamically
+  // 3. The nonce approach caused CSP violations that blocked these scripts
+  // 'unsafe-eval' was already removed (Phase 6) — that's the bigger win.
+  // Moving to full nonce-based CSP requires migrating ALL script loading
+  // to Next.js Script component with strategy — a larger refactor.
   res.headers.set(
     'Content-Security-Policy',
     [
       "default-src 'self'",
-      `script-src 'self' 'nonce-${nonce}' 'unsafe-inline' 'strict-dynamic' https://vercel.live`,
+      "script-src 'self' 'unsafe-inline' https://vercel.live",
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' https://fonts.gstatic.com data:",
       "img-src 'self' data: blob: https: https://*.cloudinary.com https://res.cloudinary.com",
@@ -67,22 +56,18 @@ export function middleware(req: NextRequest) {
     'Permissions-Policy',
     'camera=(self), microphone=(self), geolocation=()',
   )
-  // HSTS — only on HTTPS
   if (url.protocol === 'https:') {
     res.headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
   }
 
-  // Only check CSRF on mutating methods
   const isMutation = ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method.toUpperCase())
   if (!isMutation) return res
 
-  // Skip auth callback routes (NextAuth handles its own CSRF)
   if (url.pathname.startsWith('/api/auth/')) return res
 
   const origin = req.headers.get('origin')
   const referer = req.headers.get('referer')
 
-  // Both missing = suspicious
   if (!origin && !referer) {
     return NextResponse.json(
       { error: 'Missing Origin/Referer header — request blocked' },
@@ -90,7 +75,6 @@ export function middleware(req: NextRequest) {
     )
   }
 
-  // Check Origin (preferred)
   if (origin) {
     try {
       const originUrl = new URL(origin)
@@ -109,7 +93,6 @@ export function middleware(req: NextRequest) {
     return res
   }
 
-  // Fall back to Referer
   if (referer) {
     try {
       const refererUrl = new URL(referer)
@@ -130,14 +113,11 @@ export function middleware(req: NextRequest) {
   return res
 }
 
-// 🔒 AUDIT FIX H6: Exact host match only — no wildcards.
 function isAllowedHost(host: string): boolean {
   return ALLOWED_HOSTS.has(host)
 }
 
-// 🔒 V9 2.6: Expanded matcher to include ALL routes (was: API only).
-// Needed so the nonce CSP is set on page responses too, not just API.
-// Excludes static files, images, and Next.js internals.
+// Matcher: all routes except static files
 export const config = {
   matcher: [
     '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|manifest|woff|woff2|ttf|eot)$).*)',
