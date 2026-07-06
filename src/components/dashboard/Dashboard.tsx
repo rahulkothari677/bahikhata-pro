@@ -183,15 +183,17 @@ export function Dashboard() {
           onChange={handleDateChange}
           onPresetChange={setDatePreset}
         />
-        <DashboardSkeleton />
-        {/* 🔒 V9 4.1: Friendly message after 3s so the user knows the app
-            is working, not broken. Especially important during Neon cold starts. */}
+        {/* 🔒 V9 4.1: Friendly overlay message after 3s so the user knows the
+            app is working, not broken. Centered on screen with a colorful
+            saffron spinner so it's impossible to miss. */}
         {showWakingMessage && (
-          <div className="flex items-center justify-center gap-2 py-2 text-sm text-muted-foreground">
-            <Loader2 className="w-4 h-4 animate-spin" />
-            <span>Waking up your shop… almost there.</span>
+          <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+            <div className="w-14 h-14 rounded-full border-4 border-primary/20 border-t-primary animate-spin mb-4" />
+            <p className="text-base font-semibold text-primary">Waking up your shop…</p>
+            <p className="text-sm text-muted-foreground mt-1">Almost there — just a moment.</p>
           </div>
         )}
+        {!showWakingMessage && <DashboardSkeleton />}
       </div>
     )
   }
