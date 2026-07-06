@@ -113,6 +113,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const grossAmounts = items.map((item: any) =>
       roundMoney(toMoney(item.quantity) * toMoney(item.unitPrice)),
     )
+    // 🔒 V11 §4.3: Reject over-discount (same check as POST handler).
+    const subtotalCheck = roundMoney(grossAmounts.reduce((s, g) => s + g, 0))
+    if (orderDiscount > subtotalCheck) {
+      return NextResponse.json({
+        error: 'Discount cannot exceed subtotal',
+        message: `The discount (₹${orderDiscount.toFixed(2)}) is greater than the subtotal (₹${subtotalCheck.toFixed(2)}). Please reduce the discount and try again.`,
+      }, { status: 400 })
+    }
     const perItemDiscounts = distributeDiscountProportionally(grossAmounts, orderDiscount)
 
     const txItems = items.map((item: any, idx: number) => {

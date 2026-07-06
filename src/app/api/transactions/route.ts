@@ -203,6 +203,19 @@ export async function POST(req: NextRequest) {
     const grossAmounts = items.map((item: any) =>
       roundMoney(toMoney(item.quantity) * toMoney(item.unitPrice)),
     )
+    // 🔒 V11 §4.3: Reject over-discount (discount > subtotal). Was: the
+    // distributeDiscountProportionally helper clamps each item's share to
+    // [0, gross], so the sum of per-item discounts == subtotal (not the
+    // full orderDiscount). But the header computed totalAmount using the
+    // full orderDiscount → negative total while items summed to ~0 →
+    // inconsistent invoice. Now: reject early with a clear error.
+    const subtotalCheck = roundMoney(grossAmounts.reduce((s, g) => s + g, 0))
+    if (orderDiscount > subtotalCheck) {
+      return NextResponse.json({
+        error: 'Discount cannot exceed subtotal',
+        message: `The discount (₹${orderDiscount.toFixed(2)}) is greater than the subtotal (₹${subtotalCheck.toFixed(2)}). Please reduce the discount and try again.`,
+      }, { status: 400 })
+    }
     const perItemDiscounts = distributeDiscountProportionally(grossAmounts, orderDiscount)
 
     const txItems = items.map((item: any, idx: number) => {

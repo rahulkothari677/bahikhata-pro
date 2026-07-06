@@ -14,44 +14,48 @@ import { z } from 'zod'
  */
 
 // Transaction item schema (used in both POST and PUT)
+// 🔒 V11 §2.4: Use z.coerce.number() for all numeric fields so string values
+// from HTML inputs are auto-converted. Same defensive fix as products.
 export const transactionItemSchema = z.object({
   productId: z.string().nullable().optional(),
   productName: z.string().min(1, 'Product name is required').max(200, 'Product name too long'),
-  quantity: z.number().positive('Quantity must be positive').max(1000000, 'Quantity too large'),
-  unitPrice: z.number().min(0, 'Unit price cannot be negative').max(10000000, 'Unit price too large'),
-  gstRate: z.number().min(0).max(100).optional().default(0),
-  discountAmount: z.number().min(0).optional().default(0),
+  quantity: z.coerce.number().positive('Quantity must be positive').max(1000000, 'Quantity too large'),
+  unitPrice: z.coerce.number().min(0, 'Unit price cannot be negative').max(10000000, 'Unit price too large'),
+  gstRate: z.coerce.number().min(0).max(100).optional().default(0),
+  discountAmount: z.coerce.number().min(0).optional().default(0),
 })
 
 // Transaction create schema
+// 🔒 V11 §2.4: z.coerce.number() for all numeric fields.
 export const createTransactionSchema = z.object({
   type: z.enum(['sale', 'purchase', 'income', 'expense']),
   partyId: z.string().nullable().optional(),
   date: z.string().optional(),
   items: z.array(transactionItemSchema).optional(),
-  discountAmount: z.number().min(0).optional(),
+  discountAmount: z.coerce.number().min(0).optional(),
   paymentMode: z.enum(['cash', 'upi', 'card', 'bank', 'credit']).optional().default('cash'),
   notes: z.string().max(5000, 'Notes too long').nullable().optional(),
   invoiceNo: z.string().max(100).nullable().optional(),
   category: z.string().max(200).nullable().optional(),
-  paidAmount: z.number().min(0).optional(),
+  paidAmount: z.coerce.number().min(0).optional(),
   payeeName: z.string().max(200).nullable().optional(),
   payeePhone: z.string().max(20).nullable().optional(),
-  totalAmount: z.number().min(0, 'Amount cannot be negative').max(100000000, 'Amount too large').optional(), // for income/expense only — 🔒 N9: validated
+  totalAmount: z.coerce.number().min(0, 'Amount cannot be negative').max(100000000, 'Amount too large').optional(), // for income/expense only — 🔒 N9: validated
 })
 
 // Transaction update schema (same but all fields optional)
+// 🔒 V11 §2.4: z.coerce.number() for all numeric fields.
 export const updateTransactionSchema = z.object({
   type: z.enum(['sale', 'purchase', 'income', 'expense']),
   partyId: z.string().nullable().optional(),
   date: z.string().optional(),
   items: z.array(transactionItemSchema),
-  discountAmount: z.number().min(0).optional(),
+  discountAmount: z.coerce.number().min(0).optional(),
   paymentMode: z.enum(['cash', 'upi', 'card', 'bank', 'credit']).optional().default('cash'),
   notes: z.string().max(5000, 'Notes too long').nullable().optional(),
   invoiceNo: z.string().max(100).nullable().optional(),
   category: z.string().max(200).nullable().optional(),
-  paidAmount: z.number().min(0).optional(),
+  paidAmount: z.coerce.number().min(0).optional(),
   payeeName: z.string().max(200).nullable().optional(),
   payeePhone: z.string().max(20).nullable().optional(),
 })
@@ -77,6 +81,7 @@ export const createProductSchema = z.object({
 })
 
 // Party create schema
+// 🔒 V11 §2.4: z.coerce.number() for openingBalance.
 export const createPartySchema = z.object({
   name: z.string().min(1, 'Name is required').max(200),
   type: z.enum(['customer', 'supplier', 'both']).optional().default('customer'),
@@ -85,7 +90,7 @@ export const createPartySchema = z.object({
   gstin: z.string().max(15).nullable().optional(),
   address: z.string().max(1000).nullable().optional(),
   state: z.string().max(100).nullable().optional(),
-  openingBalance: z.number().optional().default(0),
+  openingBalance: z.coerce.number().optional().default(0),
 })
 
 // 🔒 AUDIT FIX V7 M4: Product update schema — all fields optional, but
