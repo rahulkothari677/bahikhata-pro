@@ -53,29 +53,72 @@ export async function GET(req: NextRequest) {
       : new Date(Date.UTC(istWall.getUTCFullYear(), istWall.getUTCMonth(), 1) - IST_OFFSET_MS)
     const to = toStr ? new Date(toStr) : now
 
-    // 🔒 V7 M5: GSTR-1 is a MONTHLY return. Reject ranges that clearly span
-    // multiple months.
-    // 🔒 V10 FIX: Timezone-aware check. Was: comparing from.getMonth() and
-    // to.getMonth() using the SERVER's local timezone (UTC on Vercel). When a
-    // user in India (IST, UTC+5:30) selects "This Month" (July 1 - July 6),
-    // the ISO strings become:
-    //   from = 2026-06-30T18:30:00Z  (July 1 00:00 IST → June 30 18:30 UTC)
-    //   to   = 2026-07-06T12:23:56Z  (July 6 17:53 IST → July 6 12:23 UTC)
-    // The old check saw monthDiff = 1 (June → July) and rejected with 400,
-    // even though the user selected a single month. This blocked every GSTR-1
-    // export for non-UTC users.
+    // 🔒 V7 M5: GSTR-1 is a MONTHLY return. Reject ranges that span multiple
+    // IST calendar months.
+    // 🔒 V10 FIX: Was comparing from.getMonth()/to.getMonth() using the
+    // SERVER's local timezone (UTC on Vercel). Blocked every GSTR-1 export
+    // for non-UTC users because "July 1 IST" became "June 30 UTC".
+    // 🔒 V11 §4.1 FIX: Was a loose 35-day heuristic that allowed 30-day
+    // ranges straddling 2 months (e.g., June 15 → July 15) — these passed
+    // the check but got mislabeled with the wrong `fp` (filing period).
+    // Now: proper IST calendar-month check.
     //
-    // New check: allow if the range is <= 35 days (covers any single month
-    // plus timezone buffer). A range > 35 days is definitely spanning multiple
-    // months and should be rejected. This is timezone-agnostic — it doesn't
-    // matter which timezone the server or user is in.
+    // Valid ranges:
+    //   1. `from` and `to` are in the SAME IST calendar month/year
+    //      (e.g., July 1 - July 15, July 1 - July 31)
+    //   2. `to` is exactly the 1st of the NEXT month at 00:00 IST
+    //      (e.g., from = July 1 00:00 IST, to = Aug 1 00:00 IST — the
+    //      "whole month of July" picker case)
+    //
+    // Invalid: any range spanning 2+ IST calendar months (e.g., June 15 -
+    // July 15), or > 31 days (defensive cap).
+    // (IST_OFFSET_MS is already declared above for the default `from`.)
+    const getISTDateParts = (date: Date) => {
+      const ist = new Date(date.getTime() + IST_OFFSET_MS)
+      return {
+        year: ist.getUTCFullYear(),
+        month: ist.getUTCMonth(),  // 0-indexed (0 = January)
+        day: ist.getUTCDate(),
+        hours: ist.getUTCHours(),
+        minutes: ist.getUTCMinutes(),
+        seconds: ist.getUTCSeconds(),
+        ms: ist.getUTCMilliseconds(),
+      }
+    }
+    const fromParts = getISTDateParts(from)
+    const toParts = getISTDateParts(to)
+
+    // Case 1: same IST calendar month/year
+    const sameMonth = fromParts.year === toParts.year && fromParts.month === toParts.month
+
+    // Case 2: `to` is exactly the 1st of the next month at 00:00:00 IST
+    // (the "whole month" picker case — from = July 1, to = Aug 1 00:00)
+    const nextMonth = fromParts.month === 11 ? 0 : fromParts.month + 1
+    const nextMonthYear = fromParts.month === 11 ? fromParts.year + 1 : fromParts.year
+    const isWholeMonthBoundary =
+      toParts.year === nextMonthYear &&
+      toParts.month === nextMonth &&
+      toParts.day === 1 &&
+      toParts.hours === 0 &&
+      toParts.minutes === 0 &&
+      toParts.seconds === 0 &&
+      toParts.ms === 0
+
+    // Defensive cap: no month has > 31 days
     const rangeMs = to.getTime() - from.getTime()
     const rangeDays = rangeMs / (1000 * 60 * 60 * 24)
-    const MAX_SINGLE_MONTH_DAYS = 35
-    if (rangeDays > MAX_SINGLE_MONTH_DAYS) {
+
+    if (!sameMonth && !isWholeMonthBoundary) {
       return NextResponse.json({
         error: 'GSTR-1 export requires a single-month period',
-        message: `GSTR-1 is a monthly return. The selected range spans ${Math.ceil(rangeDays)} days (${from.toLocaleDateString('en-IN')} to ${to.toLocaleDateString('en-IN')}). Please select a single month (max 31 days) and try again.`,
+        message: `GSTR-1 is a monthly return. The selected range spans multiple calendar months (${from.toLocaleDateString('en-IN')} to ${to.toLocaleDateString('en-IN')}). Please select a single month and try again.`,
+        hint: 'Use the date picker to select "This Month" or a specific month range (e.g., July 1 to July 31).',
+      }, { status: 400 })
+    }
+    if (rangeDays > 31) {
+      return NextResponse.json({
+        error: 'GSTR-1 export requires a single-month period',
+        message: `GSTR-1 is a monthly return. The selected range spans ${Math.ceil(rangeDays)} days, which exceeds the maximum 31-day month. Please select a single month and try again.`,
         hint: 'Use the date picker to select "This Month" or a specific month range.',
       }, { status: 400 })
     }
