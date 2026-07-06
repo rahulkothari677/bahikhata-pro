@@ -33,7 +33,9 @@ import { useRatePrompt } from '@/hooks/use-rate-prompt'
 // client displayed a different total (1.00) than the server stored (1.01).
 // Now: both use the same roundMoney() — no drift between entry preview and
 // stored value.
-import { roundMoney, calculateGst, splitGst, distributeDiscountProportionally } from '@/lib/money'
+import { roundMoney, splitGst } from '@/lib/money'
+import { computeLineItems } from '@/lib/line-items'
+import { baseUnitOf, subUnitsFor, normalizeUnitName } from '@/lib/units'
 
 const PAYMENT_MODES = [
   { value: 'cash', label: 'Cash' },
@@ -339,45 +341,40 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
     setItems(items.filter((_, i) => i !== index))
   }
 
-  // Totals — 🔒 V10 §2.1+§2.3: Same calculation as the server (proportional
-  // discount distribution + per-item GST on post-discount taxable + single
-  // shared roundMoney function). The preview the shopkeeper sees while
-  // entering a sale now EXACTLY matches what the server will store.
-  let subtotal = 0
-  let totalGst = 0
-  let totalProfit = 0
+  // Totals — 🔒 V12: Use the SAME computeLineItems() the server uses. Because
+  // line-items.ts is pure (no DB), importing it here guarantees the preview the
+  // shopkeeper sees EXACTLY matches what the server will store — including unit
+  // normalization (500 gm on a ₹20/kg product → 0.5 kg × ₹20 = ₹10) and
+  // GST-inclusive (MRP) back-calculation. Single source of truth, no drift.
   const totalDiscount = parseFloat(discountAmount) || 0
-
-  // Compute per-item gross amounts and distribute the order-level discount
-  // proportionally across them BEFORE computing GST (matches server V10 §2.1).
-  const grossAmounts = items.map(item =>
-    roundMoney((Number(item.quantity) || 0) * (Number(item.unitPrice) || 0)),
-  )
-  const perItemDiscounts = distributeDiscountProportionally(grossAmounts, totalDiscount)
-
-  items.forEach((item, idx) => {
-    const grossAmount = grossAmounts[idx]
-    const itemDiscount = roundMoney(perItemDiscounts[idx])
-    const taxableAmount = roundMoney(grossAmount - itemDiscount)
-    const itemGst = calculateGst(taxableAmount, Number(item.gstRate) || 0)
-    subtotal = roundMoney(subtotal + grossAmount)
-    totalGst = roundMoney(totalGst + itemGst)
-    if (isSale && item.productId) {
-      const p = productMap.get(item.productId)
-      if (p) {
-        // 🔒 V10 §2.4: Profit on post-discount realized unit price (matches server).
-        const realizedUnitPrice = roundMoney(taxableAmount / (Number(item.quantity) || 1))
-        totalProfit = roundMoney(totalProfit + (realizedUnitPrice - p.purchasePrice) * (Number(item.quantity) || 0))
-      }
+  const computeInput = items.map(item => {
+    const p = item.productId ? productMap.get(item.productId) : null
+    return {
+      productId: item.productId || null,
+      productName: item.productName,
+      quantity: Number(item.quantity) || 0,
+      unitPrice: Number(item.unitPrice) || 0,
+      gstRate: Number(item.gstRate) || 0,
+      unit: item.unit || p?.unit || 'pcs',
+      priceIncludesGst: p?.priceIncludesGst ?? false,
     }
   })
-
-  // 🔒 V10 §2.3: Use shared roundMoney (was: local `r` without epsilon →
-  // boundary values like 1.005 displayed differently from server-stored value).
-  const totalAmount = roundMoney((subtotal - totalDiscount) + totalGst)
-  const cgst = isInterState ? 0 : splitGst(totalGst).cgst
-  const sgst = isInterState ? 0 : splitGst(totalGst).sgst
-  const igst = isInterState ? roundMoney(totalGst) : 0
+  const preview = computeLineItems({
+    items: computeInput,
+    productMap,
+    isInterState,
+    orderDiscount: totalDiscount,
+    type,
+  })
+  const subtotal = preview.subtotal
+  const totalGst = roundMoney(preview.cgst + preview.sgst + preview.igst)
+  const totalProfit = preview.grossProfit
+  const totalAmount = preview.totalBeforeRoundOff
+  const cgst = preview.cgst
+  const sgst = preview.sgst
+  const igst = preview.igst
+  // Per-row computed lines (normalized quantity/unit + line total) for display.
+  const previewLines = preview.txItems
   const paid = parseFloat(paidAmount) || 0
   const finalPaid = paidAmount === '' ? totalAmount : paid
   const due = roundMoney(totalAmount - finalPaid)
@@ -402,14 +399,22 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
           paidAmount: finalPaid,
           discountAmount: totalDiscount,
           notes,
-          items: items.map(i => ({
-            productId: i.productId || null,
-            productName: i.productName,
-            quantity: Number(i.quantity),
-            unitPrice: Number(i.unitPrice),
-            gstRate: Number(i.gstRate) || 0,
-            discountAmount: 0,
-          })),
+          items: items.map(i => {
+            const p = i.productId ? productMap.get(i.productId) : null
+            return {
+              productId: i.productId || null,
+              productName: i.productName,
+              quantity: Number(i.quantity),
+              unitPrice: Number(i.unitPrice),
+              gstRate: Number(i.gstRate) || 0,
+              discountAmount: 0,
+              // 🔒 V12: send the unit + GST-inclusive flag so the server can
+              // normalize the quantity into the product's unit and back-
+              // calculate the taxable price for MRP-priced goods.
+              unit: i.unit || p?.unit || 'pcs',
+              priceIncludesGst: p?.priceIncludesGst ?? false,
+            }
+          }),
         }),
         offline: { invalidate: ['/api/transactions', '/api/dashboard', '/api/products', '/api/parties', '/api/insights'] },
       })
@@ -434,6 +439,13 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
           sonnerToast.warning(
             `Stock went negative:\n${lines.join('\n')}\nRecord the missing purchase to fix this.`,
             { duration: 8000 }
+          )
+        }
+        // 🔒 V12: Surface price/unit anomaly warnings (e.g. ₹20/gm looks wrong).
+        if (Array.isArray(data.priceWarnings) && data.priceWarnings.length > 0) {
+          sonnerToast.warning(
+            data.priceWarnings.map((w: any) => `⚠️ ${w.message}`).join('\n'),
+            { duration: 9000 }
           )
         }
       }
@@ -883,7 +895,15 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
               ) : (
                 <div className="space-y-1.5">
                   {items.map((item, i) => {
-                    const itemTotal = item.quantity * item.unitPrice * (1 + item.gstRate / 100)
+                    // 🔒 V12: Use the server-identical computed line (normalized
+                    // quantity/unit + correct total). Fixes the "500 gm × ₹20 =
+                    // ₹10,000" display — now shows 0.5 kg × ₹20/kg = ₹10.
+                    const line = previewLines[i]
+                    const itemTotal = line?.total ?? 0
+                    const normUnit = line?.unit || item.unit || 'pcs'
+                    const normQty = line?.quantity ?? item.quantity
+                    const converted = normalizeUnitName(item.unit) !== normUnit
+                    const unitOptions = subUnitsFor(baseUnitOf(item.unit || 'pcs'))
                     return (
                       <div key={i} className="rounded-lg bg-muted/20 border border-border/40 p-2 transition hover:bg-muted/30">
                         {/* Row 1: Number + Product name + Total + Delete */}
@@ -898,7 +918,7 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
                             <X className="w-3.5 h-3.5" />
                           </button>
                         </div>
-                        {/* Row 2: Qty + Unit + Price + GST — fills FULL width */}
+                        {/* Row 2: Qty + Unit selector + Price + GST — fills FULL width */}
                         <div className="flex items-center gap-1 pl-5 mt-1">
                           <Input
                             type="number"
@@ -910,7 +930,18 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
                             step="0.01"
                             placeholder="Qty"
                           />
-                          <span className="text-[10px] text-muted-foreground flex-shrink-0">{item.unit}</span>
+                          {/* 🔒 V12: Unit is now an editable selector (kg/gm, ltr/ml, ...) */}
+                          <Select
+                            value={normalizeUnitName(item.unit)}
+                            onValueChange={(v) => handleUpdateItem(i, 'unit', v)}
+                          >
+                            <SelectTrigger className="w-16 h-8 text-[11px] px-1 flex-shrink-0">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {unitOptions.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
                           <span className="text-[10px] text-muted-foreground flex-shrink-0">×</span>
                           <span className="text-[10px] text-muted-foreground flex-shrink-0">₹</span>
                           <Input
@@ -934,6 +965,13 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
                               {[0, 5, 12, 18, 28].map(r => <SelectItem key={r} value={String(r)}>{r}%</SelectItem>)}
                             </SelectContent>
                           </Select>
+                        </div>
+                        {/* 🔒 V12: Inline, self-verifying math so the shopkeeper
+                            instantly sees the real per-unit calculation. */}
+                        <div className="pl-5 mt-1 text-[10px] text-muted-foreground tabular-nums">
+                          {item.quantity} {normalizeUnitName(item.unit)}
+                          {converted && <span className="text-primary"> = {roundMoney(normQty)} {normUnit}</span>}
+                          {' '}× ₹{item.unitPrice}/{normUnit} = <span className="font-semibold text-foreground">{formatINR(itemTotal)}</span>
                         </div>
                       </div>
                     )
