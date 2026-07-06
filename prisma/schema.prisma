@@ -144,6 +144,14 @@ model Party {
 
   transactions    Transaction[]
   payments        Payment[]
+
+  // 🔒 V11 §2.2: Indexes — was ZERO indexes, caused full-table scans on every
+  // Parties page load and every dashboard load (the receivable/payable query
+  // joins Party to Transaction with WHERE p."userId" = ...). At scale this
+  // gets linearly slower as the Party table grows across all tenants.
+  // Now: two composite indexes matching the actual query patterns.
+  @@index([userId, deletedAt])  // list page + join filter (most common query)
+  @@index([userId, name])       // list page orders by name
 }
 
 // ==================== TRANSACTIONS (Sales, Purchases, Income, Expense) ====================
