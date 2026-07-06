@@ -35,7 +35,7 @@ import { useRatePrompt } from '@/hooks/use-rate-prompt'
 // stored value.
 import { roundMoney, splitGst } from '@/lib/money'
 import { computeLineItems } from '@/lib/line-items'
-import { baseUnitOf, subUnitsFor, normalizeUnitName } from '@/lib/units'
+import { baseUnitOf, subUnitsFor, normalizeUnitName, resolveEnteredQuantity } from '@/lib/units'
 
 const PAYMENT_MODES = [
   { value: 'cash', label: 'Cash' },
@@ -617,32 +617,29 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
               if (data.paymentMode) setPaymentMode(data.paymentMode)
               if (data.items?.length > 0) {
                 // APPEND items instead of replacing (so "Add More" works)
+                // 🔒 V12: Match to inventory, then normalize the spoken quantity
+                // into the product's (or base) unit so "500 gm @ ₹20/kg" becomes
+                // 0.5 kg × ₹20 = ₹10 instead of 500 × 20 = ₹10,000.
                 const newItems = data.items.map((item: any) => {
-                  // If price already filled by VoiceEntry, use it
-                  if (item.unitPrice && item.unitPrice > 0) {
-                    return {
-                      productId: item.productId || '',
-                      productName: item.productName || item.name,
-                      quantity: Number(item.quantity) || 1,
-                      unitPrice: Number(item.unitPrice) || 0,
-                      gstRate: Number(item.gstRate) || 0,
-                      unit: item.unit || 'pcs',
-                    }
-                  }
-                  // Otherwise try to match from inventory
                   const itemName = (item.productName || item.name || '').toLowerCase()
-                  const product = products.find(p =>
-                    p.name?.toLowerCase() === itemName
-                  ) || products.find(p =>
-                    p.name?.toLowerCase().includes(itemName) || itemName.includes(p.name?.toLowerCase())
+                  const product = item.productId
+                    ? products.find(p => p.id === item.productId)
+                    : (products.find(p => p.name?.toLowerCase() === itemName) ||
+                       products.find(p => p.name?.toLowerCase().includes(itemName) || itemName.includes(p.name?.toLowerCase())))
+                  const spokenPrice = Number(item.unitPrice) || 0
+                  const resolved = resolveEnteredQuantity(
+                    Number(item.quantity) || 1,
+                    item.unit || product?.unit || 'pcs',
+                    product?.unit,
                   )
                   return {
                     productId: product?.id || '',
-                    productName: item.productName || item.name,
-                    quantity: Number(item.quantity) || 1,
-                    unitPrice: product ? (isSale ? product.salePrice : product.purchasePrice) : (Number(item.unitPrice) || 0),
-                    gstRate: product?.gstRate || 0,
-                    unit: product?.unit || item.unit || 'pcs',
+                    productName: product?.name || item.productName || item.name,
+                    quantity: roundMoney(resolved.quantity),
+                    // If no price was spoken, use the catalog price (per product unit).
+                    unitPrice: spokenPrice > 0 ? spokenPrice : (product ? (isSale ? product.salePrice : product.purchasePrice) : 0),
+                    gstRate: product?.gstRate ?? Number(item.gstRate) ?? 0,
+                    unit: resolved.unit,
                   }
                 })
                 setItems(prev => [...prev, ...newItems])

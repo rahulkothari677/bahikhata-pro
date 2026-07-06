@@ -133,6 +133,30 @@ export function normalizeToUnit(
 /** All units offered in pickers, grouped for the UI. */
 export const UNIT_OPTIONS = ['pcs', 'kg', 'gm', 'ltr', 'ml', 'm', 'cm', 'box', 'dozen', 'packet']
 
+/**
+ * 🔒 V12: Resolve the (quantity, unit) for an entered/spoken line item so money
+ * math is sane by default. This is the fix for the voice bug where "500 gram
+ * tomato at 20 rupaye" became 500 × 20 = ₹10,000.
+ *
+ *  - Linked to a product → normalize the quantity into the PRODUCT's unit
+ *    (500 gm on a kg product → 0.5 kg). The price is then per the product's unit.
+ *  - Unlinked but a sub-unit (gm/ml/cm) → normalize to the family's BASE unit
+ *    (500 gm → 0.5 kg). Rationale: in Indian retail a spoken price like "20
+ *    rupaye" almost always means ₹20 per kg/ltr, not per gram. The user can
+ *    still switch the unit back in the row if they really meant per-gram.
+ *  - Otherwise → leave as entered.
+ */
+export function resolveEnteredQuantity(
+  quantity: number,
+  enteredUnit: string | null | undefined,
+  productUnit?: string | null,
+): { quantity: number; unit: string; converted: boolean } {
+  const from = normalizeUnitName(enteredUnit)
+  if (productUnit) return normalizeToUnit(quantity, from, productUnit)
+  if (isSubUnit(from)) return normalizeToUnit(quantity, from, baseUnitOf(from))
+  return { quantity, unit: from, converted: false }
+}
+
 /** Sub-units the quantity picker should offer for a given base unit. */
 export function subUnitsFor(baseUnit: string): string[] {
   const b = normalizeUnitName(baseUnit)
