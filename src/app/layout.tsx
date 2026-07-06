@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, Plus_Jakarta_Sans } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
@@ -8,20 +8,12 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { Analytics } from "@vercel/analytics/react";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 
-// Inter — body text. Clean, modern, very readable at small sizes.
-// Has tabular-nums feature for aligned number columns (amounts, quantities).
+// 🔒 V9 1.7a: Reduced to one font (was: Inter + Plus Jakarta Sans).
+// Plus Jakarta Sans was used for headings via --font-heading. Now --font-heading
+// falls back to Inter (set in globals.css). Saves one font request on first load.
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-sans",
-  display: "swap",
-});
-
-// Plus Jakarta Sans — headings. Geometric, friendly, bold.
-// Gives the app a more designed/premium feel vs system default.
-const jakarta = Plus_Jakarta_Sans({
-  subsets: ["latin"],
-  variable: "--font-heading",
-  weight: ["600", "700", "800"],
   display: "swap",
 });
 
@@ -61,7 +53,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" suppressHydrationWarning className={`${inter.variable} ${jakarta.variable}`}>
+    <html lang="en" suppressHydrationWarning className={inter.variable}>
       <body className="antialiased bg-background text-foreground font-sans">
         <ErrorBoundary>
           <Providers>

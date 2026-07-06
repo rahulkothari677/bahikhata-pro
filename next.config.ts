@@ -2,10 +2,11 @@ import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
-  output: "standalone",
-  // 🔒 AUDIT FIX L3: Enabled reactStrictMode — surfaces effect/concurrency
-  // bugs in development (double-invokes effects/renders). Was: false.
-  // Only affects development, not production builds.
+  // 🔒 V9 1.6: Removed `output: "standalone"` — we deploy on Vercel only
+  // (not self-hosted with Bun). Vercel builds its own serverless output and
+  // ignores standalone mode. Keeping it caused confusion (the `start` script
+  // runs `bun .next/standalone/server.js` which never runs on Vercel).
+  // reactStrictMode: Enabled — surfaces effect/concurrency bugs in development.
   reactStrictMode: true,
   // Disable source maps in production — saves ~5MB of transfer on first load.
   // Note: Sentry can still receive source maps if uploaded separately.

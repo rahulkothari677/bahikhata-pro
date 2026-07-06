@@ -1,4 +1,5 @@
 {
+  "$comment": "Vercel Hobby plan only allows daily crons. The daily warmup at 6 AM UTC is a FALLBACK. The REAL warmup is GitHub Actions (.github/workflows/neon-warmup.yml) which pings /api/warmup every 5 minutes. To eliminate cold starts entirely, disable Neon scale-to-zero (Neon Console → Project → Compute → Suspend compute → OFF).",
   "crons": [
     {
       "path": "/api/warmup",

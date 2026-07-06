@@ -42,7 +42,7 @@
   /* Font families — set by next/font in layout.tsx */
   --font-sans: var(--font-sans), ui-sans-serif, system-ui, -apple-system,
                "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --font-heading: var(--font-heading), var(--font-sans), ui-sans-serif,
+  --font-heading: var(--font-sans), ui-sans-serif,
                   system-ui, -apple-system, sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
                "Liberation Mono", "Courier New", monospace;
