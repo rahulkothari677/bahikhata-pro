@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
 import { withCache } from '@/lib/cache'
-import { roundMoney, calculateGst, splitGst } from '@/lib/money'
+import { roundMoney, calculateGst, splitGst, distributeDiscountProportionally, toMoney } from '@/lib/money'
 import { deriveInterStateStatus } from '@/lib/gst'
 import { validateBody, createTransactionSchema } from '@/lib/validation'
 
@@ -184,29 +184,53 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const txItems = items.map((item: any) => {
+    // 🔒 V10 §2.1: Distribute the order-level discount proportionally across
+    // items BEFORE computing GST. This is required by CGST Act §15(3): a
+    // discount shown on the invoice must reduce the taxable value, and GST
+    // must be charged on the net (post-discount) amount. Previously the
+    // order-level discount was subtracted from the total AFTER GST was
+    // computed on the full pre-discount amount, which:
+    //   (1) overcharged the customer GST on every discounted sale,
+    //   (2) made the invoice internally inconsistent (tax ≠ taxable × rate),
+    //   (3) made GSTR-1 non-filable for any month with discounted sales.
+    //
+    // The UI sends a single order-level `discountAmount`. We split it across
+    // items by each item's gross share. Per-item GST is then computed on the
+    // post-discount taxable value, and stored per-item (cgst/sgst/igst
+    // columns on TransactionItem — V10 §2.2 single source of truth). The
+    // transaction header sums these per-item values.
+    const orderDiscount = toMoney(discountAmount)
+    const grossAmounts = items.map((item: any) =>
+      roundMoney(toMoney(item.quantity) * toMoney(item.unitPrice)),
+    )
+    const perItemDiscounts = distributeDiscountProportionally(grossAmounts, orderDiscount)
+
+    const txItems = items.map((item: any, idx: number) => {
       // 💰 MONEY (Audit fix Phase 4): Use roundMoney() at every calculation
       // step to prevent float precision drift. Was: raw arithmetic on Floats
       // which produced values like 9.000000000000002 from itemGst / 2.
       //
-      // 🔒 V8 H1 FIX: GST is now computed on the POST-DISCOUNT taxable value.
-      // Was: GST on pre-discount amount (quantity * unitPrice), discount
-      // applied AFTER GST. This meant the stored cgst/sgst/igst didn't match
-      // the GSTR export (which computes GST post-discount). Per GST law, the
-      // taxable value is AFTER trade discount. Now: GST on (qty * unitPrice -
-      // discount), matching the GSTR/reports SQL. All screens now agree.
-      const grossAmount = roundMoney(item.quantity * item.unitPrice)
-      const itemDiscount = roundMoney(item.discountAmount || 0)
+      // 🔒 V10 §2.1+§2.2: GST is computed on the POST-DISCOUNT taxable value
+      // (proportional share of the order-level discount). Per-item CGST/SGST/
+      // IGST are stored on TransactionItem so every read path (reports, GSTR,
+      // dashboard, invoice PDF) aggregates the stored values instead of
+      // recomputing GST with a different rounding path.
+      const grossAmount = grossAmounts[idx]
+      const itemDiscount = roundMoney(perItemDiscounts[idx])
       const taxableAmount = roundMoney(grossAmount - itemDiscount)  // post-discount
       const itemGst = calculateGst(taxableAmount, item.gstRate || 0)  // GST on post-discount
       const itemTotal = roundMoney(taxableAmount + itemGst)
       subtotal = roundMoney(subtotal + grossAmount)  // subtotal stays pre-discount (list price total)
+      let itemCgst = 0, itemSgst = 0, itemIgst = 0
       if (isInterState) {
+        itemIgst = itemGst
         igst = roundMoney(igst + itemGst)
       } else {
         // splitGst returns { cgst, sgst } both rounded to 2 decimal places,
         // and cgst + sgst === itemGst exactly (no drift)
         const { cgst: c, sgst: s } = splitGst(itemGst)
+        itemCgst = c
+        itemSgst = s
         cgst = roundMoney(cgst + c)
         sgst = roundMoney(sgst + s)
       }
@@ -214,12 +238,18 @@ export async function POST(req: NextRequest) {
       // CURRENT purchasePrice (snapshotted into purchasePriceAtSale for future
       // reference). Historical profit is now immutable — changing the product's
       // purchasePrice later won't distort old profit numbers.
+      //
+      // 🔒 V10 §2.4: Profit is now computed on the post-discount unit price
+      // (the actual realized price). Was: profit on undiscounted price →
+      // overstated by the discount amount on every discounted sale.
       let purchasePriceAtSale = 0
       if (type === 'sale' && item.productId) {
         const product = productMap.get(item.productId)
         if (product) {
           purchasePriceAtSale = product.purchasePrice
-          grossProfit = roundMoney(grossProfit + (item.unitPrice - product.purchasePrice) * item.quantity)
+          // Per-unit realized price = (grossAmount - itemDiscount) / quantity
+          const realizedUnitPrice = roundMoney(taxableAmount / toMoney(item.quantity))
+          grossProfit = roundMoney(grossProfit + (realizedUnitPrice - product.purchasePrice) * toMoney(item.quantity))
         }
       }
       return {
@@ -229,13 +259,19 @@ export async function POST(req: NextRequest) {
         unitPrice: parseFloat(item.unitPrice),
         purchasePriceAtSale,  // 🔒 M4: COGS snapshot
         gstRate: parseFloat(item.gstRate) || 0,
-        discountAmount: parseFloat(item.discountAmount) || 0,
+        discountAmount: itemDiscount,  // 🔒 V10 §2.1: proportional share (was always 0)
+        cgst: itemCgst,  // 🔒 V10 §2.2: per-item GST — single source of truth
+        sgst: itemSgst,
+        igst: itemIgst,
         total: itemTotal,
       }
     })
 
-    const discount = parseFloat(discountAmount) || 0
-    const totalAmount = roundMoney(subtotal - discount + cgst + sgst + igst)
+    // 🔒 V10 §2.1: totalAmount = taxable + GST (no separate discount subtraction).
+    // The order-level discount has already been distributed into per-item
+    // taxable values, so subtracting it again here would double-count.
+    const discount = orderDiscount  // kept for schema field, but NOT subtracted from total
+    const totalAmount = roundMoney((subtotal - discount) + cgst + sgst + igst)
     const paid = parseFloat(paidAmount)
     const finalPaid = isNaN(paid) ? totalAmount : paid
 

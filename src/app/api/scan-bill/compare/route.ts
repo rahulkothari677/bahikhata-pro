@@ -3,6 +3,7 @@ import { getAuthUserId } from '@/lib/get-auth'
 import { rateLimit, rateLimitedResponse } from '@/lib/rate-limit'
 import { db as prisma } from '@/lib/db'
 import { compressImageForAI } from '@/lib/image-compress'
+import { apiError } from '@/lib/api-error'
 
 /**
  * POST /api/scan-bill/compare
@@ -211,11 +212,8 @@ export async function POST(req: NextRequest) {
       results: comparisonResults,
     })
   } catch (error) {
-    console.error('Scan comparison error:', error)
-    return NextResponse.json({
-      error: 'Failed to run comparison',
-      detail: String(error),
-    }, { status: 500 })
+    // 🔒 V10 §3.3: was `detail: String(error)` — leaked DB / SDK internals.
+    return apiError(error, 'Failed to run comparison', 500)
   }
 }
 

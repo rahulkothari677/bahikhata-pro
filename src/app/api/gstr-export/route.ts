@@ -85,6 +85,12 @@ export async function GET(req: NextRequest) {
         take: INVOICE_CAP + 1,  // fetch one extra to detect cap hit
       }),
       // Per-invoice-per-rate GST breakdown via raw SQL.
+      // 🔒 V10 §2.2: aggregate STORED per-item CGST/SGST/IGST (single source
+      // of truth). Was: recompute GST in SQL with `ROUND(taxable × rate / 200)`
+      // — different rounding path from write-time splitGst() → for odd-paise
+      // GST, stored (cgst=4.51, sgst=4.50) disagreed with recomputed
+      // (cgst=4.51, sgst=4.51) → summary tax ≠ sum of per-invoice tax →
+      // CA reconciliation fails. Now: aggregate the stored per-item values.
       // Returns one row per (transaction, gstRate) — much smaller than all items.
       db.$queryRaw<Array<{
         transactionId: string;
@@ -99,9 +105,9 @@ export async function GET(req: NextRequest) {
           ti."transactionId",
           ti."gstRate",
           SUM(ROUND((ti."quantity"::numeric * ti."unitPrice" - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 2)) AS "taxableValue",
-          SUM(CASE WHEN t."isInterState" THEN 0 ELSE ROUND(((ti."quantity"::numeric * ti."unitPrice" - COALESCE(ti."discountAmount", 0)) * ti."gstRate" / 200::numeric)::numeric, 2) END) AS cgst,
-          SUM(CASE WHEN t."isInterState" THEN 0 ELSE ROUND(((ti."quantity"::numeric * ti."unitPrice" - COALESCE(ti."discountAmount", 0)) * ti."gstRate" / 200::numeric)::numeric, 2) END) AS sgst,
-          SUM(CASE WHEN t."isInterState" THEN ROUND(((ti."quantity"::numeric * ti."unitPrice" - COALESCE(ti."discountAmount", 0)) * ti."gstRate" / 100::numeric)::numeric, 2) ELSE 0 END) AS igst,
+          SUM(COALESCE(ti."cgst", 0)::numeric) AS cgst,
+          SUM(COALESCE(ti."sgst", 0)::numeric) AS sgst,
+          SUM(COALESCE(ti."igst", 0)::numeric) AS igst,
           SUM(ti."quantity") AS quantity
         FROM "TransactionItem" ti
         JOIN "Transaction" t ON ti."transactionId" = t.id
@@ -237,24 +243,39 @@ export async function GET(req: NextRequest) {
         total_tax: roundMoney((summaryAgg._sum.cgst || 0) + (summaryAgg._sum.sgst || 0) + (summaryAgg._sum.igst || 0)),
         total_amount: roundMoney(summaryAgg._sum.totalAmount || 0),
       },
-      // 🔒 V7 H3: Reconciliation assertion — per-invoice taxable must equal
-      // summary taxable. If they don't, the export is internally inconsistent
-      // and the user (or their CA) will catch it during filing. We log a
-      // warning so the founder can see if the calculation drifts again.
+      // 🔒 V7 H3: Reconciliation assertion — per-invoice taxable AND tax must
+      // equal the summary totals. If they don't, the export is internally
+      // inconsistent and the user (or their CA) will catch it during filing.
+      // 🔒 V10 §2.2: now also reconciles TAX (was: taxable only — missed the
+      // stored-vs-recomputed drift). Since both summary and per-invoice now
+      // aggregate the SAME stored per-item CGST/SGST/IGST columns, they must
+      // be byte-identical (rounding tolerance only for float-sum drift).
       reconciliation: (() => {
         const perInvoiceTaxable = roundMoney(
           [...b2bInvoices, ...b2cInvoices].reduce((s, inv) => s + (inv.taxablevalue || 0), 0)
         )
         const summaryTaxable = roundMoney((summaryAgg._sum.subtotal || 0) - (summaryAgg._sum.discountAmount || 0))
-        const matches = Math.abs(perInvoiceTaxable - summaryTaxable) < 1 // ₹1 tolerance for rounding
+        const perInvoiceTax = roundMoney(
+          [...b2bInvoices, ...b2cInvoices].reduce((s, inv) => {
+            // inv.items is for B2B, itemsByRate spread is for B2C
+            if (inv.items) {
+              return s + inv.items.reduce((s2: number, it: any) => s2 + (it.camt || 0) + (it.samt || 0) + (it.iamt || 0), 0)
+            }
+            // B2C: rate_X.camt/samt/iamt
+            return s + Object.entries(inv)
+              .filter(([k]) => k.startsWith('rate_'))
+              .reduce((s2: number, [, v]: [string, any]) => s2 + (v.cgst || 0) + (v.sgst || 0) + (v.igst || 0), 0)
+          }, 0)
+        )
+        const summaryTax = roundMoney((summaryAgg._sum.cgst || 0) + (summaryAgg._sum.sgst || 0) + (summaryAgg._sum.igst || 0))
+        const matches = Math.abs(perInvoiceTaxable - summaryTaxable) < 1 && Math.abs(perInvoiceTax - summaryTax) < 1
         if (!matches) {
           console.warn('[gstr-export] Reconciliation mismatch:', {
-            perInvoiceTaxable,
-            summaryTaxable,
-            difference: roundMoney(perInvoiceTaxable - summaryTaxable),
+            perInvoiceTaxable, summaryTaxable,
+            perInvoiceTax, summaryTax,
           })
         }
-        return { perInvoiceTaxable, summaryTaxable, matches }
+        return { perInvoiceTaxable, summaryTaxable, perInvoiceTax, summaryTax, matches }
       })(),
       period: { from, to },
     }

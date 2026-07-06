@@ -8,9 +8,17 @@ import { db } from '@/lib/db'
  * but PUT trusted the client-supplied flag (wrong — user could flip
  * CGST/SGST ↔ IGST on edit → wrong GST return).
  *
- * 🔒 AUDIT FIX N10 (v3): Cache the shop's state to cut 1 query per write.
- * The shop state rarely changes (maybe once during setup). Cache it for
- * 5 minutes per user. This saves a DB query on every transaction write.
+ * 🔒 V10 §3.7: Removed the in-memory shopStateCache.
+ * The V3-era cache (5 min TTL) was per-instance — on serverless, a state
+ * change in instance A didn't invalidate instance B's cache, so a sale
+ * routed to B right after a state change got the WRONG intra/inter-state
+ * split (CGST/SGST vs IGST) for up to 5 minutes. That's a GST correctness
+ * bug, exactly the kind of thing this app cannot have.
+ *
+ * The query we'd be caching is a primary-key lookup on Setting (userId),
+ * which is O(1) and ~1-2ms on Neon's free tier — there's nothing to gain
+ * from caching it. Removed the cache entirely; correctness > a 2ms saving
+ * on an already-fast operation.
  *
  * Rules:
  * - If no party is selected (walk-in customer), default to intra-state
@@ -25,32 +33,11 @@ import { db } from '@/lib/db'
  * @returns { isInterState, party } — the derived flag + the party object (for reuse)
  */
 
-// 🔒 N10: Cache shop state per user (5 min TTL)
-const shopStateCache = new Map<string, { state: string | null; expiresAt: number }>()
-const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
-
-/**
- * 🔒 V8 M1: Invalidate the shop-state cache for a user.
- * Call this when the user changes their shop state in Settings.
- * Without this, sales created in the next 5 minutes would use the OLD
- * state → wrong intra/inter-state GST split (CGST/SGST vs IGST).
- */
-export function invalidateShopStateCache(userId: string): void {
-  shopStateCache.delete(userId)
-}
-
-async function getCachedShopState(userId: string): Promise<string | null> {
-  const cached = shopStateCache.get(userId)
-  if (cached && cached.expiresAt > Date.now()) {
-    return cached.state
-  }
-  const shopSetting = await db.setting.findUnique({
-    where: { userId },
-    select: { state: true },
-  })
-  const state = shopSetting?.state?.trim() || null
-  shopStateCache.set(userId, { state, expiresAt: Date.now() + CACHE_TTL })
-  return state
+// 🔒 V10 §3.7: No cache. The previous `invalidateShopStateCache()` export is
+// kept as a no-op so existing callers (Settings page) don't break — but it
+// no longer needs to be called because there's nothing to invalidate.
+export function invalidateShopStateCache(_userId: string): void {
+  // No-op — see comment above. The query is direct now.
 }
 
 export async function deriveInterStateStatus(
@@ -64,8 +51,14 @@ export async function deriveInterStateStatus(
     // If party not found, treat as walk-in (intra-state default)
   }
 
-  // 🔒 N10: Use cached shop state (5 min TTL) instead of querying every time
-  const shopState = await getCachedShopState(userId)
+  // 🔒 V10 §3.7: Direct primary-key lookup, no cache. ~1-2ms on Neon.
+  // Caching introduced a GST correctness bug on serverless (stale state on
+  // other warm instances for up to 5 min after a state change).
+  const shopSetting = await db.setting.findUnique({
+    where: { userId },
+    select: { state: true },
+  })
+  const shopState = shopSetting?.state?.trim() || null
   const partyState = party?.state?.trim() || null
 
   // Inter-state ONLY if both states are known and differ

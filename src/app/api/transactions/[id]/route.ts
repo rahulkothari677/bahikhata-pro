@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
-import { roundMoney, calculateGst, splitGst } from '@/lib/money'
+import { roundMoney, calculateGst, splitGst, distributeDiscountProportionally, toMoney } from '@/lib/money'
 import { deriveInterStateStatus } from '@/lib/gst'
 import { validateBody, updateTransactionSchema } from '@/lib/validation'
 
@@ -107,29 +107,43 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     let cgst = 0, sgst = 0, igst = 0
     let grossProfit = 0
 
-    const txItems = items.map((item: any) => {
-      // 🔒 V8 H1 FIX: GST on POST-DISCOUNT taxable value (same as POST handler).
-      // Was: GST on pre-discount amount, matching neither GSTR nor GST law.
-      const grossAmount = roundMoney(item.quantity * item.unitPrice)
-      const itemDiscount = roundMoney(item.discountAmount || 0)
+    // 🔒 V10 §2.1+§2.2: Distribute order-level discount proportionally across
+    // items BEFORE GST; store per-item CGST/SGST/IGST (same logic as POST).
+    const orderDiscount = toMoney(discountAmount)
+    const grossAmounts = items.map((item: any) =>
+      roundMoney(toMoney(item.quantity) * toMoney(item.unitPrice)),
+    )
+    const perItemDiscounts = distributeDiscountProportionally(grossAmounts, orderDiscount)
+
+    const txItems = items.map((item: any, idx: number) => {
+      // 🔒 V10 §2.1+§2.2: GST on POST-DISCOUNT taxable (proportional share),
+      // per-item CGST/SGST/IGST stored as single source of truth.
+      const grossAmount = grossAmounts[idx]
+      const itemDiscount = roundMoney(perItemDiscounts[idx])
       const taxableAmount = roundMoney(grossAmount - itemDiscount)
       const itemGst = calculateGst(taxableAmount, item.gstRate || 0)
       const itemTotal = roundMoney(taxableAmount + itemGst)
       subtotal = roundMoney(subtotal + grossAmount)
+      let itemCgst = 0, itemSgst = 0, itemIgst = 0
       if (isInterState) {
+        itemIgst = itemGst
         igst = roundMoney(igst + itemGst)
       } else {
         const { cgst: c, sgst: s } = splitGst(itemGst)
+        itemCgst = c
+        itemSgst = s
         cgst = roundMoney(cgst + c)
         sgst = roundMoney(sgst + s)
       }
-      // 💰 MONEY + COGS (Audit fix M4): Snapshot purchasePrice at sale time
+      // 💰 MONEY + COGS (Audit fix M4): Snapshot purchasePrice at sale time.
+      // 🔒 V10 §2.4: Profit on post-discount realized unit price.
       let purchasePriceAtSale = 0
       if (type === 'sale' && item.productId) {
         const product = productMap.get(item.productId)
         if (product) {
           purchasePriceAtSale = product.purchasePrice
-          grossProfit = roundMoney(grossProfit + (item.unitPrice - product.purchasePrice) * item.quantity)
+          const realizedUnitPrice = roundMoney(taxableAmount / toMoney(item.quantity))
+          grossProfit = roundMoney(grossProfit + (realizedUnitPrice - product.purchasePrice) * toMoney(item.quantity))
         }
       }
       return {
@@ -139,13 +153,18 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         unitPrice: parseFloat(item.unitPrice),
         purchasePriceAtSale,  // 🔒 M4: COGS snapshot
         gstRate: parseFloat(item.gstRate) || 0,
-        discountAmount: parseFloat(item.discountAmount) || 0,
+        discountAmount: itemDiscount,  // 🔒 V10 §2.1: proportional share
+        cgst: itemCgst,  // 🔒 V10 §2.2: per-item GST — single source of truth
+        sgst: itemSgst,
+        igst: itemIgst,
         total: itemTotal,
       }
     })
 
-    const discount = parseFloat(discountAmount) || 0
-    const totalAmount = roundMoney(subtotal - discount + cgst + sgst + igst)
+    // 🔒 V10 §2.1: totalAmount = (subtotal - orderDiscount) + GST.
+    // Discount has already been distributed into per-item taxable values.
+    const discount = orderDiscount
+    const totalAmount = roundMoney((subtotal - discount) + cgst + sgst + igst)
     const paid = parseFloat(paidAmount)
     const finalPaid = isNaN(paid) ? totalAmount : paid
 

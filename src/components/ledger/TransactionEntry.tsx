@@ -27,6 +27,13 @@ import { useDrafts } from '@/hooks/use-drafts'
 import { haptic } from '@/lib/haptic'
 import { trackRecentProduct, getRecentProductIds } from '@/lib/recent-products'
 import { useRatePrompt } from '@/hooks/use-rate-prompt'
+// 🔒 V10 §2.3: Single rounding function shared between client and server.
+// Was: `const r = (n) => Math.round(n*100)/100` here, which lacks the 1e-9
+// epsilon correction in roundMoney() → on boundary values like 1.005 the
+// client displayed a different total (1.00) than the server stored (1.01).
+// Now: both use the same roundMoney() — no drift between entry preview and
+// stored value.
+import { roundMoney, calculateGst, splitGst, distributeDiscountProportionally } from '@/lib/money'
 
 const PAYMENT_MODES = [
   { value: 'cash', label: 'Cash' },
@@ -332,33 +339,48 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
     setItems(items.filter((_, i) => i !== index))
   }
 
-  // Totals
+  // Totals — 🔒 V10 §2.1+§2.3: Same calculation as the server (proportional
+  // discount distribution + per-item GST on post-discount taxable + single
+  // shared roundMoney function). The preview the shopkeeper sees while
+  // entering a sale now EXACTLY matches what the server will store.
   let subtotal = 0
   let totalGst = 0
   let totalProfit = 0
   const totalDiscount = parseFloat(discountAmount) || 0
 
-  items.forEach(item => {
-    const amount = (item.quantity || 0) * (item.unitPrice || 0)
-    const itemGst = amount * (item.gstRate || 0) / 100
-    subtotal += amount
-    totalGst += itemGst
+  // Compute per-item gross amounts and distribute the order-level discount
+  // proportionally across them BEFORE computing GST (matches server V10 §2.1).
+  const grossAmounts = items.map(item =>
+    roundMoney((Number(item.quantity) || 0) * (Number(item.unitPrice) || 0)),
+  )
+  const perItemDiscounts = distributeDiscountProportionally(grossAmounts, totalDiscount)
+
+  items.forEach((item, idx) => {
+    const grossAmount = grossAmounts[idx]
+    const itemDiscount = roundMoney(perItemDiscounts[idx])
+    const taxableAmount = roundMoney(grossAmount - itemDiscount)
+    const itemGst = calculateGst(taxableAmount, Number(item.gstRate) || 0)
+    subtotal = roundMoney(subtotal + grossAmount)
+    totalGst = roundMoney(totalGst + itemGst)
     if (isSale && item.productId) {
       const p = productMap.get(item.productId)
-      if (p) totalProfit += (item.unitPrice - p.purchasePrice) * item.quantity
+      if (p) {
+        // 🔒 V10 §2.4: Profit on post-discount realized unit price (matches server).
+        const realizedUnitPrice = roundMoney(taxableAmount / (Number(item.quantity) || 1))
+        totalProfit = roundMoney(totalProfit + (realizedUnitPrice - p.purchasePrice) * (Number(item.quantity) || 0))
+      }
     }
   })
 
-  // 💰 MONEY (Audit fix Phase 4): Round all money to 2 decimal places to
-  // prevent float precision drift. Was: totalGst / 2 → 9.000000000000002
-  const r = (n: number) => Math.round(n * 100) / 100
-  const totalAmount = r(subtotal - totalDiscount + totalGst)
-  const cgst = isInterState ? 0 : r(totalGst / 2)
-  const sgst = isInterState ? 0 : r(totalGst - cgst)  // ensures cgst + sgst === totalGst exactly
-  const igst = isInterState ? r(totalGst) : 0
+  // 🔒 V10 §2.3: Use shared roundMoney (was: local `r` without epsilon →
+  // boundary values like 1.005 displayed differently from server-stored value).
+  const totalAmount = roundMoney((subtotal - totalDiscount) + totalGst)
+  const cgst = isInterState ? 0 : splitGst(totalGst).cgst
+  const sgst = isInterState ? 0 : splitGst(totalGst).sgst
+  const igst = isInterState ? roundMoney(totalGst) : 0
   const paid = parseFloat(paidAmount) || 0
   const finalPaid = paidAmount === '' ? totalAmount : paid
-  const due = r(totalAmount - finalPaid)
+  const due = roundMoney(totalAmount - finalPaid)
 
   const handleSave = async () => {
     if (items.length === 0) {

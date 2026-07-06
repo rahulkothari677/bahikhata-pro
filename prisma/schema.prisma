@@ -221,8 +221,17 @@ model TransactionItem {
   // is snapshotted here at sale time, so historical profit is immutable.
   purchasePriceAtSale Float  @default(0)  // cost at time of sale (for profit calc)
   gstRate        Float    @default(0)
-  discountAmount Float    @default(0)
-  total          Float    @default(0)  // qty * unitPrice - discount + gst
+  discountAmount Float    @default(0)  // 🔒 V10 §2.1: per-item discount (proportional share of order-level discount)
+  // 🔒 V10 §2.2: per-item GST components — SINGLE SOURCE OF TRUTH for GST.
+  // Was: only Transaction header stored cgst/sgst/igst; reports/GSTR recomputed
+  // in SQL using a different rounding path → drift between stored and report.
+  // Now: every code path (POST, PUT, reports, GSTR, dashboard, invoice PDF)
+  // aggregates these stored per-item values. The GST on a transaction is the
+  // sum of these three columns across all its items — never recomputed.
+  cgst           Float    @default(0)
+  sgst           Float    @default(0)
+  igst           Float    @default(0)
+  total          Float    @default(0)  // taxable + cgst + sgst + igst (was qty * unitPrice - discount + gst)
 
   createdAt      DateTime @default(now())
 

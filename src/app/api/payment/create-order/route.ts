@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUserId } from '@/lib/get-auth'
 import { db } from '@/lib/db'
 import Razorpay from 'razorpay'
+import { apiError } from '@/lib/api-error'
 
 /**
  * POST /api/payment/create-order
@@ -86,10 +87,9 @@ export async function POST(req: NextRequest) {
       keyId,  // frontend needs this to open Razorpay checkout
     })
   } catch (error: any) {
-    console.error('Create order error:', error)
-    return NextResponse.json({
-      error: 'Failed to create payment order',
-      detail: error?.error?.description || error?.message || String(error),
-    }, { status: 500 })
+    // 🔒 V10 §3.3: Was `detail: error?.error?.description || error?.message || String(error)`
+    // — leaked Razorpay SDK internals (key id, internal error structure) to
+    // the client. Now: generic message + errorId for support lookup.
+    return apiError(error, 'Failed to create payment order', 500)
   }
 }

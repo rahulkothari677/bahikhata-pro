@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUserId } from '@/lib/get-auth'
 import { checkUsage, incrementUsage } from '@/lib/usage-limits'
 import { tryParseLocally } from '@/lib/voice-regex-parser'
+import { apiError } from '@/lib/api-error'
 
 // ⏱️ Vercel serverless timeout — voice parsing calls the LLM which can
 // take 2-5s. Set explicit maxDuration so the route doesn't hit the
@@ -441,10 +442,12 @@ Return JSON only, no commentary.`
           errorMessage: errorDetail.slice(0, 500),
         },
       }).catch(() => {})
-      return NextResponse.json({
-        error: 'Failed to parse voice entry',
-        detail: errorDetail,
-      }, { status: 502 })
+      return apiError(
+        new Error(errorDetail),
+        'Failed to parse voice entry — please try speaking again or type the entry',
+        502,
+        { providerError: errorDetail.slice(0, 500) }, // server-side log only
+      )
     }
 
     const data = await response.json()

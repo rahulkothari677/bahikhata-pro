@@ -165,10 +165,14 @@ export async function GET(req: NextRequest) {
         (purchaseGstAgg._sum.cgst || 0) + (purchaseGstAgg._sum.sgst || 0) + (purchaseGstAgg._sum.igst || 0)
       )
 
-      // By GST rate slab — raw SQL grouping TransactionItem by gstRate.
-      // This is the one query that still needs to join TransactionItem, but
-      // it's a GROUP BY so it returns only the aggregated rows (5-6 slabs),
-      // not the raw transaction items.
+      // By GST rate slab — 🔒 V10 §2.2: aggregate STORED per-item CGST/SGST/IGST
+      // (single source of truth). Was: recompute GST in SQL with
+      // `ROUND(taxable × rate / 100)` — different rounding path from write-time
+      // splitGst() → for odd-paise GST, stored (cgst=4.51, sgst=4.50) disagreed
+      // with recomputed (cgst=4.51, sgst=4.51) → CA reconciliation fails.
+      // Now: every read path aggregates the stored per-item values, so the
+      // slab breakdown, the header outputTax, the GSTR per-invoice, and the
+      // dashboard are byte-identical to the values stored at write time.
       const slabRows = await db.$queryRaw<Array<{
         gstRate: number;
         isInterState: boolean;
@@ -182,10 +186,9 @@ export async function GET(req: NextRequest) {
           ti."gstRate",
           t."isInterState",
           SUM(ROUND((ti."quantity"::numeric * ti."unitPrice" - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 2)) AS taxable,
-          SUM(ROUND(((ti."quantity"::numeric * ti."unitPrice" - COALESCE(ti."discountAmount", 0)) * ti."gstRate" / 100::numeric)::numeric, 2)) AS gst,
-          SUM(CASE WHEN t."isInterState" THEN 0 ELSE ROUND(((ti."quantity"::numeric * ti."unitPrice" - COALESCE(ti."discountAmount", 0)) * ti."gstRate" / 200::numeric)::numeric, 2) END) AS cgst,
-          SUM(CASE WHEN t."isInterState" THEN 0 ELSE ROUND(((ti."quantity"::numeric * ti."unitPrice" - COALESCE(ti."discountAmount", 0)) * ti."gstRate" / 200::numeric)::numeric, 2) END) AS sgst,
-          SUM(CASE WHEN t."isInterState" THEN ROUND(((ti."quantity"::numeric * ti."unitPrice" - COALESCE(ti."discountAmount", 0)) * ti."gstRate" / 100::numeric)::numeric, 2) ELSE 0 END) AS igst,
+          SUM(COALESCE(ti."cgst", 0)::numeric) AS cgst,
+          SUM(COALESCE(ti."sgst", 0)::numeric) AS sgst,
+          SUM(COALESCE(ti."igst", 0)::numeric) AS igst,
           SUM(ti."quantity") AS quantity
         FROM "TransactionItem" ti
         JOIN "Transaction" t ON ti."transactionId" = t.id
@@ -211,7 +214,7 @@ export async function GET(req: NextRequest) {
         slabMap.set(rate, existing)
       }
 
-      // Input slab breakdown (purchases) — same pattern
+      // Input slab breakdown (purchases) — 🔒 V10 §2.2: aggregate STORED per-item values
       const inputSlabRows = await db.$queryRaw<Array<{
         gstRate: number;
         taxable: number;
@@ -222,9 +225,9 @@ export async function GET(req: NextRequest) {
         SELECT
           ti."gstRate",
           SUM(ROUND((ti."quantity"::numeric * ti."unitPrice" - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 2)) AS taxable,
-          SUM(CASE WHEN t."isInterState" THEN 0 ELSE ROUND(((ti."quantity"::numeric * ti."unitPrice" - COALESCE(ti."discountAmount", 0)) * ti."gstRate" / 200::numeric)::numeric, 2) END) AS cgst,
-          SUM(CASE WHEN t."isInterState" THEN 0 ELSE ROUND(((ti."quantity"::numeric * ti."unitPrice" - COALESCE(ti."discountAmount", 0)) * ti."gstRate" / 200::numeric)::numeric, 2) END) AS sgst,
-          SUM(CASE WHEN t."isInterState" THEN ROUND(((ti."quantity"::numeric * ti."unitPrice" - COALESCE(ti."discountAmount", 0)) * ti."gstRate" / 100::numeric)::numeric, 2) ELSE 0 END) AS igst
+          SUM(COALESCE(ti."cgst", 0)::numeric) AS cgst,
+          SUM(COALESCE(ti."sgst", 0)::numeric) AS sgst,
+          SUM(COALESCE(ti."igst", 0)::numeric) AS igst
         FROM "TransactionItem" ti
         JOIN "Transaction" t ON ti."transactionId" = t.id
         WHERE t."userId" = ${userId}

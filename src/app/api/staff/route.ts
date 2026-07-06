@@ -4,6 +4,7 @@ import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
 import { DEFAULT_STAFF_PERMISSIONS, parsePermissions, type StaffPermissions } from '@/lib/staff-permissions'
 import { checkEntityLimit } from '@/lib/usage-limits'
+import { apiError } from '@/lib/api-error'
 
 // GET /api/staff - list all staff members for the current owner
 export async function GET() {
@@ -31,8 +32,8 @@ export async function GET() {
 
     return NextResponse.json({ staff: staffWithPerms })
   } catch (error) {
-    console.error('Staff GET error:', error)
-    return NextResponse.json({ error: 'Failed to fetch staff', detail: String(error) }, { status: 500 })
+    // 🔒 V10 §3.3: was `detail: String(error)` — leaked DB internals.
+    return apiError(error, 'Failed to fetch staff', 500)
   }
 }
 
@@ -107,11 +108,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ staff: { ...staff, permissions: parsePermissions(staff.permissions) } })
   } catch (error) {
-    console.error('Staff POST error:', error)
-    return NextResponse.json({
-      error: 'Failed to create staff account',
-      detail: String(error instanceof Error ? error.message : error)
-    }, { status: 500 })
+    // 🔒 V10 §3.3: was `detail: String(error instanceof Error ? error.message : error)`.
+    return apiError(error, 'Failed to create staff account', 500)
   }
 }
 

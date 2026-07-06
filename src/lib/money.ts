@@ -123,6 +123,61 @@ export function splitGst(totalGst: number): { cgst: number; sgst: number } {
 }
 
 /**
+ * 🔒 V10 §2.1: Distribute an order-level discount proportionally across line
+ * items, returning the per-item discount amount for each item.
+ *
+ * WHY: GST law (CGST Act §15(3)) requires GST to be charged on the POST-
+ * discount taxable value when the discount is shown on the invoice. The UI
+ * collects a single order-level discount; previously this was subtracted
+ * AFTER GST was computed on the full pre-discount amount — making GST
+ * non-filable. Now the order-level discount is split proportionally across
+ * items (by each item's gross amount) BEFORE GST is computed, so:
+ *
+ *   taxableValue(item) = (qty × unitPrice) − proportionalDiscount(item)
+ *   GST(item)          = taxableValue(item) × rate
+ *   tax = taxable × rate  ← holds per item, per slab, per invoice
+ *
+ * The last item absorbs any rounding residual so the sum of per-item
+ * discounts EXACTLY equals the order-level discount (no ₹0.01 drift).
+ *
+ * @param grossAmounts - array of each item's gross amount (qty × unitPrice)
+ * @param orderDiscount - the order-level discount to distribute
+ * @returns array of per-item discount amounts (same length as input)
+ */
+export function distributeDiscountProportionally(
+  grossAmounts: number[],
+  orderDiscount: number,
+): number[] {
+  const discount = toMoney(orderDiscount)
+  if (discount <= 0) return grossAmounts.map(() => 0)
+
+  const grossValues = grossAmounts.map(toMoney)
+  const totalGross = grossValues.reduce((s, v) => s + v, 0)
+  if (totalGross <= 0) return grossAmounts.map(() => 0)
+
+  // Step 1: compute proportional share per item, rounded to 2dp.
+  const shares = grossValues.map(g => roundMoney((g / totalGross) * discount))
+
+  // Step 2: absorb any rounding residual (positive or negative) into the LAST
+  // item with a non-zero gross. This guarantees Σ(shares) === discount exactly.
+  const sumShares = shares.reduce((s, v) => s + v, 0)
+  const residual = roundMoney(discount - sumShares)
+  if (residual !== 0) {
+    // Find last non-zero-gross item (cannot push discount below 0 or above gross)
+    for (let i = shares.length - 1; i >= 0; i--) {
+      if (grossValues[i] > 0) {
+        const adjusted = roundMoney(shares[i] + residual)
+        // Clamp to [0, grossValues[i]] to be safe
+        shares[i] = Math.min(grossValues[i], Math.max(0, adjusted))
+        break
+      }
+    }
+  }
+
+  return shares
+}
+
+/**
  * Format a money value as an Indian Rupee string for display.
  *
  * Usage: formatINR(1234.5) → "₹1,234.50"

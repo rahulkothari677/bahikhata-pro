@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUserId } from '@/lib/get-auth'
 import { db } from '@/lib/db'
 import crypto from 'crypto'
+import { apiError } from '@/lib/api-error'
 
 /**
  * POST /api/payment/verify
@@ -185,10 +186,8 @@ export async function POST(req: NextRequest) {
       renewsAt: endDate.toISOString(),
     })
   } catch (error: any) {
-    console.error('Payment verification error:', error)
-    return NextResponse.json({
-      error: 'Payment verification failed',
-      detail: error?.message || String(error),
-    }, { status: 500 })
+    // 🔒 V10 §3.3: Was `detail: error?.message || String(error)` — leaked
+    // Razorpay signature/verification internals. Now: generic + errorId.
+    return apiError(error, 'Payment verification failed', 500)
   }
 }

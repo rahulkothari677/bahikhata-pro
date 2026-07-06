@@ -6,6 +6,7 @@ import { calculateCostInr } from '@/lib/ai-pricing'
 import { db } from '@/lib/db'
 import { roundMoney, calculateGst, splitGst } from '@/lib/money'
 import { preprocessImageForAI } from '@/lib/image-compress'
+import { apiError } from '@/lib/api-error'
 
 // ⏱️ Vercel serverless timeout — AI bill scanning can take 3-8s on big
 // handwritten images. Set explicit maxDuration so the route doesn't hit
@@ -276,10 +277,12 @@ Return JSON only, no commentary, no markdown formatting.`
           },
         }).catch(() => {}) // don't fail the request if logging fails
 
-        return NextResponse.json({
-          error: 'All AI providers failed',
-          detail: fallbackResult.error,
-        }, { status: 502 })
+        return apiError(
+          new Error('All AI providers failed'),
+          'All AI providers failed — please try again',
+          502,
+          { providerError: fallbackResult.error?.slice(0, 500) }, // server-side only
+        )
       }
       content = fallbackResult.content!
       // Save metadata for logging after successful parse
@@ -407,11 +410,9 @@ Return JSON only, no commentary, no markdown formatting.`
       },
     })
   } catch (error) {
-    console.error('Scan bill error:', error)
-    return NextResponse.json({
-      error: 'Failed to scan bill',
-      detail: String(error),
-    }, { status: 500 })
+    // 🔒 V10 §3.3: was `detail: String(error)` — leaked VLM provider errors
+    // (model names, API key fragments in some SDK error subclasses) to client.
+    return apiError(error, 'Failed to scan bill', 500)
   }
 }
 // Force fresh deploy Wed Jun 24 19:32:36 UTC 2026
