@@ -51,16 +51,42 @@ export async function GET(req: NextRequest) {
 
     // =====================================================================
     // P&L REPORT — pure SQL aggregation (no row cap, no truncation)
+    // 🔒 V11 §2.3: Parallelized 3 sequential queries into 1 Promise.all.
+    // Was: kpiAgg (await) → expensesByCatAgg (await) → incomeByCatAgg (await)
+    // = 3 sequential DB round-trips. On a cold Neon connection each is 1-2s,
+    // so 3-6s total. Now: 1 parallel batch = ~max(slowest query) = ~1-2s.
     // =====================================================================
     if (type === 'pl') {
-      // Single groupBy over all transaction types in the date range.
-      // Returns one row per type with sum + count. O(1) memory (4 rows max).
-      const kpiAgg = await db.transaction.groupBy({
-        by: ['type'],
-        where: activeTransactionWhere(userId, { date: { gte: from, lte: to } }),
-        _sum: { totalAmount: true, grossProfit: true, subtotal: true, discountAmount: true },
-        _count: true,
-      })
+      // All 3 aggregates are independent (different groupBy columns / filters),
+      // so they can run in parallel.
+      const [kpiAgg, expensesByCatAgg, incomeByCatAgg] = await Promise.all([
+        // Single groupBy over all transaction types in the date range.
+        // Returns one row per type with sum + count. O(1) memory (4 rows max).
+        db.transaction.groupBy({
+          by: ['type'],
+          where: activeTransactionWhere(userId, { date: { gte: from, lte: to } }),
+          _sum: { totalAmount: true, grossProfit: true, subtotal: true, discountAmount: true },
+          _count: true,
+        }),
+        // Expenses by category
+        db.transaction.groupBy({
+          by: ['category'],
+          where: activeTransactionWhere(userId, {
+            type: 'expense',
+            date: { gte: from, lte: to },
+          }),
+          _sum: { totalAmount: true },
+        }),
+        // Income by category
+        db.transaction.groupBy({
+          by: ['category'],
+          where: activeTransactionWhere(userId, {
+            type: 'income',
+            date: { gte: from, lte: to },
+          }),
+          _sum: { totalAmount: true },
+        }),
+      ])
 
       const sumOf = (t: string) => kpiAgg.filter(r => r.type === t).reduce((s, r) => s + (r._sum.totalAmount || 0), 0)
       const profitOf = (t: string) => kpiAgg.filter(r => r.type === t).reduce((s, r) => s + (r._sum.grossProfit || 0), 0)
@@ -74,28 +100,10 @@ export async function GET(req: NextRequest) {
       const netProfit = roundMoney(grossProfit + otherIncome - totalExpenses)
       const purchaseTotal = roundMoney(sumOf('purchase'))
 
-      // Expenses by category — groupBy on the `category` field
-      const expensesByCatAgg = await db.transaction.groupBy({
-        by: ['category'],
-        where: activeTransactionWhere(userId, {
-          type: 'expense',
-          date: { gte: from, lte: to },
-        }),
-        _sum: { totalAmount: true },
-      })
       const expensesByCategory = expensesByCatAgg
         .map(r => ({ name: r.category || 'Other', value: roundMoney(r._sum.totalAmount || 0) }))
         .sort((a, b) => b.value - a.value)
 
-      // Income by category
-      const incomeByCatAgg = await db.transaction.groupBy({
-        by: ['category'],
-        where: activeTransactionWhere(userId, {
-          type: 'income',
-          date: { gte: from, lte: to },
-        }),
-        _sum: { totalAmount: true },
-      })
       const incomeByCategory = incomeByCatAgg
         .map(r => ({ name: r.category || 'Other', value: roundMoney(r._sum.totalAmount || 0) }))
         .sort((a, b) => b.value - a.value)
@@ -121,10 +129,15 @@ export async function GET(req: NextRequest) {
 
     // =====================================================================
     // GST REPORT — pure SQL aggregation (no row cap, no truncation)
+    // 🔒 V11 §2.3: Parallelized 6 queries (4 aggregates + 2 slab queries)
+    // into 1 Promise.all. Was: Promise.all(4) → await slabRows → await
+    // inputSlabRows = 3 sequential round-trips. Now: 1 parallel batch.
     // =====================================================================
     if (type === 'gst') {
-      // Aggregate sale GST totals via SQL
-      const [saleGstAgg, purchaseGstAgg, saleCountAgg, purchaseCountAgg] = await Promise.all([
+      // All 6 queries are independent (different filters / tables), so they
+      // can all run in parallel.
+      const [saleGstAgg, purchaseGstAgg, saleCountAgg, purchaseCountAgg, slabRows, inputSlabRows] = await Promise.all([
+        // 1. Sale GST totals
         db.transaction.aggregate({
           where: activeTransactionWhere(userId, {
             type: 'sale',
@@ -139,6 +152,7 @@ export async function GET(req: NextRequest) {
           },
           _count: true,
         }),
+        // 2. Purchase GST totals
         db.transaction.aggregate({
           where: activeTransactionWhere(userId, {
             type: 'purchase',
@@ -152,18 +166,79 @@ export async function GET(req: NextRequest) {
           },
           _count: true,
         }),
+        // 3. Sale count
         db.transaction.count({
           where: activeTransactionWhere(userId, {
             type: 'sale',
             date: { gte: from, lte: to },
           }),
         }),
+        // 4. Purchase count
         db.transaction.count({
           where: activeTransactionWhere(userId, {
             type: 'purchase',
             date: { gte: from, lte: to },
           }),
         }),
+        // 5. Sale slab breakdown — 🔒 V10 §2.2: aggregate STORED per-item CGST/SGST/IGST
+        // (single source of truth). Was: recompute GST in SQL with
+        // `ROUND(taxable × rate / 100)` — different rounding path from write-time
+        // splitGst() → for odd-paise GST, stored (cgst=4.51, sgst=4.50) disagreed
+        // with recomputed (cgst=4.51, sgst=4.51) → CA reconciliation fails.
+        // Now: every read path aggregates the stored per-item values, so the
+        // slab breakdown, the header outputTax, the GSTR per-invoice, and the
+        // dashboard are byte-identical to the values stored at write time.
+        db.$queryRaw<Array<{
+          gstRate: number;
+          isInterState: boolean;
+          taxable: number;
+          cgst: number;
+          sgst: number;
+          igst: number;
+          quantity: number;
+        }>>`
+          SELECT
+            ti."gstRate",
+            t."isInterState",
+            SUM(ROUND((ti."quantity"::numeric * ti."unitPrice" - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 2)) AS taxable,
+            SUM(COALESCE(ti."cgst", 0)::numeric) AS cgst,
+            SUM(COALESCE(ti."sgst", 0)::numeric) AS sgst,
+            SUM(COALESCE(ti."igst", 0)::numeric) AS igst,
+            SUM(ti."quantity") AS quantity
+          FROM "TransactionItem" ti
+          JOIN "Transaction" t ON ti."transactionId" = t.id
+          WHERE t."userId" = ${userId}
+            AND t."deletedAt" IS NULL
+            AND t."type" = 'sale'
+            AND t."date" >= ${from}
+            AND t."date" <= ${to}
+          GROUP BY ti."gstRate", t."isInterState"
+          ORDER BY ti."gstRate" ASC
+        `,
+        // 6. Input slab breakdown (purchases) — 🔒 V10 §2.2: aggregate STORED per-item values
+        db.$queryRaw<Array<{
+          gstRate: number;
+          taxable: number;
+          cgst: number;
+          sgst: number;
+          igst: number;
+        }>>`
+          SELECT
+            ti."gstRate",
+            SUM(ROUND((ti."quantity"::numeric * ti."unitPrice" - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 2)) AS taxable,
+            SUM(COALESCE(ti."cgst", 0)::numeric) AS cgst,
+            SUM(COALESCE(ti."sgst", 0)::numeric) AS sgst,
+            SUM(COALESCE(ti."igst", 0)::numeric) AS igst
+          FROM "TransactionItem" ti
+          JOIN "Transaction" t ON ti."transactionId" = t.id
+          WHERE t."userId" = ${userId}
+            AND t."deletedAt" IS NULL
+            AND t."type" = 'purchase'
+            AND t."date" >= ${from}
+            AND t."date" <= ${to}
+          GROUP BY ti."gstRate"
+          ORDER BY ti."gstRate" ASC
+        `,
       ])
 
       const outputTax = roundMoney(
@@ -172,42 +247,6 @@ export async function GET(req: NextRequest) {
       const inputTax = roundMoney(
         (purchaseGstAgg._sum.cgst || 0) + (purchaseGstAgg._sum.sgst || 0) + (purchaseGstAgg._sum.igst || 0)
       )
-
-      // By GST rate slab — 🔒 V10 §2.2: aggregate STORED per-item CGST/SGST/IGST
-      // (single source of truth). Was: recompute GST in SQL with
-      // `ROUND(taxable × rate / 100)` — different rounding path from write-time
-      // splitGst() → for odd-paise GST, stored (cgst=4.51, sgst=4.50) disagreed
-      // with recomputed (cgst=4.51, sgst=4.51) → CA reconciliation fails.
-      // Now: every read path aggregates the stored per-item values, so the
-      // slab breakdown, the header outputTax, the GSTR per-invoice, and the
-      // dashboard are byte-identical to the values stored at write time.
-      const slabRows = await db.$queryRaw<Array<{
-        gstRate: number;
-        isInterState: boolean;
-        taxable: number;
-        cgst: number;
-        sgst: number;
-        igst: number;
-        quantity: number;
-      }>>`
-        SELECT
-          ti."gstRate",
-          t."isInterState",
-          SUM(ROUND((ti."quantity"::numeric * ti."unitPrice" - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 2)) AS taxable,
-          SUM(COALESCE(ti."cgst", 0)::numeric) AS cgst,
-          SUM(COALESCE(ti."sgst", 0)::numeric) AS sgst,
-          SUM(COALESCE(ti."igst", 0)::numeric) AS igst,
-          SUM(ti."quantity") AS quantity
-        FROM "TransactionItem" ti
-        JOIN "Transaction" t ON ti."transactionId" = t.id
-        WHERE t."userId" = ${userId}
-          AND t."deletedAt" IS NULL
-          AND t."type" = 'sale'
-          AND t."date" >= ${from}
-          AND t."date" <= ${to}
-        GROUP BY ti."gstRate", t."isInterState"
-        ORDER BY ti."gstRate" ASC
-      `
 
       // Build slab map (combine intra+inter state rows for the same rate)
       const slabMap = new Map<number, { taxable: number; cgst: number; sgst: number; igst: number; quantity: number }>()
@@ -221,31 +260,6 @@ export async function GET(req: NextRequest) {
         existing.quantity += Number(row.quantity)
         slabMap.set(rate, existing)
       }
-
-      // Input slab breakdown (purchases) — 🔒 V10 §2.2: aggregate STORED per-item values
-      const inputSlabRows = await db.$queryRaw<Array<{
-        gstRate: number;
-        taxable: number;
-        cgst: number;
-        sgst: number;
-        igst: number;
-      }>>`
-        SELECT
-          ti."gstRate",
-          SUM(ROUND((ti."quantity"::numeric * ti."unitPrice" - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 2)) AS taxable,
-          SUM(COALESCE(ti."cgst", 0)::numeric) AS cgst,
-          SUM(COALESCE(ti."sgst", 0)::numeric) AS sgst,
-          SUM(COALESCE(ti."igst", 0)::numeric) AS igst
-        FROM "TransactionItem" ti
-        JOIN "Transaction" t ON ti."transactionId" = t.id
-        WHERE t."userId" = ${userId}
-          AND t."deletedAt" IS NULL
-          AND t."type" = 'purchase'
-          AND t."date" >= ${from}
-          AND t."date" <= ${to}
-        GROUP BY ti."gstRate"
-        ORDER BY ti."gstRate" ASC
-      `
 
       const inputSlabMap = new Map<number, { taxable: number; cgst: number; sgst: number; igst: number }>()
       for (const row of inputSlabRows) {
@@ -326,12 +340,14 @@ export async function GET(req: NextRequest) {
     // filtered for the period summary.
     // =====================================================================
     if (type === 'party') {
-      const parties = await db.party.findMany({ where: { userId, deletedAt: null } })
-
-      // Two groupBy queries:
-      // 1. Period activity (date-filtered) — for totalSales/totalPurchases columns
-      // 2. All-time aggregates (no date filter) — for the cumulative balance
-      const [periodPartyAgg, allTimePartyAgg] = await Promise.all([
+      // 🔒 V11 §2.3: Parallelized parties findMany with the 2 groupBy queries.
+      // Was: parties (await) → Promise.all([periodPartyAgg, allTimePartyAgg])
+      // = 2 sequential round-trips. Now: 1 parallel batch of 3 queries.
+      // (The groupBy queries don't depend on the parties list — they filter
+      // by userId directly, not by party IDs.)
+      const [parties, periodPartyAgg, allTimePartyAgg] = await Promise.all([
+        db.party.findMany({ where: { userId, deletedAt: null } }),
+        // 1. Period activity (date-filtered) — for totalSales/totalPurchases columns
         db.transaction.groupBy({
           by: ['partyId', 'type'],
           where: activeTransactionWhere(userId, {
@@ -341,7 +357,7 @@ export async function GET(req: NextRequest) {
           _sum: { totalAmount: true, paidAmount: true },
           _count: true,
         }),
-        // 🔒 V7 M3: All-time aggregates for the correct cumulative balance
+        // 2. 🔒 V7 M3: All-time aggregates for the correct cumulative balance
         db.transaction.groupBy({
           by: ['partyId', 'type'],
           where: activeTransactionWhere(userId, {
