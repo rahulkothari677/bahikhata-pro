@@ -20,6 +20,7 @@ import {
   FileBarChart, TrendingUp, Receipt, Package, Users, Calendar,
   ArrowDownRight, ArrowUpRight, IndianRupee, Percent, FileText,
   FileSpreadsheet, Loader2, Download, Printer, Clock, AlertTriangle, Info,
+  AlertCircle,
 } from 'lucide-react'
 import { toast as sonnerToast } from 'sonner'
 import { offlineFetch } from '@/lib/offline-fetch'
@@ -94,15 +95,26 @@ export function Reports() {
     }
   }
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ['report', reportType, dateRange.from.toISOString(), dateRange.to.toISOString()],
     queryFn: async () => {
       // Debt aging uses party report data (includes transactions per party)
       // Inventory aging uses stock report data (includes products with createdAt)
       const apiType = reportType === 'debt-aging' ? 'party' : reportType === 'inventory-aging' ? 'stock' : reportType
       const r = await offlineFetch(`/api/reports?type=${apiType}&from=${dateRange.from.toISOString()}&to=${dateRange.to.toISOString()}`)
-      return r.json()
+      const json = await r.json()
+      // 🔒 V11 FIX: If the API returned an error response (e.g., 500 from a
+      // DB timeout), throw so React Query's `error` state is set. Without
+      // this, the component would receive `{ error: '...' }` as `data`,
+      // which is truthy, so it would render <PLReport data={data} /> and
+      // crash on `data.summary.totalRevenue` (summary is undefined).
+      if (!r.ok || json.error) {
+        throw new Error(json.error || json.message || `Request failed with status ${r.status}`)
+      }
+      return json
     },
+    // 🔒 V11 FIX: Don't crash on query errors — show retry state.
+    retry: 1,
   })
 
   const periodLabel = `${formatDate(dateRange.from)} to ${formatDate(dateRange.to)}`
@@ -287,22 +299,22 @@ export function Reports() {
         </TabsList>
 
         <TabsContent value="pl" className="mt-4">
-          {isLoading || !data ? <ReportSkeleton /> : <PLReport data={data} />}
+          {error ? <ReportError message={(error as Error).message} /> : isLoading || !data ? <ReportSkeleton /> : <PLReport data={data} />}
         </TabsContent>
         <TabsContent value="gst" className="mt-4">
-          {isLoading || !data ? <ReportSkeleton /> : <GSTReport data={data} />}
+          {error ? <ReportError message={(error as Error).message} /> : isLoading || !data ? <ReportSkeleton /> : <GSTReport data={data} />}
         </TabsContent>
         <TabsContent value="stock" className="mt-4">
-          {isLoading || !data ? <ReportSkeleton /> : <StockReport data={data} />}
+          {error ? <ReportError message={(error as Error).message} /> : isLoading || !data ? <ReportSkeleton /> : <StockReport data={data} />}
         </TabsContent>
         <TabsContent value="party" className="mt-4">
-          {isLoading || !data ? <ReportSkeleton /> : <PartyReport data={data} />}
+          {error ? <ReportError message={(error as Error).message} /> : isLoading || !data ? <ReportSkeleton /> : <PartyReport data={data} />}
         </TabsContent>
         <TabsContent value="debt-aging" className="mt-4">
-          {isLoading || !data ? <ReportSkeleton /> : <DebtAgingReport data={data} />}
+          {error ? <ReportError message={(error as Error).message} /> : isLoading || !data ? <ReportSkeleton /> : <DebtAgingReport data={data} />}
         </TabsContent>
         <TabsContent value="inventory-aging" className="mt-4">
-          {isLoading || !data ? <ReportSkeleton /> : <InventoryAgingReport data={data} />}
+          {error ? <ReportError message={(error as Error).message} /> : isLoading || !data ? <ReportSkeleton /> : <InventoryAgingReport data={data} />}
         </TabsContent>
       </Tabs>
     </div>
@@ -739,6 +751,27 @@ function ReportSkeleton() {
         {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}
       </div>
       <Skeleton className="h-72 w-full rounded-xl" />
+    </div>
+  )
+}
+
+// 🔒 V11 FIX: Error state for when the report API fails (DB timeout, cold
+// start, etc.). Was: the component crashed with 'Cannot read properties of
+// undefined (reading totalRevenue)' because the API returned { error: '...' }
+// and the component tried to destructure data.summary.
+function ReportError({ message }: { message: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+      <div className="w-12 h-12 rounded-full bg-rose-100 flex items-center justify-center mb-3">
+        <AlertCircle className="w-6 h-6 text-rose-600" />
+      </div>
+      <h3 className="font-semibold text-slate-800 mb-1">Couldn't load report</h3>
+      <p className="text-sm text-slate-500 max-w-sm mb-4">
+        {message || 'The database might be warming up. Please try again in a moment.'}
+      </p>
+      <p className="text-xs text-slate-400">
+        If this keeps happening, try narrowing the date range.
+      </p>
     </div>
   )
 }

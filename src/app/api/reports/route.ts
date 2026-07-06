@@ -437,7 +437,20 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ error: 'Invalid report type' }, { status: 400 })
   } catch (error) {
-    console.error('Reports error:', error)
-    return NextResponse.json({ error: 'Failed to generate report' }, { status: 500 })
+    // 🔒 V11 FIX: Log the actual error with context so we can debug. Was:
+    // just 'Reports error:' + generic 500. Now: includes the report type
+    // and date range so the founder can reproduce.
+    const url = new URL(req.url)
+    console.error('Reports error:', {
+      type: url.searchParams.get('type'),
+      from: url.searchParams.get('from'),
+      to: url.searchParams.get('to'),
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    })
+    return NextResponse.json(
+      { error: 'Failed to generate report. The database might be warming up — please try again.' },
+      { status: 500 },
+    )
   }
 }
