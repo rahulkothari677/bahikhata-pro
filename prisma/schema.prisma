@@ -8,8 +8,8 @@ generator client {
 
 datasource db {
   provider  = "postgresql"
-  url       = env("DATABASE_URL")      // Pooled connection (with -pooler) for runtime queries
-  directUrl = env("DIRECT_URL")         // Direct connection (no -pooler) for migrations
+  url       = env("DATABASE_URL") // Pooled connection (with -pooler) for runtime queries
+  directUrl = env("DIRECT_URL") // Direct connection (no -pooler) for migrations
 }
 
 // ==================== USERS (Authentication) ====================
@@ -17,23 +17,23 @@ model User {
   id            String    @id @default(cuid())
   email         String    @unique
   name          String?
-  password      String    // hashed with bcrypt
-  phone         String?   // for future phone OTP
+  password      String // hashed with bcrypt
+  phone         String? // for future phone OTP
   emailVerified DateTime? // for future email verification
-  image         String?   // profile picture URL
+  image         String? // profile picture URL
   role          String    @default("owner") // owner | staff
-  ownerId       String?   // if staff, links to the owner's account
+  ownerId       String? // if staff, links to the owner's account
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
   // Staff permissions — JSON object controlling which modules staff can access.
-  permissions   Json?
+  permissions Json?
 
   // Subscription / plan
-  cancelledAt   DateTime?
-  plan          String    @default("free") // free | pro | elite
-  renewsAt      DateTime?
-  trialEndsAt   DateTime?
+  cancelledAt DateTime?
+  plan        String    @default("free") // free | pro | elite
+  renewsAt    DateTime?
+  trialEndsAt DateTime?
 
   // 🔒 SECURITY (Audit fix Phase 3.3): tokenVersion for JWT revocation.
   // Incrementing this invalidates ALL existing JWTs for this user (logout all
@@ -41,25 +41,25 @@ model User {
   // The JWT callback in auth.ts compares the token's tokenVersion claim
   // against this DB value on every request — if they differ, the session
   // is treated as invalid.
-  tokenVersion  Int       @default(0)
+  tokenVersion Int @default(0)
 
   // Relations
-  products      Product[]
-  parties       Party[]
-  transactions  Transaction[]
-  payments      Payment[]
-  settings      Setting[]
-  auditLogs     AuditLog[]
-  referralsMade Referral[] @relation("Referral_referrerIdToUser")
-  referralReceived Referral? @relation("Referral_referredIdToUser")
-  subscriptions Subscription[]
-  usageTracking  UsageTracking[]
-  shops         Shop[]
-  scanComparisons ScanComparison[]
-  aiUsageLogs    AiUsageLog[]
-  supportTickets SupportTicket[]
-  npsFeedback   NpsFeedback[]
-  invoiceCounter InvoiceCounter?
+  products         Product[]
+  parties          Party[]
+  transactions     Transaction[]
+  payments         Payment[]
+  settings         Setting[]
+  auditLogs        AuditLog[]
+  referralsMade    Referral[]       @relation("Referral_referrerIdToUser")
+  referralReceived Referral?        @relation("Referral_referredIdToUser")
+  subscriptions    Subscription[]
+  usageTracking    UsageTracking[]
+  shops            Shop[]
+  scanComparisons  ScanComparison[]
+  aiUsageLogs      AiUsageLog[]
+  supportTickets   SupportTicket[]
+  npsFeedback      NpsFeedback[]
+  invoiceCounter   InvoiceCounter?
 
   @@index([plan])
   @@index([createdAt])
@@ -70,17 +70,17 @@ model User {
 // Each owner can have multiple shops. Products, transactions, parties
 // can be tagged with a shopId. When null, shows in all shops (backward compatible).
 model Shop {
-  id          String   @id @default(cuid())
-  userId      String   // owner of this shop
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name        String   // e.g. "Sharma Kirana Store"
-  gstin       String?
-  address     String?
-  phone       String?
-  state       String?
-  isDefault   Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(cuid())
+  userId    String // owner of this shop
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String // e.g. "Sharma Kirana Store"
+  gstin     String?
+  address   String?
+  phone     String?
+  state     String?
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([userId])
 }
@@ -88,18 +88,23 @@ model Shop {
 // ==================== PRODUCTS / INVENTORY ====================
 model Product {
   id                String   @id @default(cuid())
-  userId            String   // owner of this product
+  userId            String // owner of this product
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  shopId            String?  // multi-shop: null = all shops (backward compatible)
+  shopId            String? // multi-shop: null = all shops (backward compatible)
   name              String
   sku               String?
-  hsn               String?  // HSN/SAC code for GST
+  hsn               String? // HSN/SAC code for GST
   category          String?
   unit              String   @default("pcs") // pcs, kg, ltr, m, box
-  purchasePrice     Float    @default(0)  // price at which shop owner buys
-  salePrice         Float    @default(0)  // price at which shop owner sells
-  mrp               Float?   // MRP printed on product
-  gstRate           Float    @default(0)  // 0, 5, 12, 18, 28
+  purchasePrice     Float    @default(0) // price at which shop owner buys
+  salePrice         Float    @default(0) // price at which shop owner sells
+  mrp               Float? // MRP printed on product
+  gstRate           Float    @default(0) // 0, 5, 12, 18, 28
+  // 🔒 V12: When true, salePrice/mrp are INCLUSIVE of GST (the Indian retail
+  // norm — MRP is legally GST-inclusive). The sale flow then back-calculates
+  // taxable value = price × 100/(100+rate) instead of adding GST on top.
+  // Default false = old behaviour (price is taxable value, GST added on top).
+  priceIncludesGst  Boolean  @default(false)
   openingStock      Float    @default(0)
   // 🔒 AUDIT FIX H1: Authoritative stock count, maintained transactionally.
   // Was: stock computed at read time (openingStock + purchases - sales) — no
@@ -113,7 +118,7 @@ model Product {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  transactionItems  TransactionItem[]
+  transactionItems TransactionItem[]
 
   // Unique SKU per user (not globally)
   @@unique([userId, sku])
@@ -125,67 +130,72 @@ model Product {
 
 // ==================== PARTIES (Customers & Suppliers) ====================
 model Party {
-  id              String   @id @default(cuid())
-  userId          String   // owner of this party
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  shopId          String?  // multi-shop: null = all shops (backward compatible)
-  name            String
-  type            String   @default("customer") // customer | supplier | both
-  phone           String?
-  email           String?
-  gstin           String?  // GST Identification Number
-  address         String?
-  state           String?  // for intra/inter state GST
-  openingBalance  Float    @default(0) // positive = they owe us; negative = we owe them
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             String    @id @default(cuid())
+  userId         String // owner of this party
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shopId         String? // multi-shop: null = all shops (backward compatible)
+  name           String
+  type           String    @default("customer") // customer | supplier | both
+  phone          String?
+  email          String?
+  gstin          String? // GST Identification Number
+  address        String?
+  state          String? // for intra/inter state GST
+  openingBalance Float     @default(0) // positive = they owe us; negative = we owe them
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
   // 🔒 AUDIT FIX M7: Soft delete (same as Transaction)
-  deletedAt       DateTime?
+  deletedAt      DateTime?
 
-  transactions    Transaction[]
-  payments        Payment[]
+  transactions Transaction[]
+  payments     Payment[]
 
   // 🔒 V11 §2.2: Indexes — was ZERO indexes, caused full-table scans on every
   // Parties page load and every dashboard load (the receivable/payable query
   // joins Party to Transaction with WHERE p."userId" = ...). At scale this
   // gets linearly slower as the Party table grows across all tenants.
   // Now: two composite indexes matching the actual query patterns.
-  @@index([userId, deletedAt])  // list page + join filter (most common query)
-  @@index([userId, name])       // list page orders by name
+  @@index([userId, deletedAt]) // list page + join filter (most common query)
+  @@index([userId, name]) // list page orders by name
 }
 
 // ==================== TRANSACTIONS (Sales, Purchases, Income, Expense) ====================
 model Transaction {
-  id             String   @id @default(cuid())
-  userId         String   // owner of this transaction
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  shopId         String?  // multi-shop: null = all shops (backward compatible)
-  invoiceNo      String?  // bill/invoice number from bill (user-provided OR auto-generated)
+  id              String   @id @default(cuid())
+  userId          String // owner of this transaction
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shopId          String? // multi-shop: null = all shops (backward compatible)
+  invoiceNo       String? // bill/invoice number from bill (user-provided OR auto-generated)
   // 🔒 AUDIT FIX M6: Sequential invoice number per user (GST compliance).
   // Auto-generated when the user doesn't provide one. Unique per user so
   // no two transactions share the same invoice number.
-  invoiceSequence Int?     // auto-incremented per user (1, 2, 3, ...)
-  type           String   // sale | purchase | income | expense
-  partyId        String?  // customer for sale, supplier for purchase
-  party          Party?   @relation(fields: [partyId], references: [id])
-  date           DateTime @default(now())
-  subtotal       Float    @default(0)  // before tax & discount
-  discountAmount Float    @default(0)
-  cgst           Float    @default(0)
-  sgst           Float    @default(0)
-  igst           Float    @default(0)
-  totalAmount    Float    @default(0)  // final payable
-  paidAmount     Float    @default(0)  // amount actually paid
-  paymentMode    String   @default("cash") // cash | upi | card | bank | credit
-  isInterState   Boolean  @default(false)
-  notes          String?
+  invoiceSequence Int? // auto-incremented per user (1, 2, 3, ...)
+  type            String // sale | purchase | income | expense
+  partyId         String? // customer for sale, supplier for purchase
+  party           Party?   @relation(fields: [partyId], references: [id])
+  date            DateTime @default(now())
+  subtotal        Float    @default(0) // before tax & discount
+  discountAmount  Float    @default(0)
+  cgst            Float    @default(0)
+  sgst            Float    @default(0)
+  igst            Float    @default(0)
+  totalAmount     Float    @default(0) // final payable (after round-off)
+  // 🔒 V12: Invoice round-off. Indian invoices customarily round the grand
+  // total to the nearest rupee with an explicit "Round off" line. This stores
+  // the adjustment (e.g. -0.40 or +0.30) so totalAmount == taxable + tax + roundOff
+  // and the printed invoice can show it. 0 when round-off is disabled.
+  roundOff        Float    @default(0)
+  paidAmount      Float    @default(0) // amount actually paid
+  paymentMode     String   @default("cash") // cash | upi | card | bank | credit
+  isInterState    Boolean  @default(false)
+  notes           String?
   // For income/expense (no items)
-  category       String?  // e.g. rent, salary, electricity for expenses; commission etc for income
+  category        String? // e.g. rent, salary, electricity for expenses; commission etc for income
   // Payee info for income/expense (who you paid or received from)
-  payeeName      String?  // name of person you paid / received from
-  payeePhone     String?  // mobile number of payee
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  payeeName       String? // name of person you paid / received from
+  payeePhone      String? // mobile number of payee
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   // 🔒 IDEMPOTENCY (Audit fix N1): client-generated UUID to prevent duplicate
   // transactions from offline sync replays. When the offline queue replays a
@@ -194,54 +204,60 @@ model Transaction {
   // a duplicate. Same pattern as payment idempotency (Phase 1.4).
   clientMutationId String? @unique
 
-  items          TransactionItem[]
+  items TransactionItem[]
 
   // Auto-computed gross profit when type=sale
-  grossProfit    Float    @default(0)
+  grossProfit Float @default(0)
 
   // 🔒 AUDIT FIX M7: Soft delete for ledger integrity. Was: hard DELETE
   // (permanent, no audit trail). Now: set deletedAt = now() instead of
   // deleting the row. Queries filter WHERE deletedAt IS NULL. This preserves
   // the audit trail (required for GST/tax disputes) and allows "undo delete".
-  deletedAt      DateTime?
+  deletedAt DateTime?
 
+  // 🔒 M6: Unique invoice number per user (GST compliance — no duplicates)
+  @@unique([userId, invoiceNo])
   // Performance: list transactions per user filtered by date and/or type
   // Used by: dashboard, ledger (sales/purchases), reports
   @@index([userId, date])
   @@index([userId, type, date])
   @@index([userId, partyId])
-  // 🔒 M6: Unique invoice number per user (GST compliance — no duplicates)
-  @@unique([userId, invoiceNo])
 }
 
 model TransactionItem {
-  id             String   @id @default(cuid())
-  transactionId  String
-  transaction    Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
-  productId      String?
-  product        Product?  @relation(fields: [productId], references: [id])
-  productName    String   // snapshot of name at time of transaction
-  quantity       Float    @default(1)
-  unitPrice      Float    @default(0)  // price per unit (sale or purchase)
+  id                  String      @id @default(cuid())
+  transactionId       String
+  transaction         Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  productId           String?
+  product             Product?    @relation(fields: [productId], references: [id])
+  productName         String // snapshot of name at time of transaction
+  quantity            Float       @default(1)
+  // 🔒 V12: Snapshot of the unit at time of transaction (kg, gm, ltr, pcs, ...).
+  // Was: unit was dropped on save — every historical line was ambiguous
+  // ("500 of Tomato" — grams? kilos?). For product-linked lines the server
+  // normalizes (quantity, unit) into the product's unit before saving, so
+  // quantity × unitPrice is always internally consistent.
+  unit                String      @default("pcs")
+  unitPrice           Float       @default(0) // price per `unit` (sale or purchase)
   // 🔒 AUDIT FIX M4: Snapshot of purchasePrice at time of sale (COGS).
   // Was: profit calculated from the product's CURRENT purchasePrice —
   // changing it later distorted historical profit. Now: the purchase price
   // is snapshotted here at sale time, so historical profit is immutable.
-  purchasePriceAtSale Float  @default(0)  // cost at time of sale (for profit calc)
-  gstRate        Float    @default(0)
-  discountAmount Float    @default(0)  // 🔒 V10 §2.1: per-item discount (proportional share of order-level discount)
+  purchasePriceAtSale Float       @default(0) // cost at time of sale (for profit calc)
+  gstRate             Float       @default(0)
+  discountAmount      Float       @default(0) // 🔒 V10 §2.1: per-item discount (proportional share of order-level discount)
   // 🔒 V10 §2.2: per-item GST components — SINGLE SOURCE OF TRUTH for GST.
   // Was: only Transaction header stored cgst/sgst/igst; reports/GSTR recomputed
   // in SQL using a different rounding path → drift between stored and report.
   // Now: every code path (POST, PUT, reports, GSTR, dashboard, invoice PDF)
   // aggregates these stored per-item values. The GST on a transaction is the
   // sum of these three columns across all its items — never recomputed.
-  cgst           Float    @default(0)
-  sgst           Float    @default(0)
-  igst           Float    @default(0)
-  total          Float    @default(0)  // taxable + cgst + sgst + igst (was qty * unitPrice - discount + gst)
+  cgst                Float       @default(0)
+  sgst                Float       @default(0)
+  igst                Float       @default(0)
+  total               Float       @default(0) // taxable + cgst + sgst + igst (was qty * unitPrice - discount + gst)
 
-  createdAt      DateTime @default(now())
+  createdAt DateTime @default(now())
 
   // ⚡ PERFORMANCE (Audit fix Phase 5): Indexes on foreign keys.
   // Without these, every `include: { items: true }` on Transaction does a
@@ -253,17 +269,17 @@ model TransactionItem {
 
 // ==================== PAYMENTS (separate from transaction totals) ====================
 model Payment {
-  id          String   @id @default(cuid())
-  userId      String   // owner of this payment
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  partyId     String
-  party       Party    @relation(fields: [partyId], references: [id])
-  amount      Float
-  date        DateTime @default(now())
-  mode        String   @default("cash") // cash | upi | card | bank
-  type        String   @default("received") // received (from customer) | paid (to supplier)
-  notes       String?
-  createdAt   DateTime @default(now())
+  id        String   @id @default(cuid())
+  userId    String // owner of this payment
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  partyId   String
+  party     Party    @relation(fields: [partyId], references: [id])
+  amount    Float
+  date      DateTime @default(now())
+  mode      String   @default("cash") // cash | upi | card | bank
+  type      String   @default("received") // received (from customer) | paid (to supplier)
+  notes     String?
+  createdAt DateTime @default(now())
 
   // ⚡ PERFORMANCE (Audit fix Phase 5): Indexes on foreign keys + hot query
   // patterns. Without these, every payment query does a full table scan.
@@ -273,29 +289,32 @@ model Payment {
 
 // ==================== APP SETTINGS (per user) ====================
 model Setting {
-  id        String   @id @default(cuid())
-  userId    String   @unique // one setting per user
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  shopName  String   @default("My Shop")
-  ownerName String?
-  address   String?
-  phone     String?
-  gstin     String?
-  state     String?
-  email     String?
-  currency  String   @default("INR")
-  language  String   @default("en")
+  id              String  @id @default(cuid())
+  userId          String  @unique // one setting per user
+  user            User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shopName        String  @default("My Shop")
+  ownerName       String?
+  address         String?
+  phone           String?
+  gstin           String?
+  state           String?
+  email           String?
+  currency        String  @default("INR")
+  language        String  @default("en")
   // Privacy: when true, profit figures are hidden from all UI (dashboard,
   // ledger, transaction detail). Data is still calculated and stored —
   // only the display is hidden. Owner controls this; staff inherits.
-  hideProfit Boolean @default(false)
+  hideProfit      Boolean @default(false)
+  // 🔒 V12: When true, the sale grand total is rounded to the nearest rupee
+  // (Indian invoice norm) and the adjustment is stored in Transaction.roundOff.
+  roundOffEnabled Boolean @default(false)
   // AI Bill Scanner output language: 'original' (keep bill language) | 'en' | 'hi' | 'ta' | 'gu' | 'mr' | 'bn' | 'te' | 'kn' | 'ml' | 'pa'
-  scanLang String   @default("original")
+  scanLang        String  @default("original")
   // AI Voice Entry language: 'original' (keep spoken language, don't translate) | 'en' | 'hi' | 'ta' | 'gu' | 'mr' | 'bn' | 'te' | 'kn' | 'ml' | 'pa'
   // Controls BOTH the speech-recognition locale (e.g. mr-IN) AND the parsed
   // output language. 'original' listens in hi-IN (default) and keeps the
   // spoken language in the parsed result (no English translation).
-  voiceLang String  @default("original")
+  voiceLang       String  @default("original")
 }
 
 // ==================== ANNOUNCEMENTS (broadcast messages) ====================
@@ -348,11 +367,11 @@ model Referral {
 model Subscription {
   id             String   @id
   userId         String
-  plan           String   // pro | elite
+  plan           String // pro | elite
   status         String   @default("active") // active | cancelled | expired
   amount         Float
   paymentMode    String   @default("razorpay")
-  paymentId      String?  @unique  // 🔒 IDEMPOTENCY: unique constraint prevents duplicate subscriptions from double-submitted payment verifications (Audit fix Phase 1.4)
+  paymentId      String?  @unique // 🔒 IDEMPOTENCY: unique constraint prevents duplicate subscriptions from double-submitted payment verifications (Audit fix Phase 1.4)
   subscriptionId String?
   startDate      DateTime @default(now())
   endDate        DateTime
@@ -367,7 +386,7 @@ model Subscription {
 model UsageTracking {
   id           String   @id @default(cuid())
   userId       String
-  month        String   // YYYY-MM format
+  month        String // YYYY-MM format
   transactions Int      @default(0)
   aiScans      Int      @default(0)
   voiceParses  Int      @default(0)
@@ -384,12 +403,12 @@ model UsageTracking {
 // they survive serverless cold starts and are shared across instances.
 // Only the SHA-256 hash is stored — never the raw token.
 model PasswordResetToken {
-  id        String   @id @default(cuid())
-  email     String   // the user's email (lowercased)
-  tokenHash String   @unique // SHA-256 hash of the raw token (never store raw)
+  id        String    @id @default(cuid())
+  email     String // the user's email (lowercased)
+  tokenHash String    @unique // SHA-256 hash of the raw token (never store raw)
   expiresAt DateTime // 1 hour from creation
   usedAt    DateTime? // null = not yet used; set when consumed (single-use)
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
   @@index([email, expiresAt])
   @@index([tokenHash])
@@ -400,14 +419,14 @@ model PasswordResetToken {
 // Used for: security forensics, compliance (DPDP Act), dispute resolution.
 model AuditLog {
   id         String   @id @default(cuid())
-  userId     String?  // user who performed the action (null = unauthenticated attempt)
+  userId     String? // user who performed the action (null = unauthenticated attempt)
   user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  action     String   // login_success | login_failure | logout | data_export | data_delete | role_change | settings_update | etc.
-  entityType String?  // product | party | transaction | setting | user | staff
-  entityId   String?  // ID of the affected entity
-  ip         String?  // IP address of the actor
-  userAgent  String?  // browser/device info
-  metadata   Json?    // any extra context (what changed, what was exported, etc.)
+  action     String // login_success | login_failure | logout | data_export | data_delete | role_change | settings_update | etc.
+  entityType String? // product | party | transaction | setting | user | staff
+  entityId   String? // ID of the affected entity
+  ip         String? // IP address of the actor
+  userAgent  String? // browser/device info
+  metadata   Json? // any extra context (what changed, what was exported, etc.)
   createdAt  DateTime @default(now())
 
   @@index([userId, createdAt])
@@ -419,31 +438,31 @@ model AuditLog {
 // bill image scanned by 1-3 providers (Gemini, OpenAI, Groq). Admins use
 // the /settings/ai-comparison page to compare accuracy and pick the best.
 model ScanComparison {
-  id            String   @id @default(cuid())
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // The bill image that was scanned
-  imageName     String?  // filename or label, if user provided one
-  imagePreview  String   // base64 thumbnail (max ~50KB) for display in history
+  imageName    String? // filename or label, if user provided one
+  imagePreview String // base64 thumbnail (max ~50KB) for display in history
 
   // Bill type the user said it was
-  billType      String   @default("purchase") // sale | purchase
+  billType String @default("purchase") // sale | purchase
 
   // Results from each provider (null if that provider wasn't tested)
-  geminiResult  Json?    // { success, parsed, error, durationMs, tokensUsed }
-  openaiResult  Json?
-  groqResult    Json?
+  geminiResult Json? // { success, parsed, error, durationMs, tokensUsed }
+  openaiResult Json?
+  groqResult   Json?
 
   // Ground truth (what the user manually entered as the correct answer)
-  groundTruth   Json?    // { sellerName, totalAmount, itemsCount, items: [...] }
+  groundTruth Json? // { sellerName, totalAmount, itemsCount, items: [...] }
 
   // Computed scores per provider (0-100, null if not tested or no ground truth)
-  geminiScore   Float?
-  openaiScore   Float?
-  groqScore     Float?
+  geminiScore Float?
+  openaiScore Float?
+  groqScore   Float?
 
-  createdAt     DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@index([userId, createdAt])
   @@index([createdAt])
@@ -454,29 +473,29 @@ model ScanComparison {
 // counts and calculated cost. Used by the /settings/ai-usage dashboard to
 // show the founder exactly how much each feature costs to run.
 model AiUsageLog {
-  id            String   @id @default(cuid())
-  userId        String
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  feature       String   // 'scan-bill' | 'voice-parse' | 'scan-compare'
-  provider      String   // 'gemini' | 'openai' | 'groq' | 'vlm' | 'zai-sdk'
-  model         String   // e.g. 'gemini-2.5-flash', 'llama-4-scout-17b-16e-instruct'
+  feature  String // 'scan-bill' | 'voice-parse' | 'scan-compare'
+  provider String // 'gemini' | 'openai' | 'groq' | 'vlm' | 'zai-sdk'
+  model    String // e.g. 'gemini-2.5-flash', 'llama-4-scout-17b-16e-instruct'
 
   // Token counts from the AI provider's response
-  inputTokens   Int      @default(0)
-  outputTokens  Int      @default(0)
-  totalTokens   Int      @default(0)
+  inputTokens  Int @default(0)
+  outputTokens Int @default(0)
+  totalTokens  Int @default(0)
 
   // Cost in INR (calculated at time of call using current pricing)
   // Stored per-call so historical costs are preserved even if prices change
-  costInr       Float    @default(0)
+  costInr Float @default(0)
 
   // Performance + result
-  durationMs    Int      @default(0)
-  success       Boolean  @default(true)
-  errorMessage  String?  // null if success, error text if failed
+  durationMs   Int     @default(0)
+  success      Boolean @default(true)
+  errorMessage String? // null if success, error text if failed
 
-  createdAt     DateTime @default(now())
+  createdAt DateTime @default(now())
 
   @@index([userId, createdAt])
   @@index([feature, createdAt])
@@ -484,7 +503,6 @@ model AiUsageLog {
   @@index([createdAt])
   @@index([feature, provider, createdAt])
 }
-
 
 // ==================== ADMIN PANEL TABLES ====================
 // These tables are shared between the Pro app and the admin panel.
@@ -505,37 +523,37 @@ model AiUsageLog {
 // package that both apps import. For now, they stay here safely.
 
 model AdminUser {
-  id            String    @id @default(cuid())
-  email         String    @unique
-  name          String
-  password      String
-  role          String    @default("admin")
-  totpSecret    String?
-  totpEnabled   Boolean   @default(false)
-  isActive      Boolean   @default(true)
-  lastLoginAt   DateTime?
-  lastLoginIp   String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id          String    @id @default(cuid())
+  email       String    @unique
+  name        String
+  password    String
+  role        String    @default("admin")
+  totpSecret  String?
+  totpEnabled Boolean   @default(false)
+  isActive    Boolean   @default(true)
+  lastLoginAt DateTime?
+  lastLoginIp String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
-  adminActions  AdminAction[]
+  adminActions AdminAction[]
 
   @@index([email])
   @@index([isActive])
 }
 
 model AdminAction {
-  id            String   @id @default(cuid())
-  adminId       String
-  admin         AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
-  action        String
-  targetType    String?
-  targetId      String?
-  description   String
-  metadata      Json?
-  ip            String?
-  userAgent     String?
-  createdAt     DateTime @default(now())
+  id          String    @id @default(cuid())
+  adminId     String
+  admin       AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  action      String
+  targetType  String?
+  targetId    String?
+  description String
+  metadata    Json?
+  ip          String?
+  userAgent   String?
+  createdAt   DateTime  @default(now())
 
   @@index([adminId, createdAt])
   @@index([action, createdAt])
@@ -544,23 +562,23 @@ model AdminAction {
 
 // ==================== SUPPORT TICKETS (admin panel) ====================
 model SupportTicket {
-  id          String    @id @default(cuid())
-  userId      String
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  subject     String
-  message     String
-  category    String    @default("general")
-  priority    String    @default("medium")
-  status      String    @default("open")
-  assignedTo  String?
-  response    String?
-  resolvedAt  DateTime?
-  resolvedBy  String?
-  userEmail   String?
-  userAgent   String?
-  appVersion  String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject    String
+  message    String
+  category   String    @default("general")
+  priority   String    @default("medium")
+  status     String    @default("open")
+  assignedTo String?
+  response   String?
+  resolvedAt DateTime?
+  resolvedBy String?
+  userEmail  String?
+  userAgent  String?
+  appVersion String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   @@index([status, priority, createdAt])
   @@index([userId, createdAt])
@@ -569,13 +587,13 @@ model SupportTicket {
 
 // ==================== NPS FEEDBACK (admin panel) ====================
 model NpsFeedback {
-  id          String   @id @default(cuid())
-  userId      String
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  score       Int
-  feedback    String?
-  category    String?
-  createdAt   DateTime @default(now())
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  score     Int
+  feedback  String?
+  category  String?
+  createdAt DateTime @default(now())
 
   @@index([userId, createdAt])
   @@index([score])
@@ -583,34 +601,36 @@ model NpsFeedback {
 
 // ==================== DAILY STATS (admin panel — pre-computed KPIs) ====================
 model DailyStats {
-  id              String   @id @default(cuid())
-  date            DateTime @unique
-  totalUsers      Int      @default(0)
-  newUsers        Int      @default(0)
-  activeUsers     Int      @default(0)
-  payingUsers     Int      @default(0)
-  mrr             Float    @default(0)
-  newMrr          Float    @default(0)
-  churnedMrr      Float    @default(0)
-  arr             Float    @default(0)
-  totalGmv        Float    @default(0)
-  totalTxns       Int      @default(0)
-  salesCount      Int      @default(0)
-  purchasesCount  Int      @default(0)
-  aiCalls         Int      @default(0)
-  aiCostInr       Float    @default(0)
-  aiScans         Int      @default(0)
-  voiceParses     Int      @default(0)
-  computedAt      DateTime @default(now())
+  id             String   @id @default(cuid())
+  date           DateTime @unique
+  totalUsers     Int      @default(0)
+  newUsers       Int      @default(0)
+  activeUsers    Int      @default(0)
+  payingUsers    Int      @default(0)
+  mrr            Float    @default(0)
+  newMrr         Float    @default(0)
+  churnedMrr     Float    @default(0)
+  arr            Float    @default(0)
+  totalGmv       Float    @default(0)
+  totalTxns      Int      @default(0)
+  salesCount     Int      @default(0)
+  purchasesCount Int      @default(0)
+  aiCalls        Int      @default(0)
+  aiCostInr      Float    @default(0)
+  aiScans        Int      @default(0)
+  voiceParses    Int      @default(0)
+  computedAt     DateTime @default(now())
+
   @@index([date])
 }
 
 // ==================== USER SEGMENTS CACHE (admin panel) ====================
 model UserSegmentCache {
-  id          String   @id @default(cuid())
-  userId      String
-  segmentId   String
-  computedAt  DateTime @default(now())
+  id         String   @id @default(cuid())
+  userId     String
+  segmentId  String
+  computedAt DateTime @default(now())
+
   @@unique([userId, segmentId])
   @@index([segmentId])
   @@index([userId])
@@ -633,19 +653,19 @@ model UserSegmentCache {
 
 // ==================== NOTIFICATION TEMPLATES (shared with admin) ====================
 model NotificationTemplate {
-  id          String   @id @default(cuid())
-  name        String
-  category    String   @default("general")
-  channel     String                          // sms | email | push
-  subject     String?
-  body        String   @db.Text
-  variables   String   @default("[]") @db.Text
-  language    String   @default("en")
-  status      String   @default("draft")
-  version     Int      @default(1)
-  createdBy   String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(cuid())
+  name      String
+  category  String   @default("general")
+  channel   String // sms | email | push
+  subject   String?
+  body      String   @db.Text
+  variables String   @default("[]") @db.Text
+  language  String   @default("en")
+  status    String   @default("draft")
+  version   Int      @default(1)
+  createdBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([channel, status])
   @@index([category, status])
@@ -654,21 +674,21 @@ model NotificationTemplate {
 
 // ==================== NOTIFICATION LOG (shared with admin) ====================
 model NotificationLog {
-  id            String   @id @default(cuid())
-  userId        String?
-  recipient     String
-  templateId    String?
-  templateName  String?
-  channel       String
-  subject       String?
-  body          String   @db.Text
-  status        String   @default("pending")
-  provider      String?
+  id                String   @id @default(cuid())
+  userId            String?
+  recipient         String
+  templateId        String?
+  templateName      String?
+  channel           String
+  subject           String?
+  body              String   @db.Text
+  status            String   @default("pending")
+  provider          String?
   providerMessageId String?
-  errorMessage  String?
-  sentBy        String?
-  sentAt        DateTime @default(now())
-  category      String   @default("general")
+  errorMessage      String?
+  sentBy            String?
+  sentAt            DateTime @default(now())
+  category          String   @default("general")
 
   @@index([userId, sentAt])
   @@index([channel, status, sentAt])
@@ -678,22 +698,22 @@ model NotificationLog {
 
 // ==================== CAMPAIGNS (shared with admin) ====================
 model Campaign {
-  id              String   @id @default(cuid())
+  id              String         @id @default(cuid())
   name            String
-  description     String?  @db.Text
-  status          String   @default("draft")
+  description     String?        @db.Text
+  status          String         @default("draft")
   targetSegmentId String?
-  targetUserIds   String   @default("[]") @db.Text
+  targetUserIds   String         @default("[]") @db.Text
   startAt         DateTime?
   endAt           DateTime?
-  totalRecipients Int      @default(0)
-  totalSent       Int      @default(0)
-  totalFailed     Int      @default(0)
-  totalSkipped    Int      @default(0)
-  currentStep     Int      @default(0)
+  totalRecipients Int            @default(0)
+  totalSent       Int            @default(0)
+  totalFailed     Int            @default(0)
+  totalSkipped    Int            @default(0)
+  currentStep     Int            @default(0)
   createdBy       String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
   startedAt       DateTime?
   completedAt     DateTime?
   steps           CampaignStep[]
@@ -703,21 +723,21 @@ model Campaign {
 }
 
 model CampaignStep {
-  id              String   @id @default(cuid())
-  campaignId      String
-  campaign        Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  stepNumber      Int
-  templateId      String
-  templateName    String?
-  delayMinutes    Int      @default(0)
-  status          String   @default("pending")
-  scheduledAt     DateTime?
-  sentAt          DateTime?
-  recipientCount  Int      @default(0)
-  sentCount       Int      @default(0)
-  failedCount     Int      @default(0)
-  skippedCount    Int      @default(0)
-  errorMessage    String?
+  id             String    @id @default(cuid())
+  campaignId     String
+  campaign       Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  stepNumber     Int
+  templateId     String
+  templateName   String?
+  delayMinutes   Int       @default(0)
+  status         String    @default("pending")
+  scheduledAt    DateTime?
+  sentAt         DateTime?
+  recipientCount Int       @default(0)
+  sentCount      Int       @default(0)
+  failedCount    Int       @default(0)
+  skippedCount   Int       @default(0)
+  errorMessage   String?
 
   @@index([campaignId, stepNumber])
   @@index([status, scheduledAt])
@@ -725,17 +745,17 @@ model CampaignStep {
 
 // ==================== STATUS PAGE / INCIDENTS (shared with admin) ====================
 model Incident {
-  id          String   @id @default(cuid())
+  id          String           @id @default(cuid())
   title       String
-  description String   @db.Text
-  severity    String   @default("minor")
-  status      String   @default("investigating")
-  service     String   @default("all")
-  startedAt   DateTime @default(now())
+  description String           @db.Text
+  severity    String           @default("minor")
+  status      String           @default("investigating")
+  service     String           @default("all")
+  startedAt   DateTime         @default(now())
   resolvedAt  DateTime?
   createdBy   String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
   updates     IncidentUpdate[]
 
   @@index([status, startedAt])
@@ -743,40 +763,40 @@ model Incident {
 }
 
 model IncidentUpdate {
-  id          String   @id @default(cuid())
-  incidentId  String
-  incident    Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
-  message     String   @db.Text
-  status      String
-  createdBy   String?
-  createdAt   DateTime @default(now())
+  id         String   @id @default(cuid())
+  incidentId String
+  incident   Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  message    String   @db.Text
+  status     String
+  createdBy  String?
+  createdAt  DateTime @default(now())
 
   @@index([incidentId, createdAt])
 }
 
 // ==================== ANOMALY DETECTION (shared with admin) ====================
 model Anomaly {
-  id            String   @id @default(cuid())
-  metric        String
-  metricLabel   String
-  direction     String
-  severity      String   @default("medium")
-  status        String   @default("open")
-  currentValue  Float
-  baselineValue Float
+  id             String    @id @default(cuid())
+  metric         String
+  metricLabel    String
+  direction      String
+  severity       String    @default("medium")
+  status         String    @default("open")
+  currentValue   Float
+  baselineValue  Float
   baselineStdDev Float
-  zScore        Float
-  baselineDays  Int      @default(30)
-  detectedAt    DateTime @default(now())
-  windowStart   DateTime
-  windowEnd     DateTime
+  zScore         Float
+  baselineDays   Int       @default(30)
+  detectedAt     DateTime  @default(now())
+  windowStart    DateTime
+  windowEnd      DateTime
   acknowledgedBy String?
   acknowledgedAt DateTime?
   resolvedBy     String?
   resolvedAt     DateTime?
-  adminNote      String?  @db.Text
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  adminNote      String?   @db.Text
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   @@index([status, detectedAt])
   @@index([metric, detectedAt])
@@ -785,40 +805,40 @@ model Anomaly {
 
 // ==================== CONFIGURABLE FRAUD RULES (shared with admin) ====================
 model FraudRule {
-  id              String   @id @default(cuid())
-  name            String
-  description     String?  @db.Text
-  metric          String
-  operator        String
-  threshold       Float
-  windowMinutes   Int?
-  userAgeMinutes  Int?
-  enabled         Boolean  @default(true)
-  severity        String   @default("medium")
-  createdBy       String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  alerts          FraudAlert[]
+  id             String       @id @default(cuid())
+  name           String
+  description    String?      @db.Text
+  metric         String
+  operator       String
+  threshold      Float
+  windowMinutes  Int?
+  userAgeMinutes Int?
+  enabled        Boolean      @default(true)
+  severity       String       @default("medium")
+  createdBy      String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  alerts         FraudAlert[]
 
   @@index([enabled, metric])
 }
 
 model FraudAlert {
-  id              String   @id @default(cuid())
-  ruleId          String
-  rule            FraudRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
-  userId          String
-  userName        String?
-  userEmail       String?
-  metricValue     Float
-  threshold       Float
-  status          String   @default("open")
-  adminNote       String?  @db.Text
-  detectedAt      DateTime @default(now())
-  acknowledgedBy  String?
-  acknowledgedAt  DateTime?
-  resolvedBy      String?
-  resolvedAt      DateTime?
+  id             String    @id @default(cuid())
+  ruleId         String
+  rule           FraudRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  userId         String
+  userName       String?
+  userEmail      String?
+  metricValue    Float
+  threshold      Float
+  status         String    @default("open")
+  adminNote      String?   @db.Text
+  detectedAt     DateTime  @default(now())
+  acknowledgedBy String?
+  acknowledgedAt DateTime?
+  resolvedBy     String?
+  resolvedAt     DateTime?
 
   @@index([status, detectedAt])
   @@index([ruleId, detectedAt])
@@ -835,19 +855,19 @@ model FraudAlert {
 
 // ==================== API KEYS (shared with admin) ====================
 model ApiKey {
-  id            String    @id @default(cuid())
-  partnerId     String?
-  name          String
-  keyHash       String   @unique
-  keyPrefix     String
-  scopes        String   @default("[]") @db.Text
-  status        String   @default("active")
-  expiresAt     DateTime?
-  lastUsedAt    DateTime?
-  usageCount    Int      @default(0)
-  createdBy     String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id         String    @id @default(cuid())
+  partnerId  String?
+  name       String
+  keyHash    String    @unique
+  keyPrefix  String
+  scopes     String    @default("[]") @db.Text
+  status     String    @default("active")
+  expiresAt  DateTime?
+  lastUsedAt DateTime?
+  usageCount Int       @default(0)
+  createdBy  String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   @@index([partnerId, status])
   @@index([status])
@@ -856,41 +876,41 @@ model ApiKey {
 
 // ==================== WEBHOOK MANAGEMENT (shared with admin) ====================
 model WebhookEndpoint {
-  id            String   @id @default(cuid())
-  partnerId     String
-  url           String
-  secret        String?
-  events        String   @default("[]") @db.Text
-  status        String   @default("active")
-  description   String?
-  totalSent     Int      @default(0)
-  totalSuccess  Int      @default(0)
-  totalFailed   Int      @default(0)
-  lastSentAt    DateTime?
-  createdBy     String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id           String    @id @default(cuid())
+  partnerId    String
+  url          String
+  secret       String?
+  events       String    @default("[]") @db.Text
+  status       String    @default("active")
+  description  String?
+  totalSent    Int       @default(0)
+  totalSuccess Int       @default(0)
+  totalFailed  Int       @default(0)
+  lastSentAt   DateTime?
+  createdBy    String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   @@index([partnerId, status])
   @@index([status])
 }
 
 model WebhookDelivery {
-  id              String   @id @default(cuid())
-  endpointId      String
-  eventType       String
-  payload         String   @db.Text
-  status          String   @default("pending")
-  attemptCount    Int      @default(0)
-  maxAttempts     Int      @default(3)
-  responseStatus  Int?
-  responseBody    String?  @db.Text
-  errorMessage    String?
-  firstAttemptAt  DateTime?
-  lastAttemptAt   DateTime?
-  nextRetryAt     DateTime?
-  deliveredAt     DateTime?
-  createdAt       DateTime @default(now())
+  id             String    @id @default(cuid())
+  endpointId     String
+  eventType      String
+  payload        String    @db.Text
+  status         String    @default("pending")
+  attemptCount   Int       @default(0)
+  maxAttempts    Int       @default(3)
+  responseStatus Int?
+  responseBody   String?   @db.Text
+  errorMessage   String?
+  firstAttemptAt DateTime?
+  lastAttemptAt  DateTime?
+  nextRetryAt    DateTime?
+  deliveredAt    DateTime?
+  createdAt      DateTime  @default(now())
 
   @@index([endpointId, status, createdAt])
   @@index([status, nextRetryAt])
@@ -899,16 +919,16 @@ model WebhookDelivery {
 
 // ==================== REVENUE RECOGNITION (shared with admin) ====================
 model RevenueSchedule {
-  id              String   @id @default(cuid())
-  subscriptionId  String
-  userId          String
-  plan            String
-  amount          Float
-  periodStart     DateTime
-  periodEnd       DateTime
-  status          String   @default("pending")
-  recognizedAt    DateTime?
-  createdAt       DateTime @default(now())
+  id             String    @id @default(cuid())
+  subscriptionId String
+  userId         String
+  plan           String
+  amount         Float
+  periodStart    DateTime
+  periodEnd      DateTime
+  status         String    @default("pending")
+  recognizedAt   DateTime?
+  createdAt      DateTime  @default(now())
 
   @@index([status, periodStart])
   @@index([userId, periodStart])
@@ -918,34 +938,34 @@ model RevenueSchedule {
 
 // ==================== A/B TESTING (shared with admin) ====================
 model Experiment {
-  id              String   @id @default(cuid())
-  name            String
-  description     String?  @db.Text
-  status          String   @default("draft")
-  metric          String
-  metricGoal      String  @default("increase")
-  targetEvent     String?
-  trafficPct      Int      @default(100)
-  variants        String   @default("[]") @db.Text
-  startAt         DateTime?
-  endAt           DateTime?
-  winnerVariant   String?
-  conclusion      String?  @db.Text
-  createdBy       String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id            String    @id @default(cuid())
+  name          String
+  description   String?   @db.Text
+  status        String    @default("draft")
+  metric        String
+  metricGoal    String    @default("increase")
+  targetEvent   String?
+  trafficPct    Int       @default(100)
+  variants      String    @default("[]") @db.Text
+  startAt       DateTime?
+  endAt         DateTime?
+  winnerVariant String?
+  conclusion    String?   @db.Text
+  createdBy     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   @@index([status, startAt])
 }
 
 model ExperimentAssignment {
-  id              String   @id @default(cuid())
+  id              String    @id @default(cuid())
   experimentId    String
   userId          String
   variantKey      String
-  assignedAt      DateTime @default(now())
+  assignedAt      DateTime  @default(now())
   convertedAt     DateTime?
-  conversionValue Float    @default(0)
+  conversionValue Float     @default(0)
 
   @@unique([experimentId, userId])
   @@index([experimentId, variantKey])
@@ -955,58 +975,58 @@ model ExperimentAssignment {
 
 // ==================== COMPETITOR MONITORING (shared with admin) ====================
 model Competitor {
-  id              String   @id @default(cuid())
-  name            String
-  website         String?
-  description     String?  @db.Text
-  freePrice       String?
-  proPrice        String?
-  elitePrice      String?
-  features        String   @default("{}") @db.Text
-  targetMarket    String?
-  usp             String?  @db.Text
-  weaknesses      String?  @db.Text
-  status          String   @default("active")
-  createdBy       String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id           String   @id @default(cuid())
+  name         String
+  website      String?
+  description  String?  @db.Text
+  freePrice    String?
+  proPrice     String?
+  elitePrice   String?
+  features     String   @default("{}") @db.Text
+  targetMarket String?
+  usp          String?  @db.Text
+  weaknesses   String?  @db.Text
+  status       String   @default("active")
+  createdBy    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@index([status])
 }
 
 model CompetitorUpdate {
-  id              String   @id @default(cuid())
-  competitorId    String
-  field           String
-  oldValue        String?  @db.Text
-  newValue        String?  @db.Text
-  note            String?  @db.Text
-  updatedBy       String?
-  createdAt       DateTime @default(now())
+  id           String   @id @default(cuid())
+  competitorId String
+  field        String
+  oldValue     String?  @db.Text
+  newValue     String?  @db.Text
+  note         String?  @db.Text
+  updatedBy    String?
+  createdAt    DateTime @default(now())
 
   @@index([competitorId, createdAt])
 }
 
 // ==================== BULK OPERATIONS v2 (shared with admin) ====================
 model BulkJob {
-  id              String   @id @default(cuid())
-  name            String
-  action          String
-  targetType      String   @default("user")
-  targetCriteria  String   @default("{}") @db.Text
-  actionParams    String   @default("{}") @db.Text
-  status          String   @default("scheduled")
-  scheduledAt     DateTime
-  startedAt       DateTime?
-  completedAt     DateTime?
-  totalTargets    Int      @default(0)
-  processedCount  Int      @default(0)
-  successCount    Int      @default(0)
-  failedCount     Int      @default(0)
-  errorMessage    String?  @db.Text
-  createdBy       String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             String    @id @default(cuid())
+  name           String
+  action         String
+  targetType     String    @default("user")
+  targetCriteria String    @default("{}") @db.Text
+  actionParams   String    @default("{}") @db.Text
+  status         String    @default("scheduled")
+  scheduledAt    DateTime
+  startedAt      DateTime?
+  completedAt    DateTime?
+  totalTargets   Int       @default(0)
+  processedCount Int       @default(0)
+  successCount   Int       @default(0)
+  failedCount    Int       @default(0)
+  errorMessage   String?   @db.Text
+  createdBy      String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   @@index([status, scheduledAt])
   @@index([action, status])
@@ -1014,41 +1034,41 @@ model BulkJob {
 
 // ==================== NPS SURVEY CONFIG (shared with admin) ====================
 model NpsSurveyConfig {
-  id              String   @id @default(cuid())
-  name            String
-  triggerType     String
-  triggerValue    Int
-  question        String   @default("How likely are you to recommend BahiKhata Pro to a friend or colleague?")
-  cooldownDays    Int      @default(90)
-  targetPlans     String   @default("all")
-  enabled         Boolean  @default(true)
-  priority        Int      @default(1)
-  timesShown      Int      @default(0)
-  timesResponded  Int      @default(0)
-  createdBy       String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id             String   @id @default(cuid())
+  name           String
+  triggerType    String
+  triggerValue   Int
+  question       String   @default("How likely are you to recommend BahiKhata Pro to a friend or colleague?")
+  cooldownDays   Int      @default(90)
+  targetPlans    String   @default("all")
+  enabled        Boolean  @default(true)
+  priority       Int      @default(1)
+  timesShown     Int      @default(0)
+  timesResponded Int      @default(0)
+  createdBy      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   @@index([enabled, triggerType])
 }
 
 // ==================== DATA EXPORT CENTER (shared with admin) ====================
 model DataExportRequest {
-  id              String   @id @default(cuid())
-  type            String
-  format          String   @default("csv")
-  status          String   @default("pending")
-  userId          String?
-  customQuery     String?  @db.Text
-  fileName        String?
-  fileSizeBytes   Int      @default(0)
-  rowCount        Int      @default(0)
-  errorMessage    String?  @db.Text
-  requestedBy     String?
-  processedBy     String?
-  createdAt       DateTime @default(now())
-  completedAt     DateTime?
-  expiresAt       DateTime?
+  id            String    @id @default(cuid())
+  type          String
+  format        String    @default("csv")
+  status        String    @default("pending")
+  userId        String?
+  customQuery   String?   @db.Text
+  fileName      String?
+  fileSizeBytes Int       @default(0)
+  rowCount      Int       @default(0)
+  errorMessage  String?   @db.Text
+  requestedBy   String?
+  processedBy   String?
+  createdAt     DateTime  @default(now())
+  completedAt   DateTime?
+  expiresAt     DateTime?
 
   @@index([status, createdAt])
   @@index([type, status])
@@ -1056,21 +1076,21 @@ model DataExportRequest {
 
 // ==================== PREDICTIVE CHURN MODEL (shared with admin) ====================
 model ChurnPrediction {
-  id              String   @id @default(cuid())
-  userId          String   @unique
-  userName        String?
-  userEmail       String?
-  userPlan        String?
-  riskScore       Int
-  riskLevel       String
-  inactivityScore Int      @default(0)
-  engagementScore Int      @default(0)
-  aiUsageScore    Int      @default(0)
-  planScore       Int      @default(0)
-  ageScore        Int      @default(0)
-  supportScore    Int      @default(0)
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  userName          String?
+  userEmail         String?
+  userPlan          String?
+  riskScore         Int
+  riskLevel         String
+  inactivityScore   Int      @default(0)
+  engagementScore   Int      @default(0)
+  aiUsageScore      Int      @default(0)
+  planScore         Int      @default(0)
+  ageScore          Int      @default(0)
+  supportScore      Int      @default(0)
   recommendedAction String?
-  computedAt      DateTime @default(now())
+  computedAt        DateTime @default(now())
 
   @@index([riskLevel, riskScore])
   @@index([userPlan, riskLevel])
@@ -1078,20 +1098,20 @@ model ChurnPrediction {
 
 // ==================== SUPPLIER INTELLIGENCE (shared with admin) ====================
 model SupplierReport {
-  id              String   @id @default(cuid())
-  name            String
-  type            String
-  partnerId       String?
-  status          String   @default("generated")
-  summary         String?  @db.Text
-  data            String   @default("{}") @db.Text
-  dataPoints      Int      @default(0)
-  userCount       Int      @default(0)
-  priceInr        Float    @default(0)
-  period          String?
-  generatedBy     String?
-  createdAt       DateTime @default(now())
-  deliveredAt     DateTime?
+  id          String    @id @default(cuid())
+  name        String
+  type        String
+  partnerId   String?
+  status      String    @default("generated")
+  summary     String?   @db.Text
+  data        String    @default("{}") @db.Text
+  dataPoints  Int       @default(0)
+  userCount   Int       @default(0)
+  priceInr    Float     @default(0)
+  period      String?
+  generatedBy String?
+  createdAt   DateTime  @default(now())
+  deliveredAt DateTime?
 
   @@index([type, status])
   @@index([partnerId, status])

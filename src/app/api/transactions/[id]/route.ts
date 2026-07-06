@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
-import { roundMoney, calculateGst, splitGst, distributeDiscountProportionally, toMoney } from '@/lib/money'
+import { roundMoney, toMoney } from '@/lib/money'
 import { deriveInterStateStatus } from '@/lib/gst'
 import { validateBody, updateTransactionSchema } from '@/lib/validation'
+import { computeLineItems } from '@/lib/line-items'
+import { normalizeToUnit } from '@/lib/units'
 
 // GET /api/transactions/[id] - get single transaction with all details
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -103,76 +105,50 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const products = productIds.length > 0 ? await db.product.findMany({ where: { id: { in: productIds }, userId } }) : []
     const productMap = new Map(products.map(p => [p.id, p]))
 
-    let subtotal = 0
-    let cgst = 0, sgst = 0, igst = 0
-    let grossProfit = 0
-
-    // 🔒 V10 §2.1+§2.2: Distribute order-level discount proportionally across
-    // items BEFORE GST; store per-item CGST/SGST/IGST (same logic as POST).
+    // 🔒 V12: Same centralized line-item math as POST (computeLineItems) — unit
+    // normalization + GST-inclusive + proportional discount, single source of
+    // truth so edit and create can never drift apart.
     const orderDiscount = toMoney(discountAmount)
-    const grossAmounts = items.map((item: any) =>
-      roundMoney(toMoney(item.quantity) * toMoney(item.unitPrice)),
+    // 🔒 V11 §4.3: Reject over-discount, using the same normalized taxable base.
+    const preSubtotal = roundMoney(
+      items.reduce((s: number, item: any) => {
+        const product = item.productId ? productMap.get(item.productId) : null
+        const rate = toMoney(item.gstRate) || 0
+        const includesGst = item.priceIncludesGst ?? product?.priceIncludesGst ?? false
+        const unitPrice = includesGst && rate > 0
+          ? (toMoney(item.unitPrice) * 100) / (100 + rate)
+          : toMoney(item.unitPrice)
+        let qty = toMoney(item.quantity)
+        if (product?.unit) qty = normalizeToUnit(qty, item.unit || product.unit, product.unit).quantity
+        return s + roundMoney(qty * unitPrice)
+      }, 0),
     )
-    // 🔒 V11 §4.3: Reject over-discount (same check as POST handler).
-    const subtotalCheck = roundMoney(grossAmounts.reduce((s, g) => s + g, 0))
-    if (orderDiscount > subtotalCheck) {
+    if (orderDiscount > preSubtotal) {
       return NextResponse.json({
         error: 'Discount cannot exceed subtotal',
-        message: `The discount (₹${orderDiscount.toFixed(2)}) is greater than the subtotal (₹${subtotalCheck.toFixed(2)}). Please reduce the discount and try again.`,
+        message: `The discount (₹${orderDiscount.toFixed(2)}) is greater than the subtotal (₹${preSubtotal.toFixed(2)}). Please reduce the discount and try again.`,
       }, { status: 400 })
     }
-    const perItemDiscounts = distributeDiscountProportionally(grossAmounts, orderDiscount)
 
-    const txItems = items.map((item: any, idx: number) => {
-      // 🔒 V10 §2.1+§2.2: GST on POST-DISCOUNT taxable (proportional share),
-      // per-item CGST/SGST/IGST stored as single source of truth.
-      const grossAmount = grossAmounts[idx]
-      const itemDiscount = roundMoney(perItemDiscounts[idx])
-      const taxableAmount = roundMoney(grossAmount - itemDiscount)
-      const itemGst = calculateGst(taxableAmount, item.gstRate || 0)
-      const itemTotal = roundMoney(taxableAmount + itemGst)
-      subtotal = roundMoney(subtotal + grossAmount)
-      let itemCgst = 0, itemSgst = 0, itemIgst = 0
-      if (isInterState) {
-        itemIgst = itemGst
-        igst = roundMoney(igst + itemGst)
-      } else {
-        const { cgst: c, sgst: s } = splitGst(itemGst)
-        itemCgst = c
-        itemSgst = s
-        cgst = roundMoney(cgst + c)
-        sgst = roundMoney(sgst + s)
-      }
-      // 💰 MONEY + COGS (Audit fix M4): Snapshot purchasePrice at sale time.
-      // 🔒 V10 §2.4: Profit on post-discount realized unit price.
-      let purchasePriceAtSale = 0
-      if (type === 'sale' && item.productId) {
-        const product = productMap.get(item.productId)
-        if (product) {
-          purchasePriceAtSale = product.purchasePrice
-          const realizedUnitPrice = roundMoney(taxableAmount / toMoney(item.quantity))
-          grossProfit = roundMoney(grossProfit + (realizedUnitPrice - product.purchasePrice) * toMoney(item.quantity))
-        }
-      }
-      return {
-        productId: item.productId || null,
-        productName: item.productName,
-        quantity: parseFloat(item.quantity),
-        unitPrice: parseFloat(item.unitPrice),
-        purchasePriceAtSale,  // 🔒 M4: COGS snapshot
-        gstRate: parseFloat(item.gstRate) || 0,
-        discountAmount: itemDiscount,  // 🔒 V10 §2.1: proportional share
-        cgst: itemCgst,  // 🔒 V10 §2.2: per-item GST — single source of truth
-        sgst: itemSgst,
-        igst: itemIgst,
-        total: itemTotal,
-      }
-    })
-
-    // 🔒 V10 §2.1: totalAmount = (subtotal - orderDiscount) + GST.
-    // Discount has already been distributed into per-item taxable values.
+    const computed = computeLineItems({ items, productMap, isInterState, orderDiscount, type })
+    const txItems = computed.txItems
+    const subtotal = computed.subtotal
+    const cgst = computed.cgst
+    const sgst = computed.sgst
+    const igst = computed.igst
+    const grossProfit = computed.grossProfit
     const discount = orderDiscount
-    const totalAmount = roundMoney((subtotal - discount) + cgst + sgst + igst)
+
+    // 🔒 V12: Invoice round-off (nearest rupee) when enabled.
+    const setting = await db.setting.findUnique({ where: { userId }, select: { roundOffEnabled: true } })
+    let totalAmount = computed.totalBeforeRoundOff
+    let roundOff = 0
+    if (setting?.roundOffEnabled) {
+      const rounded = Math.round(totalAmount)
+      roundOff = roundMoney(rounded - totalAmount)
+      totalAmount = rounded
+    }
+
     const paid = parseFloat(paidAmount)
     const finalPaid = isNaN(paid) ? totalAmount : paid
 
@@ -220,6 +196,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           sgst: roundMoney(sgst),
           igst: roundMoney(igst),
           totalAmount,
+          roundOff: roundMoney(roundOff),  // 🔒 V12
           paidAmount: roundMoney(finalPaid),
           paymentMode: paymentMode || 'cash',
           isInterState: !!isInterState,
