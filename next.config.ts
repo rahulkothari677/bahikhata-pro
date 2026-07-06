@@ -11,21 +11,17 @@ const nextConfig: NextConfig = {
   // Note: Sentry can still receive source maps if uploaded separately.
   productionBrowserSourceMaps: false,
 
-  // 🔒 SECURITY (Audit fix N3 + M11): Content-Security-Policy header.
+  // 🔒 SECURITY (Audit fix N3 + M11 + V9 2.6): Content-Security-Policy header.
   // Now ENFORCED (was report-only). Monitored for 1+ week with no violations.
-  // If issues arise, temporarily switch back to "Content-Security-Policy-Report-Only".
   //
-  // What this policy allows:
-  // - Scripts: only from self, Vercel, and inline (Next.js needs inline scripts)
-  // - Styles: self, inline (Tailwind/CSS modules need inline styles)
-  // - Images: self, data: (base64), blob: (camera), and common CDN domains
-  // - Fonts: self and Google Fonts CDN
-  // - API calls: self (same-origin API routes)
-  // - WebSocket: self (for HMR in dev, real-time features)
-  // - Frame-ancestors: 'none' (prevents clickjacking — no iframes allowed)
+  // 🔒 V9 2.6: Removed 'unsafe-eval' — was needed by some older libraries
+  // but is not required in production Next.js. Keeping 'unsafe-inline' because
+  // Next.js injects inline scripts for hydration. Moving to nonce-based CSP
+  // would remove the need for 'unsafe-inline' too, but that requires middleware
+  // changes and is a larger task.
   //
-  // If you add a third-party service (e.g., a CDN, analytics), add its domain
-  // to the relevant directive below.
+  // If issues arise after removing 'unsafe-eval', check the browser console
+  // for CSP violation reports. If a dependency genuinely needs it, re-add it.
   async headers() {
     return [
       {
@@ -35,7 +31,7 @@ const nextConfig: NextConfig = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://vercel.live",
+              "script-src 'self' 'unsafe-inline' https://vercel.live",
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
               "font-src 'self' https://fonts.gstatic.com data:",
               "img-src 'self' data: blob: https: https://*.cloudinary.com https://res.cloudinary.com",

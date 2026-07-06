@@ -17,7 +17,7 @@ import { formatINR, cn, getInitials } from '@/lib/utils'
 import {
   ShoppingCart, Truck, Plus, X, Search, ChevronDown, ChevronRight,
   TrendingUp, Calendar, User, ScanLine, Folder, FolderOpen,
-  Package, Phone, IndianRupee, Save, Trash2, Check, AlertCircle, Mic, Clock,
+  Package, Phone, IndianRupee, Save, Trash2, Check, AlertCircle, Mic, Clock, AlertTriangle,
 } from 'lucide-react'
 import { VoiceEntry } from '@/components/common/VoiceEntry'
 import { DraftManagerModal } from '@/components/common/DraftManagerModal'
@@ -57,6 +57,8 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
   const [partySearch, setPartySearch] = useState('')
   const [partyDropdownOpen, setPartyDropdownOpen] = useState(false)
   const [addPartyOpen, setAddPartyOpen] = useState(false)
+  // 🔒 V9 4.4: Persistent stock warning banner (not just a toast)
+  const [stockWarnings, setStockWarnings] = useState<any[]>([])
 
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
   const [invoiceNo, setInvoiceNo] = useState('')
@@ -402,6 +404,8 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
         // stock below zero. Show a visible warning so the shopkeeper knows
         // their stock went negative (and can record the missing purchase).
         if (Array.isArray(data.stockWarnings) && data.stockWarnings.length > 0) {
+          // 🔒 V9 4.4: Show persistent banner + toast (was: toast only)
+          setStockWarnings(data.stockWarnings)
           const lines = data.stockWarnings.map((w: any) =>
             `• ${w.productName}: had ${w.currentStock}, sold ${w.requestedQuantity}, now ${w.resultingStock}`
           )
@@ -450,6 +454,31 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
 
   return (
     <div className="space-y-4 pb-24 lg:pb-4">
+      {/* 🔒 V9 4.4: Persistent stock warning banner — stays visible until dismissed.
+          Shows after a sale pushes stock below zero. Replaces toast-only warning. */}
+      {stockWarnings.length > 0 && (
+        <div className="rounded-xl border-2 border-rose-300 dark:border-rose-700 bg-rose-50 dark:bg-rose-950/30 p-3 flex items-start gap-3">
+          <AlertTriangle className="w-5 h-5 text-rose-600 dark:text-rose-400 flex-shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold text-rose-800 dark:text-rose-300">Stock went negative</p>
+            <div className="mt-1 space-y-0.5">
+              {stockWarnings.map((w, i) => (
+                <p key={i} className="text-xs text-rose-700 dark:text-rose-400">
+                  • {w.productName}: had {w.currentStock}, sold {w.requestedQuantity}, now <strong>{w.resultingStock}</strong>
+                </p>
+              ))}
+            </div>
+            <p className="text-xs text-rose-600 dark:text-rose-500 mt-1.5">Record the missing purchase to fix this.</p>
+          </div>
+          <button
+            onClick={() => setStockWarnings([])}
+            className="p-1 rounded text-rose-400 hover:text-rose-600 hover:bg-rose-100 dark:hover:bg-rose-900/30 flex-shrink-0"
+            aria-label="Dismiss warning"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
       {/* Drafts button — opens modal showing all saved drafts from last 24h.
           Shows a badge with the count if there are any drafts. */}
       {hasDrafts && (

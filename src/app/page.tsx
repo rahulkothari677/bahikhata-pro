@@ -73,11 +73,20 @@ export default function Home() {
   const [themePickerDone, setThemePickerDone] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [showSplash, setShowSplash] = useState(true)
+  // 🔒 V9 4.2: First-run modal orchestrator — gate low-priority modals until
+  // the user has completed onboarding + tour. Prevents modal pile-up:
+  // SplashScreen → ThemePicker → Onboarding → Tour → Consent → RatePrompt → PWA
+  // Now: RatePrompt + PWA install wait until onboarding AND tour are done.
+  const [firstRunComplete, setFirstRunComplete] = useState(false)
 
   // 🔒 V8 P3: Fetch dashboard data (shared React Query cache) to check if the
   // user has any data — replaces the separate /api/seed call. MUST be before
   // any early returns (React Rules of Hooks — hooks can't be conditional).
   const { data: dashboardData } = useDashboardThisMonth()
+
+  // 🔒 V9 4.2: Compute showOnboarding early (needed by the firstRunComplete effect below)
+  const hasNoData = dashboardData?.kpis?.productCount === 0 && dashboardData?.kpis?.partyCount === 0
+  const showOnboarding = !onboardingDismissed && !isOfflineSession && dashboardData !== undefined && hasNoData && themePickerDone
 
   // Redirect staff to their first allowed view if they try to access a blocked module
   useEffect(() => {
@@ -172,6 +181,21 @@ export default function Home() {
     }
   }, [status, session])
 
+  // 🔒 V9 4.2: Gate low-priority modals (RatePrompt, PWA install) until the
+  // first-run flow is complete. For existing users (no onboarding shown),
+  // firstRunComplete is set immediately. For new users, it's set after the
+  // tour is done (or onboarding is dismissed).
+  useEffect(() => {
+    // If onboarding is not showing (existing user) → first run is complete
+    if (!showOnboarding && themePickerDone) {
+      setFirstRunComplete(true)
+    }
+    // If tour is done → first run is complete
+    if (tourDone) {
+      setFirstRunComplete(true)
+    }
+  }, [showOnboarding, themePickerDone, tourDone])
+
   // Skip the seed check entirely when offline (we can't reach the server, and
   // 🔒 V8 P3: Removed /api/seed from the initial load path. Was: 3 COUNT
   // queries on every app open, on the critical path. Now: the dashboard API
@@ -197,13 +221,8 @@ export default function Home() {
     return <AuthScreen />
   }
 
-  // 🔒 V8 P3: Use dashboard data (already fetched above via useDashboardThisMonth)
-  // to determine if the user has any data. Was: separate /api/seed call with
-  // 3 COUNT queries on every app open. Now: reuses the shared React Query
-  // cache — no extra DB queries.
-  const hasNoData = dashboardData?.kpis?.productCount === 0 && dashboardData?.kpis?.partyCount === 0
-
-  const showOnboarding = !onboardingDismissed && !isOfflineSession && dashboardData !== undefined && hasNoData && themePickerDone
+  // 🔒 V8 P3: showOnboarding + hasNoData already computed above (V9 4.2 moved
+  // them up so the firstRunComplete effect can reference showOnboarding).
   const showThemePicker = !themePickerDone && !!session
 
   // More screen renders full-screen (no sidebar, no regular header)
@@ -222,7 +241,9 @@ export default function Home() {
         {features?.pwaInstall && <PWAInstallPrompt />}
         {!showOnboarding && <OnboardingTour onDone={() => setTourDone(true)} />}
         {!showOnboarding && tourDone && <ConsentModal />}
-        <RatePromptModal open={shouldShowRatePrompt} onRated={onRated} onDismiss={onDismiss} />
+        {/* 🔒 V9 4.2: RatePrompt + PWA install wait until first-run is complete */}
+        {firstRunComplete && <RatePromptModal open={shouldShowRatePrompt} onRated={onRated} onDismiss={onDismiss} />}
+        {firstRunComplete && features?.pwaInstall && <PWAInstallPrompt />}
         <PaywallModal feature={paywallFeature} open={paywallOpen} onClose={closePaywall} />
       </div>
     )
@@ -298,14 +319,15 @@ export default function Home() {
       <ThemePicker open={showThemePicker} onDone={() => setThemePickerDone(true)} />
       <Onboarding open={showOnboarding} onDone={() => setOnboardingDismissed(true)} />
 
-      {features?.pwaInstall && <PWAInstallPrompt />}
+      {features?.pwaInstall && firstRunComplete && <PWAInstallPrompt />}
       {/* Only show tour + consent AFTER onboarding is dismissed.
           Tour shows first, then ConsentModal shows after tour is done.
           This prevents focus-trap conflicts between Radix Dialog (ConsentModal)
           and the tour's plain div overlay (z-[100]). */}
       {!showOnboarding && <OnboardingTour onDone={() => setTourDone(true)} />}
       {!showOnboarding && tourDone && <ConsentModal />}
-      <RatePromptModal open={shouldShowRatePrompt} onRated={onRated} onDismiss={onDismiss} />
+      {/* 🔒 V9 4.2: RatePrompt waits until first-run is complete */}
+      {firstRunComplete && <RatePromptModal open={shouldShowRatePrompt} onRated={onRated} onDismiss={onDismiss} />}
       <PaywallModal feature={paywallFeature} open={paywallOpen} onClose={closePaywall} />
       </div>
     </>
