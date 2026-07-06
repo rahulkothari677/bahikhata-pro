@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
 import { roundMoney } from '@/lib/money'
 import { activeTransactionWhere } from '@/lib/query-helpers'
+import { istMonthStart, getISTDateParts, isSameISTMonth, IST_OFFSET_MS } from '@/lib/timezone'
 import { apiError } from '@/lib/api-error'
 
 // ⏱️ Vercel serverless timeout — GSTR export aggregates all transactions
@@ -45,13 +46,8 @@ export async function GET(req: NextRequest) {
     const format = searchParams.get('format') || 'json' // json or csv
 
     const now = new Date()
-    // 🔒 V11 §2.1 FIX: Default "from" is start of THIS month in IST, not UTC.
-    // (Same fix as dashboard/route.ts and reports/route.ts.)
-    const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000
-    const istWall = new Date(now.getTime() + IST_OFFSET_MS)
-    const from = fromStr
-      ? new Date(fromStr)
-      : new Date(Date.UTC(istWall.getUTCFullYear(), istWall.getUTCMonth(), 1) - IST_OFFSET_MS)
+    // 🔒 V11 §2.1 + §4.6: Default "from" is start of THIS month in IST.
+    const from = fromStr ? new Date(fromStr) : istMonthStart(now)
     const to = toStr ? new Date(toStr) : now
 
     // 🔒 V7 M5: GSTR-1 is a MONTHLY return. Reject ranges that span multiple
@@ -73,24 +69,13 @@ export async function GET(req: NextRequest) {
     //
     // Invalid: any range spanning 2+ IST calendar months (e.g., June 15 -
     // July 15), or > 31 days (defensive cap).
-    // (IST_OFFSET_MS is already declared above for the default `from`.)
-    const getISTDateParts = (date: Date) => {
-      const ist = new Date(date.getTime() + IST_OFFSET_MS)
-      return {
-        year: ist.getUTCFullYear(),
-        month: ist.getUTCMonth(),  // 0-indexed (0 = January)
-        day: ist.getUTCDate(),
-        hours: ist.getUTCHours(),
-        minutes: ist.getUTCMinutes(),
-        seconds: ist.getUTCSeconds(),
-        ms: ist.getUTCMilliseconds(),
-      }
-    }
+    // 🔒 V11 §4.6: Uses centralized getISTDateParts + isSameISTMonth from
+    // @/lib/timezone. (IST_OFFSET_MS is imported, not redeclared.)
     const fromParts = getISTDateParts(from)
     const toParts = getISTDateParts(to)
 
-    // Case 1: same IST calendar month/year
-    const sameMonth = fromParts.year === toParts.year && fromParts.month === toParts.month
+    // Case 1: same IST calendar month/year (uses helper)
+    const sameMonth = isSameISTMonth(from, to)
 
     // Case 2: `to` is exactly the 1st of the next month at 00:00:00 IST
     // (the "whole month" picker case — from = July 1, to = Aug 1 00:00)

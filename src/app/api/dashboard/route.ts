@@ -6,6 +6,7 @@ import { withCache } from '@/lib/cache'
 import { activeTransactionWhere } from '@/lib/query-helpers'
 import { roundMoney } from '@/lib/money'
 import { getReceivablePayable } from '@/lib/party-balance'
+import { istDayStart, istMonthStart, getISTDateParts, IST_OFFSET_MS } from '@/lib/timezone'
 
 // ⚡ PERFORMANCE (V6 SC3): KPIs + charts are now computed via SQL aggregate
 // queries. Was: a single findMany loaded range + previous-range transactions
@@ -38,30 +39,11 @@ export async function GET(req: NextRequest) {
     const toStr = searchParams.get('to')
 
     const now = new Date()
-    // 🔒 V11 §2.1 FIX: Compute "today" and "this month" boundaries in IST,
-    // not UTC. Was: `startOfToday.setHours(0,0,0,0)` which uses server-local
-    // time (UTC on Vercel) → "Today" started at 5:30 AM IST instead of
-    // 12 AM IST. Every sale between 12 AM and 5:30 AM IST was counted on
-    // the wrong day.
-    //
-    // IST = UTC + 5:30 (no DST). To find "start of today in IST":
-    //   1. Add IST offset to UTC now → "fake UTC" whose date parts are IST date parts.
-    //   2. Truncate to day boundary (00:00:00 UTC of that fake date).
-    //   3. Subtract IST offset → real UTC timestamp of IST midnight.
-    //
-    // NOTE: IST_OFFSET_MS and getISTDateParts are also declared later in this
-    // function (for chart bucket generation). They're declared with `const`
-    // so we can't redeclare — but we CAN use the same constant here at the top
-    // by NOT redeclaring. To keep the code clean, we compute startOfToday and
-    // startOfMonth using the same logic inline.
-    const _IST_OFFSET_MS = 5.5 * 60 * 60 * 1000
-    const _istWall = new Date(now.getTime() + _IST_OFFSET_MS)
-    const startOfToday = new Date(
-      Date.UTC(_istWall.getUTCFullYear(), _istWall.getUTCMonth(), _istWall.getUTCDate()) - _IST_OFFSET_MS
-    )
-    const startOfMonth = new Date(
-      Date.UTC(_istWall.getUTCFullYear(), _istWall.getUTCMonth(), 1) - _IST_OFFSET_MS
-    )
+    // 🔒 V11 §2.1 + §4.6: Use centralized IST helpers. Was: inline
+    // `startOfToday.setHours(0,0,0,0)` which used server-local time (UTC on
+    // Vercel) → "Today" started at 5:30 AM IST instead of 12 AM IST.
+    const startOfToday = istDayStart(now)
+    const startOfMonth = istMonthStart(now)
 
     // Date range for filtering analytics (defaults to this month)
     const rangeFrom = fromStr ? new Date(fromStr) : startOfMonth
@@ -321,11 +303,7 @@ export async function GET(req: NextRequest) {
     // The SQL groups by IST day, so the JS buckets must also use IST dates
     // for the keys to match. Without this, late-night IST transactions
     // (12 AM - 5:30 AM) would appear on the previous day's bar.
-    const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000 // IST = UTC + 5:30
-    const getISTDateParts = (date: Date) => {
-      const ist = new Date(date.getTime() + IST_OFFSET_MS)
-      return { year: ist.getUTCFullYear(), month: ist.getUTCMonth(), day: ist.getUTCDate() }
-    }
+    // 🔒 V11 §4.6: IST_OFFSET_MS and getISTDateParts now imported from @/lib/timezone.
     const generateBuckets = (): { start: Date; label: string; key: string }[] => {
       const buckets: { start: Date; label: string; key: string }[] = []
       if (truncUnit === 'day') {

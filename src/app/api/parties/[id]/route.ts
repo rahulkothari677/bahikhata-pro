@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
 import { roundMoney } from '@/lib/money'
+import { istMonthStartOffset, getISTDateParts } from '@/lib/timezone'
 
 // GET /api/parties/[id] - get party with paginated transactions + SQL aggregates
 // ⚡ PERFORMANCE (Audit fix H4): Was loading ALL transactions with items into
@@ -151,7 +152,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     // Build 6-month chart data, filling missing months with zeros.
     // 🔒 V10 FIX: The SQL returns naive timestamps at IST month-start (interpreted
     // as UTC by JS). The JS month keys must use the same IST-aligned logic.
-    const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000
+    // 🔒 V11 §4.6: Uses centralized getISTDateParts + istMonthStartOffset.
     const monthlyMap = new Map<string, { sales: number; purchases: number }>()
     for (const row of monthlyRows) {
       // row.monthStart is a naive timestamp at IST month-start (interpreted as UTC by JS).
@@ -164,10 +165,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     const monthlyData: { month: string; sales: number; purchases: number }[] = []
-    // 🔒 V10 FIX: Generate month buckets using IST date parts so the keys match.
-    const nowIST = new Date(now.getTime() + IST_OFFSET_MS)
+    // 🔒 V11 §4.6: Generate month buckets using istMonthStartOffset helper.
     for (let i = 5; i >= 0; i--) {
-      const monthStart = new Date(Date.UTC(nowIST.getUTCFullYear(), nowIST.getUTCMonth() - i, 1))
+      // istMonthStartOffset returns a UTC Date at IST month-start. The JS Date's
+      // toISOString().slice(0,7) gives the correct YYYY-MM key that matches the SQL.
+      const monthStart = istMonthStartOffset(now, -i)
       const key = monthStart.toISOString().slice(0, 7)
       const entry = monthlyMap.get(key) || { sales: 0, purchases: 0 }
       monthlyData.push({
