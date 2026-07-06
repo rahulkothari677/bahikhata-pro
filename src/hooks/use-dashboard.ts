@@ -43,14 +43,13 @@ export function useDashboard(dateRange: DateRange) {
         `/api/dashboard?from=${dateRange.from.toISOString()}&to=${dateRange.to.toISOString()}`
       )
       if (!r.ok) {
-        // 🔒 V7.1: Extract the actual error message from the response body
-        // so the dashboard shows the real error, not just "HTTP 500".
+        // 🔒 V9 2.5: Don't leak DB internals. Extract only the generic message
+        // + errorId (if provided) so the user can report it to support.
         let errorDetail = `HTTP ${r.status}`
         try {
           const body = await r.json()
-          if (body?.message) errorDetail = `HTTP ${r.status}: ${body.message}`
-          else if (body?.error) errorDetail = `HTTP ${r.status}: ${body.error}`
-          if (body?.detail) errorDetail += ` | ${body.detail}`
+          if (body?.message) errorDetail = body.message
+          if (body?.errorId) errorDetail += ` (ref: ${body.errorId})`
         } catch {
           // Response wasn't JSON — keep the status code
         }

@@ -157,19 +157,20 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     // Step 4: Apply new items' stock impact (decrement sales, increment purchases)
     const transaction = await db.$transaction(async (tx) => {
       // Step 1: Reverse old items' stock impact
+      // 🔒 V9 2.1 FIX: Scope by userId (same as POST)
       const oldItems = await tx.transactionItem.findMany({ where: { transactionId: id } })
       for (const oldItem of oldItems) {
         if (oldItem.productId) {
           if (existing.type === 'sale') {
             // Reverse sale: add stock back
-            await tx.product.update({
-              where: { id: oldItem.productId },
+            await tx.product.updateMany({
+              where: { id: oldItem.productId, userId },
               data: { currentStock: { increment: oldItem.quantity } },
             })
           } else if (existing.type === 'purchase') {
             // Reverse purchase: subtract stock
-            await tx.product.update({
-              where: { id: oldItem.productId },
+            await tx.product.updateMany({
+              where: { id: oldItem.productId, userId },
               data: { currentStock: { decrement: oldItem.quantity } },
             })
           }
@@ -204,17 +205,18 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       })
 
       // Step 4: Apply new items' stock impact
+      // 🔒 V9 2.1 FIX: Scope by userId (same as POST)
       for (const item of txItems) {
         if (item.productId) {
           const qty = item.quantity || 0
           if (type === 'sale') {
-            await tx.product.update({
-              where: { id: item.productId },
+            await tx.product.updateMany({
+              where: { id: item.productId, userId },
               data: { currentStock: { decrement: qty } },
             })
           } else if (type === 'purchase') {
-            await tx.product.update({
-              where: { id: item.productId },
+            await tx.product.updateMany({
+              where: { id: item.productId, userId },
               data: { currentStock: { increment: qty } },
             })
           }
@@ -254,18 +256,19 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       })
 
       // Step 2: Reverse stock impact (same as edit — add back sales, subtract purchases)
+      // 🔒 V9 2.1 FIX: Scope by userId (same as POST/PUT)
       if (existing.type === 'sale' || existing.type === 'purchase') {
         const items = await tx.transactionItem.findMany({ where: { transactionId: id } })
         for (const item of items) {
           if (item.productId) {
             if (existing.type === 'sale') {
-              await tx.product.update({
-                where: { id: item.productId },
+              await tx.product.updateMany({
+                where: { id: item.productId, userId },
                 data: { currentStock: { increment: item.quantity } },
               })
             } else {
-              await tx.product.update({
-                where: { id: item.productId },
+              await tx.product.updateMany({
+                where: { id: item.productId, userId },
                 data: { currentStock: { decrement: item.quantity } },
               })
             }

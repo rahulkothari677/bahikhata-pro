@@ -287,17 +287,21 @@ export async function POST(req: NextRequest) {
       })
 
       // Update product stock for each item with a productId
+      // 🔒 V9 2.1 FIX: Scope by userId to prevent cross-tenant stock manipulation.
+      // Was: where: { id: item.productId } — no userId check. A client could
+      // submit a foreign productId and modify another tenant's stock.
+      // Now: updateMany with userId in the where clause → foreign IDs affect 0 rows.
       for (const item of txItems) {
         if (item.productId) {
           const qty = item.quantity || 0
           if (type === 'sale') {
-            await tx.product.update({
-              where: { id: item.productId },
+            await tx.product.updateMany({
+              where: { id: item.productId, userId },
               data: { currentStock: { decrement: qty } },
             })
           } else if (type === 'purchase') {
-            await tx.product.update({
-              where: { id: item.productId },
+            await tx.product.updateMany({
+              where: { id: item.productId, userId },
               data: { currentStock: { increment: qty } },
             })
           }

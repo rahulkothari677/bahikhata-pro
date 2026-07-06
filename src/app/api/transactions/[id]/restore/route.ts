@@ -50,22 +50,21 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       })
 
       // Step 2: Re-apply stock impact (inverse of DELETE).
-      // DELETE did: sale → increment stock back, purchase → decrement stock back.
-      // RESTORE does: sale → decrement stock (re-apply the sale), purchase → increment stock.
+      // 🔒 V9 2.1 FIX: Scope by userId (same as POST/PUT/DELETE)
       if (existing.type === 'sale' || existing.type === 'purchase') {
         const items = await tx.transactionItem.findMany({ where: { transactionId: id } })
         for (const item of items) {
           if (item.productId) {
             if (existing.type === 'sale') {
               // Re-apply sale: decrement stock
-              await tx.product.update({
-                where: { id: item.productId },
+              await tx.product.updateMany({
+                where: { id: item.productId, userId },
                 data: { currentStock: { decrement: item.quantity } },
               })
             } else {
               // Re-apply purchase: increment stock
-              await tx.product.update({
-                where: { id: item.productId },
+              await tx.product.updateMany({
+                where: { id: item.productId, userId },
                 data: { currentStock: { increment: item.quantity } },
               })
             }

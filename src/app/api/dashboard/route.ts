@@ -431,21 +431,21 @@ export async function GET(req: NextRequest) {
       recentTransactions: recentTransactionsData,
     }, { maxAge: 30, swr: 300 })
   } catch (error) {
-    // 🔒 V7.1 BUG FIX: Was returning all-zeros with HTTP 200 on ANY error →
-    // the dashboard showed the "Welcome to EkBook" empty state for existing
-    // users, hiding the real SQL/DB error. Now: return 500 with the error
-    // message so the founder can see exactly what failed in Vercel logs,
-    // and the UI shows an error state instead of a fake empty dashboard.
-    console.error('Dashboard API error:', error)
+    // 🔒 V9 2.5 FIX: Log full error server-side only (Sentry captures it too).
+    // Was: returning error.message + String(error) to the client — leaked
+    // Prisma/Postgres internals (table names, column names, constraint
+    // messages) to any client. Now: return a generic message + error ID
+    // so the founder can find the real error in Vercel logs.
+    const errorId = `dash-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    console.error(`[Dashboard API error ${errorId}]:`, error)
     if (error instanceof Error) {
-      console.error('Dashboard API error stack:', error.stack)
-      console.error('Dashboard API error message:', error.message)
+      console.error(`[Dashboard API error ${errorId}] stack:`, error.stack)
     }
     return NextResponse.json(
       {
         error: 'Failed to load dashboard',
-        message: error instanceof Error ? error.message : 'Unknown error',
-        detail: error instanceof Error ? String(error).slice(0, 500) : String(error).slice(0, 500),
+        message: 'An internal error occurred. Please try refreshing.',
+        errorId,  // client can show this to support for log lookup
       },
       { status: 500 },
     )
