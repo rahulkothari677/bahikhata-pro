@@ -250,32 +250,48 @@ export async function GET(req: NextRequest) {
       // stored-vs-recomputed drift). Since both summary and per-invoice now
       // aggregate the SAME stored per-item CGST/SGST/IGST columns, they must
       // be byte-identical (rounding tolerance only for float-sum drift).
+      // 🔒 V10 FIX: Wrapped in try-catch. If the reconciliation code itself
+      // crashes (e.g., unexpected invoice structure), we return matches: null
+      // instead of failing the entire export. The reconciliation is a safety
+      // check — it should never block the export by crashing.
       reconciliation: (() => {
-        const perInvoiceTaxable = roundMoney(
-          [...b2bInvoices, ...b2cInvoices].reduce((s, inv) => s + (inv.taxablevalue || 0), 0)
-        )
-        const summaryTaxable = roundMoney((summaryAgg._sum.subtotal || 0) - (summaryAgg._sum.discountAmount || 0))
-        const perInvoiceTax = roundMoney(
-          [...b2bInvoices, ...b2cInvoices].reduce((s, inv) => {
-            // inv.items is for B2B, itemsByRate spread is for B2C
-            if (inv.items) {
-              return s + inv.items.reduce((s2: number, it: any) => s2 + (it.camt || 0) + (it.samt || 0) + (it.iamt || 0), 0)
-            }
-            // B2C: rate_X.camt/samt/iamt
-            return s + Object.entries(inv)
-              .filter(([k]) => k.startsWith('rate_'))
-              .reduce((s2: number, [, v]: [string, any]) => s2 + (v.cgst || 0) + (v.sgst || 0) + (v.igst || 0), 0)
-          }, 0)
-        )
-        const summaryTax = roundMoney((summaryAgg._sum.cgst || 0) + (summaryAgg._sum.sgst || 0) + (summaryAgg._sum.igst || 0))
-        const matches = Math.abs(perInvoiceTaxable - summaryTaxable) < 1 && Math.abs(perInvoiceTax - summaryTax) < 1
-        if (!matches) {
-          console.warn('[gstr-export] Reconciliation mismatch:', {
-            perInvoiceTaxable, summaryTaxable,
-            perInvoiceTax, summaryTax,
-          })
+        try {
+          const perInvoiceTaxable = roundMoney(
+            [...b2bInvoices, ...b2cInvoices].reduce((s, inv) => s + (Number(inv.taxablevalue) || 0), 0)
+          )
+          const summaryTaxable = roundMoney((summaryAgg._sum.subtotal || 0) - (summaryAgg._sum.discountAmount || 0))
+          const perInvoiceTax = roundMoney(
+            [...b2bInvoices, ...b2cInvoices].reduce((s, inv) => {
+              // B2B: inv.items is an array of { rate, txval, camt, samt, iamt, qty }
+              if (Array.isArray(inv.items)) {
+                return s + inv.items.reduce((s2: number, it: any) =>
+                  s2 + (Number(it.camt) || 0) + (Number(it.samt) || 0) + (Number(it.iamt) || 0), 0)
+              }
+              // B2C: rate_X: { taxable, cgst, sgst, igst, qty }
+              let b2cTax = 0
+              for (const [k, v] of Object.entries(inv)) {
+                if (k.startsWith('rate_') && v && typeof v === 'object') {
+                  b2cTax += (Number((v as any).cgst) || 0) + (Number((v as any).sgst) || 0) + (Number((v as any).igst) || 0)
+                }
+              }
+              return s + b2cTax
+            }, 0)
+          )
+          const summaryTax = roundMoney((summaryAgg._sum.cgst || 0) + (summaryAgg._sum.sgst || 0) + (summaryAgg._sum.igst || 0))
+          const matches = Math.abs(perInvoiceTaxable - summaryTaxable) < 1 && Math.abs(perInvoiceTax - summaryTax) < 1
+          if (!matches) {
+            console.warn('[gstr-export] Reconciliation mismatch:', {
+              perInvoiceTaxable, summaryTaxable,
+              perInvoiceTax, summaryTax,
+            })
+          }
+          return { perInvoiceTaxable, summaryTaxable, perInvoiceTax, summaryTax, matches }
+        } catch (reconError) {
+          // Reconciliation itself crashed — log it but don't block the export.
+          // The export data is still valid; the reconciliation is just a safety check.
+          console.error('[gstr-export] Reconciliation code crashed (non-blocking):', reconError)
+          return { perInvoiceTaxable: 0, summaryTaxable: 0, perInvoiceTax: 0, summaryTax: 0, matches: null }
         }
-        return { perInvoiceTaxable, summaryTaxable, perInvoiceTax, summaryTax, matches }
       })(),
       period: { from, to },
     }

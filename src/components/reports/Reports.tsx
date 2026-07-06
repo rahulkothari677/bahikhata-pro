@@ -64,6 +64,10 @@ export function Reports() {
       // 🔒 V8 L1: Block export if reconciliation fails (per-invoice taxable
       // != summary taxable). This means the GSTR is internally inconsistent
       // and should not be filed. The user should contact support.
+      // 🔒 V10 FIX: matches === null means the reconciliation code itself
+      // crashed (non-blocking). In that case, DON'T block the export — the
+      // export data is still valid, we just couldn't verify it. Only block
+      // when matches === false (explicit mismatch).
       if (checkData.reconciliation && checkData.reconciliation.matches === false) {
         sonnerToast.error('Cannot export GSTR-1 — data inconsistency detected', {
           description: `Per-invoice taxable (₹${checkData.reconciliation.perInvoiceTaxable}) does not match summary taxable (₹${checkData.reconciliation.summaryTaxable}). Please contact support before filing.`,

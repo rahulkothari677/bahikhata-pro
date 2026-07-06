@@ -65,10 +65,29 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
     try {
       const url = product ? `/api/products?id=${product.id}` : '/api/products'
       const method = product ? 'PUT' : 'POST'
+      // 🔒 FIX: Convert string form values to numbers before sending.
+      // The form stores all numeric fields as strings (e.g., purchasePrice: "95")
+      // because HTML inputs return strings. But the server's zod schema expects
+      // numbers (z.number(), not z.string()). Without this conversion, every
+      // product create/update fails with a 400 "Expected number, received string".
+      const payload = {
+        name: form.name.trim(),
+        sku: form.sku.trim() || null,
+        hsn: form.hsn.trim() || null,
+        category: form.category.trim() || null,
+        unit: form.unit || 'pcs',
+        purchasePrice: parseFloat(form.purchasePrice) || 0,
+        salePrice: parseFloat(form.salePrice) || 0,
+        mrp: form.mrp ? parseFloat(form.mrp) : null,
+        gstRate: parseFloat(form.gstRate) || 0,
+        openingStock: parseFloat(form.openingStock) || 0,
+        lowStockThreshold: parseFloat(form.lowStockThreshold) || 0,
+        notes: form.notes.trim() || null,
+      }
       const r = await offlineFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
         offline: { invalidate: ['/api/products', '/api/dashboard'] },
       })
       if (!r.ok) throw new Error('Failed')

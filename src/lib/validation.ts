@@ -63,12 +63,16 @@ export const createProductSchema = z.object({
   hsn: z.string().max(20).nullable().optional(),
   category: z.string().max(200).nullable().optional(),
   unit: z.string().max(20).optional().default('pcs'),
-  purchasePrice: z.number().min(0, 'Purchase price cannot be negative').optional().default(0),
-  salePrice: z.number().min(0, 'Sale price cannot be negative').optional().default(0),
-  mrp: z.number().min(0, 'MRP cannot be negative').nullable().optional(),
-  gstRate: z.number().min(0, 'GST rate cannot be negative').max(100, 'GST rate cannot exceed 100%').optional().default(0),
-  openingStock: z.number().min(0, 'Opening stock cannot be negative').optional().default(0),
-  lowStockThreshold: z.number().min(0, 'Low stock threshold cannot be negative').optional().default(5),
+  // 🔒 FIX: Use z.coerce.number() so string values from HTML inputs
+  // (e.g., "95") are automatically converted to numbers. Without this,
+  // any product create/update from the UI fails with 400 because the
+  // form sends strings but z.number() rejects them.
+  purchasePrice: z.coerce.number().min(0, 'Purchase price cannot be negative').optional().default(0),
+  salePrice: z.coerce.number().min(0, 'Sale price cannot be negative').optional().default(0),
+  mrp: z.coerce.number().min(0, 'MRP cannot be negative').nullable().optional(),
+  gstRate: z.coerce.number().min(0, 'GST rate cannot be negative').max(100, 'GST rate cannot exceed 100%').optional().default(0),
+  openingStock: z.coerce.number().min(0, 'Opening stock cannot be negative').optional().default(0),
+  lowStockThreshold: z.coerce.number().min(0, 'Low stock threshold cannot be negative').optional().default(5),
   notes: z.string().max(5000).nullable().optional(),
 })
 
@@ -93,12 +97,13 @@ export const updateProductSchema = z.object({
   hsn: z.string().max(20).nullable().optional(),
   category: z.string().max(200).nullable().optional(),
   unit: z.string().max(20).optional(),
-  purchasePrice: z.number().min(0, 'Purchase price cannot be negative').optional(),
-  salePrice: z.number().min(0, 'Sale price cannot be negative').optional(),
-  mrp: z.number().min(0, 'MRP cannot be negative').nullable().optional(),
-  gstRate: z.number().min(0, 'GST rate cannot be negative').max(100, 'GST rate cannot exceed 100%').optional(),
-  openingStock: z.number().min(0, 'Opening stock cannot be negative').optional(),
-  lowStockThreshold: z.number().min(0, 'Low stock threshold cannot be negative').optional(),
+  // 🔒 FIX: z.coerce.number() — same reason as createProductSchema.
+  purchasePrice: z.coerce.number().min(0, 'Purchase price cannot be negative').optional(),
+  salePrice: z.coerce.number().min(0, 'Sale price cannot be negative').optional(),
+  mrp: z.coerce.number().min(0, 'MRP cannot be negative').nullable().optional(),
+  gstRate: z.coerce.number().min(0, 'GST rate cannot be negative').max(100, 'GST rate cannot exceed 100%').optional(),
+  openingStock: z.coerce.number().min(0, 'Opening stock cannot be negative').optional(),
+  lowStockThreshold: z.coerce.number().min(0, 'Low stock threshold cannot be negative').optional(),
   notes: z.string().max(5000).nullable().optional(),
 })
 
