@@ -7,8 +7,14 @@ import { getDatabaseConfigStatus } from '@/lib/verify-db-config'
  *
  * Pings the database to wake up Neon (free tier auto-pauses after 5 min).
  * Called by:
- *   1. Vercel Cron Job (every 4 minutes) — keeps Neon warm
- *   2. Client-side on page load (before real API calls) — ensures DB is awake
+ *   1. GitHub Actions cron (every 5 minutes) — keeps Neon warm.
+ *      See .github/workflows/neon-warmup.yml
+ *   2. Client-side on page load (before real API calls) — ensures DB is awake.
+ *
+ * NOTE: vercel.json has a daily cron at 6 AM UTC, but that's a fallback.
+ * The REAL warmup is GitHub Actions every 5 min (Vercel Hobby only allows
+ * daily crons). To eliminate cold starts entirely, disable Neon scale-to-zero
+ * (Neon Console → Project → Compute → turn off Suspend compute).
  *
  * Returns 200 with a timestamp if DB is reachable, 500 if not.
  * No auth required — this endpoint only runs `SELECT 1` (no user data).

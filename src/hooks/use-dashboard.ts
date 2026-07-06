@@ -59,6 +59,9 @@ export function useDashboard(dateRange: DateRange) {
       return r.json()
     },
     staleTime: 60 * 1000, // 1 min — don't refetch within 1 min
+    // 🔒 V8 U8: Show cached data instantly while fresh data loads.
+    // When date range changes, old data stays visible until new data arrives.
+    placeholderData: (prev) => prev,  // keepPreviousData equivalent
     retry: (count, err) => {
       if (err instanceof OfflineError) return false
       if (err instanceof TypeError) return false

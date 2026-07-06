@@ -1,9 +1,9 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
 import { useState, useEffect } from 'react'
 import { useAppStore } from '@/store/app-store'
 import { useTranslation } from '@/hooks/use-translation'
+import { useDashboard } from '@/hooks/use-dashboard'
 import { SmartInsights } from '@/components/dashboard/SmartInsights'
 import { BusinessHealthScore } from '@/components/dashboard/BusinessHealthScore'
 import { useBusinessGoals } from '@/hooks/use-business-goals'
@@ -35,7 +35,7 @@ import { useCountUp } from '@/hooks/use-count-up'
 const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)']
 
 export function Dashboard() {
-  const { setView, refreshKey, setSelectedTransactionId, setPreviousView, setPendingDateRange, features } = useAppStore()
+  const { setView, setSelectedTransactionId, setPreviousView, setPendingDateRange, features } = useAppStore()
   const { t, language } = useTranslation()
   const { hideProfit } = useSetting()
   const { revenueTarget, expenseBudget } = useBusinessGoals()
@@ -51,38 +51,12 @@ export function Dashboard() {
     }
   }, [features?.recurringEntries, checkRecurring])
 
-  const { data, isLoading, error, isFetching } = useQuery({
-    queryKey: ['dashboard', refreshKey, dateRange.from.toISOString(), dateRange.to.toISOString()],
-    queryFn: async () => {
-      const r = await offlineFetch(`/api/dashboard?from=${dateRange.from.toISOString()}&to=${dateRange.to.toISOString()}`)
-      if (!r.ok) {
-        // 🔒 V7.1: Extract the actual error message from the response body
-        let errorDetail = `HTTP ${r.status}`
-        try {
-          const body = await r.json()
-          if (body?.message) errorDetail = `HTTP ${r.status}: ${body.message}`
-          else if (body?.error) errorDetail = `HTTP ${r.status}: ${body.error}`
-          if (body?.detail) errorDetail += ` | ${body.detail}`
-        } catch {
-          // Response wasn't JSON — keep the status code
-        }
-        throw new Error(errorDetail)
-      }
-      return r.json()
-    },
-    // 🔒 V8 U8: Show cached data instantly while fresh data loads (perceived speed).
-    // staleTime: 1 min — don't refetch within 1 min of last fetch.
-    // placeholderData: keepPreviousData — when date range changes, show old data
-    //   until new data arrives (instead of blanking to skeleton).
-    staleTime: 60 * 1000,
-    placeholderData: (prev) => prev,  // keepPreviousData equivalent
-    // Don't retry when offline or on network errors — fail fast
-    retry: (count, err) => {
-      if (err instanceof OfflineError) return false
-      if (err instanceof TypeError) return false // Network failure
-      return count < 2
-    },
-  })
+  // 🔒 V9 1.2 FIX: Use the shared useDashboard hook (day-granular cache keys)
+  // instead of an inline useQuery with millisecond-precision timestamps.
+  // Was: two different cache keys (Dashboard.tsx inline + page.tsx shared hook)
+  // → two full dashboard API calls on every page load (28s + 41s on cold DB).
+  // Now: ONE hook, ONE cache key, ONE API call. React Query dedupes.
+  const { data, isLoading, error } = useDashboard(dateRange)
 
   const handleDateChange = (range: DateRange, preset: DatePreset) => {
     setDateRange(range)
@@ -244,7 +218,11 @@ export function Dashboard() {
     setRepeating(true)
     try {
       // Fetch the latest sale transaction directly (cache: 'no-store' to bypass browser cache)
-      const r = await fetch('/api/transactions?limit=1&type=sale', { cache: 'no-store' })
+      // 🔒 V4 BUG-3 + V9: Use offlineFetch (not raw fetch) so this works offline.
+      // Was reverted during a rebase conflict. Now fixed.
+      const r = await offlineFetch('/api/transactions?limit=1&type=sale', {
+        cache: 'no-store',
+      })
       const data = await r.json()
       const latestSale = data?.transactions?.[0]
 
@@ -273,14 +251,23 @@ export function Dashboard() {
       setPreviousView('dashboard')
       setView('new-sale')
     } catch (err) {
-      sonnerToast.error('Failed to load last sale')
+      // 🔒 V4 BUG-3: Handle offline errors specifically
+      if (err instanceof OfflineError) {
+        sonnerToast.error('You are offline and no recent sale is cached.')
+      } else {
+        sonnerToast.error('Failed to load last sale')
+      }
     } finally {
       setRepeating(false)
     }
   }
 
   // Empty state for new users (0 transactions)
-  const isNewUser = kpis.totalStockValue === 0 && kpis.productCount === 0 && kpis.rangeTxnCount === 0 && recentTransactions.length === 0
+  // 🔒 V7.1 + V9: Only show welcome screen if the user has NO data at all
+  // (no products, no parties, no transactions). Was: also checked totalStockValue
+  // which is 0 for products with 0 stock/purchasePrice → false positive for
+  // existing users. Was reverted during rebase — now fixed.
+  const isNewUser = kpis.productCount === 0 && kpis.partyCount === 0 && kpis.rangeTxnCount === 0 && recentTransactions.length === 0
 
   if (isNewUser) {
     return (
