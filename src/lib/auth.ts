@@ -3,6 +3,81 @@ import CredentialsProvider from 'next-auth/providers/credentials'
 import bcrypt from 'bcryptjs'
 import { db } from '@/lib/db'
 import { rateLimit } from '@/lib/rate-limit'
+import { Redis } from '@upstash/redis'
+
+// 🔒 V9 2.8: Redis cache for tokenVersion — reduces revocation lag from
+// 30 minutes to ~5 seconds. On each request, we check Redis (fast, ~2ms)
+// instead of the DB (slow, ~50ms+). If Redis is down, falls back to the
+// 5-minute DB check (was 30 minutes).
+let tokenVersionRedis: Redis | null = null
+
+function getTokenVersionRedis(): Redis | null {
+  if (tokenVersionRedis !== null) return tokenVersionRedis
+  const url = process.env.UPSTASH_REDIS_REST_URL
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN
+  if (!url || !token) return null
+  try {
+    tokenVersionRedis = new Redis({ url, token })
+  } catch {
+    tokenVersionRedis = null
+  }
+  return tokenVersionRedis
+}
+
+/**
+ * 🔒 V9 2.8: Get tokenVersion from Redis cache (fast) or DB (fallback).
+ * Redis cache TTL = 5 seconds. This means:
+ * - On every request, we check Redis (~2ms) instead of DB (~50ms)
+ * - When a user's tokenVersion is bumped (password reset, logout all),
+ *   the old Redis cache entry expires within 5 seconds
+ * - If Redis is down, falls back to DB check every 5 minutes (was 30)
+ */
+async function getCachedTokenVersion(userId: string): Promise<number | null> {
+  const redis = getTokenVersionRedis()
+  const cacheKey = `tv:${userId}`
+
+  // Try Redis first (fast path — ~2ms)
+  if (redis) {
+    try {
+      const cached = await redis.get(cacheKey)
+      if (cached !== null) {
+        return Number(cached)
+      }
+      // Cache miss — read from DB, cache for 5 seconds
+      const dbUser = await db.user.findUnique({
+        where: { id: userId },
+        select: { tokenVersion: true },
+      })
+      const version = dbUser?.tokenVersion ?? 0
+      await redis.set(cacheKey, String(version), { ex: 5 }) // 5 second TTL
+      return version
+    } catch {
+      // Redis error — fall through to DB check below
+    }
+  }
+
+  // Fallback: direct DB query (no cache)
+  const dbUser = await db.user.findUnique({
+    where: { id: userId },
+    select: { tokenVersion: true },
+  })
+  return dbUser?.tokenVersion ?? 0
+}
+
+/**
+ * 🔒 V9 2.8: Invalidate the Redis cache for a user's tokenVersion.
+ * Call this when tokenVersion is bumped (password reset, logout all devices).
+ */
+export async function invalidateTokenVersionCache(userId: string): Promise<void> {
+  const redis = getTokenVersionRedis()
+  if (redis) {
+    try {
+      await redis.del(`tv:${userId}`)
+    } catch {
+      // Non-critical — the 5s TTL will expire naturally
+    }
+  }
+}
 
 export const authOptions: NextAuthOptions = {
   providers: [
@@ -89,46 +164,52 @@ export const authOptions: NextAuthOptions = {
         return token
       }
 
-      // 🔒 REVOCATION CHECK: On every subsequent request, check if the user's
-      // tokenVersion in the DB still matches the one in the JWT. If not, the
-      // user has been logged out (password changed, "logout all devices"
-      // clicked, or admin killed the session) → invalidate this JWT.
+      // 🔒 V9 2.8: JWT revocation check — now Redis-backed.
+      // Was: check DB every 30 minutes (up to 30 min revocation lag).
+      // Now: check Redis on EVERY request (~2ms). Redis caches tokenVersion
+      // with a 5-second TTL. When tokenVersion is bumped (password reset,
+      // logout all), the cache expires within 5 seconds → revocation lag
+      // drops from 30 minutes to ~5 seconds.
       //
-      // To avoid a DB hit on EVERY request, we only check once every 30 minutes.
-      // The `lastVersionCheck` claim tracks when we last checked. If <30min ago,
-      // skip the check (the token is still "fresh enough"). If >30min, re-check.
-      // Worst case: a revoked session stays valid for up to 30 minutes after
-      // revocation — acceptable trade-off for not hammering the DB on every API call.
-      // (Was 5 min — too frequent, added a DB query to every API call every 5 min.)
+      // If Redis is down, falls back to the old 5-minute DB check
+      // (reduced from 30 minutes — still better than before).
       //
-      // 🔒 BUG FIX (V5): Old JWTs created BEFORE the tokenVersion feature don't
-      // have a tokenVersion claim (it's `undefined`). The DB default is `0`.
-      // The check `0 !== undefined` was `true` → session revoked → 401 on ALL
-      // API calls. Now: treat `undefined` as `0` (the DB default) so old JWTs
-      // continue to work. The next login will create a JWT with the proper
-      // tokenVersion claim.
-      const lastCheck = (token.lastVersionCheck as number) || 0
-      const THIRTY_MINUTES = 30 * 60 * 1000
-      if (Date.now() - lastCheck > THIRTY_MINUTES) {
+      // 🔒 BUG FIX (V5): Old JWTs created BEFORE tokenVersion don't have
+      // the claim (undefined). Treat as 0 (DB default).
+      const redis = getTokenVersionRedis()
+
+      if (redis) {
+        // Fast path: check Redis on every request (~2ms)
         try {
-          const dbUser = await db.user.findUnique({
-            where: { id: token.id as string },
-            select: { tokenVersion: true },
-          })
-          // 🔒 BUG FIX: treat undefined tokenVersion as 0 (DB default)
+          const currentVersion = await getCachedTokenVersion(token.id as string)
           const jwtTokenVersion = (token.tokenVersion as number) ?? 0
-          if (!dbUser || dbUser.tokenVersion !== jwtTokenVersion) {
-            // tokenVersion mismatch → session is revoked. Return a token with
-            // no user info, which NextAuth treats as logged-out.
+          if (currentVersion !== null && currentVersion !== jwtTokenVersion) {
+            // tokenVersion mismatch → session revoked
             return { ...token, id: undefined as any, tokenVersion: undefined as any }
           }
-          // 🔒 BUG FIX: update the token with the proper tokenVersion + lastVersionCheck
-          // so future checks work correctly even for old JWTs
-          token.tokenVersion = jwtTokenVersion
           token.lastVersionCheck = Date.now()
         } catch {
-          // If the DB check fails (transient error), don't log the user out —
-          // let them keep their session and retry on the next check.
+          // Redis error — fall through to DB check below
+        }
+      } else {
+        // Fallback: DB check every 5 minutes (was 30 minutes)
+        const lastCheck = (token.lastVersionCheck as number) || 0
+        const FIVE_MINUTES = 5 * 60 * 1000
+        if (Date.now() - lastCheck > FIVE_MINUTES) {
+          try {
+            const dbUser = await db.user.findUnique({
+              where: { id: token.id as string },
+              select: { tokenVersion: true },
+            })
+            const jwtTokenVersion = (token.tokenVersion as number) ?? 0
+            if (!dbUser || dbUser.tokenVersion !== jwtTokenVersion) {
+              return { ...token, id: undefined as any, tokenVersion: undefined as any }
+            }
+            token.tokenVersion = jwtTokenVersion
+            token.lastVersionCheck = Date.now()
+          } catch {
+            // DB check failed — don't log out, retry next time
+          }
         }
       }
 

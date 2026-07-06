@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
+import { invalidateTokenVersionCache } from '@/lib/auth'
 
 /**
  * POST /api/auth/reset-confirm
@@ -82,6 +83,22 @@ export async function POST(req: NextRequest) {
     } catch (dbError) {
       console.error('[reset-confirm] DB error updating password:', dbError)
       return NextResponse.json({ error: 'Database error. Please try again or contact support.' }, { status: 503 })
+    }
+
+    // 🔒 V9 2.8: Invalidate Redis cache for tokenVersion so the password
+    // reset takes effect immediately (kills all existing sessions within ~5s).
+    // Need to fetch the user ID from the email since the $transaction above
+    // doesn't return it directly.
+    try {
+      const user = await db.user.findUnique({
+        where: { email: tokenRecord.email },
+        select: { id: true },
+      })
+      if (user) {
+        await invalidateTokenVersionCache(user.id)
+      }
+    } catch {
+      // Non-critical — the 5s TTL will expire the old cache naturally
     }
 
     return NextResponse.json({

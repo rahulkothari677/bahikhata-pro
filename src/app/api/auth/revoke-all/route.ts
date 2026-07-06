@@ -1,24 +1,17 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
+import { invalidateTokenVersionCache } from '@/lib/auth'
 
 /**
  * POST /api/auth/revoke-all
  *
- * 🔒 SECURITY (Audit fix Phase 3.3): Revokes ALL existing JWT sessions for the
- * current user by incrementing `tokenVersion` on the User record. Every JWT
- * contains a `tokenVersion` claim; the jwt callback in auth.ts checks it on
- * every request (throttled to once per 5 min). If the DB's tokenVersion
- * doesn't match the token's, the session is treated as logged out.
+ * 🔒 SECURITY (Audit fix Phase 3.3 + V9 2.8): Revokes ALL existing JWT sessions
+ * for the current user by incrementing `tokenVersion` on the User record.
  *
- * Use cases:
- *   - "Logout all devices" button in settings
- *   - User suspects their session was stolen
- *   - Admin force-logs-out a user
- *
- * After calling this, the user (and any attacker with a stolen token) must
- * re-login. The tokenVersion check runs within 5 minutes, so worst case a
- * stolen session lives for 5 more minutes before being killed.
+ * V9 2.8: Now also invalidates the Redis cache for tokenVersion, so the
+ * revocation takes effect within ~5 seconds (was up to 30 minutes with
+ * the old throttle).
  *
  * Auth: requires the user to be logged in (calls getAuthUserId).
  */
@@ -33,6 +26,11 @@ export async function POST() {
       where: { id: userId },
       data: { tokenVersion: { increment: 1 } },
     })
+
+    // 🔒 V9 2.8: Invalidate Redis cache so revocation takes effect in ~5s
+    // (not up to 30 minutes). Without this, the cached old tokenVersion
+    // would persist until the 5-second TTL expires naturally.
+    await invalidateTokenVersionCache(userId)
 
     return NextResponse.json({
       success: true,
