@@ -433,17 +433,22 @@ export async function syncPendingWrites(): Promise<{ synced: number; failed: num
           }
           synced++
         } else if (res.status >= 500) {
-          // Server error — retry next time
+          // 🔒 V9 2.9 FIX: Was `break` — one failing write stalled ALL subsequent
+          // queued writes. Now: skip this item (leave it in the queue for retry
+          // next sync) and continue to the next item. A shop that made 20 offline
+          // sales with one bad one no longer blocks the other 19.
           failed++
-          break
+          continue
         } else {
           // 4xx (other than 409/422) — drop, don't retry
           await deletePendingWrite(w.id)
           synced++
         }
       } catch {
+        // 🔒 V9 2.9: Was `break` — network error on one item stalled the rest.
+        // Now: skip and continue. The item stays in the queue for next sync.
         failed++
-        break
+        continue
       }
     }
 

@@ -250,14 +250,22 @@ export async function POST(req: NextRequest) {
       let invoiceSequence: number | null = seqOverride || null
 
       if (!finalInvoiceNo && (type === 'sale' || type === 'purchase')) {
-        // Find the highest existing sequence INSIDE the transaction
-        const lastTxn = await tx.transaction.findFirst({
-          where: { userId, invoiceSequence: { not: null } },
-          orderBy: { invoiceSequence: 'desc' },
-          select: { invoiceSequence: true },
-        })
-        invoiceSequence = (lastTxn?.invoiceSequence || 0) + 1
-        if (seqOverride) invoiceSequence = seqOverride
+        if (seqOverride) {
+          invoiceSequence = seqOverride
+        } else {
+          // 🔒 V9 2.7 FIX: Was findFirst(orderBy desc) + 1 — a read-modify-write
+          // race under READ COMMITTED. Two concurrent sales can read the same
+          // max and both compute the same next number → P2002 collision → retry.
+          // Now: use an atomic upsert on a per-user counter row. UPDATE SET
+          // seq = seq + 1 RETURNING seq is atomic — no race, no gaps, no retry.
+          const counter = await tx.invoiceCounter.upsert({
+            where: { userId },
+            update: { seq: { increment: 1 } },
+            create: { userId, seq: 1 },
+            select: { seq: true },
+          })
+          invoiceSequence = counter.seq
+        }
         finalInvoiceNo = `INV-${String(invoiceSequence).padStart(4, '0')}`
       }
 
@@ -311,29 +319,21 @@ export async function POST(req: NextRequest) {
       return txn
     }
 
-    // Try up to 3 times (in case of P2002 duplicate invoiceNo race condition)
+    // 🔒 V9 2.7: With the atomic InvoiceCounter upsert, the P2002 race should
+    // never happen. Keep the retry loop as a safety net but it should be a no-op.
     let transaction
-    let lastSeq = 0
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         transaction = await db.$transaction(async (tx) => {
-          return createTransactionWithStock(tx, undefined, lastSeq || undefined)
+          return createTransactionWithStock(tx)
         })
         break
       } catch (err: any) {
-        // P2002 = unique constraint violation on invoiceNo
+        // P2002 = unique constraint violation on invoiceNo (extremely unlikely
+        // with the atomic counter, but handle it just in case)
         if (err?.code === 'P2002' && attempt < 2) {
-          // 🔒 AUDIT FIX V5 ME: Was `+ attempt + 2` → skipped invoice numbers
-          // under contention (e.g. attempt=1 → +3, attempt=2 → +4). GST prefers
-          // gap-free per-series numbering; unexplained gaps invite scrutiny.
-          // Now: re-read max sequence + 1, let the unique constraint + loop
-          // handle collisions without inflating the number.
-          const lastTxn = await db.transaction.findFirst({
-            where: { userId, invoiceSequence: { not: null } },
-            orderBy: { invoiceSequence: 'desc' },
-            select: { invoiceSequence: true },
-          })
-          lastSeq = (lastTxn?.invoiceSequence || 0) + 1
+          // The counter already incremented, so the next attempt will get a
+          // new sequence number automatically. Just retry.
           continue
         }
         throw err

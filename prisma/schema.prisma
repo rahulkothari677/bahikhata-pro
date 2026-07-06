@@ -59,6 +59,7 @@ model User {
   aiUsageLogs    AiUsageLog[]
   supportTickets SupportTicket[]
   npsFeedback   NpsFeedback[]
+  invoiceCounter InvoiceCounter?
 
   @@index([plan])
   @@index([createdAt])
@@ -1077,4 +1078,14 @@ model SupplierReport {
 
   @@index([type, status])
   @@index([partnerId, status])
+}
+
+// 🔒 V9 2.7: Per-user atomic invoice counter — eliminates the race condition
+// in invoice number generation. Was: findFirst(orderBy desc) + 1 inside a
+// transaction → two concurrent sales could read the same max and collide.
+// Now: upsert with increment is atomic at the row level — no race, no gaps.
+model InvoiceCounter {
+  userId String @id
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  seq    Int    @default(0)
 }

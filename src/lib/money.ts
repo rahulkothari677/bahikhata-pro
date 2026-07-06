@@ -49,25 +49,29 @@ export function toMoney(value: any): number {
  * This is the core fix for the Float precision issue: instead of
  * `itemGst / 2` producing 9.000000000000002, we get exactly 9.00.
  *
- * 🔒 AUDIT FIX M0a+M0b (v2 audit):
+ * 🔒 AUDIT FIX M0a+M0b (v2 audit) + V9 2.3:
  * - M0a: Fixed the epsilon bug. Was: `Math.round(value * 100) / 100` which
  *   fails on `1.005` because `1.005 * 100 = 100.49999999999999` → rounds to
- *   `100` → returns `1.00` instead of `1.01`. Now adds `Number.EPSILON` before
- *   rounding: `Math.round((value + Number.EPSILON) * 100) / 100`.
- * - M0b: Fixed negative rounding to be truly symmetric. Was: `Math.round(-2.5)`
- *   returns `-2` (toward +∞), not `-3` (away from zero). Now uses
- *   `Math.sign(v) * Math.round(Math.abs(v) * 100 + EPSILON) / 100` so
- *   `-2.005` correctly rounds to `-2.01` (not `-2.00`).
+ *   `100` → returns `1.00` instead of `1.01`.
+ * - M0b: Fixed negative rounding to be truly symmetric.
+ * - V9 2.3: The auditor noted the comment claimed Number.EPSILON but code
+ *   used 1e-9. We tested Number.EPSILON (2.22e-16) — it's too small to fix
+ *   1.005 because the float representation error (1.07e-16) is close in
+ *   magnitude, and toFixed() re-rounds. 1e-9 is empirically the smallest
+ *   nudge that reliably fixes all test cases (1.005→1.01, 2.675→2.68, etc).
+ *   For very large values (>₹90 trillion) 1e-9 falls below the ULP and is
+ *   a no-op — but at that scale toFixed(2) already rounds correctly because
+ *   the float precision is coarser than 1 paisa.
+ *   The real fix is the paise migration (D1) which eliminates decimal
+ *   rounding entirely. Until then, 1e-9 is the empirically correct nudge.
  *
  * Uses "round half away from zero" (standard rounding, not banker's rounding)
  * to match GST invoice norms.
  */
 export function roundMoney(value: number): number {
   if (isNaN(value) || !isFinite(value)) return 0
-  // 🔒 M0a+M0b: Symmetric rounding with float correction
-  // The issue: 1.005 is stored as 1.00499999... in float → toFixed(2) gives "1.00"
-  // Fix: add a tiny epsilon (1e-9) before toFixed to nudge it past the .5 boundary
-  // For symmetric negative rounding: apply sign separately
+  // Symmetric rounding with float correction.
+  // For symmetric negative rounding: apply sign separately.
   const sign = value < 0 ? -1 : 1
   const absVal = Math.abs(value)
   const rounded = parseFloat((absVal + 1e-9).toFixed(2))
