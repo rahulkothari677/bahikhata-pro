@@ -47,22 +47,29 @@ export async function GET(req: NextRequest) {
     const from = fromStr ? new Date(fromStr) : new Date(now.getFullYear(), now.getMonth(), 1)
     const to = toStr ? new Date(toStr) : now
 
-    // 🔒 V7 M5: GSTR-1 is a MONTHLY return. The `fp` (filing period) field
-    // is derived from `from` only, so a multi-month range produces a
-    // mislabeled return. Was: silently exported with `fp` = first month.
-    // Now: reject multi-month ranges with a clear 400 error so the user
-    // selects a single month (GSTR-1's required granularity).
-    const monthDiff =
-      (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth())
-    // Allow same month (monthDiff === 0) and the natural "first of month to
-    // end of month" case. monthDiff === 0 means same month. We also allow
-    // monthDiff === 1 if `to` is the 1st of the next month (common pattern:
-    // from = July 1, to = Aug 1, which is effectively all of July).
-    const isSingleMonth = monthDiff === 0 || (monthDiff === 1 && to.getDate() === 1)
-    if (!isSingleMonth) {
+    // 🔒 V7 M5: GSTR-1 is a MONTHLY return. Reject ranges that clearly span
+    // multiple months.
+    // 🔒 V10 FIX: Timezone-aware check. Was: comparing from.getMonth() and
+    // to.getMonth() using the SERVER's local timezone (UTC on Vercel). When a
+    // user in India (IST, UTC+5:30) selects "This Month" (July 1 - July 6),
+    // the ISO strings become:
+    //   from = 2026-06-30T18:30:00Z  (July 1 00:00 IST → June 30 18:30 UTC)
+    //   to   = 2026-07-06T12:23:56Z  (July 6 17:53 IST → July 6 12:23 UTC)
+    // The old check saw monthDiff = 1 (June → July) and rejected with 400,
+    // even though the user selected a single month. This blocked every GSTR-1
+    // export for non-UTC users.
+    //
+    // New check: allow if the range is <= 35 days (covers any single month
+    // plus timezone buffer). A range > 35 days is definitely spanning multiple
+    // months and should be rejected. This is timezone-agnostic — it doesn't
+    // matter which timezone the server or user is in.
+    const rangeMs = to.getTime() - from.getTime()
+    const rangeDays = rangeMs / (1000 * 60 * 60 * 24)
+    const MAX_SINGLE_MONTH_DAYS = 35
+    if (rangeDays > MAX_SINGLE_MONTH_DAYS) {
       return NextResponse.json({
         error: 'GSTR-1 export requires a single-month period',
-        message: `GSTR-1 is a monthly return. The selected range spans ${monthDiff + 1} months (${from.toLocaleDateString('en-IN')} to ${to.toLocaleDateString('en-IN')}). Please select a single month and try again.`,
+        message: `GSTR-1 is a monthly return. The selected range spans ${Math.ceil(rangeDays)} days (${from.toLocaleDateString('en-IN')} to ${to.toLocaleDateString('en-IN')}). Please select a single month (max 31 days) and try again.`,
         hint: 'Use the date picker to select "This Month" or a specific month range.',
       }, { status: 400 })
     }
@@ -218,7 +225,13 @@ export async function GET(req: NextRequest) {
 
     const output = {
       gstin: setting?.gstin || '',
-      fp: `${String(from.getMonth() + 1).padStart(2, '0')}${from.getFullYear()}`,
+      // 🔒 V10 FIX: Derive `fp` (filing period) from the `to` date, not `from`.
+      // Reason: when a user in India selects "This Month" (July 1 - July 6 IST),
+      // the ISO strings become June 30 - July 6 in UTC. Using `from`'s UTC month
+      // gives "062026" (June) — wrong. Using `to`'s UTC month gives "072026"
+      // (July) — correct. The `to` date is always within the intended filing
+      // month (the user is exporting for a period that ENDS in the current month).
+      fp: `${String(to.getUTCMonth() + 1).padStart(2, '0')}${to.getUTCFullYear()}`,
       gt: 0,
       cur_gt: 0,
       b2b: b2bInvoices,
@@ -327,7 +340,8 @@ export async function GET(req: NextRequest) {
       return new NextResponse(csv, {
         headers: {
           'Content-Type': 'text/csv',
-          'Content-Disposition': `attachment; filename="GSTR1_${from.toISOString().slice(0,7)}.csv"`,
+          // 🔒 V10 FIX: Use `to` date for filename month (same reason as `fp`).
+          'Content-Disposition': `attachment; filename="GSTR1_${to.toISOString().slice(0,7)}.csv"`,
         },
       })
     }
