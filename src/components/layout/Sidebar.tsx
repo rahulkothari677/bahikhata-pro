@@ -13,6 +13,7 @@ import { toast as sonnerToast } from 'sonner'
 import { useFeatureFlags } from '@/hooks/use-feature-flags'
 import { useStaffPermissions } from '@/hooks/use-staff-permissions'
 import { useShops } from '@/hooks/use-shops'
+import { prefetchView } from '@/lib/prefetch'  // 🔒 V11 §3.3
 import { Store, Plus, ChevronDown, Check } from 'lucide-react'
 import {
   LayoutDashboard,
@@ -229,6 +230,8 @@ export function Sidebar() {
               <button
                 key={item.id}
                 onClick={() => setView(item.id)}
+                onMouseEnter={() => prefetchView(item.id)}  // 🔒 V11 §3.3
+                onTouchStart={() => prefetchView(item.id)}  // 🔒 V11 §3.3
                 className={cn(
                   'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all group relative',
                   sidebarCollapsed && 'lg:justify-center lg:px-2',

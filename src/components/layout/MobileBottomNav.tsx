@@ -23,6 +23,7 @@ import { cn } from '@/lib/utils'
 import { useTranslation } from '@/hooks/use-translation'
 import { haptic } from '@/lib/haptic'
 import { useStaffPermissions } from '@/hooks/use-staff-permissions'
+import { prefetchView } from '@/lib/prefetch'  // 🔒 V11 §3.3
 
 interface Tab {
   view: ViewType
@@ -86,6 +87,7 @@ export function MobileBottomNav() {
               <button
                 key={tab.view}
                 onClick={() => { haptic.click(); setView(tab.view) }}
+                onTouchStart={() => prefetchView(tab.view)}
                 className={cn(
                   'flex flex-col items-center justify-center gap-0.5 flex-1 h-full transition-colors',
                   isActive ? 'text-primary' : 'text-muted-foreground',
@@ -117,6 +119,7 @@ export function MobileBottomNav() {
               <button
                 key={tab.view}
                 onClick={() => { haptic.click(); setView(tab.view) }}
+                onTouchStart={() => prefetchView(tab.view)}
                 className={cn(
                   'flex flex-col items-center justify-center gap-0.5 flex-1 h-full transition-colors',
                   isActive ? 'text-primary' : 'text-muted-foreground',
