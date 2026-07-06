@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
 import { roundMoney } from '@/lib/money'
 import { activeTransactionWhere } from '@/lib/query-helpers'
+import { apiError } from '@/lib/api-error'
 
 // ⏱️ Vercel serverless timeout — GSTR export aggregates all transactions
 // in a period and generates CSV/JSON. Can take several seconds at scale.
@@ -397,7 +398,6 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(output)
   } catch (error) {
-    console.error('GSTR export error:', error)
-    return NextResponse.json({ error: 'Failed to generate GSTR report' }, { status: 500 })
+    return apiError(error, 'Failed to generate GSTR report', 500)
   }
 }

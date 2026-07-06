@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
 import { roundMoney } from '@/lib/money'
+import { apiError } from '@/lib/api-error'
 
 // POST /api/whatsapp-invoice - generate WhatsApp share link for an invoice
 export async function POST(req: NextRequest) {
@@ -86,7 +87,6 @@ export async function POST(req: NextRequest) {
       message: lines.join('\n'),
     })
   } catch (error) {
-    console.error('WhatsApp invoice error:', error)
-    return NextResponse.json({ error: 'Failed to generate invoice' }, { status: 500 })
+    return apiError(error, 'Failed to generate invoice', 500)
   }
 }

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
 import { checkEntityLimit } from '@/lib/usage-limits'
+import { apiError } from '@/lib/api-error'
 
 // GET /api/shops — list all shops for the current user
 export async function GET() {
@@ -75,7 +76,6 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ shop })
   } catch (error) {
-    console.error('Shops POST error:', error)
-    return NextResponse.json({ error: 'Failed to create shop' }, { status: 500 })
+    return apiError(error, 'Failed to create shop', 500)
   }
 }

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUserId } from '@/lib/get-auth'
 import { uploadBillImage } from '@/lib/cloudinary'
+import { apiError } from '@/lib/api-error'
 
 // POST /api/upload-bill - upload a bill image to Cloudinary
 export async function POST(req: NextRequest) {
@@ -26,7 +27,6 @@ export async function POST(req: NextRequest) {
       publicId: result.publicId,
     })
   } catch (error) {
-    console.error('Upload bill error:', error)
-    return NextResponse.json({ error: 'Failed to upload image' }, { status: 500 })
+    return apiError(error, 'Failed to upload image', 500)
   }
 }

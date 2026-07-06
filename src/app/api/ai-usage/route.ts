@@ -3,6 +3,7 @@ import { getAuthUserId } from '@/lib/get-auth'
 import { db } from '@/lib/db'
 import { isFounder } from '@/lib/usage-limits'
 import { formatCostInr, getPricingInfo, USD_TO_INR } from '@/lib/ai-pricing'
+import { apiError } from '@/lib/api-error'
 
 /**
  * GET /api/ai-usage
@@ -120,8 +121,7 @@ export async function GET() {
       },
     })
   } catch (error) {
-    console.error('AI usage fetch error:', error)
-    return NextResponse.json({ error: 'Failed to fetch AI usage' }, { status: 500 })
+    return apiError(error, 'Failed to fetch AI usage', 500)
   }
 }
 

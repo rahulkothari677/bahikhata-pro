@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
 import { roundMoney } from '@/lib/money'
+import { apiError } from '@/lib/api-error'
 
 // POST /api/whatsapp-reminder - generate WhatsApp reminder link for outstanding dues
 export async function POST(req: NextRequest) {
@@ -93,7 +94,6 @@ export async function POST(req: NextRequest) {
       daysOverdue,
     })
   } catch (error) {
-    console.error('WhatsApp reminder error:', error)
-    return NextResponse.json({ error: 'Failed to generate reminder' }, { status: 500 })
+    return apiError(error, 'Failed to generate reminder', 500)
   }
 }

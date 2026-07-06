@@ -5,6 +5,7 @@ import { withCache } from '@/lib/cache'
 import { roundMoney, calculateGst, splitGst, distributeDiscountProportionally, toMoney } from '@/lib/money'
 import { deriveInterStateStatus } from '@/lib/gst'
 import { validateBody, createTransactionSchema } from '@/lib/validation'
+import { apiError } from '@/lib/api-error'
 
 // GET /api/transactions - list with filters (type, from, to, limit)
 export async function GET(req: NextRequest) {
@@ -398,8 +399,7 @@ export async function POST(req: NextRequest) {
       stockWarnings,
     })
   } catch (error) {
-    console.error('Transactions POST error:', error)
-    return NextResponse.json({ error: 'Failed to create transaction' }, { status: 500 })
+    return apiError(error, 'Failed to create transaction', 500)
   }
 }
 

@@ -4,6 +4,7 @@ import { getAuthUserId } from '@/lib/get-auth'
 import { withCache } from '@/lib/cache'
 import { checkEntityLimit } from '@/lib/usage-limits'
 import { validateBody, createProductSchema, updateProductSchema } from '@/lib/validation'
+import { apiError } from '@/lib/api-error'
 
 export async function GET() {
   try {
@@ -29,17 +30,9 @@ export async function GET() {
 
     return withCache({ products: productsWithStock }, { maxAge: 60, swr: 300 })
   } catch (error) {
-    // 🔒 V7 H4: Return 503 on DB error, NOT an empty 200. Was: returned
-    // { products: [] } → user saw empty inventory during a DB blip and
-    // panicked. Now: return error so UI shows retry state.
-    console.error('Products GET error:', error)
-    return NextResponse.json(
-      {
-        error: 'Failed to load products',
-        message: 'Could not reach the database. Please retry.',
-      },
-      { status: 503 },
-    )
+    // 🔒 V11 §4.2: Use apiError() for consistent errorId logging.
+    // Was: console.error + generic 503 with no errorId.
+    return apiError(error, 'Failed to load products. The database might be warming up — please retry.', 503)
   }
 }
 
@@ -90,8 +83,7 @@ export async function POST(req: NextRequest) {
     })
     return NextResponse.json({ product })
   } catch (error) {
-    console.error('Products POST error:', error)
-    return NextResponse.json({ error: 'Failed to create product' }, { status: 500 })
+    return apiError(error, 'Failed to create product', 500)
   }
 }
 
@@ -143,8 +135,7 @@ export async function PUT(req: NextRequest) {
     })
     return NextResponse.json({ product })
   } catch (error) {
-    console.error('Products PUT error:', error)
-    return NextResponse.json({ error: 'Failed to update product' }, { status: 500 })
+    return apiError(error, 'Failed to update product', 500)
   }
 }
 
@@ -164,7 +155,6 @@ export async function DELETE(req: NextRequest) {
     await db.product.delete({ where: { id } })
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Products DELETE error:', error)
-    return NextResponse.json({ error: 'Failed to delete product' }, { status: 500 })
+    return apiError(error, 'Failed to delete product', 500)
   }
 }

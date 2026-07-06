@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
+import { apiError } from '@/lib/api-error'
 
 // POST /api/seed - seed demo data
 export async function POST() {
@@ -13,8 +14,7 @@ export async function POST() {
     const result = await seedDemoData(userId)
     return NextResponse.json({ success: true, ...result })
   } catch (error) {
-    console.error('Seed error:', error)
-    return NextResponse.json({ error: 'Failed to seed data' }, { status: 500 })
+    return apiError(error, 'Failed to seed data', 500)
   }
 }
 
@@ -55,7 +55,6 @@ export async function DELETE() {
     await db.setting.deleteMany({ where: { userId } })
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error('Delete error:', error)
-    return NextResponse.json({ error: 'Failed to delete data' }, { status: 500 })
+    return apiError(error, 'Failed to delete data', 500)
   }
 }

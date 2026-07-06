@@ -3,6 +3,7 @@ import { getAuthUserId } from '@/lib/get-auth'
 import { getUserPlan, PLAN_LIMITS } from '@/lib/usage-limits'
 import { rateLimit } from '@/lib/rate-limit'
 import { db } from '@/lib/db'
+import { apiError } from '@/lib/api-error'
 
 /**
  * GET /api/subscription/status
@@ -77,8 +78,7 @@ export async function GET() {
       plans: PLANS_CATALOG,
     })
   } catch (error) {
-    console.error('Subscription status error:', error)
-    return NextResponse.json({ error: 'Failed to fetch subscription status' }, { status: 500 })
+    return apiError(error, 'Failed to fetch subscription status', 500)
   }
 }
 

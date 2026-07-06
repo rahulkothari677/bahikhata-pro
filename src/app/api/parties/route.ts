@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
 import { withCache } from '@/lib/cache'
 import { roundMoney } from '@/lib/money'
+import { apiError } from '@/lib/api-error'
 import { getReceivablePayable } from '@/lib/party-balance'
 
 export async function GET() {
@@ -72,19 +73,8 @@ export async function GET() {
 
     return withCache({ parties: partiesWithBalance }, { maxAge: 60, swr: 300 })
   } catch (error) {
-    // 🔒 V7 H4: Return 503 (Service Unavailable) on DB error, NOT an empty
-    // 200. Was: `return NextResponse.json({ parties: [] })` → the user saw
-    // an empty ledger and panicked. Now: return an error so the UI shows a
-    // retry state. Empty array must mean "genuinely zero rows," never "the
-    // query failed."
-    console.error('Parties GET error:', error)
-    return NextResponse.json(
-      {
-        error: 'Failed to load parties',
-        message: 'Could not reach the database. Please retry.',
-      },
-      { status: 503 },
-    )
+    // 🔒 V11 §4.2: Use apiError() for consistent errorId logging.
+    return apiError(error, 'Failed to load parties. The database might be warming up — please retry.', 503)
   }
 }
 
@@ -109,7 +99,6 @@ export async function POST(req: NextRequest) {
     })
     return NextResponse.json({ party })
   } catch (error) {
-    console.error('Parties POST error:', error)
-    return NextResponse.json({ error: 'Failed to create party' }, { status: 500 })
+    return apiError(error, 'Failed to create party', 500)
   }
 }
