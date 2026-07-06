@@ -127,12 +127,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     // 🔒 V5 MA: was a dead `monthlyAgg` groupBy + hardcoded `sales: 0, purchases: 0`.
     // Now: raw SQL with date_trunc('month', date) grouped by type, joined to
     // produce a 6-row result set with real sales + purchases per month.
+    // 🔒 V10 FIX: Group by IST month (AT TIME ZONE 'Asia/Kolkata'), not UTC month.
+    // Was: DATE_TRUNC('month', t.date) which groups by UTC month → a transaction
+    // on July 1, 2 AM IST (= June 30, 20:30 UTC) appeared in June's bucket.
+    // Now: the grouping matches the user's local (IST) month.
     const now = new Date()
     const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1)
 
     const monthlyRows = await db.$queryRaw<Array<{ monthStart: Date; type: string; total: number }>>`
       SELECT
-        DATE_TRUNC('month', t.date) AS "monthStart",
+        DATE_TRUNC('month', t.date AT TIME ZONE 'Asia/Kolkata') AS "monthStart",
         t.type,
         SUM(t."totalAmount") AS total
       FROM "Transaction" t
@@ -140,13 +144,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         AND t."partyId" = ${id}
         AND t."deletedAt" IS NULL
         AND t.date >= ${sixMonthsAgo}
-      GROUP BY DATE_TRUNC('month', t.date), t.type
+      GROUP BY DATE_TRUNC('month', t.date AT TIME ZONE 'Asia/Kolkata'), t.type
       ORDER BY "monthStart" ASC
     `
 
     // Build 6-month chart data, filling missing months with zeros.
+    // 🔒 V10 FIX: The SQL returns naive timestamps at IST month-start (interpreted
+    // as UTC by JS). The JS month keys must use the same IST-aligned logic.
+    const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000
     const monthlyMap = new Map<string, { sales: number; purchases: number }>()
     for (const row of monthlyRows) {
+      // row.monthStart is a naive timestamp at IST month-start (interpreted as UTC by JS).
+      // Convert to YYYY-MM key — this matches the JS-generated keys below.
       const key = new Date(row.monthStart).toISOString().slice(0, 7) // YYYY-MM
       const entry = monthlyMap.get(key) || { sales: 0, purchases: 0 }
       if (row.type === 'sale') entry.sales = roundMoney(Number(row.total))
@@ -155,12 +164,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     const monthlyData: { month: string; sales: number; purchases: number }[] = []
+    // 🔒 V10 FIX: Generate month buckets using IST date parts so the keys match.
+    const nowIST = new Date(now.getTime() + IST_OFFSET_MS)
     for (let i = 5; i >= 0; i--) {
-      const monthStart = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      const monthStart = new Date(Date.UTC(nowIST.getUTCFullYear(), nowIST.getUTCMonth() - i, 1))
       const key = monthStart.toISOString().slice(0, 7)
       const entry = monthlyMap.get(key) || { sales: 0, purchases: 0 }
       monthlyData.push({
-        month: monthStart.toLocaleDateString('en-IN', { month: 'short' }),
+        month: monthStart.toLocaleDateString('en-IN', { month: 'short', timeZone: 'UTC' }),
         sales: entry.sales,
         purchases: entry.purchases,
       })

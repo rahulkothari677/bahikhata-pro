@@ -177,9 +177,15 @@ export async function GET(req: NextRequest) {
       }),
 
       // 4. Sales trend (raw SQL date_trunc)
+      // 🔒 V10 FIX: Group by IST day/week/month, not UTC. Was: DATE_TRUNC(unit, "date")
+      // which groups by UTC day → a sale at 2 AM IST on July 6 appears on the
+      // July 5 bar (shifted by 5.5 hours). Now: "date" AT TIME ZONE 'Asia/Kolkata'
+      // converts the UTC timestamp to IST local time before truncating, so the
+      // grouping matches the user's local day. Since this is an Indian app
+      // (100% Indian users), hardcoding IST is the right call.
       db.$queryRaw<Array<{ bucketStart: Date; revenue: number; profit: number }>>`
         SELECT
-          DATE_TRUNC(${truncUnitLiteral}, "date") AS "bucketStart",
+          DATE_TRUNC(${truncUnitLiteral}, "date" AT TIME ZONE 'Asia/Kolkata') AS "bucketStart",
           COALESCE(SUM("totalAmount"), 0) AS revenue,
           COALESCE(SUM("grossProfit"), 0) AS profit
         FROM "Transaction"
@@ -188,7 +194,7 @@ export async function GET(req: NextRequest) {
           AND "type" = 'sale'
           AND "date" >= ${rangeFrom}
           AND "date" <= ${rangeTo}
-        GROUP BY DATE_TRUNC(${truncUnitLiteral}, "date")
+        GROUP BY DATE_TRUNC(${truncUnitLiteral}, "date" AT TIME ZONE 'Asia/Kolkata')
         ORDER BY "bucketStart" ASC
       `,
 
@@ -272,9 +278,16 @@ export async function GET(req: NextRequest) {
     }))
 
     // Sales trend (fill missing buckets with zeros)
+    // 🔒 V10 FIX: The SQL now groups by IST day (via AT TIME ZONE 'Asia/Kolkata').
+    // The bucketStart is a naive timestamp at IST midnight, which JS interprets
+    // as UTC. So "2026-07-06 00:00:00 IST" becomes ISO "2026-07-06T00:00:00.000Z".
+    // The JS bucket generation below must produce the same keys — so it uses
+    // Date.UTC() to create UTC-midnight timestamps that match the SQL output.
     const salesTrend: { date: string; revenue: number; profit: number; label: string }[] = []
     const trendMap = new Map<string, { revenue: number; profit: number }>()
     for (const row of salesTrendRows) {
+      // row.bucketStart is a naive timestamp (IST midnight interpreted as UTC by JS).
+      // Convert to ISO string for the key — matches the JS-generated bucket keys below.
       const key = new Date(row.bucketStart).toISOString()
       trendMap.set(key, {
         revenue: roundMoney(Number(row.revenue)),
@@ -283,44 +296,58 @@ export async function GET(req: NextRequest) {
     }
 
     // Generate bucket boundaries in JS
+    // 🔒 V10 FIX: Generate buckets aligned to IST day boundaries (not UTC).
+    // The SQL groups by IST day, so the JS buckets must also use IST dates
+    // for the keys to match. Without this, late-night IST transactions
+    // (12 AM - 5:30 AM) would appear on the previous day's bar.
+    const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000 // IST = UTC + 5:30
+    const getISTDateParts = (date: Date) => {
+      const ist = new Date(date.getTime() + IST_OFFSET_MS)
+      return { year: ist.getUTCFullYear(), month: ist.getUTCMonth(), day: ist.getUTCDate() }
+    }
     const generateBuckets = (): { start: Date; label: string; key: string }[] => {
       const buckets: { start: Date; label: string; key: string }[] = []
       if (truncUnit === 'day') {
         const maxBuckets = 14
         const days = Math.min(daysInRange + 1, maxBuckets)
+        // Start from the IST "today" (derived from rangeTo)
+        const istParts = getISTDateParts(rangeTo)
+        const todayIST = new Date(Date.UTC(istParts.year, istParts.month, istParts.day))
         for (let i = days - 1; i >= 0; i--) {
-          const start = new Date(rangeTo)
-          start.setDate(start.getDate() - i)
-          start.setHours(0, 0, 0, 0)
+          const start = new Date(todayIST)
+          start.setUTCDate(start.getUTCDate() - i)
           buckets.push({
             start,
-            label: start.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }),
+            label: start.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', timeZone: 'UTC' }),
             key: start.toISOString(),
           })
         }
       } else if (truncUnit === 'week') {
         const maxBuckets = 14
         const weeks = Math.min(Math.ceil(daysInRange / 7), maxBuckets)
+        const istParts = getISTDateParts(rangeTo)
+        const todayIST = new Date(Date.UTC(istParts.year, istParts.month, istParts.day))
         for (let i = weeks - 1; i >= 0; i--) {
-          const end = new Date(rangeTo)
-          end.setDate(end.getDate() - i * 7)
+          const end = new Date(todayIST)
+          end.setUTCDate(end.getUTCDate() - i * 7)
           const start = new Date(end)
-          start.setDate(start.getDate() - 6)
-          start.setHours(0, 0, 0, 0)
+          start.setUTCDate(start.getUTCDate() - 6)
           buckets.push({
             start,
-            label: start.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }),
+            label: start.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', timeZone: 'UTC' }),
             key: start.toISOString(),
           })
         }
       } else {
         const maxBuckets = 12
         const months = Math.min(Math.ceil(daysInRange / 30), maxBuckets)
+        // For month buckets, use IST date parts to determine the current month
+        const istParts = getISTDateParts(rangeTo)
         for (let i = months - 1; i >= 0; i--) {
-          const start = new Date(rangeTo.getFullYear(), rangeTo.getMonth() - i, 1)
+          const start = new Date(Date.UTC(istParts.year, istParts.month - i, 1))
           buckets.push({
             start,
-            label: start.toLocaleDateString('en-IN', { month: 'short', year: '2-digit' }),
+            label: start.toLocaleDateString('en-IN', { month: 'short', year: '2-digit', timeZone: 'UTC' }),
             key: start.toISOString(),
           })
         }
