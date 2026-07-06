@@ -1649,3 +1649,46 @@ Stage Summary:
 - 9 files modified
 - Founder tasks remaining: (1) verify V6 fixes in production, (2) SC2 in admin repo, (3) SC4 in admin repo, (4) configure Resend (still pending from V5), (5) optionally add integration tests
 - Honest acknowledgment: CR1 was a one-char bug that crashed a core screen for every user. The V5 MB fix introduced it; the V5 report pasted the broken SQL and didn't notice. 'Build passes' ≠ 'works' — raw SQL isn't type-checked. Smoke test now in place to prevent recurrence. Will be more careful.
+
+---
+Task ID: bahikhata-v10-audit-response
+Agent: main
+Task: V10 Verification Audit response — fix CRITICAL P0 §2.1 (GST on pre-discount amount) + §2.2 (single source of truth for GST) + §2.3 (one rounding function) + §2.4 (profit on post-discount price) + §3.3 (apiError app-wide) + §3.7 (drop shop-state cache).
+
+Work Log:
+- Read /home/z/my-project/upload/EkBook-Audit-V10.md — auditor validated V9 work (graded B+/A−) but found CRITICAL P0: GST computed on pre-discount amount → every discounted sale overcharges GST → GSTR-1 non-filable. Plus §2.2 (two GST computation paths drift), §2.3 (three rounding functions), §2.4 (profit overstated), §3.4 (admin 2FA lockout trap — admin repo), §3.3 (8 routes leak error details), §3.7 (shop-state cache stale across instances).
+- §2.1+§2.2+§2.4 FIX (CRITICAL):
+  * Schema: added cgst/sgst/igst columns to TransactionItem (prisma/schema.prisma) + migration 20260706000002_transaction_item_per_item_gst with backfill using server's write-time formula.
+  * New helper distributeDiscountProportionally() in src/lib/money.ts: distributes order-level discount across items by gross share, rounds to 2dp, absorbs residual into last non-zero-gross item so Σ(shares) === orderDiscount exactly. Clamps each share to [0, gross] to prevent negative taxable.
+  * transactions/route.ts POST: distributes order-level discount proportionally across items BEFORE computing GST. Per-item CGST/SGST/IGST stored on TransactionItem (single source of truth). Profit computed on post-discount realized unit price (was: undiscounted → overstated).
+  * transactions/[id]/route.ts PUT: same fix applied.
+  * TransactionEntry.tsx: client preview now uses SAME calculation as server (roundMoney, calculateGst, splitGst, distributeDiscountProportionally from money.ts). Was: local `r = (n) => Math.round(n*100)/100` without epsilon → boundary values like 1.005 displayed differently from server-stored value.
+  * reports/route.ts: GST slab SQL now aggregates SUM(COALESCE(ti."cgst", 0)) instead of recomputing ROUND(taxable × rate / 200). Same for SGST/IGST.
+  * gstr-export/route.ts: per-invoice-per-rate SQL aggregates stored per-item values. reconciliation block now checks TAX too (was: taxable only — missed the drift).
+  * Golden test src/__tests__/lib/gst-discount.test.ts (11 tests): asserts auditor's exact worked example (₹1000 + ₹100 + 18% → GST ₹162 not ₹180, total ₹1062 not ₹1080) for intra-state and inter-state. Asserts tax == taxable × rate per slab for single-rate, multi-rate (5%+18%), three-rate (5%+12%+28%) invoices. Asserts edge cases (zero discount, discount > subtotal clamped, proportional distribution, rounding residual absorption). Asserts §2.2 invariant: Σ(per-item CGST) == header CGST. All 11 pass.
+  * One-time recompute script scripts/v10-recompute-discounted-invoices.ts: recomputes per-item CGST/SGST/IGST on existing discounted invoices. DRY_RUN=true support. CA-amendment warning if any were filed.
+- §3.3 FIX:
+  * Created src/lib/api-error.ts: apiError(error, message, status, context?) — generates 8-char errorId, logs full error server-side, returns {error: message, errorId} to client. Never includes raw error string.
+  * Replaced 8 error-leakage sites: payment/create-order (was leaking Razorpay SDK internals), payment/verify (Razorpay signature internals), staff GET+POST (DB internals), scan-bill 2 sites (VLM provider errors — model names, API key fragments), scan-bill/compare (DB/SDK internals), voice-parse (LLM provider errors — model name, response body snippets).
+  * detail: validation.error in products/transactions routes left as-is (intentional zod field-level feedback, not error leakage).
+- §3.7 FIX:
+  * Dropped in-memory shopStateCache in src/lib/gst.ts. Was: 5 min TTL, per-instance → stale state on other warm instances for up to 5 min after state change → wrong CGST/SGST vs IGST. Now: direct primary-key lookup on Setting (~1-2ms, O(1)). invalidateShopStateCache() kept as no-op for backward compat.
+- §1.1 VERIFIED: .github/workflows/neon-warmup.yml exists with `*/5 * * * *` schedule (every 5 min). Pings https://bahikhata-pro.vercel.app/api/warmup.
+- §3.2 VERIFIED: chart.tsx dangerouslySetInnerHTML builds CSS only from developer-defined THEMES + ChartConfig. No app code passes user input into ChartConfig. Safe.
+- §3.4 + §3.6 NOTED FOR FOUNDER: admin 2FA lockout trap + admin JWT no tokenVersion are in the separate bahikhata-admin repo (out of scope).
+- Verified: npx prisma generate ✓, npx tsc --noEmit (only 5 pre-existing errors in validation.test.ts — 0 new errors from V10), npm run build ✓ Compiled successfully in 37.3s, jest 51/51 pass (40 existing money+raw-sql-smoke + 11 new gst-discount).
+- Wrote docs/Auditor-Response-V10.md — comprehensive response with file:line evidence, golden test details, founder task list.
+
+Stage Summary:
+- 1 of 1 CRITICAL P0 fixed: §2.1 GST-on-discount (proportional distribution + golden test + recompute script)
+- 3 of 3 Tier-0 correctness items fixed: §2.1, §2.2 (single source of truth — per-item CGST/SGST/IGST), §2.3 (shared roundMoney), §2.4 (profit on post-discount price)
+- 2 of 2 Tier-1 safety items fixed: §3.3 (apiError app-wide, 8 routes), §3.7 (shop-state cache dropped)
+- 2 of 2 Tier-1 items verified: §1.1 (warmup Action exists), §3.2 (chart.tsx safe)
+- 2 items noted for founder (admin repo): §3.4 (2FA lockout trap), §3.6 (admin JWT revocation)
+- 0 new dependencies
+- 1 new migration: 20260706000002_transaction_item_per_item_gst
+- 5 new files: api-error.ts, gst-discount.test.ts, v10-recompute-discounted-invoices.ts, migration.sql, Auditor-Response-V10.md
+- 12 files modified
+- 51/51 tests pass (40 existing + 11 new golden)
+- Founder tasks remaining: (1) run recompute script on existing discounted invoices, (2) apply migration, (3) §3.4 + §3.6 in admin repo, (4) verify V10 in production, (5) schedule integer-paise migration as V11 (root cause behind §2.2/§2.3)
+- Honest acknowledgment: V8 comment claimed "GST on post-discount taxable value" but I trusted the comment without tracing actual data flow (UI sends discountAmount: 0 per item → server's post-discount calc is a no-op → order-level discount bypassed GST). Lesson: comments are not verification. Golden test now enforces the invariant — future regressions fail before ship.

@@ -156,7 +156,13 @@ export function distributeDiscountProportionally(
   if (totalGross <= 0) return grossAmounts.map(() => 0)
 
   // Step 1: compute proportional share per item, rounded to 2dp.
-  const shares = grossValues.map(g => roundMoney((g / totalGross) * discount))
+  // Clamp each share to [0, grossValues[i]] so an item's discount can never
+  // exceed its gross amount (which would produce a negative taxable value —
+  // nonsensical on a real invoice). This also covers the degenerate case
+  // where orderDiscount > totalGross (e.g. user typo) without crashing.
+  const shares = grossValues.map(g =>
+    Math.min(g, Math.max(0, roundMoney((g / totalGross) * discount))),
+  )
 
   // Step 2: absorb any rounding residual (positive or negative) into the LAST
   // item with a non-zero gross. This guarantees Σ(shares) === discount exactly.
