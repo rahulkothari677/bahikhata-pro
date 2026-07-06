@@ -34,6 +34,7 @@ import {
   getPendingWriteCount,
   getPendingWrites,
   deletePendingWrite,
+  updatePendingWriteAttempts,
   setMeta,
   getMeta,
   type PendingWrite,
@@ -417,8 +418,16 @@ export async function syncPendingWrites(): Promise<{ synced: number; failed: num
 
   try {
     const pending = await getPendingWrites()
+    // 🔒 V9 2.9: Max attempts before quarantining a failing write.
+    // After 5 failures, the item is dropped (so it doesn't block the queue forever).
+    const MAX_ATTEMPTS = 5
+
     for (const w of pending) {
       if (!w.id) continue
+
+      // Track attempts per item
+      const attempts = (w.attempts || 0) + 1
+
       try {
         const res = await fetch(w.url, {
           method: w.method,
@@ -433,11 +442,16 @@ export async function syncPendingWrites(): Promise<{ synced: number; failed: num
           }
           synced++
         } else if (res.status >= 500) {
-          // 🔒 V9 2.9 FIX: Was `break` — one failing write stalled ALL subsequent
-          // queued writes. Now: skip this item (leave it in the queue for retry
-          // next sync) and continue to the next item. A shop that made 20 offline
-          // sales with one bad one no longer blocks the other 19.
-          failed++
+          // 🔒 V9 2.9: Skip and continue (was: break). Track attempts.
+          // After MAX_ATTEMPTS, drop the item (quarantine) so it doesn't block forever.
+          if (attempts >= MAX_ATTEMPTS) {
+            console.warn(`[offline-sync] Dropping write after ${MAX_ATTEMPTS} failed attempts: ${w.url}`)
+            await deletePendingWrite(w.id)
+            failed++
+          } else {
+            await updatePendingWriteAttempts(w.id, attempts)
+            failed++
+          }
           continue
         } else {
           // 4xx (other than 409/422) — drop, don't retry
@@ -445,9 +459,15 @@ export async function syncPendingWrites(): Promise<{ synced: number; failed: num
           synced++
         }
       } catch {
-        // 🔒 V9 2.9: Was `break` — network error on one item stalled the rest.
-        // Now: skip and continue. The item stays in the queue for next sync.
-        failed++
+        // 🔒 V9 2.9: Network error — same retry/quit logic as 5xx.
+        if (attempts >= MAX_ATTEMPTS) {
+          console.warn(`[offline-sync] Dropping write after ${MAX_ATTEMPTS} failed attempts (network): ${w.url}`)
+          await deletePendingWrite(w.id)
+          failed++
+        } else {
+          await updatePendingWriteAttempts(w.id, attempts)
+          failed++
+        }
         continue
       }
     }

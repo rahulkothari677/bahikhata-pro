@@ -25,13 +25,27 @@ import { getDatabaseConfigStatus } from '@/lib/verify-db-config'
  */
 export async function GET() {
   const configStatus = getDatabaseConfigStatus()
+  const start = Date.now()
 
   try {
     // Simplest possible query — just check the connection is alive
     await db.$queryRaw`SELECT 1`
+    const durationMs = Date.now() - start
+
+    // 🔒 V9 M12: Log cold-start frequency + latency for observability.
+    // If durationMs > 2000, Neon was likely asleep (cold start).
+    // This lets the founder monitor warmup effectiveness in Vercel logs.
+    if (durationMs > 2000) {
+      console.warn(`[warmup] SLOW: ${durationMs}ms — Neon may have been sleeping (cold start). Disable scale-to-zero to eliminate this.`)
+    } else {
+      console.log(`[warmup] OK: ${durationMs}ms`)
+    }
+
     return NextResponse.json({
       ok: true,
       ts: Date.now(),
+      durationMs,  // 🔒 V9 M12: expose latency for monitoring
+      coldStart: durationMs > 2000,  // true if likely a cold start
       dbConfig: configStatus,
     })
   } catch (error) {

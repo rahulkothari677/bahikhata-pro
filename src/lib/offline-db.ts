@@ -285,6 +285,8 @@ export interface PendingWrite {
   timestamp: number
   // For optimistic UI: which cache prefix should be invalidated after sync
   invalidates: string[]
+  // 🔒 V9 2.9: Per-item attempt counter for sync retry/quit logic
+  attempts?: number
 }
 
 export async function queuePendingWrite(w: Omit<PendingWrite, 'id' | 'timestamp'>): Promise<void> {
@@ -307,6 +309,29 @@ export async function getPendingWrites(): Promise<PendingWrite[]> {
 export async function deletePendingWrite(id: number): Promise<void> {
   try {
     await tx(STORE_PENDING, 'readwrite', (s) => s.delete(id))
+  } catch {
+    /* ignore */
+  }
+}
+
+// 🔒 V9 2.9: Update a pending write's attempt count (for retry/quit logic)
+export async function updatePendingWriteAttempts(id: number, attempts: number): Promise<void> {
+  try {
+    const db = await openDB()
+    const t = db.transaction(STORE_PENDING, 'readwrite')
+    const store = t.objectStore(STORE_PENDING)
+    const getReq = store.get(id)
+    getReq.onsuccess = () => {
+      const w = getReq.result as PendingWrite | undefined
+      if (w) {
+        w.attempts = attempts
+        store.put(w)
+      }
+    }
+    return new Promise<void>((resolve) => {
+      t.oncomplete = () => resolve()
+      t.onerror = () => resolve() // don't throw — non-critical
+    })
   } catch {
     /* ignore */
   }
