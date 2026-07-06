@@ -44,7 +44,13 @@ export async function GET(req: NextRequest) {
     const format = searchParams.get('format') || 'json' // json or csv
 
     const now = new Date()
-    const from = fromStr ? new Date(fromStr) : new Date(now.getFullYear(), now.getMonth(), 1)
+    // 🔒 V11 §2.1 FIX: Default "from" is start of THIS month in IST, not UTC.
+    // (Same fix as dashboard/route.ts and reports/route.ts.)
+    const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000
+    const istWall = new Date(now.getTime() + IST_OFFSET_MS)
+    const from = fromStr
+      ? new Date(fromStr)
+      : new Date(Date.UTC(istWall.getUTCFullYear(), istWall.getUTCMonth(), 1) - IST_OFFSET_MS)
     const to = toStr ? new Date(toStr) : now
 
     // 🔒 V7 M5: GSTR-1 is a MONTHLY return. Reject ranges that clearly span

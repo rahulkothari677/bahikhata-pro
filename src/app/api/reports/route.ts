@@ -38,7 +38,15 @@ export async function GET(req: NextRequest) {
     const toStr = searchParams.get('to')
 
     const now = new Date()
-    const from = fromStr ? new Date(fromStr) : new Date(now.getFullYear(), now.getMonth(), 1)
+    // 🔒 V11 §2.1 FIX: Default "from" is start of THIS month in IST, not UTC.
+    // Was: `new Date(now.getFullYear(), now.getMonth(), 1)` which uses server-
+    // local time (UTC on Vercel). On the 1st of the month before 5:30 AM IST,
+    // this gave "last month" instead of "this month." Now uses IST boundary.
+    const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000
+    const istWall = new Date(now.getTime() + IST_OFFSET_MS)
+    const from = fromStr
+      ? new Date(fromStr)
+      : new Date(Date.UTC(istWall.getUTCFullYear(), istWall.getUTCMonth(), 1) - IST_OFFSET_MS)
     const to = toStr ? new Date(toStr) : now
 
     // =====================================================================

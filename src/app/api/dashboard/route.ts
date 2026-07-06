@@ -38,9 +38,30 @@ export async function GET(req: NextRequest) {
     const toStr = searchParams.get('to')
 
     const now = new Date()
-    const startOfToday = new Date(now)
-    startOfToday.setHours(0, 0, 0, 0)
-    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+    // 🔒 V11 §2.1 FIX: Compute "today" and "this month" boundaries in IST,
+    // not UTC. Was: `startOfToday.setHours(0,0,0,0)` which uses server-local
+    // time (UTC on Vercel) → "Today" started at 5:30 AM IST instead of
+    // 12 AM IST. Every sale between 12 AM and 5:30 AM IST was counted on
+    // the wrong day.
+    //
+    // IST = UTC + 5:30 (no DST). To find "start of today in IST":
+    //   1. Add IST offset to UTC now → "fake UTC" whose date parts are IST date parts.
+    //   2. Truncate to day boundary (00:00:00 UTC of that fake date).
+    //   3. Subtract IST offset → real UTC timestamp of IST midnight.
+    //
+    // NOTE: IST_OFFSET_MS and getISTDateParts are also declared later in this
+    // function (for chart bucket generation). They're declared with `const`
+    // so we can't redeclare — but we CAN use the same constant here at the top
+    // by NOT redeclaring. To keep the code clean, we compute startOfToday and
+    // startOfMonth using the same logic inline.
+    const _IST_OFFSET_MS = 5.5 * 60 * 60 * 1000
+    const _istWall = new Date(now.getTime() + _IST_OFFSET_MS)
+    const startOfToday = new Date(
+      Date.UTC(_istWall.getUTCFullYear(), _istWall.getUTCMonth(), _istWall.getUTCDate()) - _IST_OFFSET_MS
+    )
+    const startOfMonth = new Date(
+      Date.UTC(_istWall.getUTCFullYear(), _istWall.getUTCMonth(), 1) - _IST_OFFSET_MS
+    )
 
     // Date range for filtering analytics (defaults to this month)
     const rangeFrom = fromStr ? new Date(fromStr) : startOfMonth
