@@ -19,10 +19,14 @@ export async function GET(req: NextRequest) {
     const type = searchParams.get('type')
     const voided = searchParams.get('voided') === 'true'
     // 🔒 SECURITY (Audit fix Phase 1.5): Cap limit at 200 to prevent OOM.
-    const requestedLimit = parseInt(searchParams.get('limit') || '100')
-    const limit = Math.min(Math.max(1, isNaN(requestedLimit) ? 100 : requestedLimit), 200)
+    // 🔒 FIX M4: Default reduced from 100 to 50 for cursor pagination.
+    const requestedLimit = parseInt(searchParams.get('limit') || '50')
+    const limit = Math.min(Math.max(1, isNaN(requestedLimit) ? 50 : requestedLimit), 200)
     const from = searchParams.get('from')
     const to = searchParams.get('to')
+    // 🔒 FIX M4: Cursor for infinite scroll — the ID of the last transaction
+    // from the previous page. The client sends cursor=<id> to get the next page.
+    const cursor = searchParams.get('cursor')
 
     // 🔒 V8 U1: Support fetching voided (soft-deleted) transactions for the
     // "Voided" trail filter. Was: always filtered deletedAt: null. Now: if
@@ -36,6 +40,12 @@ export async function GET(req: NextRequest) {
       if (from) where.date.gte = new Date(from)
       if (to) where.date.lte = new Date(to)
     }
+    // 🔒 FIX M4: For cursor pagination, exclude rows up to and including the
+    // cursor ID. Combined with orderBy date desc + id desc, this gives stable
+    // pagination that doesn't skip or duplicate rows.
+    if (cursor) {
+      where.id = { lt: cursor }
+    }
 
     // 🔒 FIX M5: Was `include: { items: true, party: true }` — loaded ALL item
     // fields for all 200 transactions (~1000 rows × 15 columns each). The list
@@ -48,11 +58,19 @@ export async function GET(req: NextRequest) {
         items: { select: { productName: true, quantity: true } },
         party: { select: { name: true, phone: true, gstin: true } },
       },
-      orderBy: { date: 'desc' },
-      take: limit,
+      // 🔒 FIX M4: Order by date desc, then id desc for stable cursor pagination.
+      orderBy: [{ date: 'desc' }, { id: 'desc' }],
+      take: limit + 1,  // fetch one extra to detect "has more"
     })
 
-    return withCache({ transactions }, { maxAge: 30, swr: 300 })
+    // 🔒 FIX M4: If we got limit+1 rows, there are more — trim the extra.
+    const hasMore = transactions.length > limit
+    const trimmed = hasMore ? transactions.slice(0, limit) : transactions
+    const nextCursor = hasMore && trimmed.length > 0
+      ? trimmed[trimmed.length - 1].id
+      : null
+
+    return withCache({ transactions: trimmed, hasMore, nextCursor }, { maxAge: 30, swr: 300 })
   } catch (error) {
     // 🔒 V7 H4: Return 503 on DB error, NOT an empty 200. Was: returned
     // { transactions: [] } → user saw empty ledger during a DB blip and

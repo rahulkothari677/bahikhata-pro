@@ -1,6 +1,6 @@
 'use client'
 
-import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
+import { useQuery, useQueryClient, useInfiniteQuery, keepPreviousData } from '@tanstack/react-query'
 import { useState, useEffect, useRef } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -122,35 +122,47 @@ export function Ledger({ type }: { type: LedgerType }) {
   const accentBg = isSale ? 'bg-emerald-100' : 'bg-amber-100'
 
   // Build query with optional date filter + voided filter
-  const queryParams = new URLSearchParams({
-    type,
-    limit: '200',
-  })
-  if (showVoided) queryParams.set('voided', 'true')
-  if (dateRange) {
-    queryParams.set('from', dateRange.from.toISOString())
-    queryParams.set('to', dateRange.to.toISOString())
+  const buildQueryParams = (cursor?: string) => {
+    const qp = new URLSearchParams({ type, limit: '50' })
+    if (showVoided) qp.set('voided', 'true')
+    if (dateRange) {
+      qp.set('from', dateRange.from.toISOString())
+      qp.set('to', dateRange.to.toISOString())
+    }
+    if (cursor) qp.set('cursor', cursor)
+    return qp.toString()
   }
 
-  const { data, isLoading, error } = useQuery({
+  // 🔒 FIX M4: Infinite query with cursor pagination. Was: loaded 200 at once.
+  // Now: loads 50 per page with "Load more" button. Each page uses the
+  // nextCursor from the previous page's response.
+  const {
+    data: infiniteData,
+    isLoading,
+    error,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
     queryKey: ['transactions', type, refreshKey, dateRange?.from.toISOString() || 'all', dateRange?.to.toISOString() || 'all', showVoided ? 'voided' : 'active'],
-    queryFn: async () => {
-      const r = await offlineFetch(`/api/transactions?${queryParams.toString()}`)
+    queryFn: async ({ pageParam }) => {
+      const r = await offlineFetch(`/api/transactions?${buildQueryParams(pageParam)}`)
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
       return r.json()
     },
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor || undefined,
     retry: (count, err) => {
       if (err instanceof OfflineError) return false
       if (err instanceof TypeError) return false
       return count < 2
     },
-    // 🔒 FIX M12: Keep previous data while refetching — prevents skeleton flash
-    // and stale-data flash on view switch. Old data stays on screen until new
-    // data arrives, then swaps instantly.
     placeholderData: keepPreviousData,
   })
 
-  const transactions: any[] = data?.transactions || []
+  // Flatten all pages into a single transactions array
+  const transactions: any[] = infiniteData?.pages?.flatMap((page: any) => page.transactions || []) || []
+  const data = infiniteData?.pages?.[0] || null
 
   const filtered = transactions.filter(t => {
     if (!search) return true
@@ -742,6 +754,23 @@ export function Ledger({ type }: { type: LedgerType }) {
               </Card>
             )
           })}
+        </div>
+      )}
+      {/* 🔒 FIX M4: Load more button for cursor pagination */}
+      {hasNextPage && !showVoided && (
+        <div className="flex justify-center py-4">
+          <Button
+            variant="outline"
+            onClick={() => fetchNextPage()}
+            disabled={isFetchingNextPage}
+            className="gap-2"
+          >
+            {isFetchingNextPage ? (
+              <><RefreshCw className="w-4 h-4 animate-spin" /> Loading...</>
+            ) : (
+              <><RefreshCw className="w-4 h-4" /> Load more</>
+            )}
+          </Button>
         </div>
       )}
       {confirmDialogEl}
