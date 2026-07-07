@@ -37,6 +37,8 @@ import {
   updatePendingWriteAttempts,
   setMeta,
   getMeta,
+  saveToDeadLetter,
+  getDeadLetterCount,
   type PendingWrite,
 } from './offline-db'
 
@@ -100,7 +102,7 @@ export function onOnlineChange(fn: () => void): () => void {
 // ────────────────────────────────────────────────────────────────────────────
 
 const syncListeners = new Set<() => void>()
-const syncFailedListeners = new Set<(detail: { failed: number; synced: number }) => void>()
+const syncFailedListeners = new Set<(detail: { failed: number; synced: number; deadLetterCount?: number }) => void>()
 
 export function onSyncComplete(fn: () => void): () => void {
   syncListeners.add(fn)
@@ -110,7 +112,7 @@ export function onSyncComplete(fn: () => void): () => void {
 // 🔒 FIX C3: Listener for sync failures. The UI can subscribe to show a
 // toast when offline writes fail to sync (e.g., validation error, deleted
 // product, stock policy block).
-export function onSyncFailed(fn: (detail: { failed: number; synced: number }) => void): () => void {
+export function onSyncFailed(fn: (detail: { failed: number; synced: number; deadLetterCount?: number }) => void): () => void {
   syncFailedListeners.add(fn)
   return () => syncFailedListeners.delete(fn)
 }
@@ -454,7 +456,9 @@ export async function syncPendingWrites(): Promise<{ synced: number; failed: num
           // 🔒 V9 2.9: Skip and continue (was: break). Track attempts.
           // After MAX_ATTEMPTS, drop the item (quarantine) so it doesn't block forever.
           if (attempts >= MAX_ATTEMPTS) {
-            console.warn(`[offline-sync] Dropping write after ${MAX_ATTEMPTS} failed attempts: ${w.url}`)
+            // 🔒 FIX M1: Was silently deleting — now moves to dead-letter store
+            console.warn(`[offline-sync] Moving write to dead-letter after ${MAX_ATTEMPTS} failed attempts: ${w.url}`)
+            await saveToDeadLetter(w)
             await deletePendingWrite(w.id)
             failed++
           } else {
@@ -475,8 +479,7 @@ export async function syncPendingWrites(): Promise<{ synced: number; failed: num
           // Now: keep the item in the queue (don't delete it) and mark it as
           // failed. The user will see a "sync failed" notification. The item
           // stays in IndexedDB so the user can retry or manually fix it.
-          // After MAX_ATTEMPTS, quarantine it (delete) so it doesn't block
-          // the queue forever — but log it loudly so it's visible.
+          // After MAX_ATTEMPTS, move to dead-letter store so data is never lost.
           const errorBody = await res.text().catch(() => '')
           console.error(`[offline-sync] 4xx sync failure (NOT dropping — keeping for retry):`, {
             url: w.url,
@@ -485,7 +488,9 @@ export async function syncPendingWrites(): Promise<{ synced: number; failed: num
             attempts,
           })
           if (attempts >= MAX_ATTEMPTS) {
-            console.warn(`[offline-sync] Quarantining write after ${MAX_ATTEMPTS} failed 4xx attempts: ${w.url}`)
+            // 🔒 FIX M1: Move to dead-letter store instead of deleting
+            console.warn(`[offline-sync] Moving write to dead-letter after ${MAX_ATTEMPTS} failed 4xx attempts: ${w.url}`)
+            await saveToDeadLetter(w)
             await deletePendingWrite(w.id)
           } else {
             await updatePendingWriteAttempts(w.id, attempts)
@@ -495,7 +500,9 @@ export async function syncPendingWrites(): Promise<{ synced: number; failed: num
       } catch {
         // 🔒 V9 2.9: Network error — same retry/quit logic as 5xx.
         if (attempts >= MAX_ATTEMPTS) {
-          console.warn(`[offline-sync] Dropping write after ${MAX_ATTEMPTS} failed attempts (network): ${w.url}`)
+          // 🔒 FIX M1: Move to dead-letter store instead of deleting
+          console.warn(`[offline-sync] Moving write to dead-letter after ${MAX_ATTEMPTS} failed attempts (network): ${w.url}`)
+          await saveToDeadLetter(w)
           await deletePendingWrite(w.id)
           failed++
         } else {
@@ -511,14 +518,14 @@ export async function syncPendingWrites(): Promise<{ synced: number; failed: num
       notifySyncComplete()
       await notifyPendingCount()
     }
-    // 🔒 FIX C3: If any writes failed, notify the user so they know data
-    // didn't sync. Was: silent — the user only saw "synced" count and never
-    // knew about failures. Now: notify all syncFailedListeners (the UI shows
-    // a toast).
+    // 🔒 FIX C3+M1: If any writes failed, notify the user so they know data
+    // didn't sync. Include the dead-letter count so the user knows how many
+    // entries are permanently stuck and need manual review.
     if (failed > 0) {
+      const deadLetterCount = await getDeadLetterCount()
       syncFailedListeners.forEach((l) => {
         try {
-          l({ failed, synced })
+          l({ failed, synced, deadLetterCount })
         } catch {
           /* ignore */
         }

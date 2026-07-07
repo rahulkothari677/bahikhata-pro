@@ -11,12 +11,13 @@
  */
 
 const DB_NAME = 'bahikhata-offline'
-const DB_VERSION = 1
+const DB_VERSION = 2  // 🔒 FIX M1: bumped from 1 to 2 for dead-letter store
 
 const STORE_SESSION = 'session'
 const STORE_KV = 'kv'
 const STORE_PENDING = 'pendingWrites'
 const STORE_META = 'meta'
+const STORE_DEAD_LETTER = 'deadLetter'  // 🔒 FIX M1: quarantined writes that can never sync
 
 let dbPromise: Promise<IDBDatabase> | null = null
 
@@ -46,6 +47,11 @@ function openDB(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains(STORE_META)) {
         db.createObjectStore(STORE_META, { keyPath: 'key' })
+      }
+      // 🔒 FIX M1: Dead-letter store for quarantined writes
+      if (!db.objectStoreNames.contains(STORE_DEAD_LETTER)) {
+        const s = db.createObjectStore(STORE_DEAD_LETTER, { keyPath: 'id', autoIncrement: true })
+        s.createIndex('byTimestamp', 'timestamp', { unique: false })
       }
     }
   })
@@ -389,5 +395,58 @@ export async function clearAllOfflineData(): Promise<void> {
         /* ignore */
       }
     })(),
+    // 🔒 FIX M1: Also clear the dead-letter store on full data wipe
+    (async () => {
+      try {
+        await tx(STORE_DEAD_LETTER, 'readwrite', (s) => s.clear())
+      } catch {
+        /* ignore */
+      }
+    })(),
   ])
+}
+
+// ─── Dead-letter store (M1) ───────────────────────────────────────────
+// When a write hits MAX_ATTEMPTS and can never sync (validation error,
+// deleted product, etc.), instead of silently deleting it, we move it
+// to the dead-letter store. The user can see it, review it, and
+// re-enter the data manually. Data a shopkeeper entered must never vanish.
+
+export async function saveToDeadLetter(write: any): Promise<void> {
+  if (!isBrowser()) return
+  await tx(STORE_DEAD_LETTER, 'readwrite', (s) =>
+    s.add({
+      ...write,
+      timestamp: Date.now(),
+      reason: 'max_attempts_exceeded',
+    }),
+  )
+}
+
+export async function getDeadLetterItems(): Promise<any[]> {
+  if (!isBrowser()) return []
+  try {
+    return await tx<any[]>(STORE_DEAD_LETTER, 'readonly', (s) => s.getAll())
+  } catch {
+    return []
+  }
+}
+
+export async function getDeadLetterCount(): Promise<number> {
+  if (!isBrowser()) return 0
+  try {
+    return await tx(STORE_DEAD_LETTER, 'readonly', (s) => s.count())
+  } catch {
+    return 0
+  }
+}
+
+export async function deleteDeadLetterItem(id: number): Promise<void> {
+  if (!isBrowser()) return
+  await tx(STORE_DEAD_LETTER, 'readwrite', (s) => s.delete(id))
+}
+
+export async function clearDeadLetter(): Promise<void> {
+  if (!isBrowser()) return
+  await tx(STORE_DEAD_LETTER, 'readwrite', (s) => s.clear())
 }

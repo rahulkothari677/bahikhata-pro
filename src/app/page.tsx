@@ -170,9 +170,13 @@ export default function Home() {
   // loss — the user saw "Saved offline. Will sync when online" but the sale
   // was silently discarded if the server returned a 4xx error during sync.
   useEffect(() => {
-    const unsub = onSyncFailed(({ failed, synced }) => {
+    const unsub = onSyncFailed(({ failed, synced, deadLetterCount }) => {
+      const descParts = [`${failed} entr${failed === 1 ? 'y' : 'ies'} failed to sync${synced > 0 ? ` (${synced} synced successfully)` : ''}.`]
+      if (deadLetterCount && deadLetterCount > 0) {
+        descParts.push(`${deadLetterCount} entr${deadLetterCount === 1 ? 'y' : 'ies'} could not be synced and need manual review. Please re-enter them.`)
+      }
       sonnerToast.error('Some entries could not sync', {
-        description: `${failed} entr${failed === 1 ? 'y' : 'ies'} failed to sync${synced > 0 ? ` (${synced} synced successfully)` : ''}. Check your entries and try again, or contact support.`,
+        description: descParts.join(' '),
         duration: 10000,
       })
     })
