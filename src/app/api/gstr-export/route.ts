@@ -3,7 +3,7 @@ import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
 import { roundMoney } from '@/lib/money'
 import { activeTransactionWhere } from '@/lib/query-helpers'
-import { istMonthStart, getISTDateParts, isSameISTMonth, IST_OFFSET_MS } from '@/lib/timezone'
+import { istMonthStart, getISTDateParts, isSameISTMonth, istDateString, istYearMonth, IST_OFFSET_MS } from '@/lib/timezone'
 import { apiError } from '@/lib/api-error'
 
 // ⏱️ Vercel serverless timeout — GSTR export aggregates all transactions
@@ -97,7 +97,7 @@ export async function GET(req: NextRequest) {
     if (!sameMonth && !isWholeMonthBoundary) {
       return NextResponse.json({
         error: 'GSTR-1 export requires a single-month period',
-        message: `GSTR-1 is a monthly return. The selected range spans multiple calendar months (${from.toLocaleDateString('en-IN')} to ${to.toLocaleDateString('en-IN')}). Please select a single month and try again.`,
+        message: `GSTR-1 is a monthly return. The selected range spans multiple calendar months (${istDateString(from)} to ${istDateString(to)}). Please select a single month and try again.`,
         hint: 'Use the date picker to select "This Month" or a specific month range (e.g., July 1 to July 31).',
       }, { status: 400 })
     }
@@ -208,7 +208,7 @@ export async function GET(req: NextRequest) {
         // B2C
         b2cInvoices.push({
           inum: t.invoiceNo || t.id.slice(-8),
-          idt: t.date.toISOString().slice(0, 10),
+          idt: istDateString(t.date),  // 🔒 FIX C2: was toISOString (UTC)
           taxablevalue: taxableTotal,
           isInterState: t.isInterState,  // 🔒 V7 M2: needed for B2CL classification
           ...Object.fromEntries(
@@ -225,7 +225,7 @@ export async function GET(req: NextRequest) {
           inum: t.invoiceNo || t.id.slice(-8),
           itype: 'R', // Regular
           ctin: t.party.gstin,
-          in_date: t.date.toISOString().slice(0, 10),
+          in_date: istDateString(t.date),  // 🔒 FIX C2: was toISOString (UTC)
           taxablevalue: taxableTotal,
           isInterState: t.isInterState,  // 🔒 V7 M2: include for consistency
           items: Object.entries(itemsByRate).map(([rate, v]: [string, any]) => ({
@@ -266,7 +266,10 @@ export async function GET(req: NextRequest) {
       // gives "062026" (June) — wrong. Using `to`'s UTC month gives "072026"
       // (July) — correct. The `to` date is always within the intended filing
       // month (the user is exporting for a period that ENDS in the current month).
-      fp: `${String(to.getUTCMonth() + 1).padStart(2, '0')}${to.getUTCFullYear()}`,
+      // 🔒 FIX C1: Was `to.getUTCMonth()` which returns UTC month. For an export
+      // at IST 2 AM on July 1, `to` is still June 30 UTC → fp = "062026" (wrong).
+      // Now uses `toParts` (already computed on line ~75 from getISTDateParts).
+      fp: `${String(toParts.month + 1).padStart(2, '0')}${toParts.year}`,
       gt: 0,
       cur_gt: 0,
       b2b: b2bInvoices,
@@ -360,7 +363,7 @@ export async function GET(req: NextRequest) {
         const igst = rateRows.reduce((s, r) => s + r.igst, 0)
         csvLines.push([
           t.invoiceNo || t.id.slice(-8),
-          t.date.toISOString().slice(0, 10),
+          istDateString(t.date),  // 🔒 FIX C2: was toISOString (UTC)
           t.party?.name || 'Walk-in',
           t.party?.gstin || '',
           taxable.toFixed(2),
@@ -376,7 +379,9 @@ export async function GET(req: NextRequest) {
         headers: {
           'Content-Type': 'text/csv',
           // 🔒 V10 FIX: Use `to` date for filename month (same reason as `fp`).
-          'Content-Disposition': `attachment; filename="GSTR1_${to.toISOString().slice(0,7)}.csv"`,
+          // 🔒 FIX C14: Was `to.toISOString().slice(0,7)` which returns UTC year-month.
+          // Now uses istYearMonth which returns the IST year-month.
+          'Content-Disposition': `attachment; filename="GSTR1_${istYearMonth(to)}.csv"`,
         },
       })
     }

@@ -99,3 +99,29 @@ export function isSameISTMonth(date1: Date, date2: Date): boolean {
   const p2 = getISTDateParts(date2)
   return p1.year === p2.year && p1.month === p2.month
 }
+
+/**
+ * Format a Date as a YYYY-MM-DD string in IST.
+ *
+ * Use this for invoice dates in GSTR-1 exports, WhatsApp invoices, and any
+ * date displayed to the user that must reflect the IST calendar date (not UTC).
+ *
+ * Was: `date.toISOString().slice(0, 10)` which returns the UTC date. A sale
+ * at IST 2 AM on July 1 (= UTC June 30, 20:30) was exported as "2026-06-30".
+ * Now: correctly returns "2026-07-01".
+ */
+export function istDateString(date: Date): string {
+  const p = getISTDateParts(date)
+  return `${p.year}-${String(p.month + 1).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`
+}
+
+/**
+ * Format a Date as a YYYY-MM string in IST.
+ *
+ * Use this for GSTR-1 filing period (`fp`) and CSV filenames. Was:
+ * `date.toISOString().slice(0, 7)` which returns the UTC year-month.
+ */
+export function istYearMonth(date: Date): string {
+  const p = getISTDateParts(date)
+  return `${p.year}-${String(p.month + 1).padStart(2, '0')}`
+}
