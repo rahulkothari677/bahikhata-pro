@@ -84,7 +84,14 @@ export function Reports() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `GSTR1_${dateRange.from.toISOString().slice(0, 7)}.csv`
+      // 🔒 FIX C14 (client-side): Was `dateRange.from.toISOString().slice(0, 7)`
+      // which uses the UTC year-month of the `from` date. Since `from` = July 1
+      // IST = June 30 UTC, this produced "2026-06" instead of "2026-07".
+      // Now: computes the IST year-month of the `to` date (same as the server's
+      // fp field). The `to` date is always within the intended filing month.
+      const toIST = new Date(dateRange.to.getTime() + 5.5 * 60 * 60 * 1000)
+      const toYearMonth = `${toIST.getUTCFullYear()}-${String(toIST.getUTCMonth() + 1).padStart(2, '0')}`
+      a.download = `GSTR1_${toYearMonth}.csv`
       a.click()
       URL.revokeObjectURL(url)
       sonnerToast.success('GSTR-1 exported! Upload this to GST portal.')
