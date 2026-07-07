@@ -52,6 +52,25 @@ const MAX_STACK_DEPTH = 15
 // These are the "root" destinations — tapping them starts a new context.
 const ROOT_VIEWS: ViewType[] = ['dashboard', 'sales', 'inventory', 'more']
 
+// 🔒 V11 FIX: Module-level mirror of the view stack, so CapacitorBridge can
+// check "can the user go back within the app?" without accessing the hook's
+// internal ref. Was: CapacitorBridge used Capacitor's `canGoBack` which
+// checks Android WebView's URL-based history — but this app uses pushState
+// with the SAME URL (no URL change), so canGoBack always returned false →
+// App.exitApp() was called on every back press → app "restarted."
+//
+// This variable is updated by the hook on every push/pop. It's safe to read
+// from anywhere (CapacitorBridge, tests, etc.).
+let _appBackStackLength = 1
+
+/**
+ * Returns true if the user can go back within the app's own navigation stack.
+ * Used by CapacitorBridge to decide: go back vs exit app.
+ */
+export function canGoBackInApp(): boolean {
+  return _appBackStackLength > 1
+}
+
 export function useBrowserBackButton() {
   const { currentView, setView, setSelectedTransactionId, setSelectedTransactionType, setSelectedPartyId } = useAppStore()
   const viewStackRef = useRef<ViewType[]>([])
@@ -63,6 +82,7 @@ export function useBrowserBackButton() {
     // ── Initialize on first render ──────────────────────────────────────
     if (viewStackRef.current.length === 0) {
       viewStackRef.current = [currentView]
+      _appBackStackLength = 1  // 🔒 V11 FIX: sync module-level mirror
       lastPushedViewRef.current = currentView
       if (typeof window !== 'undefined') {
         window.history.replaceState(
@@ -98,6 +118,7 @@ export function useBrowserBackButton() {
 
       if (currentView === 'dashboard') {
         viewStackRef.current = ['dashboard']
+        _appBackStackLength = 1  // 🔒 V11 FIX: sync module-level mirror
         // Push dashboard entry with new generation
         window.history.pushState(
           {
@@ -110,6 +131,7 @@ export function useBrowserBackButton() {
       } else {
         // Stack: [dashboard, currentRootView]
         viewStackRef.current = ['dashboard', currentView]
+        _appBackStackLength = 2  // 🔒 V11 FIX: sync module-level mirror
 
         // Push a "dashboard" entry first so back from root view → dashboard
         window.history.pushState(
@@ -139,6 +161,7 @@ export function useBrowserBackButton() {
       if (viewStackRef.current.length > MAX_STACK_DEPTH) {
         viewStackRef.current = viewStackRef.current.slice(-MAX_STACK_DEPTH)
       }
+      _appBackStackLength = viewStackRef.current.length  // 🔒 V11 FIX: sync
 
       // Push to browser history with current generation
       window.history.pushState(
@@ -161,8 +184,23 @@ export function useBrowserBackButton() {
     const handlePopState = (event: PopStateEvent) => {
       const state = event.state as { [key: string]: any } | null
 
-      // No app state — user is going back beyond our app, let them exit
+      // No app state — user is going back beyond our app's history.
+      // 🔒 V11 FIX: Was: `return` (let browser navigate away → page reload
+      // → app "restarts"). Now: push the current view back onto the history
+      // stack so the app stays alive. The user stays in the app instead of
+      // being bounced out.
       if (!state || !(HISTORY_STATE_KEY in state)) {
+        if (viewStackRef.current.length > 0) {
+          const currentViewName = viewStackRef.current[viewStackRef.current.length - 1]
+          window.history.pushState(
+            {
+              [HISTORY_STATE_KEY]: currentViewName,
+              [HISTORY_GEN_KEY]: generationRef.current,
+            },
+            '',
+            window.location.href,
+          )
+        }
         return
       }
 
@@ -181,6 +219,7 @@ export function useBrowserBackButton() {
       // ── Valid entry — pop our stack and navigate ──────────────────────
       if (viewStackRef.current.length > 1) {
         viewStackRef.current.pop()
+        _appBackStackLength = viewStackRef.current.length  // 🔒 V11 FIX: sync
         const previousView = viewStackRef.current[viewStackRef.current.length - 1]
         isPopstateRef.current = true
         lastPushedViewRef.current = previousView

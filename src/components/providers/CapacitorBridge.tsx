@@ -15,6 +15,7 @@
 
 import { useEffect } from 'react'
 import { Capacitor } from '@capacitor/core'
+import { canGoBackInApp } from '@/hooks/use-browser-back-button'
 
 const SAFFRON = '#c2410c'
 
@@ -87,9 +88,24 @@ export function CapacitorBridge() {
         // App lifecycle — handle Android back button
         const { App } = await import('@capacitor/app')
         const listener = await App.addListener('backButton', ({ canGoBack }) => {
-          if (!canGoBack) {
+          // 🔒 V11 FIX: Don't trust Capacitor's `canGoBack` — it checks Android
+          // WebView's URL-based history. This app uses pushState with the SAME
+          // URL (no URL change), so canGoBack always returned false →
+          // App.exitApp() was called on every back press → app "restarted."
+          //
+          // Instead, check the app's own JS navigation stack via
+          // canGoBackInApp(). If the app has >1 view in its stack, go back
+          // within the app. Only exit if we're at the root (dashboard).
+          if (canGoBackInApp()) {
+            window.history.back()
+          } else if (!canGoBack) {
+            // Fallback: if neither the app stack nor the WebView has back
+            // history, exit the app. This handles the case where the user
+            // is at the dashboard with no app history.
             App.exitApp()
           } else {
+            // Edge case: app stack is empty but WebView has history (e.g.,
+            // user arrived from an external page). Let the WebView go back.
             window.history.back()
           }
         })
