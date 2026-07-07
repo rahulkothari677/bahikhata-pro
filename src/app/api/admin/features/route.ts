@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAdmin } from '@/lib/admin-auth'
+import { istDayStart } from '@/lib/timezone'
 
 /**
  * GET /api/admin/features
@@ -42,15 +43,14 @@ export async function GET() {
       .sort((a, b) => b.count - a.count)
 
     // Feature usage by day (for trend chart) — top 5 features
+    // 🔒 FIX M6: Was setHours(0,0,0,0) — server-local time (UTC on Vercel).
     const topFeatures = featureUsage.slice(0, 5).map(f => f.action)
     const now = new Date()
     const usageByDay: Array<Record<string, string | number>> = []
     for (let i = 29; i >= 0; i--) {
-      const day = new Date(now)
-      day.setDate(day.getDate() - i)
-      day.setHours(0, 0, 0, 0)
-      const nextDay = new Date(day)
-      nextDay.setDate(nextDay.getDate() + 1)
+      const dayRef = new Date(now.getTime() - i * 24 * 60 * 60 * 1000)
+      const day = istDayStart(dayRef)
+      const nextDay = new Date(day.getTime() + 24 * 60 * 60 * 1000)
 
       const dayData: any = { date: day.toISOString().split('T')[0] }
       topFeatures.forEach(feature => {

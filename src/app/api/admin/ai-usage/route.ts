@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAdmin } from '@/lib/admin-auth'
+import { istDayStart } from '@/lib/timezone'
 
 /**
  * GET /api/admin/ai-usage
@@ -51,13 +52,12 @@ export async function GET() {
     const uniqueVoiceUsers = new Set(voiceAttempted.map(e => e.userId).filter(Boolean)).size
 
     // Scans by day (for trend chart)
+    // 🔒 FIX M6: Was setHours(0,0,0,0) — server-local time (UTC on Vercel).
     const scansByDay: { date: string; scans: number; success: number }[] = []
     for (let i = 29; i >= 0; i--) {
-      const day = new Date(now)
-      day.setDate(day.getDate() - i)
-      day.setHours(0, 0, 0, 0)
-      const nextDay = new Date(day)
-      nextDay.setDate(nextDay.getDate() + 1)
+      const dayRef = new Date(now.getTime() - i * 24 * 60 * 60 * 1000)
+      const day = istDayStart(dayRef)
+      const nextDay = new Date(day.getTime() + 24 * 60 * 60 * 1000)
 
       const dayScans = scansAttempted.filter(e => e.createdAt >= day && e.createdAt < nextDay).length
       const daySuccess = scansSucceeded.filter(e => e.createdAt >= day && e.createdAt < nextDay).length

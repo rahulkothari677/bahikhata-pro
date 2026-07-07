@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAdmin } from '@/lib/admin-auth'
+import { istDayStart, istMonthStartOffset } from '@/lib/timezone'
 
 /**
  * GET /api/admin/overview
@@ -21,10 +22,11 @@ export async function GET() {
 
   try {
     const now = new Date()
-    const todayStart = new Date(now)
-    todayStart.setHours(0, 0, 0, 0)
+    // 🔒 FIX M6: Was setHours(0,0,0,0) + new Date(now.getFullYear(), ...) —
+    // server-local time (UTC on Vercel). Admin metrics shifted 5.5 hours.
+    const todayStart = istDayStart(now)
     const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
-    const monthAgo = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate())
+    const monthAgo = istMonthStartOffset(now, -1)
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
 
     // Run all queries in parallel for performance
