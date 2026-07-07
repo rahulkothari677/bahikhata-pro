@@ -133,7 +133,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     // on July 1, 2 AM IST (= June 30, 20:30 UTC) appeared in June's bucket.
     // Now: the grouping matches the user's local (IST) month.
     const now = new Date()
-    const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1)
+    // 🔒 FIX H3: Was `new Date(now.getFullYear(), now.getMonth() - 5, 1)` which
+    // uses server-local time (UTC on Vercel). The istMonthStartOffset helper
+    // was imported but not used. Now: uses istMonthStartOffset(now, -5) for
+    // correct IST month boundary.
+    const sixMonthsAgo = istMonthStartOffset(now, -5)
 
     const monthlyRows = await db.$queryRaw<Array<{ monthStart: Date; type: string; total: number }>>`
       SELECT

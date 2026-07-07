@@ -23,6 +23,7 @@
 import { db } from '@/lib/db'
 import { rateLimit } from '@/lib/rate-limit'
 import { PRICING_CONFIG, type Plan, type PlanConfig } from '@/lib/subscription'
+import { istDayStart } from '@/lib/timezone'
 
 export type { Plan, PlanConfig }
 
@@ -249,8 +250,11 @@ export async function checkUsage(
   // Count today's AI usage from AiUsageLog. This survives Redis outages
   // and is the real source of truth for billing/abuse detection.
   try {
-    const todayStart = new Date()
-    todayStart.setHours(0, 0, 0, 0)
+    // 🔒 FIX H5: Was `new Date(); setHours(0,0,0,0)` which uses server-local
+    // time (UTC on Vercel) = 5:30 AM IST. The daily limit "reset" at 5:30 AM
+    // instead of midnight IST, silently inflating the effective daily limit
+    // by up to 5.5 hours. Now: uses istDayStart for correct IST midnight.
+    const todayStart = istDayStart(new Date())
     const dbCount = await db.aiUsageLog.count({
       where: {
         userId,

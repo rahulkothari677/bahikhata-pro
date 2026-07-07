@@ -3,6 +3,7 @@ import { getAuthUserId } from '@/lib/get-auth'
 import { db } from '@/lib/db'
 import { isFounder } from '@/lib/usage-limits'
 import { formatCostInr, getPricingInfo, USD_TO_INR } from '@/lib/ai-pricing'
+import { istDayStart, istMonthStart } from '@/lib/timezone'
 import { apiError } from '@/lib/api-error'
 
 /**
@@ -31,10 +32,13 @@ export async function GET() {
     }
 
     // Time boundaries
+    // 🔒 FIX H4: Was `Date.UTC(...)` which uses UTC midnight = 5:30 AM IST.
+    // AI scans between 12 AM and 5:30 AM IST were counted in the previous
+    // day's bucket. Now: uses IST helpers for correct day/month boundaries.
     const now = new Date()
-    const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+    const todayStart = istDayStart(now)
     const weekStart = new Date(todayStart.getTime() - 6 * 24 * 60 * 60 * 1000)  // last 7 days
-    const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+    const monthStart = istMonthStart(now)
 
     // Fetch all logs in parallel for speed
     const [todayLogs, weekLogs, monthLogs, allTimeAggregate, recentLogs] = await Promise.all([
