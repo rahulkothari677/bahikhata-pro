@@ -104,6 +104,17 @@ export async function DELETE() {
       db.supportTicket.deleteMany({ where: { userId } }),
       db.npsFeedback.deleteMany({ where: { userId } }),
       db.shop.deleteMany({ where: { userId } }),
+      // 🔒 FIX M4: InvoiceCounter — has userId as PK with onDelete: Cascade,
+      // but explicit delete is safer (defensive against future schema changes).
+      db.invoiceCounter.deleteMany({ where: { userId } }),
+      // 🔒 FIX M4: UserSegmentCache — has userId with onDelete: Cascade,
+      // but explicit delete for safety.
+      db.userSegmentCache.deleteMany({ where: { userId } }),
+      // 🔒 FIX M4: NotificationLog — has userId? (nullable) with onDelete:
+      // SetNull. Without explicit delete, rows would have userId set to NULL
+      // but the `recipient` field (email/phone) would remain = PII left behind.
+      // Must delete explicitly for DPDP compliance.
+      db.notificationLog.deleteMany({ where: { userId } }),
       // 🔒 V5 MF: passwordResetToken is keyed by email, NOT userId, so it
       // does NOT cascade when the user is deleted. We must clean it up
       // explicitly — otherwise orphaned reset tokens linger (minor: they
