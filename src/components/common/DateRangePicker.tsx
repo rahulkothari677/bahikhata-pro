@@ -148,9 +148,15 @@ export function DateRangePicker({
 
   const handleCustomApply = () => {
     if (customFrom && customTo) {
-      const from = new Date(customFrom)
-      const to = new Date(customTo)
-      to.setHours(23, 59, 59, 999)
+      // 🔒 FIX L8: Was `new Date(customFrom)` — the single-string constructor
+      // ("YYYY-MM-DD") always parses as UTC midnight = 5:30 AM IST. The `to`
+      // was set via setHours (local = IST). This asymmetry meant the first
+      // ~5.5 hours of the "from" day were silently excluded.
+      // Now: parse via split + local constructor so both are IST midnight/23:59.
+      const [fy, fm, fd] = customFrom.split('-').map(Number)
+      const [ty, tm, td] = customTo.split('-').map(Number)
+      const from = new Date(fy, fm - 1, fd, 0, 0, 0, 0)
+      const to = new Date(ty, tm - 1, td, 23, 59, 59, 999)
       onChange({ from, to }, 'custom')
       onPresetChange('custom')
       setOpen(false)

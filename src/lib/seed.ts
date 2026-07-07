@@ -1,4 +1,5 @@
 import { db } from '@/lib/db'
+import { calculateGst, splitGst, roundMoney } from '@/lib/money'
 
 // Indian shop demo data — Kirana / General Store
 export async function seedDemoData(userId: string) {
@@ -87,7 +88,9 @@ export async function seedDemoData(userId: string) {
         const qty = 1 + Math.floor(Math.random() * 5)
         const unitPrice = product.salePrice
         const amount = qty * unitPrice
-        const itemGst = amount * product.gstRate / 100
+        // 🔒 FIX L5: Was `amount * product.gstRate / 100` — float-precision
+        // (e.g., 0.30000000000000004). Now uses calculateGst from money.ts.
+        const itemGst = calculateGst(amount, product.gstRate)
         const itemProfit = (product.salePrice - product.purchasePrice) * qty
 
         items.push({
@@ -100,8 +103,11 @@ export async function seedDemoData(userId: string) {
         })
 
         subtotal += amount
-        cgst += itemGst / 2
-        sgst += itemGst / 2
+        // 🔒 FIX L5: Was `cgst += itemGst / 2; sgst += itemGst / 2` — float drift.
+        // Now uses splitGst from money.ts (cgst + sgst === itemGst exactly).
+        const { cgst: c, sgst: s } = splitGst(itemGst)
+        cgst = roundMoney(cgst + c)
+        sgst = roundMoney(sgst + s)
         profit += itemProfit
       }
 
@@ -142,7 +148,9 @@ export async function seedDemoData(userId: string) {
         const qty = 10 + Math.floor(Math.random() * 30)
         const unitPrice = product.purchasePrice
         const amount = qty * unitPrice
-        const itemGst = amount * product.gstRate / 100
+        // 🔒 FIX L5: Was `amount * product.gstRate / 100` — float-precision
+        // (e.g., 0.30000000000000004). Now uses calculateGst from money.ts.
+        const itemGst = calculateGst(amount, product.gstRate)
 
         items.push({
           productId: product.id,
@@ -154,8 +162,11 @@ export async function seedDemoData(userId: string) {
         })
 
         subtotal += amount
-        cgst += itemGst / 2
-        sgst += itemGst / 2
+        // 🔒 FIX L5: Was `cgst += itemGst / 2; sgst += itemGst / 2` — float drift.
+        // Now uses splitGst from money.ts (cgst + sgst === itemGst exactly).
+        const { cgst: c, sgst: s } = splitGst(itemGst)
+        cgst = roundMoney(cgst + c)
+        sgst = roundMoney(sgst + s)
       }
 
       const totalAmount = subtotal + cgst + sgst

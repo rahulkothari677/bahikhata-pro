@@ -82,7 +82,14 @@ export async function GET(req: NextRequest) {
     } else {
       truncUnit = 'month'
     }
-    const truncUnitLiteral = Prisma.raw(`'${truncUnit}'`)
+    // 🔒 FIX L3: Was `Prisma.raw(\`'${truncUnit}'\`)` — string interpolation
+    // in raw SQL. Safe today (truncUnit is from a closed set), but a footgun
+    // if anyone refactors. Now: explicit switch with validated literals.
+    const truncUnitLiteral = truncUnit === 'day'
+      ? Prisma.raw("'day'")
+      : truncUnit === 'week'
+        ? Prisma.raw("'week'")
+        : Prisma.raw("'month'")
 
     // 🔒 V8 M2: Compute the effective range end = GREATEST(rangeTo, now).
     // If the user selects a past date range (e.g. "last month"), today's

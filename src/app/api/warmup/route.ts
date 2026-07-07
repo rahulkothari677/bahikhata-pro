@@ -46,7 +46,10 @@ export async function GET() {
       ts: Date.now(),
       durationMs,  // 🔒 V9 M12: expose latency for monitoring
       coldStart: durationMs > 2000,  // true if likely a cold start
-      dbConfig: configStatus,
+      // 🔒 FIX L2: Was exposing dbConfig (DB hostnames) to anyone who hits
+      // /api/warmup. Now: only include a boolean "dbConfigOk" instead of the
+      // full config with hostnames. Hostnames are internal infrastructure.
+      dbConfigOk: configStatus.databaseUrlHasPooler && configStatus.databaseUrlHasConnectionLimit && configStatus.directUrlSet,
     })
   } catch (error) {
     console.error('[warmup] DB connection failed:', error)
@@ -54,7 +57,7 @@ export async function GET() {
       {
         ok: false,
         error: 'Database connection failed',
-        dbConfig: configStatus,
+        dbConfigOk: false,  // 🔒 FIX L2: no hostnames exposed
         // Include the failure reason — if the connection error mentions
         // "too many connections" or "Connection terminated", that's a
         // strong signal the pooling config is wrong.

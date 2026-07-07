@@ -72,18 +72,10 @@ export function relativeTime(date: Date | string): string {
   return 'just now'
 }
 
-// GST helpers — 💰 MONEY (Audit fix Phase 4): round to 2 decimal places
-// to prevent float precision drift (was: gst / 2 → 9.000000000000002)
-export function calculateGST(amount: number, gstRate: number, isInterState: boolean) {
-  const gst = Math.round(amount * gstRate / 100 * 100) / 100
-  if (isInterState) {
-    return { cgst: 0, sgst: 0, igst: gst }
-  }
-  // Split GST: ensure cgst + sgst === gst exactly (no drift)
-  const cgst = Math.round(gst / 2 * 100) / 100
-  const sgst = Math.round((gst - cgst) * 100) / 100
-  return { cgst, sgst, igst: 0 }
-}
+// 🔒 FIX L4: Deleted legacy calculateGST — it bypassed roundMoney's 1e-9 epsilon
+// fix (V9 §2.3). Any future import of calculateGST from utils would silently
+// reintroduce the 1.005 → 1.00 boundary bug. Use calculateGst + splitGst from
+// @/lib/money instead.
 
 // Get start of today, this week, this month
 export function startOfDay(date: Date = new Date()): Date {

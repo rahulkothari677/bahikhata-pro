@@ -329,7 +329,10 @@ export async function GET(req: NextRequest) {
             }, 0)
           )
           const summaryTax = roundMoney((summaryAgg._sum.cgst || 0) + (summaryAgg._sum.sgst || 0) + (summaryAgg._sum.igst || 0))
-          const matches = Math.abs(perInvoiceTaxable - summaryTaxable) < 1 && Math.abs(perInvoiceTax - summaryTax) < 1
+          // 🔒 FIX L6: Was < 1 (₹1 tolerance) — too loose, could mask real per-invoice
+          // drift. Both sides aggregate the same stored per-item values, so they
+          // should agree within float-sum noise (< 0.05). Tightened from ₹1 to ₹0.05.
+          const matches = Math.abs(perInvoiceTaxable - summaryTaxable) < 0.05 && Math.abs(perInvoiceTax - summaryTax) < 0.05
           if (!matches) {
             console.warn('[gstr-export] Reconciliation mismatch:', {
               perInvoiceTaxable, summaryTaxable,
