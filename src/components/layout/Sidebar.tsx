@@ -324,14 +324,14 @@ export function Sidebar() {
           /* Collapsed mode — icons only */
           <div className="border-t border-sidebar-border py-2 flex flex-col items-center gap-2">
             {!isStaff && (
-              <button onClick={() => setView('pricing')} className="w-8 h-8 rounded-lg bg-gradient-to-r from-amber-500 to-orange-600 flex items-center justify-center" title="Upgrade to Pro">
+              <button onClick={() => setView('pricing')} className="w-10 h-10 rounded-lg bg-gradient-to-r from-amber-500 to-orange-600 flex items-center justify-center" title="Upgrade to Pro">
                 <Crown className="w-4 h-4 text-white" />
               </button>
             )}
-            <button onClick={handleInstallApp} className="w-8 h-8 rounded-lg flex items-center justify-center text-sidebar-foreground/70 hover:bg-sidebar-accent" title="Install App">
+            <button onClick={handleInstallApp} className="w-10 h-10 rounded-lg flex items-center justify-center text-sidebar-foreground/70 hover:bg-sidebar-accent" title="Install App">
               <Download className="w-4 h-4" />
             </button>
-            <button onClick={handleLogout} className="w-8 h-8 rounded-lg flex items-center justify-center text-rose-400 hover:bg-rose-500/10" title="Logout">
+            <button onClick={handleLogout} className="w-10 h-10 rounded-lg flex items-center justify-center text-rose-400 hover:bg-rose-500/10" title="Logout">
               <LogOut className="w-4 h-4" />
             </button>
           </div>

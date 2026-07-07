@@ -1325,10 +1325,10 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
             <p className="text-[10px] text-rose-600 font-medium">Not enough stock</p>
           )}
         </div>
-        <Button variant="outline" size="sm" onClick={handleCancel} className="h-10 px-4">
+        <Button variant="outline" size="sm" onClick={handleCancel} className="h-11 px-4">
           Cancel
         </Button>
-        <Button className="bg-gradient-saffron gap-2 shadow-md h-10 px-6" onClick={handleSave} disabled={saving || hasStockBlock}>
+        <Button className="bg-gradient-saffron gap-2 shadow-md h-11 px-6" onClick={handleSave} disabled={saving || hasStockBlock}>
           <Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save'}
         </Button>
       </div>
@@ -1349,10 +1349,10 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
             </div>
           )}
         </div>
-        <Button variant="outline" onClick={handleCancel} className="h-10 px-5">
+        <Button variant="outline" onClick={handleCancel} className="h-11 px-5">
           Cancel
         </Button>
-        <Button className="bg-gradient-saffron gap-2 shadow-md h-10 px-8" onClick={handleSave} disabled={saving || hasStockBlock}>
+        <Button className="bg-gradient-saffron gap-2 shadow-md h-11 px-8" onClick={handleSave} disabled={saving || hasStockBlock}>
           <Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save'}
         </Button>
       </div>

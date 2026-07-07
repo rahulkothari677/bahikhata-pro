@@ -93,21 +93,23 @@ export async function seedDemoData(userId: string) {
         const itemGst = calculateGst(amount, product.gstRate)
         const itemProfit = (product.salePrice - product.purchasePrice) * qty
 
+        const { cgst: itemCgst, sgst: itemSgst } = splitGst(itemGst)
         items.push({
           productId: product.id,
           productName: product.name,
           quantity: qty,
           unitPrice,
           gstRate: product.gstRate,
+          cgst: itemCgst,  // 🔒 FIX L9: per-item GST (was missing)
+          sgst: itemSgst,
+          igst: 0,
           total: amount + itemGst,
         })
 
         subtotal += amount
-        // 🔒 FIX L5: Was `cgst += itemGst / 2; sgst += itemGst / 2` — float drift.
-        // Now uses splitGst from money.ts (cgst + sgst === itemGst exactly).
-        const { cgst: c, sgst: s } = splitGst(itemGst)
-        cgst = roundMoney(cgst + c)
-        sgst = roundMoney(sgst + s)
+        // 🔒 FIX L5: Use the per-item split values (already computed above)
+        cgst = roundMoney(cgst + itemCgst)
+        sgst = roundMoney(sgst + itemSgst)
         profit += itemProfit
       }
 
@@ -152,21 +154,23 @@ export async function seedDemoData(userId: string) {
         // (e.g., 0.30000000000000004). Now uses calculateGst from money.ts.
         const itemGst = calculateGst(amount, product.gstRate)
 
+        const { cgst: itemCgst, sgst: itemSgst } = splitGst(itemGst)
         items.push({
           productId: product.id,
           productName: product.name,
           quantity: qty,
           unitPrice,
           gstRate: product.gstRate,
+          cgst: itemCgst,  // 🔒 FIX L9: per-item GST (was missing)
+          sgst: itemSgst,
+          igst: 0,
           total: amount + itemGst,
         })
 
         subtotal += amount
-        // 🔒 FIX L5: Was `cgst += itemGst / 2; sgst += itemGst / 2` — float drift.
-        // Now uses splitGst from money.ts (cgst + sgst === itemGst exactly).
-        const { cgst: c, sgst: s } = splitGst(itemGst)
-        cgst = roundMoney(cgst + c)
-        sgst = roundMoney(sgst + s)
+        // 🔒 FIX L5: Use the per-item split values (already computed above)
+        cgst = roundMoney(cgst + itemCgst)
+        sgst = roundMoney(sgst + itemSgst)
       }
 
       const totalAmount = subtotal + cgst + sgst

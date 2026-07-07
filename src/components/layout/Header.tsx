@@ -136,7 +136,7 @@ export function Header() {
             <div className="relative lg:hidden" ref={shopDropdownRef}>
               <button
                 onClick={() => setShopDropdownOpen(!shopDropdownOpen)}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-muted/50 hover:bg-muted transition"
+                className="flex items-center gap-1.5 px-2.5 py-2 min-h-[44px] rounded-lg bg-muted/50 hover:bg-muted transition"
               >
                 <Store className="w-4 h-4 text-primary flex-shrink-0" />
                 <span className="text-xs font-semibold truncate max-w-[80px]">{activeShop?.name || 'Shop'}</span>
