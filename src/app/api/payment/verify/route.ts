@@ -3,6 +3,7 @@ import { getAuthUserId } from '@/lib/get-auth'
 import { db } from '@/lib/db'
 import crypto from 'crypto'
 import { apiError } from '@/lib/api-error'
+import Razorpay from 'razorpay'
 
 /**
  * POST /api/payment/verify
@@ -38,9 +39,6 @@ export async function POST(req: NextRequest) {
       razorpay_order_id,
       razorpay_payment_id,
       razorpay_signature,
-      planId,
-      billingCycle,
-      amount,
     } = body
 
     // Validate required fields
@@ -48,14 +46,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing Razorpay payment fields' }, { status: 400 })
     }
 
-    if (!['pro', 'elite'].includes(planId)) {
-      return NextResponse.json({ error: 'Invalid plan' }, { status: 400 })
-    }
-
     // Verify the signature
     // Razorpay generates the signature as: HMAC_SHA256(order_id + '|' + payment_id, key_secret)
     const keySecret = process.env.RAZORPAY_KEY_SECRET
-    if (!keySecret) {
+    const keyId = process.env.RAZORPAY_KEY_ID
+    if (!keySecret || !keyId) {
       return NextResponse.json({ error: 'Razorpay not configured' }, { status: 503 })
     }
 
@@ -65,15 +60,75 @@ export async function POST(req: NextRequest) {
       .digest('hex')
 
     if (expectedSignature !== razorpay_signature) {
+      // 🔒 FIX L2: Was 'Signature mismatch — ...' which confirms to a probing
+      // attacker exactly which check failed. Now: generic message.
       console.error('Payment signature mismatch:', {
         orderId: razorpay_order_id,
         paymentId: razorpay_payment_id,
-        expected: expectedSignature.slice(0, 10) + '...',
-        actual: razorpay_signature.slice(0, 10) + '...',
       })
       return NextResponse.json({
         error: 'Payment verification failed',
-        detail: 'Signature mismatch — this could indicate a tampered payment. Please contact support.',
+      }, { status: 400 })
+    }
+
+    // 🔒 FIX C1: CRITICAL — was trusting client-supplied planId, billingCycle,
+    // and amount from the request body. The Razorpay signature only covers
+    // order_id|payment_id — it does NOT bind the plan, cycle, or amount.
+    // An attacker could pay for Pro-monthly (cheap) but claim Elite-yearly
+    // by sending a different planId in the verify request body.
+    //
+    // Now: fetch the order from Razorpay (server-trusted) and derive
+    // planId, billingCycle, and amount from the order's notes + amount
+    // (set at creation time by create-order/route.ts). The client body
+    // is treated as untrusted hints, never as the source of truth.
+    const razorpay = new Razorpay({
+      key_id: keyId,
+      key_secret: keySecret,
+    })
+
+    let order
+    try {
+      order = await razorpay.orders.fetch(razorpay_order_id)
+    } catch (fetchErr) {
+      console.error('Failed to fetch order from Razorpay:', fetchErr)
+      return NextResponse.json({
+        error: 'Payment verification failed — could not verify order details.',
+      }, { status: 400 })
+    }
+
+    // Derive everything from the server-trusted order
+    const planId = order.notes?.planId
+    const billingCycle = order.notes?.billingCycle
+    const orderUserId = order.notes?.userId
+    const amount = order.amount  // in paise, set at order creation
+
+    // Validate the order belongs to the calling user
+    if (orderUserId !== userId) {
+      console.error('Order userId mismatch:', { orderUserId, userId })
+      return NextResponse.json({
+        error: 'Payment verification failed — order does not belong to this account.',
+      }, { status: 403 })
+    }
+
+    // Validate plan and cycle are present and valid
+    if (!['pro', 'elite'].includes(planId)) {
+      console.error('Invalid plan in order notes:', planId)
+      return NextResponse.json({
+        error: 'Payment verification failed — invalid plan in order.',
+      }, { status: 400 })
+    }
+    if (!['monthly', 'yearly'].includes(billingCycle)) {
+      console.error('Invalid billing cycle in order notes:', billingCycle)
+      return NextResponse.json({
+        error: 'Payment verification failed — invalid billing cycle in order.',
+      }, { status: 400 })
+    }
+
+    // Assert order status is paid
+    if (order.status !== 'paid') {
+      console.error('Order not paid:', { orderId: razorpay_order_id, status: order.status })
+      return NextResponse.json({
+        error: 'Payment verification failed — order is not paid.',
       }, { status: 400 })
     }
 
