@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthUserId } from '@/lib/get-auth'
+import { getAuthUserIdWithModule } from '@/lib/get-auth'
 import { db as prisma } from '@/lib/db'
 
 /**
@@ -14,7 +14,7 @@ import { db as prisma } from '@/lib/db'
  */
 export async function GET(req: NextRequest) {
   try {
-    const { userId, error } = await getAuthUserId()
+    const { userId, error } = await getAuthUserIdWithModule('scanner')
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const url = new URL(req.url)

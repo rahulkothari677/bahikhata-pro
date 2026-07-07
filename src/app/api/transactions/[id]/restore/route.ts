@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getAuthUserId } from '@/lib/get-auth'
+import { getAuthContext } from '@/lib/get-auth'
+import { canAccessModule, type ModuleKey } from '@/lib/staff-permissions'
 
 /**
  * POST /api/transactions/[id]/restore
@@ -25,12 +26,13 @@ import { getAuthUserId } from '@/lib/get-auth'
  */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const { userId, error } = await getAuthUserId()
-    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // 🔒 FIX H1: Use getAuthContext for staff permission check
+    const authCtx = await getAuthContext()
+    if (authCtx.error || !authCtx.userId) return authCtx.error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const userId = authCtx.userId
 
     const { id } = await params
 
-    // Verify ownership + that the transaction IS soft-deleted
     const existing = await db.transaction.findFirst({
       where: { id, userId, deletedAt: { not: null } },
     })
@@ -39,6 +41,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         { error: 'Not found or not deleted', message: 'This transaction either does not exist, is not yours, or is not deleted.' },
         { status: 404 },
       )
+    }
+
+    // 🔒 FIX H1: Check staff permission based on transaction type
+    const module: ModuleKey = existing.type === 'purchase' ? 'purchases' : existing.type === 'income' || existing.type === 'expense' ? 'incomeExpense' : 'sales'
+    if (!canAccessModule(authCtx.role, authCtx.permissions, module)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     // Restore: set deletedAt to null + re-apply stock impact, atomically.

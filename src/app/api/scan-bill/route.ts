@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthUserId } from '@/lib/get-auth'
+import { getAuthUserIdWithModule } from '@/lib/get-auth'
 import { rateLimit, getClientIP, rateLimitedResponse } from '@/lib/rate-limit'
 import { checkUsage, incrementUsage } from '@/lib/usage-limits'
 import { calculateCostInr } from '@/lib/ai-pricing'
@@ -26,7 +26,7 @@ export const maxDuration = 60
 // Plus 10 scans per IP per hour (anti-abuse — prevents account sharing)
 export async function POST(req: NextRequest) {
   try {
-    const { userId, error } = await getAuthUserId()
+    const { userId, error } = await getAuthUserIdWithModule('scanner')
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     // Rate limit by IP (anti-abuse — prevents one user from logging in from many IPs)

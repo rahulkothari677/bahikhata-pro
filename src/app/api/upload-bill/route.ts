@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthUserId } from '@/lib/get-auth'
+import { getAuthUserIdWithModule } from '@/lib/get-auth'
 import { uploadBillImage } from '@/lib/cloudinary'
 import { apiError } from '@/lib/api-error'
 
 // POST /api/upload-bill - upload a bill image to Cloudinary
 export async function POST(req: NextRequest) {
   try {
-    const { userId, error } = await getAuthUserId()
+    const { userId, error } = await getAuthUserIdWithModule('scanner')
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const { imageBase64 } = await req.json()

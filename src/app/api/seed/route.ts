@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getAuthUserId } from '@/lib/get-auth'
+import { getAuthUserIdOwnerOnly } from '@/lib/get-auth'
 import { apiError } from '@/lib/api-error'
 
 // POST /api/seed - seed demo data
 export async function POST() {
   try {
-    const { userId, error } = await getAuthUserId()
+    const { userId, error } = await getAuthUserIdOwnerOnly()
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     // Use dynamic import to avoid path issues
@@ -21,7 +21,7 @@ export async function POST() {
 // GET /api/seed - check if seeded
 export async function GET() {
   try {
-    const { userId, error } = await getAuthUserId()
+    const { userId, error } = await getAuthUserIdOwnerOnly()
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const [productCount, partyCount, txnCount] = await Promise.all([
@@ -41,7 +41,7 @@ export async function GET() {
 // DELETE /api/seed - wipe all data for this user
 export async function DELETE() {
   try {
-    const { userId, error } = await getAuthUserId()
+    const { userId, error } = await getAuthUserIdOwnerOnly()
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     // Cascade delete in dependency order, scoped to this user

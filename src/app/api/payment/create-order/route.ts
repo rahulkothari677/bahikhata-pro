@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthUserId } from '@/lib/get-auth'
+import { getAuthUserIdOwnerOnly } from '@/lib/get-auth'
 import { db } from '@/lib/db'
 import Razorpay from 'razorpay'
 import { apiError } from '@/lib/api-error'
@@ -22,7 +22,7 @@ import { apiError } from '@/lib/api-error'
  */
 export async function POST(req: NextRequest) {
   try {
-    const { userId, error } = await getAuthUserId()
+    const { userId, error } = await getAuthUserIdOwnerOnly()
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const { planId, billingCycle } = await req.json()

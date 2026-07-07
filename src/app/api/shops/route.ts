@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getAuthUserId } from '@/lib/get-auth'
+import { getAuthUserIdOwnerOnly } from '@/lib/get-auth'
 import { checkEntityLimit } from '@/lib/usage-limits'
 import { apiError } from '@/lib/api-error'
 
 // GET /api/shops — list all shops for the current user
 export async function GET() {
   try {
-    const { userId, error } = await getAuthUserId()
+    const { userId, error } = await getAuthUserIdOwnerOnly()
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const shops = await db.shop.findMany({
@@ -42,7 +42,7 @@ export async function GET() {
 // POST /api/shops — create a new shop
 export async function POST(req: NextRequest) {
   try {
-    const { userId, error } = await getAuthUserId()
+    const { userId, error } = await getAuthUserIdOwnerOnly()
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     // 🔒 AUDIT FIX H2: Enforce plan limit on shop count (was: no check)

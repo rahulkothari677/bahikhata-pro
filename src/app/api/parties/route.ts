@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getAuthUserId } from '@/lib/get-auth'
+import { getAuthUserIdWithModule } from '@/lib/get-auth'
 import { withCache } from '@/lib/cache'
 import { roundMoney } from '@/lib/money'
 import { apiError } from '@/lib/api-error'
@@ -8,7 +8,7 @@ import { getReceivablePayable } from '@/lib/party-balance'
 
 export async function GET() {
   try {
-    const { userId, error } = await getAuthUserId()
+    const { userId, error } = await getAuthUserIdWithModule('parties')
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     // ⚡ PERFORMANCE (Audit fix Phase 3.2): Compute balances with SQL aggregates
@@ -80,7 +80,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId, error } = await getAuthUserId()
+    const { userId, error } = await getAuthUserIdWithModule('parties')
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const body = await req.json()

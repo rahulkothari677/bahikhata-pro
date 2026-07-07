@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getAuthUserId } from '@/lib/get-auth'
+import { getAuthContext } from '@/lib/get-auth'
+import { canAccessModule, type ModuleKey } from '@/lib/staff-permissions'
 import { roundMoney, toMoney } from '@/lib/money'
 import { deriveInterStateStatus } from '@/lib/gst'
 import { validateBody, updateTransactionSchema } from '@/lib/validation'
@@ -11,14 +12,12 @@ import { apiError } from '@/lib/api-error'
 // GET /api/transactions/[id] - get single transaction with all details
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const { userId, error } = await getAuthUserId()
-    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // 🔒 FIX H1: Use getAuthContext for staff permission check
+    const authCtx = await getAuthContext()
+    if (authCtx.error || !authCtx.userId) return authCtx.error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const userId = authCtx.userId
 
     const { id } = await params
-    // 🔒 V7 L1: Filter deletedAt on GET so a soft-deleted transaction
-    // returns 404 (not the deleted record). Was: returned the deleted
-    // transaction by ID — viewing/editing a deleted txn would re-apply
-    // stock without un-deleting it.
     const transaction = await db.transaction.findFirst({
       where: { id, userId, deletedAt: null },
       include: {
@@ -29,6 +28,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!transaction) {
       return NextResponse.json({ error: 'Transaction not found' }, { status: 404 })
     }
+
+    // 🔒 FIX H1: Check staff permission based on transaction type
+    const module: ModuleKey = transaction.type === 'purchase' ? 'purchases' : transaction.type === 'income' || transaction.type === 'expense' ? 'incomeExpense' : 'sales'
+    if (!canAccessModule(authCtx.role, authCtx.permissions, module)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
     return NextResponse.json({ transaction })
   } catch (error) {
     return apiError(error, 'Failed to fetch transaction', 500)
@@ -38,13 +44,20 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 // PUT /api/transactions/[id] - update transaction
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const { userId, error } = await getAuthUserId()
-    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // 🔒 FIX H1: Use getAuthContext for staff permission check
+    const authCtx = await getAuthContext()
+    if (authCtx.error || !authCtx.userId) return authCtx.error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const userId = authCtx.userId
 
     const { id } = await params
-    // Verify ownership + not soft-deleted (🔒 V7 L1)
     const existing = await db.transaction.findFirst({ where: { id, userId, deletedAt: null } })
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+    // 🔒 FIX H1: Check staff permission based on transaction type
+    const module: ModuleKey = existing.type === 'purchase' ? 'purchases' : existing.type === 'income' || existing.type === 'expense' ? 'incomeExpense' : 'sales'
+    if (!canAccessModule(authCtx.role, authCtx.permissions, module)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
 
     const body = await req.json()
 
@@ -346,13 +359,20 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 // Now: all operations in a single $transaction — all succeed or all roll back.
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const { userId, error } = await getAuthUserId()
-    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // 🔒 FIX H1: Use getAuthContext for staff permission check
+    const authCtx = await getAuthContext()
+    if (authCtx.error || !authCtx.userId) return authCtx.error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const userId = authCtx.userId
 
     const { id } = await params
-    // Verify ownership (exclude already soft-deleted)
     const existing = await db.transaction.findFirst({ where: { id, userId, deletedAt: null } })
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+    // 🔒 FIX H1: Check staff permission based on transaction type
+    const module: ModuleKey = existing.type === 'purchase' ? 'purchases' : existing.type === 'income' || existing.type === 'expense' ? 'incomeExpense' : 'sales'
+    if (!canAccessModule(authCtx.role, authCtx.permissions, module)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
 
     // 🔒 N5: Wrap soft-delete + stock reversal in $transaction
     await db.$transaction(async (tx) => {

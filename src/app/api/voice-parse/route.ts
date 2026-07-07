@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthUserId } from '@/lib/get-auth'
+import { getAuthUserIdWithModule } from '@/lib/get-auth'
 import { checkUsage, incrementUsage } from '@/lib/usage-limits'
 import { tryParseLocally } from '@/lib/voice-regex-parser'
 import { apiError } from '@/lib/api-error'
@@ -17,7 +17,7 @@ export const maxDuration = 60
 //   Elite: 100 voice entries/day (in-memory, resets daily) — marketed as "Truly Unlimited"
 export async function POST(req: NextRequest) {
   try {
-    const { userId, error } = await getAuthUserId()
+    const { userId, error } = await getAuthUserIdWithModule('scanner')
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     // Tier-based quota check. For Free: monthly DB counter. For Pro/Elite:

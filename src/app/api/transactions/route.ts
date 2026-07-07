@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getAuthUserId } from '@/lib/get-auth'
+import { getAuthContext } from '@/lib/get-auth'
+import { canAccessModule, type ModuleKey } from '@/lib/staff-permissions'
 import { withCache } from '@/lib/cache'
 import { roundMoney, calculateGst, splitGst, distributeDiscountProportionally, toMoney } from '@/lib/money'
 import { deriveInterStateStatus } from '@/lib/gst'
@@ -12,11 +13,19 @@ import { normalizeToUnit } from '@/lib/units'
 // GET /api/transactions - list with filters (type, from, to, limit)
 export async function GET(req: NextRequest) {
   try {
-    const { userId, error } = await getAuthUserId()
-    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // 🔒 FIX H1: Check staff permissions server-side based on transaction type.
+    const authCtx = await getAuthContext()
+    if (authCtx.error || !authCtx.userId) return authCtx.error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const userId = authCtx.userId
 
     const { searchParams } = new URL(req.url)
     const type = searchParams.get('type')
+    // 🔒 FIX H1: Map transaction type to module for staff permission check
+    const module: ModuleKey = type === 'purchase' ? 'purchases' : type === 'income' || type === 'expense' ? 'incomeExpense' : 'sales'
+    if (!canAccessModule(authCtx.role, authCtx.permissions, module)) {
+      return NextResponse.json({ error: 'Forbidden', message: `You don't have permission to access ${module}.` }, { status: 403 })
+    }
+
     const voided = searchParams.get('voided') === 'true'
     // 🔒 SECURITY (Audit fix Phase 1.5): Cap limit at 200 to prevent OOM.
     // 🔒 FIX M4: Default reduced from 100 to 50 for cursor pagination.
@@ -90,20 +99,26 @@ export async function GET(req: NextRequest) {
 // POST /api/transactions - create new transaction (sale, purchase, income, expense)
 export async function POST(req: NextRequest) {
   try {
-    const { userId, error } = await getAuthUserId()
-    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // 🔒 FIX H1: Check staff permissions after validating the type.
+    const authCtx = await getAuthContext()
+    if (authCtx.error || !authCtx.userId) return authCtx.error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const userId = authCtx.userId
 
     const body = await req.json()
 
     // 🔒 AUDIT FIX H7: Validate request body with zod before processing.
-    // Was: raw parseFloat on untrusted input — NaN prices, missing fields,
-    // 10MB notes could crash or store garbage.
     const validation = validateBody(createTransactionSchema, body)
     if (!validation.success) {
       return NextResponse.json({ error: 'Validation failed', detail: validation.error }, { status: 400 })
     }
 
     const { type, partyId, date, items, discountAmount, paymentMode, notes, invoiceNo, category, paidAmount, payeeName, payeePhone } = validation.data as any
+
+    // 🔒 FIX H1: Check staff permission based on transaction type
+    const module: ModuleKey = type === 'purchase' ? 'purchases' : type === 'income' || type === 'expense' ? 'incomeExpense' : 'sales'
+    if (!canAccessModule(authCtx.role, authCtx.permissions, module)) {
+      return NextResponse.json({ error: 'Forbidden', message: `You don't have permission to create ${type} transactions.` }, { status: 403 })
+    }
 
     // 🔒 IDEMPOTENCY (Audit fix N1): Check for clientMutationId to prevent
     // duplicate transactions from offline sync replays. The client generates

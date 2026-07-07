@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthUserId } from '@/lib/get-auth'
+import { getAuthUserIdWithModule } from '@/lib/get-auth'
 import { rateLimit, rateLimitedResponse } from '@/lib/rate-limit'
 import { db as prisma } from '@/lib/db'
 import { compressImageForAI } from '@/lib/image-compress'
@@ -113,7 +113,7 @@ interface ProviderConfig {
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId, error } = await getAuthUserId()
+    const { userId, error } = await getAuthUserIdWithModule('scanner')
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     // Tight rate limit — comparisons cost 3x the API budget

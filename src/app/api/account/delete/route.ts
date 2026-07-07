@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getAuthUserId } from '@/lib/get-auth'
+import { getAuthUserIdOwnerOnly } from '@/lib/get-auth'
 import { logAudit, AUDIT_ACTIONS } from '@/lib/audit'
 import { clearAllOfflineData } from '@/lib/offline-db'
 import { cloudinary } from '@/lib/cloudinary'
@@ -24,7 +24,7 @@ import { cloudinary } from '@/lib/cloudinary'
  */
 export async function DELETE() {
   try {
-    const { userId, error } = await getAuthUserId()
+    const { userId, error } = await getAuthUserIdOwnerOnly()
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     // Log the deletion request FIRST (before deleting user, so audit log has userId)
