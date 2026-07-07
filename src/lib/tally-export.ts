@@ -30,32 +30,60 @@ export async function exportToTally(
   // Build Tally XML vouchers
   const vouchers = filtered.map(t => {
     const isSale = t.type === 'sale'
-    const voucherType = isSale ? 'Sales' : t.type === 'purchase' ? 'Purchase' : t.type === 'income' ? 'Receipt' : 'Payment'
+    const isPurchase = t.type === 'purchase'
+    const voucherType = isSale ? 'Sales' : isPurchase ? 'Purchase' : t.type === 'income' ? 'Receipt' : 'Payment'
     const partyName = t.party?.name || 'Walk-in Customer'
     const date = convertToTallyDate(t.date)
     const amount = t.totalAmount.toFixed(2)
 
+    // 🔒 FIX H10: Voucher must balance (Total Debits = Total Credits).
+    // Was: Sales credited with gross subtotal, but party debited with
+    // totalAmount (= subtotal - discount + tax + roundOff). These don't
+    // balance when discount > 0 or roundOff ≠ 0.
+    // Now: Sales credited with (subtotal - discount), plus a Round Off
+    // entry for the rounding adjustment. Tally rejects unbalanced vouchers.
+
+    const discount = t.discountAmount || 0
+    const taxableAmount = t.subtotal - discount  // post-discount taxable
+
     // Build ledger entries (debit/credit)
+    // Convention: positive AMOUNT = Debit, negative AMOUNT = Credit
     const partyLedger = isSale || t.type === 'income'
       ? `<LEDGERNAME>${escapeXml(partyName)}</LEDGERNAME><ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE><AMOUNT>${amount}</AMOUNT>`
       : `<LEDGERNAME>${escapeXml(partyName)}</LEDGERNAME><ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE><AMOUNT>${amount}</AMOUNT>`
 
+    // Sales/Purchase: credit/debit the POST-DISCOUNT taxable amount
     const salesLedger = isSale
-      ? `<LEDGERNAME>Sales Account</LEDGERNAME><ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE><AMOUNT>${(-t.subtotal).toFixed(2)}</AMOUNT>`
-      : t.type === 'purchase'
-        ? `<LEDGERNAME>Purchase Account</LEDGERNAME><ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE><AMOUNT>${t.subtotal.toFixed(2)}</AMOUNT>`
+      ? `<LEDGERNAME>Sales Account</LEDGERNAME><ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE><AMOUNT>${(-taxableAmount).toFixed(2)}</AMOUNT>`
+      : isPurchase
+        ? `<LEDGERNAME>Purchase Account</LEDGERNAME><ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE><AMOUNT>${taxableAmount.toFixed(2)}</AMOUNT>`
         : t.type === 'income'
           ? `<LEDGERNAME>${escapeXml(t.category || 'Other Income')}</LEDGERNAME><ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE><AMOUNT>${(-t.totalAmount).toFixed(2)}</AMOUNT>`
           : `<LEDGERNAME>${escapeXml(t.category || 'Indirect Expenses')}</LEDGERNAME><ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE><AMOUNT>${t.totalAmount.toFixed(2)}</AMOUNT>`
 
     // Tax ledgers
-    const taxLedgers: string[] = [] as string[]
+    const taxLedgers: string[] = []
     if (t.cgst > 0) taxLedgers.push(`<LEDGERNAME>CGST</LEDGERNAME><ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE><AMOUNT>${t.cgst.toFixed(2)}</AMOUNT>`)
     if (t.sgst > 0) taxLedgers.push(`<LEDGERNAME>SGST</LEDGERNAME><ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE><AMOUNT>${t.sgst.toFixed(2)}</AMOUNT>`)
     if (t.igst > 0) taxLedgers.push(`<LEDGERNAME>IGST</LEDGERNAME><ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE><AMOUNT>${t.igst.toFixed(2)}</AMOUNT>`)
 
-    // Round off
-    const allLedgerEntries = [partyLedger, salesLedger, ...taxLedgers]
+    // Round Off ledger — makes the voucher balance when totalAmount ≠ (taxable + tax)
+    // roundOff = totalAmount - (taxableAmount + cgst + sgst + igst)
+    // If roundOff > 0: Credit Round Off (customer pays more) → negative AMOUNT
+    // If roundOff < 0: Debit Round Off (customer pays less) → positive AMOUNT
+    const roundOffLedgers: string[] = []
+    const roundOff = t.roundOff || 0
+    if (Math.abs(roundOff) >= 0.005) {
+      if (roundOff > 0) {
+        // Credit Round Off
+        roundOffLedgers.push(`<LEDGERNAME>Round Off</LEDGERNAME><ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE><AMOUNT>${(-roundOff).toFixed(2)}</AMOUNT>`)
+      } else {
+        // Debit Round Off
+        roundOffLedgers.push(`<LEDGERNAME>Round Off</LEDGERNAME><ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE><AMOUNT>${Math.abs(roundOff).toFixed(2)}</AMOUNT>`)
+      }
+    }
+
+    const allLedgerEntries = [partyLedger, salesLedger, ...taxLedgers, ...roundOffLedgers]
 
     return `
     <VOUCHER VCHTYPE="${voucherType}" ACTION="Create">
