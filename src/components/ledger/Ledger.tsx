@@ -204,7 +204,11 @@ export function Ledger({ type }: { type: LedgerType }) {
     if (!confirm(`Delete ${selectedIds.size} transactions? This cannot be undone.`)) return
     let success = 0
     for (const id of selectedIds) {
-      const r = await offlineFetch(`/api/transactions?id=${id}`, {
+      // 🔒 FIX C4: Was `/api/transactions?id=${id}` which returns 410 Gone
+      // (the deprecated hard-delete endpoint was removed in audit fix N4).
+      // The correct soft-delete endpoint is `/api/transactions/${id}` —
+      // same path the single-delete uses (line 54).
+      const r = await offlineFetch(`/api/transactions/${id}`, {
         method: 'DELETE',
         offline: { invalidate: ['/api/transactions', '/api/dashboard'] },
       })
