@@ -175,6 +175,7 @@ export async function POST(req: NextRequest) {
           notes: notes || null,
           invoiceNo: invoiceNo || null,
           payeeName: payeeName || null,
+          createdByUserId: authCtx.actingUserId,  // 🔒 V13 L4: staff accountability
           payeePhone: payeePhone || null,
         },
         include: { items: true, party: true },
@@ -391,6 +392,7 @@ export async function POST(req: NextRequest) {
           invoiceSequence,
           grossProfit: roundMoney(grossProfit),
           clientMutationId: clientMutationId || null,
+          createdByUserId: authCtx.actingUserId,  // 🔒 V13 L4: staff accountability
           items: { create: txItems },
         },
         include: { items: true, party: true },

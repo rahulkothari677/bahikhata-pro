@@ -60,6 +60,8 @@ model User {
   supportTickets   SupportTicket[]
   npsFeedback      NpsFeedback[]
   invoiceCounter   InvoiceCounter?
+  // 🔒 V13 L4: Back-relation for createdByUserId on Transaction
+  transactionsCreated Transaction[] @relation("TransactionCreatedBy")
 
   @@index([plan])
   @@index([createdAt])
@@ -194,6 +196,12 @@ model Transaction {
   // Payee info for income/expense (who you paid or received from)
   payeeName       String? // name of person you paid / received from
   payeePhone      String? // mobile number of payee
+  // 🔒 V13 L4: Staff accountability — records which user (owner or staff)
+  // created this transaction. Null for transactions created before this
+  // field was added. Used for audit trail and fraud investigation in
+  // multi-user shops. Set automatically from the session in POST handler.
+  createdByUserId String?
+  createdBy       User?    @relation("TransactionCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -267,7 +275,13 @@ model TransactionItem {
   @@index([productId])
 }
 
-// ==================== PAYMENTS (separate from transaction totals) ====================
+// ==================== PAYMENTS (udhaar settlement — V13 H3) ====================
+// 🔒 V13 H3: The Payment model is now ACTIVE (was dead weight before H3).
+// Used by:
+//   - POST /api/payments — record a receive/pay against a party
+//   - GET /api/payments?partyId=xxx — list payments for a party
+//   - party-balance.ts — included in balance calculation
+//   - PartyProfile.tsx — "Settle" button + Payment History card
 model Payment {
   id        String   @id @default(cuid())
   userId    String // owner of this payment

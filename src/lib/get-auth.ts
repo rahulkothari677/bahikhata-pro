@@ -78,6 +78,7 @@ export async function getAuthUserIdWithModule(
  */
 export async function getAuthContext(): Promise<{
   userId: string | null
+  actingUserId: string | null  // 🔒 V13 L4: the actual logged-in user (for createdByUserId)
   role: string
   permissions: any
   error?: NextResponse
@@ -87,6 +88,7 @@ export async function getAuthContext(): Promise<{
   if (!session?.user?.id) {
     return {
       userId: null,
+      actingUserId: null,
       role: 'owner',
       permissions: null,
       error: NextResponse.json({ error: 'Unauthorized — please sign in' }, { status: 401 }),
@@ -94,10 +96,11 @@ export async function getAuthContext(): Promise<{
   }
 
   const userId = session.user.ownerId || session.user.id
+  const actingUserId = session.user.id  // 🔒 V13 L4: the actual user (owner or staff)
   const role = (session.user as any).role || 'owner'
   const permissions = (session.user as any).permissions
 
-  return { userId, role, permissions }
+  return { userId, actingUserId, role, permissions }
 }
 
 /**
