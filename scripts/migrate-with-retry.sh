@@ -58,12 +58,33 @@ for i in $(seq 1 "$MAX_RETRIES"); do
   fi
 
   # P3009 = one or more migrations are recorded as FAILED in the target DB.
-  # deploy refuses to proceed until resolved. This is NOT retryable and must
-  # stop the build so we never ship code ahead of the schema.
+  # deploy refuses to proceed until resolved.
+  #
+  # 🔒 V12.2 SELF-HEAL: All our migrations are idempotent (CREATE INDEX IF NOT
+  # EXISTS / ADD COLUMN IF NOT EXISTS) and Prisma runs each file in a
+  # transaction, so re-applying a previously-failed migration is safe: either
+  # it fully applies this time or it fails atomically again. So on P3009 we
+  # mark the failed migration rolled-back and retry deploy ONCE. If it fails
+  # again, we fail the build (production keeps its last good deploy).
+  #
+  # (This exact state happened on 2026-07-06: party_indexes used CREATE INDEX
+  # CONCURRENTLY, which Postgres forbids inside a transaction. It failed
+  # instantly, the old script swallowed it, and it silently blocked every
+  # later migration until the V12 outage exposed it.)
   if echo "$OUTPUT" | grep -q "P3009"; then
-    echo "[migrate] ❌ FAILED-MIGRATION STATE (P3009) in the database."
-    echo "[migrate] A previous migration is recorded as failed and is blocking all further migrations."
-    echo "[migrate] FIX (run against the production DB, using DIRECT_URL):"
+    FAILED_MIGRATION=$(echo "$OUTPUT" | grep -oE "\`[0-9]{14}[a-zA-Z0-9_]*\`" | head -1 | tr -d '\`')
+    echo "[migrate] ⚠️  FAILED-MIGRATION STATE (P3009). Failed migration: ${FAILED_MIGRATION:-unknown}"
+    if [ -n "$FAILED_MIGRATION" ] && [ "${P3009_HEALED:-0}" = "0" ]; then
+      P3009_HEALED=1
+      echo "[migrate] Self-heal: marking '$FAILED_MIGRATION' as rolled back and retrying deploy once..."
+      if npx prisma migrate resolve --rolled-back "$FAILED_MIGRATION"; then
+        echo "[migrate] Resolve succeeded — retrying migrate deploy..."
+        continue
+      else
+        echo "[migrate] ❌ Could not resolve the failed migration automatically."
+      fi
+    fi
+    echo "[migrate] ❌ P3009 persists. Manual fix (run against the production DB, using DIRECT_URL):"
     echo "[migrate]   1. npx prisma migrate status        # see which migration failed"
     echo "[migrate]   2. Inspect/repair the DB if the migration partially applied, then:"
     echo "[migrate]   3. npx prisma migrate resolve --rolled-back <failed_migration_name>"

@@ -20,10 +20,13 @@
 --      Postgres must sort the filtered rows in memory. With the index,
 --      it can use an index scan that returns rows already sorted.
 
--- Create indexes concurrently to avoid locking the table during migration.
--- (CONCURRENTLY is safe for production — doesn't block reads/writes.)
-CREATE INDEX CONCURRENTLY IF NOT EXISTS "Party_userId_deletedAt_idx"
+-- NOTE: CONCURRENTLY removed — Postgres forbids it inside a transaction, and
+-- Prisma runs every migration in one. It made this migration fail instantly
+-- (P3009) on 2026-07-06 and silently block all later migrations. Party is a
+-- small table; a plain CREATE INDEX takes a sub-second lock, which is fine.
+
+CREATE INDEX IF NOT EXISTS "Party_userId_deletedAt_idx"
   ON "Party" ("userId", "deletedAt");
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS "Party_userId_name_idx"
+CREATE INDEX IF NOT EXISTS "Party_userId_name_idx"
   ON "Party" ("userId", "name");
