@@ -97,6 +97,8 @@ export function Settings() {
   const [newShopName, setNewShopName] = useState('')
   const [revenueGoal, setRevenueGoal] = useState('')
   const [expenseGoal, setExpenseGoal] = useState('')
+  // 🔒 V12: Invoice round-off toggle (nearest rupee on sale totals).
+  const [roundOffEnabled, setRoundOffEnabled] = useState(false)
 
   const { data } = useQuery({
     queryKey: ['setting'],
@@ -117,9 +119,26 @@ export function Settings() {
         state: data.setting.state || '',
         address: data.setting.address || '',
       })
+      setRoundOffEnabled(data.setting.roundOffEnabled ?? false)
       // hideProfit is now managed by useSetting() hook — no need to sync here
     }
   }, [data])
+
+  // 🔒 V12: Persist the round-off toggle instantly (like the hide-profit toggle).
+  const persistRoundOff = async (next: boolean) => {
+    setRoundOffEnabled(next)
+    try {
+      await offlineFetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...form, hideProfit, roundOffEnabled: next }),
+        offline: { invalidate: ['/api/settings'] },
+      })
+      sonnerToast.success(`Invoice round-off ${next ? 'on' : 'off'}`)
+    } catch {
+      sonnerToast.error('Could not save round-off setting')
+    }
+  }
 
   const handleSave = async () => {
     if (!form.shopName.trim()) {
@@ -131,7 +150,7 @@ export function Settings() {
       const r = await offlineFetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, hideProfit }),
+        body: JSON.stringify({ ...form, hideProfit, roundOffEnabled }),
         offline: { invalidate: ['/api/settings', '/api/dashboard'] },
       })
       if (!r.ok) throw new Error('Failed')
@@ -639,6 +658,23 @@ export function Settings() {
                 updateHideProfit(checked)
                 sonnerToast.success(`Profit ${checked ? 'hidden' : 'visible'}`)
               }}
+            />
+          </div>
+
+          {/* 🔒 V12: Invoice round-off toggle */}
+          <div className="mt-3 flex items-center justify-between rounded-lg bg-muted/30 border border-border/60 p-3">
+            <div className="flex items-center gap-2">
+              <Coins className="w-4 h-4 text-muted-foreground" />
+              <div>
+                <p className="text-sm font-medium">Round off invoice total</p>
+                <p className="text-[11px] text-muted-foreground">
+                  Round the grand total of each sale to the nearest rupee and show a &ldquo;Round Off&rdquo; line on the invoice (e.g. ₹1,062.40 → ₹1,062).
+                </p>
+              </div>
+            </div>
+            <Switch
+              checked={roundOffEnabled}
+              onCheckedChange={(checked) => persistRoundOff(checked)}
             />
           </div>
         </CardContent>
