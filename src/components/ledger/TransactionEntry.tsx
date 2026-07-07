@@ -382,7 +382,18 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
   const subtotal = preview.subtotal
   const totalGst = roundMoney(preview.cgst + preview.sgst + preview.igst)
   const totalProfit = preview.grossProfit
-  const totalAmount = preview.totalBeforeRoundOff
+  // 🔒 FIX C5: Apply round-off on the client too, so the preview matches the
+  // server exactly. Was: `totalAmount = preview.totalBeforeRoundOff` — the
+  // client used the pre-round-off total, but the server applied round-off.
+  // When the user left "Paid Amount" empty (meaning "full payment"), the
+  // client sent the pre-round-off total as paidAmount, but the server stored
+  // the post-round-off total as totalAmount → phantom due (e.g., ₹0.50).
+  // Now: the client computes the same round-off as the server, so the preview
+  // total matches the stored total.
+  const roundOffEnabled = settingData?.setting?.roundOffEnabled ?? false
+  const totalAmount = roundOffEnabled
+    ? Math.round(preview.totalBeforeRoundOff)
+    : preview.totalBeforeRoundOff
   const cgst = preview.cgst
   const sgst = preview.sgst
   const igst = preview.igst
@@ -461,7 +472,11 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
           invoiceNo: invoiceNo || null,
           isInterState,
           paymentMode,
-          paidAmount: finalPaid,
+          // 🔒 FIX C5: Send undefined (not finalPaid) when the user leaves
+          // Paid Amount empty. The server's `isNaN(paid) ? totalAmount : paid`
+          // will then correctly use the POST-round-off total. Was: sent
+          // finalPaid (pre-round-off) → phantom due of ₹0.50 on rounded sales.
+          paidAmount: paidAmount === '' ? undefined : Number(paidAmount),
           discountAmount: totalDiscount,
           notes,
           items: items.map(i => {
