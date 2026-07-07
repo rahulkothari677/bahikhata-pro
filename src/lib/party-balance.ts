@@ -26,16 +26,16 @@ import { roundMoney } from '@/lib/money'
 /**
  * Compute the balance for a single party (customer/supplier).
  *
+ * 🔒 FIX H3: Now includes standalone payments (receive/pay against udhaar).
+ *
  * Balance = openingBalance
  *         + Σ(sale.totalAmount - sale.paidAmount) for non-deleted sales
  *         - Σ(purchase.totalAmount - purchase.paidAmount) for non-deleted purchases
+ *         - Σ(payment.amount WHERE type='received')   // customer paid us
+ *         + Σ(payment.amount WHERE type='paid')        // we paid supplier
  *
  * Positive balance = they owe us (receivable).
  * Negative balance = we owe them (payable).
- *
- * This is the SAME formula used by parties/[id]/route.ts (verified correct
- * in V5 HA). Centralizing it here means dashboard, party list, and party
- * detail all compute the same number.
  */
 export async function computePartyBalance(
   userId: string,
@@ -48,6 +48,8 @@ export async function computePartyBalance(
   totalPurchases: number
   totalReceived: number
   totalPaid: number
+  paymentsReceived: number
+  paymentsPaid: number
 }> {
   // Fetch the party record (for openingBalance)
   const party = await db.party.findFirst({
@@ -64,11 +66,13 @@ export async function computePartyBalance(
       totalPurchases: 0,
       totalReceived: 0,
       totalPaid: 0,
+      paymentsReceived: 0,
+      paymentsPaid: 0,
     }
   }
 
-  // Aggregate sales + purchases in parallel (both filtered deletedAt: null)
-  const [salesAgg, purchaseAgg] = await Promise.all([
+  // Aggregate sales + purchases + payments in parallel
+  const [salesAgg, purchaseAgg, paymentsAgg] = await Promise.all([
     db.transaction.aggregate({
       where: { userId, partyId, type: 'sale', deletedAt: null },
       _sum: { totalAmount: true, paidAmount: true },
@@ -76,6 +80,25 @@ export async function computePartyBalance(
     db.transaction.aggregate({
       where: { userId, partyId, type: 'purchase', deletedAt: null },
       _sum: { totalAmount: true, paidAmount: true },
+    }),
+    // 🔒 FIX H3: Include standalone payments in the balance calculation.
+    // type='received' = customer paid us (reduces what they owe)
+    // type='paid' = we paid supplier (reduces what we owe them)
+    db.payment.aggregate({
+      where: { userId, partyId },
+      _sum: { amount: true },
+    }),
+  ])
+
+  // Also get per-type payment totals
+  const [receivedAgg, paidAgg] = await Promise.all([
+    db.payment.aggregate({
+      where: { userId, partyId, type: 'received' },
+      _sum: { amount: true },
+    }),
+    db.payment.aggregate({
+      where: { userId, partyId, type: 'paid' },
+      _sum: { amount: true },
     }),
   ])
 
@@ -85,7 +108,14 @@ export async function computePartyBalance(
   const totalPaid = roundMoney(purchaseAgg._sum.paidAmount || 0)
   const salesOutstanding = roundMoney(totalSales - totalReceived)
   const purchaseOutstanding = roundMoney(totalPurchases - totalPaid)
-  const balance = roundMoney(party.openingBalance + salesOutstanding - purchaseOutstanding)
+
+  // 🔒 FIX H3: Payments reduce the outstanding balance
+  const paymentsReceived = roundMoney(receivedAgg._sum.amount || 0)
+  const paymentsPaid = roundMoney(paidAgg._sum.amount || 0)
+
+  const balance = roundMoney(
+    party.openingBalance + salesOutstanding - purchaseOutstanding - paymentsReceived + paymentsPaid
+  )
 
   return {
     balance,
@@ -95,6 +125,8 @@ export async function computePartyBalance(
     totalPurchases,
     totalReceived,
     totalPaid,
+    paymentsReceived,
+    paymentsPaid,
   }
 }
 
@@ -130,12 +162,15 @@ export async function getReceivablePayable(
   // 🔒 V7.5 PERFORMANCE: Was running 4 sequential queries (1 findMany + 3
   // groupBy). Now uses ONE raw SQL query that joins Party + Transaction and
   // computes everything in a single pass. This is 1 round-trip instead of 4.
+  // 🔒 FIX H3: Added LEFT JOIN on Payment to include standalone payments.
 
   const rows = await db.$queryRaw<Array<{
     partyId: string
     openingBalance: string
     salesOutstanding: string
     purchaseOutstanding: string
+    paymentsReceived: string
+    paymentsPaid: string
     transactionCount: bigint
   }>>`
     SELECT
@@ -143,12 +178,17 @@ export async function getReceivablePayable(
       p."openingBalance"::numeric AS "openingBalance",
       COALESCE(SUM(CASE WHEN t."type" = 'sale' THEN (t."totalAmount" - t."paidAmount")::numeric ELSE 0 END), 0) AS "salesOutstanding",
       COALESCE(SUM(CASE WHEN t."type" = 'purchase' THEN (t."totalAmount" - t."paidAmount")::numeric ELSE 0 END), 0) AS "purchaseOutstanding",
+      COALESCE(SUM(CASE WHEN pay."type" = 'received' THEN pay."amount"::numeric ELSE 0 END), 0) AS "paymentsReceived",
+      COALESCE(SUM(CASE WHEN pay."type" = 'paid' THEN pay."amount"::numeric ELSE 0 END), 0) AS "paymentsPaid",
       COUNT(CASE WHEN t."type" IN ('sale', 'purchase') THEN 1 END) AS "transactionCount"
     FROM "Party" p
     LEFT JOIN "Transaction" t
       ON t."partyId" = p."id"
       AND t."deletedAt" IS NULL
       AND t."userId" = ${userId}
+    LEFT JOIN "Payment" pay
+      ON pay."partyId" = p."id"
+      AND pay."userId" = ${userId}
     WHERE p."userId" = ${userId}
       AND p."deletedAt" IS NULL
     GROUP BY p."id", p."openingBalance"
@@ -176,7 +216,10 @@ export async function getReceivablePayable(
     const openingBalance = roundMoney(Number(row.openingBalance))
     const salesOutstanding = roundMoney(Number(row.salesOutstanding))
     const purchaseOutstanding = roundMoney(Number(row.purchaseOutstanding))
-    const balance = roundMoney(openingBalance + salesOutstanding - purchaseOutstanding)
+    // 🔒 FIX H3: Include payments in the balance
+    const paymentsReceived = roundMoney(Number(row.paymentsReceived))
+    const paymentsPaid = roundMoney(Number(row.paymentsPaid))
+    const balance = roundMoney(openingBalance + salesOutstanding - purchaseOutstanding - paymentsReceived + paymentsPaid)
 
     partyBalances.set(row.partyId, {
       balance,

@@ -8,11 +8,16 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { formatINR, formatDate, formatDateTime, cn, getInitials } from '@/lib/utils'
 import {
   Phone, Building2, MapPin, User, Plus, ShoppingCart, Truck,
   ArrowDownRight, ArrowUpRight, IndianRupee, Calendar, TrendingUp,
   Receipt, Edit2, Trash2, MessageCircle, Loader2, FileDown, Printer,
+  HandCoins,
 } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -28,6 +33,13 @@ export function PartyProfile() {
   const queryClient = useQueryClient()
   const [sendingReminder, setSendingReminder] = useState(false)
   const { confirmDialog, dialog: confirmDialogEl } = useConfirmDialog()
+  // 🔒 FIX H3: Payment dialog state
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false)
+  const [paymentAmount, setPaymentAmount] = useState('')
+  const [paymentType, setPaymentType] = useState<'received' | 'paid'>('received')
+  const [paymentMode, setPaymentMode] = useState('cash')
+  const [paymentNotes, setPaymentNotes] = useState('')
+  const [savingPayment, setSavingPayment] = useState(false)
 
   const { data, isLoading } = useQuery({
     queryKey: ['party-profile', selectedPartyId],
@@ -79,6 +91,57 @@ export function PartyProfile() {
     setPreviousView('party-profile')
     setView('transaction-detail')
   }
+
+  // 🔒 FIX H3: Record a payment (receive from customer / pay to supplier)
+  const handleSavePayment = async () => {
+    const amt = parseFloat(paymentAmount) || 0
+    if (amt <= 0) {
+      sonnerToast.error('Enter a valid amount')
+      return
+    }
+    setSavingPayment(true)
+    try {
+      const r = await offlineFetch('/api/payments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          partyId: selectedPartyId,
+          amount: amt,
+          type: paymentType,
+          mode: paymentMode,
+          notes: paymentNotes || undefined,
+        }),
+        offline: { invalidate: ['/api/parties', '/api/dashboard'] },
+      })
+      if (!r.ok) throw new Error('Failed')
+      sonnerToast.success(paymentType === 'received' ? 'Payment received!' : 'Payment recorded!')
+      setPaymentDialogOpen(false)
+      setPaymentAmount('')
+      setPaymentNotes('')
+      haptic.success()
+      // Refresh party profile data to show updated balance
+      queryClient.invalidateQueries({ queryKey: ['party-profile', selectedPartyId] })
+      queryClient.invalidateQueries({ queryKey: ['party-payments', selectedPartyId] })
+      triggerRefresh()
+    } catch {
+      haptic.error()
+      sonnerToast.error('Failed to record payment')
+    } finally {
+      setSavingPayment(false)
+    }
+  }
+
+  // 🔒 FIX H3: Fetch payments for this party
+  const { data: paymentsData } = useQuery({
+    queryKey: ['party-payments', selectedPartyId],
+    queryFn: async () => {
+      const r = await offlineFetch(`/api/payments?partyId=${selectedPartyId}`)
+      if (!r.ok) throw new Error('Failed')
+      return r.json()
+    },
+    enabled: !!selectedPartyId,
+  })
+  const payments: any[] = paymentsData?.payments || []
 
   const handleDelete = async () => {
     if (!await confirmDialog(`Delete ${party.name}? All their transactions will remain but lose the party link.`, { title: 'Delete Party', confirmLabel: 'Delete', destructive: true })) return
@@ -440,6 +503,10 @@ export function PartyProfile() {
               <Plus className="w-4 h-4" /> New Purchase
             </Button>
           )}
+          {/* 🔒 FIX H3: Receive Payment / Make Payment button */}
+          <Button size="sm" variant="outline" onClick={() => setPaymentDialogOpen(true)} className="gap-2">
+            <HandCoins className="w-4 h-4" /> Settle
+          </Button>
           {isCustomer && stats.balance > 0 && features?.paymentReminders && (
             <Button
               size="sm"
@@ -727,6 +794,104 @@ export function PartyProfile() {
           )}
         </CardContent>
       </Card>
+      {/* 🔒 FIX H3: Payment dialog */}
+      <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <HandCoins className="w-5 h-5 text-primary" />
+              Settle Payment
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label>Payment Type</Label>
+              <Select value={paymentType} onValueChange={(v) => setPaymentType(v as 'received' | 'paid')}>
+                <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="received">Received from customer</SelectItem>
+                  <SelectItem value="paid">Paid to supplier</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Amount (₹)</Label>
+              <Input
+                type="number"
+                inputMode="decimal"
+                value={paymentAmount}
+                onChange={(e) => setPaymentAmount(e.target.value)}
+                placeholder="0"
+                className="mt-1"
+                autoFocus
+              />
+            </div>
+            <div>
+              <Label>Payment Mode</Label>
+              <Select value={paymentMode} onValueChange={setPaymentMode}>
+                <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="upi">UPI / QR</SelectItem>
+                  <SelectItem value="card">Card</SelectItem>
+                  <SelectItem value="bank">Bank Transfer</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Notes (optional)</Label>
+              <Input
+                value={paymentNotes}
+                onChange={(e) => setPaymentNotes(e.target.value)}
+                placeholder="e.g. Part payment for July"
+                className="mt-1"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPaymentDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleSavePayment} disabled={savingPayment} className="bg-gradient-saffron gap-2">
+              {savingPayment ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              {savingPayment ? 'Saving...' : 'Record Payment'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 🔒 FIX H3: Recent payments list */}
+      {payments.length > 0 && (
+        <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <HandCoins className="w-4 h-4" /> Payment History
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {payments.slice(0, 10).map((p: any) => (
+                <div key={p.id} className="flex items-center justify-between text-sm py-2 border-b border-border/50 last:border-0">
+                  <div className="flex items-center gap-2">
+                    <div className={cn(
+                      'w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0',
+                      p.type === 'received' ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'
+                    )}>
+                      {p.type === 'received' ? <ArrowDownRight className="w-4 h-4" /> : <ArrowUpRight className="w-4 h-4" />}
+                    </div>
+                    <div>
+                      <p className="font-medium">{p.type === 'received' ? 'Received' : 'Paid'} · {p.mode}</p>
+                      <p className="text-[11px] text-muted-foreground">{formatDate(p.date)}{p.notes ? ` · ${p.notes}` : ''}</p>
+                    </div>
+                  </div>
+                  <span className={cn('font-semibold tabular-nums', p.type === 'received' ? 'text-emerald-600' : 'text-amber-600')}>
+                    {p.type === 'received' ? '+' : '-'}{formatINR(p.amount)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {confirmDialogEl}
     </div>
   )
