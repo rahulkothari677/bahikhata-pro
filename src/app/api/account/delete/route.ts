@@ -36,27 +36,28 @@ export async function DELETE() {
       metadata: { reason: 'User requested account deletion' },
     })
 
-    // 1. Get all transactions with items (to find bill images to delete from Cloudinary)
-    // 🔒 V5 MF: Also fetch the user record so we have their email for the
-    // passwordResetToken cleanup (that table is keyed by email, not userId).
-    const [transactions, userRecord] = await Promise.all([
-      db.transaction.findMany({
-        where: { userId },
-        include: { items: true },
-      }),
-      db.user.findUnique({ where: { id: userId }, select: { email: true } }),
-    ])
+    // 1. Get the user record (for email — needed to clean up passwordResetToken
+    //    which is keyed by email, not userId).
+    // 🔒 FIX C6: Was also loading ALL transactions with items (`include: { items: true }`)
+    // to "find bill images to delete from Cloudinary" — but the Cloudinary cleanup
+    // below is a TODO no-op that never calls the API. For a shop with 100K
+    // transactions × 5 items = 500K rows, this would OOM the serverless function.
+    // Removed the unbounded findMany — if Cloudinary cleanup is needed later,
+    // track publicIds in a column and delete by query (no client-side hydration).
+    const userRecord = await db.user.findUnique({
+      where: { id: userId },
+      select: { email: true },
+    })
 
     if (!userRecord) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
-    // 2. Delete bill images from Cloudinary
-    // Note: We don't store publicId in the DB currently, so we delete the user's folder
+    // 2. Delete bill images from Cloudinary (best-effort, currently a no-op)
+    // TODO: Track publicIds in the DB for precise deletion. Until then, images
+    // will be orphaned on account deletion — acceptable for a pre-launch app.
     try {
-      // Cloudinary: delete all images in user's folder
-      // This is a best-effort operation — if it fails, images will be orphaned but user data is still deleted
-      // TODO: In production, track publicIds in the DB for precise deletion
+      // Cloudinary cleanup would go here once publicId tracking is implemented
     } catch (e) {
       console.error('[account/delete] Cloudinary cleanup failed:', e)
     }
