@@ -315,6 +315,15 @@ model Setting {
   // output language. 'original' listens in hi-IN (default) and keeps the
   // spoken language in the parsed result (no English translation).
   voiceLang       String  @default("original")
+  // 🔒 V11 STOCK POLICY: Controls whether sales can push stock below 0.
+  //   'block' (default) — sale is REJECTED if it would push stock negative.
+  //                       The user must record a purchase first or toggle to 'allow'.
+  //   'allow'            — sale goes through with a warning (kirana workflow:
+  //                       sell first, record purchase later). The warning shows
+  //                       in the UI but does NOT block.
+  // This field is per-shop (lives on Setting, one per user). The user can
+  // toggle it in Settings → "Allow overselling (kirana mode)".
+  stockPolicy     String  @default("block")
 }
 
 // ==================== ANNOUNCEMENTS (broadcast messages) ====================
