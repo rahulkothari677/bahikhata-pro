@@ -37,6 +37,7 @@ export async function PUT(req: NextRequest) {
         roundOffEnabled: body.roundOffEnabled,  // 🔒 V12
         scanLang: body.scanLang,
         voiceLang: body.voiceLang,
+        stockPolicy: body.stockPolicy,  // 🔒 V11: 'block' | 'allow'
       },
       create: {
         userId,
@@ -51,6 +52,7 @@ export async function PUT(req: NextRequest) {
         roundOffEnabled: body.roundOffEnabled ?? false,  // 🔒 V12
         scanLang: body.scanLang || 'original',
         voiceLang: body.voiceLang || 'original',
+        stockPolicy: body.stockPolicy || 'block',  // 🔒 V11: default block
       },
     })
 

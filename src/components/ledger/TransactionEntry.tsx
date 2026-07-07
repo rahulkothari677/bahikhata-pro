@@ -35,7 +35,7 @@ import { useRatePrompt } from '@/hooks/use-rate-prompt'
 // stored value.
 import { roundMoney, splitGst } from '@/lib/money'
 import { computeLineItems } from '@/lib/line-items'
-import { baseUnitOf, subUnitsFor, normalizeUnitName, resolveEnteredQuantity } from '@/lib/units'
+import { baseUnitOf, subUnitsFor, normalizeUnitName, resolveEnteredQuantity, normalizeToUnit } from '@/lib/units'
 
 const PAYMENT_MODES = [
   { value: 'cash', label: 'Cash' },
@@ -188,6 +188,19 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
   const products: any[] = productsData?.products || []
   // Memoize productMap — only rebuilds when products array changes
   const productMap = useMemo(() => new Map(products.map(p => [p.id, p])), [products])
+
+  // 🔒 V11 STOCK POLICY: Fetch the shop's stock policy so we can do a LIVE
+  // check in the cart (block input or show warning) BEFORE the user hits Save.
+  // Without this, the user fills the whole form, hits Save, then gets a 400 —
+  // frustrating UX. Now they see the warning as they type.
+  const { data: settingData } = useQuery({
+    queryKey: ['setting'],
+    queryFn: async () => {
+      const r = await offlineFetch('/api/settings')
+      return r.json()
+    },
+  })
+  const stockPolicy: 'block' | 'allow' = settingData?.setting?.stockPolicy || 'block'
 
   // Fetch parties
   const { data: partiesData, refetch: refetchParties } = useQuery({
@@ -379,9 +392,61 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
   const finalPaid = paidAmount === '' ? totalAmount : paid
   const due = roundMoney(totalAmount - finalPaid)
 
+  // 🔒 V11 STOCK POLICY: Live stock check per cart item. Computes which items
+  // would push stock below 0 (using the same normalizeToUnit logic as the server).
+  // Used to:
+  //   - Show inline warnings next to the quantity input (red text)
+  //   - Disable the Save button in 'block' mode (with a clear message)
+  const liveStockWarnings = useMemo(() => {
+    if (type !== 'sale') return []  // only check sales, not purchases
+    const warnings: Array<{
+      itemIndex: number
+      productName: string
+      currentStock: number
+      requestedQty: number
+      resultingStock: number
+    }> = []
+    items.forEach((item, i) => {
+      if (!item.productId) return
+      const product = productMap.get(item.productId)
+      if (!product) return
+      // Normalize the entered quantity into the product's unit (e.g., 500 gm → 0.5 kg)
+      const enteredQty = Number(item.quantity) || 0
+      const requestedQty = product.unit
+        ? normalizeToUnit(enteredQty, item.unit || product.unit, product.unit).quantity
+        : enteredQty
+      const resultingStock = roundMoney(product.currentStock - requestedQty)
+      if (resultingStock < 0) {
+        warnings.push({
+          itemIndex: i,
+          productName: product.name,
+          currentStock: product.currentStock,
+          requestedQty,
+          resultingStock,
+        })
+      }
+    })
+    return warnings
+  }, [items, productMap, type])
+
+  // In 'block' mode, the Save button is disabled if any item would go negative.
+  const hasStockBlock = stockPolicy === 'block' && liveStockWarnings.length > 0
+
   const handleSave = async () => {
     if (items.length === 0) {
       toast({ title: 'Add at least one item', variant: 'destructive' })
+      return
+    }
+    // 🔒 V11 STOCK POLICY: Block save if stock would go negative (block mode).
+    // The Save button is also disabled, but the user might press Enter to save.
+    if (hasStockBlock) {
+      const lines = liveStockWarnings.map(w =>
+        `• ${w.productName}: have ${w.currentStock}, selling ${w.requestedQty}`
+      ).join('\n')
+      sonnerToast.error('Not enough stock', {
+        description: `${lines}\n\nRecord a purchase first, or enable "Allow overselling" in Settings.`,
+        duration: 8000,
+      })
       return
     }
     setSaving(true)
@@ -970,6 +1035,23 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
                           {converted && <span className="text-primary"> = {roundMoney(normQty)} {normUnit}</span>}
                           {' '}× ₹{item.unitPrice}/{normUnit} = <span className="font-semibold text-foreground">{formatINR(itemTotal)}</span>
                         </div>
+                        {/* 🔒 V11 STOCK POLICY: Live stock warning per item.
+                            Shows immediately when the user enters a quantity
+                            that exceeds available stock — no need to hit Save. */}
+                        {(() => {
+                          const warning = liveStockWarnings.find(w => w.itemIndex === i)
+                          if (!warning) return null
+                          const isBlock = stockPolicy === 'block'
+                          return (
+                            <div className={cn(
+                              'pl-5 mt-1 text-[11px] font-medium flex items-center gap-1',
+                              isBlock ? 'text-rose-600' : 'text-amber-600'
+                            )}>
+                              <AlertTriangle className="w-3 h-3 flex-shrink-0" />
+                              {isBlock ? 'Not enough stock' : 'Will go negative'}: have {warning.currentStock}, selling {warning.requestedQty} → {warning.resultingStock}
+                            </div>
+                          )
+                        })()}
                       </div>
                     )
                   })}
@@ -1218,16 +1300,44 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
         </div>
       </div>
 
-      {/* Mobile sticky save bar — shows total + save */}
+      {/* 🔒 V11 FIX: Mobile sticky save bar — shows total + save.
+          Also disables Save when stock would go negative (block mode). */}
       <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t border-border p-2.5 flex items-center gap-2 z-30" style={{ paddingBottom: 'calc(0.625rem + env(safe-area-inset-bottom))' }}>
         <div className="flex-1">
           <p className="text-[10px] text-muted-foreground uppercase">Total</p>
           <p className="text-lg font-bold tabular-nums">{formatINR(totalAmount)}</p>
+          {hasStockBlock && (
+            <p className="text-[10px] text-rose-600 font-medium">Not enough stock</p>
+          )}
         </div>
         <Button variant="outline" size="sm" onClick={handleCancel} className="h-10 px-4">
           Cancel
         </Button>
-        <Button className="bg-gradient-saffron gap-2 shadow-md h-10 px-6" onClick={handleSave} disabled={saving}>
+        <Button className="bg-gradient-saffron gap-2 shadow-md h-10 px-6" onClick={handleSave} disabled={saving || hasStockBlock}>
+          <Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save'}
+        </Button>
+      </div>
+
+      {/* 🔒 V11 FIX: Desktop save bar — was MISSING entirely (only mobile had
+          a Save button). Desktop users couldn't save transactions! Now shows
+          a sticky bar at the bottom of the content area on lg+ screens. */}
+      <div className="hidden lg:flex sticky bottom-0 bg-background/95 backdrop-blur-md border-t border-border p-3 items-center gap-3 z-20 -mx-4 px-4">
+        <div className="flex-1 flex items-center gap-4">
+          <div>
+            <p className="text-xs text-muted-foreground uppercase">Total</p>
+            <p className="text-xl font-bold tabular-nums">{formatINR(totalAmount)}</p>
+          </div>
+          {hasStockBlock && (
+            <div className="flex items-center gap-1.5 text-sm text-rose-600 font-medium bg-rose-50 dark:bg-rose-950/30 px-3 py-1.5 rounded-lg">
+              <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+              <span>Not enough stock — record a purchase or enable overselling in Settings</span>
+            </div>
+          )}
+        </div>
+        <Button variant="outline" onClick={handleCancel} className="h-10 px-5">
+          Cancel
+        </Button>
+        <Button className="bg-gradient-saffron gap-2 shadow-md h-10 px-8" onClick={handleSave} disabled={saving || hasStockBlock}>
           <Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save'}
         </Button>
       </div>
