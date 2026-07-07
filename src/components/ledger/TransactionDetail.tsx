@@ -19,7 +19,7 @@ import {
   Edit2, Trash2, Printer, Download, User, Calendar, Receipt,
   ShoppingCart, Truck, ArrowDownRight, ArrowUpRight, X, Plus,
   IndianRupee, FileText, Phone, Building2, MapPin, TrendingUp,
-  MessageCircle,
+  MessageCircle, AlertCircle, ArrowLeft,
 } from 'lucide-react'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { amountToWords } from '@/lib/amount-to-words'
@@ -42,13 +42,21 @@ export function TransactionDetail() {
   const [printing, setPrinting] = useState(false)
   const queryClient = useQueryClient()
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ['transaction', selectedTransactionId],
     queryFn: async () => {
       const r = await offlineFetch(`/api/transactions/${selectedTransactionId}`)
-      return r.json()
+      const json = await r.json()
+      // 🔒 FIX H7: Throw on error so React Query sets `error` state. Was:
+      // returned { error: '...' } as data → isLoading=false, txn=undefined →
+      // infinite skeleton. Now: the error state shows a friendly message.
+      if (!r.ok || json.error) {
+        throw new Error(json.error || json.message || `Request failed (${r.status})`)
+      }
+      return json
     },
     enabled: !!selectedTransactionId,
+    retry: 1,
   })
 
   // Fetch shop settings for invoice letterhead (GSTIN, shop name, address, owner)
@@ -280,6 +288,24 @@ export function TransactionDetail() {
         duration: 8000,
       })
     }
+  }
+
+  // 🔒 FIX H7: Show error state instead of infinite skeleton on API failure.
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
+        <div className="w-12 h-12 rounded-full bg-rose-100 flex items-center justify-center mb-3">
+          <AlertCircle className="w-6 h-6 text-rose-600" />
+        </div>
+        <h3 className="font-semibold text-slate-800 mb-1">Couldn't load transaction</h3>
+        <p className="text-sm text-slate-500 max-w-sm mb-4">
+          {(error as Error).message || 'This transaction might have been deleted or the database is warming up.'}
+        </p>
+        <Button variant="outline" onClick={goBack} className="gap-2">
+          <ArrowLeft className="w-4 h-4" /> Go back
+        </Button>
+      </div>
+    )
   }
 
   if (isLoading || !txn) {

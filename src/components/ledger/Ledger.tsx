@@ -18,7 +18,7 @@ import { ContextMenu, type ContextMenuItem } from '@/components/common/ContextMe
 import {
   Search, ShoppingCart, Truck, Receipt, IndianRupee,
   TrendingUp, Calendar, User, ScanLine, ChevronRight, Plus, X,
-  Edit2, Trash2, Eye, Printer,
+  Edit2, Trash2, Eye, Printer, AlertCircle, RefreshCw,
 } from 'lucide-react'
 import { offlineFetch, isQueuedResponse, isOnline, OfflineError } from '@/lib/offline-fetch'
 import { OfflineNoData } from '@/components/common/OfflineNoData'
@@ -530,6 +530,22 @@ export function Ledger({ type }: { type: LedgerType }) {
         <div className="space-y-2">
           {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}
         </div>
+      ) : error && isOnline() ? (
+        // 🔒 FIX H8: Was falling through to the empty state "No sales yet"
+        // when the API returned a 500 (DB cold start). Now shows a clear
+        // error with retry instead of misleading the user.
+        <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
+          <CardContent className="py-12 text-center">
+            <div className="w-12 h-12 rounded-full bg-rose-100 flex items-center justify-center mx-auto mb-3">
+              <AlertCircle className="w-6 h-6 text-rose-600" />
+            </div>
+            <p className="text-sm font-medium mb-1">Couldn't load {isSale ? 'sales' : 'purchases'}</p>
+            <p className="text-xs text-muted-foreground mb-4">The database might be warming up. Please try again.</p>
+            <Button variant="outline" size="sm" onClick={() => triggerRefresh()} className="gap-2">
+              <RefreshCw className="w-3.5 h-3.5" /> Retry
+            </Button>
+          </CardContent>
+        </Card>
       ) : filtered.length === 0 ? (
         <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
           <CardContent className="p-0">
