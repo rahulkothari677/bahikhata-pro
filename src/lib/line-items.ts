@@ -20,7 +20,7 @@
  */
 
 import { roundMoney, calculateGst, splitGst, distributeDiscountProportionally, toMoney } from './money'
-import { normalizeUnitName, normalizeToUnit, isSubUnit } from './units'
+import { normalizeUnitName, resolveEnteredQuantity, isSubUnit } from './units'
 
 export interface RawLineItem {
   productId?: string | null
@@ -73,14 +73,16 @@ export function computeLineItems(opts: {
   // Step 1: normalize each line (unit + GST-inclusive → taxable unit price).
   const prepared = items.map((item) => {
     const product = item.productId ? productMap.get(item.productId) : null
-    let quantity = toMoney(item.quantity)
-    let unit = normalizeUnitName(item.unit || product?.unit || 'pcs')
-    // Normalize the entered quantity into the product's unit (if convertible).
-    if (product?.unit) {
-      const norm = normalizeToUnit(quantity, unit, product.unit)
-      quantity = norm.quantity
-      unit = norm.unit
-    }
+    // 🔒 V12.3: Normalize via resolveEnteredQuantity for EVERY line, not just
+    // product-linked ones. Linked → product's unit. UNLINKED sub-unit (gm/ml/cm)
+    // → the family's base unit (500 gm → 0.5 kg), because an Indian price like
+    // "₹20" on a gm/ml line almost always means per kg/ltr. Previously an
+    // unlinked scanned/typed "500 gm × ₹20" line skipped normalization and
+    // stored ₹10,000 — the scanner flow hit this every time (no product match).
+    const rawUnit = normalizeUnitName(item.unit || product?.unit || 'pcs')
+    const norm = resolveEnteredQuantity(toMoney(item.quantity), rawUnit, product?.unit)
+    const quantity = norm.quantity
+    const unit = norm.unit
     const gstRate = toMoney(item.gstRate) || 0
     const enteredPrice = toMoney(item.unitPrice)
     // GST-inclusive: back-calculate the taxable (ex-GST) unit price so the

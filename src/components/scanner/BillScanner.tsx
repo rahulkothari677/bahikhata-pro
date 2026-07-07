@@ -19,6 +19,8 @@ import {
 import { offlineFetch } from '@/lib/offline-fetch'
 import { useSubscription } from '@/hooks/use-subscription'
 import { Capacitor } from '@capacitor/core'
+import { resolveEnteredQuantity, convertQuantity, UNIT_OPTIONS } from '@/lib/units'
+import { roundMoney } from '@/lib/money'
 
 /**
  * takePhotoNative — uses Capacitor Camera plugin on native (Android app)
@@ -180,6 +182,73 @@ export function BillScanner() {
     staleTime: 5 * 60 * 1000,
   })
   const scanLang = settingsData?.setting?.scanLang || 'original'
+
+  // 🔒 V12.3: Fetch the product catalog so scanned items can be matched to
+  // products (same as VoiceEntry). Matching gives us: productId (→ stock
+  // updates on save), the product's unit (→ correct unit normalization), and
+  // gstRate/price fallbacks when the bill doesn't show them.
+  const { data: productsData } = useQuery({
+    queryKey: ['products', 'for-entry'],
+    queryFn: async () => {
+      const r = await offlineFetch('/api/products')
+      return r.json()
+    },
+    staleTime: 2 * 60 * 1000,
+  })
+  const catalogProducts: any[] = productsData?.products || []
+
+  // 🔒 V12.3: Enrich scanned items — mirrors the VoiceEntry fix.
+  //   1. Match each item to a catalog product by name (exact, then contains).
+  //   2. Normalize the quantity into the product's unit, or (unlinked
+  //      sub-units) the family's base unit: 500 gm → 0.5 kg. An Indian bill's
+  //      "rate" column is per kg/ltr, never per gm/ml.
+  //   3. Printed bills are authoritative about the LINE TOTAL. If the parsed
+  //      total disagrees with qty × rate by >20%, trust the total and derive
+  //      the rate from it (per the normalized unit). This self-corrects any
+  //      per-gm misreading by the AI.
+  //   4. Fill gstRate/price from the catalog when the bill doesn't show them.
+  const enrichScannedItems = (rawItems: any[]): any[] => {
+    return (rawItems || []).map((item: any) => {
+      const nameLower = (item.name || item.productName || '').toLowerCase().trim()
+      const matched = nameLower
+        ? catalogProducts.find((p: any) => p.name?.toLowerCase() === nameLower) ||
+          catalogProducts.find((p: any) =>
+            p.name?.toLowerCase().includes(nameLower) || nameLower.includes(p.name?.toLowerCase()),
+          )
+        : null
+
+      const resolved = resolveEnteredQuantity(
+        Number(item.quantity) || 0,
+        item.unit || matched?.unit || 'pcs',
+        matched?.unit,
+      )
+      const qty = roundMoney(resolved.quantity)
+      const gstRate = Number(item.gstRate) || matched?.gstRate || 0
+      let unitPrice = Number(item.unitPrice) || 0
+      const printedTotal = Number(item.total) || 0
+
+      if (printedTotal > 0 && qty > 0) {
+        const expected = qty * unitPrice * (1 + gstRate / 100)
+        const mismatch = Math.abs(expected - printedTotal) > Math.max(1, printedTotal * 0.2)
+        if (unitPrice <= 0 || mismatch) {
+          // Trust the printed line total; derive the per-unit rate from it.
+          unitPrice = roundMoney(printedTotal / (1 + gstRate / 100) / qty)
+        }
+      } else if (unitPrice <= 0 && matched) {
+        unitPrice = billType === 'sale' ? (matched.salePrice || 0) : (matched.purchasePrice || 0)
+      }
+
+      return {
+        ...item,
+        productId: matched?.id || item.productId || undefined,
+        quantity: qty,
+        unit: resolved.unit,
+        unitPrice,
+        gstRate,
+        total: roundMoney(qty * unitPrice * (1 + gstRate / 100)),
+      }
+    })
+  }
 
   const handleFile = async (file: File) => {
     // Subscription gating — re-enabled. Free users get 5 scans/month,
@@ -369,8 +438,10 @@ export function BillScanner() {
           })
         } else {
           // If we're in "adding more" mode, append new items to existing
+          // 🔒 V12.3: Enrich items (product match + unit normalization + trust
+          // printed totals) before showing the review screen.
           if (isAddingMore && existingItems.length > 0) {
-            const newItems = data.bill.items || []
+            const newItems = enrichScannedItems(data.bill.items || [])
             setScanned({
               ...data.bill,
               items: [...existingItems, ...newItems],
@@ -378,7 +449,7 @@ export function BillScanner() {
             })
             sonnerToast.success(`Added ${newItems.length} more items from second bill!`)
           } else {
-            setScanned(data.bill)
+            setScanned({ ...data.bill, items: enrichScannedItems(data.bill.items || []) })
             sonnerToast.success(`Bill scanned! Found ${data.bill.items?.length || 0} items.`)
           }
         }
@@ -483,11 +554,25 @@ export function BillScanner() {
   const updateItem = (index: number, field: string, value: any) => {
     if (!scanned) return
     const newItems = [...scanned.items]
-    newItems[index] = { ...newItems[index], [field]: value }
+    const prev = newItems[index]
+    newItems[index] = { ...prev, [field]: value }
+    // 🔒 V12.3: Changing the unit converts the quantity so the line keeps the
+    // same physical amount (0.5 kg → switch to gm → 500 gm). The price stays
+    // per the SELECTED unit, so the user sees exactly what each reading means.
+    if (field === 'unit') {
+      const convertedQty = convertQuantity(Number(prev.quantity) || 0, prev.unit || 'pcs', value)
+      const convertedPrice = convertQuantity(1, value, prev.unit || 'pcs') // price scales inversely
+      if (convertedQty !== null && convertedPrice !== null) {
+        newItems[index].quantity = roundMoney(convertedQty)
+        // Don't round the converted price — ₹2/kg is ₹0.002/gm, and rounding
+        // to 2dp would zero it out. The line TOTAL is what gets rounded.
+        newItems[index].unitPrice = (Number(prev.unitPrice) || 0) * convertedPrice
+      }
+    }
     // Recalculate item total
-    if (['quantity', 'unitPrice'].includes(field)) {
+    if (['quantity', 'unitPrice', 'gstRate', 'unit'].includes(field)) {
       const item = newItems[index]
-      newItems[index].total = (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0) * (1 + (Number(item.gstRate) || 0) / 100)
+      newItems[index].total = roundMoney((Number(item.quantity) || 0) * (Number(item.unitPrice) || 0) * (1 + (Number(item.gstRate) || 0) / 100))
     }
     setScanned({ ...scanned, items: newItems })
   }
@@ -900,7 +985,7 @@ export function BillScanner() {
                             onChange={(e) => updateItem(i, 'unit', e.target.value)}
                             className="w-full bg-background border border-border rounded focus:ring-1 focus:ring-primary text-sm px-1 py-1"
                           >
-                            {['pcs', 'kg', 'gm', 'ltr', 'ml', 'box', 'dozen', 'packet', 'set'].map(u => <option key={u} value={u}>{u}</option>)}
+                            {Array.from(new Set([...UNIT_OPTIONS, item.unit || 'pcs'])).map(u => <option key={u} value={u}>{u}</option>)}
                           </select>
                         </div>
                         <span className="text-muted-foreground flex-shrink-0 text-xs">×</span>

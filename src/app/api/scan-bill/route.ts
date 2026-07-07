@@ -173,7 +173,8 @@ CRITICAL RULES FOR HANDWRITTEN NOTES:
 8. Product names may be abbreviated: "atta" = flour, "tel" = oil, "chai" = tea, "namak" = salt, "chini" = sugar, etc.
 9. "Udhaar" or "Baad mein" or "credit" = payment mode "credit".
 10. If the word "total" or "jama" is visible, the number after it is the totalAmount.
-11. Handle Hinglish: "do kilo" = 2 kg, "paanch" = 5, "sau" = 100, "hazaar" = 1000.
+11. Handle Hinglish: "do kilo" = 2 kg, "paanch" = 5, "sau" = 100, "hazaar" = 1000. Also fractional quantity words: "pao"/"pav" = 0.25 kg, "aadha"/"adha" = 0.5, "pauna" = 0.75, "sava" = 1.25, "dedh" = 1.5, "dhai" = 2.5, "darjan" = dozen.
+11b. UNITS & RATES (very important): Indian bills price by kg/ltr even when the quantity is in gm/ml. "500 gm @ 20" means ₹20 PER KG → total ₹10, NOT 500 × 20. NEVER output a per-gm or per-ml unitPrice. For gm/ml lines: output quantity in the BASE unit as a decimal (500 gm → quantity 0.5, unit "kg"; 250 ml → 0.25, unit "ltr") with unitPrice per kg/ltr. If the line total is printed, ALWAYS trust the printed total and derive unitPrice = total ÷ quantity(base units).
 12. If the image is sideways or upside down, rotate it mentally and read the text correctly.
 13. For messy handwriting, try your best to read each character. If uncertain, set confidence to 0.5-0.7.
 14. For clearly printed bills, set confidence to 0.9-1.0.

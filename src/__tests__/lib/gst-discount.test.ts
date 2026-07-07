@@ -274,3 +274,70 @@ describe('🔒 V10 §2.1 — GST on discounted sales (golden test)', () => {
     })
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 🔒 V12.3 — computeLineItems normalizes UNLINKED sub-unit lines too.
+// The scanner produces unlinked items ("500 gm × ₹20" with no productId).
+// Previously only product-linked lines were normalized, so a scanned gm line
+// stored ₹10,000 instead of ₹10. Now every source goes through
+// resolveEnteredQuantity: linked → product unit; unlinked sub-unit → base unit.
+// ─────────────────────────────────────────────────────────────────────────────
+import { computeLineItems } from '@/lib/line-items'
+
+describe('🔒 V12.3 — unlinked sub-unit normalization (the scanner bug)', () => {
+  test('unlinked "500 gm × ₹20" line = ₹10 (per-kg reading), not ₹10,000', () => {
+    const result = computeLineItems({
+      items: [{ productId: null, productName: 'Tomato', quantity: 500, unitPrice: 20, gstRate: 0, unit: 'gm' }],
+      productMap: new Map(),
+      isInterState: false,
+      orderDiscount: 0,
+      type: 'sale',
+    })
+    expect(result.txItems[0].quantity).toBe(0.5)
+    expect(result.txItems[0].unit).toBe('kg')
+    expect(result.txItems[0].total).toBe(10)
+    expect(result.totalBeforeRoundOff).toBe(10)
+  })
+
+  test('linked gm line converts into the product\'s kg unit (stock-safe)', () => {
+    const productMap = new Map([['p1', { id: 'p1', unit: 'kg', purchasePrice: 12, salePrice: 20, priceIncludesGst: false }]])
+    const result = computeLineItems({
+      items: [{ productId: 'p1', productName: 'Tomato', quantity: 500, unitPrice: 20, gstRate: 0, unit: 'gm' }],
+      productMap,
+      isInterState: false,
+      orderDiscount: 0,
+      type: 'sale',
+    })
+    expect(result.txItems[0].quantity).toBe(0.5)
+    expect(result.txItems[0].unit).toBe('kg')
+    expect(result.txItems[0].total).toBe(10)
+    // profit = (realized 20 − purchase 12) × 0.5 kg = ₹4
+    expect(result.grossProfit).toBe(4)
+  })
+
+  test('unlinked ml line normalizes to ltr', () => {
+    const result = computeLineItems({
+      items: [{ productId: null, productName: 'Milk', quantity: 250, unitPrice: 60, gstRate: 0, unit: 'ml' }],
+      productMap: new Map(),
+      isInterState: false,
+      orderDiscount: 0,
+      type: 'sale',
+    })
+    expect(result.txItems[0].quantity).toBe(0.25)
+    expect(result.txItems[0].unit).toBe('ltr')
+    expect(result.txItems[0].total).toBe(15)
+  })
+
+  test('non-convertible units (pcs, box) are left as entered', () => {
+    const result = computeLineItems({
+      items: [{ productId: null, productName: 'Matchbox', quantity: 10, unitPrice: 2, gstRate: 0, unit: 'box' }],
+      productMap: new Map(),
+      isInterState: false,
+      orderDiscount: 0,
+      type: 'sale',
+    })
+    expect(result.txItems[0].quantity).toBe(10)
+    expect(result.txItems[0].unit).toBe('box')
+    expect(result.txItems[0].total).toBe(20)
+  })
+})
