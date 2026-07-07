@@ -6,6 +6,7 @@ import { deriveInterStateStatus } from '@/lib/gst'
 import { validateBody, updateTransactionSchema } from '@/lib/validation'
 import { computeLineItems } from '@/lib/line-items'
 import { normalizeToUnit } from '@/lib/units'
+import { apiError } from '@/lib/api-error'
 
 // GET /api/transactions/[id] - get single transaction with all details
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -30,8 +31,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
     return NextResponse.json({ transaction })
   } catch (error) {
-    console.error('Transaction GET error:', error)
-    return NextResponse.json({ error: 'Failed to fetch transaction' }, { status: 500 })
+    return apiError(error, 'Failed to fetch transaction', 500)
   }
 }
 
@@ -194,27 +194,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     // normalization + GST-inclusive + proportional discount, single source of
     // truth so edit and create can never drift apart.
     const orderDiscount = toMoney(discountAmount)
-    // 🔒 V11 §4.3: Reject over-discount, using the same normalized taxable base.
-    const preSubtotal = roundMoney(
-      items.reduce((s: number, item: any) => {
-        const product = item.productId ? productMap.get(item.productId) : null
-        const rate = toMoney(item.gstRate) || 0
-        const includesGst = item.priceIncludesGst ?? product?.priceIncludesGst ?? false
-        const unitPrice = includesGst && rate > 0
-          ? (toMoney(item.unitPrice) * 100) / (100 + rate)
-          : toMoney(item.unitPrice)
-        let qty = toMoney(item.quantity)
-        if (product?.unit) qty = normalizeToUnit(qty, item.unit || product.unit, product.unit).quantity
-        return s + roundMoney(qty * unitPrice)
-      }, 0),
-    )
-    if (orderDiscount > preSubtotal) {
-      return NextResponse.json({
-        error: 'Discount cannot exceed subtotal',
-        message: `The discount (₹${orderDiscount.toFixed(2)}) is greater than the subtotal (₹${preSubtotal.toFixed(2)}). Please reduce the discount and try again.`,
-      }, { status: 400 })
-    }
 
+    // 🔒 AUDITOR FIX: Was a duplicated preSubtotal block (same as POST). Now:
+    // call computeLineItems FIRST, then use computed.subtotal for the
+    // over-discount check. Same pattern, same guarantee — no drift possible.
     const computed = computeLineItems({ items, productMap, isInterState, orderDiscount, type })
     const txItems = computed.txItems
     const subtotal = computed.subtotal
@@ -223,6 +206,15 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const igst = computed.igst
     const grossProfit = computed.grossProfit
     const discount = orderDiscount
+
+    // 🔒 V11 §4.3: Reject over-discount (discount > subtotal). Keep the
+    // rejection (return 400) — don't silently clamp.
+    if (orderDiscount > computed.subtotal) {
+      return NextResponse.json({
+        error: 'Discount cannot exceed subtotal',
+        message: `The discount (₹${orderDiscount.toFixed(2)}) is greater than the subtotal (₹${computed.subtotal.toFixed(2)}). Please reduce the discount and try again.`,
+      }, { status: 400 })
+    }
 
     // 🔒 V12: Invoice round-off (nearest rupee) when enabled.
     // 🔒 V11: `setting` was fetched earlier (with stockPolicy). Reuse it here.
@@ -319,8 +311,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     return NextResponse.json({ transaction })
   } catch (error) {
-    console.error('Transaction PUT error:', error)
-    return NextResponse.json({ error: 'Failed to update transaction' }, { status: 500 })
+    return apiError(error, 'Failed to update transaction', 500)
   }
 }
 
@@ -370,7 +361,6 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
     return NextResponse.json({ success: true, message: 'Transaction deleted (soft delete — can be restored)' })
   } catch (error) {
-    console.error('Transaction DELETE error:', error)
-    return NextResponse.json({ error: 'Failed to delete transaction' }, { status: 500 })
+    return apiError(error, 'Failed to delete transaction', 500)
   }
 }

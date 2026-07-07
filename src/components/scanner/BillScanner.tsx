@@ -21,6 +21,7 @@ import { useSubscription } from '@/hooks/use-subscription'
 import { Capacitor } from '@capacitor/core'
 import { resolveEnteredQuantity, convertQuantity, UNIT_OPTIONS } from '@/lib/units'
 import { roundMoney } from '@/lib/money'
+import { computeLineItems } from '@/lib/line-items'
 
 /**
  * takePhotoNative — uses Capacitor Camera plugin on native (Android app)
@@ -605,14 +606,32 @@ export function BillScanner() {
     setScanning(false)
   }
 
-  // Totals
-  let subtotal = 0, totalGst = 0
-  scanned?.items?.forEach((item: any) => {
-    const amt = (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0)
-    subtotal += amt
-    totalGst += amt * (Number(item.gstRate) || 0) / 100
-  })
-  const grandTotal = subtotal - (scanned?.discountAmount || 0) + totalGst
+  // 🔒 AUDITOR FIX: Was inline `subtotal - discount + totalGst` which computed
+  // GST on pre-discount amount (the V10 §2.1 anti-pattern). Now uses
+  // computeLineItems — the same pure function the server uses — so the scanner
+  // preview matches the entry-form preview and the saved value exactly.
+  // Units are already correct (V12.3 enrichment normalizes before setScanned),
+  // so the only fix needed is the discount/GST ordering.
+  const scannerPreview = scanned?.items?.length
+    ? computeLineItems({
+        items: scanned.items.map((item: any) => ({
+          productId: item.productId || null,
+          productName: item.productName,
+          quantity: Number(item.quantity) || 0,
+          unitPrice: Number(item.unitPrice) || 0,
+          gstRate: Number(item.gstRate) || 0,
+          unit: item.unit || 'pcs',
+          priceIncludesGst: false,
+        })),
+        productMap: new Map(),  // no catalog needed — items already have unit/price
+        isInterState: false,
+        orderDiscount: Number(scanned.discountAmount) || 0,
+        type: billType,
+      })
+    : null
+  const grandTotal = scannerPreview?.totalBeforeRoundOff ?? 0
+  const subtotal = scannerPreview?.subtotal ?? 0
+  const totalGst = scannerPreview ? roundMoney(scannerPreview.cgst + scannerPreview.sgst + scannerPreview.igst) : 0
 
   return (
     <div className="space-y-4">

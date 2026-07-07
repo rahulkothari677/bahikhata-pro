@@ -234,31 +234,14 @@ export async function POST(req: NextRequest) {
     // the V10 proportional discount distribution.
     const orderDiscount = toMoney(discountAmount)
 
-    // 🔒 V11 §4.3: Reject over-discount (discount > subtotal) BEFORE computing,
-    // using the same pre-discount taxable base the helper uses.
-    const preSubtotal = roundMoney(
-      items.reduce((s: number, item: any) => {
-        const product = item.productId ? productMap.get(item.productId) : null
-        const rate = toMoney(item.gstRate) || 0
-        const includesGst = item.priceIncludesGst ?? product?.priceIncludesGst ?? false
-        const unitPrice = includesGst && rate > 0
-          ? (toMoney(item.unitPrice) * 100) / (100 + rate)
-          : toMoney(item.unitPrice)
-        // Normalize qty to product unit for an accurate subtotal check.
-        let qty = toMoney(item.quantity)
-        if (product?.unit) {
-          qty = normalizeToUnit(qty, item.unit || product.unit, product.unit).quantity
-        }
-        return s + roundMoney(qty * unitPrice)
-      }, 0),
-    )
-    if (orderDiscount > preSubtotal) {
-      return NextResponse.json({
-        error: 'Discount cannot exceed subtotal',
-        message: `The discount (₹${orderDiscount.toFixed(2)}) is greater than the subtotal (₹${preSubtotal.toFixed(2)}). Please reduce the discount and try again.`,
-      }, { status: 400 })
-    }
-
+    // 🔒 AUDITOR FIX: Was a duplicated preSubtotal block that re-implemented
+    // the GST-inclusive back-calc + unit normalization (the exact duplication
+    // line-items.ts warns against). Now: call computeLineItems FIRST, then use
+    // computed.subtotal for the over-discount check. This guarantees the check
+    // uses the exact same number as the real computation — no drift possible.
+    // distributeDiscountProportionally already clamps safely if discount >
+    // subtotal, so computing first is fine (the rejection below prevents the
+    // bad state from being stored).
     const computed = computeLineItems({ items, productMap, isInterState, orderDiscount, type })
     const txItems = computed.txItems
     subtotal = computed.subtotal
@@ -266,6 +249,15 @@ export async function POST(req: NextRequest) {
     sgst = computed.sgst
     igst = computed.igst
     grossProfit = computed.grossProfit
+
+    // 🔒 V11 §4.3: Reject over-discount (discount > subtotal). Keep the
+    // rejection (return 400) — don't silently clamp.
+    if (orderDiscount > computed.subtotal) {
+      return NextResponse.json({
+        error: 'Discount cannot exceed subtotal',
+        message: `The discount (₹${orderDiscount.toFixed(2)}) is greater than the subtotal (₹${computed.subtotal.toFixed(2)}). Please reduce the discount and try again.`,
+      }, { status: 400 })
+    }
 
     // 🔒 V12: Invoice round-off (nearest rupee) when the user has enabled it.
     // 🔒 V11: `setting` was fetched earlier (with stockPolicy). Reuse it here.
