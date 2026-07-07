@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getAuthUserIdWithModule } from '@/lib/get-auth'
+import { getAuthContext } from '@/lib/get-auth'
+import { canAccessModule } from '@/lib/staff-permissions'
+import { shouldHideProfit, stripReportProfit } from '@/lib/profit-visibility'
 import { roundMoney } from '@/lib/money'
 import { activeTransactionWhere } from '@/lib/query-helpers'
 import { istMonthStart } from '@/lib/timezone'
@@ -30,8 +32,14 @@ export const maxDuration = 60
 // GET /api/reports?type=pl|gst|stock|party&from=&to=
 export async function GET(req: NextRequest) {
   try {
-    const { userId, error } = await getAuthUserIdWithModule('reports')
-    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // 🔒 FIX H1+H2: Use getAuthContext for staff permission + profit hiding
+    const authCtx = await getAuthContext()
+    if (authCtx.error || !authCtx.userId) return authCtx.error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!canAccessModule(authCtx.role, authCtx.permissions, 'reports')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+    const userId = authCtx.userId
+    const hideProfit = await shouldHideProfit(userId, authCtx.role)
 
     const { searchParams } = new URL(req.url)
     const type = searchParams.get('type') || 'pl'
@@ -104,10 +112,10 @@ export async function GET(req: NextRequest) {
         .map(r => ({ name: r.category || 'Other', value: roundMoney(r._sum.totalAmount || 0) }))
         .sort((a, b) => b.value - a.value)
 
-      return NextResponse.json({
+      const plData = {
         type: 'pl',
         period: { from, to },
-        truncated: false,  // 🔒 V6 SC1: never truncated — SQL aggregation has no row cap
+        truncated: false,
         summary: {
           totalRevenue,
           grossProfit,
@@ -120,7 +128,10 @@ export async function GET(req: NextRequest) {
         incomeByCategory,
         salesCount: countOf('sale'),
         purchaseTotal,
-      })
+      }
+
+      // 🔒 FIX H2: Strip profit if hideProfit is on and caller is staff
+      return NextResponse.json(hideProfit ? stripReportProfit(plData) : plData)
     }
 
     // =====================================================================

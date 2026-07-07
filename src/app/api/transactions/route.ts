@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthContext } from '@/lib/get-auth'
 import { canAccessModule, type ModuleKey } from '@/lib/staff-permissions'
+import { shouldHideProfit, stripTransactionsProfit } from '@/lib/profit-visibility'
 import { withCache } from '@/lib/cache'
 import { roundMoney, calculateGst, splitGst, distributeDiscountProportionally, toMoney } from '@/lib/money'
 import { deriveInterStateStatus } from '@/lib/gst'
@@ -79,7 +80,11 @@ export async function GET(req: NextRequest) {
       ? trimmed[trimmed.length - 1].id
       : null
 
-    return withCache({ transactions: trimmed, hasMore, nextCursor }, { maxAge: 30, swr: 300 })
+    // 🔒 FIX H2: Strip grossProfit from transactions if hideProfit is on and caller is staff
+    const hideProfit = await shouldHideProfit(userId, authCtx.role)
+    const finalTransactions = hideProfit ? stripTransactionsProfit(trimmed) : trimmed
+
+    return withCache({ transactions: finalTransactions, hasMore, nextCursor }, { maxAge: 30, swr: 300 })
   } catch (error) {
     // 🔒 V7 H4: Return 503 on DB error, NOT an empty 200. Was: returned
     // { transactions: [] } → user saw empty ledger during a DB blip and

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthContext } from '@/lib/get-auth'
 import { canAccessModule, type ModuleKey } from '@/lib/staff-permissions'
+import { shouldHideProfit, stripTransactionProfit } from '@/lib/profit-visibility'
 import { roundMoney, toMoney } from '@/lib/money'
 import { deriveInterStateStatus } from '@/lib/gst'
 import { validateBody, updateTransactionSchema } from '@/lib/validation'
@@ -35,7 +36,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
-    return NextResponse.json({ transaction })
+    // 🔒 FIX H2: Strip grossProfit if hideProfit is on and caller is staff
+    const hideProfit = await shouldHideProfit(userId, authCtx.role)
+    return NextResponse.json({
+      transaction: hideProfit ? stripTransactionProfit(transaction) : transaction,
+    })
   } catch (error) {
     return apiError(error, 'Failed to fetch transaction', 500)
   }

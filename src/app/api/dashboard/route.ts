@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withConnectionRetry } from '@/lib/db'
 import { Prisma } from '@prisma/client'
-import { getAuthUserIdWithModule } from '@/lib/get-auth'
+import { getAuthContext } from '@/lib/get-auth'
+import { canAccessModule } from '@/lib/staff-permissions'
+import { shouldHideProfit, stripDashboardProfit } from '@/lib/profit-visibility'
 import { withCache } from '@/lib/cache'
 import { activeTransactionWhere } from '@/lib/query-helpers'
 import { roundMoney } from '@/lib/money'
@@ -31,8 +33,14 @@ import { istDayStart, istMonthStart, getISTDateParts, IST_OFFSET_MS } from '@/li
 // GET /api/dashboard?from=&to= - returns aggregated stats for dashboard with date filtering
 export async function GET(req: NextRequest) {
   try {
-    const { userId, error } = await getAuthUserIdWithModule('dashboard')
-    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // 🔒 FIX H1+H2: Use getAuthContext for staff permission + profit hiding
+    const authCtx = await getAuthContext()
+    if (authCtx.error || !authCtx.userId) return authCtx.error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (!canAccessModule(authCtx.role, authCtx.permissions, 'dashboard')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+    const userId = authCtx.userId
+    const hideProfit = await shouldHideProfit(userId, authCtx.role)
 
     const { searchParams } = new URL(req.url)
     const fromStr = searchParams.get('from')
@@ -430,7 +438,8 @@ export async function GET(req: NextRequest) {
       })),
     }))
 
-    return withCache({
+    // 🔒 FIX H2: Strip profit fields from response if hideProfit is on and caller is staff
+    const dashboardData = {
       setting: setting || { shopName: 'My Shop' },
       dateRange: { from: rangeFrom, to: rangeTo },
       kpis: {
@@ -451,6 +460,8 @@ export async function GET(req: NextRequest) {
         productCount: allProducts.length,
         partyCount: allParties.length,
         rangeTxnCount,
+        prevRangeRevenue,
+        prevRangeProfit,
       },
       salesTrend,
       topProducts,
@@ -458,7 +469,6 @@ export async function GET(req: NextRequest) {
       paymentModeSplit,
       lowStockProducts,
       gstSummary: {
-        taxableSales: rangeTaxableSales,
         cgst: rangeCGST,
         sgst: rangeSGST,
         igst: rangeIGST,
@@ -467,7 +477,12 @@ export async function GET(req: NextRequest) {
         netPayable: netGSTPayable,
       },
       recentTransactions: recentTransactionsData,
-    }, { maxAge: 30, swr: 300 })
+    }
+
+    return withCache(
+      hideProfit ? stripDashboardProfit(dashboardData) : dashboardData,
+      { maxAge: 30, swr: 300 }
+    )
   } catch (error) {
     // 🔒 V9 2.5 FIX: Log full error server-side only (Sentry captures it too).
     // Was: returning error.message + String(error) to the client — leaked
