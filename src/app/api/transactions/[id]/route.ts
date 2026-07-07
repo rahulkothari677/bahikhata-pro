@@ -289,38 +289,38 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
       // Step 4: Apply new items' stock impact
       // 🔒 V9 2.1 FIX: Scope by userId (same as POST)
-      // 🔒 FIX H1: In 'block' mode, the stock check is done INSIDE the $transaction
-      // using a conditional WHERE clause (currentStock >= qty). Same fix as POST.
-      for (const item of txItems) {
-        if (item.productId) {
+      // 🔒 FIX H1+H12: Same pattern as POST — block mode sequential, allow/purchase batched
+      if (type === 'sale' && stockPolicy === 'block') {
+        for (const item of txItems) {
+          if (!item.productId) continue
+          const qty = item.quantity || 0
+          const result = await tx.product.updateMany({
+            where: { id: item.productId, userId, currentStock: { gte: qty } },
+            data: { currentStock: { decrement: qty } },
+          })
+          if (result.count === 0) {
+            const err: any = new Error('STOCK_BLOCK')
+            err.code = 'STOCK_BLOCK'
+            err.productName = item.productName
+            err.requestedQty = qty
+            throw err
+          }
+        }
+      } else {
+        await Promise.all(txItems.filter(i => i.productId).map(item => {
           const qty = item.quantity || 0
           if (type === 'sale') {
-            if (stockPolicy === 'block') {
-              // Atomic check-and-decrement: only succeeds if currentStock >= qty.
-              const result = await tx.product.updateMany({
-                where: { id: item.productId, userId, currentStock: { gte: qty } },
-                data: { currentStock: { decrement: qty } },
-              })
-              if (result.count === 0) {
-                const err: any = new Error('STOCK_BLOCK')
-                err.code = 'STOCK_BLOCK'
-                err.productName = item.productName
-                err.requestedQty = qty
-                throw err
-              }
-            } else {
-              await tx.product.updateMany({
-                where: { id: item.productId, userId },
-                data: { currentStock: { decrement: qty } },
-              })
-            }
-          } else if (type === 'purchase') {
-            await tx.product.updateMany({
-              where: { id: item.productId, userId },
+            return tx.product.updateMany({
+              where: { id: item.productId!, userId },
+              data: { currentStock: { decrement: qty } },
+            })
+          } else {
+            return tx.product.updateMany({
+              where: { id: item.productId!, userId },
               data: { currentStock: { increment: qty } },
             })
           }
-        }
+        }))
       }
 
       return txn

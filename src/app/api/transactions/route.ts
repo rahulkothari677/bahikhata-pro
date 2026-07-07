@@ -334,46 +334,44 @@ export async function POST(req: NextRequest) {
       // Was: where: { id: item.productId } — no userId check. A client could
       // submit a foreign productId and modify another tenant's stock.
       // Now: updateMany with userId in the where clause → foreign IDs affect 0 rows.
-      // 🔒 FIX H1: In 'block' mode, the stock check is done INSIDE the $transaction
-      // using a conditional WHERE clause (currentStock >= qty). This closes the
-      // race condition where two concurrent sales both read currentStock = 5
-      // outside the transaction, both pass the check, both decrement → stock = -1.
-      // Now: if the conditional updateMany affects 0 rows, stock was insufficient
-      // → throw to roll back the entire transaction.
-      for (const item of txItems) {
-        if (item.productId) {
+      // 🔒 FIX H1+H12: In 'block' mode, the stock check is done INSIDE the
+      // $transaction using a conditional WHERE clause (currentStock >= qty).
+      // This closes the race condition. In 'allow' mode and for purchases,
+      // we batch the updates with Promise.all (H12 — was sequential, N round-trips).
+      if (type === 'sale' && stockPolicy === 'block') {
+        // Block mode: must check each item individually (needs result.count)
+        for (const item of txItems) {
+          if (!item.productId) continue
+          const qty = item.quantity || 0
+          const result = await tx.product.updateMany({
+            where: { id: item.productId, userId, currentStock: { gte: qty } },
+            data: { currentStock: { decrement: qty } },
+          })
+          if (result.count === 0) {
+            const err: any = new Error('STOCK_BLOCK')
+            err.code = 'STOCK_BLOCK'
+            err.productName = item.productName
+            err.requestedQty = qty
+            throw err
+          }
+        }
+      } else {
+        // 🔒 FIX H12: Allow mode + purchases — batch with Promise.all instead
+        // of sequential loop. N items → 1 parallel batch (was N sequential round-trips).
+        await Promise.all(txItems.filter(i => i.productId).map(item => {
           const qty = item.quantity || 0
           if (type === 'sale') {
-            if (stockPolicy === 'block') {
-              // Atomic check-and-decrement: only succeeds if currentStock >= qty.
-              const result = await tx.product.updateMany({
-                where: { id: item.productId, userId, currentStock: { gte: qty } },
-                data: { currentStock: { decrement: qty } },
-              })
-              if (result.count === 0) {
-                // Stock insufficient inside the transaction — a concurrent sale
-                // must have taken the stock between our pre-check and this decrement.
-                // Throw a custom error to roll back and inform the user.
-                const err: any = new Error('STOCK_BLOCK')
-                err.code = 'STOCK_BLOCK'
-                err.productName = item.productName
-                err.requestedQty = qty
-                throw err
-              }
-            } else {
-              // 'allow' mode — decrement without the stock check (allows negative)
-              await tx.product.updateMany({
-                where: { id: item.productId, userId },
-                data: { currentStock: { decrement: qty } },
-              })
-            }
-          } else if (type === 'purchase') {
-            await tx.product.updateMany({
-              where: { id: item.productId, userId },
+            return tx.product.updateMany({
+              where: { id: item.productId!, userId },
+              data: { currentStock: { decrement: qty } },
+            })
+          } else {
+            return tx.product.updateMany({
+              where: { id: item.productId!, userId },
               data: { currentStock: { increment: qty } },
             })
           }
-        }
+        }))
       }
 
       return txn
