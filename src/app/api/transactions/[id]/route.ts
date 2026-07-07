@@ -105,6 +105,91 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const products = productIds.length > 0 ? await db.product.findMany({ where: { id: { in: productIds }, userId } }) : []
     const productMap = new Map(products.map(p => [p.id, p]))
 
+    // 🔒 V11 STOCK POLICY: Fetch the shop's stock policy + roundOffEnabled early.
+    // Also fetch old items BEFORE the $transaction so we can compute the NET
+    // stock impact (old items reversed + new items applied) and block/warn.
+    const [setting, oldItems] = await Promise.all([
+      db.setting.findUnique({
+        where: { userId },
+        select: { roundOffEnabled: true, stockPolicy: true },
+      }),
+      db.transactionItem.findMany({ where: { transactionId: id } }),
+    ])
+    const stockPolicy = setting?.stockPolicy || 'block'
+
+    // 🔒 V11 STOCK POLICY: For sale edits, compute the NET stock impact per
+    // product. Old sale items are added back (stock increases), new sale items
+    // are decremented (stock decreases). If any product's resulting stock < 0:
+    //   - 'block' mode → return 400 (reject the edit)
+    //   - 'allow' mode → add to stockWarnings (sale goes through with warning)
+    //
+    // For purchase edits, we DON'T block (purchases add stock; reversing a
+    // purchase that was already sold is an edge case — not handled here).
+    const stockWarnings: Array<{
+      productId: string
+      productName: string
+      currentStock: number
+      requestedQuantity: number
+      resultingStock: number
+    }> = []
+
+    if (type === 'sale' && existing.type === 'sale') {
+      // Build a map of productId → net qty change (negative = stock decreases)
+      const netChangeMap = new Map<string, number>()
+
+      // Old items: add back (positive change)
+      for (const oldItem of oldItems) {
+        if (!oldItem.productId) continue
+        const product = productMap.get(oldItem.productId)
+        const oldQty = product?.unit
+          ? normalizeToUnit(Number(oldItem.quantity) || 0, oldItem.unit || product.unit, product.unit).quantity
+          : Number(oldItem.quantity) || 0
+        netChangeMap.set(oldItem.productId, (netChangeMap.get(oldItem.productId) || 0) + oldQty)
+      }
+
+      // New items: subtract (negative change)
+      for (const item of items) {
+        if (!item.productId) continue
+        const product = productMap.get(item.productId)
+        if (!product) continue
+        const newQty = normalizeToUnit(
+          Number(item.quantity) || 0,
+          item.unit || product.unit,
+          product.unit,
+        ).quantity
+        netChangeMap.set(item.productId, (netChangeMap.get(item.productId) || 0) - newQty)
+      }
+
+      // Check each affected product
+      for (const [productId, netChange] of netChangeMap.entries()) {
+        const product = productMap.get(productId)
+        if (!product) continue
+        const resultingStock = roundMoney(product.currentStock + netChange)
+        if (resultingStock < 0) {
+          stockWarnings.push({
+            productId: product.id,
+            productName: product.name,
+            currentStock: product.currentStock,
+            requestedQuantity: -netChange,  // the net qty being sold
+            resultingStock,
+          })
+        }
+      }
+
+      // Block mode: reject if any product would go negative
+      if (stockPolicy === 'block' && stockWarnings.length > 0 && !body.confirmOversell) {
+        const lines = stockWarnings.map(w =>
+          `• ${w.productName}: have ${w.currentStock}, would go to ${w.resultingStock}`
+        ).join('\n')
+        return NextResponse.json({
+          error: 'Not enough stock',
+          message: `This edit would push stock below zero:\n${lines}\n\nRecord a purchase first, or enable "Allow overselling" in Settings.`,
+          stockWarnings,
+          hint: 'To allow overselling, go to Settings and turn on "Allow overselling (kirana mode)".',
+        }, { status: 400 })
+      }
+    }
+
     // 🔒 V12: Same centralized line-item math as POST (computeLineItems) — unit
     // normalization + GST-inclusive + proportional discount, single source of
     // truth so edit and create can never drift apart.
@@ -140,7 +225,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const discount = orderDiscount
 
     // 🔒 V12: Invoice round-off (nearest rupee) when enabled.
-    const setting = await db.setting.findUnique({ where: { userId }, select: { roundOffEnabled: true } })
+    // 🔒 V11: `setting` was fetched earlier (with stockPolicy). Reuse it here.
     let totalAmount = computed.totalBeforeRoundOff
     let roundOff = 0
     if (setting?.roundOffEnabled) {
@@ -161,7 +246,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const transaction = await db.$transaction(async (tx) => {
       // Step 1: Reverse old items' stock impact
       // 🔒 V9 2.1 FIX: Scope by userId (same as POST)
-      const oldItems = await tx.transactionItem.findMany({ where: { transactionId: id } })
+      // 🔒 V11: oldItems was fetched earlier (before the $transaction) for the
+      // stock policy check. Reuse it here — no concurrent writes to the same
+      // transaction ID, so the snapshot is still valid.
       for (const oldItem of oldItems) {
         if (oldItem.productId) {
           if (existing.type === 'sale') {

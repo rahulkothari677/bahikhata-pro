@@ -143,6 +143,15 @@ export async function POST(req: NextRequest) {
     const products = productIds.length > 0 ? await db.product.findMany({ where: { id: { in: productIds }, userId } }) : []
     const productMap = new Map(products.map(p => [p.id, p]))
 
+    // 🔒 V11 STOCK POLICY: Fetch the shop's stock policy early so we can
+    // block or warn before computing anything. Also fetches roundOffEnabled
+    // (used later for invoice round-off). Single PK lookup on Setting (~1-2ms).
+    const setting = await db.setting.findUnique({
+      where: { userId },
+      select: { roundOffEnabled: true, stockPolicy: true },
+    })
+    const stockPolicy = setting?.stockPolicy || 'block'  // default: block
+
     // 🔒 AUDIT FIX V5 MD: Negative-stock warning.
     // Was: sales decrement currentStock with no check — selling 100 units of
     // a product with 2 in stock succeeded silently and left currentStock = -98.
@@ -194,6 +203,27 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // 🔒 V11 STOCK POLICY: If policy is 'block' and there are stock warnings,
+    // REJECT the sale with 400. The user must either:
+    //   (a) record a purchase to replenish stock, OR
+    //   (b) toggle "Allow overselling" in Settings, OR
+    //   (c) send confirmOversell: true (for the "are you sure?" flow — but
+    //       only if the client explicitly implements this override).
+    //
+    // If policy is 'allow' (kirana mode), proceed with the current behavior —
+    // the sale goes through and stockWarnings[] is returned in the response.
+    if (type === 'sale' && stockPolicy === 'block' && stockWarnings.length > 0 && !body.confirmOversell) {
+      const lines = stockWarnings.map(w =>
+        `• ${w.productName}: have ${w.currentStock}, selling ${w.requestedQuantity}, would go to ${w.resultingStock}`
+      ).join('\n')
+      return NextResponse.json({
+        error: 'Not enough stock',
+        message: `This sale would push stock below zero:\n${lines}\n\nRecord a purchase first, or enable "Allow overselling" in Settings.`,
+        stockWarnings,
+        hint: 'To allow overselling, go to Settings and turn on "Allow overselling (kirana mode)".',
+      }, { status: 400 })
+    }
+
     // 🔒 V12: Price/unit anomaly guardrail (defense-in-depth). Non-blocking —
     // warns on implausible lines like "₹20/kg entered as ₹20/gm → ₹10,000".
     const priceWarnings = body.confirmOversell ? [] : buildPriceWarnings(items, productMap)
@@ -238,7 +268,7 @@ export async function POST(req: NextRequest) {
     grossProfit = computed.grossProfit
 
     // 🔒 V12: Invoice round-off (nearest rupee) when the user has enabled it.
-    const setting = await db.setting.findUnique({ where: { userId }, select: { roundOffEnabled: true } })
+    // 🔒 V11: `setting` was fetched earlier (with stockPolicy). Reuse it here.
     let totalAmount = computed.totalBeforeRoundOff
     let roundOff = 0
     if (setting?.roundOffEnabled) {
