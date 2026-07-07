@@ -222,18 +222,28 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     const body = await req.json()
+
+    // 🔒 FIX H6: Was `openingBalance: parseFloat(body.openingBalance) || 0`
+    // which silently reset openingBalance to 0 when the client sent an edit
+    // without that field (e.g., just renaming the party). parseFloat(undefined)
+    // is NaN, and NaN || 0 = 0 — overwriting the real opening balance.
+    // Now: only update fields that are explicitly provided. Same pattern as
+    // the products PUT handler. Prevents silent data corruption.
+    const updateData: any = {}
+    if (body.name !== undefined) updateData.name = body.name
+    if (body.type !== undefined) updateData.type = body.type
+    if (body.phone !== undefined) updateData.phone = body.phone || null
+    if (body.email !== undefined) updateData.email = body.email || null
+    if (body.gstin !== undefined) updateData.gstin = body.gstin || null
+    if (body.address !== undefined) updateData.address = body.address || null
+    if (body.state !== undefined) updateData.state = body.state || null
+    if (body.openingBalance !== undefined) {
+      updateData.openingBalance = parseFloat(body.openingBalance) || 0
+    }
+
     const party = await db.party.update({
       where: { id },
-      data: {
-        name: body.name,
-        type: body.type || 'customer',
-        phone: body.phone || null,
-        email: body.email || null,
-        gstin: body.gstin || null,
-        address: body.address || null,
-        state: body.state || null,
-        openingBalance: parseFloat(body.openingBalance) || 0,
-      },
+      data: updateData,
     })
     return NextResponse.json({ party })
   } catch (error) {
