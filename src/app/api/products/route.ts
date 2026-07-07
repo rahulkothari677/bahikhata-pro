@@ -24,8 +24,13 @@ export async function GET() {
     const productsWithStock = products.map(p => ({
       ...p,
       currentStock: p.currentStock,  // 🔒 N2: read directly from column
-      stockValue: p.currentStock * p.purchasePrice,
+      // 🔒 V11: Clamp stockValue at 0 — was `p.currentStock * p.purchasePrice`
+      // which went negative when stock was oversold, making inventory totals
+      // misleading. The actual currentStock is still shown (truth); only the
+      // VALUE is clamped for display so totals don't go negative.
+      stockValue: Math.max(0, p.currentStock) * p.purchasePrice,
       isLowStock: p.currentStock <= p.lowStockThreshold,
+      isOversold: p.currentStock < 0,  // 🔒 V11: distinct flag for OVERSOLD badge
     }))
 
     return withCache({ products: productsWithStock }, { maxAge: 60, swr: 300 })

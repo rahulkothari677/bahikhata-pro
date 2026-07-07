@@ -476,13 +476,19 @@ function ProductGridCard({ product: p, onEdit }: { product: any; onEdit: () => v
           </div>
         </div>
 
-        {/* Low stock alert */}
-        {p.isLowStock && (
+        {/* Low stock alert / Oversold alert */}
+        {p.currentStock < 0 ? (
+          // 🔒 V11: Distinct OVERSOLD badge for negative stock (separate from "Out").
+          <div className="mt-2 flex items-center gap-1.5 text-xs text-white bg-gradient-to-r from-rose-600 to-red-700 rounded-md px-2 py-1 font-semibold">
+            <AlertTriangle className="w-3 h-3 flex-shrink-0" />
+            <span className="truncate">OVERSOLD — record a purchase to fix</span>
+          </div>
+        ) : p.isLowStock ? (
           <div className="mt-2 flex items-center gap-1.5 text-xs text-rose-600 bg-rose-50 dark:bg-rose-950/30 rounded-md px-2 py-1">
             <AlertTriangle className="w-3 h-3 flex-shrink-0" />
             <span className="truncate">{p.currentStock <= 0 ? 'Out of stock!' : `Low stock (threshold: ${p.lowStockThreshold} ${p.unit})`}</span>
           </div>
-        )}
+        ) : null}
       </CardContent>
     </Card>
   )

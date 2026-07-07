@@ -391,8 +391,13 @@ export async function GET(req: NextRequest) {
       .filter(p => p.currentStock <= p.lowStockThreshold)
       .sort((a, b) => a.currentStock - b.currentStock)
 
+    // 🔒 V11: Clamp each product's stock value at 0 before summing. Was:
+    // `p.currentStock * p.purchasePrice` which went negative when stock was
+    // oversold, making the dashboard "Stock Value" KPI go negative. Now:
+    // oversold products contribute 0 to the total (their value is already
+    // realized through sales, not sitting in inventory).
     const totalStockValue = roundMoney(
-      allProducts.reduce((s, p) => s + p.currentStock * p.purchasePrice, 0)
+      allProducts.reduce((s, p) => s + Math.max(0, p.currentStock) * p.purchasePrice, 0)
     )
 
     // === Recent transactions (not range-dependent, always latest) ===

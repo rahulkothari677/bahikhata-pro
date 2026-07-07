@@ -300,14 +300,16 @@ export async function GET(req: NextRequest) {
         category: p.category,
         hsn: p.hsn,
         unit: p.unit,
-        currentStock: p.currentStock,
+        currentStock: p.currentStock,  // 🔒 V11: actual value (may be negative if oversold)
         purchasePrice: p.purchasePrice,
         salePrice: p.salePrice,
         mrp: p.mrp,
         gstRate: p.gstRate,
-        stockValue: roundMoney(p.currentStock * p.purchasePrice),
-        potentialSaleValue: roundMoney(p.currentStock * p.salePrice),
+        // 🔒 V11: Clamp at 0 — oversold products contribute 0 to value totals.
+        stockValue: roundMoney(Math.max(0, p.currentStock) * p.purchasePrice),
+        potentialSaleValue: roundMoney(Math.max(0, p.currentStock) * p.salePrice),
         isLowStock: p.currentStock <= p.lowStockThreshold,
+        isOversold: p.currentStock < 0,  // 🔒 V11: distinct flag for OVERSOLD badge
       }))
 
       const totalStockValue = roundMoney(stockReport.reduce((s, p) => s + p.stockValue, 0))
