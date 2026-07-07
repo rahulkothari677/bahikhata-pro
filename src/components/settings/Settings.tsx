@@ -16,6 +16,7 @@ import { exportBackup } from '@/lib/data-backup'
 import { useBusinessGoals } from '@/hooks/use-business-goals'
 import { Target, Download, Upload, Calendar, Clock, Coins, PackageX } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
+import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
 import { toast as sonnerToast } from 'sonner'
 import { haptic } from '@/lib/haptic'
 import { useAppStore, type FeatureKey } from '@/store/app-store'
@@ -79,6 +80,7 @@ const FEATURE_CATEGORIES: { title: string; features: { key: FeatureKey; label: s
 
 export function Settings() {
   const { toast } = useToast()
+  const { confirmDialog, dialog: confirmDialogEl } = useConfirmDialog()
   const queryClient = useQueryClient()
   const { data: session } = useSession()
   const { features, setFeature, resetFeatures, themeColor, setThemeColor, language, setLanguage, setView } = useAppStore()
@@ -187,8 +189,8 @@ export function Settings() {
   }
 
   const handleResetData = async () => {
-    if (!confirm('This will DELETE ALL your data (products, transactions, parties). This cannot be undone. Are you absolutely sure?')) return
-    if (!confirm('Last confirmation: All data will be permanently deleted. Continue?')) return
+    if (!await confirmDialog('This will DELETE ALL your data (products, transactions, parties). This cannot be undone. Are you absolutely sure?', { title: 'Reset All Data', confirmLabel: 'I understand, delete everything' })) return
+    if (!await confirmDialog('Last confirmation: All data will be permanently deleted. Continue?', { title: 'Final Confirmation', confirmLabel: 'Yes, delete permanently' })) return
     try {
       // Delete via prisma - we'll do this via a special endpoint
       const r = await offlineFetch('/api/seed', { method: 'DELETE', offline: { queueable: false, invalidate: ['/api/products', '/api/parties', '/api/transactions', '/api/dashboard', '/api/settings'] } })
@@ -204,7 +206,7 @@ export function Settings() {
   }
 
   const handleClearPendingWrites = async () => {
-    if (!confirm('Clear all pending offline writes? These are changes made while offline that haven\'t synced yet. This cannot be undone.')) return
+    if (!await confirmDialog('Clear all pending offline writes? These are changes made while offline that haven\'t synced yet. This cannot be undone.', { title: 'Clear Pending Writes', confirmLabel: 'Clear' })) return
     try {
       const { getPendingWrites, deletePendingWrite } = await import('@/lib/offline-fetch')
       const writes = await getPendingWrites()
@@ -219,7 +221,7 @@ export function Settings() {
   }
 
   const handleClearOfflineCache = async () => {
-    if (!confirm('Clear offline cache? This will remove all locally cached data. You\'ll need internet to reload it. Your cloud data is NOT affected.')) return
+    if (!await confirmDialog('Clear offline cache? This will remove all locally cached data. You\'ll need internet to reload it. Your cloud data is NOT affected.', { title: 'Clear Cache', confirmLabel: 'Clear' })) return
     try {
       const { clearAllOfflineData } = await import('@/lib/offline-fetch')
       await clearAllOfflineData()
@@ -954,6 +956,7 @@ export function Settings() {
           </div>
         </CardContent>
       </Card>
+      {confirmDialogEl}
     </div>
   )
 }
