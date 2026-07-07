@@ -23,10 +23,6 @@ export const transactionItemSchema = z.object({
   unitPrice: z.coerce.number().min(0, 'Unit price cannot be negative').max(10000000, 'Unit price too large'),
   gstRate: z.coerce.number().min(0).max(100).optional().default(0),
   discountAmount: z.coerce.number().min(0).optional().default(0),
-  // 🔒 V12: the unit the quantity is expressed in (kg, gm, ltr, pcs, ...).
-  unit: z.string().max(20).optional().default('pcs'),
-  // 🔒 V12: whether unitPrice is inclusive of GST for this line (MRP pricing).
-  priceIncludesGst: z.coerce.boolean().optional().default(false),
 })
 
 // Transaction create schema
@@ -82,8 +78,6 @@ export const createProductSchema = z.object({
   openingStock: z.coerce.number().min(0, 'Opening stock cannot be negative').optional().default(0),
   lowStockThreshold: z.coerce.number().min(0, 'Low stock threshold cannot be negative').optional().default(5),
   notes: z.string().max(5000).nullable().optional(),
-  // 🔒 V12: MRP / GST-inclusive pricing flag.
-  priceIncludesGst: z.coerce.boolean().optional().default(false),
 })
 
 // Party create schema
@@ -116,8 +110,6 @@ export const updateProductSchema = z.object({
   openingStock: z.coerce.number().min(0, 'Opening stock cannot be negative').optional(),
   lowStockThreshold: z.coerce.number().min(0, 'Low stock threshold cannot be negative').optional(),
   notes: z.string().max(5000).nullable().optional(),
-  // 🔒 V12: MRP / GST-inclusive pricing flag.
-  priceIncludesGst: z.coerce.boolean().optional(),
 })
 
 /**

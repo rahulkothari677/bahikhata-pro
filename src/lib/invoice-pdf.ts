@@ -41,7 +41,6 @@ interface InvoiceData {
   sgst: number
   igst: number
   totalAmount: number
-  roundOff?: number
   paidAmount: number
   paymentMode: string
 }
@@ -205,12 +204,6 @@ export async function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting)
   if (txn.igst > 0) {
     doc.text('IGST:', labelX, y)
     doc.text(`Rs. ${txn.igst.toFixed(2)}`, valueX, y, { align: 'right' })
-    y += 5
-  }
-  // 🔒 V12: Round-off line (nearest rupee), shown only when non-zero.
-  if (txn.roundOff && Math.abs(txn.roundOff) >= 0.005) {
-    doc.text('Round Off:', labelX, y)
-    doc.text(`${txn.roundOff > 0 ? '+' : '-'}Rs. ${Math.abs(txn.roundOff).toFixed(2)}`, valueX, y, { align: 'right' })
     y += 5
   }
 

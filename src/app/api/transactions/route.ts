@@ -6,8 +6,6 @@ import { roundMoney, calculateGst, splitGst, distributeDiscountProportionally, t
 import { deriveInterStateStatus } from '@/lib/gst'
 import { validateBody, createTransactionSchema } from '@/lib/validation'
 import { apiError } from '@/lib/api-error'
-import { computeLineItems, buildPriceWarnings } from '@/lib/line-items'
-import { normalizeToUnit } from '@/lib/units'
 
 // GET /api/transactions - list with filters (type, from, to, limit)
 export async function GET(req: NextRequest) {
@@ -173,15 +171,8 @@ export async function POST(req: NextRequest) {
         if (!item.productId) continue
         const product = productMap.get(item.productId)
         if (!product) continue
-        // 🔒 V12: Convert the requested quantity into the product's unit before
-        // comparing to stock, so "500 gm" of a kg-tracked product checks against
-        // 0.5 kg — not 500. Without this the warning fired on every gm sale.
-        const requestedQty = normalizeToUnit(
-          Number(item.quantity) || 0,
-          item.unit || product.unit,
-          product.unit,
-        ).quantity
-        const resultingStock = roundMoney(product.currentStock - requestedQty)
+        const requestedQty = Number(item.quantity) || 0
+        const resultingStock = product.currentStock - requestedQty
         if (resultingStock < 0) {
           stockWarnings.push({
             productId: product.id,
@@ -194,60 +185,107 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 🔒 V12: Price/unit anomaly guardrail (defense-in-depth). Non-blocking —
-    // warns on implausible lines like "₹20/kg entered as ₹20/gm → ₹10,000".
-    const priceWarnings = body.confirmOversell ? [] : buildPriceWarnings(items, productMap)
-
-    // 🔒 V12: Line-item money math is centralized in computeLineItems() so POST
-    // and PUT share ONE implementation. It folds in: unit normalization (500 gm
-    // on a ₹20/kg product → 0.5 kg), GST-inclusive back-calculation (MRP), and
-    // the V10 proportional discount distribution.
+    // 🔒 V10 §2.1: Distribute the order-level discount proportionally across
+    // items BEFORE computing GST. This is required by CGST Act §15(3): a
+    // discount shown on the invoice must reduce the taxable value, and GST
+    // must be charged on the net (post-discount) amount. Previously the
+    // order-level discount was subtracted from the total AFTER GST was
+    // computed on the full pre-discount amount, which:
+    //   (1) overcharged the customer GST on every discounted sale,
+    //   (2) made the invoice internally inconsistent (tax ≠ taxable × rate),
+    //   (3) made GSTR-1 non-filable for any month with discounted sales.
+    //
+    // The UI sends a single order-level `discountAmount`. We split it across
+    // items by each item's gross share. Per-item GST is then computed on the
+    // post-discount taxable value, and stored per-item (cgst/sgst/igst
+    // columns on TransactionItem — V10 §2.2 single source of truth). The
+    // transaction header sums these per-item values.
     const orderDiscount = toMoney(discountAmount)
-
-    // 🔒 V11 §4.3: Reject over-discount (discount > subtotal) BEFORE computing,
-    // using the same pre-discount taxable base the helper uses.
-    const preSubtotal = roundMoney(
-      items.reduce((s: number, item: any) => {
-        const product = item.productId ? productMap.get(item.productId) : null
-        const rate = toMoney(item.gstRate) || 0
-        const includesGst = item.priceIncludesGst ?? product?.priceIncludesGst ?? false
-        const unitPrice = includesGst && rate > 0
-          ? (toMoney(item.unitPrice) * 100) / (100 + rate)
-          : toMoney(item.unitPrice)
-        // Normalize qty to product unit for an accurate subtotal check.
-        let qty = toMoney(item.quantity)
-        if (product?.unit) {
-          qty = normalizeToUnit(qty, item.unit || product.unit, product.unit).quantity
-        }
-        return s + roundMoney(qty * unitPrice)
-      }, 0),
+    const grossAmounts = items.map((item: any) =>
+      roundMoney(toMoney(item.quantity) * toMoney(item.unitPrice)),
     )
-    if (orderDiscount > preSubtotal) {
+    // 🔒 V11 §4.3: Reject over-discount (discount > subtotal). Was: the
+    // distributeDiscountProportionally helper clamps each item's share to
+    // [0, gross], so the sum of per-item discounts == subtotal (not the
+    // full orderDiscount). But the header computed totalAmount using the
+    // full orderDiscount → negative total while items summed to ~0 →
+    // inconsistent invoice. Now: reject early with a clear error.
+    const subtotalCheck = roundMoney(grossAmounts.reduce((s, g) => s + g, 0))
+    if (orderDiscount > subtotalCheck) {
       return NextResponse.json({
         error: 'Discount cannot exceed subtotal',
-        message: `The discount (₹${orderDiscount.toFixed(2)}) is greater than the subtotal (₹${preSubtotal.toFixed(2)}). Please reduce the discount and try again.`,
+        message: `The discount (₹${orderDiscount.toFixed(2)}) is greater than the subtotal (₹${subtotalCheck.toFixed(2)}). Please reduce the discount and try again.`,
       }, { status: 400 })
     }
+    const perItemDiscounts = distributeDiscountProportionally(grossAmounts, orderDiscount)
 
-    const computed = computeLineItems({ items, productMap, isInterState, orderDiscount, type })
-    const txItems = computed.txItems
-    subtotal = computed.subtotal
-    cgst = computed.cgst
-    sgst = computed.sgst
-    igst = computed.igst
-    grossProfit = computed.grossProfit
+    const txItems = items.map((item: any, idx: number) => {
+      // 💰 MONEY (Audit fix Phase 4): Use roundMoney() at every calculation
+      // step to prevent float precision drift. Was: raw arithmetic on Floats
+      // which produced values like 9.000000000000002 from itemGst / 2.
+      //
+      // 🔒 V10 §2.1+§2.2: GST is computed on the POST-DISCOUNT taxable value
+      // (proportional share of the order-level discount). Per-item CGST/SGST/
+      // IGST are stored on TransactionItem so every read path (reports, GSTR,
+      // dashboard, invoice PDF) aggregates the stored values instead of
+      // recomputing GST with a different rounding path.
+      const grossAmount = grossAmounts[idx]
+      const itemDiscount = roundMoney(perItemDiscounts[idx])
+      const taxableAmount = roundMoney(grossAmount - itemDiscount)  // post-discount
+      const itemGst = calculateGst(taxableAmount, item.gstRate || 0)  // GST on post-discount
+      const itemTotal = roundMoney(taxableAmount + itemGst)
+      subtotal = roundMoney(subtotal + grossAmount)  // subtotal stays pre-discount (list price total)
+      let itemCgst = 0, itemSgst = 0, itemIgst = 0
+      if (isInterState) {
+        itemIgst = itemGst
+        igst = roundMoney(igst + itemGst)
+      } else {
+        // splitGst returns { cgst, sgst } both rounded to 2 decimal places,
+        // and cgst + sgst === itemGst exactly (no drift)
+        const { cgst: c, sgst: s } = splitGst(itemGst)
+        itemCgst = c
+        itemSgst = s
+        cgst = roundMoney(cgst + c)
+        sgst = roundMoney(sgst + s)
+      }
+      // 💰 MONEY + COGS (Audit fix M4): Profit calculation uses the product's
+      // CURRENT purchasePrice (snapshotted into purchasePriceAtSale for future
+      // reference). Historical profit is now immutable — changing the product's
+      // purchasePrice later won't distort old profit numbers.
+      //
+      // 🔒 V10 §2.4: Profit is now computed on the post-discount unit price
+      // (the actual realized price). Was: profit on undiscounted price →
+      // overstated by the discount amount on every discounted sale.
+      let purchasePriceAtSale = 0
+      if (type === 'sale' && item.productId) {
+        const product = productMap.get(item.productId)
+        if (product) {
+          purchasePriceAtSale = product.purchasePrice
+          // Per-unit realized price = (grossAmount - itemDiscount) / quantity
+          const realizedUnitPrice = roundMoney(taxableAmount / toMoney(item.quantity))
+          grossProfit = roundMoney(grossProfit + (realizedUnitPrice - product.purchasePrice) * toMoney(item.quantity))
+        }
+      }
+      return {
+        productId: item.productId || null,
+        productName: item.productName,
+        quantity: parseFloat(item.quantity),
+        unitPrice: parseFloat(item.unitPrice),
+        purchasePriceAtSale,  // 🔒 M4: COGS snapshot
+        gstRate: parseFloat(item.gstRate) || 0,
+        discountAmount: itemDiscount,  // 🔒 V10 §2.1: proportional share (was always 0)
+        cgst: itemCgst,  // 🔒 V10 §2.2: per-item GST — single source of truth
+        sgst: itemSgst,
+        igst: itemIgst,
+        total: itemTotal,
+      }
+    })
 
-    // 🔒 V12: Invoice round-off (nearest rupee) when the user has enabled it.
-    const setting = await db.setting.findUnique({ where: { userId }, select: { roundOffEnabled: true } })
-    let totalAmount = computed.totalBeforeRoundOff
-    let roundOff = 0
-    if (setting?.roundOffEnabled) {
-      const rounded = Math.round(totalAmount)
-      roundOff = roundMoney(rounded - totalAmount)
-      totalAmount = rounded
-    }
-
-    const discount = orderDiscount  // stored in the header; already folded into per-item taxable
+    // 🔒 V10 §2.1: totalAmount = taxable + GST (no separate discount subtraction).
+    // The order-level discount has already been distributed into per-item
+    // taxable values, so subtracting it again here would double-count.
+    const discount = orderDiscount  // kept for schema field, but NOT subtracted from total
+    const totalAmount = roundMoney((subtotal - discount) + cgst + sgst + igst)
     const paid = parseFloat(paidAmount)
     const finalPaid = isNaN(paid) ? totalAmount : paid
 
@@ -293,7 +331,6 @@ export async function POST(req: NextRequest) {
           sgst: roundMoney(sgst),
           igst: roundMoney(igst),
           totalAmount,
-          roundOff: roundMoney(roundOff),  // 🔒 V12
           paidAmount: roundMoney(finalPaid),
           paymentMode: paymentMode || 'cash',
           isInterState: !!isInterState,
@@ -360,8 +397,6 @@ export async function POST(req: NextRequest) {
       // banner ("⚠️ Sold 100 units of X but only 2 were in stock. Stock is
       // now -98. Record the missing purchase?").
       stockWarnings,
-      // 🔒 V12: Non-blocking price/unit anomaly warnings.
-      priceWarnings,
     })
   } catch (error) {
     return apiError(error, 'Failed to create transaction', 500)

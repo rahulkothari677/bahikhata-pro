@@ -20,7 +20,6 @@ const EMPTY_FORM = {
   name: '', sku: '', hsn: '', category: '', unit: 'pcs',
   purchasePrice: '', salePrice: '', mrp: '', gstRate: '0',
   openingStock: '', lowStockThreshold: '5', notes: '',
-  priceIncludesGst: false,
 }
 
 export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
@@ -50,7 +49,6 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
           openingStock: String(product.openingStock ?? ''),
           lowStockThreshold: String(product.lowStockThreshold ?? 5),
           notes: product.notes || '',
-          priceIncludesGst: product.priceIncludesGst ?? false,
         })
       } else {
         setForm(EMPTY_FORM)
@@ -85,7 +83,6 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
         openingStock: parseFloat(form.openingStock) || 0,
         lowStockThreshold: parseFloat(form.lowStockThreshold) || 0,
         notes: form.notes.trim() || null,
-        priceIncludesGst: form.priceIncludesGst,
       }
       const r = await offlineFetch(url, {
         method,
@@ -167,24 +164,6 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
                 {GST_RATES.map(r => <SelectItem key={r} value={String(r)}>{r}%</SelectItem>)}
               </SelectContent>
             </Select>
-          </div>
-          {/* 🔒 V12: MRP / GST-inclusive pricing. When on, the Sale Price is
-              treated as already including GST (the Indian retail norm) and the
-              taxable value is back-calculated at sale time. */}
-          <div className="sm:col-span-2 flex items-start gap-3 rounded-lg border border-border/60 p-3">
-            <input
-              id="priceIncludesGst"
-              type="checkbox"
-              className="mt-0.5 h-4 w-4 accent-[var(--primary)]"
-              checked={form.priceIncludesGst}
-              onChange={(e) => setForm({ ...form, priceIncludesGst: e.target.checked })}
-            />
-            <label htmlFor="priceIncludesGst" className="text-sm cursor-pointer">
-              <span className="font-medium">Sale price includes GST (MRP)</span>
-              <span className="block text-xs text-muted-foreground">
-                Turn on for MRP-priced goods (packaged items). GST is taken out of the price instead of added on top.
-              </span>
-            </label>
           </div>
           <div>
             <Label>Opening Stock</Label>

@@ -87,8 +87,8 @@ Return ONLY a valid JSON object with this structure (no markdown):
     {
       "name": "product name",
       "quantity": number,
-      "unit": "kg|gm|ltr|ml|m|cm|pcs|box|dozen|packet (default: pcs)",
-      "unitPrice": number (price PER the unit the shopkeeper means — see rules below, 0 if not mentioned)
+      "unit": "kg|ltr|pcs|box|gm|ml|dozen|packet (default: pcs)",
+      "unitPrice": number (price per unit, 0 if not mentioned)
     }
   ],
   "paymentMode": "cash|upi|card|bank|credit (infer from words: udhaar/credit/baad mein = credit, cash/nagad = cash, upi/qr = upi, card = card)",
@@ -100,15 +100,6 @@ Rules:
 - If quantity missing, default to 1
 - If unit missing, default to "pcs"
 - Numbers like "pachaas" = 50, "sau" = 100, "do" = 2, "paanch" = 5 (recognize Hindi number words)
-- INDIAN QUANTITY WORDS: "pao"/"pav" = 0.25, "aadha"/"aadhaa" = 0.5, "pauna" = 0.75,
-  "sava" = 1.25, "dedh"/"deedh" = 1.5, "dhai"/"adhai" = 2.5, "darjan" = 12 (dozen).
-  Example: "pao kg pyaaz" → onion 0.25 kg; "aadha litre doodh" → milk 0.5 ltr.
-- UNIT vs PRICE (very important): Indian shopkeepers price in ₹ per KG or LITRE but
-  often sell in grams/ml. When someone says "500 gram tamatar 20 rupaye" they mean
-  ₹20 per KG (not ₹20 per gram, and not ₹20 total). So set quantity=500, unit="gm",
-  unitPrice=20 — the app converts 500 gm to 0.5 kg and computes ₹10. NEVER interpret a
-  plain rupee figure spoken with a gram/ml quantity as a per-gram or total price unless
-  the person explicitly says "total" or "per gram".
 
 Return JSON only, no commentary.`
 

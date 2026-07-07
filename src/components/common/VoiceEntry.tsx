@@ -8,9 +8,6 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { toast as sonnerToast } from 'sonner'
 import { offlineFetch } from '@/lib/offline-fetch'
-import { formatINR } from '@/lib/utils'
-import { roundMoney } from '@/lib/money'
-import { resolveEnteredQuantity } from '@/lib/units'
 import { useToast } from '@/hooks/use-toast'
 import { useSubscription } from '@/hooks/use-subscription'
 import { haptic } from '@/lib/haptic'
@@ -295,25 +292,17 @@ export function VoiceEntry({ onTransactionParsed, products = [] }: VoiceEntryPro
             p.name?.toLowerCase().includes(nameLower) || nameLower.includes(p.name?.toLowerCase())
           )
 
-          // 🔒 V12: Normalize the spoken quantity into the product's (or base)
-          // unit BEFORE it reaches the review card, so "500 gram at 20 rupaye"
-          // shows 0.5 kg × ₹20 = ₹10, not 500 × 20 = ₹10,000. The spoken price
-          // is treated as per the resolved unit (₹20/kg — the Indian norm).
-          const spokenPrice = Number(item.unitPrice) || 0
-          const resolved = resolveEnteredQuantity(
-            Number(item.quantity) || 0,
-            item.unit || matched?.unit || 'pcs',
-            matched?.unit,
-          )
-          return {
-            ...item,
-            productName: matched?.name || item.productName || item.name,
-            productId: matched?.id || item.productId || undefined,
-            quantity: roundMoney(resolved.quantity),
-            unit: resolved.unit,
-            unitPrice: spokenPrice > 0 ? spokenPrice : (matched?.salePrice || matched?.unitPrice || 0),
-            gstRate: matched?.gstRate ?? item.gstRate ?? 0,
+          if (matched && (!item.unitPrice || item.unitPrice === 0)) {
+            return {
+              ...item,
+              productName: matched.name,
+              productId: matched.id,
+              unitPrice: matched.salePrice || matched.unitPrice || 0,
+              unit: matched.unit || item.unit || 'pcs',
+              gstRate: matched.gstRate ?? item.gstRate ?? 0,
+            }
           }
+          return item
         })
 
         setParsed({ ...data.transaction, items: enrichedItems })
@@ -542,8 +531,8 @@ export function VoiceEntry({ onTransactionParsed, products = [] }: VoiceEntryPro
                         className="flex-1 min-w-0 bg-transparent font-medium text-sm focus:outline-none focus:bg-background focus:px-2 focus:py-0.5 focus:rounded transition border border-transparent focus:border-border"
                         placeholder="Product name"
                       />
-                      <span className="font-bold tabular-nums flex-shrink-0 text-sm text-primary w-20 text-right">
-                        {formatINR((Number(item.quantity) || 0) * (Number(item.unitPrice) || 0))}
+                      <span className="font-bold tabular-nums flex-shrink-0 text-sm text-primary w-16 text-right">
+                        ₹{((Number(item.quantity) || 0) * (Number(item.unitPrice) || 0)).toFixed(0)}
                       </span>
                       <button
                         onClick={() => handleDeleteItem(i)}

@@ -34,7 +34,6 @@ export async function PUT(req: NextRequest) {
         state: body.state,
         email: body.email,
         hideProfit: body.hideProfit,
-        roundOffEnabled: body.roundOffEnabled,  // 🔒 V12
         scanLang: body.scanLang,
         voiceLang: body.voiceLang,
       },
@@ -48,7 +47,6 @@ export async function PUT(req: NextRequest) {
         state: body.state,
         email: body.email,
         hideProfit: body.hideProfit ?? false,
-        roundOffEnabled: body.roundOffEnabled ?? false,  // 🔒 V12
         scanLang: body.scanLang || 'original',
         voiceLang: body.voiceLang || 'original',
       },
