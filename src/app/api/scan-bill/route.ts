@@ -106,7 +106,7 @@ export async function POST(req: NextRequest) {
       try {
         const t0 = Date.now()
         processedImageSource = await preprocessImageForAI(imageBase64)
-        console.log(`[scan-bill] Image preprocessed in ${Date.now() - t0}ms`)
+        // 🔒 FIX L1: Removed console.log — serverless log noise
       } catch (preErr) {
         // preprocessImageForAI already swallows errors + returns the original,
         // but be defensive — never let preprocessing block a scan.
@@ -512,7 +512,7 @@ async function callWithFallback(prompt: string, imageSource: string): Promise<Fa
   for (const provider of chain) {
     const result = await callSingleProvider(provider, prompt, imageSource)
     if (result.success) {
-      console.log(`[scan-bill] Provider ${provider.name} succeeded`)
+      // 🔒 FIX L1: Removed console.log — serverless log noise
       return {
         success: true,
         content: result.content,

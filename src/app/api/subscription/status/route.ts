@@ -1,66 +1,71 @@
 import { NextResponse } from 'next/server'
-import { getAuthUserId } from '@/lib/get-auth'
+import { getAuthUserIdOwnerOnly } from '@/lib/get-auth'
 import { getUserPlan, PLAN_LIMITS } from '@/lib/usage-limits'
 import { rateLimit } from '@/lib/rate-limit'
 import { db } from '@/lib/db'
 import { apiError } from '@/lib/api-error'
+import { istDayStart } from '@/lib/timezone'
 
 /**
  * GET /api/subscription/status
  *
  * Returns the user's current plan, daily usage, and remaining quota.
  *
- * All tiers use daily limits (Free=20/day, Pro=50/day, Elite=100/day).
- * The rate limiter is in-memory, so "used today" is approximate (the actual
- * enforcement happens in the API routes via checkUsage()).
- *
- * Response shape:
- *   {
- *     current: { plan, renewsAt?, trialEndsAt?, cancelledAt? },
- *     usage: {
- *       aiScans: { used, limit, remaining, resetAt, period: 'daily' },
- *       voiceEntries: { used, limit, remaining, resetAt, period: 'daily' },
- *     },
- *     plans: [...]
- *   }
+ * 🔒 FIX M6: Was returning used=0/remaining=limit because the in-memory rate
+ * limiter had no peek method (calling it would consume quota). Now: queries
+ * the DB directly (AiUsageLog) for today's count — durable, accurate, and
+ * doesn't consume quota. This is the same table the enforcement path uses
+ * (usage-limits.ts N13 DB-backed counter), so the numbers match exactly.
  */
 export async function GET() {
   try {
-    const { userId, error } = await getAuthUserId()
+    const { userId, error } = await getAuthUserIdOwnerOnly()
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const plan = await getUserPlan(userId)
     const limits = PLAN_LIMITS[plan]
 
-    // Fetch user's renewal info
     const user = await db.user.findUnique({
       where: { id: userId },
       select: { plan: true, renewsAt: true, trialEndsAt: true, cancelledAt: true },
     })
 
-    // Check daily rate limit state WITHOUT consuming.
-    // We call rateLimit with the same key the API route uses — this gives us
-    // the current remaining count. Note: this DOES consume 1 unit, which is a
-    // known limitation of the in-memory limiter (no peek-only method).
-    // To avoid skewing user's quota by just viewing the status, we DON'T call
-    // rateLimit here — instead we just return the limit and let the API route
-    // do the actual enforcement. The UI shows "limit" but "used/remaining"
-    // will be 0/limit until the user actually scans.
-    //
-    // TODO for Phase 2: add a peek() method to the rate limiter that returns
-    // state without consuming.
+    // 🔒 FIX M6: Query the DB for today's actual usage count. This is durable
+    // (survives serverless instance recycling), accurate (same source as the
+    // enforcement path), and doesn't consume quota (it's a SELECT, not a
+    // rateLimit call). Uses IST day boundary (consistent with usage-limits.ts).
+    const todayStart = istDayStart(new Date())
+    const [aiScansUsed, voiceEntriesUsed] = await Promise.all([
+      db.aiUsageLog.count({
+        where: {
+          userId,
+          feature: 'scan-bill',
+          createdAt: { gte: todayStart },
+          success: true,
+        },
+      }),
+      db.aiUsageLog.count({
+        where: {
+          userId,
+          feature: 'voice-parse',
+          createdAt: { gte: todayStart },
+          success: true,
+        },
+      }),
+    ])
+
     const aiScansUsage = {
-      used: 0,  // not tracked here to avoid consuming quota
+      used: aiScansUsed,
       limit: limits.dailyAiScans,
-      remaining: limits.dailyAiScans,
-      resetAt: new Date(Date.now() + 86400 * 1000).toISOString(),
+      remaining: Math.max(0, limits.dailyAiScans - aiScansUsed),
+      resetAt: new Date(todayStart.getTime() + 86400 * 1000).toISOString(),
       period: 'daily' as const,
     }
     const voiceEntriesUsage = {
-      used: 0,
+      used: voiceEntriesUsed,
       limit: limits.dailyVoiceEntries,
-      remaining: limits.dailyVoiceEntries,
-      resetAt: new Date(Date.now() + 86400 * 1000).toISOString(),
+      remaining: Math.max(0, limits.dailyVoiceEntries - voiceEntriesUsed),
+      resetAt: new Date(todayStart.getTime() + 86400 * 1000).toISOString(),
       period: 'daily' as const,
     }
 

@@ -37,9 +37,8 @@ export async function GET() {
     // This lets the founder monitor warmup effectiveness in Vercel logs.
     if (durationMs > 2000) {
       console.warn(`[warmup] SLOW: ${durationMs}ms — Neon may have been sleeping (cold start). Disable scale-to-zero to eliminate this.`)
-    } else {
-      console.log(`[warmup] OK: ${durationMs}ms`)
     }
+    // 🔒 FIX L1: Removed stray console.log — serverless logs cost money and can leak context
 
     return NextResponse.json({
       ok: true,
