@@ -14,7 +14,7 @@ import { StaffManagement } from '@/components/settings/StaffManagement'
 import { useShops } from '@/hooks/use-shops'
 import { exportBackup } from '@/lib/data-backup'
 import { useBusinessGoals } from '@/hooks/use-business-goals'
-import { Target, Download, Upload, Calendar, Clock, Coins } from 'lucide-react'
+import { Target, Download, Upload, Calendar, Clock, Coins, PackageX } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { toast as sonnerToast } from 'sonner'
 import { haptic } from '@/lib/haptic'
@@ -99,6 +99,8 @@ export function Settings() {
   const [expenseGoal, setExpenseGoal] = useState('')
   // 🔒 V12: Invoice round-off toggle (nearest rupee on sale totals).
   const [roundOffEnabled, setRoundOffEnabled] = useState(false)
+  // 🔒 V11: Stock policy toggle — 'block' (default) or 'allow' (kirana mode).
+  const [stockPolicy, setStockPolicy] = useState<'block' | 'allow'>('block')
 
   const { data } = useQuery({
     queryKey: ['setting'],
@@ -120,6 +122,7 @@ export function Settings() {
         address: data.setting.address || '',
       })
       setRoundOffEnabled(data.setting.roundOffEnabled ?? false)
+      setStockPolicy(data.setting.stockPolicy === 'allow' ? 'allow' : 'block')
       // hideProfit is now managed by useSetting() hook — no need to sync here
     }
   }, [data])
@@ -137,6 +140,24 @@ export function Settings() {
       sonnerToast.success(`Invoice round-off ${next ? 'on' : 'off'}`)
     } catch {
       sonnerToast.error('Could not save round-off setting')
+    }
+  }
+
+  // 🔒 V11: Persist the stock policy toggle instantly.
+  // 'block' = sales that would push stock negative are REJECTED (default).
+  // 'allow' = sales go through with a warning (kirana mode).
+  const persistStockPolicy = async (next: 'block' | 'allow') => {
+    setStockPolicy(next)
+    try {
+      await offlineFetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...form, hideProfit, roundOffEnabled, stockPolicy: next }),
+        offline: { invalidate: ['/api/settings'] },
+      })
+      sonnerToast.success(next === 'allow' ? 'Overselling allowed (kirana mode)' : 'Overselling blocked')
+    } catch {
+      sonnerToast.error('Could not save stock policy setting')
     }
   }
 
@@ -675,6 +696,25 @@ export function Settings() {
             <Switch
               checked={roundOffEnabled}
               onCheckedChange={(checked) => persistRoundOff(checked)}
+            />
+          </div>
+
+          {/* 🔒 V11: Stock policy toggle — block or allow overselling */}
+          <div className="mt-3 flex items-center justify-between rounded-lg bg-muted/30 border border-border/60 p-3">
+            <div className="flex items-center gap-2">
+              <PackageX className="w-4 h-4 text-muted-foreground" />
+              <div className="flex-1">
+                <p className="text-sm font-medium">Allow overselling (kirana mode)</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {stockPolicy === 'allow'
+                    ? 'ON: You can sell more than you have in stock. A warning shows, but the sale goes through. Useful for shops that sell first and record purchases later.'
+                    : 'OFF (default): You cannot sell more than you have in stock. The sale is blocked until you record a purchase. Keeps your stock numbers accurate.'}
+                </p>
+              </div>
+            </div>
+            <Switch
+              checked={stockPolicy === 'allow'}
+              onCheckedChange={(checked) => persistStockPolicy(checked ? 'allow' : 'block')}
             />
           </div>
         </CardContent>
