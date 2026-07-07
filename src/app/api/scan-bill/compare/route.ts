@@ -255,9 +255,14 @@ async function callProvider(
 
     if (!response.ok) {
       const errText = await response.text()
+      // 🔒 FIX M2: Was leaking raw VLM provider error body (HTTP status + errText)
+      // to the client via the `results` field. Could expose API keys, internal IDs,
+      // rate-limit details, provider response shapes. Now: generic 'provider_failed'
+      // + server-side log with the real error.
+      console.error('[scan-compare] Provider error:', response.status, errText.slice(0, 500))
       return {
         success: false,
-        error: `HTTP ${response.status}: ${errText.slice(0, 300)}`,
+        error: 'provider_failed',
         durationMs,
       }
     }
@@ -320,7 +325,7 @@ async function callProvider(
   } catch (error) {
     return {
       success: false,
-      error: `Network/parse error: ${String(error).slice(0, 300)}`,
+      error: 'provider_failed',  // 🔒 FIX M2: was leaking raw error string
       durationMs: Date.now() - start,
     }
   }

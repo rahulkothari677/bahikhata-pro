@@ -31,10 +31,14 @@ export function activeTransactionWhere(
   userId: string,
   additional?: Prisma.TransactionWhereInput,
 ): Prisma.TransactionWhereInput {
+  // 🔒 FIX M3: Spread order was { userId, deletedAt: null, ...additional } which
+  // allowed `additional` to override userId or deletedAt — a latent IDOR if any
+  // caller ever passes user-controlled data into `additional`. Now: security-
+  // critical fields go LAST so they can never be overridden.
   return {
+    ...additional,
     userId,
     deletedAt: null,
-    ...additional,
   }
 }
 
@@ -45,9 +49,10 @@ export function activePartyWhere(
   userId: string,
   additional?: Prisma.PartyWhereInput,
 ): Prisma.PartyWhereInput {
+  // 🔒 FIX M3: Same fix — security-critical fields last.
   return {
+    ...additional,
     userId,
     deletedAt: null,
-    ...additional,
   }
 }

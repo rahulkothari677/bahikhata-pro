@@ -30,8 +30,12 @@ export async function POST(req: NextRequest) {
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     // Rate limit by IP (anti-abuse — prevents one user from logging in from many IPs)
+    // 🔒 FIX M1: Added { failClosed: true } — during Redis outage, the IP limiter
+    // falls back to in-memory per-instance counters. On Vercel, a determined user
+    // could fan out across instances and bypass the 10-scans/hour cap, burning AI
+    // budget. failClosed denies the request if Redis is unavailable.
     const ip = getClientIP(req)
-    const ipRL = await rateLimit(`scan:ip:${ip}`, { limit: 10, windowSec: 3600 })
+    const ipRL = await rateLimit(`scan:ip:${ip}`, { limit: 10, windowSec: 3600 }, { failClosed: true })
     if (!ipRL.success) return rateLimitedResponse(ipRL)
 
     // Tier-based quota check. For Free: monthly DB counter. For Pro/Elite:
