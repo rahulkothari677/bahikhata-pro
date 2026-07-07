@@ -62,6 +62,7 @@ export const updateTransactionSchema = z.object({
   paidAmount: z.coerce.number().min(0).optional(),
   payeeName: z.string().max(200).nullable().optional(),
   payeePhone: z.string().max(20).nullable().optional(),
+  totalAmount: z.coerce.number().min(0, 'Amount cannot be negative').max(100000000, 'Amount too large').optional(), // for income/expense — 🔒 FIX M5
 })
 
 // Product create schema (🔒 V7 M4: enhanced with clearer error messages)

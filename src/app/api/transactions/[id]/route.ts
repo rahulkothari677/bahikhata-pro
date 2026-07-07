@@ -96,7 +96,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     // For income/expense - simple update
     if (type === 'income' || type === 'expense') {
-      const amount = parseFloat(body.totalAmount) || 0
+      // 🔒 FIX M5: Was `parseFloat(body.totalAmount)` — use validated value.
+      const amount = validation.data.totalAmount || 0
       const transaction = await db.transaction.update({
         where: { id },
         data: {
@@ -245,7 +246,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     const paid = parseFloat(paidAmount)
-    const finalPaid = isNaN(paid) ? totalAmount : paid
+    let finalPaid = isNaN(paid) ? totalAmount : paid
+
+    // 🔒 FIX M3: Same clamp as POST — snap to totalAmount if within ₹1.
+    if (!isNaN(paid) && Math.abs(totalAmount - finalPaid) < 1) {
+      finalPaid = totalAmount
+    }
 
     // 🔒 ATOMICITY (Audit fix C3) + STOCK (Audit fix H1):
     // Wrap delete + update + stock adjustments in $transaction.

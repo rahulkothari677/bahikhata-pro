@@ -158,7 +158,10 @@ export async function POST(req: NextRequest) {
 
     // For income/expense - just total amount
     if (type === 'income' || type === 'expense') {
-      const amount = parseFloat(body.totalAmount) || 0
+      // 🔒 FIX M5: Was `parseFloat(body.totalAmount)` — reads raw body instead
+      // of the zod-validated value. Use validation.data.totalAmount (already
+      // coerced to number by z.coerce.number()).
+      const amount = validation.data.totalAmount || 0
       const transaction = await db.transaction.create({
         data: {
           userId,
@@ -224,25 +227,34 @@ export async function POST(req: NextRequest) {
     }> = []
 
     if (type === 'sale' && !body.confirmOversell) {
+      // 🔒 FIX M2: Consolidate quantities per product before checking stock.
+      // Was: each line item checked individually against the original stock.
+      // If the same product appears in two lines (each selling 3 of 5 in stock),
+      // each line passes (5-3=2), but the actual total is 5-6=-1 (should warn).
+      // Now: sum quantities per product first, then check the combined total.
+      const qtyByProduct = new Map<string, number>()
       for (const item of items) {
         if (!item.productId) continue
         const product = productMap.get(item.productId)
         if (!product) continue
-        // 🔒 V12: Convert the requested quantity into the product's unit before
-        // comparing to stock, so "500 gm" of a kg-tracked product checks against
-        // 0.5 kg — not 500. Without this the warning fired on every gm sale.
         const requestedQty = normalizeToUnit(
           Number(item.quantity) || 0,
           item.unit || product.unit,
           product.unit,
         ).quantity
-        const resultingStock = roundMoney(product.currentStock - requestedQty)
+        qtyByProduct.set(item.productId, (qtyByProduct.get(item.productId) || 0) + requestedQty)
+      }
+
+      for (const [productId, totalQty] of qtyByProduct.entries()) {
+        const product = productMap.get(productId)
+        if (!product) continue
+        const resultingStock = roundMoney(product.currentStock - totalQty)
         if (resultingStock < 0) {
           stockWarnings.push({
             productId: product.id,
             productName: product.name,
             currentStock: product.currentStock,
-            requestedQuantity: requestedQty,
+            requestedQuantity: totalQty,
             resultingStock,
           })
         }
@@ -317,7 +329,16 @@ export async function POST(req: NextRequest) {
 
     const discount = orderDiscount  // stored in the header; already folded into per-item taxable
     const paid = parseFloat(paidAmount)
-    const finalPaid = isNaN(paid) ? totalAmount : paid
+    let finalPaid = isNaN(paid) ? totalAmount : paid
+
+    // 🔒 FIX M3: If the client sent a paidAmount that's within ₹1 of the
+    // post-round-off total, snap it to the total. This prevents a phantom
+    // due/overpay of up to ₹0.50 when the client computed paidAmount from
+    // the pre-round-off total (the C5 client-side fix handles the empty case,
+    // but this catches the explicit-value case too).
+    if (!isNaN(paid) && Math.abs(totalAmount - finalPaid) < 1) {
+      finalPaid = totalAmount
+    }
 
     // 🔒 AUDIT FIX N3 (v3): Invoice sequence generation is now INSIDE the
     // $transaction with retry-on-P2002. Was: max()+1 OUTSIDE the transaction
