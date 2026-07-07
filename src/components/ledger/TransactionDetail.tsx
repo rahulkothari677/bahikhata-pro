@@ -477,6 +477,18 @@ export function TransactionDetail() {
                   <span className="text-muted-foreground">GST Type</span>
                   <span className="font-medium">{txn.isInterState ? 'IGST (Inter-state)' : 'CGST+SGST'}</span>
                 </div>
+                {txn.roundOff !== 0 && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground">Round Off</span>
+                    <span className="font-medium tabular-nums">{txn.roundOff > 0 ? '+' : ''}{formatINR(txn.roundOff)}</span>
+                  </div>
+                )}
+                {txn.createdBy && (
+                  <div className="flex items-center justify-between pt-2 border-t border-border">
+                    <span className="text-muted-foreground flex items-center gap-1.5"><User className="w-3.5 h-3.5" /> Entered by</span>
+                    <span className="font-medium text-xs">{txn.createdBy.name || txn.createdBy.email}{txn.createdBy.role === 'staff' ? ' (Staff)' : ''}</span>
+                  </div>
+                )}
                 {isSale && !hideProfit && (
                   <div className="flex items-center justify-between pt-2 border-t border-border">
                     <span className="text-muted-foreground flex items-center gap-1.5"><TrendingUp className="w-3.5 h-3.5" /> Profit</span>
@@ -996,6 +1008,7 @@ function PrintInvoiceContent({ txn, setting }: { txn: any; setting: any }) {
           {txn.cgst > 0 && <div className="flex justify-between"><span className="text-gray-600">CGST</span><span className="font-medium">₹{txn.cgst.toFixed(2)}</span></div>}
           {txn.sgst > 0 && <div className="flex justify-between"><span className="text-gray-600">SGST</span><span className="font-medium">₹{txn.sgst.toFixed(2)}</span></div>}
           {txn.igst > 0 && <div className="flex justify-between"><span className="text-gray-600">IGST</span><span className="font-medium">₹{txn.igst.toFixed(2)}</span></div>}
+          {txn.roundOff !== 0 && <div className="flex justify-between"><span className="text-gray-600">Round Off</span><span className="font-medium">{txn.roundOff > 0 ? '+' : '-'}₹{Math.abs(txn.roundOff).toFixed(2)}</span></div>}
           <div className="flex justify-between text-base font-bold border-t-2 border-black pt-2 mt-1">
             <span>Total</span><span>₹{txn.totalAmount.toFixed(2)}</span>
           </div>
@@ -1013,6 +1026,7 @@ function PrintInvoiceContent({ txn, setting }: { txn: any; setting: any }) {
           <p>&bull; Goods once sold will not be taken back or exchanged.</p>
           <p>&bull; All disputes are subject to local jurisdiction only.</p>
           {due > 0 && <p>&bull; Payment due within 30 days from invoice date.</p>}
+          {txn.roundOff !== 0 && <p>&bull; Total rounded to nearest rupee as per GST norms.</p>}
         </div>
         <div className="text-right">
           <div className="border-t border-gray-400 mt-8 pt-1 inline-block w-40">
@@ -1173,6 +1187,7 @@ function generateInvoiceHTML(txn: any, setting: any): string {
       ${txn.cgst > 0 ? `<div class="row"><span>CGST</span><span>₹${txn.cgst.toFixed(2)}</span></div>` : ''}
       ${txn.sgst > 0 ? `<div class="row"><span>SGST</span><span>₹${txn.sgst.toFixed(2)}</span></div>` : ''}
       ${txn.igst > 0 ? `<div class="row"><span>IGST</span><span>₹${txn.igst.toFixed(2)}</span></div>` : ''}
+      ${txn.roundOff !== 0 ? `<div class="row"><span>Round Off</span><span>${txn.roundOff > 0 ? '+' : '-'}₹${Math.abs(txn.roundOff).toFixed(2)}</span></div>` : ''}
       <div class="row grand"><span>Total</span><span>₹${txn.totalAmount.toFixed(2)}</span></div>
       <div class="row paid"><span>Paid</span><span>₹${txn.paidAmount.toFixed(2)}</span></div>
       ${due > 0 ? `<div class="row due"><span>Balance Due</span><span>₹${due.toFixed(2)}</span></div>` : ''}

@@ -24,6 +24,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       include: {
         items: true,
         party: true,
+        createdBy: { select: { id: true, name: true, role: true } },  // 🔒 V13 L4: staff accountability
       },
     })
     if (!transaction) {
