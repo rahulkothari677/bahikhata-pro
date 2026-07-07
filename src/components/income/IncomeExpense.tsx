@@ -14,6 +14,7 @@ import { useAppStore } from '@/store/app-store'
 import { useTranslation } from '@/hooks/use-translation'
 import { useToast } from '@/hooks/use-toast'
 import { toast as sonnerToast } from 'sonner'
+import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
 import { formatINR, formatDate, cn } from '@/lib/utils'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { useExpenseBudgets } from '@/hooks/use-expense-budgets'
@@ -33,6 +34,7 @@ export function IncomeExpense() {
   const { features } = useAppStore()
   const { getProgress, setBudget, removeBudget } = useExpenseBudgets()
   const { entries: recurringEntries, addEntry: addRecurring, removeEntry: removeRecurring } = useRecurringEntries()
+  const { confirmDialog, dialog: confirmDialogEl } = useConfirmDialog()
   const [budgetDialogOpen, setBudgetDialogOpen] = useState(false)
   const [budgetCategory, setBudgetCategory] = useState('')
   const [budgetAmount, setBudgetAmount] = useState('')
@@ -83,7 +85,7 @@ export function IncomeExpense() {
   const topExpenses = Array.from(expensesByCategory.entries()).sort((a, b) => b[1] - a[1]).slice(0, 4)
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Delete this entry?')) return
+    if (!await confirmDialog('Delete this entry?', { title: 'Delete Entry', confirmLabel: 'Delete', destructive: true })) return
     const r = await offlineFetch(`/api/transactions?id=${id}`, { method: 'DELETE', offline: { invalidate: ['/api/transactions', '/api/dashboard'] } })
     if (r.ok) {
       sonnerToast.success(isQueuedResponse(r) ? 'Will delete when online' : 'Entry deleted')
@@ -636,6 +638,7 @@ export function IncomeExpense() {
         </DialogContent>
       </Dialog>
     </div>
+    {confirmDialogEl}
     </>
   )
 }

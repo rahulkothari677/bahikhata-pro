@@ -14,6 +14,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { useToast } from '@/hooks/use-toast'
 import { toast as sonnerToast } from 'sonner'
+import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
 import { formatINR, formatDateTime, formatDate, cn } from '@/lib/utils'
 import {
   Edit2, Trash2, Printer, Download, User, Calendar, Receipt,
@@ -41,6 +42,7 @@ export function TransactionDetail() {
   const [editOpen, setEditOpen] = useState(false)
   const [printing, setPrinting] = useState(false)
   const queryClient = useQueryClient()
+  const { confirmDialog, dialog: confirmDialogEl } = useConfirmDialog()
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['transaction', selectedTransactionId],
@@ -84,7 +86,7 @@ export function TransactionDetail() {
 
   const handleDelete = async () => {
     if (!txn) return
-    if (!confirm('Delete this transaction? You can undo this for 5 seconds.')) return
+    if (!await confirmDialog('Delete this transaction? You can undo this for 5 seconds.', { title: 'Delete Transaction', confirmLabel: 'Delete', destructive: true })) return
     const r = await offlineFetch(`/api/transactions/${txn.id}`, { method: 'DELETE', offline: { invalidate: ['/api/transactions', '/api/dashboard', '/api/products', '/api/parties'] } })
     if (r.ok) {
       haptic.warning()
@@ -593,6 +595,7 @@ export function TransactionDetail() {
 
       {/* Print-only invoice */}
       {printing && <PrintInvoice txn={txn} setting={setting} />}
+      {confirmDialogEl}
     </div>
   )
 }

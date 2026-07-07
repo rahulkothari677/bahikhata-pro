@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Skeleton } from '@/components/ui/skeleton'
 import { useToast } from '@/hooks/use-toast'
 import { toast as sonnerToast } from 'sonner'
+import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
 import {
   UserPlus, Trash2, Users, Shield, ChevronDown, ChevronUp, Lock, Unlock,
   LayoutDashboard, ShoppingCart, Truck, Package, ScanLine, FileBarChart,
@@ -48,6 +49,7 @@ const MODULE_ORDER: ModuleKey[] = [
 export function StaffManagement() {
   const { toast } = useToast()
   const queryClient = useQueryClient()
+  const { confirmDialog, dialog: confirmDialogEl } = useConfirmDialog()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [form, setForm] = useState({ name: '', email: '', password: '' })
   const [saving, setSaving] = useState(false)
@@ -91,7 +93,7 @@ export function StaffManagement() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Remove this staff member? They will no longer be able to log in.')) return
+    if (!await confirmDialog('Remove this staff member? They will no longer be able to log in.', { title: 'Remove Staff Member', confirmLabel: 'Remove', destructive: true })) return
     const r = await offlineFetch(`/api/staff?id=${id}`, { method: 'DELETE', offline: { queueable: false } })
     if (r.ok) {
       sonnerToast.success('Staff member removed')
@@ -139,6 +141,7 @@ export function StaffManagement() {
   }
 
   return (
+    <>
     <Card className="shadow-card border-border/60">
       <CardHeader>
         <div className="flex items-center justify-between">
@@ -324,5 +327,7 @@ export function StaffManagement() {
         </DialogContent>
       </Dialog>
     </Card>
+    {confirmDialogEl}
+    </>
   )
 }

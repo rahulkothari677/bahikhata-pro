@@ -27,6 +27,7 @@ import { haptic } from '@/lib/haptic'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { getInitials, cn } from '@/lib/utils'
 import { toast as sonnerToast } from 'sonner'
+import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
 import {
   ChevronRight, Pencil, BarChart3, Truck, Wallet, Users,
   ScanLine, Sparkles, Settings as SettingsIcon, UserCog,
@@ -78,6 +79,7 @@ export function MoreScreen() {
   const { setView, previousView, setPreviousView } = useAppStore()
   const { data: session } = useSession()
   const { canAccess } = useStaffPermissions()
+  const { confirmDialog, dialog: confirmDialogEl } = useConfirmDialog()
 
   // Fetch settings for profile header
   const { data: settingData } = useQuery({
@@ -113,7 +115,7 @@ export function MoreScreen() {
   }
 
   const handleLogout = async () => {
-    if (!confirm('Are you sure you want to logout?')) return
+    if (!await confirmDialog('Are you sure you want to logout?', { title: 'Logout', confirmLabel: 'Logout', destructive: false })) return
     haptic.warning()
     try {
       await clearAllOfflineData()
@@ -315,6 +317,7 @@ export function MoreScreen() {
           EkBook v1.0 · Made with love for Bharat 🇮🇳
         </p>
       </div>
+      {confirmDialogEl}
     </div>
   )
 }

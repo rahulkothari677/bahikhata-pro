@@ -14,6 +14,7 @@ import { useFeatureFlags } from '@/hooks/use-feature-flags'
 import { useStaffPermissions } from '@/hooks/use-staff-permissions'
 import { useShops } from '@/hooks/use-shops'
 import { prefetchView } from '@/lib/prefetch'  // 🔒 V11 §3.3
+import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
 import { Store, Plus, ChevronDown, Check } from 'lucide-react'
 import {
   LayoutDashboard,
@@ -57,6 +58,7 @@ const navItems: { id: ViewType; labelKey: string; descKey: string; icon: any; ba
 ]
 
 export function Sidebar() {
+  const { confirmDialog, dialog: confirmDialogEl } = useConfirmDialog()
   const { currentView, setView, sidebarOpen, setSidebarOpen, sidebarCollapsed, toggleSidebarCollapsed, selectedTransactionType } = useAppStore()
   const { t } = useTranslation()
   const { data: session } = useSession()
@@ -91,7 +93,7 @@ export function Sidebar() {
   const shopName = setting.shopName || 'My Shop'
 
   const handleLogout = async () => {
-    if (!confirm('Are you sure you want to logout?')) return
+    if (!await confirmDialog('Are you sure you want to logout?', { title: 'Logout', confirmLabel: 'Logout', destructive: false })) return
     try {
       await clearAllOfflineData()
       clearRecentProducts()
@@ -337,6 +339,7 @@ export function Sidebar() {
           </div>
         )}
       </aside>
+      {confirmDialogEl}
     </>
   )
 }

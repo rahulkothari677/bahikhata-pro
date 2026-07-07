@@ -19,6 +19,7 @@ import {
   ResponsiveContainer, Legend,
 } from 'recharts'
 import { toast as sonnerToast } from 'sonner'
+import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
 import { haptic } from '@/lib/haptic'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 
@@ -26,6 +27,7 @@ export function PartyProfile() {
   const { selectedPartyId, setView, setPreviousView, triggerRefresh, previousView, features } = useAppStore()
   const queryClient = useQueryClient()
   const [sendingReminder, setSendingReminder] = useState(false)
+  const { confirmDialog, dialog: confirmDialogEl } = useConfirmDialog()
 
   const { data, isLoading } = useQuery({
     queryKey: ['party-profile', selectedPartyId],
@@ -79,7 +81,7 @@ export function PartyProfile() {
   }
 
   const handleDelete = async () => {
-    if (!confirm(`Delete ${party.name}? All their transactions will remain but lose the party link.`)) return
+    if (!await confirmDialog(`Delete ${party.name}? All their transactions will remain but lose the party link.`, { title: 'Delete Party', confirmLabel: 'Delete', destructive: true })) return
     const r = await offlineFetch(`/api/parties/${party.id}`, { method: 'DELETE', offline: { invalidate: ['/api/parties', '/api/dashboard'] } })
     if (r.ok) {
       sonnerToast.success(isQueuedResponse(r) ? 'Will delete when online' : 'Party deleted')
@@ -725,6 +727,7 @@ export function PartyProfile() {
           )}
         </CardContent>
       </Card>
+      {confirmDialogEl}
     </div>
   )
 }

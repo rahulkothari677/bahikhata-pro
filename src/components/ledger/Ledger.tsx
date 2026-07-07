@@ -24,11 +24,13 @@ import {
 import { offlineFetch, isQueuedResponse, isOnline, OfflineError } from '@/lib/offline-fetch'
 import { OfflineNoData } from '@/components/common/OfflineNoData'
 import { useSetting } from '@/hooks/use-setting'
+import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
 import { toast as sonnerToast } from 'sonner'
 
 type LedgerType = 'sale' | 'purchase'
 
 export function Ledger({ type }: { type: LedgerType }) {
+  const { confirmDialog, dialog: confirmDialogEl } = useConfirmDialog()
   const {
     refreshKey, triggerRefresh, setView, setScannerBillType,
     transactionsViewMode, setTransactionsViewMode, triggerNewEntry, triggerNewEntryView,
@@ -206,7 +208,7 @@ export function Ledger({ type }: { type: LedgerType }) {
 
   const handleBulkDelete = async () => {
     if (selectedIds.size === 0) return
-    if (!confirm(`Delete ${selectedIds.size} transactions? This cannot be undone.`)) return
+    if (!await confirmDialog(`Delete ${selectedIds.size} transactions? This cannot be undone.`, { title: 'Delete Transactions', confirmLabel: 'Delete' })) return
     let success = 0
     for (const id of selectedIds) {
       // 🔒 FIX C4: Was `/api/transactions?id=${id}` which returns 410 Gone
@@ -742,6 +744,7 @@ export function Ledger({ type }: { type: LedgerType }) {
           })}
         </div>
       )}
+      {confirmDialogEl}
     </div>
   )
 }

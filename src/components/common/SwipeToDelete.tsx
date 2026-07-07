@@ -18,6 +18,7 @@
 import { useState, useRef, type ReactNode } from 'react'
 import { Trash2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
 
 interface SwipeToDeleteProps {
   children: ReactNode
@@ -37,6 +38,7 @@ export function SwipeToDelete({
   const [showDesktopDelete, setShowDesktopDelete] = useState(false)
   const startX = useRef<number | null>(null)
   const dragging = useRef(false)
+  const { confirmDialog, dialog: confirmDialogEl } = useConfirmDialog()
 
   const DELETE_THRESHOLD = 80 // px to swipe before delete action triggers
 
@@ -65,9 +67,10 @@ export function SwipeToDelete({
     }
   }
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (confirmMessage) {
-      if (!confirm(confirmMessage)) {
+      // 🔒 FIX M13: Was native confirm() — now uses styled Radix AlertDialog.
+      if (!await confirmDialog(confirmMessage, { title: 'Confirm Delete', confirmLabel: 'Delete', destructive: true })) {
         setDragX(0)
         return
       }
@@ -115,6 +118,7 @@ export function SwipeToDelete({
       >
         {children}
       </div>
+      {confirmDialogEl}
     </div>
   )
 }
