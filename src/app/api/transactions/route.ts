@@ -334,14 +334,39 @@ export async function POST(req: NextRequest) {
       // Was: where: { id: item.productId } — no userId check. A client could
       // submit a foreign productId and modify another tenant's stock.
       // Now: updateMany with userId in the where clause → foreign IDs affect 0 rows.
+      // 🔒 FIX H1: In 'block' mode, the stock check is done INSIDE the $transaction
+      // using a conditional WHERE clause (currentStock >= qty). This closes the
+      // race condition where two concurrent sales both read currentStock = 5
+      // outside the transaction, both pass the check, both decrement → stock = -1.
+      // Now: if the conditional updateMany affects 0 rows, stock was insufficient
+      // → throw to roll back the entire transaction.
       for (const item of txItems) {
         if (item.productId) {
           const qty = item.quantity || 0
           if (type === 'sale') {
-            await tx.product.updateMany({
-              where: { id: item.productId, userId },
-              data: { currentStock: { decrement: qty } },
-            })
+            if (stockPolicy === 'block') {
+              // Atomic check-and-decrement: only succeeds if currentStock >= qty.
+              const result = await tx.product.updateMany({
+                where: { id: item.productId, userId, currentStock: { gte: qty } },
+                data: { currentStock: { decrement: qty } },
+              })
+              if (result.count === 0) {
+                // Stock insufficient inside the transaction — a concurrent sale
+                // must have taken the stock between our pre-check and this decrement.
+                // Throw a custom error to roll back and inform the user.
+                const err: any = new Error('STOCK_BLOCK')
+                err.code = 'STOCK_BLOCK'
+                err.productName = item.productName
+                err.requestedQty = qty
+                throw err
+              }
+            } else {
+              // 'allow' mode — decrement without the stock check (allows negative)
+              await tx.product.updateMany({
+                where: { id: item.productId, userId },
+                data: { currentStock: { decrement: qty } },
+              })
+            }
           } else if (type === 'purchase') {
             await tx.product.updateMany({
               where: { id: item.productId, userId },
@@ -357,22 +382,36 @@ export async function POST(req: NextRequest) {
     // 🔒 V9 2.7: With the atomic InvoiceCounter upsert, the P2002 race should
     // never happen. Keep the retry loop as a safety net but it should be a no-op.
     let transaction
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        transaction = await db.$transaction(async (tx) => {
-          return createTransactionWithStock(tx)
-        })
-        break
-      } catch (err: any) {
-        // P2002 = unique constraint violation on invoiceNo (extremely unlikely
-        // with the atomic counter, but handle it just in case)
-        if (err?.code === 'P2002' && attempt < 2) {
-          // The counter already incremented, so the next attempt will get a
-          // new sequence number automatically. Just retry.
-          continue
+    try {
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          transaction = await db.$transaction(async (tx) => {
+            return createTransactionWithStock(tx)
+          })
+          break
+        } catch (err: any) {
+          // P2002 = unique constraint violation on invoiceNo (extremely unlikely
+          // with the atomic counter, but handle it just in case)
+          if (err?.code === 'P2002' && attempt < 2) {
+            // The counter already incremented, so the next attempt will get a
+            // new sequence number automatically. Just retry.
+            continue
+          }
+          throw err
         }
-        throw err
       }
+    } catch (err: any) {
+      // 🔒 FIX H1: Catch the STOCK_BLOCK error from inside the $transaction.
+      // This happens when a concurrent sale took the stock between our pre-check
+      // and the actual decrement. The $transaction has already rolled back.
+      if (err?.code === 'STOCK_BLOCK') {
+        return NextResponse.json({
+          error: 'Not enough stock',
+          message: `Another sale just took the last ${err.requestedQty} units of ${err.productName}. Please try again or record a purchase first.`,
+          hint: 'To allow overselling, go to Settings and turn on "Allow overselling (kirana mode)".',
+        }, { status: 400 })
+      }
+      throw err
     }
 
     return NextResponse.json({

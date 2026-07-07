@@ -289,14 +289,31 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
       // Step 4: Apply new items' stock impact
       // 🔒 V9 2.1 FIX: Scope by userId (same as POST)
+      // 🔒 FIX H1: In 'block' mode, the stock check is done INSIDE the $transaction
+      // using a conditional WHERE clause (currentStock >= qty). Same fix as POST.
       for (const item of txItems) {
         if (item.productId) {
           const qty = item.quantity || 0
           if (type === 'sale') {
-            await tx.product.updateMany({
-              where: { id: item.productId, userId },
-              data: { currentStock: { decrement: qty } },
-            })
+            if (stockPolicy === 'block') {
+              // Atomic check-and-decrement: only succeeds if currentStock >= qty.
+              const result = await tx.product.updateMany({
+                where: { id: item.productId, userId, currentStock: { gte: qty } },
+                data: { currentStock: { decrement: qty } },
+              })
+              if (result.count === 0) {
+                const err: any = new Error('STOCK_BLOCK')
+                err.code = 'STOCK_BLOCK'
+                err.productName = item.productName
+                err.requestedQty = qty
+                throw err
+              }
+            } else {
+              await tx.product.updateMany({
+                where: { id: item.productId, userId },
+                data: { currentStock: { decrement: qty } },
+              })
+            }
           } else if (type === 'purchase') {
             await tx.product.updateMany({
               where: { id: item.productId, userId },
@@ -310,7 +327,15 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     })
 
     return NextResponse.json({ transaction })
-  } catch (error) {
+  } catch (error: any) {
+    // 🔒 FIX H1: Catch the STOCK_BLOCK error from inside the $transaction.
+    if (error?.code === 'STOCK_BLOCK') {
+      return NextResponse.json({
+        error: 'Not enough stock',
+        message: `Another sale just took the last ${error.requestedQty} units of ${error.productName}. Please try again or record a purchase first.`,
+        hint: 'To allow overselling, go to Settings and turn on "Allow overselling (kirana mode)".',
+      }, { status: 400 })
+    }
     return apiError(error, 'Failed to update transaction', 500)
   }
 }
