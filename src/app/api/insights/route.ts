@@ -36,7 +36,7 @@ export async function GET() {
     // 🔒 V7 M1: Bounded queries — only fetch what we need, only last 60 days max.
     // Was: db.transaction.findMany({ where: activeTransactionWhere(userId), include: { items, party } })
     // with NO date filter → loaded ALL transactions for the user.
-    const [products, recentTransactions, receivablePayable] = await Promise.all([
+    const [products, salesVelocityRows, topProductRows, productsWithSales30d, recentTransactions, receivablePayable] = await Promise.all([
       // Products — read currentStock column directly (no re-derivation)
       db.product.findMany({
         where: { userId },
@@ -49,14 +49,56 @@ export async function GET() {
           lowStockThreshold: true,
         },
       }),
-      // Last 60 days of transactions (bounded) for sales-velocity + margin insights
+      // 🔒 FIX M16: Was `findMany({ include: { items: true } })` loading 60 days
+      // of transactions with all items into memory (30K rows at scale → OOM).
+      // Now: two targeted queries:
+      // 1. SQL GROUP BY for per-product 7-day sales velocity (stock-out predictions)
+      // 2. findMany WITHOUT items + take:5000 for header-only needs (dues, margin)
+      db.$queryRaw<Array<{ productId: string; totalQty: number }>>`
+        SELECT ti."productId", SUM(ti."quantity") AS "totalQty"
+        FROM "TransactionItem" ti
+        JOIN "Transaction" t ON ti."transactionId" = t.id
+        WHERE t."userId" = ${userId}
+          AND t."deletedAt" IS NULL
+          AND t."type" = 'sale'
+          AND t."date" >= ${sevenDaysAgo}
+        GROUP BY ti."productId"
+      `,
+      // 🔒 FIX M16: Top product (last 30 days) — SQL aggregate instead of JS loop
+      db.$queryRaw<Array<{ productName: string; productId: string | null; totalRevenue: number; totalQty: number }>>`
+        SELECT
+          ti."productName",
+          ti."productId",
+          SUM(ROUND(ti."quantity"::numeric * ti."unitPrice"::numeric, 2)) AS "totalRevenue",
+          SUM(ti."quantity") AS "totalQty"
+        FROM "TransactionItem" ti
+        JOIN "Transaction" t ON ti."transactionId" = t.id
+        WHERE t."userId" = ${userId}
+          AND t."deletedAt" IS NULL
+          AND t."type" = 'sale'
+          AND t."date" >= ${thirtyDaysAgo}
+        GROUP BY ti."productName", ti."productId"
+        ORDER BY "totalRevenue" DESC
+        LIMIT 1
+      `,
+      // 🔒 FIX M16: Products that had sales in 30 days (for dead-stock detection)
+      db.$queryRaw<Array<{ productId: string }>>`
+        SELECT DISTINCT ti."productId"
+        FROM "TransactionItem" ti
+        JOIN "Transaction" t ON ti."transactionId" = t.id
+        WHERE t."userId" = ${userId}
+          AND t."deletedAt" IS NULL
+          AND t."type" = 'sale'
+          AND t."date" >= ${thirtyDaysAgo}
+          AND ti."productId" IS NOT NULL
+      `,
       db.transaction.findMany({
         where: activeTransactionWhere(userId, {
           type: 'sale',
           date: { gte: sixtyDaysAgo },
         }),
-        include: { items: true },
         orderBy: { date: 'desc' },
+        take: 5000,  // 🔒 FIX M16: defensive cap — prevents OOM at scale
       }),
       // 🔒 V7 H1+H2: Use shared helper for receivable/payable (correct balances)
       getReceivablePayable(userId),
@@ -69,19 +111,18 @@ export async function GET() {
     const prev30Sales = recentTransactions.filter(t => t.date < thirtyDaysAgo && t.date >= sixtyDaysAgo)
 
     // 1. Stock-out predictions based on sales velocity (last 7 days)
-    // 🔒 V7 M1: Uses currentStock column (not re-derived)
+    // 🔒 FIX M16: Was O(products × transactions × items) JS loop. Now uses
+    // pre-computed SQL GROUP BY result (O(products) lookup).
+    const velocityMap = new Map<string, number>()
+    for (const row of salesVelocityRows) {
+      if (row.productId) velocityMap.set(row.productId, Number(row.totalQty))
+    }
+
     for (const p of products) {
       const stock = p.currentStock  // read the column directly
       if (stock <= 0) continue
 
-      // Count sold in last 7 days from the bounded recentTransactions
-      let soldIn7Days = 0
-      for (const t of last30Sales) {
-        if (t.date < sevenDaysAgo) continue
-        for (const item of t.items) {
-          if (item.productId === p.id) soldIn7Days += item.quantity
-        }
-      }
+      const soldIn7Days = velocityMap.get(p.id) || 0
 
       if (soldIn7Days > 0) {
         const dailyVelocity = soldIn7Days / 7
@@ -193,45 +234,27 @@ export async function GET() {
       }
     }
 
-    // 5. Top performer insights (last 30 days)
-    const productPerfMap = new Map<string, { name: string; revenue: number; profit: number; qty: number }>()
-    for (const t of last30Sales) {
-      for (const item of t.items) {
-        const key = item.productId || item.productName
-        const existing = productPerfMap.get(key) || { name: item.productName, revenue: 0, profit: 0, qty: 0 }
-        existing.revenue += item.unitPrice * item.quantity
-        existing.qty += item.quantity
-        const product = products.find(p => p.id === item.productId)
-        if (product) existing.profit += (item.unitPrice - product.purchasePrice) * item.quantity
-        productPerfMap.set(key, existing)
-      }
-    }
-
-    const topProduct = Array.from(productPerfMap.values()).sort((a, b) => b.revenue - a.revenue)[0]
+    // 5. Top performer insights (last 30 days) — 🔒 FIX M16: uses SQL aggregate
+    const topProduct = topProductRows[0]
     if (topProduct) {
       insights.push({
         id: 'top-product',
         type: 'info',
         category: 'sales',
-        title: `${topProduct.name} is your bestseller`,
-        description: `₹${topProduct.revenue.toFixed(0)} revenue from ${topProduct.qty} units sold in last 30 days.`,
+        title: `${topProduct.productName} is your bestseller`,
+        description: `₹${Number(topProduct.totalRevenue).toFixed(0)} revenue from ${Number(topProduct.totalQty)} units sold in last 30 days.`,
         action: 'inventory',
         actionLabel: 'View Product',
       })
     }
 
     // 6. Dead stock detection (no sales in 30 days, but has stock)
-    // 🔒 V7 M1: Uses currentStock column
-    const productsWithStock = products.filter(p => p.currentStock > 0)
-    const deadStock = productsWithStock.filter(p => {
-      let soldIn30Days = 0
-      for (const t of last30Sales) {
-        for (const item of t.items) {
-          if (item.productId === p.id) soldIn30Days += item.quantity
-        }
-      }
-      return soldIn30Days === 0
-    })
+    // 🔒 FIX M16: Was O(products × transactions × items) JS loop. Now uses
+    // pre-computed SQL DISTINCT result — O(products) set lookup.
+    const productsSold30d = new Set(productsWithSales30d.map(r => r.productId))
+    const deadStock = products.filter(p =>
+      p.currentStock > 0 && !productsSold30d.has(p.id)
+    )
 
     if (deadStock.length > 0) {
       const deadStockValue = roundMoney(deadStock.reduce((s, p) => s + p.currentStock * p.purchasePrice, 0))
