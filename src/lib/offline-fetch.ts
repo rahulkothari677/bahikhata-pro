@@ -100,10 +100,19 @@ export function onOnlineChange(fn: () => void): () => void {
 // ────────────────────────────────────────────────────────────────────────────
 
 const syncListeners = new Set<() => void>()
+const syncFailedListeners = new Set<(detail: { failed: number; synced: number }) => void>()
 
 export function onSyncComplete(fn: () => void): () => void {
   syncListeners.add(fn)
   return () => syncListeners.delete(fn)
+}
+
+// 🔒 FIX C3: Listener for sync failures. The UI can subscribe to show a
+// toast when offline writes fail to sync (e.g., validation error, deleted
+// product, stock policy block).
+export function onSyncFailed(fn: (detail: { failed: number; synced: number }) => void): () => void {
+  syncFailedListeners.add(fn)
+  return () => syncFailedListeners.delete(fn)
 }
 
 function notifySyncComplete() {
@@ -454,9 +463,34 @@ export async function syncPendingWrites(): Promise<{ synced: number; failed: num
           }
           continue
         } else {
-          // 4xx (other than 409/422) — drop, don't retry
-          await deletePendingWrite(w.id)
-          synced++
+          // 🔒 FIX C3: 4xx (other than 409/422) — was SILENTLY DROPPING the
+          // write and counting it as "synced" (success). This is a DATA LOSS
+          // bug: the user saw "Saved offline. Will sync when online" but the
+          // sale never reached the database. Scenarios that trigger this:
+          //   - Server validation tightened between write-time and sync-time
+          //   - Product/party referenced in the queued sale was deleted
+          //   - Subscription/plan limit hit during sync (402)
+          //   - Stock policy changed to 'block' and the sale now exceeds stock
+          //
+          // Now: keep the item in the queue (don't delete it) and mark it as
+          // failed. The user will see a "sync failed" notification. The item
+          // stays in IndexedDB so the user can retry or manually fix it.
+          // After MAX_ATTEMPTS, quarantine it (delete) so it doesn't block
+          // the queue forever — but log it loudly so it's visible.
+          const errorBody = await res.text().catch(() => '')
+          console.error(`[offline-sync] 4xx sync failure (NOT dropping — keeping for retry):`, {
+            url: w.url,
+            status: res.status,
+            body: errorBody.slice(0, 500),
+            attempts,
+          })
+          if (attempts >= MAX_ATTEMPTS) {
+            console.warn(`[offline-sync] Quarantining write after ${MAX_ATTEMPTS} failed 4xx attempts: ${w.url}`)
+            await deletePendingWrite(w.id)
+          } else {
+            await updatePendingWriteAttempts(w.id, attempts)
+          }
+          failed++
         }
       } catch {
         // 🔒 V9 2.9: Network error — same retry/quit logic as 5xx.
@@ -476,6 +510,19 @@ export async function syncPendingWrites(): Promise<{ synced: number; failed: num
       await setMeta('lastSyncAt', Date.now())
       notifySyncComplete()
       await notifyPendingCount()
+    }
+    // 🔒 FIX C3: If any writes failed, notify the user so they know data
+    // didn't sync. Was: silent — the user only saw "synced" count and never
+    // knew about failures. Now: notify all syncFailedListeners (the UI shows
+    // a toast).
+    if (failed > 0) {
+      syncFailedListeners.forEach((l) => {
+        try {
+          l({ failed, synced })
+        } catch {
+          /* ignore */
+        }
+      })
     }
   } finally {
     syncing = false

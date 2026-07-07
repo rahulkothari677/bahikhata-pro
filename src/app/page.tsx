@@ -8,9 +8,10 @@ import { useAppStore } from '@/store/app-store'
 import { useOfflineSession } from '@/hooks/use-offline-session'
 import { useBrowserBackButton } from '@/hooks/use-browser-back-button'
 import { PullToRefresh } from '@/hooks/use-pull-to-refresh'
-import { isOnline, onSyncComplete } from '@/lib/offline-fetch'
+import { isOnline, onSyncComplete, onSyncFailed } from '@/lib/offline-fetch'
 import { precacheData } from '@/lib/precache'
 import { useDashboardThisMonth } from '@/hooks/use-dashboard'
+import { toast as sonnerToast } from 'sonner'
 import { AuthScreen } from '@/components/auth/AuthScreen'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { Header } from '@/components/layout/Header'
@@ -153,6 +154,20 @@ export default function Home() {
     })
     return unsub
   }, [queryClient])
+
+  // 🔒 FIX C3: Listen for sync failures and show a toast so the user knows
+  // their offline sale/purchase didn't reach the server. Was: silent data
+  // loss — the user saw "Saved offline. Will sync when online" but the sale
+  // was silently discarded if the server returned a 4xx error during sync.
+  useEffect(() => {
+    const unsub = onSyncFailed(({ failed, synced }) => {
+      sonnerToast.error('Some entries could not sync', {
+        description: `${failed} entr${failed === 1 ? 'y' : 'ies'} failed to sync${synced > 0 ? ` (${synced} synced successfully)` : ''}. Check your entries and try again, or contact support.`,
+        duration: 10000,
+      })
+    })
+    return unsub
+  }, [])
 
   // precacheDone ref removed — precache is now gated behind warmup (V9 1.4)
 
