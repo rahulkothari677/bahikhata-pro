@@ -20,7 +20,7 @@ import {
   FileBarChart, TrendingUp, Receipt, Package, Users, Calendar,
   ArrowDownRight, ArrowUpRight, IndianRupee, Percent, FileText,
   FileSpreadsheet, Loader2, Download, Printer, Clock, AlertTriangle, Info,
-  AlertCircle,
+  AlertCircle, Coffee,
 } from 'lucide-react'
 import { toast as sonnerToast } from 'sonner'
 import { offlineFetch } from '@/lib/offline-fetch'
@@ -773,6 +773,11 @@ function ReportStatCard({ label, value, icon: Icon, color, bg }: { label: string
 function ReportSkeleton() {
   return (
     <div className="space-y-4">
+      {/* 🔒 FIX M11: Waking-up message for cold DB start */}
+      <div className="flex items-center gap-2 text-sm text-muted-foreground bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
+        <Coffee className="w-4 h-4 text-amber-600 flex-shrink-0 animate-pulse" />
+        <span>Waking up your shop... this takes a few seconds on first load.</span>
+      </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}
       </div>

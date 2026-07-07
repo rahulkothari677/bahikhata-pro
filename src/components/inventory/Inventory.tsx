@@ -16,6 +16,7 @@ import { formatINR, cn } from '@/lib/utils'
 import { ProductDialog } from './ProductDialog'
 import { ViewModeToggle } from '@/components/common/ViewModeToggle'
 import { EmptyState } from '@/components/common/EmptyState'
+import { WakingUpState } from '@/components/common/WakingUpState'
 import {
   Plus, Search, Package, AlertTriangle, Edit2, TrendingUp, IndianRupee,
   ChevronRight, Folder, FolderOpen, LayoutGrid, List, X, ScanLine,
@@ -266,9 +267,7 @@ export function Inventory() {
           </CardContent>
         </Card>
       ) : isLoading ? (
-        <div className="space-y-2">
-          {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-16 w-full rounded-xl" />)}
-        </div>
+        <WakingUpState rows={6} />
       ) : error && isOnline() ? (
         // 🔒 FIX H8: Was falling through to the empty state "No products yet"
         // when the API returned a 500 (DB cold start). Now shows a clear

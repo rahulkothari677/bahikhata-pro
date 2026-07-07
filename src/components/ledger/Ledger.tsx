@@ -13,6 +13,7 @@ import { useTranslation } from '@/hooks/use-translation'
 import { ViewModeToggle } from '@/components/common/ViewModeToggle'
 import { DateRangePicker, getPresetRange, getPresetLabel, type DateRange, type DatePreset } from '@/components/common/DateRangePicker'
 import { EmptyState } from '@/components/common/EmptyState'
+import { WakingUpState } from '@/components/common/WakingUpState'
 import { SwipeToDelete } from '@/components/common/SwipeToDelete'
 import { ContextMenu, type ContextMenuItem } from '@/components/common/ContextMenu'
 import {
@@ -531,9 +532,7 @@ export function Ledger({ type }: { type: LedgerType }) {
           </CardContent>
         </Card>
       ) : isLoading ? (
-        <div className="space-y-2">
-          {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}
-        </div>
+        <WakingUpState rows={5} />
       ) : error && isOnline() ? (
         // 🔒 FIX H8: Was falling through to the empty state "No sales yet"
         // when the API returned a 500 (DB cold start). Now shows a clear
