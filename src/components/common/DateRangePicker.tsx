@@ -174,6 +174,14 @@ export function DateRangePicker({
       </Button>
 
       {open && (
+        <>
+        {/* 🔒 FIX M8: Mobile backdrop — was missing. The tap that closes the
+            picker could also fire a click on the underlying row (e.g., a Ledger
+            row), navigating away unintentionally. The scrim intercepts the tap. */}
+        <div
+          className="fixed inset-0 bg-black/40 z-40 sm:hidden"
+          onClick={() => setOpen(false)}
+        />
         <div className={cn(
           'fixed sm:absolute z-50 bg-popover border border-border rounded-xl shadow-lg p-3 w-[calc(100vw-2rem)] sm:w-72 max-h-[80vh] overflow-y-auto',
           'top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 sm:translate-x-0 sm:translate-y-0 sm:top-full sm:left-auto sm:mt-2',
@@ -240,6 +248,7 @@ export function DateRangePicker({
             {formatDate(value.from)} — {formatDate(value.to)}
           </div>
         </div>
+        </>
       )}
     </div>
   )

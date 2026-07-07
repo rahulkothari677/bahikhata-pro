@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useAppStore, type ViewType } from '@/store/app-store'
 import { useTranslation } from '@/hooks/use-translation'
 import { Menu, Plus, Sparkles, ScanLine, ArrowLeft, Search, LogOut, Store, ChevronDown, Check, Globe } from 'lucide-react'
@@ -39,6 +39,18 @@ export function Header() {
   const { t } = useTranslation()
   const { shops, activeShop, switchShop } = useShops()
   const [shopDropdownOpen, setShopDropdownOpen] = useState(false)
+  // 🔒 FIX M9: Outside-click handler — was missing, dropdown stayed open forever.
+  const shopDropdownRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!shopDropdownOpen) return
+    const handleClickOutside = (e: MouseEvent) => {
+      if (shopDropdownRef.current && !shopDropdownRef.current.contains(e.target as Node)) {
+        setShopDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [shopDropdownOpen])
   const titleKeys = viewTitleKeys[currentView] || { titleKey: 'nav.dashboard', subtitleKey: 'nav.dashboard' }
   // Override for transaction detail - show Purchase Ledger if it's a purchase
   if (currentView === 'transaction-detail' && selectedTransactionType === 'purchase') {
@@ -121,7 +133,7 @@ export function Header() {
 
           {/* Mobile shop switcher — shows current shop name, tap to switch */}
           {shops.length > 1 && (
-            <div className="relative lg:hidden">
+            <div className="relative lg:hidden" ref={shopDropdownRef}>
               <button
                 onClick={() => setShopDropdownOpen(!shopDropdownOpen)}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-muted/50 hover:bg-muted transition"

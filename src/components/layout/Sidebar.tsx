@@ -2,7 +2,7 @@
 
 import { useAppStore, type ViewType } from '@/store/app-store'
 import { useTranslation } from '@/hooks/use-translation'
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useSession, signOut } from 'next-auth/react'
 import { cn, getInitials } from '@/lib/utils'
 import { useQuery } from '@tanstack/react-query'
@@ -65,6 +65,18 @@ export function Sidebar() {
   const { isFlagEnabled } = useFeatureFlags()
   const { shops, activeShop, switchShop } = useShops()
   const [shopDropdownOpen, setShopDropdownOpen] = useState(false)
+  // 🔒 FIX M9: Outside-click handler — was missing.
+  const shopDropdownRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!shopDropdownOpen) return
+    const handleClickOutside = (e: MouseEvent) => {
+      if (shopDropdownRef.current && !shopDropdownRef.current.contains(e.target as Node)) {
+        setShopDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [shopDropdownOpen])
 
   // Fetch settings for profile section
   const { data: settingData } = useQuery({
@@ -154,7 +166,7 @@ export function Sidebar() {
 
         {/* Shop switcher — shows current shop, dropdown to switch */}
         {!sidebarCollapsed && shops.length > 0 && (
-          <div className="px-3 py-2 border-b border-sidebar-border relative">
+          <div className="px-3 py-2 border-b border-sidebar-border relative" ref={shopDropdownRef}>
             <button
               onClick={() => setShopDropdownOpen(!shopDropdownOpen)}
               className="w-full flex items-center gap-2 p-2 rounded-lg bg-sidebar-accent/50 hover:bg-sidebar-accent transition text-left"
