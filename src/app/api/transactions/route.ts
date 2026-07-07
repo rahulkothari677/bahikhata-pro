@@ -37,9 +37,17 @@ export async function GET(req: NextRequest) {
       if (to) where.date.lte = new Date(to)
     }
 
+    // 🔒 FIX M5: Was `include: { items: true, party: true }` — loaded ALL item
+    // fields for all 200 transactions (~1000 rows × 15 columns each). The list
+    // view only needs: productName + quantity (for the 4-item preview) + count.
+    // Now: uses `select` to fetch only the fields the list view actually uses.
+    // Full item details are fetched via /api/transactions/[id] when expanded.
     const transactions = await db.transaction.findMany({
       where,
-      include: { items: true, party: true },
+      include: {
+        items: { select: { productName: true, quantity: true } },
+        party: { select: { name: true, phone: true, gstin: true } },
+      },
       orderBy: { date: 'desc' },
       take: limit,
     })
