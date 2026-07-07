@@ -1,6 +1,6 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from '@/hooks/use-translation'
 import { Card, CardContent } from '@/components/ui/card'
@@ -51,6 +51,8 @@ export function Inventory() {
       if (err instanceof TypeError) return false
       return count < 2
     },
+    // 🔒 FIX M12: Keep previous data while refetching.
+    placeholderData: keepPreviousData,
   })
 
   const products: any[] = data?.products || []

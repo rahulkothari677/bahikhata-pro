@@ -1,7 +1,7 @@
 'use client'
 
 import { useTranslation } from '@/hooks/use-translation'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useAppStore } from '@/store/app-store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -122,6 +122,8 @@ export function Reports() {
     },
     // 🔒 V11 FIX: Don't crash on query errors — show retry state.
     retry: 1,
+    // 🔒 FIX M12: Keep previous data while refetching.
+    placeholderData: keepPreviousData,
   })
 
   const periodLabel = `${formatDate(dateRange.from)} to ${formatDate(dateRange.to)}`

@@ -1,6 +1,6 @@
 'use client'
 
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { useState, useEffect, useRef } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -141,6 +141,10 @@ export function Ledger({ type }: { type: LedgerType }) {
       if (err instanceof TypeError) return false
       return count < 2
     },
+    // 🔒 FIX M12: Keep previous data while refetching — prevents skeleton flash
+    // and stale-data flash on view switch. Old data stays on screen until new
+    // data arrives, then swaps instantly.
+    placeholderData: keepPreviousData,
   })
 
   const transactions: any[] = data?.transactions || []
