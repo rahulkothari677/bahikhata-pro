@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useAppStore } from '@/store/app-store'
 import { Card, CardContent } from '@/components/ui/card'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -1420,45 +1421,47 @@ function AddPartyInline({ open, onOpenChange, defaultType, onAdded }: {
   }
 
   return (
-    <Card className={`fixed inset-0 z-50 m-auto w-full max-w-md h-fit shadow-2xl ${open ? 'flex' : 'hidden'} flex-col`}>
-      <div className="p-4 border-b border-border flex items-center justify-between">
-        <h3 className="font-semibold flex items-center gap-2">
-          <Plus className="w-4 h-4 text-primary" /> Add New {defaultType === 'customer' ? 'Customer' : 'Supplier'}
-        </h3>
-        <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => onOpenChange(false)}>
-          <X className="w-4 h-4" />
-        </Button>
-      </div>
-      <div className="p-4 space-y-3">
-        <div>
-          <Label>Name *</Label>
-          <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} autoFocus className="mt-1" />
-        </div>
-        <div className="grid grid-cols-2 gap-3">
+    // 🔒 FIX M7: Was a Card with fixed positioning — no backdrop, no Esc, no
+    // focus trap, no outside-click close. Now uses Radix Dialog (same as
+    // ProductDialog) — gets all of these for free.
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Plus className="w-4 h-4 text-primary" /> Add New {defaultType === 'customer' ? 'Customer' : 'Supplier'}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 py-2">
           <div>
-            <Label>Phone</Label>
-            <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="mt-1" />
+            <Label>Name *</Label>
+            <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} autoFocus className="mt-1" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Phone</Label>
+              <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="mt-1" />
+            </div>
+            <div>
+              <Label>State</Label>
+              <Input value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} className="mt-1" />
+            </div>
           </div>
           <div>
-            <Label>State</Label>
-            <Input value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} className="mt-1" />
+            <Label>GSTIN</Label>
+            <Input value={form.gstin} onChange={(e) => setForm({ ...form, gstin: e.target.value })} className="mt-1 font-mono" />
+          </div>
+          <div>
+            <Label>Address</Label>
+            <Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} className="mt-1" />
           </div>
         </div>
-        <div>
-          <Label>GSTIN</Label>
-          <Input value={form.gstin} onChange={(e) => setForm({ ...form, gstin: e.target.value })} className="mt-1 font-mono" />
-        </div>
-        <div>
-          <Label>Address</Label>
-          <Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} className="mt-1" />
-        </div>
-      </div>
-      <div className="p-4 border-t border-border flex gap-2">
-        <Button variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>Cancel</Button>
-        <Button className="flex-1 bg-gradient-saffron" onClick={handleSave} disabled={saving}>
-          {saving ? 'Adding...' : 'Add'}
-        </Button>
-      </div>
-    </Card>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" className="flex-1" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button className="flex-1 bg-gradient-saffron" onClick={handleSave} disabled={saving}>
+            {saving ? 'Adding...' : 'Add'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
