@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAppStore } from '@/store/app-store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -142,6 +142,36 @@ export function PartyProfile() {
     enabled: !!selectedPartyId,
   })
   const payments: any[] = paymentsData?.payments || []
+
+  // 🔒 FIX H3+UI/UX2: Merge transactions + payments into a single chronological
+  // statement. Each entry has a normalized shape so the UI can render them
+  // uniformly. Payments appear as blue bubbles, sales as green, purchases as amber.
+  const statement = useMemo(() => {
+    const txEntries = transactions.map((t: any) => ({
+      id: t.id,
+      date: t.date,
+      type: t.type, // 'sale' | 'purchase'
+      amount: t.totalAmount,
+      due: t.totalAmount - t.paidAmount,
+      invoiceNo: t.invoiceNo,
+      itemCount: t.items?.length || 0,
+      isPayment: false,
+    }))
+    const payEntries = payments.map((p: any) => ({
+      id: p.id,
+      date: p.date,
+      type: p.type === 'received' ? 'payment-received' : 'payment-paid',
+      amount: p.amount,
+      due: 0,
+      invoiceNo: null,
+      itemCount: 0,
+      paymentMode: p.mode,
+      notes: p.notes,
+      isPayment: true,
+    }))
+    // Sort by date descending (most recent first)
+    return [...txEntries, ...payEntries].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+  }, [transactions, payments])
 
   const handleDelete = async () => {
     if (!await confirmDialog(`Delete ${party.name}? All their transactions will remain but lose the party link.`, { title: 'Delete Party', confirmLabel: 'Delete', destructive: true })) return
@@ -687,22 +717,24 @@ export function PartyProfile() {
         </Card>
       )}
 
-      {/* Transaction history — WhatsApp-style chat view
-          Sales (inflow) = right-aligned green bubbles (like sent messages)
-          Purchases (outflow) = left-aligned saffron bubbles (like received messages)
+      {/* 🔒 UI/UX 2: Account Statement — merged transactions + payments timeline
+          Sales (inflow) = right-aligned green bubbles
+          Purchases (outflow) = left-aligned amber bubbles
+          Payments received = right-aligned blue bubbles
+          Payments paid = left-aligned blue bubbles
           Date separators between days, running balance sticky at top */}
       <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
             <CardTitle className="text-base flex items-center gap-2">
-              <Receipt className="w-4 h-4" /> Transaction History
+              <Receipt className="w-4 h-4" /> Account Statement
             </CardTitle>
-            <Badge variant="secondary">{transactions.length} total</Badge>
+            <Badge variant="secondary">{statement.length} entries</Badge>
           </div>
         </CardHeader>
         <CardContent>
-          {transactions.length === 0 ? (
-            <p className="text-center py-8 text-sm text-muted-foreground">No transactions yet with this party</p>
+          {statement.length === 0 ? (
+            <p className="text-center py-8 text-sm text-muted-foreground">No transactions or payments yet with this party</p>
           ) : (
             <div className="max-h-[500px] overflow-y-auto rounded-xl bg-muted/20 p-3 space-y-1">
               {/* Running balance banner at top */}
@@ -716,77 +748,107 @@ export function PartyProfile() {
                 </span>
               </div>
 
-              {transactions.map((txn: any, index: number) => {
-                const isSale = txn.type === 'sale'
-                const isPurchase = txn.type === 'purchase'
-                const isInflow = isSale
-                const due = txn.totalAmount - txn.paidAmount
-                const txnDate = new Date(txn.date)
-                const prevTxn = transactions[index - 1]
-                const showDateSeparator = !prevTxn || new Date(prevTxn.date).toDateString() !== txnDate.toDateString()
+              {statement.map((entry: any, index: number) => {
+                const isSale = entry.type === 'sale'
+                const isPurchase = entry.type === 'purchase'
+                const isPayReceived = entry.type === 'payment-received'
+                const isPayPaid = entry.type === 'payment-paid'
+                const isInflow = isSale || isPayReceived
+                const entryDate = new Date(entry.date)
+                const prevEntry = statement[index - 1]
+                const showDateSeparator = !prevEntry || new Date(prevEntry.date).toDateString() !== entryDate.toDateString()
 
                 return (
-                  <div key={txn.id}>
-                    {/* Date separator — shows when the day changes */}
+                  <div key={`${entry.isPayment ? 'pay' : 'txn'}-${entry.id}`}>
+                    {/* Date separator */}
                     {showDateSeparator && (
                       <div className="flex justify-center my-3">
                         <span className="text-[10px] font-medium text-muted-foreground bg-background px-3 py-1 rounded-full border border-border">
-                          {formatDate(txn.date)}
+                          {formatDate(entry.date)}
                         </span>
                       </div>
                     )}
 
-                    {/* Chat bubble — right-aligned for sales, left-aligned for purchases */}
-                    <button
-                      onClick={() => handleViewTransaction(txn.id)}
-                      className={cn(
-                        'flex w-full group',
-                        isInflow ? 'justify-end' : 'justify-start',
-                      )}
-                    >
-                      <div
-                        className={cn(
-                          'max-w-[80%] rounded-2xl px-3 py-2 shadow-sm transition group-hover:shadow-md group-active:scale-95',
-                          isInflow
-                            ? 'bg-emerald-500 text-white rounded-br-md'
-                            : 'bg-amber-500 text-white rounded-bl-md'
-                        )}
-                      >
-                        {/* Header row: type + invoice */}
-                        <div className="flex items-center gap-1.5 mb-0.5">
-                          <span className="text-[10px] font-semibold uppercase tracking-wide opacity-90">
-                            {txn.type}
-                          </span>
-                          {txn.invoiceNo && (
+                    {/* Chat bubble */}
+                    {entry.isPayment ? (
+                      // Payment entry — blue/teal bubble, not clickable
+                      <div className={cn('flex w-full', isInflow ? 'justify-end' : 'justify-start')}>
+                        <div
+                          className={cn(
+                            'max-w-[80%] rounded-2xl px-3 py-2 shadow-sm',
+                            isInflow
+                              ? 'bg-blue-500 text-white rounded-br-md'
+                              : 'bg-teal-600 text-white rounded-bl-md'
+                          )}
+                        >
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            <HandCoins className="w-3 h-3" />
+                            <span className="text-[10px] font-semibold uppercase tracking-wide opacity-90">
+                              {isPayReceived ? 'Received' : 'Paid'}
+                            </span>
                             <span className="text-[10px] opacity-75 bg-white/20 px-1.5 py-0.5 rounded">
-                              {txn.invoiceNo}
+                              {entry.paymentMode}
                             </span>
+                          </div>
+                          <p className="text-base font-bold tabular-nums">
+                            {isInflow ? '+' : '-'}{formatINR(entry.amount)}
+                          </p>
+                          {entry.notes && (
+                            <p className="text-[10px] opacity-75 mt-0.5">{entry.notes}</p>
                           )}
                           <span className="text-[10px] opacity-75">
-                            {txn.items?.length || 0} items
-                          </span>
-                        </div>
-
-                        {/* Amount — big and bold */}
-                        <p className="text-base font-bold tabular-nums">
-                          {isInflow ? '+' : '-'}{formatINR(txn.totalAmount)}
-                        </p>
-
-                        {/* Due amount + time */}
-                        <div className="flex items-center justify-between gap-2 mt-1">
-                          {due > 0 ? (
-                            <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded">
-                              Due: {formatINR(due)}
-                            </span>
-                          ) : (
-                            <span className="text-[10px] opacity-75">✓ Paid</span>
-                          )}
-                          <span className="text-[10px] opacity-75">
-                            {txnDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                            {entryDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
                           </span>
                         </div>
                       </div>
-                    </button>
+                    ) : (
+                      // Transaction entry — clickable, green/amber bubble
+                      <button
+                        onClick={() => handleViewTransaction(entry.id)}
+                        className={cn(
+                          'flex w-full group',
+                          isInflow ? 'justify-end' : 'justify-start',
+                        )}
+                      >
+                        <div
+                          className={cn(
+                            'max-w-[80%] rounded-2xl px-3 py-2 shadow-sm transition group-hover:shadow-md group-active:scale-95',
+                            isInflow
+                              ? 'bg-emerald-500 text-white rounded-br-md'
+                              : 'bg-amber-500 text-white rounded-bl-md'
+                          )}
+                        >
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            <span className="text-[10px] font-semibold uppercase tracking-wide opacity-90">
+                              {entry.type}
+                            </span>
+                            {entry.invoiceNo && (
+                              <span className="text-[10px] opacity-75 bg-white/20 px-1.5 py-0.5 rounded">
+                                {entry.invoiceNo}
+                              </span>
+                            )}
+                            <span className="text-[10px] opacity-75">
+                              {entry.itemCount} items
+                            </span>
+                          </div>
+                          <p className="text-base font-bold tabular-nums">
+                            {isInflow ? '+' : '-'}{formatINR(entry.amount)}
+                          </p>
+                          <div className="flex items-center justify-between gap-2 mt-1">
+                            {entry.due > 0 ? (
+                              <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded">
+                                Due: {formatINR(entry.due)}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] opacity-75">✓ Paid</span>
+                            )}
+                            <span className="text-[10px] opacity-75">
+                              {entryDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                        </div>
+                      </button>
+                    )}
                   </div>
                 )
               })}
@@ -858,39 +920,9 @@ export function PartyProfile() {
         </DialogContent>
       </Dialog>
 
-      {/* 🔒 FIX H3: Recent payments list */}
-      {payments.length > 0 && (
-        <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base flex items-center gap-2">
-              <HandCoins className="w-4 h-4" /> Payment History
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {payments.slice(0, 10).map((p: any) => (
-                <div key={p.id} className="flex items-center justify-between text-sm py-2 border-b border-border/50 last:border-0">
-                  <div className="flex items-center gap-2">
-                    <div className={cn(
-                      'w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0',
-                      p.type === 'received' ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'
-                    )}>
-                      {p.type === 'received' ? <ArrowDownRight className="w-4 h-4" /> : <ArrowUpRight className="w-4 h-4" />}
-                    </div>
-                    <div>
-                      <p className="font-medium">{p.type === 'received' ? 'Received' : 'Paid'} · {p.mode}</p>
-                      <p className="text-[11px] text-muted-foreground">{formatDate(p.date)}{p.notes ? ` · ${p.notes}` : ''}</p>
-                    </div>
-                  </div>
-                  <span className={cn('font-semibold tabular-nums', p.type === 'received' ? 'text-emerald-600' : 'text-amber-600')}>
-                    {p.type === 'received' ? '+' : '-'}{formatINR(p.amount)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* 🔒 UI/UX 2: Payment History card removed — payments now appear in the
+          unified Account Statement above (merged with transactions in a
+          chronological timeline with blue/teal bubbles). */}
 
       {confirmDialogEl}
     </div>
