@@ -133,19 +133,14 @@ export async function computePartyBalance(
 /**
  * Compute receivable + payable totals for ALL parties of a user.
  *
- * This is the helper the dashboard should use (instead of summing only
- * openingBalance). It:
- *   1. Fetches all parties (id + openingBalance, filtered deletedAt: null)
- *   2. Runs ONE groupBy for sales outstanding per party (filtered deletedAt: null)
- *   3. Runs ONE groupBy for purchases outstanding per party (filtered deletedAt: null)
- *   4. Computes balance per party = openingBalance + salesOut - purchaseOut
- *   5. Sums positive balances → totalReceivable, negative balances → totalPayable
+ * 🔒 FIX C-NEW-1 (V14): The H3 fix added a LEFT JOIN on Payment at the same
+ * level as the Transaction LEFT JOIN. This caused a Cartesian product
+ * (fan-out): a party with T transactions and P payments produced T×P rows,
+ * multiplying the SUM values. The dashboard and party-list balances were
+ * wrong the moment a party had both invoices AND payments.
  *
- * Returns both the totals AND the per-party balances (so the party list can
- * reuse this instead of doing its own aggregates).
- *
- * This is O(parties) memory + 3 DB round-trips — same cost as the old
- * dashboard approach but now CORRECT.
+ * Fix: pre-aggregate each one-to-many table in a subquery (GROUP BY partyId),
+ * then LEFT JOIN one row per party. No fan-out possible.
  */
 export async function getReceivablePayable(
   userId: string,
@@ -159,11 +154,8 @@ export async function getReceivablePayable(
     transactionCount: number
   }>
 }> {
-  // 🔒 V7.5 PERFORMANCE: Was running 4 sequential queries (1 findMany + 3
-  // groupBy). Now uses ONE raw SQL query that joins Party + Transaction and
-  // computes everything in a single pass. This is 1 round-trip instead of 4.
-  // 🔒 FIX H3: Added LEFT JOIN on Payment to include standalone payments.
-
+  // Pre-aggregated subqueries: one row per party from each table, then join.
+  // This avoids the T×P Cartesian product that the old multi-JOIN caused.
   const rows = await db.$queryRaw<Array<{
     partyId: string
     openingBalance: string
@@ -176,22 +168,34 @@ export async function getReceivablePayable(
     SELECT
       p."id" AS "partyId",
       p."openingBalance"::numeric AS "openingBalance",
-      COALESCE(SUM(CASE WHEN t."type" = 'sale' THEN (t."totalAmount" - t."paidAmount")::numeric ELSE 0 END), 0) AS "salesOutstanding",
-      COALESCE(SUM(CASE WHEN t."type" = 'purchase' THEN (t."totalAmount" - t."paidAmount")::numeric ELSE 0 END), 0) AS "purchaseOutstanding",
-      COALESCE(SUM(CASE WHEN pay."type" = 'received' THEN pay."amount"::numeric ELSE 0 END), 0) AS "paymentsReceived",
-      COALESCE(SUM(CASE WHEN pay."type" = 'paid' THEN pay."amount"::numeric ELSE 0 END), 0) AS "paymentsPaid",
-      COUNT(CASE WHEN t."type" IN ('sale', 'purchase') THEN 1 END) AS "transactionCount"
+      COALESCE(t."salesOutstanding", 0) AS "salesOutstanding",
+      COALESCE(t."purchaseOutstanding", 0) AS "purchaseOutstanding",
+      COALESCE(pay."paymentsReceived", 0) AS "paymentsReceived",
+      COALESCE(pay."paymentsPaid", 0) AS "paymentsPaid",
+      COALESCE(t."txnCount", 0) AS "transactionCount"
     FROM "Party" p
-    LEFT JOIN "Transaction" t
-      ON t."partyId" = p."id"
-      AND t."deletedAt" IS NULL
-      AND t."userId" = ${userId}
-    LEFT JOIN "Payment" pay
-      ON pay."partyId" = p."id"
-      AND pay."userId" = ${userId}
+    LEFT JOIN (
+      SELECT
+        "partyId",
+        SUM(CASE WHEN "type" = 'sale' THEN ("totalAmount" - "paidAmount")::numeric ELSE 0 END) AS "salesOutstanding",
+        SUM(CASE WHEN "type" = 'purchase' THEN ("totalAmount" - "paidAmount")::numeric ELSE 0 END) AS "purchaseOutstanding",
+        COUNT(*) AS "txnCount"
+      FROM "Transaction"
+      WHERE "userId" = ${userId}
+        AND "deletedAt" IS NULL
+      GROUP BY "partyId"
+    ) t ON t."partyId" = p."id"
+    LEFT JOIN (
+      SELECT
+        "partyId",
+        SUM(CASE WHEN "type" = 'received' THEN "amount"::numeric ELSE 0 END) AS "paymentsReceived",
+        SUM(CASE WHEN "type" = 'paid' THEN "amount"::numeric ELSE 0 END) AS "paymentsPaid"
+      FROM "Payment"
+      WHERE "userId" = ${userId}
+      GROUP BY "partyId"
+    ) pay ON pay."partyId" = p."id"
     WHERE p."userId" = ${userId}
       AND p."deletedAt" IS NULL
-    GROUP BY p."id", p."openingBalance"
   `
 
   if (rows.length === 0) {
