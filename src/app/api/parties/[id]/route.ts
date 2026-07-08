@@ -43,122 +43,180 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: 'Party not found' }, { status: 404 })
     }
 
-    // 2. SQL aggregates for stats (O(1) memory regardless of transaction count)
-    // 🔒 V5 HA: All queries now filter deletedAt: null.
-    // 🔒 V6 PP3: Was 2 separate findFirst queries for first/last transaction date
-    // (orderBy asc + desc). Now: 1 aggregate query with _min + _max — same result,
-    // half the round-trips, simpler code.
-    const [salesAgg, purchaseAgg, countAgg, dateRangeAgg] = await Promise.all([
-      db.transaction.aggregate({
-        where: { userId, partyId: id, type: 'sale', deletedAt: null },
-        _sum: { totalAmount: true, paidAmount: true },
-        _count: true,
+    // 🔒 V17 §3.1 FIX: Eliminated duplicate aggregation + parallelized all
+    // independent queries into a single Promise.all wave.
+    //
+    // BEFORE: ~17 queries in ~7 serialization points.
+    //   1. party.findFirst (serialized)
+    //   2. Wave 1: salesAgg + purchaseAgg + countAgg + dateRangeAgg (4 queries)
+    //   3. computePartyBalance (serialized after wave 1) — internally re-ran
+    //      salesAgg + purchaseAgg (DUPLICATES of wave 1) + 3 payment aggregates
+    //   4. transactions.findMany (serialized)
+    //   5. topProductsAgg $queryRaw (serialized)
+    //   6. monthlyRows $queryRaw (serialized)
+    //   7. In response JSON: statementTransactions + statementPayments + paymentTotal
+    //      (3 serialized awaits)
+    //
+    // AFTER: ~16 queries in 2 serialization points (party fetch + one big wave).
+    //   - Dropped salesAgg + purchaseAgg (redundant — computePartyBalance returns
+    //     totalSales, totalPurchases, totalReceived, totalPaid, salesOutstanding,
+    //     purchaseOutstanding).
+    //   - Replaced them with ONE groupBy query for salesCount + purchasesCount
+    //     (not returned by the helper).
+    //   - ALL remaining queries run in a single Promise.all — they're all
+    //     independent (only need userId + id, available from the start).
+    //
+    // Wall-clock: ~7 round-trips → ~4 (party + max of computePartyBalance's 3
+    // internal waves and the 9 single queries). On a cold Neon connection
+    // (50-100ms per round-trip), this saves 150-300ms per page load.
+
+    const now = new Date()
+    const sixMonthsAgo = istMonthStartOffset(now, -5)
+
+    const [
+      partyBalance,
+      typeCountRows,
+      countAgg,
+      dateRangeAgg,
+      transactions,
+      topProductsAgg,
+      monthlyRows,
+      statementTransactions,
+      statementPayments,
+      paymentTotal,
+    ] = await Promise.all([
+      // 🔒 V15 §1: Single source of truth for balance + money breakdown.
+      // Internally does ~6 queries in 2 sub-waves (party.findFirst + 3
+      // aggregates + 2 per-type payment aggregates). The internal party
+      // fetch is a minor duplicate of query 1 above, but changing the
+      // helper's signature would affect 3 callers — not worth the risk
+      // for 1 round-trip.
+      computePartyBalance(userId, id),
+
+      // 🔒 V17 §3.1: Single groupBy for per-type counts (was: 2 separate
+      // aggregate queries with _count). Returns [{ type: 'sale', _count: N },
+      // { type: 'purchase', _count: M }, ...]. Also returns 'income'/'expense'
+      // types if present — we only read sale + purchase.
+      db.transaction.groupBy({
+        by: ['type'],
+        where: { userId, partyId: id, deletedAt: null },
+        _count: { _all: true },
       }),
-      db.transaction.aggregate({
-        where: { userId, partyId: id, type: 'purchase', deletedAt: null },
-        _sum: { totalAmount: true, paidAmount: true },
-        _count: true,
-      }),
+
+      // Total transaction count (for the "N transactions" badge)
       db.transaction.count({ where: { userId, partyId: id, deletedAt: null } }),
-      // 🔒 V6 PP3: Single aggregate for first + last transaction date
-      // (replaces 2 separate findFirst queries)
+
+      // First + last transaction date (for the "customer since" display)
       db.transaction.aggregate({
         where: { userId, partyId: id, deletedAt: null },
         _min: { date: true },
         _max: { date: true },
       }),
+
+      // Paginated transaction list (cursor-based, max 50 per page)
+      // 🔒 V5 HA: filter deletedAt: null on the list too.
+      db.transaction.findMany({
+        where: { userId, partyId: id, deletedAt: null },
+        include: { items: true },
+        orderBy: { date: 'desc' },
+        take: PAGE_SIZE + 1, // fetch one extra to check if there's a next page
+        ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+      }),
+
+      // Top products via raw SQL (not JS reduce on all transactions)
+      // 🔒 V5 MB: was `amount: 0` for every row. Now: real line-amount sum.
+      db.$queryRaw<Array<{ productName: string; totalQuantity: bigint; totalAmount: string }>>`
+        SELECT
+          ti."productName",
+          SUM(ti."quantity") AS "totalQuantity",
+          SUM(ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 2)) AS "totalAmount"
+        FROM "TransactionItem" ti
+        JOIN "Transaction" t ON ti."transactionId" = t.id
+        WHERE t."userId" = ${userId}
+          AND t."partyId" = ${id}
+          AND t."deletedAt" IS NULL
+        GROUP BY ti."productName"
+        ORDER BY "totalQuantity" DESC
+        LIMIT 5
+      `,
+
+      // Monthly chart via raw SQL (last 6 months) — REAL data, not hardcoded zeros.
+      // 🔒 V10 FIX: Group by IST month (AT TIME ZONE 'Asia/Kolkata'), not UTC.
+      db.$queryRaw<Array<{ monthStart: Date; type: string; total: number }>>`
+        SELECT
+          DATE_TRUNC('month', t.date AT TIME ZONE 'Asia/Kolkata') AS "monthStart",
+          t.type,
+          SUM(t."totalAmount") AS total
+        FROM "Transaction" t
+        WHERE t."userId" = ${userId}
+          AND t."partyId" = ${id}
+          AND t."deletedAt" IS NULL
+          AND t.date >= ${sixMonthsAgo}
+        GROUP BY DATE_TRUNC('month', t.date AT TIME ZONE 'Asia/Kolkata'), t.type
+        ORDER BY "monthStart" ASC
+      `,
+
+      // 🔒 V15 M-2 + V17 §2.2: Statement-grade transactions (newest 500).
+      db.transaction.findMany({
+        where: { userId, partyId: id, deletedAt: null },
+        select: {
+          id: true,
+          date: true,
+          type: true,
+          totalAmount: true,
+          paidAmount: true,
+          invoiceNo: true,
+          _count: { select: { items: true } },
+        },
+        orderBy: { date: 'desc' },
+        take: 500,
+      }),
+
+      // 🔒 V15 M-2 + V17 §2.2: Statement-grade payments (newest 500).
+      db.payment.findMany({
+        where: { userId, partyId: id, deletedAt: null },
+        select: {
+          id: true,
+          date: true,
+          type: true,
+          amount: true,
+          mode: true,
+          notes: true,
+        },
+        orderBy: { date: 'desc' },
+        take: 500,
+      }),
+
+      // True payment count (not capped) — for the "showing 500 of N" banner.
+      db.payment.count({ where: { userId, partyId: id, deletedAt: null } }),
     ])
 
-    // 🔒 FIX V15 §1: Use computePartyBalance() — the single source of truth
-    // that includes standalone payments. Was: inline math that ignored payments,
-    // causing the party-detail headline to show a different (higher) balance
-    // than the dashboard and party list.
-    const partyBalance = await computePartyBalance(userId, id)
+    // === Process results (all in JS — no more DB queries) ===
 
-    // 3. Paginated transaction list (cursor-based, max 50 per page)
-    // 🔒 V5 HA: filter deletedAt: null on the list too.
-    const transactions = await db.transaction.findMany({
-      where: { userId, partyId: id, deletedAt: null },
-      include: { items: true },
-      orderBy: { date: 'desc' },
-      take: PAGE_SIZE + 1, // fetch one extra to check if there's a next page
-      ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
-    })
+    // Extract per-type counts from the groupBy result.
+    // Result shape: [{ type: 'sale', _count: { _all: 5 } }, { type: 'purchase', _count: { _all: 3 } }, ...]
+    const salesCount = typeCountRows.find(r => r.type === 'sale')?._count?._all ?? 0
+    const purchasesCount = typeCountRows.find(r => r.type === 'purchase')?._count?._all ?? 0
 
+    // Paginated transaction list: trim the extra row used for hasMore detection.
     const hasMore = transactions.length > PAGE_SIZE
     const pagedTransactions = hasMore ? transactions.slice(0, PAGE_SIZE) : transactions
     const nextCursor = hasMore ? pagedTransactions[pagedTransactions.length - 1].id : null
 
-    // 4. Top products via SQL groupBy (not JS reduce on all transactions)
-    // 🔒 V5 MB: was `amount: 0` for every row. Now: real line-amount sum via
-    // a raw SQL query that sums (quantity * unitPrice) per productName, filtered
-    // to non-deleted transactions for this party.
-    //
-    // 🔒 AUDIT FIX V6 PP2: Type annotation is now accurate. Postgres SUM(numeric)
-    // returns a `string` (Prisma raw SQL deserializes numeric/decimal as strings
-    // to avoid precision loss). We convert with Number() below, which is safe for
-    // display. The previous `number` type annotation was misleading — it implied
-    // the value was already a number, but it was actually a string at runtime.
-    const topProductsAgg = await db.$queryRaw<Array<{ productName: string; totalQuantity: bigint; totalAmount: string }>>`
-      SELECT
-        ti."productName",
-        SUM(ti."quantity") AS "totalQuantity",
-        SUM(ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 2)) AS "totalAmount"
-      FROM "TransactionItem" ti
-      JOIN "Transaction" t ON ti."transactionId" = t.id
-      WHERE t."userId" = ${userId}
-        AND t."partyId" = ${id}
-        AND t."deletedAt" IS NULL
-      GROUP BY ti."productName"
-      ORDER BY "totalQuantity" DESC
-      LIMIT 5
-    `
-
     // Normalize top products (Prisma raw returns bigint for SUM(quantity) and
-    // string for SUM(numeric) — convert both to number for the frontend)
+    // string for SUM(numeric) — convert both to number for the frontend).
     const topProducts = topProductsAgg.map(p => ({
       name: p.productName,
       quantity: Number(p.totalQuantity),
       amount: roundMoney(Number(p.totalAmount)),
     }))
 
-    // 5. Monthly chart via SQL (last 6 months) — REAL data, not hardcoded zeros.
-    // 🔒 V5 MA: was a dead `monthlyAgg` groupBy + hardcoded `sales: 0, purchases: 0`.
-    // Now: raw SQL with date_trunc('month', date) grouped by type, joined to
-    // produce a 6-row result set with real sales + purchases per month.
-    // 🔒 V10 FIX: Group by IST month (AT TIME ZONE 'Asia/Kolkata'), not UTC month.
-    // Was: DATE_TRUNC('month', t.date) which groups by UTC month → a transaction
-    // on July 1, 2 AM IST (= June 30, 20:30 UTC) appeared in June's bucket.
-    // Now: the grouping matches the user's local (IST) month.
-    const now = new Date()
-    // 🔒 FIX H3: Was `new Date(now.getFullYear(), now.getMonth() - 5, 1)` which
-    // uses server-local time (UTC on Vercel). The istMonthStartOffset helper
-    // was imported but not used. Now: uses istMonthStartOffset(now, -5) for
-    // correct IST month boundary.
-    const sixMonthsAgo = istMonthStartOffset(now, -5)
-
-    const monthlyRows = await db.$queryRaw<Array<{ monthStart: Date; type: string; total: number }>>`
-      SELECT
-        DATE_TRUNC('month', t.date AT TIME ZONE 'Asia/Kolkata') AS "monthStart",
-        t.type,
-        SUM(t."totalAmount") AS total
-      FROM "Transaction" t
-      WHERE t."userId" = ${userId}
-        AND t."partyId" = ${id}
-        AND t."deletedAt" IS NULL
-        AND t.date >= ${sixMonthsAgo}
-      GROUP BY DATE_TRUNC('month', t.date AT TIME ZONE 'Asia/Kolkata'), t.type
-      ORDER BY "monthStart" ASC
-    `
-
     // Build 6-month chart data, filling missing months with zeros.
     // 🔒 V10 FIX: The SQL returns naive timestamps at IST month-start (interpreted
     // as UTC by JS). The JS month keys must use the same IST-aligned logic.
-    // 🔒 V11 §4.6: Uses centralized getISTDateParts + istMonthStartOffset.
+    // 🔒 V11 §4.6: Uses centralized istMonthStartOffset helper.
     const monthlyMap = new Map<string, { sales: number; purchases: number }>()
     for (const row of monthlyRows) {
-      // row.monthStart is a naive timestamp at IST month-start (interpreted as UTC by JS).
-      // Convert to YYYY-MM key — this matches the JS-generated keys below.
       const key = new Date(row.monthStart).toISOString().slice(0, 7) // YYYY-MM
       const entry = monthlyMap.get(key) || { sales: 0, purchases: 0 }
       if (row.type === 'sale') entry.sales = roundMoney(Number(row.total))
@@ -167,10 +225,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     const monthlyData: { month: string; sales: number; purchases: number }[] = []
-    // 🔒 V11 §4.6: Generate month buckets using istMonthStartOffset helper.
     for (let i = 5; i >= 0; i--) {
-      // istMonthStartOffset returns a UTC Date at IST month-start. The JS Date's
-      // toISOString().slice(0,7) gives the correct YYYY-MM key that matches the SQL.
       const monthStart = istMonthStartOffset(now, -i)
       const key = monthStart.toISOString().slice(0, 7)
       const entry = monthlyMap.get(key) || { sales: 0, purchases: 0 }
@@ -194,8 +249,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         paymentsPaid: partyBalance.paymentsPaid,
         balance: partyBalance.balance,
         transactionCount: countAgg,
-        salesCount: salesAgg._count,
-        purchasesCount: purchaseAgg._count,
+        salesCount,
+        purchasesCount,
         firstTransactionDate: dateRangeAgg._min.date,
         lastTransactionDate: dateRangeAgg._max.date,
       },
@@ -207,62 +262,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         nextCursor,
         pageSize: PAGE_SIZE,
       },
-      // 🔒 V15 M-2: Statement-grade data — separate from the paginated
-      // `transactions` list above. The previous design reused the paginated
-      // list (max 50 newest) for the account statement AND merged it with
-      // ALL payments — so a party with >50 transactions had older invoices
-      // silently disappear from the statement while their payments remained,
-      // making the statement look unbalanced.
-      //
-      // 🔒 V17 §2.2 FIX: Both arrays are now `orderBy: 'desc'` (NEWEST first),
-      // capped at 500. Was: `orderBy: 'asc'` (OLDEST first) + `take: 500` →
-      // for a party with >500 transactions, the statement showed the 500
-      // OLDEST entries (ancient history) and the closing balance on the last
-      // visible row didn't match the headline. Now: the newest 500 are shown,
-      // and the client walks backward from `stats.balance` so the top row
-      // always ties to the headline regardless of truncation.
-      //
-      //   - statementTransactions: most recent 500 non-deleted transactions.
-      //   - statementPayments: most recent 500 non-soft-deleted payments.
-      // The client merges, then walks newest→oldest computing running balance
-      // from stats.balance backward.
-      statementTransactions: await db.transaction.findMany({
-        where: { userId, partyId: id, deletedAt: null },
-        select: {
-          id: true,
-          date: true,
-          type: true,
-          totalAmount: true,
-          paidAmount: true,
-          invoiceNo: true,
-          // 🔒 V16 M1: _count uses a subquery (not a JOIN), so it doesn't
-          // fan out. Returns the number of TransactionItem rows for each
-          // transaction — used by the statement bubble to show "N items".
-          // Was: missing, so the bubble showed "0 items" on every transaction
-          // after V15 M-2 slimmed the payload.
-          _count: { select: { items: true } },
-        },
-        orderBy: { date: 'desc' },
-        take: 500,
-      }),
-      statementPayments: await db.payment.findMany({
-        where: { userId, partyId: id, deletedAt: null },
-        select: {
-          id: true,
-          date: true,
-          type: true,
-          amount: true,
-          mode: true,
-          notes: true,
-        },
-        orderBy: { date: 'desc' },
-        take: 500,
-      }),
-      // True totals (not capped) — used by the UI to show a "showing 500 of N"
-      // banner if the statement was truncated.
+      // 🔒 V15 M-2 + V17 §2.2: Statement-grade data (newest 500, desc order).
+      statementTransactions,
+      statementPayments,
       statementTotals: {
         transactionTotal: countAgg,
-        paymentTotal: await db.payment.count({ where: { userId, partyId: id, deletedAt: null } }),
+        paymentTotal,
         cap: 500,
       },
     })
