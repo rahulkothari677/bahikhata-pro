@@ -353,10 +353,16 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     // 🔒 FIX M-NEW-1: Check for potential double-counting. If the party has
     // standalone Payments AND the invoice's paidAmount > 0, warn the user.
+    //
+    // 🔒 V16 C4: Filter deletedAt: null on the payment count — was counting
+    // soft-deleted payments (V15 M-3) as if they were active, which caused
+    // spurious double-count warnings on every invoice edit for a party that
+    // had any historical (now-deleted) payment. Same alert-fatigue failure
+    // mode as the original M-NEW-1 heuristic, just via a different path.
     let warning: string | null = null
     if (partyId && finalPaid > 0) {
       const paymentCount = await db.payment.count({
-        where: { userId, partyId },
+        where: { userId, partyId, deletedAt: null },
       })
       if (paymentCount > 0) {
         warning = `This party has ${paymentCount} standalone payment(s) recorded. If those payments include what you're entering as "paid amount" here, the balance will be reduced twice. To avoid double-counting, either edit the invoice's paid amount OR use "Settle Payment" — not both.`

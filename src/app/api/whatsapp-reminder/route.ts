@@ -14,10 +14,18 @@ export async function POST(req: NextRequest) {
     const { partyId } = await req.json()
 
     const party = await db.party.findFirst({
-      where: { id: partyId, userId },
+      // 🔒 V16 C3: Filter deletedAt: null on Party — was missing, so a
+      // soft-deleted party could still receive a reminder if the user
+      // navigated to its reminder button somehow.
+      where: { id: partyId, userId, deletedAt: null },
       include: {
         transactions: {
-          where: { type: 'sale' },
+          // 🔒 V16 C3: Filter deletedAt: null on Transaction — was missing,
+          // so soft-deleted invoices appeared in the "Unpaid invoices" list
+          // of the WhatsApp message, demanding payment for invoices the
+          // shopkeeper had already voided. Same bug class as V15 §1 Site 3
+          // (party-detail statement) which IS filtered; this site was missed.
+          where: { type: 'sale', deletedAt: null },
           orderBy: { date: 'desc' },
         },
       },

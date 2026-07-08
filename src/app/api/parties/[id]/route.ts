@@ -232,6 +232,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
           totalAmount: true,
           paidAmount: true,
           invoiceNo: true,
+          // 🔒 V16 M1: _count uses a subquery (not a JOIN), so it doesn't
+          // fan out. Returns the number of TransactionItem rows for each
+          // transaction — used by the statement bubble to show "N items".
+          // Was: missing, so the bubble showed "0 items" on every transaction
+          // after V15 M-2 slimmed the payload.
+          _count: { select: { items: true } },
         },
         orderBy: { date: 'asc' },
         take: 500,
@@ -324,8 +330,14 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     // 🔒 M8: Check for dependent ACTIVE records before deleting
+    // 🔒 V16 C2: Filter deletedAt: null on the Payment count too — was
+    // counting soft-deleted payments as "active", which permanently blocked
+    // party deletion even after the user soft-deleted every payment. The
+    // Transaction count on the next line already filtered deletedAt: null;
+    // the Payment count didn't, which was an oversight when V15 M-3 added
+    // Payment.deletedAt.
     const [paymentCount, transactionCount] = await Promise.all([
-      db.payment.count({ where: { partyId: id } }).catch(() => 0),
+      db.payment.count({ where: { partyId: id, deletedAt: null } }).catch(() => 0),
       db.transaction.count({ where: { partyId: id, deletedAt: null } }),
     ])
 

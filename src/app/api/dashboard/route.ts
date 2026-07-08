@@ -257,11 +257,16 @@ export async function GET(req: NextRequest) {
       // These are NOT revenue (revenue was already booked when the sale was
       // created). They're real cash coming in today. Shown as a separate
       // "Collections Today" KPI so the shopkeeper can reconcile their drawer.
+      //
+      // 🔒 V16 C1: Filter deletedAt: null — without this, a payment recorded
+      // today and then soft-deleted (V15 M-3) would still inflate this KPI
+      // for the rest of the day, breaking cash-drawer reconciliation.
       db.payment.aggregate({
         where: {
           userId,
           type: 'received',
           date: { gte: startOfToday, lte: now },
+          deletedAt: null,
         },
         _sum: { amount: true },
         _count: true,

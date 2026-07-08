@@ -1809,3 +1809,66 @@ Stage Summary:
 - 1 new migration (idempotent, safe to re-run).
 - 0 new dependencies.
 - V15 audit can be marked RESOLVED. Auditor's remaining structural debt item (integer-paise migration) is V16+ scope.
+
+---
+Task ID: bahikhata-v16-audit-response
+Agent: main
+Task: Fix all 8 bugs from V16 audit report (EkBook-Audit-V16.md): 4 Critical (deletedAt filter misses) + 3 Medium (statement regressions) + 1 test gap.
+
+Work Log:
+- Read V16 audit report end-to-end. Verified all 4 Critical bugs by reading the actual source lines cited in the report.
+- C1 — Dashboard "Collected Today" KPI counts deleted payments (dashboard/route.ts:260):
+  * Added `deletedAt: null` to the payment.aggregate where clause.
+  * Without this, recording a payment today then deleting it would inflate the KPI for the rest of the day, breaking cash-drawer reconciliation.
+- C2 — Party-delete dependency check counts soft-deleted payments (parties/[id]/route.ts:328):
+  * Added `deletedAt: null` to the db.payment.count where clause.
+  * Without this, a party with only soft-deleted payments could never be deleted — the dependency check counted audit-trail rows as active.
+- C3 — WhatsApp reminder lists soft-deleted invoices (whatsapp-reminder/route.ts:17,20):
+  * Added `deletedAt: null` to BOTH the Party findFirst where AND the transactions include where.
+  * Without this, the WhatsApp message demanded payment for invoices the shopkeeper had already voided. Same cardinal-sin bug class as V15 §1.
+- C4 — transactions/[id] PUT double-count warning fires on stale deleted payments (transactions/[id]/route.ts:358):
+  * Added `deletedAt: null` to the db.payment.count where clause.
+  * Without this, any party with historical (now-deleted) payments got a spurious double-count warning on every invoice edit — same alert-fatigue failure mode as the original M-NEW-1 heuristic, via a different path.
+- C5 — New guardrail test (src/__tests__/lib/soft-delete-sweep.test.ts, 5 tests):
+  * General sweep: scans every db.payment.* and db.transaction.* call in src/app/api and src/lib, fails if any call lacks `deletedAt: null` (or a recognized filter pattern: activeTransactionWhere helper, where: <identifier>, findUnique by id).
+  * Strips comments before scanning (false-positive fix — first iteration was matching `db.transaction.groupBy` inside doc comments).
+  * 4 targeted regression tests: one per V16 Critical bug. If any of the 4 fixes regress, the test fails immediately with a clear message pointing at the exact bug.
+  * ALLOWED_EXCEPTIONS list with one-line reasons: account/export (backup), transactions/[id]/restore (must find soft-deleted rows), transactions/route.ts GET (uses `where` variable defined above with filter), seed/route.ts (legitimate "has any data" check), reports/gstr-export/insights (V17 follow-up — known larger audit pass).
+  * Verified: test passes on current code; would fail if any of the 4 fixes were reverted.
+- M1 — "0 items" on every statement bubble (parties/[id]/route.ts select + PartyProfile.tsx):
+  * Added `_count: { select: { items: true } }` to the statementTransactions payload. Prisma's _count uses a subquery (not a JOIN), so it doesn't fan out — no row multiplication, one extra round-trip per transaction.
+  * Updated PartyProfile.tsx txEntries.map to read `t._count?.items ?? 0` instead of hardcoding 0.
+  * The statement bubble now correctly shows "5 items" on a 5-item invoice (was: "0 items" on every invoice after V15 M-2 slimmed the payload).
+- M2 — Reconciliation test didn't cover client-side running-balance formula (balance-reconciliation.test.ts):
+  * Added new describe block "🔒 V16 M2 — Client-side running balance formula matches server" with 3 tests:
+    1. delta signs match: sale → +(total-paid), purchase → -(total-paid), received → -amount, paid → +amount. Each sign verified via regex against PartyProfile.tsx source.
+    2. Running balance is seeded from `party.openingBalance` (not `stats.balance`). Starting from current balance would make every entry's "Bal: ₹X" wrong.
+    3. Math.round((running + delta) * 100) / 100 pattern is present (float safety, mirrors server's roundMoney).
+  * Test passes on current code; would fail if someone flipped a delta sign in the ternary.
+  * Now 8 tests in balance-reconciliation.test.ts (5 original V15 §1 + 3 new V16 M2).
+- M3 — Truncation banner inconsistency (PartyProfile.tsx):
+  * When statement is truncated (>500 entries), per-entry "Bal: ₹X" badges reflect only the latest 500 entries, NOT the true historical balance. The "Current Balance: ₹Y" banner at top shows the true balance. User can't reconcile the two numbers.
+  * Added an amber sub-line under the "Current Balance" banner (only visible when truncated): "Per-entry balances below reflect only the latest 500 entries — use Print Statement for the complete audited history."
+  * Honest disclosure, no formula change. The user now understands WHY the last visible badge doesn't equal the current balance.
+- Verified:
+  * npx tsc --noEmit: 0 NEW errors (5 pre-existing in validation.test.ts — unrelated, Zod discriminated-union typing on test code).
+  * npx next build: ✓ Compiled successfully (all 39 API routes + 6 pages).
+  * npx jest src/__tests__/lib/{soft-delete-sweep,balance-reconciliation,money,gst-discount,raw-sql-smoke}.test.ts: 68/68 pass (60 existing + 8 new).
+- Files changed: 7
+  * src/app/api/dashboard/route.ts (C1: +deletedAt: null on KPI)
+  * src/app/api/parties/[id]/route.ts (C2: +deletedAt on party-delete check; M1: +_count.items on statementTransactions)
+  * src/app/api/whatsapp-reminder/route.ts (C3: +deletedAt on Party + Transaction)
+  * src/app/api/transactions/[id]/route.ts (C4: +deletedAt on double-count check)
+  * src/components/parties/PartyProfile.tsx (M1: use _count.items; M3: truncation sub-banner)
+  * src/__tests__/lib/soft-delete-sweep.test.ts (NEW — C5 guardrail)
+  * src/__tests__/lib/balance-reconciliation.test.ts (M2: +3 client-side formula tests)
+- 0 new dependencies, 0 new migrations (V16 is pure code/test fixes — schema unchanged from V15).
+- 0 behavior change for happy path — only fixes for the edge cases the V16 auditor identified.
+
+Stage Summary:
+- 4 of 4 V16 Critical bugs fixed (C1, C2, C3, C4 — all `deletedAt: null` filter misses).
+- 3 of 3 V16 Medium bugs fixed (M1 items count, M2 client formula test, M3 truncation banner).
+- 1 of 1 V16 test guardrails added (C5 soft-delete sweep — 5 tests, catches the entire bug class going forward).
+- V16 audit RESOLVED. The 4 V17 follow-up items (reports/gstr-export/insights deletedAt sweep) are documented in the test's ALLOWED_EXCEPTIONS list with reasons.
+- Build clean, tests green, ready to deploy.
+- Founder-side action still pending: disable Neon "Scale to zero" (permanent P1001 fix). Code-side stopgap is in place but only buys time.

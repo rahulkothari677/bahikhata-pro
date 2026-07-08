@@ -124,7 +124,10 @@ export function PartyProfile() {
         : -(t.totalAmount - (t.paidAmount || 0)),
       due: t.totalAmount - t.paidAmount,
       invoiceNo: t.invoiceNo,
-      itemCount: 0, // not returned in statementTransactions (perf optimization)
+      // 🔒 V16 M1: itemCount now comes from _count.items (subquery, no fan-out).
+      // Was: hardcoded to 0 because V15 M-2 slimmed the payload and dropped
+      // the items relation — every bubble showed "0 items".
+      itemCount: t._count?.items ?? 0,
       isPayment: false,
     }))
     const payEntries = statementPayments.map((p: any) => ({
@@ -818,7 +821,12 @@ export function PartyProfile() {
             <p className="text-center py-8 text-sm text-muted-foreground">No transactions or payments yet with this party</p>
           ) : (
             <div className="max-h-[500px] overflow-y-auto rounded-xl bg-muted/20 p-3 space-y-1">
-              {/* Running balance banner at top */}
+              {/* Running balance banner at top.
+                  🔒 V16 M3: When the statement is truncated (>500 entries),
+                  per-entry "Bal: ₹X" badges reflect only the latest 500
+                  entries — NOT the true historical balance at that point.
+                  We surface this honestly so the user doesn't think the
+                  last visible badge should equal the current balance. */}
               <div className="sticky top-0 z-10 -mx-3 px-3 py-2 mb-2 bg-primary/10 backdrop-blur-sm border-y border-primary/20 text-center">
                 <span className="text-xs text-muted-foreground">Current Balance: </span>
                 <span className={cn('text-xs font-bold', stats.balance > 0 ? 'text-emerald-600' : stats.balance < 0 ? 'text-rose-600' : 'text-muted-foreground')}>
@@ -827,6 +835,11 @@ export function PartyProfile() {
                 <span className="text-xs text-muted-foreground">
                   {' '}· {stats.balance > 0 ? 'They owe you' : stats.balance < 0 ? 'You owe them' : 'Settled'}
                 </span>
+                {statementTotals && (statementTotals.transactionTotal > statementTotals.cap || statementTotals.paymentTotal > statementTotals.cap) && (
+                  <span className="block text-[10px] text-amber-700 mt-1">
+                    Per-entry balances below reflect only the latest {statementTotals.cap} entries — use Print Statement for the complete audited history.
+                  </span>
+                )}
               </div>
 
               {statement.map((entry: any, index: number) => {
