@@ -60,6 +60,56 @@ export function PartyProfile() {
   })
   const setting = settingData?.setting || {}
 
+  // 🔒 FIX React #310: These hooks MUST be before the early return (Rules of Hooks).
+  // Was: useQuery for payments + useMemo for statement were after `if (isLoading || !data) return`.
+  // Moved here so all hooks are called unconditionally.
+
+  // Fetch payments for this party (for the unified account statement)
+  const { data: paymentsData } = useQuery({
+    queryKey: ['party-payments', selectedPartyId],
+    queryFn: async () => {
+      const r = await offlineFetch(`/api/payments?partyId=${selectedPartyId}`)
+      if (!r.ok) throw new Error('Failed')
+      return r.json()
+    },
+    enabled: !!selectedPartyId,
+  })
+
+  // Extract data safely (before early return)
+  const party = data?.party
+  const stats = data?.stats
+  const topProducts = data?.topProducts || []
+  const monthlyData = data?.monthlyData || []
+  const transactions = data?.transactions || []
+  const payments = paymentsData?.payments || []
+
+  // Merge transactions + payments into a unified chronological statement
+  const statement = useMemo(() => {
+    const txEntries = transactions.map((t: any) => ({
+      id: t.id,
+      date: t.date,
+      type: t.type,
+      amount: t.totalAmount,
+      due: t.totalAmount - t.paidAmount,
+      invoiceNo: t.invoiceNo,
+      itemCount: t.items?.length || 0,
+      isPayment: false,
+    }))
+    const payEntries = payments.map((p: any) => ({
+      id: p.id,
+      date: p.date,
+      type: p.type === 'received' ? 'payment-received' : 'payment-paid',
+      amount: p.amount,
+      due: 0,
+      invoiceNo: null,
+      itemCount: 0,
+      paymentMode: p.mode,
+      notes: p.notes,
+      isPayment: true,
+    }))
+    return [...txEntries, ...payEntries].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+  }, [transactions, payments])
+
   if (isLoading || !data) {
     return (
       <div className="space-y-4">
@@ -69,7 +119,8 @@ export function PartyProfile() {
     )
   }
 
-  const { party, stats, topProducts, monthlyData, transactions } = data
+  // 🔒 FIX React #310: party, stats, etc. are now extracted before the early return (line 79-84)
+  // to satisfy React's Rules of Hooks. No re-declaration here.
 
   const handleNewTransaction = (type: 'sale' | 'purchase') => {
     // Set preset data with party pre-selected
@@ -131,47 +182,9 @@ export function PartyProfile() {
     }
   }
 
-  // 🔒 FIX H3: Fetch payments for this party
-  const { data: paymentsData } = useQuery({
-    queryKey: ['party-payments', selectedPartyId],
-    queryFn: async () => {
-      const r = await offlineFetch(`/api/payments?partyId=${selectedPartyId}`)
-      if (!r.ok) throw new Error('Failed')
-      return r.json()
-    },
-    enabled: !!selectedPartyId,
-  })
-  const payments: any[] = paymentsData?.payments || []
-
-  // 🔒 FIX H3+UI/UX2: Merge transactions + payments into a single chronological
-  // statement. Each entry has a normalized shape so the UI can render them
-  // uniformly. Payments appear as blue bubbles, sales as green, purchases as amber.
-  const statement = useMemo(() => {
-    const txEntries = transactions.map((t: any) => ({
-      id: t.id,
-      date: t.date,
-      type: t.type, // 'sale' | 'purchase'
-      amount: t.totalAmount,
-      due: t.totalAmount - t.paidAmount,
-      invoiceNo: t.invoiceNo,
-      itemCount: t.items?.length || 0,
-      isPayment: false,
-    }))
-    const payEntries = payments.map((p: any) => ({
-      id: p.id,
-      date: p.date,
-      type: p.type === 'received' ? 'payment-received' : 'payment-paid',
-      amount: p.amount,
-      due: 0,
-      invoiceNo: null,
-      itemCount: 0,
-      paymentMode: p.mode,
-      notes: p.notes,
-      isPayment: true,
-    }))
-    // Sort by date descending (most recent first)
-    return [...txEntries, ...payEntries].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-  }, [transactions, payments])
+  // 🔒 FIX React #310: Old duplicate payments query removed.
+  // The payments useQuery + statement useMemo are now declared BEFORE the
+  // early return (lines 68-111) to satisfy React's Rules of Hooks.
 
   const handleDelete = async () => {
     if (!await confirmDialog(`Delete ${party.name}? All their transactions will remain but lose the party link.`, { title: 'Delete Party', confirmLabel: 'Delete', destructive: true })) return
