@@ -165,7 +165,15 @@ export function PartyProfile() {
         offline: { invalidate: ['/api/parties', '/api/dashboard'] },
       })
       if (!r.ok) throw new Error('Failed')
+      const data = await r.json()
       sonnerToast.success(paymentType === 'received' ? 'Payment received!' : 'Payment recorded!')
+      // 🔒 FIX M-NEW-1: Show double-counting warning if the server detected it
+      if (data.warning) {
+        sonnerToast.warning('Double-counting risk', {
+          description: data.warning,
+          duration: 12000,
+        })
+      }
       setPaymentDialogOpen(false)
       setPaymentAmount('')
       setPaymentNotes('')

@@ -96,6 +96,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Party not found' }, { status: 404 })
     }
 
+    // 🔒 FIX M-NEW-1: Check for potential double-counting. If the party has
+    // invoices with paidAmount > 0, the user may have already settled via the
+    // invoice's paid field. Recording a standalone Payment on top of that
+    // would double-count the settlement.
+    const invoicesWithPaid = await db.transaction.aggregate({
+      where: { userId, partyId, deletedAt: null, paidAmount: { gt: 0 } },
+      _sum: { paidAmount: true },
+    })
+    const alreadyPaidOnInvoices = roundMoney(invoicesWithPaid._sum.paidAmount || 0)
+
+    // 🔒 FIX M-NEW-3: Validate date — reject future-dated payments
+    const paymentDate = date ? new Date(date) : new Date()
+    if (paymentDate > new Date()) {
+      return NextResponse.json({
+        error: 'Payment date cannot be in the future',
+        message: 'Please select today or an earlier date.',
+      }, { status: 400 })
+    }
+
     const payment = await db.payment.create({
       data: {
         userId,
@@ -103,12 +122,18 @@ export async function POST(req: NextRequest) {
         amount: roundMoney(amt),
         type,
         mode: paymentMode,
-        date: date ? new Date(date) : new Date(),
+        date: paymentDate,
         notes: notes || null,
       },
     })
 
-    return NextResponse.json({ payment })
+    // 🔒 FIX M-NEW-1: Return a non-blocking warning if double-counting is possible
+    let warning: string | null = null
+    if (alreadyPaidOnInvoices > 0) {
+      warning = `This party already has ₹${alreadyPaidOnInvoices.toFixed(2)} recorded as "paid" on their invoices. If that amount includes the payment you just recorded, the balance will be reduced twice. To avoid double-counting, either use "Settle Payment" OR edit the invoice's paid amount — not both.`
+    }
+
+    return NextResponse.json({ payment, warning })
   } catch (error) {
     return apiError(error, 'Failed to record payment', 500)
   }

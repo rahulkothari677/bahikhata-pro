@@ -351,7 +351,19 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       return txn
     })
 
-    return NextResponse.json({ transaction })
+    // 🔒 FIX M-NEW-1: Check for potential double-counting. If the party has
+    // standalone Payments AND the invoice's paidAmount > 0, warn the user.
+    let warning: string | null = null
+    if (partyId && finalPaid > 0) {
+      const paymentCount = await db.payment.count({
+        where: { userId, partyId },
+      })
+      if (paymentCount > 0) {
+        warning = `This party has ${paymentCount} standalone payment(s) recorded. If those payments include what you're entering as "paid amount" here, the balance will be reduced twice. To avoid double-counting, either edit the invoice's paid amount OR use "Settle Payment" — not both.`
+      }
+    }
+
+    return NextResponse.json({ transaction, warning })
   } catch (error: any) {
     // 🔒 FIX H1: Catch the STOCK_BLOCK error from inside the $transaction.
     if (error?.code === 'STOCK_BLOCK') {
