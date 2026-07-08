@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { getAuthUserIdWithModule } from '@/lib/get-auth'
 import { roundMoney } from '@/lib/money'
 import { istMonthStartOffset, getISTDateParts } from '@/lib/timezone'
+import { computePartyBalance } from '@/lib/party-balance'
 
 // GET /api/parties/[id] - get party with paginated transactions + SQL aggregates
 // ⚡ PERFORMANCE (Audit fix H4): Was loading ALL transactions with items into
@@ -68,14 +69,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       }),
     ])
 
-    // 💰 MONEY: roundMoney on all balance calculations
-    const totalSales = roundMoney(salesAgg._sum.totalAmount || 0)
-    const totalPurchases = roundMoney(purchaseAgg._sum.totalAmount || 0)
-    const totalReceived = roundMoney(salesAgg._sum.paidAmount || 0)
-    const totalPaid = roundMoney(purchaseAgg._sum.paidAmount || 0)
-    const salesOutstanding = roundMoney(totalSales - totalReceived)
-    const purchaseOutstanding = roundMoney(totalPurchases - totalPaid)
-    const balance = roundMoney(party.openingBalance + salesOutstanding - purchaseOutstanding)
+    // 🔒 FIX V15 §1: Use computePartyBalance() — the single source of truth
+    // that includes standalone payments. Was: inline math that ignored payments,
+    // causing the party-detail headline to show a different (higher) balance
+    // than the dashboard and party list.
+    const partyBalance = await computePartyBalance(userId, id)
 
     // 3. Paginated transaction list (cursor-based, max 50 per page)
     // 🔒 V5 HA: filter deletedAt: null on the list too.
@@ -186,13 +184,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     return NextResponse.json({
       party,
       stats: {
-        totalSales,
-        totalPurchases,
-        totalReceived,
-        totalPaid,
-        salesOutstanding,
-        purchaseOutstanding,
-        balance,
+        totalSales: partyBalance.totalSales,
+        totalPurchases: partyBalance.totalPurchases,
+        totalReceived: partyBalance.totalReceived,
+        totalPaid: partyBalance.totalPaid,
+        salesOutstanding: partyBalance.salesOutstanding,
+        purchaseOutstanding: partyBalance.purchaseOutstanding,
+        paymentsReceived: partyBalance.paymentsReceived,
+        paymentsPaid: partyBalance.paymentsPaid,
+        balance: partyBalance.balance,
         transactionCount: countAgg,
         salesCount: salesAgg._count,
         purchasesCount: purchaseAgg._count,

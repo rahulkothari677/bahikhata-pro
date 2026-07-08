@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { getAuthUserIdWithModule } from '@/lib/get-auth'
 import { roundMoney } from '@/lib/money'
 import { apiError } from '@/lib/api-error'
+import { computePartyBalance } from '@/lib/party-balance'
 
 // POST /api/whatsapp-reminder - generate WhatsApp reminder link for outstanding dues
 export async function POST(req: NextRequest) {
@@ -26,9 +27,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Party not found' }, { status: 404 })
     }
 
-    // 💰 MONEY (Audit fix Phase 8): roundMoney on balance calculation
-    const salesOutstanding = roundMoney(party.transactions.reduce((s, t) => s + (t.totalAmount - t.paidAmount), 0))
-    const balance = roundMoney(party.openingBalance + salesOutstanding)
+    // 🔒 FIX V15 §1: Use computePartyBalance() — the single source of truth
+    // that includes standalone payments AND purchases. Was: inline math that
+    // only counted sales outstanding (no purchases, no payments), so the
+    // reminder demanded money the customer had already paid.
+    const partyBalance = await computePartyBalance(userId, partyId)
+    const balance = partyBalance.balance
 
     if (balance <= 0) {
       return NextResponse.json({ error: 'No outstanding dues for this customer' }, { status: 400 })
