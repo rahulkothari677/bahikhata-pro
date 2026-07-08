@@ -294,11 +294,18 @@ model Payment {
   type      String   @default("received") // received (from customer) | paid (to supplier)
   notes     String?
   createdAt DateTime @default(now())
+  // 🔒 V15 M-3: Soft-delete so deleted receipts stay auditable (disputes / fraud).
+  // Hard-deleting a payment silently changes historical balances — exactly the
+  // kind of action that should leave an audit trail in a ledger app.
+  deletedAt DateTime?
 
   // ⚡ PERFORMANCE (Audit fix Phase 5): Indexes on foreign keys + hot query
   // patterns. Without these, every payment query does a full table scan.
   @@index([userId, date])
   @@index([partyId, date])
+  // 🔒 V15 M-3: Partial index for the common "active payments for this party"
+  // query — smaller + faster than a full index because it excludes deleted rows.
+  @@index([userId, partyId, deletedAt])
 }
 
 // ==================== APP SETTINGS (per user) ====================

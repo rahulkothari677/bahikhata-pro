@@ -63,17 +63,13 @@ export function PartyProfile() {
   // 🔒 FIX React #310: These hooks MUST be before the early return (Rules of Hooks).
   // Was: useQuery for payments + useMemo for statement were after `if (isLoading || !data) return`.
   // Moved here so all hooks are called unconditionally.
-
-  // Fetch payments for this party (for the unified account statement)
-  const { data: paymentsData } = useQuery({
-    queryKey: ['party-payments', selectedPartyId],
-    queryFn: async () => {
-      const r = await offlineFetch(`/api/payments?partyId=${selectedPartyId}`)
-      if (!r.ok) throw new Error('Failed')
-      return r.json()
-    },
-    enabled: !!selectedPartyId,
-  })
+  //
+  // 🔒 V15 M-2: The separate /api/payments fetch is GONE. Payments are now
+  // bundled into the /api/parties/[id] response as `statementPayments`
+  // (oldest-first, capped at 500, soft-delete-filtered) so the statement
+  // has a complete, consistent data set — no more "paginated transactions
+  // merged with all payments" mismatch that dropped older invoices while
+  // their payments remained.
 
   // Extract data safely (before early return)
   const party = data?.party
@@ -81,25 +77,64 @@ export function PartyProfile() {
   const topProducts = data?.topProducts || []
   const monthlyData = data?.monthlyData || []
   const transactions = data?.transactions || []
-  const payments = paymentsData?.payments || []
+  // 🔒 V15 M-2: Statement-grade data — complete (capped at 500), oldest-first.
+  // Used ONLY for the account statement. The paginated `transactions` array
+  // above is still used for the recent-transactions list.
+  const statementTransactions = data?.statementTransactions || []
+  const statementPayments = data?.statementPayments || []
+  const statementTotals = data?.statementTotals
 
-  // Merge transactions + payments into a unified chronological statement
+  // 🔒 V15 M-2: Build the unified statement with a running balance.
+  //
+  // Algorithm:
+  //   1. Merge statementTransactions + statementPayments into one array.
+  //   2. Sort OLDEST → NEWEST (the natural direction for running balance).
+  //   3. Walk the array, accumulating the balance after each entry:
+  //        openingBalance
+  //        + (sale.totalAmount - sale.paidAmount)        // sale invoice booked
+  //        - (purchase.totalAmount - purchase.paidAmount) // purchase invoice booked
+  //        - payment.amount WHERE type='received'         // customer paid us
+  //        + payment.amount WHERE type='paid'             // we paid supplier
+  //   4. Each entry gets a `runningBalance` field = balance after that entry.
+  //   5. Reverse for display (newest-first) — but the running balance on
+  //      each entry is the historical balance AT THAT POINT, not the
+  //      current balance. This is what a real ledger statement shows.
+  //
+  // The formula matches computePartyBalance() exactly — same signs, same
+  // direction. If they ever drift, the balance-reconciliation test will fail.
   const statement = useMemo(() => {
-    const txEntries = transactions.map((t: any) => ({
+    // Opening balance = the party's starting balance before any transactions
+    // or payments. Stored on the Party record. The running balance after the
+    // LAST entry should equal stats.balance — if it doesn't, the formula here
+    // has drifted from computePartyBalance() (the reconciliation test in
+    // src/__tests__/lib/balance-reconciliation.test.ts guards this).
+    const OPENING = Number(party?.openingBalance || 0)
+
+    const txEntries = statementTransactions.map((t: any) => ({
       id: t.id,
       date: t.date,
       type: t.type,
       amount: t.totalAmount,
+      // For running balance: a sale adds (totalAmount - paidAmount) to what
+      // they owe. A purchase subtracts (totalAmount - paidAmount).
+      // The `paidAmount` portion is settled at billing time — it does NOT
+      // affect the running balance (it's a same-day settlement).
+      delta: t.type === 'sale'
+        ? (t.totalAmount - (t.paidAmount || 0))
+        : -(t.totalAmount - (t.paidAmount || 0)),
       due: t.totalAmount - t.paidAmount,
       invoiceNo: t.invoiceNo,
-      itemCount: t.items?.length || 0,
+      itemCount: 0, // not returned in statementTransactions (perf optimization)
       isPayment: false,
     }))
-    const payEntries = payments.map((p: any) => ({
+    const payEntries = statementPayments.map((p: any) => ({
       id: p.id,
       date: p.date,
       type: p.type === 'received' ? 'payment-received' : 'payment-paid',
       amount: p.amount,
+      // Received payment = customer paid us = reduces what they owe = negative delta.
+      // Paid payment = we paid supplier = reduces what we owe = positive delta.
+      delta: p.type === 'received' ? -p.amount : p.amount,
       due: 0,
       invoiceNo: null,
       itemCount: 0,
@@ -107,8 +142,22 @@ export function PartyProfile() {
       notes: p.notes,
       isPayment: true,
     }))
-    return [...txEntries, ...payEntries].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-  }, [transactions, payments])
+
+    // Sort oldest → newest for running-balance accumulation.
+    const oldestFirst = [...txEntries, ...payEntries].sort(
+      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+    )
+
+    // Walk and attach running balance.
+    let running = OPENING
+    const withBalance = oldestFirst.map((entry) => {
+      running = Math.round((running + entry.delta) * 100) / 100
+      return { ...entry, runningBalance: running }
+    })
+
+    // Reverse for display: newest first (chat-bubble style, most recent on top).
+    return withBalance.reverse()
+  }, [statementTransactions, statementPayments, stats, party])
 
   if (isLoading || !data) {
     return (
@@ -178,9 +227,9 @@ export function PartyProfile() {
       setPaymentAmount('')
       setPaymentNotes('')
       haptic.success()
-      // Refresh party profile data to show updated balance
+      // Refresh party profile data to show updated balance + new payment in
+      // the unified statement (statementPayments is now part of this response).
       queryClient.invalidateQueries({ queryKey: ['party-profile', selectedPartyId] })
-      queryClient.invalidateQueries({ queryKey: ['party-payments', selectedPartyId] })
       triggerRefresh()
     } catch {
       haptic.error()
@@ -752,6 +801,17 @@ export function PartyProfile() {
             </CardTitle>
             <Badge variant="secondary">{statement.length} entries</Badge>
           </div>
+          {/* 🔒 V15 M-2: Truncation warning. The statement caps at 500
+              transactions + 500 payments to bound memory. If a party exceeds
+              that, older entries are cut off — the shopkeeper needs to use
+              the printable / exportable statement for the full history. */}
+          {statementTotals && (statementTotals.transactionTotal > statementTotals.cap || statementTotals.paymentTotal > statementTotals.cap) && (
+            <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              <strong>Showing the latest {statementTotals.cap} entries.</strong> This party has{' '}
+              {statementTotals.transactionTotal} transactions and {statementTotals.paymentTotal} payments total.
+              Use the <em>Print / Share Statement</em> button below for the complete history.
+            </div>
+          )}
         </CardHeader>
         <CardContent>
           {statement.length === 0 ? (
@@ -817,9 +877,19 @@ export function PartyProfile() {
                           {entry.notes && (
                             <p className="text-[10px] opacity-75 mt-0.5">{entry.notes}</p>
                           )}
-                          <span className="text-[10px] opacity-75">
-                            {entryDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
-                          </span>
+                          {/* 🔒 V15 M-2: Running balance after this entry —
+                              the historical balance AT THIS POINT, not the
+                              current balance. This is what a real ledger
+                              statement shows so the reader can follow the
+                              money from oldest to newest. */}
+                          <div className="flex items-center justify-between gap-2 mt-0.5">
+                            <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded tabular-nums">
+                              Bal: {entry.runningBalance >= 0 ? '+' : ''}{formatINR(entry.runningBalance)}
+                            </span>
+                            <span className="text-[10px] opacity-75">
+                              {entryDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     ) : (
@@ -863,6 +933,10 @@ export function PartyProfile() {
                             ) : (
                               <span className="text-[10px] opacity-75">✓ Paid</span>
                             )}
+                            {/* 🔒 V15 M-2: Running balance after this entry. */}
+                            <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded tabular-nums">
+                              Bal: {entry.runningBalance >= 0 ? '+' : ''}{formatINR(entry.runningBalance)}
+                            </span>
                             <span className="text-[10px] opacity-75">
                               {entryDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
                             </span>

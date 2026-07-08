@@ -84,20 +84,24 @@ export async function computePartyBalance(
     // 🔒 FIX H3: Include standalone payments in the balance calculation.
     // type='received' = customer paid us (reduces what they owe)
     // type='paid' = we paid supplier (reduces what we owe them)
+    // 🔒 V15 M-3: Filter deletedAt: null so soft-deleted payments don't
+    // double-subtract from the balance (would make the customer look like
+    // they still owe money on a payment that was deleted).
     db.payment.aggregate({
-      where: { userId, partyId },
+      where: { userId, partyId, deletedAt: null },
       _sum: { amount: true },
     }),
   ])
 
   // Also get per-type payment totals
+  // 🔒 V15 M-3: Same deletedAt filter applied here.
   const [receivedAgg, paidAgg] = await Promise.all([
     db.payment.aggregate({
-      where: { userId, partyId, type: 'received' },
+      where: { userId, partyId, type: 'received', deletedAt: null },
       _sum: { amount: true },
     }),
     db.payment.aggregate({
-      where: { userId, partyId, type: 'paid' },
+      where: { userId, partyId, type: 'paid', deletedAt: null },
       _sum: { amount: true },
     }),
   ])
@@ -192,6 +196,7 @@ export async function getReceivablePayable(
         SUM(CASE WHEN "type" = 'paid' THEN "amount"::numeric ELSE 0 END) AS "paymentsPaid"
       FROM "Payment"
       WHERE "userId" = ${userId}
+        AND "deletedAt" IS NULL   -- 🔒 V15 M-3: exclude soft-deleted payments
       GROUP BY "partyId"
     ) pay ON pay."partyId" = p."id"
     WHERE p."userId" = ${userId}

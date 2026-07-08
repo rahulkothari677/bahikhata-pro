@@ -207,6 +207,55 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         nextCursor,
         pageSize: PAGE_SIZE,
       },
+      // 🔒 V15 M-2: Statement-grade data — separate from the paginated
+      // `transactions` list above. The previous design reused the paginated
+      // list (max 50 newest) for the account statement AND merged it with
+      // ALL payments — so a party with >50 transactions had older invoices
+      // silently disappear from the statement while their payments remained,
+      // making the statement look unbalanced.
+      //
+      // Now: the statement gets its OWN complete data set:
+      //   - statementTransactions: ALL non-deleted transactions, oldest→newest
+      //     (capped at 500 to bound memory — if a shop has >500 invoices with
+      //     one party, they need a real statement export, not a chat bubble).
+      //   - statementPayments: ALL non-soft-deleted payments, oldest→newest
+      //     (same 500 cap, same reason).
+      // The client merges + computes a running balance from oldest→newest.
+      // Both are ordered oldest-first so the running balance is computed
+      // in the natural direction.
+      statementTransactions: await db.transaction.findMany({
+        where: { userId, partyId: id, deletedAt: null },
+        select: {
+          id: true,
+          date: true,
+          type: true,
+          totalAmount: true,
+          paidAmount: true,
+          invoiceNo: true,
+        },
+        orderBy: { date: 'asc' },
+        take: 500,
+      }),
+      statementPayments: await db.payment.findMany({
+        where: { userId, partyId: id, deletedAt: null },
+        select: {
+          id: true,
+          date: true,
+          type: true,
+          amount: true,
+          mode: true,
+          notes: true,
+        },
+        orderBy: { date: 'asc' },
+        take: 500,
+      }),
+      // True totals (not capped) — used by the UI to show a "showing 500 of N"
+      // banner if the statement was truncated.
+      statementTotals: {
+        transactionTotal: countAgg,
+        paymentTotal: await db.payment.count({ where: { userId, partyId: id, deletedAt: null } }),
+        cap: 500,
+      },
     })
   } catch (error) {
     console.error('Party GET error:', error)

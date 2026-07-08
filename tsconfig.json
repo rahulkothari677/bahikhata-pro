@@ -49,6 +49,7 @@
     "capacitor.config.ts",
     "instrumentation.ts",
     "sentry.client.config.ts",
-    "sentry.server.config.ts"
+    "sentry.server.config.ts",
+    "bahikhata-admin"
   ]
 }
