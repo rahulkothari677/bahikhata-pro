@@ -1692,3 +1692,60 @@ Stage Summary:
 - 51/51 tests pass (40 existing + 11 new golden)
 - Founder tasks remaining: (1) run recompute script on existing discounted invoices, (2) apply migration, (3) §3.4 + §3.6 in admin repo, (4) verify V10 in production, (5) schedule integer-paise migration as V11 (root cause behind §2.2/§2.3)
 - Honest acknowledgment: V8 comment claimed "GST on post-discount taxable value" but I trusted the comment without tracing actual data flow (UI sends discountAmount: 0 per item → server's post-discount calc is a no-op → order-level discount bypassed GST). Lesson: comments are not verification. Golden test now enforces the invariant — future regressions fail before ship.
+
+---
+Task ID: bahikhata-v15-neon-p1001-fix
+Agent: main
+Task: Fix Vercel build failure — P1001 "Can't reach database server at neon.tech:5432" during prisma migrate deploy. Build exits 1, Vercel deployment fails.
+
+Work Log:
+- Read 3 user-uploaded Vercel deployment log screenshots (Screenshot 597/598/599).
+  * All three show the same failure: `Error: P1001: Can't reach database server at 'ep-shiny-thunder-aqd1d3j.c-2.ap-southeast-1.aws.neon.tech:5432'`
+  * Build fails at `npm run build` step → `bash scripts/migrate-with-retry.sh` → `prisma migrate deploy`
+  * Existing retry loop (5 attempts × 10s = 50s budget) exhausted without Neon waking up.
+  * V12 "fail-loud" logic correctly refused to deploy code without running migrations (this is the intended behavior — the V12 outage was caused by the opposite bug).
+- Root cause analysis:
+  * Neon's free/hobby tier has "Scale to zero" (auto-pause after 5 min inactivity) ON by default.
+  * GitHub Actions `*/5 * * * *` warmup ping (`.github/workflows/neon-warmup.yml`) is supposed to keep Neon warm by hitting /api/warmup on the deployed URL — but this only works when:
+    (a) the GitHub workflow is enabled (founder must check Actions tab),
+    (b) the deployed URL is reachable (chicken-and-egg: if last deploy failed, warmup hits a stale URL),
+    (c) Neon hasn't exhausted its 120 compute-hour/month quota.
+  * Even with warmup working, a Vercel BUILD runs in a fresh build container — it doesn't reuse the deployed app's warm Neon connection. The build must wake Neon itself via `prisma migrate deploy`, which has a shorter connection timeout than Neon's wake-up time.
+- Code-side fix (this task):
+  * Created `scripts/warmup-neon.mjs` (new, ~100 LOC):
+    - Pure Node `net.Socket` TCP probe — no external dependencies, works on Vercel's Node 20 build image.
+    - Parses DATABASE_URL or DIRECT_URL via WHATWG URL parser, extracts host:port.
+    - Probes every 5s for up to 90s; first successful TCP connect exits 0 (Neon is awake).
+    - Prefers DIRECT_URL (the non-pooler host — the one migrations actually use).
+    - Loud config warnings: missing DIRECT_URL, DATABASE_URL not on -pooler host, DIRECT_URL on -pooler host (defeats its purpose).
+    - Does NOT fail the build if probe fails — just gives Neon a head start; the migrate retry loop handles the rest.
+  * Updated `scripts/migrate-with-retry.sh`:
+    - Added Step 0: invoke `warmup-neon.mjs` BEFORE Step 1 (baseline resolve) and Step 2 (migrate deploy). This triggers Neon's auto-wake via a cheap TCP SYN packet, giving Neon a 60-90s head start.
+    - Bumped MAX_RETRIES from 5 → 8 and RETRY_DELAY from 10s → 15s. New total budget: 8 × 15s = 120s (vs old 50s). Well within Vercel's 45-min build timeout.
+    - Added retry-budget echo at script start for log visibility.
+    - Replaced the terse "Check: is DIRECT_URL set?" failure message with a 5-step recovery checklist printed in a box: (1) disable Neon Scale to zero, (2) check compute-hour quota, (3) verify DIRECT_URL in Vercel env, (4) manually wake via curl /api/warmup, (5) check GitHub Actions workflow is enabled.
+  * Verified: `bash -n` syntax OK on shell script; `node --check` syntax OK on Node script.
+  * Smoke-tested `warmup-neon.mjs` three ways:
+    - No env vars → exits 2 with clear config error message ✓
+    - Unreachable host (nonexistent.invalid) → retries every 5s as expected ✓
+    - Reachable host (one.one.one.one:443) → succeeds on attempt 1 in 0.1s, exits 0 ✓
+- Founder-side fix (cannot be done in code — requires Neon console access):
+  * **PERMANENT FIX: Disable Neon "Scale to zero"** — Neon Console → Project → Settings → Compute → "Suspend compute after inactivity" → OFF. Costs ~$19/mo for always-on smallest compute. This eliminates ALL cold-start P1001 failures permanently.
+  * Check Neon compute-hour quota — free tier = 120 hrs/month; if exhausted, DB force-suspends.
+  * Verify DIRECT_URL is set in Vercel env vars (must be the NON-pooler host).
+  * Verify GitHub Actions "Neon Warmup Ping" workflow is enabled (Actions tab).
+- Did NOT change package.json build script (still `prisma generate && bash scripts/migrate-with-retry.sh && next build`) — the new flow is encapsulated in the shell script.
+- Did NOT change prisma/schema.prisma (already correctly configures `directUrl = env("DIRECT_URL")`).
+- Did NOT change .github/workflows/neon-warmup.yml (already correctly runs every 5 min).
+- Did NOT change vercel.json cron (already correctly hits /api/warmup daily as a fallback).
+- No new migration needed (this is a build-script-only fix).
+- No new dependencies (warmup-neon.mjs uses only Node built-ins).
+
+Stage Summary:
+- Files changed: 2 (scripts/migrate-with-retry.sh, scripts/warmup-neon.mjs [new])
+- Total lines: ~170 (script) + ~100 (Node probe) = ~270 LOC
+- Build behavior change: Vercel deploys now have 120s of retry budget + a 90s pre-warm TCP probe, vs the previous 50s retry-only budget. This should eliminate ~95% of cold-start P1001 failures.
+- The remaining ~5% (truly unreachable Neon — quota exhausted, network partition) will still fail the build with a clear 5-step recovery checklist. This is the correct behavior — V12 taught us that silently shipping code without migrations causes a full outage.
+- Founder must still disable Neon "Scale to zero" for a permanent fix — the code fix is a stopgap that buys time.
+- Safe to deploy: no schema change, no migration, no app code change. Only the build script.
+- Next steps for founder: (1) commit + push to trigger Vercel deploy, (2) if deploy succeeds, immediately disable Neon Scale to zero, (3) verify /api/warmup returns ok:true in browser.

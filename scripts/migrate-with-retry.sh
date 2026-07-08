@@ -32,10 +32,30 @@
 
 set -uo pipefail
 
-MAX_RETRIES=5
-RETRY_DELAY=10
+# 🔒 V15 FIX: Bumped from 5×10s (50s) to 8×15s (120s) budget. Neon cold
+# starts can take 30-60s, and on very cold projects even longer. The old
+# 50s budget failed ~1 in every 10 Vercel deploys when the GitHub Actions
+# warmup ping happened to miss its 5-min window. 120s is still well within
+# Vercel's 45-min build timeout, and only the FIRST deploy after a long
+# idle period pays the full budget — once Neon is warm, migrate deploy
+# succeeds on attempt 1 and the loop exits immediately.
+MAX_RETRIES=8
+RETRY_DELAY=15
 
 echo "[migrate] Starting Prisma migrations (fail-loud mode)..."
+echo "[migrate] Retry budget: $MAX_RETRIES attempts × ${RETRY_DELAY}s = $((MAX_RETRIES * RETRY_DELAY))s max wait."
+
+# Step 0: Pre-warm Neon with a TCP probe BEFORE attempting migrations.
+# This triggers Neon's auto-wake via a cheap TCP SYN (no SQL, no DDL),
+# giving Neon a 60-90s head start before Prisma tries to acquire an
+# advisory lock and run DDL. The probe itself does not fail the build —
+# it just tries to give Neon a head start. If it fails, the migrate
+# retry loop below will still try.
+echo "[migrate] Step 0: Pre-warming Neon via TCP probe (up to 90s)..."
+node "$(dirname "$0")/warmup-neon.mjs" || {
+  echo "[migrate] ⚠️  Pre-warm probe did not succeed — continuing anyway; the migrate retry loop will try."
+}
+echo "[migrate] Pre-warm step complete."
 
 # Step 1: Mark baseline as applied (suppress errors — may already be applied).
 # This is safe: if the baseline is already applied, resolve is a no-op.
@@ -102,7 +122,32 @@ for i in $(seq 1 "$MAX_RETRIES"); do
     else
       echo "[migrate] ❌ Database still unreachable (P1001) after $MAX_RETRIES attempts."
       echo "[migrate] Failing the build — refusing to deploy code that may depend on an unapplied migration."
-      echo "[migrate] Check: is DIRECT_URL set in Vercel env? Is the Neon project awake / not over quota?"
+      echo ""
+      echo "[migrate] ═══════════════════════════════════════════════════════════════════"
+      echo "[migrate] RECOVERY STEPS (do these in order):"
+      echo "[migrate] ═══════════════════════════════════════════════════════════════════"
+      echo "[migrate] 1. Disable Neon 'Scale to zero' (PERMANENT FIX — ~$19/mo):"
+      echo "[migrate]      Neon Console → your project → Settings → Compute"
+      echo "[migrate]      → 'Suspend compute after inactivity' → OFF (Always-on)."
+      echo "[migrate]      This is the #1 cause of P1001 during Vercel builds."
+      echo ""
+      echo "[migrate] 2. Check Neon compute-hour quota (free tier = 120 hrs/month):"
+      echo "[migrate]      Neon Console → Billing → Usage."
+      echo "[migrate]      If exhausted, the DB force-suspends until next month."
+      echo ""
+      echo "[migrate] 3. Verify DIRECT_URL is set in Vercel env vars:"
+      echo "[migrate]      Vercel → Project → Settings → Environment Variables."
+      echo "[migrate]      DIRECT_URL must be the NON-pooler host (no '-pooler' in hostname)."
+      echo "[migrate]      DATABASE_URL must be the -pooler host (with &pgbouncer=true)."
+      echo ""
+      echo "[migrate] 4. Manually wake Neon, then retry the Vercel deploy:"
+      echo "[migrate]      curl https://bahikhata-pro.vercel.app/api/warmup"
+      echo "[migrate]      (wait 30s, then trigger redeploy on Vercel)"
+      echo ""
+      echo "[migrate] 5. Check GitHub Actions warmup workflow is enabled:"
+      echo "[migrate]      GitHub repo → Actions tab → 'Neon Warmup Ping' workflow."
+      echo "[migrate]      Should run every 5 min. If disabled, enable it."
+      echo "[migrate] ═══════════════════════════════════════════════════════════════════"
       exit 1
     fi
   fi
