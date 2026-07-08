@@ -143,6 +143,7 @@ export async function GET(req: NextRequest) {
       salesTrendRows,
       topProductsRows,
       categoryRows,
+      todayPaymentsAgg,
     ] = await withConnectionRetry(() => Promise.all([
       // 1. ALL KPIs + GST in one raw SQL (SUM(CASE WHEN ...) conditional aggregation)
       db.$queryRaw<Array<{
@@ -251,6 +252,20 @@ export async function GET(req: NextRequest) {
         GROUP BY COALESCE(p."category", 'Other')
         ORDER BY "totalValue" DESC
       `,
+
+      // 7. 🔒 FIX M-NEW-2: Today's payment collections (udhaar settlements).
+      // These are NOT revenue (revenue was already booked when the sale was
+      // created). They're real cash coming in today. Shown as a separate
+      // "Collections Today" KPI so the shopkeeper can reconcile their drawer.
+      db.payment.aggregate({
+        where: {
+          userId,
+          type: 'received',
+          date: { gte: startOfToday, lte: now },
+        },
+        _sum: { amount: true },
+        _count: true,
+      }),
     ]))
 
     // === Process Batch 2 results (all in JS — no more DB queries) ===
@@ -275,6 +290,10 @@ export async function GET(req: NextRequest) {
     const profitGrowth = prevRangeProfit > 0
       ? ((rangeProfit - prevRangeProfit) / prevRangeProfit) * 100
       : 0
+
+    // 🔒 FIX M-NEW-2: Today's udhaar collections (separate from revenue)
+    const todayCollections = roundMoney(todayPaymentsAgg._sum.amount || 0)
+    const todayCollectionCount = todayPaymentsAgg._count
 
     // Receivable/Payable
     const { totalReceivable, totalPayable } = receivablePayable
@@ -462,6 +481,8 @@ export async function GET(req: NextRequest) {
         rangeTxnCount,
         prevRangeRevenue,
         prevRangeProfit,
+        todayCollections,        // 🔒 FIX M-NEW-2: udhaar collected today
+        todayCollectionCount,    // 🔒 FIX M-NEW-2: count of payments collected today
       },
       salesTrend,
       topProducts,

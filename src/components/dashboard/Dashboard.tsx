@@ -16,7 +16,7 @@ import {
   TrendingUp, TrendingDown, Wallet, Package,
   ArrowUpRight, ArrowDownRight, AlertTriangle, IndianRupee,
   Receipt, Boxes, PiggyBank, ScanLine, ArrowRight, Plus, CloudOff, Repeat, Loader2,
-  BookOpenText, Share2, Calendar, Target,
+  BookOpenText, Share2, Calendar, Target, HandCoins,
 } from 'lucide-react'
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell,
@@ -506,6 +506,17 @@ export function Dashboard() {
           color="text-rose-600"
           onClick={() => setView('parties')}
         />
+        {/* 🔒 FIX M-NEW-2: Collections Today — udhaar payments received today */}
+        {kpis.todayCollections > 0 && (
+          <MiniStatCard
+            label="Collected Today"
+            value={formatINR(kpis.todayCollections)}
+            icon={HandCoins}
+            color="text-blue-600"
+            subtitle={`${kpis.todayCollectionCount} payment${kpis.todayCollectionCount === 1 ? '' : 's'}`}
+            onClick={() => setView('parties')}
+          />
+        )}
         <MiniStatCard
           label={t('dash.stock_value')}
           value={formatINR(kpis.totalStockValue)}
@@ -1112,17 +1123,19 @@ function KPICard({ title, value, icon: Icon, gradient, subtitle, trend, onClick,
   )
 }
 
-function MiniStatCard({ label, value, icon: Icon, color, onClick }: {
+function MiniStatCard({ label, value, icon: Icon, color, subtitle, onClick }: {
   label: string
   value: string
   icon: any
   color: string
+  subtitle?: string
   onClick?: () => void
 }) {
   // Map text color to bg color for the glass icon container
   const bgClass = color.includes('emerald') ? 'bg-emerald-500/10'
     : color.includes('rose') ? 'bg-rose-500/10'
     : color.includes('amber') ? 'bg-amber-500/10'
+    : color.includes('blue') ? 'bg-blue-500/10'
     : 'bg-violet-500/10'
 
   return (
@@ -1138,6 +1151,7 @@ function MiniStatCard({ label, value, icon: Icon, color, onClick }: {
           <p className="text-[10px] lg:text-[11px] text-muted-foreground font-medium uppercase tracking-wide leading-tight truncate">{label}</p>
         </div>
         <p className="text-base lg:text-lg font-bold tracking-tight tabular-nums">{value}</p>
+        {subtitle && <p className="text-[10px] text-muted-foreground mt-0.5">{subtitle}</p>}
       </div>
     </div>
   )
