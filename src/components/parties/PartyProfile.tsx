@@ -27,7 +27,7 @@ import { toast as sonnerToast } from 'sonner'
 import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
 import { haptic } from '@/lib/haptic'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
-import { roundMoney } from '@/lib/money'
+import { computeStatementRunningBalance } from '@/lib/statement-balance'
 
 export function PartyProfile() {
   const { selectedPartyId, setView, setPreviousView, triggerRefresh, previousView, features } = useAppStore()
@@ -85,112 +85,38 @@ export function PartyProfile() {
   const statementPayments = data?.statementPayments || []
   const statementTotals = data?.statementTotals
 
-  // 🔒 V15 M-2 + V17 §2.2/§2.3: Build the unified statement with a running balance.
+  // 🔒 V15 M-2 + V17 §2.1/§2.2/§2.3: Build the unified statement with a running
+  // balance.
+  //
+  // V17 §2.1: The logic is extracted into `computeStatementRunningBalance()`
+  // (src/lib/statement-balance.ts) so it can be tested behaviorally without
+  // mounting the React component. The behavioral test in
+  // src/__tests__/lib/balance-reconciliation-behavioral.test.ts calls this
+  // exact function with a fixture and asserts the result agrees with
+  // computePartyBalance() and getReceivablePayable().
   //
   // Algorithm (V17 backward walk):
-  //   1. Merge statementTransactions + statementPayments into one array.
-  //   2. Sort NEWEST → OLDEST (server already returns newest-first, but the
-  //      merge of two arrays needs a re-sort to interleave them correctly).
-  //   3. The FIRST entry (newest) gets runningBalance = stats.balance.
-  //      This is the current balance from the server (already rounded via
-  //      roundMoney in computePartyBalance). The top row of the statement
-  //      therefore ALWAYS ties to the headline — even when the statement
-  //      is truncated (>500 entries), because we anchor on the true current
-  //      balance, not on an opening balance computed from a partial window.
-  //   4. Each OLDER entry gets:
-  //        runningBalance = roundMoney(nextEntry.runningBalance - nextEntry.delta)
-  //      Because in the forward direction: newerBalance = olderBalance + newerDelta
-  //      → olderBalance = newerBalance - newerDelta (solving backward).
-  //   5. If the statement is NOT truncated, the balance BEFORE the oldest
-  //      entry should equal party.openingBalance. Equivalently:
-  //        oldestEntry.runningBalance - oldestEntry.delta === party.openingBalance
-  //      This is the invariant the behavioral test in Phase 3 will assert.
-  //      (The oldest entry's runningBalance is the balance AFTER that entry
-  //      was recorded, not before — so it's openingBalance + oldestDelta.)
+  //   1. Merge + sort NEWEST → OLDEST.
+  //   2. First entry (newest) gets runningBalance = stats.balance (the true
+  //      current balance from the server). Top row ALWAYS ties to the headline,
+  //      even when truncated (>500 entries).
+  //   3. Each older entry: runningBalance = roundMoney(prev.balance - prev.delta).
+  //   4. If NOT truncated, oldest entry's balance - delta = openingBalance.
   //
-  // 🔒 V17 §2.2 FIX: Was `orderBy: 'asc'` (oldest first) on the server +
-  // forward walk from OPENING. For a party with >500 transactions, the
-  // server returned the 500 OLDEST entries, and the forward walk computed
-  // the balance as of the 500th-oldest entry — NOT the current balance.
-  // The last visible row's balance didn't match stats.balance. Now: server
-  // returns newest 500, client walks backward from stats.balance, top row
-  // always ties to the headline.
+  // V17 §2.2: Was forward walk from OPENING — broke at >500 entries (showed
+  // oldest 500, closing balance didn't match headline). Now backward from
+  // stats.balance — shows newest 500, top row always matches headline.
   //
-  // 🔒 V17 §2.3 FIX: Was `Math.round((running + delta) * 100) / 100` per row.
-  // The server uses roundMoney (epsilon-corrected) on aggregate sums. Per-row
-  // Math.round can drift from rounding-the-total by a paisa on long statements.
-  // Now: uses roundMoney (imported from @/lib/money — pure module, client-safe)
-  // for every running balance computation. The first entry is exactly
-  // stats.balance (already rounded by server), so no accumulation drift.
-  //
-  // The delta signs match computePartyBalance() exactly:
-  //   sale     → +(total - paid)   [adds to what they owe]
-  //   purchase → -(total - paid)   [subtracts from what they owe]
-  //   received → -amount           [customer paid us → reduces what they owe]
-  //   paid     → +amount           [we paid supplier → reduces what we owe them]
-  // If they ever drift, the balance-reconciliation test will fail.
-  const statement = useMemo(() => {
-    const txEntries = statementTransactions.map((t: any) => ({
-      id: t.id,
-      date: t.date,
-      type: t.type,
-      amount: t.totalAmount,
-      // For running balance: a sale adds (totalAmount - paidAmount) to what
-      // they owe. A purchase subtracts (totalAmount - paidAmount).
-      // The `paidAmount` portion is settled at billing time — it does NOT
-      // affect the running balance (it's a same-day settlement).
-      delta: t.type === 'sale'
-        ? (t.totalAmount - (t.paidAmount || 0))
-        : -(t.totalAmount - (t.paidAmount || 0)),
-      due: t.totalAmount - t.paidAmount,
-      invoiceNo: t.invoiceNo,
-      // 🔒 V16 M1: itemCount now comes from _count.items (subquery, no fan-out).
-      itemCount: t._count?.items ?? 0,
-      isPayment: false,
-    }))
-    const payEntries = statementPayments.map((p: any) => ({
-      id: p.id,
-      date: p.date,
-      type: p.type === 'received' ? 'payment-received' : 'payment-paid',
-      amount: p.amount,
-      // Received payment = customer paid us = reduces what they owe = negative delta.
-      // Paid payment = we paid supplier = reduces what we owe = positive delta.
-      delta: p.type === 'received' ? -p.amount : p.amount,
-      due: 0,
-      invoiceNo: null,
-      itemCount: 0,
-      paymentMode: p.mode,
-      notes: p.notes,
-      isPayment: true,
-    }))
-
-    // Sort NEWEST → OLDEST. The server already returns each array newest-first,
-    // but merging the two arrays needs a re-sort to interleave them correctly.
-    // Stable sort by date desc; ties broken arbitrarily (entry order within
-    // the same day doesn't affect the running balance because the deltas sum).
-    const newestFirst = [...txEntries, ...payEntries].sort(
-      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-    )
-
-    if (newestFirst.length === 0) return []
-
-    // Backward walk: anchor on stats.balance (the true current balance from
-    // the server, already rounded via roundMoney in computePartyBalance).
-    // First entry (newest) = stats.balance. Each older entry = prev.balance
-    // - prev.delta (solving the forward equation backward).
-    const CURRENT = roundMoney(Number(stats?.balance ?? 0))
-
-    const withBalance: any[] = []
-    withBalance.push({ ...newestFirst[0], runningBalance: CURRENT })
-    for (let i = 1; i < newestFirst.length; i++) {
-      const prev = withBalance[i - 1]
-      // olderBalance = newerBalance - newerDelta
-      const older = roundMoney(prev.runningBalance - prev.delta)
-      withBalance.push({ ...newestFirst[i], runningBalance: older })
-    }
-
-    return withBalance
-  }, [statementTransactions, statementPayments, stats])
+  // V17 §2.3: Uses roundMoney (not inline Math.round) — eliminates per-row
+  // vs aggregate paisa drift.
+  const statement = useMemo(
+    () => computeStatementRunningBalance(
+      statementTransactions,
+      statementPayments,
+      Number(stats?.balance ?? 0),
+    ),
+    [statementTransactions, statementPayments, stats],
+  )
 
   if (isLoading || !data) {
     return (

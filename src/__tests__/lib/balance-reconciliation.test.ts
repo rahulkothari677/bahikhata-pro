@@ -90,20 +90,25 @@ describe('🔒 V15 §1 — Balance reconciliation (all screens must agree)', () 
     })
   })
 
-  // 🔒 V16 M2: Client-side running-balance formula must agree with the server
-  // helpers. The V15 §1 test only grepped `party-balance.ts` (the server side).
-  // But V15 M-2 added a NEW balance computation in `PartyProfile.tsx` (the
-  // client-side running balance on the account statement). If that formula's
-  // `delta` signs ever drift from the server's, the "Bal: ₹X" badge on each
-  // statement entry will diverge from the "Current Balance: ₹Y" banner at the
-  // top — and no existing test would catch it.
-  //
-  // This block statically checks the client formula's signs match the server's.
-  // It's not a runtime test (would need a test DB), but it catches the most
-  // common drift: someone flipping a sign in the `delta` ternary.
-  describe('🔒 V16 M2 — Client-side running balance formula matches server', () => {
-    it('PartyProfile.tsx delta signs match computePartyBalance() signs', () => {
+  // 🔒 V16 M2 + V17 §2.1/§2.2/§2.3: Client-side running-balance formula must
+  // agree with the server helpers. V17 §2.1 extracted the logic into
+  // `computeStatementRunningBalance()` in `src/lib/statement-balance.ts` so it
+  // can be tested behaviorally (see balance-reconciliation-behavioral.test.ts).
+  // These static tests verify the formula patterns are present in the lib file
+  // AND that PartyProfile.tsx calls the extracted function.
+  describe('🔒 V16 M2 + V17 §2.1/§2.2/§2.3 — Client-side running balance matches server', () => {
+    it('🔒 V17 §2.1: PartyProfile.tsx imports and calls computeStatementRunningBalance', () => {
       const source = readFile('components/parties/PartyProfile.tsx')
+      // After extraction, the component must import and call the pure function.
+      // This is the bridge between the UI and the testable logic.
+      expect(source).toMatch(/import\s*\{[^}]*computeStatementRunningBalance[^}]*\}\s*from\s*['"]@\/lib\/statement-balance['"]/)
+      expect(source).toMatch(/computeStatementRunningBalance\(/)
+      // The inline logic must be GONE (no more delta ternaries in the component).
+      expect(source).not.toMatch(/t\.type\s*===\s*'sale'\s*\?[^:]*\(t\.totalAmount/)
+    })
+
+    it('statement-balance.ts delta signs match computePartyBalance() signs', () => {
+      const source = readFile('lib/statement-balance.ts')
 
       // The server formula (computePartyBalance):
       //   balance = opening + salesOut - purchaseOut - paymentsReceived + paymentsPaid
@@ -113,60 +118,42 @@ describe('🔒 V15 §1 — Balance reconciliation (all screens must agree)', () 
       //   purchase → -(total - paid)   [subtracts from what they owe]
       //   received → -amount           [customer paid us → reduces what they owe]
       //   paid     → +amount           [we paid supplier → reduces what we owe them]
-      //
-      // Verify each sign is present in the source.
 
       // sale delta: +(t.totalAmount - paidAmount)
-      // The ternary is: t.type === 'sale' ? (t.totalAmount - ...) : -(...)
       expect(source).toMatch(/t\.type\s*===\s*'sale'\s*\?[^:]*\(t\.totalAmount\s*-\s*\(t\.paidAmount/)
 
       // purchase delta: -(t.totalAmount - paidAmount) — the else branch
-      // Look for the `: -(t.totalAmount - ...)` pattern
       expect(source).toMatch(/:\s*-\(t\.totalAmount\s*-\s*\(t\.paidAmount/)
 
       // received delta: -p.amount (customer paid us reduces what they owe)
-      // The ternary is: p.type === 'received' ? -p.amount : p.amount
       expect(source).toMatch(/p\.type\s*===\s*'received'\s*\?[^:]*-p\.amount/)
 
       // paid delta: +p.amount (we paid supplier — the else branch)
-      // Look for `: p.amount` after the received ternary
       expect(source).toMatch(/-p\.amount\s*:\s*p\.amount/)
     })
 
-    it('🔒 V17 §2.2: PartyProfile.tsx walks BACKWARD from stats.balance (not forward from openingBalance)', () => {
-      const source = readFile('components/parties/PartyProfile.tsx')
-      // V17 §2.2 fix: the running balance must anchor on stats.balance (the
-      // true current balance from the server), NOT on party.openingBalance.
-      // Walking forward from openingBalance breaks when the statement is
-      // truncated (>500 entries) — the last visible row's balance wouldn't
-      // match the headline. Walking backward from stats.balance means the
-      // first (newest) row always ties to the headline, regardless of
-      // truncation.
-      //
+    it('🔒 V17 §2.2: statement-balance.ts walks BACKWARD from statsBalance (not forward from openingBalance)', () => {
+      const source = readFile('lib/statement-balance.ts')
+      // V17 §2.2 fix: the running balance must anchor on statsBalance (the
+      // true current balance from the server), NOT on openingBalance.
       // Verify the backward-walk anchor is present.
-      expect(source).toMatch(/CURRENT\s*=\s*roundMoney\(Number\(stats\?\.balance/)
+      expect(source).toMatch(/CURRENT\s*=\s*roundMoney\(statsBalance/)
 
       // Verify the backward-walk formula: olderBalance = newerBalance - newerDelta
-      // (solving the forward equation newerBalance = olderBalance + newerDelta backward)
       expect(source).toMatch(/prev\.runningBalance\s*-\s*prev\.delta/)
 
-      // Verify the OLD forward-walk pattern is GONE (no OPENING variable,
-      // no forward accumulation from openingBalance).
+      // Verify the OLD forward-walk pattern is GONE.
       expect(source).not.toMatch(/OPENING\s*=\s*Number\(party\?\.openingBalance/)
       expect(source).not.toMatch(/Math\.round\(\(running\s*\+\s*entry\.delta\)/)
     })
 
-    it('🔒 V17 §2.3: PartyProfile.tsx uses roundMoney (not inline Math.round) for float safety', () => {
-      const source = readFile('components/parties/PartyProfile.tsx')
-      // V17 §2.3 fix: the client must use the shared roundMoney helper
-      // (epsilon-corrected, same as the server's computePartyBalance) instead
-      // of inline Math.round(x * 100) / 100. Per-row Math.round can drift
-      // from the server's aggregate rounding by a paisa on long statements.
-      //
-      // Verify roundMoney is imported and used in the running-balance walk.
+    it('🔒 V17 §2.3: statement-balance.ts uses roundMoney (not inline Math.round) for float safety', () => {
+      const source = readFile('lib/statement-balance.ts')
+      // V17 §2.3 fix: must use the shared roundMoney helper (epsilon-corrected,
+      // same as the server's computePartyBalance) instead of inline Math.round.
       expect(source).toMatch(/import\s*\{[^}]*roundMoney[^}]*\}\s*from\s*['"]@\/lib\/money['"]/)
       expect(source).toMatch(/roundMoney\(prev\.runningBalance\s*-\s*prev\.delta\)/)
-      expect(source).toMatch(/roundMoney\(Number\(stats\?\.balance/)
+      expect(source).toMatch(/roundMoney\(statsBalance/)
 
       // Verify the old inline Math.round pattern is GONE.
       expect(source).not.toMatch(/Math\.round\(\(running\s*\+\s*entry\.delta\)\s*\*\s*100\)\s*\/\s*100/)
