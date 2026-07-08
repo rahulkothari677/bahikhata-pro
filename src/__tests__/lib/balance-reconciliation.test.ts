@@ -133,21 +133,43 @@ describe('🔒 V15 §1 — Balance reconciliation (all screens must agree)', () 
       expect(source).toMatch(/-p\.amount\s*:\s*p\.amount/)
     })
 
-    it('PartyProfile.tsx seeds running balance with party.openingBalance (not stats.balance)', () => {
+    it('🔒 V17 §2.2: PartyProfile.tsx walks BACKWARD from stats.balance (not forward from openingBalance)', () => {
       const source = readFile('components/parties/PartyProfile.tsx')
-      // The running balance must start from the party's opening balance, NOT
-      // from the current balance. Starting from current balance would make
-      // every entry's "Bal: ₹X" wrong by the accumulated delta.
-      expect(source).toMatch(/OPENING\s*=\s*Number\(party\?\.openingBalance/)
+      // V17 §2.2 fix: the running balance must anchor on stats.balance (the
+      // true current balance from the server), NOT on party.openingBalance.
+      // Walking forward from openingBalance breaks when the statement is
+      // truncated (>500 entries) — the last visible row's balance wouldn't
+      // match the headline. Walking backward from stats.balance means the
+      // first (newest) row always ties to the headline, regardless of
+      // truncation.
+      //
+      // Verify the backward-walk anchor is present.
+      expect(source).toMatch(/CURRENT\s*=\s*roundMoney\(Number\(stats\?\.balance/)
+
+      // Verify the backward-walk formula: olderBalance = newerBalance - newerDelta
+      // (solving the forward equation newerBalance = olderBalance + newerDelta backward)
+      expect(source).toMatch(/prev\.runningBalance\s*-\s*prev\.delta/)
+
+      // Verify the OLD forward-walk pattern is GONE (no OPENING variable,
+      // no forward accumulation from openingBalance).
+      expect(source).not.toMatch(/OPENING\s*=\s*Number\(party\?\.openingBalance/)
+      expect(source).not.toMatch(/Math\.round\(\(running\s*\+\s*entry\.delta\)/)
     })
 
-    it('PartyProfile.tsx uses Math.round * 100 / 100 for float safety (matches roundMoney)', () => {
+    it('🔒 V17 §2.3: PartyProfile.tsx uses roundMoney (not inline Math.round) for float safety', () => {
       const source = readFile('components/parties/PartyProfile.tsx')
-      // The client can't import roundMoney (it's a server lib that pulls in
-      // Prisma types via db). It uses inline Math.round(x * 100) / 100 instead.
-      // Verify the pattern is present — if someone removes it, float drift
-      // will accumulate across many entries.
-      expect(source).toMatch(/Math\.round\(\(running\s*\+\s*entry\.delta\)\s*\*\s*100\)\s*\/\s*100/)
+      // V17 §2.3 fix: the client must use the shared roundMoney helper
+      // (epsilon-corrected, same as the server's computePartyBalance) instead
+      // of inline Math.round(x * 100) / 100. Per-row Math.round can drift
+      // from the server's aggregate rounding by a paisa on long statements.
+      //
+      // Verify roundMoney is imported and used in the running-balance walk.
+      expect(source).toMatch(/import\s*\{[^}]*roundMoney[^}]*\}\s*from\s*['"]@\/lib\/money['"]/)
+      expect(source).toMatch(/roundMoney\(prev\.runningBalance\s*-\s*prev\.delta\)/)
+      expect(source).toMatch(/roundMoney\(Number\(stats\?\.balance/)
+
+      // Verify the old inline Math.round pattern is GONE.
+      expect(source).not.toMatch(/Math\.round\(\(running\s*\+\s*entry\.delta\)\s*\*\s*100\)\s*\/\s*100/)
     })
   })
 })

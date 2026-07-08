@@ -214,15 +214,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       // silently disappear from the statement while their payments remained,
       // making the statement look unbalanced.
       //
-      // Now: the statement gets its OWN complete data set:
-      //   - statementTransactions: ALL non-deleted transactions, oldest→newest
-      //     (capped at 500 to bound memory — if a shop has >500 invoices with
-      //     one party, they need a real statement export, not a chat bubble).
-      //   - statementPayments: ALL non-soft-deleted payments, oldest→newest
-      //     (same 500 cap, same reason).
-      // The client merges + computes a running balance from oldest→newest.
-      // Both are ordered oldest-first so the running balance is computed
-      // in the natural direction.
+      // 🔒 V17 §2.2 FIX: Both arrays are now `orderBy: 'desc'` (NEWEST first),
+      // capped at 500. Was: `orderBy: 'asc'` (OLDEST first) + `take: 500` →
+      // for a party with >500 transactions, the statement showed the 500
+      // OLDEST entries (ancient history) and the closing balance on the last
+      // visible row didn't match the headline. Now: the newest 500 are shown,
+      // and the client walks backward from `stats.balance` so the top row
+      // always ties to the headline regardless of truncation.
+      //
+      //   - statementTransactions: most recent 500 non-deleted transactions.
+      //   - statementPayments: most recent 500 non-soft-deleted payments.
+      // The client merges, then walks newest→oldest computing running balance
+      // from stats.balance backward.
       statementTransactions: await db.transaction.findMany({
         where: { userId, partyId: id, deletedAt: null },
         select: {
@@ -239,7 +242,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
           // after V15 M-2 slimmed the payload.
           _count: { select: { items: true } },
         },
-        orderBy: { date: 'asc' },
+        orderBy: { date: 'desc' },
         take: 500,
       }),
       statementPayments: await db.payment.findMany({
@@ -252,7 +255,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
           mode: true,
           notes: true,
         },
-        orderBy: { date: 'asc' },
+        orderBy: { date: 'desc' },
         take: 500,
       }),
       // True totals (not capped) — used by the UI to show a "showing 500 of N"
