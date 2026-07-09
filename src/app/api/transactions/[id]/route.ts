@@ -10,6 +10,7 @@ import { computeLineItems } from '@/lib/line-items'
 import { normalizeToUnit } from '@/lib/units'
 import { apiError } from '@/lib/api-error'
 import { assertPeriodNotLocked, PeriodLockedError } from '@/lib/period-lock'
+import { logFieldChanges, TRACKED_TRANSACTION_FIELDS } from '@/lib/field-audit'
 
 // GET /api/transactions/[id] - get single transaction with all details
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -131,6 +132,16 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           invoiceNo: invoiceNo || null,
         },
         include: { items: true, party: true },
+      })
+      // V17-Ext 5.1: Log field-level changes for audit trail
+      await logFieldChanges({
+        userId,
+        entityType: 'transaction',
+        entityId: id,
+        oldValues: existing,
+        newValues: transaction,
+        fieldsToTrack: TRACKED_TRANSACTION_FIELDS,
+        changedByUserId: authCtx.actingUserId,
       })
       return NextResponse.json({ transaction })
     }
@@ -376,6 +387,21 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     // 🔒 V16 C4: Filter deletedAt: null on the payment count — was counting
     // soft-deleted payments (V15 M-3) as if they were active, which caused
     // spurious double-count warnings on every invoice edit for a party that
+    // V17-Ext 5.1: Log field-level changes for audit trail.
+    // `existing` was fetched at the top of PUT (before any changes).
+    // `transaction` is the updated record returned by the $transaction.
+    // The helper diffs each tracked field and creates a FieldChangeLog row
+    // for each one that changed. Fire-and-forget — never throws.
+    await logFieldChanges({
+      userId,
+      entityType: 'transaction',
+      entityId: id,
+      oldValues: existing,
+      newValues: transaction,
+      fieldsToTrack: TRACKED_TRANSACTION_FIELDS,
+      changedByUserId: authCtx.actingUserId,
+    })
+
     // had any historical (now-deleted) payment. Same alert-fatigue failure
     // mode as the original M-NEW-1 heuristic, just via a different path.
     let warning: string | null = null

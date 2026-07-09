@@ -50,6 +50,7 @@ model User {
   payments         Payment[]
   settings         Setting[]
   auditLogs        AuditLog[]
+  fieldChangeLogs  FieldChangeLog[]
   referralsMade    Referral[]       @relation("Referral_referrerIdToUser")
   referralReceived Referral?        @relation("Referral_referredIdToUser")
   subscriptions    Subscription[]
@@ -470,6 +471,26 @@ model AuditLog {
 
   @@index([userId, createdAt])
   @@index([action, createdAt])
+}
+
+// ==================== FIELD-LEVEL AUDIT TRAIL ====================
+// V17-Ext 5.1: Every edit to a transaction/payment records who changed
+// what field from what to what. This lets you reconstruct what the books
+// said at any point in time — fraud defense + court-admissible.
+model FieldChangeLog {
+  id              String   @id @default(cuid())
+  userId          String // shop owner (tenant scope)
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entityType      String // transaction | payment
+  entityId        String
+  fieldName       String // e.g. totalAmount, paidAmount, date
+  oldValue        String? // JSON-serialized old value (null = was empty)
+  newValue        String? // JSON-serialized new value (null = set to null)
+  changedByUserId String? // who made the change (owner or staff). No FK to avoid modifying User model.
+  createdAt       DateTime @default(now())
+
+  @@index([userId, entityType, entityId, createdAt])
+  @@index([entityId, createdAt])
 }
 
 // ==================== AI SCAN COMPARISONS ====================

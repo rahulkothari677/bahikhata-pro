@@ -52,6 +52,10 @@ describe('🔒 V16 C5 — Soft-delete filter sweep (no query may miss deletedAt:
     // hard-deleted), not items on soft-deleted (voided) transactions. Items on
     // voided transactions are correct (audit trail) and should NOT be flagged.
     ['lib/reconciliation.ts', 'orphan check uses LEFT JOIN IS NULL to find truly orphaned records (parent hard-deleted), not soft-deleted ones — intentionally does NOT filter deletedAt'],
+    // The audit-trail route fetches the transaction by ID without filtering
+    // deletedAt — you should be able to view the edit history of a voided
+    // transaction too (for audit purposes).
+    ['app/api/transactions/[id]/audit-trail/route.ts', 'audit trail must be viewable for voided transactions too — intentionally does not filter deletedAt on the findFirst'],
   ]
 
   function walkDir(dir: string): string[] {

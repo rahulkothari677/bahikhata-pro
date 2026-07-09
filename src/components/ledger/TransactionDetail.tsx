@@ -2,6 +2,7 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, useEffect } from 'react'
+import { useSession } from 'next-auth/react'
 import { useAppStore } from '@/store/app-store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -18,9 +19,9 @@ import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
 import { formatINR, formatDateTime, formatDate, cn } from '@/lib/utils'
 import {
   Edit2, Trash2, Printer, Download, User, Calendar, Receipt,
-  ShoppingCart, Truck, ArrowDownRight, ArrowUpRight, X, Plus,
+  ShoppingCart, Truck, ArrowDownRight, ArrowUpRight, ArrowRight, X, Plus,
   IndianRupee, FileText, Phone, Building2, MapPin, TrendingUp,
-  MessageCircle, AlertCircle, ArrowLeft,
+  MessageCircle, AlertCircle, ArrowLeft, History,
 } from 'lucide-react'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { amountToWords } from '@/lib/amount-to-words'
@@ -43,15 +44,13 @@ export function TransactionDetail() {
   const [printing, setPrinting] = useState(false)
   const queryClient = useQueryClient()
   const { confirmDialog, dialog: confirmDialogEl } = useConfirmDialog()
+  const { data: session } = useSession()
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['transaction', selectedTransactionId],
     queryFn: async () => {
       const r = await offlineFetch(`/api/transactions/${selectedTransactionId}`)
       const json = await r.json()
-      // 🔒 FIX H7: Throw on error so React Query sets `error` state. Was:
-      // returned { error: '...' } as data → isLoading=false, txn=undefined →
-      // infinite skeleton. Now: the error state shows a friendly message.
       if (!r.ok || json.error) {
         throw new Error(json.error || json.message || `Request failed (${r.status})`)
       }
@@ -59,6 +58,20 @@ export function TransactionDetail() {
     },
     enabled: !!selectedTransactionId,
     retry: 1,
+  })
+
+  // V17-Ext 5.1: Fetch the field-level audit trail (edit history) for this transaction.
+  // Shows who changed what field from what to what, and when. Only fetched for
+  // owners (staff don't have 'reports' permission). Enabled only when not loading.
+  const isOwner = session?.user?.role !== 'staff'
+  const { data: auditTrailData } = useQuery({
+    queryKey: ['transaction-audit-trail', selectedTransactionId],
+    queryFn: async () => {
+      const r = await offlineFetch(`/api/transactions/${selectedTransactionId}/audit-trail`)
+      if (!r.ok) return { changes: [] }
+      return r.json()
+    },
+    enabled: !!selectedTransactionId && isOwner && !isLoading,
   })
 
   // Fetch shop settings for invoice letterhead (GSTIN, shop name, address, owner)
@@ -591,6 +604,45 @@ export function TransactionDetail() {
             </CardContent>
           </Card>
         </>
+      )}
+
+      {/* V17-Ext 5.1: Field-level Audit Trail — shows who changed what, when */}
+      {isOwner && auditTrailData?.changes?.length > 0 && (
+        <Card className="shadow-card border-border/60">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <History className="w-4 h-4 text-muted-foreground" />
+              Edit History
+              <Badge variant="secondary">{auditTrailData.changes.length} change{auditTrailData.changes.length !== 1 ? 's' : ''}</Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {auditTrailData.changes.map((change: any, i: number) => (
+                <div key={change.id || i} className="flex items-start gap-3 rounded-lg bg-muted/30 p-2 text-xs">
+                  <div className="flex-shrink-0 w-2 h-2 rounded-full bg-primary/40 mt-1.5" />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold">{change.fieldName}</span>
+                      <span className="text-muted-foreground">
+                        changed {new Date(change.createdAt).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 mt-1 tabular-nums">
+                      <span className="text-rose-600 line-through opacity-70">
+                        {formatAuditValue(change.oldValue)}
+                      </span>
+                      <ArrowRight className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                      <span className="text-emerald-600 font-medium">
+                        {formatAuditValue(change.newValue)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Edit Dialog */}
@@ -1214,4 +1266,21 @@ function generateInvoiceHTML(txn: any, setting: any): string {
   </div>
 </body>
 </html>`
+}
+
+// V17-Ext 5.1: Format a value from the audit trail for display.
+// Money fields show with Rs. prefix, dates are formatted, null shows as dash.
+function formatAuditValue(value: any): string {
+  if (value === null || value === undefined) return '\u2014'
+  if (value instanceof Date) return formatDate(value)
+  if (typeof value === 'number') {
+    return `Rs. ${value.toFixed(2)}`
+  }
+  if (typeof value === 'string') {
+    if (/^\d{4}-\d{2}-\d{2}T/.test(value)) {
+      try { return formatDate(new Date(value)) } catch { return value }
+    }
+    return value
+  }
+  return String(value)
 }
