@@ -47,6 +47,11 @@ describe('🔒 V16 C5 — Soft-delete filter sweep (no query may miss deletedAt:
     ['app/api/reports/route.ts', 'V17 follow-up: audit each query for deletedAt filter'],
     ['app/api/gstr-export/route.ts', 'V17 follow-up: audit each query for deletedAt filter'],
     ['app/api/insights/route.ts', 'V17 follow-up: audit each query for deletedAt filter'],
+    // The reconciliation orphan check INTENTIONALLY doesn't filter on deletedAt
+    // — it uses LEFT JOIN IS NULL to find TRULY orphaned records (parent
+    // hard-deleted), not items on soft-deleted (voided) transactions. Items on
+    // voided transactions are correct (audit trail) and should NOT be flagged.
+    ['lib/reconciliation.ts', 'orphan check uses LEFT JOIN IS NULL to find truly orphaned records (parent hard-deleted), not soft-deleted ones — intentionally does NOT filter deletedAt'],
   ]
 
   function walkDir(dir: string): string[] {

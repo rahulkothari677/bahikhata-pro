@@ -147,6 +147,18 @@ export function computeLineItems(opts: {
     }
   })
 
+  // 🔒 V17-Ext Reconciliation FIX: Header CGST/SGST/IGST must EXACTLY equal
+  // the sum of the per-item values. Was: accumulated during the loop with
+  // roundMoney at each step (cgst = roundMoney(cgst + c)). That can drift from
+  // Postgres SUM(item.cgst) due to float accumulation differences.
+  //
+  // Now: after all items are computed, derive the header from the stored item
+  // values. This makes the header a DERIVED value — by construction,
+  // SUM(headers) = SUM(items), so the reconciliation check always passes.
+  cgst = roundMoney(txItems.reduce((sum, item) => sum + item.cgst, 0))
+  sgst = roundMoney(txItems.reduce((sum, item) => sum + item.sgst, 0))
+  igst = roundMoney(txItems.reduce((sum, item) => sum + item.igst, 0))
+
   const totalBeforeRoundOff = roundMoney((subtotal - toMoney(orderDiscount)) + cgst + sgst + igst)
 
   return { txItems, subtotal, cgst, sgst, igst, grossProfit, totalBeforeRoundOff }

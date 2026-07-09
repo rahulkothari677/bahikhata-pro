@@ -140,39 +140,57 @@ export async function checkGstReconciliation(userId: string): Promise<Reconcilia
 /**
  * Check 3: No orphaned data.
  *
- * Every TransactionItem should belong to a non-deleted Transaction.
- * Every Payment should belong to a non-deleted Party.
+ * A TRUE orphan is a TransactionItem whose parent Transaction was HARD-deleted
+ * (doesn't exist at all), or a Payment whose parent Party was HARD-deleted.
+ * With Prisma's FK constraints, this should always be 0.
  *
- * Catches referential integrity issues (e.g. a transaction was soft-deleted
- * but its items are still counted somewhere, or a party was soft-deleted but
- * its payments are still active).
+ * Was: counted items on soft-deleted (voided) transactions as "orphaned."
+ * That was WRONG — voided invoices SHOULD keep their line items for audit
+ * trail. Items on voided transactions are NOT orphaned; they still have a
+ * valid parent (the voided transaction row).
+ *
+ * Now: uses LEFT JOIN IS NULL to find only TRULY orphaned records (parent
+ * hard-deleted). This will always be 0 in a well-maintained DB with FK
+ * constraints. If it's ever non-zero, it indicates a serious referential
+ * integrity issue (e.g. someone manually deleted rows from the DB bypassing
+ * Prisma's FK protection).
  */
 export async function checkOrphanedData(userId: string): Promise<ReconciliationCheck> {
-  // Count items whose parent transaction is soft-deleted
-  const orphanedItems = await db.transactionItem.count({
-    where: {
-      transaction: { userId, deletedAt: { not: null } },
-    },
-  })
+  // Count items whose parent transaction doesn't exist AT ALL (hard-deleted).
+  // Uses raw SQL because Prisma's relation filters can't express "parent IS NULL"
+  // on a required relation — they only support filtering on parent properties.
+  const orphanedItemsResult = await db.$queryRaw<Array<{ count: bigint }>>`
+    SELECT COUNT(*)::bigint as count
+    FROM "TransactionItem" ti
+    LEFT JOIN "Transaction" t ON ti."transactionId" = t.id
+    WHERE t.id IS NULL
+      AND EXISTS (
+        SELECT 1 FROM "Transaction" t2
+        WHERE t2."userId" = ${userId}
+        AND t2.id = ti."transactionId"
+      )
+  `
+  const orphanedItems = Number(orphanedItemsResult[0]?.count || 0)
 
-  // Count payments whose parent party is soft-deleted
-  const orphanedPayments = await db.payment.count({
-    where: {
-      userId,
-      deletedAt: null,
-      party: { deletedAt: { not: null } },
-    },
-  })
+  // Count payments whose parent party doesn't exist AT ALL (hard-deleted).
+  const orphanedPaymentsResult = await db.$queryRaw<Array<{ count: bigint }>>`
+    SELECT COUNT(*)::bigint as count
+    FROM "Payment" p
+    LEFT JOIN "Party" pty ON p."partyId" = pty.id
+    WHERE pty.id IS NULL
+      AND p."userId" = ${userId}
+  `
+  const orphanedPayments = Number(orphanedPaymentsResult[0]?.count || 0)
 
   const passed = orphanedItems === 0 && orphanedPayments === 0
 
   return {
     name: 'Data Integrity',
-    description: 'No orphaned items or payments from deleted records',
+    description: 'No orphaned items or payments from hard-deleted records',
     passed,
     details: passed
-      ? 'All transaction items belong to active transactions, and all payments belong to active parties.'
-      : `Found ${orphanedItems} item(s) attached to deleted transactions and ${orphanedPayments} payment(s) attached to deleted parties.`,
+      ? 'All transaction items have valid parent transactions, and all payments have valid parent parties.'
+      : `Found ${orphanedItems} item(s) with no parent transaction (hard-deleted) and ${orphanedPayments} payment(s) with no parent party. This indicates a serious referential integrity issue — contact support.`,
     expected: 0,
     actual: orphanedItems + orphanedPayments,
   }

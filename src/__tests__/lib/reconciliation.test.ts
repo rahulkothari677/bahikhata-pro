@@ -33,16 +33,24 @@ function setupCommonMocks(overrides: {
 } = {}) {
   jest.restoreAllMocks()
 
-  // Cast db to any for mocking — Prisma's generated types don't play well
-  // with jest.spyOn's type inference, but the runtime behavior is correct.
   const dbAny = db as any
 
-  // $queryRaw — used by getReceivablePayable (called by checkPartyBalances)
-  // jest.fn() from @jest/globals has strict generic typing that doesn't infer
-  // the return type from mockResolvedValue. Declaring the mock as `any` first
-  // avoids the "never" type inference issue.
+  // $queryRaw is used by BOTH getReceivablePayable (checkPartyBalances) AND
+  // the orphaned-data check (checkOrphanedData). We use mockImplementation
+  // to return different results based on the SQL query content.
   const queryRawMock: any = jest.fn()
-  queryRawMock.mockResolvedValue(overrides.queryRawResult ?? [])
+  queryRawMock.mockImplementation((sql: any) => {
+    // The orphan check queries have "LEFT JOIN" in them
+    const sqlStr = Array.isArray(sql?.strings) ? sql.strings.join('') : String(sql)
+    if (sqlStr.includes('LEFT JOIN') && sqlStr.includes('TransactionItem')) {
+      return Promise.resolve([{ count: BigInt(overrides.orphanedItems ?? 0) }])
+    }
+    if (sqlStr.includes('LEFT JOIN') && sqlStr.includes('Payment')) {
+      return Promise.resolve([{ count: BigInt(overrides.orphanedPayments ?? 0) }])
+    }
+    // Default: return the party balances result
+    return Promise.resolve(overrides.queryRawResult ?? [])
+  })
   dbAny.$queryRaw = queryRawMock
 
   // transactionItem.aggregate — used by checkGstReconciliation (per-item GST)
@@ -62,12 +70,6 @@ function setupCommonMocks(overrides: {
       igst: overrides.headerGst?.igst ?? 0,
     },
   })
-
-  // transactionItem.count — used by checkOrphanedData
-  jest.spyOn(dbAny.transactionItem, 'count').mockResolvedValue(overrides.orphanedItems ?? 0)
-
-  // payment.count — used by checkOrphanedData
-  jest.spyOn(dbAny.payment, 'count').mockResolvedValue(overrides.orphanedPayments ?? 0)
 }
 
 describe('🔒 V17-Ext §5.1 — Reconciliation health check', () => {
@@ -199,7 +201,7 @@ describe('🔒 V17-Ext §5.1 — Reconciliation health check', () => {
   })
 
   describe('checkOrphanedData (Check 3)', () => {
-    it('passes when no orphaned items or payments', async () => {
+    it('passes when no truly orphaned items or payments', async () => {
       setupCommonMocks({
         orphanedItems: 0,
         orphanedPayments: 0,
@@ -212,7 +214,7 @@ describe('🔒 V17-Ext §5.1 — Reconciliation health check', () => {
       expect(orphanCheck!.passed).toBe(true)
     })
 
-    it('fails when orphaned items exist (items attached to deleted transactions)', async () => {
+    it('fails when truly orphaned items exist (parent transaction hard-deleted)', async () => {
       setupCommonMocks({
         orphanedItems: 3,
         orphanedPayments: 0,
@@ -226,7 +228,7 @@ describe('🔒 V17-Ext §5.1 — Reconciliation health check', () => {
       expect(orphanCheck!.details).toMatch(/3 item/)
     })
 
-    it('fails when orphaned payments exist (payments attached to deleted parties)', async () => {
+    it('fails when truly orphaned payments exist (parent party hard-deleted)', async () => {
       setupCommonMocks({
         orphanedItems: 0,
         orphanedPayments: 2,
