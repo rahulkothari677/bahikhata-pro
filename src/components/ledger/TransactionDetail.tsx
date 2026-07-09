@@ -670,10 +670,17 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
   transaction: any
   onSuccess?: () => void
 }) {
-  const isIncomeOrExpense = transaction.type === 'income' || transaction.type === 'expense'
-  const isSale = transaction.type === 'sale'
   const { toast } = useToast()
   const [saving, setSaving] = useState(false)
+
+  // 🔒 Defensive: if transaction is somehow undefined (e.g. during a React
+  // Query refetch that temporarily clears data), don't crash. Hooks must be
+  // called unconditionally (Rules of Hooks), so we call them first, THEN
+  // check if transaction exists. If not, render nothing.
+  // The parent's guard (if isLoading || !txn) should prevent this, but this
+  // is a safety net against race conditions.
+  const isIncomeOrExpense = transaction?.type === 'income' || transaction?.type === 'expense'
+  const isSale = transaction?.type === 'sale'
 
   const [form, setForm] = useState({
     partyId: '',
@@ -706,7 +713,7 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
     },
   })
   const parties: any[] = (partiesData?.parties || []).filter((p: any) =>
-    isSale ? p.type === 'customer' || p.type === 'both' : transaction.type === 'purchase' ? p.type === 'supplier' || p.type === 'both' : true
+    isSale ? p.type === 'customer' || p.type === 'both' : transaction?.type === 'purchase' ? p.type === 'supplier' || p.type === 'both' : true
   )
 
   useEffect(() => {
@@ -733,6 +740,10 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
       })) || [])
     }
   }, [open, transaction])
+
+  // 🔒 Defensive: after all hooks, bail if transaction is undefined.
+  // The parent's guard should prevent this, but this is a safety net.
+  if (!transaction) return null
 
   const updateItem = (index: number, field: string, value: any) => {
     const newItems = [...items]
