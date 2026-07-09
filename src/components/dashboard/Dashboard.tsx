@@ -29,6 +29,7 @@ import { motion } from 'framer-motion'
 import { offlineFetch, isOnline, OfflineError } from '@/lib/offline-fetch'
 import { useSetting } from '@/hooks/use-setting'
 import { DayEndSummary } from '@/components/dashboard/DayEndSummary'
+import { AnalyticsInsights } from '@/components/dashboard/AnalyticsInsights'
 import { useRecurringEntries } from '@/hooks/use-recurring-entries'
 import { toast as sonnerToast } from 'sonner'
 import { useCountUp } from '@/hooks/use-count-up'
@@ -1085,6 +1086,9 @@ export function Dashboard() {
 
       {/* {t('dash.smart_insights')} - AI-powered alerts */}
       {kpis && <SmartInsights />}
+
+      {/* V17-Ext 5.5: Business Analytics — best-sellers, dead stock, top customers, reorder */}
+      <AnalyticsInsights />
 
       {/* 🔒 V17-Ext §5.4: Day-end "Close the Drawer" dialog */}
       <DayEndSummary open={showDayEnd} onOpenChange={setShowDayEnd} />
