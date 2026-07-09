@@ -11,6 +11,7 @@ import { apiError } from '@/lib/api-error'
 import { computeLineItems, buildPriceWarnings } from '@/lib/line-items'
 import { normalizeToUnit } from '@/lib/units'
 import { encodeKeysetCursor, buildKeysetWhere } from '@/lib/pagination'
+import { assertPeriodNotLocked, PeriodLockedError } from '@/lib/period-lock'
 
 // GET /api/transactions - list with filters (type, from, to, limit)
 export async function GET(req: NextRequest) {
@@ -171,6 +172,19 @@ export async function POST(req: NextRequest) {
         // Already processed — return the existing transaction (idempotent)
         return NextResponse.json({ transaction: existing, idempotent: true })
       }
+    }
+
+    // 🔒 V17-Ext §5.1: Period lock check. Block the create if the transaction's
+    // date falls within a locked period. The date defaults to now if not
+    // provided (same logic the create uses below). A backdated transaction
+    // dated last month is blocked if last month is locked.
+    try {
+      await assertPeriodNotLocked(userId, date || new Date().toISOString())
+    } catch (e) {
+      if (e instanceof PeriodLockedError) {
+        return NextResponse.json({ error: e.message, code: 'PERIOD_LOCKED' }, { status: 403 })
+      }
+      throw e
     }
 
     // 🔒 GST CORRECTNESS (Audit fix H3 v2): Derive isInterState server-side

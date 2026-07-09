@@ -4,6 +4,7 @@ import { getAuthContext } from '@/lib/get-auth'
 import { canAccessModule } from '@/lib/staff-permissions'
 import { apiError } from '@/lib/api-error'
 import { logAudit } from '@/lib/audit'
+import { assertPeriodNotLocked, PeriodLockedError } from '@/lib/period-lock'
 
 /**
  * DELETE /api/payments/[id]
@@ -51,6 +52,18 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     })
     if (!existing) {
       return NextResponse.json({ error: 'Payment not found' }, { status: 404 })
+    }
+
+    // 🔒 V17-Ext §5.1: Period lock check. You can't soft-delete (void) a
+    // payment that's in a locked period — voiding changes the period's
+    // balances retroactively, which corrupts filed GST returns.
+    try {
+      await assertPeriodNotLocked(userId, existing.date)
+    } catch (e) {
+      if (e instanceof PeriodLockedError) {
+        return NextResponse.json({ error: e.message, code: 'PERIOD_LOCKED' }, { status: 403 })
+      }
+      throw e
     }
 
     // Soft-delete: set deletedAt. The row stays in the DB for audit/disputes.

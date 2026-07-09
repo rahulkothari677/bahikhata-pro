@@ -9,6 +9,7 @@ import { validateBody, updateTransactionSchema } from '@/lib/validation'
 import { computeLineItems } from '@/lib/line-items'
 import { normalizeToUnit } from '@/lib/units'
 import { apiError } from '@/lib/api-error'
+import { assertPeriodNotLocked, PeriodLockedError } from '@/lib/period-lock'
 
 // GET /api/transactions/[id] - get single transaction with all details
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -84,6 +85,24 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         error: 'Cannot change transaction type',
         message: `This transaction is a ${existing.type}. To convert it to a ${type}, please delete this transaction and create a new one.`,
       }, { status: 400 })
+    }
+
+    // 🔒 V17-Ext §5.1: Period lock check (TWO dates to check for PUT):
+    //   1. The EXISTING transaction's date — you can't edit a transaction that's
+    //      already in a locked period (protects filed GST from alteration).
+    //   2. The NEW date (if provided) — you can't move a transaction INTO a
+    //      locked period (would alter the locked period's totals retroactively).
+    // Both must pass. If either is locked, the edit is blocked with a 403.
+    try {
+      await assertPeriodNotLocked(userId, existing.date)
+      if (date) {
+        await assertPeriodNotLocked(userId, date)
+      }
+    } catch (e) {
+      if (e instanceof PeriodLockedError) {
+        return NextResponse.json({ error: e.message, code: 'PERIOD_LOCKED' }, { status: 403 })
+      }
+      throw e
     }
 
     // 🔒 GST CORRECTNESS (Audit fix H3 v2): Derive isInterState server-side
@@ -402,6 +421,18 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     const module: ModuleKey = existing.type === 'purchase' ? 'purchases' : existing.type === 'income' || existing.type === 'expense' ? 'incomeExpense' : 'sales'
     if (!canAccessModule(authCtx.role, authCtx.permissions, module)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    // 🔒 V17-Ext §5.1: Period lock check. You can't soft-delete (void) a
+    // transaction that's in a locked period — voiding changes the period's
+    // totals retroactively, which corrupts filed GST returns.
+    try {
+      await assertPeriodNotLocked(userId, existing.date)
+    } catch (e) {
+      if (e instanceof PeriodLockedError) {
+        return NextResponse.json({ error: e.message, code: 'PERIOD_LOCKED' }, { status: 403 })
+      }
+      throw e
     }
 
     // 🔒 N5: Wrap soft-delete + stock reversal in $transaction

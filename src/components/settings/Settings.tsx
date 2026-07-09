@@ -24,7 +24,7 @@ import { THEME_OPTIONS } from '@/components/providers/ThemeProvider'
 import {
   Store, Save, Database, Trash2, AlertTriangle, Moon, Keyboard,
   Search, MessageCircle, Sparkles, Bell, Repeat, FileSpreadsheet,
-  Users, Package, ScanLine, TrendingUp, Smartphone, RotateCcw, Palette, Check, Globe, Shield, EyeOff, Plus, Mic,
+  Users, Package, ScanLine, TrendingUp, Smartphone, RotateCcw, Palette, Check, Globe, Shield, EyeOff, Plus, Mic, Lock, Loader2,
 } from 'lucide-react'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { useSetting } from '@/hooks/use-setting'
@@ -103,6 +103,12 @@ export function Settings() {
   const [roundOffEnabled, setRoundOffEnabled] = useState(false)
   // 🔒 V11: Stock policy toggle — 'block' (default) or 'allow' (kirana mode).
   const [stockPolicy, setStockPolicy] = useState<'block' | 'allow'>('block')
+  // 🔒 V17-Ext §5.1: Period lock state. null = unlocked. Date string = locked
+  // until that date. Loaded from /api/settings, persisted via persistPeriodLock.
+  const [lockedUntil, setLockedUntil] = useState<string | null>(null)
+  // Local input state for the date picker (ISO date string, e.g. "2026-03-31")
+  const [lockDateInput, setLockDateInput] = useState('')
+  const [savingLock, setSavingLock] = useState(false)
 
   const { data } = useQuery({
     queryKey: ['setting'],
@@ -125,6 +131,17 @@ export function Settings() {
       })
       setRoundOffEnabled(data.setting.roundOffEnabled ?? false)
       setStockPolicy(data.setting.stockPolicy === 'allow' ? 'allow' : 'block')
+      // 🔒 V17-Ext §5.1: Sync period lock state from server.
+      // lockedUntil is an ISO timestamp (or null). We store the full timestamp
+      // for display + derive the date-only string for the date input default.
+      const lockVal = data.setting.lockedUntil
+      setLockedUntil(lockVal || null)
+      if (lockVal) {
+        // Extract YYYY-MM-DD for the date input default
+        setLockDateInput(new Date(lockVal).toISOString().slice(0, 10))
+      } else {
+        setLockDateInput('')
+      }
       // hideProfit is now managed by useSetting() hook — no need to sync here
     }
   }, [data])
@@ -160,6 +177,64 @@ export function Settings() {
       sonnerToast.success(next === 'allow' ? 'Overselling allowed (kirana mode)' : 'Overselling blocked')
     } catch {
       sonnerToast.error('Could not save stock policy setting')
+    }
+  }
+
+  // 🔒 V17-Ext §5.1: Lock the period. Sends ONLY lockedUntil (not the whole
+  // form) so the lock can be set independently of a settings save. The server
+  // treats undefined fields as "don't touch" so other settings are preserved.
+  const persistPeriodLock = async (dateStr: string) => {
+    if (!dateStr) {
+      sonnerToast.error('Please select a date first')
+      return
+    }
+    setSavingLock(true)
+    try {
+      // Convert YYYY-MM-DD to end-of-day ISO (so "March 31" locks ALL of March 31)
+      const lockDate = new Date(dateStr + 'T23:59:59.999')
+      const r = await offlineFetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lockedUntil: lockDate.toISOString() }),
+        offline: { invalidate: ['/api/settings'] },
+      })
+      if (!r.ok) throw new Error('Failed')
+      setLockedUntil(lockDate.toISOString())
+      sonnerToast.success(`Period locked until ${new Date(dateStr).toLocaleDateString('en-IN')}. Transactions dated on or before this date can no longer be edited.`)
+      haptic.success()
+      queryClient.invalidateQueries({ queryKey: ['setting'] })
+    } catch {
+      haptic.error()
+      sonnerToast.error('Could not set period lock')
+    } finally {
+      setSavingLock(false)
+    }
+  }
+
+  // 🔒 V17-Ext §5.1: Unlock the period. Sends lockedUntil: null. The owner
+  // can always unlock — they're the boss. (A future "filed GST" status could
+  // make this truly irreversible, but that's out of scope for now.)
+  const handleUnlock = async () => {
+    if (!await confirmDialog('Unlock the period? This will allow editing and deleting transactions in the previously locked period.', { title: 'Unlock Period', confirmLabel: 'Unlock', destructive: true })) return
+    setSavingLock(true)
+    try {
+      const r = await offlineFetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lockedUntil: null }),
+        offline: { invalidate: ['/api/settings'] },
+      })
+      if (!r.ok) throw new Error('Failed')
+      setLockedUntil(null)
+      setLockDateInput('')
+      sonnerToast.success('Period unlocked. You can now edit all transactions.')
+      haptic.success()
+      queryClient.invalidateQueries({ queryKey: ['setting'] })
+    } catch {
+      haptic.error()
+      sonnerToast.error('Could not unlock period')
+    } finally {
+      setSavingLock(false)
     }
   }
 
@@ -496,6 +571,82 @@ export function Settings() {
                     <Database className="w-4 h-4" /> Clear Offline Cache
                   </Button>
                 </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 🔒 V17-Ext §5.1: Period Lock — protect filed GST periods from edits */}
+          <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+            <div className="flex items-start gap-3">
+              <Shield className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="font-semibold text-amber-900 text-sm">Period Lock (Financial-Year lock)</p>
+                  {lockedUntil ? (
+                    <Badge className="bg-amber-600 text-white hover:bg-amber-700">Locked</Badge>
+                  ) : (
+                    <Badge variant="secondary">Unlocked</Badge>
+                  )}
+                </div>
+                <p className="text-xs text-amber-800 mt-1">
+                  Once you file GST for a period, lock it. No one (not even staff) can edit, delete,
+                  or create transactions dated on or before the lock date. This protects your filed
+                  returns from accidental or fraudulent changes.
+                </p>
+
+                {lockedUntil ? (
+                  <div className="mt-3 space-y-2">
+                    <div className="flex items-center gap-2 text-sm text-amber-900">
+                      <Calendar className="w-4 h-4" />
+                      <span>
+                        Locked until:{' '}
+                        <strong>{new Date(lockedUntil).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</strong>
+                      </span>
+                    </div>
+                    <p className="text-xs text-amber-700">
+                      Transactions dated on or before this date are read-only. To make changes, unlock
+                      the period first (owner only).
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-2 border-amber-400 text-amber-800 hover:bg-amber-100"
+                      onClick={handleUnlock}
+                      disabled={savingLock}
+                    >
+                      {savingLock ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
+                      {savingLock ? 'Unlocking...' : 'Unlock Period'}
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="mt-3 space-y-2">
+                    <div className="flex items-end gap-2 flex-wrap">
+                      <div className="flex-1 min-w-[160px]">
+                        <Label className="text-xs text-amber-900">Lock until date (inclusive)</Label>
+                        <Input
+                          type="date"
+                          value={lockDateInput}
+                          onChange={(e) => setLockDateInput(e.target.value)}
+                          className="mt-1"
+                          max={new Date().toISOString().slice(0, 10)}
+                        />
+                      </div>
+                      <Button
+                        size="sm"
+                        className="gap-2 bg-amber-600 hover:bg-amber-700 text-white"
+                        onClick={() => persistPeriodLock(lockDateInput)}
+                        disabled={savingLock || !lockDateInput}
+                      >
+                        {savingLock ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
+                        {savingLock ? 'Locking...' : 'Lock Period'}
+                      </Button>
+                    </div>
+                    <p className="text-xs text-amber-700">
+                      Tip: Lock until the last day of the month you filed GST for (e.g. March 31).
+                      You can always unlock later if needed.
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           </div>

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthContext } from '@/lib/get-auth'
 import { canAccessModule, type ModuleKey } from '@/lib/staff-permissions'
+import { assertPeriodNotLocked, PeriodLockedError } from '@/lib/period-lock'
 
 /**
  * POST /api/transactions/[id]/restore
@@ -47,6 +48,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const module: ModuleKey = existing.type === 'purchase' ? 'purchases' : existing.type === 'income' || existing.type === 'expense' ? 'incomeExpense' : 'sales'
     if (!canAccessModule(authCtx.role, authCtx.permissions, module)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    // 🔒 V17-Ext §5.1: Period lock check. Restoring a soft-deleted transaction
+    // re-adds it to the period's totals — if the period is locked (GST filed),
+    // this would corrupt the filed return. Block the restore.
+    try {
+      await assertPeriodNotLocked(userId, existing.date)
+    } catch (e) {
+      if (e instanceof PeriodLockedError) {
+        return NextResponse.json({ error: e.message, code: 'PERIOD_LOCKED' }, { status: 403 })
+      }
+      throw e
     }
 
     // Restore: set deletedAt to null + re-apply stock impact, atomically.

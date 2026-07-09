@@ -5,6 +5,7 @@ import { canAccessModule } from '@/lib/staff-permissions'
 import { roundMoney } from '@/lib/money'
 import { apiError } from '@/lib/api-error'
 import { computePartyBalance } from '@/lib/party-balance'
+import { assertPeriodNotLocked, PeriodLockedError } from '@/lib/period-lock'
 
 /**
  * GET /api/payments?partyId=xxx
@@ -115,6 +116,18 @@ export async function POST(req: NextRequest) {
         error: 'Payment date cannot be in the future',
         message: 'Please select today or an earlier date.',
       }, { status: 400 })
+    }
+
+    // 🔒 V17-Ext §5.1: Period lock check. Block the payment create if its date
+    // falls within a locked period. A backdated payment dated last month is
+    // blocked if last month is locked (GST filed).
+    try {
+      await assertPeriodNotLocked(userId, paymentDate)
+    } catch (e) {
+      if (e instanceof PeriodLockedError) {
+        return NextResponse.json({ error: e.message, code: 'PERIOD_LOCKED' }, { status: 403 })
+      }
+      throw e
     }
 
     // 🔒 V15 M-1: Balance-based overpayment check (replaces the noisy old heuristic).
