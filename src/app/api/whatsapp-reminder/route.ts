@@ -4,6 +4,7 @@ import { getAuthUserIdWithModule } from '@/lib/get-auth'
 import { roundMoney } from '@/lib/money'
 import { apiError } from '@/lib/api-error'
 import { computePartyBalance } from '@/lib/party-balance'
+import { generateUpiLink } from '@/lib/upi-link'
 
 // POST /api/whatsapp-reminder - generate WhatsApp reminder link for outstanding dues
 export async function POST(req: NextRequest) {
@@ -57,15 +58,37 @@ export async function POST(req: NextRequest) {
       ? Math.floor((Date.now() - oldestUnpaid.date.getTime()) / 86400000)
       : 0
 
+    // V17-Ext 5.4: Generate UPI deep-link for one-tap payment.
+    // If the shopkeeper has configured their UPI VPA (Setting.upiId), the
+    // reminder includes a upi://pay?... link that opens the customer's UPI
+    // app with the amount pre-filled. The customer pays, then the shopkeeper
+    // confirms via "Settle Payment" in the app.
+    const upiId = setting?.upiId || null
+    const upiLink = upiId
+      ? generateUpiLink(
+          upiId,
+          setting?.shopName || 'Shop',
+          balance,
+          `Payment to ${setting?.shopName || 'shop'}`,
+        )
+      : null
+
     const lines: string[] = []
     lines.push(`Namaste ${party.name} 🙏`)
     lines.push('')
     lines.push(`This is a friendly reminder from ${setting?.shopName || 'our shop'}.`)
     lines.push('')
-    lines.push(`* Outstanding Amount: ₹${balance.toFixed(2)} *`)
-    
+    lines.push(`* Outstanding Amount: Rs. ${balance.toFixed(2)} *`)
+
     if (daysOverdue > 0) {
       lines.push(`Oldest unpaid: ${daysOverdue} days ago`)
+    }
+
+    // V17-Ext 5.4: Add UPI pay link if configured
+    if (upiLink) {
+      lines.push('')
+      lines.push('Tap to pay via UPI:')
+      lines.push(upiLink)
     }
 
     if (unpaidTxns.length > 0) {
@@ -73,7 +96,7 @@ export async function POST(req: NextRequest) {
       lines.push('Unpaid invoices:')
       unpaidTxns.slice(0, 5).forEach((t, i) => {
         const due = t.totalAmount - t.paidAmount
-        lines.push(`${i + 1}. ${t.invoiceNo || 'Bill'} - ₹${due.toFixed(2)}`)
+        lines.push(`${i + 1}. ${t.invoiceNo || 'Bill'} - Rs. ${due.toFixed(2)}`)
       })
       if (unpaidTxns.length > 5) {
         lines.push(`...and ${unpaidTxns.length - 5} more`)
@@ -85,7 +108,7 @@ export async function POST(req: NextRequest) {
     lines.push('Thank you for your business! 🙏')
     lines.push('')
     lines.push(`- ${setting?.ownerName || setting?.shopName || 'Shop Owner'}`)
-    if (setting?.phone) lines.push(`📞 ${setting.phone}`)
+    if (setting?.phone) lines.push(`Phone: ${setting.phone}`)
 
     const message = encodeURIComponent(lines.join('\n'))
 
@@ -104,6 +127,8 @@ export async function POST(req: NextRequest) {
       balance,
       unpaidCount: unpaidTxns.length,
       daysOverdue,
+      upiLink, // V17-Ext 5.4: returned so the UI can show a "Copy UPI Link" button
+      upiId: upiId, // returned so the UI knows whether UPI is configured
     })
   } catch (error) {
     return apiError(error, 'Failed to generate reminder', 500)

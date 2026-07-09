@@ -88,7 +88,7 @@ export function Settings() {
   const isOwner = session?.user?.role !== 'staff'
   const [form, setForm] = useState({
     shopName: '', ownerName: '', phone: '', email: '',
-    gstin: '', state: '', address: '',
+    gstin: '', state: '', address: '', upiId: '',
   })
   const [saving, setSaving] = useState(false)
 
@@ -132,6 +132,7 @@ export function Settings() {
         gstin: data.setting.gstin || '',
         state: data.setting.state || '',
         address: data.setting.address || '',
+        upiId: data.setting.upiId || '',
       })
       setRoundOffEnabled(data.setting.roundOffEnabled ?? false)
       setStockPolicy(data.setting.stockPolicy === 'allow' ? 'allow' : 'block')
@@ -411,6 +412,15 @@ export function Settings() {
             <div className="sm:col-span-2">
               <Label>Address</Label>
               <Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="Full shop address" />
+            </div>
+            {/* V17-Ext 5.4: UPI ID for udhaar collection links */}
+            <div>
+              <Label>UPI ID (for payment collection)</Label>
+              <Input value={form.upiId} onChange={(e) => setForm({ ...form, upiId: e.target.value })} placeholder="e.g. shop@paytm, 9876543210@ybl" className="font-mono lowercase" />
+              <p className="text-xs text-muted-foreground mt-1">
+                Your UPI VPA. When you send an udhaar reminder via WhatsApp, it will include a
+                one-tap payment link for this amount.
+              </p>
             </div>
           </div>
           <div className="flex justify-end">

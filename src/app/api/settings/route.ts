@@ -46,6 +46,7 @@ export async function PUT(req: NextRequest) {
       scanLang: body.scanLang,
       voiceLang: body.voiceLang,
       stockPolicy: body.stockPolicy,  // 🔒 V11: 'block' | 'allow'
+      upiId: body.upiId,  // V17-Ext 5.4: UPI VPA for collection links
     }
 
     if (body.lockedUntil !== undefined) {
@@ -81,6 +82,7 @@ export async function PUT(req: NextRequest) {
       scanLang: body.scanLang || 'original',
       voiceLang: body.voiceLang || 'original',
       stockPolicy: body.stockPolicy || 'block',  // 🔒 V11: default block
+      upiId: body.upiId,  // V17-Ext 5.4: UPI VPA for collection links
     }
     if (body.lockedUntil !== undefined) {
       createData.lockedUntil = body.lockedUntil === null ? null : new Date(body.lockedUntil)

@@ -345,6 +345,10 @@ model Setting {
   // This field is per-shop (lives on Setting, one per user). The user can
   // toggle it in Settings → "Allow overselling (kirana mode)".
   stockPolicy     String  @default("block")
+  // V17-Ext 5.4: Shopkeeper's UPI VPA for udhaar collection links.
+  // Used to generate upi://pay?pa=... deep-links in WhatsApp reminders.
+  // null = no UPI ID configured (the reminder sends without a pay link).
+  upiId           String?
   // 🔒 V17-Ext §5.1: Period lock (financial-year lock). When set, NO writes
   // (create/edit/delete/restore) are allowed to transactions or payments dated
   // on or before this date. Protects filed GST returns from silent alteration.
