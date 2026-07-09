@@ -28,6 +28,7 @@ import { formatINR, formatINRCompact, relativeTime, cn } from '@/lib/utils'
 import { motion } from 'framer-motion'
 import { offlineFetch, isOnline, OfflineError } from '@/lib/offline-fetch'
 import { useSetting } from '@/hooks/use-setting'
+import { DayEndSummary } from '@/components/dashboard/DayEndSummary'
 import { useRecurringEntries } from '@/hooks/use-recurring-entries'
 import { toast as sonnerToast } from 'sonner'
 import { useCountUp } from '@/hooks/use-count-up'
@@ -43,6 +44,8 @@ export function Dashboard() {
   const [dateRange, setDateRange] = useState<DateRange>(() => getPresetRange('thisMonth'))
   const [datePreset, setDatePreset] = useState<DatePreset>('thisMonth')
   const [repeating, setRepeating] = useState(false)
+  // 🔒 V17-Ext §5.4: Day-end "Close the Drawer" dialog
+  const [showDayEnd, setShowDayEnd] = useState(false)
 
   // Check for due recurring entries on mount (auto-create monthly rent, salary, etc.)
   useEffect(() => {
@@ -431,6 +434,16 @@ export function Dashboard() {
                 <span className="hidden sm:inline">Share Summary</span>
               </Button>
             )}
+            {/* 🔒 V17-Ext §5.4: Close the Drawer — day-end cash reconciliation */}
+            <Button
+              onClick={() => setShowDayEnd(true)}
+              variant="outline"
+              className="bg-white/10 text-white border-white/30 hover:bg-white/20 hover:text-white gap-2"
+              title="Close the drawer — end of day cash summary"
+            >
+              <Wallet className="w-4 h-4" />
+              <span className="hidden sm:inline">Close Drawer</span>
+            </Button>
           </div>
         </div>
       </motion.div>
@@ -1072,6 +1085,9 @@ export function Dashboard() {
 
       {/* {t('dash.smart_insights')} - AI-powered alerts */}
       {kpis && <SmartInsights />}
+
+      {/* 🔒 V17-Ext §5.4: Day-end "Close the Drawer" dialog */}
+      <DayEndSummary open={showDayEnd} onOpenChange={setShowDayEnd} />
     </div>
   )
 }
