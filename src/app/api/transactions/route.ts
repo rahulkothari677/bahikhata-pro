@@ -10,6 +10,7 @@ import { validateBody, createTransactionSchema } from '@/lib/validation'
 import { apiError } from '@/lib/api-error'
 import { computeLineItems, buildPriceWarnings } from '@/lib/line-items'
 import { normalizeToUnit } from '@/lib/units'
+import { encodeKeysetCursor, buildKeysetWhere } from '@/lib/pagination'
 
 // GET /api/transactions - list with filters (type, from, to, limit)
 export async function GET(req: NextRequest) {
@@ -45,16 +46,44 @@ export async function GET(req: NextRequest) {
       ? { userId, deletedAt: { not: null } }
       : { userId, deletedAt: null }
     if (type && type !== 'all') where.type = type
+
+    // 🔒 V17-Ext §1 FIX: Proper keyset pagination with a composite cursor.
+    //
+    // WAS: `where.id = { lt: cursor }` with `orderBy: [{ date: 'desc' }, { id: 'desc' }]`.
+    // This is broken — the cursor keys on `id` (roughly creation-time-ordered)
+    // but the sort keys on `date` (user-settable). A backdated transaction
+    // (entered today = high id, dated last week = low date) is silently
+    // SKIPPED by `id < cursor` even though it should appear in the list.
+    // Worked example: rows A(Jan10,c500), B(Jan09,c400), C(Jan08,c300),
+    // D(Jan07,c900 backdated). Page 1 returns A,B → nextCursor=c400. Page 2
+    // query `WHERE id < 'c400'` → C qualifies, D does NOT (c900 < c400 is
+    // false). D never appears on any page. It's in the DB, in the balance,
+    // in the GST report — but the shopkeeper scrolling the ledger never sees it.
+    //
+    // FIX: Use the shared keyset helpers from src/lib/pagination.ts. The
+    // cursor is now "date|id" (opaque to the client), and the WHERE condition
+    // is (date < cursorDate) OR (date == cursorDate AND id < cursorId) — which
+    // correctly selects all rows AFTER the cursor in the sort order.
+    //
+    // The helpers are extracted so they can be tested behaviorally in
+    // pagination-reconciliation.test.ts without a DB.
     if (from || to) {
       where.date = {}
       if (from) where.date.gte = new Date(from)
       if (to) where.date.lte = new Date(to)
     }
-    // 🔒 FIX M4: For cursor pagination, exclude rows up to and including the
-    // cursor ID. Combined with orderBy date desc + id desc, this gives stable
-    // pagination that doesn't skip or duplicate rows.
+
     if (cursor) {
-      where.id = { lt: cursor }
+      const cursorCondition = buildKeysetWhere(cursor)
+      if (!cursorCondition) {
+        // Malformed/legacy cursor — return 400 so the client re-fetches page 1.
+        return NextResponse.json(
+          { error: 'Invalid cursor format. Please refresh.' },
+          { status: 400 },
+        )
+      }
+      if (!where.AND) where.AND = []
+      where.AND.push(cursorCondition)
     }
 
     // 🔒 FIX M5: Was `include: { items: true, party: true }` — loaded ALL item
@@ -76,8 +105,10 @@ export async function GET(req: NextRequest) {
     // 🔒 FIX M4: If we got limit+1 rows, there are more — trim the extra.
     const hasMore = transactions.length > limit
     const trimmed = hasMore ? transactions.slice(0, limit) : transactions
-    const nextCursor = hasMore && trimmed.length > 0
-      ? trimmed[trimmed.length - 1].id
+    // 🔒 V17-Ext §1: Composite cursor "date|id" via the shared helper.
+    const lastRow = trimmed[trimmed.length - 1]
+    const nextCursor = hasMore && lastRow
+      ? encodeKeysetCursor(lastRow.date, lastRow.id)
       : null
 
     // 🔒 FIX H2: Strip grossProfit from transactions if hideProfit is on and caller is staff

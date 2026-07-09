@@ -4,6 +4,7 @@ import { getAuthUserIdWithModule } from '@/lib/get-auth'
 import { roundMoney } from '@/lib/money'
 import { istMonthStartOffset, getISTDateParts } from '@/lib/timezone'
 import { computePartyBalance } from '@/lib/party-balance'
+import { encodeKeysetCursor, buildKeysetWhere } from '@/lib/pagination'
 
 // GET /api/parties/[id] - get party with paginated transactions + SQL aggregates
 // ⚡ PERFORMANCE (Audit fix H4): Was loading ALL transactions with items into
@@ -34,6 +35,33 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const url = new URL(req.url)
     const cursor = url.searchParams.get('cursor') // cursor for pagination
     const PAGE_SIZE = 50
+
+    // 🔒 V17-Ext §1 FIX: Parse the composite cursor BEFORE the Promise.all so
+    // we can return 400 on a malformed/legacy cursor without starting the
+    // parallel queries. Uses the shared keyset helpers from src/lib/pagination.ts.
+    //
+    // WAS: Prisma native cursor `cursor: { id }, skip: 1` with `orderBy: { date: 'desc' }`
+    // (no id tiebreak). Same bug class as the main ledger — a backdated
+    // transaction (high id, low date) could be silently skipped, and same-date
+    // entries had unstable ordering across pages. Now: composite keyset + id
+    // tiebreak gives total ordering with no skips or duplicates.
+    let cursorCondition: { OR: any[] } | null = null
+    if (cursor) {
+      cursorCondition = buildKeysetWhere(cursor)
+      if (!cursorCondition) {
+        return NextResponse.json(
+          { error: 'Invalid cursor format. Please refresh.' },
+          { status: 400 },
+        )
+      }
+    }
+
+    // Build the where clause for the paginated transaction list.
+    // Base filters + optional cursor condition (composed via AND).
+    const txListWhere: any = { userId, partyId: id, deletedAt: null }
+    if (cursorCondition) {
+      txListWhere.AND = [cursorCondition]
+    }
 
     // 1. Fetch party record (without loading all transactions)
     const party = await db.party.findFirst({
@@ -113,14 +141,15 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         _max: { date: true },
       }),
 
-      // Paginated transaction list (cursor-based, max 50 per page)
+      // Paginated transaction list (keyset cursor pagination, max 50 per page)
       // 🔒 V5 HA: filter deletedAt: null on the list too.
+      // 🔒 V17-Ext §1: Composite keyset cursor (date|id) + id tiebreak in orderBy.
+      // Was: Prisma native cursor on id only, orderBy date desc with no tiebreak.
       db.transaction.findMany({
-        where: { userId, partyId: id, deletedAt: null },
+        where: txListWhere,
         include: { items: true },
-        orderBy: { date: 'desc' },
+        orderBy: [{ date: 'desc' }, { id: 'desc' }],
         take: PAGE_SIZE + 1, // fetch one extra to check if there's a next page
-        ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
       }),
 
       // Top products via raw SQL (not JS reduce on all transactions)
@@ -201,7 +230,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     // Paginated transaction list: trim the extra row used for hasMore detection.
     const hasMore = transactions.length > PAGE_SIZE
     const pagedTransactions = hasMore ? transactions.slice(0, PAGE_SIZE) : transactions
-    const nextCursor = hasMore ? pagedTransactions[pagedTransactions.length - 1].id : null
+    // 🔒 V17-Ext §1: Composite cursor "date|id" via the shared helper.
+    const lastTxn = pagedTransactions[pagedTransactions.length - 1]
+    const nextCursor = hasMore && lastTxn
+      ? encodeKeysetCursor(lastTxn.date, lastTxn.id)
+      : null
 
     // Normalize top products (Prisma raw returns bigint for SUM(quantity) and
     // string for SUM(numeric) — convert both to number for the frontend).
