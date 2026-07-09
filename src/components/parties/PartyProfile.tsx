@@ -67,10 +67,11 @@ export function PartyProfile() {
   //
   // 🔒 V15 M-2: The separate /api/payments fetch is GONE. Payments are now
   // bundled into the /api/parties/[id] response as `statementPayments`
-  // (oldest-first, capped at 500, soft-delete-filtered) so the statement
+  // (newest-first, capped at 500, soft-delete-filtered) so the statement
   // has a complete, consistent data set — no more "paginated transactions
   // merged with all payments" mismatch that dropped older invoices while
   // their payments remained.
+  // 🔒 V17 §2.2: Order changed from oldest-first to newest-first (date DESC).
 
   // Extract data safely (before early return)
   const party = data?.party
@@ -78,9 +79,10 @@ export function PartyProfile() {
   const topProducts = data?.topProducts || []
   const monthlyData = data?.monthlyData || []
   const transactions = data?.transactions || []
-  // 🔒 V15 M-2: Statement-grade data — complete (capped at 500), oldest-first.
+  // 🔒 V15 M-2: Statement-grade data — complete (capped at 500), newest-first.
   // Used ONLY for the account statement. The paginated `transactions` array
   // above is still used for the recent-transactions list.
+  // 🔒 V17 §2.2: Order changed from oldest-first to newest-first (date DESC).
   const statementTransactions = data?.statementTransactions || []
   const statementPayments = data?.statementPayments || []
   const statementTotals = data?.statementTotals

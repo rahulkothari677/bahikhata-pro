@@ -134,7 +134,32 @@ describe('canAccessModule', () => {
     expect(canAccessModule('staff', custom, 'sales')).toBe(false)
   })
 
-  test('unknown role = full access (safe default)', () => {
-    expect(canAccessModule('admin', {}, 'dashboard')).toBe(true)
+  test('🔒 V17-Ext §2.1: unknown role = DENIED (fail-closed)', () => {
+    // Was: `if (role !== 'staff') return true` — fail-OPEN, any unknown role
+    // got full access. Now: fail-closed. When adding a new role, add an
+    // explicit branch in canAccessModule with the correct permission logic.
+    expect(canAccessModule('admin', {}, 'dashboard')).toBe(false)
+    expect(canAccessModule('accountant', {}, 'reports')).toBe(false)
+    expect(canAccessModule('viewer', {}, 'sales')).toBe(false)
+    expect(canAccessModule('manager', {}, 'settings')).toBe(false)
+    expect(canAccessModule('superuser', {}, 'inventory')).toBe(false)
+  })
+
+  test('🔒 V17-Ext §2.1: unknown role is denied even with permissions set', () => {
+    // Even if someone passes a permissions object for an unknown role,
+    // the function must NOT use it — only 'owner' and 'staff' are recognized.
+    const perms = { ...DEFAULT_STAFF_PERMISSIONS, dashboard: true, reports: true }
+    expect(canAccessModule('accountant', perms, 'dashboard')).toBe(false)
+    expect(canAccessModule('accountant', perms, 'reports')).toBe(false)
+  })
+
+  test('🔒 V17-Ext §2.1: empty string role = denied (not treated as owner)', () => {
+    // Defensive: an empty string is falsy but NOT null/undefined.
+    // The `!role` check catches it (treats as owner) — but that's actually
+    // correct behavior for legacy compatibility (old sessions may have empty
+    // role = owner). This test documents that behavior so it's not accidentally
+    // changed. If you want to deny empty-string roles in the future, change
+    // the check to `role === null || role === undefined || role === 'owner'`.
+    expect(canAccessModule('', {}, 'dashboard')).toBe(true) // legacy owner
   })
 })

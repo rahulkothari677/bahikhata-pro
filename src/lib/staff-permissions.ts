@@ -64,6 +64,16 @@ export function parsePermissions(raw: any): StaffPermissions {
 /**
  * Check if a user can access a specific module.
  * Owners always have access. Staff are checked against their permissions.
+ *
+ * 🔒 V17-Ext §2.1 FIX: Was `if (role !== 'staff') return true` — fail-OPEN.
+ * That meant any future role (accountant, viewer, manager, a read-only CA
+ * login) would get FULL ACCESS to everything by default. In an access-control
+ * function, the default must be DENY. Now: explicit allowlist — owners full,
+ * staff checked against perms, everyone else DENIED.
+ *
+ * When you add a new role, you MUST explicitly handle it here (either grant
+ * full access like owner, or check against a permission set like staff).
+ * This prevents the "new role silently gets god mode" failure mode.
  */
 export function canAccessModule(
   role: string | undefined | null,
@@ -72,8 +82,16 @@ export function canAccessModule(
 ): boolean {
   // Owner (or null role = legacy owner) always has full access
   if (!role || role === 'owner') return true
-  if (role !== 'staff') return true
 
-  const perms = parsePermissions(permissions)
-  return perms[module] === true
+  // Staff are checked against their permission set
+  if (role === 'staff') {
+    const perms = parsePermissions(permissions)
+    return perms[module] === true
+  }
+
+  // 🔒 V17-Ext §2.1: Any OTHER role (accountant, viewer, manager, etc.)
+  // is DENIED by default. When adding a new role, add an explicit branch
+  // above with the correct permission logic. Do NOT change this to
+  // `return true` — that reintroduces the fail-open vulnerability.
+  return false
 }

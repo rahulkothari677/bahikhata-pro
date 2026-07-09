@@ -72,8 +72,11 @@ export async function GET() {
         appVersion: '1.0',
         format: 'JSON',
         note: 'This is a complete export of your data from EkBook, per DPDP Act 2023 Right to Data Portability.',
-        // 🔒 V8 D4: Note about soft-deleted records in the export
-        softDeleteNote: 'Transactions with a non-null "deletedAt" field have been soft-deleted (voided) but are included in this export for completeness. Parties with a non-null "deletedAt" are similarly soft-deleted.',
+        // 🔒 V8 D4 + V17-Ext §2.2: Note about soft-deleted records in the export.
+        // Payments became soft-deletable in V15 M-3 — without the isDeleted flag,
+        // a CA reconciling the export against the app wouldn't know which
+        // payments were voided.
+        softDeleteNote: 'Transactions, parties, and payments with a non-null "deletedAt" field have been soft-deleted (voided) but are included in this export for completeness. Use the "isDeleted" flag on each record to distinguish active from voided entries.',
       },
       user,
       setting,
@@ -88,7 +91,15 @@ export async function GET() {
         ...t,
         isDeleted: t.deletedAt !== null,
       })),
-      payments,
+      // 🔒 V17-Ext §2.2: Mark soft-deleted payments — same pattern as parties
+      // and transactions. Payments became soft-deletable in V15 M-3, but the
+      // export wasn't updated to flag them. A CA reconciling the export
+      // against the app would see voided payments as active and the numbers
+      // wouldn't match.
+      payments: payments?.map(p => ({
+        ...p,
+        isDeleted: p.deletedAt !== null,
+      })),
       auditLogs,
     }
 

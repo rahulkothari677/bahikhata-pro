@@ -89,6 +89,9 @@ export const createProductSchema = z.object({
 
 // Party create schema
 // 🔒 V11 §2.4: z.coerce.number() for openingBalance.
+// 🔒 V17-Ext §2.3: Added refine to reject NaN (e.g., "abc" coerces to NaN).
+//   Was: z.coerce.number() alone accepts NaN, which would store NaN as the
+//   opening balance. Now: NaN is rejected with a clear error.
 export const createPartySchema = z.object({
   name: z.string().min(1, 'Name is required').max(200),
   type: z.enum(['customer', 'supplier', 'both']).optional().default('customer'),
@@ -97,7 +100,10 @@ export const createPartySchema = z.object({
   gstin: z.string().max(15).nullable().optional(),
   address: z.string().max(1000).nullable().optional(),
   state: z.string().max(100).nullable().optional(),
-  openingBalance: z.coerce.number().optional().default(0),
+  openingBalance: z.coerce.number()
+    .refine((v) => !isNaN(v), 'Opening balance must be a valid number')
+    .optional()
+    .default(0),
 })
 
 // 🔒 AUDIT FIX V7 M4: Product update schema — all fields optional, but

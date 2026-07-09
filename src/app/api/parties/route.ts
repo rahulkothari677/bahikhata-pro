@@ -5,6 +5,7 @@ import { withCache } from '@/lib/cache'
 import { roundMoney } from '@/lib/money'
 import { apiError } from '@/lib/api-error'
 import { getReceivablePayable } from '@/lib/party-balance'
+import { validateBody, createPartySchema } from '@/lib/validation'
 
 export async function GET() {
   try {
@@ -84,17 +85,30 @@ export async function POST(req: NextRequest) {
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const body = await req.json()
+
+    // 🔒 V17-Ext §2.3: Validate with zod before touching the DB.
+    // WAS: `parseFloat(body.openingBalance) || 0` — silently turned a typo
+    // like "abc" into ₹0 opening balance (a real money value) with no error.
+    // Now: zod rejects non-numeric input with a clear 400 error.
+    // Same pattern as transactions POST and products POST.
+    const validation = validateBody(createPartySchema, body)
+    if (!validation.success) {
+      return NextResponse.json({ error: 'Validation failed', detail: validation.error }, { status: 400 })
+    }
+
+    const { name, type, phone, email, gstin, address, state, openingBalance } = validation.data as any
+
     const party = await db.party.create({
       data: {
         userId,
-        name: body.name,
-        type: body.type || 'customer',
-        phone: body.phone || null,
-        email: body.email || null,
-        gstin: body.gstin || null,
-        address: body.address || null,
-        state: body.state || null,
-        openingBalance: parseFloat(body.openingBalance) || 0,
+        name,
+        type: type || 'customer',
+        phone: phone || null,
+        email: email || null,
+        gstin: gstin || null,
+        address: address || null,
+        state: state || null,
+        openingBalance: roundMoney(openingBalance || 0),
       },
     })
     return NextResponse.json({ party })
