@@ -1,214 +1,305 @@
 /**
- * 🔒 AUDIT FIX V7: Reconciliation tests.
+ * 🔒 V17-Ext §5.1 — Reconciliation health check tests.
  *
- * The V7 auditor recommended: "Add reconciliation tests that assert
- * dashboard receivable === sum of party-list balances, and GSTR per-invoice
- * taxable === summary taxable. These tests would have caught H1, H2, and H3
- * automatically."
+ * Tests the three reconciliation checks using jest.spyOn on the real db
+ * object (same approach as the behavioral balance reconciliation test).
  *
- * These tests validate the SHAPES and FORMULAS of our calculations — they
- * don't hit a real database (that would require integration tests). Instead
- * they:
- *   1. Verify the party-balance helper's formula is correct
- *   2. Verify the GSTR reconciliation logic would catch a mismatch
- *   3. Document the EXPECTED relationship between screens so future changes
- *      that break it will fail these tests
+ * The checks verify that:
+ *   1. Party balances tie out (SQL aggregate vs JS sum)
+ *   2. GST ties out (per-item vs header)
+ *   3. No orphaned data (items attached to deleted transactions, etc.)
  *
- * For full integration tests (hitting a real DB), the founder should add
- * a separate test suite with a test database. These unit tests are the
- * first line of defense.
+ * Each test seeds fixture data via the mocks, runs the check, and verifies
+ * the { name, passed, details } result.
  */
 
-import { roundMoney } from '@/lib/money'
+process.env.DATABASE_URL = 'postgresql://dummy:dummy@localhost:5432/dummy'
+process.env.DIRECT_URL = 'postgresql://dummy:dummy@localhost:5432/dummy'
 
-describe('V7 Reconciliation — Party Balance Formula', () => {
-  // The canonical formula (from src/lib/party-balance.ts):
-  //   balance = openingBalance
-  //           + (sale.totalAmount - sale.paidAmount)    [salesOutstanding]
-  //           - (purchase.totalAmount - purchase.paidAmount)  [purchaseOutstanding]
-  //
-  // Positive = receivable (they owe us)
-  // Negative = payable (we owe them)
+import { jest } from '@jest/globals'
+import { db } from '@/lib/db'
+import { runReconciliationChecks } from '@/lib/reconciliation'
 
-  it('balance = openingBalance + salesOutstanding - purchaseOutstanding', () => {
-    const openingBalance = 1000
-    const salesOutstanding = 500  // ₹500 in unpaid credit sales
-    const purchaseOutstanding = 300  // ₹300 in unpaid credit purchases
-    const balance = roundMoney(openingBalance + salesOutstanding - purchaseOutstanding)
-    expect(balance).toBe(1200)  // 1000 + 500 - 300 = 1200 (they owe us)
+const USER_ID = 'user1'
+
+// Helper: set up the common mocks for all 3 checks.
+// Individual tests can override specific mocks as needed.
+function setupCommonMocks(overrides: {
+  queryRawResult?: any[]
+  itemGst?: { cgst: number; sgst: number; igst: number }
+  headerGst?: { cgst: number; sgst: number; igst: number }
+  orphanedItems?: number
+  orphanedPayments?: number
+} = {}) {
+  jest.restoreAllMocks()
+
+  // Cast db to any for mocking — Prisma's generated types don't play well
+  // with jest.spyOn's type inference, but the runtime behavior is correct.
+  const dbAny = db as any
+
+  // $queryRaw — used by getReceivablePayable (called by checkPartyBalances)
+  // jest.fn() from @jest/globals has strict generic typing that doesn't infer
+  // the return type from mockResolvedValue. Declaring the mock as `any` first
+  // avoids the "never" type inference issue.
+  const queryRawMock: any = jest.fn()
+  queryRawMock.mockResolvedValue(overrides.queryRawResult ?? [])
+  dbAny.$queryRaw = queryRawMock
+
+  // transactionItem.aggregate — used by checkGstReconciliation (per-item GST)
+  jest.spyOn(dbAny.transactionItem, 'aggregate').mockResolvedValue({
+    _sum: {
+      cgst: overrides.itemGst?.cgst ?? 0,
+      sgst: overrides.itemGst?.sgst ?? 0,
+      igst: overrides.itemGst?.igst ?? 0,
+    },
   })
 
-  it('positive balance = receivable', () => {
-    const balance = 500
-    expect(balance > 0).toBe(true)  // receivable
+  // transaction.aggregate — used by checkGstReconciliation (header GST)
+  jest.spyOn(dbAny.transaction, 'aggregate').mockResolvedValue({
+    _sum: {
+      cgst: overrides.headerGst?.cgst ?? 0,
+      sgst: overrides.headerGst?.sgst ?? 0,
+      igst: overrides.headerGst?.igst ?? 0,
+    },
   })
 
-  it('negative balance = payable', () => {
-    const balance = -500
-    expect(balance < 0).toBe(true)  // payable
-    const payableAmount = -balance
-    expect(payableAmount).toBe(500)
+  // transactionItem.count — used by checkOrphanedData
+  jest.spyOn(dbAny.transactionItem, 'count').mockResolvedValue(overrides.orphanedItems ?? 0)
+
+  // payment.count — used by checkOrphanedData
+  jest.spyOn(dbAny.payment, 'count').mockResolvedValue(overrides.orphanedPayments ?? 0)
+}
+
+describe('🔒 V17-Ext §5.1 — Reconciliation health check', () => {
+  afterEach(() => {
+    jest.restoreAllMocks()
   })
 
-  it('zero balance = neither receivable nor payable', () => {
-    const balance = 0
-    expect(balance > 0).toBe(false)  // not receivable
-    expect(balance < 0).toBe(false)  // not payable
+  describe('checkPartyBalances (Check 1)', () => {
+    it('passes when SQL totals match JS sum of per-party balances', async () => {
+      setupCommonMocks({
+        queryRawResult: [
+          {
+            partyId: 'p1',
+            openingBalance: '1000',
+            salesOutstanding: '500',
+            purchaseOutstanding: '0',
+            paymentsReceived: '200',
+            paymentsPaid: '0',
+            transactionCount: BigInt(1),
+          },
+          {
+            partyId: 'p2',
+            openingBalance: '0',
+            salesOutstanding: '0',
+            purchaseOutstanding: '300',
+            paymentsReceived: '0',
+            paymentsPaid: '0',
+            transactionCount: BigInt(1),
+          },
+        ],
+      })
+
+      const result = await runReconciliationChecks(USER_ID)
+      const partyCheck = result.checks.find(c => c.name === 'Party Balances')
+
+      expect(partyCheck).toBeDefined()
+      // p1 balance = 1000 + 500 - 0 - 200 + 0 = 1300 (receivable)
+      // p2 balance = 0 + 0 - 300 - 0 + 0 = -300 (payable)
+      // totalReceivable should = 1300, totalPayable should = 300
+      // JS sum of positive = 1300, JS sum of negative = 300
+      // They match → passed
+      expect(partyCheck!.passed).toBe(true)
+    })
+
+    it('passes with float values that could cause drift (roundMoney handles it)', async () => {
+      setupCommonMocks({
+        queryRawResult: [
+          {
+            partyId: 'p1',
+            openingBalance: '0.1',
+            salesOutstanding: '0.2',
+            purchaseOutstanding: '0',
+            paymentsReceived: '0',
+            paymentsPaid: '0',
+            transactionCount: BigInt(1),
+          },
+          {
+            partyId: 'p2',
+            openingBalance: '0.2',
+            salesOutstanding: '0.1',
+            purchaseOutstanding: '0',
+            paymentsReceived: '0',
+            paymentsPaid: '0',
+            transactionCount: BigInt(1),
+          },
+        ],
+      })
+
+      const result = await runReconciliationChecks(USER_ID)
+      const partyCheck = result.checks.find(c => c.name === 'Party Balances')
+
+      expect(partyCheck).toBeDefined()
+      // 0.1+0.2 = 0.30000000000000004 in float, but roundMoney fixes it.
+      // Both paths use roundMoney, so they should still agree.
+      expect(partyCheck!.passed).toBe(true)
+    })
+
+    it('passes with no parties (empty result)', async () => {
+      setupCommonMocks({ queryRawResult: [] })
+
+      const result = await runReconciliationChecks(USER_ID)
+      const partyCheck = result.checks.find(c => c.name === 'Party Balances')
+
+      expect(partyCheck).toBeDefined()
+      expect(partyCheck!.passed).toBe(true) // 0 == 0
+    })
   })
 
-  it('salesOutstanding = totalSales - totalPaid', () => {
-    const totalSales = 5000
-    const totalPaid = 3000
-    const salesOutstanding = roundMoney(totalSales - totalPaid)
-    expect(salesOutstanding).toBe(2000)
+  describe('checkGstReconciliation (Check 2)', () => {
+    it('passes when per-item GST matches header GST', async () => {
+      setupCommonMocks({
+        itemGst: { cgst: 100, sgst: 100, igst: 0 },
+        headerGst: { cgst: 100, sgst: 100, igst: 0 },
+      })
+
+      const result = await runReconciliationChecks(USER_ID)
+      const gstCheck = result.checks.find(c => c.name === 'GST Reconciliation')
+
+      expect(gstCheck).toBeDefined()
+      expect(gstCheck!.passed).toBe(true)
+    })
+
+    it('fails when per-item CGST does not match header CGST', async () => {
+      setupCommonMocks({
+        itemGst: { cgst: 100, sgst: 100, igst: 0 },
+        headerGst: { cgst: 150, sgst: 100, igst: 0 }, // Header CGST = 150, items = 100
+      })
+
+      const result = await runReconciliationChecks(USER_ID)
+      const gstCheck = result.checks.find(c => c.name === 'GST Reconciliation')
+
+      expect(gstCheck).toBeDefined()
+      expect(gstCheck!.passed).toBe(false)
+      expect(gstCheck!.details).toMatch(/Mismatch/)
+    })
+
+    it('passes when both are zero (no transactions yet)', async () => {
+      setupCommonMocks({
+        itemGst: { cgst: 0, sgst: 0, igst: 0 },
+        headerGst: { cgst: 0, sgst: 0, igst: 0 },
+      })
+
+      const result = await runReconciliationChecks(USER_ID)
+      const gstCheck = result.checks.find(c => c.name === 'GST Reconciliation')
+
+      expect(gstCheck).toBeDefined()
+      expect(gstCheck!.passed).toBe(true)
+    })
   })
 
-  it('purchaseOutstanding = totalPurchases - totalPaid', () => {
-    const totalPurchases = 4000
-    const totalPaid = 1500
-    const purchaseOutstanding = roundMoney(totalPurchases - totalPaid)
-    expect(purchaseOutstanding).toBe(2500)
+  describe('checkOrphanedData (Check 3)', () => {
+    it('passes when no orphaned items or payments', async () => {
+      setupCommonMocks({
+        orphanedItems: 0,
+        orphanedPayments: 0,
+      })
+
+      const result = await runReconciliationChecks(USER_ID)
+      const orphanCheck = result.checks.find(c => c.name === 'Data Integrity')
+
+      expect(orphanCheck).toBeDefined()
+      expect(orphanCheck!.passed).toBe(true)
+    })
+
+    it('fails when orphaned items exist (items attached to deleted transactions)', async () => {
+      setupCommonMocks({
+        orphanedItems: 3,
+        orphanedPayments: 0,
+      })
+
+      const result = await runReconciliationChecks(USER_ID)
+      const orphanCheck = result.checks.find(c => c.name === 'Data Integrity')
+
+      expect(orphanCheck).toBeDefined()
+      expect(orphanCheck!.passed).toBe(false)
+      expect(orphanCheck!.details).toMatch(/3 item/)
+    })
+
+    it('fails when orphaned payments exist (payments attached to deleted parties)', async () => {
+      setupCommonMocks({
+        orphanedItems: 0,
+        orphanedPayments: 2,
+      })
+
+      const result = await runReconciliationChecks(USER_ID)
+      const orphanCheck = result.checks.find(c => c.name === 'Data Integrity')
+
+      expect(orphanCheck).toBeDefined()
+      expect(orphanCheck!.passed).toBe(false)
+      expect(orphanCheck!.details).toMatch(/2 payment/)
+    })
   })
 
-  // 🔒 H1 regression test: dashboard receivable must NOT be just openingBalance.
-  // This is the exact bug V7 H1 found — dashboard summed only openingBalance,
-  // ignoring credit sales. If someone reverts the fix, this test documents
-  // the expected behavior.
-  it('H1 regression: receivable includes credit sales, not just openingBalance', () => {
-    const openingBalance = 0
-    const creditSales = 500000  // ₹5L in unpaid credit sales
-    const creditPurchases = 0
+  describe('runReconciliationChecks (combined)', () => {
+    it('returns allPassed=true when all 3 checks pass', async () => {
+      setupCommonMocks({
+        queryRawResult: [],
+        itemGst: { cgst: 50, sgst: 50, igst: 0 },
+        headerGst: { cgst: 50, sgst: 50, igst: 0 },
+        orphanedItems: 0,
+        orphanedPayments: 0,
+      })
 
-    // WRONG (old H1 bug): receivable = openingBalance = 0
-    const wrongReceivable = openingBalance
-    expect(wrongReceivable).toBe(0)  // this is what the dashboard used to show
+      const result = await runReconciliationChecks(USER_ID)
 
-    // CORRECT (V7 fix): receivable = openingBalance + creditSales - creditPurchases
-    const correctBalance = roundMoney(openingBalance + creditSales - creditPurchases)
-    const correctReceivable = correctBalance > 0 ? correctBalance : 0
-    expect(correctReceivable).toBe(500000)  // this is what it should show
+      expect(result.allPassed).toBe(true)
+      expect(result.checks).toHaveLength(3)
+      expect(result.runAt).toBeDefined()
+    })
 
-    // The wrong and correct values must be different — otherwise the bug would
-    // be undetectable. This assertion documents that the fix matters.
-    expect(correctReceivable).not.toBe(wrongReceivable)
-  })
+    it('returns allPassed=false when GST check fails', async () => {
+      setupCommonMocks({
+        queryRawResult: [],
+        itemGst: { cgst: 50, sgst: 50, igst: 0 },
+        headerGst: { cgst: 60, sgst: 50, igst: 0 }, // mismatch
+        orphanedItems: 0,
+        orphanedPayments: 0,
+      })
 
-  // 🔒 H2 regression test: deleted transactions must NOT count toward balance.
-  it('H2 regression: deleted sales do not count toward balance', () => {
-    // Simulate: party has openingBalance=0, one sale of ₹1000 (paid ₹0),
-    // then that sale is soft-deleted.
-    const openingBalance = 0
-    const activeSalesOutstanding = 0  // sale was deleted, so no active outstanding
-    const deletedSalesOutstanding = 1000  // this should NOT be counted
+      const result = await runReconciliationChecks(USER_ID)
 
-    // WRONG (old H2 bug): include deleted sales
-    const wrongBalance = roundMoney(openingBalance + deletedSalesOutstanding)
-    expect(wrongBalance).toBe(1000)  // inflated — deleted sale still counted
+      expect(result.allPassed).toBe(false)
+      const failedChecks = result.checks.filter(c => !c.passed)
+      expect(failedChecks.length).toBeGreaterThanOrEqual(1)
+    })
 
-    // CORRECT (V7 fix): only count active (non-deleted) transactions
-    const correctBalance = roundMoney(openingBalance + activeSalesOutstanding)
-    expect(correctBalance).toBe(0)  // correct — deleted sale excluded
+    it('returns allPassed=false when orphan check fails', async () => {
+      setupCommonMocks({
+        queryRawResult: [],
+        itemGst: { cgst: 0, sgst: 0, igst: 0 },
+        headerGst: { cgst: 0, sgst: 0, igst: 0 },
+        orphanedItems: 5,
+        orphanedPayments: 0,
+      })
 
-    expect(correctBalance).not.toBe(wrongBalance)
-  })
-})
+      const result = await runReconciliationChecks(USER_ID)
 
-describe('V7 Reconciliation — GSTR Taxable Base', () => {
-  // 🔒 H3: per-invoice taxable must equal summary taxable.
-  // The taxable base is: (quantity * unitPrice) - discountAmount (post-discount)
-  // Both per-invoice and summary must use the SAME formula.
+      expect(result.allPassed).toBe(false)
+      const orphanCheck = result.checks.find(c => c.name === 'Data Integrity')
+      expect(orphanCheck!.passed).toBe(false)
+    })
 
-  it('H3: per-invoice taxable = (qty * unitPrice) - discount', () => {
-    const quantity = 10
-    const unitPrice = 100
-    const discountAmount = 50
-    const taxable = roundMoney(quantity * unitPrice - discountAmount)
-    expect(taxable).toBe(950)  // 10*100 - 50 = 950
-  })
+    it('returns all 3 checks with correct names', async () => {
+      setupCommonMocks()
 
-  it('H3: summary taxable = subtotal - discountAmount (same formula)', () => {
-    const subtotal = 1000  // sum of (qty * unitPrice) across items
-    const discountAmount = 50
-    const summaryTaxable = roundMoney(subtotal - discountAmount)
-    expect(summaryTaxable).toBe(950)  // same as per-invoice
-  })
+      const result = await runReconciliationChecks(USER_ID)
 
-  it('H3: per-invoice taxables sum to summary taxable (no discount)', () => {
-    // 3 invoices, no discounts
-    const invoice1Taxable = roundMoney(10 * 100)  // 1000
-    const invoice2Taxable = roundMoney(5 * 200)   // 1000
-    const invoice3Taxable = roundMoney(2 * 50)    // 100
-    const perInvoiceSum = roundMoney(invoice1Taxable + invoice2Taxable + invoice3Taxable)
-
-    const subtotal = 1000 + 1000 + 100  // 2100
-    const discountAmount = 0
-    const summaryTaxable = roundMoney(subtotal - discountAmount)
-
-    expect(perInvoiceSum).toBe(summaryTaxable)  // 2100 === 2100 ✓
-  })
-
-  it('H3: per-invoice taxables sum to summary taxable (with discount)', () => {
-    // 3 invoices WITH discounts — this is the case V7 H3 found was broken
-    const invoice1Taxable = roundMoney(10 * 100 - 50)  // 950 (discount 50)
-    const invoice2Taxable = roundMoney(5 * 200 - 100)  // 900 (discount 100)
-    const invoice3Taxable = roundMoney(2 * 50 - 0)     // 100 (no discount)
-    const perInvoiceSum = roundMoney(invoice1Taxable + invoice2Taxable + invoice3Taxable)
-
-    const subtotal = 1000 + 1000 + 100  // 2100
-    const totalDiscount = 50 + 100 + 0   // 150
-    const summaryTaxable = roundMoney(subtotal - totalDiscount)
-
-    expect(perInvoiceSum).toBe(summaryTaxable)  // 1950 === 1950 ✓
-    expect(perInvoiceSum).toBe(1950)
-  })
-
-  // 🔒 H3 regression: the OLD bug (pre-discount per-invoice, post-discount summary)
-  it('H3 regression: pre-discount per-invoice != post-discount summary', () => {
-    const quantity = 10
-    const unitPrice = 100
-    const discountAmount = 50
-
-    // OLD (broken): per-invoice was pre-discount
-    const oldPerInvoiceTaxable = roundMoney(quantity * unitPrice)  // 1000
-    // Summary was post-discount
-    const summaryTaxable = roundMoney(quantity * unitPrice - discountAmount)  // 950
-
-    // They DON'T match — this is the bug V7 H3 found
-    expect(oldPerInvoiceTaxable).not.toBe(summaryTaxable)
-    expect(oldPerInvoiceTaxable).toBe(1000)
-    expect(summaryTaxable).toBe(950)
-
-    // NEW (fixed): per-invoice is post-discount, matches summary
-    const newPerInvoiceTaxable = roundMoney(quantity * unitPrice - discountAmount)
-    expect(newPerInvoiceTaxable).toBe(summaryTaxable)  // 950 === 950 ✓
-  })
-})
-
-describe('V7 Reconciliation — GSTR B2CL Classification', () => {
-  // 🔒 M2: B2CL = inter-state B2C above threshold (₹100,000)
-  // Was: only filtered on total >= 100000, ignored isInterState
-
-  it('M2: inter-state B2C above threshold = B2CL', () => {
-    const invoice = { total: 150000, isInterState: true }
-    const isB2CL = invoice.isInterState === true && invoice.total >= 100000
-    expect(isB2CL).toBe(true)
-  })
-
-  it('M2: intra-state B2C above threshold = B2CS (NOT B2CL)', () => {
-    const invoice = { total: 150000, isInterState: false }
-    const isB2CL = invoice.isInterState === true && invoice.total >= 100000
-    expect(isB2CL).toBe(false)  // intra-state → B2CS, not B2CL
-  })
-
-  it('M2: inter-state B2C below threshold = B2CS', () => {
-    const invoice = { total: 50000, isInterState: true }
-    const isB2CL = invoice.isInterState === true && invoice.total >= 100000
-    expect(isB2CL).toBe(false)  // below threshold → B2CS
-  })
-
-  it('M2: intra-state B2C below threshold = B2CS', () => {
-    const invoice = { total: 50000, isInterState: false }
-    const isB2CL = invoice.isInterState === true && invoice.total >= 100000
-    expect(isB2CL).toBe(false)  // B2CS
+      expect(result.checks.map(c => c.name)).toEqual([
+        'Party Balances',
+        'GST Reconciliation',
+        'Data Integrity',
+      ])
+    })
   })
 })

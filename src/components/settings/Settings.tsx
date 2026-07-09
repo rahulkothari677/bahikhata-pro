@@ -28,6 +28,7 @@ import {
 } from 'lucide-react'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { useSetting } from '@/hooks/use-setting'
+import { cn } from '@/lib/utils'
 
 const FEATURE_CATEGORIES: { title: string; features: { key: FeatureKey; label: string; description: string; icon: any }[] }[] = [
   {
@@ -109,6 +110,9 @@ export function Settings() {
   // Local input state for the date picker (ISO date string, e.g. "2026-03-31")
   const [lockDateInput, setLockDateInput] = useState('')
   const [savingLock, setSavingLock] = useState(false)
+  // 🔒 V17-Ext §5.1: Health check state. Stores the last reconciliation result.
+  const [healthCheck, setHealthCheck] = useState<any>(null)
+  const [runningHealthCheck, setRunningHealthCheck] = useState(false)
 
   const { data } = useQuery({
     queryKey: ['setting'],
@@ -235,6 +239,35 @@ export function Settings() {
       sonnerToast.error('Could not unlock period')
     } finally {
       setSavingLock(false)
+    }
+  }
+
+  // 🔒 V17-Ext §5.1: Run the reconciliation health check. Calls /api/reconciliation
+  // which runs 3 checks: party balances, GST totals, and orphaned data.
+  // Shows a green check or red x for each check so the shopkeeper (and their
+  // CA) can trust the numbers.
+  const handleRunHealthCheck = async () => {
+    setRunningHealthCheck(true)
+    try {
+      const r = await offlineFetch('/api/reconciliation')
+      if (!r.ok) throw new Error('Failed')
+      const data = await r.json()
+      setHealthCheck(data)
+      if (data.allPassed) {
+        sonnerToast.success('All checks passed — your books are balanced.')
+      } else {
+        const failed = data.checks.filter((c: any) => !c.passed).length
+        sonnerToast.warning(`${failed} check(s) failed`, {
+          description: 'See details below.',
+          duration: 8000,
+        })
+      }
+      haptic.success()
+    } catch {
+      haptic.error()
+      sonnerToast.error('Could not run health check')
+    } finally {
+      setRunningHealthCheck(false)
     }
   }
 
@@ -645,6 +678,72 @@ export function Settings() {
                       Tip: Lock until the last day of the month you filed GST for (e.g. March 31).
                       You can always unlock later if needed.
                     </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* 🔒 V17-Ext §5.1: Reconciliation Health Check */}
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+            <div className="flex items-start gap-3">
+              <Check className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-semibold text-emerald-900 text-sm">Health Check (Reconciliation)</p>
+                <p className="text-xs text-emerald-800 mt-1">
+                  Verify your books are balanced. Checks that party balances match dashboard totals,
+                  per-item GST matches invoice headers, and no orphaned data exists. Run this before
+                  filing GST or at month-end to catch any issues.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-3 gap-2 border-emerald-400 text-emerald-800 hover:bg-emerald-100"
+                  onClick={handleRunHealthCheck}
+                  disabled={runningHealthCheck}
+                >
+                  {runningHealthCheck ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                  {runningHealthCheck ? 'Checking...' : 'Run Health Check'}
+                </Button>
+
+                {/* Results */}
+                {healthCheck && (
+                  <div className="mt-3 space-y-2">
+                    {healthCheck.allPassed ? (
+                      <div className="flex items-center gap-2 text-sm text-emerald-700 font-medium">
+                        <Check className="w-4 h-4" />
+                        All checks passed — your books are balanced.
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 text-sm text-rose-700 font-medium">
+                        <AlertTriangle className="w-4 h-4" />
+                        Some checks failed — see details below.
+                      </div>
+                    )}
+                    {healthCheck.checks.map((check: any, i: number) => (
+                      <div
+                        key={i}
+                        className={cn(
+                          'flex items-start gap-2 rounded-md p-2 text-xs',
+                          check.passed ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                        )}
+                      >
+                        {check.passed ? (
+                          <Check className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                        ) : (
+                          <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                        )}
+                        <div>
+                          <p className="font-semibold">{check.name}</p>
+                          <p className="mt-0.5">{check.details}</p>
+                        </div>
+                      </div>
+                    ))}
+                    {healthCheck.runAt && (
+                      <p className="text-xs text-emerald-600">
+                        Last checked: {new Date(healthCheck.runAt).toLocaleString('en-IN')}
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
