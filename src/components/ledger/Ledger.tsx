@@ -123,7 +123,11 @@ export function Ledger({ type }: { type: LedgerType }) {
 
   // Build query with optional date filter + voided filter
   const buildQueryParams = (cursor?: string) => {
-    const qp = new URLSearchParams({ type, limit: '50' })
+    // V17-Ext Tier 3: Sales ledger includes credit notes; Purchase ledger
+    // includes debit notes. They're related transactions the shopkeeper
+    // needs to see in the same list.
+    const types = isSale ? ['sale', 'credit-note'] : ['purchase', 'debit-note']
+    const qp = new URLSearchParams({ type: types.join(','), limit: '50' })
     if (showVoided) qp.set('voided', 'true')
     if (dateRange) {
       qp.set('from', dateRange.from.toISOString())
@@ -676,6 +680,17 @@ export function Ledger({ type }: { type: LedgerType }) {
                         {showVoided && (
                           <Badge className="text-[9px] py-0 bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 gap-1">
                             <Trash2 className="w-2.5 h-2.5" /> Voided
+                          </Badge>
+                        )}
+                        {/* V17-Ext Tier 3: Credit/Debit Note badge */}
+                        {t.type === 'credit-note' && (
+                          <Badge className="text-[9px] py-0 bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400">
+                            Credit Note
+                          </Badge>
+                        )}
+                        {t.type === 'debit-note' && (
+                          <Badge className="text-[9px] py-0 bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400">
+                            Debit Note
                           </Badge>
                         )}
                         {t.invoiceNo && (

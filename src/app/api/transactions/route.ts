@@ -24,7 +24,10 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const type = searchParams.get('type')
     // 🔒 FIX H1: Map transaction type to module for staff permission check
-    const module: ModuleKey = type === 'purchase' ? 'purchases' : type === 'income' || type === 'expense' ? 'incomeExpense' : 'sales'
+    // V17-Ext Tier 3: Handle comma-separated types (e.g. "sale,credit-note")
+    // from the ledger. Use the first type for permission check.
+    const primaryType = type?.split(',')[0] || type
+    const module: ModuleKey = primaryType === 'purchase' || primaryType === 'debit-note' ? 'purchases' : primaryType === 'income' || primaryType === 'expense' ? 'incomeExpense' : 'sales'
     if (!canAccessModule(authCtx.role, authCtx.permissions, module)) {
       return NextResponse.json({ error: 'Forbidden', message: `You don't have permission to access ${module}.` }, { status: 403 })
     }
@@ -46,7 +49,15 @@ export async function GET(req: NextRequest) {
     const where: any = voided
       ? { userId, deletedAt: { not: null } }
       : { userId, deletedAt: null }
-    if (type && type !== 'all') where.type = type
+    if (type && type !== 'all') {
+      // V17-Ext Tier 3: Support comma-separated types (e.g. "sale,credit-note")
+      const types = type.split(',').map(t => t.trim()).filter(Boolean)
+      if (types.length === 1) {
+        where.type = types[0]
+      } else if (types.length > 1) {
+        where.type = { in: types }
+      }
+    }
 
     // 🔒 V17-Ext §1 FIX: Proper keyset pagination with a composite cursor.
     //
