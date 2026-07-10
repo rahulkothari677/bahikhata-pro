@@ -52,6 +52,7 @@ model User {
   auditLogs        AuditLog[]
   fieldChangeLogs  FieldChangeLog[]
   gstReturns       GstReturn[]
+  gstr2bImports    Gstr2bImport[]
   referralsMade    Referral[]       @relation("Referral_referrerIdToUser")
   referralReceived Referral?        @relation("Referral_referredIdToUser")
   subscriptions    Subscription[]
@@ -161,6 +162,8 @@ model Party {
   // Now: two composite indexes matching the actual query patterns.
   @@index([userId, deletedAt]) // list page + join filter (most common query)
   @@index([userId, name]) // list page orders by name
+  // V17-Ext Tier 3: GSTIN lookup for GSTR-2B reconciliation (fast supplier matching)
+  @@index([userId, gstin])
 }
 
 // ==================== TRANSACTIONS (Sales, Purchases, Income, Expense) ====================
@@ -554,6 +557,54 @@ model GstReturn {
 
   @@unique([userId, monthYear])
   @@index([userId, periodStart])
+}
+
+// ==================== GSTR-2B IMPORT (ITC Reconciliation) ====================
+// V17-Ext Tier 3: Stores a monthly GSTR-2B import from the GST portal.
+// The user downloads the 2B JSON from the portal and uploads it here.
+// We reconcile it against their purchase transactions to determine:
+//   - Matched ITC (in both books and 2B = eligible to claim)
+//   - Deferred ITC (in books but not in 2B = supplier hasn't filed yet)
+//   - Missing purchases (in 2B but not in books = investigate)
+model Gstr2bImport {
+  id            String          @id @default(cuid())
+  userId        String
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  monthYear     String          // "072026" (MMYYYY)
+  filingPeriod  String?         // GST portal's fp field
+  supplierGstin String?         // taxpayer's own GSTIN (from the 2B file)
+  importedAt    DateTime        @default(now())
+  rawJson       Json?           // full 2B JSON from portal (for audit/re-import)
+  invoiceCount  Int             @default(0)
+  taxableTotal  Float           @default(0)
+  igstTotal     Float           @default(0)
+  cgstTotal     Float           @default(0)
+  sgstTotal     Float           @default(0)
+  invoices      Gstr2bInvoice[]
+
+  @@unique([userId, monthYear])
+  @@index([userId, monthYear])
+}
+
+model Gstr2bInvoice {
+  id              String       @id @default(cuid())
+  gstr2bImportId  String
+  gstr2bImport    Gstr2bImport @relation(fields: [gstr2bImportId], references: [id], onDelete: Cascade)
+  userId          String       // denormalized for tenant-scoped queries without join
+  supplierGstin   String       // ctin from 2B (supplier's GSTIN)
+  invoiceNumber   String       // inum from 2B (supplier's invoice number)
+  invoiceDate     String?      // idt from 2B (invoice date, raw string from portal)
+  taxableValue    Float        @default(0)
+  igst            Float        @default(0)
+  cgst            Float        @default(0)
+  sgst            Float        @default(0)
+  totalAmount     Float        @default(0)
+  isReverseCharge Boolean      @default(false)
+  createdAt       DateTime     @default(now())
+
+  @@index([gstr2bImportId])
+  @@index([userId, supplierGstin, invoiceNumber])
+  @@index([userId])
 }
 
 // ==================== AI SCAN COMPARISONS ====================
