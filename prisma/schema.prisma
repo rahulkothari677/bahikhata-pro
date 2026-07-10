@@ -233,6 +233,14 @@ model Transaction {
   // the audit trail (required for GST/tax disputes) and allows "undo delete".
   deletedAt DateTime?
 
+  // V17-Ext Tier 3: Credit/Debit Notes — link to original invoice
+  originalTransactionId String?
+  originalTransaction   Transaction?  @relation("TransactionReversal", fields: [originalTransactionId], references: [id], onDelete: SetNull)
+  reversalTransactions  Transaction[] @relation("TransactionReversal")
+  noteType              String?       // 'C' (credit) or 'D' (debit) — only for credit-note/debit-note types
+  noteReason            String?       // GST reason: 'post-sale-discount' | 'deficiency' | 'return' | 'price-revision' | 'other'
+  affectsStock          Boolean       @default(false) // true only when goods are physically returned
+
   // 🔒 M6: Unique invoice number per user (GST compliance — no duplicates)
   @@unique([userId, invoiceNo])
   // Performance: list transactions per user filtered by date and/or type
@@ -240,6 +248,7 @@ model Transaction {
   @@index([userId, date])
   @@index([userId, type, date])
   @@index([userId, partyId])
+  @@index([originalTransactionId])
 }
 
 model TransactionItem {
@@ -1296,7 +1305,10 @@ model SupplierReport {
 // transaction → two concurrent sales could read the same max and collide.
 // Now: upsert with increment is atomic at the row level — no race, no gaps.
 model InvoiceCounter {
-  userId String @id
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  seq    Int    @default(0)
+  userId        String @id
+  user          User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  seq           Int    @default(0)
+  // V17-Ext Tier 3: Separate counters for credit/debit notes
+  creditNoteSeq Int    @default(0)
+  debitNoteSeq  Int    @default(0)
 }

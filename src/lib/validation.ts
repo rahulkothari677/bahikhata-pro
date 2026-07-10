@@ -32,7 +32,7 @@ export const transactionItemSchema = z.object({
 // Transaction create schema
 // 🔒 V11 §2.4: z.coerce.number() for all numeric fields.
 export const createTransactionSchema = z.object({
-  type: z.enum(['sale', 'purchase', 'income', 'expense']),
+  type: z.enum(['sale', 'purchase', 'income', 'expense', 'credit-note', 'debit-note']),
   partyId: z.string().nullable().optional(),
   date: z.string().optional(),
   items: z.array(transactionItemSchema).optional(),
@@ -45,12 +45,17 @@ export const createTransactionSchema = z.object({
   payeeName: z.string().max(200).nullable().optional(),
   payeePhone: z.string().max(20).nullable().optional(),
   totalAmount: z.coerce.number().min(0, 'Amount cannot be negative').max(100000000, 'Amount too large').optional(), // for income/expense only — 🔒 N9: validated
+  // V17-Ext Tier 3: Credit/Debit Notes fields
+  originalTransactionId: z.string().nullable().optional(),
+  noteType: z.enum(['C', 'D']).optional(),
+  noteReason: z.enum(['post-sale-discount', 'deficiency', 'return', 'price-revision', 'other']).optional(),
+  affectsStock: z.coerce.boolean().optional().default(false),
 })
 
 // Transaction update schema (same but all fields optional)
 // 🔒 V11 §2.4: z.coerce.number() for all numeric fields.
 export const updateTransactionSchema = z.object({
-  type: z.enum(['sale', 'purchase', 'income', 'expense']),
+  type: z.enum(['sale', 'purchase', 'income', 'expense', 'credit-note', 'debit-note']),
   partyId: z.string().nullable().optional(),
   date: z.string().optional(),
   items: z.array(transactionItemSchema),
@@ -63,6 +68,11 @@ export const updateTransactionSchema = z.object({
   payeeName: z.string().max(200).nullable().optional(),
   payeePhone: z.string().max(20).nullable().optional(),
   totalAmount: z.coerce.number().min(0, 'Amount cannot be negative').max(100000000, 'Amount too large').optional(), // for income/expense — 🔒 FIX M5
+  // V17-Ext Tier 3: Credit/Debit Notes fields
+  originalTransactionId: z.string().nullable().optional(),
+  noteType: z.enum(['C', 'D']).optional(),
+  noteReason: z.enum(['post-sale-discount', 'deficiency', 'return', 'price-revision', 'other']).optional(),
+  affectsStock: z.coerce.boolean().optional().default(false),
 })
 
 // Product create schema (🔒 V7 M4: enhanced with clearer error messages)
