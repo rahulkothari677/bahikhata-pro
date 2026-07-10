@@ -2013,3 +2013,56 @@ Stage Summary:
 - A CA can now NEVER create, edit, or delete anything via the API — even by bypassing the UI and calling endpoints directly. Every write route either calls assertCanWrite or uses getAuthContextForWrite.
 - 2 pre-existing security issues fixed (revoke-all + referral/apply were operating on the owner's account for CAs due to ownerId resolution in getAuthUserId).
 - Step 3 is the enforcement layer. Step 4 (Settings UI — "CA Access" card) and Step 5 (sidebar + navigation gating) remain.
+
+---
+Task ID: bahikhata-tier3-ca-login-step4
+Agent: main
+Task: Tier 3 Feature 4 (CA/Accountant Login) — Step 4: Settings UI — CA Access card
+
+Work Log:
+- Read StaffManagement.tsx (334 LOC) to understand the existing staff UI: header with "Add Staff" button, list of staff with avatar/name/email/"X modules" badge, expandable permissions matrix with 9 module switches, delete button, blue info box.
+- Read Settings.tsx to find where StaffManagement is rendered: line 1090, inside the 'staff' tab, gated by isOwner.
+- Updated StaffManagement.tsx:
+  * Added client-side filter: `(data?.staff || []).filter((s) => s.role === 'staff')`
+  * Without this filter, Step 2's GET change (which now returns both staff AND CA accounts) would cause CA accounts to appear in the staff list with a permissions matrix. Saving that matrix would 400 (Step 2's PATCH guardrail rejects CA perms edits).
+  * CAs are now shown in the separate CAAccess card instead.
+- Created CAAccess.tsx (190 LOC) — a new component for CA / Accountant management:
+  * Visual design: violet-themed (distinct from saffron staff card), Calculator icon, "CA / Accountant Access" title
+  * "Add CA" button (violet) opens a dialog with name/email/password fields (same structure as staff dialog)
+  * POST /api/staff with `role: 'ca'` in the body — uses the Step 2 API extension
+  * CA list: each row shows avatar (violet gradient), name, email, "Read-only" badge (Eye icon, violet), "Added [date]", delete button
+  * NO permissions matrix — CAs have fixed access (canAccessModule allowlist from Step 1). No expand/collapse toggle.
+  * Info box at the bottom with two sections:
+    - "What a CA can do" (violet): Dashboard, Sales, Purchases, Reports & GST, Income & Expense, Customers & Suppliers (6 modules)
+    - "What a CA cannot do" (rose): Inventory, AI Bill Scanner, Settings, Staff management, Any create/edit/delete action
+  * Shares the ['staff'] query cache with StaffManagement — React Query deduplicates the network request (both components call GET /api/staff, only one request is made). Each component filters client-side.
+  * On add/delete: calls queryClient.invalidateQueries({ queryKey: ['staff'] }) so BOTH cards refresh (StaffManagement and CAAccess share the cache).
+  * Password validation: min 8 chars (matches server-side check in /api/staff POST)
+  * Empty state: Calculator icon + "No CA accounts yet" + helpful description
+- Updated Settings.tsx:
+  * Added import: `import { CAAccess } from '@/components/settings/CAAccess'`
+  * Changed the staff tab from `{settingsTab === 'staff' && isOwner && <StaffManagement />}` to render both cards in a `space-y-4` div:
+    ```
+    {settingsTab === 'staff' && isOwner && (
+      <div className="space-y-4">
+        <StaffManagement />
+        <CAAccess />
+      </div>
+    )}
+    ```
+  * The owner now sees two clearly distinct cards on Settings > Staff:
+    1. "Staff Access" (saffron) — employees with customizable per-module permissions
+    2. "CA / Accountant Access" (violet) — accountants with fixed read-only access
+- Verified:
+  * npx tsc --noEmit: 0 NEW errors (5 pre-existing in validation.test.ts — unrelated)
+  * npx next build: ✓ Compiled successfully, all 39 API routes + 6 pages compile
+  * npx jest staff-permissions + ca-write-block + soft-delete-sweep: 54/54 pass (no regressions)
+- Committed (99e4299) + pushed to GitHub
+
+Stage Summary:
+- Files changed: 3 (StaffManagement.tsx, CAAccess.tsx [new], Settings.tsx)
+- The owner can now create and manage CA accounts entirely from the Settings UI — no API calls needed.
+- The UI clearly distinguishes staff (customizable permissions) from CAs (fixed read-only access) via separate cards with different colors and icons.
+- CAs appear with a "Read-only" badge and have no expandable permissions matrix — visually communicating that their access is fixed.
+- The info box on the CA card transparently lists what CAs can and cannot do, so the owner understands the access level before creating an account.
+- Step 4 is complete. Step 5 (sidebar + navigation gating) remains: the sidebar needs to hide modules CAs can't access (inventory, scanner, settings) when a CA is logged in, and show a "CA Mode" indicator.
