@@ -11,6 +11,7 @@ import { Switch } from '@/components/ui/switch'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { StaffManagement } from '@/components/settings/StaffManagement'
+import { CAAccess } from '@/components/settings/CAAccess'
 import { useShops } from '@/hooks/use-shops'
 import { exportBackup } from '@/lib/data-backup'
 import { useBusinessGoals } from '@/hooks/use-business-goals'
@@ -1087,7 +1088,12 @@ export function Settings() {
       )}
 
       {/* ── STAFF TAB ───────────────────────────────────────────────── */}
-      {settingsTab === 'staff' && isOwner && <StaffManagement />}
+      {settingsTab === 'staff' && isOwner && (
+        <div className="space-y-4">
+          <StaffManagement />
+          <CAAccess />
+        </div>
+      )}
 
       {/* ── FEATURES TAB ────────────────────────────────────────────── */}
       {settingsTab === 'features' && isOwner && (

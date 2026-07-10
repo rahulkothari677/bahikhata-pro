@@ -64,7 +64,9 @@ export function StaffManagement() {
     },
   })
 
-  const staff: any[] = data?.staff || []
+  // V17-Ext Tier 3 Step 4: GET /api/staff now returns BOTH staff AND CA accounts.
+  // Filter to show only staff here — CAs are shown in the separate CAAccess card.
+  const staff: any[] = (data?.staff || []).filter((s: any) => s.role === 'staff')
 
   const handleAdd = async () => {
     if (!form.email || !form.password) {
