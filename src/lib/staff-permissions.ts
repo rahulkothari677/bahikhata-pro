@@ -22,6 +22,33 @@ export type ModuleKey =
 
 export type StaffPermissions = Record<ModuleKey, boolean>
 
+/**
+ * V17-Ext Tier 3 Step 2: Sub-account roles are the roles an OWNER can create
+ * via the /api/staff endpoint. These are linked to the owner via ownerId and
+ * have limited access.
+ *
+ * 'owner' and 'admin' are NOT sub-account roles — they cannot be created via
+ * /api/staff. This preventlist is the server-side guardrail: even if a
+ * malicious client sends `{ role: 'owner' }` in the POST body, the route
+ * rejects it.
+ */
+export const SUB_ACCOUNT_ROLES = ['staff', 'ca'] as const
+export type SubAccountRole = typeof SUB_ACCOUNT_ROLES[number]
+
+/**
+ * Type guard: returns true if the given string is a valid sub-account role
+ * (i.e., a role the owner is allowed to create for someone else).
+ *
+ * 'owner' → false (cannot be created via /api/staff)
+ * 'admin' → false (admin is a separate system, not a sub-account)
+ * 'staff' → true
+ * 'ca'    → true
+ * anything else → false (fail-closed)
+ */
+export function isValidSubAccountRole(role: string): role is SubAccountRole {
+  return (SUB_ACCOUNT_ROLES as readonly string[]).includes(role)
+}
+
 export const DEFAULT_STAFF_PERMISSIONS: StaffPermissions = {
   dashboard: false,
   sales: true,

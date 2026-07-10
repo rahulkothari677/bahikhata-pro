@@ -7,6 +7,8 @@ import {
   DEFAULT_STAFF_PERMISSIONS,
   parsePermissions,
   canAccessModule,
+  isValidSubAccountRole,
+  SUB_ACCOUNT_ROLES,
   type StaffPermissions,
   type ModuleKey,
 } from '@/lib/staff-permissions'
@@ -187,5 +189,73 @@ describe('canAccessModule', () => {
       expect(canAccessModule('ca', perms, 'settings')).toBe(false)
       expect(canAccessModule('ca', perms, 'inventory')).toBe(false)
     })
+  })
+})
+
+/**
+ * V17-Ext Tier 3 Step 2: Sub-account role validation.
+ *
+ * The /api/staff POST route accepts a `role` field in the body. This test
+ * suite guards the isValidSubAccountRole() helper that validates that field.
+ *
+ * SECURITY INVARIANT: Only 'staff' and 'ca' can be created via /api/staff.
+ * 'owner' and 'admin' MUST be rejected — otherwise a malicious client could
+ * escalate privileges by sending { role: 'owner' } in the POST body.
+ */
+describe('🔒 V17-Ext Tier 3 Step 2: isValidSubAccountRole', () => {
+  test('SUB_ACCOUNT_ROLES contains exactly staff and ca', () => {
+    expect(SUB_ACCOUNT_ROLES).toHaveLength(2)
+    expect([...SUB_ACCOUNT_ROLES]).toContain('staff')
+    expect([...SUB_ACCOUNT_ROLES]).toContain('ca')
+  })
+
+  test('returns true for "staff"', () => {
+    expect(isValidSubAccountRole('staff')).toBe(true)
+  })
+
+  test('returns true for "ca"', () => {
+    expect(isValidSubAccountRole('ca')).toBe(true)
+  })
+
+  test('returns FALSE for "owner" — cannot create owner via /api/staff', () => {
+    // This is the critical security test. If this breaks, a malicious client
+    // could create an owner-level account via the staff API.
+    expect(isValidSubAccountRole('owner')).toBe(false)
+  })
+
+  test('returns FALSE for "admin" — admin is a separate system', () => {
+    expect(isValidSubAccountRole('admin')).toBe(false)
+  })
+
+  test('returns false for unknown roles (fail-closed)', () => {
+    expect(isValidSubAccountRole('manager')).toBe(false)
+    expect(isValidSubAccountRole('superuser')).toBe(false)
+    expect(isValidSubAccountRole('viewer')).toBe(false)
+    expect(isValidSubAccountRole('accountant')).toBe(false)
+  })
+
+  test('returns false for empty string', () => {
+    expect(isValidSubAccountRole('')).toBe(false)
+  })
+
+  test('returns false for strings that look similar but are not exact', () => {
+    // Case-sensitive — 'CA' and 'Staff' are NOT valid (must be lowercase)
+    expect(isValidSubAccountRole('CA')).toBe(false)
+    expect(isValidSubAccountRole('Staff')).toBe(false)
+    expect(isValidSubAccountRole('ca ')).toBe(false) // trailing space
+    expect(isValidSubAccountRole(' ca')).toBe(false) // leading space
+  })
+
+  test('acts as a type guard (narrows to SubAccountRole)', () => {
+    // This is a compile-time check: if isValidSubAccountRole returns true,
+    // TypeScript should narrow the type. We verify at runtime that the
+    // narrowed value is indeed one of the two valid roles.
+    const input: string = 'ca'
+    if (isValidSubAccountRole(input)) {
+      // Inside this block, `input` is narrowed to SubAccountRole ('staff' | 'ca')
+      expect(['staff', 'ca']).toContain(input)
+    } else {
+      throw new Error('Should have been valid')
+    }
   })
 })

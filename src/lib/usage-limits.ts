@@ -439,8 +439,14 @@ export async function checkEntityLimit(
       // Count shops owned by this user (excluding the default shop)
       used = await db.shop.count({ where: { userId } })
     } else {
-      // Count staff accounts (users with role='staff' and ownerId=userId)
-      used = await db.user.count({ where: { ownerId: userId, role: 'staff' } })
+      // V17-Ext Tier 3 Step 2: Count BOTH staff AND CA accounts against the
+      // same plan limit. CAs are sub-accounts just like staff — they share
+      // the owner's staffAccounts quota. Was: `role: 'staff'` only, which
+      // meant a Pro owner (limit 0) could create unlimited CAs by bypassing
+      // the staff limit check. Now: `role: { in: ['staff', 'ca'] }`.
+      used = await db.user.count({
+        where: { ownerId: userId, role: { in: ['staff', 'ca'] } },
+      })
     }
   } catch {
     // If DB error, allow the request (better UX than blocking on transient error)
