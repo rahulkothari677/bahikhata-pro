@@ -62,7 +62,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     // 🔒 FIX H1: Check staff permission based on transaction type
-    const module: ModuleKey = existing.type === 'purchase' ? 'purchases' : existing.type === 'income' || existing.type === 'expense' ? 'incomeExpense' : 'sales'
+    // V17-Ext Tier 3: credit-note maps to sales, debit-note maps to purchases
+    const module: ModuleKey = existing.type === 'purchase' || existing.type === 'debit-note' ? 'purchases' : existing.type === 'income' || existing.type === 'expense' ? 'incomeExpense' : 'sales'
     if (!canAccessModule(authCtx.role, authCtx.permissions, module)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
@@ -75,7 +76,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: 'Validation failed', detail: validation.error }, { status: 400 })
     }
 
-    const { type, partyId, date, items, discountAmount, paymentMode, notes, invoiceNo, category, paidAmount } = validation.data as any
+    const { type, partyId, date, items, discountAmount, paymentMode, notes, invoiceNo, category, paidAmount, originalTransactionId, noteType, noteReason, affectsStock } = validation.data as any
 
     // 🔒 AUDIT FIX N6 (v3): Forbid changing transaction type.
     // Was: editing a sale→income would orphan items and leak stock (no reversal).
@@ -166,6 +167,15 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       db.transactionItem.findMany({ where: { transactionId: id } }),
     ])
     const stockPolicy = setting?.stockPolicy || 'block'
+
+    // V17-Ext Tier 3: Stock direction (same logic as POST)
+    const shouldDecrementStock = type === 'sale' || (type === 'debit-note' && affectsStock)
+    const shouldIncrementStock = type === 'purchase' || (type === 'credit-note' && affectsStock)
+    const shouldAffectStock = shouldDecrementStock || shouldIncrementStock
+    // For reversal: check the EXISTING transaction's affectsStock flag
+    const existingShouldDecrement = existing.type === 'sale' || (existing.type === 'debit-note' && existing.affectsStock)
+    const existingShouldIncrement = existing.type === 'purchase' || (existing.type === 'credit-note' && existing.affectsStock)
+    const existingAffectsStock = existingShouldDecrement || existingShouldIncrement
 
     // 🔒 V11 STOCK POLICY: For sale edits, compute the NET stock impact per
     // product. Old sale items are added back (stock increases), new sale items
@@ -298,14 +308,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       // transaction ID, so the snapshot is still valid.
       for (const oldItem of oldItems) {
         if (oldItem.productId) {
-          if (existing.type === 'sale') {
-            // Reverse sale: add stock back
+          if (existingShouldDecrement) {
+            // Reverse a decrement (sale or debit-note with affectsStock): add stock back
             await tx.product.updateMany({
               where: { id: oldItem.productId, userId },
               data: { currentStock: { increment: oldItem.quantity } },
             })
-          } else if (existing.type === 'purchase') {
-            // Reverse purchase: subtract stock
+          } else if (existingShouldIncrement) {
+            // Reverse an increment (purchase or credit-note with affectsStock): subtract stock
             await tx.product.updateMany({
               where: { id: oldItem.productId, userId },
               data: { currentStock: { decrement: oldItem.quantity } },
@@ -337,15 +347,19 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           notes: notes || null,
           invoiceNo: invoiceNo || null,
           grossProfit: roundMoney(grossProfit),
+          // V17-Ext Tier 3: Credit/Debit Notes fields
+          originalTransactionId: originalTransactionId || null,
+          noteType: noteType || null,
+          noteReason: noteReason || null,
+          affectsStock: affectsStock || false,
           items: { create: txItems },
         },
         include: { items: true, party: true },
       })
 
       // Step 4: Apply new items' stock impact
-      // 🔒 V9 2.1 FIX: Scope by userId (same as POST)
-      // 🔒 FIX H1+H12: Same pattern as POST — block mode sequential, allow/purchase batched
-      if (type === 'sale' && stockPolicy === 'block') {
+      // V17-Ext Tier 3: Uses direction variables (same pattern as POST)
+      if (shouldDecrementStock && stockPolicy === 'block') {
         for (const item of txItems) {
           if (!item.productId) continue
           const qty = item.quantity || 0
@@ -361,10 +375,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
             throw err
           }
         }
-      } else {
+      } else if (shouldAffectStock) {
         await Promise.all(txItems.filter(i => i.productId).map(item => {
           const qty = item.quantity || 0
-          if (type === 'sale') {
+          if (shouldDecrementStock) {
             return tx.product.updateMany({
               where: { id: item.productId!, userId },
               data: { currentStock: { decrement: qty } },
@@ -444,7 +458,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     // 🔒 FIX H1: Check staff permission based on transaction type
-    const module: ModuleKey = existing.type === 'purchase' ? 'purchases' : existing.type === 'income' || existing.type === 'expense' ? 'incomeExpense' : 'sales'
+    // V17-Ext Tier 3: credit-note maps to sales, debit-note maps to purchases
+    const module: ModuleKey = existing.type === 'purchase' || existing.type === 'debit-note' ? 'purchases' : existing.type === 'income' || existing.type === 'expense' ? 'incomeExpense' : 'sales'
     if (!canAccessModule(authCtx.role, authCtx.permissions, module)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
@@ -461,6 +476,11 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       throw e
     }
 
+    // V17-Ext Tier 3: Compute stock direction for reversal
+    const delShouldDecrement = existing.type === 'sale' || (existing.type === 'debit-note' && existing.affectsStock)
+    const delShouldIncrement = existing.type === 'purchase' || (existing.type === 'credit-note' && existing.affectsStock)
+    const delAffectsStock = delShouldDecrement || delShouldIncrement
+
     // 🔒 N5: Wrap soft-delete + stock reversal in $transaction
     await db.$transaction(async (tx) => {
       // Step 1: Soft delete
@@ -469,18 +489,20 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
         data: { deletedAt: new Date() },
       })
 
-      // Step 2: Reverse stock impact (same as edit — add back sales, subtract purchases)
-      // 🔒 V9 2.1 FIX: Scope by userId (same as POST/PUT)
-      if (existing.type === 'sale' || existing.type === 'purchase') {
+      // Step 2: Reverse stock impact
+      // V17-Ext Tier 3: Handles credit-note (reverse increment) and debit-note (reverse decrement)
+      if (delAffectsStock) {
         const items = await tx.transactionItem.findMany({ where: { transactionId: id } })
         for (const item of items) {
           if (item.productId) {
-            if (existing.type === 'sale') {
+            if (delShouldDecrement) {
+              // Reverse a decrement (sale or debit-note): add stock back
               await tx.product.updateMany({
                 where: { id: item.productId, userId },
                 data: { currentStock: { increment: item.quantity } },
               })
             } else {
+              // Reverse an increment (purchase or credit-note): subtract stock
               await tx.product.updateMany({
                 where: { id: item.productId, userId },
                 data: { currentStock: { decrement: item.quantity } },

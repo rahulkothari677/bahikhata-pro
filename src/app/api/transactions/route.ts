@@ -149,10 +149,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Validation failed', detail: validation.error }, { status: 400 })
     }
 
-    const { type, partyId, date, items, discountAmount, paymentMode, notes, invoiceNo, category, paidAmount, payeeName, payeePhone } = validation.data as any
+    const { type, partyId, date, items, discountAmount, paymentMode, notes, invoiceNo, category, paidAmount, payeeName, payeePhone, originalTransactionId, noteType, noteReason, affectsStock } = validation.data as any
 
     // 🔒 FIX H1: Check staff permission based on transaction type
-    const module: ModuleKey = type === 'purchase' ? 'purchases' : type === 'income' || type === 'expense' ? 'incomeExpense' : 'sales'
+    // V17-Ext Tier 3: credit-note maps to sales, debit-note maps to purchases
+    const module: ModuleKey = type === 'purchase' || type === 'debit-note' ? 'purchases' : type === 'income' || type === 'expense' ? 'incomeExpense' : 'sales'
     if (!canAccessModule(authCtx.role, authCtx.permissions, module)) {
       return NextResponse.json({ error: 'Forbidden', message: `You don't have permission to create ${type} transactions.` }, { status: 403 })
     }
@@ -247,6 +248,17 @@ export async function POST(req: NextRequest) {
     })
     const stockPolicy = setting?.stockPolicy || 'block'  // default: block
 
+    // V17-Ext Tier 3: Stock direction for credit/debit notes.
+    // - sale: decrement (customer takes goods)
+    // - purchase: increment (we receive goods)
+    // - credit-note with affectsStock: increment (customer returns goods = reverse sale)
+    // - debit-note with affectsStock: decrement (we return goods = reverse purchase)
+    // - credit-note/debit-note without affectsStock: no stock change (price adjustment only)
+    // - income/expense: no stock change (already handled by early return above)
+    const shouldDecrementStock = type === 'sale' || (type === 'debit-note' && affectsStock)
+    const shouldIncrementStock = type === 'purchase' || (type === 'credit-note' && affectsStock)
+    const shouldAffectStock = shouldDecrementStock || shouldIncrementStock
+
     // 🔒 AUDIT FIX V5 MD: Negative-stock warning.
     // Was: sales decrement currentStock with no check — selling 100 units of
     // a product with 2 in stock succeeded silently and left currentStock = -98.
@@ -272,7 +284,7 @@ export async function POST(req: NextRequest) {
       resultingStock: number
     }> = []
 
-    if (type === 'sale' && !body.confirmOversell) {
+    if (shouldDecrementStock && !body.confirmOversell) {
       // 🔒 FIX M2: Consolidate quantities per product before checking stock.
       // Was: each line item checked individually against the original stock.
       // If the same product appears in two lines (each selling 3 of 5 in stock),
@@ -316,7 +328,7 @@ export async function POST(req: NextRequest) {
     //
     // If policy is 'allow' (kirana mode), proceed with the current behavior —
     // the sale goes through and stockWarnings[] is returned in the response.
-    if (type === 'sale' && stockPolicy === 'block' && stockWarnings.length > 0 && !body.confirmOversell) {
+    if (shouldDecrementStock && stockPolicy === 'block' && stockWarnings.length > 0 && !body.confirmOversell) {
       const lines = stockWarnings.map(w =>
         `• ${w.productName}: have ${w.currentStock}, selling ${w.requestedQuantity}, would go to ${w.resultingStock}`
       ).join('\n')
@@ -416,6 +428,30 @@ export async function POST(req: NextRequest) {
         finalInvoiceNo = `INV-${String(invoiceSequence).padStart(4, '0')}`
       }
 
+      // V17-Ext Tier 3: Credit note numbering (CN-XXXX from creditNoteSeq)
+      if (!finalInvoiceNo && type === 'credit-note') {
+        const counter = await tx.invoiceCounter.upsert({
+          where: { userId },
+          update: { creditNoteSeq: { increment: 1 } },
+          create: { userId, creditNoteSeq: 1 },
+          select: { creditNoteSeq: true },
+        })
+        invoiceSequence = counter.creditNoteSeq
+        finalInvoiceNo = `CN-${String(invoiceSequence).padStart(4, '0')}`
+      }
+
+      // V17-Ext Tier 3: Debit note numbering (DN-XXXX from debitNoteSeq)
+      if (!finalInvoiceNo && type === 'debit-note') {
+        const counter = await tx.invoiceCounter.upsert({
+          where: { userId },
+          update: { debitNoteSeq: { increment: 1 } },
+          create: { userId, debitNoteSeq: 1 },
+          select: { debitNoteSeq: true },
+        })
+        invoiceSequence = counter.debitNoteSeq
+        finalInvoiceNo = `DN-${String(invoiceSequence).padStart(4, '0')}`
+      }
+
       const txn = await tx.transaction.create({
         data: {
           userId,
@@ -438,6 +474,11 @@ export async function POST(req: NextRequest) {
           grossProfit: roundMoney(grossProfit),
           clientMutationId: clientMutationId || null,
           createdByUserId: authCtx.actingUserId,  // 🔒 V13 L4: staff accountability
+          // V17-Ext Tier 3: Credit/Debit Notes fields
+          originalTransactionId: originalTransactionId || null,
+          noteType: noteType || null,
+          noteReason: noteReason || null,
+          affectsStock: affectsStock || false,
           items: { create: txItems },
         },
         include: { items: true, party: true },
@@ -452,7 +493,11 @@ export async function POST(req: NextRequest) {
       // $transaction using a conditional WHERE clause (currentStock >= qty).
       // This closes the race condition. In 'allow' mode and for purchases,
       // we batch the updates with Promise.all (H12 — was sequential, N round-trips).
-      if (type === 'sale' && stockPolicy === 'block') {
+      // V17-Ext Tier 3: Stock adjustment using direction variables.
+      // shouldDecrementStock = sale or debit-note with affectsStock
+      // shouldIncrementStock = purchase or credit-note with affectsStock
+      // shouldAffectStock = either of the above (false for notes without affectsStock)
+      if (shouldDecrementStock && stockPolicy === 'block') {
         // Block mode: must check each item individually (needs result.count)
         for (const item of txItems) {
           if (!item.productId) continue
@@ -469,12 +514,11 @@ export async function POST(req: NextRequest) {
             throw err
           }
         }
-      } else {
-        // 🔒 FIX H12: Allow mode + purchases — batch with Promise.all instead
-        // of sequential loop. N items → 1 parallel batch (was N sequential round-trips).
+      } else if (shouldAffectStock) {
+        // 🔒 FIX H12: Allow mode + purchases + credit/debit notes — batch
         await Promise.all(txItems.filter(i => i.productId).map(item => {
           const qty = item.quantity || 0
-          if (type === 'sale') {
+          if (shouldDecrementStock) {
             return tx.product.updateMany({
               where: { id: item.productId!, userId },
               data: { currentStock: { decrement: qty } },
@@ -487,6 +531,8 @@ export async function POST(req: NextRequest) {
           }
         }))
       }
+      // If !shouldAffectStock (e.g., credit/debit note without affectsStock,
+      // or income/expense), skip stock adjustment entirely.
 
       return txn
     }

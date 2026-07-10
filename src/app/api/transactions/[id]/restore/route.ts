@@ -45,7 +45,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     // 🔒 FIX H1: Check staff permission based on transaction type
-    const module: ModuleKey = existing.type === 'purchase' ? 'purchases' : existing.type === 'income' || existing.type === 'expense' ? 'incomeExpense' : 'sales'
+    // V17-Ext Tier 3: credit-note maps to sales, debit-note maps to purchases
+    const module: ModuleKey = existing.type === 'purchase' || existing.type === 'debit-note' ? 'purchases' : existing.type === 'income' || existing.type === 'expense' ? 'incomeExpense' : 'sales'
     if (!canAccessModule(authCtx.role, authCtx.permissions, module)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
@@ -62,6 +63,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       throw e
     }
 
+    // V17-Ext Tier 3: Compute stock direction for re-application
+    const restoreShouldDecrement = existing.type === 'sale' || (existing.type === 'debit-note' && existing.affectsStock)
+    const restoreShouldIncrement = existing.type === 'purchase' || (existing.type === 'credit-note' && existing.affectsStock)
+    const restoreAffectsStock = restoreShouldDecrement || restoreShouldIncrement
+
     // Restore: set deletedAt to null + re-apply stock impact, atomically.
     await db.$transaction(async (tx) => {
       // Step 1: Restore the row
@@ -71,19 +77,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       })
 
       // Step 2: Re-apply stock impact (inverse of DELETE).
-      // 🔒 V9 2.1 FIX: Scope by userId (same as POST/PUT/DELETE)
-      if (existing.type === 'sale' || existing.type === 'purchase') {
+      // V17-Ext Tier 3: Handles credit-note (increment) and debit-note (decrement)
+      if (restoreAffectsStock) {
         const items = await tx.transactionItem.findMany({ where: { transactionId: id } })
         for (const item of items) {
           if (item.productId) {
-            if (existing.type === 'sale') {
-              // Re-apply sale: decrement stock
+            if (restoreShouldDecrement) {
+              // Re-apply a decrement (sale or debit-note): decrement stock
               await tx.product.updateMany({
                 where: { id: item.productId, userId },
                 data: { currentStock: { decrement: item.quantity } },
               })
             } else {
-              // Re-apply purchase: increment stock
+              // Re-apply an increment (purchase or credit-note): increment stock
               await tx.product.updateMany({
                 where: { id: item.productId, userId },
                 data: { currentStock: { increment: item.quantity } },
