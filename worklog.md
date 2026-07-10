@@ -1958,3 +1958,58 @@ Stage Summary:
 - CA accounts are created with permissions=null; their access is determined entirely by canAccessModule's hardcoded CA_MODULES allowlist (from Step 1).
 - Step 2 is complete. Step 3 (wire assertCanWrite into all POST/PUT/DELETE routes) is next.
 - The StaffManagement UI (Step 4) still needs updating: currently it would show a CA account with a permissions matrix (which would 400 on save). Step 4 will hide the matrix for CAs and add a "CA" badge + an "Add CA" button.
+
+---
+Task ID: bahikhata-tier3-ca-login-step3
+Agent: main
+Task: Tier 3 Feature 4 (CA/Accountant Login) — Step 3: Wire assertCanWrite into all write routes
+
+Work Log:
+- Deep research: grep'd all 37 POST/PUT/DELETE/PATCH routes across /api, then mapped each to its auth helper (getAuthUserIdOwnerOnly, getAuthUserIdWithModule, getAuthContext, getAuthUserId). Categorized into 7 groups (A-G) by protection level.
+- Created getAuthContextForWrite(module) helper in get-auth.ts:
+  * Combines getAuthContext + canAccessModule + assertCanWrite in one call
+  * Single entry point for write routes that need both module check + write block
+  * Returns full auth context (userId, actingUserId, role, permissions) on success, error on failure
+  * Used by Category C routes (parties, whatsapp) that had a static module key
+- Category B (8 routes — already used getAuthContext, added assertCanWrite after module check):
+  * transactions/route.ts POST — added assertCanWrite after dynamic module check
+  * transactions/[id]/route.ts PUT — added assertCanWrite after dynamic module check
+  * transactions/[id]/route.ts DELETE — added assertCanWrite after dynamic module check
+  * transactions/[id]/restore/route.ts POST — added assertCanWrite after dynamic module check
+  * payments/route.ts POST — added assertCanWrite after 'parties' module check
+  * payments/[id]/route.ts DELETE — added assertCanWrite after 'parties' module check
+  * gstr-2b/import/route.ts POST — added assertCanWrite after 'reports' module check
+  * gstr-3b/route.ts POST — added assertCanWrite after 'reports' module check
+  * (transactions/route.ts DELETE is a deprecated 410 endpoint — no auth needed, skipped)
+- Category C (5 routes — refactored from getAuthUserIdWithModule to getAuthContextForWrite):
+  * parties/route.ts POST — was getAuthUserIdWithModule('parties'), now getAuthContextForWrite('parties')
+  * parties/[id]/route.ts PUT — same refactor
+  * parties/[id]/route.ts DELETE — same refactor
+  * whatsapp-reminder/route.ts POST — was getAuthUserIdWithModule('parties'), now getAuthContextForWrite('parties')
+  * whatsapp-invoice/route.ts POST — was getAuthUserIdWithModule('sales'), now getAuthContextForWrite('sales')
+  * Note: GET handlers in these files still use getAuthUserIdWithModule (CAs CAN read these modules)
+- Category D (2 routes — PRE-EXISTING SECURITY ISSUE fixed):
+  * auth/revoke-all/route.ts POST — was using getAuthUserId (returns ownerId for CAs). A CA calling this would increment the OWNER's tokenVersion, logging out the owner + all staff + all CAs! Switched to getAuthContext + assertCanWrite. CAs now get 403.
+  * referral/apply/route.ts POST — was using getAuthUserId. A CA calling this would apply the referral code to the OWNER's account, granting the owner a Pro trial and modifying the owner's plan. Switched to getAuthContext + assertCanWrite. CAs now get 403.
+- No-change categories (already protected):
+  * Category E (8 routes): upload-bill, settings PUT, products POST/PUT/DELETE, voice-parse, scan-bill, scan-bill/compare POST/PATCH — all use getAuthUserIdWithModule for scanner/settings/inventory modules. canAccessModule returns false for CAs on these modules, so the route returns 403 before any write logic runs. assertCanWrite would be unreachable. No change needed.
+  * Category F (~9 routes): account/delete, staff POST/PATCH/DELETE, payment/verify, payment/create-order, shops POST, seed POST/DELETE — all use getAuthUserIdOwnerOnly which already blocks CAs (Step 1 added 'ca' to the block list).
+  * Category G (3 routes): auth/register, auth/reset-confirm, auth/reset-request — public routes, no auth needed.
+- Created ca-write-block.test.ts (7 tests):
+  * Tests assertCanWrite as a pure function (blocks CA with 403, allows owner/staff/null/unknown)
+  * Tests CA error response structure (error + message fields for UI consumption)
+  * Tests the "single enforcement point" invariant
+  * Mocks next-auth + next/server + @/lib/auth + @/lib/db to avoid jsdom polyfill issues
+  * Mock NextResponse class with static json() method (matches how assertCanWrite calls it)
+- Verified:
+  * npx tsc --noEmit: 0 NEW errors (5 pre-existing in validation.test.ts — unrelated)
+  * npx next build: ✓ Compiled successfully, all 39 API routes + 6 pages compile
+  * npx jest staff-permissions + ca-write-block + soft-delete-sweep + balance-reconciliation + period-lock: 80/80 pass (no regressions)
+- Committed (13a5831) + pushed to GitHub
+
+Stage Summary:
+- Files changed: 15 (get-auth.ts + 13 route files + 1 new test file)
+- 13 write routes now enforce CA read-only access server-side.
+- A CA can now NEVER create, edit, or delete anything via the API — even by bypassing the UI and calling endpoints directly. Every write route either calls assertCanWrite or uses getAuthContextForWrite.
+- 2 pre-existing security issues fixed (revoke-all + referral/apply were operating on the owner's account for CAs due to ownerId resolution in getAuthUserId).
+- Step 3 is the enforcement layer. Step 4 (Settings UI — "CA Access" card) and Step 5 (sidebar + navigation gating) remain.
