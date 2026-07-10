@@ -241,6 +241,91 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // V17-Ext Tier 3 Step 4: Fetch credit/debit notes for the CDN section
+    const [cdnTransactions, cdnGstRows] = await Promise.all([
+      db.transaction.findMany({
+        where: activeTransactionWhere(userId, {
+          type: { in: ['credit-note', 'debit-note'] },
+          date: { gte: from, lte: to },
+        }),
+        include: {
+          party: true,
+          originalTransaction: { select: { invoiceNo: true, date: true } },
+        },
+        orderBy: { date: 'asc' },
+        take: INVOICE_CAP + 1,
+      }),
+      db.$queryRaw<Array<{
+        transactionId: string;
+        gstRate: number;
+        taxableValue: number;
+        cgst: number;
+        sgst: number;
+        igst: number;
+        quantity: number;
+      }>>`
+        SELECT
+          ti."transactionId",
+          ti."gstRate",
+          SUM(ROUND((ti."quantity"::numeric * ti."unitPrice" - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 2)) AS "taxableValue",
+          SUM(COALESCE(ti."cgst", 0)::numeric) AS cgst,
+          SUM(COALESCE(ti."sgst", 0)::numeric) AS sgst,
+          SUM(COALESCE(ti."igst", 0)::numeric) AS igst,
+          SUM(ti."quantity") AS quantity
+        FROM "TransactionItem" ti
+        JOIN "Transaction" t ON ti."transactionId" = t.id
+        WHERE t."userId" = ${userId}
+          AND t."deletedAt" IS NULL
+          AND t."type" IN ('credit-note', 'debit-note')
+          AND t."date" >= ${from}
+          AND t."date" <= ${to}
+        GROUP BY ti."transactionId", ti."gstRate"
+      `,
+    ])
+
+    // Build per-transaction GST map for CDN
+    const cdnGstByTransaction = new Map<string, any[]>()
+    for (const row of cdnGstRows) {
+      const arr = cdnGstByTransaction.get(row.transactionId) || []
+      arr.push(row)
+      cdnGstByTransaction.set(row.transactionId, arr)
+    }
+
+    // Build CDN section: grouped by counter-party GSTIN
+    // Structure: { ctin, nt: [{ nt_num, nt_dt, ntty, pos, rchrg, doc_det, itms }] }
+    const cdnByGstin = new Map<string, any[]>()
+    for (const t of cdnTransactions) {
+      const ctin = t.party?.gstin || ''
+      if (!ctin) continue // skip unregistered parties (they go in cdnur, not cdn)
+      const rateRows = cdnGstByTransaction.get(t.id) || []
+      const items = rateRows.map(r => ({
+        rt: r.gstRate,
+        txval: roundMoney(r.taxableValue),
+        camt: roundMoney(r.cgst),
+        samt: roundMoney(r.sgst),
+        iamt: roundMoney(r.igst),
+        qty: Number(r.quantity),
+      }))
+      const noteEntry = {
+        nt_num: t.invoiceNo || t.id.slice(-8),
+        nt_dt: istDateString(t.date),
+        ntty: t.noteType || (t.type === 'credit-note' ? 'C' : 'D'),
+        pos: t.isInterState ? (t.party?.state ? '' : '99') : (setting?.state ? '' : '99'),
+        rchrg: t.isReverseCharge ? 'Y' : 'N',
+        doc_det: t.originalTransaction ? {
+          doc_num: t.originalTransaction.invoiceNo || '',
+          doc_dt: istDateString(t.originalTransaction.date),
+        } : null,
+        itms: items,
+        total: roundMoney(t.totalAmount),
+        isInterState: t.isInterState,
+      }
+      const arr = cdnByGstin.get(ctin) || []
+      arr.push(noteEntry)
+      cdnByGstin.set(ctin, arr)
+    }
+    const cdnSection = Array.from(cdnByGstin.entries()).map(([ctin, nt]) => ({ ctin, nt }))
+
     // Summary totals via SQL aggregate (O(1) memory, no row iteration)
     const summaryAgg = await db.transaction.aggregate({
       where: activeTransactionWhere(userId, {
@@ -281,6 +366,8 @@ export async function GET(req: NextRequest) {
       // Correct for current filing periods.
       b2cl: b2cInvoices.filter(i => i.isInterState === true && i.total >= 100000), // B2C Large (inter-state only, ₹1L threshold)
       b2cs: b2cInvoices.filter(i => !(i.isInterState === true && i.total >= 100000)), // B2C Small (everything else)
+      // V17-Ext Tier 3: CDN section — credit/debit notes
+      cdn: cdnSection,
       // 🔒 V6 SC1: flag if we hit the 10K cap — return is incomplete.
       // The UI must hard-block export when this is true (V6 PP1).
       truncated: hitCap,
@@ -375,6 +462,26 @@ export async function GET(req: NextRequest) {
           igst.toFixed(2),
           t.totalAmount.toFixed(2),
           t.party?.gstin ? 'B2B' : 'B2C',
+        ].join(','))
+      }
+      // V17-Ext Tier 3: Add credit/debit note rows to CSV
+      for (const t of cdnTransactions) {
+        const rateRows = cdnGstByTransaction.get(t.id) || []
+        const taxable = rateRows.reduce((s, r) => s + r.taxableValue, 0)
+        const cgst = rateRows.reduce((s, r) => s + r.cgst, 0)
+        const sgst = rateRows.reduce((s, r) => s + r.sgst, 0)
+        const igst = rateRows.reduce((s, r) => s + r.igst, 0)
+        csvLines.push([
+          t.invoiceNo || t.id.slice(-8),
+          istDateString(t.date),
+          t.party?.name || 'Unknown',
+          t.party?.gstin || '',
+          taxable.toFixed(2),
+          cgst.toFixed(2),
+          sgst.toFixed(2),
+          igst.toFixed(2),
+          t.totalAmount.toFixed(2),
+          t.type === 'credit-note' ? 'CDN-C' : 'CDN-D',
         ].join(','))
       }
       const csv = csvLines.join('\n')
