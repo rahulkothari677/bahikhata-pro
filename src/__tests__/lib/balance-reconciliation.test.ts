@@ -73,18 +73,19 @@ describe('🔒 V15 §1 — Balance reconciliation (all screens must agree)', () 
     // Verify both helpers use the SAME formula:
     // balance = openingBalance + salesOutstanding - purchaseOutstanding
     //           - paymentsReceived + paymentsPaid
+    // V17-Ext Tier 3: now also includes - creditNoteOutstanding + debitNoteOutstanding
     it('computePartyBalance and getReceivablePayable use the same formula', () => {
       const source = readFile('lib/party-balance.ts')
 
-      // computePartyBalance formula
+      // computePartyBalance formula (V17-Ext Tier 3: includes credit/debit notes)
       const computeMatch = source.match(
-        /party\.openingBalance\s*\+\s*salesOutstanding\s*-\s*purchaseOutstanding\s*-\s*paymentsReceived\s*\+\s*paymentsPaid/
+        /party\.openingBalance[\s\S]*?salesOutstanding[\s\S]*?purchaseOutstanding[\s\S]*?creditNoteOutstanding[\s\S]*?debitNoteOutstanding[\s\S]*?paymentsReceived[\s\S]*?paymentsPaid/
       )
       expect(computeMatch).not.toBeNull()
 
       // getReceivablePayable formula (in the JS processing of SQL rows)
       const getMatch = source.match(
-        /openingBalance\s*\+\s*salesOutstanding\s*-\s*purchaseOutstanding\s*-\s*paymentsReceived\s*\+\s*paymentsPaid/
+        /openingBalance[\s\S]*?salesOutstanding[\s\S]*?purchaseOutstanding[\s\S]*?creditNoteOutstanding[\s\S]*?debitNoteOutstanding[\s\S]*?paymentsReceived[\s\S]*?paymentsPaid/
       )
       expect(getMatch).not.toBeNull()
     })
@@ -120,9 +121,10 @@ describe('🔒 V15 §1 — Balance reconciliation (all screens must agree)', () 
       //   paid     → +amount           [we paid supplier → reduces what we owe them]
 
       // sale delta: +(t.totalAmount - paidAmount)
-      expect(source).toMatch(/t\.type\s*===\s*'sale'\s*\?[^:]*\(t\.totalAmount\s*-\s*\(t\.paidAmount/)
+      // V17-Ext Tier 3: condition now includes || t.type === 'debit-note'
+      expect(source).toMatch(/t\.type\s*===\s*'sale'[\s\S]*?\?[\s\S]*?\(t\.totalAmount\s*-\s*\(t\.paidAmount/)
 
-      // purchase delta: -(t.totalAmount - paidAmount) — the else branch
+      // purchase/credit-note delta: -(t.totalAmount - paidAmount) — the else branch
       expect(source).toMatch(/:\s*-\(t\.totalAmount\s*-\s*\(t\.paidAmount/)
 
       // received delta: -p.amount (customer paid us reduces what they owe)

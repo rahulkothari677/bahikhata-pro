@@ -32,7 +32,7 @@ import { roundMoney } from '@/lib/money'
 export interface StatementTransaction {
   id: string
   date: string | Date
-  type: 'sale' | 'purchase' | 'income' | 'expense'
+  type: 'sale' | 'purchase' | 'income' | 'expense' | 'credit-note' | 'debit-note'
   totalAmount: number
   paidAmount: number
   invoiceNo?: string | null
@@ -90,9 +90,10 @@ export function computeStatementRunningBalance(
     amount: t.totalAmount,
     // sale → +(total - paid)   [adds to what they owe]
     // purchase → -(total - paid) [subtracts from what they owe]
-    // The paidAmount portion is settled at billing time — it does NOT affect
-    // the running balance (it's a same-day settlement).
-    delta: t.type === 'sale'
+    // credit-note → -(total - paid) [reduces what they owe — same as received payment]
+    // debit-note → +(total - paid)  [reduces what we owe — same direction as sale]
+    // V17-Ext Tier 3: debit-note has the SAME delta direction as sale
+    delta: t.type === 'sale' || t.type === 'debit-note'
       ? (t.totalAmount - (t.paidAmount || 0))
       : -(t.totalAmount - (t.paidAmount || 0)),
     due: t.totalAmount - t.paidAmount,

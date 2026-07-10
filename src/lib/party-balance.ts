@@ -27,10 +27,14 @@ import { roundMoney } from '@/lib/money'
  * Compute the balance for a single party (customer/supplier).
  *
  * 🔒 FIX H3: Now includes standalone payments (receive/pay against udhaar).
+ * 🔒 V17-Ext Tier 3: Now includes credit notes (reduce receivable) and
+ *   debit notes (reduce payable).
  *
  * Balance = openingBalance
  *         + Σ(sale.totalAmount - sale.paidAmount) for non-deleted sales
  *         - Σ(purchase.totalAmount - purchase.paidAmount) for non-deleted purchases
+ *         - Σ(credit-note.totalAmount - credit-note.paidAmount)  // reduces receivable
+ *         + Σ(debit-note.totalAmount - debit-note.paidAmount)    // reduces payable
  *         - Σ(payment.amount WHERE type='received')   // customer paid us
  *         + Σ(payment.amount WHERE type='paid')        // we paid supplier
  *
@@ -44,6 +48,8 @@ export async function computePartyBalance(
   balance: number
   salesOutstanding: number
   purchaseOutstanding: number
+  creditNoteOutstanding: number
+  debitNoteOutstanding: number
   totalSales: number
   totalPurchases: number
   totalReceived: number
@@ -62,6 +68,8 @@ export async function computePartyBalance(
       balance: 0,
       salesOutstanding: 0,
       purchaseOutstanding: 0,
+      creditNoteOutstanding: 0,
+      debitNoteOutstanding: 0,
       totalSales: 0,
       totalPurchases: 0,
       totalReceived: 0,
@@ -71,8 +79,8 @@ export async function computePartyBalance(
     }
   }
 
-  // Aggregate sales + purchases + payments in parallel
-  const [salesAgg, purchaseAgg, paymentsAgg] = await Promise.all([
+  // Aggregate sales + purchases + credit-notes + debit-notes + payments in parallel
+  const [salesAgg, purchaseAgg, creditNoteAgg, debitNoteAgg, paymentsAgg] = await Promise.all([
     db.transaction.aggregate({
       where: { userId, partyId, type: 'sale', deletedAt: null },
       _sum: { totalAmount: true, paidAmount: true },
@@ -81,12 +89,18 @@ export async function computePartyBalance(
       where: { userId, partyId, type: 'purchase', deletedAt: null },
       _sum: { totalAmount: true, paidAmount: true },
     }),
+    // V17-Ext Tier 3: Credit notes reduce receivable (like a received payment)
+    db.transaction.aggregate({
+      where: { userId, partyId, type: 'credit-note', deletedAt: null },
+      _sum: { totalAmount: true, paidAmount: true },
+    }),
+    // V17-Ext Tier 3: Debit notes reduce payable (like a paid payment)
+    db.transaction.aggregate({
+      where: { userId, partyId, type: 'debit-note', deletedAt: null },
+      _sum: { totalAmount: true, paidAmount: true },
+    }),
     // 🔒 FIX H3: Include standalone payments in the balance calculation.
-    // type='received' = customer paid us (reduces what they owe)
-    // type='paid' = we paid supplier (reduces what we owe them)
-    // 🔒 V15 M-3: Filter deletedAt: null so soft-deleted payments don't
-    // double-subtract from the balance (would make the customer look like
-    // they still owe money on a payment that was deleted).
+    // 🔒 V15 M-3: Filter deletedAt: null
     db.payment.aggregate({
       where: { userId, partyId, deletedAt: null },
       _sum: { amount: true },
@@ -94,7 +108,6 @@ export async function computePartyBalance(
   ])
 
   // Also get per-type payment totals
-  // 🔒 V15 M-3: Same deletedAt filter applied here.
   const [receivedAgg, paidAgg] = await Promise.all([
     db.payment.aggregate({
       where: { userId, partyId, type: 'received', deletedAt: null },
@@ -113,18 +126,34 @@ export async function computePartyBalance(
   const salesOutstanding = roundMoney(totalSales - totalReceived)
   const purchaseOutstanding = roundMoney(totalPurchases - totalPaid)
 
+  // V17-Ext Tier 3: Credit/debit note outstanding
+  const creditNoteOutstanding = roundMoney(
+    (creditNoteAgg._sum.totalAmount || 0) - (creditNoteAgg._sum.paidAmount || 0)
+  )
+  const debitNoteOutstanding = roundMoney(
+    (debitNoteAgg._sum.totalAmount || 0) - (debitNoteAgg._sum.paidAmount || 0)
+  )
+
   // 🔒 FIX H3: Payments reduce the outstanding balance
   const paymentsReceived = roundMoney(receivedAgg._sum.amount || 0)
   const paymentsPaid = roundMoney(paidAgg._sum.amount || 0)
 
   const balance = roundMoney(
-    party.openingBalance + salesOutstanding - purchaseOutstanding - paymentsReceived + paymentsPaid
+    party.openingBalance
+    + salesOutstanding
+    - purchaseOutstanding
+    - creditNoteOutstanding   // V17-Ext Tier 3: reduces receivable
+    + debitNoteOutstanding    // V17-Ext Tier 3: reduces payable
+    - paymentsReceived
+    + paymentsPaid
   )
 
   return {
     balance,
     salesOutstanding,
     purchaseOutstanding,
+    creditNoteOutstanding,
+    debitNoteOutstanding,
     totalSales,
     totalPurchases,
     totalReceived,
@@ -165,6 +194,8 @@ export async function getReceivablePayable(
     openingBalance: string
     salesOutstanding: string
     purchaseOutstanding: string
+    creditNoteOutstanding: string
+    debitNoteOutstanding: string
     paymentsReceived: string
     paymentsPaid: string
     transactionCount: bigint
@@ -174,6 +205,8 @@ export async function getReceivablePayable(
       p."openingBalance"::numeric AS "openingBalance",
       COALESCE(t."salesOutstanding", 0) AS "salesOutstanding",
       COALESCE(t."purchaseOutstanding", 0) AS "purchaseOutstanding",
+      COALESCE(t."creditNoteOutstanding", 0) AS "creditNoteOutstanding",
+      COALESCE(t."debitNoteOutstanding", 0) AS "debitNoteOutstanding",
       COALESCE(pay."paymentsReceived", 0) AS "paymentsReceived",
       COALESCE(pay."paymentsPaid", 0) AS "paymentsPaid",
       COALESCE(t."txnCount", 0) AS "transactionCount"
@@ -183,6 +216,8 @@ export async function getReceivablePayable(
         "partyId",
         SUM(CASE WHEN "type" = 'sale' THEN ("totalAmount" - "paidAmount")::numeric ELSE 0 END) AS "salesOutstanding",
         SUM(CASE WHEN "type" = 'purchase' THEN ("totalAmount" - "paidAmount")::numeric ELSE 0 END) AS "purchaseOutstanding",
+        SUM(CASE WHEN "type" = 'credit-note' THEN ("totalAmount" - "paidAmount")::numeric ELSE 0 END) AS "creditNoteOutstanding",
+        SUM(CASE WHEN "type" = 'debit-note' THEN ("totalAmount" - "paidAmount")::numeric ELSE 0 END) AS "debitNoteOutstanding",
         COUNT(*) AS "txnCount"
       FROM "Transaction"
       WHERE "userId" = ${userId}
@@ -196,7 +231,7 @@ export async function getReceivablePayable(
         SUM(CASE WHEN "type" = 'paid' THEN "amount"::numeric ELSE 0 END) AS "paymentsPaid"
       FROM "Payment"
       WHERE "userId" = ${userId}
-        AND "deletedAt" IS NULL   -- 🔒 V15 M-3: exclude soft-deleted payments
+        AND "deletedAt" IS NULL
       GROUP BY "partyId"
     ) pay ON pay."partyId" = p."id"
     WHERE p."userId" = ${userId}
@@ -225,10 +260,21 @@ export async function getReceivablePayable(
     const openingBalance = roundMoney(Number(row.openingBalance))
     const salesOutstanding = roundMoney(Number(row.salesOutstanding))
     const purchaseOutstanding = roundMoney(Number(row.purchaseOutstanding))
+    const creditNoteOutstanding = roundMoney(Number(row.creditNoteOutstanding))
+    const debitNoteOutstanding = roundMoney(Number(row.debitNoteOutstanding))
     // 🔒 FIX H3: Include payments in the balance
     const paymentsReceived = roundMoney(Number(row.paymentsReceived))
     const paymentsPaid = roundMoney(Number(row.paymentsPaid))
-    const balance = roundMoney(openingBalance + salesOutstanding - purchaseOutstanding - paymentsReceived + paymentsPaid)
+    // V17-Ext Tier 3: Credit notes reduce receivable, debit notes reduce payable
+    const balance = roundMoney(
+      openingBalance
+      + salesOutstanding
+      - purchaseOutstanding
+      - creditNoteOutstanding
+      + debitNoteOutstanding
+      - paymentsReceived
+      + paymentsPaid
+    )
 
     partyBalances.set(row.partyId, {
       balance,
