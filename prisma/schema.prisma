@@ -51,6 +51,7 @@ model User {
   settings         Setting[]
   auditLogs        AuditLog[]
   fieldChangeLogs  FieldChangeLog[]
+  gstReturns       GstReturn[]
   referralsMade    Referral[]       @relation("Referral_referrerIdToUser")
   referralReceived Referral?        @relation("Referral_referredIdToUser")
   subscriptions    Subscription[]
@@ -191,6 +192,11 @@ model Transaction {
   paidAmount      Float    @default(0) // amount actually paid
   paymentMode     String   @default("cash") // cash | upi | card | bank | credit
   isInterState    Boolean  @default(false)
+  // V17-Ext Tier 3: Reverse Charge Mechanism (RCM). When true on a purchase,
+  // the buyer (shopkeeper) pays GST directly to the government instead of the
+  // supplier charging it. Common for: GTA (transport), legal services,
+  // unregistered purchases. Affects GSTR-3B sections 3.1(d) + 4(b).
+  isReverseCharge Boolean  @default(false)
   notes           String?
   // For income/expense (no items)
   category        String? // e.g. rent, salary, electricity for expenses; commission etc for income
@@ -491,6 +497,63 @@ model FieldChangeLog {
 
   @@index([userId, entityType, entityId, createdAt])
   @@index([entityId, createdAt])
+}
+
+// ==================== GST RETURN (GSTR-3B MONTHLY SNAPSHOT) ====================
+// V17-Ext Tier 3: Stores a monthly GSTR-3B snapshot so the user can see
+// "what did I file for July?" without recomputing. One snapshot per user
+// per month (unique on userId + monthYear). Fields mirror the GSTR-3B form
+// sections: 3.1 (outward), 3.1(d) (RCM), 3.1(c) (nil/exempt/non-GST),
+// 3.2 (interstate B2C), 4 (ITC), 5 (exempt inward), 6.1 (net payable).
+model GstReturn {
+  id                          String   @id @default(cuid())
+  userId                      String
+  user                        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  monthYear                   String // "072026" (MMYYYY) — matches GSTR-1 fp format
+  periodStart                 DateTime // IST first day of month
+  periodEnd                   DateTime // IST last day of month
+  filingStatus                String   @default("draft") // draft | filed
+  filedAt                     DateTime?
+  filedByUserId               String? // who marked it as filed
+
+  // Section 3.1(a): Outward taxable supplies (regular sales)
+  outwardTaxableValue         Float    @default(0)
+  outwardCgst                 Float    @default(0)
+  outwardSgst                 Float    @default(0)
+  outwardIgst                 Float    @default(0)
+
+  // Section 3.1(d): RCM (reverse charge) outward liability
+  rcmTaxableValue             Float    @default(0)
+  rcmCgst                     Float    @default(0)
+  rcmSgst                     Float    @default(0)
+  rcmIgst                     Float    @default(0)
+
+  // Section 3.1(c): Nil-rated + exempt + non-GST outward
+  nilRatedValue               Float    @default(0)
+  exemptValue                 Float    @default(0)
+  nonGstValue                 Float    @default(0)
+
+  // Section 4(a): ITC (input tax credit) from purchases
+  itcTaxableValue             Float    @default(0)
+  itcCgst                     Float    @default(0)
+  itcSgst                     Float    @default(0)
+  itcIgst                     Float    @default(0)
+
+  // Section 5: Exempt inward supplies
+  exemptInwardValue           Float    @default(0)
+
+  // Section 3.2: Inter-state B2C supplies (unregistered, any amount)
+  interstateB2cTaxableValue   Float    @default(0)
+  interstateB2cIgst           Float    @default(0)
+
+  // Section 6.1: Net tax payable (output + RCM - ITC)
+  netTaxPayable               Float    @default(0)
+
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+
+  @@unique([userId, monthYear])
+  @@index([userId, periodStart])
 }
 
 // ==================== AI SCAN COMPARISONS ====================
