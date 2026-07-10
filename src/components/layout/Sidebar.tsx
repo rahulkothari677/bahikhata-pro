@@ -15,7 +15,7 @@ import { useStaffPermissions } from '@/hooks/use-staff-permissions'
 import { useShops } from '@/hooks/use-shops'
 import { prefetchView } from '@/lib/prefetch'  // 🔒 V11 §3.3
 import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
-import { Store, Plus, ChevronDown, Check } from 'lucide-react'
+import { Store, Plus, ChevronDown, Check, Calculator } from 'lucide-react'
 import {
   LayoutDashboard,
   Package,
@@ -63,7 +63,7 @@ export function Sidebar() {
   const { t } = useTranslation()
   const { data: session } = useSession()
   const isStaff = session?.user?.role === 'staff'
-  const { canAccess } = useStaffPermissions()
+  const { canAccess, isCA } = useStaffPermissions()
   const { isFlagEnabled } = useFeatureFlags()
   const { shops, activeShop, switchShop } = useShops()
   const [shopDropdownOpen, setShopDropdownOpen] = useState(false)
@@ -215,6 +215,8 @@ export function Sidebar() {
         <nav className={cn('flex-1 overflow-y-auto px-3 py-4 space-y-1', sidebarCollapsed && 'lg:px-2')}>
           {navItems.filter(item => {
             if (item.id === 'scanner' && !isFlagEnabled('ai_scanner')) return false
+            // V17-Ext Tier 3 Step 5: CAs cannot see Pricing (owner-only upgrade feature)
+            if (item.id === 'pricing' && isCA) return false
             // Gate by staff permissions — map ViewType to ModuleKey
             const moduleMap: Record<string, string> = {
               'dashboard': 'dashboard',
@@ -287,6 +289,26 @@ export function Sidebar() {
             )
           })}
         </nav>
+
+        {/* V17-Ext Tier 3 Step 5: CA Mode indicator — shows when a CA is logged in */}
+        {isCA && !sidebarCollapsed && (
+          <div className="px-3 py-2 border-t border-sidebar-border">
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-violet-500/10 border border-violet-500/20">
+              <Calculator className="w-4 h-4 text-violet-400 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold text-violet-300">CA Mode</p>
+                <p className="text-[10px] text-violet-400/70">Read-only access</p>
+              </div>
+            </div>
+          </div>
+        )}
+        {isCA && sidebarCollapsed && (
+          <div className="px-2 py-1 border-t border-sidebar-border flex justify-center">
+            <div className="w-8 h-8 rounded-lg bg-violet-500/10 border border-violet-500/20 flex items-center justify-center" title="CA Mode (Read-only)">
+              <Calculator className="w-4 h-4 text-violet-400" />
+            </div>
+          </div>
+        )}
 
         {/* Footer — Clean, organized sections */}
         {!sidebarCollapsed ? (

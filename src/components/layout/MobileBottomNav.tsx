@@ -18,7 +18,7 @@
  */
 
 import { useAppStore, type ViewType } from '@/store/app-store'
-import { LayoutDashboard, ShoppingCart, Package, Menu, Plus } from 'lucide-react'
+import { LayoutDashboard, ShoppingCart, Package, Menu, Plus, Calculator } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/hooks/use-translation'
 import { haptic } from '@/lib/haptic'
@@ -43,7 +43,7 @@ const TABS: Tab[] = [
 export function MobileBottomNav() {
   const { currentView, setView } = useAppStore()
   const { t } = useTranslation()
-  const { canAccess } = useStaffPermissions()
+  const { canAccess, isCA } = useStaffPermissions()
 
   // Don't show on auth screen or new entry/detail pages (those have their own back button)
   // The More screen KEEPS the bottom nav so users can switch tabs without going back
@@ -100,15 +100,28 @@ export function MobileBottomNav() {
             )
           })}
 
-          {/* Center: New Sale button (elevated) */}
+          {/* Center: New Sale button (elevated) — hidden for CAs (read-only) */}
           <div className="flex-1 flex justify-center">
-            <button
-              onClick={() => { haptic.medium(); setView('new-sale') }}
-              className="w-12 h-12 -mt-6 rounded-full bg-gradient-saffron text-white flex items-center justify-center shadow-lg shadow-primary/30 active:scale-95 transition-transform"
-              aria-label="New Sale"
-            >
-              <Plus className="w-6 h-6" strokeWidth={2.5} />
-            </button>
+            {isCA ? (
+              // V17-Ext Tier 3 Step 5: CA Mode badge replaces the New Sale button
+              <div
+                className="flex flex-col items-center justify-center gap-0.5"
+                title="CA Mode — Read-only access"
+              >
+                <div className="w-12 h-12 -mt-6 rounded-full bg-violet-600 text-white flex items-center justify-center shadow-lg shadow-violet-600/30">
+                  <Calculator className="w-6 h-6" strokeWidth={2.5} />
+                </div>
+                <span className="text-[10px] font-medium text-violet-600 dark:text-violet-400">CA Mode</span>
+              </div>
+            ) : (
+              <button
+                onClick={() => { haptic.medium(); setView('new-sale') }}
+                className="w-12 h-12 -mt-6 rounded-full bg-gradient-saffron text-white flex items-center justify-center shadow-lg shadow-primary/30 active:scale-95 transition-transform"
+                aria-label="New Sale"
+              >
+                <Plus className="w-6 h-6" strokeWidth={2.5} />
+              </button>
+            )}
           </div>
 
           {/* Right side: Inventory + More */}

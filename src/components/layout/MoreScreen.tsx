@@ -32,7 +32,7 @@ import {
   ChevronRight, Pencil, BarChart3, Truck, Wallet, Users,
   ScanLine, Sparkles, Settings as SettingsIcon, UserCog,
   Crown, HelpCircle, Phone, Info, Star, LogOut, ArrowLeft,
-  FileSpreadsheet, Bell,
+  FileSpreadsheet, Bell, Calculator,
 } from 'lucide-react'
 import type { ViewType } from '@/store/app-store'
 import type { LucideIcon } from 'lucide-react'
@@ -78,7 +78,7 @@ const SECTIONS: MenuSection[] = [
 export function MoreScreen() {
   const { setView, previousView, setPreviousView } = useAppStore()
   const { data: session } = useSession()
-  const { canAccess } = useStaffPermissions()
+  const { canAccess, isCA } = useStaffPermissions()
   const { confirmDialog, dialog: confirmDialogEl } = useConfirmDialog()
 
   // Fetch settings for profile header
@@ -145,11 +145,16 @@ export function MoreScreen() {
         style={{ paddingBottom: 'calc(6rem + env(safe-area-inset-bottom))' }}
       >
         {/* Profile Header — premium gradient banner */}
+        {/* V17-Ext Tier 3 Step 5: CAs get a violet gradient + CA Mode badge */}
         <button
-          onClick={handleEditProfile}
-          className="w-full rounded-2xl shadow-card relative overflow-hidden text-white active:scale-[0.98] transition"
+          onClick={isCA ? undefined : handleEditProfile}
+          disabled={isCA}
+          className={cn(
+            "w-full rounded-2xl shadow-card relative overflow-hidden text-white transition",
+            isCA ? "cursor-default" : "active:scale-[0.98]"
+          )}
         >
-          <div className="bg-gradient-saffron p-5 relative">
+          <div className={cn("p-5 relative", isCA ? "bg-gradient-to-br from-violet-600 to-purple-700" : "bg-gradient-saffron")}>
             {/* Decorative circles */}
             <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 pointer-events-none" />
             <div className="absolute bottom-0 right-20 w-24 h-24 bg-white/5 rounded-full -mb-12 pointer-events-none" />
@@ -160,12 +165,22 @@ export function MoreScreen() {
                 </AvatarFallback>
               </Avatar>
               <div className="flex-1 min-w-0">
-                <p className="font-bold text-lg font-heading tracking-tight truncate">{userName}</p>
+                <div className="flex items-center gap-2">
+                  <p className="font-bold text-lg font-heading tracking-tight truncate">{userName}</p>
+                  {isCA && (
+                    <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-white/25 text-white whitespace-nowrap flex items-center gap-1">
+                      <Calculator className="w-2.5 h-2.5" /> CA
+                    </span>
+                  )}
+                </div>
                 <p className="text-sm text-white/80 truncate">{shopName}</p>
                 {email && <p className="text-xs text-white/70 truncate">{email}</p>}
+                {isCA && (
+                  <p className="text-[11px] text-white/60 truncate mt-0.5">Read-only access — ask the owner to make changes</p>
+                )}
               </div>
               <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
-                <Pencil className="w-4 h-4" />
+                {isCA ? <Calculator className="w-4 h-4" /> : <Pencil className="w-4 h-4" />}
               </div>
             </div>
           </div>
