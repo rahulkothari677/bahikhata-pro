@@ -5,6 +5,7 @@ import { canAccessModule } from '@/lib/staff-permissions'
 import { roundMoney } from '@/lib/money'
 import { istMonthStartOffset, getISTDateParts } from '@/lib/timezone'
 import { apiError } from '@/lib/api-error'
+import { logAudit } from '@/lib/audit'
 
 /**
  * GET /api/gstr-3b?month=2026-07
@@ -339,5 +340,227 @@ export async function GET(req: NextRequest) {
     })
   } catch (err) {
     return apiError(err, 'Failed to compute GSTR-3B', 500)
+  }
+}
+
+/**
+ * POST /api/gstr-3b
+ *
+ * Saves a GSTR-3B snapshot for a given month. The server RE-COMPUTES all
+ * values (never trusts client-sent financial data) and upserts them to
+ * the GstReturn table.
+ *
+ * Request body: { month: "2026-07", action: "save" | "file" }
+ *   - "save": creates/updates a draft snapshot
+ *   - "file": marks the snapshot as "filed" (sets filedAt + filedByUserId)
+ *
+ * If a snapshot is already "filed", it CANNOT be overwritten (filed returns
+ * are immutable — you'd need to file a revised return on the portal).
+ *
+ * Auth: requires 'reports' permission (same as viewing GST reports).
+ */
+export async function POST(req: NextRequest) {
+  try {
+    const authCtx = await getAuthContext()
+    if (authCtx.error || !authCtx.userId) return authCtx.error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const userId = authCtx.userId
+
+    if (!canAccessModule(authCtx.role, authCtx.permissions, 'reports')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    const body = await req.json()
+    const { month: monthParam, action } = body
+
+    if (!monthParam || typeof monthParam !== 'string') {
+      return NextResponse.json({ error: 'month is required (format: YYYY-MM, e.g. 2026-07)' }, { status: 400 })
+    }
+
+    if (action !== 'save' && action !== 'file') {
+      return NextResponse.json({ error: 'action must be "save" or "file"' }, { status: 400 })
+    }
+
+    // Parse the month (same validation as GET)
+    const [year, month] = monthParam.split('-').map(Number)
+    if (!year || !month || month < 1 || month > 12) {
+      return NextResponse.json({ error: 'Invalid month format. Use YYYY-MM (e.g. 2026-07).' }, { status: 400 })
+    }
+
+    const monthDate = new Date(Date.UTC(year, month - 1, 15))
+    const periodStart = istMonthStartOffset(monthDate, 0)
+    const periodEnd = istMonthStartOffset(monthDate, 1)
+    const istParts = getISTDateParts(periodStart)
+    const monthYear = String(istParts.month + 1).padStart(2, '0') + String(istParts.year)
+
+    // Check if a snapshot already exists
+    const existing = await db.gstReturn.findUnique({
+      where: { userId_monthYear: { userId, monthYear } },
+    })
+
+    // If already filed, block the update (filed returns are immutable)
+    if (existing?.filingStatus === 'filed') {
+      return NextResponse.json({
+        error: 'This month is already filed',
+        message: 'Filed GSTR-3B returns cannot be modified. To correct an error, file a revised return on the GST portal.',
+        monthYear,
+      }, { status: 409 })
+    }
+
+    // === Re-compute all 3B values (same queries as GET — DRY) ===
+    // This is critical: we NEVER trust client-sent financial data for a
+    // snapshot. The server always recomputes from the source of truth.
+    const [
+      outwardSalesAgg, rcmOutwardAgg, nilRatedAgg, nonGstAgg,
+      interstateB2cAgg, itcPurchasesAgg, rcmItcAgg, exemptInwardAgg,
+    ] = await Promise.all([
+      db.transaction.aggregate({
+        where: { userId, type: 'sale', deletedAt: null, isReverseCharge: false, date: { gte: periodStart, lt: periodEnd } },
+        _sum: { subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true },
+        _count: true,
+      }),
+      db.transaction.aggregate({
+        where: { userId, type: 'sale', deletedAt: null, isReverseCharge: true, date: { gte: periodStart, lt: periodEnd } },
+        _sum: { subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true },
+        _count: true,
+      }),
+      db.$queryRaw<Array<{ totalValue: string }>>`
+        SELECT COALESCE(SUM(t."totalAmount"::numeric), 0)::text AS "totalValue"
+        FROM "Transaction" t
+        WHERE t."userId" = ${userId}
+          AND t."deletedAt" IS NULL AND t."type" = 'sale' AND t."isReverseCharge" = false
+          AND t."date" >= ${periodStart} AND t."date" < ${periodEnd}
+          AND NOT EXISTS (SELECT 1 FROM "TransactionItem" ti WHERE ti."transactionId" = t.id AND ti."gstRate" > 0)
+      `,
+      db.transaction.aggregate({
+        where: { userId, type: 'income', deletedAt: null, date: { gte: periodStart, lt: periodEnd } },
+        _sum: { totalAmount: true }, _count: true,
+      }),
+      db.$queryRaw<Array<{ taxableValue: string; igst: string }>>`
+        SELECT
+          COALESCE(SUM(t."subtotal"::numeric - COALESCE(t."discountAmount", 0)::numeric), 0)::text AS "taxableValue",
+          COALESCE(SUM(t."igst"::numeric), 0)::text AS "igst"
+        FROM "Transaction" t
+        LEFT JOIN "Party" p ON t."partyId" = p.id
+        WHERE t."userId" = ${userId} AND t."deletedAt" IS NULL AND t."type" = 'sale'
+          AND t."isInterState" = true AND t."isReverseCharge" = false
+          AND t."date" >= ${periodStart} AND t."date" < ${periodEnd}
+          AND (p."gstin" IS NULL OR p."gstin" = '')
+      `,
+      db.transaction.aggregate({
+        where: { userId, type: 'purchase', deletedAt: null, isReverseCharge: false, date: { gte: periodStart, lt: periodEnd } },
+        _sum: { subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true },
+        _count: true,
+      }),
+      db.transaction.aggregate({
+        where: { userId, type: 'purchase', deletedAt: null, isReverseCharge: true, date: { gte: periodStart, lt: periodEnd } },
+        _sum: { subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true },
+        _count: true,
+      }),
+      db.$queryRaw<Array<{ totalValue: string }>>`
+        SELECT COALESCE(SUM(t."totalAmount"::numeric), 0)::text AS "totalValue"
+        FROM "Transaction" t
+        WHERE t."userId" = ${userId}
+          AND t."deletedAt" IS NULL AND t."type" = 'purchase'
+          AND t."date" >= ${periodStart} AND t."date" < ${periodEnd}
+          AND NOT EXISTS (SELECT 1 FROM "TransactionItem" ti WHERE ti."transactionId" = t.id AND ti."gstRate" > 0)
+      `,
+    ])
+
+    // Compute all values (same as GET)
+    const outwardTaxableValue = roundMoney((outwardSalesAgg._sum.subtotal || 0) - (outwardSalesAgg._sum.discountAmount || 0))
+    const outwardCgst = roundMoney(outwardSalesAgg._sum.cgst || 0)
+    const outwardSgst = roundMoney(outwardSalesAgg._sum.sgst || 0)
+    const outwardIgst = roundMoney(outwardSalesAgg._sum.igst || 0)
+    const nilRatedValue = roundMoney(Number(nilRatedAgg[0]?.totalValue || 0))
+    const nonGstValue = roundMoney(nonGstAgg._sum.totalAmount || 0)
+    const rcmTaxableValue = roundMoney((rcmOutwardAgg._sum.subtotal || 0) - (rcmOutwardAgg._sum.discountAmount || 0))
+    const rcmCgst = roundMoney(rcmOutwardAgg._sum.cgst || 0)
+    const rcmSgst = roundMoney(rcmOutwardAgg._sum.sgst || 0)
+    const rcmIgst = roundMoney(rcmOutwardAgg._sum.igst || 0)
+    const interstateB2cTaxableValue = roundMoney(Number(interstateB2cAgg[0]?.taxableValue || 0))
+    const interstateB2cIgst = roundMoney(Number(interstateB2cAgg[0]?.igst || 0))
+    const itcTaxableValue = roundMoney((itcPurchasesAgg._sum.subtotal || 0) - (itcPurchasesAgg._sum.discountAmount || 0))
+    const itcCgst = roundMoney(itcPurchasesAgg._sum.cgst || 0)
+    const itcSgst = roundMoney(itcPurchasesAgg._sum.sgst || 0)
+    const itcIgst = roundMoney(itcPurchasesAgg._sum.igst || 0)
+    const rcmItcTaxableValue = roundMoney((rcmItcAgg._sum.subtotal || 0) - (rcmItcAgg._sum.discountAmount || 0))
+    const rcmItcCgst = roundMoney(rcmItcAgg._sum.cgst || 0)
+    const rcmItcSgst = roundMoney(rcmItcAgg._sum.sgst || 0)
+    const rcmItcIgst = roundMoney(rcmItcAgg._sum.igst || 0)
+    const exemptInwardValue = roundMoney(Number(exemptInwardAgg[0]?.totalValue || 0))
+    const totalOutputTax = roundMoney(outwardCgst + outwardSgst + outwardIgst)
+    const totalRcmOutward = roundMoney(rcmCgst + rcmSgst + rcmIgst)
+    const totalItc = roundMoney(itcCgst + itcSgst + itcIgst)
+    const totalRcmItc = roundMoney(rcmItcCgst + rcmItcSgst + rcmItcIgst)
+    const netTaxPayable = roundMoney(totalOutputTax + totalRcmOutward - totalItc - totalRcmItc)
+
+    // === Upsert the snapshot ===
+    const filingStatus = action === 'file' ? 'filed' : 'draft'
+    const filedAt = action === 'file' ? new Date() : null
+    const filedByUserId = action === 'file' ? (authCtx.actingUserId || userId) : null
+
+    const snapshot = await db.gstReturn.upsert({
+      where: { userId_monthYear: { userId, monthYear } },
+      update: {
+        filingStatus,
+        filedAt,
+        filedByUserId,
+        outwardTaxableValue, outwardCgst, outwardSgst, outwardIgst,
+        rcmTaxableValue, rcmCgst, rcmSgst, rcmIgst,
+        nilRatedValue, exemptValue: 0, nonGstValue,
+        itcTaxableValue, itcCgst, itcSgst, itcIgst,
+        exemptInwardValue,
+        interstateB2cTaxableValue, interstateB2cIgst,
+        netTaxPayable,
+      },
+      create: {
+        userId,
+        monthYear,
+        periodStart,
+        periodEnd,
+        filingStatus,
+        filedAt,
+        filedByUserId,
+        outwardTaxableValue, outwardCgst, outwardSgst, outwardIgst,
+        rcmTaxableValue, rcmCgst, rcmSgst, rcmIgst,
+        nilRatedValue, exemptValue: 0, nonGstValue,
+        itcTaxableValue, itcCgst, itcSgst, itcIgst,
+        exemptInwardValue,
+        interstateB2cTaxableValue, interstateB2cIgst,
+        netTaxPayable,
+      },
+    })
+
+    // 🔒 Audit log — record the save/file action
+    await logAudit({
+      userId,
+      action: action === 'file' ? 'gstr3b.filed' : 'gstr3b.saved',
+      entityType: 'gstReturn',
+      entityId: snapshot.id,
+      req,
+      metadata: {
+        monthYear,
+        filingStatus,
+        netTaxPayable,
+        outwardTaxableValue,
+        itcTaxableValue,
+      },
+    })
+
+    return NextResponse.json({
+      success: true,
+      snapshot: {
+        id: snapshot.id,
+        monthYear: snapshot.monthYear,
+        filingStatus: snapshot.filingStatus,
+        filedAt: snapshot.filedAt,
+        netTaxPayable: snapshot.netTaxPayable,
+      },
+      message: action === 'file'
+        ? `GSTR-3B for ${monthParam} marked as Filed. Net tax payable: Rs. ${netTaxPayable.toFixed(2)}`
+        : `GSTR-3B for ${monthParam} saved as Draft.`,
+    })
+  } catch (err) {
+    return apiError(err, 'Failed to save GSTR-3B', 500)
   }
 }
