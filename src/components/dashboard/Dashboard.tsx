@@ -1088,7 +1088,7 @@ export function Dashboard() {
       {kpis && <SmartInsights />}
 
       {/* V17-Ext 5.5: Business Analytics — best-sellers, dead stock, top customers, reorder */}
-      <AnalyticsInsights />
+      {features?.businessAnalytics && <AnalyticsInsights />}
 
       {/* 🔒 V17-Ext §5.4: Day-end "Close the Drawer" dialog */}
       <DayEndSummary open={showDayEnd} onOpenChange={setShowDayEnd} />

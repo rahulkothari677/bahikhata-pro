@@ -61,6 +61,7 @@ export type FeatureKey =
   | 'announcementBanners'
   | 'repeatLastSale'
   | 'quickActions'
+  | 'businessAnalytics'
 
 export type FeatureFlags = Record<FeatureKey, boolean>
 
@@ -89,6 +90,7 @@ const DEFAULT_FEATURES: FeatureFlags = {
   announcementBanners: true,
   repeatLastSale: true,
   quickActions: true,
+  businessAnalytics: true,
 }
 
 interface AppState {
