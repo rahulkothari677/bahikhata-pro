@@ -2066,3 +2066,64 @@ Stage Summary:
 - CAs appear with a "Read-only" badge and have no expandable permissions matrix — visually communicating that their access is fixed.
 - The info box on the CA card transparently lists what CAs can and cannot do, so the owner understands the access level before creating an account.
 - Step 4 is complete. Step 5 (sidebar + navigation gating) remains: the sidebar needs to hide modules CAs can't access (inventory, scanner, settings) when a CA is logged in, and show a "CA Mode" indicator.
+
+---
+Task ID: bahikhata-tier3-ca-login-step5
+Agent: main
+Task: Tier 3 Feature 4 (CA/Accountant Login) — Step 5: Sidebar + navigation gating + CA Mode indicators (FINAL STEP)
+
+Work Log:
+- Read Sidebar.tsx (346 LOC), MobileBottomNav.tsx (151 LOC), MoreScreen.tsx (324 LOC), and page.tsx (369 LOC) to map the full navigation surface area.
+- KEY FINDING: The infrastructure from Step 1 was already doing most of the work. useStaffPermissions returns { isCA, canAccess }, and all 3 nav components already filter items via canAccess. The specific gaps were:
+  1. Sidebar: 'pricing' nav item was special-cased to always show (line 229) — CAs shouldn't see it.
+  2. MobileBottomNav: center '+' New Sale button was ALWAYS shown (line 106) — CAs can't create sales.
+  3. No CA Mode indicator anywhere — CAs had no visual feedback that they were in read-only mode.
+  4. MoreScreen profile header used saffron gradient + pencil edit button — CAs can't edit profile.
+- Sidebar.tsx changes:
+  * Added Calculator icon import (for CA Mode indicator)
+  * Added isCA to the useStaffPermissions destructure
+  * Added filter: `if (item.id === 'pricing' && isCA) return false` — hides Pricing for CAs
+  * Added CA Mode indicator badge between nav and footer:
+    - Expanded mode: violet-tinted card with Calculator icon + "CA Mode" + "Read-only access" text
+    - Collapsed mode: small violet-tinted square with Calculator icon + title="CA Mode (Read-only)"
+  * The existing canAccess filter already hides inventory, scanner, settings for CAs — no change needed there.
+- MobileBottomNav.tsx changes:
+  * Added Calculator icon import
+  * Added isCA to the useStaffPermissions destructure
+  * Replaced the center '+' New Sale button with a conditional:
+    - For CAs: a static violet "CA Mode" badge (Calculator icon, no onClick) with "CA Mode" text below
+    - For owner/staff: the original saffron '+' New Sale button (unchanged)
+  * The existing canAccess filter already hides the inventory tab for CAs — no change needed.
+- MoreScreen.tsx changes:
+  * Added Calculator icon import
+  * Added isCA to the useStaffPermissions destructure
+  * Modified the profile header for CAs:
+    - Gradient changes from saffron to violet (bg-gradient-to-br from-violet-600 to-purple-700)
+    - "CA" badge added next to the user name (Calculator icon + "CA" text, white-on-violet)
+    - Subtitle "Read-only access — ask the owner to make changes" added below email
+    - Pencil icon replaced with Calculator icon (CAs can't edit profile)
+    - Button onClick set to undefined + disabled={isCA} (CAs can't access Settings)
+    - active:scale-[0.98] transition removed for CAs (no click action)
+  * The existing canAccess filter already hides scanner + settings items for CAs — no change needed.
+- page.tsx — NO CHANGES NEEDED:
+  * The redirect effect (lines 103-124) already redirects CAs away from blocked modules using canAccess. If a CA somehow navigates to inventory/scanner/settings, they're redirected to their first allowed view.
+  * The module rendering (lines 313-341) already works because the redirect fires before the component mounts.
+- Verified:
+  * npx tsc --noEmit: 0 NEW errors (5 pre-existing in validation.test.ts — unrelated)
+  * npx next build: ✓ Compiled successfully, all 39 API routes + 6 pages compile
+  * npx jest staff-permissions + ca-write-block + soft-delete-sweep: 54/54 pass (no regressions)
+- Committed (1ddb63a) + pushed to GitHub
+
+Stage Summary:
+- Files changed: 3 (Sidebar.tsx, MobileBottomNav.tsx, MoreScreen.tsx)
+- The CA navigation experience is now complete and intuitive:
+  * Sidebar: Dashboard, Sales, Purchases, Income & Expense, Parties, Reports + violet "CA Mode" badge. NO inventory, scanner, settings, or pricing.
+  * Mobile: Dashboard + Sales tabs + violet "CA Mode" center badge + More button. NO inventory tab, NO '+' New Sale button.
+  * More screen: violet profile header with "CA" badge + "Read-only access" subtitle, then 4 business items (Reports, Purchases, Income & Expense, Customers & Suppliers). NO scanner, NO settings, NO staff management.
+- CAs get immediate visual feedback that they're in read-only mode via the consistent violet CA Mode indicators across all 3 navigation surfaces.
+- This completes Tier 3 Feature 4 (CA/Accountant Login) — all 5 steps done:
+  Step 1: canAccessModule + assertCanWrite helper + isCA flag
+  Step 2: CA creation API (extend /api/staff)
+  Step 3: Wire assertCanWrite into all write routes (13 routes)
+  Step 4: Settings UI — CA Access card
+  Step 5: Sidebar + navigation gating + CA Mode indicators
