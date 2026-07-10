@@ -78,6 +78,8 @@ export async function GET(req: NextRequest) {
       outwardSalesAgg,
       // === Section 3.1(d): RCM outward (sales with isReverseCharge = true) ===
       rcmOutwardAgg,
+      // V17-Ext Tier 3: Credit notes (reduce output tax — seller issued credit to customer)
+      creditNoteAgg,
       // === Section 3.1(c): Nil-rated, exempt, non-GST outward ===
       // Nil-rated = sales with all items at 0% GST (GST-rate is 0 but supply IS taxable)
       // Non-GST = income transactions (not subject to GST at all)
@@ -91,6 +93,8 @@ export async function GET(req: NextRequest) {
       itcPurchasesAgg,
       // === Section 4(b): ITC from RCM purchases ===
       rcmItcAgg,
+      // V17-Ext Tier 3: Debit notes (reduce ITC — supplier issued debit to us)
+      debitNoteAgg,
       // === Section 5: Exempt inward (0% GST purchases) ===
       exemptInwardAgg,
       // === Existing snapshot (if any) ===
@@ -118,6 +122,18 @@ export async function GET(req: NextRequest) {
           type: 'sale',
           deletedAt: null,
           isReverseCharge: true,
+          date: { gte: periodStart, lt: periodEnd },
+        },
+        _sum: { subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true },
+        _count: true,
+      }),
+
+      // V17-Ext Tier 3: Credit notes (reduce output tax)
+      db.transaction.aggregate({
+        where: {
+          userId,
+          type: 'credit-note',
+          deletedAt: null,
           date: { gte: periodStart, lt: periodEnd },
         },
         _sum: { subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true },
@@ -198,6 +214,18 @@ export async function GET(req: NextRequest) {
         _count: true,
       }),
 
+      // V17-Ext Tier 3: Debit notes (reduce ITC)
+      db.transaction.aggregate({
+        where: {
+          userId,
+          type: 'debit-note',
+          deletedAt: null,
+          date: { gte: periodStart, lt: periodEnd },
+        },
+        _sum: { subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true },
+        _count: true,
+      }),
+
       // 5: Exempt inward (0% GST purchases)
       // Same pattern as nil-rated sales — purchases where ALL items have gstRate = 0
       db.$queryRaw<Array<{ totalValue: string }>>`
@@ -248,6 +276,14 @@ export async function GET(req: NextRequest) {
     const rcmSgst = roundMoney(rcmOutwardAgg._sum.sgst || 0)
     const rcmIgst = roundMoney(rcmOutwardAgg._sum.igst || 0)
 
+    // V17-Ext Tier 3: Credit notes reduce output tax
+    const creditNoteTaxableValue = roundMoney(
+      (creditNoteAgg._sum.subtotal || 0) - (creditNoteAgg._sum.discountAmount || 0)
+    )
+    const creditNoteCgst = roundMoney(creditNoteAgg._sum.cgst || 0)
+    const creditNoteSgst = roundMoney(creditNoteAgg._sum.sgst || 0)
+    const creditNoteIgst = roundMoney(creditNoteAgg._sum.igst || 0)
+
     // 3.2: Inter-state B2C
     const interstateB2cTaxableValue = roundMoney(Number(interstateB2cAgg[0]?.taxableValue || 0))
     const interstateB2cIgst = roundMoney(Number(interstateB2cAgg[0]?.igst || 0))
@@ -268,6 +304,14 @@ export async function GET(req: NextRequest) {
     const rcmItcSgst = roundMoney(rcmItcAgg._sum.sgst || 0)
     const rcmItcIgst = roundMoney(rcmItcAgg._sum.igst || 0)
 
+    // V17-Ext Tier 3: Debit notes reduce ITC
+    const debitNoteTaxableValue = roundMoney(
+      (debitNoteAgg._sum.subtotal || 0) - (debitNoteAgg._sum.discountAmount || 0)
+    )
+    const debitNoteCgst = roundMoney(debitNoteAgg._sum.cgst || 0)
+    const debitNoteSgst = roundMoney(debitNoteAgg._sum.sgst || 0)
+    const debitNoteIgst = roundMoney(debitNoteAgg._sum.igst || 0)
+
     // 4(c): ITC from imports — ₹0 (not applicable)
     // 4(d): ITC from SEZ — ₹0 (not applicable)
 
@@ -277,13 +321,20 @@ export async function GET(req: NextRequest) {
     // 6.1: Net tax payable
     // = (output CGST + output SGST + output IGST)
     // + (RCM outward CGST + RCM outward SGST + RCM outward IGST)
+    // - (credit note CGST + credit note SGST + credit note IGST)  // V17-Ext Tier 3
     // - (ITC CGST + ITC SGST + ITC IGST)
     // - (RCM ITC CGST + RCM ITC SGST + RCM ITC IGST)
+    // + (debit note CGST + debit note SGST + debit note IGST)    // V17-Ext Tier 3
     const totalOutputTax = roundMoney(outwardCgst + outwardSgst + outwardIgst)
     const totalRcmOutward = roundMoney(rcmCgst + rcmSgst + rcmIgst)
+    const totalCreditNoteTax = roundMoney(creditNoteCgst + creditNoteSgst + creditNoteIgst) // V17-Ext Tier 3
     const totalItc = roundMoney(itcCgst + itcSgst + itcIgst)
     const totalRcmItc = roundMoney(rcmItcCgst + rcmItcSgst + rcmItcIgst)
-    const netTaxPayable = roundMoney(totalOutputTax + totalRcmOutward - totalItc - totalRcmItc)
+    const totalDebitNoteTax = roundMoney(debitNoteCgst + debitNoteSgst + debitNoteIgst) // V17-Ext Tier 3
+    const netTaxPayable = roundMoney(
+      totalOutputTax + totalRcmOutward - totalCreditNoteTax
+      - totalItc - totalRcmItc + totalDebitNoteTax
+    )
 
     return NextResponse.json({
       period: {
@@ -324,12 +375,16 @@ export async function GET(req: NextRequest) {
       netTaxPayable,
       totalOutputTax,
       totalRcmOutward,
+      totalCreditNoteTax, // V17-Ext Tier 3
       totalItc,
       totalRcmItc,
+      totalDebitNoteTax, // V17-Ext Tier 3
       // Counts
       totalSaleInvoices: outwardSalesAgg._count,
       totalPurchaseBills: itcPurchasesAgg._count,
       totalRcmPurchases: rcmItcAgg._count,
+      totalCreditNotes: creditNoteAgg._count,
+      totalDebitNotes: debitNoteAgg._count,
       // Existing snapshot
       snapshot: existingSnapshot ? {
         id: existingSnapshot.id,
@@ -410,8 +465,8 @@ export async function POST(req: NextRequest) {
     // This is critical: we NEVER trust client-sent financial data for a
     // snapshot. The server always recomputes from the source of truth.
     const [
-      outwardSalesAgg, rcmOutwardAgg, nilRatedAgg, nonGstAgg,
-      interstateB2cAgg, itcPurchasesAgg, rcmItcAgg, exemptInwardAgg,
+      outwardSalesAgg, rcmOutwardAgg, creditNoteAgg, nilRatedAgg, nonGstAgg,
+      interstateB2cAgg, itcPurchasesAgg, rcmItcAgg, debitNoteAgg, exemptInwardAgg,
     ] = await Promise.all([
       db.transaction.aggregate({
         where: { userId, type: 'sale', deletedAt: null, isReverseCharge: false, date: { gte: periodStart, lt: periodEnd } },
@@ -420,6 +475,11 @@ export async function POST(req: NextRequest) {
       }),
       db.transaction.aggregate({
         where: { userId, type: 'sale', deletedAt: null, isReverseCharge: true, date: { gte: periodStart, lt: periodEnd } },
+        _sum: { subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true },
+        _count: true,
+      }),
+      db.transaction.aggregate({
+        where: { userId, type: 'credit-note', deletedAt: null, date: { gte: periodStart, lt: periodEnd } },
         _sum: { subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true },
         _count: true,
       }),
@@ -456,6 +516,11 @@ export async function POST(req: NextRequest) {
         _sum: { subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true },
         _count: true,
       }),
+      db.transaction.aggregate({
+        where: { userId, type: 'debit-note', deletedAt: null, date: { gte: periodStart, lt: periodEnd } },
+        _sum: { subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true },
+        _count: true,
+      }),
       db.$queryRaw<Array<{ totalValue: string }>>`
         SELECT COALESCE(SUM(t."totalAmount"::numeric), 0)::text AS "totalValue"
         FROM "Transaction" t
@@ -477,6 +542,11 @@ export async function POST(req: NextRequest) {
     const rcmCgst = roundMoney(rcmOutwardAgg._sum.cgst || 0)
     const rcmSgst = roundMoney(rcmOutwardAgg._sum.sgst || 0)
     const rcmIgst = roundMoney(rcmOutwardAgg._sum.igst || 0)
+    // V17-Ext Tier 3: Credit/debit notes
+    const creditNoteTaxableValue = roundMoney((creditNoteAgg._sum.subtotal || 0) - (creditNoteAgg._sum.discountAmount || 0))
+    const creditNoteCgst = roundMoney(creditNoteAgg._sum.cgst || 0)
+    const creditNoteSgst = roundMoney(creditNoteAgg._sum.sgst || 0)
+    const creditNoteIgst = roundMoney(creditNoteAgg._sum.igst || 0)
     const interstateB2cTaxableValue = roundMoney(Number(interstateB2cAgg[0]?.taxableValue || 0))
     const interstateB2cIgst = roundMoney(Number(interstateB2cAgg[0]?.igst || 0))
     const itcTaxableValue = roundMoney((itcPurchasesAgg._sum.subtotal || 0) - (itcPurchasesAgg._sum.discountAmount || 0))
@@ -487,12 +557,22 @@ export async function POST(req: NextRequest) {
     const rcmItcCgst = roundMoney(rcmItcAgg._sum.cgst || 0)
     const rcmItcSgst = roundMoney(rcmItcAgg._sum.sgst || 0)
     const rcmItcIgst = roundMoney(rcmItcAgg._sum.igst || 0)
+    // V17-Ext Tier 3: Debit notes
+    const debitNoteTaxableValue = roundMoney((debitNoteAgg._sum.subtotal || 0) - (debitNoteAgg._sum.discountAmount || 0))
+    const debitNoteCgst = roundMoney(debitNoteAgg._sum.cgst || 0)
+    const debitNoteSgst = roundMoney(debitNoteAgg._sum.sgst || 0)
+    const debitNoteIgst = roundMoney(debitNoteAgg._sum.igst || 0)
     const exemptInwardValue = roundMoney(Number(exemptInwardAgg[0]?.totalValue || 0))
     const totalOutputTax = roundMoney(outwardCgst + outwardSgst + outwardIgst)
     const totalRcmOutward = roundMoney(rcmCgst + rcmSgst + rcmIgst)
+    const totalCreditNoteTax = roundMoney(creditNoteCgst + creditNoteSgst + creditNoteIgst)
     const totalItc = roundMoney(itcCgst + itcSgst + itcIgst)
     const totalRcmItc = roundMoney(rcmItcCgst + rcmItcSgst + rcmItcIgst)
-    const netTaxPayable = roundMoney(totalOutputTax + totalRcmOutward - totalItc - totalRcmItc)
+    const totalDebitNoteTax = roundMoney(debitNoteCgst + debitNoteSgst + debitNoteIgst)
+    const netTaxPayable = roundMoney(
+      totalOutputTax + totalRcmOutward - totalCreditNoteTax
+      - totalItc - totalRcmItc + totalDebitNoteTax
+    )
 
     // === Upsert the snapshot ===
     const filingStatus = action === 'file' ? 'filed' : 'draft'
