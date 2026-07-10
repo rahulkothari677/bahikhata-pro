@@ -20,7 +20,7 @@ import {
   FileBarChart, TrendingUp, Receipt, Package, Users, Calendar,
   ArrowDownRight, ArrowUpRight, IndianRupee, Percent, FileText,
   FileSpreadsheet, Loader2, Download, Printer, Clock, AlertTriangle, Info,
-  AlertCircle, Coffee,
+  AlertCircle, Coffee, FileCheck,
 } from 'lucide-react'
 import { toast as sonnerToast } from 'sonner'
 import { offlineFetch } from '@/lib/offline-fetch'
@@ -29,13 +29,14 @@ import { exportToTally } from '@/lib/tally-export'
 import { DebtAgingReport } from '@/components/reports/DebtAgingReport'
 import { InventoryAgingReport } from '@/components/reports/InventoryAgingReport'
 import { Gstr3bReport } from '@/components/reports/Gstr3bReport'
+import { Gstr2bReconciliation } from '@/components/reports/Gstr2bReconciliation'
 
 const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)', 'oklch(0.7 0.16 250)']
 
 export function Reports() {
   const { t } = useTranslation()
   const { features } = useAppStore()
-  const [reportType, setReportType] = useState<'pl' | 'gst' | 'stock' | 'party' | 'debt-aging' | 'inventory-aging' | 'gstr-3b'>('pl')
+  const [reportType, setReportType] = useState<'pl' | 'gst' | 'stock' | 'party' | 'debt-aging' | 'inventory-aging' | 'gstr-3b' | 'gstr-2b'>('pl')
   const [dateRange, setDateRange] = useState<DateRange>(() => getPresetRange('thisMonth'))
   const [datePreset, setDatePreset] = useState<DatePreset>('thisMonth')
   const [exportingGstr, setExportingGstr] = useState(false)
@@ -105,7 +106,7 @@ export function Reports() {
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['report', reportType, dateRange.from.toISOString(), dateRange.to.toISOString()],
-    enabled: reportType !== 'gstr-3b', // GSTR-3B has its own data fetching
+    enabled: reportType !== 'gstr-3b' && reportType !== 'gstr-2b', // GSTR-3B and 2B have their own data fetching
     queryFn: async () => {
       // Debt aging uses party report data (includes transactions per party)
       // Inventory aging uses stock report data (includes products with createdAt)
@@ -212,7 +213,7 @@ export function Reports() {
       </div>
 
       {/* Period selector + export toolbar (hidden for GSTR-3B which has its own month picker) */}
-      {reportType !== 'gstr-3b' && (
+      {reportType !== 'gstr-3b' && reportType !== 'gstr-2b' && (
       <Card className="shadow-card border-border/60 no-print">
         <CardContent className="p-3 lg:p-4">
           <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
@@ -287,11 +288,12 @@ export function Reports() {
             <ReportTabButton value="debt-aging" active={reportType === 'debt-aging'} icon={Clock} label="Debt Aging" onClick={() => setReportType('debt-aging')} />
             <ReportTabButton value="inventory-aging" active={reportType === 'inventory-aging'} icon={AlertTriangle} label="Inv Aging" onClick={() => setReportType('inventory-aging')} />
             <ReportTabButton value="gstr-3b" active={reportType === 'gstr-3b'} icon={FileText} label="GSTR-3B" onClick={() => setReportType('gstr-3b')} />
+            <ReportTabButton value="gstr-2b" active={reportType === 'gstr-2b'} icon={FileCheck} label="GSTR-2B" onClick={() => setReportType('gstr-2b')} />
           </div>
         </div>
 
-        {/* Desktop: full grid (all 7 tabs visible) */}
-        <TabsList className="hidden lg:grid lg:grid-cols-7 w-full h-auto no-print">
+        {/* Desktop: full grid (all 8 tabs visible) */}
+        <TabsList className="hidden lg:grid lg:grid-cols-8 w-full h-auto no-print">
           <TabsTrigger value="pl" className="gap-1.5 py-2">
             <TrendingUp className="w-3.5 h-3.5" /> {t('reports.pl')}
           </TabsTrigger>
@@ -312,6 +314,9 @@ export function Reports() {
           </TabsTrigger>
           <TabsTrigger value="gstr-3b" className="gap-1.5 py-2">
             <FileText className="w-3.5 h-3.5" /> GSTR-3B
+          </TabsTrigger>
+          <TabsTrigger value="gstr-2b" className="gap-1.5 py-2">
+            <FileCheck className="w-3.5 h-3.5" /> GSTR-2B
           </TabsTrigger>
         </TabsList>
 
@@ -335,6 +340,9 @@ export function Reports() {
         </TabsContent>
         <TabsContent value="gstr-3b" className="mt-4">
           <Gstr3bReport />
+        </TabsContent>
+        <TabsContent value="gstr-2b" className="mt-4">
+          <Gstr2bReconciliation />
         </TabsContent>
       </Tabs>
     </div>
