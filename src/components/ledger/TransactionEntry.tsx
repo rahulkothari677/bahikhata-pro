@@ -59,6 +59,15 @@ type ItemRow = {
 
 export function TransactionEntry({ type }: { type: LedgerType }) {
   const isSale = type === 'sale'
+  // V17-Ext Tier 3: actualType can be overridden by preset to 'credit-note' or 'debit-note'
+  const [actualType, setActualType] = useState<string>(type)
+  const isCreditNote = actualType === 'credit-note'
+  const isDebitNote = actualType === 'debit-note'
+  const isNote = isCreditNote || isDebitNote
+  // V17-Ext Tier 3: Note-specific fields
+  const [noteReason, setNoteReason] = useState<string>('')
+  const [affectsStock, setAffectsStock] = useState(false)
+  const [originalTransactionId, setOriginalTransactionId] = useState<string | null>(null)
   const { setView, triggerRefresh, setScannerBillType, previousView, setPreviousView, features } = useAppStore()
   const { toast } = useToast()
   const queryClient = useQueryClient()
@@ -255,7 +264,25 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
   useEffect(() => {
     const checkPreset = () => {
       const stored = (window as any).__ledgerPreset
-      if (!stored || stored.type !== type) return
+      if (!stored) return
+
+      // V17-Ext Tier 3: Credit notes come from the sale form, debit notes from purchase form.
+      // The preset type may be 'credit-note' (when component type is 'sale') or
+      // 'debit-note' (when component type is 'purchase'). Check both.
+      const isMatchingPreset =
+        stored.type === type ||
+        (stored.type === 'credit-note' && type === 'sale') ||
+        (stored.type === 'debit-note' && type === 'purchase')
+      if (!isMatchingPreset) return
+
+      // V17-Ext Tier 3: If preset is a credit/debit note, switch the actual type
+      if (stored.type === 'credit-note' || stored.type === 'debit-note') {
+        setActualType(stored.type)
+        if (stored.data.noteType) {/* noteType is derived from actualType */}
+        if (stored.data.noteReason) setNoteReason(stored.data.noteReason)
+        if (stored.data.affectsStock) setAffectsStock(stored.data.affectsStock)
+        if (stored.data.originalTransactionId) setOriginalTransactionId(stored.data.originalTransactionId)
+      }
 
       // If preset has items, clear any existing drafts first — we're starting
       // a fresh form with pre-filled data, so old drafts are stale.
@@ -467,19 +494,20 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          type,
+          type: actualType,
           partyId: partyId || null,
           date,
           invoiceNo: invoiceNo || null,
           isInterState,
           paymentMode,
-          // 🔒 FIX C5: Send undefined (not finalPaid) when the user leaves
-          // Paid Amount empty. The server's `isNaN(paid) ? totalAmount : paid`
-          // will then correctly use the POST-round-off total. Was: sent
-          // finalPaid (pre-round-off) → phantom due of ₹0.50 on rounded sales.
           paidAmount: paidAmount === '' ? undefined : Number(paidAmount),
           discountAmount: totalDiscount,
           notes,
+          // V17-Ext Tier 3: Credit/Debit Note fields
+          originalTransactionId: originalTransactionId || undefined,
+          noteType: isCreditNote ? 'C' : isDebitNote ? 'D' : undefined,
+          noteReason: noteReason || undefined,
+          affectsStock: affectsStock || undefined,
           items: items.map(i => {
             const p = i.productId ? productMap.get(i.productId) : null
             return {
@@ -501,10 +529,10 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
       })
       if (!r.ok) throw new Error('Failed')
       if (isQueuedResponse(r)) {
-        sonnerToast.success(`${isSale ? 'Sale' : 'Purchase'} saved offline — will sync when online`)
+        sonnerToast.success(`${isNote ? (isCreditNote ? 'Credit Note' : 'Debit Note') : (isSale ? 'Sale' : 'Purchase')} saved offline — will sync when online`)
       } else {
         const data = await r.json()
-        sonnerToast.success(`${isSale ? 'Sale' : 'Purchase'} recorded successfully!`)
+        sonnerToast.success(`${isNote ? (isCreditNote ? 'Credit Note' : 'Debit Note') : (isSale ? 'Sale' : 'Purchase')} recorded successfully!`)
 
         // 🔒 AUDIT FIX V5 MD: Surface negative-stock warnings from the API.
         // The server returns `stockWarnings: [{ productName, currentStock,
@@ -660,7 +688,9 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
               : <Truck className="w-5 h-5 text-amber-600" />}
           </div>
           <div>
-            <h2 className="text-lg font-bold font-heading tracking-tight">New {isSale ? 'Sale' : 'Purchase'}</h2>
+            <h2 className="text-lg font-bold font-heading tracking-tight">
+              {isCreditNote ? 'Credit Note' : isDebitNote ? 'Debit Note' : `New ${isSale ? 'Sale' : 'Purchase'}`}
+            </h2>
             <p className="text-xs text-muted-foreground">Fill in the details below</p>
           </div>
         </div>
@@ -1086,6 +1116,41 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
                 placeholder="Any additional notes about this transaction..."
                 className="mt-1"
               />
+              {/* V17-Ext Tier 3: Credit/Debit Note specific fields */}
+              {isNote && (
+                <div className="mt-4 space-y-3 rounded-lg bg-violet-50 dark:bg-violet-950/20 p-3 border border-violet-200 dark:border-violet-900">
+                  <p className="text-xs font-semibold text-violet-700 dark:text-violet-300 uppercase tracking-wide">
+                    {isCreditNote ? 'Credit Note' : 'Debit Note'} Details
+                  </p>
+                  <div>
+                    <Label className="text-xs">Reason</Label>
+                    <select
+                      value={noteReason}
+                      onChange={(e) => setNoteReason(e.target.value)}
+                      className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    >
+                      <option value="">Select a reason...</option>
+                      <option value="post-sale-discount">Post-sale discount</option>
+                      <option value="deficiency">Deficiency in goods</option>
+                      <option value="return">Goods returned</option>
+                      <option value="price-revision">Price revision</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="affectsStock"
+                      checked={affectsStock}
+                      onChange={(e) => setAffectsStock(e.target.checked)}
+                      className="w-4 h-4 rounded"
+                    />
+                    <Label htmlFor="affectsStock" className="text-xs cursor-pointer">
+                      Goods physically returned (adjust stock)
+                    </Label>
+                  </div>
+                </div>
+              )}
             </div>
           </Card>
         </div>
