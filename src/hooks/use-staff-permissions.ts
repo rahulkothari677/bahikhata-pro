@@ -18,6 +18,13 @@ export function useStaffPermissions() {
   const user = session?.user as any
 
   const isOwner = !user?.role || user?.role === 'owner'
+  const isCA = user?.role === 'ca' // V17-Ext Tier 3: CA role
+
+  // V17-Ext Tier 3: CA permissions are hardcoded (read-only allowlist)
+  const CA_PERMISSIONS: StaffPermissions = {
+    dashboard: true, sales: true, purchases: true, inventory: false,
+    scanner: false, reports: true, incomeExpense: true, parties: true, settings: false,
+  }
 
   // Parse permissions from session (stored as JSON by NextAuth)
   const permissions: StaffPermissions = useMemo(() => {
@@ -28,16 +35,20 @@ export function useStaffPermissions() {
         scanner: true, reports: true, incomeExpense: true, parties: true, settings: true,
       }
     }
+    // V17-Ext Tier 3: CA — hardcoded read-only allowlist
+    if (isCA) {
+      return CA_PERMISSIONS
+    }
     // Staff — use their saved permissions
     if (user?.permissions && typeof user.permissions === 'object') {
       return { ...DEFAULT_STAFF_PERMISSIONS, ...user.permissions }
     }
     return DEFAULT_STAFF_PERMISSIONS
-  }, [isOwner, user?.permissions])
+  }, [isOwner, isCA, user?.permissions])
 
   const canAccess = (module: ModuleKey): boolean => {
     return permissions[module] === true
   }
 
-  return { permissions, canAccess, isOwner }
+  return { permissions, canAccess, isOwner, isCA }
 }

@@ -135,31 +135,57 @@ describe('canAccessModule', () => {
   })
 
   test('🔒 V17-Ext §2.1: unknown role = DENIED (fail-closed)', () => {
-    // Was: `if (role !== 'staff') return true` — fail-OPEN, any unknown role
-    // got full access. Now: fail-closed. When adding a new role, add an
-    // explicit branch in canAccessModule with the correct permission logic.
+    // 'ca' is now a VALID role (V17-Ext Tier 3) — test with truly unknown roles
     expect(canAccessModule('admin', {}, 'dashboard')).toBe(false)
-    expect(canAccessModule('accountant', {}, 'reports')).toBe(false)
     expect(canAccessModule('viewer', {}, 'sales')).toBe(false)
     expect(canAccessModule('manager', {}, 'settings')).toBe(false)
     expect(canAccessModule('superuser', {}, 'inventory')).toBe(false)
   })
 
   test('🔒 V17-Ext §2.1: unknown role is denied even with permissions set', () => {
-    // Even if someone passes a permissions object for an unknown role,
-    // the function must NOT use it — only 'owner' and 'staff' are recognized.
     const perms = { ...DEFAULT_STAFF_PERMISSIONS, dashboard: true, reports: true }
-    expect(canAccessModule('accountant', perms, 'dashboard')).toBe(false)
-    expect(canAccessModule('accountant', perms, 'reports')).toBe(false)
+    expect(canAccessModule('viewer', perms, 'dashboard')).toBe(false)
+    expect(canAccessModule('viewer', perms, 'reports')).toBe(false)
   })
 
   test('🔒 V17-Ext §2.1: empty string role = denied (not treated as owner)', () => {
-    // Defensive: an empty string is falsy but NOT null/undefined.
-    // The `!role` check catches it (treats as owner) — but that's actually
-    // correct behavior for legacy compatibility (old sessions may have empty
-    // role = owner). This test documents that behavior so it's not accidentally
-    // changed. If you want to deny empty-string roles in the future, change
-    // the check to `role === null || role === undefined || role === 'owner'`.
     expect(canAccessModule('', {}, 'dashboard')).toBe(true) // legacy owner
+  })
+
+  // V17-Ext Tier 3: CA role tests
+  describe('🔒 V17-Ext Tier 3: CA (Chartered Accountant) role', () => {
+    test('CA can access dashboard', () => {
+      expect(canAccessModule('ca', null, 'dashboard')).toBe(true)
+    })
+    test('CA can access sales', () => {
+      expect(canAccessModule('ca', null, 'sales')).toBe(true)
+    })
+    test('CA can access purchases', () => {
+      expect(canAccessModule('ca', null, 'purchases')).toBe(true)
+    })
+    test('CA can access reports', () => {
+      expect(canAccessModule('ca', null, 'reports')).toBe(true)
+    })
+    test('CA can access incomeExpense', () => {
+      expect(canAccessModule('ca', null, 'incomeExpense')).toBe(true)
+    })
+    test('CA can access parties', () => {
+      expect(canAccessModule('ca', null, 'parties')).toBe(true)
+    })
+    test('CA CANNOT access inventory', () => {
+      expect(canAccessModule('ca', null, 'inventory')).toBe(false)
+    })
+    test('CA CANNOT access scanner', () => {
+      expect(canAccessModule('ca', null, 'scanner')).toBe(false)
+    })
+    test('CA CANNOT access settings', () => {
+      expect(canAccessModule('ca', null, 'settings')).toBe(false)
+    })
+    test('CA permissions parameter is ignored (access is hardcoded)', () => {
+      // Even if someone passes a permissions object, CA uses its own allowlist
+      const perms = { ...DEFAULT_STAFF_PERMISSIONS, settings: true, inventory: true }
+      expect(canAccessModule('ca', perms, 'settings')).toBe(false)
+      expect(canAccessModule('ca', perms, 'inventory')).toBe(false)
+    })
   })
 })

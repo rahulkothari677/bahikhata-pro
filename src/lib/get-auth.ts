@@ -105,7 +105,8 @@ export async function getAuthContext(): Promise<{
 
 /**
  * 🔒 FIX H1: Owner-only routes (payment, account delete, staff management).
- * Staff members get 403 regardless of permissions.
+ * Staff AND CA members get 403 regardless of permissions.
+ * V17-Ext Tier 3: CA is also blocked from owner-only routes.
  */
 export async function getAuthUserIdOwnerOnly(): Promise<{ userId: string | null; error?: NextResponse }> {
   const session = await getServerSession(authOptions)
@@ -118,7 +119,7 @@ export async function getAuthUserIdOwnerOnly(): Promise<{ userId: string | null;
   }
 
   const role = (session.user as any).role || 'owner'
-  if (role === 'staff') {
+  if (role === 'staff' || role === 'ca') {
     return {
       userId: null,
       error: NextResponse.json({
@@ -130,4 +131,33 @@ export async function getAuthUserIdOwnerOnly(): Promise<{ userId: string | null;
 
   const userId = session.user.ownerId || session.user.id
   return { userId }
+}
+
+/**
+ * V17-Ext Tier 3: Write-blocking for CA (Chartered Accountant) role.
+ *
+ * CAs have read-only access — they can VIEW everything in their allowed
+ * modules but cannot create, edit, or delete anything. This helper checks
+ * if the current user is a CA and returns a 403 error if so.
+ *
+ * Usage in write routes (POST/PUT/DELETE/PATCH):
+ *   const authCtx = await getAuthContext()
+ *   if (authCtx.error || !authCtx.userId) return authCtx.error || 401
+ *   const writeError = assertCanWrite(authCtx)
+ *   if (writeError) return writeError
+ *
+ * For routes that already use getAuthUserIdWithModule + getAuthContext,
+ * call assertCanWrite AFTER the module check (so the error message is
+ * about write access, not module access).
+ */
+export function assertCanWrite(authCtx: {
+  role: string
+}): NextResponse | null {
+  if (authCtx.role === 'ca') {
+    return NextResponse.json({
+      error: 'Read-only access',
+      message: 'Your CA account has read-only access. Ask the shop owner to make changes.',
+    }, { status: 403 })
+  }
+  return null
 }

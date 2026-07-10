@@ -89,9 +89,22 @@ export function canAccessModule(
     return perms[module] === true
   }
 
-  // 🔒 V17-Ext §2.1: Any OTHER role (accountant, viewer, manager, etc.)
-  // is DENIED by default. When adding a new role, add an explicit branch
-  // above with the correct permission logic. Do NOT change this to
-  // `return true` — that reintroduces the fail-open vulnerability.
+  // V17-Ext Tier 3: CA (Chartered Accountant) — read-only access to a
+  // specific allowlist of modules. CAs can VIEW reports, transactions,
+  // parties, and dashboard, but cannot create/edit/delete anything
+  // (enforced separately via assertCanWrite in get-auth.ts).
+  if (role === 'ca') {
+    const CA_MODULES: ModuleKey[] = [
+      'dashboard',   // view KPIs + analytics
+      'sales',       // view sales ledger (read-only)
+      'purchases',   // view purchase ledger (read-only)
+      'reports',     // view GST reports + GSTR-1/3B/2B exports
+      'incomeExpense', // view income/expense entries (read-only)
+      'parties',     // view party statements + balances
+    ]
+    return CA_MODULES.includes(module)
+  }
+
+  // 🔒 V17-Ext §2.1: Any OTHER role is DENIED by default.
   return false
 }
