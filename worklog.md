@@ -1872,3 +1872,89 @@ Stage Summary:
 - V16 audit RESOLVED. The 4 V17 follow-up items (reports/gstr-export/insights deletedAt sweep) are documented in the test's ALLOWED_EXCEPTIONS list with reasons.
 - Build clean, tests green, ready to deploy.
 - Founder-side action still pending: disable Neon "Scale to zero" (permanent P1001 fix). Code-side stopgap is in place but only buys time.
+
+---
+Task ID: bahikhata-tier3-ca-login-step1
+Agent: main
+Task: Tier 3 Feature 4 (CA/Accountant Login) — Step 1: canAccessModule + write-blocking helper + isCA flag
+
+Work Log:
+- Deep research via subagent: confirmed the system is architecturally prepared for a 'ca' role — User.role is a free-form String, ownerId linkage exists, canAccessModule was already fail-closed (V17-Ext §2.1) with a comment saying "when you add a new role, handle it here".
+- Extended canAccessModule() in staff-permissions.ts with a 'ca' branch:
+  * CA_MODULES allowlist: dashboard, sales, purchases, reports, incomeExpense, parties (6 modules — read-only view of the business)
+  * CAs CANNOT access: inventory, scanner, settings (3 modules excluded)
+  * The permissions parameter is IGNORED for CAs — their access is hardcoded, not customizable per-CA
+- Created assertCanWrite() helper in get-auth.ts:
+  * Returns a 403 NextResponse if authCtx.role === 'ca'
+  * Returns null otherwise (write allowed)
+  * For use in POST/PUT/DELETE/PATCH routes: call AFTER getAuthContext() + module check, so the error message is about write access (not module access)
+- Updated getAuthUserIdOwnerOnly() in get-auth.ts:
+  * Now blocks BOTH 'staff' AND 'ca' roles (was: staff only)
+  * CAs cannot access owner-only routes (payment management, account delete, staff management)
+- Updated use-staff-permissions.ts hook:
+  * Added isCA flag (derived from session.user.role === 'ca')
+  * CA_PERMISSIONS hardcoded object mirrors the canAccessModule allowlist
+  * Returns { permissions, canAccess, isOwner, isCA } — the isCA flag is consumed by Step 4 UI
+- Updated staff-permissions.test.ts:
+  * +10 tests in a new "CA role" describe block
+  * Tests: CA can access 6 allowed modules, CA cannot access 3 excluded modules, CA permissions parameter is ignored
+  * Updated existing "unknown role" tests to use truly unknown roles (was using 'ca' which is now valid)
+- Verified: tsc 0 new errors, next build ✓, jest 33/33 pass
+- Committed (09d5384) + pushed to GitHub
+
+Stage Summary:
+- Files changed: 4 (staff-permissions.ts, get-auth.ts, use-staff-permissions.ts, staff-permissions.test.ts)
+- CA role is now recognized by the access-control system: canAccessModule grants read-only access to 6 modules, assertCanWrite blocks all writes, getAuthUserIdOwnerOnly blocks owner-only routes.
+- No schema migration needed — User.role is already a free-form String.
+- Step 1 is the foundation: the 'ca' role exists in the permission system but cannot yet be created via the API (Step 2), routes don't yet call assertCanWrite (Step 3), and the UI doesn't yet show CA management (Step 4).
+
+---
+Task ID: bahikhata-tier3-ca-login-step2
+Agent: main
+Task: Tier 3 Feature 4 (CA/Accountant Login) — Step 2: CA creation API (extend /api/staff)
+
+Work Log:
+- Read the existing /api/staff route (180 LOC, 4 methods: GET/POST/PATCH/DELETE). All 4 were hardcoded to role='staff' only — CA accounts couldn't be created, listed, edited, or deleted.
+- Read auth.ts to confirm the session already carries role + ownerId + permissions — no changes needed there. The JWT callback already serializes role into the token.
+- Read use-staff-permissions.ts to confirm the isCA flag from Step 1 is already wired into the client hook.
+- Read StaffManagement.tsx to understand the UI contract for Step 4 (the component calls GET /api/staff, POST with {name,email,password}, PATCH with {permissions}, DELETE?id=xxx).
+- Added SUB_ACCOUNT_ROLES constant + isValidSubAccountRole() type guard to staff-permissions.ts:
+  * SUB_ACCOUNT_ROLES = ['staff', 'ca'] as const
+  * isValidSubAccountRole('staff') → true, isValidSubAccountRole('ca') → true
+  * isValidSubAccountRole('owner') → FALSE (security: cannot create owner via /api/staff)
+  * isValidSubAccountRole('admin') → FALSE
+  * Unknown/empty/case-variant strings → false (fail-closed)
+  * Acts as a TypeScript type guard (narrows string → SubAccountRole)
+- Updated checkEntityLimit() in usage-limits.ts:
+  * Staff count query changed from role: 'staff' to role: { in: ['staff', 'ca'] }
+  * CAs now share the owner's staffAccounts plan quota — a Pro owner (limit 0) can no longer bypass the limit by creating CAs instead of staff
+  * Without this fix, a Pro owner could create unlimited CA accounts (each with read-only access to all financial data) by bypassing the staff limit check
+- Extended /api/staff route — all 4 methods:
+  * GET: where clause changed to role: { in: ['staff', 'ca'] } — CA accounts now appear in the list alongside staff
+  * POST: accepts optional `role` field in body (default 'staff' for backward compat). Validates via isValidSubAccountRole — rejects 'owner', 'admin', unknown strings with 400. CA accounts created with permissions=null (access hardcoded in canAccessModule). Owner-role check expanded to block both staff AND ca from creating sub-accounts (was: staff only).
+  * PATCH: findFirst changed to role: { in: ['staff', 'ca'] } so we can find CA accounts. But if the target IS a ca, returns 400 "CA accounts have fixed read-only access" — permissions cannot be customized. This is a server-side guardrail: even if the UI (Step 4) accidentally sends a PATCH for a CA, the server refuses.
+  * DELETE: findFirst changed to role: { in: ['staff', 'ca'] } — CA accounts can now be removed.
+- Added 9 tests to staff-permissions.test.ts in a new "isValidSubAccountRole" describe block:
+  * SUB_ACCOUNT_ROLES contains exactly ['staff', 'ca']
+  * Valid roles: 'staff' → true, 'ca' → true
+  * SECURITY CRITICAL: 'owner' → false (cannot create owner via /api/staff)
+  * 'admin' → false
+  * Unknown roles (manager, superuser, viewer, accountant) → false
+  * Empty string → false
+  * Case sensitivity: 'CA', 'Staff', 'ca ', ' ca' → false
+  * Type guard narrowing: inside `if (isValidSubAccountRole(input))`, input is narrowed to SubAccountRole
+- Verified:
+  * npx tsc --noEmit: 0 NEW errors (5 pre-existing in validation.test.ts — unrelated Zod discriminated-union typing on test code, documented in V16 worklog)
+  * npx next build: ✓ Compiled successfully, all 39 API routes + 6 pages compile
+  * npx jest staff-permissions.test.ts: 42/42 pass (33 existing + 9 new)
+  * npx jest staff-permissions + soft-delete-sweep + balance-reconciliation + period-lock: 73/73 pass (no regressions in security-critical suites)
+- Committed (28c47c7) + pushed to GitHub
+
+Stage Summary:
+- Files changed: 4 (staff-permissions.ts, usage-limits.ts, /api/staff/route.ts, staff-permissions.test.ts)
+- The /api/staff API now fully supports CA accounts: create, list, (reject perms edit), delete.
+- Security guardrail: isValidSubAccountRole prevents privilege escalation — no one can create an 'owner' account via the staff API.
+- Plan limit guardrail: CAs count against the same staffAccounts quota as staff — no bypass.
+- CA accounts are created with permissions=null; their access is determined entirely by canAccessModule's hardcoded CA_MODULES allowlist (from Step 1).
+- Step 2 is complete. Step 3 (wire assertCanWrite into all POST/PUT/DELETE routes) is next.
+- The StaffManagement UI (Step 4) still needs updating: currently it would show a CA account with a permissions matrix (which would 400 on save). Step 4 will hide the matrix for CAs and add a "CA" badge + an "Add CA" button.
