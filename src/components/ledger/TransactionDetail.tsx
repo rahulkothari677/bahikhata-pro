@@ -336,8 +336,14 @@ export function TransactionDetail() {
   const isPurchase = txn.type === 'purchase'
   const isIncome = txn.type === 'income'
   const isExpense = txn.type === 'expense'
+  const isCreditNote = txn.type === 'credit-note'
+  const isDebitNote = txn.type === 'debit-note'
   const isInflow = isSale || isIncome
   const due = txn.totalAmount - txn.paidAmount
+
+  // V17-Ext Tier 3: Credit/debit note display helpers
+  const isNote = isCreditNote || isDebitNote
+  const noteLabel = isCreditNote ? 'Credit Note' : isDebitNote ? 'Debit Note' : isSale ? 'Sales Invoice' : 'Purchase Bill'
 
   return (
     <div className="space-y-4">
@@ -355,6 +361,31 @@ export function TransactionDetail() {
         <Button variant="outline" size="touch" onClick={handleWhatsAppShare} className="gap-2 border-emerald-300 text-emerald-700 hover:bg-emerald-50">
           <MessageCircle className="w-4 h-4" /> Send PDF
         </Button>
+        {/* V17-Ext Tier 3: Create Credit Note button (sales only) */}
+        {isSale && (
+          <Button
+            variant="outline"
+            size="touch"
+            className="gap-2 border-violet-300 text-violet-700 hover:bg-violet-50"
+            onClick={() => {
+              useAppStore.getState().setSelectedTransactionId(null)
+              ;(window as any).__ledgerPreset = {
+                type: 'credit-note',
+                data: {
+                  partyId: txn.partyId,
+                  partyName: txn.party?.name,
+                  date: new Date().toISOString().slice(0, 10),
+                  originalTransactionId: txn.id,
+                  noteType: 'C',
+                },
+              }
+              useAppStore.getState().setPreviousView('transaction-detail')
+              useAppStore.getState().setView('new-sale')
+            }}
+          >
+            <FileText className="w-4 h-4" /> Credit Note
+          </Button>
+        )}
         <div className="flex-1" />
         <Button variant="outline" size="touch" onClick={handleDelete} className="gap-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50">
           <Trash2 className="w-4 h-4" /> Delete
@@ -397,17 +428,26 @@ export function TransactionDetail() {
       ) : (
         <>
           {/* Invoice-style header card — full-width gradient */}
-          <div className={cn('rounded-2xl shadow-card overflow-hidden text-white', isSale ? 'bg-gradient-emerald' : 'bg-gradient-saffron')}>
+          <div className={cn('rounded-2xl shadow-card overflow-hidden text-white',
+            isNote ? 'bg-gradient-to-br from-violet-500 to-purple-600'
+            : isSale ? 'bg-gradient-emerald' : 'bg-gradient-saffron')}>
             <div className="p-5 relative">
               <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 pointer-events-none" />
               <div className="relative flex items-start justify-between flex-wrap gap-3">
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
-                    {isSale ? <ShoppingCart className="w-6 h-6" /> : <Truck className="w-6 h-6" />}
+                    {isCreditNote ? <FileText className="w-6 h-6" />
+                    : isDebitNote ? <FileText className="w-6 h-6" />
+                    : isSale ? <ShoppingCart className="w-6 h-6" />
+                    : <Truck className="w-6 h-6" />}
                   </div>
                   <div>
-                    <p className="text-white/70 text-xs uppercase tracking-wide">{isSale ? 'Sales Invoice' : 'Purchase Bill'}</p>
+                    <p className="text-white/70 text-xs uppercase tracking-wide">{noteLabel}</p>
                     <h2 className="text-xl font-bold font-heading tracking-tight">{txn.invoiceNo || `TXN-${txn.id.slice(-6)}`}</h2>
+                    {/* V17-Ext Tier 3: Show note reason if present */}
+                    {isNote && txn.noteReason && (
+                      <p className="text-white/60 text-[10px] mt-0.5 capitalize">{txn.noteReason.replace(/-/g, ' ')}</p>
+                    )}
                   </div>
                 </div>
                 <div className="text-right">
