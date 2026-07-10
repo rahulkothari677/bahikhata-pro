@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getAuthUserId } from '@/lib/get-auth'
+import { getAuthContext, assertCanWrite } from '@/lib/get-auth'
 import { invalidateTokenVersionCache } from '@/lib/auth'
 
 /**
@@ -13,12 +13,23 @@ import { invalidateTokenVersionCache } from '@/lib/auth'
  * revocation takes effect within ~5 seconds (was up to 30 minutes with
  * the old throttle).
  *
- * Auth: requires the user to be logged in (calls getAuthUserId).
+ * 🔒 V17-Ext Tier 3 Step 3: CAs are now blocked from this route. Was: used
+ * getAuthUserId (which returns ownerId for CAs) → a CA could increment the
+ * OWNER's tokenVersion, logging out the owner + all staff + all CAs. Now:
+ * assertCanWrite blocks CAs with 403. Staff/owners retain existing behavior.
+ *
+ * Auth: requires the user to be logged in (calls getAuthContext).
  */
 export async function POST() {
   try {
-    const { userId, error } = await getAuthUserId()
-    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const authCtx = await getAuthContext()
+    if (authCtx.error || !authCtx.userId) return authCtx.error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    // 🔒 V17-Ext Tier 3 Step 3: Block CAs — revoking sessions is a write op
+    const writeError = assertCanWrite(authCtx)
+    if (writeError) return writeError
+
+    const userId = authCtx.userId
 
     // Atomically increment tokenVersion. All existing JWTs become invalid
     // because their embedded tokenVersion claim no longer matches the DB.

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getAuthUserIdWithModule } from '@/lib/get-auth'
+import { getAuthContextForWrite } from '@/lib/get-auth'
 import { roundMoney } from '@/lib/money'
 import { apiError } from '@/lib/api-error'
 import { computePartyBalance } from '@/lib/party-balance'
@@ -9,8 +9,11 @@ import { generateUpiLink } from '@/lib/upi-link'
 // POST /api/whatsapp-reminder - generate WhatsApp reminder link for outstanding dues
 export async function POST(req: NextRequest) {
   try {
-    const { userId, error } = await getAuthUserIdWithModule('parties')
-    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // 🔒 V17-Ext Tier 3 Step 3: getAuthContextForWrite blocks CAs (read-only).
+    // WhatsApp reminders are an owner/staff action — CAs view but don't send.
+    const authCtx = await getAuthContextForWrite('parties')
+    if (authCtx.error || !authCtx.userId) return authCtx.error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const userId = authCtx.userId
 
     const { partyId } = await req.json()
 

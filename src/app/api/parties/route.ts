@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getAuthUserIdWithModule } from '@/lib/get-auth'
+import { getAuthUserIdWithModule, getAuthContextForWrite } from '@/lib/get-auth'
 import { withCache } from '@/lib/cache'
 import { roundMoney } from '@/lib/money'
 import { apiError } from '@/lib/api-error'
@@ -81,8 +81,12 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId, error } = await getAuthUserIdWithModule('parties')
-    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // 🔒 V17-Ext Tier 3 Step 3: Use getAuthContextForWrite — combines module
+    // check ('parties') + write block (CA = read-only). Was: getAuthUserIdWithModule
+    // which allowed CAs to create parties (read-only bypass).
+    const authCtx = await getAuthContextForWrite('parties')
+    if (authCtx.error || !authCtx.userId) return authCtx.error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const userId = authCtx.userId
 
     const body = await req.json()
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getAuthUserId } from '@/lib/get-auth'
+import { getAuthContext, assertCanWrite } from '@/lib/get-auth'
 import { logAudit } from '@/lib/audit'
 
 /**
@@ -18,6 +18,11 @@ import { logAudit } from '@/lib/audit'
  * 4. Sets referredId to the new user
  * 5. Sets status to 'completed'
  * 6. Checks if referrer has reached 3 completed referrals → grants 1 year Pro
+ *
+ * 🔒 V17-Ext Tier 3 Step 3: CAs are now blocked. Was: used getAuthUserId (which
+ * returns ownerId for CAs) → a CA could apply a referral code to the OWNER's
+ * account, granting the owner a Pro trial and modifying the owner's plan. Now:
+ * assertCanWrite blocks CAs with 403.
  */
 
 const REWARD_THRESHOLD = 3
@@ -25,8 +30,15 @@ const REWARD_DURATION_DAYS = 365
 
 export async function POST(req: NextRequest) {
   try {
-    const { userId, error } = await getAuthUserId()
-    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const authCtx = await getAuthContext()
+    if (authCtx.error || !authCtx.userId) return authCtx.error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    // 🔒 V17-Ext Tier 3 Step 3: Block CAs — applying referrals modifies the
+    // user's plan, which is an owner-only action.
+    const writeError = assertCanWrite(authCtx)
+    if (writeError) return writeError
+
+    const userId = authCtx.userId
 
     const { code } = await req.json()
 

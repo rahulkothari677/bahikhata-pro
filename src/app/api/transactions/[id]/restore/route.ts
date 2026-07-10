@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getAuthContext } from '@/lib/get-auth'
+import { getAuthContext, assertCanWrite } from '@/lib/get-auth'
 import { canAccessModule, type ModuleKey } from '@/lib/staff-permissions'
 import { assertPeriodNotLocked, PeriodLockedError } from '@/lib/period-lock'
 
@@ -50,6 +50,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (!canAccessModule(authCtx.role, authCtx.permissions, module)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
+
+    // 🔒 V17-Ext Tier 3 Step 3: CAs are read-only — block transaction restore
+    const writeError = assertCanWrite(authCtx)
+    if (writeError) return writeError
 
     // 🔒 V17-Ext §5.1: Period lock check. Restoring a soft-deleted transaction
     // re-adds it to the period's totals — if the period is locked (GST filed),

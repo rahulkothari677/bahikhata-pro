@@ -161,3 +161,61 @@ export function assertCanWrite(authCtx: {
   }
   return null
 }
+
+/**
+ * V17-Ext Tier 3 Step 3: Combined module-access + write-block helper for
+ * write routes (POST/PUT/DELETE/PATCH).
+ *
+ * This is the single entry point for write routes that need BOTH:
+ *   1. Module permission check (canAccessModule — staff perms + CA allowlist)
+ *   2. Write block (assertCanWrite — CAs are read-only)
+ *
+ * Usage:
+ *   const authCtx = await getAuthContextForWrite('parties')
+ *   if (authCtx.error || !authCtx.userId) return authCtx.error || 401
+ *   const userId = authCtx.userId
+ *
+ * For routes that check the module DYNAMICALLY (e.g., transactions where
+ * the module depends on the type: sale→'sales', purchase→'purchases'),
+ * use getAuthContext() + canAccessModule() + assertCanWrite() separately
+ * instead — this helper requires a static module key.
+ *
+ * Returns the full auth context (userId, actingUserId, role, permissions)
+ * on success, or an error response on failure.
+ */
+export async function getAuthContextForWrite(
+  module: ModuleKey
+): Promise<{
+  userId: string | null
+  actingUserId: string | null
+  role: string
+  permissions: any
+  error?: NextResponse
+}> {
+  const authCtx = await getAuthContext()
+  if (authCtx.error || !authCtx.userId) return authCtx
+
+  // Module access check (handles staff perms + CA allowlist + fail-closed)
+  if (!canAccessModule(authCtx.role, authCtx.permissions, module)) {
+    return {
+      ...authCtx,
+      userId: null,
+      error: NextResponse.json({
+        error: 'Forbidden',
+        message: `You don't have permission to access ${module}. Contact the shop owner.`,
+      }, { status: 403 }),
+    }
+  }
+
+  // Write block (CA = read-only)
+  const writeError = assertCanWrite(authCtx)
+  if (writeError) {
+    return {
+      ...authCtx,
+      userId: null,
+      error: writeError,
+    }
+  }
+
+  return authCtx
+}

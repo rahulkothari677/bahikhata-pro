@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getAuthContext } from '@/lib/get-auth'
+import { getAuthContext, assertCanWrite } from '@/lib/get-auth'
 import { canAccessModule } from '@/lib/staff-permissions'
 import { roundMoney } from '@/lib/money'
 import { istMonthStartOffset, getISTDateParts } from '@/lib/timezone'
@@ -423,6 +423,10 @@ export async function POST(req: NextRequest) {
     if (!canAccessModule(authCtx.role, authCtx.permissions, 'reports')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
+
+    // 🔒 V17-Ext Tier 3 Step 3: CAs are read-only — block 3B save/file (write op)
+    const writeError = assertCanWrite(authCtx)
+    if (writeError) return writeError
 
     const body = await req.json()
     const { month: monthParam, action } = body

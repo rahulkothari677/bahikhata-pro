@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getAuthContext } from '@/lib/get-auth'
+import { getAuthContext, assertCanWrite } from '@/lib/get-auth'
 import { canAccessModule } from '@/lib/staff-permissions'
 import { apiError } from '@/lib/api-error'
 import { logAudit } from '@/lib/audit'
@@ -30,6 +30,10 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     if (!canAccessModule(authCtx.role, authCtx.permissions, 'parties')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
+
+    // 🔒 V17-Ext Tier 3 Step 3: CAs are read-only — block payment deletion
+    const writeError = assertCanWrite(authCtx)
+    if (writeError) return writeError
 
     const { id } = await params
 

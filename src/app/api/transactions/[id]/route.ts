@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getAuthContext } from '@/lib/get-auth'
+import { getAuthContext, assertCanWrite } from '@/lib/get-auth'
 import { canAccessModule, type ModuleKey } from '@/lib/staff-permissions'
 import { shouldHideProfit, stripTransactionProfit } from '@/lib/profit-visibility'
 import { roundMoney, toMoney } from '@/lib/money'
@@ -67,6 +67,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!canAccessModule(authCtx.role, authCtx.permissions, module)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
+
+    // 🔒 V17-Ext Tier 3 Step 3: CAs are read-only — block transaction edits
+    const writeError = assertCanWrite(authCtx)
+    if (writeError) return writeError
 
     const body = await req.json()
 
@@ -463,6 +467,10 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     if (!canAccessModule(authCtx.role, authCtx.permissions, module)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
+
+    // 🔒 V17-Ext Tier 3 Step 3: CAs are read-only — block transaction deletion
+    const writeError = assertCanWrite(authCtx)
+    if (writeError) return writeError
 
     // 🔒 V17-Ext §5.1: Period lock check. You can't soft-delete (void) a
     // transaction that's in a locked period — voiding changes the period's

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getAuthContext } from '@/lib/get-auth'
+import { getAuthContext, assertCanWrite } from '@/lib/get-auth'
 import { canAccessModule, type ModuleKey } from '@/lib/staff-permissions'
 import { shouldHideProfit, stripTransactionsProfit } from '@/lib/profit-visibility'
 import { withCache } from '@/lib/cache'
@@ -168,6 +168,10 @@ export async function POST(req: NextRequest) {
     if (!canAccessModule(authCtx.role, authCtx.permissions, module)) {
       return NextResponse.json({ error: 'Forbidden', message: `You don't have permission to create ${type} transactions.` }, { status: 403 })
     }
+
+    // 🔒 V17-Ext Tier 3 Step 3: CAs are read-only — block all transaction creation
+    const writeError = assertCanWrite(authCtx)
+    if (writeError) return writeError
 
     // 🔒 IDEMPOTENCY (Audit fix N1): Check for clientMutationId to prevent
     // duplicate transactions from offline sync replays. The client generates

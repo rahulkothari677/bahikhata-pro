@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getAuthUserIdWithModule } from '@/lib/get-auth'
+import { getAuthUserIdWithModule, getAuthContextForWrite } from '@/lib/get-auth'
 import { roundMoney } from '@/lib/money'
 import { istMonthStartOffset, getISTDateParts } from '@/lib/timezone'
 import { computePartyBalance } from '@/lib/party-balance'
@@ -313,8 +313,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 // PUT /api/parties/[id] - update party
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const { userId, error } = await getAuthUserIdWithModule('parties')
-    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // 🔒 V17-Ext Tier 3 Step 3: getAuthContextForWrite blocks CAs (read-only)
+    const authCtx = await getAuthContextForWrite('parties')
+    if (authCtx.error || !authCtx.userId) return authCtx.error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const userId = authCtx.userId
 
     const { id } = await params
     // Verify ownership
@@ -362,8 +364,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 // with only soft-deleted transactions can be deleted cleanly.
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const { userId, error } = await getAuthUserIdWithModule('parties')
-    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // 🔒 V17-Ext Tier 3 Step 3: getAuthContextForWrite blocks CAs (read-only)
+    const authCtx = await getAuthContextForWrite('parties')
+    if (authCtx.error || !authCtx.userId) return authCtx.error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const userId = authCtx.userId
 
     const { id } = await params
     // Verify ownership
