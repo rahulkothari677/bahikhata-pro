@@ -166,3 +166,25 @@ export function subUnitsFor(baseUnit: string): string[] {
   if (b === 'pcs') return ['pcs', 'dozen']
   return [b]
 }
+
+/**
+ * 🔒 V17 Audit Phase 10: Count-family units where decimal quantities are
+ * nonsensical (you can't sell 22.02 pieces of milk). Weight/volume/length
+ * units CAN have decimals (0.5 kg, 1.5 ltr).
+ *
+ * Used by:
+ *   - Zod validation (.refine() to reject decimals for count units)
+ *   - UI input (step="1" for count, step="0.001" for weight/volume)
+ */
+const COUNT_UNITS = ['pcs', 'dozen', 'box', 'packet', 'bag']
+
+/** Is this a count-family unit where decimals don't make sense? */
+export function isCountUnit(unit: string | null | undefined): boolean {
+  if (!unit) return true  // default unit is 'pcs' → count
+  return COUNT_UNITS.includes(normalizeUnitName(unit))
+}
+
+/** The HTML input step attribute for a given unit. */
+export function stepForUnit(unit: string | null | undefined): string {
+  return isCountUnit(unit) ? '1' : '0.001'
+}

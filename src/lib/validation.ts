@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { isCountUnit } from './units'
 
 /**
  * 🔒 AUDIT FIX H7 (v2 audit): Zod validation schemas for API routes.
@@ -27,7 +28,21 @@ export const transactionItemSchema = z.object({
   unit: z.string().max(20).optional().default('pcs'),
   // 🔒 V12: whether unitPrice is inclusive of GST for this line (MRP pricing).
   priceIncludesGst: z.coerce.boolean().optional().default(false),
-})
+}).refine(
+  // 🔒 V17 Audit Phase 10: Reject decimal quantities for count-family units
+  // (pcs, dozen, box, packet, bag). You can't sell 22.02 pieces of milk.
+  // Weight/volume/length units (kg, gm, ltr, ml, m, cm) CAN have decimals.
+  (data) => {
+    if (isCountUnit(data.unit) && !Number.isInteger(data.quantity)) {
+      return false
+    }
+    return true
+  },
+  {
+    message: 'Quantity must be a whole number for count units (pcs, dozen, box). Use kg/gm/ltr/ml for fractional quantities.',
+    path: ['quantity'],
+  }
+)
 
 // Transaction create schema
 // 🔒 V11 §2.4: z.coerce.number() for all numeric fields.

@@ -318,6 +318,13 @@ model TransactionItem {
   hsn                 String?
   total               Float       @default(0) // taxable + cgst + sgst + igst + csamt
 
+  // 🔒 V17 Audit Phase 10: Snapshot of the user's ORIGINAL entered quantity + unit
+  // (before normalization). The stored `quantity`/`unit` are the NORMALIZED values
+  // (e.g., 500ml → 0.5ltr). This snapshot preserves what the user actually typed
+  // so credit notes can load the original intent (500ml, not 0.5ltr).
+  enteredQuantity   Float?    // original quantity as entered by the user
+  enteredUnit       String?   // original unit as entered by the user (ml, gm, etc.)
+
   createdAt DateTime @default(now())
 
   // ⚡ PERFORMANCE (Audit fix Phase 5): Indexes on foreign keys.

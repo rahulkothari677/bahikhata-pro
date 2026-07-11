@@ -37,7 +37,7 @@ import { useRatePrompt } from '@/hooks/use-rate-prompt'
 // stored value.
 import { roundMoney, splitGst } from '@/lib/money'
 import { computeLineItems } from '@/lib/line-items'
-import { baseUnitOf, subUnitsFor, normalizeUnitName, resolveEnteredQuantity, normalizeToUnit } from '@/lib/units'
+import { baseUnitOf, subUnitsFor, normalizeUnitName, resolveEnteredQuantity, normalizeToUnit, isCountUnit, stepForUnit } from '@/lib/units'
 
 const PAYMENT_MODES = [
   { value: 'cash', label: 'Cash' },
@@ -406,10 +406,12 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
       setItems(originalItems.map((item: any) => ({
         productId: item.productId || '',
         productName: item.productName || '',
-        quantity: item.quantity || 1,
+        // 🔒 V17 Audit Phase 10: Use enteredQuantity/enteredUnit if available
+        // (preserves the user's original input like "500ml" instead of "0.5ltr")
+        quantity: item.enteredQuantity ?? item.quantity ?? 1,
         unitPrice: item.unitPrice || 0,
         gstRate: item.gstRate || 0,
-        unit: item.unit || 'pcs',
+        unit: item.enteredUnit ?? item.unit ?? 'pcs',
         discountAmount: 0,
       })))
       sonnerToast.success(`Loaded ${originalItems.length} item${originalItems.length !== 1 ? 's' : ''} from the original sale`)
@@ -1093,10 +1095,16 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
                             type="number"
                             inputMode="decimal"
                             value={item.quantity}
-                            onChange={(e) => handleUpdateItem(i, 'quantity', parseFloat(e.target.value) || 0)}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value) || 0
+                              // 🔒 V17 Audit Phase 10: Round to integer for count units
+                              // Prevents 22.02 pcs (milk packs must be whole numbers)
+                              const finalVal = isCountUnit(item.unit) ? Math.round(val) : val
+                              handleUpdateItem(i, 'quantity', finalVal)
+                            }}
                             className="flex-1 min-w-0 h-8 text-center text-sm tabular-nums"
                             min="0"
-                            step="0.01"
+                            step={stepForUnit(item.unit)}
                             placeholder="Qty"
                           />
                           {/* 🔒 V12: Unit is now an editable selector (kg/gm, ltr/ml, ...) */}

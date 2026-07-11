@@ -45,6 +45,9 @@ export interface StoredLineItem {
   sgst: number
   igst: number
   total: number          // taxable + gst
+  // 🔒 V17 Audit Phase 10: Original entered values (before normalization)
+  enteredQuantity: number  // what the user typed (e.g., 500 for 500ml)
+  enteredUnit: string      // the unit the user selected (e.g., 'ml')
 }
 
 export interface LineItemResult {
@@ -80,7 +83,8 @@ export function computeLineItems(opts: {
     // unlinked scanned/typed "500 gm × ₹20" line skipped normalization and
     // stored ₹10,000 — the scanner flow hit this every time (no product match).
     const rawUnit = normalizeUnitName(item.unit || product?.unit || 'pcs')
-    const norm = resolveEnteredQuantity(toMoney(item.quantity), rawUnit, product?.unit)
+    const rawQuantity = toMoney(item.quantity)  // 🔒 preserve original before normalization
+    const norm = resolveEnteredQuantity(rawQuantity, rawUnit, product?.unit)
     const quantity = norm.quantity
     const unit = norm.unit
     const gstRate = toMoney(item.gstRate) || 0
@@ -91,7 +95,7 @@ export function computeLineItems(opts: {
     const unitPrice = includesGst && gstRate > 0
       ? roundMoney((enteredPrice * 100) / (100 + gstRate))
       : enteredPrice
-    return { item, product, quantity, unit, gstRate, unitPrice }
+    return { item, product, quantity, unit, gstRate, unitPrice, rawQuantity, rawUnit }
   })
 
   // Step 2: pre-discount taxable value per line = quantity × taxable unit price.
@@ -159,6 +163,9 @@ export function computeLineItems(opts: {
       sgst: itemSgst,
       igst: itemIgst,
       total: itemTotal,
+      // 🔒 V17 Audit Phase 10: preserve the user's original input
+      enteredQuantity: p.rawQuantity,
+      enteredUnit: p.rawUnit,
     }
   })
 
