@@ -192,3 +192,80 @@ describe('V6 PP6 — raw SQL smoke tests (other routes)', () => {
     })
   }
 })
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔒 V17 PAISE MIGRATION Phase 2A — paise-read-pattern regression guard
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Phase 2A migrated the top-product query in insights/route.ts to return
+// paise (integer) instead of rupees (Float). The migration pattern is:
+//
+//   Old: SUM(ROUND(qty*price, 2))              AS "totalRevenue"      (Float)
+//   New: SUM(ROUND(qty*price, 2) * 100)::int   AS "totalRevenuePaise" (Int)
+//
+// This test guards against accidental regression: if someone reverts the
+// query or renames the alias without updating the calling code, this test
+// will fail. As more queries are migrated in subsequent sub-phases (2B, 2C,
+// ...), add similar assertions for each.
+describe('V17 Phase 2A — paise-read-pattern regression guard (insights route)', () => {
+  const INSIGHTS_ROUTE_PATH = path.join(
+    process.cwd(),
+    'src',
+    'app',
+    'api',
+    'insights',
+    'route.ts',
+  )
+  const source = fs.existsSync(INSIGHTS_ROUTE_PATH)
+    ? fs.readFileSync(INSIGHTS_ROUTE_PATH, 'utf8')
+    : ''
+  const skip = !source
+
+  it('insights route file exists', () => {
+    if (skip) return
+    expect(source.length).toBeGreaterThan(0)
+  })
+
+  it('top-product query returns paise (alias "totalRevenuePaise", not "totalRevenue")', () => {
+    if (skip) return
+    const queries = extractRawSql(source)
+    // The top-product query is the one that references unitPrice in a SUM
+    const topProductQuery = queries.find(q => q.includes('unitPrice') && q.includes('SUM'))
+    if (!topProductQuery) {
+      throw new Error(
+        'Could not find the top-product query in insights/route.ts. ' +
+        'Did the SQL shape change? Update this test to match.',
+      )
+    }
+    // Must use the paise alias (regression: must not revert to "totalRevenue")
+    expect(topProductQuery).toContain('"totalRevenuePaise"')
+    expect(topProductQuery).not.toMatch(/AS\s+"totalRevenue"\s/)
+
+    // Must cast to int (regression: must not return Float rupees)
+    expect(topProductQuery).toMatch(/::int\s+AS\s+"totalRevenuePaise"/)
+
+    // Must multiply by 100 inside the SUM (regression: must not skip the *100)
+    expect(topProductQuery).toMatch(/\*\s*100/)
+  })
+
+  it('insights route imports fromPaise from money.ts', () => {
+    if (skip) return
+    // Regression guard: the display call uses fromPaise to convert back to rupees.
+    // If someone reverts the import, the display call will ReferenceError at runtime.
+    expect(source).toMatch(/import\s+\{[^}]*\bfromPaise\b[^}]*\}\s+from\s+['"]@\/lib\/money['"]/)
+  })
+
+  it('no stale references to "topProduct.totalRevenue" (without Paise suffix)', () => {
+    if (skip) return
+    // The old code referenced topProduct.totalRevenue — must now be totalRevenuePaise.
+    // Allow comments and string literals, but flag code references.
+    // Strip /* */ and // comments and string literals before checking.
+    const stripped = source
+      .replace(/\/\*[\s\S]*?\*\//g, '')       // block comments
+      .replace(/\/\/[^\n]*/g, '')              // line comments
+      .replace(/`[^`]*`/g, '')                 // template literals (SQL)
+      .replace(/"[^"]*"/g, '')                 // double-quoted strings
+      .replace(/'[^']*'/g, '')                 // single-quoted strings
+    expect(stripped).not.toMatch(/totalRevenue\b(?!Paise)/)
+  })
+})

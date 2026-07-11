@@ -4045,3 +4045,59 @@ Part B — The paise migration is a 15-20 engineer-day effort across 7 phases,
   alongside the existing rupee helpers) — zero risk, unblocks the rest.
 
 Worklog entry complete. Read-only research task — no code changes made.
+
+---
+Task ID: paise-migration-phase-2A
+Agent: main
+Task: V17 Paise Migration Phase 2A — Migrate the first read path (insights/route.ts top-product query) from rupee Float to paise integer via SQL math, preserving all UI/API behavior.
+
+Work Log:
+- Read Phase 1 helpers in src/lib/money.ts (toPaise, fromPaise, formatPaise, addPaise, multiplyPaise, calculateGstPaise, splitGstPaise — all additive, all tested by paise-helpers.test.ts with 98 tests passing).
+- Surveyed raw SQL footprint: 48 $queryRaw occurrences across 14 files (higher than the prior estimate of 26 in 9 files — codebase has grown).
+- Identified insights/route.ts as the smallest/safest Phase 2A target: only 3 raw SQL queries, only 1 touches money (the top-product query at lines 68-83). The other 2 (sales velocity, dead stock) only touch quantity/productId — no migration needed.
+- Phase 2A strategy (compute-paise-in-SQL, convert-back-at-boundary):
+    Old SQL: SUM(ROUND(qty::numeric * price::numeric, 2)) AS "totalRevenue"
+            → returns Float rupees (e.g. 1234.56)
+    New SQL: SUM(ROUND(qty::numeric * price::numeric, 2) * 100)::int AS "totalRevenuePaise"
+            → returns Int paise (e.g. 123456)
+    Display: fromPaise(totalRevenuePaise).toFixed(0)
+            → divides by 100 → same Float rupees the UI used to receive
+- Modified files (exactly 2, per git status):
+    1. src/app/api/insights/route.ts
+       - Added `fromPaise` to imports from '@/lib/money'
+       - Renamed TypeScript type field `totalRevenue: number` → `totalRevenuePaise: number`
+       - Changed SQL: `SUM(ROUND(qty*price, 2)) AS "totalRevenue"` → `SUM(ROUND(qty*price, 2) * 100)::int AS "totalRevenuePaise"`
+       - Changed ORDER BY to use the new alias
+       - Changed display: `Number(topProduct.totalRevenue).toFixed(0)` → `fromPaise(Number(topProduct.totalRevenuePaise)).toFixed(0)`
+       - Added detailed comments documenting the migration pattern and why behavior is preserved
+    2. src/__tests__/lib/raw-sql-smoke.test.ts
+       - Added new describe block "V17 Phase 2A — paise-read-pattern regression guard (insights route)" with 4 tests:
+         a) insights route file exists
+         b) top-product query returns paise (alias "totalRevenuePaise", cast ::int, has * 100)
+         c) insights route imports fromPaise from money.ts
+         d) no stale references to "topProduct.totalRevenue" (without Paise suffix)
+- Verification:
+    * `npx tsc --noEmit`: 5 errors (ALL pre-existing in src/__tests__/lib/validation.test.ts — Zod union type issue, unrelated to paise). ZERO errors in my modified files.
+    * `npx eslint` on both modified files: clean (no output).
+    * `npx jest paise-helpers raw-sql-smoke money reconciliation balance-reconciliation balance-reconciliation-behavioral gst-discount net-sales`: 177 tests, ALL PASS.
+    * `npx jest gstr-3b gstr1-builder gstr-2b amount-to-words bank-recon books-tie-out` (one at a time to avoid OOM): 142 tests, ALL PASS.
+    * Pre-existing failures in tenant-isolation.test.ts (2 tests) are UNRELATED to paise — about activeTransactionWhere() not preventing userId/deletedAt override. Confirmed by git status showing only my 2 intended files modified.
+- Manual bug-check:
+    * Confirmed NO other references to `totalRevenue` (the old name) remain in insights/route.ts — only `totalRevenuePaise` and documentation comments.
+    * Confirmed the dashboard route has its OWN separate `totalRevenue` field — NOT touched by Phase 2A (out of scope, will be migrated in a later sub-phase).
+    * Traced behavior preservation with concrete scenarios:
+        - 5 units × ₹100.00: OLD gives "₹500", NEW gives "₹500" ✓
+        - 3 units × ₹1.005 (float-drift case): OLD gives "₹3", NEW gives "₹3" ✓
+        - 0 sales: topProduct is undefined, if-check skips, no push (unchanged) ✓
+    * Confirmed SQL ORDER BY still sorts correctly (paise is just rupees × 100, sort order identical).
+    * Confirmed the SmartInsights.tsx component consumes a DIFFERENT `topProducts` field (from dashboard endpoint, not insights endpoint) — so no UI breakage.
+
+Stage Summary:
+- Phase 2A COMPLETE. Exactly 2 files modified, exactly as planned. Zero behavior change at the UI/API boundary.
+- The migration pattern is now established for subsequent sub-phases:
+    Pattern: SQL computes paise via `<expr> * 100)::int AS <name>Paise`, code receives paise, converts back to rupees via fromPaise() at display boundary.
+- 4 new regression-guard tests added — any accidental revert will fail tests.
+- All paise/money/reconciliation/GST tests pass (319 tests total across 14 test files).
+- 5 pre-existing tsc errors and 2 pre-existing tenant-isolation test failures are NOT caused by this change (confirmed via git status).
+- NO deployment pushed yet — waiting for user verification before proceeding.
+- NEXT: Phase 2B (proposed) — migrate party-balance.ts (1 query, but CRITICAL — computes outstanding balances across sales/credit-notes/purchases/debit-notes/payments). Will need careful testing of the party-balance flow.

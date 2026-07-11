@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUserIdWithModule } from '@/lib/get-auth'
-import { roundMoney } from '@/lib/money'
+import { roundMoney, fromPaise } from '@/lib/money'
 import { activeTransactionWhere } from '@/lib/query-helpers'
 import { getReceivablePayable } from '@/lib/party-balance'
 
@@ -65,11 +65,28 @@ export async function GET() {
         GROUP BY ti."productId"
       `,
       // 🔒 FIX M16: Top product (last 30 days) — SQL aggregate instead of JS loop
-      db.$queryRaw<Array<{ productName: string; productId: string | null; totalRevenue: number; totalQty: number }>>`
+      //
+      // 🔒 V17 PAISE MIGRATION Phase 2A: SQL now returns paise (integer) instead
+      // of rupees (Float). The transformation is:
+      //   Old: SUM(ROUND(qty*price, 2)) AS "totalRevenue"          → Float rupees
+      //   New: SUM(ROUND(qty*price, 2) * 100)::int AS "totalRevenuePaise"  → Int paise
+      //
+      // Why this preserves behavior:
+      //   - Per-item rounding is unchanged: ROUND(qty*price, 2) still happens per item.
+      //   - The * 100 and ::int happen AFTER the per-item round, so the integer
+      //     paise value is exactly round(rupee_value * 100) — no float drift.
+      //   - At the display boundary, fromPaise(paise) = paise / 100 gives back
+      //     the same rupee Float the UI used to receive.
+      //
+      // Why bother: when Phase 4 changes the column type from Float to Int
+      // (paise), this SQL simplifies to just `SUM("unitPricePaise" * "quantity")::int`
+      // — no calling-code changes needed because the contract (returns paise)
+      // is already established here.
+      db.$queryRaw<Array<{ productName: string; productId: string | null; totalRevenuePaise: number; totalQty: number }>>`
         SELECT
           ti."productName",
           ti."productId",
-          SUM(ROUND(ti."quantity"::numeric * ti."unitPrice"::numeric, 2)) AS "totalRevenue",
+          SUM(ROUND(ti."quantity"::numeric * ti."unitPrice"::numeric, 2) * 100)::int AS "totalRevenuePaise",
           SUM(ti."quantity") AS "totalQty"
         FROM "TransactionItem" ti
         JOIN "Transaction" t ON ti."transactionId" = t.id
@@ -78,7 +95,7 @@ export async function GET() {
           AND t."type" = 'sale'
           AND t."date" >= ${thirtyDaysAgo}
         GROUP BY ti."productName", ti."productId"
-        ORDER BY "totalRevenue" DESC
+        ORDER BY "totalRevenuePaise" DESC
         LIMIT 1
       `,
       // 🔒 FIX M16: Products that had sales in 30 days (for dead-stock detection)
@@ -252,6 +269,9 @@ export async function GET() {
     }
 
     // 5. Top performer insights (last 30 days) — 🔒 FIX M16: uses SQL aggregate
+    // 🔒 V17 PAISE MIGRATION Phase 2A: SQL now returns paise; convert to rupees
+    // for display using fromPaise(). Behavior is identical to the old code
+    // because fromPaise(p) = p / 100 — the same value the UI used to receive.
     const topProduct = topProductRows[0]
     if (topProduct) {
       insights.push({
@@ -259,7 +279,7 @@ export async function GET() {
         type: 'info',
         category: 'sales',
         title: `${topProduct.productName} is your bestseller`,
-        description: `₹${Number(topProduct.totalRevenue).toFixed(0)} revenue from ${Number(topProduct.totalQty)} units sold in last 30 days.`,
+        description: `₹${fromPaise(Number(topProduct.totalRevenuePaise)).toFixed(0)} revenue from ${Number(topProduct.totalQty)} units sold in last 30 days.`,
         action: 'inventory',
         actionLabel: 'View Product',
       })
