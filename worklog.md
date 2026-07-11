@@ -4180,3 +4180,24 @@ Stage Summary:
 - 7 new regression-guard tests added. Total paise-migration test coverage: 11 regression guards (4 from Phase 2A + 7 from Phase 2B).
 - NO deployment pushed yet — waiting for user verification before proceeding.
 - NEXT: Phase 2C (proposed) — migrate src/lib/reconciliation.ts (2 raw SQL queries: orphaned-items check + orphaned-payments check). These are COUNT queries (no money), so the migration is simpler — just verify they don't touch money columns. If they don't, skip to Phase 2D (reports/route.ts + gstr-export/route.ts).
+
+---
+Task ID: paise-migration-phase-2AB-deploy
+Agent: main
+Task: Deploy Phase 2A + Phase 2B to Vercel (user pointed out neither sub-phase was deployed after Phase 1).
+
+Work Log:
+- Discovered Phase 2A (commit d846a11) and Phase 2B (commit 0e515e1) were committed locally but NEVER pushed to origin/main. Vercel auto-deploys from origin/main, so the last deployed commit was b6f45fb (Phase 1).
+- Verified final state before push:
+    * npx tsc --noEmit: 5 errors (ALL pre-existing in validation.test.ts — Zod union type issue, unrelated to paise migration). ZERO errors in paise-migration files.
+    * npx jest (5 targeted test files): 130 tests, ALL PASS — paise-helpers, raw-sql-smoke (with Phase 2A + 2B regression guards), balance-reconciliation-behavioral (the CRITICAL parity test), reconciliation, money.
+- Pushed b6f45fb..0e515e1 to origin/main. Vercel auto-deploy triggered.
+- Both sub-phases are now in the SAME Vercel deployment (Vercel deploys the tip of main, which includes both commits).
+
+Stage Summary:
+- Phase 2A + Phase 2B now deployed to Vercel (single deployment containing both sub-phases).
+- User can verify at the production URL:
+    * Phase 2A: Dashboard → Smart Insights widget → "Top performer" insight should show correct revenue (e.g., "₹500 revenue from 5 units sold in last 30 days.")
+    * Phase 2B: Dashboard "You'll get" / "You'll pay" totals should be identical to pre-deploy values. Party list balances should be identical. Party-detail balance should match dashboard balance. Settings → Reconciliation page should show all 3 checks PASSING.
+- If any of these are wrong, ROLL BACK by reverting commit 0e515e1 on origin/main (reverts Phase 2B but keeps Phase 2A) or reverting d846a11 (reverts both Phase 2A and 2B).
+- NEXT: Wait for user to verify the deployment. If green, proceed to Phase 2C (reconciliation.ts — quick verify, mostly COUNT queries).
