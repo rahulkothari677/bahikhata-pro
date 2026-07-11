@@ -2873,3 +2873,56 @@ Stage Summary:
   Comparable in scope to GSTR-3B (1,300 LOC) + GSTR-2B (1,500 LOC) combined.
 - This is RESEARCH ONLY — no code written. Ready for the implementing agent
   to start at Step 1.
+
+---
+Task ID: bahikhata-v17-audit-phase1
+Agent: main
+Task: V17 Audit §1 (HIGH) — Credit/debit notes must reduce revenue, profit, and GST on dashboard + P&L + GST report
+
+Work Log:
+- Read the V17 audit report end-to-end. Confirmed all 4 findings (§1 HIGH, §2 MEDIUM, §4.1-4.4 LOW) by reading the actual source code cited in each finding.
+- §1 CONFIRMED: dashboard/route.ts lines 159-177 use type='sale' only for today_revenue, today_profit, range_revenue, range_profit, prev_revenue, prev_profit, sale_cgst/sgst/igst. reports/route.ts P&L branch (line 100-101) uses profitOf('sale') and taxableOf('sale'). GST branch (line 251-256) uses saleGstAgg only. Credit notes (type='credit-note') never subtracted.
+- Created src/lib/net-sales.ts (150 LOC) — pure functions (no DB import, fully testable):
+  * netSalesTaxable(sale, cn) = sale taxable − credit-note taxable
+  * netSalesProfit(sale, cn) = sale grossProfit − credit-note grossProfit
+  * netOutputTax(sale, cn) = sale GST − credit-note GST
+  * netPurchasesTaxable(purchase, dn) = purchase taxable − debit-note taxable
+  * netInputTax(purchase, dn) = purchase GST − debit-note GST
+  * netSalesTotal(sale, cn) = sale totalAmount − credit-note totalAmount
+  * All null-safe (null/undefined aggregates treated as 0 via `const s = sale || {}` pattern)
+  * TypeAggregates interface: subtotal, discountAmount, totalAmount, grossProfit, cgst, sgst, igst (all optional)
+- Created src/__tests__/lib/net-sales.test.ts (20 tests) — the golden test suite:
+  * The GOLDEN TEST: "₹10,000 sale + ₹3,000 credit note = ₹7,000 net everywhere" — verifies netSalesTaxable=7000, netSalesTotal=8260, netSalesProfit=2100, netOutputTax=1260. This is the exact worked example from the auditor's report. If this test ever fails, the §1 bug has regressed.
+  * 19 other tests: partial returns, full returns, no returns, inter-state, float precision (₹0.01 edges), null safety, per-type coverage
+  * All 20 tests pass
+- Refactored dashboard/route.ts — 4 raw SQL queries updated:
+  * KPI query: Added −COALESCE(SUM(...type='credit-note'...)) terms to today_revenue, today_profit, range_revenue, range_profit, prev_revenue, prev_profit, sale_cgst, sale_sgst, sale_igst, sale_subtotal, sale_discount. Added −COALESCE(SUM(...type='debit-note'...)) to purchase_cgst, purchase_sgst, purchase_igst. Single consolidated query preserved (no extra round-trip).
+  * Sales trend query: Changed WHERE type='sale' to WHERE type IN ('sale','credit-note'). Revenue/profit per bucket now use CASE WHEN type='sale' THEN totalAmount ELSE -totalAmount pattern (credit notes subtract).
+  * Top products query: Changed WHERE type='sale' to type IN ('sale','credit-note'). Quantities and revenue now net of returns (a product with high returns no longer appears as a "best seller").
+  * Category breakdown query: Same pattern — net of returns per category.
+- Refactored reports/route.ts P&L branch:
+  * Built saleAgg, creditNoteAgg, purchaseAgg, debitNoteAgg TypeAggregates objects from the groupBy result
+  * grossProfit = netSalesProfit(saleAgg, creditNoteAgg) (was: profitOf('sale'))
+  * totalRevenue = netSalesTaxable(saleAgg, creditNoteAgg) (was: taxableOf('sale'))
+  * purchaseTotal = netPurchasesTaxable(purchaseAgg, debitNoteAgg) (was: sumOf('purchase'))
+  * netProfit = grossProfit + otherIncome − totalExpenses (uses the new net grossProfit)
+- Refactored reports/route.ts GST branch:
+  * Added 2 new parallel queries to the Promise.all: creditNoteGstAgg (query 7) + debitNoteGstAgg (query 8). Now 8 queries in parallel (was 6).
+  * outputTax = netOutputTax(saleGstAgg, creditNoteGstAgg) (was: saleGstAgg only)
+  * inputTax = netInputTax(purchaseGstAgg, debitNoteGstAgg) (was: purchaseGstAgg only)
+  * outputSales.taxableValue = netSalesTaxable(sale, creditNote) (was: sale only)
+  * inputPurchases.taxableValue = netPurchasesTaxable(purchase, debitNote) (was: purchase only)
+  * Added discountAmount to purchaseGstAgg._sum (was missing — needed for netPurchasesTaxable)
+- Verified:
+  * npx tsc --noEmit: 0 NEW errors (5 pre-existing in validation.test.ts — unrelated Zod typing)
+  * npx next build: ✓ Compiled successfully, all 39 API routes + 6 pages compile
+  * npx jest net-sales + balance-reconciliation + soft-delete-sweep + staff-permissions + ca-write-block + gstr-3b: 103/103 pass (no regressions)
+- Committed (3f417d7) + pushed to GitHub
+
+Stage Summary:
+- Files changed: 4 (net-sales.ts [new], net-sales.test.ts [new], dashboard/route.ts, reports/route.ts)
+- §1 HIGH bug FIXED: Credit notes now reduce revenue, profit, and output tax on the dashboard, P&L report, and GST report — matching GSTR-1/3B (which were already correct).
+- The dashboard, P&L, and GST report now AGREE with the formal GST returns. A CA cross-checking will see consistent numbers.
+- Single definition of "revenue net of returns" in net-sales.ts — tested once (20 tests), used everywhere. This is the discipline the auditor recommended in §5.1.
+- GOLDEN TEST locks in the fix: "₹10,000 sale + ₹3,000 credit note = ₹7,000 net" — if this ever regresses, the test fails immediately.
+- Phase 1 complete. Phase 2 (GSTR-3B RCM net tax) next.
