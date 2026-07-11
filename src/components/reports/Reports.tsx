@@ -20,7 +20,7 @@ import {
   FileBarChart, TrendingUp, Receipt, Package, Users, Calendar,
   ArrowDownRight, ArrowUpRight, IndianRupee, Percent, FileText,
   FileSpreadsheet, Loader2, Download, Printer, Clock, AlertTriangle, Info,
-  AlertCircle, Coffee, FileCheck, Banknote,
+  AlertCircle, Coffee, FileCheck, Banknote, Store,
 } from 'lucide-react'
 import { toast as sonnerToast } from 'sonner'
 import { offlineFetch } from '@/lib/offline-fetch'
@@ -32,13 +32,14 @@ import { Gstr1Report } from '@/components/reports/Gstr1Report'
 import { Gstr3bReport } from '@/components/reports/Gstr3bReport'
 import { Gstr2bReconciliation } from '@/components/reports/Gstr2bReconciliation'
 import { BankReconciliation } from '@/components/reports/BankReconciliation'
+import { ConsolidatedReport } from '@/components/reports/ConsolidatedReport'
 
 const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)', 'oklch(0.7 0.16 250)']
 
 export function Reports() {
   const { t } = useTranslation()
   const { features } = useAppStore()
-  const [reportType, setReportType] = useState<'pl' | 'gst' | 'stock' | 'party' | 'debt-aging' | 'inventory-aging' | 'gstr-1' | 'gstr-3b' | 'gstr-2b' | 'bank-recon'>('pl')
+  const [reportType, setReportType] = useState<'pl' | 'gst' | 'stock' | 'party' | 'debt-aging' | 'inventory-aging' | 'gstr-1' | 'gstr-3b' | 'gstr-2b' | 'bank-recon' | 'consolidated'>('pl')
   const [dateRange, setDateRange] = useState<DateRange>(() => getPresetRange('thisMonth'))
   const [datePreset, setDatePreset] = useState<DatePreset>('thisMonth')
   const [exportingGstr, setExportingGstr] = useState(false)
@@ -117,7 +118,7 @@ export function Reports() {
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['report', reportType, dateRange.from.toISOString(), dateRange.to.toISOString()],
-    enabled: reportType !== 'gstr-1' && reportType !== 'gstr-3b' && reportType !== 'gstr-2b' && reportType !== 'bank-recon',
+    enabled: reportType !== 'gstr-1' && reportType !== 'gstr-3b' && reportType !== 'gstr-2b' && reportType !== 'bank-recon' && reportType !== 'consolidated',
     queryFn: async () => {
       // Debt aging uses party report data (includes transactions per party)
       // Inventory aging uses stock report data (includes products with createdAt)
@@ -224,7 +225,7 @@ export function Reports() {
       </div>
 
       {/* Period selector + export toolbar (hidden for GSTR-3B which has its own month picker) */}
-      {reportType !== 'gstr-1' && reportType !== 'gstr-3b' && reportType !== 'gstr-2b' && reportType !== 'bank-recon' && (
+      {reportType !== 'gstr-1' && reportType !== 'gstr-3b' && reportType !== 'gstr-2b' && reportType !== 'bank-recon' && reportType !== 'consolidated' && (
       <Card className="shadow-card border-border/60 no-print">
         <CardContent className="p-3 lg:p-4">
           <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
@@ -302,6 +303,7 @@ export function Reports() {
             <ReportTabButton value="gstr-3b" active={reportType === 'gstr-3b'} icon={FileText} label="GSTR-3B" onClick={() => setReportType('gstr-3b')} />
             <ReportTabButton value="gstr-2b" active={reportType === 'gstr-2b'} icon={FileCheck} label="GSTR-2B" onClick={() => setReportType('gstr-2b')} />
             <ReportTabButton value="bank-recon" active={reportType === 'bank-recon'} icon={Banknote} label="Bank Recon" onClick={() => setReportType('bank-recon')} />
+            <ReportTabButton value="consolidated" active={reportType === 'consolidated'} icon={Store} label="Consolidated" onClick={() => setReportType('consolidated')} />
           </div>
         </div>
 
@@ -337,6 +339,9 @@ export function Reports() {
           <TabsTrigger value="bank-recon" className="gap-1.5 py-2">
             <Banknote className="w-3.5 h-3.5" /> Bank Recon
           </TabsTrigger>
+          <TabsTrigger value="consolidated" className="gap-1.5 py-2">
+            <Store className="w-3.5 h-3.5" /> Consolidated
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="pl" className="mt-4">
@@ -368,6 +373,9 @@ export function Reports() {
         </TabsContent>
         <TabsContent value="bank-recon" className="mt-4">
           <BankReconciliation />
+        </TabsContent>
+        <TabsContent value="consolidated" className="mt-4">
+          <ConsolidatedReport />
         </TabsContent>
       </Tabs>
     </div>
