@@ -20,6 +20,10 @@ and include enough context to reproduce.
 
 <!-- Add new bugs below this line. Newest first. -->
 
+### BUG-005 — (RESERVED — was the validation.test.ts tsc errors, now FIXED, see Fixed bugs section)
+
+- **Status**: FIXED (2026-07-11)
+
 ### BUG-004 — `openingBalance` on party UPDATE not rounded (Medium)
 
 - **Found**: 2026-07-11, during Phase 2B pre-change scan of `party-balance.ts` call chain
@@ -59,6 +63,30 @@ and include enough context to reproduce.
 ## Fixed bugs
 
 <!-- Move bugs here once fixed. Include fix date and commit/PR reference. -->
+
+### BUG-005 — `validation.test.ts` had 5 tsc errors (discriminated union not narrowed) — FIXED
+
+- **Found**: 2026-07-11, after user pointed out I was ignoring pre-existing tsc errors
+- **File**: `src/__tests__/lib/validation.test.ts` (lines 30, 40, 50, 60, 71)
+- **Severity**: Low (type-level only — tests passed at runtime, but `tsc --noEmit` failed)
+- **Description**: The test file accessed `result.error` after `expect(result.success).toBe(false)`. TypeScript does NOT narrow the discriminated union `{ success: true; data } | { success: false; error }` based on an `expect()` call — `expect()` returns a Jest assertion object, not a boolean, so it's not a type guard. The 5 occurrences all followed the pattern:
+  ```ts
+  const result = validateBody(createTransactionSchema, invalid)
+  expect(result.success).toBe(false)
+  expect(result.error).toContain('type')  // ← tsc error: 'error' doesn't exist on the union
+  ```
+- **Why this matters even though tests passed at runtime**:
+  1. `tsc --noEmit` fails → anyone adding `tsc` as a CI build gate would block deploys
+  2. IDE shows red squiggles → misleading signal that code is broken
+  3. Sets a precedent of "we ignore tsc errors" → real type bugs get missed
+  4. The fix is trivial and correct — no reason to leave it broken
+- **Fix applied**: 2026-07-11. Wrapped each `result.error` access in `if (!result.success) { ... }` — a proper TypeScript type guard that narrows the union. 5 occurrences fixed with the same pattern. This matches the existing pattern already used at lines 182-185 of the same file.
+- **Verification**:
+  - `npx tsc --noEmit`: **0 errors** (was 5 before fix). Codebase is now fully type-clean.
+  - `npx jest validation.test.ts`: 19 tests, ALL PASS (same as before — runtime behavior unchanged).
+  - `npx eslint validation.test.ts`: clean.
+- **Scanned for same pattern elsewhere**: Grepped `src/__tests__/` for `expect(result.success).toBe(false)` followed by `result.error` access. Other test files (`phase5-technical.test.ts`, `decimal-quantity.test.ts`) call `expect(result.success).toBe(false)` but DON'T access `result.error` afterward, so they don't have this bug. No other instances found.
+- **Status**: FIXED
 
 ### BUG-003 — `getReceivablePayable` COUNT(*) includes income/expense transactions (Low/Medium) — FIXED
 

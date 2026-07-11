@@ -27,7 +27,9 @@ describe('validation.ts — Zod request body validation', () => {
       const invalid = { type: 'invalid_type', items: [] }
       const result = validateBody(createTransactionSchema, invalid)
       expect(result.success).toBe(false)
-      expect(result.error).toContain('type')
+      if (!result.success) {
+        expect(result.error).toContain('type')
+      }
     })
 
     it('rejects negative unit price', () => {
@@ -37,7 +39,9 @@ describe('validation.ts — Zod request body validation', () => {
       }
       const result = validateBody(createTransactionSchema, invalid)
       expect(result.success).toBe(false)
-      expect(result.error).toContain('unitPrice')
+      if (!result.success) {
+        expect(result.error).toContain('unitPrice')
+      }
     })
 
     it('rejects negative quantity', () => {
@@ -47,7 +51,9 @@ describe('validation.ts — Zod request body validation', () => {
       }
       const result = validateBody(createTransactionSchema, invalid)
       expect(result.success).toBe(false)
-      expect(result.error).toContain('quantity')
+      if (!result.success) {
+        expect(result.error).toContain('quantity')
+      }
     })
 
     it('rejects empty product name', () => {
@@ -57,7 +63,9 @@ describe('validation.ts — Zod request body validation', () => {
       }
       const result = validateBody(createTransactionSchema, invalid)
       expect(result.success).toBe(false)
-      expect(result.error).toContain('productName')
+      if (!result.success) {
+        expect(result.error).toContain('productName')
+      }
     })
 
     it('rejects notes over 5000 characters', () => {
@@ -68,7 +76,9 @@ describe('validation.ts — Zod request body validation', () => {
       }
       const result = validateBody(createTransactionSchema, invalid)
       expect(result.success).toBe(false)
-      expect(result.error).toContain('Notes')
+      if (!result.success) {
+        expect(result.error).toContain('Notes')
+      }
     })
 
     it('accepts income/expense without items', () => {
