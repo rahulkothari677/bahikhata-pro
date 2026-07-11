@@ -86,7 +86,7 @@ export async function GET() {
         SELECT
           ti."productName",
           ti."productId",
-          SUM(ROUND(ti."quantity"::numeric * ti."unitPrice"::numeric, 2) * 100)::int AS "totalRevenuePaise",
+          SUM(ROUND(ti."quantity"::numeric * ti."unitPrice"::numeric, 0))::int AS "totalRevenuePaise",
           SUM(ti."quantity") AS "totalQty"
         FROM "TransactionItem" ti
         JOIN "Transaction" t ON ti."transactionId" = t.id

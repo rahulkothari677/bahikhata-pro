@@ -159,7 +159,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         SELECT
           ti."productName",
           SUM(ti."quantity") AS "totalQuantity",
-          ROUND(SUM(ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 2)) * 100 + 0.0000001) AS "totalAmountPaise"
+          SUM(ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 0)) AS "totalAmountPaise"
         FROM "TransactionItem" ti
         JOIN "Transaction" t ON ti."transactionId" = t.id
         WHERE t."userId" = ${userId}
@@ -179,7 +179,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         SELECT
           DATE_TRUNC('month', t.date AT TIME ZONE 'Asia/Kolkata') AS "monthStart",
           t.type,
-          ROUND(SUM(t."totalAmount"::numeric) * 100 + 0.0000001) AS "totalPaise"
+          SUM(t."totalAmount"::numeric) AS "totalPaise"
         FROM "Transaction" t
         WHERE t."userId" = ${userId}
           AND t."partyId" = ${id}

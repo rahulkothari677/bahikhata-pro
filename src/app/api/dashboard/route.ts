@@ -155,7 +155,7 @@ export async function GET(req: NextRequest) {
       //
       // CTE approach avoids repeating each ~100-char expression twice (once for
       // ROUND, once for SIGN). The CTE computes the raw values; the outer SELECT
-      // just applies: ROUND(raw * 100 + 0.0000001 * SIGN(raw)) AS raw_paise.
+      // just applies: raw AS raw_paise.
       db.$queryRaw<Array<{
         today_revenue_paise: string; today_profit_paise: string;
         today_count: bigint;
@@ -211,26 +211,26 @@ export async function GET(req: NextRequest) {
             AND "date" <= ${effectiveRangeEnd}
         )
         SELECT
-          ROUND(today_revenue * 100 + 0.0000001 * SIGN(today_revenue)) AS today_revenue_paise,
-          ROUND(today_profit * 100 + 0.0000001 * SIGN(today_profit)) AS today_profit_paise,
+          today_revenue AS today_revenue_paise,
+          today_profit AS today_profit_paise,
           today_count,
           today_credit_note_count,
-          ROUND(range_revenue * 100 + 0.0000001 * SIGN(range_revenue)) AS range_revenue_paise,
-          ROUND(range_profit * 100 + 0.0000001 * SIGN(range_profit)) AS range_profit_paise,
-          ROUND(range_expenses * 100 + 0.0000001 * SIGN(range_expenses)) AS range_expenses_paise,
-          ROUND(range_purchases * 100 + 0.0000001 * SIGN(range_purchases)) AS range_purchases_paise,
-          ROUND(range_income * 100 + 0.0000001 * SIGN(range_income)) AS range_income_paise,
+          range_revenue AS range_revenue_paise,
+          range_profit AS range_profit_paise,
+          range_expenses AS range_expenses_paise,
+          range_purchases AS range_purchases_paise,
+          range_income AS range_income_paise,
           range_sale_count,
-          ROUND(prev_revenue * 100 + 0.0000001 * SIGN(prev_revenue)) AS prev_revenue_paise,
-          ROUND(prev_profit * 100 + 0.0000001 * SIGN(prev_profit)) AS prev_profit_paise,
-          ROUND(sale_subtotal * 100 + 0.0000001 * SIGN(sale_subtotal)) AS sale_subtotal_paise,
-          ROUND(sale_discount * 100 + 0.0000001 * SIGN(sale_discount)) AS sale_discount_paise,
-          ROUND(sale_cgst * 100 + 0.0000001 * SIGN(sale_cgst)) AS sale_cgst_paise,
-          ROUND(sale_sgst * 100 + 0.0000001 * SIGN(sale_sgst)) AS sale_sgst_paise,
-          ROUND(sale_igst * 100 + 0.0000001 * SIGN(sale_igst)) AS sale_igst_paise,
-          ROUND(purchase_cgst * 100 + 0.0000001 * SIGN(purchase_cgst)) AS purchase_cgst_paise,
-          ROUND(purchase_sgst * 100 + 0.0000001 * SIGN(purchase_sgst)) AS purchase_sgst_paise,
-          ROUND(purchase_igst * 100 + 0.0000001 * SIGN(purchase_igst)) AS purchase_igst_paise
+          prev_revenue AS prev_revenue_paise,
+          prev_profit AS prev_profit_paise,
+          sale_subtotal AS sale_subtotal_paise,
+          sale_discount AS sale_discount_paise,
+          sale_cgst AS sale_cgst_paise,
+          sale_sgst AS sale_sgst_paise,
+          sale_igst AS sale_igst_paise,
+          purchase_cgst AS purchase_cgst_paise,
+          purchase_sgst AS purchase_sgst_paise,
+          purchase_igst AS purchase_igst_paise
         FROM kpi_raw
       `,
 
@@ -262,22 +262,10 @@ export async function GET(req: NextRequest) {
       db.$queryRaw<Array<{ bucketStart: Date; revenuePaise: number; profitPaise: number }>>`
         SELECT
           DATE_TRUNC(${truncUnitLiteral}, "date" AT TIME ZONE 'Asia/Kolkata') AS "bucketStart",
-          ROUND(
-            (COALESCE(SUM(CASE WHEN "type" = 'sale' THEN "totalAmount" ELSE 0 END), 0)
-             - COALESCE(SUM(CASE WHEN "type" = 'credit-note' THEN "totalAmount" ELSE 0 END), 0)) * 100
-            + 0.0000001 * SIGN(
-              COALESCE(SUM(CASE WHEN "type" = 'sale' THEN "totalAmount" ELSE 0 END), 0)
-              - COALESCE(SUM(CASE WHEN "type" = 'credit-note' THEN "totalAmount" ELSE 0 END), 0)
-            )
-          ) AS "revenuePaise",
-          ROUND(
-            (COALESCE(SUM(CASE WHEN "type" = 'sale' THEN "grossProfit" ELSE 0 END), 0)
-             + COALESCE(SUM(CASE WHEN "type" = 'credit-note' THEN "grossProfit" ELSE 0 END), 0)) * 100
-            + 0.0000001 * SIGN(
-              COALESCE(SUM(CASE WHEN "type" = 'sale' THEN "grossProfit" ELSE 0 END), 0)
-              + COALESCE(SUM(CASE WHEN "type" = 'credit-note' THEN "grossProfit" ELSE 0 END), 0)
-            )
-          ) AS "profitPaise"
+          COALESCE(SUM(CASE WHEN "type" = 'sale' THEN "totalAmount" ELSE 0 END), 0)
+          - COALESCE(SUM(CASE WHEN "type" = 'credit-note' THEN "totalAmount" ELSE 0 END), 0) AS "revenuePaise",
+          COALESCE(SUM(CASE WHEN "type" = 'sale' THEN "grossProfit" ELSE 0 END), 0)
+          + COALESCE(SUM(CASE WHEN "type" = 'credit-note' THEN "grossProfit" ELSE 0 END), 0) AS "profitPaise"
         FROM "Transaction"
         WHERE "userId" = ${userId}
           AND "deletedAt" IS NULL
@@ -299,12 +287,7 @@ export async function GET(req: NextRequest) {
           ti."productName",
           ti."productId",
           SUM(CASE WHEN t."type" = 'sale' THEN ti."quantity" ELSE -ti."quantity" END) AS "totalQuantity",
-          ROUND(
-            SUM(CASE WHEN t."type" = 'sale' THEN ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 2) ELSE -ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 2) END) * 100
-            + 0.0000001 * SIGN(
-              SUM(CASE WHEN t."type" = 'sale' THEN ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 2) ELSE -ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 2) END)
-            )
-          ) AS "totalRevenuePaise"
+          SUM(CASE WHEN t."type" = 'sale' THEN ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 0) ELSE -ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 0) END) AS "totalRevenuePaise"
         FROM "TransactionItem" ti
         JOIN "Transaction" t ON ti."transactionId" = t.id
         WHERE t."userId" = ${userId}
@@ -324,12 +307,7 @@ export async function GET(req: NextRequest) {
       db.$queryRaw<Array<{ category: string | null; totalValuePaise: string }>>`
         SELECT
           COALESCE(p."category", 'Other') AS category,
-          ROUND(
-            SUM(CASE WHEN t."type" = 'sale' THEN ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 2) ELSE -ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 2) END) * 100
-            + 0.0000001 * SIGN(
-              SUM(CASE WHEN t."type" = 'sale' THEN ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 2) ELSE -ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 2) END)
-            )
-          ) AS "totalValuePaise"
+          SUM(CASE WHEN t."type" = 'sale' THEN ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 0) ELSE -ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 0) END) AS "totalValuePaise"
         FROM "TransactionItem" ti
         JOIN "Transaction" t ON ti."transactionId" = t.id
         LEFT JOIN "Product" p ON ti."productId" = p.id

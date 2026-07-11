@@ -163,8 +163,8 @@ export async function GET(req: NextRequest) {
       // (sum of taxable values), so positive nudge is sufficient.
       db.$queryRaw<Array<{ totalValuePaise: string }>>`
         SELECT COALESCE(ROUND(SUM(
-          ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 2)
-        ) * 100 + 0.0000001, 0), 0)::text AS "totalValuePaise"
+          ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 0)
+        ), 0)::text AS "totalValuePaise"
         FROM "TransactionItem" ti
         JOIN "Transaction" t ON ti."transactionId" = t.id
         LEFT JOIN "Product" p ON ti."productId" = p.id
@@ -185,8 +185,8 @@ export async function GET(req: NextRequest) {
       // 🔒 V17 PAISE MIGRATION Phase 2G: SQL returns paise. Same pattern as above.
       db.$queryRaw<Array<{ totalValuePaise: string }>>`
         SELECT COALESCE(ROUND(SUM(
-          ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 2)
-        ) * 100 + 0.0000001, 0), 0)::text AS "totalValuePaise"
+          ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 0)
+        ), 0)::text AS "totalValuePaise"
         FROM "TransactionItem" ti
         JOIN "Transaction" t ON ti."transactionId" = t.id
         LEFT JOIN "Product" p ON ti."productId" = p.id
@@ -217,8 +217,8 @@ export async function GET(req: NextRequest) {
       // taxableValue + igst are always >= 0, so positive nudge.
       db.$queryRaw<Array<{ taxableValuePaise: string; igstPaise: string }>>`
         SELECT
-          COALESCE(ROUND(SUM(t."subtotal"::numeric - COALESCE(t."discountAmount", 0)::numeric) * 100 + 0.0000001, 0), 0)::text AS "taxableValuePaise",
-          COALESCE(ROUND(SUM(t."igst"::numeric) * 100 + 0.0000001, 0), 0)::text AS "igstPaise"
+          COALESCE(SUM(t."subtotal"::numeric - COALESCE(t."discountAmount", 0)::numeric), 0)::text AS "taxableValuePaise",
+          COALESCE(SUM(t."igst"::numeric), 0)::text AS "igstPaise"
         FROM "Transaction" t
         LEFT JOIN "Party" p ON t."partyId" = p.id
         WHERE t."userId" = ${userId}
@@ -273,7 +273,7 @@ export async function GET(req: NextRequest) {
       // Same pattern as nil-rated sales — purchases where ALL items have gstRate = 0
       // 🔒 V17 PAISE MIGRATION Phase 2G: SQL returns paise. totalAmount >= 0, positive nudge.
       db.$queryRaw<Array<{ totalValuePaise: string }>>`
-        SELECT COALESCE(ROUND(SUM(t."totalAmount"::numeric) * 100 + 0.0000001, 0), 0)::text AS "totalValuePaise"
+        SELECT COALESCE(SUM(t."totalAmount"::numeric), 0)::text AS "totalValuePaise"
         FROM "Transaction" t
         WHERE t."userId" = ${userId}
           AND t."deletedAt" IS NULL
@@ -570,8 +570,8 @@ export async function POST(req: NextRequest) {
       // 🔒 V17 PAISE MIGRATION Phase 2G: SQL returns paise. Positive nudge (value >= 0).
       db.$queryRaw<Array<{ totalValuePaise: string }>>`
         SELECT COALESCE(ROUND(SUM(
-          ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 2)
-        ) * 100 + 0.0000001, 0), 0)::text AS "totalValuePaise"
+          ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 0)
+        ), 0)::text AS "totalValuePaise"
         FROM "TransactionItem" ti
         JOIN "Transaction" t ON ti."transactionId" = t.id
         LEFT JOIN "Product" p ON ti."productId" = p.id
@@ -585,8 +585,8 @@ export async function POST(req: NextRequest) {
       // 🔒 V17 PAISE MIGRATION Phase 2G: SQL returns paise. Positive nudge (value >= 0).
       db.$queryRaw<Array<{ totalValuePaise: string }>>`
         SELECT COALESCE(ROUND(SUM(
-          ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 2)
-        ) * 100 + 0.0000001, 0), 0)::text AS "totalValuePaise"
+          ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 0)
+        ), 0)::text AS "totalValuePaise"
         FROM "TransactionItem" ti
         JOIN "Transaction" t ON ti."transactionId" = t.id
         LEFT JOIN "Product" p ON ti."productId" = p.id
@@ -602,8 +602,8 @@ export async function POST(req: NextRequest) {
       // 🔒 V17 PAISE MIGRATION Phase 2G: SQL returns paise. Positive nudge (values >= 0).
       db.$queryRaw<Array<{ taxableValuePaise: string; igstPaise: string }>>`
         SELECT
-          COALESCE(ROUND(SUM(t."subtotal"::numeric - COALESCE(t."discountAmount", 0)::numeric) * 100 + 0.0000001, 0), 0)::text AS "taxableValuePaise",
-          COALESCE(ROUND(SUM(t."igst"::numeric) * 100 + 0.0000001, 0), 0)::text AS "igstPaise"
+          COALESCE(SUM(t."subtotal"::numeric - COALESCE(t."discountAmount", 0)::numeric), 0)::text AS "taxableValuePaise",
+          COALESCE(SUM(t."igst"::numeric), 0)::text AS "igstPaise"
         FROM "Transaction" t
         LEFT JOIN "Party" p ON t."partyId" = p.id
         WHERE t."userId" = ${userId} AND t."deletedAt" IS NULL AND t."type" = 'sale'
@@ -628,7 +628,7 @@ export async function POST(req: NextRequest) {
       }),
       // 🔒 V17 PAISE MIGRATION Phase 2G: SQL returns paise. Positive nudge (totalAmount >= 0).
       db.$queryRaw<Array<{ totalValuePaise: string }>>`
-        SELECT COALESCE(ROUND(SUM(t."totalAmount"::numeric) * 100 + 0.0000001, 0), 0)::text AS "totalValuePaise"
+        SELECT COALESCE(SUM(t."totalAmount"::numeric), 0)::text AS "totalValuePaise"
         FROM "Transaction" t
         WHERE t."userId" = ${userId}
           AND t."deletedAt" IS NULL AND t."type" = 'purchase'

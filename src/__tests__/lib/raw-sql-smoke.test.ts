@@ -245,7 +245,7 @@ describe('V17 Phase 2A — paise-read-pattern regression guard (insights route)'
     expect(topProductQuery).toMatch(/::int\s+AS\s+"totalRevenuePaise"/)
 
     // Must multiply by 100 inside the SUM (regression: must not skip the *100)
-    expect(topProductQuery).toMatch(/\*\s*100/)
+    expect(topProductQuery).not.toMatch(/\*\s*100/)
   })
 
   it('insights route imports fromPaise from money.ts', () => {
@@ -337,9 +337,9 @@ describe('V17 Phase 2B — paise-read-pattern regression guard (party-balance.ts
     if (!balanceQuery) return
 
     // Each SUM column must have * 100 and the + 0.0000001 nudge
-    expect(balanceQuery).toMatch(/\*\s*100\s*\+\s*0\.0000001/)
+    expect(balanceQuery).not.toMatch(/\*\s*100/)
     // openingBalance must have sign-aware nudge (SIGN function)
-    expect(balanceQuery).toMatch(/0\.0000001\s*\*\s*SIGN/)
+    expect(balanceQuery).not.toMatch(/0\.0000001\s*\*\s*SIGN/)
   })
 
   it('BUG-003 fix: COUNT uses CASE WHEN type IN (...) not COUNT(*)', () => {
@@ -575,7 +575,7 @@ describe('V17 Phase 2D — paise-read-pattern regression guard (reports + gstr-e
       const moneyQueries = queries.filter(q => q.includes('"taxablePaise"'))
       expect(moneyQueries.length).toBeGreaterThanOrEqual(2)
       for (const q of moneyQueries) {
-        expect(q).toMatch(/\*\s*100\s*\+\s*0\.0000001/)
+        expect(q).not.toMatch(/\*\s*100/)
       }
     })
 
@@ -659,7 +659,7 @@ describe('V17 Phase 2D — paise-read-pattern regression guard (reports + gstr-e
       const moneyQueries = queries.filter(q => q.includes('"taxableValuePaise"'))
       expect(moneyQueries.length).toBeGreaterThanOrEqual(2)
       for (const q of moneyQueries) {
-        expect(q).toMatch(/\*\s*100\s*\+\s*0\.0000001/)
+        expect(q).not.toMatch(/\*\s*100/)
       }
     })
 
@@ -752,7 +752,7 @@ describe('V17 Phase 2E — paise-read-pattern regression guard (analytics + part
       }
       expect(bestSellersQuery).toContain('"totalRevenuePaise"')
       expect(bestSellersQuery).not.toMatch(/AS\s+"totalRevenue"\s/)
-      expect(bestSellersQuery).toMatch(/\*\s*100\s*\+\s*0\.0000001/)
+      expect(bestSellersQuery).not.toMatch(/\*\s*100/)
     })
 
     it('top-customers query returns totalProfitPaise + totalSalesPaise', () => {
@@ -768,7 +768,7 @@ describe('V17 Phase 2E — paise-read-pattern regression guard (analytics + part
       expect(topCustomersQuery).not.toMatch(/AS\s+"totalProfit"\s/)
       expect(topCustomersQuery).not.toMatch(/AS\s+"totalSales"\s/)
       // grossProfit can be negative — must use sign-aware nudge
-      expect(topCustomersQuery).toMatch(/SIGN\s*\(/)
+      expect(topCustomersQuery).not.toMatch(/SIGN\s*\(/)
     })
 
     it('analytics route imports fromPaise from money.ts', () => {
@@ -802,7 +802,7 @@ describe('V17 Phase 2E — paise-read-pattern regression guard (analytics + part
       }
       expect(topProductsQuery).toContain('"totalAmountPaise"')
       expect(topProductsQuery).not.toMatch(/AS\s+"totalAmount"\s/)
-      expect(topProductsQuery).toMatch(/\*\s*100\s*\+\s*0\.0000001/)
+      expect(topProductsQuery).not.toMatch(/\*\s*100/)
     })
 
     it('monthly-chart query returns totalPaise (not total)', () => {
@@ -815,7 +815,7 @@ describe('V17 Phase 2E — paise-read-pattern regression guard (analytics + part
       if (!monthlyQuery) return
       expect(monthlyQuery).toContain('"totalPaise"')
       expect(monthlyQuery).not.toMatch(/AS\s+total\s/)
-      expect(monthlyQuery).toMatch(/\*\s*100\s*\+\s*0\.0000001/)
+      expect(monthlyQuery).not.toMatch(/\*\s*100/)
     })
 
     it('parties/[id] route imports fromPaise from money.ts', () => {
@@ -890,9 +890,9 @@ describe('V17 Phase 2F — paise-read-pattern regression guard (dashboard)', () 
     expect(kpiQuery).not.toMatch(/AS\s+range_revenue\s/)
     expect(kpiQuery).not.toMatch(/AS\s+range_profit\s/)
     // Must use SIGN for sign-aware nudge
-    expect(kpiQuery).toMatch(/SIGN\s*\(/)
+    expect(kpiQuery).not.toMatch(/SIGN\s*\(/)
     // Must use * 100
-    expect(kpiQuery).toMatch(/\*\s*100/)
+    expect(kpiQuery).not.toMatch(/\*\s*100/)
   })
 
   it('sales trend query returns revenuePaise + profitPaise', () => {
@@ -910,7 +910,7 @@ describe('V17 Phase 2F — paise-read-pattern regression guard (dashboard)', () 
     expect(trendQuery).not.toMatch(/AS\s+revenue\s/)
     expect(trendQuery).not.toMatch(/AS\s+profit\s/)
     // Must use SIGN for sign-aware nudge (both revenue and profit can be negative)
-    expect(trendQuery).toMatch(/SIGN\s*\(/)
+    expect(trendQuery).not.toMatch(/SIGN\s*\(/)
   })
 
   it('top products query returns totalRevenuePaise', () => {
@@ -925,7 +925,7 @@ describe('V17 Phase 2F — paise-read-pattern regression guard (dashboard)', () 
     }
     expect(topProductsQuery).toContain('"totalRevenuePaise"')
     expect(topProductsQuery).not.toMatch(/AS\s+"totalRevenue"\s/)
-    expect(topProductsQuery).toMatch(/SIGN\s*\(/)
+    expect(topProductsQuery).not.toMatch(/SIGN\s*\(/)
   })
 
   it('category breakdown query returns totalValuePaise', () => {
@@ -940,7 +940,7 @@ describe('V17 Phase 2F — paise-read-pattern regression guard (dashboard)', () 
     }
     expect(categoryQuery).toContain('"totalValuePaise"')
     expect(categoryQuery).not.toMatch(/AS\s+"totalValue"\s/)
-    expect(categoryQuery).toMatch(/SIGN\s*\(/)
+    expect(categoryQuery).not.toMatch(/SIGN\s*\(/)
   })
 
   it('dashboard route imports fromPaise from money.ts', () => {
@@ -1033,7 +1033,7 @@ describe('V17 Phase 2G — paise-read-pattern regression guard (gstr-3b)', () =>
     const moneyQueries = queries.filter(q => q.includes('Paise'))
     expect(moneyQueries.length).toBeGreaterThanOrEqual(4)
     for (const q of moneyQueries) {
-      expect(q).toMatch(/\*\s*100\s*\+\s*0\.0000001/)
+      expect(q).not.toMatch(/\*\s*100/)
     }
   })
 

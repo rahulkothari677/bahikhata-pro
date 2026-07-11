@@ -151,10 +151,10 @@ export async function GET(req: NextRequest) {
         SELECT
           ti."transactionId",
           ti."gstRate",
-          ROUND(SUM(ROUND((ti."quantity"::numeric * ti."unitPrice" - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 2)) * 100 + 0.0000001) AS "taxableValuePaise",
-          ROUND(SUM(COALESCE(ti."cgst", 0)::numeric) * 100 + 0.0000001) AS "cgstPaise",
-          ROUND(SUM(COALESCE(ti."sgst", 0)::numeric) * 100 + 0.0000001) AS "sgstPaise",
-          ROUND(SUM(COALESCE(ti."igst", 0)::numeric) * 100 + 0.0000001) AS "igstPaise",
+          SUM(ROUND((ti."quantity"::numeric * ti."unitPrice" - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 2)) AS "taxableValuePaise",
+          SUM(COALESCE(ti."cgst", 0)::numeric) AS "cgstPaise",
+          SUM(COALESCE(ti."sgst", 0)::numeric) AS "sgstPaise",
+          SUM(COALESCE(ti."igst", 0)::numeric) AS "igstPaise",
           SUM(ti."quantity") AS quantity
         FROM "TransactionItem" ti
         JOIN "Transaction" t ON ti."transactionId" = t.id
@@ -273,10 +273,10 @@ export async function GET(req: NextRequest) {
         SELECT
           ti."transactionId",
           ti."gstRate",
-          ROUND(SUM(ROUND((ti."quantity"::numeric * ti."unitPrice" - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 2)) * 100 + 0.0000001) AS "taxableValuePaise",
-          ROUND(SUM(COALESCE(ti."cgst", 0)::numeric) * 100 + 0.0000001) AS "cgstPaise",
-          ROUND(SUM(COALESCE(ti."sgst", 0)::numeric) * 100 + 0.0000001) AS "sgstPaise",
-          ROUND(SUM(COALESCE(ti."igst", 0)::numeric) * 100 + 0.0000001) AS "igstPaise",
+          SUM(ROUND((ti."quantity"::numeric * ti."unitPrice" - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 2)) AS "taxableValuePaise",
+          SUM(COALESCE(ti."cgst", 0)::numeric) AS "cgstPaise",
+          SUM(COALESCE(ti."sgst", 0)::numeric) AS "sgstPaise",
+          SUM(COALESCE(ti."igst", 0)::numeric) AS "igstPaise",
           SUM(ti."quantity") AS quantity
         FROM "TransactionItem" ti
         JOIN "Transaction" t ON ti."transactionId" = t.id

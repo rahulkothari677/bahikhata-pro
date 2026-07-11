@@ -47,7 +47,7 @@ export async function GET() {
       SELECT
         ti."productName",
         SUM(ti."quantity") AS "totalQty",
-        ROUND(SUM(ROUND(ti."quantity"::numeric * ti."unitPrice"::numeric, 2)) * 100 + 0.0000001) AS "totalRevenuePaise"
+        SUM(ROUND(ti."quantity"::numeric * ti."unitPrice"::numeric, 0)) AS "totalRevenuePaise"
       FROM "TransactionItem" ti
       JOIN "Transaction" t ON ti."transactionId" = t.id
       WHERE t."userId" = ${userId}
@@ -107,8 +107,8 @@ export async function GET() {
       }>>`
         SELECT
           t."partyId",
-          ROUND(SUM(t."grossProfit"::numeric) * 100 + 0.0000001 * SIGN(SUM(t."grossProfit"::numeric))) AS "totalProfitPaise",
-          ROUND(SUM(t."totalAmount"::numeric) * 100 + 0.0000001) AS "totalSalesPaise"
+          SUM(t."grossProfit"::numeric) AS "totalProfitPaise",
+          SUM(t."totalAmount"::numeric) AS "totalSalesPaise"
         FROM "Transaction" t
         WHERE t."userId" = ${userId}
           AND t."deletedAt" IS NULL

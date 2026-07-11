@@ -229,7 +229,7 @@ export async function getReceivablePayable(
   }>>`
     SELECT
       p."id" AS "partyId",
-      ROUND(p."openingBalance"::numeric * 100 + 0.0000001 * SIGN(p."openingBalance"::numeric)) AS "openingBalancePaise",
+      p."openingBalance"::numeric AS "openingBalancePaise",
       COALESCE(t."salesOutstandingPaise", 0) AS "salesOutstandingPaise",
       COALESCE(t."purchaseOutstandingPaise", 0) AS "purchaseOutstandingPaise",
       COALESCE(t."creditNoteOutstandingPaise", 0) AS "creditNoteOutstandingPaise",
@@ -241,10 +241,10 @@ export async function getReceivablePayable(
     LEFT JOIN (
       SELECT
         "partyId",
-        ROUND(SUM(CASE WHEN "type" = 'sale' THEN ("totalAmount" - "paidAmount")::numeric ELSE 0 END) * 100 + 0.0000001) AS "salesOutstandingPaise",
-        ROUND(SUM(CASE WHEN "type" = 'purchase' THEN ("totalAmount" - "paidAmount")::numeric ELSE 0 END) * 100 + 0.0000001) AS "purchaseOutstandingPaise",
-        ROUND(SUM(CASE WHEN "type" = 'credit-note' THEN ("totalAmount" - "paidAmount")::numeric ELSE 0 END) * 100 + 0.0000001) AS "creditNoteOutstandingPaise",
-        ROUND(SUM(CASE WHEN "type" = 'debit-note' THEN ("totalAmount" - "paidAmount")::numeric ELSE 0 END) * 100 + 0.0000001) AS "debitNoteOutstandingPaise",
+        SUM(CASE WHEN "type" = 'sale' THEN ("totalAmount" - "paidAmount")::numeric ELSE 0 END) AS "salesOutstandingPaise",
+        SUM(CASE WHEN "type" = 'purchase' THEN ("totalAmount" - "paidAmount")::numeric ELSE 0 END) AS "purchaseOutstandingPaise",
+        SUM(CASE WHEN "type" = 'credit-note' THEN ("totalAmount" - "paidAmount")::numeric ELSE 0 END) AS "creditNoteOutstandingPaise",
+        SUM(CASE WHEN "type" = 'debit-note' THEN ("totalAmount" - "paidAmount")::numeric ELSE 0 END) AS "debitNoteOutstandingPaise",
         COUNT(CASE WHEN "type" IN ('sale', 'purchase', 'credit-note', 'debit-note') THEN 1 END) AS "txnCount"
       FROM "Transaction"
       WHERE "userId" = ${userId}
@@ -254,8 +254,8 @@ export async function getReceivablePayable(
     LEFT JOIN (
       SELECT
         "partyId",
-        ROUND(SUM(CASE WHEN "type" = 'received' THEN "amount"::numeric ELSE 0 END) * 100 + 0.0000001) AS "paymentsReceivedPaise",
-        ROUND(SUM(CASE WHEN "type" = 'paid' THEN "amount"::numeric ELSE 0 END) * 100 + 0.0000001) AS "paymentsPaidPaise"
+        SUM(CASE WHEN "type" = 'received' THEN "amount"::numeric ELSE 0 END) AS "paymentsReceivedPaise",
+        SUM(CASE WHEN "type" = 'paid' THEN "amount"::numeric ELSE 0 END) AS "paymentsPaidPaise"
       FROM "Payment"
       WHERE "userId" = ${userId}
         AND "deletedAt" IS NULL
