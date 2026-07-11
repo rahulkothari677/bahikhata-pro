@@ -120,6 +120,12 @@ model Product {
   currentStock      Float    @default(0)
   lowStockThreshold Float    @default(5)
   notes             String?
+  // 🔒 V17 Audit §4.2: GST treatment — distinguishes nil-rated (0% GST but
+  // taxable supply), exempt (no GST, not taxable), non-GST (outside GST scope),
+  // and taxable (default). Used by GSTR-3B 3.1(c) to properly break out
+  // nil-rated vs exempt vs non-GST outward supplies. Before this, exemptValue
+  // was hardcoded to 0 because there was no way to mark a product as exempt.
+  gstTreatment      String   @default("taxable") // taxable | nil | exempt | nonGst
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
@@ -550,6 +556,18 @@ model GstReturn {
   itcCgst                     Float    @default(0)
   itcSgst                     Float    @default(0)
   itcIgst                     Float    @default(0)
+
+  // 🔒 V17 Audit §4.3: Credit/Debit Note breakdown (computed but not stored before).
+  // Storing these helps audit/dispute resolution — the filed snapshot now has
+  // the full CDN adjustment, not just the net tax payable.
+  creditNoteTaxableValue      Float    @default(0)
+  creditNoteCgst              Float    @default(0)
+  creditNoteSgst              Float    @default(0)
+  creditNoteIgst              Float    @default(0)
+  debitNoteTaxableValue       Float    @default(0)
+  debitNoteCgst               Float    @default(0)
+  debitNoteSgst               Float    @default(0)
+  debitNoteIgst               Float    @default(0)
 
   // Section 5: Exempt inward supplies
   exemptInwardValue           Float    @default(0)

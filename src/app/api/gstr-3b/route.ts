@@ -87,10 +87,11 @@ export async function GET(req: NextRequest) {
       // V17-Ext Tier 3: Credit notes (reduce output tax — seller issued credit to customer)
       creditNoteAgg,
       // === Section 3.1(c): Nil-rated, exempt, non-GST outward ===
-      // Nil-rated = sales with all items at 0% GST (GST-rate is 0 but supply IS taxable)
+      // 🔒 V17 Audit §4.1: Nil-rated = sum of 0%-rated line items (was: whole-invoice only)
+      // 🔒 V17 Audit §4.2: Exempt = products marked gstTreatment='exempt' (was: hardcoded 0)
       // Non-GST = income transactions (not subject to GST at all)
-      // Exempt = we don't currently have an "exempt" flag, so this is 0 for now
       nilRatedAgg,
+      exemptAgg,
       nonGstAgg,
       // === Section 3.2: Inter-state B2C supplies (unregistered, any amount) ===
       // Sales where isInterState = true AND party has no GSTIN
@@ -147,25 +148,49 @@ export async function GET(req: NextRequest) {
         _count: true,
       }),
 
-      // 3.1(c) part 1: Nil-rated sales (all items at 0% GST)
-      // Use raw SQL to find sales where ALL items have gstRate = 0
+      // 3.1(c) part 1: Nil-rated outward (0% GST items)
+      // 🔒 V17 Audit §4.1 FIX: Was "sales where ALL items have gstRate=0" (whole-invoice
+      // only). An invoice with a mix of 0% and 18% items had its 0% portion counted
+      // only inside the taxable supply, never broken out as nil-rated. Now: sum the
+      // taxable value of ALL 0%-rated line items across ALL non-RCM sales (whether
+      // the invoice is mixed or pure-0%). This correctly breaks out the nil-rated
+      // portion of mixed invoices.
       db.$queryRaw<Array<{ totalValue: string }>>`
-        SELECT COALESCE(SUM(t."totalAmount"::numeric), 0)::text AS "totalValue"
-        FROM "Transaction" t
+        SELECT COALESCE(SUM(
+          ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 2)
+        ), 0)::text AS "totalValue"
+        FROM "TransactionItem" ti
+        JOIN "Transaction" t ON ti."transactionId" = t.id
         WHERE t."userId" = ${userId}
           AND t."deletedAt" IS NULL
           AND t."type" = 'sale'
           AND t."isReverseCharge" = false
           AND t."date" >= ${periodStart}
           AND t."date" < ${periodEnd}
-          AND NOT EXISTS (
-            SELECT 1 FROM "TransactionItem" ti
-            WHERE ti."transactionId" = t.id
-              AND ti."gstRate" > 0
-          )
+          AND ti."gstRate" = 0
       `,
 
-      // 3.1(c) part 2: Non-GST outward (income transactions — not subject to GST)
+      // 3.1(c) part 2: Exempt outward (products marked gstTreatment='exempt')
+      // 🔒 V17 Audit §4.2 FIX: Was hardcoded to 0 (no exempt flag existed).
+      // Now: sum the taxable value of line items whose product is marked exempt.
+      // Falls back to 0 if no products have gstTreatment='exempt' (backward compat).
+      db.$queryRaw<Array<{ totalValue: string }>>`
+        SELECT COALESCE(SUM(
+          ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 2)
+        ), 0)::text AS "totalValue"
+        FROM "TransactionItem" ti
+        JOIN "Transaction" t ON ti."transactionId" = t.id
+        LEFT JOIN "Product" p ON ti."productId" = p.id
+        WHERE t."userId" = ${userId}
+          AND t."deletedAt" IS NULL
+          AND t."type" = 'sale'
+          AND t."isReverseCharge" = false
+          AND t."date" >= ${periodStart}
+          AND t."date" < ${periodEnd}
+          AND p."gstTreatment" = 'exempt'
+      `,
+
+      // 3.1(c) part 3: Non-GST outward (income transactions — not subject to GST)
       db.transaction.aggregate({
         where: {
           userId,
@@ -271,8 +296,10 @@ export async function GET(req: NextRequest) {
     const zeroRatedIgst = 0
 
     // 3.1(c): Nil-rated + exempt + non-GST
+    // 🔒 V17 Audit §4.1: Nil-rated now sums 0%-rated line items (not whole invoices)
     const nilRatedValue = roundMoney(Number(nilRatedAgg[0]?.totalValue || 0))
-    const exemptValue = 0 // No exempt flag currently
+    // 🔒 V17 Audit §4.2: Exempt now reads from Product.gstTreatment='exempt' (was: hardcoded 0)
+    const exemptValue = roundMoney(Number(exemptAgg[0]?.totalValue || 0))
     const nonGstValue = roundMoney(nonGstAgg._sum.totalAmount || 0)
 
     // 3.1(d): RCM INWARD liability (purchases with isReverseCharge = true)
@@ -488,8 +515,9 @@ export async function POST(req: NextRequest) {
     // This is critical: we NEVER trust client-sent financial data for a
     // snapshot. The server always recomputes from the source of truth.
     // 🔒 V17 Audit §2: rcmInwardAgg now queries type='purchase' (was: 'sale').
+    // 🔒 V17 Audit §4.1+4.2: nilRatedAgg now sums 0%-rated items; exemptAgg added.
     const [
-      outwardSalesAgg, rcmInwardAgg, creditNoteAgg, nilRatedAgg, nonGstAgg,
+      outwardSalesAgg, rcmInwardAgg, creditNoteAgg, nilRatedAgg, exemptAgg, nonGstAgg,
       interstateB2cAgg, itcPurchasesAgg, rcmItcAgg, debitNoteAgg, exemptInwardAgg,
     ] = await Promise.all([
       db.transaction.aggregate({
@@ -508,13 +536,30 @@ export async function POST(req: NextRequest) {
         _sum: { subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true },
         _count: true,
       }),
+      // 🔒 V17 Audit §4.1: Nil-rated = sum of 0%-rated line items (was: whole-invoice)
       db.$queryRaw<Array<{ totalValue: string }>>`
-        SELECT COALESCE(SUM(t."totalAmount"::numeric), 0)::text AS "totalValue"
-        FROM "Transaction" t
+        SELECT COALESCE(SUM(
+          ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 2)
+        ), 0)::text AS "totalValue"
+        FROM "TransactionItem" ti
+        JOIN "Transaction" t ON ti."transactionId" = t.id
         WHERE t."userId" = ${userId}
           AND t."deletedAt" IS NULL AND t."type" = 'sale' AND t."isReverseCharge" = false
           AND t."date" >= ${periodStart} AND t."date" < ${periodEnd}
-          AND NOT EXISTS (SELECT 1 FROM "TransactionItem" ti WHERE ti."transactionId" = t.id AND ti."gstRate" > 0)
+          AND ti."gstRate" = 0
+      `,
+      // 🔒 V17 Audit §4.2: Exempt = products with gstTreatment='exempt'
+      db.$queryRaw<Array<{ totalValue: string }>>`
+        SELECT COALESCE(SUM(
+          ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 2)
+        ), 0)::text AS "totalValue"
+        FROM "TransactionItem" ti
+        JOIN "Transaction" t ON ti."transactionId" = t.id
+        LEFT JOIN "Product" p ON ti."productId" = p.id
+        WHERE t."userId" = ${userId}
+          AND t."deletedAt" IS NULL AND t."type" = 'sale' AND t."isReverseCharge" = false
+          AND t."date" >= ${periodStart} AND t."date" < ${periodEnd}
+          AND p."gstTreatment" = 'exempt'
       `,
       db.transaction.aggregate({
         where: { userId, type: 'income', deletedAt: null, date: { gte: periodStart, lt: periodEnd } },
@@ -561,7 +606,10 @@ export async function POST(req: NextRequest) {
     const outwardCgst = roundMoney(outwardSalesAgg._sum.cgst || 0)
     const outwardSgst = roundMoney(outwardSalesAgg._sum.sgst || 0)
     const outwardIgst = roundMoney(outwardSalesAgg._sum.igst || 0)
+    // 🔒 V17 Audit §4.1: Nil-rated now sums 0%-rated line items
     const nilRatedValue = roundMoney(Number(nilRatedAgg[0]?.totalValue || 0))
+    // 🔒 V17 Audit §4.2: Exempt now reads from Product.gstTreatment='exempt'
+    const exemptValue = roundMoney(Number(exemptAgg[0]?.totalValue || 0))
     const nonGstValue = roundMoney(nonGstAgg._sum.totalAmount || 0)
     // 🔒 V17 Audit §2: 3.1(d) now from RCM purchases (rcmInwardAgg, was rcmOutwardAgg)
     const rcmTaxableValue = roundMoney((rcmInwardAgg._sum.subtotal || 0) - (rcmInwardAgg._sum.discountAmount || 0))
@@ -616,8 +664,11 @@ export async function POST(req: NextRequest) {
         filedByUserId,
         outwardTaxableValue, outwardCgst, outwardSgst, outwardIgst,
         rcmTaxableValue, rcmCgst, rcmSgst, rcmIgst,
-        nilRatedValue, exemptValue: 0, nonGstValue,
+        nilRatedValue, exemptValue, nonGstValue,
         itcTaxableValue, itcCgst, itcSgst, itcIgst,
+        // 🔒 V17 Audit §4.3: Persist CDN breakdown for audit/dispute resolution
+        creditNoteTaxableValue, creditNoteCgst, creditNoteSgst, creditNoteIgst,
+        debitNoteTaxableValue, debitNoteCgst, debitNoteSgst, debitNoteIgst,
         exemptInwardValue,
         interstateB2cTaxableValue, interstateB2cIgst,
         netTaxPayable,
@@ -632,8 +683,11 @@ export async function POST(req: NextRequest) {
         filedByUserId,
         outwardTaxableValue, outwardCgst, outwardSgst, outwardIgst,
         rcmTaxableValue, rcmCgst, rcmSgst, rcmIgst,
-        nilRatedValue, exemptValue: 0, nonGstValue,
+        nilRatedValue, exemptValue, nonGstValue,
         itcTaxableValue, itcCgst, itcSgst, itcIgst,
+        // 🔒 V17 Audit §4.3: Persist CDN breakdown for audit/dispute resolution
+        creditNoteTaxableValue, creditNoteCgst, creditNoteSgst, creditNoteIgst,
+        debitNoteTaxableValue, debitNoteCgst, debitNoteSgst, debitNoteIgst,
         exemptInwardValue,
         interstateB2cTaxableValue, interstateB2cIgst,
         netTaxPayable,
