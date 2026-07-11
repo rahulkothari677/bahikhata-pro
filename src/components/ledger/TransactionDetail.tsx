@@ -377,18 +377,14 @@ export function TransactionDetail() {
                   date: new Date().toISOString().slice(0, 10),
                   originalTransactionId: txn.id,
                   noteType: 'C',
-                  // 🔒 V17 Audit §1: Pre-fill items from the original sale so the
-                  // user can adjust quantities (for partial returns) instead of
-                  // re-entering everything. Each item maps to the RawLineItem shape
-                  // that TransactionEntry expects.
-                  items: txn.items?.map((item: any) => ({
-                    productId: item.productId,
-                    productName: item.productName,
-                    quantity: item.quantity,
-                    unitPrice: item.unitPrice,
-                    gstRate: item.gstRate,
-                    unit: item.unit,
-                  })) || [],
+                  // 🔒 V17 Audit §1: Items are NOT pre-filled. The credit note form
+                  // starts BLANK because the most common case is a partial return
+                  // (customer returns 1-2 items from a multi-item sale). Pre-filling
+                  // all items would force the user to delete the non-returned items.
+                  // Instead, the TransactionEntry shows a "Load items from original
+                  // sale" button that the user can click for full returns.
+                  // The originalTransactionId is passed so the entry form can fetch
+                  // the original items on demand when the user clicks that button.
                 },
               }
               useAppStore.getState().setPreviousView('transaction-detail')

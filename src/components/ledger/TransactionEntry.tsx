@@ -19,6 +19,7 @@ import {
   ShoppingCart, Truck, Plus, X, Search, ChevronDown, ChevronRight,
   TrendingUp, Calendar, User, ScanLine, Folder, FolderOpen,
   Package, Phone, IndianRupee, Save, Trash2, Check, AlertCircle, Mic, Clock, AlertTriangle,
+  FileDown,
 } from 'lucide-react'
 import { VoiceEntry } from '@/components/common/VoiceEntry'
 import { DraftManagerModal } from '@/components/common/DraftManagerModal'
@@ -380,6 +381,43 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
   const handleRemoveItem = (index: number) => {
     setPresetLoaded(false) // User manually removed — resume autosave
     setItems(items.filter((_, i) => i !== index))
+  }
+
+  // V17 Audit §1: Load items from the original sale when creating a credit note.
+  // The form starts BLANK (partial returns are the common case). This button lets
+  // the user pull in ALL items from the original sale for full returns — they then
+  // adjust quantities or delete non-returned items. Fetches the original transaction
+  // by ID and maps its items to the ItemRow shape.
+  const [loadingOriginal, setLoadingOriginal] = useState(false)
+  const handleLoadOriginalItems = async () => {
+    if (!originalTransactionId) return
+    setLoadingOriginal(true)
+    try {
+      const r = await offlineFetch(`/api/transactions/${originalTransactionId}`)
+      if (!r.ok) throw new Error('Failed to fetch original transaction')
+      const data = await r.json()
+      const originalItems = data.transaction?.items || []
+      if (originalItems.length === 0) {
+        sonnerToast.info('The original sale has no items to load.')
+        setLoadingOriginal(false)
+        return
+      }
+      setPresetLoaded(false) // resume autosave — user is making changes
+      setItems(originalItems.map((item: any) => ({
+        productId: item.productId || '',
+        productName: item.productName || '',
+        quantity: item.quantity || 1,
+        unitPrice: item.unitPrice || 0,
+        gstRate: item.gstRate || 0,
+        unit: item.unit || 'pcs',
+        discountAmount: 0,
+      })))
+      sonnerToast.success(`Loaded ${originalItems.length} item${originalItems.length !== 1 ? 's' : ''} from the original sale`)
+    } catch (e: any) {
+      sonnerToast.error('Failed to load items from original sale')
+    } finally {
+      setLoadingOriginal(false)
+    }
   }
 
   // Totals — 🔒 V12: Use the SAME computeLineItems() the server uses. Because
@@ -992,6 +1030,29 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
                     />
                   </CardContent>
                 </Card>
+              )}
+
+              {/* V17 Audit §1: "Load items from original sale" button for credit notes.
+                  The form starts BLANK (partial returns are common). This button lets
+                  the user pull in ALL items from the original sale for full returns. */}
+              {isCreditNote && originalTransactionId && (
+                <button
+                  type="button"
+                  onClick={handleLoadOriginalItems}
+                  disabled={loadingOriginal}
+                  className={cn(
+                    'w-full flex items-center justify-center gap-2 py-2.5 rounded-lg border border-violet-300 bg-violet-50 dark:bg-violet-950/20 text-violet-700 dark:text-violet-300 text-sm font-medium hover:bg-violet-100 dark:hover:bg-violet-950/30 transition mb-2',
+                    loadingOriginal && 'opacity-60 cursor-not-allowed'
+                  )}
+                >
+                  <FileDown className="w-4 h-4" />
+                  {loadingOriginal
+                    ? 'Loading...'
+                    : items.length > 0
+                      ? 'Reload all items from original sale'
+                      : 'Load all items from original sale'
+                  }
+                </button>
               )}
 
               {items.length === 0 ? (
