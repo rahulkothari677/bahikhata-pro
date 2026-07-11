@@ -20,6 +20,14 @@ and include enough context to reproduce.
 
 <!-- Add new bugs below this line. Newest first. -->
 
+### BUG-007 — (MOVED to Fixed bugs section below)
+
+- **Status**: FIXED (2026-07-11, as part of V17 Phase 2C)
+
+### BUG-006 — (MOVED to Fixed bugs section below)
+
+- **Status**: FIXED (2026-07-11, as part of V17 Phase 2C)
+
 ### BUG-005 — (RESERVED — was the validation.test.ts tsc errors, now FIXED, see Fixed bugs section)
 
 - **Status**: FIXED (2026-07-11)
@@ -63,6 +71,30 @@ and include enough context to reproduce.
 ## Fixed bugs
 
 <!-- Move bugs here once fixed. Include fix date and commit/PR reference. -->
+
+### BUG-007 — Reconciliation test mock misroutes getReceivablePayable SQL — FIXED
+
+- **Found**: 2026-07-11, during Phase 2C post-change scan of `reconciliation.test.ts`
+- **File**: `src/__tests__/lib/reconciliation.test.ts:42-53` (mock routing logic)
+- **Severity**: Medium (test always passed trivially — fixture data never used)
+- **Description**: The mock `$queryRaw` implementation used `includes('Payment')` to identify the orphaned-payments query. However, `getReceivablePayable`'s SQL ALSO contains `"Payment"` in its subquery. This caused `getReceivablePayable` to be misrouted to the orphaned-payments branch, receiving `[{ count: 0 }]` instead of the fixture party-balance rows. The test then passed trivially (0 === 0) without ever testing the actual fixture data.
+- **Fix applied**: 2026-07-11. Changed mock routing to use patterns UNIQUE to each query:
+  - Orphaned-items: `includes('TransactionItem')` (unique — no other query refs TransactionItem)
+  - Orphaned-payments: `includes('pty.id IS NULL')` (unique — only orphaned-payments checks pty.id IS NULL)
+  - getReceivablePayable: default (falls through to `overrides.queryRawResult`)
+- **Verification**: `npx jest reconciliation.test.ts` — 13 tests pass. The party-balances check now actually tests the fixture values (p1=1300, p2=-300) instead of 0===0.
+- **Status**: FIXED
+
+### BUG-006 — Orphaned-items reconciliation check ALWAYS returns 0 — FIXED
+
+- **Found**: 2026-07-11, during Phase 2C pre-change scan of `reconciliation.ts`
+- **File**: `src/lib/reconciliation.ts:162-172` (`checkOrphanedData` function)
+- **Severity**: High (the check is designed to catch DB integrity issues but could never fire)
+- **Description**: The orphaned-items query had a contradictory `EXISTS` clause: `WHERE t.id IS NULL AND EXISTS (SELECT 1 FROM Transaction t2 WHERE t2.id = ti.transactionId)`. If the parent Transaction was hard-deleted (t.id IS NULL), the EXISTS subquery also can't find it → always false → count always 0. The check could never detect the exact orphans it was designed to catch.
+- **Root cause**: TransactionItem has no `userId` field. The original author tried to scope the orphan check to the current user via the parent Transaction's userId, but since the parent is deleted, there's no row to read userId from.
+- **Fix applied**: 2026-07-11. Removed the EXISTS clause entirely. The orphaned-items check is now global (not user-scoped). This is appropriate because: (1) orphans indicate a DB integrity issue (FK bypass), not a user data issue; (2) TransactionItem has no userId field; (3) a global check that fires is better than a user-scoped check that never fires. The orphaned-payments check remains correctly user-scoped because Payment HAS its own userId field.
+- **Regression guard**: Added in `src/__tests__/lib/raw-sql-smoke.test.ts` under "V17 Phase 2C — reconciliation.ts verification" → "BUG-006 fix: orphaned-items query does NOT have the contradictory EXISTS clause".
+- **Status**: FIXED
 
 ### BUG-005 — `validation.test.ts` had 5 tsc errors (discriminated union not narrowed) — FIXED
 

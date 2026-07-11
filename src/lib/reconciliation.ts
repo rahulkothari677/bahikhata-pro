@@ -99,6 +99,17 @@ export async function checkPartyBalances(userId: string): Promise<Reconciliation
  *   - SUM of TransactionItem.cgst (non-deleted items, non-deleted transactions)
  *   - vs. SUM of Transaction.cgst (non-deleted)
  * And same for sgst and igst.
+ *
+ * 🔒 V17 PAISE MIGRATION Phase 2C — Phase 4 dependency note:
+ *   This function uses Prisma `aggregate()` (not raw SQL), so it's NOT part
+ *   of Phase 2 (read-path SQL migration). However, when Phase 4 changes the
+ *   column types from Float (rupees) to Int (paise), the Prisma `_sum` will
+ *   return paise instead of rupees. At that point, the `roundMoney()` calls
+ *   below must change to `fromPaise()`:
+ *     itemCgst = fromPaise(itemGst._sum.cgst || 0)
+ *     headerCgst = fromPaise(headerGst._sum.cgst || 0)
+ *   And the comparison tolerance `< 0.01` can become `=== 0` (exact equality
+ *   for integers). Catalog this as a Phase 4 task.
  */
 export async function checkGstReconciliation(userId: string): Promise<ReconciliationCheck> {
   // Per-item GST totals (the "single source of truth" from V10)
@@ -159,20 +170,36 @@ export async function checkOrphanedData(userId: string): Promise<ReconciliationC
   // Count items whose parent transaction doesn't exist AT ALL (hard-deleted).
   // Uses raw SQL because Prisma's relation filters can't express "parent IS NULL"
   // on a required relation — they only support filtering on parent properties.
+  //
+  // 🔒 BUG-006 FIX (V17 Phase 2C): Removed the contradictory EXISTS clause that
+  // checked `EXISTS (SELECT 1 FROM Transaction t2 WHERE t2.userId = userId AND
+  // t2.id = ti.transactionId)`. That clause made the query ALWAYS return 0
+  // because: if the parent Transaction was hard-deleted (t.id IS NULL), then
+  // t2.id = ti.transactionId can't match any row either → EXISTS is false →
+  // the row is filtered out → count is always 0. The check could never detect
+  // the exact orphans it was designed to catch.
+  //
+  // TransactionItem has no userId field (unlike Payment), so user-scoping is
+  // impossible without a schema change. The check is now GLOBAL (not user-
+  // scoped). This is appropriate because orphans indicate a DB integrity
+  // issue (FK bypass), not a user data issue. The orphaned-payments check
+  // below correctly uses p.userId because Payment HAS its own userId field.
+  //
+  // With Prisma's onDelete: Cascade on Transaction→TransactionItem, this
+  // count should always be 0. A non-zero count means someone manually deleted
+  // Transaction rows via SQL, bypassing the cascade.
   const orphanedItemsResult = await db.$queryRaw<Array<{ count: bigint }>>`
     SELECT COUNT(*)::bigint as count
     FROM "TransactionItem" ti
     LEFT JOIN "Transaction" t ON ti."transactionId" = t.id
     WHERE t.id IS NULL
-      AND EXISTS (
-        SELECT 1 FROM "Transaction" t2
-        WHERE t2."userId" = ${userId}
-        AND t2.id = ti."transactionId"
-      )
   `
   const orphanedItems = Number(orphanedItemsResult[0]?.count || 0)
 
   // Count payments whose parent party doesn't exist AT ALL (hard-deleted).
+  // This check IS correctly user-scoped because Payment has its own userId
+  // field (schema line 347), so we can filter by p."userId" without needing
+  // the parent Party to exist.
   const orphanedPaymentsResult = await db.$queryRaw<Array<{ count: bigint }>>`
     SELECT COUNT(*)::bigint as count
     FROM "Payment" p

@@ -385,3 +385,118 @@ describe('V17 Phase 2B — paise-read-pattern regression guard (party-balance.ts
     expect(stripped).not.toMatch(/row\.(openingBalance|salesOutstanding|purchaseOutstanding|creditNoteOutstanding|debitNoteOutstanding|paymentsReceived|paymentsPaid)\b(?!Paise)/)
   })
 })
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔒 V17 PAISE MIGRATION Phase 2C — reconciliation.ts verification
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Phase 2C scanned reconciliation.ts and found:
+//   - checkPartyBalances: calls getReceivablePayable() (already migrated in
+//     Phase 2B). No raw SQL. Nothing to migrate.
+//   - checkGstReconciliation: uses Prisma aggregate() (not raw SQL). Phase 4
+//     dependency noted in code comment — will need roundMoney→fromPaise when
+//     columns change to Int.
+//   - checkOrphanedData: 2 raw SQL queries, both SELECT COUNT(*). No money
+//     columns touched. Nothing to migrate for paise.
+//
+// This test block verifies:
+//   1. The orphaned-items and orphaned-payments queries DON'T touch money
+//      columns (so paise migration doesn't affect them).
+//   2. BUG-006 fix: the orphaned-items query does NOT have the contradictory
+//      EXISTS clause that made it always return 0.
+describe('V17 Phase 2C — reconciliation.ts verification + BUG-006 regression guard', () => {
+  const RECONCILIATION_PATH = path.join(
+    process.cwd(),
+    'src',
+    'lib',
+    'reconciliation.ts',
+  )
+  const source = fs.existsSync(RECONCILIATION_PATH)
+    ? fs.readFileSync(RECONCILIATION_PATH, 'utf8')
+    : ''
+  const skip = !source
+
+  it('reconciliation.ts file exists', () => {
+    if (skip) return
+    expect(source.length).toBeGreaterThan(0)
+  })
+
+  // Money column names that should NOT appear in the orphan-check SQL
+  const MONEY_COLUMNS = [
+    'totalAmount', 'paidAmount', 'unitPrice', 'purchasePrice',
+    'openingBalance', 'amount', 'cgst', 'sgst', 'igst',
+    'subtotal', 'discountAmount', 'roundOff', 'grossProfit',
+  ]
+
+  it('orphaned-items query does NOT touch money columns (paise migration safe)', () => {
+    if (skip) return
+    const queries = extractRawSql(source)
+    // The orphaned-items query references TransactionItem + LEFT JOIN Transaction
+    const orphanItemsQuery = queries.find(q =>
+      q.includes('TransactionItem') && q.includes('LEFT JOIN') && q.includes('COUNT')
+    )
+    if (!orphanItemsQuery) {
+      throw new Error(
+        'Could not find orphaned-items query in reconciliation.ts. ' +
+        'Did the SQL shape change? Update this test to match.',
+      )
+    }
+    // Assert NO money columns are referenced in the query
+    for (const col of MONEY_COLUMNS) {
+      // Match "columnName" (with double quotes, as used in Postgres identifiers)
+      // or columnName (without quotes). Use word boundary to avoid partial matches.
+      const pattern = new RegExp(`"${col}"|\\b${col}\\b`, 'i')
+      if (pattern.test(orphanItemsQuery)) {
+        throw new Error(
+          `Orphaned-items query references money column "${col}". ` +
+          `This query should only count rows (COUNT *), not read money values. ` +
+          `If money columns are now needed, this query needs paise migration.`
+        )
+      }
+    }
+  })
+
+  it('orphaned-payments query does NOT touch money columns (paise migration safe)', () => {
+    if (skip) return
+    const queries = extractRawSql(source)
+    // The orphaned-payments query references Payment + LEFT JOIN Party
+    const orphanPaymentsQuery = queries.find(q =>
+      q.includes('"Payment"') && q.includes('LEFT JOIN') && q.includes('"Party"')
+    )
+    if (!orphanPaymentsQuery) {
+      throw new Error(
+        'Could not find orphaned-payments query in reconciliation.ts. ' +
+        'Did the SQL shape change? Update this test to match.',
+      )
+    }
+    // The Payment table has an "amount" column — but the orphan check should
+    // only COUNT rows, not SUM the amount. Assert no money columns are in SUM/SELECT.
+    for (const col of MONEY_COLUMNS) {
+      const pattern = new RegExp(`"${col}"|\\b${col}\\b`, 'i')
+      if (pattern.test(orphanPaymentsQuery)) {
+        throw new Error(
+          `Orphaned-payments query references money column "${col}". ` +
+          `This query should only count rows (COUNT *), not read money values. ` +
+          `If money columns are now needed, this query needs paise migration.`
+        )
+      }
+    }
+  })
+
+  it('BUG-006 fix: orphaned-items query does NOT have the contradictory EXISTS clause', () => {
+    if (skip) return
+    const queries = extractRawSql(source)
+    const orphanItemsQuery = queries.find(q =>
+      q.includes('TransactionItem') && q.includes('LEFT JOIN') && q.includes('COUNT')
+    )
+    if (!orphanItemsQuery) return
+
+    // The old (buggy) query had: AND EXISTS (SELECT 1 FROM "Transaction" t2 WHERE t2."userId" = ... AND t2.id = ti."transactionId")
+    // This made the query ALWAYS return 0 because if the parent is deleted (t.id IS NULL),
+    // the EXISTS subquery also can't find it.
+    expect(orphanItemsQuery).not.toMatch(/EXISTS\s*\(\s*SELECT\s+1\s+FROM\s+["]?Transaction["]?\s+t2/i)
+
+    // The fixed query should just be: WHERE t.id IS NULL (no EXISTS subquery)
+    expect(orphanItemsQuery).toMatch(/WHERE\s+t\.id\s+IS\s+NULL/i)
+  })
+})

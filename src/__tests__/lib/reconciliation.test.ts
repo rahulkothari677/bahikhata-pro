@@ -38,17 +38,31 @@ function setupCommonMocks(overrides: {
   // $queryRaw is used by BOTH getReceivablePayable (checkPartyBalances) AND
   // the orphaned-data check (checkOrphanedData). We use mockImplementation
   // to return different results based on the SQL query content.
+  //
+  // 🔒 BUG-007 FIX (V17 Phase 2C): The old routing used `includes('Payment')`
+  // to identify the orphaned-payments query. However, getReceivablePayable's
+  // SQL ALSO contains `"Payment"` in its subquery (LEFT JOIN ... FROM "Payment"
+  // ...). This caused getReceivablePayable to be misrouted to the orphaned-
+  // payments branch, receiving `[{ count: 0 }]` instead of the fixture party-
+  // balance rows. The test then passed trivially (0 === 0) without ever
+  // testing the actual fixture data.
+  //
+  // Fix: use patterns UNIQUE to each query:
+  //   - Orphaned-items: `includes('TransactionItem')` — no other query refs TransactionItem
+  //   - Orphaned-payments: `includes('pty.id IS NULL')` — only orphaned-payments checks pty.id IS NULL
+  //   - getReceivablePayable: default (falls through to overrides.queryRawResult)
   const queryRawMock: any = jest.fn()
   queryRawMock.mockImplementation((sql: any) => {
-    // The orphan check queries have "LEFT JOIN" in them
     const sqlStr = Array.isArray(sql?.strings) ? sql.strings.join('') : String(sql)
-    if (sqlStr.includes('LEFT JOIN') && sqlStr.includes('TransactionItem')) {
+    // Orphaned-items query: references TransactionItem table
+    if (sqlStr.includes('TransactionItem')) {
       return Promise.resolve([{ count: BigInt(overrides.orphanedItems ?? 0) }])
     }
-    if (sqlStr.includes('LEFT JOIN') && sqlStr.includes('Payment')) {
+    // Orphaned-payments query: checks pty.id IS NULL (Party hard-deleted)
+    if (sqlStr.includes('pty.id IS NULL')) {
       return Promise.resolve([{ count: BigInt(overrides.orphanedPayments ?? 0) }])
     }
-    // Default: return the party balances result
+    // Default: return the party balances result (getReceivablePayable SQL)
     return Promise.resolve(overrides.queryRawResult ?? [])
   })
   dbAny.$queryRaw = queryRawMock

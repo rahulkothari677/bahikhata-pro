@@ -4222,3 +4222,55 @@ Stage Summary:
 - Protocol lesson reinforced: "pre-existing" is NOT an excuse to skip cataloging. Every bug found — whether pre-existing or introduced — goes in BUGS-FOUND.md and is either fixed immediately or scheduled for a later sub-phase.
 - Open bugs remaining: BUG-002 (computePartyBalance sequential Promise.all — Low/Perf), BUG-004 (openingBalance not rounded on UPDATE — Medium). Both scheduled for fixing after paise migration completes (or sooner if user requests).
 - NEXT: Wait for user to verify Vercel deployment of Phase 2A + 2B + BUG-005 fix, then proceed to Phase 2C.
+
+---
+Task ID: paise-migration-phase-2C
+Agent: main
+Task: V17 Paise Migration Phase 2C — Scan reconciliation.ts for money-touching SQL. Found no paise migration needed (COUNT queries only). Found and fixed 2 pre-existing bugs: BUG-006 (orphaned-items check always returns 0) + BUG-007 (test mock misroutes SQL).
+
+Work Log:
+- PRE-CHANGE SCAN: Read reconciliation.ts (218 lines, 3 check functions). Analyzed each:
+    * checkPartyBalances: calls getReceivablePayable() (already migrated Phase 2B). No raw SQL. Nothing to migrate.
+    * checkGstReconciliation: uses Prisma aggregate() (not raw SQL). Reads Float columns (cgst/sgst/igst) with roundMoney() in JS. No raw SQL to migrate. Added Phase 4 dependency note in code comment (roundMoney → fromPaise when columns change to Int).
+    * checkOrphanedData: 2 raw SQL queries, both SELECT COUNT(*). No money columns touched. Nothing to migrate for paise.
+
+- Found BUG-006 (High): Orphaned-items query had contradictory EXISTS clause:
+    WHERE t.id IS NULL AND EXISTS (SELECT 1 FROM Transaction t2 WHERE t2.id = ti.transactionId)
+  If parent Transaction is hard-deleted (t.id IS NULL), the EXISTS subquery also can't find it → always false → count always 0. The check could NEVER detect the orphans it was designed to catch. Root cause: TransactionItem has no userId field, so the author tried to scope via the parent's userId — but the parent is deleted.
+  FIX: Removed the EXISTS clause. Check is now global (not user-scoped). Appropriate because orphans indicate DB integrity issues, not user data issues. The orphaned-payments check remains correctly user-scoped (Payment has its own userId field).
+
+- POST-CHANGE SCAN of reconciliation.test.ts: Found BUG-007 (Medium): Test mock used `includes('Payment')` to route the orphaned-payments query, but getReceivablePayable's SQL ALSO contains `"Payment"` in its subquery. This caused getReceivablePayable to be misrouted, receiving `[{ count: 0 }]` instead of the fixture party-balance rows. The party-balances test passed trivially (0===0) — fixture data was NEVER tested.
+  FIX: Changed mock routing to use patterns unique to each query: `includes('TransactionItem')` for orphaned-items, `includes('pty.id IS NULL')` for orphaned-payments, default for getReceivablePayable.
+
+- Added 4 new regression-guard tests in raw-sql-smoke.test.ts:
+    1. reconciliation.ts file exists
+    2. orphaned-items query does NOT touch money columns (paise migration safe)
+    3. orphaned-payments query does NOT touch money columns (paise migration safe)
+    4. BUG-006 fix: orphaned-items query does NOT have the contradictory EXISTS clause
+
+- Added Phase 4 dependency note in checkGstReconciliation code comment: when Phase 4 changes columns from Float to Int, the roundMoney() calls must change to fromPaise(), and the comparison tolerance < 0.01 can become === 0 (exact equality for integers).
+
+- Files modified (4, per git status):
+    1. src/lib/reconciliation.ts — BUG-006 fix (removed EXISTS clause) + Phase 4 dependency note
+    2. src/__tests__/lib/reconciliation.test.ts — BUG-007 fix (mock routing)
+    3. src/__tests__/lib/raw-sql-smoke.test.ts — 4 new Phase 2C regression guards
+    4. BUGS-FOUND.md — BUG-006 + BUG-007 cataloged and marked FIXED
+
+- VERIFICATION:
+    * npx tsc --noEmit: 0 errors (codebase remains fully type-clean)
+    * npx eslint on all 3 modified source files: clean
+    * npx jest (6 targeted test files): 143 tests, ALL PASS — including:
+        - reconciliation.test.ts (13 tests — now ACTUALLY tests fixture data instead of 0===0)
+        - raw-sql-smoke.test.ts (including 4 new Phase 2C regression guards)
+        - balance-reconciliation-behavioral.test.ts (the CRITICAL parity test)
+        - paise-helpers, money, balance-reconciliation
+    * npx jest (6 broader financial test files one-at-a-time): 152 tests, ALL PASS.
+
+Stage Summary:
+- Phase 2C COMPLETE. No paise migration needed (COUNT queries only, no money columns). But found and fixed 2 real bugs:
+    * BUG-006 (High): Orphaned-items reconciliation check could NEVER detect orphans. Now fixed — the check actually works.
+    * BUG-007 (Medium): Test mock misrouted SQL, making the party-balances test pass trivially (0===0) instead of testing fixture data. Now fixed — the test actually tests what it claims to test.
+- 4 new regression-guard tests added. Total paise-migration regression guards: 15 (4 Phase 2A + 7 Phase 2B + 4 Phase 2C).
+- Phase 4 dependency noted in code: checkGstReconciliation uses Prisma aggregate() on Float columns — will need roundMoney→fromPaise when columns change to Int.
+- Bug registry status: 4 bugs FIXED (BUG-003, BUG-005, BUG-006, BUG-007), 2 bugs OPEN (BUG-002 Low/Perf, BUG-004 Medium).
+- NEXT: Push to origin/main, wait for Vercel deploy + user verification, then proceed to Phase 2D (reports/route.ts + gstr-export/route.ts — 4 raw SQL queries with money columns).
