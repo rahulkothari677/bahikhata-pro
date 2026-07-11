@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { getAuthContext, assertCanWrite } from '@/lib/get-auth'
 import { canAccessModule, type ModuleKey } from '@/lib/staff-permissions'
 import { assertPeriodNotLocked, PeriodLockedError } from '@/lib/period-lock'
+import { apiError } from '@/lib/api-error'
 
 /**
  * POST /api/transactions/[id]/restore
@@ -110,7 +111,6 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       transactionId: id,
     })
   } catch (error) {
-    console.error('Transaction RESTORE error:', error)
-    return NextResponse.json({ error: 'Failed to restore transaction' }, { status: 500 })
+    return apiError(error, 'Failed to restore transaction', 500)
   }
 }

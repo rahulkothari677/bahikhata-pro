@@ -4,6 +4,7 @@ import { getAuthUserIdOwnerOnly } from '@/lib/get-auth'
 import { logAudit, AUDIT_ACTIONS } from '@/lib/audit'
 import { clearAllOfflineData } from '@/lib/offline-db'
 import { cloudinary } from '@/lib/cloudinary'
+import { apiError } from '@/lib/api-error'
 
 /**
  * DELETE /api/account/delete

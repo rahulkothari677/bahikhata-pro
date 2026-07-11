@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUserIdWithModule } from '@/lib/get-auth'
 import { db as prisma } from '@/lib/db'
+import { apiError } from '@/lib/api-error'
 
 /**
  * PATCH /api/scan-bill/compare/[id]
@@ -72,8 +73,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       scores: { gemini: geminiScore, openai: openaiScore, groq: groqScore },
     })
   } catch (error) {
-    console.error('Update comparison ground truth error:', error)
-    return NextResponse.json({ error: 'Failed to save ground truth' }, { status: 500 })
+    return apiError(error, 'Failed to save ground truth', 500)
   }
 }
 

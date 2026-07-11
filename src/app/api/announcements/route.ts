@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { apiError } from '@/lib/api-error'
 
 /**
  * GET /api/announcements

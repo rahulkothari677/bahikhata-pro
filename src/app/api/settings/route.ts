@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUserIdWithModule } from '@/lib/get-auth'
 import { withCache } from '@/lib/cache'
+import { apiError } from '@/lib/api-error'
 
 // GET /api/settings
 export async function GET() {
@@ -104,7 +105,6 @@ export async function PUT(req: NextRequest) {
 
     return NextResponse.json({ setting })
   } catch (error) {
-    console.error('Settings PUT error:', error)
-    return NextResponse.json({ error: 'Failed to update settings' }, { status: 500 })
+    return apiError(error, 'Failed to update settings', 500)
   }
 }

@@ -3,6 +3,7 @@ import { validateBody, applyReferralSchema } from '@/lib/validation'
 import { db } from '@/lib/db'
 import { getAuthContext, assertCanWrite } from '@/lib/get-auth'
 import { logAudit } from '@/lib/audit'
+import { apiError } from '@/lib/api-error'
 
 /**
  * POST /api/referral/apply
@@ -142,7 +143,6 @@ export async function POST(req: NextRequest) {
       referrerRewardGranted: rewardGranted,
     })
   } catch (e) {
-    console.error('[referral/apply] Error:', e)
-    return NextResponse.json({ error: 'Failed to apply referral code' }, { status: 500 })
+    return apiError(e, 'Failed to apply referral code', 500)
   }
 }

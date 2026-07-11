@@ -6,6 +6,7 @@ import { istMonthStartOffset, getISTDateParts } from '@/lib/timezone'
 import { computePartyBalance } from '@/lib/party-balance'
 import { encodeKeysetCursor, buildKeysetWhere } from '@/lib/pagination'
 import { validateBody, updatePartySchema } from '@/lib/validation'
+import { apiError } from '@/lib/api-error'
 
 // GET /api/parties/[id] - get party with paginated transactions + SQL aggregates
 // ⚡ PERFORMANCE (Audit fix H4): Was loading ALL transactions with items into
@@ -312,8 +313,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       },
     })
   } catch (error) {
-    console.error('Party GET error:', error)
-    return NextResponse.json({ error: 'Failed to fetch party' }, { status: 500 })
+    return apiError(error, 'Failed to fetch party', 500)
   }
 }
 
@@ -359,8 +359,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     })
     return NextResponse.json({ party })
   } catch (error) {
-    console.error('Party PUT error:', error)
-    return NextResponse.json({ error: 'Failed to update party' }, { status: 500 })
+    return apiError(error, 'Failed to update party', 500)
   }
 }
 
@@ -415,7 +414,6 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     })
     return NextResponse.json({ success: true, message: 'Party deleted (soft delete — can be restored)' })
   } catch (error) {
-    console.error('Party DELETE error:', error)
-    return NextResponse.json({ error: 'Failed to delete party' }, { status: 500 })
+    return apiError(error, 'Failed to delete party', 500)
   }
 }

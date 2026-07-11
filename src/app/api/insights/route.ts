@@ -4,6 +4,7 @@ import { getAuthUserIdWithModule } from '@/lib/get-auth'
 import { roundMoney, fromPaise } from '@/lib/money'
 import { activeTransactionWhere } from '@/lib/query-helpers'
 import { getReceivablePayable } from '@/lib/party-balance'
+import { apiError } from '@/lib/api-error'
 
 // ⏱️ Vercel serverless timeout — insights aggregates dashboard data and
 // may call AI for smart alerts. Set explicit maxDuration.
@@ -319,7 +320,6 @@ export async function GET() {
       },
     })
   } catch (error) {
-    console.error('Insights error:', error)
-    return NextResponse.json({ error: 'Failed to generate insights' }, { status: 500 })
+    return apiError(error, 'Failed to generate insights', 500)
   }
 }

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAdmin } from '@/lib/admin-auth'
 import { istDayStart } from '@/lib/timezone'
+import { apiError } from '@/lib/api-error'
 
 /**
  * GET /api/admin/ai-usage
@@ -119,7 +120,6 @@ export async function GET() {
       },
     })
   } catch (error) {
-    console.error('[admin/ai-usage] Error:', error)
-    return NextResponse.json({ error: 'Failed to load AI usage data' }, { status: 500 })
+    return apiError(error, 'Failed to load AI usage data', 500)
   }
 }

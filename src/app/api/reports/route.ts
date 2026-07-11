@@ -6,6 +6,7 @@ import { shouldHideProfit, stripReportProfit } from '@/lib/profit-visibility'
 import { roundMoney, fromPaise } from '@/lib/money'
 import { activeTransactionWhere } from '@/lib/query-helpers'
 import { istMonthStart } from '@/lib/timezone'
+import { apiError } from '@/lib/api-error'
 import {
   netSalesTaxable,
   netSalesProfit,

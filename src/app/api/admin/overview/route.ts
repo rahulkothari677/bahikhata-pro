@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAdmin } from '@/lib/admin-auth'
 import { istDayStart, istMonthStartOffset } from '@/lib/timezone'
+import { apiError } from '@/lib/api-error'
 
 /**
  * GET /api/admin/overview
@@ -148,7 +149,6 @@ export async function GET() {
       generatedAt: now.toISOString(),
     })
   } catch (error) {
-    console.error('[admin/overview] Error:', error)
-    return NextResponse.json({ error: 'Failed to load admin overview' }, { status: 500 })
+    return apiError(error, 'Failed to load admin overview', 500)
   }
 }

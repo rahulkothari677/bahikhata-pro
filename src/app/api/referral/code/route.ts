@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
 import { withCache } from '@/lib/cache'
+import { apiError } from '@/lib/api-error'
 
 /**
  * GET /api/referral/code
@@ -52,7 +53,6 @@ export async function GET() {
       whatsappText,
     }, { maxAge: 300, swr: 600 })
   } catch (e) {
-    console.error('[referral/code] Error:', e)
-    return NextResponse.json({ error: 'Failed to get referral code' }, { status: 500 })
+    return apiError(e, 'Failed to get referral code', 500)
   }
 }

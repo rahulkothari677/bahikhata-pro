@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { isEmailConfigured } from '@/lib/email'
+import { apiError } from '@/lib/api-error'
 
 /**
  * GET /api/feature-flags

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUserIdWithModule } from '@/lib/get-auth'
 import { db as prisma } from '@/lib/db'
+import { apiError } from '@/lib/api-error'
 
 /**
  * GET /api/scan-bill/compare/history
@@ -48,8 +49,7 @@ export async function GET(req: NextRequest) {
       stats,
     })
   } catch (error) {
-    console.error('Fetch comparison history error:', error)
-    return NextResponse.json({ error: 'Failed to fetch history' }, { status: 500 })
+    return apiError(error, 'Failed to fetch history', 500)
   }
 }
 

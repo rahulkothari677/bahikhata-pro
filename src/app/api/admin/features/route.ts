@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAdmin } from '@/lib/admin-auth'
 import { istDayStart } from '@/lib/timezone'
+import { apiError } from '@/lib/api-error'
 
 /**
  * GET /api/admin/features
@@ -77,7 +78,6 @@ export async function GET() {
       totalEvents: auditLogs.length,
     })
   } catch (error) {
-    console.error('[admin/features] Error:', error)
-    return NextResponse.json({ error: 'Failed to load feature usage' }, { status: 500 })
+    return apiError(error, 'Failed to load feature usage', 500)
   }
 }

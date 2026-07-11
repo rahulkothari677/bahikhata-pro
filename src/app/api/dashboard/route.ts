@@ -9,6 +9,7 @@ import { activeTransactionWhere } from '@/lib/query-helpers'
 import { roundMoney, fromPaise } from '@/lib/money'
 import { getReceivablePayable } from '@/lib/party-balance'
 import { istDayStart, istMonthStart, getISTDateParts, IST_OFFSET_MS } from '@/lib/timezone'
+import { apiError } from '@/lib/api-error'
 
 // ⚡ PERFORMANCE (V6 SC3): KPIs + charts are now computed via SQL aggregate
 // queries. Was: a single findMany loaded range + previous-range transactions

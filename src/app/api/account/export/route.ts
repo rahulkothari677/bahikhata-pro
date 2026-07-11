@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUserIdOwnerOnly } from '@/lib/get-auth'
 import { logAudit, AUDIT_ACTIONS } from '@/lib/audit'
+import { apiError } from '@/lib/api-error'
 
 /**
  * GET /api/account/export

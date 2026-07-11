@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
+import { apiError } from '@/lib/api-error'
 
 /**
  * GET /api/referral/status

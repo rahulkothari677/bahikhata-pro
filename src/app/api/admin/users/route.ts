@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAdmin } from '@/lib/admin-auth'
 import { istDayStart } from '@/lib/timezone'
+import { apiError } from '@/lib/api-error'
 
 /**
  * GET /api/admin/users
@@ -70,7 +71,6 @@ export async function GET() {
       avgSignupsPerDay: recentUsers.length / 30,
     })
   } catch (error) {
-    console.error('[admin/users] Error:', error)
-    return NextResponse.json({ error: 'Failed to load users data' }, { status: 500 })
+    return apiError(error, 'Failed to load users data', 500)
   }
 }
