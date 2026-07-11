@@ -771,11 +771,11 @@ export function TransactionDetail() {
                     </div>
                     <div className="flex items-center gap-2 mt-1 tabular-nums">
                       <span className="text-rose-600 line-through opacity-70">
-                        {formatAuditValue(change.oldValue)}
+                        {formatAuditValue(change.oldValue, change.fieldName)}
                       </span>
                       <ArrowRight className="w-3 h-3 text-muted-foreground flex-shrink-0" />
                       <span className="text-emerald-600 font-medium">
-                        {formatAuditValue(change.newValue)}
+                        {formatAuditValue(change.newValue, change.fieldName)}
                       </span>
                     </div>
                   </div>
@@ -1018,7 +1018,9 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
 
               <div className="flex items-center justify-between rounded-lg bg-muted/50 p-3">
                 <Label className="cursor-pointer">Inter-state (IGST)</Label>
-                <Switch checked={form.isInterState} onCheckedChange={(v) => setForm({ ...form, isInterState: v })} />
+                {/* 🔒 V19-021: isInterState is server-derived from party state, not user-settable.
+                    Display as read-only to avoid confusion. */}
+                <Switch checked={form.isInterState} disabled />
               </div>
 
               <div>
@@ -1421,11 +1423,17 @@ function generateInvoiceHTML(txn: any, setting: any): string {
 }
 
 // V17-Ext 5.1: Format a value from the audit trail for display.
-// Money fields show with Rs. prefix, dates are formatted, null shows as dash.
-function formatAuditValue(value: any): string {
+// 🔒 V19-033 FIX: gstRate is a percentage (not money), quantity is a count.
+// Money fields show with Rs. prefix, percentages with %, others as plain numbers.
+function formatAuditValue(value: any, fieldName?: string): string {
   if (value === null || value === undefined) return '\u2014'
   if (value instanceof Date) return formatDate(value)
   if (typeof value === 'number') {
+    // 🔒 V19-033: gstRate is a percentage, not money
+    if (fieldName === 'gstRate') return `${value}%`
+    // quantity is a count, not money
+    if (fieldName === 'quantity' || fieldName === 'currentStock' || fieldName === 'openingStock' || fieldName === 'lowStockThreshold') return String(value)
+    // All other numbers are money
     return `Rs. ${value.toFixed(2)}`
   }
   if (typeof value === 'string') {

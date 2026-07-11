@@ -13,7 +13,10 @@ export async function GET() {
     const setting = await db.setting.findUnique({ where: { userId } })
     return withCache({ setting: setting || { shopName: 'My Shop' } }, { maxAge: 120, swr: 600 })
   } catch (error) {
-    return NextResponse.json({ setting: { shopName: 'My Shop' } })
+    // 🔒 V19-025 FIX: Return 500 on error, not 200 with fake defaults.
+    // Previously: returned 200 + { shopName: 'My Shop' } on DB failure →
+    // client thinks settings loaded successfully, shows wrong shop name.
+    return apiError(error, 'Failed to load settings', 500)
   }
 }
 

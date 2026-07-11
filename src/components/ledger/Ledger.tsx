@@ -326,7 +326,7 @@ export function Ledger({ type }: { type: LedgerType }) {
       if (stored && stored.type === type) {
         setPreviousView(targetView)
         setView(isSale ? 'new-sale' : 'new-purchase')
-        ;(window as any).__ledgerPreset = stored
+        ;(window as any).__ledgerPreset = null
       }
     }
     checkPreset()

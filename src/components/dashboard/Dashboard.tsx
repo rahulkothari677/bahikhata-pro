@@ -609,7 +609,7 @@ export function Dashboard() {
                   <Pie
                     data={[
                       { name: 'Sales', value: kpis.rangeRevenue || 0, fill: 'oklch(0.62 0.15 155)' },
-                      { name: 'Purchases', value: kpis.totalPayable || 0, fill: 'oklch(0.62 0.18 42)' },
+                      { name: 'Purchases', value: kpis.rangePurchases || 0, fill: 'oklch(0.62 0.18 42)' },
                     ]}
                     dataKey="value"
                     cx="50%"
@@ -640,7 +640,7 @@ export function Dashboard() {
                     'text-sm font-bold tabular-nums',
                     (kpis.rangeRevenue - (kpis.totalPayable || 0)) >= 0 ? 'text-emerald-600' : 'text-rose-600'
                   )}>
-                    {formatINRCompact(kpis.rangeRevenue - (kpis.totalPayable || 0))}
+                    {formatINRCompact(kpis.rangeRevenue - (kpis.rangePurchases || 0))}
                   </span>
                 </div>
               </div>

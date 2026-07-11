@@ -87,7 +87,7 @@ export function Settings() {
   const queryClient = useQueryClient()
   const { data: session } = useSession()
   const { features, setFeature, resetFeatures, themeColor, setThemeColor, language, setLanguage, setView } = useAppStore()
-  const isOwner = session?.user?.role !== 'staff'
+  const isOwner = session?.user?.role === 'owner'
   const [form, setForm] = useState({
     shopName: '', ownerName: '', phone: '', email: '',
     gstin: '', state: '', address: '', upiId: '',
@@ -160,7 +160,7 @@ export function Settings() {
       await offlineFetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, hideProfit, roundOffEnabled: next }),
+        body: JSON.stringify({ roundOffEnabled: next }),
         offline: { invalidate: ['/api/settings'] },
       })
       sonnerToast.success(`Invoice round-off ${next ? 'on' : 'off'}`)
@@ -178,7 +178,7 @@ export function Settings() {
       await offlineFetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, hideProfit, roundOffEnabled, stockPolicy: next }),
+        body: JSON.stringify({ stockPolicy: next }),
         offline: { invalidate: ['/api/settings'] },
       })
       sonnerToast.success(next === 'allow' ? 'Overselling allowed (kirana mode)' : 'Overselling blocked')
@@ -906,22 +906,7 @@ export function Settings() {
               </button>
             ))}
           </div>
-          <div className="mt-4 flex items-center justify-between rounded-lg bg-muted/50 p-3">
-            <div className="flex items-center gap-2">
-              <Moon className="w-4 h-4 text-muted-foreground" />
-              <div>
-                <p className="text-sm font-medium">Dark Mode</p>
-                <p className="text-[11px] text-muted-foreground">Switch to dark background</p>
-              </div>
-            </div>
-            <Switch
-              checked={features.darkMode}
-              onCheckedChange={(checked) => {
-                setFeature('darkMode', checked)
-                sonnerToast.success(`Dark mode ${checked ? 'enabled' : 'disabled'}`)
-              }}
-            />
-          </div>
+          {/* 🔒 V19-034: Removed duplicate Dark Mode toggle — keep the one below */}
 
           {/* Language Toggle — 6 languages */}
           <div className="mt-3 flex items-center justify-between rounded-lg bg-muted/50 p-3 flex-wrap gap-2">
@@ -1067,7 +1052,7 @@ export function Settings() {
                   fetch('/api/settings', {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ...form, scanLang: e.target.value }),
+                    body: JSON.stringify({ scanLang: e.target.value }),
                   }).then(() => {
                     sonnerToast.success('Scanner language updated')
                   }).catch(() => {
@@ -1118,7 +1103,7 @@ export function Settings() {
                   fetch('/api/settings', {
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ...form, voiceLang: e.target.value }),
+                    body: JSON.stringify({ voiceLang: e.target.value }),
                   }).then(() => {
                     sonnerToast.success('Voice entry language updated')
                   }).catch(() => {

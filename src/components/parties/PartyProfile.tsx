@@ -806,7 +806,11 @@ export function PartyProfile() {
                 const isPurchase = entry.type === 'purchase'
                 const isPayReceived = entry.type === 'payment-received'
                 const isPayPaid = entry.type === 'payment-paid'
-                const isInflow = isSale || isPayReceived
+                // 🔒 V19-015 FIX: Credit notes are OUTFLOW (money returned to customer).
+                // Debit notes are INFLOW (money received from supplier).
+                const isCreditNote = entry.type === 'credit-note'
+                const isDebitNote = entry.type === 'debit-note'
+                const isInflow = isSale || isPayReceived || isDebitNote
                 const entryDate = new Date(entry.date)
                 const prevEntry = statement[index - 1]
                 const showDateSeparator = !prevEntry || new Date(prevEntry.date).toDateString() !== entryDate.toDateString()
