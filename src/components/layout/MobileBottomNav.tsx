@@ -6,24 +6,25 @@
  * Shows on screens < lg (1024px). Hidden on desktop where the sidebar
  * is always visible.
  *
- * 5 tabs:
- *   [Dashboard] [Sales] [ + New ] [Inventory] [More]
+ * 🔒 V17 Audit Phase 10: Now 6 tabs (Purchases moved from More to bottom nav):
+ *   [Dashboard] [Sales] [ + New ] [Purchases] [Stock] [More]
  *
- * The center "+" button is elevated and highlighted — it's the most
- * important action (record a new sale). Tapping it goes to the New Sale
- * page directly.
+ * The center "+" button is elevated and highlighted. Tapping it goes to
+ * New Sale. Long-pressing it opens a quick-action menu (New Sale /
+ * New Purchase / Record Payment).
  *
- * "More" opens the sidebar (which has all other views: Purchases,
- * Income/Expense, Parties, Scanner, Reports, Settings).
+ * "More" opens the MoreScreen (Income/Expense, Parties, Scanner, Reports,
+ * Settings, Support).
  */
 
 import { useAppStore, type ViewType } from '@/store/app-store'
-import { LayoutDashboard, ShoppingCart, Package, Menu, Plus, Calculator } from 'lucide-react'
+import { LayoutDashboard, ShoppingCart, Package, Menu, Plus, Calculator, Truck, Wallet } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTranslation } from '@/hooks/use-translation'
 import { haptic } from '@/lib/haptic'
 import { useStaffPermissions } from '@/hooks/use-staff-permissions'
 import { prefetchView } from '@/lib/prefetch'  // 🔒 V11 §3.3
+import { useState, useRef, useEffect } from 'react'
 
 interface Tab {
   view: ViewType
@@ -36,14 +37,32 @@ const TABS: Tab[] = [
   { view: 'dashboard', icon: LayoutDashboard, labelKey: 'nav.dashboard', label: 'Home' },
   { view: 'sales', icon: ShoppingCart, labelKey: 'nav.sales', label: 'Sales' },
   // Center "+" button is separate (not in this array)
-  { view: 'inventory', icon: Package, labelKey: 'nav.inventory', label: 'Stock' },
-  // "More" is also separate
+  // 🔒 V17 Audit Phase 10: Purchases replaces Inventory in bottom nav (more frequently accessed)
+  { view: 'purchases', icon: Truck, labelKey: 'nav.purchases', label: 'Buy' },
+  // "More" is also separate (Inventory is now in More)
 ]
 
 export function MobileBottomNav() {
   const { currentView, setView } = useAppStore()
   const { t } = useTranslation()
   const { canAccess, isCA } = useStaffPermissions()
+
+  // 🔒 V17 Audit Phase 10: Long-press quick-action menu state
+  const [showQuickMenu, setShowQuickMenu] = useState(false)
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const quickMenuRef = useRef<HTMLDivElement>(null)
+
+  // Close quick menu on outside click
+  useEffect(() => {
+    if (!showQuickMenu) return
+    const handleClick = (e: MouseEvent) => {
+      if (quickMenuRef.current && !quickMenuRef.current.contains(e.target as Node)) {
+        setShowQuickMenu(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [showQuickMenu])
 
   // Don't show on auth screen or new entry/detail pages (those have their own back button)
   // The More screen KEEPS the bottom nav so users can switch tabs without going back
@@ -55,7 +74,7 @@ export function MobileBottomNav() {
     const moduleMap: Record<string, string> = {
       'dashboard': 'dashboard',
       'sales': 'sales',
-      'inventory': 'inventory',
+      'purchases': 'purchases',
     }
     const moduleKey = moduleMap[tab.view]
     if (moduleKey) return canAccess(moduleKey as any)
@@ -63,7 +82,34 @@ export function MobileBottomNav() {
   })
 
   // 'More' tab is active when on the More screen OR any secondary view reached from More
-  const isMoreActive = currentView === 'more' || ['purchases', 'income-expense', 'parties', 'scanner', 'reports', 'settings'].includes(currentView)
+  const isMoreActive = currentView === 'more' || ['inventory', 'income-expense', 'parties', 'scanner', 'reports', 'settings'].includes(currentView)
+
+  // 🔒 V17 Audit Phase 10: Long-press handlers for the + button
+  const handlePlusTouchStart = () => {
+    longPressTimer.current = setTimeout(() => {
+      haptic.medium()
+      setShowQuickMenu(true)
+    }, 500) // 500ms long-press
+  }
+  const handlePlusTouchEnd = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current)
+      longPressTimer.current = null
+    }
+  }
+  const handlePlusClick = () => {
+    // If the menu is showing, don't also navigate (the long-press already fired)
+    if (showQuickMenu) return
+    haptic.medium()
+    setView('new-sale')
+  }
+
+  // Quick menu actions
+  const quickActions = [
+    { label: 'New Sale', icon: ShoppingCart, view: 'new-sale' as ViewType, color: 'text-emerald-600' },
+    { label: 'New Purchase', icon: Truck, view: 'new-purchase' as ViewType, color: 'text-amber-600' },
+    { label: 'Income/Expense', icon: Wallet, view: 'income-expense' as ViewType, color: 'text-blue-600' },
+  ]
 
   return (
     <>
@@ -100,10 +146,9 @@ export function MobileBottomNav() {
             )
           })}
 
-          {/* Center: New Sale button (elevated) — hidden for CAs (read-only) */}
-          <div className="flex-1 flex justify-center">
+          {/* Center: New button (elevated) — long-press for quick menu */}
+          <div className="flex-1 flex justify-center relative">
             {isCA ? (
-              // V17-Ext Tier 3 Step 5: CA Mode badge replaces the New Sale button
               <div
                 className="flex flex-col items-center justify-center gap-0.5"
                 title="CA Mode — Read-only access"
@@ -114,13 +159,43 @@ export function MobileBottomNav() {
                 <span className="text-[10px] font-medium text-violet-600 dark:text-violet-400">CA Mode</span>
               </div>
             ) : (
-              <button
-                onClick={() => { haptic.medium(); setView('new-sale') }}
-                className="w-12 h-12 -mt-6 rounded-full bg-gradient-saffron text-white flex items-center justify-center shadow-lg shadow-primary/30 active:scale-95 transition-transform"
-                aria-label="New Sale"
-              >
-                <Plus className="w-6 h-6" strokeWidth={2.5} />
-              </button>
+              <>
+                <button
+                  onClick={handlePlusClick}
+                  onTouchStart={handlePlusTouchStart}
+                  onTouchEnd={handlePlusTouchEnd}
+                  onTouchMove={handlePlusTouchEnd}
+                  className="w-12 h-12 -mt-6 rounded-full bg-gradient-saffron text-white flex items-center justify-center shadow-lg shadow-primary/30 active:scale-95 transition-transform"
+                  aria-label="New Sale (long-press for more options)"
+                >
+                  <Plus className="w-6 h-6" strokeWidth={2.5} />
+                </button>
+                {/* 🔒 V17 Audit Phase 10: Long-press quick-action menu */}
+                {showQuickMenu && (
+                  <div
+                    ref={quickMenuRef}
+                    className="absolute bottom-16 left-1/2 -translate-x-1/2 bg-popover border border-border rounded-xl shadow-xl py-1 min-w-[160px] z-50"
+                  >
+                    {quickActions.map((action) => {
+                      const ActionIcon = action.icon
+                      return (
+                        <button
+                          key={action.view}
+                          onClick={() => {
+                            haptic.click()
+                            setShowQuickMenu(false)
+                            setView(action.view)
+                          }}
+                          className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-muted transition text-left"
+                        >
+                          <ActionIcon className={cn('w-4 h-4', action.color)} />
+                          <span className="text-sm font-medium">{action.label}</span>
+                        </button>
+                      )
+                    })}
+                  </div>
+                )}
+              </>
             )}
           </div>
 

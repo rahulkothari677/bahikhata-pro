@@ -32,7 +32,7 @@ import {
   ChevronRight, Pencil, BarChart3, Truck, Wallet, Users,
   ScanLine, Sparkles, Settings as SettingsIcon, UserCog,
   Crown, HelpCircle, Phone, Info, Star, LogOut, ArrowLeft,
-  FileSpreadsheet, Bell, Calculator,
+  FileSpreadsheet, Bell, Calculator, Package,
 } from 'lucide-react'
 import type { ViewType } from '@/store/app-store'
 import type { LucideIcon } from 'lucide-react'
@@ -56,7 +56,7 @@ const SECTIONS: MenuSection[] = [
     title: 'Business',
     items: [
       { icon: BarChart3, label: 'Reports', description: 'GST, P&L, sales analytics', view: 'reports', iconColor: 'text-rose-600', iconBg: 'bg-rose-100' },
-      { icon: Truck, label: 'Purchases', description: 'Stock purchases & supplier ledger', view: 'purchases', iconColor: 'text-amber-600', iconBg: 'bg-amber-100' },
+      { icon: Package, label: 'Inventory', description: 'Manage products, stock, prices', view: 'inventory', iconColor: 'text-amber-600', iconBg: 'bg-amber-100' },
       { icon: Wallet, label: 'Income & Expense', description: 'Rent, salary, other income', view: 'income-expense', iconColor: 'text-emerald-600', iconBg: 'bg-emerald-100' },
       { icon: Users, label: 'Customers & Suppliers', description: 'Track dues & party balances', view: 'parties', iconColor: 'text-blue-600', iconBg: 'bg-blue-100' },
     ],
@@ -264,7 +264,7 @@ export function MoreScreen() {
           </p>
           <div className="bg-card rounded-2xl shadow-sm border border-border/60 overflow-hidden">
             <button
-              onClick={() => { haptic.click(); sonnerToast.info('Help center coming soon!') }}
+              onClick={() => { haptic.click(); setPreviousView('more'); setView('settings') }}
               className="w-full flex items-center gap-3 p-3 hover:bg-muted/50 transition text-left"
             >
               <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
@@ -272,12 +272,12 @@ export function MoreScreen() {
               </div>
               <div className="flex-1">
                 <p className="font-medium text-sm">Help & Support</p>
-                <p className="text-xs text-muted-foreground">FAQs, tutorials, guides</p>
+                <p className="text-xs text-muted-foreground">Settings, features, theme</p>
               </div>
               <ChevronRight className="w-4 h-4 text-muted-foreground" />
             </button>
             <button
-              onClick={() => { haptic.click(); sonnerToast.info('Contact us at support@ekbook.app') }}
+              onClick={() => { haptic.click(); sonnerToast.info('Contact us at support@ekbook.app', { description: 'Email us anytime — we respond within 24 hours.' }) }}
               className="w-full flex items-center gap-3 p-3 hover:bg-muted/50 transition text-left border-t border-border/40"
             >
               <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
@@ -285,12 +285,12 @@ export function MoreScreen() {
               </div>
               <div className="flex-1">
                 <p className="font-medium text-sm">Contact Us</p>
-                <p className="text-xs text-muted-foreground">WhatsApp, email, phone</p>
+                <p className="text-xs text-muted-foreground">support@ekbook.app</p>
               </div>
               <ChevronRight className="w-4 h-4 text-muted-foreground" />
             </button>
             <button
-              onClick={() => { haptic.click(); sonnerToast.info('EkBook v1.0 — Made in India 🇮🇳') }}
+              onClick={() => { haptic.click(); sonnerToast.info('EkBook — India\'s Smart Ledger', { description: 'Made in India with love for Bharat. GST-compliant, offline-ready, CA-friendly.' }) }}
               className="w-full flex items-center gap-3 p-3 hover:bg-muted/50 transition text-left border-t border-border/40"
             >
               <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0">
@@ -298,12 +298,12 @@ export function MoreScreen() {
               </div>
               <div className="flex-1">
                 <p className="font-medium text-sm">About</p>
-                <p className="text-xs text-muted-foreground">Version, privacy policy, terms</p>
+                <p className="text-xs text-muted-foreground">Version, privacy, terms</p>
               </div>
               <ChevronRight className="w-4 h-4 text-muted-foreground" />
             </button>
             <button
-              onClick={() => { haptic.click(); sonnerToast.success('Thank you for rating! ⭐') }}
+              onClick={() => { haptic.click(); window.open('https://play.google.com/store/apps/details?id=com.ekbook.app', '_blank') }}
               className="w-full flex items-center gap-3 p-3 hover:bg-muted/50 transition text-left border-t border-border/40"
             >
               <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
