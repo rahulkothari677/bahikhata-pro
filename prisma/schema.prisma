@@ -104,9 +104,9 @@ model Product {
   hsn               String? // HSN/SAC code for GST
   category          String?
   unit              String   @default("pcs") // pcs, kg, ltr, m, box
-  purchasePrice     Int    @default(0) // price at which shop owner buys
-  salePrice         Int    @default(0) // price at which shop owner sells
-  mrp               Int? // MRP printed on product
+  purchasePrice     Float    @default(0) // price at which shop owner buys
+  salePrice         Float    @default(0) // price at which shop owner sells
+  mrp               Float? // MRP printed on product
   gstRate           Float    @default(0) // 0, 5, 12, 18, 28
   // 🔒 V12: When true, salePrice/mrp are INCLUSIVE of GST (the Indian retail
   // norm — MRP is legally GST-inclusive). The sale flow then back-calculates
@@ -155,7 +155,7 @@ model Party {
   gstin          String? // GST Identification Number
   address        String?
   state          String? // for intra/inter state GST
-  openingBalance Int     @default(0) // positive = they owe us; negative = we owe them
+  openingBalance Float     @default(0) // positive = they owe us; negative = we owe them
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
   // 🔒 AUDIT FIX M7: Soft delete (same as Transaction)
@@ -190,18 +190,18 @@ model Transaction {
   partyId         String? // customer for sale, supplier for purchase
   party           Party?   @relation(fields: [partyId], references: [id])
   date            DateTime @default(now())
-  subtotal        Int    @default(0) // before tax & discount
-  discountAmount  Int    @default(0)
-  cgst            Int    @default(0)
-  sgst            Int    @default(0)
-  igst            Int    @default(0)
-  totalAmount     Int    @default(0) // final payable (after round-off)
+  subtotal        Float    @default(0) // before tax & discount
+  discountAmount  Float    @default(0)
+  cgst            Float    @default(0)
+  sgst            Float    @default(0)
+  igst            Float    @default(0)
+  totalAmount     Float    @default(0) // final payable (after round-off)
   // 🔒 V12: Invoice round-off. Indian invoices customarily round the grand
   // total to the nearest rupee with an explicit "Round off" line. This stores
   // the adjustment (e.g. -0.40 or +0.30) so totalAmount == taxable + tax + roundOff
   // and the printed invoice can show it. 0 when round-off is disabled.
-  roundOff        Int    @default(0)
-  paidAmount      Int    @default(0) // amount actually paid
+  roundOff        Float    @default(0)
+  paidAmount      Float    @default(0) // amount actually paid
   paymentMode     String   @default("cash") // cash | upi | card | bank | credit
   isInterState    Boolean  @default(false)
   // V17-Ext Tier 3: Reverse Charge Mechanism (RCM). When true on a purchase,
@@ -234,7 +234,7 @@ model Transaction {
   items TransactionItem[]
 
   // Auto-computed gross profit when type=sale
-  grossProfit Int @default(0)
+  grossProfit Float @default(0)
 
   // 🔒 AUDIT FIX M7: Soft delete for ledger integrity. Was: hard DELETE
   // (permanent, no audit trail). Now: set deletedAt = now() instead of
@@ -292,31 +292,31 @@ model TransactionItem {
   // normalizes (quantity, unit) into the product's unit before saving, so
   // quantity × unitPrice is always internally consistent.
   unit                String      @default("pcs")
-  unitPrice           Int       @default(0) // price per `unit` (sale or purchase)
+  unitPrice           Float       @default(0) // price per `unit` (sale or purchase)
   // 🔒 AUDIT FIX M4: Snapshot of purchasePrice at time of sale (COGS).
   // Was: profit calculated from the product's CURRENT purchasePrice —
   // changing it later distorted historical profit. Now: the purchase price
   // is snapshotted here at sale time, so historical profit is immutable.
-  purchasePriceAtSale Int       @default(0) // cost at time of sale (for profit calc)
+  purchasePriceAtSale Float       @default(0) // cost at time of sale (for profit calc)
   gstRate             Float       @default(0)
-  discountAmount      Int       @default(0) // 🔒 V10 §2.1: per-item discount (proportional share of order-level discount)
+  discountAmount      Float       @default(0) // 🔒 V10 §2.1: per-item discount (proportional share of order-level discount)
   // 🔒 V10 §2.2: per-item GST components — SINGLE SOURCE OF TRUTH for GST.
   // Was: only Transaction header stored cgst/sgst/igst; reports/GSTR recomputed
   // in SQL using a different rounding path → drift between stored and report.
   // Now: every code path (POST, PUT, reports, GSTR, dashboard, invoice PDF)
   // aggregates these stored per-item values. The GST on a transaction is the
   // sum of these three columns across all its items — never recomputed.
-  cgst                Int       @default(0)
-  sgst                Int       @default(0)
-  igst                Int       @default(0)
+  cgst                Float       @default(0)
+  sgst                Float       @default(0)
+  igst                Float       @default(0)
   // 🔒 V17 Audit Phase 3 (GSTR-1): CESS amount (rare for kirana but portal requires the field).
-  csamt               Int       @default(0)
+  csamt               Float       @default(0)
   // 🔒 V17 Audit Phase 3 (GSTR-1): HSN snapshot at time of transaction.
   // Was: only Product.hsn existed. But HSN can change when the user edits the product,
   // and historical GSTR-1 returns must show the HSN that was in effect at sale time.
   // Now: snapshot at write time (like purchasePriceAtSale). Backfilled from Product.hsn.
   hsn                 String?
-  total               Int       @default(0) // taxable + cgst + sgst + igst + csamt
+  total               Float       @default(0) // taxable + cgst + sgst + igst + csamt
 
   // 🔒 V17 Audit Phase 10: Snapshot of the user's ORIGINAL entered quantity + unit
   // (before normalization). The stored `quantity`/`unit` are the NORMALIZED values
@@ -348,7 +348,7 @@ model Payment {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   partyId   String
   party     Party    @relation(fields: [partyId], references: [id])
-  amount    Int
+  amount    Float
   date      DateTime @default(now())
   mode      String   @default("cash") // cash | upi | card | bank
   type      String   @default("received") // received (from customer) | paid (to supplier)
@@ -471,7 +471,7 @@ model Subscription {
   userId         String
   plan           String // pro | elite
   status         String   @default("active") // active | cancelled | expired
-  amount         Int
+  amount         Float
   paymentMode    String   @default("razorpay")
   paymentId      String?  @unique // 🔒 IDEMPOTENCY: unique constraint prevents duplicate subscriptions from double-submitted payment verifications (Audit fix Phase 1.4)
   subscriptionId String?
@@ -573,49 +573,49 @@ model GstReturn {
   filedByUserId               String? // who marked it as filed
 
   // Section 3.1(a): Outward taxable supplies (regular sales)
-  outwardTaxableValue         Int    @default(0)
-  outwardCgst                 Int    @default(0)
-  outwardSgst                 Int    @default(0)
-  outwardIgst                 Int    @default(0)
+  outwardTaxableValue         Float    @default(0)
+  outwardCgst                 Float    @default(0)
+  outwardSgst                 Float    @default(0)
+  outwardIgst                 Float    @default(0)
 
   // Section 3.1(d): RCM (reverse charge) outward liability
-  rcmTaxableValue             Int    @default(0)
-  rcmCgst                     Int    @default(0)
-  rcmSgst                     Int    @default(0)
-  rcmIgst                     Int    @default(0)
+  rcmTaxableValue             Float    @default(0)
+  rcmCgst                     Float    @default(0)
+  rcmSgst                     Float    @default(0)
+  rcmIgst                     Float    @default(0)
 
   // Section 3.1(c): Nil-rated + exempt + non-GST outward
-  nilRatedValue               Int    @default(0)
-  exemptValue                 Int    @default(0)
-  nonGstValue                 Int    @default(0)
+  nilRatedValue               Float    @default(0)
+  exemptValue                 Float    @default(0)
+  nonGstValue                 Float    @default(0)
 
   // Section 4(a): ITC (input tax credit) from purchases
-  itcTaxableValue             Int    @default(0)
-  itcCgst                     Int    @default(0)
-  itcSgst                     Int    @default(0)
-  itcIgst                     Int    @default(0)
+  itcTaxableValue             Float    @default(0)
+  itcCgst                     Float    @default(0)
+  itcSgst                     Float    @default(0)
+  itcIgst                     Float    @default(0)
 
   // 🔒 V17 Audit §4.3: Credit/Debit Note breakdown (computed but not stored before).
   // Storing these helps audit/dispute resolution — the filed snapshot now has
   // the full CDN adjustment, not just the net tax payable.
-  creditNoteTaxableValue      Int    @default(0)
-  creditNoteCgst              Int    @default(0)
-  creditNoteSgst              Int    @default(0)
-  creditNoteIgst              Int    @default(0)
-  debitNoteTaxableValue       Int    @default(0)
-  debitNoteCgst               Int    @default(0)
-  debitNoteSgst               Int    @default(0)
-  debitNoteIgst               Int    @default(0)
+  creditNoteTaxableValue      Float    @default(0)
+  creditNoteCgst              Float    @default(0)
+  creditNoteSgst              Float    @default(0)
+  creditNoteIgst              Float    @default(0)
+  debitNoteTaxableValue       Float    @default(0)
+  debitNoteCgst               Float    @default(0)
+  debitNoteSgst               Float    @default(0)
+  debitNoteIgst               Float    @default(0)
 
   // Section 5: Exempt inward supplies
-  exemptInwardValue           Int    @default(0)
+  exemptInwardValue           Float    @default(0)
 
   // Section 3.2: Inter-state B2C supplies (unregistered, any amount)
-  interstateB2cTaxableValue   Int    @default(0)
-  interstateB2cIgst           Int    @default(0)
+  interstateB2cTaxableValue   Float    @default(0)
+  interstateB2cIgst           Float    @default(0)
 
   // Section 6.1: Net tax payable (output + RCM - ITC)
-  netTaxPayable               Int    @default(0)
+  netTaxPayable               Float    @default(0)
 
   createdAt                   DateTime @default(now())
   updatedAt                   DateTime @updatedAt
@@ -645,8 +645,8 @@ model Gstr1Snapshot {
   rawJson         Json?
 
   // Summary totals (for quick display without parsing rawJson)
-  totalTaxableValue   Int @default(0)
-  totalOutputTax      Int @default(0)  // CGST + SGST + IGST
+  totalTaxableValue   Float @default(0)
+  totalOutputTax      Float @default(0)  // CGST + SGST + IGST
   totalInvoiceCount   Int   @default(0)
   totalCreditNotes    Int   @default(0)
 
@@ -677,8 +677,8 @@ model BankStatement {
   accountNumber   String?  // last 4 digits (for display)
   statementPeriod String?  // e.g. "Jul 2026"
   importedAt      DateTime @default(now())
-  totalCredits    Int    @default(0)  // money in
-  totalDebits     Int    @default(0)  // money out
+  totalCredits    Float    @default(0)  // money in
+  totalDebits     Float    @default(0)  // money out
   txnCount        Int      @default(0)
   matchedCount    Int      @default(0)  // auto-matched on import
   rawCsv          String?  // original CSV (for audit/re-import)
@@ -697,8 +697,8 @@ model BankTransaction {
 
   date            DateTime // transaction date (as shown in bank statement)
   description     String   // bank description (e.g. "UPI/Rahul Traders/1234")
-  amount          Int    // positive = credit (money in), negative = debit (money out)
-  balance         Int?   // running balance (if provided by bank)
+  amount          Float    // positive = credit (money in), negative = debit (money out)
+  balance         Float?   // running balance (if provided by bank)
 
   // Matching status
   matchStatus     String   @default("unmatched") // unmatched | matched | ignored
@@ -733,10 +733,10 @@ model Gstr2bImport {
   importedAt    DateTime        @default(now())
   rawJson       Json?           // full 2B JSON from portal (for audit/re-import)
   invoiceCount  Int             @default(0)
-  taxableTotal  Int           @default(0)
-  igstTotal     Int           @default(0)
-  cgstTotal     Int           @default(0)
-  sgstTotal     Int           @default(0)
+  taxableTotal  Float           @default(0)
+  igstTotal     Float           @default(0)
+  cgstTotal     Float           @default(0)
+  sgstTotal     Float           @default(0)
   invoices      Gstr2bInvoice[]
 
   @@unique([userId, monthYear])
@@ -751,11 +751,11 @@ model Gstr2bInvoice {
   supplierGstin   String       // ctin from 2B (supplier's GSTIN)
   invoiceNumber   String       // inum from 2B (supplier's invoice number)
   invoiceDate     String?      // idt from 2B (invoice date, raw string from portal)
-  taxableValue    Int        @default(0)
-  igst            Int        @default(0)
-  cgst            Int        @default(0)
-  sgst            Int        @default(0)
-  totalAmount     Int        @default(0)
+  taxableValue    Float        @default(0)
+  igst            Float        @default(0)
+  cgst            Float        @default(0)
+  sgst            Float        @default(0)
+  totalAmount     Float        @default(0)
   isReverseCharge Boolean      @default(false)
   createdAt       DateTime     @default(now())
 
@@ -819,7 +819,7 @@ model AiUsageLog {
 
   // Cost in INR (calculated at time of call using current pricing)
   // Stored per-call so historical costs are preserved even if prices change
-  costInr Int @default(0)
+  costInr Float @default(0)
 
   // Performance + result
   durationMs   Int     @default(0)
@@ -938,16 +938,16 @@ model DailyStats {
   newUsers       Int      @default(0)
   activeUsers    Int      @default(0)
   payingUsers    Int      @default(0)
-  mrr            Int    @default(0)
-  newMrr         Int    @default(0)
-  churnedMrr     Int    @default(0)
-  arr            Int    @default(0)
-  totalGmv       Int    @default(0)
+  mrr            Float    @default(0)
+  newMrr         Float    @default(0)
+  churnedMrr     Float    @default(0)
+  arr            Float    @default(0)
+  totalGmv       Float    @default(0)
   totalTxns      Int      @default(0)
   salesCount     Int      @default(0)
   purchasesCount Int      @default(0)
   aiCalls        Int      @default(0)
-  aiCostInr      Int    @default(0)
+  aiCostInr      Float    @default(0)
   aiScans        Int      @default(0)
   voiceParses    Int      @default(0)
   computedAt     DateTime @default(now())
@@ -1254,7 +1254,7 @@ model RevenueSchedule {
   subscriptionId String
   userId         String
   plan           String
-  amount         Int
+  amount         Float
   periodStart    DateTime
   periodEnd      DateTime
   status         String    @default("pending")
