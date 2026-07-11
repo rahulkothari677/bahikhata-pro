@@ -156,25 +156,39 @@ export async function GET(req: NextRequest) {
         purchase_cgst: string; purchase_sgst: string; purchase_igst: string;
       }>>`
         SELECT
-          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${startOfToday} AND "date" <= ${now} THEN "totalAmount" ELSE 0 END), 0)::numeric AS today_revenue,
-          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${startOfToday} AND "date" <= ${now} THEN "grossProfit" ELSE 0 END), 0)::numeric AS today_profit,
+          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${startOfToday} AND "date" <= ${now} THEN "totalAmount" ELSE 0 END), 0)::numeric
+          - COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${startOfToday} AND "date" <= ${now} THEN "totalAmount" ELSE 0 END), 0)::numeric AS today_revenue,
+          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${startOfToday} AND "date" <= ${now} THEN "grossProfit" ELSE 0 END), 0)::numeric
+          - COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${startOfToday} AND "date" <= ${now} THEN "grossProfit" ELSE 0 END), 0)::numeric AS today_profit,
           COUNT(CASE WHEN "type" = 'sale' AND "date" >= ${startOfToday} AND "date" <= ${now} THEN 1 END) AS today_count,
-          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric AS range_revenue,
-          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "grossProfit" ELSE 0 END), 0)::numeric AS range_profit,
+          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric
+          - COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric AS range_revenue,
+          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "grossProfit" ELSE 0 END), 0)::numeric
+          - COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "grossProfit" ELSE 0 END), 0)::numeric AS range_profit,
           COALESCE(SUM(CASE WHEN "type" = 'expense' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric AS range_expenses,
           COALESCE(SUM(CASE WHEN "type" = 'purchase' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric AS range_purchases,
           COALESCE(SUM(CASE WHEN "type" = 'income' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric AS range_income,
           COUNT(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN 1 END) AS range_sale_count,
-          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${prevRangeFrom} AND "date" <= ${prevRangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric AS prev_revenue,
-          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${prevRangeFrom} AND "date" <= ${prevRangeTo} THEN "grossProfit" ELSE 0 END), 0)::numeric AS prev_profit,
-          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "subtotal" ELSE 0 END), 0)::numeric AS sale_subtotal,
-          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "discountAmount" ELSE 0 END), 0)::numeric AS sale_discount,
-          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "cgst" ELSE 0 END), 0)::numeric AS sale_cgst,
-          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "sgst" ELSE 0 END), 0)::numeric AS sale_sgst,
-          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "igst" ELSE 0 END), 0)::numeric AS sale_igst,
-          COALESCE(SUM(CASE WHEN "type" = 'purchase' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "cgst" ELSE 0 END), 0)::numeric AS purchase_cgst,
-          COALESCE(SUM(CASE WHEN "type" = 'purchase' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "sgst" ELSE 0 END), 0)::numeric AS purchase_sgst,
-          COALESCE(SUM(CASE WHEN "type" = 'purchase' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "igst" ELSE 0 END), 0)::numeric AS purchase_igst
+          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${prevRangeFrom} AND "date" <= ${prevRangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric
+          - COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${prevRangeFrom} AND "date" <= ${prevRangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric AS prev_revenue,
+          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${prevRangeFrom} AND "date" <= ${prevRangeTo} THEN "grossProfit" ELSE 0 END), 0)::numeric
+          - COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${prevRangeFrom} AND "date" <= ${prevRangeTo} THEN "grossProfit" ELSE 0 END), 0)::numeric AS prev_profit,
+          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "subtotal" ELSE 0 END), 0)::numeric
+          - COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "subtotal" ELSE 0 END), 0)::numeric AS sale_subtotal,
+          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "discountAmount" ELSE 0 END), 0)::numeric
+          - COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "discountAmount" ELSE 0 END), 0)::numeric AS sale_discount,
+          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "cgst" ELSE 0 END), 0)::numeric
+          - COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "cgst" ELSE 0 END), 0)::numeric AS sale_cgst,
+          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "sgst" ELSE 0 END), 0)::numeric
+          - COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "sgst" ELSE 0 END), 0)::numeric AS sale_sgst,
+          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "igst" ELSE 0 END), 0)::numeric
+          - COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "igst" ELSE 0 END), 0)::numeric AS sale_igst,
+          COALESCE(SUM(CASE WHEN "type" = 'purchase' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "cgst" ELSE 0 END), 0)::numeric
+          - COALESCE(SUM(CASE WHEN "type" = 'debit-note' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "cgst" ELSE 0 END), 0)::numeric AS purchase_cgst,
+          COALESCE(SUM(CASE WHEN "type" = 'purchase' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "sgst" ELSE 0 END), 0)::numeric
+          - COALESCE(SUM(CASE WHEN "type" = 'debit-note' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "sgst" ELSE 0 END), 0)::numeric AS purchase_sgst,
+          COALESCE(SUM(CASE WHEN "type" = 'purchase' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "igst" ELSE 0 END), 0)::numeric
+          - COALESCE(SUM(CASE WHEN "type" = 'debit-note' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "igst" ELSE 0 END), 0)::numeric AS purchase_igst
         FROM "Transaction"
         WHERE "userId" = ${userId}
           AND "deletedAt" IS NULL
@@ -205,12 +219,14 @@ export async function GET(req: NextRequest) {
       db.$queryRaw<Array<{ bucketStart: Date; revenue: number; profit: number }>>`
         SELECT
           DATE_TRUNC(${truncUnitLiteral}, "date" AT TIME ZONE 'Asia/Kolkata') AS "bucketStart",
-          COALESCE(SUM("totalAmount"), 0) AS revenue,
-          COALESCE(SUM("grossProfit"), 0) AS profit
+          COALESCE(SUM(CASE WHEN "type" = 'sale' THEN "totalAmount" ELSE 0 END), 0)
+          - COALESCE(SUM(CASE WHEN "type" = 'credit-note' THEN "totalAmount" ELSE 0 END), 0) AS revenue,
+          COALESCE(SUM(CASE WHEN "type" = 'sale' THEN "grossProfit" ELSE 0 END), 0)
+          - COALESCE(SUM(CASE WHEN "type" = 'credit-note' THEN "grossProfit" ELSE 0 END), 0) AS profit
         FROM "Transaction"
         WHERE "userId" = ${userId}
           AND "deletedAt" IS NULL
-          AND "type" = 'sale'
+          AND "type" IN ('sale', 'credit-note')
           AND "date" >= ${rangeFrom}
           AND "date" <= ${rangeTo}
         GROUP BY DATE_TRUNC(${truncUnitLiteral}, "date" AT TIME ZONE 'Asia/Kolkata')
@@ -218,17 +234,19 @@ export async function GET(req: NextRequest) {
       `,
 
       // 5. Top products (raw SQL)
+      // 🔒 V17 Audit §1: Net of returns — subtract credit-note quantities/revenue
+      // so a product with high returns doesn't appear as a "best seller".
       db.$queryRaw<Array<{ productName: string; productId: string | null; totalQuantity: bigint; totalRevenue: string }>>`
         SELECT
           ti."productName",
           ti."productId",
-          SUM(ti."quantity") AS "totalQuantity",
-          SUM(ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 2)) AS "totalRevenue"
+          SUM(CASE WHEN t."type" = 'sale' THEN ti."quantity" ELSE -ti."quantity" END) AS "totalQuantity",
+          SUM(CASE WHEN t."type" = 'sale' THEN ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 2) ELSE -ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 2) END) AS "totalRevenue"
         FROM "TransactionItem" ti
         JOIN "Transaction" t ON ti."transactionId" = t.id
         WHERE t."userId" = ${userId}
           AND t."deletedAt" IS NULL
-          AND t."type" = 'sale'
+          AND t."type" IN ('sale', 'credit-note')
           AND t."date" >= ${rangeFrom}
           AND t."date" <= ${rangeTo}
         GROUP BY ti."productName", ti."productId"
@@ -237,16 +255,17 @@ export async function GET(req: NextRequest) {
       `,
 
       // 6. Category breakdown (raw SQL)
+      // 🔒 V17 Audit §1: Net of returns — subtract credit-note value per category.
       db.$queryRaw<Array<{ category: string | null; totalValue: string }>>`
         SELECT
           COALESCE(p."category", 'Other') AS category,
-          SUM(ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 2)) AS "totalValue"
+          SUM(CASE WHEN t."type" = 'sale' THEN ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 2) ELSE -ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 2) END) AS "totalValue"
         FROM "TransactionItem" ti
         JOIN "Transaction" t ON ti."transactionId" = t.id
         LEFT JOIN "Product" p ON ti."productId" = p.id
         WHERE t."userId" = ${userId}
           AND t."deletedAt" IS NULL
-          AND t."type" = 'sale'
+          AND t."type" IN ('sale', 'credit-note')
           AND t."date" >= ${rangeFrom}
           AND t."date" <= ${rangeTo}
         GROUP BY COALESCE(p."category", 'Other')

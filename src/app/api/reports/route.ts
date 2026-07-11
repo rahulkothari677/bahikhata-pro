@@ -6,6 +6,14 @@ import { shouldHideProfit, stripReportProfit } from '@/lib/profit-visibility'
 import { roundMoney } from '@/lib/money'
 import { activeTransactionWhere } from '@/lib/query-helpers'
 import { istMonthStart } from '@/lib/timezone'
+import {
+  netSalesTaxable,
+  netSalesProfit,
+  netOutputTax,
+  netInputTax,
+  netPurchasesTaxable,
+  type TypeAggregates,
+} from '@/lib/net-sales'
 
 // ⏱️ Vercel serverless timeout — reports can aggregate thousands of
 // transactions and generate large responses. Set explicit maxDuration.
@@ -97,12 +105,41 @@ export async function GET(req: NextRequest) {
       const countOf = (t: string) => kpiAgg.filter(r => r.type === t).reduce((s, r) => s + r._count, 0)
       const taxableOf = (t: string) => kpiAgg.filter(r => r.type === t).reduce((s, r) => s + ((r._sum.subtotal || 0) - (r._sum.discountAmount || 0)), 0)
 
-      const grossProfit = roundMoney(profitOf('sale'))
-      const totalRevenue = roundMoney(taxableOf('sale'))
+      // 🔒 V17 Audit §1 FIX: Revenue and profit must be NET of credit notes.
+      // A credit note (sales return) reverses revenue and profit. Before this
+      // fix, P&L showed gross (pre-return) revenue — overstated for any shop
+      // that accepts returns. Now: netRevenue = sale taxable − credit-note taxable,
+      // netProfit = sale profit − credit-note profit.
+      // Also net purchases for the purchaseTotal display.
+      const saleAgg: TypeAggregates = {
+        subtotal: kpiAgg.filter(r => r.type === 'sale').reduce((s, r) => s + (r._sum.subtotal || 0), 0),
+        discountAmount: kpiAgg.filter(r => r.type === 'sale').reduce((s, r) => s + (r._sum.discountAmount || 0), 0),
+        grossProfit: profitOf('sale'),
+        totalAmount: sumOf('sale'),
+      }
+      const creditNoteAgg: TypeAggregates = {
+        subtotal: kpiAgg.filter(r => r.type === 'credit-note').reduce((s, r) => s + (r._sum.subtotal || 0), 0),
+        discountAmount: kpiAgg.filter(r => r.type === 'credit-note').reduce((s, r) => s + (r._sum.discountAmount || 0), 0),
+        grossProfit: profitOf('credit-note'),
+        totalAmount: sumOf('credit-note'),
+      }
+      const purchaseAgg: TypeAggregates = {
+        subtotal: kpiAgg.filter(r => r.type === 'purchase').reduce((s, r) => s + (r._sum.subtotal || 0), 0),
+        discountAmount: kpiAgg.filter(r => r.type === 'purchase').reduce((s, r) => s + (r._sum.discountAmount || 0), 0),
+        totalAmount: sumOf('purchase'),
+      }
+      const debitNoteAgg: TypeAggregates = {
+        subtotal: kpiAgg.filter(r => r.type === 'debit-note').reduce((s, r) => s + (r._sum.subtotal || 0), 0),
+        discountAmount: kpiAgg.filter(r => r.type === 'debit-note').reduce((s, r) => s + (r._sum.discountAmount || 0), 0),
+        totalAmount: sumOf('debit-note'),
+      }
+
+      const grossProfit = netSalesProfit(saleAgg, creditNoteAgg)
+      const totalRevenue = netSalesTaxable(saleAgg, creditNoteAgg)
       const totalExpenses = roundMoney(sumOf('expense'))
       const otherIncome = roundMoney(sumOf('income'))
       const netProfit = roundMoney(grossProfit + otherIncome - totalExpenses)
-      const purchaseTotal = roundMoney(sumOf('purchase'))
+      const purchaseTotal = netPurchasesTaxable(purchaseAgg, debitNoteAgg)
 
       const expensesByCategory = expensesByCatAgg
         .map(r => ({ name: r.category || 'Other', value: roundMoney(r._sum.totalAmount || 0) }))
@@ -141,9 +178,15 @@ export async function GET(req: NextRequest) {
     // inputSlabRows = 3 sequential round-trips. Now: 1 parallel batch.
     // =====================================================================
     if (type === 'gst') {
-      // All 6 queries are independent (different filters / tables), so they
+      // All 8 queries are independent (different filters / tables), so they
       // can all run in parallel.
-      const [saleGstAgg, purchaseGstAgg, saleCountAgg, purchaseCountAgg, slabRows, inputSlabRows] = await Promise.all([
+      // 🔒 V17 Audit §1: Added credit-note + debit-note aggregates (queries 7+8)
+      // so output/input tax is NET of returns. Was: 6 queries, output tax
+      // overstated by credit-note tax, input tax overstated by debit-note tax.
+      const [
+        saleGstAgg, purchaseGstAgg, saleCountAgg, purchaseCountAgg, slabRows, inputSlabRows,
+        creditNoteGstAgg, debitNoteGstAgg,
+      ] = await Promise.all([
         // 1. Sale GST totals
         db.transaction.aggregate({
           where: activeTransactionWhere(userId, {
@@ -167,6 +210,7 @@ export async function GET(req: NextRequest) {
           }),
           _sum: {
             subtotal: true,
+            discountAmount: true,  // 🔒 V17 Audit §1: needed for netPurchasesTaxable
             cgst: true,
             sgst: true,
             igst: true,
@@ -246,13 +290,64 @@ export async function GET(req: NextRequest) {
           GROUP BY ti."gstRate"
           ORDER BY ti."gstRate" ASC
         `,
+        // 7. 🔒 V17 Audit §1: Credit-note GST totals (reduces output tax)
+        db.transaction.aggregate({
+          where: activeTransactionWhere(userId, {
+            type: 'credit-note',
+            date: { gte: from, lte: to },
+          }),
+          _sum: {
+            subtotal: true,
+            discountAmount: true,
+            cgst: true,
+            sgst: true,
+            igst: true,
+          },
+          _count: true,
+        }),
+        // 8. 🔒 V17 Audit §1: Debit-note GST totals (reduces input tax)
+        db.transaction.aggregate({
+          where: activeTransactionWhere(userId, {
+            type: 'debit-note',
+            date: { gte: from, lte: to },
+          }),
+          _sum: {
+            subtotal: true,
+            discountAmount: true,
+            cgst: true,
+            sgst: true,
+            igst: true,
+          },
+          _count: true,
+        }),
       ])
 
-      const outputTax = roundMoney(
-        (saleGstAgg._sum.cgst || 0) + (saleGstAgg._sum.sgst || 0) + (saleGstAgg._sum.igst || 0)
+      // 🔒 V17 Audit §1: Output tax NET of credit notes, input tax NET of debit notes.
+      // Was: outputTax = sale GST only (overstated by credit-note tax).
+      // Now: outputTax = sale GST − credit-note GST (matches GSTR-1/3B).
+      const outputTax = netOutputTax(
+        {
+          cgst: saleGstAgg._sum.cgst || 0,
+          sgst: saleGstAgg._sum.sgst || 0,
+          igst: saleGstAgg._sum.igst || 0,
+        },
+        {
+          cgst: creditNoteGstAgg._sum.cgst || 0,
+          sgst: creditNoteGstAgg._sum.sgst || 0,
+          igst: creditNoteGstAgg._sum.igst || 0,
+        }
       )
-      const inputTax = roundMoney(
-        (purchaseGstAgg._sum.cgst || 0) + (purchaseGstAgg._sum.sgst || 0) + (purchaseGstAgg._sum.igst || 0)
+      const inputTax = netInputTax(
+        {
+          cgst: purchaseGstAgg._sum.cgst || 0,
+          sgst: purchaseGstAgg._sum.sgst || 0,
+          igst: purchaseGstAgg._sum.igst || 0,
+        },
+        {
+          cgst: debitNoteGstAgg._sum.cgst || 0,
+          sgst: debitNoteGstAgg._sum.sgst || 0,
+          igst: debitNoteGstAgg._sum.igst || 0,
+        }
       )
 
       // Build slab map (combine intra+inter state rows for the same rate)
@@ -284,12 +379,20 @@ export async function GET(req: NextRequest) {
         period: { from, to },
         truncated: false,  // 🔒 V6 SC1: never truncated
         outputSales: {
-          taxableValue: roundMoney((saleGstAgg._sum.subtotal || 0) - (saleGstAgg._sum.discountAmount || 0)),
+          // 🔒 V17 Audit §1: taxable value NET of credit notes
+          taxableValue: netSalesTaxable(
+            { subtotal: saleGstAgg._sum.subtotal || 0, discountAmount: saleGstAgg._sum.discountAmount || 0 },
+            { subtotal: creditNoteGstAgg._sum.subtotal || 0, discountAmount: creditNoteGstAgg._sum.discountAmount || 0 }
+          ),
           outputTax,
           bySlab: Array.from(slabMap.entries()).map(([rate, v]) => ({ rate, ...v })),
         },
         inputPurchases: {
-          taxableValue: roundMoney(purchaseGstAgg._sum.subtotal || 0),
+          // 🔒 V17 Audit §1: taxable value NET of debit notes
+          taxableValue: netPurchasesTaxable(
+            { subtotal: purchaseGstAgg._sum.subtotal || 0, discountAmount: purchaseGstAgg._sum.discountAmount || 0 },
+            { subtotal: debitNoteGstAgg._sum.subtotal || 0, discountAmount: debitNoteGstAgg._sum.discountAmount || 0 }
+          ),
           inputTax,
           bySlab: Array.from(inputSlabMap.entries()).map(([rate, v]) => ({ rate, ...v })),
         },
