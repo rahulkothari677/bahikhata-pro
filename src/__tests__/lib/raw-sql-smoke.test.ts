@@ -500,3 +500,214 @@ describe('V17 Phase 2C — reconciliation.ts verification + BUG-006 regression g
     expect(orphanItemsQuery).toMatch(/WHERE\s+t\.id\s+IS\s+NULL/i)
   })
 })
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔒 V17 PAISE MIGRATION Phase 2D — reports/route.ts + gstr-export/route.ts
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Phase 2D migrated 4 raw SQL queries from rupee Float to paise integer:
+//   reports/route.ts:
+//     1. Sale slab breakdown (GROUP BY gstRate, isInterState)
+//     2. Input slab breakdown (GROUP BY gstRate)
+//   gstr-export/route.ts:
+//     3. Per-invoice-per-rate GST (GROUP BY transactionId, gstRate)
+//     4. CDN per-invoice-per-rate GST (GROUP BY transactionId, gstRate)
+//
+// Pattern (same as Phase 2A/2B):
+//   Old: SUM(ROUND(qty*price - discount, 2)) AS "taxable"                    → Float
+//   New: ROUND(SUM(ROUND(qty*price - discount, 2)) * 100 + 0.0000001) AS "taxablePaise"  → Int
+//   JS:  fromPaise(Number(row.XPaise))  → rupee Float (same value as before)
+describe('V17 Phase 2D — paise-read-pattern regression guard (reports + gstr-export)', () => {
+  const REPORTS_PATH = path.join(process.cwd(), 'src', 'app', 'api', 'reports', 'route.ts')
+  const GSTR_EXPORT_PATH = path.join(process.cwd(), 'src', 'app', 'api', 'gstr-export', 'route.ts')
+
+  const reportsSource = fs.existsSync(REPORTS_PATH) ? fs.readFileSync(REPORTS_PATH, 'utf8') : ''
+  const gstrSource = fs.existsSync(GSTR_EXPORT_PATH) ? fs.readFileSync(GSTR_EXPORT_PATH, 'utf8') : ''
+
+  // Helper: find queries matching a predicate
+  function findQueries(source: string, predicate: (q: string) => boolean): string[] {
+    return extractRawSql(source).filter(predicate)
+  }
+
+  // ---------- reports/route.ts ----------
+
+  describe('reports/route.ts', () => {
+    it('reports route file exists', () => {
+      expect(reportsSource.length).toBeGreaterThan(0)
+    })
+
+    it('sale slab query returns paise aliases (taxablePaise, cgstPaise, sgstPaise, igstPaise)', () => {
+      if (!reportsSource) return
+      // The sale slab query groups by gstRate + isInterState and filters type='sale'
+      const saleSlabQueries = findQueries(reportsSource, q =>
+        q.includes('"gstRate"') && q.includes('"isInterState"') && q.includes("'sale'")
+      )
+      expect(saleSlabQueries.length).toBeGreaterThanOrEqual(1)
+      const q = saleSlabQueries[0]
+      expect(q).toContain('"taxablePaise"')
+      expect(q).toContain('"cgstPaise"')
+      expect(q).toContain('"sgstPaise"')
+      expect(q).toContain('"igstPaise"')
+      // Must NOT use old rupee aliases
+      expect(q).not.toMatch(/AS\s+"taxable"\s/)
+      expect(q).not.toMatch(/AS\s+cgst\s/)
+      expect(q).not.toMatch(/AS\s+sgst\s/)
+      expect(q).not.toMatch(/AS\s+igst\s/)
+    })
+
+    it('input slab query returns paise aliases', () => {
+      if (!reportsSource) return
+      // The input slab query groups by gstRate only and filters type='purchase'
+      const inputSlabQueries = findQueries(reportsSource, q =>
+        q.includes('"gstRate"') && q.includes("'purchase'") && !q.includes('"isInterState"')
+      )
+      expect(inputSlabQueries.length).toBeGreaterThanOrEqual(1)
+      const q = inputSlabQueries[0]
+      expect(q).toContain('"taxablePaise"')
+      expect(q).toContain('"cgstPaise"')
+      expect(q).toContain('"sgstPaise"')
+      expect(q).toContain('"igstPaise"')
+    })
+
+    it('SQL multiplies by 100 and applies the 1e-7 paise nudge', () => {
+      if (!reportsSource) return
+      const queries = extractRawSql(reportsSource)
+      const moneyQueries = queries.filter(q => q.includes('"taxablePaise"'))
+      expect(moneyQueries.length).toBeGreaterThanOrEqual(2)
+      for (const q of moneyQueries) {
+        expect(q).toMatch(/\*\s*100\s*\+\s*0\.0000001/)
+      }
+    })
+
+    it('reports route imports fromPaise from money.ts', () => {
+      if (!reportsSource) return
+      expect(reportsSource).toMatch(/import\s+\{[^}]*\bfromPaise\b[^}]*\}\s+from\s+['"]@\/lib\/money['"]/)
+    })
+
+    it('JS processing uses fromPaise(Number(row.XPaise)) pattern', () => {
+      if (!reportsSource) return
+      expect(reportsSource).toMatch(/fromPaise\(Number\(row\.taxablePaise\)\)/)
+      expect(reportsSource).toMatch(/fromPaise\(Number\(row\.cgstPaise\)\)/)
+    })
+
+    it('no stale references to row.taxable/cgst/sgst/igst (without Paise) on raw SQL rows', () => {
+      if (!reportsSource) return
+      // The SQL row objects (from slabRows / inputSlabRows) must only be accessed
+      // via the *Paise property names. The JS processing loops convert paise to
+      // rupees via fromPaise() and store in slabMap / inputSlabMap.
+      //
+      // Find the processing loop bodies and verify they only access *Paise props.
+      const conversionLoopPattern = /for\s*\(\s*const\s+row\s+of\s+(slabRows|inputSlabRows)\s*\)\s*\{([^}]*(?:\{[^}]*\}[^}]*)*)\}/g
+      let match: RegExpExecArray | null
+      while ((match = conversionLoopPattern.exec(reportsSource)) !== null) {
+        const loopBody = match[2]
+        const stalePattern = /row\.(taxable|cgst|sgst|igst)\b(?!Paise)/
+        if (stalePattern.test(loopBody)) {
+          throw new Error(
+            `Stale reference found in conversion loop (for row of ${match[1]}): ` +
+            `loop body references row.X without Paise suffix. ` +
+            `Raw SQL rows must only be accessed via *Paise property names.`
+          )
+        }
+      }
+    })
+  })
+
+  // ---------- gstr-export/route.ts ----------
+
+  describe('gstr-export/route.ts', () => {
+    it('gstr-export route file exists', () => {
+      expect(gstrSource.length).toBeGreaterThan(0)
+    })
+
+    it('per-invoice GST query returns paise aliases (taxableValuePaise, cgstPaise, etc.)', () => {
+      if (!gstrSource) return
+      // The per-invoice query groups by transactionId + gstRate, filters type='sale'
+      const perInvoiceQueries = findQueries(gstrSource, q =>
+        q.includes('"transactionId"') && q.includes('"gstRate"') && q.includes("'sale'")
+      )
+      expect(perInvoiceQueries.length).toBeGreaterThanOrEqual(1)
+      const q = perInvoiceQueries[0]
+      expect(q).toContain('"taxableValuePaise"')
+      expect(q).toContain('"cgstPaise"')
+      expect(q).toContain('"sgstPaise"')
+      expect(q).toContain('"igstPaise"')
+      // Must NOT use old rupee aliases
+      expect(q).not.toMatch(/AS\s+"taxableValue"\s/)
+      expect(q).not.toMatch(/AS\s+cgst\s/)
+      expect(q).not.toMatch(/AS\s+sgst\s/)
+      expect(q).not.toMatch(/AS\s+igst\s/)
+    })
+
+    it('CDN query returns paise aliases', () => {
+      if (!gstrSource) return
+      // The CDN query filters type IN ('credit-note', 'debit-note')
+      const cdnQueries = findQueries(gstrSource, q =>
+        q.includes("'credit-note'") && q.includes("'debit-note'")
+      )
+      expect(cdnQueries.length).toBeGreaterThanOrEqual(1)
+      const q = cdnQueries[0]
+      expect(q).toContain('"taxableValuePaise"')
+      expect(q).toContain('"cgstPaise"')
+      expect(q).toContain('"sgstPaise"')
+      expect(q).toContain('"igstPaise"')
+    })
+
+    it('SQL multiplies by 100 and applies the 1e-7 paise nudge', () => {
+      if (!gstrSource) return
+      const queries = extractRawSql(gstrSource)
+      const moneyQueries = queries.filter(q => q.includes('"taxableValuePaise"'))
+      expect(moneyQueries.length).toBeGreaterThanOrEqual(2)
+      for (const q of moneyQueries) {
+        expect(q).toMatch(/\*\s*100\s*\+\s*0\.0000001/)
+      }
+    })
+
+    it('gstr-export route imports fromPaise from money.ts', () => {
+      if (!gstrSource) return
+      expect(gstrSource).toMatch(/import\s+\{[^}]*\bfromPaise\b[^}]*\}\s+from\s+['"]@\/lib\/money['"]/)
+    })
+
+    it('JS processing uses fromPaise(Number(row.XPaise)) pattern', () => {
+      if (!gstrSource) return
+      expect(gstrSource).toMatch(/fromPaise\(Number\(row\.taxableValuePaise\)\)/)
+      expect(gstrSource).toMatch(/fromPaise\(Number\(row\.cgstPaise\)\)/)
+    })
+
+    it('no stale references to row.taxableValue/cgst/sgst/igst (without Paise) on raw SQL rows', () => {
+      if (!gstrSource) return
+      // The SQL row objects (from perInvoiceGstRows / cdnGstRows) must only be
+      // accessed via the *Paise property names. After conversion (via fromPaise),
+      // the JS objects stored in gstByTransaction / cdnGstByTransaction maps
+      // have rupee property names (taxableValue, cgst, etc.) — those are fine.
+      //
+      // Strategy: find the conversion loops (where row = raw SQL row) and check
+      // that within those loops, only *Paise properties are accessed. The
+      // conversion loops are the only places where `row` refers to a raw SQL row.
+      //
+      // Pattern: `for (const row of perInvoiceGstRows)` or
+      //          `for (const row of cdnGstRows)`
+      // Within each loop body, `row.X` must use Paise suffix for money fields.
+
+      // Extract the conversion loop bodies
+      const conversionLoopPattern = /for\s*\(\s*const\s+row\s+of\s+(perInvoiceGstRows|cdnGstRows)\s*\)\s*\{([^}]*(?:\{[^}]*\}[^}]*)*)\}/g
+      let match: RegExpExecArray | null
+      while ((match = conversionLoopPattern.exec(gstrSource)) !== null) {
+        const loopBody = match[2]
+        // Within the loop body, check for row.X access where X is a money field
+        // WITHOUT the Paise suffix. This would indicate a stale reference.
+        // The access pattern is: row.taxableValue, row.cgst, row.sgst, row.igst
+        // (without Paise suffix)
+        const stalePattern = /row\.(taxableValue|cgst|sgst|igst)\b(?!Paise)/
+        if (stalePattern.test(loopBody)) {
+          throw new Error(
+            `Stale reference found in conversion loop (for row of ${match[1]}): ` +
+            `loop body references row.X without Paise suffix. ` +
+            `Raw SQL rows must only be accessed via *Paise property names. ` +
+            `Loop body:\n${loopBody.substring(0, 200)}...`
+          )
+        }
+      }
+    })
+  })
+})

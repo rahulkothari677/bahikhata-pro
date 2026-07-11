@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUserIdWithModule } from '@/lib/get-auth'
-import { roundMoney } from '@/lib/money'
+import { roundMoney, fromPaise } from '@/lib/money'
 import { activeTransactionWhere } from '@/lib/query-helpers'
 import { istMonthStart, getISTDateParts, isSameISTMonth, istDateString, istYearMonth, IST_OFFSET_MS } from '@/lib/timezone'
 import { apiError } from '@/lib/api-error'
@@ -134,22 +134,27 @@ export async function GET(req: NextRequest) {
       // (cgst=4.51, sgst=4.51) → summary tax ≠ sum of per-invoice tax →
       // CA reconciliation fails. Now: aggregate the stored per-item values.
       // Returns one row per (transaction, gstRate) — much smaller than all items.
+      //
+      // 🔒 V17 PAISE MIGRATION Phase 2D: SQL now returns PAISE (integer) instead
+      // of rupees (Float). Pattern: ROUND(SUM(...) * 100 + nudge) AS "XPaise".
+      // The 1e-7 paise nudge mirrors roundMoney()'s 1e-9 rupee nudge.
+      // JS converts back via fromPaise(Number(row.XPaise)) — same rupee values.
       db.$queryRaw<Array<{
         transactionId: string;
         gstRate: number;
-        taxableValue: number;
-        cgst: number;
-        sgst: number;
-        igst: number;
+        taxableValuePaise: number;
+        cgstPaise: number;
+        sgstPaise: number;
+        igstPaise: number;
         quantity: number;
       }>>`
         SELECT
           ti."transactionId",
           ti."gstRate",
-          SUM(ROUND((ti."quantity"::numeric * ti."unitPrice" - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 2)) AS "taxableValue",
-          SUM(COALESCE(ti."cgst", 0)::numeric) AS cgst,
-          SUM(COALESCE(ti."sgst", 0)::numeric) AS sgst,
-          SUM(COALESCE(ti."igst", 0)::numeric) AS igst,
+          ROUND(SUM(ROUND((ti."quantity"::numeric * ti."unitPrice" - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 2)) * 100 + 0.0000001) AS "taxableValuePaise",
+          ROUND(SUM(COALESCE(ti."cgst", 0)::numeric) * 100 + 0.0000001) AS "cgstPaise",
+          ROUND(SUM(COALESCE(ti."sgst", 0)::numeric) * 100 + 0.0000001) AS "sgstPaise",
+          ROUND(SUM(COALESCE(ti."igst", 0)::numeric) * 100 + 0.0000001) AS "igstPaise",
           SUM(ti."quantity") AS quantity
         FROM "TransactionItem" ti
         JOIN "Transaction" t ON ti."transactionId" = t.id
@@ -168,16 +173,17 @@ export async function GET(req: NextRequest) {
     const cappedTransactions = hitCap ? transactions.slice(0, INVOICE_CAP) : transactions
 
     // Build a lookup: transactionId → array of per-rate rows
+    // 🔒 V17 PAISE MIGRATION Phase 2D: SQL returns paise; convert to rupees via fromPaise().
     const gstByTransaction = new Map<string, Array<{ gstRate: number; taxableValue: number; cgst: number; sgst: number; igst: number; quantity: number }>>()
     for (const row of perInvoiceGstRows) {
       const txId = row.transactionId
       if (!gstByTransaction.has(txId)) gstByTransaction.set(txId, [])
       gstByTransaction.get(txId)!.push({
         gstRate: Number(row.gstRate),
-        taxableValue: roundMoney(Number(row.taxableValue)),
-        cgst: roundMoney(Number(row.cgst)),
-        sgst: roundMoney(Number(row.sgst)),
-        igst: roundMoney(Number(row.igst)),
+        taxableValue: fromPaise(Number(row.taxableValuePaise)),
+        cgst: fromPaise(Number(row.cgstPaise)),
+        sgst: fromPaise(Number(row.sgstPaise)),
+        igst: fromPaise(Number(row.igstPaise)),
         quantity: Number(row.quantity),
       })
     }
@@ -258,19 +264,19 @@ export async function GET(req: NextRequest) {
       db.$queryRaw<Array<{
         transactionId: string;
         gstRate: number;
-        taxableValue: number;
-        cgst: number;
-        sgst: number;
-        igst: number;
+        taxableValuePaise: number;
+        cgstPaise: number;
+        sgstPaise: number;
+        igstPaise: number;
         quantity: number;
       }>>`
         SELECT
           ti."transactionId",
           ti."gstRate",
-          SUM(ROUND((ti."quantity"::numeric * ti."unitPrice" - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 2)) AS "taxableValue",
-          SUM(COALESCE(ti."cgst", 0)::numeric) AS cgst,
-          SUM(COALESCE(ti."sgst", 0)::numeric) AS sgst,
-          SUM(COALESCE(ti."igst", 0)::numeric) AS igst,
+          ROUND(SUM(ROUND((ti."quantity"::numeric * ti."unitPrice" - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 2)) * 100 + 0.0000001) AS "taxableValuePaise",
+          ROUND(SUM(COALESCE(ti."cgst", 0)::numeric) * 100 + 0.0000001) AS "cgstPaise",
+          ROUND(SUM(COALESCE(ti."sgst", 0)::numeric) * 100 + 0.0000001) AS "sgstPaise",
+          ROUND(SUM(COALESCE(ti."igst", 0)::numeric) * 100 + 0.0000001) AS "igstPaise",
           SUM(ti."quantity") AS quantity
         FROM "TransactionItem" ti
         JOIN "Transaction" t ON ti."transactionId" = t.id
@@ -284,10 +290,19 @@ export async function GET(req: NextRequest) {
     ])
 
     // Build per-transaction GST map for CDN
-    const cdnGstByTransaction = new Map<string, any[]>()
+    // 🔒 V17 PAISE MIGRATION Phase 2D: SQL returns paise; convert to rupees via fromPaise().
+    // Store the converted values in the map so downstream code uses rupees.
+    const cdnGstByTransaction = new Map<string, Array<{ gstRate: number; taxableValue: number; cgst: number; sgst: number; igst: number; quantity: number }>>()
     for (const row of cdnGstRows) {
       const arr = cdnGstByTransaction.get(row.transactionId) || []
-      arr.push(row)
+      arr.push({
+        gstRate: Number(row.gstRate),
+        taxableValue: fromPaise(Number(row.taxableValuePaise)),
+        cgst: fromPaise(Number(row.cgstPaise)),
+        sgst: fromPaise(Number(row.sgstPaise)),
+        igst: fromPaise(Number(row.igstPaise)),
+        quantity: Number(row.quantity),
+      })
       cdnGstByTransaction.set(row.transactionId, arr)
     }
 
@@ -300,11 +315,11 @@ export async function GET(req: NextRequest) {
       const rateRows = cdnGstByTransaction.get(t.id) || []
       const items = rateRows.map(r => ({
         rt: r.gstRate,
-        txval: roundMoney(r.taxableValue),
-        camt: roundMoney(r.cgst),
-        samt: roundMoney(r.sgst),
-        iamt: roundMoney(r.igst),
-        qty: Number(r.quantity),
+        txval: r.taxableValue,
+        camt: r.cgst,
+        samt: r.sgst,
+        iamt: r.igst,
+        qty: r.quantity,
       }))
       const noteEntry = {
         nt_num: t.invoiceNo || t.id.slice(-8),

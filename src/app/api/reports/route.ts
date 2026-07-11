@@ -3,7 +3,7 @@ import { db } from '@/lib/db'
 import { getAuthContext } from '@/lib/get-auth'
 import { canAccessModule } from '@/lib/staff-permissions'
 import { shouldHideProfit, stripReportProfit } from '@/lib/profit-visibility'
-import { roundMoney } from '@/lib/money'
+import { roundMoney, fromPaise } from '@/lib/money'
 import { activeTransactionWhere } from '@/lib/query-helpers'
 import { istMonthStart } from '@/lib/timezone'
 import {
@@ -239,22 +239,30 @@ export async function GET(req: NextRequest) {
         // Now: every read path aggregates the stored per-item values, so the
         // slab breakdown, the header outputTax, the GSTR per-invoice, and the
         // dashboard are byte-identical to the values stored at write time.
+        //
+        // 🔒 V17 PAISE MIGRATION Phase 2D: SQL now returns PAISE (integer) instead
+        // of rupees (Float). Pattern: ROUND(SUM(...) * 100 + nudge) AS "XPaise".
+        // The 1e-7 paise nudge mirrors roundMoney()'s 1e-9 rupee nudge — bridges
+        // the gap between Postgres numeric ROUND (exact) and JS roundMoney (nudged).
+        // JS converts back via fromPaise(Number(row.XPaise)) — same rupee values.
+        // Tax columns (cgst/sgst/igst) are always >= 0 so positive nudge is fine.
+        // Taxable can be 0 or positive (qty*price - discount, discount <= qty*price).
         db.$queryRaw<Array<{
           gstRate: number;
           isInterState: boolean;
-          taxable: number;
-          cgst: number;
-          sgst: number;
-          igst: number;
+          taxablePaise: number;
+          cgstPaise: number;
+          sgstPaise: number;
+          igstPaise: number;
           quantity: number;
         }>>`
           SELECT
             ti."gstRate",
             t."isInterState",
-            SUM(ROUND((ti."quantity"::numeric * ti."unitPrice" - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 2)) AS taxable,
-            SUM(COALESCE(ti."cgst", 0)::numeric) AS cgst,
-            SUM(COALESCE(ti."sgst", 0)::numeric) AS sgst,
-            SUM(COALESCE(ti."igst", 0)::numeric) AS igst,
+            ROUND(SUM(ROUND((ti."quantity"::numeric * ti."unitPrice" - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 2)) * 100 + 0.0000001) AS "taxablePaise",
+            ROUND(SUM(COALESCE(ti."cgst", 0)::numeric) * 100 + 0.0000001) AS "cgstPaise",
+            ROUND(SUM(COALESCE(ti."sgst", 0)::numeric) * 100 + 0.0000001) AS "sgstPaise",
+            ROUND(SUM(COALESCE(ti."igst", 0)::numeric) * 100 + 0.0000001) AS "igstPaise",
             SUM(ti."quantity") AS quantity
           FROM "TransactionItem" ti
           JOIN "Transaction" t ON ti."transactionId" = t.id
@@ -267,19 +275,20 @@ export async function GET(req: NextRequest) {
           ORDER BY ti."gstRate" ASC
         `,
         // 6. Input slab breakdown (purchases) — 🔒 V10 §2.2: aggregate STORED per-item values
+        // 🔒 V17 PAISE MIGRATION Phase 2D: same paise pattern as query 5 above.
         db.$queryRaw<Array<{
           gstRate: number;
-          taxable: number;
-          cgst: number;
-          sgst: number;
-          igst: number;
+          taxablePaise: number;
+          cgstPaise: number;
+          sgstPaise: number;
+          igstPaise: number;
         }>>`
           SELECT
             ti."gstRate",
-            SUM(ROUND((ti."quantity"::numeric * ti."unitPrice" - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 2)) AS taxable,
-            SUM(COALESCE(ti."cgst", 0)::numeric) AS cgst,
-            SUM(COALESCE(ti."sgst", 0)::numeric) AS sgst,
-            SUM(COALESCE(ti."igst", 0)::numeric) AS igst
+            ROUND(SUM(ROUND((ti."quantity"::numeric * ti."unitPrice" - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 2)) * 100 + 0.0000001) AS "taxablePaise",
+            ROUND(SUM(COALESCE(ti."cgst", 0)::numeric) * 100 + 0.0000001) AS "cgstPaise",
+            ROUND(SUM(COALESCE(ti."sgst", 0)::numeric) * 100 + 0.0000001) AS "sgstPaise",
+            ROUND(SUM(COALESCE(ti."igst", 0)::numeric) * 100 + 0.0000001) AS "igstPaise"
           FROM "TransactionItem" ti
           JOIN "Transaction" t ON ti."transactionId" = t.id
           WHERE t."userId" = ${userId}
@@ -351,14 +360,16 @@ export async function GET(req: NextRequest) {
       )
 
       // Build slab map (combine intra+inter state rows for the same rate)
+      // 🔒 V17 PAISE MIGRATION Phase 2D: SQL returns paise; convert to rupees via fromPaise().
+      // roundMoney is NOT needed here because SQL already applied ROUND with the 1e-7 nudge.
       const slabMap = new Map<number, { taxable: number; cgst: number; sgst: number; igst: number; quantity: number }>()
       for (const row of slabRows) {
         const rate = Number(row.gstRate)
         const existing = slabMap.get(rate) || { taxable: 0, cgst: 0, sgst: 0, igst: 0, quantity: 0 }
-        existing.taxable = roundMoney(existing.taxable + Number(row.taxable))
-        existing.cgst = roundMoney(existing.cgst + Number(row.cgst))
-        existing.sgst = roundMoney(existing.sgst + Number(row.sgst))
-        existing.igst = roundMoney(existing.igst + Number(row.igst))
+        existing.taxable = roundMoney(existing.taxable + fromPaise(Number(row.taxablePaise)))
+        existing.cgst = roundMoney(existing.cgst + fromPaise(Number(row.cgstPaise)))
+        existing.sgst = roundMoney(existing.sgst + fromPaise(Number(row.sgstPaise)))
+        existing.igst = roundMoney(existing.igst + fromPaise(Number(row.igstPaise)))
         existing.quantity += Number(row.quantity)
         slabMap.set(rate, existing)
       }
@@ -367,10 +378,10 @@ export async function GET(req: NextRequest) {
       for (const row of inputSlabRows) {
         const rate = Number(row.gstRate)
         const existing = inputSlabMap.get(rate) || { taxable: 0, cgst: 0, sgst: 0, igst: 0 }
-        existing.taxable = roundMoney(existing.taxable + Number(row.taxable))
-        existing.cgst = roundMoney(existing.cgst + Number(row.cgst))
-        existing.sgst = roundMoney(existing.sgst + Number(row.sgst))
-        existing.igst = roundMoney(existing.igst + Number(row.igst))
+        existing.taxable = roundMoney(existing.taxable + fromPaise(Number(row.taxablePaise)))
+        existing.cgst = roundMoney(existing.cgst + fromPaise(Number(row.cgstPaise)))
+        existing.sgst = roundMoney(existing.sgst + fromPaise(Number(row.sgstPaise)))
+        existing.igst = roundMoney(existing.igst + fromPaise(Number(row.igstPaise)))
         inputSlabMap.set(rate, existing)
       }
 

@@ -4274,3 +4274,49 @@ Stage Summary:
 - Phase 4 dependency noted in code: checkGstReconciliation uses Prisma aggregate() on Float columns — will need roundMoney→fromPaise when columns change to Int.
 - Bug registry status: 4 bugs FIXED (BUG-003, BUG-005, BUG-006, BUG-007), 2 bugs OPEN (BUG-002 Low/Perf, BUG-004 Medium).
 - NEXT: Push to origin/main, wait for Vercel deploy + user verification, then proceed to Phase 2D (reports/route.ts + gstr-export/route.ts — 4 raw SQL queries with money columns).
+
+---
+Task ID: paise-migration-phase-2D
+Agent: main
+Task: V17 Paise Migration Phase 2D — Migrate 4 money-touching raw SQL queries in reports/route.ts (sale slab + input slab) and gstr-export/route.ts (per-invoice GST + CDN GST) from rupee Float to paise integer.
+
+Work Log:
+- PRE-CHANGE SCAN: Read both files completely.
+    * reports/route.ts: 2 raw SQL queries (sale slab breakdown, input slab breakdown). Both return money columns: taxable, cgst, sgst, igst. Same pattern as Phase 2A.
+    * gstr-export/route.ts: 2 raw SQL queries (per-invoice-per-rate GST for sales, per-invoice-per-rate GST for CDN). Both return: taxableValue, cgst, sgst, igst. Same pattern.
+    * No pre-existing bugs found in the SQL logic itself (the V10 §2.2 stored-per-item aggregation is correct).
+
+- IMPLEMENTATION (same pattern as Phase 2A/2B):
+    SQL: SUM(ROUND(qty*price - discount, 2)) AS "taxable"  →  ROUND(SUM(ROUND(qty*price - discount, 2)) * 100 + 0.0000001) AS "taxablePaise"
+    JS:  roundMoney(Number(row.taxable))  →  fromPaise(Number(row.taxablePaise))
+    The 1e-7 paise nudge mirrors roundMoney's 1e-9 rupee nudge — bridges Postgres numeric ROUND vs JS roundMoney float correction.
+
+- Files modified (4, per git status):
+    1. src/app/api/reports/route.ts — migrated sale slab + input slab queries (2 queries). Updated TypeScript types (taxable→taxablePaise, etc.) and JS processing loops (fromPaise conversion). Added fromPaise to imports.
+    2. src/app/api/gstr-export/route.ts — migrated per-invoice GST + CDN GST queries (2 queries). Updated TypeScript types and 2 JS processing loops (gstByTransaction map + cdnGstByTransaction map). Added fromPaise to imports.
+    3. src/__tests__/lib/raw-sql-smoke.test.ts — added 14 new regression-guard tests (7 for reports, 7 for gstr-export) under "V17 Phase 2D" describe block.
+    4. BUGS-FOUND.md — cataloged BUG-008 (csv-export.test.ts pre-existing crash).
+
+- VERIFICATION:
+    * npx tsc --noEmit: 0 errors (codebase fully type-clean)
+    * npx eslint on all 3 modified source files: clean
+    * npx jest (7 targeted test files): 203 tests, ALL PASS — including:
+        - raw-sql-smoke.test.ts (with 14 new Phase 2D regression guards)
+        - gst-discount, net-sales, books-tie-out (GST reconciliation tests)
+        - reconciliation, paise-helpers, money
+    * npx jest (7 broader financial test files one-at-a-time): 141 tests, ALL PASS — including balance-reconciliation-behavioral (the CRITICAL parity test), gstr-3b, gstr1-builder, gstr-2b, amount-to-words, bank-recon.
+    * csv-export.test.ts: PRE-EXISTING crash (BUG-008) — reproduced on Phase 2C commit via git stash, NOT caused by my changes.
+
+- POST-CHANGE SCAN:
+    * Verified no stale references to old field names (taxable, cgst, sgst, igst without Paise suffix) in the SQL conversion loops.
+    * Verified downstream code (itemsByRate map, cdnByGstin map, reconciliation block, CSV generation) all consume the converted JS objects (which have rupee property names) — no SQL row access.
+    * The gstr-export reconciliation block (lines 429-479) compares per-invoice totals vs summary totals — both now use the same converted rupee values, so reconciliation still works correctly.
+    * The reports route return shape is UNCHANGED — callers (Reports UI component) consume the same fields (bySlab array with {rate, taxable, cgst, sgst, igst, quantity}). No caller changes needed.
+
+- BUG-008 cataloged: csv-export.test.ts crashes Jest with unhandled rejection loop. Pre-existing (reproduced on Phase 2C). Defer to dedicated test-infra fix.
+
+Stage Summary:
+- Phase 2D COMPLETE. 4 raw SQL queries migrated from rupee Float to paise integer. Zero behavior change at the API/UI boundary.
+- 14 new regression-guard tests added. Total paise-migration regression guards: 29 (4 Phase 2A + 7 Phase 2B + 4 Phase 2C + 14 Phase 2D).
+- Bug registry: 4 FIXED (BUG-003/005/006/007), 3 OPEN (BUG-002 Low/Perf, BUG-004 Medium, BUG-008 Medium/TestInfra).
+- NEXT: Push to origin/main, wait for Vercel deploy + user verification, then proceed to Phase 2E (analytics/route.ts + parties/[id]/route.ts — 9 raw SQL queries).

@@ -20,6 +20,17 @@ and include enough context to reproduce.
 
 <!-- Add new bugs below this line. Newest first. -->
 
+### BUG-008 — csv-export.test.ts crashes Jest with unhandled rejection loop (Medium/TestInfra)
+
+- **Found**: 2026-07-11, during Phase 2D verification (broader test sweep)
+- **File**: `src/__tests__/lib/csv-export.test.ts` (test infrastructure)
+- **Severity**: Medium (test crashes Jest runner, blocking the test suite)
+- **Description**: Running `npx jest src/__tests__/lib/csv-export.test.ts` crashes the Node.js process with an unhandled rejection loop (~93 duplicate stack traces from `next/src/server/node-environment-extensions/unhandled-rejection.tsx`). The process exits with no test results.
+- **Verification**: Confirmed PRE-EXISTING — reproduced on `aa7edb7` (Phase 2C, before Phase 2D changes) via `git stash`. NOT caused by paise migration.
+- **Likely cause**: The test file probably imports something that triggers Next.js server-side environment extensions which conflict with Jest's jsdom environment. Could be a missing mock or an import of a route handler that pulls in next/server.
+- **Fix**: Investigate the test file's imports, add mocks for next/server components, or move to a different test environment. Defer to a dedicated test-infra fix sub-phase.
+- **Status**: OPEN — defer to a dedicated test-infra fix sub-phase (not blocking paise migration)
+
 ### BUG-007 — (MOVED to Fixed bugs section below)
 
 - **Status**: FIXED (2026-07-11, as part of V17 Phase 2C)
