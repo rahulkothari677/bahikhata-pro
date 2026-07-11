@@ -3090,3 +3090,193 @@ Stage Summary:
   * §1 user-reported bugs (profit=0, not visible, not pre-filled) — Phase 1 fixes ✅
   * §2 MEDIUM (GSTR-3B RCM net tax) — Phase 2 ✅
   * §4.1-4.4 LOW — Phase 3 ✅
+
+---
+Task ID: v17-reverify-research
+Agent: Explore (read-only)
+Task: Verify V17 audit fixes are complete AND find any NEW bugs introduced by the fixes
+
+SCOPE: Read-only research. Verified §1, §1-fixes, §2, §4.1-4.4 fixes across dashboard/route.ts, reports/route.ts, net-sales.ts, line-items.ts, gstr-3b/route.ts, Ledger.tsx, TransactionDetail.tsx, TransactionEntry.tsx, transactions/[id]/route.ts, day-summary/route.ts, insights/route.ts, whatsapp-reminder/route.ts, ProductDialog.tsx, validation.ts, products/route.ts, schema.prisma, migration.sql, gstr-3b.test.ts, net-sales.test.ts, and the backfill script.
+
+═══════════════════════════════════════════════════════════════════════
+✅ VERIFIED FIXED
+═══════════════════════════════════════════════════════════════════════
+
+§2 GSTR-3B RCM (MEDIUM) — VERIFIED FIXED:
+- rcmInwardAgg queries type='purchase' (was 'sale') in BOTH GET (route.ts:127-137) and POST (route.ts:528-533).
+- netTaxPayable formula: + totalRcmInward - totalRcmItc — they cancel for fully-creditable RCM (route.ts:380-383, 649-652).
+- Response uses totalRcmInward (route.ts:423). Gstr3bReport.tsx:351 uses totalRcmInward. No leftover totalRcmOutward/rcmOutwardAgg in non-comment code.
+
+§4.1 Nil-rated (LOW) — VERIFIED FIXED:
+- Query now sums 0%-rated LINE ITEMS (not whole invoices) via `ti."gstRate" = 0` filter. Applied to both GET (route.ts:158-171) and POST (route.ts:540-550).
+
+§4.2 Exempt flag (LOW) — PARTIALLY FIXED (see GAP 1):
+- Product.gstTreatment field exists in schema (schema.prisma:128) with default 'taxable'.
+- Migration applied (20260711000001_v17_audit_phase3).
+- GSTR-3B exempt query uses `p."gstTreatment" = 'exempt'` (route.ts:177-191, 552-563).
+- exemptValue no longer hardcoded to 0.
+
+§4.3 CDN snapshot columns (LOW) — VERIFIED FIXED:
+- 8 columns added to GstReturn (schema.prisma:563-570).
+- Migration applied (idempotent ALTER TABLE).
+- POST upsert persists all 8 values to both update + create (route.ts:659-695).
+
+§4.4 Nil+RCM overlap test (LOW) — VERIFIED (with caveat, see GAP 3):
+- Test added at gstr-3b.test.ts:219-227.
+- nilRatedAgg query correctly filters `isReverseCharge = false` (route.ts:167, 547).
+
+§1-fixes credit-note profit (line-items.ts) — VERIFIED:
+- line-items.ts:138-146 stores NEGATIVE grossProfit for credit notes (`grossProfit - itemProfit` where itemProfit is positive).
+- POST (transactions/route.ts:376) and PUT (transactions/[id]/route.ts:294) both call computeLineItems.
+- Debit notes still skip profit (correct — purchases don't carry profit).
+
+§1-fixes reversalTransactions/originalTransaction — VERIFIED:
+- GET handler includes both (transactions/[id]/route.ts:33-58).
+- TransactionDetail.tsx shows violet "Credit/Debit Notes Issued" card (lines 657-712) and blue "Original Sale/Purchase" card (lines 714-740).
+
+§1-fixes "Load items" button — VERIFIED:
+- TransactionEntry.tsx:392-421 handles fetch errors via try/catch with sonnerToast.error.
+- Shows toast for empty original sale.
+- Only displays when isCreditNote && originalTransactionId.
+
+Backfill script — VERIFIED CORRECT (with caveat, see GAP 2):
+- Correctly computes NEGATIVE profit (`recomputedProfit - itemProfit`).
+- Skips unlinked items (`if (!item.productId) continue`).
+- Supports --dry-run mode.
+- Uses purchasePriceAtSale (stored at sale time).
+
+═══════════════════════════════════════════════════════════════════════
+🐛 NEW BUGS FOUND (introduced or exposed by the V17 fixes)
+═══════════════════════════════════════════════════════════════════════
+
+🔴 BUG A (HIGH) — Credit-note profit DOUBLE-COUNTED in dashboard KPI query
+  File: src/app/api/dashboard/route.ts
+  Lines: 161-162 (today_profit), 166-167 (range_profit), 174-175 (prev_profit), 224-225 (sales trend profit)
+  Root cause: Phase 1 wrote SQL that SUBTRACTS SUM(credit-note grossProfit):
+    `SUM(sale grossProfit) - SUM(credit-note grossProfit) AS range_profit`
+  Phase 1-fixes changed line-items.ts to store credit-note grossProfit as NEGATIVE.
+  So now: 3000 (sale) - (-900) (cn) = 3900. WRONG — should be 3000 + (-900) = 2100.
+  Impact: After the founder runs the backfill script, dashboard profit will be INFLATED by the credit-note amount — the OPPOSITE of the §1 fix's intent. This is a regression of the original screenshot bug ("profit unchanged after credit note") in the OPPOSITE direction (profit doubled instead of unchanged).
+  Fix: Change `-` to `+` in the KPI query, OR remove the credit-note clause entirely and let `SUM(CASE WHEN type IN ('sale','credit-note') THEN grossProfit ELSE 0 END)` do the work (since credit-note grossProfit is already negative, summing naturally nets).
+
+🔴 BUG B (HIGH) — Credit-note profit DOUBLE-COUNTED in P&L report
+  File: src/lib/net-sales.ts:78 (netSalesProfit)
+  Used by: src/app/api/reports/route.ts:137 (P&L grossProfit)
+  Root cause: `return roundMoney((s.grossProfit || 0) - (c.grossProfit || 0))` — subtracts a negative number → ADDS.
+  Example: sale.grossProfit=3000, cn.grossProfit=-900 → returns 3900 (WRONG, should be 2100).
+  Test gap: The golden test at net-sales.test.ts:67-78 passes POSITIVE 900 for credit-note grossProfit and asserts 2100. The test comment literally says: "A credit note's grossProfit is POSITIVE (it stores the absolute reversal amount). We SUBTRACT it to get net profit." But line-items.ts stores NEGATIVE. The test passes but doesn't reflect actual storage.
+  Fix: Change netSalesProfit to ADD: `(s.grossProfit || 0) + (c.grossProfit || 0)`. Update the golden test to use cn.grossProfit = -900 (matching actual storage).
+
+🔴 BUG C (HIGH) — Credit-note profit DOUBLE-COUNTED in Ledger totalProfit
+  File: src/components/ledger/Ledger.tsx:277-281
+  Code: `if (t.type === 'credit-note') return s - (t.grossProfit || 0)`
+  The code comment at lines 273-276 ACKNOWLEDGES credit notes have NEGATIVE grossProfit, but then proceeds to SUBTRACT — which is exactly the wrong sign. `s - (-900) = s + 900`.
+  Example: Sale profit=+3000 + Credit note profit=-900 → Ledger shows 3000 - (-900) = 3900 (WRONG, should be 2100).
+  Fix: Change to `return s + (t.grossProfit || 0)` for credit notes (ADD, since grossProfit is already negative). Or simply: `if (t.type === 'sale' || t.type === 'credit-note') return s + (t.grossProfit || 0)`.
+
+🟠 BUG D (MEDIUM) — Credit-note per-card "negative profit" badge never displays
+  File: src/components/ledger/Ledger.tsx:684 (desktop), 782 (mobile)
+  Code: `{t.type === 'credit-note' && !hideProfit && t.grossProfit > 0 && (...)}`
+  Issue: The condition `t.grossProfit > 0` is now ALWAYS FALSE for credit notes (they have NEGATIVE grossProfit after the fix). The rose-colored "-₹X profit reversed" badge never renders.
+  Fix: Change to `t.grossProfit < 0` and use `Math.abs(t.grossProfit)` for display.
+
+🟠 BUG E (MEDIUM) — Reversal-card "negative profit" badge never displays
+  File: src/components/ledger/TransactionDetail.tsx:700
+  Code: `{rev.grossProfit > 0 && (<p ...>-{formatINR(rev.grossProfit)} profit</p>)}`
+  Same issue as BUG D. The profit-reversal indicator inside the violet "Credit Notes Issued" card never shows.
+  Fix: Change to `rev.grossProfit < 0` and use `Math.abs(rev.grossProfit)` for display.
+
+🟠 BUG F (MEDIUM) — Day-summary cash drawer reconciliation inflated by credit notes
+  File: src/app/api/day-summary/route.ts:82-104
+  Issue: The for-loop handles `sale`, `purchase`, `expense`, `income` but NOT `credit-note` or `debit-note`. Credit notes are silently ignored.
+  Example: ₹5,000 cash sale + ₹1,000 cash credit note → `cashSales=5000` (should be 4000 net). `expectedCash` overstated by ₹1,000. The shopkeeper's drawer would appear SHORT by ₹1,000 at end of day, even though they correctly gave ₹1,000 back.
+  Impact: Defeats the V17-Ext §5.4 "Close the Drawer" reconciliation feature. This is a missed instance of the original §1 bug.
+  Fix: Add a `credit-note` branch that subtracts from the matching payment-mode bucket, and a `debit-note` branch that subtracts from the matching purchase bucket.
+
+🟠 BUG G (MEDIUM) — Nil-rated + Exempt DOUBLE-COUNTING in GSTR-3B 3.1(c)
+  File: src/app/api/gstr-3b/route.ts:158-191 (GET), 540-563 (POST)
+  Issue: nilRatedAgg sums ALL items with `ti."gstRate" = 0`. exemptAgg sums ALL items where `p."gstTreatment" = 'exempt'`. If a product is marked gstTreatment='exempt' AND its line items have gstRate=0 (the natural case for exempt products), the SAME items are counted in BOTH queries.
+  Gstr3bReport.tsx:253 sums `nilRatedValue + exemptValue + nonGstValue` for the 3.1 total → exempt items are counted TWICE.
+  Fix: Add `AND (p."gstTreatment" IS NULL OR p."gstTreatment" != 'exempt')` to the nilRatedAgg query. Or only count items where `p."gstTreatment" = 'taxable'` (the default).
+
+🟡 BUG H (LOW) — WhatsApp reminder shows gross invoice amounts, not net-of-credit-notes
+  File: src/app/api/whatsapp-reminder/route.ts:32, 55-103
+  Issue: Queries only `type: 'sale'` for the unpaid invoice list. Shows each unpaid invoice at full `totalAmount - paidAmount` even if a credit note was issued against it.
+  The total balance shown (line 84) IS correct (uses computePartyBalance which handles credit notes). But the per-invoice breakdown sums to MORE than the balance when credit notes exist.
+  Impact: Customer sees "INV-001 - Rs. 5000" + "INV-002 - Rs. 3000" but the total at top says "Outstanding: Rs. 6000" (after a Rs. 2000 credit note). Confusing.
+  Fix: Either subtract credit-note amounts from the corresponding sale in the breakdown, or annotate that the per-invoice amounts don't reflect credit notes.
+
+🟡 BUG I (LOW) — Insights margin widget ignores credit notes
+  File: src/app/api/insights/route.ts:95-99, 110-111, 209-211
+  Issue: Filters transactions by `type: 'sale'` only. The "Profit margin dropped X%" alert uses gross (pre-return) profit and revenue.
+  Impact: Misleading "margin dropped" alerts if a credit note was issued (margin appears to drop because revenue drops but the credit-note profit reversal isn't counted).
+  Fix: Include credit notes in the filter and sum grossProfit naturally (since credit-note grossProfit is already negative).
+
+═══════════════════════════════════════════════════════════════════════
+⚠️ GAPS (incomplete fixes)
+═══════════════════════════════════════════════════════════════════════
+
+⚠️ GAP 1 (HIGH) — No UI/API to set Product.gstTreatment (§4.2 is functionally dead)
+  Files:
+    - src/components/inventory/ProductDialog.tsx — no gstTreatment form field
+    - src/lib/validation.ts:79-98, 122-138 — createProductSchema and updateProductSchema don't accept gstTreatment
+    - src/app/api/products/route.ts:71-88, 117-135 — POST/PUT handlers don't write gstTreatment
+  Issue: Product.gstTreatment defaults to 'taxable' on every product. There is NO way for a user (or even a direct API call) to change it to 'exempt', 'nil', or 'nonGst'. The Zod schemas would reject any client-sent gstTreatment value.
+  Result: exemptValue will ALWAYS be 0 in production. The §4.2 fix is functionally dead code — the query exists but can never return non-zero data.
+  Fix: Add a "GST Treatment" Select to ProductDialog with options {Taxable, Nil-rated (0%), Exempt, Non-GST}. Add gstTreatment to createProductSchema and updateProductSchema. Add the field to POST/PUT handlers.
+
+⚠️ GAP 2 (LOW) — Backfill script diverges from line-items.ts for purchasePrice
+  File: scripts/recompute-credit-note-profit.ts:78
+  Issue: Backfill uses `item.purchasePriceAtSale` (the price stored at sale time). line-items.ts uses `p.product.purchasePrice` (the LIVE product price). If a product's purchasePrice has changed since the credit note was created, the backfill will produce a DIFFERENT grossProfit than re-creating the credit note would.
+  Also: If purchasePriceAtSale is 0 (e.g., for items created before V12 added this field, or unlinked items that were somehow linked later), the recomputed profit becomes `-(realizedUnitPrice - 0) × quantity` = a huge negative number. This matches line-items.ts behavior (which also falls back to product.purchasePrice which could be 0), but it's a footgun.
+  Fix: Document the divergence, OR have the backfill use the current product.purchasePrice (matching line-items.ts), OR have line-items.ts use purchasePriceAtSale (matching the backfill).
+
+⚠️ GAP 3 (LOW) — §4.4 nil+RCM overlap test is a soft assertion (not a real query test)
+  File: src/__tests__/lib/gstr-3b.test.ts:219-227
+  Issue: The test just asserts:
+    `const regularNilRated = 1000; const rcmNilRated = 0; const nilRatedValue = regularNilRated + rcmNilRated; expect(nilRatedValue).toBe(1000)`
+  This is a documentation test — it doesn't actually call the SQL query. If someone removes the `isReverseCharge = false` filter from nilRatedAgg, this test would still pass.
+  Fix: Mock the db.$queryRaw call and assert the SQL contains `isReverseCharge = false`. Or call the actual route handler with a mock that returns different values for isReverseCharge=true vs false, and assert nilRatedValue excludes RCM.
+
+═══════════════════════════════════════════════════════════════════════
+📋 SUMMARY
+═══════════════════════════════════════════════════════════════════════
+
+The V17 audit fixes are PARTIALLY complete with a CRITICAL REGRESSION:
+
+1. §2 GSTR-3B RCM: ✅ Correctly fixed.
+2. §4.1 Nil-rated: ✅ Correctly fixed (but interacts badly with §4.2 — see BUG G).
+3. §4.2 Exempt flag: ⚠️ Schema + query added, but NO UI/API to set it — functionally dead.
+4. §4.3 CDN columns: ✅ Correctly fixed.
+5. §4.4 Nil+RCM test: ✅ Added but is a soft assertion (GAP 3).
+
+6. §1 Credit notes: 🔴 CRITICAL REGRESSION
+   - Phase 1 assumed credit notes have POSITIVE grossProfit (subtract to net).
+   - Phase 1-fixes changed line-items.ts to store NEGATIVE grossProfit.
+   - Phase 1 code (dashboard KPI SQL, net-sales.ts netSalesProfit) and Phase 1-fixes code (Ledger.tsx totalProfit) were NOT updated to match.
+   - Result: After the founder runs the backfill script, credit-note profit is DOUBLE-COUNTED in the dashboard, P&L report, and Sales Ledger (the OPPOSITE of the §1 fix's intent).
+   - The golden test in net-sales.test.ts passes POSITIVE grossProfit for credit notes (matching the OLD assumption), so it does NOT catch this bug. The test passes but doesn't reflect actual storage.
+   - Additionally, the per-card and reversal-card UI badges use `t.grossProfit > 0` which is now never true for credit notes — the badges never render.
+
+This is exactly the kind of bug the auditor's "single definition of revenue, tested once, used everywhere" discipline was supposed to prevent. The helpers in net-sales.ts were supposed to be the single source of truth, but:
+   (a) Ledger.tsx bypasses them (inline reduce),
+   (b) Dashboard KPI SQL bypasses them (raw SQL),
+   (c) The helpers themselves have the wrong sign convention post-Phase-1-fixes.
+
+RECOMMENDED IMMEDIATE ACTIONS (Phase 4 — critical):
+1. CRITICAL: Pick ONE convention for credit-note grossProfit and apply it consistently.
+   Option A (recommended — keep current line-items.ts): store NEGATIVE. Then:
+     - netSalesProfit: change `-` to `+`
+     - Ledger.tsx:278: change `s -` to `s +`
+     - Dashboard KPI SQL (lines 161-162, 166-167, 174-175, 224-225): change `-` to `+`
+   Option B (more invasive): store POSITIVE in line-items.ts. Then no other changes needed (the existing subtract logic works), but the backfill script and any existing credit notes would need re-migration.
+2. CRITICAL: Update the golden test in net-sales.test.ts to use cn.grossProfit = -900 (matching actual storage). This will FAIL the current code and force the fix.
+3. HIGH: Fix BUG D and BUG E — change `> 0` to `< 0` (or use Math.abs) in Ledger.tsx and TransactionDetail.tsx badge conditions.
+4. MEDIUM: Fix BUG F — add credit-note and debit-note branches to day-summary/route.ts.
+5. MEDIUM: Fix GAP 1 — add UI + Zod schema + API handler for Product.gstTreatment.
+6. MEDIUM: Fix BUG G — exclude exempt/nonGst products from nilRatedAgg query.
+7. LOW: Fix BUG H and BUG I — include credit notes in whatsapp-reminder and insights queries.
+
+TEST COVERAGE GAP: No existing test exercises the dashboard KPI query, Ledger.tsx totalProfit, or netSalesProfit with credit notes that have NEGATIVE grossProfit (matching actual storage). All tests pass POSITIVE values, masking the bug. Recommend adding integration tests with realistic mock data (credit notes with negative grossProfit) that assert the dashboard, P&L, and Ledger all show the correct net profit.
+
+Worklog entry complete. Read-only research task — no code changes made.
