@@ -54,6 +54,8 @@ model User {
   gstReturns       GstReturn[]
   gstr1Snapshots   Gstr1Snapshot[]
   gstr2bImports    Gstr2bImport[]
+  bankStatements   BankStatement[]
+  bankTransactions BankTransaction[]
   referralsMade    Referral[]       @relation("Referral_referrerIdToUser")
   referralReceived Referral?        @relation("Referral_referredIdToUser")
   subscriptions    Subscription[]
@@ -244,6 +246,8 @@ model Transaction {
   originalTransactionId String?
   originalTransaction   Transaction?  @relation("TransactionReversal", fields: [originalTransactionId], references: [id], onDelete: SetNull)
   reversalTransactions  Transaction[] @relation("TransactionReversal")
+  // 🔒 V17 Audit Phase 6: Bank reconciliation — matched bank transactions
+  matchedBankTransactions BankTransaction[] @relation("BankReconMatch")
   noteType              String?       // 'C' (credit) or 'D' (debit) — only for credit-note/debit-note types
   noteReason            String?       // GST reason: 'post-sale-discount' | 'deficiency' | 'return' | 'price-revision' | 'other'
   affectsStock          Boolean       @default(false) // true only when goods are physically returned
@@ -347,6 +351,9 @@ model Payment {
   // Hard-deleting a payment silently changes historical balances — exactly the
   // kind of action that should leave an audit trail in a ledger app.
   deletedAt DateTime?
+
+  // 🔒 V17 Audit Phase 6: Bank reconciliation — matched bank transactions
+  bankTransactions BankTransaction[]
 
   // ⚡ PERFORMANCE (Audit fix Phase 5): Indexes on foreign keys + hot query
   // patterns. Without these, every payment query does a full table scan.
@@ -641,6 +648,65 @@ model Gstr1Snapshot {
 
   @@unique([userId, monthYear])
   @@index([userId, periodStart])
+}
+
+// ==================== BANK RECONCILIATION (Phase 6) ====================
+// 🔒 V17 Audit Phase 6: Stores imported bank statement transactions and
+// matches them against recorded payments (cash/UPI/card/bank mode).
+// Makes the app the source of truth for cash, not just credit.
+//
+// Flow:
+//   1. User downloads a bank statement CSV from their bank/UPI app
+//   2. Uploads it here → BankStatement (header) + BankTransaction (rows)
+//   3. Auto-match: bank transactions ↔ recorded payments (amount + date ±2 days)
+//   4. Manual match/unmatch for edge cases
+//   5. Reconciled = matched bank txns; Unreconciled = unmatched (investigate)
+
+model BankStatement {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bankName        String   // e.g. "HDFC", "SBI", "ICICI"
+  accountNumber   String?  // last 4 digits (for display)
+  statementPeriod String?  // e.g. "Jul 2026"
+  importedAt      DateTime @default(now())
+  totalCredits    Float    @default(0)  // money in
+  totalDebits     Float    @default(0)  // money out
+  txnCount        Int      @default(0)
+  matchedCount    Int      @default(0)  // auto-matched on import
+  rawCsv          String?  // original CSV (for audit/re-import)
+
+  transactions    BankTransaction[]
+
+  @@index([userId, importedAt])
+}
+
+model BankTransaction {
+  id              String   @id @default(cuid())
+  bankStatementId String
+  bankStatement   BankStatement @relation(fields: [bankStatementId], references: [id], onDelete: Cascade)
+  userId          String   // denormalized for direct querying
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  date            DateTime // transaction date (as shown in bank statement)
+  description     String   // bank description (e.g. "UPI/Rahul Traders/1234")
+  amount          Float    // positive = credit (money in), negative = debit (money out)
+  balance         Float?   // running balance (if provided by bank)
+
+  // Matching status
+  matchStatus     String   @default("unmatched") // unmatched | matched | ignored
+  matchedPaymentId String? // FK to Payment (if matched)
+  matchedPayment  Payment? @relation(fields: [matchedPaymentId], references: [id], onDelete: SetNull)
+  matchedTransactionId String? // FK to Transaction (if matched to a sale/purchase)
+  matchedTransaction Transaction? @relation("BankReconMatch", fields: [matchedTransactionId], references: [id], onDelete: SetNull)
+  matchMethod     String?  // auto | manual (how the match was made)
+  matchConfidence Float?   // 0-1 (auto-match confidence score)
+
+  createdAt       DateTime @default(now())
+
+  @@index([userId, date])
+  @@index([bankStatementId])
+  @@index([matchStatus])
 }
 
 // ==================== GSTR-2B IMPORT (ITC Reconciliation) ====================
