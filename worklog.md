@@ -3591,3 +3591,457 @@ The V17 audit (Phases 1-5) fixed the credit-note SIGN CONVENTION and made the ba
 The HIGHEST-IMPACT fix is #1 (Gstr3bReport CDN + filed snapshot view) because it's a compliance gap: filed GSTR-3B snapshots can silently diverge from live values, and the user has no way to detect this.
 
 Worklog entry complete. Read-only research task — no code changes made.
+
+---
+Task ID: paise-audit-research
+Agent: Explore subagent (read-only research)
+Task: Audit (A) decimal-quantity bug in credit-note "Load items from original sale" flow, and (B) inventory of all Float money fields for a planned integer-paise migration.
+
+═══════════════════════════════════════════════════════════════════════
+PART A — DECIMAL QUANTITY BUG (Credit-Note "Load items from original sale")
+═══════════════════════════════════════════════════════════════════════
+
+USER REPORT
+- "Amul Taaza Milk 500ml" loaded into a credit note with quantity = 22.02 pcs (should be a whole number).
+
+DATA-FLOW TRACE (end-to-end)
+
+1. ORIGINAL SALE WRITE — POST /api/transactions/route.ts:376 calls computeLineItems().
+   - line-items.ts:82-83 computes the normalized quantity:
+        const rawUnit  = normalizeUnitName(item.unit || product?.unit || 'pcs')
+        const norm     = resolveEnteredQuantity(toMoney(item.quantity), rawUnit, product?.unit)
+        const quantity = norm.quantity   // ← this is what gets stored
+        const unit     = norm.unit
+   - resolveEnteredQuantity (units.ts:149-158) calls normalizeToUnit(quantity, from, productUnit):
+       • If from === productUnit            → returns unchanged.
+       • If convertible within same family  → returns the converted value (e.g. 500 gm → 0.5 kg).
+       • If NOT convertible (different families, e.g. ml ↔ pcs) → returns the ORIGINAL quantity
+         and the ORIGINAL unit unchanged (no conversion, no error).
+   - The returned `quantity` is what gets persisted to TransactionItem.quantity.
+
+2. ORIGINAL SALE READ — GET /api/transactions/[id]/route.ts:24-60 returns the items array
+   verbatim (db.transaction.findFirst with `include: { items: true }`). No reverse
+   normalization, no de-normalization back to a "friendly" unit.
+
+3. CREDIT-NOTE "LOAD ITEMS" — TransactionEntry.tsx:392-421 (handleLoadOriginalItems)
+   fetches the original via GET /api/transactions/[id] and maps each item:
+        setItems(originalItems.map((item) => ({
+          ...
+          quantity: item.quantity || 1,    // ← STORED normalized quantity, AS-IS
+          unit:      item.unit || 'pcs',   // ← STORED unit, AS-IS
+          ...
+        })))
+   - No rounding, no integer validation, no "denormalize back to sub-unit" pass.
+
+4. CREDIT-NOTE PREVIEW — TransactionEntry.tsx:441-447 re-runs computeLineItems() on the
+   loaded values. For a count-family product (unit='pcs') with a decimal quantity
+   (e.g. 22.02), resolveEnteredQuantity returns the value unchanged → preview shows
+   "22.02 pcs × ₹X = ₹Y".
+
+5. CREDIT-NOTE SAVE — TransactionEntry.tsx:549-564 POSTs `quantity: Number(i.quantity)`
+   back to /api/transactions. The cycle repeats: server stores 22.02, with no
+   integer-only check.
+
+ROOT CAUSE (two distinct bugs, both contributing)
+
+BUG A1 — STORED QUANTITY IS THE NORMALIZED QUANTITY (loses user intent)
+  - When the original sale is recorded, computeLineItems() converts the entered
+    quantity into the PRODUCT's unit before saving (e.g. 500 gm → 0.5 kg, or
+    500 ml → 0.5 ltr).
+  - When the credit-note form loads the original items, it gets the NORMALIZED
+    value (0.5), not what the user actually typed (500). The user sees "0.5 ltr"
+    where they remember entering "500 ml" — confusing on a return form.
+  - This is the V12 unit-normalization feature (line-items.ts:75-95) working as
+    designed for sales, but interacting badly with credit notes because returns
+    need to mirror exactly what the customer brought back.
+
+BUG A2 — NO INTEGER-ONLY VALIDATION FOR COUNT-FAMILY UNITS (lets 22.02 slip in)
+  - The quantity <Input> in TransactionEntry.tsx:1092-1101 uses `type="number"`
+    and `step="0.01"` unconditionally — even when the unit is "pcs" or "dozen",
+    where fractional quantities are nonsensical.
+  - validation.ts:22 (createTransactionItemSchema) uses
+    `z.coerce.number().positive()` with no integer constraint for count units.
+  - So 22.02 pcs can be entered, stored, re-loaded, and re-saved without any
+    guard ever firing. The 22.02 likely originated from one of:
+      (a) a typo by the shopkeeper (the field accepts it),
+      (b) the AI bill-scanner misreading "22" as "22.02" from a noisy image,
+      (c) a sub-unit sale (e.g. 22 ltr + 20 ml on a volume product) that got
+          normalized to 22.02 ltr at write time, then loaded back as 22.02
+          on a credit note where the unit dropdown was switched to pcs.
+
+SECONDARY ISSUE — UNIT DROPDOWN CAN DESYNC FROM STORED UNIT
+  - TransactionEntry.tsx:1075 builds the unit picker as
+    `subUnitsFor(baseUnitOf(item.unit || 'pcs'))`. So if the stored unit is
+    "ltr", the picker shows only ['ltr','ml']; if it's "pcs", only ['pcs','dozen'].
+  - If the product.unit was changed after the original sale (e.g. product
+    re-categorized from "ltr" to "pcs"), the loaded unit is still the stored
+    "ltr" — but the product's current unit is "pcs", so the credit-note
+    server-side normalization (resolveEnteredQuantity(22, 'ltr', 'pcs'))
+    hits the "different family" branch and returns 22, 'ltr' unchanged.
+    The user sees "22 ltr" for a product now tracked in pcs — confusing.
+
+RECOMMENDED FIX (three changes, in priority order)
+
+FIX A1 (HIGH, ~30 min) — Integer-only validation for count-family units.
+  - In validation.ts:22, change to a refine:
+        quantity: z.coerce.number().positive().max(1000000).refine(
+          (v) => { /* integer-only when unit is in ['pcs','dozen'] */ },
+          { message: 'Quantity must be a whole number for pcs/dozen' }
+        )
+  - In TransactionEntry.tsx:1092-1101, set the input step dynamically:
+        step={isCountUnit(item.unit) ? '1' : '0.01'}
+        inputMode={isCountUnit(item.unit) ? 'numeric' : 'decimal'}
+  - Add `isCountUnit()` helper in units.ts (returns true for pcs, dozen, nos, pc).
+  - This prevents NEW decimal quantities from being entered on count items.
+
+FIX A2 (MEDIUM, ~1 hour) — Display the ORIGINAL entered quantity on credit-note load.
+  Two options:
+  (a) Quick (UI-only): in handleLoadOriginalItems, run a "denormalize" pass —
+      if the stored quantity is < 1 AND the unit is a base unit (kg/ltr/m),
+      convert back to the sub-unit (0.5 kg → 500 gm, 0.5 ltr → 500 ml). Use
+      `convertQuantity(qty, baseUnit, subUnit)` from units.ts. Only applies
+      when the sub-unit conversion produces a clean number (no fractional ml).
+      Pro: no schema change. Con: heuristic; doesn't help for 22.02 pcs (already
+      a count unit) — only helps the "0.5 ltr vs 500 ml" case.
+  (b) Proper (schema change): add two columns to TransactionItem:
+          enteredQuantity  Float  @default(0)   // what the user typed
+          enteredUnit      String @default("pcs")
+      Store BOTH (enteredQuantity, enteredUnit) AND (quantity, unit) [normalized].
+      Credit notes load (enteredQuantity, enteredUnit) so the form mirrors the
+      original sale exactly. Reports/SQL keep using the normalized `quantity`.
+      Pro: precise. Con: requires migration + backfill + dual-write logic.
+
+  Recommend (a) for the immediate fix and (b) as a follow-up if more
+  "the credit note shows the wrong number" complaints come in.
+
+FIX A3 (LOW, ~15 min) — Tooltip/label clarifying the normalized display.
+  - Below the quantity input in credit-note mode, show a hint when
+    `item.quantity !== line.quantity || item.unit !== line.unit`:
+      "Normalized to {line.quantity} {line.unit} for this product's stock unit."
+  - Cheap, helps the shopkeeper understand why the number differs from what
+    they remember.
+
+NOTE ON THE SPECIFIC "22.02" VALUE
+  - I could not find a single code path that would deterministically produce
+    22.02 from a clean input. The most plausible path is BUG A2 + a scanner
+    typo or a manual decimal entry that survived because no integer-only
+    validation exists. Fix A1 directly closes this path.
+
+═══════════════════════════════════════════════════════════════════════
+PART B — INTEGER PAISE MIGRATION AUDIT
+═══════════════════════════════════════════════════════════════════════
+
+CURRENT STATE
+- All money is stored as Postgres `DOUBLE PRECISION` (Prisma `Float`).
+- money.ts:71-79 roundMoney() applies a 1e-9 nudge + toFixed(2) to mitigate
+  float drift (e.g. 9.000000000000002 → 9.00). money.ts:4-13 itself
+  acknowledges this is a MITIGATION not a structural fix, and notes a prior
+  Decimal(18,2) migration attempt was reverted because it produced
+  "126 type errors across 13 files".
+- 875 roundMoney()/toMoney()/formatINR() calls exist across 65 files —
+  every one of them is a workaround for the Float storage.
+
+FLOAT MONEY FIELD INVENTORY (by model — money fields only, excludes rate/qty/score Floats)
+
+Legend: ✓ money (migrate to paise)  ✗ non-money Float (leave alone)
+
+User-facing (production app):
+  Product (3 money, 4 non-money)
+    ✓ purchasePrice, salePrice, mrp
+    ✗ gstRate (percent), openingStock, currentStock, lowStockThreshold (qty)
+  Party (1 money)
+    ✓ openingBalance
+  Transaction (9 money)
+    ✓ subtotal, discountAmount, cgst, sgst, igst, totalAmount, roundOff,
+      paidAmount, grossProfit
+  TransactionItem (8 money, 2 non-money)
+    ✓ unitPrice, purchasePriceAtSale, discountAmount, cgst, sgst, igst,
+      csamt (cess), total
+    ✗ quantity (qty), gstRate (percent)
+  Payment (1 money)
+    ✓ amount
+  Subscription (1 money)
+    ✓ amount
+  GstReturn (27 money — all fields)
+    ✓ outwardTaxableValue/Cgst/Sgst/Igst (4)
+    ✓ rcmTaxableValue/Cgst/Sgst/Igst (4)
+    ✓ nilRatedValue, exemptValue, nonGstValue (3)
+    ✓ itcTaxableValue/Cgst/Sgst/Igst (4)
+    ✓ creditNoteTaxableValue/Cgst/Sgst/Igst (4)
+    ✓ debitNoteTaxableValue/Cgst/Sgst/Igst (4)
+    ✓ exemptInwardValue, interstateB2cTaxableValue, interstateB2cIgst,
+      netTaxPayable (4)
+  Gstr1Snapshot (2 money)
+    ✓ totalTaxableValue, totalOutputTax
+  BankStatement (2 money)
+    ✓ totalCredits, totalDebits
+  BankTransaction (2 money, 1 non-money)
+    ✓ amount, balance
+    ✗ matchConfidence (0-1 score)
+  Gstr2bImport (4 money)
+    ✓ taxableTotal, igstTotal, cgstTotal, sgstTotal
+  Gstr2bInvoice (5 money)
+    ✓ taxableValue, igst, cgst, sgst, totalAmount
+
+Admin/internal (admin panel — lower priority for migration):
+  AiUsageLog (1 money)
+    ✓ costInr (internal cost tracking — paise migration optional)
+  DailyStats (6 money)
+    ✓ mrr, newMrr, churnedMrr, arr, totalGmv, aiCostInr
+  RevenueSchedule (1 money)
+    ✓ amount
+  SupplierReport (1 money)
+    ✓ priceInr
+
+Non-money Floats (DO NOT MIGRATE):
+  ScanComparison.geminiScore / openaiScore / groqScore (3 — accuracy scores 0-100)
+  BankTransaction.matchConfidence (1 — 0-1 score)
+  Anomaly.currentValue / baselineValue / baselineStdDev / zScore (4 — metrics)
+  FraudRule.threshold (1 — generic threshold, depends on metric)
+  FraudAlert.metricValue / threshold (2 — generic)
+  ExperimentAssignment.conversionValue (1 — generic)
+  Product.gstRate, TransactionItem.gstRate, Product.openingStock /
+    currentStock / lowStockThreshold, TransactionItem.quantity (rates/quantities)
+
+COUNTS
+  Total Float fields in schema.prisma:              92
+  Money Float fields (candidates for paise):        74
+    of which user-facing (production):              65
+    of which admin/internal (lower priority):        9
+  Non-money Float fields (leave alone):             18
+  Models with at least one money Float field:       16
+
+  NOTE: The money.ts:5 comment says "42 fields" — that count is OUT OF DATE.
+  Since that comment was written, the schema gained 32+ new money Float fields
+  (GstReturn CDN columns, Gstr1Snapshot, BankStatement, BankTransaction,
+  Gstr2bImport, Gstr2bInvoice, DailyStats, RevenueSchedule, SupplierReport).
+
+SQL QUERY IMPACT (raw $queryRaw queries that touch money columns)
+
+  Production raw SQL queries (db.$queryRaw) that touch money fields:
+    src/app/api/analytics/route.ts              4 queries (3 touch money)
+    src/app/api/dashboard/route.ts              4 queries (4 touch money — KPIs, charts,
+                                                  top products, top categories)
+    src/app/api/gstr-3b/route.ts                8 queries (8 touch money — taxable,
+                                                  GST split, ITC, CDN breakdown)
+    src/app/api/gstr-export/route.ts            2 queries (2 touch money — HSN summary,
+                                                  B2B/B2CL)
+    src/app/api/reports/route.ts                2 queries (2 touch money — HSN summary)
+    src/app/api/parties/[id]/route.ts           2 queries (2 touch money — top products,
+                                                  monthly breakdown)
+    src/app/api/insights/route.ts               3 queries (2 touch money — top revenue)
+    src/lib/party-balance.ts                    1 query  (1 touches money — outstanding)
+    src/lib/reconciliation.ts                   2 queries (0 touch money — orphan counts)
+    src/app/api/warmup/route.ts                 1 query  (0 touch money — SELECT 1)
+
+  Distinct production queries touching money:       ~26
+  All would need: column renames (subtotal → subtotalPaise), removal of
+    ROUND(...,2) / ::numeric casts (integer math needs neither), and
+    /100 division at the read boundary for display.
+
+  SUM/COALESCE/::numeric occurrences across the codebase:  107 (10 files)
+    - dashboard/route.ts: 41
+    - party-balance.ts:   14
+    - gstr-3b/route.ts:   14
+    - gstr-export/route.ts: 10
+    - reports/route.ts:    9
+    - parties/[id]/route.ts: 5
+    - analytics/route.ts:  4
+    - insights/route.ts:   3
+    - line-items.ts:       2 (in comments — not real SQL)
+    - raw-sql-smoke.test.ts: 5 (test fixture)
+
+  Test files with raw SQL (need updates to fixtures, not migration logic):
+    src/__tests__/lib/reconciliation.test.ts                  2
+    src/__tests__/lib/soft-delete-sweep.test.ts               3
+    src/__tests__/lib/balance-reconciliation-behavioral.test.ts 3
+    src/__tests__/lib/raw-sql-smoke.test.ts                   8
+
+DISPLAY-LAYER IMPACT (these become /100 after migration)
+
+  .toFixed(2) calls:       123  across 23 files
+    Most are display paths like `txn.totalAmount.toFixed(2)` — would change
+    to `(txn.totalAmountPaise / 100).toFixed(2)` OR be replaced by a new
+    `formatPaise(valuePaise)` helper.
+    Top files:
+      - TransactionDetail.tsx: 26
+      - tally-export.ts:       20
+      - invoice-pdf.ts:        11
+      - gstr-export/route.ts:  10
+      - whatsapp-invoice/route.ts: 9
+      - PartyProfile.tsx:      13
+      - admin/page.tsx:        6
+
+  parseFloat() calls:       40  across 17 files
+    Many are parsing form input (Number(paidAmount), etc.) — would change
+    to `Math.round(parseFloat(...) * 100)` to convert rupees→paise at the
+    write boundary. money.ts:34 toMoney() and money.ts:220 parseMoney()
+    are the centralized entry points — only those need to change.
+
+  roundMoney() calls:     180  across 13 lib files (plus 875 toMoney/formatINR)
+    After migration, roundMoney becomes a no-op (or removed) — integer
+    arithmetic on paise is exact. This is the BIG WIN: 180 workaround calls
+    can be deleted.
+
+  formatINR() calls:      296  across 31 files (UI components)
+    Would be reimplemented as `formatINR(paise)` which divides by 100
+    internally. UI components don't need to change.
+
+VALIDATION LAYER IMPACT
+  - src/lib/validation.ts: 30 z.coerce.number() calls — most validate money
+    fields (unitPrice, discountAmount, paidAmount, totalAmount, openingBalance,
+    purchasePrice, salePrice, mrp, etc.). Would change to:
+       z.coerce.number().transform(v => Math.round(v * 100))
+    to convert rupees → paise at the API boundary. Limits (.max(10000000))
+    would need to be raised by 100×.
+
+MIGRATION SCRIPT IMPACT
+  - New Prisma migration: rename 74 columns from X to XPaise (or keep name,
+    change type Float → Int). The simpler approach is to keep the column
+    names the same and just change the type, but Prisma + Postgres require
+    a data migration: `UPDATE ... SET x = ROUND(x * 100)`.
+  - A backfill is required for EVERY row in: Transaction, TransactionItem,
+    Payment, Product, Party, Subscription, GstReturn, Gstr1Snapshot,
+    BankStatement, BankTransaction, Gstr2bImport, Gstr2bInvoice,
+    AiUsageLog, DailyStats, RevenueSchedule, SupplierReport.
+  - For large tenants, this is a multi-hour migration — needs to run with
+    downtime OR a dual-write window.
+
+RECOMMENDED MIGRATION PLAN (incremental, 7 phases)
+
+Phase 0 — Decide the storage convention (1 day, no code).
+  - Option A (recommended): rename columns to `XPaise` everywhere. Pros:
+    explicit at every call site; the compiler catches missed renames.
+    Cons: large diff, all 875+ call sites touched.
+  - Option B: keep column names, change type Float → Int. Pros: smaller
+    diff at the schema level. Cons: easy to forget a column is now paise
+    (silent *100 or /100 bugs).
+  - Recommend Option A for safety in a financial app.
+
+Phase 1 — Add paise helpers alongside the rupee helpers (1 day, additive).
+  - In money.ts, add:
+      toPaise(rupees: number): number  → Math.round(rupees * 100)
+      fromPaise(paise: number): number → paise / 100
+      formatPaise(paise: number): string → formatINR(paise / 100)
+      roundPaise(paise: number): number → paise (no-op, integer is exact)
+  - Do NOT remove roundMoney / toMoney / formatINR yet. Both old and new
+    helpers coexist so we can migrate call sites incrementally.
+
+Phase 2 — Migrate read paths (5-7 days, no behavior change).
+  - Update all $queryRaw queries (26 queries) to read `X_paise` columns.
+    Divide by 100 at the read boundary OR return paise to the caller.
+  - Update all Prisma findFirst/findMany calls (in routes) to select the
+    new paise columns. Convert to rupees at the API response boundary.
+  - UI components keep receiving rupees — no UI changes yet.
+  - Run tests after each file. The 32 test files in src/__tests__/lib/
+    need their fixtures updated to expect paise from the DB layer.
+
+Phase 3 — Migrate write paths (3-5 days, no behavior change).
+  - In POST/PUT handlers, convert rupees → paise before writing:
+      data: { totalAmountPaise: Math.round(totalAmount * 100), ... }
+  - In validation.ts, transform coerced numbers to paise at parse time:
+      paidAmount: z.coerce.number().min(0).transform(v => Math.round(v * 100))
+  - Update computeLineItems to do all math in paise (integer arithmetic).
+    roundMoney() calls inside line-items.ts (19 occurrences) can be deleted.
+
+Phase 4 — Migrate the Prisma schema (1 day, requires downtime window).
+  - Run a migration that for each of the 74 money columns:
+      ALTER TABLE "X" ADD COLUMN "fieldPaise" INTEGER NOT NULL DEFAULT 0;
+      UPDATE "X" SET "fieldPaise" = ROUND("field" * 100);
+      ALTER TABLE "X" DROP COLUMN "field";
+      ALTER TABLE "X" RENAME COLUMN "fieldPaise" TO "field";  (if Option B)
+  - For large tables (Transaction, TransactionItem), batch the UPDATE in
+    chunks of 50k rows to avoid lock contention.
+  - Update schema.prisma generator to use Int for all migrated fields.
+
+Phase 5 — Delete the workarounds (1 day, pure cleanup).
+  - Remove roundMoney() from money.ts (or keep as a deprecated no-op for
+    one release). Remove the 180 roundMoney() call sites across 13 lib files.
+  - Remove the 1e-9 nudge in money.ts (no longer needed — integers are exact).
+  - Update money.ts:4-13 comment to reflect the new state.
+
+Phase 6 — UI migration (2-3 days, behavior change for display only).
+  - Update the 123 .toFixed(2) call sites to use formatPaise().
+    Most can be found-and-replaced: `X.toFixed(2)` → `formatPaise(X)`.
+  - Update the 296 formatINR() call sites to receive paise.
+    formatINR itself changes: `formatINR(paise)` divides by 100 internally.
+  - Many of the 40 parseFloat() calls become unnecessary (paise is integer).
+
+Phase 7 — Admin/internal models (1 day, low risk).
+  - Migrate DailyStats, AiUsageLog, RevenueSchedule, SupplierReport
+    (9 money fields). These are admin-panel-only and lower priority.
+  - Skip the 18 non-money Float fields (rates, quantities, scores).
+
+ESTIMATED TOTAL SCOPE
+  - Schema: 74 money fields across 16 models need Float → Int migration.
+  - SQL:    ~26 production raw queries (in 8 route files + 1 lib file) need
+            column renames + ::numeric/ROUND cleanup.
+  - Code:   875 roundMoney/toMoney/formatINR calls across 65 files need review
+            (most become trivial; ~180 roundMoney calls can be deleted).
+  - Display: 123 .toFixed(2) calls across 23 files become /100 or formatPaise().
+  - Tests:  16 test files (in src/__tests__/lib/) have fixtures with hardcoded
+            rupee values that need to be multiplied by 100 (or the assertions
+            need to expect paise).
+  - Validation: 30 z.coerce.number() calls in validation.ts need a
+            `.transform(v => Math.round(v * 100))` for money fields.
+  - Migration: 1 large Prisma migration with 74 ADD/UPDATE/DROP/RENAME
+            batches per table, requiring a downtime window.
+  - Estimated total effort: 15-20 engineer-days, split across 7 phases.
+
+HIGHEST-RISK AREAS
+  - The reconciliation logic (reconciliation.ts + 5 reconciliation test files)
+    currently verifies that SUM(item.cgst) === header.cgst exactly. Float
+    drift is THE failure mode this test catches. After paise migration, this
+    test should become trivially true — but the assertions need updating
+    or they'll fail on the new integer values.
+  - The dashboard KPI query (dashboard/route.ts:148-200) is the most
+    complex raw SQL in the codebase. It has 41 SUM/COALESCE occurrences
+    in one query. Renaming 9 columns in one query is high-risk.
+  - The party-balance.ts query (line 192) computes outstanding balances
+    across sales/credit-notes/purchases/debit-notes/payments. A subtle
+    *100 or /100 error here would corrupt every party's balance — the
+    most user-visible failure mode.
+  - Backfill correctness: ROUND(x * 100) must match what the app would
+    have stored if it had been using paise all along. The 1e-9 nudge in
+    roundMoney() can produce values like 1.005 → 1.01 → 101 paise, which
+    is correct — but values stored BEFORE the nudge fix (V6 audit) may
+    have different rounding. A spot-check of historical data is needed.
+
+RECOMMENDED IMMEDIATE ACTION
+  - DO NOT attempt the paise migration as a single big-bang PR. The prior
+    Decimal(18,2) attempt failed with 126 type errors across 13 files for
+    exactly this reason. Follow the 7-phase incremental plan above.
+  - Start with Phase 1 (add helpers) — pure addition, zero risk. This
+    unblocks incremental migration of individual routes.
+  - Prioritize the user-facing models (Transaction, TransactionItem,
+    Payment, Product, Party) over admin models (DailyStats, AiUsageLog).
+  - Pair the migration with a reconciliation test that runs nightly
+    (orphaned payments, balance drift, GST header-vs-item drift). The
+    test already exists (reconciliation.ts) — extend it to assert paise
+    arithmetic is exact.
+
+═══════════════════════════════════════════════════════════════════════
+SUMMARY
+═══════════════════════════════════════════════════════════════════════
+
+Part A — The decimal-quantity bug has two contributing root causes:
+  (1) computeLineItems() stores the NORMALIZED quantity (500 ml → 0.5 ltr),
+      so the credit-note form shows the normalized value, not what the user
+      entered. (2) No integer-only validation exists for count-family units
+      (pcs, dozen), so decimals like 22.02 can be entered, stored, and
+      re-loaded without any guard firing. The fastest fix is to add a Zod
+      refine + dynamic `step` attribute on the quantity input for count
+      units. The proper fix is to also store the original enteredQuantity/
+      enteredUnit alongside the normalized values so credit notes can
+      display the user's intent.
+
+Part B — The paise migration is a 15-20 engineer-day effort across 7 phases,
+  touching 74 money fields in 16 models, ~26 raw SQL queries, ~875 money-
+  helper call sites, 123 .toFixed(2) display calls, and 30 Zod validators.
+  The migration is worthwhile (eliminates 180 roundMoney() workarounds and
+  makes the GST reconciliation check trivially true), but must be done
+  incrementally — the prior big-bang Decimal(18,2) attempt failed with 126
+  type errors. Start with Phase 1 (add toPaise/fromPaise/formatPaise helpers
+  alongside the existing rupee helpers) — zero risk, unblocks the rest.
+
+Worklog entry complete. Read-only research task — no code changes made.
