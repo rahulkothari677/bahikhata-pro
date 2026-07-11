@@ -5,6 +5,7 @@ import { roundMoney, fromPaise } from '@/lib/money'
 import { activeTransactionWhere } from '@/lib/query-helpers'
 import { istMonthStart, getISTDateParts, isSameISTMonth, istDateString, istYearMonth, IST_OFFSET_MS } from '@/lib/timezone'
 import { apiError } from '@/lib/api-error'
+import { deriveStateCode } from '@/lib/gst'
 
 // ⏱️ Vercel serverless timeout — GSTR export aggregates all transactions
 // in a period and generates CSV/JSON. Can take several seconds at scale.
@@ -308,10 +309,11 @@ export async function GET(req: NextRequest) {
 
     // Build CDN section: grouped by counter-party GSTIN
     // Structure: { ctin, nt: [{ nt_num, nt_dt, ntty, pos, rchrg, doc_det, itms }] }
+    // 🔒 V19-010 FIX: Also build CDNUR section for unregistered parties.
     const cdnByGstin = new Map<string, any[]>()
+    const cdnurSection: any[] = []  // V19-010: credit/debit notes to unregistered parties
     for (const t of cdnTransactions) {
       const ctin = t.party?.gstin || ''
-      if (!ctin) continue // skip unregistered parties (they go in cdnur, not cdn)
       const rateRows = cdnGstByTransaction.get(t.id) || []
       const items = rateRows.map(r => ({
         rt: r.gstRate,
@@ -321,11 +323,12 @@ export async function GET(req: NextRequest) {
         iamt: r.igst,
         qty: r.quantity,
       }))
+      const posCode = deriveStateCode(t.party?.gstin || null, t.party?.state || null, setting?.gstin || null, setting?.state || null) || '99'
       const noteEntry = {
         nt_num: t.invoiceNo || t.id.slice(-8),
         nt_dt: istDateString(t.date),
         ntty: t.noteType || (t.type === 'credit-note' ? 'C' : 'D'),
-        pos: t.isInterState ? (t.party?.state ? '' : '99') : (setting?.state ? '' : '99'),
+        pos: posCode,
         rchrg: t.isReverseCharge ? 'Y' : 'N',
         doc_det: t.originalTransaction ? {
           doc_num: t.originalTransaction.invoiceNo || '',
@@ -335,9 +338,24 @@ export async function GET(req: NextRequest) {
         total: roundMoney(t.totalAmount),
         isInterState: t.isInterState,
       }
-      const arr = cdnByGstin.get(ctin) || []
-      arr.push(noteEntry)
-      cdnByGstin.set(ctin, arr)
+
+      if (!ctin) {
+        // 🔒 V19-010: Unregistered party → CDNUR section (was: silently skipped)
+        cdnurSection.push({
+          nt_num: noteEntry.nt_num,
+          nt_dt: noteEntry.nt_dt,
+          ntty: noteEntry.ntty,
+          typ: t.isInterState ? 'INTER' : 'INTRA',
+          pos: posCode,
+          rchrg: noteEntry.rchrg,
+          itms: items,
+          total: noteEntry.total,
+        })
+      } else {
+        const arr = cdnByGstin.get(ctin) || []
+        arr.push(noteEntry)
+        cdnByGstin.set(ctin, arr)
+      }
     }
     const cdnSection = Array.from(cdnByGstin.entries()).map(([ctin, nt]) => ({ ctin, nt }))
 
@@ -416,6 +434,8 @@ export async function GET(req: NextRequest) {
       b2cs: b2cInvoices.filter(i => !(i.isInterState === true && i.total >= 100000)), // B2C Small (everything else)
       // V17-Ext Tier 3: CDN section — credit/debit notes
       cdn: cdnSection,
+      // 🔒 V19-010: CDNUR section — credit/debit notes to unregistered parties
+      cdnur: cdnurSection,
       // 🔒 V6 SC1: flag if we hit the 10K cap — return is incomplete.
       // The UI must hard-block export when this is true (V6 PP1).
       truncated: hitCap,
