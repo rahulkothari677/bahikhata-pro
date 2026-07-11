@@ -4201,3 +4201,24 @@ Stage Summary:
     * Phase 2B: Dashboard "You'll get" / "You'll pay" totals should be identical to pre-deploy values. Party list balances should be identical. Party-detail balance should match dashboard balance. Settings → Reconciliation page should show all 3 checks PASSING.
 - If any of these are wrong, ROLL BACK by reverting commit 0e515e1 on origin/main (reverts Phase 2B but keeps Phase 2A) or reverting d846a11 (reverts both Phase 2A and 2B).
 - NEXT: Wait for user to verify the deployment. If green, proceed to Phase 2C (reconciliation.ts — quick verify, mostly COUNT queries).
+
+---
+Task ID: bug-005-fix
+Agent: main
+Task: User called out that I was ignoring pre-existing tsc errors. Investigated, cataloged, and fixed BUG-005 (validation.test.ts discriminated union narrowing).
+
+Work Log:
+- User correctly pointed out that I had been mentioning "5 pre-existing tsc errors" across Phase 2A and 2B without ever investigating or cataloging them — a direct violation of the bug-checking protocol I committed to.
+- Investigated: all 5 errors were in src/__tests__/lib/validation.test.ts (lines 30, 40, 50, 60, 71), all the same pattern — accessing `result.error` after `expect(result.success).toBe(false)` without a type guard. TypeScript does not narrow discriminated unions based on `expect()` calls because `expect()` returns a Jest assertion object, not a boolean.
+- Confirmed tests pass at runtime (19/19) — this was a type-level bug only, no runtime impact.
+- Fixed all 5 occurrences by wrapping `result.error` access in `if (!result.success) { ... }` — matches the existing pattern already used at lines 182-185 of the same file.
+- Scanned for the same pattern elsewhere: grepped `src/__tests__/` for `expect(result.success).toBe(false)` followed by `result.error` access. Other test files (`phase5-technical.test.ts`, `decimal-quantity.test.ts`) call `expect(result.success).toBe(false)` but DON'T access `result.error` afterward, so they don't have this bug. No other instances found.
+- Cataloged as BUG-005 in BUGS-FOUND.md (FIXED).
+- Committed and pushed (5bc5dbf..2556dac). Vercel auto-deploy triggered.
+
+Stage Summary:
+- Codebase is now FULLY TYPE-CLEAN: `npx tsc --noEmit` returns 0 errors (was 5).
+- This was a pre-existing bug, NOT introduced by paise migration. Fixing it now means future `tsc` checks can be used as a reliable CI gate.
+- Protocol lesson reinforced: "pre-existing" is NOT an excuse to skip cataloging. Every bug found — whether pre-existing or introduced — goes in BUGS-FOUND.md and is either fixed immediately or scheduled for a later sub-phase.
+- Open bugs remaining: BUG-002 (computePartyBalance sequential Promise.all — Low/Perf), BUG-004 (openingBalance not rounded on UPDATE — Medium). Both scheduled for fixing after paise migration completes (or sooner if user requests).
+- NEXT: Wait for user to verify Vercel deployment of Phase 2A + 2B + BUG-005 fix, then proceed to Phase 2C.
