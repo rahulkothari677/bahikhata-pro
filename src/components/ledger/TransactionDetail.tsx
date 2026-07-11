@@ -377,6 +377,18 @@ export function TransactionDetail() {
                   date: new Date().toISOString().slice(0, 10),
                   originalTransactionId: txn.id,
                   noteType: 'C',
+                  // 🔒 V17 Audit §1: Pre-fill items from the original sale so the
+                  // user can adjust quantities (for partial returns) instead of
+                  // re-entering everything. Each item maps to the RawLineItem shape
+                  // that TransactionEntry expects.
+                  items: txn.items?.map((item: any) => ({
+                    productId: item.productId,
+                    productName: item.productName,
+                    quantity: item.quantity,
+                    unitPrice: item.unitPrice,
+                    gstRate: item.gstRate,
+                    unit: item.unit,
+                  })) || [],
                 },
               }
               useAppStore.getState().setPreviousView('transaction-detail')
@@ -644,6 +656,91 @@ export function TransactionDetail() {
             </CardContent>
           </Card>
         </>
+      )}
+
+      {/* 🔒 V17 Audit §1: Linked Credit/Debit Notes — show reversals issued against this transaction */}
+      {txn.reversalTransactions && txn.reversalTransactions.length > 0 && (
+        <Card className="shadow-card border-violet-200 dark:border-violet-900/50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <FileText className="w-4 h-4 text-violet-600" />
+              {txn.type === 'sale' ? 'Credit Notes Issued' : 'Debit Notes Issued'}
+              <Badge variant="secondary" className="bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">
+                {txn.reversalTransactions.length}
+              </Badge>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {txn.reversalTransactions.map((rev: any) => (
+                <div
+                  key={rev.id}
+                  className="flex items-center justify-between rounded-lg bg-violet-50/50 dark:bg-violet-950/20 p-3 border border-violet-100 dark:border-violet-900/40 cursor-pointer hover:bg-violet-50 dark:hover:bg-violet-950/30 transition"
+                  onClick={() => {
+                    useAppStore.getState().setSelectedTransactionId(rev.id)
+                  }}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-sm">{rev.invoiceNo || '—'}</span>
+                      <Badge className="text-[9px] py-0 bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300">
+                        {rev.type === 'credit-note' ? 'Credit Note' : 'Debit Note'}
+                      </Badge>
+                      {rev.affectsStock && (
+                        <Badge className="text-[9px] py-0 bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300">
+                          Stock Adjusted
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      {formatDateTime(rev.date)}
+                      {rev.noteReason && ` • ${rev.noteReason.replace(/-/g, ' ')}`}
+                    </p>
+                  </div>
+                  <div className="text-right flex-shrink-0 ml-2">
+                    <p className="font-bold text-sm tabular-nums text-violet-700 dark:text-violet-300">
+                      -{formatINR(rev.totalAmount)}
+                    </p>
+                    {rev.grossProfit > 0 && (
+                      <p className="text-[10px] text-rose-500 tabular-nums">-{formatINR(rev.grossProfit)} profit</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-2">
+              Tap a note to view its details. Total adjusted: <span className="font-semibold text-violet-700 dark:text-violet-300">-{formatINR(txn.reversalTransactions.reduce((s: number, r: any) => s + r.totalAmount, 0))}</span>
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* 🔒 V17 Audit §1: If this IS a credit/debit note, show the original transaction link */}
+      {txn.originalTransaction && (
+        <Card className="shadow-card border-blue-200 dark:border-blue-900/50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <ArrowLeft className="w-4 h-4 text-blue-600" />
+              Original {txn.originalTransaction.type === 'sale' ? 'Sale' : 'Purchase'}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div
+              className="flex items-center justify-between rounded-lg bg-blue-50/50 dark:bg-blue-950/20 p-3 border border-blue-100 dark:border-blue-900/40 cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-950/30 transition"
+              onClick={() => {
+                useAppStore.getState().setSelectedTransactionId(txn.originalTransaction.id)
+              }}
+            >
+              <div className="flex-1 min-w-0">
+                <span className="font-semibold text-sm">{txn.originalTransaction.invoiceNo || '—'}</span>
+                <p className="text-[11px] text-muted-foreground mt-0.5">{formatDateTime(txn.originalTransaction.date)}</p>
+              </div>
+              <div className="text-right flex-shrink-0 ml-2">
+                <p className="font-bold text-sm tabular-nums">{formatINR(txn.originalTransaction.totalAmount)}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* V17-Ext 5.1: Field-level Audit Trail — shows who changed what, when */}

@@ -269,7 +269,16 @@ export function Ledger({ type }: { type: LedgerType }) {
   }
 
   const totalAmount = filtered.reduce((s, t) => s + t.totalAmount, 0)
-  const totalProfit = filtered.reduce((s, t) => s + (t.grossProfit || 0), 0)
+  // 🔒 V17 Audit §1: Net profit = sale profit − credit-note profit.
+  // Credit notes have NEGATIVE grossProfit (stored at creation time), so we
+  // could just sum all. But for safety, we subtract credit-note profit
+  // explicitly in case any old credit notes have grossProfit=0 (pre-fix).
+  // Sales: +grossProfit. Credit notes: −grossProfit (reverse). Others: 0.
+  const totalProfit = filtered.reduce((s, t) => {
+    if (t.type === 'credit-note') return s - (t.grossProfit || 0)
+    if (t.type === 'sale') return s + (t.grossProfit || 0)
+    return s
+  }, 0)
   const totalPaid = filtered.reduce((s, t) => s + t.paidAmount, 0)
   const totalDue = totalAmount - totalPaid
 
@@ -671,6 +680,10 @@ export function Ledger({ type }: { type: LedgerType }) {
                           {isSale && !hideProfit && (
                             <p className="text-[11px] text-emerald-600 mt-0.5 tabular-nums">+{formatINR(t.grossProfit)}</p>
                           )}
+                          {/* 🔒 V17 Audit §1: Show negative profit on credit notes (reverses sale profit) */}
+                          {t.type === 'credit-note' && !hideProfit && t.grossProfit > 0 && (
+                            <p className="text-[11px] text-rose-500 mt-0.5 tabular-nums">-{formatINR(t.grossProfit)}</p>
+                          )}
                         </div>
                       </div>
 
@@ -764,6 +777,10 @@ export function Ledger({ type }: { type: LedgerType }) {
                   </div>
                   {isSale && !hideProfit && (
                     <p className="text-[10px] text-emerald-600 mt-1">+{formatINRCompact(t.grossProfit)} profit</p>
+                  )}
+                  {/* 🔒 V17 Audit §1: Show negative profit on credit notes */}
+                  {t.type === 'credit-note' && !hideProfit && t.grossProfit > 0 && (
+                    <p className="text-[10px] text-rose-500 mt-1">-{formatINRCompact(t.grossProfit)} profit reversed</p>
                   )}
                 </CardContent>
               </Card>

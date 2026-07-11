@@ -124,11 +124,26 @@ export function computeLineItems(opts: {
 
     // Profit on the post-discount realized price (V10 §2.4). quantity is now in
     // the product's unit, so purchasePrice (per product unit) lines up exactly.
+    //
+    // 🔒 V17 Audit §1 FIX: Credit notes (type='credit-note') must compute a
+    // NEGATIVE grossProfit — they reverse the profit booked on the original sale.
+    // A return reverses both revenue AND cost, so the profit reversal =
+    // -(realizedUnitPrice - purchasePrice) × quantity. Before this fix, credit
+    // notes had grossProfit=0 (the `type === 'sale'` check skipped them), so
+    // dashboard/P&L profit was overstated by the return amount.
+    //
+    // Debit notes (type='debit-note') don't carry grossProfit (purchases don't
+    // have profit) — they only affect ITC, which is handled in GST reports.
     let purchasePriceAtSale = 0
-    if (type === 'sale' && p.product) {
+    if ((type === 'sale' || type === 'credit-note') && p.product) {
       purchasePriceAtSale = p.product.purchasePrice
       const realizedUnitPrice = p.quantity > 0 ? roundMoney(taxableAmount / p.quantity) : 0
-      grossProfit = roundMoney(grossProfit + (realizedUnitPrice - p.product.purchasePrice) * p.quantity)
+      const itemProfit = roundMoney((realizedUnitPrice - p.product.purchasePrice) * p.quantity)
+      // Credit notes NEGATE the profit (they reverse the original sale's profit).
+      // Sales ADD the profit. This way, sale + credit-note = net profit.
+      grossProfit = type === 'credit-note'
+        ? roundMoney(grossProfit - itemProfit)  // subtract (reverse)
+        : roundMoney(grossProfit + itemProfit)  // add (normal sale)
     }
 
     return {

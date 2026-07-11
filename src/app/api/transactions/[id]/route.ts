@@ -27,6 +27,35 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         items: true,
         party: true,
         createdBy: { select: { id: true, name: true, role: true } },  // 🔒 V13 L4: staff accountability
+        // 🔒 V17 Audit §1: Fetch linked credit/debit notes (reversalTransactions)
+        // so the TransactionDetail UI can show "Credit notes issued against this sale".
+        // Only fetch non-deleted reversals (voided credit notes shouldn't appear).
+        reversalTransactions: {
+          where: { deletedAt: null },
+          select: {
+            id: true,
+            invoiceNo: true,
+            type: true,
+            noteType: true,
+            noteReason: true,
+            date: true,
+            totalAmount: true,
+            grossProfit: true,
+            paidAmount: true,
+            affectsStock: true,
+          },
+          orderBy: { date: 'desc' },
+        },
+        // Also fetch the original transaction if this IS a credit/debit note
+        originalTransaction: {
+          select: {
+            id: true,
+            invoiceNo: true,
+            type: true,
+            date: true,
+            totalAmount: true,
+          },
+        },
       },
     })
     if (!transaction) {
