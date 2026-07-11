@@ -76,25 +76,31 @@ describe('🔒 V17-Ext Tier 3 — GSTR-3B computation', () => {
   })
 
   describe('Net tax payable formula (Section 6.1)', () => {
-    it('computes net = (output + RCM outward) - (ITC + RCM ITC)', () => {
+    it('computes net = (output + RCM inward liability) - (ITC + RCM ITC) - credit notes + debit notes', () => {
+      // 🔒 V17 Audit §2 FIX: RCM inward is now a LIABILITY (3.1d) that cancels
+      // with RCM ITC (4b). Was: totalRcmOutward (RCM sales — rare/never for kirana).
+      // Now: totalRcmInward = RCM purchase tax = totalRcmItc (same purchases).
       const outwardCgst = 900, outwardSgst = 900, outwardIgst = 0
+      // RCM INWARD liability (from RCM purchases) — same values as RCM ITC below
       const rcmCgst = 0, rcmSgst = 0, rcmIgst = 360
       const itcCgst = 540, itcSgst = 540, itcIgst = 0
-      const rcmItcCgst = 0, rcmItcSgst = 0, rcmItcIgst = 270
+      // RCM ITC (from the same RCM purchases) — cancels with RCM inward liability
+      const rcmItcCgst = 0, rcmItcSgst = 0, rcmItcIgst = 360
 
       const totalOutputTax = roundMoney(outwardCgst + outwardSgst + outwardIgst)
-      const totalRcmOutward = roundMoney(rcmCgst + rcmSgst + rcmIgst)
+      const totalRcmInward = roundMoney(rcmCgst + rcmSgst + rcmIgst) // liability
       const totalItc = roundMoney(itcCgst + itcSgst + itcIgst)
-      const totalRcmItc = roundMoney(rcmItcCgst + rcmItcSgst + rcmItcIgst)
-      const netTaxPayable = roundMoney(totalOutputTax + totalRcmOutward - totalItc - totalRcmItc)
+      const totalRcmItc = roundMoney(rcmItcCgst + rcmItcSgst + rcmItcIgst) // ITC
+      const netTaxPayable = roundMoney(totalOutputTax + totalRcmInward - totalItc - totalRcmItc)
 
-      // output = 1800, rcm outward = 360, itc = 1080, rcm itc = 270
-      // net = (1800 + 360) - (1080 + 270) = 2160 - 1350 = 810
+      // output = 1800, rcm inward = 360, itc = 1080, rcm itc = 360
+      // net = (1800 + 360) - (1080 + 360) = 2160 - 1440 = 720
+      // (RCM liability + RCM ITC cancel: 360 - 360 = 0, so net = 1800 - 1080 = 720)
       expect(totalOutputTax).toBe(1800)
-      expect(totalRcmOutward).toBe(360)
+      expect(totalRcmInward).toBe(360)
       expect(totalItc).toBe(1080)
-      expect(totalRcmItc).toBe(270)
-      expect(netTaxPayable).toBe(810)
+      expect(totalRcmItc).toBe(360)
+      expect(netTaxPayable).toBe(720)
     })
 
     it('shows negative (credit) when ITC > output', () => {
@@ -109,6 +115,29 @@ describe('🔒 V17-Ext Tier 3 — GSTR-3B computation', () => {
       const totalItc = 1800
       const netTaxPayable = roundMoney(totalOutputTax - totalItc)
       expect(netTaxPayable).toBe(0)
+    })
+
+    // 🔒 V17 Audit §2: The key fix — RCM purchase liability + ITC cancel out.
+    // Before the fix: only ITC was subtracted (no liability), so net tax was
+    // understated by the RCM amount. Now: liability + ITC cancel → net unchanged.
+    it('🔒 V17 Audit §2: RCM purchase cancels out (liability + ITC = 0 net effect)', () => {
+      // Scenario: ₹10,000 regular sales (18% GST = ₹1,800 output tax)
+      //           ₹2,000 RCM purchase (18% GST = ₹360 liability + ₹360 ITC)
+      //           ₹6,000 regular purchase (18% GST = ₹1,080 ITC)
+      // Expected net tax = 1800 (output) + 360 (RCM liability) - 1080 (ITC) - 360 (RCM ITC) = 720
+      // = 1800 - 1080 = 720 (RCM cancels)
+      const totalOutputTax = 1800
+      const totalRcmInward = 360  // RCM purchase tax (liability)
+      const totalItc = 1080       // regular purchase ITC
+      const totalRcmItc = 360     // RCM purchase ITC (same as liability)
+      const netTaxPayable = roundMoney(totalOutputTax + totalRcmInward - totalItc - totalRcmItc)
+
+      // RCM cancels: 360 - 360 = 0. Net = 1800 - 1080 = 720.
+      expect(netTaxPayable).toBe(720)
+      // CRITICAL: net tax WITHOUT the RCM purchase would be 1800 - 1080 = 720.
+      // The RCM purchase doesn't change net tax (liability + ITC cancel).
+      // Before the fix: net = 1800 - 1080 - 360 = 360 (understated by 360!).
+      expect(netTaxPayable).not.toBe(360) // would be 360 with the OLD buggy formula
     })
   })
 
@@ -132,15 +161,16 @@ describe('🔒 V17-Ext Tier 3 — GSTR-3B computation', () => {
   })
 
   describe('RCM separation logic', () => {
-    it('RCM sales are separate from regular sales', () => {
-      // Regular sales: cgst=900, sgst=900, igst=0
-      // RCM sales: igst=360
-      // They must NOT be combined
+    it('🔒 V17 Audit §2: RCM INWARD (purchases) is the 3.1(d) liability — not RCM sales', () => {
+      // 🔒 V17 Audit §2 FIX: 3.1(d) is now fed by RCM PURCHASES (inward liability),
+      // not RCM sales. RCM sales are rare/never for kirana. The liability cancels
+      // with the ITC in 4(b) for fully-creditable RCM.
+      // Regular sales output tax: cgst=900, sgst=900, igst=0 → 1800
+      // RCM purchase liability: igst=360 (appears in 3.1d AND 4b)
       const regularOutputTax = roundMoney(900 + 900 + 0) // 1800
-      const rcmOutputTax = roundMoney(0 + 0 + 360) // 360
+      const rcmInwardLiability = roundMoney(0 + 0 + 360) // 360
       expect(regularOutputTax).toBe(1800)
-      expect(rcmOutputTax).toBe(360)
-      expect(regularOutputTax + rcmOutputTax).toBe(2160) // total outward liability
+      expect(rcmInwardLiability).toBe(360)
     })
 
     it('RCM purchases ITC is separate from regular ITC', () => {
@@ -190,33 +220,37 @@ describe('🔒 V17-Ext Tier 3 — GSTR-3B computation', () => {
       // Fixture values
       const outwardTaxableValue = roundMoney(50000 - 1000) // 49000
       const outwardCgst = 4410, outwardSgst = 4410, outwardIgst = 0
+      // 🔒 V17 Audit §2: rcmTaxableValue now from RCM PURCHASES (inward liability)
       const rcmTaxableValue = 2000, rcmCgst = 0, rcmSgst = 0, rcmIgst = 360
       const nilRatedValue = 5000, exemptValue = 0, nonGstValue = 3000
       const itcTaxableValue = roundMoney(30000 - 500) // 29500
       const itcCgst = 2655, itcSgst = 2655, itcIgst = 0
+      // RCM ITC — same purchases as rcmTaxableValue above (liability + ITC cancel)
       const rcmItcTaxableValue = 2000, rcmItcCgst = 0, rcmItcSgst = 0, rcmItcIgst = 360
       const interstateB2cTaxableValue = 8000, interstateB2cIgst = 1440
       const exemptInwardValue = 2000
 
       // Section 3.1 totals
       const totalOutward = roundMoney(outwardCgst + outwardSgst + outwardIgst) // 8820
-      const totalRcmOutward = roundMoney(rcmCgst + rcmSgst + rcmIgst) // 360
+      // 🔒 V17 Audit §2: totalRcmInward (liability, was: totalRcmOutward)
+      const totalRcmInward = roundMoney(rcmCgst + rcmSgst + rcmIgst) // 360
 
       // Section 4 totals
       const totalItc = roundMoney(itcCgst + itcSgst + itcIgst) // 5310
       const totalRcmItc = roundMoney(rcmItcCgst + rcmItcSgst + rcmItcIgst) // 360
 
-      // Section 6.1
-      const netTaxPayable = roundMoney(totalOutward + totalRcmOutward - totalItc - totalRcmItc)
+      // Section 6.1 — 🔒 V17 Audit §2: + totalRcmInward (liability) - totalRcmItc (ITC)
+      // RCM cancels: 360 - 360 = 0. Net = 8820 - 5310 = 3510.
+      const netTaxPayable = roundMoney(totalOutward + totalRcmInward - totalItc - totalRcmItc)
       // = (8820 + 360) - (5310 + 360) = 9180 - 5670 = 3510
 
       expect(outwardTaxableValue).toBe(49000)
       expect(totalOutward).toBe(8820)
-      expect(totalRcmOutward).toBe(360)
+      expect(totalRcmInward).toBe(360) // 🔒 V17 Audit §2: was totalRcmOutward
       expect(itcTaxableValue).toBe(29500)
       expect(totalItc).toBe(5310)
       expect(totalRcmItc).toBe(360)
-      expect(netTaxPayable).toBe(3510)
+      expect(netTaxPayable).toBe(3510) // same as before — RCM cancels
       expect(nilRatedValue + exemptValue + nonGstValue).toBe(8000)
       expect(interstateB2cTaxableValue).toBe(8000)
       expect(exemptInwardValue).toBe(2000)

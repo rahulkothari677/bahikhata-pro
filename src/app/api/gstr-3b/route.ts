@@ -76,8 +76,14 @@ export async function GET(req: NextRequest) {
     const [
       // === Section 3.1(a): Outward taxable supplies (regular sales, non-RCM) ===
       outwardSalesAgg,
-      // === Section 3.1(d): RCM outward (sales with isReverseCharge = true) ===
-      rcmOutwardAgg,
+      // === Section 3.1(d): RCM INWARD liability (purchases with isReverseCharge=true) ===
+      // 🔒 V17 Audit §2 FIX: Was `rcmOutwardAgg` querying type='sale' (RCM sales —
+      // rare/never for kirana). GSTR-3B 3.1(d) "Inward supplies liable to reverse
+      // charge" must be fed by RCM PURCHASES (GTA freight, legal fees, etc.).
+      // The same purchases also appear in 4(b) as ITC — liability + ITC cancel
+      // for fully-creditable RCM. This is the same `rcmItcAgg` query below; both
+      // are kept for semantic clarity (3.1(d) = liability, 4(b) = ITC).
+      rcmInwardAgg,
       // V17-Ext Tier 3: Credit notes (reduce output tax — seller issued credit to customer)
       creditNoteAgg,
       // === Section 3.1(c): Nil-rated, exempt, non-GST outward ===
@@ -113,13 +119,14 @@ export async function GET(req: NextRequest) {
         _count: true,
       }),
 
-      // 3.1(d): RCM outward (sales with isReverseCharge = true)
-      // This is rare — usually the supplier charges RCM, but some unregistered
-      // outward supplies may be marked RCM by the user.
+      // 3.1(d): RCM INWARD liability (purchases with isReverseCharge = true)
+      // 🔒 V17 Audit §2 FIX: Was type='sale' (RCM sales — rare). Now type='purchase'
+      // (RCM inward — GTA freight, legal fees, etc.). This is the LIABILITY side;
+      // the ITC side is in rcmItcAgg below (same purchases, same values).
       db.transaction.aggregate({
         where: {
           userId,
-          type: 'sale',
+          type: 'purchase',
           deletedAt: null,
           isReverseCharge: true,
           date: { gte: periodStart, lt: periodEnd },
@@ -268,13 +275,18 @@ export async function GET(req: NextRequest) {
     const exemptValue = 0 // No exempt flag currently
     const nonGstValue = roundMoney(nonGstAgg._sum.totalAmount || 0)
 
-    // 3.1(d): RCM outward
+    // 3.1(d): RCM INWARD liability (purchases with isReverseCharge = true)
+    // 🔒 V17 Audit §2 FIX: Now fed by RCM purchases (was: RCM sales).
+    // This is the LIABILITY that appears in 3.1(d). The ITC on the same
+    // purchases appears in 4(b). For fully-creditable RCM, liability = ITC
+    // (they cancel in netTaxPayable). If ITC is partially blocked, the
+    // liability still appears here.
     const rcmTaxableValue = roundMoney(
-      (rcmOutwardAgg._sum.subtotal || 0) - (rcmOutwardAgg._sum.discountAmount || 0)
+      (rcmInwardAgg._sum.subtotal || 0) - (rcmInwardAgg._sum.discountAmount || 0)
     )
-    const rcmCgst = roundMoney(rcmOutwardAgg._sum.cgst || 0)
-    const rcmSgst = roundMoney(rcmOutwardAgg._sum.sgst || 0)
-    const rcmIgst = roundMoney(rcmOutwardAgg._sum.igst || 0)
+    const rcmCgst = roundMoney(rcmInwardAgg._sum.cgst || 0)
+    const rcmSgst = roundMoney(rcmInwardAgg._sum.sgst || 0)
+    const rcmIgst = roundMoney(rcmInwardAgg._sum.igst || 0)
 
     // V17-Ext Tier 3: Credit notes reduce output tax
     const creditNoteTaxableValue = roundMoney(
@@ -320,19 +332,26 @@ export async function GET(req: NextRequest) {
 
     // 6.1: Net tax payable
     // = (output CGST + output SGST + output IGST)
-    // + (RCM outward CGST + RCM outward SGST + RCM outward IGST)
+    // + (RCM inward CGST + RCM inward SGST + RCM inward IGST)    // 🔒 V17 Audit §2: liability (3.1d)
     // - (credit note CGST + credit note SGST + credit note IGST)  // V17-Ext Tier 3
     // - (ITC CGST + ITC SGST + ITC IGST)
-    // - (RCM ITC CGST + RCM ITC SGST + RCM ITC IGST)
+    // - (RCM ITC CGST + RCM ITC SGST + RCM ITC IGST)              // 🔒 V17 Audit §2: ITC (4b)
     // + (debit note CGST + debit note SGST + debit note IGST)    // V17-Ext Tier 3
+    //
+    // 🔒 V17 Audit §2 FIX: RCM inward liability (totalRcmInward) is now ADDED.
+    // For fully-creditable RCM, totalRcmInward == totalRcmItc (same purchases),
+    // so they cancel. Before this fix, totalRcmItc was subtracted with NO
+    // matching liability added → net tax was understated by the RCM amount.
+    // Now: if a shop has an RCM purchase of ₹10K + ₹1.8K GST, 3.1(d) shows
+    // ₹1.8K liability AND 4(b) shows ₹1.8K ITC → net effect ₹0 (correct).
     const totalOutputTax = roundMoney(outwardCgst + outwardSgst + outwardIgst)
-    const totalRcmOutward = roundMoney(rcmCgst + rcmSgst + rcmIgst)
+    const totalRcmInward = roundMoney(rcmCgst + rcmSgst + rcmIgst) // 🔒 V17 Audit §2: liability
     const totalCreditNoteTax = roundMoney(creditNoteCgst + creditNoteSgst + creditNoteIgst) // V17-Ext Tier 3
     const totalItc = roundMoney(itcCgst + itcSgst + itcIgst)
     const totalRcmItc = roundMoney(rcmItcCgst + rcmItcSgst + rcmItcIgst)
     const totalDebitNoteTax = roundMoney(debitNoteCgst + debitNoteSgst + debitNoteIgst) // V17-Ext Tier 3
     const netTaxPayable = roundMoney(
-      totalOutputTax + totalRcmOutward - totalCreditNoteTax
+      totalOutputTax + totalRcmInward - totalCreditNoteTax
       - totalItc - totalRcmItc + totalDebitNoteTax
     )
 
@@ -374,7 +393,7 @@ export async function GET(req: NextRequest) {
       // Section 6
       netTaxPayable,
       totalOutputTax,
-      totalRcmOutward,
+      totalRcmInward, // 🔒 V17 Audit §2: RCM inward liability (was: totalRcmOutward)
       totalCreditNoteTax, // V17-Ext Tier 3
       totalItc,
       totalRcmItc,
@@ -468,8 +487,9 @@ export async function POST(req: NextRequest) {
     // === Re-compute all 3B values (same queries as GET — DRY) ===
     // This is critical: we NEVER trust client-sent financial data for a
     // snapshot. The server always recomputes from the source of truth.
+    // 🔒 V17 Audit §2: rcmInwardAgg now queries type='purchase' (was: 'sale').
     const [
-      outwardSalesAgg, rcmOutwardAgg, creditNoteAgg, nilRatedAgg, nonGstAgg,
+      outwardSalesAgg, rcmInwardAgg, creditNoteAgg, nilRatedAgg, nonGstAgg,
       interstateB2cAgg, itcPurchasesAgg, rcmItcAgg, debitNoteAgg, exemptInwardAgg,
     ] = await Promise.all([
       db.transaction.aggregate({
@@ -477,8 +497,9 @@ export async function POST(req: NextRequest) {
         _sum: { subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true },
         _count: true,
       }),
+      // 🔒 V17 Audit §2: 3.1(d) now fed by RCM PURCHASES (was: RCM sales)
       db.transaction.aggregate({
-        where: { userId, type: 'sale', deletedAt: null, isReverseCharge: true, date: { gte: periodStart, lt: periodEnd } },
+        where: { userId, type: 'purchase', deletedAt: null, isReverseCharge: true, date: { gte: periodStart, lt: periodEnd } },
         _sum: { subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true },
         _count: true,
       }),
@@ -542,10 +563,11 @@ export async function POST(req: NextRequest) {
     const outwardIgst = roundMoney(outwardSalesAgg._sum.igst || 0)
     const nilRatedValue = roundMoney(Number(nilRatedAgg[0]?.totalValue || 0))
     const nonGstValue = roundMoney(nonGstAgg._sum.totalAmount || 0)
-    const rcmTaxableValue = roundMoney((rcmOutwardAgg._sum.subtotal || 0) - (rcmOutwardAgg._sum.discountAmount || 0))
-    const rcmCgst = roundMoney(rcmOutwardAgg._sum.cgst || 0)
-    const rcmSgst = roundMoney(rcmOutwardAgg._sum.sgst || 0)
-    const rcmIgst = roundMoney(rcmOutwardAgg._sum.igst || 0)
+    // 🔒 V17 Audit §2: 3.1(d) now from RCM purchases (rcmInwardAgg, was rcmOutwardAgg)
+    const rcmTaxableValue = roundMoney((rcmInwardAgg._sum.subtotal || 0) - (rcmInwardAgg._sum.discountAmount || 0))
+    const rcmCgst = roundMoney(rcmInwardAgg._sum.cgst || 0)
+    const rcmSgst = roundMoney(rcmInwardAgg._sum.sgst || 0)
+    const rcmIgst = roundMoney(rcmInwardAgg._sum.igst || 0)
     // V17-Ext Tier 3: Credit/debit notes
     const creditNoteTaxableValue = roundMoney((creditNoteAgg._sum.subtotal || 0) - (creditNoteAgg._sum.discountAmount || 0))
     const creditNoteCgst = roundMoney(creditNoteAgg._sum.cgst || 0)
@@ -568,13 +590,16 @@ export async function POST(req: NextRequest) {
     const debitNoteIgst = roundMoney(debitNoteAgg._sum.igst || 0)
     const exemptInwardValue = roundMoney(Number(exemptInwardAgg[0]?.totalValue || 0))
     const totalOutputTax = roundMoney(outwardCgst + outwardSgst + outwardIgst)
-    const totalRcmOutward = roundMoney(rcmCgst + rcmSgst + rcmIgst)
+    // 🔒 V17 Audit §2: RCM inward liability (was: totalRcmOutward). Now fed by
+    // RCM purchases. Cancels with totalRcmItc for fully-creditable RCM.
+    const totalRcmInward = roundMoney(rcmCgst + rcmSgst + rcmIgst)
     const totalCreditNoteTax = roundMoney(creditNoteCgst + creditNoteSgst + creditNoteIgst)
     const totalItc = roundMoney(itcCgst + itcSgst + itcIgst)
     const totalRcmItc = roundMoney(rcmItcCgst + rcmItcSgst + rcmItcIgst)
     const totalDebitNoteTax = roundMoney(debitNoteCgst + debitNoteSgst + debitNoteIgst)
+    // 🔒 V17 Audit §2: + totalRcmInward (liability) - totalRcmItc (ITC) → cancel for fully-creditable RCM
     const netTaxPayable = roundMoney(
-      totalOutputTax + totalRcmOutward - totalCreditNoteTax
+      totalOutputTax + totalRcmInward - totalCreditNoteTax
       - totalItc - totalRcmItc + totalDebitNoteTax
     )
 

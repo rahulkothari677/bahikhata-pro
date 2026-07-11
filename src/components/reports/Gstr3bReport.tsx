@@ -9,7 +9,7 @@
  * 3.1(a) Outward taxable supplies
  * 3.1(b) Zero-rated (Rs.0)
  * 3.1(c) Nil-rated + exempt + non-GST
- * 3.1(d) RCM outward
+ * 3.1(d) Inward supplies liable to reverse charge (RCM inward)
  * 3.2   Interstate B2C
  * 4(a)  ITC from purchases
  * 4(b)  ITC from RCM purchases
@@ -110,7 +110,7 @@ export function Gstr3bReport() {
     rows.push(`3.1(a),Outward taxable supplies,${data?.outwardTaxableValue || 0},${data?.outwardCgst || 0},${data?.outwardSgst || 0},${data?.outwardIgst || 0},${(data?.outwardCgst || 0) + (data?.outwardSgst || 0) + (data?.outwardIgst || 0)}`)
     rows.push(`3.1(b),Zero-rated supplies,${data?.zeroRatedTaxableValue || 0},0,0,${data?.zeroRatedIgst || 0},${data?.zeroRatedIgst || 0}`)
     rows.push(`3.1(c),Nil-rated + exempt + non-GST,${(data?.nilRatedValue || 0) + (data?.exemptValue || 0) + (data?.nonGstValue || 0)},0,0,0,0`)
-    rows.push(`3.1(d),RCM outward,${data?.rcmTaxableValue || 0},${data?.rcmCgst || 0},${data?.rcmSgst || 0},${data?.rcmIgst || 0},${(data?.rcmCgst || 0) + (data?.rcmSgst || 0) + (data?.rcmIgst || 0)}`)
+    rows.push(`3.1(d),Inward supplies liable to RCM,${data?.rcmTaxableValue || 0},${data?.rcmCgst || 0},${data?.rcmSgst || 0},${data?.rcmIgst || 0},${(data?.rcmCgst || 0) + (data?.rcmSgst || 0) + (data?.rcmIgst || 0)}`)
     rows.push(`3.2,Interstate B2C (unregistered),${data?.interstateB2cTaxableValue || 0},0,0,${data?.interstateB2cIgst || 0},${data?.interstateB2cIgst || 0}`)
     rows.push(`4(a),ITC regular purchases,${data?.itcTaxableValue || 0},${data?.itcCgst || 0},${data?.itcSgst || 0},${data?.itcIgst || 0},${(data?.itcCgst || 0) + (data?.itcSgst || 0) + (data?.itcIgst || 0)}`)
     rows.push(`4(b),ITC from RCM purchases,${data?.rcmItcTaxableValue || 0},${data?.rcmItcCgst || 0},${data?.rcmItcSgst || 0},${data?.rcmItcIgst || 0},${(data?.rcmItcCgst || 0) + (data?.rcmItcSgst || 0) + (data?.rcmItcIgst || 0)}`)
@@ -243,7 +243,7 @@ export function Gstr3bReport() {
               <Gstr3bRow label="(a) Taxable supplies" taxable={data?.outwardTaxableValue} cgst={data?.outwardCgst} sgst={data?.outwardSgst} igst={data?.outwardIgst} />
               <Gstr3bRow label="(b) Zero-rated" taxable={data?.zeroRatedTaxableValue} cgst={0} sgst={0} igst={data?.zeroRatedIgst} />
               <Gstr3bRow label="(c) Nil/Exempt/Non-GST" taxable={(data?.nilRatedValue || 0) + (data?.exemptValue || 0) + (data?.nonGstValue || 0)} cgst={0} sgst={0} igst={0} />
-              <Gstr3bRow label="(d) RCM outward" taxable={data?.rcmTaxableValue} cgst={data?.rcmCgst} sgst={data?.rcmSgst} igst={data?.rcmIgst} />
+              <Gstr3bRow label="(d) Inward supplies liable to RCM" taxable={data?.rcmTaxableValue} cgst={data?.rcmCgst} sgst={data?.rcmSgst} igst={data?.rcmIgst} />
               <tr className="border-t font-semibold">
                 <td className="py-1.5">Total Outward</td>
                 <td className="text-right py-1.5 tabular-nums">{formatINR((data?.outwardTaxableValue || 0) + (data?.zeroRatedTaxableValue || 0) + (data?.nilRatedValue || 0) + (data?.exemptValue || 0) + (data?.nonGstValue || 0) + (data?.rcmTaxableValue || 0))}</td>
@@ -344,7 +344,7 @@ export function Gstr3bReport() {
           </div>
           <div className="text-right text-xs text-white/70 space-y-0.5">
             <p>Output: {formatINR(data?.totalOutputTax || 0)}</p>
-            <p>RCM: {formatINR(data?.totalRcmOutward || 0)}</p>
+            <p>RCM Inward: {formatINR(data?.totalRcmInward || 0)}</p>
             <p>ITC: -{formatINR(data?.totalItc || 0)}</p>
             <p>RCM ITC: -{formatINR(data?.totalRcmItc || 0)}</p>
           </div>
