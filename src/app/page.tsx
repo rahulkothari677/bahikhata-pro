@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft } from 'lucide-react'
-import { useAppStore } from '@/store/app-store'
+import { useAppStore, type ViewType } from '@/store/app-store'
 import { useOfflineSession } from '@/hooks/use-offline-session'
 import { useBrowserBackButton } from '@/hooks/use-browser-back-button'
 import { PullToRefresh } from '@/hooks/use-pull-to-refresh'
@@ -36,6 +36,7 @@ import { PaywallModal } from '@/components/common/PaywallModal'
 import { SplashScreen } from '@/components/common/SplashScreen'
 import { useRatePrompt } from '@/hooks/use-rate-prompt'
 import { useStaffPermissions } from '@/hooks/use-staff-permissions'
+import type { ModuleKey } from '@/lib/staff-permissions'
 
 // Lazy-load heavy components that are only used occasionally.
 // This splits them into separate JS chunks, loaded on-demand when the user
@@ -114,12 +115,12 @@ export default function Home() {
       'settings': 'settings',
     }
     const moduleKey = moduleMap[currentView]
-    if (moduleKey && !canAccess(moduleKey as any)) {
+    if (moduleKey && !canAccess(moduleKey as ModuleKey)) {
       // Redirect to first allowed view
       const firstAllowed = ['sales', 'purchases', 'inventory', 'scanner', 'dashboard'].find(
-        (v) => canAccess(v as any)
+        (v) => canAccess(v as ModuleKey)
       )
-      setView((firstAllowed || 'sales') as any)
+      setView((firstAllowed || 'sales') as ViewType)
     }
   }, [currentView, session, status, canAccess, setView])
 

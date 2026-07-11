@@ -23,6 +23,7 @@ import { useAppStore } from '@/store/app-store'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { clearAllOfflineData } from '@/lib/offline-db'
 import { useStaffPermissions } from '@/hooks/use-staff-permissions'
+import type { ModuleKey } from '@/lib/staff-permissions'
 import { haptic } from '@/lib/haptic'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { getInitials, cn } from '@/lib/utils'
@@ -198,7 +199,7 @@ export function MoreScreen() {
               'settings': 'settings',
             }
             const moduleKey = moduleMap[item.view]
-            if (moduleKey) return canAccess(moduleKey as any)
+            if (moduleKey) return canAccess(moduleKey as ModuleKey)
             return true
           })
           if (visibleItems.length === 0) return null

@@ -12,6 +12,7 @@ import { clearRecentProducts } from '@/lib/recent-products'
 import { toast as sonnerToast } from 'sonner'
 import { useFeatureFlags } from '@/hooks/use-feature-flags'
 import { useStaffPermissions } from '@/hooks/use-staff-permissions'
+import type { ModuleKey } from '@/lib/staff-permissions'
 import { useShops } from '@/hooks/use-shops'
 import { prefetchView } from '@/lib/prefetch'  // 🔒 V11 §3.3
 import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
@@ -232,7 +233,7 @@ export function Sidebar() {
             }
             const moduleKey = moduleMap[item.id]
             if (moduleKey && moduleKey !== 'pricing') {
-              return canAccess(moduleKey as any)
+              return canAccess(moduleKey as ModuleKey)
             }
             return true
           }).map((item) => {

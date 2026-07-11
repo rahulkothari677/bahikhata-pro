@@ -23,6 +23,7 @@ import { cn } from '@/lib/utils'
 import { useTranslation } from '@/hooks/use-translation'
 import { haptic } from '@/lib/haptic'
 import { useStaffPermissions } from '@/hooks/use-staff-permissions'
+import type { ModuleKey } from '@/lib/staff-permissions'
 import { prefetchView } from '@/lib/prefetch'  // 🔒 V11 §3.3
 import { useState, useRef, useEffect } from 'react'
 
@@ -77,7 +78,7 @@ export function MobileBottomNav() {
       'purchases': 'purchases',
     }
     const moduleKey = moduleMap[tab.view]
-    if (moduleKey) return canAccess(moduleKey as any)
+    if (moduleKey) return canAccess(moduleKey as ModuleKey)
     return true
   })
 
