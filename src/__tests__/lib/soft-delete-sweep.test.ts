@@ -215,8 +215,10 @@ describe('🔒 V16 C5 — Soft-delete filter sweep (no query may miss deletedAt:
       const src = readFile('app/api/whatsapp-reminder/route.ts')
       // Party findFirst must filter deletedAt: null
       expect(src).toMatch(/where:\s*\{\s*id:\s*partyId,\s*userId,\s*deletedAt:\s*null\s*\}/)
-      // Transactions include must filter deletedAt: null
-      expect(src).toMatch(/where:\s*\{\s*type:\s*'sale',\s*deletedAt:\s*null\s*\}/)
+      // 🔒 V17 Audit Phase 5: Transactions include now uses type: { in: ['sale', 'credit-note'] }
+      // (was: type: 'sale' only). Still filters deletedAt: null.
+      expect(src).toMatch(/type:\s*\{\s*in:\s*\['sale',\s*'credit-note'\]\s*\}/)
+      expect(src).toContain('deletedAt: null')
     })
 
     it('transactions/[id] PUT double-count check filters Payment.deletedAt: null', () => {

@@ -95,6 +95,11 @@ export const createProductSchema = z.object({
   notes: z.string().max(5000).nullable().optional(),
   // 🔒 V12: MRP / GST-inclusive pricing flag.
   priceIncludesGst: z.coerce.boolean().optional().default(false),
+  // 🔒 V17 Audit §4.2: GST treatment — distinguishes nil-rated (0% GST but
+  // taxable supply), exempt (no GST, not taxable), non-GST (outside GST scope),
+  // and taxable (default). Used by GSTR-3B 3.1(c) to break out nil/exempt/non-GST.
+  // Enum validation prevents arbitrary strings from being stored.
+  gstTreatment: z.enum(['taxable', 'nil', 'exempt', 'nonGst']).optional().default('taxable'),
 })
 
 // Party create schema
@@ -135,6 +140,8 @@ export const updateProductSchema = z.object({
   notes: z.string().max(5000).nullable().optional(),
   // 🔒 V12: MRP / GST-inclusive pricing flag.
   priceIncludesGst: z.coerce.boolean().optional(),
+  // 🔒 V17 Audit §4.2: GST treatment (optional on update; if omitted, unchanged).
+  gstTreatment: z.enum(['taxable', 'nil', 'exempt', 'nonGst']).optional(),
 })
 
 /**

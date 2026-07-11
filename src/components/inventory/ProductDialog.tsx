@@ -15,12 +15,20 @@ import { formatINR } from '@/lib/utils'
 
 const GST_RATES = [0, 5, 12, 18, 28]
 const UNITS = ['pcs', 'kg', 'gm', 'ltr', 'ml', 'm', 'box', 'dozen', 'packet']
+// 🔒 V17 Audit §4.2: GST treatment options for GSTR-3B 3.1(c) breakdown
+const GST_TREATMENTS = [
+  { value: 'taxable', label: 'Taxable', desc: 'Normal GST applies' },
+  { value: 'nil', label: 'Nil-rated', desc: '0% GST but taxable supply' },
+  { value: 'exempt', label: 'Exempt', desc: 'No GST — not taxable' },
+  { value: 'nonGst', label: 'Non-GST', desc: 'Outside GST scope' },
+]
 
 const EMPTY_FORM = {
   name: '', sku: '', hsn: '', category: '', unit: 'pcs',
   purchasePrice: '', salePrice: '', mrp: '', gstRate: '0',
   openingStock: '', lowStockThreshold: '5', notes: '',
   priceIncludesGst: false,
+  gstTreatment: 'taxable',  // 🔒 V17 Audit §4.2
 }
 
 export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
@@ -51,6 +59,7 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
           lowStockThreshold: String(product.lowStockThreshold ?? 5),
           notes: product.notes || '',
           priceIncludesGst: product.priceIncludesGst ?? false,
+          gstTreatment: product.gstTreatment || 'taxable',  // 🔒 V17 Audit §4.2
         })
       } else {
         setForm(EMPTY_FORM)
@@ -86,6 +95,7 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
         lowStockThreshold: parseFloat(form.lowStockThreshold) || 0,
         notes: form.notes.trim() || null,
         priceIncludesGst: form.priceIncludesGst,
+        gstTreatment: form.gstTreatment,  // 🔒 V17 Audit §4.2
       }
       const r = await offlineFetch(url, {
         method,
@@ -165,6 +175,23 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 {GST_RATES.map(r => <SelectItem key={r} value={String(r)}>{r}%</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+          {/* 🔒 V17 Audit §4.2: GST treatment — for GSTR-3B 3.1(c) nil/exempt/non-GST breakdown */}
+          <div>
+            <Label>GST Treatment</Label>
+            <Select value={form.gstTreatment} onValueChange={(v) => setForm({ ...form, gstTreatment: v })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {GST_TREATMENTS.map(t => (
+                  <SelectItem key={t.value} value={t.value}>
+                    <div className="flex flex-col">
+                      <span>{t.label}</span>
+                      <span className="text-[10px] text-muted-foreground">{t.desc}</span>
+                    </div>
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

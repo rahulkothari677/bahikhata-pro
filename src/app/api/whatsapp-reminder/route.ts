@@ -29,7 +29,11 @@ export async function POST(req: NextRequest) {
           // of the WhatsApp message, demanding payment for invoices the
           // shopkeeper had already voided. Same bug class as V15 §1 Site 3
           // (party-detail statement) which IS filtered; this site was missed.
-          where: { type: 'sale', deletedAt: null },
+          // 🔒 V17 Audit Phase 5 (Bug H): Include credit notes so the per-invoice
+          // breakdown shows returns. Was: type: 'sale' only → a customer who
+          // returned goods saw their original invoices at full amount with no
+          // credit note listed → the per-invoice sum > actual balance.
+          where: { type: { in: ['sale', 'credit-note'] }, deletedAt: null },
           orderBy: { date: 'desc' },
         },
       },
@@ -52,11 +56,18 @@ export async function POST(req: NextRequest) {
 
     const setting = await db.setting.findUnique({ where: { userId } })
 
-    const unpaidTxns = party.transactions
-      .filter(t => t.totalAmount - t.paidAmount > 0)
+    // 🔒 V17 Audit Phase 5 (Bug H): Separate sales (outstanding > 0) from
+    // credit notes (which reduce the balance). Was: filtered all to
+    // `totalAmount - paidAmount > 0` which excluded credit notes entirely.
+    // Now: sales with outstanding are "invoices", credit notes are "credits".
+    const unpaidSales = party.transactions
+      .filter(t => t.type === 'sale' && (t.totalAmount - t.paidAmount) > 0.01)
+      .sort((a, b) => a.date.getTime() - b.date.getTime())
+    const creditNotes = party.transactions
+      .filter(t => t.type === 'credit-note')
       .sort((a, b) => a.date.getTime() - b.date.getTime())
 
-    const oldestUnpaid = unpaidTxns[0]
+    const oldestUnpaid = unpaidSales[0]
     const daysOverdue = oldestUnpaid
       ? Math.floor((Date.now() - oldestUnpaid.date.getTime()) / 86400000)
       : 0
@@ -94,15 +105,28 @@ export async function POST(req: NextRequest) {
       lines.push(upiLink)
     }
 
-    if (unpaidTxns.length > 0) {
+    if (unpaidSales.length > 0) {
       lines.push('')
       lines.push('Unpaid invoices:')
-      unpaidTxns.slice(0, 5).forEach((t, i) => {
+      unpaidSales.slice(0, 5).forEach((t, i) => {
         const due = t.totalAmount - t.paidAmount
         lines.push(`${i + 1}. ${t.invoiceNo || 'Bill'} - Rs. ${due.toFixed(2)}`)
       })
-      if (unpaidTxns.length > 5) {
-        lines.push(`...and ${unpaidTxns.length - 5} more`)
+      if (unpaidSales.length > 5) {
+        lines.push(`...and ${unpaidSales.length - 5} more`)
+      }
+    }
+
+    // 🔒 V17 Audit Phase 5 (Bug H): Show credit notes (returns) so the customer
+    // sees the true net outstanding. Without this, the invoice list sum > balance.
+    if (creditNotes.length > 0) {
+      lines.push('')
+      lines.push('Credit notes (returns):')
+      creditNotes.slice(0, 3).forEach((t, i) => {
+        lines.push(`${i + 1}. ${t.invoiceNo || 'CN'} - Rs. ${t.totalAmount.toFixed(2)}`)
+      })
+      if (creditNotes.length > 3) {
+        lines.push(`...and ${creditNotes.length - 3} more`)
       }
     }
 
@@ -128,7 +152,7 @@ export async function POST(req: NextRequest) {
       success: true,
       whatsappUrl,
       balance,
-      unpaidCount: unpaidTxns.length,
+      unpaidCount: unpaidSales.length,  // 🔒 V17 Audit Phase 5: was unpaidTxns (renamed)
       daysOverdue,
       upiLink, // V17-Ext 5.4: returned so the UI can show a "Copy UPI Link" button
       upiId: upiId, // returned so the UI knows whether UPI is configured

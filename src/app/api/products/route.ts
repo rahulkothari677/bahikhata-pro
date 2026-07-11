@@ -84,6 +84,11 @@ export async function POST(req: NextRequest) {
         currentStock: v.openingStock,  // currentStock starts at openingStock
         lowStockThreshold: v.lowStockThreshold,
         notes: v.notes || null,
+        // 🔒 V17 Audit Phase 5: priceIncludesGst was in the schema but NOT persisted
+        // (pre-existing bug — the checkbox had no effect on the stored product).
+        // Now persisted. Also persist gstTreatment (§4.2).
+        priceIncludesGst: v.priceIncludesGst,
+        gstTreatment: v.gstTreatment,
       },
     })
     return NextResponse.json({ product })
@@ -133,6 +138,9 @@ export async function PUT(req: NextRequest) {
     }
     if (v.lowStockThreshold !== undefined) updateData.lowStockThreshold = v.lowStockThreshold
     if (v.notes !== undefined) updateData.notes = v.notes
+    // 🔒 V17 Audit Phase 5: Persist priceIncludesGst (was missing) + gstTreatment
+    if (v.priceIncludesGst !== undefined) updateData.priceIncludesGst = v.priceIncludesGst
+    if (v.gstTreatment !== undefined) updateData.gstTreatment = v.gstTreatment
 
     const product = await db.product.update({
       where: { id },

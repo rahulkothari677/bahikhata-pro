@@ -94,7 +94,10 @@ export async function GET() {
       `,
       db.transaction.findMany({
         where: activeTransactionWhere(userId, {
-          type: 'sale',
+          // 🔒 V17 Audit Phase 5 (Bug I): Include credit notes so margin insights
+          // are net of returns. Was: type: 'sale' only → margin overstated because
+          // credit notes (which reduce profit) were excluded from the calc.
+          type: { in: ['sale', 'credit-note'] },
           date: { gte: sixtyDaysAgo },
         }),
         orderBy: { date: 'desc' },
@@ -206,9 +209,23 @@ export async function GET() {
     }
 
     // 4. Profit margin insights (last 30 days vs prev 30 days)
+    // 🔒 V17 Audit Phase 5 (Bug I): Margin is now net of credit notes.
+    // Credit notes have NEGATIVE grossProfit and POSITIVE totalAmount.
+    // Net profit = Σ grossProfit (sale positive + credit-note negative).
+    // Net revenue = Σ totalAmount(sale) - Σ totalAmount(credit-note).
+    // Was: type='sale' only → margin overstated (credit notes excluded).
     if (last30Sales.length > 0 && prev30Sales.length > 0) {
-      const lastMargin = last30Sales.reduce((s, t) => s + t.grossProfit, 0) / last30Sales.reduce((s, t) => s + t.totalAmount, 0) * 100
-      const prevMargin = prev30Sales.reduce((s, t) => s + t.grossProfit, 0) / prev30Sales.reduce((s, t) => s + t.totalAmount, 0) * 100
+      const lastProfit = last30Sales.reduce((s, t) => s + (t.grossProfit || 0), 0)
+      const lastRevenue = last30Sales.reduce((s, t) => {
+        return t.type === 'credit-note' ? s - t.totalAmount : s + t.totalAmount
+      }, 0)
+      const prevProfit = prev30Sales.reduce((s, t) => s + (t.grossProfit || 0), 0)
+      const prevRevenue = prev30Sales.reduce((s, t) => {
+        return t.type === 'credit-note' ? s - t.totalAmount : s + t.totalAmount
+      }, 0)
+
+      const lastMargin = lastRevenue > 0 ? (lastProfit / lastRevenue) * 100 : 0
+      const prevMargin = prevRevenue > 0 ? (prevProfit / prevRevenue) * 100 : 0
       const marginChange = lastMargin - prevMargin
 
       if (marginChange < -3) {
