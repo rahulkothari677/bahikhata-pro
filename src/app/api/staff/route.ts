@@ -17,9 +17,6 @@ export async function GET() {
   try {
     const { userId, error } = await getAuthUserIdOwnerOnly()
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    // 🔒 V18: Rate limit staff creation (5/hour per owner — prevents abuse)
-    const rl = await rateLimit(`staff-create:${userId}`, { limit: 5, windowSec: 3600 })
-    if (!rl.success) return rateLimitedResponse(rl)
     // V17-Ext Tier 3 Step 2: List BOTH staff and CA accounts. Was: role:'staff' only.
     // CAs are sub-accounts managed in the same UI, so they must appear here.
     const staff = await db.user.findMany({
@@ -55,6 +52,10 @@ export async function POST(req: NextRequest) {
   try {
     const { userId, error } = await getAuthUserIdOwnerOnly()
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    // 🔒 V19-008 FIX: Rate limit moved from GET to POST (was blocking list, not creation)
+    const rl = await rateLimit(`staff-create:${userId}`, { limit: 5, windowSec: 3600 })
+    if (!rl.success) return rateLimitedResponse(rl)
 
     // Verify the current user is an owner
     const owner = await db.user.findUnique({ where: { id: userId } })

@@ -114,23 +114,39 @@ function convertDataOnWrite(model: string, data: Record<string, any>): Record<st
 }
 
 // ─── Helper: convert nested data objects (for create with nested records) ──
+// 🔒 V19-001 FIX: Previously used `key` (relation name like 'items') as the
+// model name when recursing — but MONEY_COLUMNS uses model names like
+// 'TransactionItem'. This caused nested writes to skip money conversion,
+// storing rupee values in paise Int columns (100× understatement).
+// Fix: look up the actual model name from MODEL_RELATIONS.
 function convertNestedData(model: string, data: any): any {
   if (!data || typeof data !== 'object') return data
 
   const converted = convertDataOnWrite(model, data)
 
   // Handle nested creates (e.g., transaction.create with items: { create: [...] })
+  const relations = MODEL_RELATIONS[model] || {}
   for (const key of Object.keys(converted)) {
     const val = converted[key]
+    const relModel = relations[key]  // ← V19-001 FIX: look up actual model name
+    if (!relModel) continue          // ← skip non-relation keys (no conversion needed)
+
     if (val && typeof val === 'object') {
       if (Array.isArray(val)) {
-        converted[key] = val.map((v) => typeof v === 'object' ? convertNestedData(key, v) : v)
+        converted[key] = val.map((v) => typeof v === 'object' ? convertNestedData(relModel, v) : v)
       } else if ('create' in val) {
         // { create: [...] } or { create: {...} }
         if (Array.isArray(val.create)) {
-          converted[key] = { ...val, create: val.create.map((v: any) => convertNestedData(key, v)) }
+          converted[key] = { ...val, create: val.create.map((v: any) => convertNestedData(relModel, v)) }
         } else {
-          converted[key] = { ...val, create: convertNestedData(key, val.create) }
+          converted[key] = { ...val, create: convertNestedData(relModel, val.create) }
+        }
+      } else if ('update' in val) {
+        // Handle nested update: { update: { where: {...}, data: {...} } }
+        if (val.update && typeof val.update === 'object' && 'data' in val.update) {
+          converted[key] = { ...val, update: { ...val.update, data: convertNestedData(relModel, val.update.data) } }
+        } else if (val.update && typeof val.update === 'object') {
+          converted[key] = { ...val, update: convertNestedData(relModel, val.update) }
         }
       } else if ('connect' in val || 'connectOrCreate' in val) {
         // Don't convert connection objects — they only have IDs
