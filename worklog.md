@@ -3316,3 +3316,46 @@ Stage Summary:
 - Cross-path consistency test added — would have caught the regression before deploy.
 - TESTING COMMITMENT: From now on, golden tests use REAL storage sign conventions (not idealized positive values), and cross-path consistency tests verify all computation paths agree.
 - REMAINING (Phase 5): GAP 1 (gstTreatment UI — no way for users to mark products exempt), Bug H (whatsapp-reminder), Bug I (insights). These are lower priority — the HIGH/MEDIUM bugs are all fixed.
+
+---
+Task ID: bahikhata-v17-audit-phase5
+Agent: main
+Task: V17 Audit Phase 5 — gstTreatment UI + whatsapp-reminder + insights (net of credit notes) + technical-error tests
+
+Work Log:
+- User requested Phase 5 + committed to expanded testing standard (calculation + logic + detailed technical errors: null safety, edge cases, data integrity, auth, input validation).
+- GAP 1 (gstTreatment UI — was: dead code):
+  * validation.ts: Added gstTreatment zod enum to createProductSchema + updateProductSchema. Values: taxable | nil | exempt | nonGst. Default: taxable. Enum validation rejects invalid strings, case variants, trailing spaces, numbers, null.
+  * products/route.ts POST: Now persists gstTreatment AND priceIncludesGst (pre-existing bug: priceIncludesGst was in schema but never saved to DB — the MRP checkbox had no effect).
+  * products/route.ts PUT: Now persists gstTreatment + priceIncludesGst if provided.
+  * ProductDialog.tsx: Added 'GST Treatment' dropdown with 4 options (Taxable, Nil-rated, Exempt, Non-GST) each with a description. Form state + payload include gstTreatment. Existing products load their saved value (defaults to 'taxable' if null).
+- Bug H (whatsapp-reminder):
+  * Was: fetched type='sale' only → customer who returned goods saw original invoices at full amount, no credit note listed → per-invoice sum > actual balance.
+  * Now: fetches type: { in: ['sale', 'credit-note'] }. Separates unpaid sales from credit notes. Message shows 'Unpaid invoices' + 'Credit notes (returns)' sections. Customer sees true net outstanding.
+  * Fixed: unpaidCount response field was referencing old variable name (unpaidTxns → unpaidSales).
+- Bug I (insights margin widget):
+  * Was: fetched type='sale' only → margin overstated (credit notes excluded).
+  * Now: fetches type: { in: ['sale', 'credit-note'] }. Margin = net profit (sale grossProfit + credit-note negative grossProfit) / net revenue (sale totalAmount - credit-note totalAmount). Handles zero-revenue edge case (returns 0% margin instead of NaN).
+- Pre-existing bug found + fixed: products/route.ts POST was NOT persisting priceIncludesGst despite it being in the schema. The 'Sale price includes GST (MRP)' checkbox had no effect on stored products. Now persisted in both POST and PUT.
+- NEW TEST SUITE (phase5-technical.test.ts, 34 tests) — covers the TECHNICAL error class:
+  * gstTreatment Zod validation: accepts 4 valid values, defaults to taxable, rejects invalid/case-variant/space/number/null/'owner'/'admin' (privilege escalation guard)
+  * null/undefined safety: all net-sales helpers handle null/undefined inputs without crashing
+  * zero values: all helpers handle zero inputs correctly
+  * mixed signs: unlinked items (grossProfit=0), linked items (negative), full return, over-return (net loss)
+  * float precision: ₹0.01 edges, no float artifacts
+  * data integrity: discounts, large values (no overflow)
+- Updated soft-delete-sweep.test.ts: whatsapp-reminder assertion now checks for type: { in: ['sale', 'credit-note'] } (was: type: 'sale'). Still verifies deletedAt: null.
+- Verified:
+  * npx tsc --noEmit: 0 NEW errors
+  * npx next build: ✓ Compiled successfully
+  * npx jest all 7 suites: 144/144 pass (110 existing + 34 new technical-error tests)
+- Committed (d7c67ae) + pushed to GitHub
+
+Stage Summary:
+- Files changed: 7 (validation.ts, products/route.ts, ProductDialog.tsx, whatsapp-reminder/route.ts, insights/route.ts, phase5-technical.test.ts [new], soft-delete-sweep.test.ts)
+- GAP 1 CLOSED: gstTreatment is now a full-stack feature (schema → Zod → API → UI). Users can mark products as exempt/nil/nonGst → GSTR-3B 3.1(c) shows real values.
+- Bugs H + I FIXED: whatsapp-reminder and insights are now net of credit notes.
+- Pre-existing bug FIXED: priceIncludesGst now persisted (was in schema but never saved).
+- 34 new technical-error tests covering null safety, edge cases, data integrity, input validation, privilege escalation.
+- EXPANDED TESTING COMMITMENT: From now on, tests cover calculation + logic + technical errors (null safety, edge cases, data integrity, auth, input validation, error handling).
+- V17 AUDIT FULLY COMPLETE — all findings + all re-verification bugs resolved.
