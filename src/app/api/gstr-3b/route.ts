@@ -37,6 +37,169 @@ import { logAudit } from '@/lib/audit'
  */
 export const maxDuration = 60
 
+// 🔒 V19-035 FIX: Extracted shared query + computation function.
+// Previously the GET and POST handlers had copy-pasted 200+ line blocks.
+// Now both call this single function — any change automatically applies to both.
+async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd: Date) {
+  const [
+    outwardSalesAgg, rcmInwardAgg, creditNoteAgg, nilRatedAgg, exemptAgg, nonGstAgg,
+    interstateB2cAgg, itcPurchasesAgg, rcmItcAgg, debitNoteAgg, exemptInwardAgg,
+  ] = await Promise.all([
+    db.transaction.aggregate({
+      where: { userId, type: 'sale', deletedAt: null, isReverseCharge: false, date: { gte: periodStart, lt: periodEnd } },
+      _sum: { subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true },
+      _count: true,
+    }),
+    db.transaction.aggregate({
+      where: { userId, type: 'purchase', deletedAt: null, isReverseCharge: true, date: { gte: periodStart, lt: periodEnd } },
+      _sum: { subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true },
+      _count: true,
+    }),
+    db.transaction.aggregate({
+      where: { userId, type: 'credit-note', deletedAt: null, date: { gte: periodStart, lt: periodEnd } },
+      _sum: { subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true },
+      _count: true,
+    }),
+    db.$queryRaw<Array<{ totalValuePaise: string }>>`
+      SELECT COALESCE(SUM(
+        ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 0)
+      ), 0)::text AS "totalValuePaise"
+      FROM "TransactionItem" ti
+      JOIN "Transaction" t ON ti."transactionId" = t.id
+      LEFT JOIN "Product" p ON ti."productId" = p.id
+      WHERE t."userId" = ${userId}
+        AND t."deletedAt" IS NULL
+        AND t."type" = 'sale'
+        AND t."isReverseCharge" = false
+        AND t."date" >= ${periodStart}
+        AND t."date" < ${periodEnd}
+        AND ti."gstRate" = 0
+        AND (p."gstTreatment" IS NULL OR p."gstTreatment" = 'taxable' OR p."gstTreatment" = 'nil')
+    `,
+    db.$queryRaw<Array<{ totalValuePaise: string }>>`
+      SELECT COALESCE(SUM(
+        ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 0)
+      ), 0)::text AS "totalValuePaise"
+      FROM "TransactionItem" ti
+      JOIN "Transaction" t ON ti."transactionId" = t.id
+      LEFT JOIN "Product" p ON ti."productId" = p.id
+      WHERE t."userId" = ${userId}
+        AND t."deletedAt" IS NULL
+        AND t."type" = 'sale'
+        AND t."isReverseCharge" = false
+        AND t."date" >= ${periodStart}
+        AND t."date" < ${periodEnd}
+        AND p."gstTreatment" = 'exempt'
+    `,
+    db.transaction.aggregate({
+      where: { userId, type: 'income', deletedAt: null, date: { gte: periodStart, lt: periodEnd } },
+      _sum: { totalAmount: true }, _count: true,
+    }),
+    db.$queryRaw<Array<{ taxableValuePaise: string; igstPaise: string }>>`
+      SELECT
+        COALESCE(SUM(t."subtotal"::numeric - COALESCE(t."discountAmount", 0)::numeric), 0)::text AS "taxableValuePaise",
+        COALESCE(SUM(t."igst"::numeric), 0)::text AS "igstPaise"
+      FROM "Transaction" t
+      LEFT JOIN "Party" p ON t."partyId" = p.id
+      WHERE t."userId" = ${userId}
+        AND t."deletedAt" IS NULL AND t."type" = 'sale'
+        AND t."isInterState" = true AND t."isReverseCharge" = false
+        AND t."date" >= ${periodStart} AND t."date" < ${periodEnd}
+        AND (p."gstin" IS NULL OR p."gstin" = '')
+    `,
+    db.transaction.aggregate({
+      where: { userId, type: 'purchase', deletedAt: null, isReverseCharge: false, date: { gte: periodStart, lt: periodEnd } },
+      _sum: { subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true },
+      _count: true,
+    }),
+    db.transaction.aggregate({
+      where: { userId, type: 'purchase', deletedAt: null, isReverseCharge: true, date: { gte: periodStart, lt: periodEnd } },
+      _sum: { subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true },
+      _count: true,
+    }),
+    db.transaction.aggregate({
+      where: { userId, type: 'debit-note', deletedAt: null, date: { gte: periodStart, lt: periodEnd } },
+      _sum: { subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true },
+      _count: true,
+    }),
+    db.$queryRaw<Array<{ totalValuePaise: string }>>`
+      SELECT COALESCE(SUM(t."totalAmount"::numeric), 0)::text AS "totalValuePaise"
+      FROM "Transaction" t
+      WHERE t."userId" = ${userId}
+        AND t."deletedAt" IS NULL AND t."type" = 'purchase'
+        AND t."date" >= ${periodStart} AND t."date" < ${periodEnd}
+        AND NOT EXISTS (SELECT 1 FROM "TransactionItem" ti WHERE ti."transactionId" = t.id AND ti."gstRate" > 0)
+    `,
+  ])
+
+  // === Compute structured 3B values ===
+  const outwardTaxableValue = roundMoney((outwardSalesAgg._sum.subtotal || 0) - (outwardSalesAgg._sum.discountAmount || 0))
+  const outwardCgst = roundMoney(outwardSalesAgg._sum.cgst || 0)
+  const outwardSgst = roundMoney(outwardSalesAgg._sum.sgst || 0)
+  const outwardIgst = roundMoney(outwardSalesAgg._sum.igst || 0)
+  const zeroRatedTaxableValue = 0
+  const zeroRatedIgst = 0
+  const nilRatedValue = fromPaise(Number(nilRatedAgg[0]?.totalValuePaise || 0))
+  const exemptValue = fromPaise(Number(exemptAgg[0]?.totalValuePaise || 0))
+  const nonGstValue = roundMoney(nonGstAgg._sum.totalAmount || 0)
+  const rcmTaxableValue = roundMoney((rcmInwardAgg._sum.subtotal || 0) - (rcmInwardAgg._sum.discountAmount || 0))
+  const rcmCgst = roundMoney(rcmInwardAgg._sum.cgst || 0)
+  const rcmSgst = roundMoney(rcmInwardAgg._sum.sgst || 0)
+  const rcmIgst = roundMoney(rcmInwardAgg._sum.igst || 0)
+  const creditNoteTaxableValue = roundMoney((creditNoteAgg._sum.subtotal || 0) - (creditNoteAgg._sum.discountAmount || 0))
+  const creditNoteCgst = roundMoney(creditNoteAgg._sum.cgst || 0)
+  const creditNoteSgst = roundMoney(creditNoteAgg._sum.sgst || 0)
+  const creditNoteIgst = roundMoney(creditNoteAgg._sum.igst || 0)
+  const interstateB2cTaxableValue = fromPaise(Number(interstateB2cAgg[0]?.taxableValuePaise || 0))
+  const interstateB2cIgst = fromPaise(Number(interstateB2cAgg[0]?.igstPaise || 0))
+  const itcTaxableValue = roundMoney((itcPurchasesAgg._sum.subtotal || 0) - (itcPurchasesAgg._sum.discountAmount || 0))
+  const itcCgst = roundMoney(itcPurchasesAgg._sum.cgst || 0)
+  const itcSgst = roundMoney(itcPurchasesAgg._sum.sgst || 0)
+  const itcIgst = roundMoney(itcPurchasesAgg._sum.igst || 0)
+  const rcmItcTaxableValue = roundMoney((rcmItcAgg._sum.subtotal || 0) - (rcmItcAgg._sum.discountAmount || 0))
+  const rcmItcCgst = roundMoney(rcmItcAgg._sum.cgst || 0)
+  const rcmItcSgst = roundMoney(rcmItcAgg._sum.sgst || 0)
+  const rcmItcIgst = roundMoney(rcmItcAgg._sum.igst || 0)
+  const debitNoteTaxableValue = roundMoney((debitNoteAgg._sum.subtotal || 0) - (debitNoteAgg._sum.discountAmount || 0))
+  const debitNoteCgst = roundMoney(debitNoteAgg._sum.cgst || 0)
+  const debitNoteSgst = roundMoney(debitNoteAgg._sum.sgst || 0)
+  const debitNoteIgst = roundMoney(debitNoteAgg._sum.igst || 0)
+  const exemptInwardValue = fromPaise(Number(exemptInwardAgg[0]?.totalValuePaise || 0))
+  const totalOutputTax = roundMoney(outwardCgst + outwardSgst + outwardIgst)
+  const totalRcmInward = roundMoney(rcmCgst + rcmSgst + rcmIgst)
+  const totalCreditNoteTax = roundMoney(creditNoteCgst + creditNoteSgst + creditNoteIgst)
+  const totalItc = roundMoney(itcCgst + itcSgst + itcIgst)
+  const totalRcmItc = roundMoney(rcmItcCgst + rcmItcSgst + rcmItcIgst)
+  const totalDebitNoteTax = roundMoney(debitNoteCgst + debitNoteSgst + debitNoteIgst)
+  const netTaxPayable = roundMoney(
+    totalOutputTax + totalRcmInward - totalCreditNoteTax
+    - totalItc - totalRcmItc + totalDebitNoteTax
+  )
+
+  return {
+    outwardTaxableValue, outwardCgst, outwardSgst, outwardIgst,
+    zeroRatedTaxableValue, zeroRatedIgst,
+    nilRatedValue, exemptValue, nonGstValue,
+    rcmTaxableValue, rcmCgst, rcmSgst, rcmIgst,
+    creditNoteTaxableValue, creditNoteCgst, creditNoteSgst, creditNoteIgst,
+    interstateB2cTaxableValue, interstateB2cIgst,
+    itcTaxableValue, itcCgst, itcSgst, itcIgst,
+    rcmItcTaxableValue, rcmItcCgst, rcmItcSgst, rcmItcIgst,
+    debitNoteTaxableValue, debitNoteCgst, debitNoteSgst, debitNoteIgst,
+    exemptInwardValue,
+    netTaxPayable,
+    totalOutputTax, totalRcmInward, totalCreditNoteTax, totalItc, totalRcmItc, totalDebitNoteTax,
+    counts: {
+      sales: outwardSalesAgg._count,
+      purchases: itcPurchasesAgg._count,
+      creditNotes: creditNoteAgg._count,
+      debitNotes: debitNoteAgg._count,
+      rcmPurchases: rcmInwardAgg._count,
+      rcmItcPurchases: rcmItcAgg._count,
+    },
+  }
+}
+
 export async function GET(req: NextRequest) {
   try {
     const authCtx = await getAuthContext()
@@ -540,155 +703,22 @@ export async function POST(req: NextRequest) {
       }, { status: 409 })
     }
 
-    // === Re-compute all 3B values (same queries as GET — DRY) ===
-    // This is critical: we NEVER trust client-sent financial data for a
-    // snapshot. The server always recomputes from the source of truth.
-    // 🔒 V17 Audit §2: rcmInwardAgg now queries type='purchase' (was: 'sale').
-    // 🔒 V17 Audit §4.1+4.2: nilRatedAgg now sums 0%-rated items; exemptAgg added.
-    const [
-      outwardSalesAgg, rcmInwardAgg, creditNoteAgg, nilRatedAgg, exemptAgg, nonGstAgg,
-      interstateB2cAgg, itcPurchasesAgg, rcmItcAgg, debitNoteAgg, exemptInwardAgg,
-    ] = await Promise.all([
-      db.transaction.aggregate({
-        where: { userId, type: 'sale', deletedAt: null, isReverseCharge: false, date: { gte: periodStart, lt: periodEnd } },
-        _sum: { subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true },
-        _count: true,
-      }),
-      // 🔒 V17 Audit §2: 3.1(d) now fed by RCM PURCHASES (was: RCM sales)
-      db.transaction.aggregate({
-        where: { userId, type: 'purchase', deletedAt: null, isReverseCharge: true, date: { gte: periodStart, lt: periodEnd } },
-        _sum: { subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true },
-        _count: true,
-      }),
-      db.transaction.aggregate({
-        where: { userId, type: 'credit-note', deletedAt: null, date: { gte: periodStart, lt: periodEnd } },
-        _sum: { subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true },
-        _count: true,
-      }),
-      // 🔒 V17 Audit §4.1: Nil-rated = sum of 0%-rated line items (was: whole-invoice)
-      // 🔒 V17 Audit Phase 4: Exclude exempt/nonGst products (counted in their own rows)
-      // 🔒 V17 PAISE MIGRATION Phase 2G: SQL returns paise. Positive nudge (value >= 0).
-      db.$queryRaw<Array<{ totalValuePaise: string }>>`
-        SELECT COALESCE(ROUND(SUM(
-          ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 0)
-        ), 0)::text AS "totalValuePaise"
-        FROM "TransactionItem" ti
-        JOIN "Transaction" t ON ti."transactionId" = t.id
-        LEFT JOIN "Product" p ON ti."productId" = p.id
-        WHERE t."userId" = ${userId}
-          AND t."deletedAt" IS NULL AND t."type" = 'sale' AND t."isReverseCharge" = false
-          AND t."date" >= ${periodStart} AND t."date" < ${periodEnd}
-          AND ti."gstRate" = 0
-          AND (p."gstTreatment" IS NULL OR p."gstTreatment" = 'taxable' OR p."gstTreatment" = 'nil')
-      `,
-      // 🔒 V17 Audit §4.2: Exempt = products with gstTreatment='exempt'
-      // 🔒 V17 PAISE MIGRATION Phase 2G: SQL returns paise. Positive nudge (value >= 0).
-      db.$queryRaw<Array<{ totalValuePaise: string }>>`
-        SELECT COALESCE(ROUND(SUM(
-          ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 0)
-        ), 0)::text AS "totalValuePaise"
-        FROM "TransactionItem" ti
-        JOIN "Transaction" t ON ti."transactionId" = t.id
-        LEFT JOIN "Product" p ON ti."productId" = p.id
-        WHERE t."userId" = ${userId}
-          AND t."deletedAt" IS NULL AND t."type" = 'sale' AND t."isReverseCharge" = false
-          AND t."date" >= ${periodStart} AND t."date" < ${periodEnd}
-          AND p."gstTreatment" = 'exempt'
-      `,
-      db.transaction.aggregate({
-        where: { userId, type: 'income', deletedAt: null, date: { gte: periodStart, lt: periodEnd } },
-        _sum: { totalAmount: true }, _count: true,
-      }),
-      // 🔒 V17 PAISE MIGRATION Phase 2G: SQL returns paise. Positive nudge (values >= 0).
-      db.$queryRaw<Array<{ taxableValuePaise: string; igstPaise: string }>>`
-        SELECT
-          COALESCE(SUM(t."subtotal"::numeric - COALESCE(t."discountAmount", 0)::numeric), 0)::text AS "taxableValuePaise",
-          COALESCE(SUM(t."igst"::numeric), 0)::text AS "igstPaise"
-        FROM "Transaction" t
-        LEFT JOIN "Party" p ON t."partyId" = p.id
-        WHERE t."userId" = ${userId} AND t."deletedAt" IS NULL AND t."type" = 'sale'
-          AND t."isInterState" = true AND t."isReverseCharge" = false
-          AND t."date" >= ${periodStart} AND t."date" < ${periodEnd}
-          AND (p."gstin" IS NULL OR p."gstin" = '')
-      `,
-      db.transaction.aggregate({
-        where: { userId, type: 'purchase', deletedAt: null, isReverseCharge: false, date: { gte: periodStart, lt: periodEnd } },
-        _sum: { subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true },
-        _count: true,
-      }),
-      db.transaction.aggregate({
-        where: { userId, type: 'purchase', deletedAt: null, isReverseCharge: true, date: { gte: periodStart, lt: periodEnd } },
-        _sum: { subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true },
-        _count: true,
-      }),
-      db.transaction.aggregate({
-        where: { userId, type: 'debit-note', deletedAt: null, date: { gte: periodStart, lt: periodEnd } },
-        _sum: { subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true },
-        _count: true,
-      }),
-      // 🔒 V17 PAISE MIGRATION Phase 2G: SQL returns paise. Positive nudge (totalAmount >= 0).
-      db.$queryRaw<Array<{ totalValuePaise: string }>>`
-        SELECT COALESCE(SUM(t."totalAmount"::numeric), 0)::text AS "totalValuePaise"
-        FROM "Transaction" t
-        WHERE t."userId" = ${userId}
-          AND t."deletedAt" IS NULL AND t."type" = 'purchase'
-          AND t."date" >= ${periodStart} AND t."date" < ${periodEnd}
-          AND NOT EXISTS (SELECT 1 FROM "TransactionItem" ti WHERE ti."transactionId" = t.id AND ti."gstRate" > 0)
-      `,
-    ])
-
-    // Compute all values (same as GET)
-    const outwardTaxableValue = roundMoney((outwardSalesAgg._sum.subtotal || 0) - (outwardSalesAgg._sum.discountAmount || 0))
-    const outwardCgst = roundMoney(outwardSalesAgg._sum.cgst || 0)
-    const outwardSgst = roundMoney(outwardSalesAgg._sum.sgst || 0)
-    const outwardIgst = roundMoney(outwardSalesAgg._sum.igst || 0)
-    // 🔒 V17 Audit §4.1: Nil-rated now sums 0%-rated line items
-    // 🔒 V17 PAISE MIGRATION Phase 2G: SQL returns paise; convert to rupees via fromPaise().
-    const nilRatedValue = fromPaise(Number(nilRatedAgg[0]?.totalValuePaise || 0))
-    // 🔒 V17 Audit §4.2: Exempt now reads from Product.gstTreatment='exempt'
-    const exemptValue = fromPaise(Number(exemptAgg[0]?.totalValuePaise || 0))
-    const nonGstValue = roundMoney(nonGstAgg._sum.totalAmount || 0)
-    // 🔒 V17 Audit §2: 3.1(d) now from RCM purchases (rcmInwardAgg, was rcmOutwardAgg)
-    const rcmTaxableValue = roundMoney((rcmInwardAgg._sum.subtotal || 0) - (rcmInwardAgg._sum.discountAmount || 0))
-    const rcmCgst = roundMoney(rcmInwardAgg._sum.cgst || 0)
-    const rcmSgst = roundMoney(rcmInwardAgg._sum.sgst || 0)
-    const rcmIgst = roundMoney(rcmInwardAgg._sum.igst || 0)
-    // V17-Ext Tier 3: Credit/debit notes
-    const creditNoteTaxableValue = roundMoney((creditNoteAgg._sum.subtotal || 0) - (creditNoteAgg._sum.discountAmount || 0))
-    const creditNoteCgst = roundMoney(creditNoteAgg._sum.cgst || 0)
-    const creditNoteSgst = roundMoney(creditNoteAgg._sum.sgst || 0)
-    const creditNoteIgst = roundMoney(creditNoteAgg._sum.igst || 0)
-    // 🔒 V17 PAISE MIGRATION Phase 2G: SQL returns paise; convert to rupees via fromPaise().
-    const interstateB2cTaxableValue = fromPaise(Number(interstateB2cAgg[0]?.taxableValuePaise || 0))
-    const interstateB2cIgst = fromPaise(Number(interstateB2cAgg[0]?.igstPaise || 0))
-    const itcTaxableValue = roundMoney((itcPurchasesAgg._sum.subtotal || 0) - (itcPurchasesAgg._sum.discountAmount || 0))
-    const itcCgst = roundMoney(itcPurchasesAgg._sum.cgst || 0)
-    const itcSgst = roundMoney(itcPurchasesAgg._sum.sgst || 0)
-    const itcIgst = roundMoney(itcPurchasesAgg._sum.igst || 0)
-    const rcmItcTaxableValue = roundMoney((rcmItcAgg._sum.subtotal || 0) - (rcmItcAgg._sum.discountAmount || 0))
-    const rcmItcCgst = roundMoney(rcmItcAgg._sum.cgst || 0)
-    const rcmItcSgst = roundMoney(rcmItcAgg._sum.sgst || 0)
-    const rcmItcIgst = roundMoney(rcmItcAgg._sum.igst || 0)
-    // V17-Ext Tier 3: Debit notes
-    const debitNoteTaxableValue = roundMoney((debitNoteAgg._sum.subtotal || 0) - (debitNoteAgg._sum.discountAmount || 0))
-    const debitNoteCgst = roundMoney(debitNoteAgg._sum.cgst || 0)
-    const debitNoteSgst = roundMoney(debitNoteAgg._sum.sgst || 0)
-    const debitNoteIgst = roundMoney(debitNoteAgg._sum.igst || 0)
-    // 🔒 V17 PAISE MIGRATION Phase 2G: SQL returns paise; convert to rupees via fromPaise().
-    const exemptInwardValue = fromPaise(Number(exemptInwardAgg[0]?.totalValuePaise || 0))
-    const totalOutputTax = roundMoney(outwardCgst + outwardSgst + outwardIgst)
-    // 🔒 V17 Audit §2: RCM inward liability (was: totalRcmOutward). Now fed by
-    // RCM purchases. Cancels with totalRcmItc for fully-creditable RCM.
-    const totalRcmInward = roundMoney(rcmCgst + rcmSgst + rcmIgst)
-    const totalCreditNoteTax = roundMoney(creditNoteCgst + creditNoteSgst + creditNoteIgst)
-    const totalItc = roundMoney(itcCgst + itcSgst + itcIgst)
-    const totalRcmItc = roundMoney(rcmItcCgst + rcmItcSgst + rcmItcIgst)
-    const totalDebitNoteTax = roundMoney(debitNoteCgst + debitNoteSgst + debitNoteIgst)
-    // 🔒 V17 Audit §2: + totalRcmInward (liability) - totalRcmItc (ITC) → cancel for fully-creditable RCM
-    const netTaxPayable = roundMoney(
-      totalOutputTax + totalRcmInward - totalCreditNoteTax
-      - totalItc - totalRcmItc + totalDebitNoteTax
-    )
+    // 🔒 V19-035 FIX: Use shared function instead of copy-pasted queries
+    const values = await computeGstr3bValues(userId, periodStart, periodEnd)
+    const {
+      outwardTaxableValue, outwardCgst, outwardSgst, outwardIgst,
+      zeroRatedTaxableValue, zeroRatedIgst,
+      nilRatedValue, exemptValue, nonGstValue,
+      rcmTaxableValue, rcmCgst, rcmSgst, rcmIgst,
+      creditNoteTaxableValue, creditNoteCgst, creditNoteSgst, creditNoteIgst,
+      interstateB2cTaxableValue, interstateB2cIgst,
+      itcTaxableValue, itcCgst, itcSgst, itcIgst,
+      rcmItcTaxableValue, rcmItcCgst, rcmItcSgst, rcmItcIgst,
+      debitNoteTaxableValue, debitNoteCgst, debitNoteSgst, debitNoteIgst,
+      exemptInwardValue,
+      netTaxPayable,
+      totalOutputTax, totalRcmInward, totalCreditNoteTax, totalItc, totalRcmItc, totalDebitNoteTax,
+    } = values
 
     // === Upsert the snapshot ===
     const filingStatus = action === 'file' ? 'filed' : 'draft'

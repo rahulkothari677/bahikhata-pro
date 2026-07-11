@@ -210,14 +210,18 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const existingShouldIncrement = existing.type === 'purchase' || (existing.type === 'credit-note' && existing.affectsStock)
     const existingAffectsStock = existingShouldDecrement || existingShouldIncrement
 
-    // 🔒 V11 STOCK POLICY: For sale edits, compute the NET stock impact per
-    // product. Old sale items are added back (stock increases), new sale items
-    // are decremented (stock decreases). If any product's resulting stock < 0:
-    //   - 'block' mode → return 400 (reject the edit)
-    //   - 'allow' mode → add to stockWarnings (sale goes through with warning)
+    // 🔒 V11 STOCK POLICY: For ALL stock-affecting edits, compute the NET stock
+    // impact per product.
     //
-    // For purchase edits, we DON'T block (purchases add stock; reversing a
-    // purchase that was already sold is an edge case — not handled here).
+    // 🔒 V19-006 FIX: Previously only ran for sale→sale edits. Now runs for ALL
+    // stock-affecting transaction types (sale, purchase, credit-note w/ stock,
+    // debit-note w/ stock). The net change is:
+    //   - Old items: reversed (if old decremented, add back; if old incremented, remove)
+    //   - New items: applied (if new decrements, subtract; if new increments, add)
+    //
+    // If any product's resulting stock < 0:
+    //   - 'block' mode → return 400 (reject the edit)
+    //   - 'allow' mode → add to stockWarnings (edit goes through with warning)
     const stockWarnings: Array<{
       productId: string
       productName: string
@@ -226,31 +230,41 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       resultingStock: number
     }> = []
 
-    if (type === 'sale' && existing.type === 'sale') {
-      // Build a map of productId → net qty change (negative = stock decreases)
+    // Only check if either old or new transaction affects stock
+    if ((existingAffectsStock || shouldAffectStock) && !body.confirmOversell) {
       const netChangeMap = new Map<string, number>()
 
-      // Old items: add back (positive change)
-      for (const oldItem of oldItems) {
-        if (!oldItem.productId) continue
-        const product = productMap.get(oldItem.productId)
-        const oldQty = product?.unit
-          ? normalizeToUnit(Number(oldItem.quantity) || 0, oldItem.unit || product.unit, product.unit).quantity
-          : Number(oldItem.quantity) || 0
-        netChangeMap.set(oldItem.productId, (netChangeMap.get(oldItem.productId) || 0) + oldQty)
+      // Old items: reverse their stock impact
+      if (existingAffectsStock) {
+        for (const oldItem of oldItems) {
+          if (!oldItem.productId) continue
+          const product = productMap.get(oldItem.productId)
+          const oldQty = product?.unit
+            ? normalizeToUnit(Number(oldItem.quantity) || 0, oldItem.unit || product.unit, product.unit).quantity
+            : Number(oldItem.quantity) || 0
+          // If old transaction DECREMENTED stock (sale/debit-note), reversal ADDS back (+)
+          // If old transaction INCREMENTED stock (purchase/credit-note), reversal REMOVES (-)
+          const reversalSign = existingShouldDecrement ? 1 : -1
+          netChangeMap.set(oldItem.productId, (netChangeMap.get(oldItem.productId) || 0) + (oldQty * reversalSign))
+        }
       }
 
-      // New items: subtract (negative change)
-      for (const item of items) {
-        if (!item.productId) continue
-        const product = productMap.get(item.productId)
-        if (!product) continue
-        const newQty = normalizeToUnit(
-          Number(item.quantity) || 0,
-          item.unit || product.unit,
-          product.unit,
-        ).quantity
-        netChangeMap.set(item.productId, (netChangeMap.get(item.productId) || 0) - newQty)
+      // New items: apply their stock impact
+      if (shouldAffectStock) {
+        for (const item of items) {
+          if (!item.productId) continue
+          const product = productMap.get(item.productId)
+          if (!product) continue
+          const newQty = normalizeToUnit(
+            Number(item.quantity) || 0,
+            item.unit || product.unit,
+            product.unit,
+          ).quantity
+          // If new transaction DECREMENTS stock (sale/debit-note), subtract (-)
+          // If new transaction INCREMENTS stock (purchase/credit-note), add (+)
+          const newSign = shouldDecrementStock ? -1 : 1
+          netChangeMap.set(item.productId, (netChangeMap.get(item.productId) || 0) + (newQty * newSign))
+        }
       }
 
       // Check each affected product
@@ -263,14 +277,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
             productId: product.id,
             productName: product.name,
             currentStock: product.currentStock,
-            requestedQuantity: -netChange,  // the net qty being sold
+            requestedQuantity: -netChange,  // the net qty being removed
             resultingStock,
           })
         }
       }
 
       // Block mode: reject if any product would go negative
-      if (stockPolicy === 'block' && stockWarnings.length > 0 && !body.confirmOversell) {
+      if (stockPolicy === 'block' && stockWarnings.length > 0) {
         const lines = stockWarnings.map(w =>
           `• ${w.productName}: have ${w.currentStock}, would go to ${w.resultingStock}`
         ).join('\n')
