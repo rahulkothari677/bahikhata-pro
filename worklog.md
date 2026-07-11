@@ -2993,3 +2993,46 @@ Stage Summary:
   `npx tsx scripts/recompute-credit-note-profit.ts` (apply)
   Without this, existing credit notes (like CN-0002) will still show ₹0 profit until edited or re-created.
 - Phase 1 fixes complete. Ready for Phase 2 (GSTR-3B RCM net tax) when user verifies.
+
+---
+Task ID: bahikhata-v17-audit-phase2
+Agent: main
+Task: V17 Audit §2 (MEDIUM) — GSTR-3B RCM net tax understated: 3.1(d) fed by RCM sales, no RCM inward liability
+
+Work Log:
+- Read the GSTR-3B route (651 LOC) end-to-end. Confirmed both bugs:
+  * GET handler line 119-129: rcmOutwardAgg queries `type: 'sale', isReverseCharge: true` (RCM SALES). But GSTR-3B 3.1(d) "Inward supplies liable to reverse charge" should be RCM PURCHASES (GTA freight, legal fees).
+  * GET handler line 334-337: netTaxPayable = output + totalRcmOutward - creditNotes - ITC - totalRcmItc + debitNotes. The totalRcmItc (ITC on RCM purchases) is subtracted, but no corresponding RCM LIABILITY is added. For an RCM purchase of ₹10K + ₹1.8K GST: ₹1.8K ITC subtracted, ₹0 liability added → net tax understated by ₹1.8K.
+  * POST handler (lines 480-484, 576-579): same 2 bugs duplicated in the recompute path.
+- Fix applied to BOTH GET and POST paths:
+  1. Renamed `rcmOutwardAgg` → `rcmInwardAgg`. Changed query from `type: 'sale'` to `type: 'purchase'` (isReverseCharge=true). Now 3.1(d) is fed by RCM purchases (the liability side). The ITC side (rcmItcAgg) is unchanged — same purchases, same values.
+  2. Renamed `totalRcmOutward` → `totalRcmInward` in the netTaxPayable formula. Formula is now: `output + totalRcmInward - creditNotes - ITC - totalRcmItc + debitNotes`. For fully-creditable RCM, totalRcmInward == totalRcmItc (same purchases), so they cancel → net tax unchanged by RCM. If ITC is partially blocked, the liability still appears (correct).
+  3. Response field: `totalRcmOutward` → `totalRcmInward` (semantically accurate).
+- UI updates (Gstr3bReport.tsx):
+  * 3.1(d) label: "RCM outward" → "Inward supplies liable to RCM"
+  * CSV export row: same relabel
+  * Summary card: "RCM" → "RCM Inward" (liability)
+  * Header comment: "3.1(d) RCM outward" → "3.1(d) Inward supplies liable to reverse charge (RCM inward)"
+- Test updates (gstr-3b.test.ts):
+  * "Net tax payable formula" test: RCM ITC now equals RCM inward (360 = 360, same purchases). They cancel. Net = 1800 - 1080 = 720 (was 810 with the old buggy formula where RCM outward=360, RCM ITC=270 didn't cancel because they were different transactions).
+  * "RCM separation logic" test: now asserts 3.1(d) is RCM INWARD (purchases), not RCM sales.
+  * "Complete 3B scenario" test: RCM cancels (360-360=0), net=3510 (unchanged from before because the old test had RCM outward=360 and RCM ITC=360 which happened to cancel, but for the wrong reason).
+  * NEW test: "🔒 V17 Audit §2: RCM purchase cancels out (liability + ITC = 0 net effect)" — the key regression guard. Scenario: ₹10K regular sales (₹1.8K output) + ₹2K RCM purchase (₹360 liability + ₹360 ITC) + ₹6K regular purchase (₹1.08K ITC). Asserts netTaxPayable=720 (correct: 1800+360-1080-360=720) and explicitly NOT 360 (the old buggy value: 1800-1080-360=360). If this test ever fails, the §2 bug has regressed.
+- Verified:
+  * npx tsc --noEmit: 0 NEW errors
+  * npx next build: ✓ Compiled successfully
+  * npx jest gstr-3b: 21/21 pass (20 existing updated + 1 new RCM-cancel test)
+  * npx jest gstr-3b + net-sales + balance-reconciliation + soft-delete-sweep + staff-permissions: 97/97 pass (no regressions)
+- Committed (ed8f8cb) + pushed to GitHub
+
+Stage Summary:
+- Files changed: 3 (gstr-3b/route.ts, Gstr3bReport.tsx, gstr-3b.test.ts)
+- §2 MEDIUM bug FIXED: GSTR-3B now correctly handles RCM (reverse charge).
+  * 3.1(d) is now fed by RCM PURCHASES (inward liability), not RCM sales.
+  * netTaxPayable now includes the RCM inward liability (+ totalRcmInward) which cancels with the RCM ITC (- totalRcmItc) for fully-creditable RCM.
+  * A shop with an RCM purchase now files the CORRECT net tax. Before the fix, they would underpay GST by the RCM amount (interest/penalty exposure).
+- The fix is semantically correct for both cases:
+  * Fully-creditable RCM: liability + ITC cancel → net tax unchanged (correct).
+  * Partially-blocked ITC: liability appears in 3.1(d), only the credited portion appears in 4(b) → net tax increases by the blocked portion (correct).
+- NEW regression test locks in the fix: "RCM purchase cancels out" asserts net=720 (correct) and NOT 360 (old buggy value).
+- Phase 2 complete. Phase 3 (LOW findings: mixed nil-rated, exempt flag, snapshot CDN columns, nil+RCM overlap test) next.
