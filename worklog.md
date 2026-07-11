@@ -4541,3 +4541,51 @@ Stage Summary:
 - Bug registry: 5 FIXED, 4 OPEN (BUG-002 Low/Perf, BUG-008 Medium/TestInfra, BUG-009 Low/DataIssue, BUG-010 Low/APIDesign).
 - The write path is now READY for Phase 4: when DB columns change from Float to Int, just remove the fromPaise() conversions at the return boundary and the paise values will be written directly.
 - NEXT: Push to origin/main, wait for Vercel deploy + user verification. Then proceed to Phase 4 (Prisma migration — Float → Int columns, requires downtime window).
+
+---
+Task ID: v7-audit-fixes
+Agent: main
+Task: Analyze the V7 Comprehensive Audit Report (ekbook_v7_report.md), verify each issue, and fix all real bugs in phases.
+
+Work Log:
+- Read the full V7 audit report (485 lines, 18 issues: 4 Critical, 6 High, 5 Medium, 3 Low).
+- Verified each issue against the current codebase (many were fixed in prior audit cycles V6→V17).
+
+VERIFICATION RESULTS:
+  Already Fixed (8 issues):
+  - C1: Error leaking — all 22+ routes already return generic messages or use apiError()
+  - C2: Account delete OOM — findMany removed (🔒 FIX C6 comment confirms)
+  - C3: Stock race condition — check inside $transaction with conditional updateMany
+  - H4: Admin TOTP plaintext — TOTP removed from admin schema (schema now 289 lines, no TOTP field)
+  - H5: parties/[id] UTC chart — uses istMonthStartOffset(now, -5) (line 102)
+  - M3: z-ai-web-dev-sdk dead dep — actually used in scan-bill/route.ts (ZAI VLM provider, line 215)
+  - M5: ai-usage UTC — uses istDayStart + istMonthStart (line 39-41)
+  - H6: BillScanner preview GST — NOT A BUG. Preview computes qty*unitPrice*(1+gstRate/100) which is correct for no-discount scenario. Discount is applied at transaction creation, not at scan time.
+
+  Fixed in this session (4 issues):
+  - C4: Removed typescript.ignoreBuildErrors from bahikhata-admin/next.config.ts
+  - H3: Removed 'unsafe-eval' from admin CSP script-src (kept 'unsafe-inline' — nonce-based CSP needs middleware, deferred)
+  - H3: Added HSTS + Permissions-Policy headers to admin panel (were missing)
+  - M1: Added Permissions-Policy: camera=self, microphone=(), geolocation=() to main app next.config.ts
+  - M2: Replaced 5 console.log in CapacitorBridge.tsx with comments (client-side, but noisy)
+  - M2: Changed 2 console.log in verify-db-config.ts to console.debug (serverless log noise reduction)
+
+  Deferred (6 issues):
+  - H1: 'as any' in 49 files — large effort, needs careful TypeScript type work. Worst offenders: auth.ts (10), get-auth.ts (5).
+  - H2: Admin panel has zero test files — needs test infrastructure setup (separate from main app)
+  - M4: Admin auth.ts 'as any' (6 instances) — part of H1, same fix approach
+  - L1: 2 TODOs in account/delete — acknowledged, harmless (Cloudinary cleanup)
+  - L2: vercel.json comment — cosmetic
+  - L3: Admin next.config TODO — cosmetic
+
+- VERIFICATION:
+    * npx tsc --noEmit: 0 errors (codebase fully type-clean)
+    * npx eslint: clean on all modified files
+    * npx jest (paise-helpers + money): 81 tests pass
+
+Stage Summary:
+- V7 audit analysis complete. 8 of 18 issues were already fixed in prior audit cycles. 4 fixed in this session. 6 deferred (H1/H2 need significant effort, L1-L3 are cosmetic).
+- Main app security headers now include Permissions-Policy (M1 fix).
+- Admin panel no longer suppresses type errors (C4 fix) and has stricter CSP (H3 partial fix).
+- No new bugs found during the fix process.
+- NEXT: Wait for auditor's response on the paise migration report. H1 (as any cleanup) is the next highest-priority deferred item if the user wants to continue.
