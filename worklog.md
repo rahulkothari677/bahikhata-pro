@@ -2926,3 +2926,70 @@ Stage Summary:
 - Single definition of "revenue net of returns" in net-sales.ts — tested once (20 tests), used everywhere. This is the discipline the auditor recommended in §5.1.
 - GOLDEN TEST locks in the fix: "₹10,000 sale + ₹3,000 credit note = ₹7,000 net" — if this ever regresses, the test fails immediately.
 - Phase 1 complete. Phase 2 (GSTR-3B RCM net tax) next.
+
+---
+Task ID: bahikhata-v17-audit-phase1-fixes
+Agent: main
+Task: V17 Audit Phase 1 user-reported bugs — credit note profit=0, not visible in original transaction, not pre-filled on creation
+
+Work Log:
+- User reported via screenshots (Screenshot 612, 613):
+  * Dashboard showed ₹8,254.58 revenue, ₹534.94 profit — profit unchanged after credit note
+  * Sales Ledger showed credit note CN-0002 with ₹0 profit (should be negative)
+  * Opening the original sale showed no indication a credit note was issued against it
+  * Clicking "Credit Note" on a sale opened an empty form (items not pre-filled)
+- Root cause analysis — found 4 bugs:
+  * Bug A (line-items.ts:128): `if (type === 'sale' && p.product)` — profit ONLY computed for type='sale'. Credit notes (type='credit-note') skipped the profit block entirely, so grossProfit stayed 0.
+  * Bug B (transactions/[id]/route.ts:26-30): GET handler included items/party/createdBy but NOT reversalTransactions or originalTransaction. The TransactionDetail UI had no data to display linked notes.
+  * Bug C (TransactionDetail.tsx:372-381): "Create Credit Note" preset only passed partyId, date, originalTransactionId, noteType — did NOT pass items. User had to re-enter all items manually.
+  * Bug D (Ledger.tsx:272): `totalProfit = filtered.reduce((s, t) => s + (t.grossProfit || 0), 0)` — ADDED credit-note profit (₹0 pre-fix). Should SUBTRACT credit-note profit.
+- Bug A FIX (line-items.ts):
+  * Changed condition from `type === 'sale'` to `type === 'sale' || type === 'credit-note'`
+  * Compute itemProfit = (realizedUnitPrice - purchasePrice) × quantity (same as sale)
+  * For credit notes: grossProfit = roundMoney(grossProfit - itemProfit) (NEGATE — reverses sale profit)
+  * For sales: grossProfit = roundMoney(grossProfit + itemProfit) (normal — unchanged)
+  * Debit notes still skip profit (purchases don't carry profit, only ITC)
+  * Result: sale ₹10K (profit ₹3K) + credit note ₹3K (profit -₹900) = net ₹2,100 profit
+- Bug B FIX (transactions/[id]/route.ts + TransactionDetail.tsx):
+  * API: Added reversalTransactions (where deletedAt:null, select invoiceNo/type/noteType/noteReason/date/totalAmount/grossProfit/paidAmount/affectsStock, orderBy date desc) + originalTransaction (select invoiceNo/type/date/totalAmount) to the Prisma include
+  * UI: Added violet "Credit Notes Issued" card (shows when txn.reversalTransactions.length > 0) with:
+    - Each note as a clickable row (navigates to the note's detail)
+    - Invoice number, "Credit Note" badge, "Stock Adjusted" badge if affectsStock
+    - Date + note reason
+    - Negative amount (-₹X) in violet
+    - Negative profit (-₹X profit) in rose if grossProfit > 0
+    - Footer: "Total adjusted: -₹X"
+  * UI: Added blue "Original Sale" card (shows when txn.originalTransaction exists) — for credit notes viewing their parent sale. Clickable to navigate back.
+- Bug C FIX (TransactionDetail.tsx):
+  * "Create Credit Note" preset now includes `items: txn.items?.map(...)` with productId, productName, quantity, unitPrice, gstRate, unit
+  * User sees the original sale's items pre-filled in the credit note form — can adjust quantities for partial returns instead of re-entering everything
+- Bug D FIX (Ledger.tsx):
+  * totalProfit now: `sales ADD grossProfit, credit notes SUBTRACT grossProfit, others 0`
+  * Added per-card negative profit display for credit notes:
+    - Desktop list: `-₹X` in rose text (when grossProfit > 0)
+    - Mobile card: `-₹X profit reversed` in rose text
+- Backfill script (scripts/recompute-credit-note-profit.ts):
+  * Existing credit notes in the DB have grossProfit=0 (created before the fix)
+  * Script finds all credit-notes with grossProfit=0, recomputes from stored items using the same formula, updates the DB
+  * Supports --dry-run mode (preview before applying)
+  * Founder must run once after deploy: `npx tsx scripts/recompute-credit-note-profit.ts`
+- Verified:
+  * npx tsc --noEmit: 0 NEW errors
+  * npx next build: ✓ Compiled successfully
+  * npx jest net-sales + balance-reconciliation + soft-delete-sweep + gstr-3b: 54/54 pass
+- Committed (86f458c) + pushed to GitHub
+
+Stage Summary:
+- Files changed: 5 (line-items.ts, transactions/[id]/route.ts, TransactionDetail.tsx, Ledger.tsx, recompute-credit-note-profit.ts [new])
+- 4 bugs fixed:
+  * Credit notes now store NEGATIVE grossProfit (reverses sale profit)
+  * Original sale's detail page shows linked credit notes (violet card, clickable)
+  * Credit note's detail page shows original sale link (blue card, clickable)
+  * "Create Credit Note" pre-fills items from the original sale
+  * Ledger totalProfit correctly nets credit-note profit
+  * Ledger shows negative profit on credit-note cards
+- FOUNDER ACTION REQUIRED: Run the backfill script after deploy to fix existing credit notes:
+  `npx tsx scripts/recompute-credit-note-profit.ts --dry-run` (preview)
+  `npx tsx scripts/recompute-credit-note-profit.ts` (apply)
+  Without this, existing credit notes (like CN-0002) will still show ₹0 profit until edited or re-created.
+- Phase 1 fixes complete. Ready for Phase 2 (GSTR-3B RCM net tax) when user verifies.
