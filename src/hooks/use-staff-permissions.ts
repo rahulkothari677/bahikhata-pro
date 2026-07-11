@@ -15,7 +15,7 @@ import { DEFAULT_STAFF_PERMISSIONS, type ModuleKey, type StaffPermissions } from
 
 export function useStaffPermissions() {
   const { data: session } = useSession()
-  const user = session?.user as any
+  const user = session?.user
 
   const isOwner = !user?.role || user?.role === 'owner'
   const isCA = user?.role === 'ca' // V17-Ext Tier 3: CA role
@@ -39,9 +39,14 @@ export function useStaffPermissions() {
     if (isCA) {
       return CA_PERMISSIONS
     }
-    // Staff — use their saved permissions
-    if (user?.permissions && typeof user.permissions === 'object') {
-      return { ...DEFAULT_STAFF_PERMISSIONS, ...user.permissions }
+    // Staff — use their saved permissions (stored as JSON string in session)
+    if (user?.permissions && typeof user.permissions === 'string') {
+      try {
+        const parsed = JSON.parse(user.permissions) as Partial<StaffPermissions>
+        return { ...DEFAULT_STAFF_PERMISSIONS, ...parsed }
+      } catch {
+        return DEFAULT_STAFF_PERMISSIONS
+      }
     }
     return DEFAULT_STAFF_PERMISSIONS
   }, [isOwner, isCA, user?.permissions])

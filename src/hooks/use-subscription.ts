@@ -120,7 +120,7 @@ export function useSubscription() {
       })
     } else {
       // User has the feature in their plan but hit the daily limit (e.g. 20/20 scans today)
-      const usageInfo = usage as any
+      const usageInfo = usage as Record<string, any>
       const featureUsage = feature === 'ai_scanner' ? usageInfo?.aiScans : feature === 'voice_entry' ? usageInfo?.voiceEntries : null
       if (featureUsage && featureUsage.remaining === 0) {
         sonnerToast.error(`Daily limit reached for ${info.label}`, {

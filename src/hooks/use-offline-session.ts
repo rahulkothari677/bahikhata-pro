@@ -56,7 +56,7 @@ export function useOfflineSession(): OfflineSessionState {
   // Whenever NextAuth gives us a real session, persist it to IndexedDB
   useEffect(() => {
     if (status === 'authenticated' && session?.user) {
-      const u = session.user as any
+      const u = session.user
       // Guard: don't save if user.id is missing (would create a broken session)
       if (!u.id) {
         console.warn('[offline] Skipping session cache — user.id missing')
@@ -67,7 +67,7 @@ export function useOfflineSession(): OfflineSessionState {
           id: u.id,
           email: u.email || '',
           name: u.name || null,
-          role: u.role || 'owner',
+          role: (u.role as 'owner' | 'staff') || 'owner',
           ownerId: u.ownerId || null,
         },
         expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,
