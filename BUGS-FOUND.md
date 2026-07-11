@@ -20,6 +20,28 @@ and include enough context to reproduce.
 
 <!-- Add new bugs below this line. Newest first. -->
 
+### BUG-010 — `item.discountAmount` input field is accepted but silently ignored (Low/APIDesign)
+
+- **Found**: 2026-07-11, during Phase 3 pre-change scan of `line-items.ts` + `validation.ts`
+- **File**: `src/lib/validation.ts:26` (Zod schema) + `src/lib/line-items.ts` (computeLineItems)
+- **Severity**: Low (API design issue, no data corruption)
+- **Description**: The `transactionItemSchema` accepts a `discountAmount` field per line item:
+  ```ts
+  discountAmount: z.coerce.number().min(0).optional().default(0)
+  ```
+  But `computeLineItems()` NEVER reads `item.discountAmount` from the input. It computes the per-item discount as the proportional share of the ORDER-level discount:
+  ```ts
+  const perItemDiscounts = distributeDiscountProportionally(grossAmounts, toMoney(orderDiscount))
+  const itemDiscount = roundMoney(perItemDiscounts[idx])
+  ```
+  So if a client sends `items: [{ productName: 'X', quantity: 2, unitPrice: 100, discountAmount: 50 }]`, the `discountAmount: 50` is **silently dropped**. The stored `discountAmount` will be the proportional share of the order-level discount (0 if no order discount).
+- **Impact**: 
+  - No data corruption (the stored value is always correct — proportional share of order discount)
+  - But: misleading API — the field suggests per-item discounts are supported, when they're not
+  - If a frontend developer builds a "per-item discount" UI based on this field, it will appear to work (no error) but the discount won't be applied
+- **Fix**: Either (a) remove `discountAmount` from the item input schema (breaking change for any client that sends it), or (b) implement per-item discount support in `computeLineItems` (add `item.discountAmount` to the per-item discount calculation). Option (b) is more user-friendly but changes behavior.
+- **Status**: OPEN — defer to a future API design cleanup sub-phase (not blocking paise migration)
+
 ### BUG-009 — GSTR-1 reconciliation mismatch on demo data (Low/DataIssue)
 
 - **Found**: 2026-07-11, user reported "Cannot export GSTR-1 — data inconsistency detected" error

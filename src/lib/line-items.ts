@@ -17,9 +17,12 @@
  *     all reports stay GST-correct.
  *   - PROPORTIONAL DISCOUNT (V10 §2.1): the order-level discount is distributed
  *     across items by taxable share BEFORE GST.
+ *
+ * 🔒 V17 PAISE MIGRATION Phase 3: All internal math is now done in PAISE
+ * (integer arithmetic) to eliminate float drift. See computeLineItems docblock.
  */
 
-import { roundMoney, calculateGst, splitGst, distributeDiscountProportionally, toMoney } from './money'
+import { roundMoney, calculateGst, splitGst, distributeDiscountProportionally, toMoney, toPaise, fromPaise, multiplyPaise, calculateGstPaise, splitGstPaise, addPaise } from './money'
 import { normalizeUnitName, resolveEnteredQuantity, isSubUnit } from './units'
 
 export interface RawLineItem {
@@ -63,6 +66,20 @@ export interface LineItemResult {
 /**
  * Compute all stored line items + header totals for a sale/purchase.
  * `orderDiscount` must already be validated (≤ subtotal) by the caller.
+ *
+ * 🔒 V17 PAISE MIGRATION Phase 3: All internal math is now done in PAISE
+ * (integer arithmetic) to eliminate float drift. Inputs are converted to
+ * paise at the top, all calculations use integer arithmetic (multiplyPaise,
+ * calculateGstPaise, splitGstPaise, addPaise), and results are converted
+ * back to rupees (via fromPaise) at the return boundary.
+ *
+ * This is a PURE REFACTOR — the output is byte-identical to the previous
+ * rupee-based implementation. The paise helpers apply the same 1e-9 nudge
+ * as roundMoney, so the rounding behavior is preserved exactly.
+ *
+ * When Phase 4 migrates the DB columns from Float (rupees) to Int (paise),
+ * the final fromPaise() conversions at the return boundary can be removed —
+ * the paise values will be written directly to the Int columns.
  */
 export function computeLineItems(opts: {
   items: RawLineItem[]
@@ -73,12 +90,17 @@ export function computeLineItems(opts: {
 }): LineItemResult {
   const { items, productMap, isInterState, orderDiscount, type } = opts
 
-  // Step 1: normalize each line (unit + GST-inclusive → taxable unit price).
+  // 🔒 V17 Phase 3: Convert order discount to paise once (integer for all math)
+  const orderDiscountPaise = toPaise(toMoney(orderDiscount))
+
+  // Step 1: normalize each line (unit + GST-inclusive -> taxable unit price).
+  // 🔒 V17 Phase 3: unitPrice is converted to paise immediately. All downstream
+  // math (grossAmount, discount, GST, profit) uses paise arithmetic.
   const prepared = items.map((item) => {
     const product = item.productId ? productMap.get(item.productId) : null
     // 🔒 V12.3: Normalize via resolveEnteredQuantity for EVERY line, not just
-    // product-linked ones. Linked → product's unit. UNLINKED sub-unit (gm/ml/cm)
-    // → the family's base unit (500 gm → 0.5 kg), because an Indian price like
+    // product-linked ones. Linked -> product's unit. UNLINKED sub-unit (gm/ml/cm)
+    // -> the family's base unit (500 gm -> 0.5 kg), because an Indian price like
     // "₹20" on a gm/ml line almost always means per kg/ltr. Previously an
     // unlinked scanned/typed "500 gm × ₹20" line skipped normalization and
     // stored ₹10,000 — the scanner flow hit this every time (no product match).
@@ -88,81 +110,95 @@ export function computeLineItems(opts: {
     const quantity = norm.quantity
     const unit = norm.unit
     const gstRate = toMoney(item.gstRate) || 0
-    const enteredPrice = toMoney(item.unitPrice)
+    const enteredPriceRupees = toMoney(item.unitPrice)
     // GST-inclusive: back-calculate the taxable (ex-GST) unit price so the
-    // stored line and all reports are GST-correct. Falls back to product flag.
+    // stored line and all reports stay GST-correct. Falls back to product flag.
+    // 🔒 V17 Phase 3: back-calc in RUPEES (matches old behavior), then convert to paise.
+    // The back-calc formula (price * 100 / (100 + rate)) needs rupee-level precision
+    // to match the old roundMoney behavior. Converting to paise after roundMoney
+    // preserves the exact same unitPrice value.
     const includesGst = item.priceIncludesGst ?? product?.priceIncludesGst ?? false
-    const unitPrice = includesGst && gstRate > 0
-      ? roundMoney((enteredPrice * 100) / (100 + gstRate))
-      : enteredPrice
-    return { item, product, quantity, unit, gstRate, unitPrice, rawQuantity, rawUnit }
+    const unitPriceRupees = includesGst && gstRate > 0
+      ? roundMoney((enteredPriceRupees * 100) / (100 + gstRate))
+      : enteredPriceRupees
+    const unitPricePaise = toPaise(unitPriceRupees)
+    return { item, product, quantity, unit, gstRate, unitPriceRupees, unitPricePaise, rawQuantity, rawUnit }
   })
 
-  // Step 2: pre-discount taxable value per line = quantity × taxable unit price.
-  const grossAmounts = prepared.map((p) => roundMoney(p.quantity * p.unitPrice))
-  const perItemDiscounts = distributeDiscountProportionally(grossAmounts, toMoney(orderDiscount))
+  // Step 2: pre-discount taxable value per line = quantity × taxable unit price (in paise).
+  // 🔒 V17 Phase 3: multiplyPaise does Math.round(qty * pricePaise) — integer result, no drift.
+  const grossAmountsPaise = prepared.map((p) => multiplyPaise(p.quantity, p.unitPricePaise))
+  // 🔒 V17 Phase 3: distributeDiscountProportionally works in rupees (roundMoney-based).
+  // Convert gross amounts to rupees for the distribution, then convert the per-item
+  // discounts back to paise. This preserves the exact same proportional distribution
+  // as the old code (the function uses roundMoney internally).
+  const grossAmountsRupees = grossAmountsPaise.map(gp => fromPaise(gp))
+  const perItemDiscountsRupees = distributeDiscountProportionally(grossAmountsRupees, toMoney(orderDiscount))
+  const perItemDiscountsPaise = perItemDiscountsRupees.map(d => toPaise(d))
 
-  let subtotal = 0
-  let cgst = 0, sgst = 0, igst = 0
-  let grossProfit = 0
+  let subtotalPaise = 0
+  let cgstPaise = 0, sgstPaise = 0, igstPaise = 0
+  let grossProfitPaise = 0
 
   const txItems: StoredLineItem[] = prepared.map((p, idx) => {
-    const grossAmount = grossAmounts[idx]
-    const itemDiscount = roundMoney(perItemDiscounts[idx])
-    const taxableAmount = roundMoney(grossAmount - itemDiscount)  // post-discount
-    const itemGst = calculateGst(taxableAmount, p.gstRate)         // GST on post-discount
-    const itemTotal = roundMoney(taxableAmount + itemGst)
-    subtotal = roundMoney(subtotal + grossAmount)
+    const grossAmountPaise = grossAmountsPaise[idx]
+    const itemDiscountPaise = perItemDiscountsPaise[idx]
+    const taxableAmountPaise = grossAmountPaise - itemDiscountPaise  // integer subtraction, exact
+    const itemGstPaise = calculateGstPaise(taxableAmountPaise, p.gstRate)  // integer GST
+    const itemTotalPaise = taxableAmountPaise + itemGstPaise  // integer addition, exact
+    subtotalPaise = addPaise(subtotalPaise, grossAmountPaise)
 
-    let itemCgst = 0, itemSgst = 0, itemIgst = 0
+    let itemCgstPaise = 0, itemSgstPaise = 0, itemIgstPaise = 0
     if (isInterState) {
-      itemIgst = itemGst
-      igst = roundMoney(igst + itemGst)
+      itemIgstPaise = itemGstPaise
+      igstPaise = addPaise(igstPaise, itemGstPaise)
     } else {
-      const { cgst: c, sgst: s } = splitGst(itemGst)
-      itemCgst = c
-      itemSgst = s
-      cgst = roundMoney(cgst + c)
-      sgst = roundMoney(sgst + s)
+      const { cgst, sgst } = splitGstPaise(itemGstPaise)  // integer split, exact
+      itemCgstPaise = cgst
+      itemSgstPaise = sgst
+      cgstPaise = addPaise(cgstPaise, cgst)
+      sgstPaise = addPaise(sgstPaise, sgst)
     }
 
-    // Profit on the post-discount realized price (V10 §2.4). quantity is now in
-    // the product's unit, so purchasePrice (per product unit) lines up exactly.
-    //
+    // Profit on the post-discount realized price (V10 §2.4).
     // 🔒 V17 Audit §1 FIX: Credit notes (type='credit-note') must compute a
     // NEGATIVE grossProfit — they reverse the profit booked on the original sale.
-    // A return reverses both revenue AND cost, so the profit reversal =
-    // -(realizedUnitPrice - purchasePrice) × quantity. Before this fix, credit
-    // notes had grossProfit=0 (the `type === 'sale'` check skipped them), so
-    // dashboard/P&L profit was overstated by the return amount.
     //
-    // Debit notes (type='debit-note') don't carry grossProfit (purchases don't
-    // have profit) — they only affect ITC, which is handled in GST reports.
+    // 🔒 V17 Phase 3: profit calc in paise. realizedUnitPrice = taxableAmountPaise / quantity
+    // (a Float division, then round to nearest paisa). profit = (realized - purchasePrice) * qty.
+    // To match old behavior exactly, we compute in rupees (the old code used roundMoney on
+    // Float values). Converting to paise for the final accumulation.
     let purchasePriceAtSale = 0
+    let itemProfitPaise = 0
     if ((type === 'sale' || type === 'credit-note') && p.product) {
       purchasePriceAtSale = p.product.purchasePrice
-      const realizedUnitPrice = p.quantity > 0 ? roundMoney(taxableAmount / p.quantity) : 0
-      const itemProfit = roundMoney((realizedUnitPrice - p.product.purchasePrice) * p.quantity)
+      const taxableAmountRupees = fromPaise(taxableAmountPaise)
+      const realizedUnitPriceRupees = p.quantity > 0 ? roundMoney(taxableAmountRupees / p.quantity) : 0
+      const itemProfitRupees = roundMoney((realizedUnitPriceRupees - p.product.purchasePrice) * p.quantity)
+      itemProfitPaise = toPaise(itemProfitRupees)
       // Credit notes NEGATE the profit (they reverse the original sale's profit).
       // Sales ADD the profit. This way, sale + credit-note = net profit.
-      grossProfit = type === 'credit-note'
-        ? roundMoney(grossProfit - itemProfit)  // subtract (reverse)
-        : roundMoney(grossProfit + itemProfit)  // add (normal sale)
+      grossProfitPaise = type === 'credit-note'
+        ? addPaise(grossProfitPaise, -itemProfitPaise)  // subtract (reverse)
+        : addPaise(grossProfitPaise, itemProfitPaise)   // add (normal sale)
     }
 
+    // 🔒 V17 Phase 3: Convert paise values back to rupees for the StoredLineItem.
+    // The StoredLineItem interface uses rupee Floats (matching the DB column type).
+    // When Phase 4 migrates columns to Int, these fromPaise() calls can be removed.
     return {
       productId: p.item.productId || null,
       productName: p.item.productName,
       quantity: p.quantity,
       unit: p.unit,
-      unitPrice: p.unitPrice,
+      unitPrice: p.unitPriceRupees,
       purchasePriceAtSale,
       gstRate: p.gstRate,
-      discountAmount: itemDiscount,
-      cgst: itemCgst,
-      sgst: itemSgst,
-      igst: itemIgst,
-      total: itemTotal,
+      discountAmount: fromPaise(itemDiscountPaise),
+      cgst: fromPaise(itemCgstPaise),
+      sgst: fromPaise(itemSgstPaise),
+      igst: fromPaise(itemIgstPaise),
+      total: fromPaise(itemTotalPaise),
       // 🔒 V17 Audit Phase 10: preserve the user's original input
       enteredQuantity: p.rawQuantity,
       enteredUnit: p.rawUnit,
@@ -170,20 +206,28 @@ export function computeLineItems(opts: {
   })
 
   // 🔒 V17-Ext Reconciliation FIX: Header CGST/SGST/IGST must EXACTLY equal
-  // the sum of the per-item values. Was: accumulated during the loop with
-  // roundMoney at each step (cgst = roundMoney(cgst + c)). That can drift from
-  // Postgres SUM(item.cgst) due to float accumulation differences.
-  //
-  // Now: after all items are computed, derive the header from the stored item
-  // values. This makes the header a DERIVED value — by construction,
-  // SUM(headers) = SUM(items), so the reconciliation check always passes.
-  cgst = roundMoney(txItems.reduce((sum, item) => sum + item.cgst, 0))
-  sgst = roundMoney(txItems.reduce((sum, item) => sum + item.sgst, 0))
-  igst = roundMoney(txItems.reduce((sum, item) => sum + item.igst, 0))
+  // the sum of the per-item values. Derive from stored items (integer sum in paise).
+  // 🔒 V17 Phase 3: addPaise with spread does integer sum — no float drift.
+  cgstPaise = addPaise(...txItems.map(item => toPaise(item.cgst)))
+  sgstPaise = addPaise(...txItems.map(item => toPaise(item.sgst)))
+  igstPaise = addPaise(...txItems.map(item => toPaise(item.igst)))
 
-  const totalBeforeRoundOff = roundMoney((subtotal - toMoney(orderDiscount)) + cgst + sgst + igst)
+  // 🔒 V17 Phase 3: totalBeforeRoundOff in paise (integer arithmetic), then convert to rupees.
+  const totalBeforeRoundOffPaise = subtotalPaise - orderDiscountPaise + cgstPaise + sgstPaise + igstPaise
 
-  return { txItems, subtotal, cgst, sgst, igst, grossProfit, totalBeforeRoundOff }
+  // 🔒 V17 Phase 3: Convert all paise values back to rupees for the return.
+  // roundMoney is applied to the rupee values to handle any float drift from the
+  // fromPaise division (though paise values are exact integers, /100 can produce
+  // float artifacts like 0.30000000000000004).
+  return {
+    txItems,
+    subtotal: roundMoney(fromPaise(subtotalPaise)),
+    cgst: roundMoney(fromPaise(cgstPaise)),
+    sgst: roundMoney(fromPaise(sgstPaise)),
+    igst: roundMoney(fromPaise(igstPaise)),
+    grossProfit: roundMoney(fromPaise(grossProfitPaise)),
+    totalBeforeRoundOff: roundMoney(fromPaise(totalBeforeRoundOffPaise)),
+  }
 }
 
 export interface PriceWarning {
