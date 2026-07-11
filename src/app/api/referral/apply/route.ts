@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { rateLimit, rateLimitedResponse } from '@/lib/rate-limit'
 import { validateBody, applyReferralSchema } from '@/lib/validation'
 import { db } from '@/lib/db'
 import { getAuthContext, assertCanWrite } from '@/lib/get-auth'
@@ -41,6 +42,10 @@ export async function POST(req: NextRequest) {
     if (writeError) return writeError
 
     const userId = authCtx.userId
+    // 🔒 V18: Rate limit referral application (3/hour — prevents brute force)
+    const rl = await rateLimit(`referral:${userId}`, { limit: 3, windowSec: 3600 })
+    if (!rl.success) return rateLimitedResponse(rl)
+
 
     const body = await req.json()
     const validation = validateBody(applyReferralSchema, body)

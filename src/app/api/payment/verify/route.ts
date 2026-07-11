@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { rateLimit, rateLimitedResponse } from '@/lib/rate-limit'
 import { getAuthUserIdOwnerOnly } from '@/lib/get-auth'
 import { db } from '@/lib/db'
 import crypto from 'crypto'
@@ -33,6 +34,9 @@ export async function POST(req: NextRequest) {
   try {
     const { userId, error } = await getAuthUserIdOwnerOnly()
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // 🔒 V18: Rate limit payment verification (10/min per user)
+    const rl = await rateLimit(`payment-verify:${userId}`, { limit: 10, windowSec: 60 })
+    if (!rl.success) return rateLimitedResponse(rl)
 
     const body = await req.json()
     const {

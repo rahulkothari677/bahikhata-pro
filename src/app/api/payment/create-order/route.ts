@@ -4,6 +4,7 @@ import { getAuthUserIdOwnerOnly } from '@/lib/get-auth'
 import { db } from '@/lib/db'
 import Razorpay from 'razorpay'
 import { apiError } from '@/lib/api-error'
+import { rateLimit, rateLimitedResponse } from '@/lib/rate-limit'
 
 /**
  * POST /api/payment/create-order
@@ -25,6 +26,9 @@ export async function POST(req: NextRequest) {
   try {
     const { userId, error } = await getAuthUserIdOwnerOnly()
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // 🔒 V18: Rate limit payment creation (10/min per user)
+    const rl = await rateLimit(`payment-create:${userId}`, { limit: 10, windowSec: 60 })
+    if (!rl.success) return rateLimitedResponse(rl)
 
     const body = await req.json()
     const validation = validateBody(createOrderSchema, body)

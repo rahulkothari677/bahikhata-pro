@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { rateLimit, rateLimitedResponse } from '@/lib/rate-limit'
 import { db } from '@/lib/db'
 import { getAuthContext, assertCanWrite } from '@/lib/get-auth'
 import { canAccessModule } from '@/lib/staff-permissions'
@@ -22,6 +23,10 @@ export async function GET(req: NextRequest) {
     const authCtx = await getAuthContext()
     if (authCtx.error || !authCtx.userId) return authCtx.error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     const userId = authCtx.userId
+    // 🔒 V18: Rate limit payment creation (20/min per user)
+    const rl = await rateLimit(`payments:${userId}`, { limit: 20, windowSec: 60 })
+    if (!rl.success) return rateLimitedResponse(rl)
+
 
     // 🔒 FIX H1: Staff need 'parties' permission to view payments
     if (!canAccessModule(authCtx.role, authCtx.permissions, 'parties')) {
