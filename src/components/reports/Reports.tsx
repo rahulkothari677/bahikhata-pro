@@ -28,6 +28,7 @@ import { exportPLReportCSV, exportGSTReportCSV, exportStockReportCSV, exportPart
 import { exportToTally } from '@/lib/tally-export'
 import { DebtAgingReport } from '@/components/reports/DebtAgingReport'
 import { InventoryAgingReport } from '@/components/reports/InventoryAgingReport'
+import { Gstr1Report } from '@/components/reports/Gstr1Report'
 import { Gstr3bReport } from '@/components/reports/Gstr3bReport'
 import { Gstr2bReconciliation } from '@/components/reports/Gstr2bReconciliation'
 
@@ -36,7 +37,7 @@ const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 
 export function Reports() {
   const { t } = useTranslation()
   const { features } = useAppStore()
-  const [reportType, setReportType] = useState<'pl' | 'gst' | 'stock' | 'party' | 'debt-aging' | 'inventory-aging' | 'gstr-3b' | 'gstr-2b'>('pl')
+  const [reportType, setReportType] = useState<'pl' | 'gst' | 'stock' | 'party' | 'debt-aging' | 'inventory-aging' | 'gstr-1' | 'gstr-3b' | 'gstr-2b'>('pl')
   const [dateRange, setDateRange] = useState<DateRange>(() => getPresetRange('thisMonth'))
   const [datePreset, setDatePreset] = useState<DatePreset>('thisMonth')
   const [exportingGstr, setExportingGstr] = useState(false)
@@ -106,7 +107,7 @@ export function Reports() {
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['report', reportType, dateRange.from.toISOString(), dateRange.to.toISOString()],
-    enabled: reportType !== 'gstr-3b' && reportType !== 'gstr-2b', // GSTR-3B and 2B have their own data fetching
+    enabled: reportType !== 'gstr-1' && reportType !== 'gstr-3b' && reportType !== 'gstr-2b', // GSTR-1, 3B, 2B have their own data fetching
     queryFn: async () => {
       // Debt aging uses party report data (includes transactions per party)
       // Inventory aging uses stock report data (includes products with createdAt)
@@ -213,7 +214,7 @@ export function Reports() {
       </div>
 
       {/* Period selector + export toolbar (hidden for GSTR-3B which has its own month picker) */}
-      {reportType !== 'gstr-3b' && reportType !== 'gstr-2b' && (
+      {reportType !== 'gstr-1' && reportType !== 'gstr-3b' && reportType !== 'gstr-2b' && (
       <Card className="shadow-card border-border/60 no-print">
         <CardContent className="p-3 lg:p-4">
           <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
@@ -287,6 +288,7 @@ export function Reports() {
             <ReportTabButton value="party" active={reportType === 'party'} icon={Users} label="Party" onClick={() => setReportType('party')} />
             <ReportTabButton value="debt-aging" active={reportType === 'debt-aging'} icon={Clock} label="Debt Aging" onClick={() => setReportType('debt-aging')} />
             <ReportTabButton value="inventory-aging" active={reportType === 'inventory-aging'} icon={AlertTriangle} label="Inv Aging" onClick={() => setReportType('inventory-aging')} />
+            <ReportTabButton value="gstr-1" active={reportType === 'gstr-1'} icon={FileText} label="GSTR-1" onClick={() => setReportType('gstr-1')} />
             <ReportTabButton value="gstr-3b" active={reportType === 'gstr-3b'} icon={FileText} label="GSTR-3B" onClick={() => setReportType('gstr-3b')} />
             <ReportTabButton value="gstr-2b" active={reportType === 'gstr-2b'} icon={FileCheck} label="GSTR-2B" onClick={() => setReportType('gstr-2b')} />
           </div>
@@ -311,6 +313,9 @@ export function Reports() {
           </TabsTrigger>
           <TabsTrigger value="inventory-aging" className="gap-1.5 py-2">
             <AlertTriangle className="w-3.5 h-3.5" /> Inv Aging
+          </TabsTrigger>
+          <TabsTrigger value="gstr-1" className="gap-1.5 py-2">
+            <FileText className="w-3.5 h-3.5" /> GSTR-1
           </TabsTrigger>
           <TabsTrigger value="gstr-3b" className="gap-1.5 py-2">
             <FileText className="w-3.5 h-3.5" /> GSTR-3B
@@ -337,6 +342,9 @@ export function Reports() {
         </TabsContent>
         <TabsContent value="inventory-aging" className="mt-4">
           {error ? <ReportError message={(error as Error).message} /> : isLoading || !data ? <ReportSkeleton /> : <InventoryAgingReport data={data} />}
+        </TabsContent>
+        <TabsContent value="gstr-1" className="mt-4">
+          <Gstr1Report />
         </TabsContent>
         <TabsContent value="gstr-3b" className="mt-4">
           <Gstr3bReport />

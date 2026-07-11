@@ -52,6 +52,7 @@ model User {
   auditLogs        AuditLog[]
   fieldChangeLogs  FieldChangeLog[]
   gstReturns       GstReturn[]
+  gstr1Snapshots   Gstr1Snapshot[]
   gstr2bImports    Gstr2bImport[]
   referralsMade    Referral[]       @relation("Referral_referrerIdToUser")
   referralReceived Referral?        @relation("Referral_referredIdToUser")
@@ -288,7 +289,14 @@ model TransactionItem {
   cgst                Float       @default(0)
   sgst                Float       @default(0)
   igst                Float       @default(0)
-  total               Float       @default(0) // taxable + cgst + sgst + igst (was qty * unitPrice - discount + gst)
+  // 🔒 V17 Audit Phase 3 (GSTR-1): CESS amount (rare for kirana but portal requires the field).
+  csamt               Float       @default(0)
+  // 🔒 V17 Audit Phase 3 (GSTR-1): HSN snapshot at time of transaction.
+  // Was: only Product.hsn existed. But HSN can change when the user edits the product,
+  // and historical GSTR-1 returns must show the HSN that was in effect at sale time.
+  // Now: snapshot at write time (like purchasePriceAtSale). Backfilled from Product.hsn.
+  hsn                 String?
+  total               Float       @default(0) // taxable + cgst + sgst + igst + csamt
 
   createdAt DateTime @default(now())
 
@@ -581,6 +589,39 @@ model GstReturn {
 
   createdAt                   DateTime @default(now())
   updatedAt                   DateTime @updatedAt
+
+  @@unique([userId, monthYear])
+  @@index([userId, periodStart])
+}
+
+// ==================== GSTR-1 SNAPSHOT (Phase 3) ====================
+// 🔒 V17 Audit Phase 3: Stores a monthly GSTR-1 snapshot so the user can see
+// "what did I file for July?" without recomputing. One snapshot per user per
+// month (unique on userId + monthYear). Stores the portal-ready JSON for audit
+// + a filed/draft status + the filed netTaxPayable for drift detection.
+model Gstr1Snapshot {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  monthYear       String   // "072026" (MMYYYY) — matches GSTR-1 fp format
+  periodStart     DateTime // IST first day of month
+  periodEnd       DateTime // IST last day of month
+  filingStatus    String   @default("draft") // draft | filed
+  filedAt         DateTime?
+  filedByUserId   String?  // who marked it as filed
+
+  // The portal-ready JSON (all 8 sections: B2B, B2CL, B2CS, CDNR, CDNUR, HSN, NIL, DOC)
+  // Stored as Json so the exact filed return can be reproduced for audit/dispute.
+  rawJson         Json?
+
+  // Summary totals (for quick display without parsing rawJson)
+  totalTaxableValue   Float @default(0)
+  totalOutputTax      Float @default(0)  // CGST + SGST + IGST
+  totalInvoiceCount   Int   @default(0)
+  totalCreditNotes    Int   @default(0)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   @@unique([userId, monthYear])
   @@index([userId, periodStart])
