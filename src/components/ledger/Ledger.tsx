@@ -268,7 +268,20 @@ export function Ledger({ type }: { type: LedgerType }) {
     clearSelection()
   }
 
-  const totalAmount = filtered.reduce((s, t) => s + t.totalAmount, 0)
+  // 🔒 V17 Audit Phase 0 FIX: Net of returns — credit notes/debit notes store
+  // POSITIVE totalAmount (the absolute invoice total), so we SUBTRACT them to
+  // get the net total. Was: `s + t.totalAmount` for all types → credit notes
+  // INFLATED the total (5 sales ₹5000 + 1 credit note ₹1000 = ₹6000 shown,
+  // but real net is ₹4000).
+  // Sales ledger: sales ADD, credit notes SUBTRACT.
+  // Purchase ledger: purchases ADD, debit notes SUBTRACT.
+  const totalAmount = filtered.reduce((s, t) => {
+    if (isSale) {
+      return t.type === 'credit-note' ? s - t.totalAmount : s + t.totalAmount
+    } else {
+      return t.type === 'debit-note' ? s - t.totalAmount : s + t.totalAmount
+    }
+  }, 0)
   // 🔒 V17 Audit Phase 4 SIGN-CONVENTION FIX:
   // Credit notes store NEGATIVE grossProfit (line-items.ts: grossProfit - itemProfit = 0 - 900 = -900).
   // So we ADD grossProfit for both sales (+3000) and credit notes (-900) → net = 2100.
@@ -280,7 +293,16 @@ export function Ledger({ type }: { type: LedgerType }) {
     if (t.type === 'sale') return s + (t.grossProfit || 0)
     return s
   }, 0)
-  const totalPaid = filtered.reduce((s, t) => s + t.paidAmount, 0)
+  // 🔒 V17 Audit Phase 0 FIX: Same net-of-returns pattern for paidAmount.
+  // Credit notes have paidAmount (the refund issued) — SUBTRACT for sales.
+  // Debit notes have paidAmount (the refund received) — SUBTRACT for purchases.
+  const totalPaid = filtered.reduce((s, t) => {
+    if (isSale) {
+      return t.type === 'credit-note' ? s - (t.paidAmount || 0) : s + (t.paidAmount || 0)
+    } else {
+      return t.type === 'debit-note' ? s - (t.paidAmount || 0) : s + (t.paidAmount || 0)
+    }
+  }, 0)
   const totalDue = totalAmount - totalPaid
 
   // Listen for global "New Entry" trigger from Header (only if fired on this view)

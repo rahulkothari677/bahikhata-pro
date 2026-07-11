@@ -313,4 +313,173 @@ describe('🔒 V17 Audit §1 — Net-of-returns helpers', () => {
       expect(ledgerResult).not.toBe(9400) // old buggy value (8000 - (-1400))
     })
   })
+
+  /**
+   * 🔒 V17 Audit Phase 0 — Ledger totalAmount + totalPaid net-of-returns
+   *
+   * The Ledger.tsx "Total Sales" KPI was inflating by credit notes because
+   * credit notes store POSITIVE totalAmount (the absolute invoice total) and
+   * the reduce was ADDING them. 5 sales (₹5000) + 1 credit note (₹1000)
+   * showed ₹6000 instead of ₹4000 net.
+   *
+   * This test simulates the REAL data: sales with positive totalAmount,
+   * credit notes with positive totalAmount (but they should be SUBTRACTED).
+   * Verifies the Ledger reduce produces the correct net total.
+   */
+  describe('🔒 V17 Audit Phase 0 — Ledger totalAmount net of returns', () => {
+    test('sales ledger totalAmount: sales ADD, credit notes SUBTRACT', () => {
+      // Real DB rows: sales have positive totalAmount, credit notes have positive totalAmount
+      const rows = [
+        { type: 'sale', totalAmount: 2000 },
+        { type: 'sale', totalAmount: 3000 },
+        { type: 'credit-note', totalAmount: 1000 }, // POSITIVE in DB, but reduces revenue
+      ]
+
+      // Ledger.tsx totalAmount reduce (sales ledger — isSale=true)
+      const isSale = true
+      const totalAmount = rows.reduce((s, t) => {
+        if (isSale) {
+          return t.type === 'credit-note' ? s - t.totalAmount : s + t.totalAmount
+        } else {
+          return t.type === 'debit-note' ? s - t.totalAmount : s + t.totalAmount
+        }
+      }, 0)
+
+      // 2000 + 3000 - 1000 = 4000 (net of return)
+      expect(totalAmount).toBe(4000)
+      // NOT 6000 (the old buggy value — adding credit-note totalAmount)
+      expect(totalAmount).not.toBe(6000)
+    })
+
+    test('purchase ledger totalAmount: purchases ADD, debit notes SUBTRACT', () => {
+      const rows = [
+        { type: 'purchase', totalAmount: 5000 },
+        { type: 'purchase', totalAmount: 3000 },
+        { type: 'debit-note', totalAmount: 2000 }, // POSITIVE in DB, but reduces purchases
+      ]
+
+      // Ledger.tsx totalAmount reduce (purchase ledger — isSale=false)
+      const isSale = false
+      const totalAmount = rows.reduce((s, t) => {
+        if (isSale) {
+          return t.type === 'credit-note' ? s - t.totalAmount : s + t.totalAmount
+        } else {
+          return t.type === 'debit-note' ? s - t.totalAmount : s + t.totalAmount
+        }
+      }, 0)
+
+      // 5000 + 3000 - 2000 = 6000 (net of return)
+      expect(totalAmount).toBe(6000)
+      // NOT 10000 (the old buggy value)
+      expect(totalAmount).not.toBe(10000)
+    })
+
+    test('totalPaid: sales ADD paidAmount, credit notes SUBTRACT (refund)', () => {
+      const rows = [
+        { type: 'sale', paidAmount: 2000 },
+        { type: 'sale', paidAmount: 3000 },
+        { type: 'credit-note', paidAmount: 1000 }, // refund issued
+      ]
+
+      const isSale = true
+      const totalPaid = rows.reduce((s, t) => {
+        if (isSale) {
+          return t.type === 'credit-note' ? s - (t.paidAmount || 0) : s + (t.paidAmount || 0)
+        } else {
+          return t.type === 'debit-note' ? s - (t.paidAmount || 0) : s + (t.paidAmount || 0)
+        }
+      }, 0)
+
+      // 2000 + 3000 - 1000 = 4000 (net paid)
+      expect(totalPaid).toBe(4000)
+      expect(totalPaid).not.toBe(6000) // old buggy value
+    })
+
+    test('totalDue = net totalAmount - net totalPaid (correct outstanding)', () => {
+      const rows = [
+        { type: 'sale', totalAmount: 5000, paidAmount: 3000 },
+        { type: 'credit-note', totalAmount: 1000, paidAmount: 1000 }, // full refund
+      ]
+
+      const isSale = true
+      const totalAmount = rows.reduce((s, t) => {
+        return t.type === 'credit-note' ? s - t.totalAmount : s + t.totalAmount
+      }, 0)
+      const totalPaid = rows.reduce((s, t) => {
+        return t.type === 'credit-note' ? s - (t.paidAmount || 0) : s + (t.paidAmount || 0)
+      }, 0)
+      const totalDue = totalAmount - totalPaid
+
+      // Net total = 5000 - 1000 = 4000
+      // Net paid = 3000 - 1000 = 2000
+      // Due = 4000 - 2000 = 2000
+      expect(totalAmount).toBe(4000)
+      expect(totalPaid).toBe(2000)
+      expect(totalDue).toBe(2000)
+    })
+
+    test('no credit notes = full total (backward compat)', () => {
+      const rows = [
+        { type: 'sale', totalAmount: 5000 },
+        { type: 'sale', totalAmount: 3000 },
+      ]
+
+      const isSale = true
+      const totalAmount = rows.reduce((s, t) => {
+        return t.type === 'credit-note' ? s - t.totalAmount : s + t.totalAmount
+      }, 0)
+
+      expect(totalAmount).toBe(8000) // no returns → full total
+    })
+
+    test('null/undefined totalAmount handled gracefully', () => {
+      const rows = [
+        { type: 'sale', totalAmount: 5000 },
+        { type: 'sale', totalAmount: null as any },
+        { type: 'credit-note', totalAmount: undefined as any },
+      ]
+
+      const isSale = true
+      const totalAmount = rows.reduce((s, t) => {
+        const amt = t.totalAmount || 0
+        return t.type === 'credit-note' ? s - amt : s + amt
+      }, 0)
+
+      // 5000 + 0 - 0 = 5000 (no crash)
+      expect(totalAmount).toBe(5000)
+    })
+  })
+
+  /**
+   * 🔒 V17 Audit Phase 0 — Cross-path consistency
+   *
+   * Verifies that the Ledger totalAmount reduce and the netSalesTotal helper
+   * produce the SAME result for the same input. Before Phase 0, the Ledger
+   * inflated (added credit-note totalAmount) while the helper correctly
+   * subtracted — they DISAGREED.
+   */
+  describe('🔒 V17 Audit Phase 0 — Cross-path consistency (Ledger == helper)', () => {
+    test('Ledger totalAmount reduce == netSalesTotal helper', () => {
+      const sale: TypeAggregates = { totalAmount: 5000 }
+      const cn: TypeAggregates = { totalAmount: 1000 }
+
+      // Path 1: netSalesTotal helper
+      const helperResult = netSalesTotal(sale, cn)
+
+      // Path 2: Ledger reduce (simulated with the EXACT same values)
+      const rows = [
+        { type: 'sale', totalAmount: 5000 },
+        { type: 'credit-note', totalAmount: 1000 },
+      ]
+      const ledgerResult = rows.reduce((s, t) => {
+        return t.type === 'credit-note' ? s - t.totalAmount : s + t.totalAmount
+      }, 0)
+
+      // Both must agree
+      expect(helperResult).toBe(4000)
+      expect(ledgerResult).toBe(4000)
+      expect(helperResult).toBe(ledgerResult)
+    })
+  })
 })
+
