@@ -2127,3 +2127,749 @@ Stage Summary:
   Step 3: Wire assertCanWrite into all write routes (13 routes)
   Step 4: Settings UI — CA Access card
   Step 5: Sidebar + navigation gating + CA Mode indicators
+
+---
+Task ID: tier3-gstr1-research
+Agent: explore
+Task: Tier 3 Feature 5 (GSTR-1 Filing Export) — research existing GSTR-1 export code, the GSTR-3B/GSTR-2B architecture patterns, the Prisma schema, the GST portal JSON spec, and the reports UI; produce an implementation plan. RESEARCH ONLY — no code written.
+
+Work Log:
+- Read worklog.md (2129 LOC) end-to-end to understand prior work — particularly:
+  * Phase 3.4 GST Filing Service (admin-only) — generates summary GSTR-1 + GSTR-3B for admin overview.
+  * V4/V5/V6/V10/V15/V16 audit responses — built the per-item CGST/SGST/IGST source of truth (V10 §2.2), the roundMoney helper (V10 §2.3), the proportional discount distribution (V10 §2.1), the soft-delete sweep tests (V16 C5), and the gstr-export route's SQL aggregation + truncation flag (V6 SC1/PP1).
+  * V17-Ext Tier 3 Step 4 — credit/debit notes feature: added `credit-note`/`debit-note` Transaction types, `noteType`/`noteReason`/`affectsStock`/`originalTransactionId` fields, `InvoiceCounter.creditNoteSeq`/`debitNoteSeq`, and a CDN section in /api/gstr-export (registered parties only — unregistered notes are silently skipped).
+  * V17-Ext Tier 3 GSTR-3B + GSTR-2B features — added GstReturn snapshot model, Gstr2bImport + Gstr2bInvoice models, GET/POST gstr-3b route, import + reconcile gstr-2b routes, Gstr3bReport.tsx + Gstr2bReconciliation.tsx components, and tests gstr-3b.test.ts + gstr-2b.test.ts.
+  * Tier 3 Feature 4 CA Login (Steps 1–5) — added 'ca' role, canAccessModule allowlist (6 modules), assertCanWrite helper, getAuthContextForWrite helper, wired into 13 write routes including gstr-3b POST and gstr-2b/import POST.
+
+- Read /home/z/my-project/src/app/api/gstr-export/route.ts (503 LOC) — the existing GSTR-1 export. Documented below.
+- Read /home/z/my-project/src/app/api/gstr-3b/route.ts (651 LOC) — GET (compute) + POST (save/file snapshot). Documented below.
+- Read /home/z/my-project/src/app/api/gstr-2b/import/route.ts (233 LOC) — POST (validate + parse + store). Documented below.
+- Read /home/z/my-project/src/app/api/gstr-2b/reconcile/route.ts (234 LOC) — GET (3-way match). Documented below.
+- Read /home/z/my-project/src/components/reports/Gstr3bReport.tsx (434 LOC) — self-contained UI pattern.
+- Read /home/z/my-project/src/components/reports/Gstr2bReconciliation.tsx (450 LOC) — self-contained UI pattern with file upload.
+- Read /home/z/my-project/src/components/reports/Reports.tsx (828 LOC) — tabs structure (8 tabs, mobile scroll + desktop grid).
+- Read /home/z/my-project/prisma/schema.prisma (1315 LOC) — Party, Transaction, TransactionItem, Product, Setting, GstReturn, Gstr2bImport, Gstr2bInvoice, InvoiceCounter models.
+- Read /home/z/my-project/src/__tests__/lib/gstr-3b.test.ts (267 LOC) + /home/z/my-project/src/__tests__/lib/gstr-2b.test.ts (362 LOC) — test patterns.
+- Read /home/z/my-project/src/lib/{timezone,money,get-auth,staff-permissions,audit,api-error,query-helpers,gst}.ts — shared helpers.
+- Grep'd for HSN, CESS, and state-code usage across src/ — confirmed gaps (see below).
+
+================================================================================
+FINDING 1 — CURRENT STATE OF /api/gstr-export (the existing "GSTR-1 export")
+================================================================================
+
+WHAT EXISTS (the existing GET /api/gstr-export?from=&to=&format=json|csv):
+
+  • Single-month enforcement: rejects ranges that span 2+ IST calendar months
+    or > 31 days. Uses getISTDateParts + isSameISTMonth + istMonthStartOffset
+    (V11 §4.6 centralized helpers). GOOD.
+  • 10K invoice cap with `truncated` flag + `truncatedHint` (V6 SC1/PP1).
+    UI hard-blocks CSV download when truncated=true. GOOD.
+  • SQL aggregation: per-invoice-per-rate breakdown via raw SQL GROUP BY
+    (transactionId, gstRate), summing STORED per-item CGST/SGST/IGST (V10 §2.2
+    single source of truth). GOOD.
+  • Reconciliation assertion: per-invoice taxable AND tax must equal summary
+    totals within ₹0.05 (V7 H3 + V10 §2.2). UI hard-blocks on mismatch. GOOD.
+  • Sections generated:
+      - b2b: array of one object per B2B invoice (party has GSTIN).
+        Fields: { inum, itype:'R', ctin, in_date, taxablevalue, isInterState,
+                  items: [{ rate, txval, camt, samt, iamt, qty }], total }
+      - b2cl: b2cInvoices filtered to isInterState===true && total>=100000
+        (₹1L threshold — current GST rule, was ₹2.5L historically)
+      - b2cs: everything else (intra-state B2C, or inter-state B2C under ₹1L)
+      - cdn: array of { ctin, nt: [{ nt_num, nt_dt, ntty, pos, rchrg, doc_det,
+                                     itms, total, isInterState }] }
+        (V17-Ext Tier 3 — credit/debit notes for REGISTERED parties only)
+  • Top-level fields: gstin, fp (MMYYYY derived from `to` date, V10 fix),
+    gt:0, cur_gt:0, b2b, b2cl, b2cs, cdn, truncated, truncatedHint, summary,
+    reconciliation, period. NO version, NO hash, NO outer envelope.
+  • CSV format: flat per-invoice rows — "Invoice No,Date,Party Name,GSTIN,
+    Taxable Value,CGST,SGST,IGST,Total,Type" — Type is B2B/B2C/CDN-C/CDN-D.
+    NOT the GST portal CSV format.
+
+WHAT'S MISSING / BROKEN for a proper GSTR-1 filing:
+
+  (a) JSON STRUCTURE IS NOT PORTAL-READY. The GSTN offline utility expects
+      strict field names and nesting:
+      - B2B must be array of { ctin, inv: [...] } (grouped by counter-party
+        GSTIN, with an inner `inv` array). Existing code emits one B2B object
+        per invoice — never grouped by ctin.
+      - Field name mismatches: `in_date` should be `idt`; `taxablevalue`
+        should be `txval`; `rate` should be `rt`; `itype` should be `inv_typ`;
+        the `total` field is not in the portal spec; `isInterState` is not
+        in the portal spec.
+      - B2B items must include `csamt` (CESS) — currently always missing.
+      - B2B must include `pos` (place of supply, 2-digit state code) and
+        `rchrg` (Y/N) per invoice. Currently missing.
+      - B2CL structure: portal uses array of { pos, inv: [{ inum, idt, val,
+        itms: [{ rt, txval, iamt }] }] } — grouped by POS, NOT per-invoice,
+        and IGST only (no CGST/SGST because B2CL is always inter-state).
+        Existing code emits per-invoice objects with rate_X keys + CGST/SGST.
+      - B2CS structure: portal uses array of { typ, pos, txval, iamt, camt,
+        samt, csamt, rt } — ONE ENTRY PER (rate, POS, typ), aggregated across
+        all invoices. Existing code emits per-invoice objects.
+      - CDN: portal name is `cdnr` (Credit/Debit Notes Registered) — existing
+        code uses `cdn`. Portal also expects a separate `cdnur` array for
+        Credit/Debit Notes Unregistered. Existing code SILENTLY DROPS notes
+        for parties without GSTIN (line 299: `if (!ctin) continue`).
+      - CDN item fields: portal expects `rt` (not `rt`), `txval`, `iamt`,
+        `camt`, `samt`, `csamt`. Existing `itms` have `rt, txval, camt, samt,
+        iamt, qty` — qty is not in the portal spec; csamt is missing.
+      - CDN `nt_num` is correct, `nt_dt` is correct, `ntty` is correct,
+        `pos` is currently computed weirdly (lines 313): `t.isInterState ?
+        (t.party?.state ? '' : '99') : (setting?.state ? '' : '99')` — this
+        returns EMPTY STRING when state is known, which is WRONG. Portal
+        requires the 2-digit state code (e.g. '27' for Maharashtra).
+      - CDN `typ` field (R = regular, SEWP, SEWOP, DE) is missing.
+      - Missing sections entirely: HSN, NIL, DOC, TXP (TXP is usually 0).
+      - NO outer envelope — portal upload expects { gstr1: { ... } }.
+
+  (b) HSN SUMMARY MISSING. GST portal requires an HSN-wise summary of all
+      outward supplies (B2B + B2CL + B2CS combined) grouped by HSN code +
+      rate + unit. For turnover > ₹5 crore, HSN is mandatory at 4+ digits;
+      for turnover ≤ ₹5 crore, HSN is mandatory at 2+ digits. Schema only
+      has Product.hsn (string, free-form, no TransactionItem snapshot) —
+      so if the user edits a product's HSN later, historical invoices would
+      be reported under the NEW HSN code (WRONG for GST audit). Need to
+      snapshot HSN on TransactionItem at write time (same pattern as
+      purchasePriceAtSale snapshot, V10 audit fix M4).
+
+  (c) NIL SUPPLIES MISSING. Portal expects `nil: { inv: [{ sply_ty,
+      description, txval }] }` with 3 categories: nil-rated (0% GST taxable),
+      exempt (not subject to GST), non-GST (alcohol/petrol/etc). The gstr-3b
+      route already computes these via SQL (nilRatedAgg + nonGstAgg) — same
+      pattern can be reused.
+
+  (d) DOC ISSUED MISSING. Portal expects `doc: { doc_det: [{ doc_num,
+      doc_typ, docs: [{ num, from, to, totnum, cancel, net_issue }] }] }`
+      — a summary of invoice number ranges issued in the period, broken
+      down by document type (1=Invoices, 2=Credit notes, 3=Debit notes).
+      We have InvoiceCounter (seq, creditNoteSeq, debitNoteSeq) which gives
+      us the COUNT but not the range; we need to query MIN/MAX(invoiceNo)
+      per type for the period and count cancelled (deletedAt IS NOT NULL).
+
+  (e) NO SNAPSHOT MODEL. GSTR-3B has GstReturn (one snapshot per user per
+      month, draft/filed status, immutable after filing). GSTR-1 has NO
+      equivalent — every export recomputes from live data. This means:
+      - User can file GSTR-1 on portal, then edit a transaction dated in
+        that month → next export shows different numbers → no audit trail
+        that "this is what was filed".
+      - Cannot show "Filed" badge in UI (Gstr3bReport has this).
+      - Cannot prevent edits after filing (period-lock.ts uses Setting.
+        lockedUntil but it's a single global lock, not per-month).
+
+  (f) NO STATE CODE HELPER. Setting.state and Party.state are free-form
+      strings ("Maharashtra", "maharashtra", "MH", etc). The GST portal's
+      `pos` field requires the 2-digit numeric state code (first 2 digits
+      of GSTIN: 27=MH, 29=KA, 33=TN, etc). Need a state-name → state-code
+      map. Best source: extract from GSTIN itself (setting.gstin.slice(0,2))
+      for the shop's POS; for the counter-party's POS, use party.gstin
+      (B2B) or default to shop's POS (B2C — place of supply is the shop's
+      location for unregistered B2C).
+
+  (g) NO CA WRITE-BLOCK ON EXPORT. Current /api/gstr-export uses
+      getAuthUserIdWithModule('reports') — only GET handler exists, so
+      assertCanWrite isn't strictly needed. BUT if we add POST (save/file
+      snapshot like GSTR-3B), we MUST call assertCanWrite to block CAs.
+      CAs can VIEW GSTR-1 but should NOT be able to mark it "filed".
+
+  (h) CSV IS NOT PORTAL-UPLOADABLE. The GST portal's CSV import format is
+      section-specific (different CSV templates for B2B/B2CL/B2CS/CDNR/
+      CDNUR/HSN/NIL/DOC). The current flat CSV is human-readable but
+      CANNOT be uploaded to the portal — the user would have to manually
+      re-enter everything. The portal actually prefers JSON upload over
+      CSV; the offline utility generates JSON.
+
+================================================================================
+FINDING 2 — ESTABLISHED ARCHITECTURE PATTERN (schema → API → UI → tests)
+================================================================================
+
+The GSTR-3B and GSTR-2B features established a clear 4-layer pattern. Tier 3
+Feature 5 (GSTR-1) should follow it exactly.
+
+LAYER 1 — SCHEMA MODEL (prisma/schema.prisma):
+  Pattern: one snapshot model per return type, unique on (userId, monthYear),
+  with filingStatus (draft|filed), filedAt, filedByUserId, and all the
+  numeric fields needed to reproduce the form.
+  Examples:
+    - GstReturn (lines 520–569): userId, monthYear "072026", periodStart,
+      periodEnd, filingStatus, filedAt, filedByUserId, outwardTaxableValue,
+      outwardCgst, ..., netTaxPayable. @@unique([userId, monthYear]).
+    - Gstr2bImport (lines 578–596): userId, monthYear, filingPeriod,
+      supplierGstin, importedAt, rawJson (Json?), invoiceCount, totals.
+      @@unique([userId, monthYear]). Has child Gstr2bInvoice[].
+    - Gstr2bInvoice (lines 598–617): gstr2bImportId (CASCADE), denormalized
+      userId, supplierGstin, invoiceNumber, invoiceDate, taxableValue, igst,
+      cgst, sgst, totalAmount, isReverseCharge. 3 indexes.
+
+LAYER 2 — API ROUTE (src/app/api/<feature>/route.ts):
+  Pattern: GET computes from live data (SQL aggregation, never trust client),
+  returns both computed values AND existing snapshot (so UI shows Filed vs
+  Draft). POST recomputes server-side (DRY — never trusts client-sent
+  financials), upserts snapshot, blocks if already filed (409), logs audit.
+  Auth: getAuthContext + canAccessModule('reports') + assertCanWrite (POST).
+  Helpers: roundMoney (every money calc), istMonthStartOffset/getISTDateParts
+  (every date calc), apiError (every catch), activeTransactionWhere (every
+  transaction query), logAudit (every mutation).
+  maxDuration = 60 (Vercel serverless).
+  Examples:
+    - /api/gstr-3b/route.ts (651 LOC) — GET computes 11 parallel SQL queries
+      covering 3.1(a/b/c/d), 3.2, 4(a/b/c/d), 5, 6.1. POST re-runs the same
+      11 queries (DRY violation noted but acceptable — pure functions would
+      require extracting to lib/, which the existing code didn't do). Blocks
+      filing if existing.filingStatus === 'filed' (409). Audit logs
+      'gstr3b.filed' / 'gstr3b.saved'.
+    - /api/gstr-2b/import/route.ts (233 LOC) — POST validates GSTIN match
+      (fileGstin vs setting.gstin), validates period match (fileFp vs
+      monthYear), parses b2b entries, deletes old import (CASCADE), creates
+      new Gstr2bImport + Gstr2bInvoice rows in one nested create. Audit logs
+      'gstr2b.imported'.
+    - /api/gstr-2b/reconcile/route.ts (234 LOC) — GET fetches Gstr2bImport
+      + invoices, fetches purchases for month, builds a Map keyed by
+      "GSTIN|INVOICE_NO" (uppercased), 3-way categorization (matched /
+      booksOnly / twoBOnly), amount tolerance ₹0.05. Returns summary +
+      3 arrays.
+
+LAYER 3 — UI COMPONENT (src/components/reports/<Feature>.tsx):
+  Pattern: self-contained component with own month state (YYYY-MM string,
+  default = current IST month), own useQuery (TanStack), own month picker
+  (prev/next chevrons), own action handlers (save/file/upload/download CSV).
+  All hooks BEFORE any early return. Optional chaining everywhere. Skeleton
+  for isLoading, error card with retry button, empty state for no-data.
+  Imports: Card/CardContent/CardHeader/CardTitle, Button, Badge, Skeleton,
+  formatINR, cn, offlineFetch, sonner toast, haptic, lucide icons.
+  Examples:
+    - Gstr3bReport.tsx (434 LOC) — month picker, 4 summary cards, 4 section
+      cards (3.1, 3.2, 4, 5), gradient "Net Tax Payable" banner, Save Draft /
+      Mark as Filed buttons, CSV download, filing status badge.
+    - Gstr2bReconciliation.tsx (450 LOC) — month picker, Upload button (hidden
+      <input type="file" accept=".json">), 3 summary cards, 3 toggleable
+      section tables (matched/booksOnly/twoBOnly), CSV download.
+
+LAYER 4 — TESTS (src/__tests__/lib/<feature>.test.ts):
+  Pattern: pure function tests of the math + matching logic, NO route import
+  (avoids jsdom Request polyfill issue — explicitly noted in gstr-2b.test.ts
+  line 7). Set process.env.DATABASE_URL + DIRECT_URL to dummy values at top
+  so @/lib/db doesn't crash on import. Use jest.spyOn(db, ...) for db mock
+  queries when needed. Group with describe blocks per logical concern.
+  Examples:
+    - gstr-3b.test.ts (267 LOC, ~15 tests) — IST month boundary, net tax
+      formula, outward taxable value, RCM separation, nil-rated detection,
+      non-GST outward, exempt inward, interstate B2C, complete scenario,
+      db mock queries.
+    - gstr-2b.test.ts (362 LOC, ~25 tests) — matching key (GSTIN|INVOICE_NO
+      case-insensitive), amount tolerance (₹0.05), 3-way categorization,
+      exclusion rules, ITC totals, monthYear format, IST month boundaries,
+      edge cases (empty 2B, empty purchases, both empty, multi-invoice
+      supplier).
+
+REPORTS TAB INTEGRATION (src/components/reports/Reports.tsx):
+  Pattern: add a new tab value to the union type at line 39
+  ('pl' | 'gst' | 'stock' | 'party' | 'debt-aging' | 'inventory-aging' |
+   'gstr-3b' | 'gstr-2b' → add 'gstr-1'). Add a ReportTabButton (mobile)
+  + TabsTrigger (desktop grid — bump lg:grid-cols-8 → lg:grid-cols-9).
+  Add a TabsContent block that renders <Gstr1Report />. Add the import
+  statement near Gstr3bReport/Gstr2bReconciliation imports (lines 31–32).
+  Existing GSTR-1 button in the toolbar (line 250, features?.gstrExport)
+  can stay for backward compat — it triggers a CSV download via the OLD
+  /api/gstr-export route. The new tab will be the proper filing flow.
+
+================================================================================
+FINDING 3 — GST PORTAL GSTR-1 JSON FORMAT SPEC (offline knowledge)
+================================================================================
+
+The GSTN offline utility generates a JSON file with this structure. The
+portal upload endpoint accepts the same structure (wrapped in an outer
+`{ gstr1: { ... } }` envelope). Field names are case-sensitive. Numeric
+fields are JSON numbers (not strings). Date fields are strings in
+"dd-mm-yyyy" format. All amounts are in rupees (2-decimal precision).
+
+OUTER STRUCTURE:
+{
+  "gstr1": {
+    "version": "GST-2.0.0",      // utility version, not required by portal
+    "hash": "...",                 // checksum, added by utility — skip
+    "gstin": "27AAAAA0000A1Z5",   // shop's GSTIN
+    "fp": "072026",                // filing period MMYYYY
+    "gt": 0,                       // gross turnover (legacy, 0)
+    "cur_gt": 0,                   // current gross turnover (legacy, 0)
+    "b2b":   [ ... ],              // Section 4 — B2B Invoices
+    "b2cl":  [ ... ],              // Section 5A — B2C Large
+    "b2cs":  [ ... ],              // Section 5B — B2C Small
+    "cdnr":  [ ... ],              // Section 9A — CDNs Registered
+    "cdnur": [ ... ],              // Section 9B — CDNs Unregistered
+    "hsn":   [ ... ],              // Section 12 — HSN Summary
+    "nil":   { ... },              // Section 8 — Nil-rated/exempt/non-GST
+    "doc_issue": { ... },          // Section 13 — Document Issued
+    "txp":   [ ... ]               // Section 14 — Tax Liability (rare)
+  }
+}
+
+SECTION 4 — B2B (Business-to-Business, party has GSTIN):
+[
+  {
+    "ctin": "29BBBBB1111B1Z2",   // counter-party GSTIN
+    "inv": [
+      {
+        "inum":   "INV-001",      // invoice number (max 16 chars)
+        "idt":    "01-07-2026",   // invoice date (dd-mm-yyyy)
+        "val":    11800,          // invoice total (taxable + tax)
+        "pos":    "27",           // place of supply (2-digit state code)
+        "rchrg":  "N",            // reverse charge Y/N
+        "inv_typ":"R",            // R=Regular, SEWP=SEZ w/ pay, SEWOP=SEZ w/o pay, DE=Deemed Export
+        "itms": [
+          {
+            "rt":    18,           // GST rate (0, 0.25, 3, 5, 12, 18, 28)
+            "txval": 10000,        // taxable value
+            "iamt":  0,            // IGST amount
+            "camt":  900,          // CGST amount
+            "samt":  900,          // SGST amount
+            "csamt": 0             // CESS amount (0 if no CESS)
+          }
+        ]
+      }
+    ]
+  }
+]
+Note: Multiple invoices for the SAME counter-party GSTIN are grouped under
+one `ctin` entry's `inv` array (NOT separate top-level objects).
+
+SECTION 5A — B2CL (B2C Large, inter-state, invoice value > ₹1 lakh):
+[
+  {
+    "pos": "29",                  // place of supply (counter-party state)
+    "inv": [
+      {
+        "inum": "INV-002",
+        "idt":  "02-07-2026",
+        "val":  150000,
+        "itms": [
+          { "rt": 18, "txval": 127119, "iamt": 22881 }
+        ]
+      }
+    ]
+  }
+]
+Note: B2CL is ALWAYS inter-state (IGST only — no CGST/SGST keys). Grouped
+by `pos`. Intra-state B2C above ₹1L stays in B2CS (not B2CL).
+
+SECTION 5B — B2CS (B2C Small — everything not in B2CL):
+[
+  {
+    "typ":    "OE",                // OE=Outward Export? actually "OE" for original entry; can be "E" for amended
+    "pos":    "27",                // place of supply
+    "txval":  50000,               // aggregated taxable value
+    "iamt":   0,                   // aggregated IGST
+    "camt":   4500,                // aggregated CGST
+    "samt":   4500,                // aggregated SGST
+    "csamt":  0,
+    "rt":     18                   // GST rate
+  }
+]
+Note: B2CS is AGGREGATED — one entry per (typ, pos, rt). NOT per-invoice.
+Sum across all B2CS invoices for the same (pos, rate) into a single row.
+
+SECTION 9A — CDNR (Credit/Debit Notes Registered, party has GSTIN):
+[
+  {
+    "ctin": "29BBBBB1111B1Z2",
+    "nt": [
+      {
+        "nt_num": "CN-001",        // note number
+        "nt_dt":  "05-07-2026",    // note date
+        "val":    5000,            // note value
+        "ntty":   "C",             // C=Credit, D=Debit
+        "pos":    "27",
+        "rchrg":  "N",
+        "typ":    "R",             // R=Regular, SEWP, SEWOP, DE
+        "itms": [
+          { "rt": 18, "txval": 4237, "iamt": 0, "camt": 381, "samt": 381, "csamt": 0 }
+        ]
+      }
+    ]
+  }
+]
+
+SECTION 9B — CDNUR (Credit/Debit Notes Unregistered):
+[
+  {
+    "typ":    "R",                 // R=Regular, EXPWP=Export w/ pay, EXPWOP=Export w/o pay
+    "nt_num": "CN-002",
+    "nt_dt":  "06-07-2026",
+    "val":    2000,
+    "ntty":   "C",
+    "pos":    "27",
+    "rchrg":  "N",
+    "itms": [
+      { "rt": 18, "txval": 1695, "iamt": 305, "camt": 0, "samt": 0, "csamt": 0 }
+    ]
+  }
+]
+
+SECTION 12 — HSN (HSN/SAC-wise summary):
+{
+  "data": [
+    {
+      "num":     1,                // serial number
+      "hsn_sc":  "1101",           // HSN/SAC code (4+ digits for turnover > ₹5cr; 2+ for ≤ ₹5cr)
+      "desc":    "Wheat Flour",    // description (auto-populated from HSN master)
+      "uqc":     "PCS",            // unit quantity code (PCS, KGS, LTR, etc.)
+      "qty":     100,              // total quantity
+      "txval":   28000,            // total taxable value
+      "iamt":    0,
+      "camt":    2520,
+      "samt":    2520,
+      "csamt":   0,
+      "rt":      18                // GST rate
+    }
+  ]
+}
+Note: HSN is computed across ALL outward supplies (B2B + B2CL + B2CS + NIL
+excluded). Group by (hsn_sc, rt, uqc). Aggregate qty + taxable + tax.
+
+SECTION 8 — NIL (Nil-rated, exempt, non-GST outward supplies):
+{
+  "inv": [
+    { "sply_ty": "INTRB2B", "description": "...", "txval": 0 }, // rarely used
+    { "sply_ty": "INTRB2C", "description": "...", "txval": 0 }, // rarely used
+    // The three primary categories:
+    { "description": "Nil-rated supplies", "sply_ty": "NIL", "txval": 5000 },
+    { "description": "Exempted supplies",  "sply_ty": "EXPT", "txval": 0 },
+    { "description": "Non-GST supplies",   "sply_ty": "NGST", "txval": 3000 }
+  ]
+}
+Note: nil-rated = sales where ALL items have gstRate=0 (already computed in
+gstr-3b route via the NOT EXISTS subquery). exempt = no exempt flag currently
+in schema — defaults to 0. non-GST = income transactions (already computed).
+
+SECTION 13 — DOC (Document Issued summary):
+{
+  "doc_det": [
+    {
+      "doc_num": 1,                // 1=Invoices for outward supply
+      "doc_typ": "Invoices for outward supply",
+      "docs": [
+        {
+          "num":      1,            // serial
+          "from":     "INV-001",    // starting invoice number
+          "to":       "INV-050",    // ending invoice number
+          "totnum":   50,           // total number in range
+          "cancel":   2,            // cancelled count (soft-deleted in month)
+          "net_issue": 48           // net issued = totnum - cancel
+        }
+      ]
+    },
+    // doc_num 2 = Invoices for inward supply (reverse charge)
+    // doc_num 3 = Debit notes
+    // doc_num 4 = Credit notes
+  ]
+}
+Note: We have InvoiceCounter (seq, creditNoteSeq, debitNoteSeq) but it only
+gives us the COUNT, not the range. Need to query MIN(invoiceNo), MAX(invoiceNo)
+per type for the period + count of cancelled (deletedAt IS NOT NULL in month).
+
+SECTION 14 — TXP (Tax Liability — rarely needed for kirana):
+[]  // Almost always empty. Skip.
+
+================================================================================
+FINDING 4 — SCHEMA GAPS
+================================================================================
+
+  • TransactionItem.hsn — MISSING. Only Product.hsn exists. Need to snapshot
+    HSN at write time (same pattern as purchasePriceAtSale snapshot, V10 §M4).
+    Backfill migration: UPDATE TransactionItem SET hsn = (SELECT hsn FROM
+    Product WHERE Product.id = TransactionItem.productId) WHERE productId
+    IS NOT NULL. Items with no productId (manual entry) → hsn = NULL →
+    excluded from HSN summary (with a UI warning).
+  • TransactionItem.csamt (CESS) — MISSING. CESS is rare for kirana (only
+    on pan masala, tobacco, aerated drinks) but the portal spec requires
+    the field. Default 0 is fine; just need to add the column for future
+    use. Lower priority than HSN.
+  • Gstr1Snapshot model — MISSING. Need to add (analogous to GstReturn):
+    userId, monthYear "072026", periodStart, periodEnd, filingStatus
+    (draft|filed), filedAt, filedByUserId, rawJson (Json? — full exported
+    JSON for audit), invoiceCount, taxableTotal, igstTotal, cgstTotal,
+    sgstTotal, totalTax. @@unique([userId, monthYear]).
+  • Transaction.pos (place of supply) — NOT NEEDED if we derive POS from
+    party.gstin (B2B) or setting.gstin (B2C). Don't add a column — derive.
+  • State-code helper — MISSING. Need a state name → 2-digit code map in
+    src/lib/gst.ts. The most reliable source is the GSTIN itself (first 2
+    chars). For Setting.state (free-form string), need a lookup table:
+    { "Maharashtra": "27", "Karnataka": "29", ... }. Better: validate
+    Setting.gstin at save time and store the derived state code alongside.
+  • CESS on Transaction (header) — MISSING. Same low-priority as line-level.
+
+================================================================================
+FINDING 5 — RECOMMENDED IMPLEMENTATION PLAN (6 steps)
+================================================================================
+
+STEP 1 — Schema + migration (foundation):
+  - Add `hsn String?` to TransactionItem (snapshot of product HSN at sale time).
+  - Add `csamt Float @default(0)` to TransactionItem + Transaction (CESS, future-proofing).
+  - Add new Gstr1Snapshot model (userId, monthYear, periodStart, periodEnd,
+    filingStatus, filedAt, filedByUserId, rawJson, invoiceCount, taxableTotal,
+    igstTotal, cgstTotal, sgstTotal, totalTax, createdAt, updatedAt).
+    @@unique([userId, monthYear]) + @@index([userId, periodStart]).
+  - Migration: backfill TransactionItem.hsn from Product.hsn via UPDATE.
+    Idempotent: `UPDATE "TransactionItem" SET hsn = p.hsn FROM "Product" p
+    WHERE "TransactionItem"."productId" = p.id AND "TransactionItem".hsn IS NULL`.
+  - Add state-code helper to src/lib/gst.ts: stateNameToCode("Maharashtra")
+    → "27". Map of 28 states + 8 UTs. Plus deriveStateCode(gstin) → first 2 chars.
+  - Tests: extend gst-discount.test.ts pattern; add state-code test.
+
+STEP 2 — Build the GST portal JSON builder (pure functions in src/lib/):
+  - Create src/lib/gstr1-builder.ts with pure functions:
+      buildB2B(transactions) → grouped-by-ctin array
+      buildB2CL(transactions, threshold=100000) → grouped-by-pos array
+      buildB2CS(transactions) → aggregated per (typ, pos, rt)
+      buildCDNR(notes) → grouped-by-ctin array (notes with party.gstin)
+      buildCDNUR(notes) → flat array (notes without party.gstin)
+      buildHSN(transactionItems) → aggregated per (hsn_sc, rt, uqc)
+      buildNIL(sales, income) → { inv: [...] }
+      buildDOC(transactions, deletedCount) → { doc_det: [...] }
+      buildGstr1({ userId, monthYear, ... }) → { gstr1: { ... } }
+  - Each function takes plain JS objects (not Prisma models) — pure + testable.
+  - No db import in this file — all data fetched by the API route and passed in.
+  - Tests: src/__tests__/lib/gstr1-builder.test.ts covering each section's
+    structure, field names, grouping, and edge cases (empty, single, multi-rate,
+    multi-invoice same GSTIN, B2CL threshold boundary, etc.).
+
+STEP 3 — API route /api/gstr-1/route.ts (GET + POST):
+  - GET /api/gstr-1?month=2026-07 → computes the full portal JSON, returns
+    it + the existing Gstr1Snapshot (if any) + a reconciliation assertion
+    (per-section totals vs. summary). Same auth as gstr-3b: getAuthContext +
+    canAccessModule('reports'). No assertCanWrite (read-only).
+  - POST /api/gstr-1 { month, action: 'save'|'file' } → recomputes server-side,
+    upserts Gstr1Snapshot, blocks if already filed (409), audit logs
+    'gstr1.saved' / 'gstr1.filed'. MUST call assertCanWrite (CA blocked).
+  - Both handlers use the SQL aggregation pattern from gstr-export/route.ts
+    (per-invoice-per-rate GROUP BY) + add HSN aggregation query + DOC range query.
+  - maxDuration = 60.
+  - apiError on catch.
+  - Replace /api/gstr-export/route.ts? Or keep it as a "legacy CSV report"
+    route and add a clear deprecation header? Recommend KEEPING it (for
+    backward compat with the existing toolbar button) and adding the new
+    /api/gstr-1 route alongside. The Reports toolbar "Export GSTR-1" button
+    stays as a quick CSV; the new GSTR-1 TAB is the proper filing flow.
+
+STEP 4 — UI component src/components/reports/Gstr1Report.tsx:
+  - Self-contained component (same pattern as Gstr3bReport.tsx).
+  - Month picker (prev/next, defaults to current IST month).
+  - Summary cards: Total Taxable, IGST, CGST+SGST, Total Invoices.
+  - Section tabs: B2B | B2CL | B2CS | CDNR | CDNUR | HSN | NIL | DOC.
+    Each tab shows a table of the JSON entries with formatINR.
+  - Filing status badge (Filed / Draft / Not saved) — same as 3B.
+  - 3 download buttons:
+      1. "Download JSON" — portal-ready file (gstr1_<monthYear>.json).
+      2. "Download CSV" — flat per-invoice report (existing CSV style).
+      3. "Print" — printable summary.
+  - Save Draft + Mark as Filed buttons (POST to /api/gstr-1) — hidden for CAs
+    (use isCA flag from use-staff-permissions hook to gate).
+  - Reconciliation banner: if reconciliation.matches === false, show red
+    banner "Data inconsistency — do not file" and disable Filed button.
+
+STEP 5 — Reports.tsx integration:
+  - Add 'gstr-1' to the reportType union (line 39).
+  - Add import: `import { Gstr1Report } from '@/components/reports/Gstr1Report'`.
+  - Add ReportTabButton (mobile, line ~291) + TabsTrigger (desktop, line ~318).
+  - Bump desktop grid: lg:grid-cols-8 → lg:grid-cols-9.
+  - Add <TabsContent value="gstr-1"><Gstr1Report /></TabsContent>.
+  - Icon suggestion: FileSpreadsheet (already imported). Color: saffron
+    (bg-gradient-saffron) to distinguish from 3B (blue) and 2B (emerald).
+  - No changes needed to the existing toolbar "Export GSTR-1" button — it
+    stays as a quick CSV export (uses old /api/gstr-export).
+
+STEP 6 — Tests + audit + docs:
+  - Tests:
+      * src/__tests__/lib/gstr1-builder.test.ts (~30 tests) — pure function
+        tests for each section builder + edge cases.
+      * src/__tests__/lib/gstr1.test.ts (~15 tests) — IST month boundary,
+        monthYear format, db mock queries, snapshot status, filed-blocks-
+        refile logic. Same pattern as gstr-3b.test.ts.
+  - Audit: logAudit({ userId, action: 'gstr1.saved'/'gstr1.filed',
+    entityType: 'gstr1Snapshot', entityId, req, metadata: { monthYear,
+    invoiceCount, totalTax } }).
+  - Docs: write docs/GSTR1-FILING-GUIDE.md with:
+      * Step-by-step "How to file GSTR-1 with EkBook" (select month → review
+        sections → download JSON → upload to GST portal → mark as Filed).
+      * Section reference (B2B/B2CL/B2CS/CDNR/CDNUR/HSN/NIL/DOC) with field
+        meanings.
+      * Gotchas: HSN code requirements, B2CL threshold, inter-state vs
+        intra-state, reverse charge, document range.
+
+================================================================================
+FINDING 6 — KEY FILES TO CREATE / MODIFY
+================================================================================
+
+CREATE (7 files):
+  • prisma/migrations/<timestamp>_gstr1_schema/migration.sql — adds hsn, csamt
+    columns + Gstr1Snapshot table + backfill.
+  • src/lib/gstr1-builder.ts — pure functions for each portal section (~400 LOC).
+  • src/app/api/gstr-1/route.ts — GET + POST handlers (~500 LOC).
+  • src/components/reports/Gstr1Report.tsx — self-contained UI (~500 LOC).
+  • src/__tests__/lib/gstr1-builder.test.ts — pure function tests (~350 LOC).
+  • src/__tests__/lib/gstr1.test.ts — route logic tests (~250 LOC).
+  • docs/GSTR1-FILING-GUIDE.md — user-facing filing guide.
+
+MODIFY (4 files):
+  • prisma/schema.prisma — add TransactionItem.hsn, TransactionItem.csamt,
+    Transaction.csamt (optional), new Gstr1Snapshot model.
+  • src/lib/gst.ts — add stateNameToCode() map + deriveStateCode(gstin).
+  • src/components/reports/Reports.tsx — add gstr-1 tab + import.
+  • src/app/api/transactions/route.ts — snapshot hsn on TransactionItem
+    create (POST) + update (PUT). Same pattern as purchasePriceAtSale.
+    Note: line-items.ts likely needs the change (where items are computed).
+
+NO CHANGE NEEDED:
+  • src/app/api/gstr-export/route.ts — keep as-is for legacy CSV export.
+  • Existing Gstr3bReport.tsx / Gstr2bReconciliation.tsx — unchanged.
+
+================================================================================
+FINDING 7 — RISKS + GOTCHAS
+================================================================================
+
+HIGH RISK:
+
+  1. HSN CODE REQUIREMENTS. GST law: turnover > ₹5cr → HSN mandatory at 4+
+     digits; turnover ≤ ₹5cr → 2+ digits. The current schema has Product.hsn
+     as a free-form string with NO validation. Users have entered "1101",
+     "1101.00", "HSN-1101", "1101A", "" — all of which would be rejected by
+     the portal. We need:
+     (a) Validate hsn on Product save (zod regex: ^\d{2,8}$ — 2 to 8 digits).
+     (b) Surface a UI warning in Gstr1Report if any item has no HSN or
+         malformed HSN — "HSN missing on 3 invoices — these will be rejected
+         by the GST portal".
+     (c) Backfill migration: items without productId → hsn = NULL → excluded
+         from HSN summary with a count warning.
+     (d) Consider: a Product.hsn change after sale SHOULD NOT affect that
+         sale's HSN — hence the TransactionItem.hsn snapshot.
+
+  2. INTER-STATE vs INTRA-STATE LOGIC. The current isInterState flag is set
+     at write time based on Setting.state vs Party.state. If the user later
+     changes Setting.state (e.g., moved shops), all HISTORICAL transactions
+     keep their old isInterState flag (correct) — but the GSTR-1 export's
+     `pos` field needs to reflect the party's state AT TIME OF SUPPLY, not
+     the current party state. The `pos` field in B2B/B2CL/CDNR should be:
+     - For B2B (registered party): derive from party.gstin.slice(0,2) at
+       export time (GSTIN is stable, doesn't change).
+     - For B2C (unregistered): pos = shop's state code (place of supply =
+       location of supplier for unregistered B2C per IGST Act §10(1)(a)).
+       Derive from setting.gstin.slice(0,2).
+     - For B2CL: pos = counter-party's state. But we don't track party
+       state for walk-in customers. If party exists but no GSTIN, use
+       party.state → stateNameToCode. If no party at all, default to shop
+       state (matches B2CS treatment).
+     GOTCHA: the existing gstr-export route computes `pos` as an empty
+     string in most cases (lines 313) — WRONG. Must be fixed.
+
+  3. ROUNDING RULES. GST portal expects each amount to be rounded to 2
+     decimals (1 paisa precision). The existing code uses roundMoney which
+     is correct. BUT the portal also expects the SUM of per-item amounts
+     to equal the per-invoice amount, AND the SUM of per-invoice amounts
+     to equal the per-section total. The existing reconciliation check
+     (V7 H3 + V10 §2.2) already enforces this within ₹0.05 tolerance —
+     good. NEW rounding concern: HSN summary aggregates per-rate per-HSN
+     — the sum across HSN rows must equal the sum across B2B+B2CL+B2CS
+     invoice items. Add a reconciliation check for this too.
+
+  4. CDNUR SECTION WAS SILENTLY DROPPED. The existing /api/gstr-export
+     route (line 299: `if (!ctin) continue`) SKIPS credit/debit notes for
+     unregistered parties. This is a GST compliance bug — those notes
+     MUST go in the CDNUR section. The new builder must include them.
+
+  5. B2CL THRESHOLD. Current code uses ₹1,00,000 (correct for current
+     GST law). But the threshold is on INVOICE VALUE (totalAmount), not
+     taxable value. Current code uses `i.total >= 100000` where i.total
+     is t.totalAmount — correct. Verify this is still the threshold at
+     implementation time (GST law changes; was ₹2.5L historically).
+
+MEDIUM RISK:
+
+  6. SNAPSHOT HSN ON EXISTING INVOICES. The migration backfills hsn from
+     Product.hsn — but if the user has CHANGED a product's HSN since the
+     sale was recorded, the backfilled value will be the CURRENT hsn, not
+     the original. This is a one-time data-quality issue. Mitigation:
+     show a UI warning "HSN codes were backfilled from current product
+     data — verify historical invoices" after migration. No way to
+     recover the original HSN if it was changed.
+
+  7. GSTIN VALIDATION. The GST portal validates GSTIN format strictly:
+     2-digit state code + 10-char PAN + 1-char entity + "Z" + 1-char
+     check-digit. We don't validate this on Party save. A typo'd GSTIN
+     would cause the entire B2B section to be rejected. Add a zod regex
+     on Party.gstin: ^\d{2}[A-Z]{5}\d{4}[A-Z]{1}[A-Z\d]{1}[Z]{1}[A-Z\d]{1}$
+     (case-insensitive, uppercase before save). Lower priority than HSN
+     but worth doing.
+
+  8. FILED-RETURN IMMUTABILITY. Once a Gstr1Snapshot is filed, the user
+     should not be able to edit transactions dated in that month (else
+     the snapshot drifts from reality). The existing period-lock.ts uses
+     Setting.lockedUntil — a single global lock. For per-month locking,
+     the Gstr1Snapshot.filingStatus === 'filed' should IMPLY a lock on
+     that month's transactions. Wire this into the transactions POST/PUT/
+     DELETE handlers: if a Gstr1Snapshot exists for the transaction's
+     month with filingStatus='filed', reject with 409 "This month is
+     already filed — file a revised return on the GST portal to modify".
+     Same logic already exists for GstReturn (3B) — extend to Gstr1Snapshot.
+
+  9. CDN DOC_DET FIELD. The existing code (line 315) includes a `doc_det`
+     field on each CDN note pointing to the original invoice. The portal
+     spec does NOT have a `doc_det` field on CDN entries — it's a custom
+     EkBook extension for audit. Keep it in the EkBook-internal snapshot
+     JSON but REMOVE it from the portal-upload JSON. Otherwise the portal
+     will reject the file.
+
+  10. AMOUNT SIGNING. Credit notes reduce output tax; debit notes increase
+      it. The portal expects credit notes with POSITIVE txval + tax (the
+      sign is implicit in ntty='C'). Make sure we don't negate the amounts
+      — the existing cdnGstRows SQL aggregates SUM(cgst) which is already
+      positive on a credit-note row (the credit-note's stored cgst is
+      positive). Verify this by inspecting a credit-note transaction in
+      the DB after the V17-Ext Tier 3 implementation.
+
+LOW RISK:
+
+  11. TXP SECTION. Almost always empty for kirana. Skip — emit `[]`.
+
+  12. CESS. Almost always 0 for kirana. Default 0 in the JSON. The
+      `csamt` field is required by the portal but accepts 0.
+
+  13. OUTER ENVELOPE. The portal accepts both `{ gstr1: { ... } }` (with
+      envelope) and `{ ... }` (without, top-level keys = gstin/fp/b2b/etc).
+      The offline utility uses the wrapped form. Recommend emitting the
+      wrapped form for maximum compatibility.
+
+  14. JSON vs CSV. The portal's primary upload format is JSON. CSV is a
+      secondary format with section-specific templates. The new Gstr1Report
+      should default to JSON download. CSV is a "human-readable summary"
+      for the user's own records — not portal-uploadable.
+
+  15. EXISTING /api/gstr-export ROUTE. Keep it. Don't break it. The
+      toolbar "Export GSTR-1" button (features?.gstrExport) still uses it.
+      The new /api/gstr-1 route is additive. Future cleanup: deprecate
+      /api/gstr-export after the new route is verified in production.
+
+Stage Summary:
+- Existing /api/gstr-export route produces a REPORT-STYLE JSON + flat CSV
+  that is NOT portal-uploadable. It has the right SQL aggregation pattern
+  (per-invoice-per-rate GROUP BY, V10 single source of truth), reconciliation
+  assertion, and truncation flag — but the JSON structure uses wrong field
+  names, wrong nesting (B2B not grouped by ctin, B2CS not aggregated), and
+  is missing 4 sections (HSN, NIL, DOC, CDNUR).
+- The established GSTR-3B + GSTR-2B pattern (schema snapshot model → GET+
+  POST API route with assertCanWrite → self-contained UI component → pure
+  function tests) is clear and proven. GSTR-1 should follow it exactly.
+- The GST portal JSON spec has 8 sections (B2B, B2CL, B2CS, CDNR, CDNUR,
+  HSN, NIL, DOC) with strict field names and nesting. Documented in detail
+  above. The new src/lib/gstr1-builder.ts should have one pure function
+  per section.
+- Schema gaps: TransactionItem.hsn (snapshot needed), Gstr1Snapshot model,
+  state-code helper. CESS column is optional (low priority).
+- 6-step implementation plan: schema + migration → pure-function builder →
+  API route → UI component → Reports.tsx integration → tests + audit + docs.
+- Top 5 risks: HSN validation/requirements, inter-state vs intra-state POS
+  derivation, rounding reconciliation across sections, silently-dropped
+  CDNUR section, filed-return immutability (per-month lock).
+- Total estimated effort: ~2,400 LOC new + ~50 LOC modified across 11 files.
+  Comparable in scope to GSTR-3B (1,300 LOC) + GSTR-2B (1,500 LOC) combined.
+- This is RESEARCH ONLY — no code written. Ready for the implementing agent
+  to start at Step 1.
