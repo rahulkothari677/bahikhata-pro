@@ -43,6 +43,14 @@ const nextConfig: NextConfig = {
             key: "Strict-Transport-Security",
             value: "max-age=31536000; includeSubDomains; preload",
           },
+          {
+            // 🔒 V7 Audit M1: Permissions-Policy restricts browser features.
+            // camera=self allows the barcode scanner + bill scanner to use the camera.
+            // microphone=() blocks all microphone access (not needed).
+            // geolocation=() blocks all geolocation access (not needed).
+            key: "Permissions-Policy",
+            value: "camera=self, microphone=(), geolocation=()",
+          },
         ],
       },
     ];

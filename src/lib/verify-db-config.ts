@@ -112,8 +112,9 @@ export function verifyDatabaseConfig(): void {
     console.warn('=========================================================')
   }
   if (ok.length > 0) {
-    console.log('[db-config] Pooling checks passed:')
-    ok.forEach((o) => console.log(`  ✓ ${o}`))
+    // 🔒 V7 Audit M2: Changed from console.log to console.debug to reduce
+    // serverless log noise. console.debug is filtered by default in Vercel.
+    console.debug('[db-config] Pooling checks passed:', ok.join(', '))
   }
 }
 

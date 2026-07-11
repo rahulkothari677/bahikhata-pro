@@ -29,7 +29,7 @@ async function applySaffronStatusBar() {
     await StatusBar.setStyle({ style: Style.Light })
     // Always saffron background, in both light and dark mode
     await StatusBar.setBackgroundColor({ color: SAFFRON })
-    console.log('[Capacitor] StatusBar applied: saffron bg, white text')
+    // StatusBar applied successfully (saffron bg, white text)
   } catch (err) {
     console.warn('[Capacitor] StatusBar apply failed:', err)
   }
@@ -39,11 +39,11 @@ export function CapacitorBridge() {
   // Effect 1: Status bar — apply once on mount, and re-apply on app foreground
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) {
-      console.log('[Capacitor] Not a native platform, skipping status bar')
+      // Not a native platform, skipping status bar
       return
     }
 
-    console.log('[Capacitor] Native platform detected, applying status bar')
+    // Native platform detected, applying status bar
     // Small delay to ensure WebView is fully ready before we set the color.
     // Without this, Android sometimes overrides our color after app launch.
     const initialTimer = setTimeout(applySaffronStatusBar, 300)
@@ -57,7 +57,7 @@ export function CapacitorBridge() {
         const { App } = await import('@capacitor/app')
         const listener = await App.addListener('appStateChange', ({ isActive }) => {
           if (isActive) {
-            console.log('[Capacitor] App foregrounded, re-applying status bar')
+            // App foregrounded, re-applying status bar
             applySaffronStatusBar()
           }
         })
@@ -114,7 +114,7 @@ export function CapacitorBridge() {
           listener.remove()
         }
       } catch (err) {
-        console.log('[Capacitor] Running on web, native plugins skipped')
+        // Running on web, native plugins skipped
       }
     }
 
