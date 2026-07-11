@@ -73,6 +73,11 @@ export async function GET() {
     let expenses = 0, income = 0
     let totalSales = 0, totalPurchases = 0
     let transactionCount = 0
+    // 🔒 V17 Audit Phase 1 P0.4: Track credit-note/debit-note refunds separately
+    // so the DayEndSummary UI can show them as distinct line items (not folded
+    // into the net sales/purchases totals).
+    let creditNoteRefunds = 0  // total credit-note amounts (refunds issued to customers)
+    let debitNoteRefunds = 0   // total debit-note amounts (refunds received from suppliers)
 
     // 🔒 V17 Audit Phase 4: Credit notes reduce sales (customer return = refund).
     // Debit notes reduce purchases (we return to supplier = refund). Without these
@@ -110,6 +115,8 @@ export async function GET() {
       } else if (row.type === 'credit-note') {
         // 🔒 V17 Audit Phase 4: Credit note = sales return. Reduces totalSales.
         // The refund (cash/UPI/etc.) goes OUT, so it reduces that payment mode.
+        // 🔒 V17 Audit Phase 1 P0.4: Also track total refund amount for the UI.
+        creditNoteRefunds = roundMoney(creditNoteRefunds + amount)
         totalSales = roundMoney(totalSales - amount)
         switch (row.paymentMode) {
           case 'cash': cashSales = roundMoney(cashSales - amount); break
@@ -121,6 +128,8 @@ export async function GET() {
       } else if (row.type === 'debit-note') {
         // 🔒 V17 Audit Phase 4: Debit note = purchase return. Reduces totalPurchases.
         // The refund (cash/UPI/etc.) comes IN, so it reduces that purchase payment mode.
+        // 🔒 V17 Audit Phase 1 P0.4: Also track total refund amount for the UI.
+        debitNoteRefunds = roundMoney(debitNoteRefunds + amount)
         totalPurchases = roundMoney(totalPurchases - amount)
         switch (row.paymentMode) {
           case 'cash': cashPurchases = roundMoney(cashPurchases - amount); break
@@ -176,6 +185,8 @@ export async function GET() {
       totalPurchases,
       expenses,
       income,
+      creditNoteRefunds,  // 🔒 V17 Audit Phase 1 P0.4: for separate UI line item
+      debitNoteRefunds,   // 🔒 V17 Audit Phase 1 P0.4: for separate UI line item
       udhaarCollected,
       udhaarPaid,
       expectedCash,

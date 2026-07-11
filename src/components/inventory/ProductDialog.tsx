@@ -72,6 +72,18 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
       toast({ title: 'Product name required', variant: 'destructive' })
       return
     }
+    // 🔒 V17 Audit Phase 1 P1.5: Client-side check for contradictory gstRate + gstTreatment.
+    // Exempt/Non-GST products must have gstRate=0. The Zod schema also enforces this
+    // server-side, but the client-side check gives immediate feedback before the API call.
+    const gstRateNum = parseFloat(form.gstRate) || 0
+    if ((form.gstTreatment === 'exempt' || form.gstTreatment === 'nonGst') && gstRateNum > 0) {
+      toast({
+        title: 'Contradictory GST settings',
+        description: `${form.gstTreatment === 'exempt' ? 'Exempt' : 'Non-GST'} products must have GST rate 0%. Change the GST rate to 0% or set GST Treatment to Taxable/Nil-rated.`,
+        variant: 'destructive',
+      })
+      return
+    }
     setSaving(true)
     try {
       const url = product ? `/api/products?id=${product.id}` : '/api/products'

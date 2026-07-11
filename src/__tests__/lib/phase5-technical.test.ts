@@ -46,16 +46,31 @@ describe('🔒 V17 Audit Phase 5 — gstTreatment Zod validation', () => {
       if (result.success) expect(result.data.gstTreatment).toBe('nil')
     })
 
-    test('accepts gstTreatment = "exempt"', () => {
-      const result = createProductSchema.safeParse({ ...validBase, gstTreatment: 'exempt' })
+    test('accepts gstTreatment = "exempt" with gstRate=0', () => {
+      const result = createProductSchema.safeParse({ ...validBase, gstRate: 0, gstTreatment: 'exempt' })
       expect(result.success).toBe(true)
       if (result.success) expect(result.data.gstTreatment).toBe('exempt')
     })
 
-    test('accepts gstTreatment = "nonGst"', () => {
-      const result = createProductSchema.safeParse({ ...validBase, gstTreatment: 'nonGst' })
+    test('accepts gstTreatment = "nonGst" with gstRate=0', () => {
+      const result = createProductSchema.safeParse({ ...validBase, gstRate: 0, gstTreatment: 'nonGst' })
       expect(result.success).toBe(true)
       if (result.success) expect(result.data.gstTreatment).toBe('nonGst')
+    })
+
+    test('🔒 V17 Audit Phase 1 P1.5: REJECTS gstTreatment="exempt" with gstRate>0 (contradictory)', () => {
+      const result = createProductSchema.safeParse({ ...validBase, gstRate: 18, gstTreatment: 'exempt' })
+      expect(result.success).toBe(false)
+    })
+
+    test('🔒 V17 Audit Phase 1 P1.5: REJECTS gstTreatment="nonGst" with gstRate>0 (contradictory)', () => {
+      const result = createProductSchema.safeParse({ ...validBase, gstRate: 5, gstTreatment: 'nonGst' })
+      expect(result.success).toBe(false)
+    })
+
+    test('accepts gstTreatment="nil" with gstRate=0 (nil-rated is 0% but taxable)', () => {
+      const result = createProductSchema.safeParse({ ...validBase, gstRate: 0, gstTreatment: 'nil' })
+      expect(result.success).toBe(true)
     })
 
     test('defaults to "taxable" when gstTreatment is omitted', () => {

@@ -41,7 +41,7 @@ import { haptic } from '@/lib/haptic'
 import {
   ChevronLeft, ChevronRight, Download, FileCheck, Save,
   Receipt, TrendingDown, TrendingUp, Wallet, Loader2,
-  ArrowRight, ArrowDownRight, ArrowUpRight,
+  ArrowRight, ArrowDownRight, ArrowUpRight, FileText, AlertCircle,
 } from 'lucide-react'
 
 export function Gstr3bReport() {
@@ -120,6 +120,11 @@ export function Gstr3bReport() {
     rows.push(`4(d),ITC from SEZ,0,0,0,0,0`)
     rows.push(`5,Exempt inward supplies,${data?.exemptInwardValue || 0},0,0,0,0`)
     rows.push('')
+    // 🔒 V17 Audit Phase 1 P0.1: CDN breakdown — was persisted to DB but never exported
+    rows.push('Credit/Debit Note Adjustments')
+    rows.push(`Credit Notes (reduce output tax),${data?.creditNoteTaxableValue || 0},${data?.creditNoteCgst || 0},${data?.creditNoteSgst || 0},${data?.creditNoteIgst || 0},${(data?.creditNoteCgst || 0) + (data?.creditNoteSgst || 0) + (data?.creditNoteIgst || 0)}`)
+    rows.push(`Debit Notes (reduce ITC),${data?.debitNoteTaxableValue || 0},${data?.debitNoteCgst || 0},${data?.debitNoteSgst || 0},${data?.debitNoteIgst || 0},${(data?.debitNoteCgst || 0) + (data?.debitNoteSgst || 0) + (data?.debitNoteIgst || 0)}`)
+    rows.push('')
     rows.push(`6.1,Net Tax Payable,,,${data?.netTaxPayable || 0}`)
     rows.push(`,Total Sale Invoices: ${data?.totalSaleInvoices || 0}`)
     rows.push(`,Total Purchase Bills: ${data?.totalPurchaseBills || 0}`)
@@ -158,6 +163,14 @@ export function Gstr3bReport() {
 
   const isFiled = data?.snapshot?.filingStatus === 'filed'
   const monthLabel = data?.period?.monthLabel || month
+  // 🔒 V17 Audit Phase 1 P0.2: Detect filed-vs-live divergence.
+  // If the snapshot's filedNetTaxPayable differs from the live netTaxPayable,
+  // it means transactions were edited/deleted after filing → the filed return
+  // no longer matches the books. Warn the user so they can file a revised return.
+  const filedNet = data?.snapshot?.filedNetTaxPayable
+  const liveNet = data?.netTaxPayable
+  const hasDivergence = isFiled && typeof filedNet === 'number' && typeof liveNet === 'number'
+    && Math.abs(filedNet - liveNet) > 0.01
 
   return (
     <div className="space-y-4">
@@ -187,6 +200,33 @@ export function Gstr3bReport() {
           </Button>
         </div>
       </div>
+
+      {/* 🔒 V17 Audit Phase 1 P0.2: Filed-vs-live divergence warning.
+          Shows when a filed snapshot's netTaxPayable differs from the live value —
+          meaning transactions were edited/deleted after filing. The user must file
+          a revised return on the GST portal to stay compliant. */}
+      {hasDivergence && (
+        <div className="rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 p-4 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-amber-800 dark:text-amber-200">
+              Books have changed since this return was filed
+            </p>
+            <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+              Filed Net Tax: <span className="font-semibold tabular-nums">{formatINR(filedNet!)}</span>
+              {' → '}
+              Live Net Tax: <span className="font-semibold tabular-nums">{formatINR(liveNet!)}</span>
+              {' '}
+              (difference: {formatINR(Math.abs(filedNet! - liveNet!))})
+            </p>
+            <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+              Transactions were edited or deleted after this return was filed. The filed GSTR-3B
+              no longer matches your books. Please file a <strong>revised return</strong> on the
+              GST portal to stay compliant.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -313,6 +353,66 @@ export function Gstr3bReport() {
               </tr>
             </tbody>
           </table>
+        </CardContent>
+      </Card>
+
+      {/* 🔒 V17 Audit Phase 1 P0.1: Credit/Debit Note Adjustments
+          — was persisted to DB (8 columns) but never shown in the UI. */}
+      <Card className="shadow-card border-violet-200 dark:border-violet-900/50">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <FileText className="w-4 h-4 text-violet-600" />
+            Credit/Debit Note Adjustments
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-muted-foreground border-b">
+                <th className="text-left py-1.5 font-medium">Type</th>
+                <th className="text-right py-1.5 font-medium">Taxable</th>
+                <th className="text-right py-1.5 font-medium">CGST</th>
+                <th className="text-right py-1.5 font-medium">SGST</th>
+                <th className="text-right py-1.5 font-medium">IGST</th>
+              </tr>
+            </thead>
+            <tbody>
+              <Gstr3bRow
+                label="Credit Notes (reduce output tax)"
+                taxable={data?.creditNoteTaxableValue}
+                cgst={data?.creditNoteCgst}
+                sgst={data?.creditNoteSgst}
+                igst={data?.creditNoteIgst}
+              />
+              <Gstr3bRow
+                label="Debit Notes (reduce ITC)"
+                taxable={data?.debitNoteTaxableValue}
+                cgst={data?.debitNoteCgst}
+                sgst={data?.debitNoteSgst}
+                igst={data?.debitNoteIgst}
+              />
+              <tr className="border-t font-semibold">
+                <td className="py-1.5">Net CDN Adjustment</td>
+                <td className="text-right py-1.5 tabular-nums">
+                  {formatINR((data?.creditNoteTaxableValue || 0) - (data?.debitNoteTaxableValue || 0))}
+                </td>
+                <td className="text-right py-1.5 tabular-nums">
+                  {formatINR((data?.creditNoteCgst || 0) - (data?.debitNoteCgst || 0))}
+                </td>
+                <td className="text-right py-1.5 tabular-nums">
+                  {formatINR((data?.creditNoteSgst || 0) - (data?.debitNoteSgst || 0))}
+                </td>
+                <td className="text-right py-1.5 tabular-nums">
+                  {formatINR((data?.creditNoteIgst || 0) - (data?.debitNoteIgst || 0))}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <p className="text-[10px] text-muted-foreground mt-2">
+            Credit notes reduce your output tax liability (sales returns).
+            Debit notes reduce your input tax credit (purchase returns).
+            Both are already included in the Net Tax Payable calculation above.
+          </p>
         </CardContent>
       </Card>
 

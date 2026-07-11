@@ -121,6 +121,17 @@ export function DayEndSummary({ open, onOpenChange }: { open: boolean; onOpenCha
                 <span className="text-sm font-semibold">Total Sales</span>
                 <span className="text-sm font-bold tabular-nums">{formatINR(data.totalSales)}</span>
               </div>
+              {/* 🔒 V17 Audit Phase 1 P0.4: Show credit-note refunds as a separate line
+                  so the shopkeeper can reconcile the drawer. Without this, the net
+                  cash sales number was opaque — the shopkeeper didn't know a refund
+                  was subtracted. */}
+              {data.creditNoteRefunds > 0 && (
+                <SummaryRow
+                  icon={<TrendingDown className="w-4 h-4 text-violet-600" />}
+                  label="Credit Note Refunds"
+                  value={-data.creditNoteRefunds}
+                />
+              )}
             </div>
 
             {/* Cash out */}

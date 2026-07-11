@@ -16,7 +16,7 @@ import {
   TrendingUp, TrendingDown, Wallet, Package,
   ArrowUpRight, ArrowDownRight, AlertTriangle, IndianRupee,
   Receipt, Boxes, PiggyBank, ScanLine, ArrowRight, Plus, CloudOff, Repeat, Loader2,
-  BookOpenText, Share2, Calendar, Target, HandCoins,
+  BookOpenText, Share2, Calendar, Target, HandCoins, FileText,
 } from 'lucide-react'
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell,
@@ -205,7 +205,7 @@ export function Dashboard() {
   // 🔒 BUG FIX V5: Add null checks to prevent crash when API returns error
   // Was: const { kpis, ... } = data → if data is partial/missing, crash
   // Now: provide defaults for every field
-  const kpis = data.kpis || { todayRevenue: 0, todayProfit: 0, todayTxnCount: 0, rangeRevenue: 0, rangeProfit: 0, rangeExpenses: 0, rangePurchases: 0, rangeIncome: 0, revenueGrowth: 0, profitGrowth: 0, totalReceivable: 0, totalPayable: 0, rangeSaleCount: 0 }
+  const kpis = data.kpis || { todayRevenue: 0, todayProfit: 0, todayTxnCount: 0, todayCreditNoteCount: 0, rangeRevenue: 0, rangeProfit: 0, rangeExpenses: 0, rangePurchases: 0, rangeIncome: 0, revenueGrowth: 0, profitGrowth: 0, totalReceivable: 0, totalPayable: 0, rangeSaleCount: 0 }
   const salesTrend = data.salesTrend || []
   const topProducts = data.topProducts || []
   const categoryBreakdown = data.categoryBreakdown || []
@@ -392,6 +392,13 @@ export function Dashboard() {
             <h2 className="text-2xl lg:text-3xl font-bold mt-1">{setting?.shopName || 'My Shop'}</h2>
             <p className="text-white/80 text-sm mt-1">
               {t('dash.today_made')} <span className="font-bold text-white">{formatINR(kpis.todayRevenue)}</span> {t('dash.from')} <span className="font-bold text-white">{kpis.todayTxnCount}</span> {t('dash.sales_word')}
+              {/* 🔒 V17 Audit Phase 1 P0.3: Show "net of returns" badge if credit notes exist today */}
+              {kpis.todayCreditNoteCount > 0 && (
+                <span className="ml-2 inline-flex items-center gap-1 text-[11px] bg-white/20 px-2 py-0.5 rounded-full">
+                  <FileText className="w-3 h-3" />
+                  {kpis.todayCreditNoteCount} return{kpis.todayCreditNoteCount !== 1 ? 's' : ''} netted
+                </span>
+              )}
             </p>
           </div>
           <div className="flex gap-2 flex-wrap">

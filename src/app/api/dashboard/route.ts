@@ -148,6 +148,7 @@ export async function GET(req: NextRequest) {
       // 1. ALL KPIs + GST in one raw SQL (SUM(CASE WHEN ...) conditional aggregation)
       db.$queryRaw<Array<{
         today_revenue: string; today_profit: string; today_count: bigint;
+        today_credit_note_count: bigint;  // 🔒 V17 Audit Phase 1 P0.3
         range_revenue: string; range_profit: string; range_expenses: string;
         range_purchases: string; range_income: string; range_sale_count: bigint;
         prev_revenue: string; prev_profit: string;
@@ -162,6 +163,8 @@ export async function GET(req: NextRequest) {
           COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${startOfToday} AND "date" <= ${now} THEN "grossProfit" ELSE 0 END), 0)::numeric
           + COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${startOfToday} AND "date" <= ${now} THEN "grossProfit" ELSE 0 END), 0)::numeric AS today_profit,
           COUNT(CASE WHEN "type" = 'sale' AND "date" >= ${startOfToday} AND "date" <= ${now} THEN 1 END) AS today_count,
+          -- 🔒 V17 Audit Phase 1 P0.3: Count credit notes so the UI can show net sale count
+          COUNT(CASE WHEN "type" = 'credit-note' AND "date" >= ${startOfToday} AND "date" <= ${now} THEN 1 END) AS today_credit_note_count,
           COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric
           - COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric AS range_revenue,
           -- 🔒 V17 Audit Phase 4: credit-note grossProfit is NEGATIVE, so we ADD (not subtract)
@@ -303,6 +306,7 @@ export async function GET(req: NextRequest) {
     const todayRevenue = roundMoney(Number(kpi.today_revenue))
     const todayProfit = roundMoney(Number(kpi.today_profit))
     const todayTxnCount = Number(kpi.today_count)
+    const todayCreditNoteCount = Number(kpi.today_credit_note_count)  // 🔒 V17 Audit Phase 1 P0.3
     const rangeRevenue = roundMoney(Number(kpi.range_revenue))
     const rangeProfit = roundMoney(Number(kpi.range_profit))
     const rangeExpenses = roundMoney(Number(kpi.range_expenses))
@@ -493,6 +497,7 @@ export async function GET(req: NextRequest) {
         todayRevenue,
         todayProfit,
         todayTxnCount,
+        todayCreditNoteCount,  // 🔒 V17 Audit Phase 1 P0.3: for "net of returns" UI
         rangeRevenue,
         rangeProfit,
         rangeExpenses,

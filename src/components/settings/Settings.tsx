@@ -762,7 +762,39 @@ export function Settings() {
             </div>
           </div>
 
-          {/* Danger zone */}
+          {/* 🔒 V17 Audit Phase 1 P1.6: Backup card moved OUT of the Danger Zone.
+              Was: safe "Download Backup" action grouped with destructive "Reset All Data"
+              inside a rose-bordered danger card. Now: separate blue card above the danger
+              zone so the user doesn't confuse a safe action with a destructive one. */}
+          <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+            <div className="flex items-start gap-3">
+              <Download className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-semibold text-blue-900 text-sm">Backup Your Data</p>
+                <p className="text-xs text-blue-700 mt-1">
+                  Download all your products, transactions, parties, and settings as a JSON file.
+                  Use this to migrate to a new device or keep a safe copy.
+                </p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-2 gap-2 border-blue-300 text-blue-700 hover:bg-blue-100"
+                  onClick={async () => {
+                    try {
+                      await exportBackup()
+                      sonnerToast.success('Backup downloaded!')
+                    } catch {
+                      sonnerToast.error('Failed to create backup')
+                    }
+                  }}
+                >
+                  <Download className="w-4 h-4" /> Download Backup
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Danger zone — destructive actions only (no safe actions mixed in) */}
           <div className="rounded-lg border border-rose-200 bg-rose-50 p-4">
             <div className="flex items-start gap-3">
               <AlertTriangle className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" />
@@ -771,34 +803,7 @@ export function Settings() {
                 <p className="text-xs text-rose-700 mt-1">
                   This will permanently delete all products, transactions, parties and settings. Useful if you want to start fresh.
                 </p>
-              {/* Data Backup — export all data to JSON */}
-              <div className="flex items-start gap-3 mb-4">
-                <Download className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <p className="font-semibold text-sm">Backup Your Data</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Download all your products, transactions, parties, and settings as a JSON file.
-                    Use this to migrate to a new device or keep a safe copy.
-                  </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="mt-2 gap-2 border-blue-300 text-blue-700 hover:bg-blue-100"
-                    onClick={async () => {
-                      try {
-                        await exportBackup()
-                        sonnerToast.success('Backup downloaded!')
-                      } catch {
-                        sonnerToast.error('Failed to create backup')
-                      }
-                    }}
-                  >
-                    <Download className="w-4 h-4" /> Download Backup
-                  </Button>
-                </div>
-              </div>
-
-              <Button variant="destructive" size="sm" className="mt-3 gap-2" onClick={handleResetData}>
+                <Button variant="destructive" size="sm" className="mt-3 gap-2" onClick={handleResetData}>
                   <Trash2 className="w-4 h-4" /> Reset All Data
                 </Button>
               </div>

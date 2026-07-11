@@ -423,6 +423,17 @@ export async function GET(req: NextRequest) {
       rcmItcIgst,
       // Section 5
       exemptInwardValue,
+      // 🔒 V17 Audit Phase 1 P0.1: CDN breakdown — was computed + persisted to DB
+      // but NOT returned in the GET response. The UI had no data to display.
+      // Now returned so the Gstr3bReport can show the Credit/Debit Note Adjustments card.
+      creditNoteTaxableValue,
+      creditNoteCgst,
+      creditNoteSgst,
+      creditNoteIgst,
+      debitNoteTaxableValue,
+      debitNoteCgst,
+      debitNoteSgst,
+      debitNoteIgst,
       // Section 6
       netTaxPayable,
       totalOutputTax,
@@ -443,6 +454,9 @@ export async function GET(req: NextRequest) {
         filingStatus: existingSnapshot.filingStatus,
         filedAt: existingSnapshot.filedAt,
         filedByUserId: existingSnapshot.filedByUserId,
+        // 🔒 V17 Audit Phase 1 P0.2: Return the filed netTaxPayable so the UI
+        // can compare it to the live value and warn if they diverge (post-filing edits).
+        filedNetTaxPayable: existingSnapshot.netTaxPayable,
       } : null,
     })
   } catch (err) {
