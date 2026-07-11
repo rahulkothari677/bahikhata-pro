@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { formatINR, formatDate, formatDateTime, cn, getInitials } from '@/lib/utils'
+import { roundMoney } from '@/lib/money'
 import {
   Phone, Building2, MapPin, User, Plus, ShoppingCart, Truck,
   ArrowDownRight, ArrowUpRight, IndianRupee, Calendar, TrendingUp,
@@ -423,7 +424,7 @@ export function PartyProfile() {
       let totalAmount = 0, totalPaid = 0
       transactions.forEach((t: any, i: number) => {
         if (y > pageHeight - 40) { doc.addPage(); y = 20 }
-        const due = t.totalAmount - (t.paidAmount || 0)
+        const due = roundMoney(t.totalAmount - (t.paidAmount || 0))
         totalAmount += t.totalAmount; totalPaid += (t.paidAmount || 0)
         doc.text(String(i + 1), margin + 2, y)
         doc.text(formatDate(t.date), margin + 10, y)

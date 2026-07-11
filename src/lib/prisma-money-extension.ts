@@ -366,6 +366,13 @@ export function withMoneyConversion(client: PrismaClient) {
           if (args.data) args.data = convertNestedData('Payment', args.data)
           return query(args)
         },
+        // 🔒 V18 BUG-012: delete returns record with money cols — convert
+        async delete({ args, query }) {
+          return convertRowOnRead('Payment', await query(args))
+        },
+        async deleteMany({ args, query }) {
+          return query(args)
+        },
         // 🔒 V18 Phase 4: aggregate returns _sum in paise — convert to rupees
         async aggregate({ args, query }) {
           const result = await query(args)
@@ -450,6 +457,13 @@ function generateModelHandlers(modelName: string, prismaModel: string): Record<s
     },
     async updateMany({ args, query }: any) {
       if (args.data) args.data = convertNestedData(modelName, args.data)
+      return query(args)
+    },
+    // 🔒 V18 BUG-012 FIX: delete returns the deleted record — convert money cols
+    async delete({ args, query }: any) {
+      return convertRowOnRead(modelName, await query(args))
+    },
+    async deleteMany({ args, query }: any) {
       return query(args)
     },
     async aggregate({ args, query }: any) {

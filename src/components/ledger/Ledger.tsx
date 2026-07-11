@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAppStore } from '@/store/app-store'
 import { formatINR, formatDate, formatDateTime, formatINRCompact, cn } from '@/lib/utils'
+import { roundMoney } from '@/lib/money'
 import { useTranslation } from '@/hooks/use-translation'
 import { ViewModeToggle } from '@/components/common/ViewModeToggle'
 import { DateRangePicker, getPresetRange, getPresetLabel, type DateRange, type DatePreset } from '@/components/common/DateRangePicker'
@@ -187,8 +188,8 @@ export function Ledger({ type }: { type: LedgerType }) {
       cmp = (a.party?.name || '').localeCompare(b.party?.name || '')
     } else if (sortBy === 'status') {
       // Sort by due amount (largest due first)
-      const aDue = a.totalAmount - a.paidAmount
-      const bDue = b.totalAmount - b.paidAmount
+      const aDue = roundMoney(a.totalAmount - a.paidAmount)
+      const bDue = roundMoney(b.totalAmount - b.paidAmount)
       cmp = bDue - aDue
     }
     return sortOrder === 'asc' ? cmp : -cmp
@@ -253,7 +254,7 @@ export function Ledger({ type }: { type: LedgerType }) {
       t.type,
       t.totalAmount,
       t.paidAmount,
-      t.totalAmount - t.paidAmount,
+      roundMoney(t.totalAmount - t.paidAmount),
       t.paymentMode,
     ])
     const csv = [headers.join(','), ...rows.map(r => r.map(c => `"${c}"`).join(','))].join('\n')
@@ -625,7 +626,7 @@ export function Ledger({ type }: { type: LedgerType }) {
       ) : transactionsViewMode === 'list' ? (
         <div className="space-y-2">
           {sorted.map((t) => {
-            const due = t.totalAmount - t.paidAmount
+            const due = roundMoney(t.totalAmount - t.paidAmount)
             const contextMenuItems: ContextMenuItem[] = [
               { label: 'View Details', icon: Eye, onClick: () => handleViewTransaction(t.id) },
               { label: 'Edit', icon: Edit2, onClick: () => {
@@ -771,7 +772,7 @@ export function Ledger({ type }: { type: LedgerType }) {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
           {sorted.map((t) => {
-            const due = t.totalAmount - t.paidAmount
+            const due = roundMoney(t.totalAmount - t.paidAmount)
             return (
               <Card
                 key={t.id}

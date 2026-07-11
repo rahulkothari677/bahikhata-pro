@@ -17,6 +17,7 @@ import { useToast } from '@/hooks/use-toast'
 import { toast as sonnerToast } from 'sonner'
 import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
 import { formatINR, formatDateTime, formatDate, cn } from '@/lib/utils'
+import { roundMoney } from '@/lib/money'
 import {
   Edit2, Trash2, Printer, Download, User, Calendar, Receipt,
   ShoppingCart, Truck, ArrowDownRight, ArrowUpRight, ArrowRight, X, Plus,
@@ -339,7 +340,7 @@ export function TransactionDetail() {
   const isCreditNote = txn.type === 'credit-note'
   const isDebitNote = txn.type === 'debit-note'
   const isInflow = isSale || isIncome
-  const due = txn.totalAmount - txn.paidAmount
+  const due = roundMoney(txn.totalAmount - txn.paidAmount)
 
   // V17-Ext Tier 3: Credit/debit note display helpers
   const isNote = isCreditNote || isDebitNote
@@ -1114,7 +1115,7 @@ function PrintInvoice({ txn, setting }: { txn: any; setting: any }) {
 
 function PrintInvoiceContent({ txn, setting }: { txn: any; setting: any }) {
   const isSale = txn.type === 'sale'
-  const due = txn.totalAmount - txn.paidAmount
+  const due = roundMoney(txn.totalAmount - txn.paidAmount)
   const shopName = setting?.shopName || 'My Shop'
   const shopAddress = setting?.address
   const shopPhone = setting?.phone
@@ -1249,7 +1250,7 @@ function PrintInvoiceContent({ txn, setting }: { txn: any; setting: any }) {
 
 function generateInvoiceHTML(txn: any, setting: any): string {
   const isSale = txn.type === 'sale'
-  const due = txn.totalAmount - txn.paidAmount
+  const due = roundMoney(txn.totalAmount - txn.paidAmount)
   const shopName = setting?.shopName || 'My Shop'
   const shopAddress = setting?.address || ''
   const shopPhone = setting?.phone || ''

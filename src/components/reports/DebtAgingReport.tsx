@@ -15,6 +15,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { formatINR, cn } from '@/lib/utils'
+import { roundMoney } from '@/lib/money'
 import { AlertTriangle, Clock, User } from 'lucide-react'
 
 export function DebtAgingReport({ data }: { data: any }) {
@@ -26,12 +27,12 @@ export function DebtAgingReport({ data }: { data: any }) {
     .filter((p: any) => p.balance > 0)
     .map((p: any) => {
       const transactions = (p.transactions || []).filter((t: any) =>
-        (t.totalAmount - t.paidAmount) > 0 && t.type === 'sale'
+        roundMoney(t.totalAmount - t.paidAmount) > 0 && t.type === 'sale'
       )
       const buckets = { current: 0, overdue: 0, serious: 0, critical: 0 }
       transactions.forEach((t: any) => {
         const days = Math.floor((now.getTime() - new Date(t.date).getTime()) / (1000 * 60 * 60 * 24))
-        const due = t.totalAmount - t.paidAmount
+        const due = roundMoney(t.totalAmount - t.paidAmount)
         if (days <= 30) buckets.current += due
         else if (days <= 60) buckets.overdue += due
         else if (days <= 90) buckets.serious += due
