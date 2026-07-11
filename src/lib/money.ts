@@ -225,3 +225,172 @@ export function parseMoney(input: string | number | any): number {
   const n = parseFloat(cleaned)
   return isNaN(n) ? 0 : roundMoney(n)
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔒 V17 PAISE MIGRATION — Phase 1: Additive helpers (zero-risk)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// These helpers exist ALONGSIDE the existing rupee helpers. No existing code
+// is changed. They will be used incrementally as we migrate each model from
+// Float (rupees) to BigInt (paise).
+//
+// CONVENTION:
+//   - Rupees (Float):    1234.56  ← current storage (being migrated away)
+//   - Paise (BigInt):    123456   ← future storage (integer, no float drift)
+//   - 1 rupee = 100 paise
+//
+// The migration plan (7 phases):
+//   Phase 1: Add these helpers (DONE in this commit) ← zero-risk, additive
+//   Phase 2: Migrate read paths (SQL queries) — each query independently
+//   Phase 3: Migrate write paths (POST/PUT handlers, Zod transforms)
+//   Phase 4: Run Prisma migration (74 columns Float → BigInt)
+//   Phase 5: Migrate UI display (.toFixed → formatPaise)
+//   Phase 6: Delete workarounds (180 roundMoney calls)
+//   Phase 7: Update tests (16 test files with rupee fixtures)
+//
+// Each phase is independently deployable. No big-bang cutover.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Convert rupees (Float) to paise (integer).
+ *
+ * Uses Math.round to handle float representation errors:
+ *   1.005 * 100 = 100.49999999999999 → Math.round → 101 (correct: 1.01 rupees)
+ *
+ * @param rupees - a money value in rupees (e.g., 1234.56)
+ * @returns the same value in paise as an integer (e.g., 123456)
+ *
+ * Examples:
+ *   toPaise(1234.56) → 123456
+ *   toPaise(0) → 0
+ *   toPaise(1.005) → 101  (float-safe: 1.005 * 100 = 100.499... → rounds to 101)
+ *   toPaise(-500.25) → -50025
+ *   toPaise(null) → 0
+ *   toPaise(undefined) → 0
+ *   toPaise(NaN) → 0
+ */
+export function toPaise(rupees: number | null | undefined | any): number {
+  // 🔒 Use roundMoney FIRST to fix float representation errors (1.005 → 1.01),
+  // THEN multiply by 100 and round to integer. This two-step process ensures:
+  //   1.005 → roundMoney → 1.01 → × 100 → 101 (correct)
+  //   Without roundMoney: 1.005 × 100 = 100.499... → Math.round → 100 (WRONG)
+  const n = roundMoney(toMoney(rupees))
+  if (isNaN(n) || !isFinite(n)) return 0
+  return Math.round(n * 100)
+}
+
+/**
+ * Convert paise (integer) back to rupees (Float) for display.
+ *
+ * @param paise - a money value in paise (e.g., 123456)
+ * @returns the same value in rupees as a Float (e.g., 1234.56)
+ *
+ * Examples:
+ *   fromPaise(123456) → 1234.56
+ *   fromPaise(0) → 0
+ *   fromPaise(101) → 1.01
+ *   fromPaise(-50025) → -500.25
+ *   fromPaise(null) → 0
+ *   fromPaise(undefined) → 0
+ */
+export function fromPaise(paise: number | null | undefined | any): number {
+  const n = toMoney(paise)
+  if (isNaN(n) || !isFinite(n)) return 0
+  return n / 100
+}
+
+/**
+ * Format paise (integer) as an Indian Rupee string for display.
+ *
+ * This is the paise equivalent of formatINR(). Once the migration is complete,
+ * all display code will use formatPaise() instead of formatINR().
+ *
+ * @param paise - a money value in paise (e.g., 123456)
+ * @returns formatted string (e.g., "₹1,234.56")
+ *
+ * Examples:
+ *   formatPaise(123456) → "₹1,234.56"
+ *   formatPaise(0) → "₹0.00"
+ *   formatPaise(-50025) → "-₹500.25"
+ *   formatPaise(101) → "₹1.01"
+ */
+export function formatPaise(paise: number | null | undefined | any): string {
+  return formatINR(fromPaise(paise))
+}
+
+/**
+ * Add two or more paise values (integer arithmetic — no float drift).
+ *
+ * This is the paise equivalent of addMoney(). Once the migration is complete,
+ * all money addition will use addPaise() instead of addMoney().
+ *
+ * @param values - money values in paise (integers)
+ * @returns the sum in paise (integer)
+ *
+ * Examples:
+ *   addPaise(100, 200, 50) → 350
+ *   addPaise(123456, -50000) → 73456
+ *   addPaise() → 0
+ */
+export function addPaise(...values: number[]): number {
+  return values.reduce((sum, v) => sum + toMoney(v), 0)
+}
+
+/**
+ * Multiply a paise value by a quantity (integer arithmetic — no float drift).
+ *
+ * Use for line-item total calculation in paise mode.
+ *
+ * @param quantity - the quantity (can be fractional: 0.5 kg)
+ * @param unitPricePaise - the unit price in paise (integer)
+ * @returns the total in paise (integer, rounded)
+ *
+ * Examples:
+ *   multiplyPaise(2, 5000) → 10000  (2 units × ₹50.00 = ₹100.00)
+ *   multiplyPaise(0.5, 2000) → 1000  (0.5 kg × ₹20.00 = ₹10.00)
+ *   multiplyPaise(3, 2800) → 8400  (3 pcs × ₹28.00 = ₹84.00)
+ */
+export function multiplyPaise(quantity: number, unitPricePaise: number): number {
+  const qty = toMoney(quantity)
+  const price = toMoney(unitPricePaise)
+  return Math.round(qty * price)
+}
+
+/**
+ * Calculate GST in paise from a paise taxable amount.
+ *
+ * @param amountPaise - the taxable amount in paise (integer)
+ * @param gstRate - the GST percentage (0, 5, 12, 18, 28)
+ * @returns the GST amount in paise (integer, rounded)
+ *
+ * Examples:
+ *   calculateGstPaise(100000, 18) → 18000  (₹1000 × 18% = ₹180.00)
+ *   calculateGstPaise(50000, 5) → 2500  (₹500 × 5% = ₹25.00)
+ *   calculateGstPaise(100, 0) → 0
+ */
+export function calculateGstPaise(amountPaise: number, gstRate: number): number {
+  const amount = toMoney(amountPaise)
+  const rate = toMoney(gstRate)
+  return Math.round(amount * rate / 100)
+}
+
+/**
+ * Split GST (in paise) into CGST and SGST (in paise).
+ *
+ * @param totalGstPaise - the total GST in paise (integer)
+ * @returns { cgst, sgst } — each in paise (integers that sum to totalGstPaise)
+ *
+ * If the GST is an odd number of paise, the extra paisa goes to CGST
+ * (same rule as splitGst — arbitrary but consistent).
+ *
+ * Examples:
+ *   splitGstPaise(18000) → { cgst: 9000, sgst: 9000 }
+ *   splitGstPaise(18001) → { cgst: 9001, sgst: 9000 }  (extra paisa → CGST)
+ *   splitGstPaise(0) → { cgst: 0, sgst: 0 }
+ */
+export function splitGstPaise(totalGstPaise: number): { cgst: number; sgst: number } {
+  const gst = toMoney(totalGstPaise)
+  const cgst = Math.ceil(gst / 2)  // extra paisa goes to CGST
+  const sgst = gst - cgst  // ensures cgst + sgst === gst exactly
+  return { cgst, sgst }
+}
