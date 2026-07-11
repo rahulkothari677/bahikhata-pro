@@ -394,16 +394,15 @@ export async function GET(req: NextRequest) {
 
     const output = {
       gstin: setting?.gstin || '',
-      // 🔒 V10 FIX: Derive `fp` (filing period) from the `to` date, not `from`.
-      // Reason: when a user in India selects "This Month" (July 1 - July 6 IST),
-      // the ISO strings become June 30 - July 6 in UTC. Using `from`'s UTC month
-      // gives "062026" (June) — wrong. Using `to`'s UTC month gives "072026"
-      // (July) — correct. The `to` date is always within the intended filing
-      // month (the user is exporting for a period that ENDS in the current month).
-      // 🔒 FIX C1: Was `to.getUTCMonth()` which returns UTC month. For an export
-      // at IST 2 AM on July 1, `to` is still June 30 UTC → fp = "062026" (wrong).
-      // Now uses `toParts` (already computed on line ~75 from getISTDateParts).
-      fp: `${String(toParts.month + 1).padStart(2, '0')}${toParts.year}`,
+      // 🔒 V19-002 FIX: Use `fromParts` for `fp` (filing period), not `toParts`.
+      // The `from` date is ALWAYS in the intended filing month. The `to` date
+      // can be in the NEXT month for whole-month-boundary exports (e.g.,
+      // from = July 1, to = Aug 1 00:00 → toParts is August → fp = "082026" WRONG).
+      // Using fromParts: fp = "072026" (correct — July filing).
+      // The previous comment was backwards: it claimed `to` is always in the
+      // intended month, but the isWholeMonthBoundary case (line 84-91) explicitly
+      // allows `to` to be the 1st of the NEXT month.
+      fp: `${String(fromParts.month + 1).padStart(2, '0')}${fromParts.year}`,
       gt: 0,
       cur_gt: 0,
       b2b: b2bInvoices,

@@ -113,9 +113,15 @@ export async function checkPartyBalances(userId: string): Promise<Reconciliation
  */
 export async function checkGstReconciliation(userId: string): Promise<ReconciliationCheck> {
   // Per-item GST totals (the "single source of truth" from V10)
+  // 🔒 V19-003 FIX: Added type filter to item-level query. Previously, the
+  // item aggregate included ALL transaction types (sale, purchase, credit-note,
+  // debit-note), while the header aggregate only included sale + purchase.
+  // This caused a false "GST mismatch" whenever credit notes or debit notes
+  // had GST. Now both queries use the same type filter for an apples-to-apples
+  // comparison.
   const [itemGst, headerGst] = await Promise.all([
     db.transactionItem.aggregate({
-      where: { transaction: { userId, deletedAt: null } },
+      where: { transaction: { userId, deletedAt: null, type: { in: ['sale', 'purchase'] } } },
       _sum: { cgst: true, sgst: true, igst: true },
     }),
     db.transaction.aggregate({

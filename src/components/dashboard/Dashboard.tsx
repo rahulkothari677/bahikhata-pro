@@ -1061,21 +1061,21 @@ export function Dashboard() {
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-xs font-semibold">Expense Budget</span>
                   <span className="text-xs font-bold tabular-nums">
-                    {formatINRCompact(kpis.totalExpenses || 0)} / {formatINRCompact(expenseBudget)}
+                    {formatINRCompact(kpis.rangeExpenses || 0)} / {formatINRCompact(expenseBudget)}
                   </span>
                 </div>
                 <div className="h-2.5 bg-muted rounded-full overflow-hidden">
                   <div
                     className={cn('h-full rounded-full transition-all duration-500',
-                      (kpis.totalExpenses || 0) > expenseBudget ? 'bg-rose-500' : 'bg-amber-500'
+                      (kpis.rangeExpenses || 0) > expenseBudget ? 'bg-rose-500' : 'bg-amber-500'
                     )}
-                    style={{ width: `${Math.min(100, ((kpis.totalExpenses || 0) / expenseBudget) * 100)}%` }}
+                    style={{ width: `${Math.min(100, ((kpis.rangeExpenses || 0) / expenseBudget) * 100)}%` }}
                   />
                 </div>
                 <p className="text-[10px] text-muted-foreground mt-0.5 tabular-nums">
-                  {(kpis.totalExpenses || 0) > expenseBudget
-                    ? `⚠️ Over budget by ${formatINRCompact((kpis.totalExpenses || 0) - expenseBudget)}`
-                    : `${formatINRCompact(expenseBudget - (kpis.totalExpenses || 0))} remaining`}
+                  {(kpis.rangeExpenses || 0) > expenseBudget
+                    ? `⚠️ Over budget by ${formatINRCompact((kpis.rangeExpenses || 0) - expenseBudget)}`
+                    : `${formatINRCompact(expenseBudget - (kpis.rangeExpenses || 0))} remaining`}
                 </p>
               </div>
             )}
