@@ -36,11 +36,14 @@ export function Gstr1Report() {
   const [activeSection, setActiveSection] = useState<string>('b2b')
   const [saving, setSaving] = useState(false)
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, error } = useQuery({
     queryKey: ['gstr-1', month],
     queryFn: async () => {
       const r = await offlineFetch(`/api/gstr-1?month=${month}`)
-      if (!r.ok) throw new Error('Failed to fetch GSTR-1')
+      if (!r.ok) {
+        const errBody = await r.json().catch(() => ({}))
+        throw new Error(errBody.error || errBody.message || `Failed to fetch GSTR-1 (HTTP ${r.status})`)
+      }
       return r.json()
     },
   })
@@ -57,7 +60,10 @@ export function Gstr1Report() {
   }
 
   const handleDownloadJSON = () => {
-    if (!data?.gstr1) return
+    if (!data?.gstr1) {
+      sonnerToast.error('No GSTR-1 data to download. Check if the API returned an error.')
+      return
+    }
     const json = JSON.stringify({ gstr1: data.gstr1 }, null, 2)
     const blob = new Blob([json], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
@@ -70,7 +76,10 @@ export function Gstr1Report() {
   }
 
   const handleDownloadCSV = () => {
-    if (!data?.gstr1) return
+    if (!data?.gstr1) {
+      sonnerToast.error('No GSTR-1 data to download. Check if the API returned an error.')
+      return
+    }
     const g = data.gstr1
     const rows: string[] = []
     rows.push('GSTR-1 Summary,' + (data?.period?.monthLabel || month))
@@ -130,6 +139,41 @@ export function Gstr1Report() {
         <Skeleton className="h-32 w-full rounded-xl" />
         <Skeleton className="h-64 w-full rounded-xl" />
       </div>
+    )
+  }
+
+  // 🔒 V17 Audit Phase 3: Show error state instead of silently rendering zeros.
+  // This happens when the API fails (e.g., migration not applied, Neon cold start).
+  if (error || !data) {
+    return (
+      <Card className="shadow-card border-rose-200 dark:border-rose-900/50">
+        <CardContent className="p-6">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-rose-800 dark:text-rose-200">
+                Failed to load GSTR-1
+              </p>
+              <p className="text-xs text-rose-700 dark:text-rose-300 mt-1">
+                {error instanceof Error ? error.message : 'Unknown error'}
+              </p>
+              <p className="text-xs text-muted-foreground mt-2">
+                This usually means the database migration hasn't run yet. Wait for the Vercel
+                deploy to finish (the build runs migrations automatically), then refresh this page.
+                If the error persists, check that your shop has transactions in {month}.
+              </p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-3 gap-2"
+                onClick={() => queryClient.invalidateQueries({ queryKey: ['gstr-1', month] })}
+              >
+                <Loader2 className="w-4 h-4" /> Retry
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     )
   }
 
