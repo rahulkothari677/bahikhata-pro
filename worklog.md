@@ -3036,3 +3036,57 @@ Stage Summary:
   * Partially-blocked ITC: liability appears in 3.1(d), only the credited portion appears in 4(b) → net tax increases by the blocked portion (correct).
 - NEW regression test locks in the fix: "RCM purchase cancels out" asserts net=720 (correct) and NOT 360 (old buggy value).
 - Phase 2 complete. Phase 3 (LOW findings: mixed nil-rated, exempt flag, snapshot CDN columns, nil+RCM overlap test) next.
+
+---
+Task ID: bahikhata-v17-audit-phase3
+Agent: main
+Task: V17 Audit §4.1-4.4 (LOW) — Mixed nil-rated, exempt flag, CDN snapshot columns, nil+RCM overlap test
+
+Work Log:
+- Read the current nil-rated query (gstr-3b/route.ts:150-166): used NOT EXISTS (item with gstRate>0) — whole-invoice only. An invoice with a mix of 0% and 18% items had its 0% portion counted only inside taxable supply, never broken out as nil-rated.
+- Read the Product schema: no gstTreatment field. exemptValue was hardcoded to 0.
+- Read the GstReturn schema: no CDN columns. creditNote/debitNote values were computed but not persisted.
+- §4.1 FIX (nil-rated query — both GET and POST):
+  * OLD: SELECT SUM(totalAmount) FROM Transaction WHERE type='sale' AND NOT EXISTS (item with gstRate>0)
+  * NEW: SELECT SUM(quantity × unitPrice - discountAmount) FROM TransactionItem ti JOIN Transaction t WHERE type='sale' AND isReverseCharge=false AND ti.gstRate=0
+  * Now sums ALL 0%-rated line items across ALL non-RCM sales (whether the invoice is mixed or pure-0%). Correctly breaks out the nil-rated portion of mixed invoices.
+- §4.2 FIX (exempt flag):
+  * Added Product.gstTreatment: String @default("taxable") — enum: taxable | nil | exempt | nonGst
+  * Added a new raw SQL query (exemptAgg) that sums line items whose product is marked gstTreatment='exempt'. Falls back to 0 if no products are exempt (backward compat).
+  * exemptValue now reads from exemptAgg (was: hardcoded 0). Applied to both GET and POST.
+  * Migration: ALTER TABLE Product ADD COLUMN gstTreatment TEXT NOT NULL DEFAULT 'taxable'
+- §4.3 FIX (CDN snapshot columns):
+  * Added 8 columns to GstReturn: creditNoteTaxableValue, creditNoteCgst, creditNoteSgst, creditNoteIgst, debitNoteTaxableValue, debitNoteCgst, debitNoteSgst, debitNoteIgst (all Float @default(0))
+  * POST upsert now persists all 8 values (was: only netTaxPayable). The filed snapshot now has the full CDN breakdown for audit/dispute resolution.
+  * Migration: ALTER TABLE GstReturn ADD COLUMN × 8 (all DOUBLE PRECISION NOT NULL DEFAULT 0)
+  * Also fixed: POST upsert had `exemptValue: 0` hardcoded in both update and create — now uses the real `exemptValue` variable.
+- §4.4 FIX (nil+RCM overlap test):
+  * The nil-rated query already filters `isReverseCharge = false` (RCM sales excluded). Added a test asserting this: "nil-rated query EXCLUDES RCM sales" — locks in the behavior so nil+RCM don't double-count.
+- UI updates (Gstr3bReport.tsx):
+  * 3.1(c) row split into 3 separate rows: "Nil-rated (0% GST)", "Exempt", "Non-GST" (was: one combined row). More transparent — the user sees each category's value.
+  * CSV export: same 3-row split.
+- Tests (gstr-3b.test.ts): 24 total (was 21)
+  * Updated "Nil-rated detection" test: now asserts line-item sum (1300) not whole-invoice (1000). Scenario: Invoice A (2 items @ 0% = ₹1000) + Invoice B (1 item @ 0% + 1 item @ 18%; ₹300 nil-rated). Old query: ₹1000 (Invoice B excluded). New query: ₹1300 (sums 0%-rated items from BOTH).
+  * NEW "Exempt supplies (§4.2)" describe block: 2 tests. (1) exempt = sum of items where product.gstTreatment='exempt'. (2) exempt defaults to 0 when no products are marked exempt.
+  * NEW "Nil-rated + RCM overlap (§4.4)" describe block: 1 test. Asserts nil-rated query EXCLUDES RCM sales.
+- Verified:
+  * npx prisma generate: ✓ (Prisma client regenerated with new fields)
+  * npx tsc --noEmit: 0 NEW errors
+  * npx next build: ✓ Compiled successfully
+  * npx jest gstr-3b: 24/24 pass (21 existing updated + 3 new)
+  * npx jest gstr-3b + net-sales + balance-reconciliation + soft-delete-sweep + staff-permissions + ca-write-block: 107/107 pass (no regressions)
+- Committed (99cb996) + pushed to GitHub
+
+Stage Summary:
+- Files changed: 5 (schema.prisma, migration.sql [new], gstr-3b/route.ts, Gstr3bReport.tsx, gstr-3b.test.ts)
+- All 4 LOW findings fixed:
+  * §4.1: Nil-rated now breaks out 0% portion of mixed invoices (line-item sum, not whole-invoice)
+  * §4.2: exemptValue now reads from Product.gstTreatment='exempt' (was: hardcoded 0)
+  * §4.3: GstReturn snapshot now persists CDN breakdown (8 new columns)
+  * §4.4: nil+RCM overlap test added (locks in non-double-counting)
+- 1 migration (idempotent, safe to re-run): Product.gstTreatment + GstReturn CDN columns
+- V17 AUDIT COMPLETE — all findings resolved:
+  * §1 HIGH (credit notes not netted) — Phase 1 ✅
+  * §1 user-reported bugs (profit=0, not visible, not pre-filled) — Phase 1 fixes ✅
+  * §2 MEDIUM (GSTR-3B RCM net tax) — Phase 2 ✅
+  * §4.1-4.4 LOW — Phase 3 ✅
