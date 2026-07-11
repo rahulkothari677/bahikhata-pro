@@ -21,7 +21,7 @@
  */
 
 import { db } from '@/lib/db'
-import { roundMoney } from '@/lib/money'
+import { roundMoney, fromPaise } from '@/lib/money'
 
 /**
  * Compute the balance for a single party (customer/supplier).
@@ -189,36 +189,69 @@ export async function getReceivablePayable(
 }> {
   // Pre-aggregated subqueries: one row per party from each table, then join.
   // This avoids the T×P Cartesian product that the old multi-JOIN caused.
+  //
+  // 🔒 V17 PAISE MIGRATION Phase 2B: SQL now returns paise (integer) instead
+  // of rupees (Float). The transformation for each money column:
+  //   Old: SUM(...) AS "X"                    → Float rupees (numeric string)
+  //   New: ROUND(SUM(...) * 100 + nudge) AS "XPaise"  → Int paise (numeric string)
+  //
+  // The nudge (0.0000001 = 1e-7 paise = 1e-9 rupees) mirrors the roundMoney()
+  // helper's float-correction nudge. It bridges the gap between:
+  //   - Postgres numeric ROUND (exact decimal arithmetic, no nudge needed for
+  //     exact values, but float-cast values like 1.005→1.00499999... round DOWN)
+  //   - JS roundMoney (adds 1e-9 to abs value before toFixed(2), so
+  //     1.00499999... → 1.0050000009... → "1.01" → 1.01)
+  //
+  // For openingBalance (can be negative — supplier we owe), the nudge is
+  // sign-aware: `+ nudge * SIGN(x)`. This matches roundMoney's symmetric
+  // rounding (sign applied separately to abs value).
+  //
+  // For SUM columns (always >= 0: totalAmount >= paidAmount by definition),
+  // a positive nudge is sufficient.
+  //
+  // WHY: This preserves EXACT behavioral parity with the pre-migration code
+  // (which applied roundMoney in JS). Without the nudge, values with float
+  // representation errors (e.g., 1.005 stored as 1.00499999...) would round
+  // DOWN to 1.00 in SQL but UP to 1.01 in the old JS path — a 1-paisa
+  // discrepancy that would fail the behavioral reconciliation test.
+  //
+  // The nudge is a TRANSITIONAL WORKAROUND. It will be removed in Phase 5
+  // (delete workarounds) after Phase 4 migrates columns from Float to Int
+  // (paise), eliminating float representation errors entirely.
+  //
+  // JS reads paise strings, converts via Number() + fromPaise() to get back
+  // the same rupee Float the caller expects. The function's return type is
+  // UNCHANGED (still rupees) — callers don't need to change.
   const rows = await db.$queryRaw<Array<{
     partyId: string
-    openingBalance: string
-    salesOutstanding: string
-    purchaseOutstanding: string
-    creditNoteOutstanding: string
-    debitNoteOutstanding: string
-    paymentsReceived: string
-    paymentsPaid: string
+    openingBalancePaise: string
+    salesOutstandingPaise: string
+    purchaseOutstandingPaise: string
+    creditNoteOutstandingPaise: string
+    debitNoteOutstandingPaise: string
+    paymentsReceivedPaise: string
+    paymentsPaidPaise: string
     transactionCount: bigint
   }>>`
     SELECT
       p."id" AS "partyId",
-      p."openingBalance"::numeric AS "openingBalance",
-      COALESCE(t."salesOutstanding", 0) AS "salesOutstanding",
-      COALESCE(t."purchaseOutstanding", 0) AS "purchaseOutstanding",
-      COALESCE(t."creditNoteOutstanding", 0) AS "creditNoteOutstanding",
-      COALESCE(t."debitNoteOutstanding", 0) AS "debitNoteOutstanding",
-      COALESCE(pay."paymentsReceived", 0) AS "paymentsReceived",
-      COALESCE(pay."paymentsPaid", 0) AS "paymentsPaid",
+      ROUND(p."openingBalance"::numeric * 100 + 0.0000001 * SIGN(p."openingBalance"::numeric)) AS "openingBalancePaise",
+      COALESCE(t."salesOutstandingPaise", 0) AS "salesOutstandingPaise",
+      COALESCE(t."purchaseOutstandingPaise", 0) AS "purchaseOutstandingPaise",
+      COALESCE(t."creditNoteOutstandingPaise", 0) AS "creditNoteOutstandingPaise",
+      COALESCE(t."debitNoteOutstandingPaise", 0) AS "debitNoteOutstandingPaise",
+      COALESCE(pay."paymentsReceivedPaise", 0) AS "paymentsReceivedPaise",
+      COALESCE(pay."paymentsPaidPaise", 0) AS "paymentsPaidPaise",
       COALESCE(t."txnCount", 0) AS "transactionCount"
     FROM "Party" p
     LEFT JOIN (
       SELECT
         "partyId",
-        SUM(CASE WHEN "type" = 'sale' THEN ("totalAmount" - "paidAmount")::numeric ELSE 0 END) AS "salesOutstanding",
-        SUM(CASE WHEN "type" = 'purchase' THEN ("totalAmount" - "paidAmount")::numeric ELSE 0 END) AS "purchaseOutstanding",
-        SUM(CASE WHEN "type" = 'credit-note' THEN ("totalAmount" - "paidAmount")::numeric ELSE 0 END) AS "creditNoteOutstanding",
-        SUM(CASE WHEN "type" = 'debit-note' THEN ("totalAmount" - "paidAmount")::numeric ELSE 0 END) AS "debitNoteOutstanding",
-        COUNT(*) AS "txnCount"
+        ROUND(SUM(CASE WHEN "type" = 'sale' THEN ("totalAmount" - "paidAmount")::numeric ELSE 0 END) * 100 + 0.0000001) AS "salesOutstandingPaise",
+        ROUND(SUM(CASE WHEN "type" = 'purchase' THEN ("totalAmount" - "paidAmount")::numeric ELSE 0 END) * 100 + 0.0000001) AS "purchaseOutstandingPaise",
+        ROUND(SUM(CASE WHEN "type" = 'credit-note' THEN ("totalAmount" - "paidAmount")::numeric ELSE 0 END) * 100 + 0.0000001) AS "creditNoteOutstandingPaise",
+        ROUND(SUM(CASE WHEN "type" = 'debit-note' THEN ("totalAmount" - "paidAmount")::numeric ELSE 0 END) * 100 + 0.0000001) AS "debitNoteOutstandingPaise",
+        COUNT(CASE WHEN "type" IN ('sale', 'purchase', 'credit-note', 'debit-note') THEN 1 END) AS "txnCount"
       FROM "Transaction"
       WHERE "userId" = ${userId}
         AND "deletedAt" IS NULL
@@ -227,8 +260,8 @@ export async function getReceivablePayable(
     LEFT JOIN (
       SELECT
         "partyId",
-        SUM(CASE WHEN "type" = 'received' THEN "amount"::numeric ELSE 0 END) AS "paymentsReceived",
-        SUM(CASE WHEN "type" = 'paid' THEN "amount"::numeric ELSE 0 END) AS "paymentsPaid"
+        ROUND(SUM(CASE WHEN "type" = 'received' THEN "amount"::numeric ELSE 0 END) * 100 + 0.0000001) AS "paymentsReceivedPaise",
+        ROUND(SUM(CASE WHEN "type" = 'paid' THEN "amount"::numeric ELSE 0 END) * 100 + 0.0000001) AS "paymentsPaidPaise"
       FROM "Payment"
       WHERE "userId" = ${userId}
         AND "deletedAt" IS NULL
@@ -257,14 +290,19 @@ export async function getReceivablePayable(
   let totalPayable = 0
 
   for (const row of rows) {
-    const openingBalance = roundMoney(Number(row.openingBalance))
-    const salesOutstanding = roundMoney(Number(row.salesOutstanding))
-    const purchaseOutstanding = roundMoney(Number(row.purchaseOutstanding))
-    const creditNoteOutstanding = roundMoney(Number(row.creditNoteOutstanding))
-    const debitNoteOutstanding = roundMoney(Number(row.debitNoteOutstanding))
-    // 🔒 FIX H3: Include payments in the balance
-    const paymentsReceived = roundMoney(Number(row.paymentsReceived))
-    const paymentsPaid = roundMoney(Number(row.paymentsPaid))
+    // 🔒 V17 PAISE MIGRATION Phase 2B: SQL returns paise (numeric strings).
+    // Convert to rupees via fromPaise() for the existing return type.
+    // Number() parses the numeric string to a JS number (safe up to 2^53
+    // paise ≈ ₹90 trillion — well beyond any party balance).
+    // roundMoney is NOT needed here because the SQL already applied ROUND
+    // with the 1e-7 paise nudge (matching roundMoney's 1e-9 rupee nudge).
+    const openingBalance = fromPaise(Number(row.openingBalancePaise))
+    const salesOutstanding = fromPaise(Number(row.salesOutstandingPaise))
+    const purchaseOutstanding = fromPaise(Number(row.purchaseOutstandingPaise))
+    const creditNoteOutstanding = fromPaise(Number(row.creditNoteOutstandingPaise))
+    const debitNoteOutstanding = fromPaise(Number(row.debitNoteOutstandingPaise))
+    const paymentsReceived = fromPaise(Number(row.paymentsReceivedPaise))
+    const paymentsPaid = fromPaise(Number(row.paymentsPaidPaise))
     // V17-Ext Tier 3: Credit notes reduce receivable, debit notes reduce payable
     const balance = roundMoney(
       openingBalance

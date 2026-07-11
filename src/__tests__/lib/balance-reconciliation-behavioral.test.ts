@@ -210,7 +210,16 @@ function configureMocks() {
 
   // db.$queryRaw — returns the pre-aggregated rows that the SQL would produce.
   // Prisma raw SQL returns numeric as string, COUNT as bigint.
-  // The helper converts with Number().
+  // The helper converts with Number() + fromPaise().
+  //
+  // 🔒 V17 PAISE MIGRATION Phase 2B: Mock now returns PAISE fields (integer
+  // paise as strings) instead of rupee fields. This matches the new SQL
+  // contract: ROUND(... * 100 + nudge) AS "XPaise". The helper's JS code
+  // converts back to rupees via fromPaise(Number(row.XPaise)).
+  //
+  // The fixture values are clean integers (500, 300, 200, 1000, 400, 100),
+  // so * 100 is exact — no float drift, no nudge effect. The final rupee
+  // values (after fromPaise) are identical to the pre-migration values.
   // Note: using direct assignment instead of jest.spyOn because $queryRaw's
   // TypeScript overloads don't play well with jest.spyOn's type inference.
   // jest.restoreAllMocks() won't restore this — but we re-assign in every
@@ -218,26 +227,28 @@ function configureMocks() {
   ;(db as any).$queryRaw = (jest.fn() as any).mockResolvedValue([
     {
       partyId: PARTY_ID,
-      openingBalance: String(OPENING_BALANCE),
-      salesOutstanding: String(
+      openingBalancePaise: String(OPENING_BALANCE * 100),
+      salesOutstandingPaise: String(
         FIXTURE_TRANSACTIONS
           .filter(t => t.type === 'sale' && t.deletedAt === null)
-          .reduce((s, t) => s + (t.totalAmount - t.paidAmount), 0)
+          .reduce((s, t) => s + (t.totalAmount - t.paidAmount), 0) * 100
       ),
-      purchaseOutstanding: String(
+      purchaseOutstandingPaise: String(
         FIXTURE_TRANSACTIONS
           .filter(t => t.type === 'purchase' && t.deletedAt === null)
-          .reduce((s, t) => s + (t.totalAmount - t.paidAmount), 0)
+          .reduce((s, t) => s + (t.totalAmount - t.paidAmount), 0) * 100
       ),
-      paymentsReceived: String(
+      creditNoteOutstandingPaise: '0',
+      debitNoteOutstandingPaise: '0',
+      paymentsReceivedPaise: String(
         FIXTURE_PAYMENTS
           .filter(p => p.type === 'received' && p.deletedAt === null)
-          .reduce((s, p) => s + p.amount, 0)
+          .reduce((s, p) => s + p.amount, 0) * 100
       ),
-      paymentsPaid: String(
+      paymentsPaidPaise: String(
         FIXTURE_PAYMENTS
           .filter(p => p.type === 'paid' && p.deletedAt === null)
-          .reduce((s, p) => s + p.amount, 0)
+          .reduce((s, p) => s + p.amount, 0) * 100
       ),
       transactionCount: BigInt(FIXTURE_TRANSACTIONS.filter(t => t.deletedAt === null).length),
     },

@@ -4101,3 +4101,82 @@ Stage Summary:
 - 5 pre-existing tsc errors and 2 pre-existing tenant-isolation test failures are NOT caused by this change (confirmed via git status).
 - NO deployment pushed yet — waiting for user verification before proceeding.
 - NEXT: Phase 2B (proposed) — migrate party-balance.ts (1 query, but CRITICAL — computes outstanding balances across sales/credit-notes/purchases/debit-notes/payments). Will need careful testing of the party-balance flow.
+
+---
+Task ID: paise-migration-phase-2B
+Agent: main
+Task: V17 Paise Migration Phase 2B — Migrate getReceivablePayable (party-balance.ts) read path from rupee Float to paise integer. Also: pre-change bug scan, fix BUG-003 (COUNT includes income/expense), catalog BUG-002 and BUG-004 for later.
+
+Work Log:
+- PRE-CHANGE SCAN (new protocol step): Read party-balance.ts + entire call chain (parties/route.ts, parties/[id]/route.ts, dashboard/route.ts, insights/route.ts, reconciliation.ts, whatsapp-reminder/route.ts, payments/route.ts). Scanned for: logic errors, type coercion bugs, null/undefined risks, race conditions, inconsistencies, comments documenting unfixed bugs.
+- Found 3 pre-existing bugs (cataloged in /home/z/my-project/BUGS-FOUND.md):
+    * BUG-002 (Low/Perf): computePartyBalance runs 2 sequential Promise.all batches (7 queries total) when they could all run in parallel. Deferred — not part of paise migration.
+    * BUG-003 (Low/Medium): getReceivablePayable COUNT(*) includes income/expense transactions if they have partyId set. FIXED in this sub-phase (same SQL was being modified).
+    * BUG-004 (Medium): parties/[id]/route.ts:343 uses parseFloat(body.openingBalance) without roundMoney, while parties/route.ts:115 (CREATE) correctly uses roundMoney. Inconsistency can cause 1-paisa discrepancy between dashboard and party-detail. Deferred — separate fix.
+- Created /home/z/my-project/BUGS-FOUND.md as the persistent bug registry (per the 4-step bug-checking protocol).
+
+- PHASE 2B IMPLEMENTATION:
+  Strategy: "compute-paise-in-SQL, convert-back-at-boundary" (same as Phase 2A).
+  For each of 7 money columns in getReceivablePayable:
+    Old: SUM(...) AS "X"                       → Float rupees (numeric string)
+    New: ROUND(SUM(...) * 100 + nudge) AS "XPaise"  → Int paise (numeric string)
+  
+  The nudge (0.0000001 = 1e-7 paise = 1e-9 rupees) mirrors roundMoney()'s
+  float-correction nudge. Without it, values with float representation errors
+  (e.g., 1.005 stored as 1.00499999...) would round DOWN in SQL but UP in the
+  old JS path — a 1-paisa discrepancy. With the nudge, behavior is EXACTLY
+  preserved.
+  
+  For openingBalance (can be negative — supplier we owe): sign-aware nudge
+  using SIGN() function: `+ 0.0000001 * SIGN(x)`. Matches roundMoney's
+  symmetric rounding (sign applied separately to abs value).
+  
+  For SUM columns (always >= 0: totalAmount >= paidAmount): positive nudge.
+  
+  JS processing: `fromPaise(Number(row.XPaise))` converts paise strings back
+  to rupee Floats. roundMoney NOT needed in JS because SQL already applied
+  ROUND with the nudge. The function's return type is UNCHANGED (still rupees)
+  — callers (dashboard, parties list, insights, reconciliation) don't change.
+
+- BUG-003 FIX (same SQL): Changed `COUNT(*) AS "txnCount"` to
+  `COUNT(CASE WHEN "type" IN ('sale', 'purchase', 'credit-note', 'debit-note') THEN 1 END) AS "txnCount"`
+  — excludes income/expense from transaction count, matching the SUM(CASE WHEN...)
+  logic for financial totals.
+
+- Files modified (4, per git status):
+    1. src/lib/party-balance.ts — SQL + TypeScript types + JS processing loop
+    2. src/__tests__/lib/balance-reconciliation-behavioral.test.ts — mock returns paise fields
+    3. src/__tests__/lib/reconciliation.test.ts — 2 mock fixtures updated to paise fields
+    4. src/__tests__/lib/raw-sql-smoke.test.ts — 7 new regression-guard tests
+  + 1 new file: /home/z/my-project/BUGS-FOUND.md (bug registry)
+
+- VERIFICATION:
+    * npx tsc --noEmit: 5 errors (ALL pre-existing in validation.test.ts — Zod union type issue, unrelated to paise). ZERO errors in my 4 modified files.
+    * npx eslint on all 4 modified files: clean (no output).
+    * npx jest (targeted, 6 test files): 139 tests, ALL PASS — including:
+        - balance-reconciliation-behavioral.test.ts (the CRITICAL test asserting computePartyBalance === getReceivablePayable === statement balance)
+        - balance-reconciliation.test.ts (formula consistency test)
+        - reconciliation.test.ts (3 reconciliation health checks)
+        - raw-sql-smoke.test.ts (including 7 new Phase 2B regression guards)
+        - paise-helpers.test.ts, money.test.ts
+    * npx jest (broader, 8 more financial test files one-at-a-time): 198 tests, ALL PASS.
+    * Manual behavior trace (node script): verified fromPaise(ROUND(sum*100+nudge)) === roundMoney(sum) for:
+        - Clean integers (fixture values): 1300 === 1300 ✓
+        - Positive float drift (1.005): 1.01 === 1.01 ✓
+        - Negative float drift (-1.005): -1.01 === -1.01 ✓
+
+- POST-CHANGE SCAN:
+    * git status confirms exactly 4 modified files + 1 new file — no unintended changes.
+    * getReceivablePayable return type UNCHANGED — callers (parties/route.ts:56, dashboard/route.ts:206, insights/route.ts:124, reconciliation.ts:61) consume the same fields (totalReceivable, totalPayable, partyBalances with {balance, salesOutstanding, purchaseOutstanding, transactionCount}). No caller needs to change.
+    * computePartyBalance (the other function in party-balance.ts) is UNCHANGED — uses Prisma aggregates, not raw SQL. Still reads Float columns, still applies roundMoney in JS. Will be migrated in Phase 4 (column type change) — no work needed in Phase 2.
+    * No new bugs introduced by the change. The nudge is a documented transitional workaround (will be removed in Phase 5).
+
+Stage Summary:
+- Phase 2B COMPLETE. 4 files modified + 1 new file (BUGS-FOUND.md). Zero behavior change at the API/UI boundary.
+- The getReceivablePayable read path now returns paise from SQL, converts to rupees at the JS boundary. When Phase 4 changes columns from Float to Int (paise), this SQL simplifies to just `SUM("totalAmountPaise" - "paidAmountPaise")` — the * 100 and nudge are removed.
+- BUG-003 FIXED (COUNT includes income/expense). Regression guard added.
+- BUG-002 and BUG-004 cataloged for later fixing.
+- Bug-checking protocol now active: pre-change scan → implement → post-change scan → catalog/fix bugs → registry update. Will follow this for all subsequent sub-phases.
+- 7 new regression-guard tests added. Total paise-migration test coverage: 11 regression guards (4 from Phase 2A + 7 from Phase 2B).
+- NO deployment pushed yet — waiting for user verification before proceeding.
+- NEXT: Phase 2C (proposed) — migrate src/lib/reconciliation.ts (2 raw SQL queries: orphaned-items check + orphaned-payments check). These are COUNT queries (no money), so the migration is simpler — just verify they don't touch money columns. If they don't, skip to Phase 2D (reports/route.ts + gstr-export/route.ts).

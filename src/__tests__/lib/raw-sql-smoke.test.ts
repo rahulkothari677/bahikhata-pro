@@ -269,3 +269,119 @@ describe('V17 Phase 2A — paise-read-pattern regression guard (insights route)'
     expect(stripped).not.toMatch(/totalRevenue\b(?!Paise)/)
   })
 })
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔒 V17 PAISE MIGRATION Phase 2B — paise-read-pattern regression guard
+// (party-balance.ts getReceivablePayable)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Phase 2B migrated the getReceivablePayable SQL in src/lib/party-balance.ts
+// from returning rupee Floats to returning paise integers. The pattern:
+//
+//   Old: SUM(CASE WHEN ... THEN (totalAmount - paidAmount)::numeric ELSE 0 END) AS "X"
+//   New: ROUND(SUM(CASE WHEN ... THEN (...)::numeric ELSE 0 END) * 100 + 0.0000001) AS "XPaise"
+//
+// Also fixes BUG-003: COUNT(*) → COUNT(CASE WHEN type IN (...) THEN 1 END)
+// to exclude income/expense from the transaction count.
+describe('V17 Phase 2B — paise-read-pattern regression guard (party-balance.ts)', () => {
+  const PARTY_BALANCE_PATH = path.join(
+    process.cwd(),
+    'src',
+    'lib',
+    'party-balance.ts',
+  )
+  const source = fs.existsSync(PARTY_BALANCE_PATH)
+    ? fs.readFileSync(PARTY_BALANCE_PATH, 'utf8')
+    : ''
+  const skip = !source
+
+  it('party-balance.ts file exists', () => {
+    if (skip) return
+    expect(source.length).toBeGreaterThan(0)
+  })
+
+  it('getReceivablePayable SQL uses paise aliases (not rupee aliases)', () => {
+    if (skip) return
+    const queries = extractRawSql(source)
+    // getReceivablePayable's query is the long one with "Party" + "Transaction" + "Payment"
+    const balanceQuery = queries.find(q =>
+      q.includes('"Party"') && q.includes('"Transaction"') && q.includes('"Payment"')
+    )
+    if (!balanceQuery) {
+      throw new Error(
+        'Could not find getReceivablePayable query in party-balance.ts. ' +
+        'Did the SQL shape change? Update this test to match.',
+      )
+    }
+    // Must use paise aliases
+    expect(balanceQuery).toContain('"openingBalancePaise"')
+    expect(balanceQuery).toContain('"salesOutstandingPaise"')
+    expect(balanceQuery).toContain('"purchaseOutstandingPaise"')
+    expect(balanceQuery).toContain('"paymentsReceivedPaise"')
+    expect(balanceQuery).toContain('"paymentsPaidPaise"')
+
+    // Must NOT use the old rupee aliases (regression guard)
+    expect(balanceQuery).not.toMatch(/AS\s+"openingBalance"\s/)
+    expect(balanceQuery).not.toMatch(/AS\s+"salesOutstanding"\s/)
+    expect(balanceQuery).not.toMatch(/AS\s+"purchaseOutstanding"\s/)
+    expect(balanceQuery).not.toMatch(/AS\s+"paymentsReceived"\s/)
+    expect(balanceQuery).not.toMatch(/AS\s+"paymentsPaid"\s/)
+  })
+
+  it('SQL multiplies by 100 and applies the 1e-7 paise nudge (matches roundMoney)', () => {
+    if (skip) return
+    const queries = extractRawSql(source)
+    const balanceQuery = queries.find(q =>
+      q.includes('"Party"') && q.includes('"Transaction"') && q.includes('"Payment"')
+    )
+    if (!balanceQuery) return
+
+    // Each SUM column must have * 100 and the + 0.0000001 nudge
+    expect(balanceQuery).toMatch(/\*\s*100\s*\+\s*0\.0000001/)
+    // openingBalance must have sign-aware nudge (SIGN function)
+    expect(balanceQuery).toMatch(/0\.0000001\s*\*\s*SIGN/)
+  })
+
+  it('BUG-003 fix: COUNT uses CASE WHEN type IN (...) not COUNT(*)', () => {
+    if (skip) return
+    const queries = extractRawSql(source)
+    const balanceQuery = queries.find(q =>
+      q.includes('"Party"') && q.includes('"Transaction"') && q.includes('"Payment"')
+    )
+    if (!balanceQuery) return
+
+    // Must NOT use COUNT(*) for txnCount (BUG-003 fix)
+    expect(balanceQuery).not.toMatch(/COUNT\(\*\)\s+AS\s+"txnCount"/)
+    // Must use COUNT(CASE WHEN ... IN ('sale', 'purchase', 'credit-note', 'debit-note') THEN 1 END)
+    // Use [\s\S]* instead of .* with /s flag (es2018) for cross-line matching
+    expect(balanceQuery).toMatch(/COUNT\(CASE WHEN[\s\S]*?type[\s\S]*?IN[\s\S]*?sale[\s\S]*?purchase[\s\S]*?credit-note[\s\S]*?debit-note[\s\S]*?THEN\s+1\s+END\)\s+AS\s+"txnCount"/)
+  })
+
+  it('party-balance.ts imports fromPaise from money.ts', () => {
+    if (skip) return
+    expect(source).toMatch(/import\s+\{[^}]*\bfromPaise\b[^}]*\}\s+from\s+['"]@\/lib\/money['"]/)
+  })
+
+  it('JS processing uses fromPaise(Number(row.XPaise)) pattern', () => {
+    if (skip) return
+    expect(source).toMatch(/fromPaise\(Number\(row\.openingBalancePaise\)\)/)
+    expect(source).toMatch(/fromPaise\(Number\(row\.salesOutstandingPaise\)\)/)
+    expect(source).toMatch(/fromPaise\(Number\(row\.purchaseOutstandingPaise\)\)/)
+    expect(source).toMatch(/fromPaise\(Number\(row\.paymentsReceivedPaise\)\)/)
+    expect(source).toMatch(/fromPaise\(Number\(row\.paymentsPaidPaise\)\)/)
+  })
+
+  it('no stale references to row.X (rupee names without Paise suffix) in code', () => {
+    if (skip) return
+    // Strip comments and string literals, then check for stale references
+    const stripped = source
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/[^\n]*/g, '')
+      .replace(/`[^`]*`/g, '')                 // template literals (SQL)
+      .replace(/"[^"]*"/g, '')
+      .replace(/'[^']*'/g, '')
+    // Should NOT reference row.openingBalance, row.salesOutstanding, etc.
+    // (without the Paise suffix)
+    expect(stripped).not.toMatch(/row\.(openingBalance|salesOutstanding|purchaseOutstanding|creditNoteOutstanding|debitNoteOutstanding|paymentsReceived|paymentsPaid)\b(?!Paise)/)
+  })
+})

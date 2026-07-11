@@ -79,24 +79,28 @@ describe('🔒 V17-Ext §5.1 — Reconciliation health check', () => {
 
   describe('checkPartyBalances (Check 1)', () => {
     it('passes when SQL totals match JS sum of per-party balances', async () => {
+      // 🔒 V17 PAISE MIGRATION Phase 2B: Mock returns PAISE fields (integer
+      // paise as strings) to match the new SQL contract. Values are
+      // original_rupees * 100. Missing creditNote/debitNote fields default
+      // to 0 via fromPaise(toMoney(undefined)) = 0.
       setupCommonMocks({
         queryRawResult: [
           {
             partyId: 'p1',
-            openingBalance: '1000',
-            salesOutstanding: '500',
-            purchaseOutstanding: '0',
-            paymentsReceived: '200',
-            paymentsPaid: '0',
+            openingBalancePaise: '100000',
+            salesOutstandingPaise: '50000',
+            purchaseOutstandingPaise: '0',
+            paymentsReceivedPaise: '20000',
+            paymentsPaidPaise: '0',
             transactionCount: BigInt(1),
           },
           {
             partyId: 'p2',
-            openingBalance: '0',
-            salesOutstanding: '0',
-            purchaseOutstanding: '300',
-            paymentsReceived: '0',
-            paymentsPaid: '0',
+            openingBalancePaise: '0',
+            salesOutstandingPaise: '0',
+            purchaseOutstandingPaise: '30000',
+            paymentsReceivedPaise: '0',
+            paymentsPaidPaise: '0',
             transactionCount: BigInt(1),
           },
         ],
@@ -115,24 +119,29 @@ describe('🔒 V17-Ext §5.1 — Reconciliation health check', () => {
     })
 
     it('passes with float values that could cause drift (roundMoney handles it)', async () => {
+      // 🔒 V17 PAISE MIGRATION Phase 2B: Mock returns paise. The float drift
+      // (0.1 + 0.2 = 0.30000000000000004) still occurs in the JS balance
+      // computation (roundMoney in party-balance.ts:307), independent of
+      // whether the SQL returns rupees or paise. The test verifies that
+      // roundMoney fixes the drift in BOTH the SQL total and the JS sum.
       setupCommonMocks({
         queryRawResult: [
           {
             partyId: 'p1',
-            openingBalance: '0.1',
-            salesOutstanding: '0.2',
-            purchaseOutstanding: '0',
-            paymentsReceived: '0',
-            paymentsPaid: '0',
+            openingBalancePaise: '10',
+            salesOutstandingPaise: '20',
+            purchaseOutstandingPaise: '0',
+            paymentsReceivedPaise: '0',
+            paymentsPaidPaise: '0',
             transactionCount: BigInt(1),
           },
           {
             partyId: 'p2',
-            openingBalance: '0.2',
-            salesOutstanding: '0.1',
-            purchaseOutstanding: '0',
-            paymentsReceived: '0',
-            paymentsPaid: '0',
+            openingBalancePaise: '20',
+            salesOutstandingPaise: '10',
+            purchaseOutstandingPaise: '0',
+            paymentsReceivedPaise: '0',
+            paymentsPaidPaise: '0',
             transactionCount: BigInt(1),
           },
         ],
