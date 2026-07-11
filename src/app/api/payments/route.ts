@@ -102,6 +102,19 @@ export async function POST(req: NextRequest) {
     }
     const { partyId, amount, type, mode, date, notes } = validation.data
     const amt = amount
+    const clientMutationId = (body as any).clientMutationId as string | undefined
+
+    // 🔒 V19-007: Idempotency check — prevents duplicate payments from offline
+    // sync replays. Same pattern as transactions POST.
+    if (clientMutationId) {
+      const existing = await db.payment.findUnique({
+        where: { clientMutationId },
+        select: { id: true, amount: true, type: true, partyId: true, date: true, mode: true, notes: true },
+      })
+      if (existing) {
+        return NextResponse.json({ payment: existing, idempotent: true })
+      }
+    }
 
     // Verify the party belongs to this user
     const party = await db.party.findFirst({
@@ -172,6 +185,7 @@ export async function POST(req: NextRequest) {
         mode: mode,
         date: paymentDate,
         notes: notes || null,
+        clientMutationId: clientMutationId || null,  // 🔒 V19-007: idempotency
       },
     })
 

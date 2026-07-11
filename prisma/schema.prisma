@@ -358,6 +358,9 @@ model Payment {
   // Hard-deleting a payment silently changes historical balances — exactly the
   // kind of action that should leave an audit trail in a ledger app.
   deletedAt DateTime?
+  // 🔒 V19-007: Idempotency — prevents duplicate payments from offline sync replays.
+  // Same pattern as Transaction.clientMutationId.
+  clientMutationId String? @unique
 
   // 🔒 V17 Audit Phase 6: Bank reconciliation — matched bank transactions
   bankTransactions BankTransaction[]

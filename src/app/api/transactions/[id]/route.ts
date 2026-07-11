@@ -513,6 +513,22 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       throw e
     }
 
+    // 🔒 V19-004 FIX: Check for linked credit/debit notes before deleting.
+    // If a sale has credit notes, deleting the sale would leave the credit
+    // notes orphaned — they'd continue to reduce the party balance with no
+    // original sale to credit against (double-counted credit).
+    const linkedNotes = await db.transaction.findMany({
+      where: { originalTransactionId: id, deletedAt: null },
+      select: { id: true, invoiceNo: true, type: true, totalAmount: true },
+    })
+    if (linkedNotes.length > 0) {
+      return NextResponse.json({
+        error: 'Cannot delete — linked credit/debit notes exist',
+        message: `This transaction has ${linkedNotes.length} linked credit/debit note(s). Please delete them first.`,
+        linkedNotes: linkedNotes.map(n => ({ id: n.id, invoiceNo: n.invoiceNo, type: n.type })),
+      }, { status: 400 })
+    }
+
     // V17-Ext Tier 3: Compute stock direction for reversal
     const delShouldDecrement = existing.type === 'sale' || (existing.type === 'debit-note' && existing.affectsStock)
     const delShouldIncrement = existing.type === 'purchase' || (existing.type === 'credit-note' && existing.affectsStock)

@@ -227,6 +227,7 @@ export async function POST(req: NextRequest) {
         data: {
           userId,
           type,
+          partyId: partyId || null,  // 🔒 V19-005 FIX: was missing — income/expense can be linked to a party
           category: category || null,
           date: new Date(date || new Date()),
           subtotal: amount,

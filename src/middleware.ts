@@ -13,10 +13,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 // 🔒 AUDIT FIX H6+L1 (v2 audit): Exact host matching only.
+// 🔒 V19-012 FIX: Read additional hosts from env var (for custom domains).
 const ALLOWED_HOSTS = new Set([
   'bahikhata-pro.vercel.app',
   'localhost:3000',
   '127.0.0.1:3000',
+  ...(process.env.ALLOWED_HOSTS?.split(',').map(h => h.trim()).filter(Boolean) || []),
 ])
 
 export function middleware(req: NextRequest) {
