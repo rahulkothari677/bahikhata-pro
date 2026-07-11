@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthContext } from '@/lib/get-auth'
 import { canAccessModule } from '@/lib/staff-permissions'
-import { roundMoney } from '@/lib/money'
+import { roundMoney, fromPaise } from '@/lib/money'
 import { shouldHideProfit } from '@/lib/profit-visibility'
 import { apiError } from '@/lib/api-error'
 
@@ -37,15 +37,17 @@ export async function GET() {
 
     // === 1. Best-selling items (last 30 days) ===
     // SQL GROUP BY productName, SUM quantity + revenue. Returns top 5.
+    // 🔒 V17 PAISE MIGRATION Phase 2E: SQL returns paise (integer). JS converts
+    // back to rupees via fromPaise(). Same pattern as Phase 2A/2B/2D.
     const bestSellersRaw = await db.$queryRaw<Array<{
       productName: string
       totalQty: bigint
-      totalRevenue: string
+      totalRevenuePaise: string
     }>>`
       SELECT
         ti."productName",
         SUM(ti."quantity") AS "totalQty",
-        SUM(ROUND(ti."quantity"::numeric * ti."unitPrice"::numeric, 2)) AS "totalRevenue"
+        ROUND(SUM(ROUND(ti."quantity"::numeric * ti."unitPrice"::numeric, 2)) * 100 + 0.0000001) AS "totalRevenuePaise"
       FROM "TransactionItem" ti
       JOIN "Transaction" t ON ti."transactionId" = t.id
       WHERE t."userId" = ${userId}
@@ -53,13 +55,13 @@ export async function GET() {
         AND t."type" = 'sale'
         AND t."date" >= ${thirtyDaysAgo}
       GROUP BY ti."productName"
-      ORDER BY "totalRevenue" DESC
+      ORDER BY "totalRevenuePaise" DESC
       LIMIT 5
     `
     const bestSellers = bestSellersRaw.map(r => ({
       name: r.productName,
       quantity: Number(r.totalQty),
-      revenue: roundMoney(Number(r.totalRevenue)),
+      revenue: fromPaise(Number(r.totalRevenuePaise)),
     }))
 
     // === 2. Dead stock — products with stock > 0 but zero sales in 90 days ===
@@ -93,17 +95,20 @@ export async function GET() {
 
     // === 3. Most profitable customers (owner only) ===
     // SQL GROUP BY partyId, SUM grossProfit. Returns top 5.
+    // 🔒 V17 PAISE MIGRATION Phase 2E: SQL returns paise for totalProfit + totalSales.
+    // grossProfit can be negative (credit notes), so sign-aware nudge via SIGN().
+    // totalAmount is always >= 0, so positive nudge is fine.
     let topCustomers: Array<{ name: string; profit: number; totalSales: number }> = []
     if (!hideProfit) {
       const topCustomersRaw = await db.$queryRaw<Array<{
         partyId: string
-        totalProfit: string
-        totalSales: string
+        totalProfitPaise: string
+        totalSalesPaise: string
       }>>`
         SELECT
           t."partyId",
-          SUM(t."grossProfit") AS "totalProfit",
-          SUM(t."totalAmount") AS "totalSales"
+          ROUND(SUM(t."grossProfit"::numeric) * 100 + 0.0000001 * SIGN(SUM(t."grossProfit"::numeric))) AS "totalProfitPaise",
+          ROUND(SUM(t."totalAmount"::numeric) * 100 + 0.0000001) AS "totalSalesPaise"
         FROM "Transaction" t
         WHERE t."userId" = ${userId}
           AND t."deletedAt" IS NULL
@@ -111,7 +116,7 @@ export async function GET() {
           AND t."partyId" IS NOT NULL
           AND t."date" >= ${ninetyDaysAgo}
         GROUP BY t."partyId"
-        ORDER BY "totalProfit" DESC
+        ORDER BY "totalProfitPaise" DESC
         LIMIT 5
       `
       // Fetch party names
@@ -124,8 +129,8 @@ export async function GET() {
 
       topCustomers = topCustomersRaw.map(r => ({
         name: partyMap.get(r.partyId) || 'Unknown',
-        profit: roundMoney(Number(r.totalProfit)),
-        totalSales: roundMoney(Number(r.totalSales)),
+        profit: fromPaise(Number(r.totalProfitPaise)),
+        totalSales: fromPaise(Number(r.totalSalesPaise)),
       }))
     }
 

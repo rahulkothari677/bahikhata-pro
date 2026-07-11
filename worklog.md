@@ -4320,3 +4320,55 @@ Stage Summary:
 - 14 new regression-guard tests added. Total paise-migration regression guards: 29 (4 Phase 2A + 7 Phase 2B + 4 Phase 2C + 14 Phase 2D).
 - Bug registry: 4 FIXED (BUG-003/005/006/007), 3 OPEN (BUG-002 Low/Perf, BUG-004 Medium, BUG-008 Medium/TestInfra).
 - NEXT: Push to origin/main, wait for Vercel deploy + user verification, then proceed to Phase 2E (analytics/route.ts + parties/[id]/route.ts — 9 raw SQL queries).
+
+---
+Task ID: paise-migration-phase-2E
+Agent: main
+Task: V17 Paise Migration Phase 2E — Migrate 4 money-touching raw SQL queries in analytics/route.ts (best-sellers + top-customers) and parties/[id]/route.ts (top-products + monthly-chart). Also fix BUG-004 (openingBalance not rounded on PUT).
+
+Work Log:
+- PRE-CHANGE SCAN:
+    * analytics/route.ts: 4 raw SQL queries. 2 touch money (best-sellers totalRevenue, top-customers totalProfit+totalSales). 2 don't (recently-sold product IDs, reorder patterns — only counts/dates).
+    * parties/[id]/route.ts: 2 raw SQL queries, both touch money (top-products totalAmount, monthly-chart total). Other queries are Prisma findMany/aggregate/groupBy (not raw SQL).
+    * Found BUG-004 still open in this file (openingBalance on PUT not rounded). Fixed it since I'm in the file.
+
+- IMPLEMENTATION (same paise pattern as Phase 2A/2B/2D):
+    analytics/route.ts:
+      1. Best-sellers: SUM(ROUND(qty*price, 2)) AS "totalRevenue" → ROUND(SUM(ROUND(qty*price, 2)) * 100 + 0.0000001) AS "totalRevenuePaise"
+      2. Top-customers: SUM(grossProfit) AS "totalProfit" → ROUND(SUM(grossProfit::numeric) * 100 + 0.0000001 * SIGN(SUM(grossProfit::numeric))) AS "totalProfitPaise"
+         (sign-aware nudge because grossProfit can be negative from credit notes)
+         SUM(totalAmount) AS "totalSales" → ROUND(SUM(totalAmount::numeric) * 100 + 0.0000001) AS "totalSalesPaise"
+    parties/[id]/route.ts:
+      3. Top-products: SUM(ROUND(qty*price, 2)) AS "totalAmount" → ROUND(...) AS "totalAmountPaise"
+      4. Monthly-chart: SUM(totalAmount) AS total → ROUND(SUM(totalAmount::numeric) * 100 + 0.0000001) AS "totalPaise"
+    JS: all processing loops use fromPaise(Number(row.XPaise)) to convert back to rupees.
+
+- BUG-004 FIX: parties/[id] PUT handler line 343 was `parseFloat(body.openingBalance) || 0` without roundMoney. Changed to `parseMoney(body.openingBalance)` which applies roundMoney internally + handles string cleaning (₹ symbol, commas). Now matches the CREATE path (parties/route.ts:115 uses roundMoney).
+
+- Files modified (4, per git status):
+    1. src/app/api/analytics/route.ts — migrated 2 queries + JS processing
+    2. src/app/api/parties/[id]/route.ts — migrated 2 queries + JS processing + BUG-004 fix
+    3. src/__tests__/lib/raw-sql-smoke.test.ts — 10 new Phase 2E regression guards
+    4. BUGS-FOUND.md — BUG-004 marked FIXED, BUG-009 cataloged (demo data issue)
+
+- VERIFICATION:
+    * npx tsc --noEmit: 0 errors (codebase fully type-clean)
+    * npx eslint on all 3 modified source files: clean
+    * npx jest (6 targeted test files): 168 tests, ALL PASS — including:
+        - raw-sql-smoke.test.ts (with 10 new Phase 2E regression guards)
+        - balance-reconciliation-behavioral.test.ts (CRITICAL parity test)
+        - reconciliation, paise-helpers, balance-reconciliation, money
+    * npx jest (7 broader financial test files one-at-a-time): 162 tests, ALL PASS.
+
+- POST-CHANGE SCAN:
+    * Verified no stale references to old field names (totalRevenue, totalProfit, totalSales, totalAmount, total without Paise suffix) in the SQL conversion code.
+    * Return types UNCHANGED — callers (Analytics UI, PartyProfile UI) consume the same fields. No caller changes needed.
+    * analytics/route.ts still uses roundMoney for `tiedUpValue` (JS computation from product.purchasePrice × currentStock — not SQL, so no paise migration needed there).
+    * parties/[id]/route.ts: removed roundMoney from imports (no longer used in code after migration). Kept fromPaise + parseMoney.
+    * BUG-004 regression guard initially failed because the regex matched the documentation comment. Fixed the test to strip comments before checking.
+
+Stage Summary:
+- Phase 2E COMPLETE. 4 raw SQL queries migrated + BUG-004 fixed. Zero behavior change at the API/UI boundary.
+- 10 new regression-guard tests added. Total paise-migration regression guards: 39 (4 Phase 2A + 7 Phase 2B + 4 Phase 2C + 14 Phase 2D + 10 Phase 2E).
+- Bug registry: 5 FIXED (BUG-003/004/005/006/007), 2 OPEN (BUG-002 Low/Perf, BUG-008 Medium/TestInfra, BUG-009 Low/DataIssue).
+- NEXT: Push to origin/main, wait for Vercel deploy + user verification, then proceed to Phase 2F (dashboard/route.ts — highest complexity, 4 queries, 41 SUM/COALESCE in one KPI query).

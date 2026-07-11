@@ -20,6 +20,18 @@ and include enough context to reproduce.
 
 <!-- Add new bugs below this line. Newest first. -->
 
+### BUG-009 — GSTR-1 reconciliation mismatch on demo data (Low/DataIssue)
+
+- **Found**: 2026-07-11, user reported "Cannot export GSTR-1 — data inconsistency detected" error
+- **File**: Data issue (not a code bug) — affects `src/app/api/gstr-export/route.ts` reconciliation check
+- **Severity**: Low (app is in testing phase, no real customers, only demo data affected)
+- **Description**: The GSTR-1 export reconciliation check correctly catches that some transactions have header columns (subtotal, discountAmount) that don't match their line items (qty×price, per-item discount). Per-invoice taxable (₹52,524) ≠ summary taxable (₹52,150) — ₹374 drift.
+- **Root cause**: Pre-existing data integrity issue in demo data — NOT caused by paise migration. Some transactions were saved with header values inconsistent with their line items (likely from before the V12 computeLineItems centralization).
+- **NOT a code bug**: The reconciliation check is working as designed — it caught a real data drift before an incorrect GSTR-1 would be filed. The code is correct.
+- **Fix available**: `/api/admin/repair-headers?fix=true` endpoint (deployed in commit e533c35) recomputes header columns from line items. User can run this to repair demo data.
+- **User decision**: Leave for now (app is in testing phase, no real data). Will re-seed demo data or run the repair endpoint when needed.
+- **Status**: OPEN (data issue, not a code bug) — defer until real data exists or user requests repair
+
 ### BUG-008 — csv-export.test.ts crashes Jest with unhandled rejection loop (Medium/TestInfra)
 
 - **Found**: 2026-07-11, during Phase 2D verification (broader test sweep)
@@ -43,18 +55,9 @@ and include enough context to reproduce.
 
 - **Status**: FIXED (2026-07-11)
 
-### BUG-004 — `openingBalance` on party UPDATE not rounded (Medium)
+### BUG-004 — (MOVED to Fixed bugs section below)
 
-- **Found**: 2026-07-11, during Phase 2B pre-change scan of `party-balance.ts` call chain
-- **File**: `src/app/api/parties/[id]/route.ts:343`
-- **Severity**: Medium
-- **Description**: The party UPDATE handler writes `openingBalance` using `parseFloat(body.openingBalance) || 0` — NO `roundMoney()` applied. The CREATE handler (`src/app/api/parties/route.ts:115`) correctly uses `roundMoney(openingBalance || 0)`. This inconsistency means:
-  1. If a user edits a party and enters `1.005` as opening balance, it's stored as `1.005` (float with representation error `1.00499999...`)
-  2. The `getReceivablePayable` SQL then reads this drift-prone value
-  3. The dashboard/party-list balance may differ by 1 paisa from the party-detail balance (which uses `computePartyBalance` → Prisma aggregate → `roundMoney` in JS)
-- **Repro**: Edit a party, set opening balance to `1.005`, save. Check dashboard balance vs party-detail balance — they may differ by 1 paisa.
-- **Fix**: Change line 343 to `updateData.openingBalance = roundMoney(parseFloat(body.openingBalance) || 0)` (or use `parseMoney(body.openingBalance)` for consistency with the CREATE path).
-- **Status**: OPEN
+- **Status**: FIXED (2026-07-11, as part of V17 Phase 2E)
 
 ### BUG-003 — MOVED to Fixed bugs section below
 
@@ -82,6 +85,16 @@ and include enough context to reproduce.
 ## Fixed bugs
 
 <!-- Move bugs here once fixed. Include fix date and commit/PR reference. -->
+
+### BUG-004 — `openingBalance` on party UPDATE not rounded — FIXED
+
+- **Found**: 2026-07-11, during Phase 2B pre-change scan
+- **File**: `src/app/api/parties/[id]/route.ts:343`
+- **Severity**: Medium
+- **Description**: The party UPDATE handler used `parseFloat(body.openingBalance) || 0` without `roundMoney()`. The CREATE handler (`src/app/api/parties/route.ts:115`) correctly used `roundMoney(openingBalance || 0)`. This inconsistency meant editing a party with `1.005` as opening balance would store the float-drifted value `1.00499999...`, causing 1-paisa discrepancies between dashboard and party-detail balances.
+- **Fix applied**: 2026-07-11, as part of V17 Phase 2E. Changed to `parseMoney(body.openingBalance)` which applies `roundMoney` internally — matches the CREATE path's behavior. `parseMoney` was chosen over `roundMoney(parseFloat(...))` because it also handles string cleaning (removes ₹ symbol, commas, spaces) for robustness.
+- **Regression guard**: Added in `src/__tests__/lib/raw-sql-smoke.test.ts` under "V17 Phase 2E" → "BUG-004 fix: openingBalance uses parseMoney".
+- **Status**: FIXED
 
 ### BUG-007 — Reconciliation test mock misroutes getReceivablePayable SQL — FIXED
 

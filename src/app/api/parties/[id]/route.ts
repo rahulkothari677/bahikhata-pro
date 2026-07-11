@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUserIdWithModule, getAuthContextForWrite } from '@/lib/get-auth'
-import { roundMoney } from '@/lib/money'
+import { fromPaise, parseMoney } from '@/lib/money'
 import { istMonthStartOffset, getISTDateParts } from '@/lib/timezone'
 import { computePartyBalance } from '@/lib/party-balance'
 import { encodeKeysetCursor, buildKeysetWhere } from '@/lib/pagination'
@@ -154,11 +154,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
       // Top products via raw SQL (not JS reduce on all transactions)
       // 🔒 V5 MB: was `amount: 0` for every row. Now: real line-amount sum.
-      db.$queryRaw<Array<{ productName: string; totalQuantity: bigint; totalAmount: string }>>`
+      // 🔒 V17 PAISE MIGRATION Phase 2E: SQL returns paise. JS converts via fromPaise().
+      db.$queryRaw<Array<{ productName: string; totalQuantity: bigint; totalAmountPaise: string }>>`
         SELECT
           ti."productName",
           SUM(ti."quantity") AS "totalQuantity",
-          SUM(ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 2)) AS "totalAmount"
+          ROUND(SUM(ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 2)) * 100 + 0.0000001) AS "totalAmountPaise"
         FROM "TransactionItem" ti
         JOIN "Transaction" t ON ti."transactionId" = t.id
         WHERE t."userId" = ${userId}
@@ -171,11 +172,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
       // Monthly chart via raw SQL (last 6 months) — REAL data, not hardcoded zeros.
       // 🔒 V10 FIX: Group by IST month (AT TIME ZONE 'Asia/Kolkata'), not UTC.
-      db.$queryRaw<Array<{ monthStart: Date; type: string; total: number }>>`
+      // 🔒 V17 PAISE MIGRATION Phase 2E: SQL returns paise for the total.
+      // totalAmount is always >= 0, so positive nudge is fine.
+      // Sign-aware nudge not needed because sales/purchases are always positive.
+      db.$queryRaw<Array<{ monthStart: Date; type: string; totalPaise: number }>>`
         SELECT
           DATE_TRUNC('month', t.date AT TIME ZONE 'Asia/Kolkata') AS "monthStart",
           t.type,
-          SUM(t."totalAmount") AS total
+          ROUND(SUM(t."totalAmount"::numeric) * 100 + 0.0000001) AS "totalPaise"
         FROM "Transaction" t
         WHERE t."userId" = ${userId}
           AND t."partyId" = ${id}
@@ -238,22 +242,24 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
     // Normalize top products (Prisma raw returns bigint for SUM(quantity) and
     // string for SUM(numeric) — convert both to number for the frontend).
+    // 🔒 V17 PAISE MIGRATION Phase 2E: SQL returns paise; convert to rupees via fromPaise().
     const topProducts = topProductsAgg.map(p => ({
       name: p.productName,
       quantity: Number(p.totalQuantity),
-      amount: roundMoney(Number(p.totalAmount)),
+      amount: fromPaise(Number(p.totalAmountPaise)),
     }))
 
     // Build 6-month chart data, filling missing months with zeros.
     // 🔒 V10 FIX: The SQL returns naive timestamps at IST month-start (interpreted
     // as UTC by JS). The JS month keys must use the same IST-aligned logic.
     // 🔒 V11 §4.6: Uses centralized istMonthStartOffset helper.
+    // 🔒 V17 PAISE MIGRATION Phase 2E: SQL returns paise; convert to rupees via fromPaise().
     const monthlyMap = new Map<string, { sales: number; purchases: number }>()
     for (const row of monthlyRows) {
       const key = new Date(row.monthStart).toISOString().slice(0, 7) // YYYY-MM
       const entry = monthlyMap.get(key) || { sales: 0, purchases: 0 }
-      if (row.type === 'sale') entry.sales = roundMoney(Number(row.total))
-      if (row.type === 'purchase') entry.purchases = roundMoney(Number(row.total))
+      if (row.type === 'sale') entry.sales = fromPaise(Number(row.totalPaise))
+      if (row.type === 'purchase') entry.purchases = fromPaise(Number(row.totalPaise))
       monthlyMap.set(key, entry)
     }
 
@@ -340,7 +346,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (body.address !== undefined) updateData.address = body.address || null
     if (body.state !== undefined) updateData.state = body.state || null
     if (body.openingBalance !== undefined) {
-      updateData.openingBalance = parseFloat(body.openingBalance) || 0
+      // 🔒 BUG-004 FIX (V17 Phase 2E): Was `parseFloat(body.openingBalance) || 0`
+      // without roundMoney — could store float drift values like 1.005 as
+      // 1.00499999... The CREATE handler (parties/route.ts:115) correctly uses
+      // roundMoney. Now uses parseMoney() which applies roundMoney internally,
+      // matching the CREATE path. This prevents 1-paisa discrepancies between
+      // dashboard and party-detail balances.
+      updateData.openingBalance = parseMoney(body.openingBalance)
     }
 
     const party = await db.party.update({

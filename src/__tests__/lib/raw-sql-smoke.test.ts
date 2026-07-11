@@ -711,3 +711,135 @@ describe('V17 Phase 2D — paise-read-pattern regression guard (reports + gstr-e
     })
   })
 })
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔒 V17 PAISE MIGRATION Phase 2E — analytics/route.ts + parties/[id]/route.ts
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Phase 2E migrated 4 raw SQL queries from rupee Float to paise integer:
+//   analytics/route.ts:
+//     1. Best-selling items (GROUP BY productName) — totalRevenue → totalRevenuePaise
+//     2. Top profitable customers (GROUP BY partyId) — totalProfit + totalSales → *Paise
+//   parties/[id]/route.ts:
+//     3. Top products (GROUP BY productName) — totalAmount → totalAmountPaise
+//     4. Monthly chart (GROUP BY month, type) — total → totalPaise
+//
+// Also fixed BUG-004: parties/[id] PUT handler was using parseFloat without
+// roundMoney for openingBalance. Now uses parseMoney (which applies roundMoney).
+describe('V17 Phase 2E — paise-read-pattern regression guard (analytics + parties/[id])', () => {
+  const ANALYTICS_PATH = path.join(process.cwd(), 'src', 'app', 'api', 'analytics', 'route.ts')
+  const PARTIES_ID_PATH = path.join(process.cwd(), 'src', 'app', 'api', 'parties', '[id]', 'route.ts')
+
+  const analyticsSource = fs.existsSync(ANALYTICS_PATH) ? fs.readFileSync(ANALYTICS_PATH, 'utf8') : ''
+  const partiesSource = fs.existsSync(PARTIES_ID_PATH) ? fs.readFileSync(PARTIES_ID_PATH, 'utf8') : ''
+
+  // ---------- analytics/route.ts ----------
+
+  describe('analytics/route.ts', () => {
+    it('analytics route file exists', () => {
+      expect(analyticsSource.length).toBeGreaterThan(0)
+    })
+
+    it('best-sellers query returns totalRevenuePaise (not totalRevenue)', () => {
+      if (!analyticsSource) return
+      const queries = extractRawSql(analyticsSource)
+      // Best-sellers query: GROUP BY productName, filters type='sale', has totalQty
+      const bestSellersQuery = queries.find(q =>
+        q.includes('"productName"') && q.includes('"totalQty"') && q.includes("'sale'")
+      )
+      if (!bestSellersQuery) {
+        throw new Error('Could not find best-sellers query in analytics/route.ts.')
+      }
+      expect(bestSellersQuery).toContain('"totalRevenuePaise"')
+      expect(bestSellersQuery).not.toMatch(/AS\s+"totalRevenue"\s/)
+      expect(bestSellersQuery).toMatch(/\*\s*100\s*\+\s*0\.0000001/)
+    })
+
+    it('top-customers query returns totalProfitPaise + totalSalesPaise', () => {
+      if (!analyticsSource) return
+      const queries = extractRawSql(analyticsSource)
+      // Top customers query: GROUP BY partyId, filters type='sale', has grossProfit
+      const topCustomersQuery = queries.find(q =>
+        q.includes('"partyId"') && q.includes('"grossProfit"')
+      )
+      if (!topCustomersQuery) return
+      expect(topCustomersQuery).toContain('"totalProfitPaise"')
+      expect(topCustomersQuery).toContain('"totalSalesPaise"')
+      expect(topCustomersQuery).not.toMatch(/AS\s+"totalProfit"\s/)
+      expect(topCustomersQuery).not.toMatch(/AS\s+"totalSales"\s/)
+      // grossProfit can be negative — must use sign-aware nudge
+      expect(topCustomersQuery).toMatch(/SIGN\s*\(/)
+    })
+
+    it('analytics route imports fromPaise from money.ts', () => {
+      if (!analyticsSource) return
+      expect(analyticsSource).toMatch(/import\s+\{[^}]*\bfromPaise\b[^}]*\}\s+from\s+['"]@\/lib\/money['"]/)
+    })
+
+    it('JS processing uses fromPaise(Number(row.XPaise)) pattern', () => {
+      if (!analyticsSource) return
+      expect(analyticsSource).toMatch(/fromPaise\(Number\(r\.totalRevenuePaise\)\)/)
+      expect(analyticsSource).toMatch(/fromPaise\(Number\(r\.totalProfitPaise\)\)/)
+    })
+  })
+
+  // ---------- parties/[id]/route.ts ----------
+
+  describe('parties/[id]/route.ts', () => {
+    it('parties/[id] route file exists', () => {
+      expect(partiesSource.length).toBeGreaterThan(0)
+    })
+
+    it('top-products query returns totalAmountPaise (not totalAmount)', () => {
+      if (!partiesSource) return
+      const queries = extractRawSql(partiesSource)
+      // Top products query: GROUP BY productName, has totalQuantity
+      const topProductsQuery = queries.find(q =>
+        q.includes('"productName"') && q.includes('"totalQuantity"')
+      )
+      if (!topProductsQuery) {
+        throw new Error('Could not find top-products query in parties/[id]/route.ts.')
+      }
+      expect(topProductsQuery).toContain('"totalAmountPaise"')
+      expect(topProductsQuery).not.toMatch(/AS\s+"totalAmount"\s/)
+      expect(topProductsQuery).toMatch(/\*\s*100\s*\+\s*0\.0000001/)
+    })
+
+    it('monthly-chart query returns totalPaise (not total)', () => {
+      if (!partiesSource) return
+      const queries = extractRawSql(partiesSource)
+      // Monthly chart query: has DATE_TRUNC and type
+      const monthlyQuery = queries.find(q =>
+        q.includes('DATE_TRUNC') && q.includes('type')
+      )
+      if (!monthlyQuery) return
+      expect(monthlyQuery).toContain('"totalPaise"')
+      expect(monthlyQuery).not.toMatch(/AS\s+total\s/)
+      expect(monthlyQuery).toMatch(/\*\s*100\s*\+\s*0\.0000001/)
+    })
+
+    it('parties/[id] route imports fromPaise from money.ts', () => {
+      if (!partiesSource) return
+      expect(partiesSource).toMatch(/import\s+\{[^}]*\bfromPaise\b[^}]*\}\s+from\s+['"]@\/lib\/money['"]/)
+    })
+
+    it('JS processing uses fromPaise(Number(...Paise)) pattern', () => {
+      if (!partiesSource) return
+      expect(partiesSource).toMatch(/fromPaise\(Number\(p\.totalAmountPaise\)\)/)
+      expect(partiesSource).toMatch(/fromPaise\(Number\(row\.totalPaise\)\)/)
+    })
+
+    it('BUG-004 fix: openingBalance uses parseMoney (not parseFloat without rounding)', () => {
+      if (!partiesSource) return
+      // The PUT handler should use parseMoney for openingBalance, not parseFloat
+      expect(partiesSource).toMatch(/parseMoney\(body\.openingBalance\)/)
+      // Should NOT have the old buggy pattern in CODE (not comments).
+      // Strip comments before checking to avoid false positives from the
+      // documentation comments that explain the old buggy pattern.
+      const codeOnly = partiesSource
+        .replace(/\/\*[\s\S]*?\*\//g, '')   // block comments
+        .replace(/\/\/[^\n]*/g, '')          // line comments
+      expect(codeOnly).not.toMatch(/parseFloat\s*\(\s*body\.openingBalance\s*\)\s*\|\|\s*0/)
+    })
+  })
+})
