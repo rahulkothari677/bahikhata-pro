@@ -697,8 +697,9 @@ export function TransactionDetail() {
                     <p className="font-bold text-sm tabular-nums text-violet-700 dark:text-violet-300">
                       -{formatINR(rev.totalAmount)}
                     </p>
-                    {rev.grossProfit > 0 && (
-                      <p className="text-[10px] text-rose-500 tabular-nums">-{formatINR(rev.grossProfit)} profit</p>
+                    {/* 🔒 V17 Audit Phase 4: credit-note grossProfit is NEGATIVE, so use < 0 */}
+                    {rev.grossProfit < 0 && (
+                      <p className="text-[10px] text-rose-500 tabular-nums">-{formatINR(Math.abs(rev.grossProfit))} profit</p>
                     )}
                   </div>
                 </div>

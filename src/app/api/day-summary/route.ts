@@ -74,6 +74,12 @@ export async function GET() {
     let totalSales = 0, totalPurchases = 0
     let transactionCount = 0
 
+    // 🔒 V17 Audit Phase 4: Credit notes reduce sales (customer return = refund).
+    // Debit notes reduce purchases (we return to supplier = refund). Without these
+    // branches, the cash drawer was inflated — a cash credit note (refund to customer)
+    // wasn't subtracted from expected cash, and a cash debit note (refund from supplier)
+    // wasn't added. Credit/debit note totalAmount is stored POSITIVE, so we subtract
+    // for credit notes (sales reversal) and subtract for debit notes (purchase reversal).
     for (const row of txByTypeMode) {
       const amount = roundMoney(row._sum.totalAmount || 0)
       const count = row._count._all
@@ -101,6 +107,28 @@ export async function GET() {
         expenses = roundMoney(expenses + amount)
       } else if (row.type === 'income') {
         income = roundMoney(income + amount)
+      } else if (row.type === 'credit-note') {
+        // 🔒 V17 Audit Phase 4: Credit note = sales return. Reduces totalSales.
+        // The refund (cash/UPI/etc.) goes OUT, so it reduces that payment mode.
+        totalSales = roundMoney(totalSales - amount)
+        switch (row.paymentMode) {
+          case 'cash': cashSales = roundMoney(cashSales - amount); break
+          case 'upi': upiSales = roundMoney(upiSales - amount); break
+          case 'card': cardSales = roundMoney(cardSales - amount); break
+          case 'bank': bankSales = roundMoney(bankSales - amount); break
+          case 'credit': creditSales = roundMoney(creditSales - amount); break
+        }
+      } else if (row.type === 'debit-note') {
+        // 🔒 V17 Audit Phase 4: Debit note = purchase return. Reduces totalPurchases.
+        // The refund (cash/UPI/etc.) comes IN, so it reduces that purchase payment mode.
+        totalPurchases = roundMoney(totalPurchases - amount)
+        switch (row.paymentMode) {
+          case 'cash': cashPurchases = roundMoney(cashPurchases - amount); break
+          case 'upi': upiPurchases = roundMoney(upiPurchases - amount); break
+          case 'card': cardPurchases = roundMoney(cardPurchases - amount); break
+          case 'bank': bankPurchases = roundMoney(bankPurchases - amount); break
+          case 'credit': creditPurchases = roundMoney(creditPurchases - amount); break
+        }
       }
     }
 

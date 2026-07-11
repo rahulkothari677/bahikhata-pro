@@ -63,19 +63,27 @@ export function netSalesTaxable(sale: TypeAggregates | null | undefined, creditN
 }
 
 /**
- * Net sales profit = sale grossProfit − credit-note grossProfit.
+ * Net sales profit = sale grossProfit + credit-note grossProfit.
  *
- * A credit note reverses the profit booked on the original sale. If the
- * returned goods have a cost, the credit note's grossProfit is negative
- * (reversing both revenue and COGS). Subtracting it here gives true net profit.
+ * 🔒 V17 Audit Phase 4 SIGN-CONVENTION FIX:
+ * Credit notes store NEGATIVE grossProfit (a return reverses profit, so
+ * line-items.ts stores -itemProfit). Therefore we ADD the credit-note
+ * grossProfit (adding a negative = subtracting the reversal).
  *
- * Used by: P&L grossProfit, dashboard range_profit.
+ * sale.grossProfit = +3000, creditNote.grossProfit = -900
+ * net = 3000 + (-900) = 2100 ✅
+ *
+ * BEFORE this fix: the helper used `s.grossProfit - c.grossProfit` which
+ * produced `3000 - (-900) = 3900` — profit was INFLATED by the return amount.
+ * This was a regression of the original §1 bug in the opposite direction.
+ *
+ * Used by: P&L grossProfit, dashboard range_profit (via SQL).
  * Null-safe: null/undefined aggregates are treated as 0.
  */
 export function netSalesProfit(sale: TypeAggregates | null | undefined, creditNote: TypeAggregates | null | undefined): number {
   const s = sale || {}
   const c = creditNote || {}
-  return roundMoney((s.grossProfit || 0) - (c.grossProfit || 0))
+  return roundMoney((s.grossProfit || 0) + (c.grossProfit || 0))
 }
 
 /**

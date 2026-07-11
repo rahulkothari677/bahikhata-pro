@@ -269,13 +269,14 @@ export function Ledger({ type }: { type: LedgerType }) {
   }
 
   const totalAmount = filtered.reduce((s, t) => s + t.totalAmount, 0)
-  // 🔒 V17 Audit §1: Net profit = sale profit − credit-note profit.
-  // Credit notes have NEGATIVE grossProfit (stored at creation time), so we
-  // could just sum all. But for safety, we subtract credit-note profit
-  // explicitly in case any old credit notes have grossProfit=0 (pre-fix).
-  // Sales: +grossProfit. Credit notes: −grossProfit (reverse). Others: 0.
+  // 🔒 V17 Audit Phase 4 SIGN-CONVENTION FIX:
+  // Credit notes store NEGATIVE grossProfit (line-items.ts: grossProfit - itemProfit = 0 - 900 = -900).
+  // So we ADD grossProfit for both sales (+3000) and credit notes (-900) → net = 2100.
+  // BEFORE this fix: the code did `s - t.grossProfit` for credit notes → `3000 - (-900) = 3900`
+  // which INFLATED profit by the return amount (regression of §1 in the opposite direction).
+  // Sales: +grossProfit (positive). Credit notes: +grossProfit (negative). Others: 0.
   const totalProfit = filtered.reduce((s, t) => {
-    if (t.type === 'credit-note') return s - (t.grossProfit || 0)
+    if (t.type === 'credit-note') return s + (t.grossProfit || 0)  // ADD (grossProfit is negative)
     if (t.type === 'sale') return s + (t.grossProfit || 0)
     return s
   }, 0)
@@ -680,9 +681,9 @@ export function Ledger({ type }: { type: LedgerType }) {
                           {isSale && !hideProfit && (
                             <p className="text-[11px] text-emerald-600 mt-0.5 tabular-nums">+{formatINR(t.grossProfit)}</p>
                           )}
-                          {/* 🔒 V17 Audit §1: Show negative profit on credit notes (reverses sale profit) */}
-                          {t.type === 'credit-note' && !hideProfit && t.grossProfit > 0 && (
-                            <p className="text-[11px] text-rose-500 mt-0.5 tabular-nums">-{formatINR(t.grossProfit)}</p>
+                          {/* 🔒 V17 Audit Phase 4: credit-note grossProfit is NEGATIVE, so use < 0 */}
+                          {t.type === 'credit-note' && !hideProfit && t.grossProfit < 0 && (
+                            <p className="text-[11px] text-rose-500 mt-0.5 tabular-nums">-{formatINR(Math.abs(t.grossProfit))}</p>
                           )}
                         </div>
                       </div>
@@ -778,9 +779,9 @@ export function Ledger({ type }: { type: LedgerType }) {
                   {isSale && !hideProfit && (
                     <p className="text-[10px] text-emerald-600 mt-1">+{formatINRCompact(t.grossProfit)} profit</p>
                   )}
-                  {/* 🔒 V17 Audit §1: Show negative profit on credit notes */}
-                  {t.type === 'credit-note' && !hideProfit && t.grossProfit > 0 && (
-                    <p className="text-[10px] text-rose-500 mt-1">-{formatINRCompact(t.grossProfit)} profit reversed</p>
+                  {/* 🔒 V17 Audit Phase 4: credit-note grossProfit is NEGATIVE, so use < 0 */}
+                  {t.type === 'credit-note' && !hideProfit && t.grossProfit < 0 && (
+                    <p className="text-[10px] text-rose-500 mt-1">-{formatINRCompact(Math.abs(t.grossProfit))} profit reversed</p>
                   )}
                 </CardContent>
               </Card>

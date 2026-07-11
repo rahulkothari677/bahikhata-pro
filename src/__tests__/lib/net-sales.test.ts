@@ -65,21 +65,20 @@ describe('🔒 V17 Audit §1 — Net-of-returns helpers', () => {
   })
 
   describe('netSalesProfit (profit net of credit notes)', () => {
-    test('sale profit minus credit-note profit = net profit', () => {
-      // Sale: revenue 10000, cost 7000, profit 3000
+    test('sale profit + credit-note profit (NEGATIVE) = net profit', () => {
+      // 🔒 V17 Audit Phase 4 SIGN-CONVENTION FIX:
+      // Credit notes store NEGATIVE grossProfit (line-items.ts: grossProfit - itemProfit = 0 - 900 = -900).
+      // So netSalesProfit ADDS (not subtracts): sale(+3000) + cn(-900) = 2100.
+      // BEFORE the fix: the helper subtracted → 3000 - (-900) = 3900 (INFLATED).
       const sale: TypeAggregates = { grossProfit: 3000 }
-      // Credit note reverses part: revenue -3000, cost +2100, profit -900
-      const cn: TypeAggregates = { grossProfit: 900 }
+      const cn: TypeAggregates = { grossProfit: -900 } // NEGATIVE (matches real DB storage)
 
-      // A credit note's grossProfit is POSITIVE (it stores the absolute
-      // reversal amount). We SUBTRACT it to get net profit.
-      // net = 3000 - 900 = 2100
       expect(netSalesProfit(sale, cn)).toBe(2100)
     })
 
     test('full return reverses all profit', () => {
       const sale: TypeAggregates = { grossProfit: 2000 }
-      const cn: TypeAggregates = { grossProfit: 2000 }
+      const cn: TypeAggregates = { grossProfit: -2000 } // NEGATIVE
 
       expect(netSalesProfit(sale, cn)).toBe(0)
     })
@@ -89,6 +88,17 @@ describe('🔒 V17 Audit §1 — Net-of-returns helpers', () => {
       const cn: TypeAggregates = {}
 
       expect(netSalesProfit(sale, cn)).toBe(5000)
+    })
+
+    test('🔒 V17 Audit Phase 4: OLD buggy formula would produce 3900 (not 2100)', () => {
+      // Regression guard: if someone reverts netSalesProfit to `s - c`, this test fails.
+      const sale: TypeAggregates = { grossProfit: 3000 }
+      const cn: TypeAggregates = { grossProfit: -900 }
+
+      const result = netSalesProfit(sale, cn)
+      expect(result).toBe(2100)      // correct
+      expect(result).not.toBe(3900)  // old buggy value (3000 - (-900))
+      expect(result).not.toBe(3900)  // double-guard
     })
   })
 
@@ -199,7 +209,7 @@ describe('🔒 V17 Audit §1 — Net-of-returns helpers', () => {
         subtotal: 3000,
         discountAmount: 0,
         totalAmount: 3540, // 3000 + 540 GST
-        grossProfit: 900,  // 30% margin reversed
+        grossProfit: -900,  // 🔒 V17 Audit Phase 4: NEGATIVE (matches real DB storage)
         cgst: 270,
         sgst: 270,
         igst: 0,
@@ -211,8 +221,10 @@ describe('🔒 V17 Audit §1 — Net-of-returns helpers', () => {
       // Net revenue (total) = 11800 - 3540 = 8260
       expect(netSalesTotal(sale, creditNote)).toBe(8260)
 
-      // Net profit = 3000 - 900 = 2100
+      // Net profit = 3000 + (-900) = 2100 (credit-note grossProfit is NEGATIVE, so we ADD)
       expect(netSalesProfit(sale, creditNote)).toBe(2100)
+      // 🔒 V17 Audit Phase 4: assert NOT 3900 (the old buggy value from subtracting a negative)
+      expect(netSalesProfit(sale, creditNote)).not.toBe(3900)
 
       // Net output tax = 1800 - 540 = 1260
       expect(netOutputTax(sale, creditNote)).toBe(1260)
@@ -230,6 +242,75 @@ describe('🔒 V17 Audit §1 — Net-of-returns helpers', () => {
 
       // 9.02 - 3.01 = 6.01 (no float artifacts)
       expect(netOutputTax(sale, cn)).toBe(6.01)
+    })
+  })
+
+  /**
+   * 🔒 V17 Audit Phase 4 — Sign-Convention Integration Test
+   *
+   * This test simulates the REAL data flow: a sale stores POSITIVE grossProfit,
+   * a credit note stores NEGATIVE grossProfit (per line-items.ts). It then
+   * verifies that BOTH computation paths produce the same correct net profit:
+   *
+   * 1. The netSalesProfit helper (used by P&L report)
+   * 2. The Ledger.tsx reduce logic (used by the sales ledger total)
+   *
+   * Before Phase 4, these two paths DISAGREED because the helper subtracted
+   * (3000 - (-900) = 3900) while the Ledger also subtracted (same bug). Both
+   * were wrong in the same way, so they "agreed" — but on the WRONG number.
+   *
+   * This test catches that class of bug by asserting the CORRECT value (2100)
+   * and explicitly NOT the buggy value (3900).
+   */
+  describe('🔒 V17 Audit Phase 4 — Sign-convention integration', () => {
+    test('sale (+3000) + credit-note (-900) = 2100 across ALL computation paths', () => {
+      // Simulate real DB rows (as stored by line-items.ts)
+      const saleRow = { type: 'sale', grossProfit: 3000 }
+      const creditNoteRow = { type: 'credit-note', grossProfit: -900 } // NEGATIVE
+      const allRows = [saleRow, creditNoteRow]
+
+      // Path 1: netSalesProfit helper (used by P&L report via reports/route.ts)
+      const helperResult = netSalesProfit(
+        { grossProfit: 3000 },
+        { grossProfit: -900 }
+      )
+
+      // Path 2: Ledger.tsx reduce logic (simulated)
+      // This is the EXACT code from Ledger.tsx totalProfit:
+      const ledgerResult = allRows.reduce((s, t) => {
+        if (t.type === 'credit-note') return s + (t.grossProfit || 0)  // ADD (negative)
+        if (t.type === 'sale') return s + (t.grossProfit || 0)
+        return s
+      }, 0)
+
+      // Both paths must agree
+      expect(helperResult).toBe(2100)
+      expect(ledgerResult).toBe(2100)
+      expect(helperResult).toBe(ledgerResult)
+
+      // Both must NOT be the old buggy value
+      expect(helperResult).not.toBe(3900)
+      expect(ledgerResult).not.toBe(3900)
+    })
+
+    test('multiple credit notes all with negative profit', () => {
+      const rows = [
+        { type: 'sale', grossProfit: 5000 },
+        { type: 'sale', grossProfit: 3000 },
+        { type: 'credit-note', grossProfit: -900 },
+        { type: 'credit-note', grossProfit: -500 },
+      ]
+
+      // Ledger reduce
+      const ledgerResult = rows.reduce((s, t) => {
+        if (t.type === 'credit-note') return s + (t.grossProfit || 0)
+        if (t.type === 'sale') return s + (t.grossProfit || 0)
+        return s
+      }, 0)
+
+      // 5000 + 3000 + (-900) + (-500) = 6600
+      expect(ledgerResult).toBe(6600)
+      expect(ledgerResult).not.toBe(9400) // old buggy value (8000 - (-1400))
     })
   })
 })

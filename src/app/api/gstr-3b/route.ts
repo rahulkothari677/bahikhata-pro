@@ -148,19 +148,24 @@ export async function GET(req: NextRequest) {
         _count: true,
       }),
 
-      // 3.1(c) part 1: Nil-rated outward (0% GST items)
+      // 3.1(c) part 1: Nil-rated outward (0% GST items, EXCLUDING exempt/nonGst products)
       // 🔒 V17 Audit §4.1 FIX: Was "sales where ALL items have gstRate=0" (whole-invoice
       // only). An invoice with a mix of 0% and 18% items had its 0% portion counted
       // only inside the taxable supply, never broken out as nil-rated. Now: sum the
       // taxable value of ALL 0%-rated line items across ALL non-RCM sales (whether
       // the invoice is mixed or pure-0%). This correctly breaks out the nil-rated
       // portion of mixed invoices.
+      // 🔒 V17 Audit Phase 4 FIX: Exclude products marked gstTreatment='exempt' or 'nonGst'
+      // — those are counted in their own 3.1(c) sub-rows, not in nil-rated. Without this
+      // exclusion, an exempt product (which typically has gstRate=0) would be counted in
+      // BOTH nil-rated AND exempt → 3.1(c) total overstated.
       db.$queryRaw<Array<{ totalValue: string }>>`
         SELECT COALESCE(SUM(
           ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 2)
         ), 0)::text AS "totalValue"
         FROM "TransactionItem" ti
         JOIN "Transaction" t ON ti."transactionId" = t.id
+        LEFT JOIN "Product" p ON ti."productId" = p.id
         WHERE t."userId" = ${userId}
           AND t."deletedAt" IS NULL
           AND t."type" = 'sale'
@@ -168,6 +173,7 @@ export async function GET(req: NextRequest) {
           AND t."date" >= ${periodStart}
           AND t."date" < ${periodEnd}
           AND ti."gstRate" = 0
+          AND (p."gstTreatment" IS NULL OR p."gstTreatment" = 'taxable' OR p."gstTreatment" = 'nil')
       `,
 
       // 3.1(c) part 2: Exempt outward (products marked gstTreatment='exempt')
@@ -537,16 +543,19 @@ export async function POST(req: NextRequest) {
         _count: true,
       }),
       // 🔒 V17 Audit §4.1: Nil-rated = sum of 0%-rated line items (was: whole-invoice)
+      // 🔒 V17 Audit Phase 4: Exclude exempt/nonGst products (counted in their own rows)
       db.$queryRaw<Array<{ totalValue: string }>>`
         SELECT COALESCE(SUM(
           ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 2)
         ), 0)::text AS "totalValue"
         FROM "TransactionItem" ti
         JOIN "Transaction" t ON ti."transactionId" = t.id
+        LEFT JOIN "Product" p ON ti."productId" = p.id
         WHERE t."userId" = ${userId}
           AND t."deletedAt" IS NULL AND t."type" = 'sale' AND t."isReverseCharge" = false
           AND t."date" >= ${periodStart} AND t."date" < ${periodEnd}
           AND ti."gstRate" = 0
+          AND (p."gstTreatment" IS NULL OR p."gstTreatment" = 'taxable' OR p."gstTreatment" = 'nil')
       `,
       // 🔒 V17 Audit §4.2: Exempt = products with gstTreatment='exempt'
       db.$queryRaw<Array<{ totalValue: string }>>`
