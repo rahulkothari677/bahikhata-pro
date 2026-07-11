@@ -975,3 +975,93 @@ describe('V17 Phase 2F — paise-read-pattern regression guard (dashboard)', () 
     expect(codeOnly).not.toMatch(/kpi\.(today_revenue|today_profit|range_revenue|range_profit|range_expenses|range_purchases|range_income|prev_revenue|prev_profit|sale_subtotal|sale_discount|sale_cgst|sale_sgst|sale_igst|purchase_cgst|purchase_sgst|purchase_igst)\b(?!_paise)/)
   })
 })
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔒 V17 PAISE MIGRATION Phase 2G — gstr-3b/route.ts (8 queries, 4 unique)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Phase 2G migrated 8 raw SQL queries (4 unique, duplicated in GET + POST):
+//   1. Nil-rated outward (3.1c part 1) — totalValue → totalValuePaise
+//   2. Exempt outward (3.1c part 2) — totalValue → totalValuePaise
+//   3. Inter-state B2C (3.2) — taxableValue + igst → *Paise
+//   4. Exempt inward (5) — totalValue → totalValuePaise
+//
+// All values are sums of positive amounts (taxable values, IGST, totalAmount),
+// so positive nudge (no SIGN needed). This is the FINAL Phase 2 sub-phase.
+describe('V17 Phase 2G — paise-read-pattern regression guard (gstr-3b)', () => {
+  const GSTR3B_PATH = path.join(process.cwd(), 'src', 'app', 'api', 'gstr-3b', 'route.ts')
+  const source = fs.existsSync(GSTR3B_PATH) ? fs.readFileSync(GSTR3B_PATH, 'utf8') : ''
+
+  it('gstr-3b route file exists', () => {
+    expect(source.length).toBeGreaterThan(0)
+  })
+
+  it('all 4 unique queries return *Paise aliases (not old rupee aliases)', () => {
+    if (!source) return
+    const queries = extractRawSql(source)
+
+    // Nil-rated + exempt outward queries: have gstTreatment + gstRate = 0
+    const nilRatedQueries = queries.filter(q => q.includes('"gstRate" = 0') || q.includes('"gstTreatment"'))
+    expect(nilRatedQueries.length).toBeGreaterThanOrEqual(2)
+    for (const q of nilRatedQueries) {
+      expect(q).toContain('"totalValuePaise"')
+      expect(q).not.toMatch(/AS\s+"totalValue"\s/)
+    }
+
+    // Inter-state B2C queries: have isInterState + Party
+    const b2cQueries = queries.filter(q => q.includes('"isInterState"') && q.includes('"Party"'))
+    expect(b2cQueries.length).toBeGreaterThanOrEqual(1)
+    for (const q of b2cQueries) {
+      expect(q).toContain('"taxableValuePaise"')
+      expect(q).toContain('"igstPaise"')
+      expect(q).not.toMatch(/AS\s+"taxableValue"\s/)
+      expect(q).not.toMatch(/AS\s+"igst"\s/)
+    }
+
+    // Exempt inward queries: have NOT EXISTS + gstRate > 0
+    const exemptInwardQueries = queries.filter(q => q.includes('NOT EXISTS') && q.includes('"gstRate" > 0'))
+    expect(exemptInwardQueries.length).toBeGreaterThanOrEqual(1)
+    for (const q of exemptInwardQueries) {
+      expect(q).toContain('"totalValuePaise"')
+      expect(q).not.toMatch(/AS\s+"totalValue"\s/)
+    }
+  })
+
+  it('SQL multiplies by 100 and applies the 1e-7 paise nudge', () => {
+    if (!source) return
+    const queries = extractRawSql(source)
+    const moneyQueries = queries.filter(q => q.includes('Paise'))
+    expect(moneyQueries.length).toBeGreaterThanOrEqual(4)
+    for (const q of moneyQueries) {
+      expect(q).toMatch(/\*\s*100\s*\+\s*0\.0000001/)
+    }
+  })
+
+  it('gstr-3b route imports fromPaise from money.ts', () => {
+    if (!source) return
+    expect(source).toMatch(/import\s+\{[^}]*\bfromPaise\b[^}]*\}\s+from\s+['"]@\/lib\/money['"]/)
+  })
+
+  it('JS processing uses fromPaise for all 4 query types', () => {
+    if (!source) return
+    // nil-rated + exempt + exempt inward all use totalValuePaise
+    // Note: optional chaining is [0]?., not [0?]. — the ? comes AFTER ]
+    expect(source).toMatch(/fromPaise\(Number\([a-zA-Z]+Agg\[0\]\?\.totalValuePaise \|\| 0\)\)/)
+    // inter-state B2C uses taxableValuePaise + igstPaise
+    expect(source).toMatch(/fromPaise\(Number\(interstateB2cAgg\[0\]\?\.taxableValuePaise \|\| 0\)\)/)
+    expect(source).toMatch(/fromPaise\(Number\(interstateB2cAgg\[0\]\?\.igstPaise \|\| 0\)\)/)
+  })
+
+  it('no stale references to old raw SQL field names (without Paise) in code', () => {
+    if (!source) return
+    // Strip comments and string literals
+    const codeOnly = source
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/[^\n]*/g, '')
+      .replace(/`[^`]*`/g, '')
+      .replace(/"[^"]*"/g, '')
+      .replace(/'[^']*'/g, '')
+    // Should not reference Agg[0]?.totalValue, .taxableValue, .igst (without Paise)
+    expect(codeOnly).not.toMatch(/Agg\[0\]\?\.(totalValue|taxableValue|igst)\b(?!Paise)/)
+  })
+})

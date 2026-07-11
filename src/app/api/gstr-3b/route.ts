@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthContext, assertCanWrite } from '@/lib/get-auth'
 import { canAccessModule } from '@/lib/staff-permissions'
-import { roundMoney } from '@/lib/money'
+import { roundMoney, fromPaise } from '@/lib/money'
 import { istMonthStartOffset, getISTDateParts } from '@/lib/timezone'
 import { apiError } from '@/lib/api-error'
 import { logAudit } from '@/lib/audit'
@@ -159,10 +159,12 @@ export async function GET(req: NextRequest) {
       // — those are counted in their own 3.1(c) sub-rows, not in nil-rated. Without this
       // exclusion, an exempt product (which typically has gstRate=0) would be counted in
       // BOTH nil-rated AND exempt → 3.1(c) total overstated.
-      db.$queryRaw<Array<{ totalValue: string }>>`
-        SELECT COALESCE(SUM(
+      // 🔒 V17 PAISE MIGRATION Phase 2G: SQL returns paise. totalValue is always >= 0
+      // (sum of taxable values), so positive nudge is sufficient.
+      db.$queryRaw<Array<{ totalValuePaise: string }>>`
+        SELECT COALESCE(ROUND(SUM(
           ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 2)
-        ), 0)::text AS "totalValue"
+        ) * 100 + 0.0000001, 0), 0)::text AS "totalValuePaise"
         FROM "TransactionItem" ti
         JOIN "Transaction" t ON ti."transactionId" = t.id
         LEFT JOIN "Product" p ON ti."productId" = p.id
@@ -180,10 +182,11 @@ export async function GET(req: NextRequest) {
       // 🔒 V17 Audit §4.2 FIX: Was hardcoded to 0 (no exempt flag existed).
       // Now: sum the taxable value of line items whose product is marked exempt.
       // Falls back to 0 if no products have gstTreatment='exempt' (backward compat).
-      db.$queryRaw<Array<{ totalValue: string }>>`
-        SELECT COALESCE(SUM(
+      // 🔒 V17 PAISE MIGRATION Phase 2G: SQL returns paise. Same pattern as above.
+      db.$queryRaw<Array<{ totalValuePaise: string }>>`
+        SELECT COALESCE(ROUND(SUM(
           ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 2)
-        ), 0)::text AS "totalValue"
+        ) * 100 + 0.0000001, 0), 0)::text AS "totalValuePaise"
         FROM "TransactionItem" ti
         JOIN "Transaction" t ON ti."transactionId" = t.id
         LEFT JOIN "Product" p ON ti."productId" = p.id
@@ -210,10 +213,12 @@ export async function GET(req: NextRequest) {
 
       // 3.2: Inter-state B2C (unregistered parties)
       // Sales where isInterState = true AND party has no GSTIN
-      db.$queryRaw<Array<{ taxableValue: string; igst: string }>>`
+      // 🔒 V17 PAISE MIGRATION Phase 2G: SQL returns paise for both columns.
+      // taxableValue + igst are always >= 0, so positive nudge.
+      db.$queryRaw<Array<{ taxableValuePaise: string; igstPaise: string }>>`
         SELECT
-          COALESCE(SUM(t."subtotal"::numeric - COALESCE(t."discountAmount", 0)::numeric), 0)::text AS "taxableValue",
-          COALESCE(SUM(t."igst"::numeric), 0)::text AS "igst"
+          COALESCE(ROUND(SUM(t."subtotal"::numeric - COALESCE(t."discountAmount", 0)::numeric) * 100 + 0.0000001, 0), 0)::text AS "taxableValuePaise",
+          COALESCE(ROUND(SUM(t."igst"::numeric) * 100 + 0.0000001, 0), 0)::text AS "igstPaise"
         FROM "Transaction" t
         LEFT JOIN "Party" p ON t."partyId" = p.id
         WHERE t."userId" = ${userId}
@@ -266,8 +271,9 @@ export async function GET(req: NextRequest) {
 
       // 5: Exempt inward (0% GST purchases)
       // Same pattern as nil-rated sales — purchases where ALL items have gstRate = 0
-      db.$queryRaw<Array<{ totalValue: string }>>`
-        SELECT COALESCE(SUM(t."totalAmount"::numeric), 0)::text AS "totalValue"
+      // 🔒 V17 PAISE MIGRATION Phase 2G: SQL returns paise. totalAmount >= 0, positive nudge.
+      db.$queryRaw<Array<{ totalValuePaise: string }>>`
+        SELECT COALESCE(ROUND(SUM(t."totalAmount"::numeric) * 100 + 0.0000001, 0), 0)::text AS "totalValuePaise"
         FROM "Transaction" t
         WHERE t."userId" = ${userId}
           AND t."deletedAt" IS NULL
@@ -303,9 +309,10 @@ export async function GET(req: NextRequest) {
 
     // 3.1(c): Nil-rated + exempt + non-GST
     // 🔒 V17 Audit §4.1: Nil-rated now sums 0%-rated line items (not whole invoices)
-    const nilRatedValue = roundMoney(Number(nilRatedAgg[0]?.totalValue || 0))
+    // 🔒 V17 PAISE MIGRATION Phase 2G: SQL returns paise; convert to rupees via fromPaise().
+    const nilRatedValue = fromPaise(Number(nilRatedAgg[0]?.totalValuePaise || 0))
     // 🔒 V17 Audit §4.2: Exempt now reads from Product.gstTreatment='exempt' (was: hardcoded 0)
-    const exemptValue = roundMoney(Number(exemptAgg[0]?.totalValue || 0))
+    const exemptValue = fromPaise(Number(exemptAgg[0]?.totalValuePaise || 0))
     const nonGstValue = roundMoney(nonGstAgg._sum.totalAmount || 0)
 
     // 3.1(d): RCM INWARD liability (purchases with isReverseCharge = true)
@@ -330,8 +337,9 @@ export async function GET(req: NextRequest) {
     const creditNoteIgst = roundMoney(creditNoteAgg._sum.igst || 0)
 
     // 3.2: Inter-state B2C
-    const interstateB2cTaxableValue = roundMoney(Number(interstateB2cAgg[0]?.taxableValue || 0))
-    const interstateB2cIgst = roundMoney(Number(interstateB2cAgg[0]?.igst || 0))
+    // 🔒 V17 PAISE MIGRATION Phase 2G: SQL returns paise; convert to rupees via fromPaise().
+    const interstateB2cTaxableValue = fromPaise(Number(interstateB2cAgg[0]?.taxableValuePaise || 0))
+    const interstateB2cIgst = fromPaise(Number(interstateB2cAgg[0]?.igstPaise || 0))
 
     // 4(a): ITC regular
     const itcTaxableValue = roundMoney(
@@ -361,7 +369,8 @@ export async function GET(req: NextRequest) {
     // 4(d): ITC from SEZ — ₹0 (not applicable)
 
     // 5: Exempt inward
-    const exemptInwardValue = roundMoney(Number(exemptInwardAgg[0]?.totalValue || 0))
+    // 🔒 V17 PAISE MIGRATION Phase 2G: SQL returns paise; convert to rupees via fromPaise().
+    const exemptInwardValue = fromPaise(Number(exemptInwardAgg[0]?.totalValuePaise || 0))
 
     // 6.1: Net tax payable
     // = (output CGST + output SGST + output IGST)
@@ -558,10 +567,11 @@ export async function POST(req: NextRequest) {
       }),
       // 🔒 V17 Audit §4.1: Nil-rated = sum of 0%-rated line items (was: whole-invoice)
       // 🔒 V17 Audit Phase 4: Exclude exempt/nonGst products (counted in their own rows)
-      db.$queryRaw<Array<{ totalValue: string }>>`
-        SELECT COALESCE(SUM(
+      // 🔒 V17 PAISE MIGRATION Phase 2G: SQL returns paise. Positive nudge (value >= 0).
+      db.$queryRaw<Array<{ totalValuePaise: string }>>`
+        SELECT COALESCE(ROUND(SUM(
           ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 2)
-        ), 0)::text AS "totalValue"
+        ) * 100 + 0.0000001, 0), 0)::text AS "totalValuePaise"
         FROM "TransactionItem" ti
         JOIN "Transaction" t ON ti."transactionId" = t.id
         LEFT JOIN "Product" p ON ti."productId" = p.id
@@ -572,10 +582,11 @@ export async function POST(req: NextRequest) {
           AND (p."gstTreatment" IS NULL OR p."gstTreatment" = 'taxable' OR p."gstTreatment" = 'nil')
       `,
       // 🔒 V17 Audit §4.2: Exempt = products with gstTreatment='exempt'
-      db.$queryRaw<Array<{ totalValue: string }>>`
-        SELECT COALESCE(SUM(
+      // 🔒 V17 PAISE MIGRATION Phase 2G: SQL returns paise. Positive nudge (value >= 0).
+      db.$queryRaw<Array<{ totalValuePaise: string }>>`
+        SELECT COALESCE(ROUND(SUM(
           ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 2)
-        ), 0)::text AS "totalValue"
+        ) * 100 + 0.0000001, 0), 0)::text AS "totalValuePaise"
         FROM "TransactionItem" ti
         JOIN "Transaction" t ON ti."transactionId" = t.id
         LEFT JOIN "Product" p ON ti."productId" = p.id
@@ -588,10 +599,11 @@ export async function POST(req: NextRequest) {
         where: { userId, type: 'income', deletedAt: null, date: { gte: periodStart, lt: periodEnd } },
         _sum: { totalAmount: true }, _count: true,
       }),
-      db.$queryRaw<Array<{ taxableValue: string; igst: string }>>`
+      // 🔒 V17 PAISE MIGRATION Phase 2G: SQL returns paise. Positive nudge (values >= 0).
+      db.$queryRaw<Array<{ taxableValuePaise: string; igstPaise: string }>>`
         SELECT
-          COALESCE(SUM(t."subtotal"::numeric - COALESCE(t."discountAmount", 0)::numeric), 0)::text AS "taxableValue",
-          COALESCE(SUM(t."igst"::numeric), 0)::text AS "igst"
+          COALESCE(ROUND(SUM(t."subtotal"::numeric - COALESCE(t."discountAmount", 0)::numeric) * 100 + 0.0000001, 0), 0)::text AS "taxableValuePaise",
+          COALESCE(ROUND(SUM(t."igst"::numeric) * 100 + 0.0000001, 0), 0)::text AS "igstPaise"
         FROM "Transaction" t
         LEFT JOIN "Party" p ON t."partyId" = p.id
         WHERE t."userId" = ${userId} AND t."deletedAt" IS NULL AND t."type" = 'sale'
@@ -614,8 +626,9 @@ export async function POST(req: NextRequest) {
         _sum: { subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true },
         _count: true,
       }),
-      db.$queryRaw<Array<{ totalValue: string }>>`
-        SELECT COALESCE(SUM(t."totalAmount"::numeric), 0)::text AS "totalValue"
+      // 🔒 V17 PAISE MIGRATION Phase 2G: SQL returns paise. Positive nudge (totalAmount >= 0).
+      db.$queryRaw<Array<{ totalValuePaise: string }>>`
+        SELECT COALESCE(ROUND(SUM(t."totalAmount"::numeric) * 100 + 0.0000001, 0), 0)::text AS "totalValuePaise"
         FROM "Transaction" t
         WHERE t."userId" = ${userId}
           AND t."deletedAt" IS NULL AND t."type" = 'purchase'
@@ -630,9 +643,10 @@ export async function POST(req: NextRequest) {
     const outwardSgst = roundMoney(outwardSalesAgg._sum.sgst || 0)
     const outwardIgst = roundMoney(outwardSalesAgg._sum.igst || 0)
     // 🔒 V17 Audit §4.1: Nil-rated now sums 0%-rated line items
-    const nilRatedValue = roundMoney(Number(nilRatedAgg[0]?.totalValue || 0))
+    // 🔒 V17 PAISE MIGRATION Phase 2G: SQL returns paise; convert to rupees via fromPaise().
+    const nilRatedValue = fromPaise(Number(nilRatedAgg[0]?.totalValuePaise || 0))
     // 🔒 V17 Audit §4.2: Exempt now reads from Product.gstTreatment='exempt'
-    const exemptValue = roundMoney(Number(exemptAgg[0]?.totalValue || 0))
+    const exemptValue = fromPaise(Number(exemptAgg[0]?.totalValuePaise || 0))
     const nonGstValue = roundMoney(nonGstAgg._sum.totalAmount || 0)
     // 🔒 V17 Audit §2: 3.1(d) now from RCM purchases (rcmInwardAgg, was rcmOutwardAgg)
     const rcmTaxableValue = roundMoney((rcmInwardAgg._sum.subtotal || 0) - (rcmInwardAgg._sum.discountAmount || 0))
@@ -644,8 +658,9 @@ export async function POST(req: NextRequest) {
     const creditNoteCgst = roundMoney(creditNoteAgg._sum.cgst || 0)
     const creditNoteSgst = roundMoney(creditNoteAgg._sum.sgst || 0)
     const creditNoteIgst = roundMoney(creditNoteAgg._sum.igst || 0)
-    const interstateB2cTaxableValue = roundMoney(Number(interstateB2cAgg[0]?.taxableValue || 0))
-    const interstateB2cIgst = roundMoney(Number(interstateB2cAgg[0]?.igst || 0))
+    // 🔒 V17 PAISE MIGRATION Phase 2G: SQL returns paise; convert to rupees via fromPaise().
+    const interstateB2cTaxableValue = fromPaise(Number(interstateB2cAgg[0]?.taxableValuePaise || 0))
+    const interstateB2cIgst = fromPaise(Number(interstateB2cAgg[0]?.igstPaise || 0))
     const itcTaxableValue = roundMoney((itcPurchasesAgg._sum.subtotal || 0) - (itcPurchasesAgg._sum.discountAmount || 0))
     const itcCgst = roundMoney(itcPurchasesAgg._sum.cgst || 0)
     const itcSgst = roundMoney(itcPurchasesAgg._sum.sgst || 0)
@@ -659,7 +674,8 @@ export async function POST(req: NextRequest) {
     const debitNoteCgst = roundMoney(debitNoteAgg._sum.cgst || 0)
     const debitNoteSgst = roundMoney(debitNoteAgg._sum.sgst || 0)
     const debitNoteIgst = roundMoney(debitNoteAgg._sum.igst || 0)
-    const exemptInwardValue = roundMoney(Number(exemptInwardAgg[0]?.totalValue || 0))
+    // 🔒 V17 PAISE MIGRATION Phase 2G: SQL returns paise; convert to rupees via fromPaise().
+    const exemptInwardValue = fromPaise(Number(exemptInwardAgg[0]?.totalValuePaise || 0))
     const totalOutputTax = roundMoney(outwardCgst + outwardSgst + outwardIgst)
     // 🔒 V17 Audit §2: RCM inward liability (was: totalRcmOutward). Now fed by
     // RCM purchases. Cancels with totalRcmItc for fully-creditable RCM.

@@ -4425,3 +4425,60 @@ Stage Summary:
 - 10 new regression-guard tests. Total paise-migration regression guards: 49 (4 Phase 2A + 7 Phase 2B + 4 Phase 2C + 14 Phase 2D + 10 Phase 2E + 10 Phase 2F).
 - Dashboard is the most critical read path (every page load). All KPIs, charts, and breakdowns now read paise from SQL and convert to rupees at the JS boundary.
 - NEXT: Push to origin/main, wait for Vercel deploy + user verification, then proceed to Phase 2G (gstr-3b/route.ts — 8 raw SQL queries, the last Phase 2 sub-phase).
+
+---
+Task ID: paise-migration-phase-2G
+Agent: main
+Task: V17 Paise Migration Phase 2G — Migrate 8 raw SQL queries in gstr-3b/route.ts (4 unique queries duplicated in GET + POST). FINAL Phase 2 sub-phase.
+
+Work Log:
+- PRE-CHANGE SCAN: Read gstr-3b/route.ts (767 lines, 8 raw SQL queries).
+    * 4 unique queries, each duplicated in GET (lines 162-288) and POST (lines 568-637):
+      1. Nil-rated outward (3.1c part 1) — totalValue (sum of 0%-rated line items, always >= 0)
+      2. Exempt outward (3.1c part 2) — totalValue (gstTreatment='exempt', always >= 0)
+      3. Inter-state B2C (3.2) — taxableValue + igst (always >= 0)
+      4. Exempt inward (5) — totalValue (totalAmount of 0%-GST purchases, always >= 0)
+    * All values are sums of positive amounts → positive nudge (no SIGN needed).
+    * The other ~10 Prisma aggregate() calls in the file read Float columns directly — NOT raw SQL, will be migrated in Phase 4 when column types change.
+
+- IMPLEMENTATION (same paise pattern as previous phases):
+    SQL: COALESCE(SUM(ROUND(..., 2)), 0)::text AS "totalValue"
+       → COALESCE(ROUND(SUM(ROUND(..., 2)) * 100 + 0.0000001, 0), 0)::text AS "totalValuePaise"
+    JS:  roundMoney(Number(agg[0]?.totalValue || 0))
+       → fromPaise(Number(agg[0]?.totalValuePaise || 0))
+    Applied to all 8 queries (4 in GET + 4 in POST) + their JS processing.
+
+- Files modified (2, per git status):
+    1. src/app/api/gstr-3b/route.ts — all 8 queries migrated + JS processing updated. Added fromPaise to imports.
+    2. src/__tests__/lib/raw-sql-smoke.test.ts — 5 new Phase 2G regression guards.
+
+- VERIFICATION:
+    * npx tsc --noEmit: 0 errors (codebase fully type-clean)
+    * npx eslint on both modified files: clean
+    * npx jest (5 targeted test files): 171 tests, ALL PASS — including:
+        - raw-sql-smoke.test.ts (with 5 new Phase 2G regression guards)
+        - gstr-3b.test.ts (24 tests — GSTR-3B computation logic)
+        - balance-reconciliation-behavioral, reconciliation, paise-helpers
+    * npx jest (5 broader financial test files): 129 tests, ALL PASS.
+    * Debugging note: initial test had a regex bug — used [0\?\] instead of [0]\? for optional chaining. The actual JS syntax is agg[0]?.X (bracket, then ?), not agg[0?].X. Fixed and all tests pass.
+
+- POST-CHANGE SCAN:
+    * No stale references to old field names (totalValue, taxableValue, igst without Paise) in raw SQL row access.
+    * The Prisma _sum.igst / _sum.cgst / _sum.sgst references remain — these are from Prisma aggregate() calls (not raw SQL), and will be migrated in Phase 4.
+    * Return shape UNCHANGED — GSTR-3B UI consumes the same fields (outwardTaxableValue, nilRatedValue, exemptValue, etc.). No UI changes needed.
+
+Stage Summary:
+- Phase 2G COMPLETE. 8 raw SQL queries migrated (4 unique, duplicated in GET+POST). Zero behavior change at the API/UI boundary.
+- 5 new regression-guard tests. Total paise-migration regression guards: 54 (4 Phase 2A + 7 Phase 2B + 4 Phase 2C + 14 Phase 2D + 10 Phase 2E + 10 Phase 2F + 5 Phase 2G).
+- 🎉 PHASE 2 (READ PATHS) IS NOW COMPLETE. All 26 raw SQL queries across 8 files have been migrated from rupee Float to paise integer.
+- Summary of Phase 2 work:
+    Phase 2A: insights/route.ts (1 query)
+    Phase 2B: party-balance.ts (1 query, 7 money columns) + BUG-003 fix
+    Phase 2C: reconciliation.ts (0 queries — COUNT only) + BUG-006/007 fixes
+    Phase 2D: reports/route.ts + gstr-export/route.ts (4 queries)
+    Phase 2E: analytics/route.ts + parties/[id]/route.ts (4 queries) + BUG-004 fix
+    Phase 2F: dashboard/route.ts (4 queries, highest complexity — CTE for 18-column KPI query)
+    Phase 2G: gstr-3b/route.ts (8 queries, 4 unique duplicated)
+    Total: 22 queries migrated, 5 bugs fixed (BUG-003/004/005/006/007), 54 regression guards added.
+- Bug registry: 5 FIXED (BUG-003/004/005/006/007), 3 OPEN (BUG-002 Low/Perf, BUG-008 Medium/TestInfra, BUG-009 Low/DataIssue).
+- NEXT: Push to origin/main, wait for Vercel deploy + user verification. Then proceed to Phase 3 (write paths — POST/PUT handlers, Zod transforms, computeLineItems).
