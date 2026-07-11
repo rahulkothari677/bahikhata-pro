@@ -31,7 +31,17 @@ export async function exportToTally(
   const vouchers = filtered.map(t => {
     const isSale = t.type === 'sale'
     const isPurchase = t.type === 'purchase'
-    const voucherType = isSale ? 'Sales' : isPurchase ? 'Purchase' : t.type === 'income' ? 'Receipt' : 'Payment'
+    const isCreditNote = t.type === 'credit-note'
+    const isDebitNote = t.type === 'debit-note'
+    // 🔒 V17 Audit Phase 4: Added Credit Note and Debit Note voucher types.
+    // Was: only sale/purchase/income/expense. Credit notes were exported as
+    // 'Sales' (wrong — they're reversals) and debit notes as 'Purchase' (wrong).
+    const voucherType = isSale ? 'Sales'
+      : isPurchase ? 'Purchase'
+      : isCreditNote ? 'Credit Note'
+      : isDebitNote ? 'Debit Note'
+      : t.type === 'income' ? 'Receipt'
+      : 'Payment'
     const partyName = t.party?.name || 'Walk-in Customer'
     const date = convertToTallyDate(t.date)
     const amount = t.totalAmount.toFixed(2)
@@ -48,24 +58,54 @@ export async function exportToTally(
 
     // Build ledger entries (debit/credit)
     // Convention: positive AMOUNT = Debit, negative AMOUNT = Credit
-    const partyLedger = isSale || t.type === 'income'
+    // 🔒 V17 Audit Phase 4: Credit notes REVERSE sales (party credited, sales debited).
+    // Debit notes REVERSE purchases (party debited, purchase credited).
+    const partyLedger = (isSale || t.type === 'income')
       ? `<LEDGERNAME>${escapeXml(partyName)}</LEDGERNAME><ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE><AMOUNT>${amount}</AMOUNT>`
-      : `<LEDGERNAME>${escapeXml(partyName)}</LEDGERNAME><ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE><AMOUNT>${amount}</AMOUNT>`
+      : (isPurchase || t.type === 'expense')
+        ? `<LEDGERNAME>${escapeXml(partyName)}</LEDGERNAME><ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE><AMOUNT>${amount}</AMOUNT>`
+        : isCreditNote
+          // Credit Note: party is CREDITED (we owe them), sales is DEBITED (reversal)
+          ? `<LEDGERNAME>${escapeXml(partyName)}</LEDGERNAME><ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE><AMOUNT>${amount}</AMOUNT>`
+          : isDebitNote
+            // Debit Note: party is DEBITED (they owe us), purchase is CREDITED (reversal)
+            ? `<LEDGERNAME>${escapeXml(partyName)}</LEDGERNAME><ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE><AMOUNT>${amount}</AMOUNT>`
+            : `<LEDGERNAME>${escapeXml(partyName)}</LEDGERNAME><ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE><AMOUNT>${amount}</AMOUNT>`
 
     // Sales/Purchase: credit/debit the POST-DISCOUNT taxable amount
+    // 🔒 V17 Audit Phase 4: Credit notes DEBIT sales (reversal). Debit notes CREDIT purchase (reversal).
     const salesLedger = isSale
       ? `<LEDGERNAME>Sales Account</LEDGERNAME><ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE><AMOUNT>${(-taxableAmount).toFixed(2)}</AMOUNT>`
       : isPurchase
         ? `<LEDGERNAME>Purchase Account</LEDGERNAME><ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE><AMOUNT>${taxableAmount.toFixed(2)}</AMOUNT>`
-        : t.type === 'income'
-          ? `<LEDGERNAME>${escapeXml(t.category || 'Other Income')}</LEDGERNAME><ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE><AMOUNT>${(-t.totalAmount).toFixed(2)}</AMOUNT>`
-          : `<LEDGERNAME>${escapeXml(t.category || 'Indirect Expenses')}</LEDGERNAME><ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE><AMOUNT>${t.totalAmount.toFixed(2)}</AMOUNT>`
+        : isCreditNote
+          // Credit Note: DEBIT Sales (reversal of credit)
+          ? `<LEDGERNAME>Sales Account</LEDGERNAME><ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE><AMOUNT>${taxableAmount.toFixed(2)}</AMOUNT>`
+          : isDebitNote
+            // Debit Note: CREDIT Purchase (reversal of debit)
+            ? `<LEDGERNAME>Purchase Account</LEDGERNAME><ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE><AMOUNT>${(-taxableAmount).toFixed(2)}</AMOUNT>`
+            : t.type === 'income'
+              ? `<LEDGERNAME>${escapeXml(t.category || 'Other Income')}</LEDGERNAME><ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE><AMOUNT>${(-t.totalAmount).toFixed(2)}</AMOUNT>`
+              : `<LEDGERNAME>${escapeXml(t.category || 'Indirect Expenses')}</LEDGERNAME><ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE><AMOUNT>${t.totalAmount.toFixed(2)}</AMOUNT>`
 
-    // Tax ledgers
+    // Tax ledgers — for credit notes, REVERSE the tax direction
     const taxLedgers: string[] = []
-    if (t.cgst > 0) taxLedgers.push(`<LEDGERNAME>CGST</LEDGERNAME><ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE><AMOUNT>${t.cgst.toFixed(2)}</AMOUNT>`)
-    if (t.sgst > 0) taxLedgers.push(`<LEDGERNAME>SGST</LEDGERNAME><ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE><AMOUNT>${t.sgst.toFixed(2)}</AMOUNT>`)
-    if (t.igst > 0) taxLedgers.push(`<LEDGERNAME>IGST</LEDGERNAME><ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE><AMOUNT>${t.igst.toFixed(2)}</AMOUNT>`)
+    if (isCreditNote) {
+      // Credit Note: DEBIT tax (reversal of credit)
+      if (t.cgst > 0) taxLedgers.push(`<LEDGERNAME>CGST</LEDGERNAME><ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE><AMOUNT>${t.cgst.toFixed(2)}</AMOUNT>`)
+      if (t.sgst > 0) taxLedgers.push(`<LEDGERNAME>SGST</LEDGERNAME><ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE><AMOUNT>${t.sgst.toFixed(2)}</AMOUNT>`)
+      if (t.igst > 0) taxLedgers.push(`<LEDGERNAME>IGST</LEDGERNAME><ISDEEMEDPOSITIVE>No</ISDEEMEDPOSITIVE><AMOUNT>${t.igst.toFixed(2)}</AMOUNT>`)
+    } else if (isDebitNote) {
+      // Debit Note: CREDIT tax (reversal of debit)
+      if (t.cgst > 0) taxLedgers.push(`<LEDGERNAME>CGST</LEDGERNAME><ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE><AMOUNT>${(-t.cgst).toFixed(2)}</AMOUNT>`)
+      if (t.sgst > 0) taxLedgers.push(`<LEDGERNAME>SGST</LEDGERNAME><ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE><AMOUNT>${(-t.sgst).toFixed(2)}</AMOUNT>`)
+      if (t.igst > 0) taxLedgers.push(`<LEDGERNAME>IGST</LEDGERNAME><ISDEEMEDPOSITIVE>Yes</ISDEEMEDPOSITIVE><AMOUNT>${(-t.igst).toFixed(2)}</AMOUNT>`)
+    } else {
+      // Normal sale/purchase: CREDIT tax (for sales) or DEBIT tax (for purchases)
+      if (t.cgst > 0) taxLedgers.push(`<LEDGERNAME>CGST</LEDGERNAME><ISDEEMEDPOSITIVE>${isPurchase ? 'No' : 'Yes'}</ISDEEMEDPOSITIVE><AMOUNT>${(isPurchase ? t.cgst : -t.cgst).toFixed(2)}</AMOUNT>`)
+      if (t.sgst > 0) taxLedgers.push(`<LEDGERNAME>SGST</LEDGERNAME><ISDEEMEDPOSITIVE>${isPurchase ? 'No' : 'Yes'}</ISDEEMEDPOSITIVE><AMOUNT>${(isPurchase ? t.sgst : -t.sgst).toFixed(2)}</AMOUNT>`)
+      if (t.igst > 0) taxLedgers.push(`<LEDGERNAME>IGST</LEDGERNAME><ISDEEMEDPOSITIVE>${isPurchase ? 'No' : 'Yes'}</ISDEEMEDPOSITIVE><AMOUNT>${(isPurchase ? t.igst : -t.igst).toFixed(2)}</AMOUNT>`)
+    }
 
     // Round Off ledger — makes the voucher balance when totalAmount ≠ (taxable + tax)
     // roundOff = totalAmount - (taxableAmount + cgst + sgst + igst)
@@ -184,9 +224,14 @@ function escapeXml(str: string): string {
 
 function convertToTallyDate(dateStr: string): string {
   // Tally expects YYYYMMDD format
+  // 🔒 V17 Audit Phase 4: Use IST date, not local timezone (was: d.getDate()
+  // which returns the LOCAL date — on Vercel/UTC, a sale at 2 AM IST on July 6
+  // showed July 5 in the Tally export).
   const d = new Date(dateStr)
-  const year = d.getFullYear()
-  const month = String(d.getMonth() + 1).padStart(2, '0')
-  const day = String(d.getDate()).padStart(2, '0')
+  const istMs = d.getTime() + 5.5 * 60 * 60 * 1000
+  const istDate = new Date(istMs)
+  const year = istDate.getUTCFullYear()
+  const month = String(istDate.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(istDate.getUTCDate()).padStart(2, '0')
   return `${year}${month}${day}`
 }
