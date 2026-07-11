@@ -51,16 +51,19 @@ export class PeriodLockedError extends Error {
   attemptedDate: Date
 
   constructor(lockedUntil: Date, attemptedDate: Date) {
-    const lockStr = lockedUntil.toLocaleDateString('en-IN', {
+    // 🔒 V18 FIX: Format in IST (Asia/Kolkata), not the server's local TZ.
+    // Was: `toLocaleDateString('en-IN', …)` with no timeZone → on Vercel (UTC)
+    // a lock the shopkeeper set as "31 Mar" could display as "01 Apr" (or vice
+    // versa) depending on the stored instant. Pinning to IST makes the message
+    // match what an Indian user actually sees everywhere else in the app.
+    const fmt: Intl.DateTimeFormatOptions = {
       day: '2-digit',
       month: 'short',
       year: 'numeric',
-    })
-    const dateStr = attemptedDate.toLocaleDateString('en-IN', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-    })
+      timeZone: 'Asia/Kolkata',
+    }
+    const lockStr = lockedUntil.toLocaleDateString('en-IN', fmt)
+    const dateStr = attemptedDate.toLocaleDateString('en-IN', fmt)
     super(
       `This period is locked. Transactions dated on or before ${lockStr} cannot be edited, deleted, or created. ` +
       `The attempted date was ${dateStr}. ` +

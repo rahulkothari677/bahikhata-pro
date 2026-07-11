@@ -4,6 +4,7 @@ import { getAuthContext } from '@/lib/get-auth'
 import { canAccessModule } from '@/lib/staff-permissions'
 import { apiError } from '@/lib/api-error'
 import { computeBalanceAsOf } from '@/lib/balance-as-of'
+import { roundMoney } from '@/lib/money'
 
 /**
  * GET /api/parties/[id]/balance-as-of?date=YYYY-MM-DD
@@ -38,9 +39,12 @@ export async function GET(
       return NextResponse.json({ error: 'date is required (format: YYYY-MM-DD)' }, { status: 400 })
     }
 
-    // Set the asOfDate to END of that day (23:59:59.999) so transactions
-    // ON that date are included (inclusive boundary)
-    const asOfDate = new Date(dateStr + 'T23:59:59.999Z')
+    // 🔒 V18 FIX B.3: Set asOfDate to END of the day in IST (not UTC).
+    // Was: `dateStr + 'T23:59:59.999Z'` — that's 23:59 UTC = 05:29 next-day
+    // IST, so a transaction dated e.g. July 9 02:00 IST (= July 8 20:30 UTC)
+    // was wrongly counted in "as of July 8". Using the explicit +05:30 offset
+    // makes this exactly 23:59:59.999 IST on the selected calendar date.
+    const asOfDate = new Date(dateStr + 'T23:59:59.999+05:30')
 
     // Fetch party
     const party = await db.party.findFirst({
@@ -62,6 +66,7 @@ export async function GET(
         paidAmount: true,
         deletedAt: true,
         invoiceNo: true,
+        updatedAt: true,  // 🔒 V18 B.2: detect post-hoc edits (see accuracy caveat below)
       },
       orderBy: { date: 'asc' },
     })
@@ -143,7 +148,10 @@ export async function GET(
     allEntries.sort((a, b) => a.date.getTime() - b.date.getTime())
 
     for (const entry of allEntries) {
-      runningBalance = Math.round((runningBalance + entry.delta) * 100) / 100
+      // 🔒 V18 FIX: use roundMoney (epsilon-corrected) for parity with the
+      // headline balance and every other money path — was plain Math.round,
+      // which can drift by a paisa on a long statement.
+      runningBalance = roundMoney(runningBalance + entry.delta)
       statementEntries.push({
         date: entry.date,
         description: entry.description,
@@ -153,6 +161,25 @@ export async function GET(
       })
     }
 
+    // 🔒 V18 B.2: Historical accuracy caveat. This computation uses each
+    // invoice's CURRENT paidAmount, not the paidAmount as it stood on the
+    // as-of date. If an invoice dated on/before the as-of date was EDITED
+    // afterwards (e.g. its paidAmount was changed to settle it later, instead
+    // of recording a dated Payment), the historical balance can be off. We
+    // detect exactly that case — an included transaction whose updatedAt is
+    // after the as-of date — and surface an honest warning so a CA isn't
+    // silently misled. (The structural fix is dated-payment-only settlement /
+    // event sourcing; until then, this flag makes the limitation visible.)
+    const editedAfterAsOf = transactions.some(
+      (t) =>
+        !t.deletedAt &&
+        t.date.getTime() <= asOfDate.getTime() &&
+        t.updatedAt.getTime() > asOfDate.getTime(),
+    )
+    const accuracyNote = editedAfterAsOf
+      ? 'Some invoices dated on or before this date were edited afterwards. This balance reflects their current settlement state, which may differ from the exact position on the selected date. For a precise historical figure, record settlements as dated payments rather than editing an invoice’s paid amount.'
+      : null
+
     return NextResponse.json({
       party: {
         id: party.id,
@@ -161,6 +188,8 @@ export async function GET(
       },
       asOfDate: asOfDate.toISOString(),
       balance: result.balance,
+      // 🔒 V18 B.2: null when the figure is reliable; a message when it may not be.
+      accuracyWarning: accuracyNote,
       breakdown: {
         openingBalance: result.openingBalance,
         salesOutstanding: result.salesOutstanding,

@@ -42,21 +42,20 @@ describe('V9 3.6 — Tenant Isolation Unit Tests', () => {
     })
 
     it('does NOT allow overriding userId via additional filters', () => {
-      // The spread order is { userId, deletedAt: null, ...additional }
-      // If additional tries to set userId, it WOULD override. This test
-      // documents the current behavior — if this changes, the test fails.
+      // 🔒 V18: This test previously DOCUMENTED an IDOR — it asserted that a
+      // caller-supplied `userId` in `additional` would override the enforced
+      // one. The M3 fix put the security fields LAST in the spread
+      // ({ ...additional, userId, deletedAt: null }) so they can NEVER be
+      // overridden. The test now verifies that security property holds.
       const where = activeTransactionWhere('user-123', { userId: 'user-456' } as any)
-      // Note: current implementation DOES allow override via spread.
-      // This is a known limitation — callers should never pass userId in
-      // additional filters. The test documents this behavior.
-      expect(where.userId).toBe('user-456') // override happens
+      expect(where.userId).toBe('user-123') // enforced userId always wins
     })
 
     it('does NOT allow overriding deletedAt via additional filters', () => {
-      // Same as above — documents current behavior
+      // 🔒 V18: `deletedAt: null` (exclude soft-deleted) can no longer be
+      // overridden by a caller-supplied filter — it is applied last.
       const where = activeTransactionWhere('user-123', { deletedAt: new Date() } as any)
-      // Override happens via spread — callers should never pass deletedAt
-      expect(where.deletedAt).toEqual(new Date()) // override happens
+      expect(where.deletedAt).toBeNull() // enforced deletedAt: null always wins
     })
   })
 

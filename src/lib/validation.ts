@@ -23,7 +23,12 @@ export const transactionItemSchema = z.object({
   quantity: z.coerce.number().positive('Quantity must be positive').max(1000000, 'Quantity too large'),
   unitPrice: z.coerce.number().min(0, 'Unit price cannot be negative').max(10000000, 'Unit price too large'),
   gstRate: z.coerce.number().min(0).max(100).optional().default(0),
-  discountAmount: z.coerce.number().min(0).optional().default(0),
+  // 🔒 V18 BUG-010: Removed the per-item `discountAmount` input. It was
+  // accepted here but NEVER read by computeLineItems — the discount is entered
+  // at the ORDER level and distributed proportionally across items. Accepting a
+  // per-item value that silently does nothing is a misleading API that invites
+  // a future "why isn't my line discount applying?" bug. (Extra keys sent by
+  // older clients are ignored by Zod, so this is backward-compatible.)
   // 🔒 V12: the unit the quantity is expressed in (kg, gm, ltr, pcs, ...).
   unit: z.string().max(20).optional().default('pcs'),
   // 🔒 V12: whether unitPrice is inclusive of GST for this line (MRP pricing).

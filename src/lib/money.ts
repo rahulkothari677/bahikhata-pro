@@ -269,14 +269,29 @@ export function parseMoney(input: string | number | any): number {
  *   toPaise(undefined) → 0
  *   toPaise(NaN) → 0
  */
-export function toPaise(rupees: number | null | undefined | any): number {
+/**
+ * 🔒 V18 (Paise Migration precondition): a BRANDED integer-paise type.
+ *
+ * `Paise` is structurally a `number`, so it widens to `number` freely (every
+ * existing consumer keeps compiling — this is intentionally NON-breaking). The
+ * value it adds NOW: the paise-producing helpers below are typed `Paise`, so a
+ * money value's units are visible in the type, and a future, deliberate
+ * refactor can flip the helper PARAMETERS to require `Paise` (a plain `number`
+ * is NOT assignable to `Paise` without going through `toPaise`) — at which
+ * point the compiler will catch any rupee/paise mix-up. That param-level
+ * enforcement is the Phase-4 precondition; making it breaking is its own step.
+ * Do NOT hand-cast arbitrary numbers to `Paise` — only `toPaise()` mints it.
+ */
+export type Paise = number & { readonly __brand: 'paise' }
+
+export function toPaise(rupees: number | null | undefined | any): Paise {
   // 🔒 Use roundMoney FIRST to fix float representation errors (1.005 → 1.01),
   // THEN multiply by 100 and round to integer. This two-step process ensures:
   //   1.005 → roundMoney → 1.01 → × 100 → 101 (correct)
   //   Without roundMoney: 1.005 × 100 = 100.499... → Math.round → 100 (WRONG)
   const n = roundMoney(toMoney(rupees))
-  if (isNaN(n) || !isFinite(n)) return 0
-  return Math.round(n * 100)
+  if (isNaN(n) || !isFinite(n)) return 0 as Paise
+  return Math.round(n * 100) as Paise
 }
 
 /**
@@ -332,8 +347,8 @@ export function formatPaise(paise: number | null | undefined | any): string {
  *   addPaise(123456, -50000) → 73456
  *   addPaise() → 0
  */
-export function addPaise(...values: number[]): number {
-  return values.reduce((sum, v) => sum + toMoney(v), 0)
+export function addPaise(...values: number[]): Paise {
+  return values.reduce((sum, v) => sum + toMoney(v), 0) as Paise
 }
 
 /**
@@ -350,10 +365,10 @@ export function addPaise(...values: number[]): number {
  *   multiplyPaise(0.5, 2000) → 1000  (0.5 kg × ₹20.00 = ₹10.00)
  *   multiplyPaise(3, 2800) → 8400  (3 pcs × ₹28.00 = ₹84.00)
  */
-export function multiplyPaise(quantity: number, unitPricePaise: number): number {
+export function multiplyPaise(quantity: number, unitPricePaise: number): Paise {
   const qty = toMoney(quantity)
   const price = toMoney(unitPricePaise)
-  return Math.round(qty * price)
+  return Math.round(qty * price) as Paise
 }
 
 /**
@@ -368,10 +383,10 @@ export function multiplyPaise(quantity: number, unitPricePaise: number): number 
  *   calculateGstPaise(50000, 5) → 2500  (₹500 × 5% = ₹25.00)
  *   calculateGstPaise(100, 0) → 0
  */
-export function calculateGstPaise(amountPaise: number, gstRate: number): number {
+export function calculateGstPaise(amountPaise: number, gstRate: number): Paise {
   const amount = toMoney(amountPaise)
   const rate = toMoney(gstRate)
-  return Math.round(amount * rate / 100)
+  return Math.round(amount * rate / 100) as Paise
 }
 
 /**
@@ -388,9 +403,9 @@ export function calculateGstPaise(amountPaise: number, gstRate: number): number 
  *   splitGstPaise(18001) → { cgst: 9001, sgst: 9000 }  (extra paisa → CGST)
  *   splitGstPaise(0) → { cgst: 0, sgst: 0 }
  */
-export function splitGstPaise(totalGstPaise: number): { cgst: number; sgst: number } {
+export function splitGstPaise(totalGstPaise: number): { cgst: Paise; sgst: Paise } {
   const gst = toMoney(totalGstPaise)
-  const cgst = Math.ceil(gst / 2)  // extra paisa goes to CGST
-  const sgst = gst - cgst  // ensures cgst + sgst === gst exactly
+  const cgst = Math.ceil(gst / 2) as Paise  // extra paisa goes to CGST
+  const sgst = (gst - cgst) as Paise  // ensures cgst + sgst === gst exactly
   return { cgst, sgst }
 }

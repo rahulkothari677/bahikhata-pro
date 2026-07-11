@@ -79,8 +79,11 @@ export async function computePartyBalance(
     }
   }
 
-  // Aggregate sales + purchases + credit-notes + debit-notes + payments in parallel
-  const [salesAgg, purchaseAgg, creditNoteAgg, debitNoteAgg, paymentsAgg] = await Promise.all([
+  // 🔒 V18 BUG-002 FIX: All six aggregates run in ONE Promise.all (was two
+  // sequential batches → an extra DB round-trip per party-detail load). Also
+  // removed a dead `paymentsAgg` (total-of-both-types) that was queried but
+  // never used — the balance uses the per-type received/paid totals below.
+  const [salesAgg, purchaseAgg, creditNoteAgg, debitNoteAgg, receivedAgg, paidAgg] = await Promise.all([
     db.transaction.aggregate({
       where: { userId, partyId, type: 'sale', deletedAt: null },
       _sum: { totalAmount: true, paidAmount: true },
@@ -99,16 +102,7 @@ export async function computePartyBalance(
       where: { userId, partyId, type: 'debit-note', deletedAt: null },
       _sum: { totalAmount: true, paidAmount: true },
     }),
-    // 🔒 FIX H3: Include standalone payments in the balance calculation.
-    // 🔒 V15 M-3: Filter deletedAt: null
-    db.payment.aggregate({
-      where: { userId, partyId, deletedAt: null },
-      _sum: { amount: true },
-    }),
-  ])
-
-  // Also get per-type payment totals
-  const [receivedAgg, paidAgg] = await Promise.all([
+    // 🔒 FIX H3 + V15 M-3: standalone payments per type, filter deletedAt: null
     db.payment.aggregate({
       where: { userId, partyId, type: 'received', deletedAt: null },
       _sum: { amount: true },

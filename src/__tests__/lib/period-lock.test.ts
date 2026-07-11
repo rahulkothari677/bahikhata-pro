@@ -32,7 +32,11 @@ import {
 } from '@/lib/period-lock'
 
 const USER_ID = 'user1'
-const LOCK_DATE = new Date('2026-03-31T23:59:59.999Z')
+// 🔒 V18: unambiguous IST end-of-day for March 31, 2026 (23:59:59.999 IST).
+// The old value '…T23:59:59.999Z' was UTC, which is April 1 in IST — so the
+// message-format assertion below ("31 Mar") was machine-timezone dependent.
+// PeriodLockedError now formats in Asia/Kolkata, so this is stable everywhere.
+const LOCK_DATE = new Date('2026-03-31T23:59:59.999+05:30')
 
 describe('🔒 V17-Ext §5.1 — Period lock', () => {
   afterEach(() => {
