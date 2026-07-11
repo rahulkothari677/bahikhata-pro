@@ -6,6 +6,7 @@ import { roundMoney } from '@/lib/money'
 import { apiError } from '@/lib/api-error'
 import { computePartyBalance } from '@/lib/party-balance'
 import { assertPeriodNotLocked, PeriodLockedError } from '@/lib/period-lock'
+import { validateBody, createPaymentSchema } from '@/lib/validation'
 
 /**
  * GET /api/payments?partyId=xxx
@@ -88,21 +89,14 @@ export async function POST(req: NextRequest) {
     const writeError = assertCanWrite(authCtx)
     if (writeError) return writeError
 
+    // 🔒 V18 Zod validation: replaces manual field checks
     const body = await req.json()
-    const { partyId, amount, type, mode, date, notes } = body
-
-    // Validate required fields
-    if (!partyId) {
-      return NextResponse.json({ error: 'partyId is required' }, { status: 400 })
+    const validation = validateBody(createPaymentSchema, body)
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 })
     }
-    const amt = Number(amount)
-    if (isNaN(amt) || amt <= 0) {
-      return NextResponse.json({ error: 'Amount must be a positive number' }, { status: 400 })
-    }
-    if (!['received', 'paid'].includes(type)) {
-      return NextResponse.json({ error: 'Type must be "received" or "paid"' }, { status: 400 })
-    }
-    const paymentMode = ['cash', 'upi', 'card', 'bank'].includes(mode) ? mode : 'cash'
+    const { partyId, amount, type, mode, date, notes } = validation.data
+    const amt = amount
 
     // Verify the party belongs to this user
     const party = await db.party.findFirst({
@@ -170,7 +164,7 @@ export async function POST(req: NextRequest) {
         partyId,
         amount: roundMoney(amt),
         type,
-        mode: paymentMode,
+        mode: mode,
         date: paymentDate,
         notes: notes || null,
       },

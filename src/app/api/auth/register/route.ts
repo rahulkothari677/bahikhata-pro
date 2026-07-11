@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { validateBody, registerSchema } from '@/lib/validation'
 import bcrypt from 'bcryptjs'
 import { db } from '@/lib/db'
 import { rateLimit, getClientIP, rateLimitedResponse } from '@/lib/rate-limit'
@@ -12,7 +13,12 @@ export async function POST(req: NextRequest) {
     const rl = await rateLimit(`signup:${ip}`, { limit: 5, windowSec: 3600 })
     if (!rl.success) return rateLimitedResponse(rl)
 
-    const { email, password, name } = await req.json()
+    const body = await req.json()
+    const validation = validateBody(registerSchema, body)
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 })
+    }
+    const { email, password, name } = validation.data
 
     if (!email || !password) {
       return NextResponse.json({ error: 'Email and password are required' }, { status: 400 })

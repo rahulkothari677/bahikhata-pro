@@ -5,6 +5,7 @@ import { fromPaise, parseMoney } from '@/lib/money'
 import { istMonthStartOffset, getISTDateParts } from '@/lib/timezone'
 import { computePartyBalance } from '@/lib/party-balance'
 import { encodeKeysetCursor, buildKeysetWhere } from '@/lib/pagination'
+import { validateBody, updatePartySchema } from '@/lib/validation'
 
 // GET /api/parties/[id] - get party with paginated transactions + SQL aggregates
 // ⚡ PERFORMANCE (Audit fix H4): Was loading ALL transactions with items into
@@ -331,28 +332,25 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     const body = await req.json()
 
-    // 🔒 FIX H6: Was `openingBalance: parseFloat(body.openingBalance) || 0`
-    // which silently reset openingBalance to 0 when the client sent an edit
-    // without that field (e.g., just renaming the party). parseFloat(undefined)
-    // is NaN, and NaN || 0 = 0 — overwriting the real opening balance.
-    // Now: only update fields that are explicitly provided. Same pattern as
-    // the products PUT handler. Prevents silent data corruption.
+    // 🔒 V18 Zod validation: validate input before processing
+    const validation = validateBody(updatePartySchema, body)
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 })
+    }
+    const validatedBody = validation.data
+
+    // 🔒 FIX H6: Only update fields that are explicitly provided.
     const updateData: any = {}
-    if (body.name !== undefined) updateData.name = body.name
-    if (body.type !== undefined) updateData.type = body.type
-    if (body.phone !== undefined) updateData.phone = body.phone || null
-    if (body.email !== undefined) updateData.email = body.email || null
-    if (body.gstin !== undefined) updateData.gstin = body.gstin || null
-    if (body.address !== undefined) updateData.address = body.address || null
-    if (body.state !== undefined) updateData.state = body.state || null
-    if (body.openingBalance !== undefined) {
-      // 🔒 BUG-004 FIX (V17 Phase 2E): Was `parseFloat(body.openingBalance) || 0`
-      // without roundMoney — could store float drift values like 1.005 as
-      // 1.00499999... The CREATE handler (parties/route.ts:115) correctly uses
-      // roundMoney. Now uses parseMoney() which applies roundMoney internally,
-      // matching the CREATE path. This prevents 1-paisa discrepancies between
-      // dashboard and party-detail balances.
-      updateData.openingBalance = parseMoney(body.openingBalance)
+    if (validatedBody.name !== undefined) updateData.name = validatedBody.name
+    if (validatedBody.type !== undefined) updateData.type = validatedBody.type
+    if (validatedBody.phone !== undefined) updateData.phone = validatedBody.phone || null
+    if (validatedBody.email !== undefined) updateData.email = validatedBody.email || null
+    if (validatedBody.gstin !== undefined) updateData.gstin = validatedBody.gstin || null
+    if (validatedBody.address !== undefined) updateData.address = validatedBody.address || null
+    if (validatedBody.state !== undefined) updateData.state = validatedBody.state || null
+    if (validatedBody.openingBalance !== undefined) {
+      // 🔒 BUG-004 FIX: use parseMoney (applies roundMoney internally)
+      updateData.openingBalance = parseMoney(validatedBody.openingBalance)
     }
 
     const party = await db.party.update({

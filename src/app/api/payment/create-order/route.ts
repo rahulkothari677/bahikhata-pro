@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { validateBody, createOrderSchema } from '@/lib/validation'
 import { getAuthUserIdOwnerOnly } from '@/lib/get-auth'
 import { db } from '@/lib/db'
 import Razorpay from 'razorpay'
@@ -11,7 +12,7 @@ import { apiError } from '@/lib/api-error'
  * Called by CheckoutButton.tsx when user clicks "Upgrade to Pro/Elite".
  *
  * Request body:
- *   { planId: 'pro' | 'elite', billingCycle: 'monthly' | 'yearly' }
+ *   { planId: 'pro' | 'elite', cycle: 'monthly' | 'yearly' }
  *
  * Response:
  *   { success: true, orderId, amount, currency, keyId }
@@ -25,16 +26,22 @@ export async function POST(req: NextRequest) {
     const { userId, error } = await getAuthUserIdOwnerOnly()
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const { planId, billingCycle } = await req.json()
+    const body = await req.json()
+    const validation = validateBody(createOrderSchema, body)
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 })
+    }
+    const { planId, billingCycle } = validation.data
+    const cycle = billingCycle || 'monthly'
 
     // Validate planId
     if (!['pro', 'elite'].includes(planId)) {
       return NextResponse.json({ error: `Invalid plan: ${planId}. Must be 'pro' or 'elite'.` }, { status: 400 })
     }
 
-    // Validate billingCycle
-    if (!['monthly', 'yearly'].includes(billingCycle)) {
-      return NextResponse.json({ error: `Invalid billing cycle: ${billingCycle}` }, { status: 400 })
+    // Validate cycle
+    if (!['monthly', 'yearly'].includes(cycle)) {
+      return NextResponse.json({ error: `Invalid billing cycle: ${cycle}` }, { status: 400 })
     }
 
     // Check Razorpay keys are configured
@@ -56,7 +63,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: `Invalid plan: ${planId}` }, { status: 400 })
     }
 
-    const amount = billingCycle === 'yearly'
+    const amount = cycle === 'yearly'
       ? planConfig.priceInPaise.yearly
       : planConfig.priceInPaise.monthly
 
@@ -70,11 +77,11 @@ export async function POST(req: NextRequest) {
     const order = await razorpay.orders.create({
       amount,
       currency: 'INR',
-      receipt: `bizp_${planId}_${billingCycle}_${userId.slice(-8)}_${Date.now()}`,
+      receipt: `bizp_${planId}_${cycle}_${userId.slice(-8)}_${Date.now()}`,
       notes: {
         userId,
         planId,
-        billingCycle,
+        cycle,
         appName: 'EkBook',
       },
     })

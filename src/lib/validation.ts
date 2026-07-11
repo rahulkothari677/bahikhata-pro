@@ -195,3 +195,108 @@ export function validateBody<T>(schema: z.ZodSchema<T>, body: unknown):
     .join('; ')
   return { success: false, error: errorMessages }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔒 V18 ZOD VALIDATION: Additional schemas for previously-unvalidated routes
+// ═══════════════════════════════════════════════════════════════════════════
+
+// Payment create schema
+export const createPaymentSchema = z.object({
+  partyId: z.string().min(1, 'Party ID is required'),
+  amount: z.coerce.number().min(0.01, 'Amount must be greater than 0').max(100000000, 'Amount too large'),
+  type: z.enum(['received', 'paid']),
+  date: z.string().optional(),
+  mode: z.enum(['cash', 'upi', 'card', 'bank']).optional().default('cash'),
+  notes: z.string().max(5000).nullable().optional(),
+})
+
+// Payment update schema (for editing/deleting)
+export const updatePaymentSchema = z.object({
+  amount: z.coerce.number().min(0.01, 'Amount must be greater than 0').max(100000000).optional(),
+  type: z.enum(['received', 'paid']).optional(),
+  date: z.string().optional(),
+  mode: z.enum(['cash', 'upi', 'card', 'bank']).optional(),
+  notes: z.string().max(5000).nullable().optional(),
+})
+
+// Staff create schema
+export const createStaffSchema = z.object({
+  name: z.string().min(1, 'Name is required').max(200),
+  email: z.string().email('Valid email is required').max(200),
+  password: z.string().min(6, 'Password must be at least 6 characters').max(200),
+  role: z.enum(['staff', 'ca']).optional().default('staff'),
+  permissions: z.record(z.string(), z.boolean()).optional(),
+})
+
+// Staff update schema
+export const updateStaffSchema = z.object({
+  name: z.string().min(1).max(200).optional(),
+  password: z.string().min(6, 'Password must be at least 6 characters').max(200).optional(),
+  permissions: z.record(z.string(), z.boolean()).optional(),
+  active: z.boolean().optional(),
+})
+
+// Auth register schema
+export const registerSchema = z.object({
+  email: z.string().email('Valid email is required').max(200),
+  password: z.string().min(6, 'Password must be at least 6 characters').max(200),
+  name: z.string().min(1, 'Name is required').max(200).optional(),
+})
+
+// Auth password reset request schema
+export const resetRequestSchema = z.object({
+  email: z.string().email('Valid email is required').max(200),
+})
+
+// Auth password reset confirm schema
+export const resetConfirmSchema = z.object({
+  token: z.string().min(1, 'Reset token is required'),
+  password: z.string().min(6, 'Password must be at least 6 characters').max(200),
+})
+
+// Party update schema (for PUT /api/parties/[id])
+export const updatePartySchema = z.object({
+  name: z.string().min(1, 'Name cannot be empty').max(200).optional(),
+  type: z.enum(['customer', 'supplier', 'both']).optional(),
+  phone: z.string().max(20).nullable().optional(),
+  email: z.string().email('Invalid email').max(200).nullable().optional().or(z.literal('')),
+  gstin: z.string().max(15).nullable().optional(),
+  address: z.string().max(1000).nullable().optional(),
+  state: z.string().max(100).nullable().optional(),
+  openingBalance: z.coerce.number()
+    .refine((v) => !isNaN(v), 'Opening balance must be a valid number')
+    .optional(),
+})
+
+// Referral apply schema
+export const applyReferralSchema = z.object({
+  code: z.string().min(1, 'Referral code is required').max(50),
+})
+
+// Payment order creation schema (Razorpay)
+export const createOrderSchema = z.object({
+  planId: z.enum(['pro_monthly', 'pro_yearly', 'elite_monthly', 'elite_yearly']),
+  billingCycle: z.enum(['monthly', 'yearly']).optional(),
+})
+
+// Payment verification schema (Razorpay)
+export const verifyPaymentSchema = z.object({
+  razorpay_order_id: z.string().min(1),
+  razorpay_payment_id: z.string().min(1),
+  razorpay_signature: z.string().min(1),
+  planId: z.enum(['pro_monthly', 'pro_yearly', 'elite_monthly', 'elite_yearly']),
+  billingCycle: z.enum(['monthly', 'yearly']).optional(),
+})
+
+// Upload bill schema
+export const uploadBillSchema = z.object({
+  imageBase64: z.string().min(100, 'Image data is required').max(15 * 1024 * 1024, 'Image too large (max 15MB)'),
+})
+
+// GSTR-3B file/save schema
+export const fileGstr3bSchema = z.object({
+  monthYear: z.string().regex(/^\d{4}-\d{2}$/, 'Month must be in YYYY-MM format'),
+  lateFee: z.coerce.number().min(0).optional().default(0),
+  interest: z.coerce.number().min(0).optional().default(0),
+  tdsTcsAdjustment: z.coerce.number().optional().default(0),
+})

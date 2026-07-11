@@ -832,7 +832,7 @@ describe('V17 Phase 2E — paise-read-pattern regression guard (analytics + part
     it('BUG-004 fix: openingBalance uses parseMoney (not parseFloat without rounding)', () => {
       if (!partiesSource) return
       // The PUT handler should use parseMoney for openingBalance, not parseFloat
-      expect(partiesSource).toMatch(/parseMoney\(body\.openingBalance\)/)
+      expect(partiesSource).toMatch(/parseMoney\(.*openingBalance\)/)
       // Should NOT have the old buggy pattern in CODE (not comments).
       // Strip comments before checking to avoid false positives from the
       // documentation comments that explain the old buggy pattern.

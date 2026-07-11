@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { validateBody, applyReferralSchema } from '@/lib/validation'
 import { db } from '@/lib/db'
 import { getAuthContext, assertCanWrite } from '@/lib/get-auth'
 import { logAudit } from '@/lib/audit'
@@ -40,7 +41,12 @@ export async function POST(req: NextRequest) {
 
     const userId = authCtx.userId
 
-    const { code } = await req.json()
+    const body = await req.json()
+    const validation = validateBody(applyReferralSchema, body)
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 })
+    }
+    const { code } = validation.data
 
     if (!code) {
       return NextResponse.json({ error: 'Referral code required' }, { status: 400 })

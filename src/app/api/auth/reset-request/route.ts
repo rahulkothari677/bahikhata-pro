@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { validateBody, resetRequestSchema } from '@/lib/validation'
 import { db } from '@/lib/db'
 import { rateLimit, getClientIP, rateLimitedResponse } from '@/lib/rate-limit'
 import { sendEmail, sendFounderAlert, isEmailConfigured } from '@/lib/email'
@@ -35,7 +36,12 @@ export async function POST(req: NextRequest) {
     const rl = await rateLimit(`reset-request:${ip}`, { limit: 3, windowSec: 3600 })
     if (!rl.success) return rateLimitedResponse(rl)
 
-    const { email } = await req.json()
+    const body = await req.json()
+    const validation = validateBody(resetRequestSchema, body)
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 })
+    }
+    const { email } = validation.data
     if (!email) {
       return NextResponse.json({ error: 'Email is required' }, { status: 400 })
     }

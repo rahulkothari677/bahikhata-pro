@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { validateBody, resetConfirmSchema } from '@/lib/validation'
 import { db } from '@/lib/db'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
@@ -18,7 +19,12 @@ import { invalidateTokenVersionCache } from '@/lib/auth'
  */
 export async function POST(req: NextRequest) {
   try {
-    const { token, password } = await req.json()
+    const body = await req.json()
+    const validation = validateBody(resetConfirmSchema, body)
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 })
+    }
+    const { token, password } = validation.data
 
     if (!token || !password) {
       return NextResponse.json({ error: 'Token and new password are required' }, { status: 400 })
