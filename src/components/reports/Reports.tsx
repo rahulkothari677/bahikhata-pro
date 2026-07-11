@@ -54,7 +54,10 @@ export function Reports() {
       // If truncated, hard-block the download with a loud warning — filing a
       // truncated GST return is a compliance risk.
       const checkR = await offlineFetch(`/api/gstr-export?from=${dateRange.from.toISOString()}&to=${dateRange.to.toISOString()}&format=json`)
-      if (!checkR.ok) throw new Error('Export check failed')
+      if (!checkR.ok) {
+        const errBody = await checkR.json().catch(() => ({}))
+        throw new Error(errBody.message || errBody.error || `Export check failed (HTTP ${checkR.status})`)
+      }
       const checkData = await checkR.json()
 
       if (checkData.truncated) {
@@ -82,7 +85,10 @@ export function Reports() {
 
       // Not truncated — proceed with CSV download
       const r = await offlineFetch(`/api/gstr-export?from=${dateRange.from.toISOString()}&to=${dateRange.to.toISOString()}&format=csv`)
-      if (!r.ok) throw new Error('Export failed')
+      if (!r.ok) {
+        const errBody = await r.json().catch(() => ({}))
+        throw new Error(errBody.message || errBody.error || `Export failed (HTTP ${r.status})`)
+      }
       const blob = await r.blob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -98,8 +104,11 @@ export function Reports() {
       a.click()
       URL.revokeObjectURL(url)
       sonnerToast.success('GSTR-1 exported! Upload this to GST portal.')
-    } catch {
-      sonnerToast.error('Failed to export GSTR-1')
+    } catch (e: any) {
+      sonnerToast.error('Failed to export GSTR-1', {
+        description: e?.message || 'Unknown error. Check the date range — GSTR-1 requires a single-month period.',
+        duration: 10000,
+      })
     } finally {
       setExportingGstr(false)
     }
