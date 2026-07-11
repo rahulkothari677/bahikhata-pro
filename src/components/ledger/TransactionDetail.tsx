@@ -21,7 +21,7 @@ import {
   Edit2, Trash2, Printer, Download, User, Calendar, Receipt,
   ShoppingCart, Truck, ArrowDownRight, ArrowUpRight, ArrowRight, X, Plus,
   IndianRupee, FileText, Phone, Building2, MapPin, TrendingUp,
-  MessageCircle, AlertCircle, ArrowLeft, History,
+  MessageCircle, AlertCircle, ArrowLeft, History, Loader2,
 } from 'lucide-react'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { amountToWords } from '@/lib/amount-to-words'
@@ -740,6 +740,12 @@ export function TransactionDetail() {
         </Card>
       )}
 
+      {/* 🔒 V17 Audit Phase 5: e-Invoicing (IRN/QR) card.
+          Shows IRN status + allows generating the IRN request JSON for B2B invoices. */}
+      {(isSale || isCreditNote) && (
+        <EInvoiceCard txn={txn} />
+      )}
+
       {/* V17-Ext 5.1: Field-level Audit Trail — shows who changed what, when */}
       {isOwner && auditTrailData?.changes?.length > 0 && (
         <Card className="shadow-card border-border/60">
@@ -1428,4 +1434,205 @@ function formatAuditValue(value: any): string {
     return value
   }
   return String(value)
+}
+
+// ─── E-Invoice Card (Phase 5) ─────────────────────────────────────────────
+
+/**
+ * Shows e-Invoice (IRN/QR) status for a B2B transaction.
+ * Lets the user:
+ *   - Check eligibility
+ *   - Download the IRN request JSON (for NIC portal submission)
+ *   - Store the IRN + signed QR (after NIC portal returns them)
+ *   - View the stored IRN/QR
+ */
+function EInvoiceCard({ txn }: { txn: any }) {
+  const [loading, setLoading] = useState(false)
+  const [irnInput, setIrnInput] = useState('')
+  const [qrInput, setQrInput] = useState('')
+  const [showStoreForm, setShowStoreForm] = useState(false)
+
+  const handleGenerate = async () => {
+    setLoading(true)
+    try {
+      const r = await offlineFetch(`/api/e-invoice/irn?transactionId=${txn.id}`)
+      const data = await r.json()
+      if (!r.ok) throw new Error(data.error || data.message || 'Failed')
+
+      if (!data.eligible) {
+        sonnerToast.error('Not eligible for e-Invoicing', {
+          description: data.reason || 'This transaction does not meet e-Invoicing requirements.',
+          duration: 8000,
+        })
+        return
+      }
+
+      // Download the IRN request JSON
+      const json = JSON.stringify(data.irnRequest, null, 2)
+      const blob = new Blob([json], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `IRN_Request_${txn.invoiceNo || txn.id}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+      sonnerToast.success('IRN request JSON downloaded', {
+        description: 'Submit this to the NIC e-Invoice portal or your API provider. Then paste the returned IRN + QR here.',
+        duration: 10000,
+      })
+      setShowStoreForm(true)
+    } catch (e: any) {
+      sonnerToast.error('Failed to generate IRN request', {
+        description: e.message,
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleStoreIrn = async () => {
+    if (!irnInput.trim()) {
+      sonnerToast.error('IRN is required')
+      return
+    }
+    setLoading(true)
+    try {
+      const r = await offlineFetch('/api/e-invoice/irn', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transactionId: txn.id,
+          irn: irnInput.trim(),
+          signedQR: qrInput.trim() || undefined,
+        }),
+      })
+      const data = await r.json()
+      if (!r.ok) throw new Error(data.error || data.message || 'Failed')
+      sonnerToast.success('IRN stored successfully')
+      setShowStoreForm(false)
+      setIrnInput('')
+      setQrInput('')
+      window.location.reload()
+    } catch (e: any) {
+      sonnerToast.error('Failed to store IRN', { description: e.message })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const irnStatus = txn.irnStatus
+  const hasIrn = !!txn.irn
+
+  return (
+    <Card className="shadow-card border-indigo-200 dark:border-indigo-900/50">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base flex items-center gap-2">
+          <FileText className="w-4 h-4 text-indigo-600" />
+          e-Invoice (IRN)
+          {hasIrn && (
+            <Badge className={cn(
+              'text-[9px]',
+              irnStatus === 'generated' && 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
+              irnStatus === 'cancelled' && 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300',
+              irnStatus === 'pending' && 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300',
+            )}>
+              {irnStatus === 'generated' && '✓ IRN Generated'}
+              {irnStatus === 'cancelled' && '✗ Cancelled'}
+              {irnStatus === 'pending' && '⏳ Pending'}
+            </Badge>
+          )}
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {hasIrn ? (
+          <div className="space-y-3">
+            <div className="rounded-lg bg-muted/30 p-3 space-y-1.5">
+              <div className="flex justify-between text-xs">
+                <span className="text-muted-foreground">IRN:</span>
+                <span className="font-mono text-[10px] break-all text-right max-w-[200px]">{txn.irn}</span>
+              </div>
+              {txn.irnGeneratedAt && (
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">Generated:</span>
+                  <span>{formatDateTime(txn.irnGeneratedAt)}</span>
+                </div>
+              )}
+              {txn.signedQR && (
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">Signed QR:</span>
+                  <span className="text-emerald-600">✓ Available</span>
+                </div>
+              )}
+            </div>
+            {txn.ewayBillNo && (
+              <div className="rounded-lg bg-blue-50 dark:bg-blue-950/20 p-3 space-y-1.5 border border-blue-100 dark:border-blue-900/40">
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">e-Way Bill:</span>
+                  <span className="font-mono">{txn.ewayBillNo}</span>
+                </div>
+                {txn.ewayBillExpiry && (
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">Expires:</span>
+                    <span>{formatDateTime(txn.ewayBillExpiry)}</span>
+                  </div>
+                )}
+              </div>
+            )}
+            <p className="text-[10px] text-muted-foreground">
+              This invoice is e-Invoice compliant. The IRN and signed QR are stored permanently for audit.
+            </p>
+          </div>
+        ) : showStoreForm ? (
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Paste the IRN and signed QR from the NIC portal response:
+            </p>
+            <div>
+              <Label className="text-xs">IRN (64 characters) *</Label>
+              <textarea
+                value={irnInput}
+                onChange={(e) => setIrnInput(e.target.value)}
+                placeholder="Paste the 64-char IRN here..."
+                className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-xs font-mono"
+                rows={2}
+              />
+            </div>
+            <div>
+              <Label className="text-xs">Signed QR (optional)</Label>
+              <textarea
+                value={qrInput}
+                onChange={(e) => setQrInput(e.target.value)}
+                placeholder="Paste the signed QR string here..."
+                className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-xs font-mono"
+                rows={2}
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" onClick={() => setShowStoreForm(false)}>Cancel</Button>
+              <Button size="sm" onClick={handleStoreIrn} disabled={loading} className="bg-indigo-600 hover:bg-indigo-700">
+                {loading ? 'Storing...' : 'Store IRN'}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Generate the IRN request JSON, submit it to the NIC e-Invoice portal
+              (or your API provider), then store the returned IRN + QR here.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2 border-indigo-300 text-indigo-700 hover:bg-indigo-50"
+              onClick={handleGenerate}
+              disabled={loading}
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              Generate IRN Request JSON
+            </Button>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
 }

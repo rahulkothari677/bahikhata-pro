@@ -248,6 +248,22 @@ model Transaction {
   noteReason            String?       // GST reason: 'post-sale-discount' | 'deficiency' | 'return' | 'price-revision' | 'other'
   affectsStock          Boolean       @default(false) // true only when goods are physically returned
 
+  // 🔒 V17 Audit Phase 5: e-Invoicing (IRN/QR) + e-Way Bill fields
+  // IRN = Invoice Reference Number (64-char hash, issued by NIC portal)
+  // signedQR = Signed QR code string (returned by NIC, contains invoice summary)
+  // ewayBillNo = e-Way Bill number (for inter-state movement of goods > ₹50,000)
+  // ewayBillExpiry = e-Way Bill expiry date (valid for ~3 days for <100km, 1 day per 200km)
+  // ewayBillDate = e-Way Bill generation date
+  // irnStatus = 'pending' | 'generated' | 'cancelled' (tracks IRN lifecycle)
+  // irnGeneratedAt = when the IRN was generated (for audit)
+  irn                   String?       // 64-char alphanumeric IRN from NIC
+  signedQR              String?       // signed QR code string from NIC
+  irnStatus             String?       // pending | generated | cancelled
+  irnGeneratedAt        DateTime?
+  ewayBillNo            String?       // 12-digit e-Way Bill number
+  ewayBillExpiry        DateTime?
+  ewayBillDate          DateTime?
+
   // 🔒 M6: Unique invoice number per user (GST compliance — no duplicates)
   @@unique([userId, invoiceNo])
   // Performance: list transactions per user filtered by date and/or type
