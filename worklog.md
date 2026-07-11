@@ -4589,3 +4589,86 @@ Stage Summary:
 - Admin panel no longer suppresses type errors (C4 fix) and has stricter CSP (H3 partial fix).
 - No new bugs found during the fix process.
 - NEXT: Wait for auditor's response on the paise migration report. H1 (as any cleanup) is the next highest-priority deferred item if the user wants to continue.
+
+---
+Task ID: v19-deep-audit
+Agent: sub-agent (general-purpose)
+Task: Deep line-by-line code audit of 20 critical source files in BahiKhata Pro / EkBook
+
+Work Log:
+- Read worklog.md and BUGS-FOUND.md to understand prior audit work (V1-V18, paise migration phases 1-3, 10 cataloged bugs).
+- Read all 20 files line by line (~12,400 lines total):
+    1. src/app/api/transactions/route.ts (615 lines)
+    2. src/app/api/transactions/[id]/route.ts (557 lines)
+    3. src/app/api/payments/route.ts (202 lines)
+    4. src/app/api/payments/[id]/route.ts (106 lines)
+    5. src/lib/line-items.ts (274 lines)
+    6. src/lib/party-balance.ts (330 lines)
+    7. src/lib/prisma-money-extension.ts (496 lines)
+    8. src/app/api/dashboard/route.ts (610 lines)
+    9. src/components/ledger/Ledger.tsx (835 lines)
+    10. src/components/ledger/TransactionDetail.tsx (1639 lines)
+    11. src/components/dashboard/Dashboard.tsx (1272 lines)
+    12. src/components/scanner/BillScanner.tsx (1101 lines)
+    13. src/components/parties/PartyProfile.tsx (1029 lines)
+    14. src/app/api/gstr-3b/route.ts (768 lines)
+    15. src/app/api/gstr-export/route.ts (561 lines)
+    16. src/lib/reconciliation.ts (244 lines)
+    17. src/middleware.ts (125 lines)
+    18. src/app/api/settings/route.ts (110 lines)
+    19. src/app/api/staff/route.ts (225 lines)
+    20. src/components/settings/Settings.tsx (1289 lines)
+
+- Verified the paise migration (Phase 4) is COMPLETE: all money columns are Int (paise) in both schema and migration SQL. The Prisma extension is supposed to auto-convert paise↔rupees at the DB boundary.
+
+- CRITICAL FINDING (V19-001): The Prisma money extension's `convertNestedData` function uses the RELATION NAME (e.g., 'items') instead of the MODEL NAME (e.g., 'TransactionItem') when recursing into nested creates. Since MONEY_COLUMNS['items'] is undefined, nested money columns are NOT converted from rupees to paise before writing. This means every `transaction.create({ data: { items: { create: [...] } } })` stores item money columns (unitPrice, cgst, sgst, igst, discountAmount, total, purchasePriceAtSale) as RUPEE values in PAISE Int columns — a 100× understatement. Verified via standalone Node script simulating the extension logic. Header totals (top-level conversion) are correct, so the data is internally inconsistent (header says ₹118, items sum to ₹1.18). This is a P0 SHOWSTOPPER. No existing test catches it (all tests mock the db or test pure functions).
+
+- CRITICAL FINDING (V19-002): GSTR-1 export `fp` (filing period) is computed from `toParts` (the `to` date's IST month). For a "whole month boundary" export (from=July 1, to=Aug 1 00:00 IST), `to` is in August → fp="082026" (WRONG, should be "072026" for July). The return would be filed for the wrong month.
+
+- HIGH FINDING (V19-003): Reconciliation `checkGstReconciliation` compares per-item GST (NO type filter — includes credit-note/debit-note items) against header GST (type filter `['sale', 'purchase']` — excludes credit-note/debit-note). Any shop with credit notes sees a perpetual false-positive "GST mismatch".
+
+- HIGH FINDING (V19-004): Transaction DELETE doesn't handle linked credit/debit notes. Deleting a sale with credit notes leaves the credit notes active → double-counted credit on party balance.
+
+- HIGH FINDING (V19-005): Income/expense POST and PUT silently drop `partyId`, `payeeName`, `payeePhone` (not in the data object).
+
+- HIGH FINDING (V19-006): PUT stock check only runs for sale→sale edits. Purchase/credit-note/debit-note edits can push stock negative silently.
+
+- HIGH FINDING (V19-007): Payment POST has NO clientMutationId idempotency (unlike transactions POST). Offline sync replays can duplicate payments.
+
+- HIGH FINDING (V19-008): Staff GET has a rate limit (5/hour) meant for POST (staff creation). The staff management UI breaks after 5 views per hour.
+
+- HIGH FINDING (V19-009): Dashboard uses `kpis.totalExpenses` (non-existent field — API returns `rangeExpenses`). Expense budget progress always shows 0%.
+
+- HIGH FINDING (V19-010): GSTR-1 export skips credit notes to unregistered parties (CDNUR section missing). Incomplete GSTR-1.
+
+- HIGH FINDING (V19-011): GSTR-1 export POS (Place of Supply) always returns '' or '99' — never the actual state code.
+
+- Also documented 14 medium-severity and 11 low-severity issues (V19-012 through V19-035), including: middleware ALLOWED_HOSTS hardcoded, dashboard donut compares flow vs stock, ledger sorting only sorts loaded subset, __ledgerPreset not cleared, TransactionDetail dead code, Settings duplicate Dark Mode toggle, Settings isOwner check lets CA see owner tabs, etc.
+
+- Verified cross-cutting concerns:
+    * Stock reversal on edit: CORRECT (uses oldItem.quantity which is stored normalized). Pre-check only for sale→sale (V19-006).
+    * Stock reversal on delete: CORRECT (same mechanism).
+    * Party balance on delete: CORRECT for the transaction itself; WRONG for linked credit notes (V19-004).
+    * Credit note referencing deleted transaction: ORPHANED — credit note remains active, party balance corrupted.
+    * Partial payments: CORRECT (paidAmount < totalAmount → due > 0).
+    * Period lock: CORRECT (POST/PUT/DELETE all check assertPeriodNotLocked).
+    * Offline sync: transactions have idempotency; payments DO NOT (V19-007).
+    * Soft-delete leak: NO leaks found — all 20+ query paths filter deletedAt: null / deletedAt IS NULL.
+    * Prisma extension edge cases: nested writes BROKEN (V19-001); nested reads OK; aggregate/groupBy OK; $transaction OK; null values OK; $queryRaw not affected.
+
+- Wrote comprehensive audit report (35 bugs, ~1,000 lines) to /home/z/my-project/upload/V19-Deep-Audit-Report.md with:
+    * Executive summary
+    * Bug index table (severity, file, summary)
+    * Detailed findings for each bug (file, line numbers, code snippets, impact, fix)
+    * Cross-cutting answers to 8 audit questions
+    * Test coverage gaps
+    * Prioritized recommendations
+
+Stage Summary:
+- 35 bugs found: 1 P0/Critical (V19-001), 2 Critical (V19-002, V19-003 — though V19-003 is High severity, it's critical for trust), 8 High, 14 Medium, 11 Low.
+- The P0 bug (V19-001) is a SHOWSTOPPER — every transaction's line items are 100× understated. Must be fixed before any production use.
+- The V19-002 bug (GSTR-1 fp wrong month) is a regulatory compliance issue.
+- The V19-003 bug (reconciliation false positive) undermines the health-check feature.
+- No new code changes made (audit-only task). All findings documented in the report.
+- Bug registry (BUGS-FOUND.md) was NOT modified — the report is a standalone document. The user can choose to catalog the most critical findings (V19-001, V19-002, V19-003) as BUG-011+ in the registry if desired.
+- NEXT: User should review the report and prioritize fixes. V19-001 should be fixed immediately with a regression test that creates a transaction through the real Prisma client.
