@@ -3359,3 +3359,235 @@ Stage Summary:
 - 34 new technical-error tests covering null safety, edge cases, data integrity, input validation, privilege escalation.
 - EXPANDED TESTING COMMITMENT: From now on, tests cover calculation + logic + technical errors (null safety, edge cases, data integrity, auth, input validation, error handling).
 - V17 AUDIT FULLY COMPLETE — all findings + all re-verification bugs resolved.
+
+---
+Task ID: ui-ux-audit-research
+Agent: Explore (read-only)
+Task: UI/UX audit + feature gap analysis — identify improvement opportunities, missing UI for backend features, and feature gaps for a "spotless ledger app"
+
+SCOPE: Read-only research. Audited 11 components (Dashboard, Ledger, TransactionDetail, Gstr3bReport, Reports, ProductDialog, DayEndSummary, Settings, PartyProfile, MobileBottomNav, MoreScreen) + backend routes (dashboard, day-summary, gstr-3b, reconciliation, transactions, account/export) + lib files (data-backup, field-audit, audit, reconciliation, tally-export).
+
+═══════════════════════════════════════════════════════════════════════
+🎨 UI/UX IMPROVEMENTS
+═══════════════════════════════════════════════════════════════════════
+
+DASHBOARD (src/components/dashboard/Dashboard.tsx)
+- HERO INCONSISTENCY (lines 393-395): The greeting banner says "You made {todayRevenue} from {todayTxnCount} sales" but todayRevenue is NET of credit notes (dashboard/route.ts:160 subtracts credit-note totalAmount) while todayTxnCount counts ONLY type='sale' (route.ts:164 — credit notes NOT subtracted). Result: 5 sales (₹5,000) + 1 credit note (₹1,000) → hero says "₹4,000 from 5 sales" — confusing. FIX: either show "5 sales − 1 return = 4 net sales" or change the count to net (subtract credit-note count).
+- NO "NET OF RETURNS" BADGE: The Today Revenue KPI (line 463) and Range Revenue KPI (line 483) show net-of-returns values with no indication. A shopkeeper who issued a ₹1,000 credit note sees revenue drop ₹1,000 with no explanation. FIX: when kpis.todayCreditNoteAmount > 0, show a small violet "net of ₹X returns" badge below the revenue value (requires backend to expose todayCreditNoteAmount + rangeCreditNoteAmount in the KPI response).
+- RECENT TRANSACTIONS LIST (lines 891-948): Credit notes appear with rose outflow styling (isInflow=false) but no special badge — only muted text "credit-note" (line 922, `capitalize`). Easy to miss. FIX: add a small violet "Return" badge to credit notes in the recent list, similar to the Ledger's badge (Ledger.tsx:700).
+- SALES TREND CHART (line 680): Shows revenue as a single area. When credit notes are issued, the line dips but the user can't see WHY. FIX: add faint marker dots on days with credit notes, or a second thin area showing credit-note volume.
+
+LEDGER (src/components/ledger/Ledger.tsx)
+- 🔴 "TOTAL SALES" KPI INFLATED BY CREDIT NOTES (line 271, 353): `const totalAmount = filtered.reduce((s, t) => s + t.totalAmount, 0)` sums BOTH sales AND credit notes (which have positive totalAmount — confirmed by dashboard/route.ts:166 which subtracts). The Ledger queries `?type=sale,credit-note` (buildQueryParams:129). So 5 sales (₹5,000) + 1 credit note (₹1,000) → KPI shows ₹6,000 (WRONG — should be ₹5,000 gross or ₹4,000 net). FIX: either (a) relabel to "Gross Sales (incl. returns)" and add a "Net Sales" KPI, OR (b) change the reduce to `if (t.type === 'sale') return s + t.totalAmount; if (t.type === 'credit-note') return s - t.totalAmount; return s` to compute net.
+- 🔴 "OUTSTANDING" KPI DOUBLE-COUNTS CREDIT NOTES (line 284): `const totalDue = totalAmount - totalPaid`. Since totalAmount is inflated (above), and unpaid credit notes (paidAmount=0) add their full totalAmount to totalDue, the Outstanding KPI is inflated. Conceptually, an unpaid credit note should REDUCE the customer's outstanding (they're owed a refund), not increase it. FIX: same as above — compute net per type before summing.
+- CREDIT NOTES BLENDED INTO LIST (lines 600-747): Only a small violet "Credit Note" badge (line 700) distinguishes them. On a busy day, they blend in. FIX: (a) use a slightly different row background tint (violet-50/30) for credit-note rows, OR (b) add a section header "Returns" between sales and credit notes (sorted by date within each section).
+- PROFIT KPI LABEL: The "Gross Profit" KPI (line 365) is correctly net of returns (Phase 4 fix), but the label says "Gross Profit" — misleading since it's actually NET profit. FIX: relabel to "Net Profit" or add subtitle "net of ₹X returns".
+
+TRANSACTION DETAIL (src/components/ledger/TransactionDetail.tsx)
+- LINKED NOTES CARD (lines 657-712): Shows "Total adjusted: -₹X" at the bottom (line 709) — good. But doesn't show the REMAINING balance after credit notes. FIX: add "Original ₹5000 → Adjusted ₹4000 (₹1000 returned)" so the user sees the running balance at a glance.
+- REVERSAL BADGE LABEL (line 702): Shows `-{formatINR(Math.abs(rev.grossProfit))} profit` in rose. The word "profit" is confusing for a reversal. FIX: change to "profit reversed" or "−profit" to clarify it's a reversal.
+- "LOAD ITEMS" BUTTON PLACEMENT (TransactionEntry.tsx:1038-1056): The button is a flat text-style button placed below the items section. When the credit-note form is empty (the common starting state), it's easy to miss. FIX: (a) when items.length === 0 AND isCreditNote AND originalTransactionId, show a prominent callout card "Start by loading items from the original sale → [Load items]" with an arrow/illustration; (b) when items exist, demote the button to a ghost link.
+- "CREATE CREDIT NOTE" BUTTON (lines 364-396): Visible only on the TransactionDetail header. Not discoverable from the Ledger list. FIX: add "Issue Credit Note" to the Ledger row's context menu (right-click / long-press).
+
+GSTR-3B REPORT (src/components/reports/Gstr3bReport.tsx)
+- 🔴 CDN BREAKDOWN NEVER DISPLAYED: The schema has 8 CDN columns (GstReturn.creditNoteTaxableValue, creditNoteCgst, creditNoteSgst, creditNoteIgst, debitNoteTaxableValue, debitNoteCgst, debitNoteSgst, debitNoteIgst — schema.prisma:563-570). POST /api/gstr-3b persists all 8 (route.ts:659-695). But Gstr3bReport.tsx has ZERO matches for `creditNote|cdn|debitNote`. The CSV export (lines 104-136) also omits CDN rows. FIX: add a "Credit/Debit Notes Breakdown" card between Section 3.1 and 3.2 showing: Credit Notes (Taxable | CGST | SGST | IGST), Debit Notes (same), Net CDN adjustment, with note "Already netted into 3.1(a) above — shown here for transparency". Add 2 rows to the CSV.
+- 🔴 NO "VIEW FILED SNAPSHOT" FEATURE: When a month is filed, the UI shows "Filed on [date]" (line 383) but the numbers shown are LIVE recomputed values (GET /api/gstr-3b recomputes — route.ts returns only `id, filingStatus, filedAt, filedByUserId` for the snapshot at line 441-446, NOT the stored values). If transactions are edited after filing, the live numbers diverge from the filed snapshot, but the UI shows no warning. FIX: (a) GET /api/gstr-3b should return the full snapshot object (all 30+ stored fields) when one exists; (b) add a "View Filed Snapshot" toggle button (when isFiled) that switches between live and snapshot values; (c) show a yellow banner "⚠️ Live values differ from filed snapshot by ₹X — transactions were edited after filing".
+- FILING STATUS BADGE (line 176-184): Shows "Filed" / "Draft" / "Not saved" but doesn't show WHO filed it. The backend returns filedByUserId — the UI ignores it. FIX: add tooltip "Filed by [name] on [date]" (requires joining filedByUserId → User.name).
+
+REPORTS (src/components/reports/Reports.tsx)
+- 8 TABS IS CRAMPED (line 296): "PL | GST | Stock | Party | Debt Aging | Inv Aging | GSTR-3B | GSTR-2B" in a single row of 8 on desktop. On mobile they're horizontal-scroll pills (acceptable). FIX: group into 2 sections — "Operations" (PL, Stock, Party, Debt Aging, Inv Aging) and "Compliance" (GST, GSTR-3B, GSTR-2B) — with a visual separator or color-coded backgrounds.
+- "INV AGING" ABBREVIATION (line 289, 313): Unclear. FIX: rename to "Stock Aging" (shorter than "Inventory Aging" but clearer than "Inv Aging").
+- NO RECENTLY-USED INDICATOR: User always starts on PL. FIX: remember last-used tab in localStorage.
+
+PRODUCT DIALOG (src/components/inventory/ProductDialog.tsx)
+- GST TREATMENT DROPDOWN (lines 182-197): Has labels + descriptions (good), but no tooltip explaining IMPACT on GSTR-3B. A shopkeeper doesn't know that "Exempt" means the product appears in 3.1(c) Exempt row AND disqualifies ITC on its inputs. FIX: add a help icon (ⓘ) next to the "GST Treatment" label that opens a tooltip: "Taxable: normal GST. Nil-rated: 0% GST but still reported in 3.1(c). Exempt: no GST, no ITC on inputs. Non-GST: outside GST (e.g. alcohol, petrol)."
+- 🔴 NO GST RATE ↔ TREATMENT CONSISTENCY VALIDATION: The GST Rate dropdown (line 174) and GST Treatment dropdown (line 184) are independent. A user can set gstRate=18% AND gstTreatment='exempt' (contradictory). FIX: when gstTreatment is 'exempt' or 'nonGst', auto-set gstRate to 0 and disable the GST Rate dropdown with tooltip "Exempt products have 0% GST by definition". When gstTreatment is 'nil', auto-set gstRate to 0 but keep editable (nil-rated is by definition 0%).
+- MRP CHECKBOX PLACEMENT (lines 201-215): At the BOTTOM of the form, separated from the Sale Price field (line 165). The user enters Sale Price without knowing the checkbox affects its interpretation. FIX: move the checkbox directly below the Sale Price field, with a live preview "If MRP is ₹118 (incl 18% GST), taxable value = ₹100".
+
+DAY-END SUMMARY (src/components/dashboard/DayEndSummary.tsx)
+- 🔴 CREDIT-NOTE REFUNDS NOT SURFACED: The cash drawer breakdown (lines 105-124) shows Cash, UPI, Card, Bank, Udhaar sales. Credit-note refunds are folded into these buckets (subtracted — day-summary/route.ts:110-120) but not called out. A shopkeeper who processed a ₹1,000 cash refund sees "Cash: ₹4,000" and wonders "I made ₹5,000 in cash sales — where did ₹1,000 go?" FIX: add a "Returns / Refunds" section showing "Cash refund: -₹1,000 | UPI refund: ₹0 | ..." so the breakdown reconciles to the net. Requires backend to expose creditNoteByMode + debitNoteByMode in the response.
+- EXPECTED CASH FORMULA EXPLANATION (line 160): Says "Cash sales + income + udhaar collected − cash purchases − expenses − udhaar paid" — doesn't mention credit notes. FIX: update to "Cash sales (net of cash refunds) + income + udhaar collected − cash purchases − expenses − udhaar paid".
+
+SETTINGS (src/components/settings/Settings.tsx)
+- 🔴 BACKUP CARD INSIDE DANGER ZONE (line 774 inside line 766-806): The safe "Download Backup" action is visually grouped with the destructive "Reset All Data" action. A shopkeeper may be afraid to click anything in the danger zone. FIX: move the Backup card OUT of the Danger Zone, to its own "Data Safety" card above it.
+- CA ACCESS BURIED (line 1094): Under Settings → Staff tab → CAAccess. A shopkeeper who doesn't think about "Staff" won't discover the CA feature. FIX: (a) promote CA Access to its own "Accountant" tab, OR (b) add a callout on the Profile tab "Want your CA to view your books? Set up CA Access →" that switches to the Staff tab.
+- PERIOD LOCK IS SINGLE-DATE (lines 623-697): Only shows one global lockedUntil date. No per-month view. A user who files monthly can't say "April locked, May locked, June open" — they must pick the latest filed date. FIX: (a) change to per-month lock (array of locked monthYear strings), OR (b) add a "Locked Months" calendar visualization showing which months are read-only.
+- HEALTH CHECK OWNER-ONLY (line 593, 699): The Data tab is `isOwner`-gated, so the Reconciliation Health Check is owner-only. But the API allows CAs (who have 'reports' access). CAs (who would benefit most from running a health check) can't access it. FIX: add a read-only "Run Health Check" button in the Reports tab (accessible to CAs).
+- HEALTH CHECK RESULTS MISSING EXPECTED/ACTUAL (lines 735-753): The backend returns `expected` and `actual` per check (reconciliation.ts:85-86, 135-136, 194-195), but the UI only shows `check.details`. FIX: show "Expected: ₹X | Actual: ₹Y | Diff: ₹Z" for failed checks.
+
+PARTY PROFILE (src/components/parties/PartyProfile.tsx)
+- CREDIT NOTES IN STATEMENT (lines 803-920): The statement uses chat bubbles with `entry.type` in uppercase text (line 885). For credit notes, this shows "CREDIT-NOTE" — jarring. Credit notes appear as outflow (left-side, amber bubble — line 880) same as purchases. But they're conceptually different (a reversal of a sale, not a new purchase). FIX: (a) use a violet bubble for credit notes (matching the credit-note color theme used in Ledger/TransactionDetail), (b) show "Return" or "Credit Note" as a friendlier label, (c) add an icon (RotateCcw or Undo2).
+- NO "BALANCE AS OF [DATE]" (entire file): The statement shows the CURRENT balance (stats.balance) and per-entry running balance, but there's NO way to enter a date and see "what was this party's balance on June 15?". The user must scroll through 500+ entries. FIX: add a date picker at the top: "Balance as of: [date picker] → ₹X".
+- STATEMENT CAPPED AT 500 ENTRIES (lines 769-800): Truncation warning shown, but user must use "Print Statement" for full history (PDF, not interactive). FIX: add infinite scroll (load 500 more on scroll) OR a date-range filter for the statement.
+
+═══════════════════════════════════════════════════════════════════════
+🔌 MISSING UI FOR BACKEND
+═══════════════════════════════════════════════════════════════════════
+
+1. CDN BREAKDOWN IN FILED GSTR-3B SNAPSHOT (HIGH)
+   - Schema: GstReturn has 8 CDN columns (schema.prisma:563-570).
+   - Backend: POST /api/gstr-3b persists all 8 (route.ts:659-695).
+   - UI gap: Gstr3bReport.tsx NEVER displays them. Zero matches for `creditNote|cdn|debitNote`.
+   - API gap: GET /api/gstr-3b returns only `id, filingStatus, filedAt, filedByUserId` for the snapshot (route.ts:441-446) — NOT the stored values. So even if the UI wanted to show filed vs live, the API doesn't return filed values.
+   - FIX: (a) GET /api/gstr-3b should return the full snapshot object; (b) Gstr3bReport.tsx should add a CDN card + a "View Filed Snapshot" toggle.
+
+2. PERIOD-LOCK UI IS SINGLE-DATE, NO PER-MONTH VIEW (MEDIUM)
+   - Backend: settings.lockedUntil is a single timestamp (period-lock.ts checks `if (txn.date <= lockedUntil) block`).
+   - UI gap: Settings → Data tab shows only one lock date. No calendar, no per-month breakdown.
+   - FIX: either (a) change to per-month lock (array of locked monthYear strings), OR (b) add a "Locked Months" calendar visualization showing which months are read-only. Also: show a lock icon on transaction rows in the Ledger when they're in a locked period (currently the user only discovers the lock when they try to edit and get an error).
+
+3. FIELD-LEVEL AUDIT TRAIL UI ONLY EXISTS FOR TRANSACTIONS (HIGH)
+   - Schema: FieldChangeLog supports entityType: 'transaction' | 'payment' (field-audit.ts:81).
+   - Backend: Only transactions call `logFieldChanges` (transactions/[id]/route.ts:171, 442). Payments, products, parties, settings do NOT log field changes — even though the schema supports payments.
+   - UI gap: TransactionDetail.tsx has the "Edit History" card (line 744). NO UI for payment audit trail, and NO audit trail at all for products, parties, settings.
+   - Compliance risk: A shopkeeper changes a product's gstTreatment from 'taxable' to 'exempt' — no record. Changes GSTIN in settings — no record. Changes a party's opening balance — no record. These are compliance-critical.
+   - FIX: (a) extend `logFieldChanges` calls to products (esp. purchasePrice, gstRate, gstTreatment — critical for GST), parties (openingBalance), settings (GSTIN, UPI ID — critical for compliance); (b) add an "Edit History" card to ProductDialog (when editing), PartyProfile, and Settings.
+
+4. COARSE AuditLog HAS NO USER-FACING UI (MEDIUM)
+   - Schema: AuditLog table stores every action (PRODUCT_CREATE/UPDATE/DELETE, PARTY_*, TRANSACTION_*, SETTINGS_UPDATE, DATA_EXPORT, DATA_RESET, STAFF_*, ROLE_CHANGE, AI_*) with userId, IP, userAgent, metadata.
+   - Backend: `logAudit` called from many routes (account/delete, account/export, gstr-2b/import, referral/apply, payments/[id], payment/verify, gstr-3b).
+   - UI gap: NO user-facing "Activity Log" page. AuditLog data only used by admin endpoints (admin/overview, admin/features, admin/ai-usage) for platform-wide analytics.
+   - FIX: add an "Activity Log" page (Settings → Data tab → Activity Log) showing the user's own actions: "On [date] at [time], [user] [action] [entity]. IP: [ip]." — useful for forensic review and DPDP compliance.
+
+5. RECONCILIATION HEALTH CHECK IS OWNER-ONLY (MEDIUM)
+   - Backend: GET /api/reconciliation requires `getAuthUserIdWithModule('reports')` — CAs (who have 'reports' access) CAN call it.
+   - UI gap: Health Check card is in Settings → Data tab, which is `isOwner`-gated (line 593). UI blocks CAs even though API allows them.
+   - FIX: expose a read-only "Run Health Check" button in the Reports tab (accessible to CAs).
+
+6. RESTORE FROM BACKUP IS MISSING ENTIRELY (HIGH)
+   - The `data-backup.ts` header comment says "Restore: uploads a JSON file → creates all records via API" but the file only contains `exportBackup()` — NO `importBackup()`.
+   - The `/api/account/export` endpoint is GET-only (export). NO POST endpoint for restore.
+   - FIX: (a) add `importBackup(file: File)` to data-backup.ts that POSTs JSON to a new `/api/account/import` endpoint; (b) the import endpoint creates all records (products, parties, transactions, payments, settings); (c) add a "Restore from Backup" button in Settings → Data tab.
+
+7. PAYMENT DETAIL VIEW + PAYMENT AUDIT TRAIL (MEDIUM)
+   - Payments appear only as chat bubbles in PartyProfile — no dedicated Payment list view, no Payment detail view, no "Edit payment" UI.
+   - Payment audit trail is logged in the DB (schema supports entityType='payment') but never displayed.
+   - FIX: add a Payment detail dialog (clickable from PartyProfile statement) showing amount, mode, date, notes, and edit history.
+
+═══════════════════════════════════════════════════════════════════════
+📋 FEATURE GAPS (for a "spotless ledger app")
+═══════════════════════════════════════════════════════════════════════
+
+1. "BALANCE AS OF [DATE]" FOR A PARTY (HIGH)
+   - Currently: PartyProfile shows current balance + per-entry running balance.
+   - Gap: NO way to enter a date and see "what was this party's balance on June 15?".
+   - Why it matters: Tally/Busy have this. Auditors ask "what was the balance at year-end?" — shopkeeper can't answer without scrolling 500+ entries.
+   - FIX: add a date picker at the top of the party statement: "Balance as of: [date picker] → ₹X". Backend: new endpoint or query param `?asOf=date` on /api/parties/[id] that sums transactions up to that date.
+
+2. E-INVOICING / E-WAY BILL (CRITICAL for compliance)
+   - Currently: NO e-invoicing or e-way bill feature. Matches in codebase are for regular PDF generation (Invoice Reference Number = invoiceNo).
+   - Why it matters: Mandatory for B2B invoices ≥ ₹50,000 (e-invoicing) and inter-state movement ≥ ₹50,000 (e-way bill) since 2020. A "spotless ledger app" can't be GST-compliant without it.
+   - FIX: (a) integrate with NIC e-invoicing API (IRN generation, QR code); (b) integrate with NIC e-way bill API; (c) add IRN + QR code + eWayBillNo fields to Transaction schema; (d) show IRN + QR on invoice PDF; (e) add "Generate IRN" + "Generate E-Way Bill" buttons in TransactionDetail.
+
+3. BANK RECONCILIATION (MEDIUM)
+   - Currently: NO bank reconciliation. Zero matches for `bank.?statement|bank.?reco|reconcile.?bank|match.?bank|bankFeed`.
+   - Why it matters: Tally/Busy standard feature. A shopkeeper with a current account needs to match bank statements vs recorded bank-mode sales/purchases.
+   - FIX: add a "Bank Reconciliation" tab in Reports: (a) upload bank statement CSV, (b) auto-match against bank-mode transactions by amount+date, (c) show matched/unmatched/mismatched, (d) mark matched transactions as reconciled.
+
+4. "BOOKS TIE OUT" CONSISTENCY CHECKS (broader than current reconciliation) (HIGH)
+   - Currently: reconciliation.ts has 3 checks (party balances, GST per-item vs header, no orphaned data).
+   - MISSING CHECKS:
+     a. Stock valuation: SUM(product.currentStock × purchasePrice) matches dashboard "Stock Value" KPI.
+     b. 🔴 Filed GSTR-3B snapshot vs live recomputed values — catches post-filing edits (CRITICAL for GST compliance — currently invisible).
+     c. P&L revenue matches Sales Ledger net total (sum of sale totalAmount − credit-note totalAmount).
+     d. Cash drawer: recorded cash sales vs counted cash (manual input via Day-End Summary).
+     e. Trial balance: total debits = total credits (Tally-style).
+   - FIX: add these checks to runReconciliationChecks() and display in the Health Check UI.
+
+5. BULK INVOICE PDF EXPORT (LOW)
+   - Currently: invoices generated one at a time (TransactionDetail → "Print Invoice" / "Send PDF").
+   - Gap: NO way to bulk-export all invoices for a month as PDFs (e.g. for sharing with CA).
+   - FIX: add "Bulk PDF Export" button in Reports → Party (select month → download ZIP of all invoice PDFs).
+
+6. EXCEL (.xlsx) EXPORT (LOW)
+   - Currently: CSV export (per-report) + Tally XML export. No Excel.
+   - Why it matters: Indian CAs prefer Excel for analysis (formulas, pivot tables).
+   - FIX: add .xlsx export option alongside CSV (use a library like exceljs).
+
+7. RECURRING TRANSACTIONS / TEMPLATES (LOW)
+   - Currently: NO recurring transaction feature. Each sale/purchase is one-off.
+   - Why it matters: Tally/Busy have recurring vouchers (e.g. monthly rent, salary).
+   - FIX: add a "Recurring" toggle in TransactionEntry (frequency: daily/weekly/monthly) → cron job creates the transaction automatically.
+
+8. EXISTING EXPORTS (already implemented — for reference):
+   - CSV export per report (csv-export.ts) ✓
+   - Tally XML export (tally-export.ts) ✓
+   - JSON backup (data-backup.ts) ✓ — but restore missing (see MISSING UI #6)
+   - GSTR-1 CSV export (gstr-export API) ✓
+   - DPDP Act full JSON export (/api/account/export) ✓
+
+═══════════════════════════════════════════════════════════════════════
+📱 MOBILE UX
+═══════════════════════════════════════════════════════════════════════
+
+MOBILE BOTTOM NAV (src/components/layout/MobileBottomNav.tsx)
+- ONLY 5 TABS: Home, Sales, +New, Stock, More (line 35-41). "Purchases" requires going through More. For a ledger app, purchases is a primary action.
+- CENTER "+" ALWAYS GOES TO NEW SALE (line 118). No quick way to start a New Purchase from the bottom nav (must go: More → Purchases → New Purchase = 3 taps).
+- NO BADGES/COUNTS on any tab (e.g., "3 unpaid invoices" badge on Sales tab, "2 low-stock items" badge on Stock tab).
+- FIX options: (a) 6 tabs (Home, Sales, +, Purchases, Stock, More) — tight on mobile but workable; OR (b) long-press the "+" for a menu (New Sale / New Purchase / New Income / New Expense); OR (c) add badges for actionable counts.
+
+MORE SCREEN (src/components/layout/MoreScreen.tsx)
+- "SMART TOOLS" SECTION ONLY HAS AI BILL SCANNER (line 66-68). Other smart features (Smart Insights, Business Analytics) aren't listed — they're auto-shown on dashboard but not directly accessible from More.
+- NO "CLOSE DRAWER" SHORTCUT: The Day-End Summary is a 10-second ritual that should be prominent on mobile. Currently only accessible via Dashboard → Close Drawer button (small, in hero). FIX: add "Close Drawer" to the Smart Tools section.
+- NO "BACKUP" OR "HEALTH CHECK" QUICK ACTION: Both require Settings → Data tab (3 taps from More). FIX: add a "Data Safety" section with Backup + Health Check shortcuts.
+- PLACEHOLDER SUPPORT BUTTONS (lines 267-317): "Help & Support", "Contact Us", "About", "Rate" all show "coming soon" toasts — not implemented. FIX: either implement them or remove the buttons (placeholder buttons erode trust).
+
+MOBILE CREDIT-NOTE FLOW
+- The flow (TransactionDetail → Credit Note button → New Sale form in credit-note mode → Load items button) works on mobile, but the "Load items" button (TransactionEntry.tsx:1039) is small and easy to miss on a small screen.
+- The reversal cards (violet/blue) in TransactionDetail render fine on mobile (responsive), but the running-balance info ("Total adjusted: -₹X") is at the bottom of the card — requires scrolling.
+- FIX: (a) make the "Load items" button a full-width prominent CTA on mobile when the credit-note form is empty; (b) move the "Total adjusted" summary to the TOP of the reversal card (sticky) so it's visible without scrolling.
+
+═══════════════════════════════════════════════════════════════════════
+🎯 PRIORITY RANKING (highest-impact first)
+═══════════════════════════════════════════════════════════════════════
+
+P0 — CRITICAL (compliance / data integrity)
+1. Gstr3bReport: show CDN breakdown + "View Filed Snapshot" toggle + filed-vs-live divergence warning. (8 columns persisted but invisible; filed snapshots silently diverge from live values.)
+2. Reconciliation: add "filed GSTR-3B snapshot vs live recomputed" check — catches post-filing edits (GST compliance violation).
+3. Audit trail: extend to products (gstTreatment, gstRate, purchasePrice) + settings (GSTIN, UPI ID). Compliance-critical fields have no edit history.
+4. Ledger: fix "Total Sales" KPI inflation + "Outstanding" double-counting (credit notes add positive totalAmount to both — currently inflates by credit-note amount).
+
+P1 — HIGH (UX consistency / "spotless" polish)
+5. Dashboard hero: fix the "₹X from Y sales" count inconsistency (count is gross, revenue is net).
+6. Dashboard: add "net of ₹X returns" badge below revenue KPIs.
+7. DayEndSummary: surface credit-note refunds as a separate line item (shopkeeper can't reconcile drawer otherwise).
+8. ProductDialog: add gstTreatment help tooltip + validate gstRate↔treatment consistency (currently can set gstRate=18% AND gstTreatment='exempt').
+9. Settings: move Backup card OUT of Danger Zone (safe action grouped with destructive).
+10. Settings: promote CA Access (currently buried under Staff tab).
+11. Restore from backup (export-only is half a feature).
+
+P2 — MEDIUM (feature gaps)
+12. "Balance as of [date]" for parties (auditors ask this; shopkeeper can't answer).
+13. E-invoicing / e-way bill (mandatory for B2B ≥ ₹50k since 2020).
+14. Period-lock: per-month view + lock icon on transaction rows.
+15. Bank reconciliation (Tally/Busy standard).
+16. Activity Log page (AuditLog data exists, no UI).
+17. Payment detail view + payment audit trail UI.
+18. Health Check accessible to CAs (move to Reports tab).
+
+P3 — LOW (polish)
+19. Mobile: add "Close Drawer" + "Backup" + "Health Check" to MoreScreen.
+20. Reports: group 8 tabs into "Operations" vs "Compliance" sections.
+21. PartyProfile: use violet bubble for credit notes (currently amber like purchases).
+22. MobileBottomNav: long-press "+" for New Sale/Purchase/Income/Expense menu.
+23. TransactionDetail: show "Original ₹5000 → Adjusted ₹4000" in the reversal card.
+24. Implement Help/Contact/About/Rate actions on MoreScreen (currently placeholder toasts).
+25. Excel (.xlsx) export option alongside CSV.
+26. Recurring transactions (monthly rent, salary).
+27. Bulk invoice PDF export (ZIP for CA).
+
+═══════════════════════════════════════════════════════════════════════
+SUMMARY
+═══════════════════════════════════════════════════════════════════════
+
+The V17 audit (Phases 1-5) fixed the credit-note SIGN CONVENTION and made the backend correctly net-of-returns everywhere. But the UI layer has NOT caught up:
+
+- The backend correctly subtracts credit notes (dashboard SQL, day-summary, net-sales.ts, gstr-3b) — but the UI doesn't SURFACE this to the user. Shopkeepers see lower revenue without knowing why (no "net of returns" badge, no credit-note line item in Day-End Summary, no CDN breakdown in GSTR-3B).
+- The Ledger "Total Sales" KPI is STILL inflating by credit notes (the reduce adds positive totalAmount for both sales and credit notes) — this is a NEW bug not caught in Phase 4 (Phase 4 only fixed the profit reduce, not the totalAmount reduce).
+- The 8 CDN snapshot columns added in Phase 3 are persisted to the DB but NEVER displayed in the UI — and the GET /api/gstr-3b endpoint doesn't even return them, so the UI can't show filed-vs-live divergence.
+- Field-level audit trail only exists for transactions — products, parties, settings have no edit history (compliance risk for gstTreatment/GSTIN changes).
+- Backup is export-only — no restore.
+
+The HIGHEST-IMPACT fix is #1 (Gstr3bReport CDN + filed snapshot view) because it's a compliance gap: filed GSTR-3B snapshots can silently diverge from live values, and the user has no way to detect this.
+
+Worklog entry complete. Read-only research task — no code changes made.
