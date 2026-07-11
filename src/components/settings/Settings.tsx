@@ -284,7 +284,7 @@ export function Settings() {
       const r = await offlineFetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, hideProfit, roundOffEnabled }),
+        body: JSON.stringify({ ...form, hideProfit, roundOffEnabled, stockPolicy, scanLang: (form as any).scanLang, voiceLang: (form as any).voiceLang }),
         offline: { invalidate: ['/api/settings', '/api/dashboard'] },
       })
       if (!r.ok) throw new Error('Failed')

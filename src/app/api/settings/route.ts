@@ -106,7 +106,17 @@ export async function PUT(req: NextRequest) {
       invalidateShopStateCache(userId)
     }
 
-    return NextResponse.json({ setting })
+    // 🔒 V19-026 FIX: Invalidate the HTTP cache on the GET response.
+    // The GET handler uses withCache({ maxAge: 120 }) — without invalidation,
+    // the next GET within 2 minutes returns the OLD settings.
+    // Since we can't easily purge the HTTP cache from here, we add a
+    // Cache-Control: no-cache header to the response so the client knows
+    // to refetch. The React Query invalidateQueries on the client side
+    // handles the rest.
+    return NextResponse.json(
+      { setting },
+      { headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' } }
+    )
   } catch (error) {
     return apiError(error, 'Failed to update settings', 500)
   }

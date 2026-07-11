@@ -125,6 +125,14 @@ async function pickPhotoNative(): Promise<File | null> {
         const permStatus = await Camera.checkPermissions()
         if (permStatus.photos !== 'granted' && permStatus.photos !== 'limited') {
           const reqResult = await Camera.requestPermissions({ permissions: ['photos'] })
+          // 🔒 V19-027 FIX: Check the permission result before proceeding.
+          // Was: result ignored, Camera.getPhoto called even if permission denied.
+          if (reqResult.photos !== 'granted' && reqResult.photos !== 'limited') {
+            sonnerToast.error('Photo permission denied', {
+              description: 'Please allow photo library access to upload bills.',
+            })
+            return null
+          }
         }
       } catch (permErr) {
         console.warn('[Camera] Photos permission check failed (continuing):', permErr)

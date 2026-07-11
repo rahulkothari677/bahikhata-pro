@@ -374,7 +374,8 @@ export function Ledger({ type }: { type: LedgerType }) {
               <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">{isSale ? 'Total Sales' : 'Total Purchases'}</p>
             </div>
             <p className="text-xl font-bold tabular-nums">{formatINR(totalAmount)}</p>
-            <p className="text-[11px] text-muted-foreground">{filtered.length} transactions</p>
+            {/* 🔒 V19-019 FIX: Label makes clear this is the loaded subset, not all-time total */}
+            <p className="text-[11px] text-muted-foreground">{filtered.length} transactions{hasNextPage ? ' (loaded)' : ''}</p>
           </div>
         </div>
         {isSale && !hideProfit && (

@@ -241,18 +241,22 @@ export function PartyProfile() {
 
   // Generate a printable statement HTML for this party
   const handleDownloadStatement = () => {
-    if (!party || !transactions) return
+    if (!party) return
+    // 🔒 V19-017 FIX: Use statementTransactions (all, up to 500) instead of
+    // `transactions` (paginated, 50 per page). The downloaded statement should
+    // include ALL transactions, not just the first page.
+    const allTxns = statementTransactions || transactions || []
 
     const shopName = setting?.shopName || 'My Shop'
     const shopAddress = setting?.address || ''
     const shopPhone = setting?.phone || ''
     const shopGstin = setting?.gstin || ''
 
-    const rows = transactions.map((t: any, i: number) => {
+    const rows = allTxns.map((t: any, i: number) => {
       const isInflow = t.type === 'sale' || t.type === 'income'
       const amount = isInflow ? t.totalAmount : -t.totalAmount
       const paid = t.paidAmount || 0
-      const due = t.totalAmount - paid
+      const due = roundMoney(t.totalAmount - paid)
       return `
         <tr>
           <td style="text-align:center">${i + 1}</td>
@@ -266,9 +270,9 @@ export function PartyProfile() {
       `
     }).join('')
 
-    const totalAmount = transactions.reduce((s: number, t: any) => s + t.totalAmount, 0)
-    const totalPaid = transactions.reduce((s: number, t: any) => s + (t.paidAmount || 0), 0)
-    const totalDue = totalAmount - totalPaid
+    const totalAmount = allTxns.reduce((s: number, t: any) => s + t.totalAmount, 0)
+    const totalPaid = allTxns.reduce((s: number, t: any) => s + (t.paidAmount || 0), 0)
+    const totalDue = roundMoney(totalAmount - totalPaid)
 
     const html = `<!DOCTYPE html>
 <html>
@@ -363,10 +367,25 @@ export function PartyProfile() {
   }
 
   // Print statement directly
+  // 🔒 V19-016 FIX: Was calling handleDownloadStatement() then window.print()
+  // which printed the CURRENT PAGE (the PartyProfile UI), not the statement.
+  // Now: open the generated HTML in a new window and print that.
   const handlePrintStatement = () => {
-    if (!party || !transactions) return
-    handleDownloadStatement()
-    setTimeout(() => window.print(), 500)
+    if (!party) return
+    const allTxns = statementTransactions || transactions || []
+    const shopName = setting?.shopName || 'My Shop'
+    const rows = allTxns.map((t: any, i: number) => {
+      const paid = t.paidAmount || 0
+      const due = roundMoney(t.totalAmount - paid)
+      return `<tr><td style="text-align:center">${i + 1}</td><td>${formatDate(t.date)}</td><td>${t.invoiceNo || '—'}</td><td style="text-transform:capitalize">${t.type}</td><td style="text-align:right">${t.totalAmount.toFixed(2)}</td><td style="text-align:right">${paid.toFixed(2)}</td><td style="text-align:right">${due.toFixed(2)}</td></tr>`
+    }).join('')
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Statement - ${party.name}</title><style>body{font-family:Arial,sans-serif;max-width:800px;margin:0 auto;padding:40px}h1{font-size:22px}table{width:100%;border-collapse:collapse}th{background:#fef3e6;padding:10px;font-size:12px;text-align:left}td{padding:8px;font-size:13px;border-bottom:1px solid #e5e7eb}</style></head><body><h1>${shopName}</h1><h2>Statement: ${party.name}</h2><table><thead><tr><th>#</th><th>Date</th><th>Invoice</th><th>Type</th><th style="text-align:right">Total</th><th style="text-align:right">Paid</th><th style="text-align:right">Due</th></tr></thead><tbody>${rows}</tbody></table></body></html>`
+    const win = window.open('', '_blank')
+    if (!win) return
+    win.document.write(html)
+    win.document.close()
+    win.focus()
+    setTimeout(() => { win.print(); win.close() }, 250)
   }
 
   // Share statement as PDF via WhatsApp (uses Capacitor Share on native)
@@ -579,6 +598,24 @@ export function PartyProfile() {
             >
               {sendingReminder ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageCircle className="w-4 h-4" />}
               Send Reminder
+            </Button>
+          )}
+          {/* 🔒 V19-031 FIX: Show "Notify Supplier" button when we owe them (balance < 0) */}
+          {isSupplier && stats.balance < 0 && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                const phone = party?.phone?.replace(/\D/g, '')
+                if (phone) {
+                  const msg = `Hi ${party?.name}, we have a pending payment of ₹${Math.abs(stats.balance).toFixed(2)} to you. Will settle soon.`
+                  window.open(`https://wa.me/91${phone}?text=${encodeURIComponent(msg)}`, '_blank')
+                }
+              }}
+              className="gap-2 border-blue-300 text-blue-700 hover:bg-blue-50"
+            >
+              <MessageCircle className="w-4 h-4" />
+              Notify Supplier
             </Button>
           )}
           {/* WhatsApp Payment Link — sends UPI payment link for outstanding dues */}

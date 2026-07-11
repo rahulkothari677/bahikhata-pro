@@ -1038,7 +1038,7 @@ export function Dashboard() {
             {revenueTarget && (
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-semibold">Revenue Target</span>
+                  <span className="text-xs font-semibold">Revenue Target <span className="text-muted-foreground font-normal">(selected range)</span></span>
                   <span className="text-xs font-bold tabular-nums">
                     {formatINRCompact(kpis.rangeRevenue)} / {formatINRCompact(revenueTarget)}
                   </span>
