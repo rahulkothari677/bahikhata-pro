@@ -3280,3 +3280,39 @@ RECOMMENDED IMMEDIATE ACTIONS (Phase 4 — critical):
 TEST COVERAGE GAP: No existing test exercises the dashboard KPI query, Ledger.tsx totalProfit, or netSalesProfit with credit notes that have NEGATIVE grossProfit (matching actual storage). All tests pass POSITIVE values, masking the bug. Recommend adding integration tests with realistic mock data (credit notes with negative grossProfit) that assert the dashboard, P&L, and Ledger all show the correct net profit.
 
 Worklog entry complete. Read-only research task — no code changes made.
+
+---
+Task ID: bahikhata-v17-audit-phase4
+Agent: main
+Task: V17 Audit Phase 4 — Fix sign-convention regression (credit-note profit double-counted) + 6 other bugs found in re-verification
+
+Work Log:
+- User asked to re-analyze the V17 audit and check for missing fixes or new bugs. Launched a research agent that found a CRITICAL regression introduced by Phase 1 + Phase 1-fixes.
+- ROOT CAUSE: Phase 1 wrote `netSalesProfit = s.grossProfit - c.grossProfit` (subtracts). Phase 1-fixes changed line-items.ts to store NEGATIVE grossProfit for credit notes (correct). But the Phase 1 code was NOT updated → `3000 - (-900) = 3900` → profit INFLATED by the return amount. This was a regression of §1 in the OPPOSITE direction.
+- The golden test MASKED the bug: it passed `cn.grossProfit = 900` (positive), but real credit notes store `-900` (negative). The test passed because the helper math was internally consistent with its wrong assumption.
+- CONVENTION DECISION: Keep NEGATIVE grossProfit in line-items.ts (correct accounting — a return is a negative event). Fix all consumers to ADD (not subtract) credit-note grossProfit.
+- 7 bugs fixed:
+  * Bug A (HIGH, dashboard/route.ts): 3 KPI SQL grossProfit terms changed '-' to '+' for credit notes (today_profit, range_profit, prev_profit). Sales trend query same fix. totalAmount/GST terms unchanged (those are stored positive).
+  * Bug B (HIGH, net-sales.ts): netSalesProfit changed from `(s.grossProfit) - (c.grossProfit)` to `(s.grossProfit) + (c.grossProfit)`. sale(3000) + cn(-900) = 2100.
+  * Bug C (HIGH, Ledger.tsx): totalProfit changed from `s - t.grossProfit` to `s + t.grossProfit` for credit notes. Now matches the helper.
+  * Bug D (MEDIUM, Ledger.tsx): Badge conditions changed from `t.grossProfit > 0` to `t.grossProfit < 0` (2 places — desktop list + mobile card). Uses Math.abs() for display. The "-₹X profit reversed" badge now renders.
+  * Bug E (MEDIUM, TransactionDetail.tsx): Same > 0 → < 0 fix in the reversal card's profit badge.
+  * Bug F (MEDIUM, day-summary/route.ts): Added credit-note + debit-note branches. Credit notes reduce sales + payment mode (refund goes out). Debit notes reduce purchases + payment mode (refund comes in). Before: cash drawer was inflated — cash credit notes weren't subtracted.
+  * Bug G (MEDIUM, gstr-3b/route.ts): nilRatedAgg now EXCLUDES gstTreatment='exempt' and 'nonGst' products. Before: exempt products (which typically have gstRate=0) were counted in BOTH nil-rated AND exempt → 3.1(c) overstated. Applied to both GET and POST.
+- GOLDEN TEST FIX (net-sales.test.ts): Changed `cn.grossProfit = 900` to `cn.grossProfit = -900` (matches real DB storage). The test would have FAILED before this fix — it now catches the regression class. Added `expect(result).not.toBe(3900)` regression guard.
+- NEW SIGN-CONVENTION INTEGRATION TEST: "sale (+3000) + credit-note (-900) = 2100 across ALL computation paths". Verifies BOTH the netSalesProfit helper AND the Ledger.tsx reduce logic produce the same correct net (2100). Also tests multiple credit notes (5000 + 3000 + (-900) + (-500) = 6600). This is the cross-path consistency test that would have caught the regression before deploy.
+- Verified:
+  * npx tsc --noEmit: 0 NEW errors
+  * npx next build: ✓ Compiled successfully
+  * npx jest net-sales: 23/23 pass (20 existing updated + 3 new sign-convention tests)
+  * npx jest all 6 suites: 110/110 pass (no regressions)
+- Committed (3888a3c) + pushed to GitHub
+
+Stage Summary:
+- Files changed: 7 (net-sales.ts, net-sales.test.ts, dashboard/route.ts, day-summary/route.ts, gstr-3b/route.ts, Ledger.tsx, TransactionDetail.tsx)
+- CRITICAL regression fixed: credit-note profit is no longer double-counted. Dashboard, P&L, and Ledger all show correct net profit.
+- 7 bugs fixed (3 HIGH, 4 MEDIUM) — all found by the re-verification research agent.
+- Golden test now uses REAL negative values (matches DB storage) — catches this class of bug.
+- Cross-path consistency test added — would have caught the regression before deploy.
+- TESTING COMMITMENT: From now on, golden tests use REAL storage sign conventions (not idealized positive values), and cross-path consistency tests verify all computation paths agree.
+- REMAINING (Phase 5): GAP 1 (gstTreatment UI — no way for users to mark products exempt), Bug H (whatsapp-reminder), Bug I (insights). These are lower priority — the HIGH/MEDIUM bugs are all fixed.
