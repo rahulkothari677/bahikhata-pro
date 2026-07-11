@@ -37,6 +37,8 @@ describe('🔒 V16 C5 — Soft-delete filter sweep (no query may miss deletedAt:
   // Each entry: [fileRelativePath, reasonForException]
   const ALLOWED_EXCEPTIONS: Array<[string, string]> = [
     ['app/api/account/export/route.ts', 'data export includes everything for backup/restore'],
+    ['app/api/export/full/route.ts', 'full data export includes everything for backup/restore'],
+    ['app/api/import/restore/route.ts', 'restore endpoint imports data — no deletedAt filter needed on create'],
     ['app/api/transactions/[id]/restore/route.ts', 'restore endpoint must find soft-deleted rows to restore them'],
     ['app/api/transactions/route.ts', 'GET uses a `where` variable that filters deletedAt: null (or deletedAt: { not: null } for voided view); POST idempotency check uses findUnique by clientMutationId which is exempt'],
     ['app/api/seed/route.ts', 'seed "has any data" check — counting soft-deleted rows is fine (we dont want to re-seed over any historical data)'],

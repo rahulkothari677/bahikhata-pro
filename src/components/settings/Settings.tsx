@@ -794,6 +794,61 @@ export function Settings() {
             </div>
           </div>
 
+          {/* 🔒 V17 Audit Phase 9: Restore from Backup — upload a JSON backup file */}
+          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+            <div className="flex items-start gap-3">
+              <Upload className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-semibold text-emerald-900 text-sm">Restore from Backup</p>
+                <p className="text-xs text-emerald-700 mt-1">
+                  Upload a previously downloaded backup JSON file to restore your data.
+                  This MERGES with existing data — items with the same SKU or name are skipped.
+                </p>
+                <input
+                  type="file"
+                  accept=".json,application/json"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0]
+                    if (!file) return
+                    try {
+                      const text = await file.text()
+                      const backup = JSON.parse(text)
+                      const r = await offlineFetch('/api/import/restore', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ backup }),
+                        offline: { queueable: false },
+                      })
+                      const result = await r.json()
+                      if (!r.ok) throw new Error(result.error || result.message || 'Restore failed')
+                      sonnerToast.success('Restore complete!', {
+                        description: `Products: ${result.results.products.imported} imported. Parties: ${result.results.parties.imported}. Transactions: ${result.results.transactions.imported}.`,
+                        duration: 10000,
+                      })
+                    } catch (err: any) {
+                      sonnerToast.error('Restore failed', {
+                        description: err.message,
+                        duration: 10000,
+                      })
+                    }
+                    // Reset the input so the same file can be selected again
+                    e.target.value = ''
+                  }}
+                  className="hidden"
+                  id="restore-backup-upload"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="mt-2 gap-2 border-emerald-300 text-emerald-700 hover:bg-emerald-100"
+                  onClick={() => document.getElementById('restore-backup-upload')?.click()}
+                >
+                  <Upload className="w-4 h-4" /> Upload Backup File
+                </Button>
+              </div>
+            </div>
+          </div>
+
           {/* Danger zone — destructive actions only (no safe actions mixed in) */}
           <div className="rounded-lg border border-rose-200 bg-rose-50 p-4">
             <div className="flex items-start gap-3">
