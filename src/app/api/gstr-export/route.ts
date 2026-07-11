@@ -327,21 +327,55 @@ export async function GET(req: NextRequest) {
     const cdnSection = Array.from(cdnByGstin.entries()).map(([ctin, nt]) => ({ ctin, nt }))
 
     // Summary totals via SQL aggregate (O(1) memory, no row iteration)
-    const summaryAgg = await db.transaction.aggregate({
-      where: activeTransactionWhere(userId, {
-        type: 'sale',
-        date: { gte: from, lte: to },
+    // 🔒 V17 Audit Phase 3 FIX: Summary must NET credit notes (was: type='sale' only).
+    // The per-invoice aggregation includes credit-note items (via the CDN section),
+    // so the summary must also subtract credit-note taxable to match.
+    // Without this, per-invoice taxable > summary taxable → reconciliation fails.
+    const [saleAgg, creditNoteAgg] = await Promise.all([
+      db.transaction.aggregate({
+        where: activeTransactionWhere(userId, {
+          type: 'sale',
+          date: { gte: from, lte: to },
+        }),
+        _sum: {
+          subtotal: true,
+          discountAmount: true,
+          cgst: true,
+          sgst: true,
+          igst: true,
+          totalAmount: true,
+        },
+        _count: true,
       }),
+      db.transaction.aggregate({
+        where: activeTransactionWhere(userId, {
+          type: 'credit-note',
+          date: { gte: from, lte: to },
+        }),
+        _sum: {
+          subtotal: true,
+          discountAmount: true,
+          cgst: true,
+          sgst: true,
+          igst: true,
+          totalAmount: true,
+        },
+        _count: true,
+      }),
+    ])
+
+    // Net totals: sale - credit-note
+    const summaryAgg = {
+      _count: saleAgg._count,
       _sum: {
-        subtotal: true,
-        discountAmount: true,
-        cgst: true,
-        sgst: true,
-        igst: true,
-        totalAmount: true,
+        subtotal: roundMoney((saleAgg._sum.subtotal || 0) - (creditNoteAgg._sum.subtotal || 0)),
+        discountAmount: roundMoney((saleAgg._sum.discountAmount || 0) - (creditNoteAgg._sum.discountAmount || 0)),
+        cgst: roundMoney((saleAgg._sum.cgst || 0) - (creditNoteAgg._sum.cgst || 0)),
+        sgst: roundMoney((saleAgg._sum.sgst || 0) - (creditNoteAgg._sum.sgst || 0)),
+        igst: roundMoney((saleAgg._sum.igst || 0) - (creditNoteAgg._sum.igst || 0)),
+        totalAmount: roundMoney((saleAgg._sum.totalAmount || 0) - (creditNoteAgg._sum.totalAmount || 0)),
       },
-      _count: true,
-    })
+    }
 
     const output = {
       gstin: setting?.gstin || '',
@@ -394,9 +428,18 @@ export async function GET(req: NextRequest) {
       // check — it should never block the export by crashing.
       reconciliation: (() => {
         try {
-          const perInvoiceTaxable = roundMoney(
+          // 🔒 V17 Audit Phase 3 FIX: Per-invoice taxable must be NET of credit notes.
+          // Was: only summed B2B + B2C (sales). Now: also subtract CDN (credit-note) taxable.
+          const salesTaxable = roundMoney(
             [...b2bInvoices, ...b2cInvoices].reduce((s, inv) => s + (Number(inv.taxablevalue) || 0), 0)
           )
+          const cdnTaxable = roundMoney(
+            cdnTransactions.reduce((s, t) => {
+              const rows = cdnGstByTransaction.get(t.id) || []
+              return s + rows.reduce((ss, r) => ss + Number(r.taxableValue || 0), 0)
+            }, 0)
+          )
+          const perInvoiceTaxable = roundMoney(salesTaxable - cdnTaxable)
           const summaryTaxable = roundMoney((summaryAgg._sum.subtotal || 0) - (summaryAgg._sum.discountAmount || 0))
           const perInvoiceTax = roundMoney(
             [...b2bInvoices, ...b2cInvoices].reduce((s, inv) => {
