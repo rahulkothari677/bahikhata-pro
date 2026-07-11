@@ -48,8 +48,8 @@ export async function getAuthUserIdWithModule(
   }
 
   const userId = session.user.ownerId || session.user.id
-  const role = (session.user as any).role || 'owner'
-  const permissions = (session.user as any).permissions
+  const role = session.user.role || 'owner'
+  const permissions = session.user.permissions
 
   // 🔒 FIX H1: Enforce staff permissions on the SERVER, not just the UI.
   // Was: only page.tsx checked canAccessModule. Staff could bypass by calling
@@ -97,8 +97,8 @@ export async function getAuthContext(): Promise<{
 
   const userId = session.user.ownerId || session.user.id
   const actingUserId = session.user.id  // 🔒 V13 L4: the actual user (owner or staff)
-  const role = (session.user as any).role || 'owner'
-  const permissions = (session.user as any).permissions
+  const role = session.user.role || 'owner'
+  const permissions = session.user.permissions
 
   return { userId, actingUserId, role, permissions }
 }
@@ -118,7 +118,7 @@ export async function getAuthUserIdOwnerOnly(): Promise<{ userId: string | null;
     }
   }
 
-  const role = (session.user as any).role || 'owner'
+  const role = session.user.role || 'owner'
   if (role === 'staff' || role === 'ca') {
     return {
       userId: null,

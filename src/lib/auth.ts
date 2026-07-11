@@ -156,6 +156,10 @@ export const authOptions: NextAuthOptions = {
       // Initial login: capture user fields + tokenVersion
       if (user) {
         token.id = user.id
+        // 🔒 V18 H1: Session/JWT types now declare these fields (next-auth.d.ts).
+        // The `user` param here is the Prisma User returned by authorize() —
+        // it has these fields at runtime but NextAuth types it as User|AdapterUser.
+        // The cast is safe: authorize() always returns them (line 120-128).
         token.role = (user as any).role
         token.ownerId = (user as any).ownerId
         token.permissions = (user as any).permissions
@@ -224,7 +228,7 @@ export const authOptions: NextAuthOptions = {
         session.user.id = token.id as string
         session.user.role = (token.role as string) || 'owner'
         session.user.ownerId = token.ownerId as string | null
-        ;(session.user as any).permissions = token.permissions
+        session.user.permissions = token.permissions ?? null
       }
       return session
     },

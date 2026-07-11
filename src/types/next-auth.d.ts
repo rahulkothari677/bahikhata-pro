@@ -10,6 +10,8 @@ declare module 'next-auth' {
       image?: string | null
       role: string
       ownerId: string | null
+      permissions: string | null
+      tokenVersion: number
     }
   }
 }
@@ -19,5 +21,7 @@ declare module 'next-auth/jwt' {
     id: string
     role?: string
     ownerId?: string | null
+    permissions?: string | null
+    tokenVersion?: number
   }
 }
