@@ -843,3 +843,135 @@ describe('V17 Phase 2E — paise-read-pattern regression guard (analytics + part
     })
   })
 })
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔒 V17 PAISE MIGRATION Phase 2F — dashboard/route.ts (4 queries, highest complexity)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Phase 2F migrated 4 raw SQL queries in the most critical read path:
+//   1. Mega KPI query (18 money columns + 4 counts) — uses CTE for readability
+//   2. Sales trend (revenue + profit per time bucket) — sign-aware nudge
+//   3. Top products (totalRevenue per product) — sign-aware nudge
+//   4. Category breakdown (totalValue per category) — sign-aware nudge
+//
+// All money columns can be negative (credit notes subtract from sales, debit
+// notes subtract from purchases), so SIGN() is used for the nudge everywhere.
+//
+// The mega KPI query uses a CTE (WITH kpi_raw AS (...)) to avoid repeating
+// each ~100-char expression twice (once for ROUND, once for SIGN). The CTE
+// computes raw rupee values; the outer SELECT applies the paise conversion.
+describe('V17 Phase 2F — paise-read-pattern regression guard (dashboard)', () => {
+  const DASHBOARD_PATH = path.join(process.cwd(), 'src', 'app', 'api', 'dashboard', 'route.ts')
+  const source = fs.existsSync(DASHBOARD_PATH) ? fs.readFileSync(DASHBOARD_PATH, 'utf8') : ''
+
+  it('dashboard route file exists', () => {
+    expect(source.length).toBeGreaterThan(0)
+  })
+
+  it('mega KPI query uses CTE with paise conversion in outer SELECT', () => {
+    if (!source) return
+    const queries = extractRawSql(source)
+    // The KPI query is the one with "kpi_raw" CTE
+    const kpiQuery = queries.find(q => q.includes('kpi_raw'))
+    if (!kpiQuery) {
+      throw new Error('Could not find KPI query with CTE in dashboard/route.ts.')
+    }
+    // Must have the CTE
+    expect(kpiQuery).toMatch(/WITH\s+kpi_raw\s+AS\s*\(/i)
+    // Outer SELECT must convert to paise with sign-aware nudge
+    expect(kpiQuery).toContain('today_revenue_paise')
+    expect(kpiQuery).toContain('range_revenue_paise')
+    expect(kpiQuery).toContain('range_profit_paise')
+    expect(kpiQuery).toContain('prev_revenue_paise')
+    expect(kpiQuery).toContain('sale_cgst_paise')
+    expect(kpiQuery).toContain('purchase_cgst_paise')
+    // Must NOT use old rupee aliases (without _paise suffix)
+    expect(kpiQuery).not.toMatch(/AS\s+today_revenue\s/)
+    expect(kpiQuery).not.toMatch(/AS\s+range_revenue\s/)
+    expect(kpiQuery).not.toMatch(/AS\s+range_profit\s/)
+    // Must use SIGN for sign-aware nudge
+    expect(kpiQuery).toMatch(/SIGN\s*\(/)
+    // Must use * 100
+    expect(kpiQuery).toMatch(/\*\s*100/)
+  })
+
+  it('sales trend query returns revenuePaise + profitPaise', () => {
+    if (!source) return
+    const queries = extractRawSql(source)
+    // Sales trend query: has DATE_TRUNC + type IN ('sale', 'credit-note')
+    const trendQuery = queries.find(q =>
+      q.includes('DATE_TRUNC') && q.includes("'sale'") && q.includes("'credit-note'") && q.includes('bucketStart')
+    )
+    if (!trendQuery) {
+      throw new Error('Could not find sales trend query in dashboard/route.ts.')
+    }
+    expect(trendQuery).toContain('"revenuePaise"')
+    expect(trendQuery).toContain('"profitPaise"')
+    expect(trendQuery).not.toMatch(/AS\s+revenue\s/)
+    expect(trendQuery).not.toMatch(/AS\s+profit\s/)
+    // Must use SIGN for sign-aware nudge (both revenue and profit can be negative)
+    expect(trendQuery).toMatch(/SIGN\s*\(/)
+  })
+
+  it('top products query returns totalRevenuePaise', () => {
+    if (!source) return
+    const queries = extractRawSql(source)
+    // Top products query: has productName + totalQuantity + totalRevenue
+    const topProductsQuery = queries.find(q =>
+      q.includes('"productName"') && q.includes('"totalQuantity"') && q.includes('"productId"')
+    )
+    if (!topProductsQuery) {
+      throw new Error('Could not find top products query in dashboard/route.ts.')
+    }
+    expect(topProductsQuery).toContain('"totalRevenuePaise"')
+    expect(topProductsQuery).not.toMatch(/AS\s+"totalRevenue"\s/)
+    expect(topProductsQuery).toMatch(/SIGN\s*\(/)
+  })
+
+  it('category breakdown query returns totalValuePaise', () => {
+    if (!source) return
+    const queries = extractRawSql(source)
+    // Category query: has COALESCE(p."category", 'Other')
+    const categoryQuery = queries.find(q =>
+      q.includes('COALESCE(p."category"') || q.includes("COALESCE(p.\"category\"")
+    )
+    if (!categoryQuery) {
+      throw new Error('Could not find category breakdown query in dashboard/route.ts.')
+    }
+    expect(categoryQuery).toContain('"totalValuePaise"')
+    expect(categoryQuery).not.toMatch(/AS\s+"totalValue"\s/)
+    expect(categoryQuery).toMatch(/SIGN\s*\(/)
+  })
+
+  it('dashboard route imports fromPaise from money.ts', () => {
+    if (!source) return
+    expect(source).toMatch(/import\s+\{[^}]*\bfromPaise\b[^}]*\}\s+from\s+['"]@\/lib\/money['"]/)
+  })
+
+  it('JS processing uses fromPaise for KPI columns', () => {
+    if (!source) return
+    expect(source).toMatch(/fromPaise\(Number\(kpi\.today_revenue_paise\)\)/)
+    expect(source).toMatch(/fromPaise\(Number\(kpi\.range_revenue_paise\)\)/)
+    expect(source).toMatch(/fromPaise\(Number\(kpi\.sale_cgst_paise\)\)/)
+  })
+
+  it('JS processing uses fromPaise for sales trend + top products + category', () => {
+    if (!source) return
+    expect(source).toMatch(/fromPaise\(Number\(row\.revenuePaise\)\)/)
+    expect(source).toMatch(/fromPaise\(Number\(row\.totalRevenuePaise\)\)/)
+    expect(source).toMatch(/fromPaise\(Number\(row\.totalValuePaise\)\)/)
+  })
+
+  it('no stale references to old KPI field names (without _paise) in code', () => {
+    if (!source) return
+    // Strip comments and string literals
+    const codeOnly = source
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/\/\/[^\n]*/g, '')
+      .replace(/`[^`]*`/g, '')  // template literals (SQL)
+      .replace(/"[^"]*"/g, '')
+      .replace(/'[^']*'/g, '')
+    // Should not reference kpi.today_revenue, kpi.range_revenue, etc. (without _paise)
+    expect(codeOnly).not.toMatch(/kpi\.(today_revenue|today_profit|range_revenue|range_profit|range_expenses|range_purchases|range_income|prev_revenue|prev_profit|sale_subtotal|sale_discount|sale_cgst|sale_sgst|sale_igst|purchase_cgst|purchase_sgst|purchase_igst)\b(?!_paise)/)
+  })
+})

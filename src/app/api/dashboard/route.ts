@@ -6,7 +6,7 @@ import { canAccessModule } from '@/lib/staff-permissions'
 import { shouldHideProfit, stripDashboardProfit } from '@/lib/profit-visibility'
 import { withCache } from '@/lib/cache'
 import { activeTransactionWhere } from '@/lib/query-helpers'
-import { roundMoney } from '@/lib/money'
+import { roundMoney, fromPaise } from '@/lib/money'
 import { getReceivablePayable } from '@/lib/party-balance'
 import { istDayStart, istMonthStart, getISTDateParts, IST_OFFSET_MS } from '@/lib/timezone'
 
@@ -146,60 +146,92 @@ export async function GET(req: NextRequest) {
       todayPaymentsAgg,
     ] = await withConnectionRetry(() => Promise.all([
       // 1. ALL KPIs + GST in one raw SQL (SUM(CASE WHEN ...) conditional aggregation)
+      //
+      // 🔒 V17 PAISE MIGRATION Phase 2F-b: Uses a CTE to compute raw rupee values,
+      // then converts to paise in the outer SELECT with sign-aware nudges.
+      // All 18 money columns can be negative (credit notes subtract from sales,
+      // debit notes subtract from purchases), so SIGN() is used for the nudge.
+      // The 4 COUNT columns don't need conversion.
+      //
+      // CTE approach avoids repeating each ~100-char expression twice (once for
+      // ROUND, once for SIGN). The CTE computes the raw values; the outer SELECT
+      // just applies: ROUND(raw * 100 + 0.0000001 * SIGN(raw)) AS raw_paise.
       db.$queryRaw<Array<{
-        today_revenue: string; today_profit: string; today_count: bigint;
-        today_credit_note_count: bigint;  // 🔒 V17 Audit Phase 1 P0.3
-        range_revenue: string; range_profit: string; range_expenses: string;
-        range_purchases: string; range_income: string; range_sale_count: bigint;
-        prev_revenue: string; prev_profit: string;
-        sale_subtotal: string; sale_discount: string;
-        sale_cgst: string; sale_sgst: string; sale_igst: string;
-        purchase_cgst: string; purchase_sgst: string; purchase_igst: string;
+        today_revenue_paise: string; today_profit_paise: string;
+        today_count: bigint;
+        today_credit_note_count: bigint;
+        range_revenue_paise: string; range_profit_paise: string;
+        range_expenses_paise: string; range_purchases_paise: string;
+        range_income_paise: string; range_sale_count: bigint;
+        prev_revenue_paise: string; prev_profit_paise: string;
+        sale_subtotal_paise: string; sale_discount_paise: string;
+        sale_cgst_paise: string; sale_sgst_paise: string; sale_igst_paise: string;
+        purchase_cgst_paise: string; purchase_sgst_paise: string; purchase_igst_paise: string;
       }>>`
+        WITH kpi_raw AS (
+          SELECT
+            COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${startOfToday} AND "date" <= ${now} THEN "totalAmount" ELSE 0 END), 0)::numeric
+            - COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${startOfToday} AND "date" <= ${now} THEN "totalAmount" ELSE 0 END), 0)::numeric AS today_revenue,
+            COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${startOfToday} AND "date" <= ${now} THEN "grossProfit" ELSE 0 END), 0)::numeric
+            + COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${startOfToday} AND "date" <= ${now} THEN "grossProfit" ELSE 0 END), 0)::numeric AS today_profit,
+            COUNT(CASE WHEN "type" = 'sale' AND "date" >= ${startOfToday} AND "date" <= ${now} THEN 1 END) AS today_count,
+            COUNT(CASE WHEN "type" = 'credit-note' AND "date" >= ${startOfToday} AND "date" <= ${now} THEN 1 END) AS today_credit_note_count,
+            COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric
+            - COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric AS range_revenue,
+            COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "grossProfit" ELSE 0 END), 0)::numeric
+            + COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "grossProfit" ELSE 0 END), 0)::numeric AS range_profit,
+            COALESCE(SUM(CASE WHEN "type" = 'expense' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric AS range_expenses,
+            COALESCE(SUM(CASE WHEN "type" = 'purchase' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric AS range_purchases,
+            COALESCE(SUM(CASE WHEN "type" = 'income' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric AS range_income,
+            COUNT(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN 1 END) AS range_sale_count,
+            COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${prevRangeFrom} AND "date" <= ${prevRangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric
+            - COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${prevRangeFrom} AND "date" <= ${prevRangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric AS prev_revenue,
+            COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${prevRangeFrom} AND "date" <= ${prevRangeTo} THEN "grossProfit" ELSE 0 END), 0)::numeric
+            + COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${prevRangeFrom} AND "date" <= ${prevRangeTo} THEN "grossProfit" ELSE 0 END), 0)::numeric AS prev_profit,
+            COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "subtotal" ELSE 0 END), 0)::numeric
+            - COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "subtotal" ELSE 0 END), 0)::numeric AS sale_subtotal,
+            COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "discountAmount" ELSE 0 END), 0)::numeric
+            - COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "discountAmount" ELSE 0 END), 0)::numeric AS sale_discount,
+            COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "cgst" ELSE 0 END), 0)::numeric
+            - COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "cgst" ELSE 0 END), 0)::numeric AS sale_cgst,
+            COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "sgst" ELSE 0 END), 0)::numeric
+            - COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "sgst" ELSE 0 END), 0)::numeric AS sale_sgst,
+            COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "igst" ELSE 0 END), 0)::numeric
+            - COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "igst" ELSE 0 END), 0)::numeric AS sale_igst,
+            COALESCE(SUM(CASE WHEN "type" = 'purchase' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "cgst" ELSE 0 END), 0)::numeric
+            - COALESCE(SUM(CASE WHEN "type" = 'debit-note' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "cgst" ELSE 0 END), 0)::numeric AS purchase_cgst,
+            COALESCE(SUM(CASE WHEN "type" = 'purchase' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "sgst" ELSE 0 END), 0)::numeric
+            - COALESCE(SUM(CASE WHEN "type" = 'debit-note' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "sgst" ELSE 0 END), 0)::numeric AS purchase_sgst,
+            COALESCE(SUM(CASE WHEN "type" = 'purchase' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "igst" ELSE 0 END), 0)::numeric
+            - COALESCE(SUM(CASE WHEN "type" = 'debit-note' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "igst" ELSE 0 END), 0)::numeric AS purchase_igst
+          FROM "Transaction"
+          WHERE "userId" = ${userId}
+            AND "deletedAt" IS NULL
+            AND "date" >= ${prevRangeFrom}
+            AND "date" <= ${effectiveRangeEnd}
+        )
         SELECT
-          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${startOfToday} AND "date" <= ${now} THEN "totalAmount" ELSE 0 END), 0)::numeric
-          - COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${startOfToday} AND "date" <= ${now} THEN "totalAmount" ELSE 0 END), 0)::numeric AS today_revenue,
-          -- 🔒 V17 Audit Phase 4: credit-note grossProfit is NEGATIVE, so we ADD (not subtract)
-          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${startOfToday} AND "date" <= ${now} THEN "grossProfit" ELSE 0 END), 0)::numeric
-          + COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${startOfToday} AND "date" <= ${now} THEN "grossProfit" ELSE 0 END), 0)::numeric AS today_profit,
-          COUNT(CASE WHEN "type" = 'sale' AND "date" >= ${startOfToday} AND "date" <= ${now} THEN 1 END) AS today_count,
-          -- 🔒 V17 Audit Phase 1 P0.3: Count credit notes so the UI can show net sale count
-          COUNT(CASE WHEN "type" = 'credit-note' AND "date" >= ${startOfToday} AND "date" <= ${now} THEN 1 END) AS today_credit_note_count,
-          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric
-          - COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric AS range_revenue,
-          -- 🔒 V17 Audit Phase 4: credit-note grossProfit is NEGATIVE, so we ADD (not subtract)
-          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "grossProfit" ELSE 0 END), 0)::numeric
-          + COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "grossProfit" ELSE 0 END), 0)::numeric AS range_profit,
-          COALESCE(SUM(CASE WHEN "type" = 'expense' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric AS range_expenses,
-          COALESCE(SUM(CASE WHEN "type" = 'purchase' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric AS range_purchases,
-          COALESCE(SUM(CASE WHEN "type" = 'income' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric AS range_income,
-          COUNT(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN 1 END) AS range_sale_count,
-          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${prevRangeFrom} AND "date" <= ${prevRangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric
-          - COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${prevRangeFrom} AND "date" <= ${prevRangeTo} THEN "totalAmount" ELSE 0 END), 0)::numeric AS prev_revenue,
-          -- 🔒 V17 Audit Phase 4: credit-note grossProfit is NEGATIVE, so we ADD (not subtract)
-          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${prevRangeFrom} AND "date" <= ${prevRangeTo} THEN "grossProfit" ELSE 0 END), 0)::numeric
-          + COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${prevRangeFrom} AND "date" <= ${prevRangeTo} THEN "grossProfit" ELSE 0 END), 0)::numeric AS prev_profit,
-          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "subtotal" ELSE 0 END), 0)::numeric
-          - COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "subtotal" ELSE 0 END), 0)::numeric AS sale_subtotal,
-          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "discountAmount" ELSE 0 END), 0)::numeric
-          - COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "discountAmount" ELSE 0 END), 0)::numeric AS sale_discount,
-          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "cgst" ELSE 0 END), 0)::numeric
-          - COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "cgst" ELSE 0 END), 0)::numeric AS sale_cgst,
-          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "sgst" ELSE 0 END), 0)::numeric
-          - COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "sgst" ELSE 0 END), 0)::numeric AS sale_sgst,
-          COALESCE(SUM(CASE WHEN "type" = 'sale' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "igst" ELSE 0 END), 0)::numeric
-          - COALESCE(SUM(CASE WHEN "type" = 'credit-note' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "igst" ELSE 0 END), 0)::numeric AS sale_igst,
-          COALESCE(SUM(CASE WHEN "type" = 'purchase' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "cgst" ELSE 0 END), 0)::numeric
-          - COALESCE(SUM(CASE WHEN "type" = 'debit-note' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "cgst" ELSE 0 END), 0)::numeric AS purchase_cgst,
-          COALESCE(SUM(CASE WHEN "type" = 'purchase' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "sgst" ELSE 0 END), 0)::numeric
-          - COALESCE(SUM(CASE WHEN "type" = 'debit-note' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "sgst" ELSE 0 END), 0)::numeric AS purchase_sgst,
-          COALESCE(SUM(CASE WHEN "type" = 'purchase' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "igst" ELSE 0 END), 0)::numeric
-          - COALESCE(SUM(CASE WHEN "type" = 'debit-note' AND "date" >= ${rangeFrom} AND "date" <= ${rangeTo} THEN "igst" ELSE 0 END), 0)::numeric AS purchase_igst
-        FROM "Transaction"
-        WHERE "userId" = ${userId}
-          AND "deletedAt" IS NULL
-          AND "date" >= ${prevRangeFrom}
-          AND "date" <= ${effectiveRangeEnd}
+          ROUND(today_revenue * 100 + 0.0000001 * SIGN(today_revenue)) AS today_revenue_paise,
+          ROUND(today_profit * 100 + 0.0000001 * SIGN(today_profit)) AS today_profit_paise,
+          today_count,
+          today_credit_note_count,
+          ROUND(range_revenue * 100 + 0.0000001 * SIGN(range_revenue)) AS range_revenue_paise,
+          ROUND(range_profit * 100 + 0.0000001 * SIGN(range_profit)) AS range_profit_paise,
+          ROUND(range_expenses * 100 + 0.0000001 * SIGN(range_expenses)) AS range_expenses_paise,
+          ROUND(range_purchases * 100 + 0.0000001 * SIGN(range_purchases)) AS range_purchases_paise,
+          ROUND(range_income * 100 + 0.0000001 * SIGN(range_income)) AS range_income_paise,
+          range_sale_count,
+          ROUND(prev_revenue * 100 + 0.0000001 * SIGN(prev_revenue)) AS prev_revenue_paise,
+          ROUND(prev_profit * 100 + 0.0000001 * SIGN(prev_profit)) AS prev_profit_paise,
+          ROUND(sale_subtotal * 100 + 0.0000001 * SIGN(sale_subtotal)) AS sale_subtotal_paise,
+          ROUND(sale_discount * 100 + 0.0000001 * SIGN(sale_discount)) AS sale_discount_paise,
+          ROUND(sale_cgst * 100 + 0.0000001 * SIGN(sale_cgst)) AS sale_cgst_paise,
+          ROUND(sale_sgst * 100 + 0.0000001 * SIGN(sale_sgst)) AS sale_sgst_paise,
+          ROUND(sale_igst * 100 + 0.0000001 * SIGN(sale_igst)) AS sale_igst_paise,
+          ROUND(purchase_cgst * 100 + 0.0000001 * SIGN(purchase_cgst)) AS purchase_cgst_paise,
+          ROUND(purchase_sgst * 100 + 0.0000001 * SIGN(purchase_sgst)) AS purchase_sgst_paise,
+          ROUND(purchase_igst * 100 + 0.0000001 * SIGN(purchase_igst)) AS purchase_igst_paise
+        FROM kpi_raw
       `,
 
       // 2. Receivable/Payable (shared helper — 1 raw SQL with LEFT JOIN)
@@ -222,14 +254,30 @@ export async function GET(req: NextRequest) {
       // converts the UTC timestamp to IST local time before truncating, so the
       // grouping matches the user's local day. Since this is an Indian app
       // (100% Indian users), hardcoding IST is the right call.
-      db.$queryRaw<Array<{ bucketStart: Date; revenue: number; profit: number }>>`
+      //
+      // 🔒 V17 PAISE MIGRATION Phase 2F-a: SQL returns paise (integer). Both
+      // revenue and profit can be negative (credit notes reduce revenue;
+      // credit-note grossProfit is negative). Sign-aware nudge via SIGN()
+      // mirrors roundMoney's symmetric rounding.
+      db.$queryRaw<Array<{ bucketStart: Date; revenuePaise: number; profitPaise: number }>>`
         SELECT
           DATE_TRUNC(${truncUnitLiteral}, "date" AT TIME ZONE 'Asia/Kolkata') AS "bucketStart",
-          COALESCE(SUM(CASE WHEN "type" = 'sale' THEN "totalAmount" ELSE 0 END), 0)
-          - COALESCE(SUM(CASE WHEN "type" = 'credit-note' THEN "totalAmount" ELSE 0 END), 0) AS revenue,
-          -- 🔒 V17 Audit Phase 4: credit-note grossProfit is NEGATIVE, so we ADD (not subtract)
-          COALESCE(SUM(CASE WHEN "type" = 'sale' THEN "grossProfit" ELSE 0 END), 0)
-          + COALESCE(SUM(CASE WHEN "type" = 'credit-note' THEN "grossProfit" ELSE 0 END), 0) AS profit
+          ROUND(
+            (COALESCE(SUM(CASE WHEN "type" = 'sale' THEN "totalAmount" ELSE 0 END), 0)
+             - COALESCE(SUM(CASE WHEN "type" = 'credit-note' THEN "totalAmount" ELSE 0 END), 0)) * 100
+            + 0.0000001 * SIGN(
+              COALESCE(SUM(CASE WHEN "type" = 'sale' THEN "totalAmount" ELSE 0 END), 0)
+              - COALESCE(SUM(CASE WHEN "type" = 'credit-note' THEN "totalAmount" ELSE 0 END), 0)
+            )
+          ) AS "revenuePaise",
+          ROUND(
+            (COALESCE(SUM(CASE WHEN "type" = 'sale' THEN "grossProfit" ELSE 0 END), 0)
+             + COALESCE(SUM(CASE WHEN "type" = 'credit-note' THEN "grossProfit" ELSE 0 END), 0)) * 100
+            + 0.0000001 * SIGN(
+              COALESCE(SUM(CASE WHEN "type" = 'sale' THEN "grossProfit" ELSE 0 END), 0)
+              + COALESCE(SUM(CASE WHEN "type" = 'credit-note' THEN "grossProfit" ELSE 0 END), 0)
+            )
+          ) AS "profitPaise"
         FROM "Transaction"
         WHERE "userId" = ${userId}
           AND "deletedAt" IS NULL
@@ -243,12 +291,20 @@ export async function GET(req: NextRequest) {
       // 5. Top products (raw SQL)
       // 🔒 V17 Audit §1: Net of returns — subtract credit-note quantities/revenue
       // so a product with high returns doesn't appear as a "best seller".
-      db.$queryRaw<Array<{ productName: string; productId: string | null; totalQuantity: bigint; totalRevenue: string }>>`
+      // 🔒 V17 PAISE MIGRATION Phase 2F-a: SQL returns paise for totalRevenue.
+      // totalRevenue can be negative (credit notes subtract), so sign-aware nudge.
+      // totalQuantity is a quantity (not money), so no paise conversion needed.
+      db.$queryRaw<Array<{ productName: string; productId: string | null; totalQuantity: bigint; totalRevenuePaise: string }>>`
         SELECT
           ti."productName",
           ti."productId",
           SUM(CASE WHEN t."type" = 'sale' THEN ti."quantity" ELSE -ti."quantity" END) AS "totalQuantity",
-          SUM(CASE WHEN t."type" = 'sale' THEN ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 2) ELSE -ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 2) END) AS "totalRevenue"
+          ROUND(
+            SUM(CASE WHEN t."type" = 'sale' THEN ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 2) ELSE -ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 2) END) * 100
+            + 0.0000001 * SIGN(
+              SUM(CASE WHEN t."type" = 'sale' THEN ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 2) ELSE -ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 2) END)
+            )
+          ) AS "totalRevenuePaise"
         FROM "TransactionItem" ti
         JOIN "Transaction" t ON ti."transactionId" = t.id
         WHERE t."userId" = ${userId}
@@ -257,16 +313,23 @@ export async function GET(req: NextRequest) {
           AND t."date" >= ${rangeFrom}
           AND t."date" <= ${rangeTo}
         GROUP BY ti."productName", ti."productId"
-        ORDER BY "totalRevenue" DESC
+        ORDER BY "totalRevenuePaise" DESC
         LIMIT 5
       `,
 
       // 6. Category breakdown (raw SQL)
       // 🔒 V17 Audit §1: Net of returns — subtract credit-note value per category.
-      db.$queryRaw<Array<{ category: string | null; totalValue: string }>>`
+      // 🔒 V17 PAISE MIGRATION Phase 2F-a: SQL returns paise for totalValue.
+      // totalValue can be negative (credit notes subtract), so sign-aware nudge.
+      db.$queryRaw<Array<{ category: string | null; totalValuePaise: string }>>`
         SELECT
           COALESCE(p."category", 'Other') AS category,
-          SUM(CASE WHEN t."type" = 'sale' THEN ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 2) ELSE -ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 2) END) AS "totalValue"
+          ROUND(
+            SUM(CASE WHEN t."type" = 'sale' THEN ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 2) ELSE -ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 2) END) * 100
+            + 0.0000001 * SIGN(
+              SUM(CASE WHEN t."type" = 'sale' THEN ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 2) ELSE -ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric)::numeric, 2) END)
+            )
+          ) AS "totalValuePaise"
         FROM "TransactionItem" ti
         JOIN "Transaction" t ON ti."transactionId" = t.id
         LEFT JOIN "Product" p ON ti."productId" = p.id
@@ -276,7 +339,7 @@ export async function GET(req: NextRequest) {
           AND t."date" >= ${rangeFrom}
           AND t."date" <= ${rangeTo}
         GROUP BY COALESCE(p."category", 'Other')
-        ORDER BY "totalValue" DESC
+        ORDER BY "totalValuePaise" DESC
       `,
 
       // 7. 🔒 FIX M-NEW-2: Today's payment collections (udhaar settlements).
@@ -302,19 +365,23 @@ export async function GET(req: NextRequest) {
     // === Process Batch 2 results (all in JS — no more DB queries) ===
 
     // KPIs from the consolidated query
+    // 🔒 V17 PAISE MIGRATION Phase 2F-b: SQL returns paise; convert to rupees via fromPaise().
+    // roundMoney is NOT needed because SQL already applied ROUND with the sign-aware nudge.
+    // roundMoney is still used for DERIVED values (e.g., netProfit = rangeProfit + rangeIncome - rangeExpenses)
+    // because those are computed in JS from the already-converted rupee values.
     const kpi = kpiRows[0]
-    const todayRevenue = roundMoney(Number(kpi.today_revenue))
-    const todayProfit = roundMoney(Number(kpi.today_profit))
+    const todayRevenue = fromPaise(Number(kpi.today_revenue_paise))
+    const todayProfit = fromPaise(Number(kpi.today_profit_paise))
     const todayTxnCount = Number(kpi.today_count)
-    const todayCreditNoteCount = Number(kpi.today_credit_note_count)  // 🔒 V17 Audit Phase 1 P0.3
-    const rangeRevenue = roundMoney(Number(kpi.range_revenue))
-    const rangeProfit = roundMoney(Number(kpi.range_profit))
-    const rangeExpenses = roundMoney(Number(kpi.range_expenses))
-    const rangePurchases = roundMoney(Number(kpi.range_purchases))
-    const rangeIncome = roundMoney(Number(kpi.range_income))
+    const todayCreditNoteCount = Number(kpi.today_credit_note_count)
+    const rangeRevenue = fromPaise(Number(kpi.range_revenue_paise))
+    const rangeProfit = fromPaise(Number(kpi.range_profit_paise))
+    const rangeExpenses = fromPaise(Number(kpi.range_expenses_paise))
+    const rangePurchases = fromPaise(Number(kpi.range_purchases_paise))
+    const rangeIncome = fromPaise(Number(kpi.range_income_paise))
     const rangeTxnCount = Number(kpi.range_sale_count)
-    const prevRangeRevenue = roundMoney(Number(kpi.prev_revenue))
-    const prevRangeProfit = roundMoney(Number(kpi.prev_profit))
+    const prevRangeRevenue = fromPaise(Number(kpi.prev_revenue_paise))
+    const prevRangeProfit = fromPaise(Number(kpi.prev_profit_paise))
 
     const revenueGrowth = prevRangeRevenue > 0
       ? ((rangeRevenue - prevRangeRevenue) / prevRangeRevenue) * 100
@@ -331,12 +398,13 @@ export async function GET(req: NextRequest) {
     const { totalReceivable, totalPayable } = receivablePayable
 
     // GST summary
-    const rangeTaxableSales = roundMoney(Number(kpi.sale_subtotal) - Number(kpi.sale_discount))
-    const rangeCGST = roundMoney(Number(kpi.sale_cgst))
-    const rangeSGST = roundMoney(Number(kpi.sale_sgst))
-    const rangeIGST = roundMoney(Number(kpi.sale_igst))
+    // 🔒 V17 PAISE MIGRATION Phase 2F-b: SQL returns paise; convert to rupees via fromPaise().
+    const rangeTaxableSales = roundMoney(fromPaise(Number(kpi.sale_subtotal_paise)) - fromPaise(Number(kpi.sale_discount_paise)))
+    const rangeCGST = fromPaise(Number(kpi.sale_cgst_paise))
+    const rangeSGST = fromPaise(Number(kpi.sale_sgst_paise))
+    const rangeIGST = fromPaise(Number(kpi.sale_igst_paise))
     const rangeInputTax = roundMoney(
-      Number(kpi.purchase_cgst) + Number(kpi.purchase_sgst) + Number(kpi.purchase_igst)
+      fromPaise(Number(kpi.purchase_cgst_paise)) + fromPaise(Number(kpi.purchase_sgst_paise)) + fromPaise(Number(kpi.purchase_igst_paise))
     )
     const netGSTPayable = roundMoney((rangeCGST + rangeSGST + rangeIGST) - rangeInputTax)
 
@@ -357,10 +425,11 @@ export async function GET(req: NextRequest) {
     for (const row of salesTrendRows) {
       // row.bucketStart is a naive timestamp (IST midnight interpreted as UTC by JS).
       // Convert to ISO string for the key — matches the JS-generated bucket keys below.
+      // 🔒 V17 PAISE MIGRATION Phase 2F-a: SQL returns paise; convert to rupees via fromPaise().
       const key = new Date(row.bucketStart).toISOString()
       trendMap.set(key, {
-        revenue: roundMoney(Number(row.revenue)),
-        profit: roundMoney(Number(row.profit)),
+        revenue: fromPaise(Number(row.revenuePaise)),
+        profit: fromPaise(Number(row.profitPaise)),
       })
     }
 
@@ -431,11 +500,12 @@ export async function GET(req: NextRequest) {
     }
 
     // Top products
+    // 🔒 V17 PAISE MIGRATION Phase 2F-a: SQL returns paise; convert to rupees via fromPaise().
     const topProducts = topProductsRows.map(row => {
       const product = row.productId ? allProducts.find(p => p.id === row.productId) : null
       const purchasePrice = product?.purchasePrice || 0
       const quantity = Number(row.totalQuantity)
-      const revenue = roundMoney(Number(row.totalRevenue))
+      const revenue = fromPaise(Number(row.totalRevenuePaise))
       const avgUnitPrice = quantity > 0 ? revenue / quantity : 0
       const profit = roundMoney((avgUnitPrice - purchasePrice) * quantity)
       return {
@@ -447,9 +517,10 @@ export async function GET(req: NextRequest) {
     })
 
     // Category breakdown
+    // 🔒 V17 PAISE MIGRATION Phase 2F-a: SQL returns paise; convert to rupees via fromPaise().
     const categoryBreakdown = categoryRows.map(row => ({
       name: row.category || 'Other',
-      value: roundMoney(Number(row.totalValue)),
+      value: fromPaise(Number(row.totalValuePaise)),
     }))
 
     // === Inventory stats (not range-dependent) — read currentStock column directly (V3 N2) ===

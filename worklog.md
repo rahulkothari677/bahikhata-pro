@@ -4372,3 +4372,56 @@ Stage Summary:
 - 10 new regression-guard tests added. Total paise-migration regression guards: 39 (4 Phase 2A + 7 Phase 2B + 4 Phase 2C + 14 Phase 2D + 10 Phase 2E).
 - Bug registry: 5 FIXED (BUG-003/004/005/006/007), 2 OPEN (BUG-002 Low/Perf, BUG-008 Medium/TestInfra, BUG-009 Low/DataIssue).
 - NEXT: Push to origin/main, wait for Vercel deploy + user verification, then proceed to Phase 2F (dashboard/route.ts — highest complexity, 4 queries, 41 SUM/COALESCE in one KPI query).
+
+---
+Task ID: paise-migration-phase-2F
+Agent: main
+Task: V17 Paise Migration Phase 2F — Migrate 4 raw SQL queries in dashboard/route.ts (the most critical read path). Split into 2 sub-phases (2F-a: 3 simpler queries, 2F-b: mega KPI query with 18 money columns).
+
+Work Log:
+- PRE-CHANGE SCAN: Read dashboard/route.ts (561 lines, 4 raw SQL queries).
+    * Query 1 (mega KPI): 18 money columns + 4 counts. All money columns can be negative (credit notes subtract from sales, debit notes subtract from purchases). HIGHEST COMPLEXITY — uses CTE approach for readability.
+    * Query 2 (sales trend): revenue + profit per time bucket. Both can be negative.
+    * Query 3 (top products): totalRevenue per product. Can be negative (credit notes subtract).
+    * Query 4 (category breakdown): totalValue per category. Can be negative.
+    * No pre-existing bugs found in the SQL logic itself.
+
+- PHASE 2F-a (3 simpler queries): sales trend, top products, category breakdown.
+    * All use sign-aware nudge: ROUND(expr * 100 + 0.0000001 * SIGN(expr)) AS "XPaise"
+    * JS: fromPaise(Number(row.XPaise)) — no roundMoney needed (SQL nudge handles it)
+    * Verified tsc clean after this sub-phase.
+
+- PHASE 2F-b (mega KPI query): 18 money columns.
+    * Used CTE (WITH kpi_raw AS (...)) to avoid repeating each ~100-char expression twice.
+    * CTE computes raw rupee values (same expressions as before, unchanged).
+    * Outer SELECT applies: ROUND(raw * 100 + 0.0000001 * SIGN(raw)) AS raw_paise
+    * 4 COUNT columns passed through unchanged (no money, no paise conversion).
+    * JS: fromPaise(Number(kpi.X_paise)) for all 18 money columns.
+    * roundMoney still used for DERIVED values (netProfit = rangeProfit + rangeIncome - rangeExpenses, etc.) because those are JS computations on already-converted rupee values.
+
+- KEY TECHNICAL DECISION: Verified that the SQL nudge IS needed even when JS applies roundMoney afterward. Without the nudge: 1.005 * 100 = 100.499999 → SQL ROUND → 100 → fromPaise(100) = 1.00. With the nudge: 1.005 * 100 + 0.0000001 = 100.5000001 → SQL ROUND → 101 → fromPaise(101) = 1.01. The nudge in SQL is essential because SQL ROUND happens BEFORE the /100 — once SQL rounds 100.499999 DOWN to 100, the paisa is lost forever.
+
+- Files modified (2, per git status):
+    1. src/app/api/dashboard/route.ts — all 4 queries migrated + JS processing updated. Added fromPaise to imports.
+    2. src/__tests__/lib/raw-sql-smoke.test.ts — 10 new Phase 2F regression guards (8 query-level + 2 JS-level).
+
+- VERIFICATION:
+    * npx tsc --noEmit: 0 errors (codebase fully type-clean)
+    * npx eslint on both modified files: clean
+    * npx jest (5 targeted test files): 168 tests, ALL PASS — including:
+        - raw-sql-smoke.test.ts (with 10 new Phase 2F regression guards)
+        - balance-reconciliation-behavioral.test.ts (CRITICAL parity test)
+        - reconciliation, paise-helpers, money
+    * npx jest (4 broader financial test files): 91 tests, ALL PASS.
+
+- POST-CHANGE SCAN:
+    * No stale references to old field names (kpi.today_revenue, row.revenue, row.totalRevenue, row.totalValue without _paise) in code.
+    * Return shape UNCHANGED — dashboard UI consumes the same fields (kpis.todayRevenue, kpis.rangeRevenue, salesTrend[].revenue, topProducts[].revenue, categoryBreakdown[].value, etc.). No UI changes needed.
+    * The CTE approach preserves EXACT SQL semantics — the raw expressions in the CTE are identical to the old query. Only the outer SELECT (paise conversion) is new.
+    * roundMoney is still used for: DERIVED JS values (netProfit, revenueGrowth, profitGrowth, totalStockValue, todayCollections, rangeTaxableSales, rangeInputTax, netGSTPayable, paymentModeSplit). These are JS computations, not SQL reads — they need roundMoney for float drift protection.
+
+Stage Summary:
+- Phase 2F COMPLETE. 4 raw SQL queries migrated (including the most complex query in the codebase — 18 money columns via CTE). Zero behavior change at the API/UI boundary.
+- 10 new regression-guard tests. Total paise-migration regression guards: 49 (4 Phase 2A + 7 Phase 2B + 4 Phase 2C + 14 Phase 2D + 10 Phase 2E + 10 Phase 2F).
+- Dashboard is the most critical read path (every page load). All KPIs, charts, and breakdowns now read paise from SQL and convert to rupees at the JS boundary.
+- NEXT: Push to origin/main, wait for Vercel deploy + user verification, then proceed to Phase 2G (gstr-3b/route.ts — 8 raw SQL queries, the last Phase 2 sub-phase).
