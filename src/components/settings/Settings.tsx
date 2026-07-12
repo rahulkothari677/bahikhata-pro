@@ -381,7 +381,7 @@ export function Settings() {
       <Card className="shadow-card border-border/60">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Store className="w-5 h-5 text-amber-600" /> Shop Profile
+            <Store className="w-5 h-5 text-amber-600 dark:text-amber-400" /> Shop Profile
           </CardTitle>
           <p className="text-xs text-muted-foreground">This information appears on invoices and reports</p>
         </CardHeader>
@@ -547,7 +547,7 @@ export function Settings() {
                 </Button>
               </div>
               {revenueTarget ? (
-                <p className="text-[11px] text-emerald-600 mt-1">
+                <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1">
                   Current target: {revenueTarget} — track progress on dashboard
                 </p>
               ) : (
@@ -578,7 +578,7 @@ export function Settings() {
                 </Button>
               </div>
               {expenseBudget ? (
-                <p className="text-[11px] text-amber-600 mt-1">
+                <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">
                   Current budget: {expenseBudget} — track on Income & Expense page
                 </p>
               ) : (
@@ -623,7 +623,7 @@ export function Settings() {
           {/* 🔒 V17-Ext §5.1: Period Lock — protect filed GST periods from edits */}
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
             <div className="flex items-start gap-3">
-              <Shield className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+              <Shield className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="font-semibold text-amber-900 text-sm">Period Lock (Financial-Year lock)</p>
@@ -648,7 +648,7 @@ export function Settings() {
                         <strong>{new Date(lockedUntil).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</strong>
                       </span>
                     </div>
-                    <p className="text-xs text-amber-700">
+                    <p className="text-xs text-amber-700 dark:text-amber-300">
                       Transactions dated on or before this date are read-only. To make changes, unlock
                       the period first (owner only).
                     </p>
@@ -686,7 +686,7 @@ export function Settings() {
                         {savingLock ? 'Locking...' : 'Lock Period'}
                       </Button>
                     </div>
-                    <p className="text-xs text-amber-700">
+                    <p className="text-xs text-amber-700 dark:text-amber-300">
                       Tip: Lock until the last day of the month you filed GST for (e.g. March 31).
                       You can always unlock later if needed.
                     </p>
@@ -699,7 +699,7 @@ export function Settings() {
           {/* 🔒 V17-Ext §5.1: Reconciliation Health Check */}
           <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
             <div className="flex items-start gap-3">
-              <Check className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+              <Check className="w-5 h-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
                 <p className="font-semibold text-emerald-900 text-sm">Health Check (Reconciliation)</p>
                 <p className="text-xs text-emerald-800 mt-1">
@@ -722,7 +722,7 @@ export function Settings() {
                 {healthCheck && (
                   <div className="mt-3 space-y-2">
                     {healthCheck.allPassed ? (
-                      <div className="flex items-center gap-2 text-sm text-emerald-700 font-medium">
+                      <div className="flex items-center gap-2 text-sm text-emerald-700 dark:text-emerald-300 font-medium">
                         <Check className="w-4 h-4" />
                         All checks passed — your books are balanced.
                       </div>
@@ -752,7 +752,7 @@ export function Settings() {
                       </div>
                     ))}
                     {healthCheck.runAt && (
-                      <p className="text-xs text-emerald-600">
+                      <p className="text-xs text-emerald-600 dark:text-emerald-400">
                         Last checked: {new Date(healthCheck.runAt).toLocaleString('en-IN')}
                       </p>
                     )}
@@ -797,10 +797,10 @@ export function Settings() {
           {/* 🔒 V17 Audit Phase 9: Restore from Backup — upload a JSON backup file */}
           <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
             <div className="flex items-start gap-3">
-              <Upload className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+              <Upload className="w-5 h-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
                 <p className="font-semibold text-emerald-900 text-sm">Restore from Backup</p>
-                <p className="text-xs text-emerald-700 mt-1">
+                <p className="text-xs text-emerald-700 dark:text-emerald-300 mt-1">
                   Upload a previously downloaded backup JSON file to restore your data.
                   This MERGES with existing data — items with the same SKU or name are skipped.
                 </p>
@@ -840,7 +840,7 @@ export function Settings() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="mt-2 gap-2 border-emerald-300 text-emerald-700 hover:bg-emerald-100"
+                  className="mt-2 gap-2 border-emerald-300 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100"
                   onClick={() => document.getElementById('restore-backup-upload')?.click()}
                 >
                   <Upload className="w-4 h-4" /> Upload Backup File
@@ -974,7 +974,7 @@ export function Settings() {
           {/* Hide Profit Toggle */}
           <div className="mt-3 flex items-center justify-between rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 p-3">
             <div className="flex items-center gap-2">
-              <EyeOff className="w-4 h-4 text-amber-600" />
+              <EyeOff className="w-4 h-4 text-amber-600 dark:text-amber-400" />
               <div>
                 <p className="text-sm font-medium">Hide Profit</p>
                 <p className="text-[11px] text-muted-foreground">
@@ -1172,7 +1172,7 @@ export function Settings() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-medium">{label}</p>
-                        {features[key] && <Badge className="text-[9px] bg-emerald-100 text-emerald-700">ON</Badge>}
+                        {features[key] && <Badge className="text-[9px] bg-emerald-100 text-emerald-700 dark:text-emerald-300">ON</Badge>}
                       </div>
                       <p className="text-[11px] text-muted-foreground mt-0.5">{description}</p>
                     </div>

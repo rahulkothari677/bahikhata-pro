@@ -119,7 +119,7 @@ export function Ledger({ type }: { type: LedgerType }) {
   }, [pendingDateRange, setPendingDateRange])
 
   const isSale = type === 'sale'
-  const accentColor = isSale ? 'text-emerald-600' : 'text-amber-600'
+  const accentColor = isSale ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'
   const accentBg = isSale ? 'bg-emerald-100' : 'bg-amber-100'
 
   // Build query with optional date filter + voided filter
@@ -369,7 +369,7 @@ export function Ledger({ type }: { type: LedgerType }) {
           <div className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <div className="w-7 h-7 rounded-lg bg-amber-500/10 flex items-center justify-center">
-                <Receipt className="w-3.5 h-3.5 text-amber-600" />
+                <Receipt className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
               </div>
               <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">{isSale ? 'Total Sales' : 'Total Purchases'}</p>
             </div>
@@ -384,11 +384,11 @@ export function Ledger({ type }: { type: LedgerType }) {
             <div className="p-4">
               <div className="flex items-center gap-2 mb-1">
                 <div className="w-7 h-7 rounded-lg bg-emerald-500/10 flex items-center justify-center">
-                  <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
+                  <TrendingUp className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                 </div>
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">{t('stat.gross_profit')}</p>
               </div>
-              <p className="text-xl font-bold text-emerald-600 tabular-nums">{formatINR(totalProfit)}</p>
+              <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">{formatINR(totalProfit)}</p>
               <p className="text-[11px] text-muted-foreground">{totalAmount > 0 ? ((totalProfit / totalAmount) * 100).toFixed(1) : 0}% margin</p>
             </div>
           </div>
@@ -703,7 +703,7 @@ export function Ledger({ type }: { type: LedgerType }) {
                             <p className="text-[11px] text-rose-600 mt-0.5 tabular-nums">Due: {formatINR(due)}</p>
                           )}
                           {isSale && !hideProfit && (
-                            <p className="text-[11px] text-emerald-600 mt-0.5 tabular-nums">+{formatINR(t.grossProfit)}</p>
+                            <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-0.5 tabular-nums">+{formatINR(t.grossProfit)}</p>
                           )}
                           {/* 🔒 V17 Audit Phase 4: credit-note grossProfit is NEGATIVE, so use < 0 */}
                           {t.type === 'credit-note' && !hideProfit && t.grossProfit < 0 && (
@@ -797,11 +797,11 @@ export function Ledger({ type }: { type: LedgerType }) {
                     {due > 0 ? (
                       <Badge variant="destructive" className="text-[9px]">Due {formatINRCompact(due)}</Badge>
                     ) : (
-                      <Badge variant="secondary" className="text-[9px] bg-emerald-100 text-emerald-700">{t('stat.paid')}</Badge>
+                      <Badge variant="secondary" className="text-[9px] bg-emerald-100 text-emerald-700 dark:text-emerald-300">{t('stat.paid')}</Badge>
                     )}
                   </div>
                   {isSale && !hideProfit && (
-                    <p className="text-[10px] text-emerald-600 mt-1">+{formatINRCompact(t.grossProfit)} profit</p>
+                    <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1">+{formatINRCompact(t.grossProfit)} profit</p>
                   )}
                   {/* 🔒 V17 Audit Phase 4: credit-note grossProfit is NEGATIVE, so use < 0 */}
                   {t.type === 'credit-note' && !hideProfit && t.grossProfit < 0 && (

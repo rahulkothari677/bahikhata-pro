@@ -49,7 +49,7 @@ interface HistoryItem {
 
 const PROVIDERS = [
   { key: 'gemini' as const, name: 'Gemini 2.5 Flash', color: 'bg-blue-500', textColor: 'text-blue-600', badge: 'bg-blue-100 text-blue-700' },
-  { key: 'openai' as const, name: 'OpenAI GPT-4o mini', color: 'bg-emerald-500', textColor: 'text-emerald-600', badge: 'bg-emerald-100 text-emerald-700' },
+  { key: 'openai' as const, name: 'OpenAI GPT-4o mini', color: 'bg-emerald-500', textColor: 'text-emerald-600 dark:text-emerald-400', badge: 'bg-emerald-100 text-emerald-700' },
   { key: 'groq' as const, name: 'Groq Llama 3.2 90B', color: 'bg-orange-500', textColor: 'text-orange-600', badge: 'bg-orange-100 text-orange-700' },
 ]
 
@@ -217,7 +217,7 @@ export function AIComparison() {
                   >
                     <div className="flex items-center justify-between mb-2">
                       <span className="font-medium text-sm">{p.name}</span>
-                      {isBest && <Badge className="bg-emerald-100 text-emerald-700">🏆 Best</Badge>}
+                      {isBest && <Badge className="bg-emerald-100 text-emerald-700 dark:text-emerald-300">🏆 Best</Badge>}
                     </div>
                     <div className="space-y-1 text-xs">
                       <div className="flex justify-between">
@@ -573,13 +573,13 @@ function HistoryRow({ item }: { item: HistoryItem }) {
               {result === null ? (
                 <div className="text-[10px] text-muted-foreground">—</div>
               ) : score !== null ? (
-                <div className={`font-bold ${score >= 75 ? 'text-emerald-600' : score >= 50 ? 'text-amber-600' : 'text-red-600'}`}>
+                <div className={`font-bold ${score >= 75 ? 'text-emerald-600 dark:text-emerald-400' : score >= 50 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`}>
                   {score}/100
                 </div>
               ) : result.success ? (
-                <div className="text-emerald-600 text-[10px]">✓ unscored</div>
+                <div className="text-emerald-600 dark:text-emerald-400 text-[10px]">✓ unscored</div>
               ) : (
-                <div className="text-red-600 text-[10px]">✗ failed</div>
+                <div className="text-red-600 dark:text-red-400 text-[10px]">✗ failed</div>
               )}
             </div>
           )

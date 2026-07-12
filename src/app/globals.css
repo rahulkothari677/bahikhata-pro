@@ -127,7 +127,11 @@
   --sidebar: oklch(0.16 0.01 30);
   --sidebar-foreground: oklch(0.96 0 0);
   --sidebar-primary: oklch(0.7 0.18 42);
-  --sidebar-primary-foreground: oklch(0.99 0 0);
+  /* 🔒 V20-022 WCAG FIX: Was oklch(0.99 0 0) (white) on saffron sidebar-primary
+   * (oklch(0.7 0.18 42)) — contrast ratio 2.78:1, FAILED WCAG AA (needs 4.5:1).
+   * Changed to dark (oklch(0.15 0.01 30)) to match primary-foreground pattern.
+   * Dark text on saffron = 6.88:1, PASS. This is the active sidebar item text. */
+  --sidebar-primary-foreground: oklch(0.15 0.01 30);
   --sidebar-accent: oklch(0.22 0.01 30);
   --sidebar-accent-foreground: oklch(0.96 0 0);
   --sidebar-border: oklch(1 0 0 / 8%);

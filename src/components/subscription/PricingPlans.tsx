@@ -100,7 +100,7 @@ export function PricingPlans() {
 function FeatureItem({ text, included }: { text: string; included: boolean }) {
   return (
     <div className="flex items-center gap-2">
-      {included ? <Check className="w-4 h-4 text-emerald-600 flex-shrink-0" /> : <X className="w-4 h-4 text-muted-foreground/40 flex-shrink-0" />}
+      {included ? <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" /> : <X className="w-4 h-4 text-muted-foreground/40 flex-shrink-0" />}
       <span className={cn(included ? 'text-foreground' : 'text-muted-foreground/60 line-through')}>{text}</span>
     </div>
   )

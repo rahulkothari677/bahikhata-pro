@@ -99,7 +99,7 @@ function getTypeConfig(type: string) {
         bg: 'bg-emerald-50 dark:bg-emerald-950/20',
         border: 'border-emerald-200 dark:border-emerald-900',
         textColor: 'text-emerald-700 dark:text-emerald-400',
-        iconColor: 'text-emerald-600',
+        iconColor: 'text-emerald-600 dark:text-emerald-400',
         linkColor: '#059669',
       }
     case 'warning':
@@ -108,7 +108,7 @@ function getTypeConfig(type: string) {
         bg: 'bg-amber-50 dark:bg-amber-950/20',
         border: 'border-amber-200 dark:border-amber-900',
         textColor: 'text-amber-700 dark:text-amber-400',
-        iconColor: 'text-amber-600',
+        iconColor: 'text-amber-600 dark:text-amber-400',
         linkColor: '#d97706',
       }
     case 'error':

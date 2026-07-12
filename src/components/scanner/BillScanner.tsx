@@ -657,7 +657,7 @@ export function BillScanner() {
                   : 'border-border hover:border-amber-300 dark:hover:border-amber-700'
               )}
             >
-              <Truck className={cn('w-6 h-6 mb-2', billType === 'purchase' ? 'text-amber-600' : 'text-muted-foreground')} />
+              <Truck className={cn('w-6 h-6 mb-2', billType === 'purchase' ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground')} />
               <p className="font-semibold text-sm">{t('scanner.purchase_bill')}</p>
               <p className="text-[11px] text-muted-foreground mt-0.5">{t('scanner.goods_bought')}</p>
             </button>
@@ -670,7 +670,7 @@ export function BillScanner() {
                   : 'border-border hover:border-emerald-300 dark:hover:border-emerald-700'
               )}
             >
-              <ShoppingCart className={cn('w-6 h-6 mb-2', billType === 'sale' ? 'text-emerald-600' : 'text-muted-foreground')} />
+              <ShoppingCart className={cn('w-6 h-6 mb-2', billType === 'sale' ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground')} />
               <p className="font-semibold text-sm">{t('scanner.sales_bill')}</p>
               <p className="text-[11px] text-muted-foreground mt-0.5">{t('scanner.goods_sold')}</p>
             </button>

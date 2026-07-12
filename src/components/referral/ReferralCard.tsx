@@ -92,7 +92,7 @@ export function ReferralCard() {
               {codeData.code}
             </div>
             <Button onClick={handleCopy} size="icon" variant="outline" className="h-12 w-12">
-              {copied ? <Check className="w-5 h-5 text-emerald-600" /> : <Copy className="w-5 h-5" />}
+              {copied ? <Check className="w-5 h-5 text-emerald-600 dark:text-emerald-400" /> : <Copy className="w-5 h-5" />}
             </Button>
           </div>
         </div>
@@ -103,7 +103,7 @@ export function ReferralCard() {
               Progress: {completed}/{threshold} referrals
             </p>
             {rewardEarned && (
-              <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-medium flex items-center gap-1">
+              <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:text-emerald-300 font-medium flex items-center gap-1">
                 <Crown className="w-3 h-3" /> Reward Earned!
               </span>
             )}
@@ -150,9 +150,9 @@ export function ReferralCard() {
                     {ref.referredEmail && <p className="text-muted-foreground">{ref.referredEmail}</p>}
                   </div>
                   <span className={`px-2 py-0.5 rounded-full ${
-                    ref.status === 'rewarded' ? 'bg-emerald-100 text-emerald-700' :
+                    ref.status === 'rewarded' ? 'bg-emerald-100 text-emerald-700 dark:text-emerald-300' :
                     ref.status === 'completed' ? 'bg-blue-100 text-blue-700' :
-                    'bg-amber-100 text-amber-700'
+                    'bg-amber-100 text-amber-700 dark:text-amber-300'
                   }`}>
                     {ref.status === 'rewarded' ? 'Reward earned' : ref.status === 'completed' ? 'Signed up' : 'Pending'}
                   </span>

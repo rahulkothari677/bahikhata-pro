@@ -79,7 +79,7 @@ export function GlobalSearch() {
         subtitle: `${p.category || 'Uncategorized'} • Stock: ${p.currentStock} ${p.unit}`,
         meta: formatINR(p.salePrice),
         icon: Package,
-        color: 'text-amber-600',
+        color: 'text-amber-600 dark:text-amber-400',
       })
     })
 
@@ -94,7 +94,7 @@ export function GlobalSearch() {
         subtitle: `${p.phone || 'No phone'} • ${p.type}`,
         meta: p.balance !== 0 ? formatINR(p.balance) : undefined,
         icon: Users,
-        color: p.type === 'customer' ? 'text-emerald-600' : 'text-amber-600',
+        color: p.type === 'customer' ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400',
       })
     })
 
@@ -109,7 +109,7 @@ export function GlobalSearch() {
         subtitle: `${t.party?.name || 'Walk-in'} • ${formatDate(t.date)} • ${t.items?.length || 0} items`,
         meta: formatINR(t.totalAmount),
         icon: t.type === 'sale' ? ShoppingCart : t.type === 'purchase' ? Truck : Receipt,
-        color: t.type === 'sale' ? 'text-emerald-600' : t.type === 'purchase' ? 'text-amber-600' : 'text-violet-600',
+        color: t.type === 'sale' ? 'text-emerald-600 dark:text-emerald-400' : t.type === 'purchase' ? 'text-amber-600 dark:text-amber-400' : 'text-violet-600',
       })
     })
   }
@@ -117,18 +117,18 @@ export function GlobalSearch() {
   // All available commands — shown when no query, filtered when typing
   const allCommands = [
     // Actions (create new)
-    { type: 'command', id: 'cmd-new-sale', title: 'New Sale', subtitle: 'Record a new sale transaction', icon: ShoppingCart, color: 'text-emerald-600', keywords: 'new sale create add record', action: () => { setPreviousView(useAppStore.getState().currentView); setView('new-sale') } },
-    { type: 'command', id: 'cmd-new-purchase', title: 'New Purchase', subtitle: 'Record a new stock purchase', icon: Truck, color: 'text-amber-600', keywords: 'new purchase create add record buy stock', action: () => { setPreviousView(useAppStore.getState().currentView); setView('new-purchase') } },
+    { type: 'command', id: 'cmd-new-sale', title: 'New Sale', subtitle: 'Record a new sale transaction', icon: ShoppingCart, color: 'text-emerald-600 dark:text-emerald-400', keywords: 'new sale create add record', action: () => { setPreviousView(useAppStore.getState().currentView); setView('new-sale') } },
+    { type: 'command', id: 'cmd-new-purchase', title: 'New Purchase', subtitle: 'Record a new stock purchase', icon: Truck, color: 'text-amber-600 dark:text-amber-400', keywords: 'new purchase create add record buy stock', action: () => { setPreviousView(useAppStore.getState().currentView); setView('new-purchase') } },
     { type: 'command', id: 'cmd-add-product', title: 'Add Product', subtitle: 'Add a new product to inventory', icon: Plus, color: 'text-violet-600', keywords: 'add new product create inventory item', action: () => { setView('inventory') } },
     { type: 'command', id: 'cmd-add-party', title: 'Add Customer/Supplier', subtitle: 'Add a new party', icon: UserPlus, color: 'text-blue-600', keywords: 'add new customer supplier party create', action: () => { setView('parties') } },
-    { type: 'command', id: 'cmd-scan', title: 'Scan Bill with AI', subtitle: 'Snap a bill photo, auto-fill data', icon: ScanLine, color: 'text-amber-600', keywords: 'scan bill ai camera photo ocr', action: () => { setView('scanner') } },
+    { type: 'command', id: 'cmd-scan', title: 'Scan Bill with AI', subtitle: 'Snap a bill photo, auto-fill data', icon: ScanLine, color: 'text-amber-600 dark:text-amber-400', keywords: 'scan bill ai camera photo ocr', action: () => { setView('scanner') } },
     // Navigation (go to)
     { type: 'command', id: 'cmd-dashboard', title: 'Go to Dashboard', subtitle: 'View overview & charts', icon: LayoutDashboard, color: 'text-primary', keywords: 'dashboard home overview charts stats kpi', action: () => { setView('dashboard') } },
-    { type: 'command', id: 'cmd-sales', title: 'Go to Sales Ledger', subtitle: 'View all sales transactions', icon: ShoppingCart, color: 'text-emerald-600', keywords: 'sales ledger transactions history', action: () => { setView('sales') } },
-    { type: 'command', id: 'cmd-purchases', title: 'Go to Purchase Ledger', subtitle: 'View all purchase transactions', icon: Truck, color: 'text-amber-600', keywords: 'purchases ledger transactions buy stock', action: () => { setView('purchases') } },
+    { type: 'command', id: 'cmd-sales', title: 'Go to Sales Ledger', subtitle: 'View all sales transactions', icon: ShoppingCart, color: 'text-emerald-600 dark:text-emerald-400', keywords: 'sales ledger transactions history', action: () => { setView('sales') } },
+    { type: 'command', id: 'cmd-purchases', title: 'Go to Purchase Ledger', subtitle: 'View all purchase transactions', icon: Truck, color: 'text-amber-600 dark:text-amber-400', keywords: 'purchases ledger transactions buy stock', action: () => { setView('purchases') } },
     { type: 'command', id: 'cmd-inventory', title: 'Go to Inventory', subtitle: 'Manage products & stock', icon: Package, color: 'text-violet-600', keywords: 'inventory products stock items', action: () => { setView('inventory') } },
     { type: 'command', id: 'cmd-parties', title: 'Go to Parties', subtitle: 'Customers & suppliers', icon: Users, color: 'text-blue-600', keywords: 'parties customers suppliers dues balance', action: () => { setView('parties') } },
-    { type: 'command', id: 'cmd-income', title: 'Go to Income & Expense', subtitle: 'Record rent, salary, other income', icon: Wallet, color: 'text-emerald-600', keywords: 'income expense rent salary money', action: () => { setView('income-expense') } },
+    { type: 'command', id: 'cmd-income', title: 'Go to Income & Expense', subtitle: 'Record rent, salary, other income', icon: Wallet, color: 'text-emerald-600 dark:text-emerald-400', keywords: 'income expense rent salary money', action: () => { setView('income-expense') } },
     { type: 'command', id: 'cmd-reports', title: 'Go to Reports', subtitle: 'P&L, GST, stock reports', icon: FileBarChart, color: 'text-rose-600', keywords: 'reports gst pl profit loss stock analysis', action: () => { setView('reports') } },
     { type: 'command', id: 'cmd-settings', title: 'Go to Settings', subtitle: 'Shop profile, features, theme', icon: Settings, color: 'text-slate-600', keywords: 'settings profile theme features configuration', action: () => { setView('settings') } },
   ]

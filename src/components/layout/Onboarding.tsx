@@ -66,9 +66,9 @@ export function Onboarding({ open, onDone }: { open: boolean; onDone: () => void
           </p>
 
           <div className="grid grid-cols-2 gap-3">
-            <FeatureBox icon={ScanLine} title="AI Bill Scanner" desc="Snap a bill, we auto-fill everything" color="text-amber-600 bg-amber-100" />
+            <FeatureBox icon={ScanLine} title="AI Bill Scanner" desc="Snap a bill, we auto-fill everything" color="text-amber-600 dark:text-amber-400 bg-amber-100" />
             <FeatureBox icon={Package} title="Smart Inventory" desc="Track stock, prices, low-stock alerts" color="text-violet-600 bg-violet-100" />
-            <FeatureBox icon={ShoppingCart} title="Sales & Purchase" desc="Record transactions with auto profit calc" color="text-emerald-600 bg-emerald-100" />
+            <FeatureBox icon={ShoppingCart} title="Sales & Purchase" desc="Record transactions with auto profit calc" color="text-emerald-600 dark:text-emerald-400 bg-emerald-100" />
             <FeatureBox icon={FileBarChart} title="Reports & GST" desc="P&L, GST returns, stock valuation" color="text-rose-600 bg-rose-100" />
           </div>
 

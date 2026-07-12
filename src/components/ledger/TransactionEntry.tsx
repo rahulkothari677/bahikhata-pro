@@ -631,7 +631,7 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
     setPreviousView(null)
   }
 
-  const accentColor = isSale ? 'text-emerald-600' : 'text-amber-600'
+  const accentColor = isSale ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'
   const accentBg = isSale ? 'bg-emerald-100' : 'bg-amber-100'
   const accentGradient = isSale ? 'bg-gradient-emerald' : 'bg-gradient-saffron'
 
@@ -724,8 +724,8 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
             isSale ? 'bg-emerald-100 dark:bg-emerald-900/40' : 'bg-amber-100 dark:bg-amber-900/40'
           )}>
             {isSale
-              ? <ShoppingCart className="w-5 h-5 text-emerald-600" />
-              : <Truck className="w-5 h-5 text-amber-600" />}
+              ? <ShoppingCart className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+              : <Truck className="w-5 h-5 text-amber-600 dark:text-amber-400" />}
           </div>
           <div>
             <h2 className="text-lg font-bold font-heading tracking-tight">
@@ -882,7 +882,7 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
                           className={cn(
                             'px-2.5 py-1.5 rounded-lg text-xs font-medium border transition flex items-center gap-1.5',
                             inList
-                              ? 'bg-emerald-100 dark:bg-emerald-950/40 border-emerald-300 text-emerald-700'
+                              ? 'bg-emerald-100 dark:bg-emerald-950/40 border-emerald-300 text-emerald-700 dark:text-emerald-300'
                               : 'bg-muted/50 border-border hover:bg-muted hover:border-primary/30'
                           )}
                         >
@@ -923,7 +923,7 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
                           <p className={cn(
                             'text-[11px] font-medium',
                             p.currentStock <= 0 ? 'text-rose-600' :
-                            p.isLowStock ? 'text-amber-600' : 'text-emerald-600'
+                            p.isLowStock ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'
                           )}>
                             {p.currentStock} {p.unit}
                           </p>
@@ -932,12 +932,12 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
                             <span className="text-[9px] font-bold text-rose-600 bg-rose-50 dark:bg-rose-950/30 px-1.5 py-0.5 rounded-full">OUT</span>
                           )}
                           {p.currentStock > 0 && p.isLowStock && (
-                            <span className="text-[9px] font-bold text-amber-600 bg-amber-50 dark:bg-amber-950/30 px-1.5 py-0.5 rounded-full">LOW</span>
+                            <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 px-1.5 py-0.5 rounded-full">LOW</span>
                           )}
                         </div>
                         <div className="flex-shrink-0">
                           {inList ? (
-                            <Badge className="bg-emerald-100 text-emerald-700 text-[9px] gap-1">
+                            <Badge className="bg-emerald-100 text-emerald-700 dark:text-emerald-300 text-[9px] gap-1">
                               <Check className="w-2.5 h-2.5" /> Added
                             </Badge>
                           ) : (
@@ -1160,7 +1160,7 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
                           return (
                             <div className={cn(
                               'pl-5 mt-1 text-[11px] font-medium flex items-center gap-1',
-                              isBlock ? 'text-rose-600' : 'text-amber-600'
+                              isBlock ? 'text-rose-600' : 'text-amber-600 dark:text-amber-400'
                             )}>
                               <AlertTriangle className="w-3 h-3 flex-shrink-0" />
                               {isBlock ? 'Not enough stock' : 'Will go negative'}: have {warning.currentStock}, selling {warning.requestedQty} → {warning.resultingStock}
@@ -1250,7 +1250,7 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
                     <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
                       {selectedParty.phone && <span className="flex items-center gap-0.5"><Phone className="w-2.5 h-2.5" />{selectedParty.phone}</span>}
                       {selectedParty.balance !== 0 && (
-                        <Badge variant="outline" className={cn('text-[9px] py-0', selectedParty.balance > 0 ? 'text-emerald-600 border-emerald-300' : 'text-rose-600 border-rose-300')}>
+                        <Badge variant="outline" className={cn('text-[9px] py-0', selectedParty.balance > 0 ? 'text-emerald-600 dark:text-emerald-400 border-emerald-300' : 'text-rose-600 border-rose-300')}>
                           {selectedParty.balance > 0 ? `Owes ₹${selectedParty.balance}` : `You owe ₹${Math.abs(selectedParty.balance)}`}
                         </Badge>
                       )}
@@ -1313,7 +1313,7 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
                                 </div>
                               </div>
                               {p.balance !== 0 && (
-                                <Badge variant="outline" className={cn('text-[9px] py-0', p.balance > 0 ? 'text-emerald-600' : 'text-rose-600')}>
+                                <Badge variant="outline" className={cn('text-[9px] py-0', p.balance > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600')}>
                                   {p.balance > 0 ? `+₹${p.balance}` : `-₹${Math.abs(p.balance)}`}
                                 </Badge>
                               )}
@@ -1435,10 +1435,10 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
                 )}
                 {isSale && totalProfit > 0 && (
                   <div className="flex items-center justify-between text-sm bg-emerald-50 -mx-4 px-4 py-2 rounded-lg">
-                    <span className="text-emerald-700 font-medium flex items-center gap-1">
+                    <span className="text-emerald-700 dark:text-emerald-300 font-medium flex items-center gap-1">
                       <TrendingUp className="w-3.5 h-3.5" /> Gross Profit
                     </span>
-                    <span className="font-bold text-emerald-700">
+                    <span className="font-bold text-emerald-700 dark:text-emerald-300">
                       {formatINR(totalProfit)}
                       <span className="text-[10px] ml-1">({totalAmount > 0 ? ((totalProfit / totalAmount) * 100).toFixed(1) : 0}%)</span>
                     </span>

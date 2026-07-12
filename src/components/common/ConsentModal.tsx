@@ -41,7 +41,7 @@ export function ConsentModal() {
         <DialogHeader>
           <div className="flex items-center gap-3 mb-2">
             <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
-              <Shield className="w-5 h-5 text-emerald-600" />
+              <Shield className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
             </div>
             <div>
               <DialogTitle className="text-lg">Your Privacy Matters</DialogTitle>
@@ -56,9 +56,9 @@ export function ConsentModal() {
           <div className="bg-muted/50 rounded-lg p-3 space-y-2">
             <p className="font-semibold text-xs">What we collect:</p>
             <ul className="space-y-1 text-xs text-muted-foreground">
-              <li className="flex items-start gap-2"><Check className="w-3.5 h-3.5 text-emerald-600 mt-0.5 flex-shrink-0" /> Which features you use</li>
-              <li className="flex items-start gap-2"><Check className="w-3.5 h-3.5 text-emerald-600 mt-0.5 flex-shrink-0" /> App performance and crashes</li>
-              <li className="flex items-start gap-2"><Check className="w-3.5 h-3.5 text-emerald-600 mt-0.5 flex-shrink-0" /> Your state/region (not GPS)</li>
+              <li className="flex items-start gap-2"><Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 mt-0.5 flex-shrink-0" /> Which features you use</li>
+              <li className="flex items-start gap-2"><Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 mt-0.5 flex-shrink-0" /> App performance and crashes</li>
+              <li className="flex items-start gap-2"><Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 mt-0.5 flex-shrink-0" /> Your state/region (not GPS)</li>
             </ul>
           </div>
           <div className="bg-rose-50 dark:bg-rose-950/20 rounded-lg p-3 space-y-2">

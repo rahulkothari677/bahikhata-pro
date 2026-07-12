@@ -241,7 +241,7 @@ export function StaffManagement() {
                                   'w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0',
                                   isEnabled ? 'bg-emerald-100 dark:bg-emerald-900/40' : 'bg-muted'
                                 )}>
-                                  <Icon className={cn('w-3.5 h-3.5', isEnabled ? 'text-emerald-600' : 'text-muted-foreground')} />
+                                  <Icon className={cn('w-3.5 h-3.5', isEnabled ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground')} />
                                 </div>
                                 <div className="min-w-0">
                                   <p className="text-xs font-medium truncate">{MODULE_LABELS[module].label}</p>

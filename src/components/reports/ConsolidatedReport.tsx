@@ -218,9 +218,9 @@ export function ConsolidatedReport() {
                       {viewMode === 'pl' && (
                         <>
                           <td className="text-right py-2 tabular-nums">{formatINR(shop.revenue)}</td>
-                          <td className="text-right py-2 tabular-nums text-emerald-600">{formatINR(shop.profit)}</td>
+                          <td className="text-right py-2 tabular-nums text-emerald-600 dark:text-emerald-400">{formatINR(shop.profit)}</td>
                           <td className="text-right py-2 tabular-nums text-rose-600">{formatINR(shop.expenses)}</td>
-                          <td className={cn('text-right py-2 tabular-nums font-semibold', shop.netProfit >= 0 ? 'text-emerald-600' : 'text-rose-600')}>
+                          <td className={cn('text-right py-2 tabular-nums font-semibold', shop.netProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600')}>
                             {formatINR(shop.netProfit)}
                           </td>
                         </>
@@ -273,9 +273,9 @@ export function ConsolidatedReport() {
                 {viewMode === 'pl' && (
                   <>
                     <td className="text-right py-2 tabular-nums">{formatINR(total.revenue)}</td>
-                    <td className="text-right py-2 tabular-nums text-emerald-600">{formatINR(total.profit)}</td>
+                    <td className="text-right py-2 tabular-nums text-emerald-600 dark:text-emerald-400">{formatINR(total.profit)}</td>
                     <td className="text-right py-2 tabular-nums text-rose-600">{formatINR(total.expenses)}</td>
-                    <td className={cn('text-right py-2 tabular-nums', total.netProfit >= 0 ? 'text-emerald-600' : 'text-rose-600')}>
+                    <td className={cn('text-right py-2 tabular-nums', total.netProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600')}>
                       {formatINR(total.netProfit)}
                     </td>
                   </>

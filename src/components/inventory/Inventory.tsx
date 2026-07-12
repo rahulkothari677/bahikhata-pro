@@ -121,7 +121,7 @@ export function Inventory() {
         <Card className="shadow-card border-border/60 border-t-4 border-t-amber-500">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
-              <Package className="w-4 h-4 text-amber-600" />
+              <Package className="w-4 h-4 text-amber-600 dark:text-amber-400" />
               <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">{t('stat.total_products')}</p>
             </div>
             <p className="text-xl font-bold">{products.length}</p>
@@ -130,7 +130,7 @@ export function Inventory() {
         <Card className="shadow-card border-border/60 border-t-4 border-t-emerald-500">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
-              <IndianRupee className="w-4 h-4 text-emerald-600" />
+              <IndianRupee className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
               <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">{t('dash.stock_value')}</p>
             </div>
             <p className="text-xl font-bold">{formatINR(totalStockValue)}</p>
@@ -162,7 +162,7 @@ export function Inventory() {
       <Card className="shadow-card border-border/60">
         <CardContent className="p-3">
           <div className="flex items-center gap-2 mb-2">
-            <Folder className="w-4 h-4 text-amber-600" />
+            <Folder className="w-4 h-4 text-amber-600 dark:text-amber-400" />
             <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t('inv.categories')}</p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -347,12 +347,12 @@ export function Inventory() {
                       <td className="py-3 px-2 text-right">{formatINR(p.salePrice)}</td>
                       <td className={cn('py-3 px-2 text-right font-medium',
                         p.currentStock <= 0 ? 'text-rose-600' :
-                        p.isLowStock ? 'text-amber-600' : 'text-emerald-600'
+                        p.isLowStock ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'
                       )}>
                         {p.currentStock} <span className="text-[10px] text-muted-foreground">{p.unit}</span>
                       </td>
                       <td className="py-3 px-2 text-right">{formatINR(p.stockValue)}</td>
-                      <td className="py-3 px-2 text-right text-emerald-600 font-medium">
+                      <td className="py-3 px-2 text-right text-emerald-600 dark:text-emerald-400 font-medium">
                         {formatINR(profit)}
                         <span className="text-[10px] text-muted-foreground ml-1">({margin.toFixed(0)}%)</span>
                       </td>
@@ -362,7 +362,7 @@ export function Inventory() {
                             {p.currentStock <= 0 ? 'Out' : 'Low'}
                           </Badge>
                         ) : (
-                          <Badge variant="secondary" className="text-[10px] bg-emerald-100 text-emerald-700">OK</Badge>
+                          <Badge variant="secondary" className="text-[10px] bg-emerald-100 text-emerald-700 dark:text-emerald-300">OK</Badge>
                         )}
                       </td>
                       <td className="py-3 px-2">
@@ -462,7 +462,7 @@ function ProductGridCard({ product: p, onEdit }: { product: any; onEdit: () => v
           </div>
           <div className="text-right">
             <p className="text-[10px] text-muted-foreground uppercase">Profit</p>
-            <p className="text-sm font-semibold text-emerald-600 tabular-nums">
+            <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">
               +{formatINR(profit)}
               <span className="text-[10px] text-muted-foreground ml-0.5">({margin.toFixed(0)}%)</span>
             </p>
@@ -476,7 +476,7 @@ function ProductGridCard({ product: p, onEdit }: { product: any; onEdit: () => v
             <span className={cn(
               'text-xs font-bold tabular-nums',
               p.currentStock <= 0 ? 'text-rose-600' :
-              p.isLowStock ? 'text-amber-600' : 'text-emerald-600'
+              p.isLowStock ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'
             )}>
               {p.currentStock} {p.unit}
             </span>

@@ -57,8 +57,8 @@ const SECTIONS: MenuSection[] = [
     title: 'Business',
     items: [
       { icon: BarChart3, label: 'Reports', description: 'GST, P&L, sales analytics', view: 'reports', iconColor: 'text-rose-600', iconBg: 'bg-rose-100' },
-      { icon: Package, label: 'Inventory', description: 'Manage products, stock, prices', view: 'inventory', iconColor: 'text-amber-600', iconBg: 'bg-amber-100' },
-      { icon: Wallet, label: 'Income & Expense', description: 'Rent, salary, other income', view: 'income-expense', iconColor: 'text-emerald-600', iconBg: 'bg-emerald-100' },
+      { icon: Package, label: 'Inventory', description: 'Manage products, stock, prices', view: 'inventory', iconColor: 'text-amber-600 dark:text-amber-400', iconBg: 'bg-amber-100' },
+      { icon: Wallet, label: 'Income & Expense', description: 'Rent, salary, other income', view: 'income-expense', iconColor: 'text-emerald-600 dark:text-emerald-400', iconBg: 'bg-emerald-100' },
       { icon: Users, label: 'Customers & Suppliers', description: 'Track dues & party balances', view: 'parties', iconColor: 'text-blue-600', iconBg: 'bg-blue-100' },
     ],
   },
@@ -282,7 +282,7 @@ export function MoreScreen() {
               className="w-full flex items-center gap-3 p-3 hover:bg-muted/50 transition text-left border-t border-border/40"
             >
               <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
-                <Phone className="w-5 h-5 text-emerald-600" />
+                <Phone className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
               </div>
               <div className="flex-1">
                 <p className="font-medium text-sm">Contact Us</p>
@@ -308,7 +308,7 @@ export function MoreScreen() {
               className="w-full flex items-center gap-3 p-3 hover:bg-muted/50 transition text-left border-t border-border/40"
             >
               <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
-                <Star className="w-5 h-5 text-amber-600" />
+                <Star className="w-5 h-5 text-amber-600 dark:text-amber-400" />
               </div>
               <div className="flex-1">
                 <p className="font-medium text-sm">Rate EkBook</p>

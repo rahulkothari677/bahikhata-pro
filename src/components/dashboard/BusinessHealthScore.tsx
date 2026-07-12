@@ -60,7 +60,7 @@ export function BusinessHealthScore({ kpis }: { kpis: any }) {
 
   const getColor = (s: number) => {
     if (s >= 80) return {
-      text: 'text-emerald-600',
+      text: 'text-emerald-600 dark:text-emerald-400',
       stroke: '#10b981', // emerald-500
       bg: 'from-emerald-500 to-teal-600',
       label: 'Excellent',
@@ -74,7 +74,7 @@ export function BusinessHealthScore({ kpis }: { kpis: any }) {
       icon: Activity,
     }
     if (s >= 40) return {
-      text: 'text-amber-600',
+      text: 'text-amber-600 dark:text-amber-400',
       stroke: '#f59e0b', // amber-500
       bg: 'from-amber-500 to-orange-600',
       label: 'Needs Attention',

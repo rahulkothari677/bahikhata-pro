@@ -96,7 +96,7 @@ export function AnalyticsInsights() {
           {hasBestSellers && (
             <AnalyticsSection
               icon={<Crown className="w-3.5 h-3.5" />}
-              iconColor="text-amber-600"
+              iconColor="text-amber-600 dark:text-amber-400"
               iconBg="bg-amber-100 dark:bg-amber-900/40"
               title="Top Sellers"
               subtitle="Last 30 days"
@@ -106,7 +106,7 @@ export function AnalyticsInsights() {
                 right: (
                   <div className="flex items-center gap-3 flex-shrink-0">
                     <span className="text-xs text-muted-foreground tabular-nums">{item.quantity} sold</span>
-                    <span className="font-semibold tabular-nums text-emerald-600">{formatINRCompact(item.revenue)}</span>
+                    <span className="font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">{formatINRCompact(item.revenue)}</span>
                   </div>
                 ),
               }))}
@@ -138,7 +138,7 @@ export function AnalyticsInsights() {
           {hasTopCustomers && (
             <AnalyticsSection
               icon={<Users className="w-3.5 h-3.5" />}
-              iconColor="text-emerald-600"
+              iconColor="text-emerald-600 dark:text-emerald-400"
               iconBg="bg-emerald-100 dark:bg-emerald-900/40"
               title="Most Profitable Customers"
               subtitle="Last 90 days"
@@ -148,7 +148,7 @@ export function AnalyticsInsights() {
                 right: (
                   <div className="flex items-center gap-3 flex-shrink-0">
                     <span className="text-xs text-muted-foreground tabular-nums">{formatINRCompact(customer.totalSales)} sales</span>
-                    <span className="font-semibold tabular-nums text-emerald-600">{formatINRCompact(customer.profit)}</span>
+                    <span className="font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">{formatINRCompact(customer.profit)}</span>
                   </div>
                 ),
               }))}

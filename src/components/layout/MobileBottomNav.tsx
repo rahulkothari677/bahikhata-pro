@@ -107,8 +107,8 @@ export function MobileBottomNav() {
 
   // Quick menu actions
   const quickActions = [
-    { label: 'New Sale', icon: ShoppingCart, view: 'new-sale' as ViewType, color: 'text-emerald-600' },
-    { label: 'New Purchase', icon: Truck, view: 'new-purchase' as ViewType, color: 'text-amber-600' },
+    { label: 'New Sale', icon: ShoppingCart, view: 'new-sale' as ViewType, color: 'text-emerald-600 dark:text-emerald-400' },
+    { label: 'New Purchase', icon: Truck, view: 'new-purchase' as ViewType, color: 'text-amber-600 dark:text-amber-400' },
     { label: 'Income/Expense', icon: Wallet, view: 'income-expense' as ViewType, color: 'text-blue-600' },
   ]
 

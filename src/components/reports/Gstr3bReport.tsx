@@ -207,7 +207,7 @@ export function Gstr3bReport() {
           a revised return on the GST portal to stay compliant. */}
       {hasDivergence && (
         <div className="rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-950/30 dark:border-amber-800 p-4 flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+          <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
           <div className="flex-1">
             <p className="text-sm font-semibold text-amber-800 dark:text-amber-200">
               Books have changed since this return was filed
@@ -241,14 +241,14 @@ export function Gstr3bReport() {
           icon={<TrendingDown className="w-4 h-4" />}
           label="Input Tax (ITC)"
           value={data?.totalItc || 0}
-          color="text-amber-600"
+          color="text-amber-600 dark:text-amber-400"
           bg="bg-amber-100 dark:bg-amber-900/40"
         />
         <SummaryCard
           icon={<Wallet className="w-4 h-4" />}
           label="Net Tax Payable"
           value={data?.netTaxPayable || 0}
-          color={data?.netTaxPayable > 0 ? 'text-rose-600' : 'text-emerald-600'}
+          color={data?.netTaxPayable > 0 ? 'text-rose-600' : 'text-emerald-600 dark:text-emerald-400'}
           bg={data?.netTaxPayable > 0 ? 'bg-rose-100 dark:bg-rose-900/40' : 'bg-emerald-100 dark:bg-emerald-900/40'}
           highlight
         />
@@ -324,7 +324,7 @@ export function Gstr3bReport() {
       <Card className="shadow-card border-border/60">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm flex items-center gap-2">
-            <ArrowDownRight className="w-4 h-4 text-amber-600" />
+            <ArrowDownRight className="w-4 h-4 text-amber-600 dark:text-amber-400" />
             4. Input Tax Credit (ITC)
           </CardTitle>
         </CardHeader>

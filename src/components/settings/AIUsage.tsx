@@ -109,7 +109,7 @@ export function AIUsage() {
         </button>
         <div className="flex-1">
           <h2 className="text-xl font-bold flex items-center gap-2">
-            <Coins className="w-5 h-5 text-amber-600" />
+            <Coins className="w-5 h-5 text-amber-600 dark:text-amber-400" />
             AI Usage & Cost Dashboard
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
@@ -125,7 +125,7 @@ export function AIUsage() {
       <Card className="border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-900">
         <CardHeader className="pb-3">
           <CardTitle className="text-sm flex items-center gap-2">
-            <DollarSign className="w-4 h-4 text-amber-600" />
+            <DollarSign className="w-4 h-4 text-amber-600 dark:text-amber-400" />
             Active Provider & Pricing
           </CardTitle>
         </CardHeader>
@@ -196,7 +196,7 @@ export function AIUsage() {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Success rate</span>
-                    <span className={stats.calls > 0 && stats.successCount / stats.calls < 0.9 ? 'text-red-600' : 'text-emerald-600'}>
+                    <span className={stats.calls > 0 && stats.successCount / stats.calls < 0.9 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}>
                       {stats.calls > 0 ? `${((stats.successCount / stats.calls) * 100).toFixed(0)}%` : '—'}
                     </span>
                   </div>
@@ -249,7 +249,7 @@ export function AIUsage() {
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-sm flex items-center gap-2">
-            <Clock className="w-4 h-4 text-emerald-600" />
+            <Clock className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
             Recent AI Calls (last 20)
           </CardTitle>
         </CardHeader>

@@ -101,7 +101,7 @@ export function PartySelect({
             <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
               {selectedParty.phone && <span>{selectedParty.phone}</span>}
               {selectedParty.balance !== 0 && (
-                <Badge variant="outline" className={cn('text-[9px] py-0', selectedParty.balance > 0 ? 'text-emerald-600 border-emerald-300' : 'text-rose-600 border-rose-300')}>
+                <Badge variant="outline" className={cn('text-[9px] py-0', selectedParty.balance > 0 ? 'text-emerald-600 dark:text-emerald-400 border-emerald-300' : 'text-rose-600 border-rose-300')}>
                   {selectedParty.balance > 0 ? `Owes ₹${selectedParty.balance}` : `You owe ₹${Math.abs(selectedParty.balance)}`}
                 </Badge>
               )}
@@ -188,7 +188,7 @@ export function PartySelect({
                     </div>
                   </div>
                   {p.balance !== 0 && (
-                    <Badge variant="outline" className={cn('text-[9px] py-0', p.balance > 0 ? 'text-emerald-600' : 'text-rose-600')}>
+                    <Badge variant="outline" className={cn('text-[9px] py-0', p.balance > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600')}>
                       {p.balance > 0 ? `+₹${p.balance}` : `-₹${Math.abs(p.balance)}`}
                     </Badge>
                   )}

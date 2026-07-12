@@ -238,13 +238,13 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
         {purchasePrice > 0 && salePrice > 0 && (
           <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg bg-emerald-100 flex items-center justify-center">
-              <TrendingUp className="w-4 h-4 text-emerald-600" />
+              <TrendingUp className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
             </div>
             <div className="text-sm">
-              <p className="font-semibold text-emerald-700">
+              <p className="font-semibold text-emerald-700 dark:text-emerald-300">
                 Profit per unit: {formatINR(profit)}
               </p>
-              <p className="text-xs text-emerald-600">
+              <p className="text-xs text-emerald-600 dark:text-emerald-400">
                 Margin: {margin.toFixed(1)}%
               </p>
             </div>

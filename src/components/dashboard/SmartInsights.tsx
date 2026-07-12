@@ -106,9 +106,9 @@ export function SmartInsights() {
                   <Icon className={cn(
                     'w-4 h-4',
                     insight.severity === 'critical' && 'text-rose-600',
-                    insight.severity === 'warning' && 'text-amber-600',
+                    insight.severity === 'warning' && 'text-amber-600 dark:text-amber-400',
                     insight.severity === 'info' && 'text-blue-600',
-                    insight.severity === 'positive' && 'text-emerald-600',
+                    insight.severity === 'positive' && 'text-emerald-600 dark:text-emerald-400',
                   )} />
                 </div>
                 <div className="flex-1 min-w-0">

@@ -58,8 +58,8 @@ export function InventoryAgingReport({ data }: { data: any }) {
   }
 
   const bucketConfig = [
-    { key: 'fresh', label: '< 30 Days', sublabel: 'Fresh Stock', color: 'text-emerald-600', bg: 'bg-emerald-500', lightBg: 'bg-emerald-50 dark:bg-emerald-950/30', count: buckets.fresh.length, value: bucketValues.fresh },
-    { key: 'slow', label: '30-90 Days', sublabel: 'Slow Moving', color: 'text-amber-600', bg: 'bg-amber-500', lightBg: 'bg-amber-50 dark:bg-amber-950/30', count: buckets.slow.length, value: bucketValues.slow },
+    { key: 'fresh', label: '< 30 Days', sublabel: 'Fresh Stock', color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-500', lightBg: 'bg-emerald-50 dark:bg-emerald-950/30', count: buckets.fresh.length, value: bucketValues.fresh },
+    { key: 'slow', label: '30-90 Days', sublabel: 'Slow Moving', color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-500', lightBg: 'bg-amber-50 dark:bg-amber-950/30', count: buckets.slow.length, value: bucketValues.slow },
     { key: 'dead', label: '90+ Days', sublabel: 'Dead Stock', color: 'text-rose-600', bg: 'bg-rose-500', lightBg: 'bg-rose-50 dark:bg-rose-950/30', count: buckets.dead.length, value: bucketValues.dead },
   ]
 

@@ -121,7 +121,7 @@ export function ProductPicker({
                   <span>•</span>
                   <span className={cn(
                     selectedProduct.currentStock <= 0 ? 'text-rose-600' :
-                    selectedProduct.isLowStock ? 'text-amber-600' : 'text-emerald-600'
+                    selectedProduct.isLowStock ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'
                   )}>
                     Stock: {selectedProduct.currentStock} {selectedProduct.unit}
                   </span>
@@ -250,7 +250,7 @@ export function ProductPicker({
                     <p className={cn(
                       'text-[11px] font-medium',
                       p.currentStock <= 0 ? 'text-rose-600' :
-                      p.isLowStock ? 'text-amber-600' : 'text-emerald-600'
+                      p.isLowStock ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'
                     )}>
                       {p.currentStock} {p.unit}
                     </p>

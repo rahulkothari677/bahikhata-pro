@@ -58,7 +58,7 @@ export function DebtAgingReport({ data }: { data: any }) {
       <Card className="shadow-card border-border/60">
         <CardContent className="py-12 text-center">
           <div className="w-14 h-14 rounded-full bg-emerald-100 dark:bg-emerald-950/40 flex items-center justify-center mx-auto mb-3">
-            <User className="w-7 h-7 text-emerald-600" />
+            <User className="w-7 h-7 text-emerald-600 dark:text-emerald-400" />
           </div>
           <p className="text-sm font-medium">No outstanding dues</p>
           <p className="text-xs text-muted-foreground mt-1">All customers have paid their bills. Great job!</p>
@@ -68,8 +68,8 @@ export function DebtAgingReport({ data }: { data: any }) {
   }
 
   const bucketConfig = [
-    { key: 'current', label: '0-30 Days', sublabel: 'Current', color: 'text-emerald-600', bg: 'bg-emerald-500', lightBg: 'bg-emerald-50 dark:bg-emerald-950/30' },
-    { key: 'overdue', label: '31-60 Days', sublabel: 'Overdue', color: 'text-amber-600', bg: 'bg-amber-500', lightBg: 'bg-amber-50 dark:bg-amber-950/30' },
+    { key: 'current', label: '0-30 Days', sublabel: 'Current', color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-500', lightBg: 'bg-emerald-50 dark:bg-emerald-950/30' },
+    { key: 'overdue', label: '31-60 Days', sublabel: 'Overdue', color: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-500', lightBg: 'bg-amber-50 dark:bg-amber-950/30' },
     { key: 'serious', label: '61-90 Days', sublabel: 'Serious', color: 'text-orange-600', bg: 'bg-orange-500', lightBg: 'bg-orange-50 dark:bg-orange-950/30' },
     { key: 'critical', label: '90+ Days', sublabel: 'Critical', color: 'text-rose-600', bg: 'bg-rose-500', lightBg: 'bg-rose-50 dark:bg-rose-950/30' },
   ]
@@ -120,8 +120,8 @@ export function DebtAgingReport({ data }: { data: any }) {
                 {agedParties.map((p: any) => (
                   <tr key={p.party.id} className="border-b border-border/50 hover:bg-muted/30">
                     <td className="py-2 px-2 font-medium">{p.party.name}</td>
-                    <td className="py-2 px-2 text-right text-emerald-600">{p.buckets.current > 0 ? formatINR(p.buckets.current) : '—'}</td>
-                    <td className="py-2 px-2 text-right text-amber-600">{p.buckets.overdue > 0 ? formatINR(p.buckets.overdue) : '—'}</td>
+                    <td className="py-2 px-2 text-right text-emerald-600 dark:text-emerald-400">{p.buckets.current > 0 ? formatINR(p.buckets.current) : '—'}</td>
+                    <td className="py-2 px-2 text-right text-amber-600 dark:text-amber-400">{p.buckets.overdue > 0 ? formatINR(p.buckets.overdue) : '—'}</td>
                     <td className="py-2 px-2 text-right text-orange-600">{p.buckets.serious > 0 ? formatINR(p.buckets.serious) : '—'}</td>
                     <td className="py-2 px-2 text-right text-rose-600">{p.buckets.critical > 0 ? formatINR(p.buckets.critical) : '—'}</td>
                     <td className="py-2 px-2 text-right font-bold">{formatINR(p.totalDue)}</td>
@@ -131,8 +131,8 @@ export function DebtAgingReport({ data }: { data: any }) {
               <tfoot>
                 <tr className="border-t-2 border-border font-semibold">
                   <td className="py-2 px-2">Total</td>
-                  <td className="py-2 px-2 text-right text-emerald-600">{formatINR(totals.current)}</td>
-                  <td className="py-2 px-2 text-right text-amber-600">{formatINR(totals.overdue)}</td>
+                  <td className="py-2 px-2 text-right text-emerald-600 dark:text-emerald-400">{formatINR(totals.current)}</td>
+                  <td className="py-2 px-2 text-right text-amber-600 dark:text-amber-400">{formatINR(totals.overdue)}</td>
                   <td className="py-2 px-2 text-right text-orange-600">{formatINR(totals.serious)}</td>
                   <td className="py-2 px-2 text-right text-rose-600">{formatINR(totals.critical)}</td>
                   <td className="py-2 px-2 text-right font-bold">{formatINR(totalDue)}</td>

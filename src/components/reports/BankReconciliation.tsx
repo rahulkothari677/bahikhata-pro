@@ -148,13 +148,13 @@ export function BankReconciliation() {
           <Card className="shadow-card border-emerald-200 dark:border-emerald-900/50">
             <CardContent className="p-3">
               <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Matched</p>
-              <p className="text-xl font-bold tabular-nums text-emerald-600">{summary.matchedCount}</p>
+              <p className="text-xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{summary.matchedCount}</p>
             </CardContent>
           </Card>
           <Card className="shadow-card border-amber-200 dark:border-amber-900/50">
             <CardContent className="p-3">
               <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Unmatched</p>
-              <p className="text-xl font-bold tabular-nums text-amber-600">{summary.unmatchedCount}</p>
+              <p className="text-xl font-bold tabular-nums text-amber-600 dark:text-amber-400">{summary.unmatchedCount}</p>
             </CardContent>
           </Card>
           <Card className="shadow-card border-border/60">
@@ -200,7 +200,7 @@ export function BankReconciliation() {
                   </div>
                   <div className="flex items-center gap-2">
                     <div className="text-right">
-                      <p className="text-[11px] text-emerald-600 flex items-center gap-1 justify-end">
+                      <p className="text-[11px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1 justify-end">
                         <TrendingUp className="w-3 h-3" /> {formatINR(bs.totalCredits)}
                       </p>
                       <p className="text-[11px] text-rose-600 flex items-center gap-1 justify-end">
@@ -226,9 +226,9 @@ export function BankReconciliation() {
                       >
                         <div className="flex-shrink-0">
                           {t.matchStatus === 'matched' ? (
-                            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                           ) : (
-                            <XCircle className="w-4 h-4 text-amber-600" />
+                            <XCircle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
@@ -240,7 +240,7 @@ export function BankReconciliation() {
                           </p>
                         </div>
                         <div className="text-right flex-shrink-0">
-                          <p className={cn('font-bold tabular-nums', t.amount > 0 ? 'text-emerald-600' : 'text-rose-600')}>
+                          <p className={cn('font-bold tabular-nums', t.amount > 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600')}>
                             {t.amount > 0 ? '+' : ''}{formatINR(t.amount)}
                           </p>
                           {t.matchConfidence && t.matchConfidence < 1.0 && (

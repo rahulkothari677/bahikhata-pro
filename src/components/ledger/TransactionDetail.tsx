@@ -359,7 +359,7 @@ export function TransactionDetail() {
         <Button variant="outline" size="touch" onClick={handleDownload} className="gap-2">
           <Download className="w-4 h-4" /> PDF
         </Button>
-        <Button variant="outline" size="touch" onClick={handleWhatsAppShare} className="gap-2 border-emerald-300 text-emerald-700 hover:bg-emerald-50">
+        <Button variant="outline" size="touch" onClick={handleWhatsAppShare} className="gap-2 border-emerald-300 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50">
           <MessageCircle className="w-4 h-4" /> Send PDF
         </Button>
         {/* V17-Ext Tier 3: Create Credit Note button (sales only) */}
@@ -554,7 +554,7 @@ export function TransactionDetail() {
                 {isSale && !hideProfit && (
                   <div className="flex items-center justify-between pt-2 border-t border-border">
                     <span className="text-muted-foreground flex items-center gap-1.5"><TrendingUp className="w-3.5 h-3.5" /> Profit</span>
-                    <span className="font-bold text-emerald-600">{formatINR(txn.grossProfit)}</span>
+                    <span className="font-bold text-emerald-600 dark:text-emerald-400">{formatINR(txn.grossProfit)}</span>
                   </div>
                 )}
               </CardContent>
@@ -632,8 +632,8 @@ export function TransactionDetail() {
                     <span className="font-bold">{formatINR(txn.totalAmount)}</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-emerald-600">Paid</span>
-                    <span className="font-medium text-emerald-600">{formatINR(txn.paidAmount)}</span>
+                    <span className="text-emerald-600 dark:text-emerald-400">Paid</span>
+                    <span className="font-medium text-emerald-600 dark:text-emerald-400">{formatINR(txn.paidAmount)}</span>
                   </div>
                   {due > 0 && (
                     <div className="flex justify-between text-sm">
@@ -774,7 +774,7 @@ export function TransactionDetail() {
                         {formatAuditValue(change.oldValue, change.fieldName)}
                       </span>
                       <ArrowRight className="w-3 h-3 text-muted-foreground flex-shrink-0" />
-                      <span className="text-emerald-600 font-medium">
+                      <span className="text-emerald-600 dark:text-emerald-400 font-medium">
                         {formatAuditValue(change.newValue, change.fieldName)}
                       </span>
                     </div>
@@ -1168,7 +1168,7 @@ function PrintInvoiceContent({ txn, setting }: { txn: any; setting: any }) {
             <div className="flex justify-between"><span className="text-gray-500">GST Type:</span><span className="font-medium">{txn.isInterState ? 'IGST (Inter-state)' : 'CGST + SGST'}</span></div>
             <div className="flex justify-between"><span className="text-gray-500">Items:</span><span className="font-medium">{txn.items.length}</span></div>
             {isSale && txn.grossProfit !== undefined && (
-              <div className="flex justify-between"><span className="text-gray-500">Profit:</span><span className="font-medium text-emerald-700">₹{txn.grossProfit.toFixed(2)}</span></div>
+              <div className="flex justify-between"><span className="text-gray-500">Profit:</span><span className="font-medium text-emerald-700 dark:text-emerald-300">₹{txn.grossProfit.toFixed(2)}</span></div>
             )}
           </div>
         </div>
@@ -1218,7 +1218,7 @@ function PrintInvoiceContent({ txn, setting }: { txn: any; setting: any }) {
           <div className="flex justify-between text-base font-bold border-t-2 border-black pt-2 mt-1">
             <span>Total</span><span>₹{txn.totalAmount.toFixed(2)}</span>
           </div>
-          <div className="flex justify-between text-emerald-700"><span>Paid</span><span className="font-medium">₹{txn.paidAmount.toFixed(2)}</span></div>
+          <div className="flex justify-between text-emerald-700 dark:text-emerald-300"><span>Paid</span><span className="font-medium">₹{txn.paidAmount.toFixed(2)}</span></div>
           {due > 0 && (
             <div className="flex justify-between text-rose-700 font-semibold"><span>Balance Due</span><span>₹{due.toFixed(2)}</span></div>
           )}
@@ -1397,7 +1397,7 @@ function EInvoiceCard({ txn }: { txn: any }) {
               {txn.signedQR && (
                 <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">Signed QR:</span>
-                  <span className="text-emerald-600">✓ Available</span>
+                  <span className="text-emerald-600 dark:text-emerald-400">✓ Available</span>
                 </div>
               )}
             </div>

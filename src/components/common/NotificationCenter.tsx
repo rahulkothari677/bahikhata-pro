@@ -251,7 +251,7 @@ export function NotificationCenter() {
                   <div className="absolute w-20 h-20 rounded-full bg-emerald-500/5" />
                   <div className="absolute w-16 h-16 rounded-full bg-emerald-500/10" />
                   <div className="relative w-14 h-14 rounded-2xl bg-emerald-100 dark:bg-emerald-900/40 flex items-center justify-center">
-                    <CheckCircle className="w-7 h-7 text-emerald-600" strokeWidth={1.5} />
+                    <CheckCircle className="w-7 h-7 text-emerald-600 dark:text-emerald-400" strokeWidth={1.5} />
                   </div>
                 </div>
                 <p className="text-base font-semibold font-heading">All caught up!</p>
@@ -411,7 +411,7 @@ function SwipeableNotification({
           <Icon className={cn(
             'w-4 h-4',
             n.type === 'error' && 'text-rose-600',
-            n.type === 'warning' && 'text-amber-600',
+            n.type === 'warning' && 'text-amber-600 dark:text-amber-400',
             n.type === 'info' && 'text-blue-600',
           )} />
         </div>

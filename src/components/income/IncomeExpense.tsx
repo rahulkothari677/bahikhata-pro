@@ -108,7 +108,7 @@ export function IncomeExpense() {
               </div>
               <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Income</p>
             </div>
-            <p className="text-2xl font-bold tabular-nums text-emerald-600">{formatINR(totalIncome)}</p>
+            <p className="text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{formatINR(totalIncome)}</p>
           </div>
         </div>
         {/* Expense card — rose accent */}
@@ -134,7 +134,7 @@ export function IncomeExpense() {
               </div>
               <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Net Cashflow</p>
             </div>
-            <p className={cn('text-2xl font-bold tabular-nums', netCashflow >= 0 ? 'text-violet-600' : 'text-amber-600')}>
+            <p className={cn('text-2xl font-bold tabular-nums', netCashflow >= 0 ? 'text-violet-600' : 'text-amber-600 dark:text-amber-400')}>
               {netCashflow >= 0 ? '+' : ''}{formatINR(netCashflow)}
             </p>
           </div>
@@ -252,7 +252,7 @@ export function IncomeExpense() {
                     )}>
                       {entry.type === 'expense'
                         ? <ArrowUpRight className="w-4 h-4 text-rose-600" />
-                        : <ArrowDownRight className="w-4 h-4 text-emerald-600" />}
+                        : <ArrowDownRight className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />}
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{entry.category}</p>
@@ -265,7 +265,7 @@ export function IncomeExpense() {
                       </p>
                     </div>
                     <div className="text-right flex-shrink-0">
-                      <p className={cn('text-sm font-semibold', entry.type === 'expense' ? 'text-rose-600' : 'text-emerald-600')}>
+                      <p className={cn('text-sm font-semibold', entry.type === 'expense' ? 'text-rose-600' : 'text-emerald-600 dark:text-emerald-400')}>
                         {formatINR(entry.amount)}
                       </p>
                       <p className="text-[10px] text-muted-foreground">per month</p>
@@ -340,7 +340,7 @@ export function IncomeExpense() {
                         <div className={cn(
                           'w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-sm',
                           isIncome
-                            ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600'
+                            ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400'
                             : 'bg-rose-100 dark:bg-rose-900/40 text-rose-600'
                         )}>
                           {(t.category || 'O').charAt(0).toUpperCase()}
@@ -367,7 +367,7 @@ export function IncomeExpense() {
                         <div className="text-right flex-shrink-0">
                           <p className={cn(
                             'font-bold text-sm tabular-nums',
-                            isIncome ? 'text-emerald-600' : 'text-rose-600'
+                            isIncome ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'
                           )}>
                             {isIncome ? '+' : '-'}{formatINR(t.totalAmount)}
                           </p>
@@ -446,7 +446,7 @@ export function IncomeExpense() {
               onClick={() => { setDialogType('income'); setDialogOpen(true); setChoiceOpen(false) }}
               className="rounded-xl p-4 border-2 border-emerald-300 hover:border-emerald-500 hover:bg-emerald-50 transition text-left"
             >
-              <ArrowDownRight className="w-6 h-6 mb-2 text-emerald-600" />
+              <ArrowDownRight className="w-6 h-6 mb-2 text-emerald-600 dark:text-emerald-400" />
               <p className="font-semibold text-sm">Add Income</p>
               <p className="text-[11px] text-muted-foreground mt-0.5">Commission, interest, etc.</p>
             </button>
@@ -728,7 +728,7 @@ function IncomeExpenseDialog({ open, onOpenChange, type, onSuccess }: {
           <DialogTitle className="flex items-center gap-2">
             {isExpense
               ? <ArrowUpRight className="w-5 h-5 text-rose-600" />
-              : <ArrowDownRight className="w-5 h-5 text-emerald-600" />}
+              : <ArrowDownRight className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />}
             Add {isExpense ? 'Expense' : 'Income'}
           </DialogTitle>
         </DialogHeader>

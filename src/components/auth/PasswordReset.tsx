@@ -95,7 +95,7 @@ export function PasswordReset({ onBack }: PasswordResetProps) {
       <div className="space-y-4">
         <div className="text-center">
           <div className="inline-flex w-12 h-12 rounded-full bg-emerald-100 items-center justify-center mb-3">
-            <CheckCircle2 className="w-6 h-6 text-emerald-600" />
+            <CheckCircle2 className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
           </div>
           <h3 className="font-semibold">Reset Link Ready</h3>
           <p className="text-sm text-muted-foreground mt-1">

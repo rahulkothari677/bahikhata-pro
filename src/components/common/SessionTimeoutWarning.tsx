@@ -100,7 +100,7 @@ export function SessionTimeoutWarning() {
         <DialogHeader>
           <div className="flex items-center gap-3 mb-2">
             <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
-              <Clock className="w-5 h-5 text-amber-600" />
+              <Clock className="w-5 h-5 text-amber-600 dark:text-amber-400" />
             </div>
             <div>
               <DialogTitle className="text-lg">Are you still there?</DialogTitle>
@@ -113,7 +113,7 @@ export function SessionTimeoutWarning() {
           <p className="text-sm text-muted-foreground mb-3">
             For your security, you'll be automatically logged out in:
           </p>
-          <div className="text-center text-4xl font-bold text-amber-600 mb-3">
+          <div className="text-center text-4xl font-bold text-amber-600 dark:text-amber-400 mb-3">
             {formatTime(secondsLeft)}
           </div>
           <p className="text-xs text-muted-foreground text-center">

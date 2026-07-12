@@ -233,7 +233,7 @@ export function Gstr2bReconciliation() {
         <>
           {/* Import info */}
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <FileCheck className="w-3.5 h-3.5 text-emerald-600" />
+            <FileCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
             <span>
               Imported on {new Date(data?.importInfo?.importedAt).toLocaleDateString('en-IN')} ·
               {' '}{data?.importInfo?.invoiceCount || 0} invoices ·
@@ -248,7 +248,7 @@ export function Gstr2bReconciliation() {
               label="Matched (Eligible ITC)"
               count={summary.matched}
               itc={summary.matchedItc}
-              color="text-emerald-600"
+              color="text-emerald-600 dark:text-emerald-400"
               bg="bg-emerald-100 dark:bg-emerald-900/40"
               active={activeSection === 'matched'}
               onClick={() => setActiveSection('matched')}
@@ -258,7 +258,7 @@ export function Gstr2bReconciliation() {
               label="Books-only (Deferred ITC)"
               count={summary.booksOnly}
               itc={summary.deferredItc}
-              color="text-amber-600"
+              color="text-amber-600 dark:text-amber-400"
               bg="bg-amber-100 dark:bg-amber-900/40"
               active={activeSection === 'booksOnly'}
               onClick={() => setActiveSection('booksOnly')}
@@ -279,8 +279,8 @@ export function Gstr2bReconciliation() {
           <Card className="shadow-card border-border/60">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm flex items-center gap-2">
-                {activeSection === 'matched' && <CheckCircle2 className="w-4 h-4 text-emerald-600" />}
-                {activeSection === 'booksOnly' && <AlertTriangle className="w-4 h-4 text-amber-600" />}
+                {activeSection === 'matched' && <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />}
+                {activeSection === 'booksOnly' && <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400" />}
                 {activeSection === 'twoBOnly' && <XCircle className="w-4 h-4 text-rose-600" />}
                 {activeSection === 'matched' ? 'Matched Invoices' : activeSection === 'booksOnly' ? 'In Books, Not in 2B' : 'In 2B, Not in Books'}
                 <Badge variant="secondary">
@@ -402,7 +402,7 @@ function BooksOnlyTable({ items }: { items: any[] }) {
               <td className="py-1.5 font-mono text-[10px]">{b.partyGstin}</td>
               <td className="py-1.5">{b.invoiceNumber}</td>
               <td className="text-right py-1.5 tabular-nums">{formatINR(b.taxableValue)}</td>
-              <td className="text-right py-1.5 tabular-nums text-amber-600">{formatINR(b.igst + b.cgst + b.sgst)}</td>
+              <td className="text-right py-1.5 tabular-nums text-amber-600 dark:text-amber-400">{formatINR(b.igst + b.cgst + b.sgst)}</td>
               <td className="text-right py-1.5 tabular-nums font-medium">{formatINR(b.totalAmount)}</td>
             </tr>
           ))}

@@ -121,7 +121,7 @@ export function Dashboard() {
         />
         <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
           <div className="w-16 h-16 rounded-full bg-red-100 dark:bg-red-950/40 flex items-center justify-center mb-4">
-            <CloudOff className="w-8 h-8 text-red-600" />
+            <CloudOff className="w-8 h-8 text-red-600 dark:text-red-400" />
           </div>
           <h3 className="text-lg font-semibold mb-2">Unable to load dashboard</h3>
           <p className="text-sm text-muted-foreground max-w-sm mb-4">
@@ -151,7 +151,7 @@ export function Dashboard() {
         />
         <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
           <div className="w-16 h-16 rounded-full bg-amber-100 dark:bg-amber-950/40 flex items-center justify-center mb-4">
-            <CloudOff className="w-8 h-8 text-amber-600" />
+            <CloudOff className="w-8 h-8 text-amber-600 dark:text-amber-400" />
           </div>
           <h3 className="text-lg font-semibold mb-2">No cached data</h3>
           <p className="text-sm text-muted-foreground max-w-sm mb-4">
@@ -357,8 +357,8 @@ export function Dashboard() {
         {/* Quick stats (all zeros but shows the layout) */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {[
-            { label: "Today's Revenue", value: '₹0', icon: IndianRupee, color: 'text-amber-600 bg-amber-100' },
-            { label: "Today's Profit", value: '₹0', icon: TrendingUp, color: 'text-emerald-600 bg-emerald-100' },
+            { label: "Today's Revenue", value: '₹0', icon: IndianRupee, color: 'text-amber-600 dark:text-amber-400 bg-amber-100' },
+            { label: "Today's Profit", value: '₹0', icon: TrendingUp, color: 'text-emerald-600 dark:text-emerald-400 bg-emerald-100' },
             { label: 'Products', value: '0', icon: Package, color: 'text-blue-600 bg-blue-100' },
             { label: 'Customers', value: '0', icon: Wallet, color: 'text-violet-600 bg-violet-100' },
           ].map((stat, i) => {
@@ -521,7 +521,7 @@ export function Dashboard() {
           label={t('dash.receivable')}
           value={formatINR(kpis.totalReceivable)}
           icon={ArrowDownRight}
-          color="text-emerald-600"
+          color="text-emerald-600 dark:text-emerald-400"
           onClick={() => setView('parties')}
         />
         <MiniStatCard
@@ -546,7 +546,7 @@ export function Dashboard() {
           label={t('dash.stock_value')}
           value={formatINR(kpis.totalStockValue)}
           icon={Boxes}
-          color="text-amber-600"
+          color="text-amber-600 dark:text-amber-400"
           onClick={() => setView('inventory')}
         />
         <MiniStatCard
@@ -573,7 +573,7 @@ export function Dashboard() {
               {kpis.revenueGrowth !== 0 && (
                 <div className={cn(
                   'flex items-center gap-1 text-xs font-semibold rounded-full px-2 py-0.5',
-                  kpis.revenueGrowth > 0 ? 'text-emerald-600 bg-emerald-100 dark:bg-emerald-950/40' : 'text-rose-600 bg-rose-100 dark:bg-rose-950/40'
+                  kpis.revenueGrowth > 0 ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950/40' : 'text-rose-600 bg-rose-100 dark:bg-rose-950/40'
                 )}>
                   {kpis.revenueGrowth > 0 ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
                   {Math.abs(kpis.revenueGrowth).toFixed(0)}%
@@ -642,7 +642,7 @@ export function Dashboard() {
                   <span className="text-xs text-muted-foreground flex-1">Net</span>
                   <span className={cn(
                     'text-sm font-bold tabular-nums',
-                    (kpis.rangeRevenue - (kpis.totalPayable || 0)) >= 0 ? 'text-emerald-600' : 'text-rose-600'
+                    (kpis.rangeRevenue - (kpis.totalPayable || 0)) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'
                   )}>
                     {formatINRCompact(kpis.rangeRevenue - (kpis.rangePurchases || 0))}
                   </span>
@@ -882,7 +882,7 @@ export function Dashboard() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-lg bg-amber-100 flex items-center justify-center">
-                  <Receipt className="w-4 h-4 text-amber-600" />
+                  <Receipt className="w-4 h-4 text-amber-600 dark:text-amber-400" />
                 </div>
                 <div>
                   <CardTitle className="text-base font-semibold">{t('dash.recent_transactions')}</CardTitle>
@@ -917,7 +917,7 @@ export function Dashboard() {
                           or icon for walk-in. Tinted with accent color. */}
                       <div className={cn(
                         'w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-sm',
-                        isInflow ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600' : 'bg-rose-100 dark:bg-rose-900/40 text-rose-600'
+                        isInflow ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400' : 'bg-rose-100 dark:bg-rose-900/40 text-rose-600'
                       )}>
                         {txn.partyName
                           ? txn.partyName.charAt(0).toUpperCase()
@@ -944,7 +944,7 @@ export function Dashboard() {
                       <div className="text-right flex-shrink-0">
                         <p className={cn(
                           'text-sm font-bold tabular-nums',
-                          isInflow ? 'text-emerald-600' : 'text-rose-600'
+                          isInflow ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'
                         )}>
                           {isInflow ? '+' : '-'}{formatINRCompact(txn.totalAmount)}
                         </p>
@@ -974,10 +974,10 @@ export function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <GstMiniStat label="Output Tax (Sales)" value={gstSummary.outputTax} color="text-amber-600" />
-              <GstMiniStat label="Input Tax (Purchase)" value={gstSummary.inputTax} color="text-emerald-600" />
+              <GstMiniStat label="Output Tax (Sales)" value={gstSummary.outputTax} color="text-amber-600 dark:text-amber-400" />
+              <GstMiniStat label="Input Tax (Purchase)" value={gstSummary.inputTax} color="text-emerald-600 dark:text-emerald-400" />
               <GstMiniStat label="CGST + SGST" value={gstSummary.cgst + gstSummary.sgst} color="text-violet-600" />
-              <GstMiniStat label="Net GST Payable" value={gstSummary.netPayable} color={gstSummary.netPayable >= 0 ? 'text-rose-600' : 'text-emerald-600'} highlight />
+              <GstMiniStat label="Net GST Payable" value={gstSummary.netPayable} color={gstSummary.netPayable >= 0 ? 'text-rose-600' : 'text-emerald-600 dark:text-emerald-400'} highlight />
             </div>
           </CardContent>
         </Card>
@@ -1139,7 +1139,7 @@ function KPICard({ title, value, icon: Icon, gradient, subtitle, trend, onClick,
             </div>
             {trend && (
               <div className={cn('flex items-center text-xs font-bold rounded-full px-2 py-0.5',
-                trend === 'up' ? 'text-emerald-600 bg-emerald-100 dark:bg-emerald-950/40' : 'text-rose-600 bg-rose-100 dark:bg-rose-950/40'
+                trend === 'up' ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950/40' : 'text-rose-600 bg-rose-100 dark:bg-rose-950/40'
               )}>
                 {trend === 'up' ? <TrendingUp className="w-3 h-3 mr-0.5" /> : <TrendingDown className="w-3 h-3 mr-0.5" />}
               </div>

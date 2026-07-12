@@ -92,7 +92,7 @@ export function Parties() {
         <Card className="shadow-card border-border/60">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
-              <Users className="w-4 h-4 text-amber-600" />
+              <Users className="w-4 h-4 text-amber-600 dark:text-amber-400" />
               <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">{t('stat.total_parties')}</p>
             </div>
             <p className="text-xl font-bold">{parties.length}</p>
@@ -101,7 +101,7 @@ export function Parties() {
         <Card className="shadow-card border-border/60">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
-              <User className="w-4 h-4 text-emerald-600" />
+              <User className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
               <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">{t('stat.customers')}</p>
             </div>
             <p className="text-xl font-bold">{customers}</p>
@@ -110,10 +110,10 @@ export function Parties() {
         <Card className="shadow-card border-border/60">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
-              <ArrowDownRight className="w-4 h-4 text-emerald-600" />
+              <ArrowDownRight className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
               <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">{t('dash.receivable')}</p>
             </div>
-            <p className="text-xl font-bold text-emerald-600">{formatINR(totalReceivable)}</p>
+            <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">{formatINR(totalReceivable)}</p>
           </CardContent>
         </Card>
         <Card className="shadow-card border-border/60">
@@ -244,7 +244,7 @@ export function Parties() {
                         <p className="text-[10px] text-muted-foreground uppercase">Balance</p>
                         <p className={cn(
                           'text-sm font-bold',
-                          p.balance > 0 ? 'text-emerald-600' : p.balance < 0 ? 'text-rose-600' : 'text-muted-foreground'
+                          p.balance > 0 ? 'text-emerald-600 dark:text-emerald-400' : p.balance < 0 ? 'text-rose-600' : 'text-muted-foreground'
                         )}>
                           {p.balance > 0 ? `+${formatINR(p.balance)}` : p.balance < 0 ? `-${formatINR(Math.abs(p.balance))}` : 'Settled'}
                         </p>
@@ -258,7 +258,7 @@ export function Parties() {
                     {p.balance !== 0 && (
                       <div className={cn(
                         'mt-2 text-[11px] px-2 py-1 rounded-md',
-                        p.balance > 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
+                        p.balance > 0 ? 'bg-emerald-50 text-emerald-700 dark:text-emerald-300' : 'bg-rose-50 text-rose-700'
                       )}>
                         {p.balance > 0 ? 'They owe you' : 'You owe them'}
                       </div>
@@ -318,7 +318,7 @@ export function Parties() {
                     </td>
                     <td className="py-3 px-2 text-right">{p.transactionCount}</td>
                     <td className={cn('py-3 px-2 text-right font-semibold',
-                      p.balance > 0 ? 'text-emerald-600' : p.balance < 0 ? 'text-rose-600' : 'text-muted-foreground'
+                      p.balance > 0 ? 'text-emerald-600 dark:text-emerald-400' : p.balance < 0 ? 'text-rose-600' : 'text-muted-foreground'
                     )}>
                       {p.balance > 0 ? `+${formatINRCompact(p.balance)}` : p.balance < 0 ? `-${formatINRCompact(Math.abs(p.balance))}` : 'Settled'}
                     </td>
@@ -395,7 +395,7 @@ function PartyDialog({ open, onOpenChange, onSuccess }: {
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Users className="w-5 h-5 text-amber-600" />
+            <Users className="w-5 h-5 text-amber-600 dark:text-amber-400" />
             Add Party
           </DialogTitle>
         </DialogHeader>

@@ -420,10 +420,10 @@ function PLReport({ data }: { data: any }) {
     <div className="space-y-4">
       {/* Top metrics */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <ReportStatCard label="Revenue (Sales)" value={formatINR(summary.totalRevenue)} icon={IndianRupee} color="text-amber-600" bg="bg-amber-100" />
-        <ReportStatCard label="Gross Profit" value={formatINR(summary.grossProfit)} icon={TrendingUp} color="text-emerald-600" bg="bg-emerald-100" />
+        <ReportStatCard label="Revenue (Sales)" value={formatINR(summary.totalRevenue)} icon={IndianRupee} color="text-amber-600 dark:text-amber-400" bg="bg-amber-100" />
+        <ReportStatCard label="Gross Profit" value={formatINR(summary.grossProfit)} icon={TrendingUp} color="text-emerald-600 dark:text-emerald-400" bg="bg-emerald-100" />
         <ReportStatCard label="Total Expenses" value={formatINR(summary.totalExpenses)} icon={ArrowUpRight} color="text-rose-600" bg="bg-rose-100" />
-        <ReportStatCard label="Net Profit" value={formatINR(summary.netProfit)} icon={Percent} color={summary.netProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'} bg={summary.netProfit >= 0 ? 'bg-emerald-100' : 'bg-rose-100'} />
+        <ReportStatCard label="Net Profit" value={formatINR(summary.netProfit)} icon={Percent} color={summary.netProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'} bg={summary.netProfit >= 0 ? 'bg-emerald-100' : 'bg-rose-100'} />
       </div>
 
       {/* {t('reports.pl')} breakdown */}
@@ -461,7 +461,7 @@ function PLReport({ data }: { data: any }) {
         <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
           <CardHeader className="pb-2">
             <CardTitle className="text-base flex items-center gap-2">
-              <ArrowDownRight className="w-4 h-4 text-emerald-600" /> Other Income
+              <ArrowDownRight className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> Other Income
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -508,11 +508,11 @@ function PLReport({ data }: { data: any }) {
             </div>
             <div className="flex justify-between py-1.5 border-b border-border">
               <span className="font-semibold">Gross Profit</span>
-              <span className="font-bold text-emerald-600">{formatINR(summary.grossProfit)}</span>
+              <span className="font-bold text-emerald-600 dark:text-emerald-400">{formatINR(summary.grossProfit)}</span>
             </div>
             <div className="flex justify-between py-1.5 border-b border-border">
               <span className="text-muted-foreground">Add: Other Income</span>
-              <span className="font-medium text-emerald-600">+{formatINR(summary.otherIncome)}</span>
+              <span className="font-medium text-emerald-600 dark:text-emerald-400">+{formatINR(summary.otherIncome)}</span>
             </div>
             <div className="flex justify-between py-1.5 border-b border-border">
               <span className="text-muted-foreground">Less: Operating Expenses</span>
@@ -520,7 +520,7 @@ function PLReport({ data }: { data: any }) {
             </div>
             <div className="flex justify-between py-2 text-base">
               <span className="font-bold">Net Profit</span>
-              <span className={cn('font-bold', summary.netProfit >= 0 ? 'text-emerald-600' : 'text-rose-600')}>
+              <span className={cn('font-bold', summary.netProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600')}>
                 {formatINR(summary.netProfit)}
               </span>
             </div>
@@ -562,9 +562,9 @@ function GSTReport({ data }: { data: any }) {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <ReportStatCard label="Output Tax (Sales)" value={formatINR(outputSales.outputTax)} icon={ArrowUpRight} color="text-rose-600" bg="bg-rose-100" />
-        <ReportStatCard label="Input Tax (Purchases)" value={formatINR(inputPurchases.inputTax)} icon={ArrowDownRight} color="text-emerald-600" bg="bg-emerald-100" />
-        <ReportStatCard label="Net GST Payable" value={formatINR(netGSTPayable)} icon={Receipt} color={netGSTPayable >= 0 ? 'text-rose-600' : 'text-emerald-600'} bg={netGSTPayable >= 0 ? 'bg-rose-100' : 'bg-emerald-100'} />
-        <ReportStatCard label="Total Invoices" value={String(data?.totalInvoices ?? 0)} icon={FileText} color="text-amber-600" bg="bg-amber-100" />
+        <ReportStatCard label="Input Tax (Purchases)" value={formatINR(inputPurchases.inputTax)} icon={ArrowDownRight} color="text-emerald-600 dark:text-emerald-400" bg="bg-emerald-100" />
+        <ReportStatCard label="Net GST Payable" value={formatINR(netGSTPayable)} icon={Receipt} color={netGSTPayable >= 0 ? 'text-rose-600' : 'text-emerald-600 dark:text-emerald-400'} bg={netGSTPayable >= 0 ? 'bg-rose-100' : 'bg-emerald-100'} />
+        <ReportStatCard label="Total Invoices" value={String(data?.totalInvoices ?? 0)} icon={FileText} color="text-amber-600 dark:text-amber-400" bg="bg-amber-100" />
       </div>
 
       {/* By slab */}
@@ -649,7 +649,7 @@ function GSTReport({ data }: { data: any }) {
                       <td className="py-2 px-2 text-right">{o ? formatINR(o.taxable) : '—'}</td>
                       <td className="py-2 px-2 text-right text-rose-600">{out > 0 ? formatINR(out) : '—'}</td>
                       <td className="py-2 px-2 text-right">{i ? formatINR(i.taxable) : '—'}</td>
-                      <td className="py-2 px-2 text-right text-emerald-600">{inp > 0 ? formatINR(inp) : '—'}</td>
+                      <td className="py-2 px-2 text-right text-emerald-600 dark:text-emerald-400">{inp > 0 ? formatINR(inp) : '—'}</td>
                       <td className="py-2 px-2 text-right font-semibold">{formatINR(out - inp)}</td>
                     </tr>
                   )
@@ -661,7 +661,7 @@ function GSTReport({ data }: { data: any }) {
                   <td className="py-2 px-2 text-right">{formatINR(outputSales.taxableValue)}</td>
                   <td className="py-2 px-2 text-right text-rose-600">{formatINR(outputSales.outputTax)}</td>
                   <td className="py-2 px-2 text-right">{formatINR(inputPurchases.taxableValue)}</td>
-                  <td className="py-2 px-2 text-right text-emerald-600">{formatINR(inputPurchases.inputTax)}</td>
+                  <td className="py-2 px-2 text-right text-emerald-600 dark:text-emerald-400">{formatINR(inputPurchases.inputTax)}</td>
                   <td className="py-2 px-2 text-right">{formatINR(netGSTPayable)}</td>
                 </tr>
               </tfoot>
@@ -684,8 +684,8 @@ function StockReport({ data }: { data: any }) {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <ReportStatCard label="Total Stock Value" value={formatINR(totalStockValue)} icon={Package} color="text-amber-600" bg="bg-amber-100" />
-        <ReportStatCard label="Potential Sale Value" value={formatINR(totalPotentialValue)} icon={IndianRupee} color="text-emerald-600" bg="bg-emerald-100" />
+        <ReportStatCard label="Total Stock Value" value={formatINR(totalStockValue)} icon={Package} color="text-amber-600 dark:text-amber-400" bg="bg-amber-100" />
+        <ReportStatCard label="Potential Sale Value" value={formatINR(totalPotentialValue)} icon={IndianRupee} color="text-emerald-600 dark:text-emerald-400" bg="bg-emerald-100" />
         <ReportStatCard label="Potential Profit" value={formatINR(potentialProfit)} icon={TrendingUp} color="text-violet-600" bg="bg-violet-100" />
         <ReportStatCard label="Low Stock Items" value={String(lowStockCount)} icon={ArrowUpRight} color="text-rose-600" bg="bg-rose-100" />
       </div>
@@ -723,7 +723,7 @@ function StockReport({ data }: { data: any }) {
                       {p.isLowStock ? (
                         <Badge variant="destructive" className="text-[10px]">Low</Badge>
                       ) : (
-                        <Badge variant="secondary" className="text-[10px] bg-emerald-100 text-emerald-700">OK</Badge>
+                        <Badge variant="secondary" className="text-[10px] bg-emerald-100 text-emerald-700 dark:text-emerald-300">OK</Badge>
                       )}
                     </td>
                   </tr>
@@ -772,11 +772,11 @@ function PartyReport({ data }: { data: any }) {
                     <td className="py-2 px-2">
                       <Badge variant="outline" className="text-[10px] capitalize">{p.party.type}</Badge>
                     </td>
-                    <td className="py-2 px-2 text-right text-emerald-600">{p.totalSales > 0 ? formatINR(p.totalSales) : '—'}</td>
-                    <td className="py-2 px-2 text-right text-amber-600">{p.totalPurchases > 0 ? formatINR(p.totalPurchases) : '—'}</td>
+                    <td className="py-2 px-2 text-right text-emerald-600 dark:text-emerald-400">{p.totalSales > 0 ? formatINR(p.totalSales) : '—'}</td>
+                    <td className="py-2 px-2 text-right text-amber-600 dark:text-amber-400">{p.totalPurchases > 0 ? formatINR(p.totalPurchases) : '—'}</td>
                     <td className="py-2 px-2 text-right">{p.totalPaid > 0 ? formatINR(p.totalPaid) : '—'}</td>
                     <td className="py-2 px-2 text-right">{p.totalReceived > 0 ? formatINR(p.totalReceived) : '—'}</td>
-                    <td className={cn('py-2 px-2 text-right font-semibold', p.balance > 0 ? 'text-emerald-600' : p.balance < 0 ? 'text-rose-600' : 'text-muted-foreground')}>
+                    <td className={cn('py-2 px-2 text-right font-semibold', p.balance > 0 ? 'text-emerald-600 dark:text-emerald-400' : p.balance < 0 ? 'text-rose-600' : 'text-muted-foreground')}>
                       {p.balance > 0 ? `+${formatINR(p.balance)}` : p.balance < 0 ? `-${formatINR(Math.abs(p.balance))}` : 'Settled'}
                     </td>
                   </tr>
@@ -800,8 +800,8 @@ function ReportStatCard({ label, value, icon: Icon, color, bg }: { label: string
     : bg.includes('rose') ? 'from-rose-500 to-red-600'
     : 'from-violet-500 to-purple-600'
 
-  const textColor = color.includes('amber') ? 'text-amber-600'
-    : color.includes('emerald') ? 'text-emerald-600'
+  const textColor = color.includes('amber') ? 'text-amber-600 dark:text-amber-400'
+    : color.includes('emerald') ? 'text-emerald-600 dark:text-emerald-400'
     : color.includes('rose') ? 'text-rose-600'
     : 'text-violet-600'
 
@@ -827,7 +827,7 @@ function ReportSkeleton() {
     <div className="space-y-4">
       {/* 🔒 FIX M11: Waking-up message for cold DB start */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
-        <Coffee className="w-4 h-4 text-amber-600 flex-shrink-0 animate-pulse" />
+        <Coffee className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 animate-pulse" />
         <span>Waking up your shop... this takes a few seconds on first load.</span>
       </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">

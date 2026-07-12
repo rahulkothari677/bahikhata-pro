@@ -104,7 +104,7 @@ export function DayEndSummary({ open, onOpenChange }: { open: boolean; onOpenCha
             {/* Sales breakdown */}
             <div className="space-y-2">
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Sales Today</p>
-              <SummaryRow icon={<TrendingUp className="w-4 h-4 text-emerald-600" />} label="Cash" value={data.cashSales} highlight />
+              <SummaryRow icon={<TrendingUp className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />} label="Cash" value={data.cashSales} highlight />
               {data.upiSales > 0 && (
                 <SummaryRow icon={<TrendingUp className="w-4 h-4 text-blue-600" />} label="UPI" value={data.upiSales} />
               )}
@@ -115,7 +115,7 @@ export function DayEndSummary({ open, onOpenChange }: { open: boolean; onOpenCha
                 <SummaryRow icon={<TrendingUp className="w-4 h-4 text-indigo-600" />} label="Bank" value={data.bankSales} />
               )}
               {data.creditSales > 0 && (
-                <SummaryRow icon={<HandCoins className="w-4 h-4 text-amber-600" />} label="Udhaar (credit)" value={data.creditSales} />
+                <SummaryRow icon={<HandCoins className="w-4 h-4 text-amber-600 dark:text-amber-400" />} label="Udhaar (credit)" value={data.creditSales} />
               )}
               <div className="flex items-center justify-between border-t border-border pt-2 mt-1">
                 <span className="text-sm font-semibold">Total Sales</span>
@@ -154,7 +154,7 @@ export function DayEndSummary({ open, onOpenChange }: { open: boolean; onOpenCha
             {data.udhaarCollected > 0 && (
               <div className="space-y-2">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Udhaar Collected</p>
-                <SummaryRow icon={<HandCoins className="w-4 h-4 text-emerald-600" />} label="Payments Received" value={data.udhaarCollected} highlight />
+                <SummaryRow icon={<HandCoins className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />} label="Payments Received" value={data.udhaarCollected} highlight />
               </div>
             )}
 
@@ -200,7 +200,7 @@ export function DayEndSummary({ open, onOpenChange }: { open: boolean; onOpenCha
                   <div className={cn(
                     'flex items-center justify-between rounded-md p-2 text-sm font-medium',
                     Math.abs(variance) < 1
-                      ? 'bg-emerald-100 text-emerald-700'
+                      ? 'bg-emerald-100 text-emerald-700 dark:text-emerald-300'
                       : variance > 0
                       ? 'bg-blue-100 text-blue-700'
                       : 'bg-rose-100 text-rose-700'
@@ -264,7 +264,7 @@ function SummaryRow({ icon, label, value, highlight }: {
       </div>
       <span className={cn(
         'text-sm tabular-nums',
-        isPositive ? 'text-emerald-600' : 'text-rose-600',
+        isPositive ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600',
         highlight && 'font-bold',
       )}>
         {isPositive ? '+' : ''}{formatINR(value)}

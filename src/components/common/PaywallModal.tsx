@@ -77,7 +77,7 @@ export function PaywallModal({
               <span className="text-foreground">
                 {usageStat.used} / {usageStat.limit === Infinity ? '∞' : usageStat.limit} {usageLabel}
               </span>
-              <span className={`font-bold ${usageStat.remaining === 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+              <span className={`font-bold ${usageStat.remaining === 0 ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
                 {usageStat.remaining === 0 ? 'Limit reached' : `${usageStat.remaining} left`}
               </span>
             </div>
@@ -107,13 +107,13 @@ export function PaywallModal({
 
         <div className="rounded-xl bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/20 border border-amber-200 dark:border-amber-900/40 p-4 my-2">
           <div className="flex items-center gap-2 mb-3">
-            <Crown className="w-5 h-5 text-amber-600" />
+            <Crown className="w-5 h-5 text-amber-600 dark:text-amber-400" />
             <p className="font-bold text-base">{isElite ? 'Elite Plan' : 'Pro Plan'} includes:</p>
           </div>
           <div className="grid grid-cols-1 gap-1.5">
             {planFeatures.map((f) => (
               <div key={f} className="flex items-center gap-2 text-sm">
-                <Check className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
                 <span>{f}</span>
               </div>
             ))}

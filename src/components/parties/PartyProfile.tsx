@@ -594,7 +594,7 @@ export function PartyProfile() {
               variant="outline"
               onClick={handleSendReminder}
               disabled={sendingReminder}
-              className="gap-2 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+              className="gap-2 border-emerald-300 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50"
             >
               {sendingReminder ? <Loader2 className="w-4 h-4 animate-spin" /> : <MessageCircle className="w-4 h-4" />}
               Send Reminder
@@ -647,7 +647,7 @@ export function PartyProfile() {
             size="sm"
             variant="outline"
             onClick={handleShareStatementPDF}
-            className="gap-2 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+            className="gap-2 border-emerald-300 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50"
             title="Share account statement as PDF via WhatsApp"
           >
             <MessageCircle className="w-4 h-4" />
@@ -668,7 +668,7 @@ export function PartyProfile() {
           label="Total Sales"
           value={formatINR(stats.totalSales)}
           icon={ShoppingCart}
-          color="text-emerald-600"
+          color="text-emerald-600 dark:text-emerald-400"
           bg="bg-emerald-100"
           sub={`${stats.salesCount} sales`}
         />
@@ -676,7 +676,7 @@ export function PartyProfile() {
           label="Total Purchases"
           value={formatINR(stats.totalPurchases)}
           icon={Truck}
-          color="text-amber-600"
+          color="text-amber-600 dark:text-amber-400"
           bg="bg-amber-100"
           sub={`${stats.purchasesCount} purchases`}
         />
@@ -825,14 +825,14 @@ export function PartyProfile() {
                   last visible badge should equal the current balance. */}
               <div className="sticky top-0 z-10 -mx-3 px-3 py-2 mb-2 bg-primary/10 backdrop-blur-sm border-y border-primary/20 text-center">
                 <span className="text-xs text-muted-foreground">Current Balance: </span>
-                <span className={cn('text-xs font-bold', stats.balance > 0 ? 'text-emerald-600' : stats.balance < 0 ? 'text-rose-600' : 'text-muted-foreground')}>
+                <span className={cn('text-xs font-bold', stats.balance > 0 ? 'text-emerald-600 dark:text-emerald-400' : stats.balance < 0 ? 'text-rose-600' : 'text-muted-foreground')}>
                   {stats.balance >= 0 ? '+' : ''}{formatINR(stats.balance)}
                 </span>
                 <span className="text-xs text-muted-foreground">
                   {' '}· {stats.balance > 0 ? 'They owe you' : stats.balance < 0 ? 'You owe them' : 'Settled'}
                 </span>
                 {statementTotals && (statementTotals.transactionTotal > statementTotals.cap || statementTotals.paymentTotal > statementTotals.cap) && (
-                  <span className="block text-[10px] text-amber-700 mt-1">
+                  <span className="block text-[10px] text-amber-700 dark:text-amber-300 mt-1">
                     Per-entry balances below reflect only the latest {statementTotals.cap} entries — use Print Statement for the complete audited history.
                   </span>
                 )}
