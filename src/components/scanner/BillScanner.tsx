@@ -182,8 +182,11 @@ export function BillScanner() {
   const cameraInputRef = useRef<HTMLInputElement>(null)
 
   // Fetch user settings (for scanLang)
+  // 🔒 V21-003 FIX: Was queryKey: ['user-settings'] — duplicated the ['setting']
+  // query used by use-setting.ts, causing redundant /api/settings fetches.
+  // Now uses the same key so React Query shares the cache.
   const { data: settingsData } = useQuery({
-    queryKey: ['user-settings'],
+    queryKey: ['setting'],
     queryFn: async () => {
       const r = await fetch('/api/settings')
       if (!r.ok) return null
