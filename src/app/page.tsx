@@ -77,15 +77,17 @@ export default function Home() {
   const [tourDone, setTourDone] = useState(false)
   const [themePickerDone, setThemePickerDone] = useState(false)
   const [mounted, setMounted] = useState(false)
-  // 🔒 FIX M10: Skip splash on native (Capacitor native splash already covers
-  // warm-up) and on warm reloads (sessionStorage flag). Was: showed 2s on
-  // EVERY app open, blocking interaction.
+  // 🔒 V20-019: Splash shows on every full page load. The old sessionStorage
+  // check (FIX M10) skipped the splash on warm reloads — but sessionStorage
+  // persists across refreshes in the same tab, so users who visited before
+  // NEVER saw the splash again. Now the splash is data-driven (dismisses
+  // when session + dashboard data are ready, not after a fixed 2s timer),
+  // so showing it on every load is fine — it dismisses quickly.
+  // Only skip on native (Capacitor has its own native splash screen).
   const [showSplash, setShowSplash] = useState(() => {
     if (typeof window === 'undefined') return true
     // Skip on native — CapacitorBridge hides the native splash separately
     if (typeof window !== 'undefined' && (window as any).Capacitor?.isNativePlatform?.()) return false
-    // Skip on warm reloads — if we've already shown the splash this session
-    if (sessionStorage.getItem('splashShown') === 'true') return false
     return true
   })
   // 🔒 V9 4.2: First-run modal orchestrator — gate low-priority modals until
@@ -257,7 +259,6 @@ export default function Home() {
         ready={false}
         onFinish={() => {
           setShowSplash(false)
-          try { sessionStorage.setItem('splashShown', 'true') } catch {}
         }}
       />
     ) : (
@@ -305,8 +306,6 @@ export default function Home() {
         ready={status === 'authenticated' && dashboardData !== undefined}
         onFinish={() => {
         setShowSplash(false)
-        // 🔒 FIX M10: Mark splash as shown so warm reloads skip it.
-        try { sessionStorage.setItem('splashShown', 'true') } catch {}
       }} />}
       <div className="flex min-h-screen bg-background">
       {features?.keyboardShortcuts && <KeyboardShortcuts />}
