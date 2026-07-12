@@ -17,6 +17,8 @@ import { Button } from '@/components/ui/button'
 import { Crown, Lock, Check, Sparkles, TrendingUp } from 'lucide-react'
 import { FEATURE_LABELS, type GatedFeature, useSubscription } from '@/hooks/use-subscription'
 import { useAppStore } from '@/store/app-store'
+import { track, EVENTS } from '@/lib/analytics'
+import { useEffect, useRef } from 'react'
 
 export function PaywallModal({
   feature,
@@ -29,6 +31,17 @@ export function PaywallModal({
 }) {
   const { setView } = useAppStore()
   const { usage, plan: currentPlan } = useSubscription()
+  // 🔒 V20-025: Track paywall shown (only once per open, not on every render)
+  const trackedRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (open && feature && trackedRef.current !== feature) {
+      trackedRef.current = feature
+      track(EVENTS.PAYWALL_SHOWN, { feature, currentPlan })
+    }
+    if (!open) {
+      trackedRef.current = null
+    }
+  }, [open, feature, currentPlan])
 
   if (!feature) return null
 
@@ -46,6 +59,8 @@ export function PaywallModal({
     : ['AI Bill Scanner', 'Barcode Scanner', 'GSTR-1 Export', 'WhatsApp Sharing', 'Voice Entry', 'Recurring Entries', 'Split View (Desktop)', 'Customer Statements', 'Expense Budgets', 'Repeat Last Sale']
 
   const handleUpgrade = () => {
+    // 🔒 V20-025: Track paywall upgrade click (user showed intent to upgrade)
+    track(EVENTS.PAYWALL_DISMISSED, { feature, action: 'upgrade', currentPlan })
     onClose()
     setView('pricing')
   }

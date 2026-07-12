@@ -10,6 +10,7 @@ import { toast as sonnerToast } from 'sonner'
 import { getCachedSession } from '@/lib/offline-db'
 import { useAppStore } from '@/store/app-store'
 import { useTranslation } from '@/hooks/use-translation'
+import { track, identifyUser, EVENTS } from '@/lib/analytics'
 import { Globe } from 'lucide-react'
 
 // 🔒 V20-5C: Language options for the login screen toggle
@@ -85,6 +86,8 @@ export function AuthScreen() {
           setLoading(false)
           return
         }
+        // 🔒 V20-025: Track signup event
+        track(EVENTS.SIGNUP, { method: 'email' })
       }
 
       const result = await signIn('credentials', {
@@ -98,6 +101,13 @@ export function AuthScreen() {
         setLoading(false)
       } else if (result?.ok) {
         sonnerToast.success(mode === 'signup' ? 'Account created! Welcome to EkBook.' : 'Welcome back!')
+        // 🔒 V20-025: Track login + identify user for attribution
+        if (mode === 'login') {
+          track(EVENTS.LOGIN, { method: 'email' })
+        }
+        // identifyUser will be called again after session loads with the real userId,
+        // but calling it here with the email hash ensures the login event is attributed.
+        try { identifyUser(btoa(email).slice(0, 16)) } catch {}
         // Small delay to let session propagate
         setTimeout(() => window.location.reload(), 500)
       } else {

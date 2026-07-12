@@ -10,6 +10,7 @@ import { useToast } from '@/hooks/use-toast'
 import { toast as sonnerToast } from 'sonner'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { haptic } from '@/lib/haptic'
+import { track, EVENTS } from '@/lib/analytics'
 import { TrendingUp } from 'lucide-react'
 import { formatINR } from '@/lib/utils'
 
@@ -120,6 +121,10 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
         sonnerToast.success('Saved offline — will sync when online')
       } else {
         sonnerToast.success(product ? 'Product updated' : 'Product added successfully')
+        // 🔒 V20-025: Track product added/updated event
+        if (!product) {
+          track(EVENTS.PRODUCT_ADDED, { gstRate: payload.gstRate, unit: payload.unit })
+        }
       }
       haptic.success()
       onSuccess?.()

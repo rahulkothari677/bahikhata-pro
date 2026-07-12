@@ -17,6 +17,7 @@ import {
   ImageIcon, FileText, ArrowRight, Trash2, ShoppingCart, Truck, Plus, AlertTriangle,
 } from 'lucide-react'
 import { offlineFetch } from '@/lib/offline-fetch'
+import { track, EVENTS } from '@/lib/analytics'
 import { useSubscription } from '@/hooks/use-subscription'
 import { Capacitor } from '@capacitor/core'
 import { resolveEnteredQuantity, convertQuantity, UNIT_OPTIONS } from '@/lib/units'
@@ -405,6 +406,8 @@ export function BillScanner() {
 
         // Step 2: Send to AI scanner (use Cloudinary URL if upload succeeded, else base64)
         const imageUrl = uploadData.success ? uploadData.url : null
+        // 🔒 V20-025: Track scan attempt
+        track(EVENTS.AI_SCAN_ATTEMPT, { billType, scanLang, hasImageUrl: !!imageUrl })
         const scanRes = await offlineFetch('/api/scan-bill', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -431,6 +434,8 @@ export function BillScanner() {
             description: errorDetail,
             duration: 10000,
           })
+          // 🔒 V20-025: Track scan failure
+          track(EVENTS.AI_SCAN_FAILURE, { httpStatus: scanRes.status, billType, scanLang })
           return
         }
 
@@ -440,11 +445,15 @@ export function BillScanner() {
             description: `${data.error}${data.detail ? ': ' + data.detail : ''}`,
             duration: 10000,
           })
+          // 🔒 V20-025: Track scan failure (AI returned error)
+          track(EVENTS.AI_SCAN_FAILURE, { billType, scanLang, aiError: data.error })
         } else if (!data.bill || !data.bill.items || data.bill.items.length === 0) {
           sonnerToast.warning('Scan returned no items', {
             description: 'AI could not detect any items in this image. Try a clearer photo.',
             duration: 8000,
           })
+          // 🔒 V20-025: Track scan failure (no items detected)
+          track(EVENTS.AI_SCAN_FAILURE, { billType, scanLang, reason: 'no_items' })
         } else {
           // If we're in "adding more" mode, append new items to existing
           // 🔒 V12.3: Enrich items (product match + unit normalization + trust
@@ -460,6 +469,13 @@ export function BillScanner() {
           } else {
             setScanned({ ...data.bill, items: enrichScannedItems(data.bill.items || []) })
             sonnerToast.success(`Bill scanned! Found ${data.bill.items?.length || 0} items.`)
+            // 🔒 V20-025: Track scan success
+            track(EVENTS.AI_SCAN_SUCCESS, {
+              billType,
+              scanLang,
+              itemCount: data.bill.items?.length || 0,
+              provider: data.provider || 'unknown',
+            })
           }
         }
       } catch (e: any) {

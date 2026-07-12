@@ -40,6 +40,7 @@ import { SplashScreen } from '@/components/common/SplashScreen'
 import { useRatePrompt } from '@/hooks/use-rate-prompt'
 import { useStaffPermissions } from '@/hooks/use-staff-permissions'
 import type { ModuleKey } from '@/lib/staff-permissions'
+import { track, identifyUser, initAnalytics, EVENTS } from '@/lib/analytics'
 
 // Lazy-load heavy components that are only used occasionally.
 // This splits them into separate JS chunks, loaded on-demand when the user
@@ -226,6 +227,33 @@ export default function Home() {
       setFirstRunComplete(true)
     }
   }, [showOnboarding, themePickerDone, tourDone])
+
+  // 🔒 V20-025: Analytics — init on mount, identify user on auth, track app_opened
+  useEffect(() => {
+    initAnalytics()
+  }, [])
+
+  useEffect(() => {
+    if (status === 'authenticated' && session?.user?.id) {
+      identifyUser(session.user.id, {
+        email_hash: session.user.email ? btoa(session.user.email).slice(0, 16) : undefined,
+      })
+      // Track app_opened once per session (not on every re-render)
+      track(EVENTS.APP_OPENED, {
+        isOfflineSession,
+        plan: (session.user as any)?.plan || 'free',
+      })
+    }
+  }, [status, session, isOfflineSession])
+
+  // 🔒 V20-025: Track view changes for engagement analytics
+  const lastTrackedViewRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (status === 'authenticated' && currentView && lastTrackedViewRef.current !== currentView) {
+      lastTrackedViewRef.current = currentView
+      track(EVENTS.VIEW_CHANGED, { view: currentView })
+    }
+  }, [currentView, status])
 
   // Skip the seed check entirely when offline (we can't reach the server, and
   // 🔒 V8 P3: Removed /api/seed from the initial load path. Was: 3 COUNT

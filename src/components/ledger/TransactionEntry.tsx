@@ -25,6 +25,7 @@ import { VoiceEntry } from '@/components/common/VoiceEntry'
 import { DraftManagerModal } from '@/components/common/DraftManagerModal'
 import { BarcodeScanner } from '@/components/common/BarcodeScanner'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
+import { track, EVENTS } from '@/lib/analytics'
 import { useDrafts } from '@/hooks/use-drafts'
 import { haptic } from '@/lib/haptic'
 import { trackRecentProduct, getRecentProductIds } from '@/lib/recent-products'
@@ -573,6 +574,17 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
       } else {
         const data = await r.json()
         sonnerToast.success(`${isNote ? (isCreditNote ? 'Credit Note' : 'Debit Note') : (isSale ? 'Sale' : 'Purchase')} recorded successfully!`)
+
+        // 🔒 V20-025: Track transaction creation event
+        const txType = isNote ? (isCreditNote ? 'credit-note' : 'debit-note') : (isSale ? 'sale' : 'purchase')
+        const event = isSale ? EVENTS.SALE_CREATED : isNote ? EVENTS.TRANSACTION_CREATED : EVENTS.PURCHASE_CREATED
+        track(event, {
+          type: txType,
+          itemCount: items.length,
+          totalAmount: roundMoney(data.totalAmount || 0),
+          paymentMode: data.paymentMode || 'cash',
+          isInterState: !!isInterState,
+        })
 
         // 🔒 AUDIT FIX V5 MD: Surface negative-stock warnings from the API.
         // The server returns `stockWarnings: [{ productName, currentStock,
@@ -1545,6 +1557,8 @@ function AddPartyInline({ open, onOpenChange, defaultType, onAdded }: {
       }
       const data = await r.json()
       sonnerToast.success(`${defaultType === 'customer' ? 'Customer' : 'Supplier'} added`)
+      // 🔒 V20-025: Track party added event
+      track(EVENTS.PARTY_ADDED, { type: defaultType })
       onAdded(data.party)
       onOpenChange(false)
     } catch {
