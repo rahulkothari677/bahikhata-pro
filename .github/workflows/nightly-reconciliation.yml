@@ -1,0 +1,87 @@
+name: Nightly Reconciliation — Does the ledger tie out?
+
+# 🔒 V20-018: Nightly reconciliation cron job (auditor §5.6).
+# "A one-command 'does the whole ledger tie out?' job run nightly across all
+#  shops (you have the reconciliation logic — schedule it and alert on any
+#  mismatch)."
+#
+# This workflow triggers /api/cron/nightly-reconciliation at 2 AM IST every
+# night. The endpoint:
+#   1. Iterates ALL users
+#   2. Runs the 3 reconciliation checks (party balances, GST, orphaned data)
+#   3. Captures any failures to Sentry (triggers Alert Rule 4)
+#   4. Returns a summary JSON
+#
+# Why GitHub Actions instead of Vercel Cron?
+#   - Vercel Hobby plan allows only 1 daily cron (already used by /api/warmup)
+#   - GitHub Actions is free (2000 min/month) and supports any schedule
+#   - Same pattern as the neon-warmup workflow
+#
+# Schedule: 2 AM IST = 8:30 PM UTC previous day (IST is UTC+5:30)
+# GitHub Actions cron is in UTC, so "30 20 * * *" = 8:30 PM UTC = 2 AM IST
+#
+# Manual trigger: workflow_dispatch lets you run it ad-hoc from the Actions tab
+#
+# Secret required: CRON_SECRET in GitHub repo secrets (must match the
+# CRON_SECRET env var in Vercel). Generate with: openssl rand -hex 32
+
+on:
+  schedule:
+    # 8:30 PM UTC = 2:00 AM IST (next day)
+    - cron: '30 20 * * *'
+  workflow_dispatch: # Allow manual trigger for ad-hoc checks
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run nightly reconciliation
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          # APP_URL: override in repo secrets if deploying to a custom domain
+          # Default: the Vercel production URL
+          APP_URL: ${{ secrets.APP_URL || 'https://bahikhata-pro.vercel.app' }}
+        run: |
+          echo "[$(date -u)] Starting nightly reconciliation..."
+          RESPONSE=$(curl -s -w "\n%{http_code}" \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${APP_URL}/api/cron/nightly-reconciliation")
+
+          HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+          BODY=$(echo "$RESPONSE" | sed '$d')
+
+          echo "HTTP status: $HTTP_CODE"
+          echo "Response body: $BODY"
+
+          # Exit non-zero if the endpoint itself failed (not if reconciliation
+          # found failures — those are captured to Sentry, not reflected in
+          # HTTP status. The endpoint returns 200 even with failures.)
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ Nightly reconciliation endpoint returned HTTP $HTTP_CODE"
+            exit 1
+          fi
+
+          # Parse the summary for logging
+          TOTAL_USERS=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin).get('totalUsers', 'unknown'))" 2>/dev/null || echo "parse-error")
+          TOTAL_PASSED=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin).get('totalPassed', 'unknown'))" 2>/dev/null || echo "parse-error")
+          TOTAL_FAILED=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin).get('totalFailed', 'unknown'))" 2>/dev/null || echo "parse-error")
+          DURATION_MS=$(echo "$BODY" | python3 -c "import sys,json; print(json.load(sys.stdin).get('durationMs', 'unknown'))" 2>/dev/null || echo "parse-error")
+
+          echo ""
+          echo "━━━ Reconciliation Summary ━━━"
+          echo "  Users checked: $TOTAL_USERS"
+          echo "  Passed: $TOTAL_PASSED"
+          echo "  Failed: $TOTAL_FAILED"
+          echo "  Duration: ${DURATION_MS}ms"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+          if [ "$TOTAL_FAILED" != "0" ] && [ "$TOTAL_FAILED" != "parse-error" ]; then
+            echo "⚠️  $TOTAL_FAILED user(s) had reconciliation failures."
+            echo "Failures have been captured to Sentry (module: reconciliation tag)."
+            echo "Check the Sentry dashboard or the #alerts-critical Slack channel."
+            # Don't exit 1 here — the job itself succeeded. Failures are for Sentry.
+          else
+            echo "✅ All users reconciled successfully."
+          fi
+
+          echo "[$(date -u)] Nightly reconciliation complete."

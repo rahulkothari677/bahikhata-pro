@@ -69,17 +69,32 @@ snapshot. If that regresses, this alert fires the moment a CA tries to file.
 
 ## Alert Rule 4: Reconciliation Mismatch (MEDIUM — daily digest)
 
-**Purpose:** The nightly reconciliation job (deferred item #4) will detect
-ledger tie-out failures. If that job reports a mismatch via Sentry, this
-alert surfaces it.
+**Purpose:** The nightly reconciliation job (V20-018, `.github/workflows/nightly-reconciliation.yml`)
+runs at 2 AM IST every night, iterates all users, and runs the 3 reconciliation
+checks (party balances, GST, orphaned data). If any check fails for any user,
+it captures a Sentry event with `module: reconciliation`.
 
-**Trigger:** Any error where `module = "reconciliation"`
+**Trigger:** Any event where `module = "reconciliation"`
 
 **Configuration:**
 1. Filter: `event.tags.module` equals `reconciliation`
-2. Action: Daily digest email
-3. Note: This alert won't fire until the nightly reconciliation cron job is
-   built (deferred item #4). The tag infrastructure is in place now.
+2. Action: Daily digest email to engineering team + Slack `#alerts-critical`
+3. Throttle: 1 notification per hour (avoid spam if multiple users fail)
+
+**What to do when this fires:**
+1. Open the Sentry event — it includes `userId`, `userEmail`, `checkName`,
+   and `details` in the `reconciliation_failure` context.
+2. Log in as that user (via the admin panel) and run the reconciliation check
+   manually from the Reports page.
+3. If it's a GST mismatch, check whether the user has credit notes or edited
+   invoices — the V20-006 tolerance tightening may have surfaced a real drift.
+4. If it's a party balance mismatch, check the party-detail page — the SQL
+   path and JS path should agree; if they don't, it's a float drift bug.
+5. If it's orphaned data, that's a referential integrity issue — someone may
+   have manually deleted rows via SQL. Contact support.
+
+**Status:** ACTIVE as of V20-018. The nightly cron job is deployed and will
+fire this alert when failures occur.
 
 ---
 

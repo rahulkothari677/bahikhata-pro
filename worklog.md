@@ -4885,3 +4885,63 @@ Stage Summary:
 - 6 new smoke tests added (1581 total, was 1575).
 - The founder needs to: (1) verify SENTRY_DSN is set in Vercel, (2) create the 4 alert rules in Sentry dashboard per docs/sentry-alerts.md, (3) configure Slack integration.
 - NEXT: Push to origin/main, wait for Vercel deploy + user verification. Then proceed to deferred item #4 (nightly reconciliation cron job — 4 hours).
+
+---
+Task ID: v20-018-nightly-reconciliation-cron
+Agent: main
+Task: Implement deferred item #4 from the V20 post-audit report — nightly "does the ledger tie out?" cron job (auditor §5.6). "A one-command 'does the whole ledger tie out?' job run nightly across all shops (you have the reconciliation logic — schedule it and alert on any mismatch)."
+
+Work Log:
+- PRE-CHANGE SCAN:
+  * Read src/lib/reconciliation.ts — runReconciliationChecks(userId) runs 3 checks (party balances, GST, orphaned data) for a single user. All use SQL aggregates (O(1) memory).
+  * Read src/app/api/reconciliation/route.ts — existing route is per-user, requires auth + 'reports' module permission. Not suitable for a cron job.
+  * Read vercel.json — already has 1 daily cron (/api/warmup at 6 AM UTC). Vercel Hobby allows only 1 daily cron, so can't add another there.
+  * Read .github/workflows/neon-warmup.yml — existing GitHub Actions cron pattern (every 5 min). Free tier (2000 min/month). This is the right place for the nightly job.
+  * Confirmed no CRON_SECRET env var exists yet — need to add it.
+
+- IMPLEMENTATION:
+  * Created src/app/api/cron/nightly-reconciliation/route.ts:
+    - Auth: CRON_SECRET header (Authorization: Bearer <secret>). Returns 503 if CRON_SECRET env var not set, 401 if wrong/missing.
+    - Iterates ALL users (db.user.findMany, select id+email+name only — no PII).
+    - Runs runReconciliationChecks for each user SEQUENTIALLY (not parallel — avoids overwhelming DB connection pool).
+    - Per-user error isolation: if reconciliation crashes for one user, records the failure and continues to the next user. Critical: one corrupt user shouldn't block checking others.
+    - Captures each failure to Sentry with module: reconciliation tag, reconciliation_check, reconciliation_user tags + reconciliation_failure context. Uses captureMessage (not captureException) — this is a data integrity issue, not a code crash.
+    - Always returns 200 (even with failures) — the cron job itself succeeded. Failures are for Sentry alerting, not for GitHub Actions status.
+    - maxDuration = 300s (5 min, Vercel Pro limit) — gives room for large user counts.
+  * Created .github/workflows/nightly-reconciliation.yml:
+    - Schedule: '30 20 * * *' (8:30 PM UTC = 2 AM IST next day)
+    - workflow_dispatch enabled (manual trigger for ad-hoc checks)
+    - Calls /api/cron/nightly-reconciliation with Authorization: Bearer ${CRON_SECRET}
+    - Parses the JSON response and prints a summary (users checked, passed, failed, duration)
+    - Exits 0 even if reconciliation found failures (those are for Sentry) — only exits 1 if the endpoint itself returned non-200 (job execution failure).
+  * Updated docs/sentry-alerts.md — Alert Rule 4 now marked ACTIVE with troubleshooting steps (what to do when each check type fires).
+  * Added CRON_SECRET to .env.example with setup instructions (generate with openssl rand -hex 32, set in both Vercel env vars + GitHub repo secrets).
+  * Created src/__tests__/lib/v20-nightly-reconciliation.test.ts — 7 smoke tests:
+    - 503 when CRON_SECRET not configured
+    - 401 when Authorization header missing
+    - 401 when wrong secret
+    - 401 when wrong format (missing 'Bearer ' prefix)
+    - Success with 0 users (empty DB)
+    - Runs reconciliation for each user + returns correct summary
+    - Continues processing when one user crashes (error isolation)
+
+- VERIFICATION (all four checks):
+  * npx tsc --noEmit: 0 errors
+  * npx jest: 1588/1588 pass (was 1581, +7 new nightly reconciliation tests)
+  * npx next build: Compiled successfully in 37.3s
+  * npx eslint (on 2 new files): clean
+
+- POST-CHANGE SCAN:
+  * No Vercel cron conflict (used GitHub Actions, not vercel.json — avoids the 1-cron Hobby limit).
+  * The route uses the same fire-and-forget Sentry pattern as apiError() — safe on Vercel serverless.
+  * Per-user error isolation tested — one user crashing doesn't abort the job.
+  * The CRON_SECRET gate is critical: without it, anyone could trigger a heavy multi-user DB scan (DoS vector). Verified the gate returns 401/503 correctly.
+  * No adjacent bugs found.
+
+Stage Summary:
+- V20-018 COMPLETE. The auditor's §5.6 recommendation is implemented.
+- The nightly job runs at 2 AM IST every night, checks every user's ledger, and alerts via Sentry if anything doesn't tie out.
+- This pairs with Alert Rule 4 (Reconciliation Mismatch) from the V20-017 Sentry alerts work — the alert is now ACTIVE.
+- 7 new smoke tests added (1588 total, was 1581).
+- The founder needs to: (1) generate CRON_SECRET (openssl rand -hex 32), (2) set it in Vercel env vars + GitHub repo secrets, (3) verify the workflow runs (manual dispatch from GitHub Actions tab).
+- NEXT: Push to origin/main, wait for Vercel deploy + user verification. Then proceed to deferred item #5 (splash screen data-driven — 4 hours).
