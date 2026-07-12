@@ -1,0 +1,63 @@
+name: Lighthouse CI — Mobile TTI Budget
+
+# 🔒 V20-016: Lighthouse CI budget test (auditor §2.6 recommendation).
+# "Ship a mobile-CPU budget test: measure Time-to-Interactive on a throttled
+# 4× CPU in CI so bundle regressions are caught before beta."
+#
+# This workflow runs Lighthouse against the /landing page (public, no auth)
+# with 4× CPU throttling (simulating a mid-range Android phone) and asserts:
+#   - Performance score ≥ 70 (warn — non-blocking during beta setup)
+#   - Accessibility score ≥ 90 (error — blocking)
+#   - CLS ≤ 0.1 (error — blocking; layout shifts are always bad UX)
+#   - TBT ≤ 600ms (warn)
+#   - LCP ≤ 4s (warn)
+#   - FCP ≤ 2s (warn)
+#   - TTI ≤ 5s (warn)
+#   - Total JS ≤ 1MB (warn — catches bundle bloat)
+#
+# Warnings are non-blocking during initial setup. Once the scores stabilize,
+# we can promote warns to errors. The CLS check is already an error because
+# layout shifts are never acceptable.
+#
+# This workflow only runs on PRs (not every push) to save CI minutes.
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  lighthouse:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Next.js project
+        run: npx next build
+        env:
+          NEXTAUTH_SECRET: ci-build-secret-for-lighthouse-only
+          DATABASE_URL: postgresql://dummy:dummy@localhost:5432/dummy
+          NEXTAUTH_URL: http://localhost:3000
+
+      - name: Run Lighthouse CI
+        run: npx @lhci/cli@0.15.x autorun
+        env:
+          LHCI_GITHUB_APP_TOKEN: ${{ secrets.LHCI_GITHUB_APP_TOKEN }}
+
+      - name: Upload Lighthouse report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-report
+          path: |
+            .lighthouseci/
+          retention-days: 7

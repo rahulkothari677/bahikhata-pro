@@ -1,6 +1,22 @@
 import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 
+// 🔒 V20-015: Bundle analyzer — Next.js 16 ships `next experimental-analyze`
+// (Turbopack-native interactive web UI). The legacy @next/bundle-analyzer
+// package is NOT compatible with Turbopack builds (Next 16 default).
+//
+// Usage: `npm run analyze` → runs `next experimental-analyze` → opens
+// interactive treemap at http://localhost:4000 showing every module's size.
+// Or `npm run analyze:output` to write static analysis files to disk
+// (for CI / commit-to-repo workflows).
+//
+// The auditor's §2.2 recommendation: "Run @next/bundle-analyzer and attack
+// the top 5 chunks." This is the Next 16 equivalent — same purpose, native
+// to the build toolchain, no extra dependency.
+//
+// (We intentionally did NOT install @next/bundle-analyzer — it prints a
+// "not compatible with Turbopack" warning and produces no output.)
+
 const nextConfig: NextConfig = {
   // 🔒 V9 1.6: Removed `output: "standalone"` — we deploy on Vercel only
   // (not self-hosted with Bun). Vercel builds its own serverless output and

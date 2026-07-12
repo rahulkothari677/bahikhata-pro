@@ -4779,3 +4779,57 @@ Stage Summary:
 - The money extension now has comprehensive round-trip coverage. Any future change that breaks conversion (missing model, missing relation, wrong aggKey) will fail the build.
 - The __testing export is a minimal, well-documented addition — it only exposes existing internal functions, no new logic.
 - NEXT: Push to origin/main, wait for Vercel deploy + user verification. Then proceed to deferred item #2 (bundle analyzer + mobile TTI CI budget).
+
+---
+Task ID: v20-015-016-bundle-analyzer-lighthouse-ci
+Agent: main
+Task: Implement deferred item #2 from the V20 post-audit report — bundle analyzer + mobile TTI CI budget (auditor §2.2 + §2.6).
+
+Work Log:
+- PRE-CHANGE SCAN:
+  * Read next.config.ts — no existing bundle analyzer. Sentry wrapper is the only config wrapper.
+  * Read package.json — no analyze script, no @next/bundle-analyzer or @lhci/cli devDep.
+  * Read .github/workflows/ci.yml — existing CI has lint + tsc + jest + build steps. Lint has continue-on-error: true (pre-existing policy — lint warnings non-blocking). No Lighthouse/performance step.
+  * Checked current bundle size: .next/static/ = 4.6 MB across ~100 chunks. Top 4 chunks ~400 KB each (likely recharts, framer-motion, large views).
+  * Read .gitignore — .next/ already ignored. Added .lighthouseci/ for the new Lighthouse workflow.
+
+- IMPLEMENTATION DECISION — Bundle analyzer:
+  * Initially installed @next/bundle-analyzer (the package the auditor recommended).
+  * First build with ANALYZE=true showed: "The Next Bundle Analyzer is not compatible with Turbopack builds, no report will be generated."
+  * Next.js 16 defaults to Turbopack. The auditor's recommendation predates Turbopack's maturity.
+  * Discovered Next.js 16 has a built-in analyzer: `next experimental-analyze` (Turbopack-native, interactive web UI at localhost:4000, or `--output` for static files).
+  * UNINSTALLED @next/bundle-analyzer (incompatible, would just print warnings). Switched to the native command.
+  * Added two scripts: `npm run analyze` (interactive web UI) and `npm run analyze:output` (static files for CI/commit workflows).
+  * Updated next.config.ts comment block to document the decision (so the next developer doesn't re-install @next/bundle-analyzer and hit the same wall).
+
+- IMPLEMENTATION — Lighthouse CI:
+  * Created .github/workflows/lighthouse-ci.yml — runs on PRs (not every push, to save CI minutes).
+  * Created lighthouserc.json with mobile throttling (4× CPU slowdown, 40ms RTT, 1024 Kbps — simulates mid-range Android).
+  * Budget assertions:
+    - CLS ≤ 0.1 (ERROR — layout shifts are never acceptable)
+    - Accessibility ≥ 90 (ERROR — a11y regressions block merge)
+    - Performance ≥ 70 (WARN — non-blocking during beta setup, promote to error once stable)
+    - LCP ≤ 4s, FCP ≤ 2s, TTI ≤ 5s, TBT ≤ 600ms (all WARN)
+    - Total JS ≤ 1MB (WARN — catches bundle bloat)
+  * Tests the /landing page (public, no auth required — avoids session mock complexity).
+  * Uploads .lighthouseci/ as artifact for 7 days.
+
+- VERIFICATION (all four checks):
+  * npx tsc --noEmit: 0 errors
+  * npx jest: 1575/1575 pass (unchanged — no test changes)
+  * npx next build: Compiled successfully in 32.4s
+  * npx next experimental-analyze --output: "Analyze completed in 34.8s. Results written to .next/diagnostics/analyze/" — confirmed analyzer works, produces interactive HTML treemap + per-route .txt files.
+  * npx eslint next.config.ts: clean
+
+- POST-CHANGE SCAN:
+  * Adjacent issue: existing ci.yml line 26 has `continue-on-error: true` on the ESLint step. This means the 24 pre-existing eslint errors never block CI. This is a pre-existing policy decision (lint = style, non-blocking) but worth flagging — the Lighthouse workflow's a11y/CLS checks ARE blocking, so a11y regressions will block even if lint doesn't. Did not change this without user approval.
+  * Verified .next/diagnostics/ is gitignored (it's under .next/ which is already ignored).
+  * Verified .lighthouseci/ added to .gitignore.
+  * The Lighthouse workflow uses `npx @lhci/cli@0.15.x autorun` (pinned version) — no need to add @lhci/cli as a devDep since npx fetches it on demand.
+
+Stage Summary:
+- V20-015 (bundle analyzer) COMPLETE. `npm run analyze` opens interactive treemap. No new dependencies.
+- V20-016 (mobile TTI CI budget) COMPLETE. Lighthouse CI runs on PRs with mobile throttling + budget assertions.
+- Both items are infrastructure — no app code changed, no test changes, no behavior changes.
+- The next developer who wants to attack the top 5 chunks (per auditor §2.2) can now run `npm run analyze`, see the treemap, and decide what to lazy-load next.
+- NEXT: Push to origin/main, wait for Vercel deploy + user verification. Then proceed to deferred item #3 (Sentry alerts on GST filing 500s — 1 hour).

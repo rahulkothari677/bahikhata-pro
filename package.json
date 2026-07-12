@@ -19,7 +19,9 @@
     "db:deploy": "prisma migrate deploy",
     "db:resolve-baseline": "prisma migrate resolve --applied 0_init",
     "db:reset": "prisma migrate reset",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "analyze": "next experimental-analyze",
+    "analyze:output": "next experimental-analyze --output"
   },
   "dependencies": {
     "@capacitor-community/camera-preview": "^8.0.1",

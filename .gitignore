@@ -77,3 +77,5 @@ worklog.md
 /e2e-test.db
 
 tool-results/
+# Lighthouse CI reports (V20-016)
+.lighthouseci/
