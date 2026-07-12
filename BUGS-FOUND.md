@@ -20,6 +20,41 @@ and include enough context to reproduce.
 
 <!-- Add new bugs below this line. Newest first. -->
 
+### BUG-013 — Hand-written aggregate handlers only converted `_sum` (Medium/Latent) — FIXED
+
+- **Found**: 2026-07-12, during V20 post-audit deep scan
+- **File**: `src/lib/prisma-money-extension.ts` (Transaction handler line 312, Payment handler line 426)
+- **Severity**: Medium (latent — no code path uses `_avg/_min/_max` on money columns today, but inconsistent with V20-005)
+- **Description**: The V20-005 fix added `_avg/_min/_max` conversion to `generateModelHandlers`, but the hand-written Transaction and Payment aggregate/groupBy handlers still only converted `_sum`. If anyone writes `db.transaction.aggregate({ _avg: { totalAmount: true } })`, it would return paise (100× too large).
+- **Fix applied**: 2026-07-12 (V20-008 batch). Updated both hand-written handlers to iterate `['_sum', '_avg', '_min', '_max']` — matches the generateModelHandlers pattern.
+- **Regression guard**: Added in `src/__tests__/lib/v20-money-extension-regression.test.ts` → "V20-010: hand-written aggregate handlers convert _avg/_min/_max".
+- **Status**: FIXED
+
+### BUG-012 — AuthScreen language toggle didn't translate anything (Medium/UX) — FIXED
+
+- **Found**: 2026-07-12, during V20 post-audit deep scan
+- **File**: `src/components/auth/AuthScreen.tsx`
+- **Severity**: Medium (misleading feature — user selects Hindi, nothing changes)
+- **Description**: The V20-5C batch added a language toggle to the login screen with 5 languages (EN, हिं, ગુ, मरा, தமி). However, the AuthScreen used hardcoded English strings ("Sign In", "Create Account", "Email", "Password", "Your Name", "India's Smartest Ledger App", data-secure notice) — the toggle only set the store value without any visible effect. The i18n system already had `auth.*` translation keys for all 5 languages, but the AuthScreen never called `useTranslation()`.
+- **Fix applied**: 2026-07-12 (V20-008 batch). Wired AuthScreen to `useTranslation()`. All visible strings now use `t('auth.*')` keys. Selecting Hindi now actually translates the login screen to Hindi.
+- **Status**: FIXED
+
+### BUG-011 — MODEL_RELATIONS missing 5 money-bearing relations (Critical/100× bug) — FIXED
+
+- **Found**: 2026-07-12, during V20 post-audit deep scan (the V20 auditor's §1.3 "audit every include" recommendation was not fully executed in Batch 1)
+- **File**: `src/lib/prisma-money-extension.ts` (MODEL_RELATIONS map, line 79)
+- **Severity**: Critical (100× money display bug — same class as V20-002)
+- **Description**: The V20-002 fix added `BankStatement → transactions` to MODEL_RELATIONS, but did NOT complete the full audit the auditor recommended. Five money-bearing relations were missing:
+  1. `BankTransaction → matchedPayment` (Payment.amount) — bank recon UI showed matched payments 100× inflated
+  2. `BankTransaction → matchedTransaction` (Transaction.totalAmount, etc.) — bank recon UI showed matched transactions 100× inflated
+  3. `Transaction → originalTransaction` (self-relation, Transaction.totalAmount) — credit/debit note detail showed original sale 100× inflated
+  4. `Transaction → reversalTransactions` (self-relation, Transaction.totalAmount) — sale detail showed "Total adjusted" 100× inflated
+  5. `Transaction → matchedBankTransactions` (BankTransaction.amount) — back-reference, latent
+- **Reachable today**: Yes. `src/app/api/transactions/[id]/route.ts:33-58` includes `reversalTransactions` and `originalTransaction` (both with `totalAmount`). `src/app/api/bank-recon/reconcile/route.ts:30-42` includes `matchedPayment` and `matchedTransaction`. Both paths returned paise values to the UI without conversion.
+- **Fix applied**: 2026-07-12 (V20-008 batch). Added all 5 missing entries to MODEL_RELATIONS.
+- **Regression guard**: Added in `src/__tests__/lib/v20-money-extension-regression.test.ts` → "V20-008: MODEL_RELATIONS completeness" (7 tests verifying each relation is present in the source).
+- **Status**: FIXED
+
 ### BUG-010 — `item.discountAmount` input field is accepted but silently ignored (Low/APIDesign)
 
 - **Status**: FIXED (2026-07-11, auditor commit 8d61e2f — removed from transactionItemSchema)

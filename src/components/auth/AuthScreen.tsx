@@ -9,9 +9,14 @@ import { Label } from '@/components/ui/label'
 import { toast as sonnerToast } from 'sonner'
 import { getCachedSession } from '@/lib/offline-db'
 import { useAppStore } from '@/store/app-store'
+import { useTranslation } from '@/hooks/use-translation'
 import { Globe } from 'lucide-react'
 
 // 🔒 V20-5C: Language options for the login screen toggle
+// 🔒 V20-009 FIX: The toggle now actually drives translation via useTranslation.
+//   Previously the toggle set the store value but the AuthScreen used hardcoded
+//   English strings — selecting Hindi did nothing visible. Now all visible
+//   text uses t('auth.*') keys from i18n.ts (which has all 5 languages).
 const LANGS = [
   { code: 'en', label: 'EN' },
   { code: 'hi', label: 'हिं' },
@@ -23,6 +28,7 @@ const LANGS = [
 export function AuthScreen() {
   const { data: session, status } = useSession()
   const { language, setLanguage } = useAppStore()
+  const { t } = useTranslation()
   const [mode, setMode] = useState<'login' | 'signup'>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -118,7 +124,7 @@ export function AuthScreen() {
             <BookOpenText className="w-8 h-8 text-white" />
           </div>
           <h1 className="text-3xl font-bold tracking-tight">EkBook</h1>
-          <p className="text-sm text-muted-foreground mt-1">India&apos;s Smartest Ledger App</p>
+          <p className="text-sm text-muted-foreground mt-1">{t('auth.india_smart')}</p>
 
           {/* 🔒 V20-5C: Language toggle on login screen — front and center */}
           <div className="flex items-center justify-center gap-1.5 mt-3">
@@ -147,7 +153,7 @@ export function AuthScreen() {
                 mode === 'login' ? 'bg-background shadow-sm' : 'text-muted-foreground'
               }`}
             >
-              Sign In
+              {t('auth.sign_in')}
             </button>
             <button
               onClick={() => setMode('signup')}
@@ -155,7 +161,7 @@ export function AuthScreen() {
                 mode === 'signup' ? 'bg-background shadow-sm' : 'text-muted-foreground'
               }`}
             >
-              Create Account
+              {t('auth.sign_up')}
             </button>
           </div>
 
@@ -192,7 +198,7 @@ export function AuthScreen() {
           <form onSubmit={handleSubmit} className="space-y-4">
             {mode === 'signup' && (
               <div>
-                <Label>Your Name</Label>
+                <Label>{t('auth.name')}</Label>
                 <div className="relative mt-1">
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <Input
@@ -208,7 +214,7 @@ export function AuthScreen() {
             )}
 
             <div>
-              <Label>Email</Label>
+              <Label>{t('auth.email')}</Label>
               <div className="relative mt-1">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
@@ -224,7 +230,7 @@ export function AuthScreen() {
             </div>
 
             <div>
-              <Label>Password</Label>
+              <Label>{t('auth.password')}</Label>
               <div className="relative mt-1">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
@@ -254,11 +260,11 @@ export function AuthScreen() {
               {loading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  {mode === 'signup' ? 'Creating account...' : 'Signing in...'}
+                  {mode === 'signup' ? t('auth.sign_up') + '...' : t('auth.sign_in') + '...'}
                 </>
               ) : (
                 <>
-                  {mode === 'login' ? 'Sign In' : 'Create Account'}
+                  {mode === 'login' ? t('auth.sign_in') : t('auth.sign_up')}
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
@@ -285,7 +291,7 @@ export function AuthScreen() {
         </div>
 
         <p className="text-center text-[11px] text-muted-foreground mt-4">
-          🔒 Your data is private & secure. Each shop owner has their own isolated data.
+          🔒 {t('auth.data_secure')}
         </p>
       </div>
     </div>

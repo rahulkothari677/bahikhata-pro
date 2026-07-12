@@ -4672,3 +4672,65 @@ Stage Summary:
 - No new code changes made (audit-only task). All findings documented in the report.
 - Bug registry (BUGS-FOUND.md) was NOT modified — the report is a standalone document. The user can choose to catalog the most critical findings (V19-001, V19-002, V19-003) as BUG-011+ in the registry if desired.
 - NEXT: User should review the report and prioritize fixes. V19-001 should be fixed immediately with a regression test that creates a transaction through the real Prisma client.
+
+---
+Task ID: v20-post-audit-deep-scan-and-fixes
+Agent: main
+Task: User called out that V20 batches did NOT follow the cautious process — no new bugs found, no verification of existing bugs, no worklog entries. Do a proper deep scan, find NEW bugs missed during V20, verify V20 fixes, complete remaining items, and create an auditor report.
+
+Work Log:
+- Read worklog.md and found NO V20 entries (Batches 1-5C were committed but never logged — process violation).
+- Read EkBook-Audit-V20-PreBeta.md (auditor's V20 report, 128 lines) — identified all items the auditor flagged and cross-checked what V20 actually addressed.
+- Verified V20 fixes actually present in code:
+  * V20-001 upsert handler: ✓ present at prisma-money-extension.ts:495
+  * V20-002 BankStatement→transactions: ✓ present at line 91
+  * V20-005 aggregate _avg/_min/_max in generateModelHandlers: ✓ present at line 505
+  * V20-004 splash 1.1s: ✓ present at SplashScreen.tsx:26-28
+  * V20-007 lazy-load analytics: ✓ present in layout.tsx
+  * V20-008 lazy-load non-default views: ✓ present in page.tsx
+  * V20-5A inputMode: ✓ present in ProductDialog + TransactionDetail
+  * V20-5C language toggle: ✓ present in AuthScreen (but see BUG-012 below)
+- Verified §3 balance-as-of UTC issue: ALREADY FIXED in V18 B.3 (auditor was re-flagging). Current code uses `+05:30` offset (line 47). Same for Math.round → roundMoney (line 154).
+- Ran full verification suite: tsc clean (0 errors), jest 746/746 pass, build succeeds. eslint has 24 pre-existing errors (same count at baseline af62217 — not new, but I never verified eslint during V20, process failure).
+
+- DEEP SCAN — found 3 NEW bugs that V20 missed:
+  * BUG-011 (CRITICAL): MODEL_RELATIONS missing 5 money-bearing relations. The V20 auditor's §1.3 explicitly said "audit every include" — V20-002 only added BankStatement→transactions. I found 5 more: BankTransaction→matchedPayment, BankTransaction→matchedTransaction, Transaction→originalTransaction, Transaction→reversalTransactions, Transaction→matchedBankTransactions. Reachable today in transactions/[id]/route.ts (credit note detail shows 100× inflated) and bank-recon/reconcile/route.ts (matched amounts 100× inflated).
+  * BUG-012 (Medium/UX): AuthScreen language toggle (V20-5C) sets store value but AuthScreen never called useTranslation() — selecting Hindi did nothing visible. All strings were hardcoded English.
+  * BUG-013 (Medium/Latent): Hand-written Transaction + Payment aggregate handlers only converted _sum, not _avg/_min/_max (V20-005 only fixed generateModelHandlers). Inconsistent — latent landmine.
+
+- Also identified stale file header comment in prisma-money-extension.ts (said aggregate needs manual conversion — V20-005 fixed that but comment wasn't updated). Updated.
+
+- FIXED all 3 new bugs:
+  * BUG-011: Added 5 missing entries to MODEL_RELATIONS. Added 7-test regression guard.
+  * BUG-012: Wired AuthScreen to useTranslation(). All visible strings now use t('auth.*') keys.
+  * BUG-013: Updated Transaction + Payment aggregate/groupBy to iterate [_sum, _avg, _min, _max]. Added 2-test regression guard.
+- Created new regression test file: src/__tests__/lib/v20-money-extension-regression.test.ts (10 tests total, covering V20-001, V20-008, V20-010).
+
+- VERIFICATION:
+  * npx tsc --noEmit: 0 errors
+  * npx jest: 756/756 pass (was 746, +10 new regression tests)
+  * npx next build: succeeds
+
+- IDENTIFIED DEFERRED ITEMS (not done in V20, documented in auditor report):
+  * Bundle analyzer (@next/bundle-analyzer) — NOT installed
+  * Mobile TTI CI budget test — NOT created
+  * Sentry alerts — NOT configured
+  * Money round-trip integration test (auditor §5.2) — NOT created (only static-source regression test added)
+  * Reconciliation tolerance: auditor wanted === 0, I did <0.005 (rationale: fromPaise float drift; documented)
+  * Splash screen: still time-driven, not data-driven (auditor §2.4)
+  * H1 'as any' cleanup (49 files) — deferred from V7, still open
+  * H2 Admin panel tests — deferred from V7, still open
+  * Admin CSP nonce-based enforcement — deferred from V7, still open
+  * PostHog analytics wiring — NOT done
+  * Nightly tie-out job — NOT done
+  * Staging environment — NOT done (user-side)
+  * Dark mode WCAG contrast audit — NOT done
+
+Stage Summary:
+- 3 NEW bugs found and fixed (BUG-011 Critical, BUG-012 Medium, BUG-013 Medium).
+- 10 new regression tests added (756 total, was 746).
+- All V20 fixes verified present in code.
+- Comprehensive auditor report created at download/v20-post-audit-report.pdf covering:
+  (a) What V20 did, (b) What V20 skipped (with reasons), (c) 3 new bugs found in this post-audit scan,
+  (d) Process-failure acknowledgment, (e) Deferred items with rationale.
+- Next: User should review the report and decide which deferred items to prioritize. The money-extension is now significantly safer (5 more 100× traps closed + regression guards).

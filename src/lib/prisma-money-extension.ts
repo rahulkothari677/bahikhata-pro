@@ -17,13 +17,27 @@
  *
  * WHAT IT DOESN'T COVER:
  *   - $queryRaw results (already handled by Phase 2 SQL * 100 + nudge pattern)
- *   - aggregate _sum results (these need manual fromPaise — see below)
- *   - groupBy _sum results (same)
+ *
+ * 🔒 V20-005 UPDATE: aggregate() and groupBy() _sum/_avg/_min/_max results
+ *   ARE now converted by this extension (was previously _sum-only, latent
+ *   landmine flagged by the V20 auditor §1.3). The CI paise-guard test
+ *   catches any missed spots.
+ *
+ * 🔒 V20-008 UPDATE: MODEL_RELATIONS now covers ALL money-bearing relations
+ *   (BankStatement→transactions, BankTransaction→matchedPayment/
+ *   matchedTransaction, Transaction→originalTransaction/reversalTransactions/
+ *   matchedBankTransactions, Gstr2bImport→invoices). The V20 auditor's §1.3
+ *   "audit every include" recommendation is now fully executed.
  *
  * LIMITATIONS:
- *   - aggregate() and groupBy() return { _sum: { col: number } } which the
- *     extension can't easily intercept. These call sites need manual
- *     fromPaise() wrapping. The CI guard test catches any missed spots.
+ *   - `where`-clause money values are NOT converted. A filter like
+ *     `where: { totalAmount: { gte: 100000 } }` compares against 100000 paise
+ *     (₹1,000), not ₹1,00,000. Today only `> 0` filters exist (boundary-safe).
+ *     Any future money-threshold filter must use toPaise() manually.
+ *   - The extension is a hand-maintained whitelist. If a new model with money
+ *     columns is added to the schema, it MUST be added to MONEY_COLUMNS,
+ *     MODEL_RELATIONS (if it has nested money relations), and registered in
+ *     generateModelHandlers or given a hand-written handler block.
  */
 
 import { Prisma, PrismaClient } from '@prisma/client'
@@ -65,13 +79,34 @@ const MONEY_COLUMNS: Record<string, string[]> = {
 // Previously, bankStatement.findMany({ include: { transactions: true } })
 // did not convert nested BankTransaction.amount/.balance from paise to rupees,
 // causing bank reconciliation UI to show 100× inflated amounts.
+//
+// 🔒 V20-008 FIX: Added missing money-bearing relations discovered during
+// the V20 post-audit deep scan (the auditor's §1.3 "audit every include"
+// recommendation was not fully executed in Batch 1 — this completes it):
+//   - BankTransaction → matchedPayment (Payment has money: amount)
+//   - BankTransaction → matchedTransaction (Transaction has money: totalAmount, etc.)
+//   - Transaction → originalTransaction (self-relation for credit/debit notes)
+//   - Transaction → reversalTransactions (self-relation, linked credit notes)
+//   - Transaction → matchedBankTransactions (bank recon back-reference)
+// Without these, TransactionDetail showed credit note amounts 100× inflated
+// and bank-recon/reconcile showed matched payment amounts 100× inflated.
 const MODEL_RELATIONS: Record<string, Record<string, string>> = {
-  Transaction: { items: 'TransactionItem', party: 'Party' },
+  Transaction: {
+    items: 'TransactionItem',
+    party: 'Party',
+    originalTransaction: 'Transaction',      // V20-008: credit/debit note reversal
+    reversalTransactions: 'Transaction',     // V20-008: linked credit/debit notes
+    matchedBankTransactions: 'BankTransaction', // V20-008: bank recon back-ref
+  },
   TransactionItem: { transaction: 'Transaction', product: 'Product' },
   Payment: { party: 'Party' },
   Party: { transactions: 'Transaction', payments: 'Payment' },
   Product: {},
   BankStatement: { transactions: 'BankTransaction' },
+  BankTransaction: {
+    matchedPayment: 'Payment',         // V20-008: bank recon matched payment
+    matchedTransaction: 'Transaction', // V20-008: bank recon matched txn
+  },
   Gstr2bImport: { invoices: 'Gstr2bInvoice' },
 }
 
@@ -288,28 +323,35 @@ export function withMoneyConversion(client: PrismaClient) {
           if (args.update) args.update = convertNestedData('Transaction', args.update)
           return convertRowOnRead('Transaction', await query(args))
         },
-        // 🔒 V18 Phase 4: aggregate returns _sum in paise — convert to rupees
+        // 🔒 V18 Phase 4 + V20-010 FIX: aggregate returns _sum/_avg/_min/_max
+        // in paise — convert ALL 4 to rupees. Previously only _sum was converted
+        // (V20-005 fixed this in generateModelHandlers but missed the hand-written
+        // Transaction handler). Now consistent across all models.
         async aggregate({ args, query }) {
           const result = await query(args)
-          if (result._sum) {
-            const cols = MONEY_COLUMNS['Transaction'] || []
-            for (const col of cols) {
-              if (col in result._sum && result._sum[col] != null) {
-                result._sum[col] = fromPaise(result._sum[col])
+          const cols = MONEY_COLUMNS['Transaction'] || []
+          for (const aggKey of ['_sum', '_avg', '_min', '_max']) {
+            if ((result as any)[aggKey]) {
+              for (const col of cols) {
+                if (col in (result as any)[aggKey] && (result as any)[aggKey][col] != null) {
+                  (result as any)[aggKey][col] = fromPaise((result as any)[aggKey][col])
+                }
               }
             }
           }
           return result
         },
-        // 🔒 V18 Phase 4: groupBy returns _sum per group in paise — convert
+        // 🔒 V18 Phase 4 + V20-010 FIX: same _sum/_avg/_min/_max conversion for groupBy
         async groupBy({ args, query }) {
           const result = await query(args)
           const cols = MONEY_COLUMNS['Transaction'] || []
           return result.map((row: any) => {
-            if (row._sum) {
-              for (const col of cols) {
-                if (col in row._sum && row._sum[col] != null) {
-                  row._sum[col] = fromPaise(row._sum[col])
+            for (const aggKey of ['_sum', '_avg', '_min', '_max']) {
+              if (row[aggKey]) {
+                for (const col of cols) {
+                  if (col in row[aggKey] && row[aggKey][col] != null) {
+                    row[aggKey][col] = fromPaise(row[aggKey][col])
+                  }
                 }
               }
             }
@@ -395,28 +437,33 @@ export function withMoneyConversion(client: PrismaClient) {
         async deleteMany({ args, query }) {
           return query(args)
         },
-        // 🔒 V18 Phase 4: aggregate returns _sum in paise — convert to rupees
+        // 🔒 V18 Phase 4 + V20-010 FIX: aggregate returns _sum/_avg/_min/_max
+        // in paise — convert ALL 4 to rupees (was only _sum, same as Transaction).
         async aggregate({ args, query }) {
           const result = await query(args)
-          if (result._sum) {
-            const cols = MONEY_COLUMNS['Payment'] || []
-            for (const col of cols) {
-              if (col in result._sum && result._sum[col] != null) {
-                result._sum[col] = fromPaise(result._sum[col])
+          const cols = MONEY_COLUMNS['Payment'] || []
+          for (const aggKey of ['_sum', '_avg', '_min', '_max']) {
+            if ((result as any)[aggKey]) {
+              for (const col of cols) {
+                if (col in (result as any)[aggKey] && (result as any)[aggKey][col] != null) {
+                  (result as any)[aggKey][col] = fromPaise((result as any)[aggKey][col])
+                }
               }
             }
           }
           return result
         },
-        // 🔒 V18 Phase 4: groupBy returns _sum per group in paise — convert
+        // 🔒 V18 Phase 4 + V20-010 FIX: same _sum/_avg/_min/_max conversion for groupBy
         async groupBy({ args, query }) {
           const result = await query(args)
           const cols = MONEY_COLUMNS['Payment'] || []
           return result.map((row: any) => {
-            if (row._sum) {
-              for (const col of cols) {
-                if (col in row._sum && row._sum[col] != null) {
-                  row._sum[col] = fromPaise(row._sum[col])
+            for (const aggKey of ['_sum', '_avg', '_min', '_max']) {
+              if (row[aggKey]) {
+                for (const col of cols) {
+                  if (col in row[aggKey] && row[aggKey][col] != null) {
+                    row[aggKey][col] = fromPaise(row[aggKey][col])
+                  }
                 }
               }
             }
