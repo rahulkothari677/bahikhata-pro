@@ -71,8 +71,12 @@ export async function checkPartyBalances(userId: string): Promise<Reconciliation
     }
   }
 
-  const receivableMatches = Math.abs(totalReceivable - jsReceivable) < 0.01
-  const payableMatches = Math.abs(totalPayable - jsPayable) < 0.01
+  // 🔒 V20-006: Tightened from < 0.01 to < 0.005. With the Prisma extension
+  // converting paise→rupees, values are already roundMoney'd at the source.
+  // A 0.01 tolerance could mask a 1-paisa rounding difference. 0.005 catches
+  // any drift while allowing for float representation noise in fromPaise().
+  const receivableMatches = Math.abs(totalReceivable - jsReceivable) < 0.005
+  const payableMatches = Math.abs(totalPayable - jsPayable) < 0.005
   const passed = receivableMatches && payableMatches
 
   return {
@@ -137,9 +141,10 @@ export async function checkGstReconciliation(userId: string): Promise<Reconcilia
   const headerSgst = roundMoney(headerGst._sum.sgst || 0)
   const headerIgst = roundMoney(headerGst._sum.igst || 0)
 
-  const cgstMatches = Math.abs(itemCgst - headerCgst) < 0.01
-  const sgstMatches = Math.abs(itemSgst - headerSgst) < 0.01
-  const igstMatches = Math.abs(itemIgst - headerIgst) < 0.01
+  // 🔒 V20-006: Tightened GST tolerance from < 0.01 to < 0.005
+  const cgstMatches = Math.abs(itemCgst - headerCgst) < 0.005
+  const sgstMatches = Math.abs(itemSgst - headerSgst) < 0.005
+  const igstMatches = Math.abs(itemIgst - headerIgst) < 0.005
   const passed = cgstMatches && sgstMatches && igstMatches
 
   return {

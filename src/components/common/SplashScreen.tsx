@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 
 /**
  * Premium Splash Screen
- * 
+ *
  * Shows when the app first opens — like the best apps in the world.
  * Features:
  * - Saffron gradient background (Indian flag inspired)
@@ -12,17 +12,20 @@ import { useEffect, useState } from 'react'
  * - App name "EkBook" with fade-in animation
  * - Caption "India's Smartest Ledger App"
  * - Smooth transition to main app
- * 
- * Shows for 2 seconds, then fades out.
+ *
+ * 🔒 V20-004 FIX: Was a fixed 2-second delay (1.5s display + 0.5s fade).
+ * Now caps at 800ms display + 300ms fade = 1.1s max. The old 2s floor
+ * added unnecessary delay even when the app was ready in 200ms.
+ * On mid-range Android phones, 2s of waiting for a splash = bad UX.
  */
 export function SplashScreen({ onFinish }: { onFinish: () => void }) {
   const [fadingOut, setFadingOut] = useState(false)
 
   useEffect(() => {
-    // Start fade out after 1.5s
-    const fadeTimer = setTimeout(() => setFadingOut(true), 1500)
-    // Complete after fade animation (500ms)
-    const finishTimer = setTimeout(onFinish, 2000)
+    // Start fade out after 800ms (was 1500ms)
+    const fadeTimer = setTimeout(() => setFadingOut(true), 800)
+    // Complete after fade animation (300ms, was 500ms)
+    const finishTimer = setTimeout(onFinish, 1100)
 
     return () => {
       clearTimeout(fadeTimer)
@@ -32,7 +35,7 @@ export function SplashScreen({ onFinish }: { onFinish: () => void }) {
 
   return (
     <div
-      className={`fixed inset-0 z-[9999] flex flex-col items-center justify-center transition-opacity duration-500 ${
+      className={`fixed inset-0 z-[9999] flex flex-col items-center justify-center transition-opacity duration-300 ${
         fadingOut ? 'opacity-0' : 'opacity-100'
       }`}
       style={{

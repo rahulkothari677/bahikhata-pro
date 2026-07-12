@@ -499,11 +499,15 @@ function generateModelHandlers(modelName: string, prismaModel: string): Record<s
     },
     async aggregate({ args, query }: any) {
       const result = await query(args)
-      if (result._sum) {
-        const cols = MONEY_COLUMNS[modelName] || []
-        for (const col of cols) {
-          if (col in result._sum && result._sum[col] != null) {
-            result._sum[col] = fromPaise(result._sum[col])
+      const cols = MONEY_COLUMNS[modelName] || []
+      // 🔒 V20-005: Convert _sum, _avg, _min, _max for money columns.
+      // Previously only _sum was converted — _avg/_min/_max would return paise.
+      for (const aggKey of ['_sum', '_avg', '_min', '_max']) {
+        if ((result as any)[aggKey]) {
+          for (const col of cols) {
+            if (col in (result as any)[aggKey] && (result as any)[aggKey][col] != null) {
+              (result as any)[aggKey][col] = fromPaise((result as any)[aggKey][col])
+            }
           }
         }
       }
@@ -512,11 +516,14 @@ function generateModelHandlers(modelName: string, prismaModel: string): Record<s
     async groupBy({ args, query }: any) {
       const result = await query(args)
       const cols = MONEY_COLUMNS[modelName] || []
+      // 🔒 V20-005: Same _sum/_avg/_min/_max conversion for groupBy
       return result.map((row: any) => {
-        if (row._sum) {
-          for (const col of cols) {
-            if (col in row._sum && row._sum[col] != null) {
-              row._sum[col] = fromPaise(row._sum[col])
+        for (const aggKey of ['_sum', '_avg', '_min', '_max']) {
+          if (row[aggKey]) {
+            for (const col of cols) {
+              if (col in row[aggKey] && row[aggKey][col] != null) {
+                row[aggKey][col] = fromPaise(row[aggKey][col])
+              }
             }
           }
         }
