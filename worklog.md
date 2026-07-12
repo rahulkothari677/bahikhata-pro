@@ -5014,3 +5014,30 @@ Stage Summary:
 - All animations respect prefers-reduced-motion for accessibility.
 - No new tests needed (UI component — verified visually).
 - NEXT: Push to origin/main, wait for Vercel deploy + user verification. Then proceed to deferred item #6 (staging environment — 1 day, infrastructure task) or #7 (dark mode WCAG contrast audit — 1 day).
+
+---
+Task ID: v20-019-fix-splash-not-showing
+Agent: main
+Task: Bug fix — user reported splash screen not showing. Diagnosed and fixed.
+
+Work Log:
+- DIAGNOSIS:
+  * User sent screen recording showing the splash never appears.
+  * Read page.tsx and found the root cause: an early return at line 245 shows a plain spinner div during `status === 'loading'`. This early return happens BEFORE the SplashScreen component (rendered at line 287 inside the main return).
+  * Result: during the entire loading phase, the user sees the plain spinner — the splash never shows. By the time status resolves (loading complete), the splash would render but `ready` is already true, so it dismisses almost instantly (after 900ms min display). Net effect: users never see the splash.
+  * The splash was designed to be the loading screen, but the early return prevented it from appearing during loading.
+
+- FIX:
+  * Modified the early return block to show the SplashScreen (with ready=false) instead of the plain spinner, when showSplash is true.
+  * When showSplash is false (warm reloads via sessionStorage), falls back to the plain spinner — same as before.
+  * The splash at line 304 (main return) still handles the case where loading completes but the splash is still showing — it transitions seamlessly and ready becomes true, triggering dismissal.
+
+- VERIFICATION:
+  * npx tsc --noEmit: 0 errors
+  * npx jest: 1588/1588 pass
+  * npx next build: Compiled successfully in 36.9s
+
+Stage Summary:
+- Bug fixed. The splash now shows DURING loading (as intended) and dismisses when the session + dashboard data are ready.
+- The plain spinner is now only a fallback for warm reloads (when showSplash is false).
+- NEXT: Push to origin/main, wait for Vercel deploy + user verification.

@@ -240,10 +240,27 @@ export default function Home() {
   // call explicitly (if needed), but it's no longer fired automatically on
   // every app open.
 
-  // During SSR and first client render, show loading
-  // This prevents hydration mismatch
+  // During SSR and first client render, show the splash screen (not a plain
+  // spinner). The splash is the loading screen — it dismisses when the session
+  // resolves + dashboard data is ready (data-driven, per V20-019).
+  //
+  // 🔒 V20-019 FIX: Previously this block returned a plain spinner div, which
+  // meant the SplashScreen (rendered at line ~287 inside the main return)
+  // NEVER showed during loading — the early return prevented it. By the time
+  // status !== 'loading', the splash would render but immediately dismiss
+  // because `ready` was already true. Net result: users never saw the splash.
+  // Now: the splash shows DURING loading (ready=false), and dismisses when
+  // the session resolves AND dashboard data loads.
   if (!mounted || status === 'loading') {
-    return (
+    return showSplash ? (
+      <SplashScreen
+        ready={false}
+        onFinish={() => {
+          setShowSplash(false)
+          try { sessionStorage.setItem('splashShown', 'true') } catch {}
+        }}
+      />
+    ) : (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="w-10 h-10 rounded-full border-4 border-primary border-t-transparent animate-spin" />
       </div>
