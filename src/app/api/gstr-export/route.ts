@@ -5,6 +5,7 @@ import { roundMoney, fromPaise } from '@/lib/money'
 import { activeTransactionWhere } from '@/lib/query-helpers'
 import { istMonthStart, getISTDateParts, isSameISTMonth, istDateString, istYearMonth, IST_OFFSET_MS } from '@/lib/timezone'
 import { apiError } from '@/lib/api-error'
+import { captureGstFilingError } from '@/lib/sentry-gst'
 import { deriveStateCode } from '@/lib/gst'
 
 // ⏱️ Vercel serverless timeout — GSTR export aggregates all transactions
@@ -575,6 +576,11 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(output)
   } catch (error) {
+    // 🔒 V20-017: GST export error — capture with GST-specific tags for Sentry alerting
+    captureGstFilingError(error, {
+      route: '/api/gstr-export',
+      action: 'export',
+    })
     return apiError(error, 'Failed to generate GSTR report', 500)
   }
 }

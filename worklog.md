@@ -4833,3 +4833,55 @@ Stage Summary:
 - Both items are infrastructure — no app code changed, no test changes, no behavior changes.
 - The next developer who wants to attack the top 5 chunks (per auditor §2.2) can now run `npm run analyze`, see the treemap, and decide what to lazy-load next.
 - NEXT: Push to origin/main, wait for Vercel deploy + user verification. Then proceed to deferred item #3 (Sentry alerts on GST filing 500s — 1 hour).
+
+---
+Task ID: v20-017-sentry-alerts-gst-filing
+Agent: main
+Task: Implement deferred item #3 from the V20 post-audit report — Sentry alerts on 500s, especially GST filing routes (auditor §5.5). "Sentry is wired — set up alerts on 500s so a §1.1-class bug surfaces from telemetry within minutes of beta, not from an angry CA."
+
+Work Log:
+- PRE-CHANGE SCAN:
+  * Read sentry.client.config.ts + sentry.server.config.ts — both exist, Sentry SDK is initialized when SENTRY_DSN is set.
+  * Grepped for Sentry usage in app code: only 1 call (ErrorBoundary.tsx client-side captureException). NO API route reports to Sentry.
+  * Read src/lib/api-error.ts — the centralized error handler used by 66 call sites across ~22 API routes. It logs to console but does NOT capture to Sentry.
+  * Read GST filing routes (gstr-3b, gstr-1, gstr-export) — all use `return apiError(err, 'Failed to ...', 500)` in their catch blocks. No Sentry capture.
+  * Identified the fix: add Sentry capture to apiError() (the chokepoint) + a GST-specific helper for additional tagging.
+
+- IMPLEMENTATION:
+  * Modified src/lib/api-error.ts:
+    - Added captureInSentry() helper that does a dynamic import('@sentry/nextjs') and calls captureException with tags (error_id, http_status, source) + context (message, errorId, status, ...context).
+    - Fire-and-forget pattern (no await) — doesn't add latency to 500 responses. Sentry SDK buffers and flushes asynchronously.
+    - Only captures 5xx errors (4xx are client mistakes, would spam Sentry).
+    - Wrapped in .catch() so it never throws even if @sentry/nextjs isn't installed.
+    - Kept apiError() SYNCHRONOUS (not async) so the 66 existing callers don't need `await`.
+  * Created src/lib/sentry-gst.ts:
+    - captureGstFilingError() helper that sets GST-specific tags (module: 'gst-filing', gst_route, gst_action, gst_month_year) on the current scope.
+    - Designed to be called BEFORE apiError() in GST route catch blocks. The tags persist on the scope, so apiError's withScope inherits them — producing a SINGLE Sentry event with both GST tags AND apiError context.
+  * Updated GST filing routes to call captureGstFilingError() before apiError():
+    - src/app/api/gstr-3b/route.ts — GET (compute) + POST (save/file)
+    - src/app/api/gstr-1/route.ts — GET (compute) + POST (save/file)
+    - src/app/api/gstr-export/route.ts — GET (export)
+  * Created docs/sentry-alerts.md — documents the 4 alert rules to configure in the Sentry dashboard (GST Filing Failure CRITICAL, Any 5xx HIGH, Error Rate Spike HIGH, Reconciliation Mismatch MEDIUM). Includes the exact tag filters, Slack channel, throttle settings, and a setup checklist.
+  * Created src/__tests__/lib/v20-sentry-integration.test.ts — 6 smoke tests verifying apiError returns correct shape, doesn't leak context, generates unique errorIds, and captureGstFilingError doesn't throw.
+
+- VERIFICATION (all four checks):
+  * npx tsc --noEmit: 0 errors
+  * npx jest: 1581/1581 pass (was 1575, +6 new Sentry smoke tests)
+  * npx next build: Compiled successfully in 37.7s
+  * npx eslint (on 6 modified files): clean
+
+- POST-CHANGE SCAN:
+  * 66 apiError call sites across ~22 API routes now automatically report 500s to Sentry. No individual route changes needed (the chokepoint fix covers them all).
+  * The GST routes get additional tagging (module, gst_route, gst_action) so alert rules can target GST filing failures specifically.
+  * Verified Sentry SDK handles Vercel serverless flush automatically — the fire-and-forget pattern is safe.
+  * Verified the dynamic import doesn't add per-request overhead (Node module cache).
+  * Verified the .catch() wrapper makes it resilient if @sentry/nextjs isn't installed or SENTRY_DSN isn't set.
+  * No adjacent bugs found.
+
+Stage Summary:
+- V20-017 COMPLETE. The auditor's §5.5 recommendation is implemented.
+- Code-side instrumentation is done: every API 500 reports to Sentry; GST filing routes have additional tags for targeted alerting.
+- Dashboard-side alert rules are documented in docs/sentry-alerts.md (a one-time manual setup task for the founder — Sentry alert rules are configured in the UI, not code).
+- 6 new smoke tests added (1581 total, was 1575).
+- The founder needs to: (1) verify SENTRY_DSN is set in Vercel, (2) create the 4 alert rules in Sentry dashboard per docs/sentry-alerts.md, (3) configure Slack integration.
+- NEXT: Push to origin/main, wait for Vercel deploy + user verification. Then proceed to deferred item #4 (nightly reconciliation cron job — 4 hours).

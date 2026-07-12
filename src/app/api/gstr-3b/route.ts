@@ -5,6 +5,7 @@ import { canAccessModule } from '@/lib/staff-permissions'
 import { roundMoney, fromPaise } from '@/lib/money'
 import { istMonthStartOffset, getISTDateParts } from '@/lib/timezone'
 import { apiError } from '@/lib/api-error'
+import { captureGstFilingError } from '@/lib/sentry-gst'
 import { logAudit } from '@/lib/audit'
 
 /**
@@ -632,6 +633,15 @@ export async function GET(req: NextRequest) {
       } : null,
     })
   } catch (err) {
+    // 🔒 V20-017: GST filing error — capture with GST-specific tags for Sentry alerting.
+    // userId/monthYear are defined inside the try block and may not be in scope
+    // if the error happened early (e.g. auth failure). The route + action tags
+    // are enough for Sentry alert rules — userId is also captured by Sentry's
+    // default request context if auth succeeded.
+    captureGstFilingError(err, {
+      route: '/api/gstr-3b',
+      action: 'compute',
+    })
     return apiError(err, 'Failed to compute GSTR-3B', 500)
   }
 }
@@ -793,6 +803,14 @@ export async function POST(req: NextRequest) {
         : `GSTR-3B for ${monthParam} saved as Draft.`,
     })
   } catch (err) {
+    // 🔒 V20-017: GST filing error — capture with GST-specific tags for Sentry alerting.
+    // The POST handler is the most critical — this is where a V20-001-class bug
+    // (100× wrong GST filing) would surface as a 500 or as silently wrong data.
+    // `action` may not be in scope if the error happened before parsing the body.
+    captureGstFilingError(err, {
+      route: '/api/gstr-3b',
+      action: 'save',  // POST handler is always save/file; exact action unknown in catch
+    })
     return apiError(err, 'Failed to save GSTR-3B', 500)
   }
 }

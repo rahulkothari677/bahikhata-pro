@@ -5,6 +5,7 @@ import { canAccessModule } from '@/lib/staff-permissions'
 import { roundMoney } from '@/lib/money'
 import { istMonthStartOffset, getISTDateParts } from '@/lib/timezone'
 import { apiError } from '@/lib/api-error'
+import { captureGstFilingError } from '@/lib/sentry-gst'
 import { logAudit } from '@/lib/audit'
 import { deriveStateCode } from '@/lib/gst'
 import { buildGstr1, type Gstr1Transaction, type ShopInfo } from '@/lib/gstr1-builder'
@@ -165,6 +166,11 @@ export async function GET(req: NextRequest) {
       } : null,
     })
   } catch (err) {
+    // 🔒 V20-017: GST filing error — capture with GST-specific tags for Sentry alerting
+    captureGstFilingError(err, {
+      route: '/api/gstr-1',
+      action: 'compute',
+    })
     return apiError(err, 'Failed to compute GSTR-1', 500)
   }
 }
@@ -356,6 +362,11 @@ export async function POST(req: NextRequest) {
         : 'GSTR-1 draft saved.',
     })
   } catch (err) {
+    // 🔒 V20-017: GST filing error — capture with GST-specific tags for Sentry alerting
+    captureGstFilingError(err, {
+      route: '/api/gstr-1',
+      action: 'save',
+    })
     return apiError(err, 'Failed to save GSTR-1', 500)
   }
 }
