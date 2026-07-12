@@ -133,6 +133,11 @@ interface AppState {
   // navigates to Settings, it sets this so Settings opens on the right tab.
   pendingSettingsTab: 'profile' | 'features' | 'appearance' | 'data' | 'staff' | null
   setPendingSettingsTab: (tab: 'profile' | 'features' | 'appearance' | 'data' | 'staff' | null) => void
+  // 🔒 V21-014 (Phase 6): Account section — when non-null, AccountScreen
+  // renders a DEDICATED page for that section (no tabs, no menu).
+  // When null, shows the account menu (profile header + 10 items).
+  accountSection: string | null
+  setAccountSection: (section: string | null) => void
   features: FeatureFlags
   setFeature: (key: FeatureKey, enabled: boolean) => void
   resetFeatures: () => void
@@ -200,6 +205,9 @@ export const useAppStore = create<AppState>()(
       // 🔒 V21-012 (Phase 4a)
       pendingSettingsTab: null,
       setPendingSettingsTab: (tab) => set({ pendingSettingsTab: tab }),
+      // 🔒 V21-014 (Phase 6)
+      accountSection: null,
+      setAccountSection: (section) => set({ accountSection: section }),
       features: DEFAULT_FEATURES,
       setFeature: (key, enabled) => set((s) => ({ features: { ...s.features, [key]: enabled } })),
       resetFeatures: () => set({ features: DEFAULT_FEATURES }),

@@ -55,6 +55,8 @@ interface AccountMenuSection {
 
 export function AccountScreen() {
   const { setView, previousView, setPreviousView } = useAppStore()
+  const accountSection = useAppStore((s) => s.accountSection)
+  const setAccountSection = useAppStore((s) => s.setAccountSection)
   const { data: session } = useSession()
   const { plan } = useSubscription()
   const { isCA, isOwner } = useStaffPermissions()
@@ -76,40 +78,43 @@ export function AccountScreen() {
 
   const handleBack = () => {
     haptic.click()
-    setView(previousView || 'dashboard')
-    setPreviousView(null)
+    if (accountSection) {
+      // If in a section, go back to the account menu
+      setAccountSection(null)
+    } else {
+      // If on the menu, go back to the previous view
+      setView(previousView || 'dashboard')
+      setPreviousView(null)
+    }
   }
 
   const handleItemClick = (item: AccountMenuItem) => {
     haptic.click()
-    // 🔒 V21-012 fix: Set previousView to 'account' BEFORE navigating,
-    // so the back button on Settings/Pricing returns to Account (not More).
-    setPreviousView('account')
 
-    // 🔒 V21-012 (Phase 4a): Set the correct Settings tab BEFORE navigating.
-    // Use getState().setPendingSettingsTab() for synchronous update.
-    const tabMap: Record<string, 'profile' | 'features' | 'appearance' | 'data' | 'staff'> = {
+    // 🔒 V21-014 (Phase 6): Open dedicated section page (not Settings with tabs)
+    const sectionMap: Record<string, string> = {
       'My Profile': 'profile',
-      'Security': 'profile',
-      'App Settings': 'appearance',   // App Settings → appearance tab (language, dark mode)
+      'Security': 'security',
+      'Subscription': 'subscription',
+      'App Settings': 'app-settings',
       'Data & Privacy': 'data',
       'Staff & Access': 'staff',
-      'Refer & Earn': 'profile',
-      'Help & Support': 'profile',
-      'About': 'profile',
+      'Refer & Earn': 'referral',
+      'Help & Support': 'help',
+      'About': 'about',
     }
-    if (item.label && tabMap[item.label]) {
-      useAppStore.getState().setPendingSettingsTab(tabMap[item.label])
+    if (item.label && sectionMap[item.label]) {
+      setAccountSection(sectionMap[item.label])
+      return
     }
 
-    if (item.view) setView(item.view)
+    // For items without a dedicated section (like Rate EkBook), use action
     if (item.action) item.action()
   }
 
   const handleEditProfile = () => {
     haptic.click()
-    setPreviousView('account')
-    setView('settings')
+    setAccountSection('profile')
   }
 
   // Plan badge styling
@@ -120,6 +125,19 @@ export function AccountScreen() {
   }
   const planBadge = planBadges[plan] || planBadges.free
   const PlanIcon = planBadge.icon
+
+  // ═══ Section titles for dedicated pages ═══
+  const sectionTitles: Record<string, string> = {
+    'profile': 'My Profile',
+    'security': 'Security',
+    'subscription': 'Subscription',
+    'app-settings': 'App Settings',
+    'data': 'Data & Privacy',
+    'staff': 'Staff & Access',
+    'referral': 'Refer & Earn',
+    'help': 'Help & Support',
+    'about': 'About',
+  }
 
   // ═══ 10 Menu Sections ═══
   const sections: AccountMenuSection[] = [
@@ -238,10 +256,28 @@ export function AccountScreen() {
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <h2 className="text-lg font-bold">Account</h2>
+          <h2 className="text-lg font-bold">
+            {accountSection ? (sectionTitles[accountSection] || 'Account') : 'Account'}
+          </h2>
         </div>
       </div>
 
+      {/* ═══ Dedicated Section Page (no tabs, no menu) ═══ */}
+      {accountSection && (
+        <div className="max-w-2xl mx-auto px-4 py-4 pb-24"
+             style={{ paddingBottom: 'calc(6rem + env(safe-area-inset-bottom))' }}>
+          <AccountSectionContent
+            section={accountSection}
+            setting={setting}
+            session={session}
+            isOwner={isOwner}
+            isCA={isCA}
+          />
+        </div>
+      )}
+
+      {/* ═══ Account Menu (profile header + 10 items) ═══ */}
+      {!accountSection && (
       <div className="max-w-2xl mx-auto px-4 py-4 space-y-4 pb-24"
            style={{ paddingBottom: 'calc(6rem + env(safe-area-inset-bottom))' }}>
 
@@ -395,6 +431,81 @@ export function AccountScreen() {
           EkBook v1.0 · Made with love for Bharat 🇮🇳
         </p>
       </div>
+      )}
     </div>
   )
+}
+
+/**
+ * 🔒 V21-014 (Phase 6): AccountSectionContent — renders a DEDICATED page
+ * for each account section. No tabs, no menu — just the content for that
+ * one section. Each section is a standalone page like PhonePe/CRED.
+ */
+function AccountSectionContent({
+  section,
+  setting,
+  session,
+  isOwner,
+  isCA,
+}: {
+  section: string
+  setting: any
+  session: any
+  isOwner: boolean
+  isCA: boolean
+}) {
+  // Render the Settings component with a singleTab prop that hides the tab bar
+  // and locks to the relevant tab. This reuses all the existing Settings logic
+  // (forms, API calls, state management) without duplicating code.
+  const tabMap: Record<string, 'profile' | 'features' | 'appearance' | 'data' | 'staff'> = {
+    'profile': 'profile',
+    'security': 'profile',
+    'app-settings': 'appearance',
+    'data': 'data',
+    'staff': 'staff',
+    'referral': 'profile',
+    'help': 'profile',
+    'about': 'profile',
+  }
+
+  // For subscription, redirect to pricing page
+  if (section === 'subscription') {
+    return (
+      <div className="bg-card rounded-2xl shadow-sm border border-border/60 p-6 text-center">
+        <CreditCard className="w-12 h-12 text-amber-500 mx-auto mb-3" />
+        <p className="font-semibold mb-1">Manage Subscription</p>
+        <p className="text-sm text-muted-foreground mb-4">
+          View plans, upgrade, or manage your subscription.
+        </p>
+        <button
+          onClick={() => {
+            useAppStore.getState().setPreviousView('account')
+            useAppStore.getState().setAccountSection(null)
+            useAppStore.getState().setView('pricing')
+          }}
+          className="px-4 py-2 rounded-lg bg-gradient-saffron text-white text-sm font-medium"
+        >
+          View Plans
+        </button>
+      </div>
+    )
+  }
+
+  // For sections that don't have dedicated content yet, show a placeholder
+  const hasContent = tabMap[section]
+  if (!hasContent) {
+    return (
+      <div className="bg-card rounded-2xl shadow-sm border border-border/60 p-6 text-center">
+        <p className="text-muted-foreground text-sm">
+          This section is coming soon. We're building it to match the quality
+          of top apps like PhonePe and CRED.
+        </p>
+      </div>
+    )
+  }
+
+  // For sections with Settings content, render Settings with singleTab
+  // This imports the Settings component dynamically to avoid circular deps
+  const Settings = require('@/components/settings/Settings').Settings
+  return <Settings singleTab={tabMap[section]} />
 }

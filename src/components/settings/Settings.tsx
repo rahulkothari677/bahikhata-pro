@@ -81,7 +81,10 @@ const FEATURE_CATEGORIES: { title: string; features: { key: FeatureKey; label: s
   },
 ]
 
-export function Settings() {
+// 🔒 V21-014 (Phase 6): singleTab prop — when set, hides the tab bar and
+// locks to that tab. Used by the Account page to render each section as a
+// dedicated standalone page (no tab navigation visible).
+export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | 'appearance' | 'data' | 'staff' }) {
   const { toast } = useToast()
   const { confirmDialog, dialog: confirmDialogEl } = useConfirmDialog()
   const queryClient = useQueryClient()
@@ -347,18 +350,18 @@ export function Settings() {
   // so the Settings page opens on the correct tab when navigated from Account.
   const pendingTab = useAppStore((s) => s.pendingSettingsTab)
   const setPendingSettingsTab = useAppStore((s) => s.setPendingSettingsTab)
-  const [settingsTab, setSettingsTab] = useState<'profile' | 'features' | 'appearance' | 'data' | 'staff'>('profile')
+  // 🔒 V21-014 (Phase 6): If singleTab is set, use it as the initial tab.
+  const [settingsTab, setSettingsTab] = useState<'profile' | 'features' | 'appearance' | 'data' | 'staff'>(singleTab || 'profile')
 
-  // 🔒 V21-012 fix: Use useLayoutEffect to switch tab BEFORE paint, avoiding
-  // a flash of the wrong tab. Also reads from getState() directly to avoid
-  // stale closure issues.
+  // 🔒 V21-012 fix: Read from store on mount for pending tab
   useEffect(() => {
+    if (singleTab) return // Don't override singleTab mode
     const tab = useAppStore.getState().pendingSettingsTab
     if (tab) {
       setSettingsTab(tab)
       setPendingSettingsTab(null)
     }
-  }, [setPendingSettingsTab])
+  }, [setPendingSettingsTab, singleTab])
 
   const tabs = [
     { id: 'profile', label: 'Profile', icon: Store },
@@ -370,7 +373,8 @@ export function Settings() {
 
   return (
     <div className="space-y-4 max-w-3xl">
-      {/* Tab bar */}
+      {/* Tab bar — hidden when singleTab is set (Account page dedicated sections) */}
+      {!singleTab && (
       <div className="flex gap-1 overflow-x-auto border-b border-border">
         {tabs.map(tab => {
           const Icon = tab.icon
@@ -390,6 +394,7 @@ export function Settings() {
           )
         })}
       </div>
+      )}
 
       {/* ── PROFILE TAB ─────────────────────────────────────────────── */}
       {settingsTab === 'profile' && (
