@@ -125,6 +125,9 @@ export async function GET(req: NextRequest) {
             id: true, name: true, category: true,
             purchasePrice: true, salePrice: true,
             currentStock: true, lowStockThreshold: true,
+            // 🔒 V21-001 FIX: Was missing 'unit' — SmartInsights rendered
+            // "Stock: -70 undefined" because p.unit was undefined.
+            unit: true,
           },
         }),
         db.party.findMany({

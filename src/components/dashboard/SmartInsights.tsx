@@ -176,12 +176,12 @@ function computeInsights(data: any): Insight[] {
 
       insights.push({
         title: p.currentStock <= 0
-          ? `📦 ${p.name} is OUT OF STOCK`
+          ? `📦 ${p.name} is OVERSOLD`
           : daysLeft <= 7
             ? `📦 ${p.name} runs out in ~${daysLeft} days`
             : `📦 ${p.name} is running low`,
         description: p.currentStock <= 0
-          ? `Stock: ${p.currentStock} ${p.unit}. Restock immediately — you're losing sales.`
+          ? `Oversold by ${Math.abs(p.currentStock)} ${p.unit}. Restock immediately — you're losing sales.`
           : `${p.currentStock} ${p.unit} left · threshold: ${p.lowStockThreshold} ${p.unit}. Consider reordering soon.`,
         icon: Package,
         severity: p.currentStock <= 0 ? 'critical' : 'warning',
