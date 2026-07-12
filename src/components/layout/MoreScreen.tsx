@@ -68,12 +68,12 @@ const SECTIONS: MenuSection[] = [
       { icon: ScanLine, label: 'AI Bill Scanner', description: 'Snap a bill, auto-fill everything', view: 'scanner', iconColor: 'text-violet-600', iconBg: 'bg-violet-100' },
     ],
   },
-  {
-    title: 'Account',
-    items: [
-      { icon: SettingsIcon, label: 'Settings', description: 'Shop profile, features, theme', view: 'settings', iconColor: 'text-slate-600', iconBg: 'bg-slate-100' },
-    ],
-  },
+  // 🔒 V21-011 (Phase 3): Removed Account section (Settings) — now in Account page
+  // 🔒 V21-011 (Phase 3): Removed Support section (Help, Contact, About, Rate) — now in Account page
+  // 🔒 V21-011 (Phase 3): Removed Premium banner — now in Account page (Subscription)
+  // 🔒 V21-011 (Phase 3): Removed Logout button — now in Account page
+  // 🔒 V21-011 (Phase 3): Removed Profile header — now in Account page
+  // More section is now BUSINESS TOOLS ONLY.
 ]
 
 export function MoreScreen() {
@@ -145,47 +145,8 @@ export function MoreScreen() {
         className="max-w-2xl mx-auto px-4 py-4 space-y-4 pb-24"
         style={{ paddingBottom: 'calc(6rem + env(safe-area-inset-bottom))' }}
       >
-        {/* Profile Header — premium gradient banner */}
-        {/* V17-Ext Tier 3 Step 5: CAs get a violet gradient + CA Mode badge */}
-        <button
-          onClick={isCA ? undefined : handleEditProfile}
-          disabled={isCA}
-          className={cn(
-            "w-full rounded-2xl shadow-card relative overflow-hidden text-white transition",
-            isCA ? "cursor-default" : "active:scale-[0.98]"
-          )}
-        >
-          <div className={cn("p-5 relative", isCA ? "bg-gradient-to-br from-violet-600 to-purple-700" : "bg-gradient-saffron")}>
-            {/* Decorative circles */}
-            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 pointer-events-none" />
-            <div className="absolute bottom-0 right-20 w-24 h-24 bg-white/5 rounded-full -mb-12 pointer-events-none" />
-            <div className="relative flex items-center gap-4">
-              <Avatar className="w-16 h-16 border-4 border-white/30 flex-shrink-0">
-                <AvatarFallback className="bg-white/20 backdrop-blur-sm text-white text-xl font-bold">
-                  {getInitials(userName)}
-                </AvatarFallback>
-              </Avatar>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className="font-bold text-lg font-heading tracking-tight truncate">{userName}</p>
-                  {isCA && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-white/25 text-white whitespace-nowrap flex items-center gap-1">
-                      <Calculator className="w-2.5 h-2.5" /> CA
-                    </span>
-                  )}
-                </div>
-                <p className="text-sm text-white/80 truncate">{shopName}</p>
-                {email && <p className="text-xs text-white/70 truncate">{email}</p>}
-                {isCA && (
-                  <p className="text-[11px] text-white/60 truncate mt-0.5">Read-only access — ask the owner to make changes</p>
-                )}
-              </div>
-              <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
-                {isCA ? <Calculator className="w-4 h-4" /> : <Pencil className="w-4 h-4" />}
-              </div>
-            </div>
-          </div>
-        </button>
+        {/* 🔒 V21-011 (Phase 3): Profile header removed — now in Account page.
+            The More section is now BUSINESS TOOLS ONLY. */}
 
         {/* Menu Sections — filtered by staff permissions */}
         {SECTIONS.map((section, idx) => {
@@ -243,95 +204,10 @@ export function MoreScreen() {
           )
         })}
 
-        {/* Premium Banner — links to Plans & Pricing view */}
-        <button
-          onClick={() => { haptic.click(); setPreviousView('more'); setView('pricing') }}
-          className="w-full bg-gradient-to-r from-amber-500 to-orange-600 rounded-2xl p-4 shadow-lg text-white text-left hover:shadow-xl transition active:scale-[0.98] flex items-center gap-4"
-        >
-          <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center flex-shrink-0">
-            <Crown className="w-6 h-6" />
-          </div>
-          <div className="flex-1">
-            <p className="font-bold text-base">Upgrade to Pro</p>
-            <p className="text-sm text-white/80">Unlimited AI scans, multi-shop, advanced reports</p>
-          </div>
-          <ChevronRight className="w-5 h-5 text-white/80" />
-        </button>
-
-        {/* Support Section */}
-        <div>
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-2 mb-2">
-            Support
-          </p>
-          <div className="bg-card rounded-2xl shadow-sm border border-border/60 overflow-hidden">
-            <button
-              onClick={() => { haptic.click(); setPreviousView('more'); setView('settings') }}
-              className="w-full flex items-center gap-3 p-3 hover:bg-muted/50 transition text-left"
-            >
-              <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
-                <HelpCircle className="w-5 h-5 text-blue-600" />
-              </div>
-              <div className="flex-1">
-                <p className="font-medium text-sm">Help & Support</p>
-                <p className="text-xs text-muted-foreground">Settings, features, theme</p>
-              </div>
-              <ChevronRight className="w-4 h-4 text-muted-foreground" />
-            </button>
-            <button
-              onClick={() => { haptic.click(); sonnerToast.info('Contact us at support@ekbook.app', { description: 'Email us anytime — we respond within 24 hours.' }) }}
-              className="w-full flex items-center gap-3 p-3 hover:bg-muted/50 transition text-left border-t border-border/40"
-            >
-              <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center flex-shrink-0">
-                <Phone className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-              </div>
-              <div className="flex-1">
-                <p className="font-medium text-sm">Contact Us</p>
-                <p className="text-xs text-muted-foreground">support@ekbook.app</p>
-              </div>
-              <ChevronRight className="w-4 h-4 text-muted-foreground" />
-            </button>
-            <button
-              onClick={() => { haptic.click(); sonnerToast.info('EkBook — India\'s Smart Ledger', { description: 'Made in India with love for Bharat. GST-compliant, offline-ready, CA-friendly.' }) }}
-              className="w-full flex items-center gap-3 p-3 hover:bg-muted/50 transition text-left border-t border-border/40"
-            >
-              <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0">
-                <Info className="w-5 h-5 text-slate-600" />
-              </div>
-              <div className="flex-1">
-                <p className="font-medium text-sm">About</p>
-                <p className="text-xs text-muted-foreground">Version, privacy, terms</p>
-              </div>
-              <ChevronRight className="w-4 h-4 text-muted-foreground" />
-            </button>
-            <button
-              onClick={() => { haptic.click(); window.open('https://play.google.com/store/apps/details?id=com.ekbook.app', '_blank') }}
-              className="w-full flex items-center gap-3 p-3 hover:bg-muted/50 transition text-left border-t border-border/40"
-            >
-              <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
-                <Star className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-              </div>
-              <div className="flex-1">
-                <p className="font-medium text-sm">Rate EkBook</p>
-                <p className="text-xs text-muted-foreground">Help others discover us</p>
-              </div>
-              <ChevronRight className="w-4 h-4 text-muted-foreground" />
-            </button>
-          </div>
-        </div>
-
-        {/* Logout Button */}
-        <button
-          onClick={handleLogout}
-          className="w-full bg-card rounded-2xl p-4 shadow-sm border border-rose-200 flex items-center justify-center gap-2 text-rose-600 hover:bg-rose-50 transition active:scale-[0.98]"
-        >
-          <LogOut className="w-5 h-5" />
-          <span className="font-semibold">Logout</span>
-        </button>
-
-        {/* Version footer */}
-        <p className="text-center text-xs text-muted-foreground pt-2">
-          EkBook v1.0 · Made with love for Bharat 🇮🇳
-        </p>
+        {/* 🔒 V21-011 (Phase 3): Premium banner removed — now in Account page (Subscription) */}
+        {/* 🔒 V21-011 (Phase 3): Support section removed — now in Account page */}
+        {/* 🔒 V21-011 (Phase 3): Logout button removed — now in Account page */}
+        {/* 🔒 V21-011 (Phase 3): Version footer removed — now in Account page */}
       </div>
       {confirmDialogEl}
     </div>
