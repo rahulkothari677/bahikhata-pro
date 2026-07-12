@@ -23,6 +23,13 @@ import { Activity, TrendingUp, TrendingDown, Minus } from 'lucide-react'
 import { useCountUp } from '@/hooks/use-count-up'
 
 export function BusinessHealthScore({ kpis }: { kpis: any }) {
+  // 🔒 V21-005: Detect low-data accounts (new users with <5 transactions).
+  // For these accounts, the health score is meaningless (a new user with 0
+  // sales gets 0/100 "Critical" which is demotivating). Instead, show an
+  // encouraging state that invites them to add data.
+  const totalTxns = (kpis.rangeTxnCount || 0) + (kpis.todayTxnCount || 0)
+  const isLowData = totalTxns < 5
+
   // Calculate score components (each 0-100)
   const revenueScore = Math.min(100, Math.max(0,
     kpis.revenueGrowth >= 0
@@ -89,10 +96,20 @@ export function BusinessHealthScore({ kpis }: { kpis: any }) {
     }
   }
 
-  const { text, stroke, bg, label, icon: Icon } = getColor(score)
+  // 🔒 V21-005: For low-data accounts, use a friendly blue/teal color
+  // instead of the harsh red/amber that a 0-40 score would produce.
+  const lowDataColor = {
+    text: 'text-blue-600 dark:text-blue-400',
+    stroke: '#3b82f6',
+    bg: 'from-blue-500 to-cyan-600',
+    label: 'Getting Started',
+    icon: Activity,
+  }
+
+  const { text, stroke, bg, label, icon: Icon } = isLowData ? lowDataColor : getColor(score)
 
   // Count-up animation for the score number
-  const animatedScore = useCountUp(score, 1000)
+  const animatedScore = useCountUp(isLowData ? 0 : score, 1000)
   const displayScore = Math.round(animatedScore)
 
   // Circular gauge parameters
@@ -108,6 +125,40 @@ export function BusinessHealthScore({ kpis }: { kpis: any }) {
     { label: 'Stock Health', score: stockScore, weight: '15%' },
     { label: 'Activity', score: activityScore, weight: '15%' },
   ]
+
+  // 🔒 V21-005: For low-data accounts, show an encouraging message instead
+  // of the harsh "Critical/Needs Attention" label + 0-40 score.
+  if (isLowData) {
+    return (
+      <div className="rounded-2xl shadow-card border border-border/60 overflow-hidden">
+        <div className={cn('bg-gradient-to-r p-3 text-white relative overflow-hidden', bg)}>
+          <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -mr-10 -mt-10 pointer-events-none" />
+          <div className="relative flex items-center gap-2">
+            <div className="w-8 h-8 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center">
+              <Activity className="w-4 h-4" />
+            </div>
+            <div>
+              <p className="text-sm font-bold font-heading tracking-tight">Business Health Score</p>
+              <p className="text-[10px] text-white/80">Overall business wellness indicator</p>
+            </div>
+          </div>
+        </div>
+        <CardContent className="p-4">
+          <div className="flex flex-col items-center text-center py-2">
+            <div className={cn('w-12 h-12 rounded-full bg-gradient-to-br flex items-center justify-center mb-3', bg)}>
+              <Icon className="w-6 h-6 text-white" />
+            </div>
+            <p className="text-sm font-bold mb-1">Add more sales to see your score</p>
+            <p className="text-xs text-muted-foreground">
+              Record at least 5 transactions to get a meaningful health score.
+              Your business health is calculated from revenue trends, profit
+              margins, cash flow, and stock health.
+            </p>
+          </div>
+        </CardContent>
+      </div>
+    )
+  }
 
   return (
     <div className="rounded-2xl shadow-card border border-border/60 overflow-hidden">
