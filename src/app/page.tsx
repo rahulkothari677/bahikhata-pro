@@ -284,7 +284,9 @@ export default function Home() {
 
   return (
     <>
-      {showSplash && <SplashScreen onFinish={() => {
+      {showSplash && <SplashScreen
+        ready={status === 'authenticated' && dashboardData !== undefined}
+        onFinish={() => {
         setShowSplash(false)
         // 🔒 FIX M10: Mark splash as shown so warm reloads skip it.
         try { sessionStorage.setItem('splashShown', 'true') } catch {}

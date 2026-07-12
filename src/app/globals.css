@@ -398,6 +398,9 @@
 }
 
 /* ==================== SPLASH SCREEN ANIMATIONS ==================== */
+/* 🔒 V20-019: Premium splash — multi-stage animation with shimmer, glow,
+ * particle accents, and reduced-motion support. CSS-only (no JS loops)
+ * for performance on mid-range Android. */
 
 @keyframes splash-logo {
   0% {
@@ -436,6 +439,147 @@
   }
 }
 
+/* ─── V20-019: Premium splash animations ─────────────────────────── */
+
+/* Logo assembly: book pages open from center, checkmark draws last */
+@keyframes splash-logo-premium {
+  0% {
+    transform: scale(0.5) rotate(-8deg);
+    opacity: 0;
+    filter: blur(8px);
+  }
+  40% {
+    transform: scale(1.08) rotate(2deg);
+    opacity: 1;
+    filter: blur(0);
+  }
+  60% {
+    transform: scale(1.02) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+/* SVG path draw animation for the checkmark */
+@keyframes splash-checkmark-draw {
+  0% {
+    stroke-dashoffset: 80;
+    opacity: 0;
+  }
+  60% {
+    opacity: 0;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 1;
+  }
+}
+
+/* Shimmer sweep across the logo (continuous, subtle) */
+@keyframes splash-shimmer {
+  0% {
+    transform: translateX(-150%) skewX(-20deg);
+  }
+  100% {
+    transform: translateX(250%) skewX(-20deg);
+  }
+}
+
+/* Glow pulse behind the logo */
+@keyframes splash-glow-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 0.25;
+  }
+  50% {
+    transform: scale(1.15);
+    opacity: 0.4;
+  }
+}
+
+/* Floating particle accents — 3 particles with different timings */
+@keyframes splash-particle-float {
+  0% {
+    transform: translateY(0) translateX(0) scale(0.8);
+    opacity: 0;
+  }
+  20% {
+    opacity: 0.6;
+  }
+  80% {
+    opacity: 0.4;
+  }
+  100% {
+    transform: translateY(-120px) translateX(var(--drift, 20px)) scale(0.3);
+    opacity: 0;
+  }
+}
+
+/* Brand reveal: letters rise into place with stagger */
+@keyframes splash-letter-rise {
+  0% {
+    opacity: 0;
+    transform: translateY(30px) scale(0.9);
+    filter: blur(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+/* Tagline fade-in with slight upward motion */
+@keyframes splash-tagline {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 0.85;
+    transform: translateY(0);
+  }
+}
+
+/* Progress bar fill — tied to data-readiness, not a fixed timer */
+@keyframes splash-progress-fill {
+  0% {
+    width: 0%;
+  }
+  60% {
+    width: 70%;
+  }
+  100% {
+    width: 100%;
+  }
+}
+
+/* Premium exit: scale up + fade out (feels like the app "opens" from the splash) */
+@keyframes splash-exit-premium {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.08);
+    opacity: 0;
+  }
+}
+
+/* Gradient shift on the background (subtle, premium) */
+@keyframes splash-gradient-shift {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+/* Class bindings */
 .animate-splash-logo {
   animation: splash-logo 0.8s ease-out;
 }
@@ -458,4 +602,82 @@
 
 .animate-splash-dot-3 {
   animation: splash-dot 1.4s ease-in-out 0.4s infinite;
+}
+
+/* V20-019 premium classes */
+.animate-splash-logo-premium {
+  animation: splash-logo-premium 1s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.animate-splash-checkmark {
+  stroke-dasharray: 80;
+  animation: splash-checkmark-draw 1.2s ease-out 0.6s both;
+}
+
+.animate-splash-shimmer {
+  animation: splash-shimmer 2.5s ease-in-out 1s infinite;
+}
+
+.animate-splash-glow {
+  animation: splash-glow-pulse 3s ease-in-out infinite;
+}
+
+.animate-splash-particle-1 {
+  animation: splash-particle-float 3s ease-out 0.5s infinite;
+  --drift: 15px;
+}
+
+.animate-splash-particle-2 {
+  animation: splash-particle-float 3.5s ease-out 1.2s infinite;
+  --drift: -25px;
+}
+
+.animate-splash-particle-3 {
+  animation: splash-particle-float 2.8s ease-out 1.8s infinite;
+  --drift: 30px;
+}
+
+.animate-splash-letter {
+  animation: splash-letter-rise 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.animate-splash-tagline {
+  animation: splash-tagline 0.8s ease-out 0.9s both;
+}
+
+.animate-splash-progress {
+  animation: splash-progress-fill 1.4s ease-out 0.4s both;
+}
+
+.animate-splash-exit {
+  animation: splash-exit-premium 0.4s ease-in forwards;
+}
+
+.animate-splash-gradient {
+  background-size: 200% 200%;
+  animation: splash-gradient-shift 6s ease-in-out infinite;
+}
+
+/* Respect reduced motion — disable all non-essential animations */
+@media (prefers-reduced-motion: reduce) {
+  .animate-splash-logo-premium,
+  .animate-splash-checkmark,
+  .animate-splash-shimmer,
+  .animate-splash-glow,
+  .animate-splash-particle-1,
+  .animate-splash-particle-2,
+  .animate-splash-particle-3,
+  .animate-splash-letter,
+  .animate-splash-tagline,
+  .animate-splash-progress,
+  .animate-splash-gradient {
+    animation: none !important;
+  }
+  .animate-splash-checkmark {
+    stroke-dashoffset: 0 !important;
+    opacity: 1 !important;
+  }
+  .animate-splash-progress {
+    width: 100% !important;
+  }
 }
