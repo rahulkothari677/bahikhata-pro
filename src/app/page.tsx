@@ -77,17 +77,13 @@ export default function Home() {
   const [tourDone, setTourDone] = useState(false)
   const [themePickerDone, setThemePickerDone] = useState(false)
   const [mounted, setMounted] = useState(false)
-  // 🔒 V20-019: Splash shows on every full page load. The old sessionStorage
-  // check (FIX M10) skipped the splash on warm reloads — but sessionStorage
-  // persists across refreshes in the same tab, so users who visited before
-  // NEVER saw the splash again. Now the splash is data-driven (dismisses
-  // when session + dashboard data are ready, not after a fixed 2s timer),
-  // so showing it on every load is fine — it dismisses quickly.
-  // Only skip on native (Capacitor has its own native splash screen).
+  // 🔒 V20-019: Splash shows on every full page load — desktop AND mobile.
+  // Previously skipped on Capacitor native (which has its own static native
+  // splash), but the user wants the premium animated splash everywhere.
+  // The CapacitorBridge hides the native splash immediately, and this web
+  // splash takes over with the same saffron background (seamless transition).
   const [showSplash, setShowSplash] = useState(() => {
     if (typeof window === 'undefined') return true
-    // Skip on native — CapacitorBridge hides the native splash separately
-    if (typeof window !== 'undefined' && (window as any).Capacitor?.isNativePlatform?.()) return false
     return true
   })
   // 🔒 V9 4.2: First-run modal orchestrator — gate low-priority modals until
