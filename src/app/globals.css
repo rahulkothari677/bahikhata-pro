@@ -150,6 +150,16 @@
        based on the .dark class. Our Capacitor StatusBar plugin controls
        the status bar color directly, so we don't want the OS overriding it. */
     color-scheme: light;
+    /* 🔒 V21-013 (Phase 5a): Base font size increased from 16px (Tailwind default)
+       to 16px on mobile, 17px on desktop. This makes body text more readable
+       on small screens without being too large. Combined with the tighter
+       padding in Phase 5b, this gives cards more breathing room. */
+    font-size: 16px;
+  }
+  @media (min-width: 1024px) {
+    html {
+      font-size: 17px;
+    }
   }
   body {
     @apply bg-background text-foreground;
@@ -159,6 +169,10 @@
     /* Slightly tighter line-height for a more designed feel */
     line-height: 1.5;
     overscroll-behavior-y: none;
+    /* 🔒 V21-013 (Phase 5a): Improve text rendering on all platforms */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
   }
   /* Headings use Plus Jakarta Sans — geometric, friendly, bold.
      Apply to h1-h6 and any element with .font-heading class. */
@@ -366,7 +380,7 @@
   /* Reports: expand tables, remove card shadows/borders */
   .print\:block { display: block !important; }
   .print\:full { width: 100% !important; max-width: none !important; }
-  table { font-size: 11px !important; }
+  table { font-size: 13px !important; }
   thead { display: table-header-group !important; }
   tr { page-break-inside: avoid !important; }
   .shadow-card, .shadow-sm, .shadow-lg, .shadow-md {

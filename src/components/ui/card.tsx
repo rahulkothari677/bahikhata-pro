@@ -7,7 +7,8 @@ function Card({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card"
       className={cn(
-        "bg-card text-card-foreground flex flex-col gap-6 rounded-2xl border border-border/60 py-6 shadow-card",
+        // 🔒 V21-013 (Phase 5b): Reduced from py-6 to py-4 — less wasted vertical space.
+        "bg-card text-card-foreground flex flex-col gap-4 rounded-2xl border border-border/60 py-4 shadow-card",
         className
       )}
       {...props}
@@ -20,7 +21,8 @@ function CardHeader({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="card-header"
       className={cn(
-        "@container/card-header grid auto-rows-min grid-rows-[auto_auto] items-start gap-1.5 px-6 has-data-[slot=card-action]:grid-cols-[1fr_auto] [.border-b]:pb-6",
+        // 🔒 V21-013 (Phase 5b): Reduced from px-6 to px-4 — less wasted horizontal space on mobile.
+        "@container/card-header grid auto-rows-min grid-rows-[auto_auto] items-start gap-1.5 px-4 has-data-[slot=card-action]:grid-cols-[1fr_auto] [.border-b]:pb-4 lg:px-6",
         className
       )}
       {...props}
@@ -65,7 +67,8 @@ function CardContent({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card-content"
-      className={cn("px-6", className)}
+      // 🔒 V21-013 (Phase 5b): Reduced from px-6 to px-4 on mobile, px-6 on desktop.
+      className={cn("px-4 lg:px-6", className)}
       {...props}
     />
   )
@@ -75,7 +78,8 @@ function CardFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="card-footer"
-      className={cn("flex items-center px-6 [.border-t]:pt-6", className)}
+      // 🔒 V21-013 (Phase 5b): Reduced from px-6 to px-4 on mobile, pt-6 to pt-4.
+      className={cn("flex items-center px-4 lg:px-6 [.border-t]:pt-4", className)}
       {...props}
     />
   )

@@ -112,7 +112,7 @@ export function Dashboard() {
   // 🔒 BUG FIX V5: Show error state if query fails (e.g., 401) and no data
   if (error && !data && !isLoading) {
     return (
-      <div className="space-y-5">
+      <div className="space-y-3 lg:space-y-5">
         <DateRangeHeader
           dateRange={dateRange}
           datePreset={datePreset}
@@ -142,7 +142,7 @@ export function Dashboard() {
 
   if (isOfflineNoData) {
     return (
-      <div className="space-y-5">
+      <div className="space-y-3 lg:space-y-5">
         <DateRangeHeader
           dateRange={dateRange}
           datePreset={datePreset}
@@ -184,7 +184,7 @@ export function Dashboard() {
 
   if (isLoading || !data) {
     return (
-      <div className="space-y-5">
+      <div className="space-y-3 lg:space-y-5">
         <DateRangeHeader
           dateRange={dateRange}
           datePreset={datePreset}
@@ -309,7 +309,7 @@ export function Dashboard() {
 
   if (isNewUser) {
     return (
-      <div className="space-y-5">
+      <div className="space-y-3 lg:space-y-5">
         <DateRangeHeader
           dateRange={dateRange}
           datePreset={datePreset}
@@ -381,12 +381,12 @@ export function Dashboard() {
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3 lg:space-y-5">
       {/* Greeting banner */}
       <motion.div
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="rounded-2xl bg-gradient-saffron p-5 lg:p-6 text-white shadow-lg relative overflow-hidden"
+        className="rounded-2xl bg-gradient-saffron p-4 lg:p-6 text-white shadow-lg relative overflow-hidden"
       >
         <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32" />
         <div className="absolute bottom-0 right-20 w-40 h-40 bg-white/5 rounded-full -mb-20" />
@@ -1132,7 +1132,7 @@ function KPICard({ title, value, icon: Icon, gradient, subtitle, trend, onClick,
       <div className={`rounded-2xl bg-card border border-border/60 shadow-card relative overflow-hidden h-full transition hover:shadow-lg ${onClick ? 'hover:scale-[1.02]' : ''}`}>
         {/* Subtle colored top border — connects card to theme */}
         <div className={`h-1 bg-gradient-to-r ${gradient}`} />
-        <div className="p-4 lg:p-5 relative">
+        <div className="p-3 lg:p-5 relative">
           <div className="flex items-start justify-between mb-3">
             <div className={`w-9 h-9 rounded-lg bg-gradient-to-br ${gradient} flex items-center justify-center shadow-md flex-shrink-0`}>
               <Icon className="w-4 h-4 text-white" />
@@ -1204,7 +1204,7 @@ function GstMiniStat({ label, value, color, highlight }: {
 
 function DashboardSkeleton() {
   return (
-    <div className="space-y-5">
+    <div className="space-y-3 lg:space-y-5">
       {/* Hero card — matches the today's summary hero */}
       <Skeleton className="h-36 w-full rounded-2xl" />
 
@@ -1220,7 +1220,7 @@ function DashboardSkeleton() {
       </div>
 
       {/* Sales trend chart */}
-      <div className="rounded-2xl border border-border/60 p-5 space-y-4">
+      <div className="rounded-2xl border border-border/60 p-4 space-y-4">
         <div className="flex items-center justify-between">
           <Skeleton className="h-5 w-32" />
           <Skeleton className="h-3 w-16" />
@@ -1230,7 +1230,7 @@ function DashboardSkeleton() {
 
       {/* Top products + category breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="rounded-2xl border border-border/60 p-5 space-y-3 lg:col-span-2">
+        <div className="rounded-2xl border border-border/60 p-4 space-y-3 lg:col-span-2">
           <Skeleton className="h-5 w-40" />
           {[...Array(5)].map((_, i) => (
             <div key={i} className="flex items-center gap-3">
@@ -1243,7 +1243,7 @@ function DashboardSkeleton() {
             </div>
           ))}
         </div>
-        <div className="rounded-2xl border border-border/60 p-5 space-y-3">
+        <div className="rounded-2xl border border-border/60 p-4 space-y-3">
           <Skeleton className="h-5 w-32" />
           <Skeleton className="h-48 w-full rounded-full mx-auto" />
         </div>
