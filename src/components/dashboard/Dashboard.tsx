@@ -28,8 +28,11 @@ import { formatINR, formatINRCompact, relativeTime, cn } from '@/lib/utils'
 import { motion } from 'framer-motion'
 import { offlineFetch, isOnline, OfflineError } from '@/lib/offline-fetch'
 import { useSetting } from '@/hooks/use-setting'
-import { DayEndSummary } from '@/components/dashboard/DayEndSummary'
-import { AnalyticsInsights } from '@/components/dashboard/AnalyticsInsights'
+// 🔒 V20-003: Lazy-load heavy dashboard sub-components to reduce initial bundle.
+// DayEndSummary and AnalyticsInsights import recharts + other heavy deps.
+// Loading them dynamically moves ~200KB out of the initial JS payload.
+const DayEndSummary = dynamic(() => import('@/components/dashboard/DayEndSummary').then(m => ({ default: m.DayEndSummary })), { ssr: false, loading: () => null })
+const AnalyticsInsights = dynamic(() => import('@/components/dashboard/AnalyticsInsights').then(m => ({ default: m.AnalyticsInsights })), { ssr: false, loading: () => null })
 import { useRecurringEntries } from '@/hooks/use-recurring-entries'
 import { toast as sonnerToast } from 'sonner'
 import { useCountUp } from '@/hooks/use-count-up'
