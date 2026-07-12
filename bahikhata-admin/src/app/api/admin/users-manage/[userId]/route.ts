@@ -12,12 +12,12 @@ import { adminAuthOptions } from '@/lib/auth'
  *   Body: { action: 'impersonate' | 'extend_trial', days?: number }
  */
 
-export async function DELETE(req: NextRequest, { params }: { params: { userId: string } }) {
+export async function DELETE(req: NextRequest, { params }: { params: Promise<{ userId: string }> }) {
   const auth = await requireAdmin()
   if (!auth.ok) return auth.error
 
   try {
-    const { userId } = params
+    const { userId } = await params
 
     // Prevent self-deletion
     if (userId === auth.userId) {
@@ -55,12 +55,12 @@ export async function DELETE(req: NextRequest, { params }: { params: { userId: s
   }
 }
 
-export async function POST(req: NextRequest, { params }: { params: { userId: string } }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ userId: string }> }) {
   const auth = await requireAdmin()
   if (!auth.ok) return auth.error
 
   try {
-    const { userId } = params
+    const { userId } = await params
     const { action, days } = await req.json()
 
     if (action === 'extend_trial') {

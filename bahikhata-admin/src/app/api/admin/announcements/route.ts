@@ -28,7 +28,12 @@ export async function POST(req: NextRequest) {
   if (!auth.ok) return auth.error
 
   try {
-    const { title, message, type, link, endsAt } = await req.json()
+    const body = await req.json()
+    const title: string = body.title
+    const message: string = body.message
+    const type: string = body.type || 'info'
+    const link: string | null = body.link || null
+    const endsAt: Date | null = body.endsAt ? new Date(body.endsAt) : null
 
     if (!title || !message) {
       return NextResponse.json({ error: 'title and message required' }, { status: 400 })
@@ -38,9 +43,9 @@ export async function POST(req: NextRequest) {
       data: {
         title,
         message,
-        type: type || 'info',
-        link: link || null,
-        endsAt: endsAt ? new Date(endsAt) : null,
+        type,
+        link,
+        endsAt,
         createdBy: auth.userId,
       },
     })

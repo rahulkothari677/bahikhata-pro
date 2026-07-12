@@ -59,7 +59,7 @@ export async function GET() {
     const DAU = (activeToday || []).filter(a => a.userId).length
     const WAU = (activeWeek || []).filter(a => a.userId).length
     const MAU = (activeMonth || []).filter(a => a.userId).length
-    const aiSuccessRate = (totalAIScans || 0) > 0 ? ((successfulAIScans || 0) / totalAIScans) * 100 : 0
+    const aiSuccessRate = (totalAIScans || 0) > 0 ? ((successfulAIScans || 0) / (totalAIScans || 1)) * 100 : 0
     const totalUsersCount = totalUsers || 0
 
     return NextResponse.json({
