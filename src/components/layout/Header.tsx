@@ -287,24 +287,11 @@ export function Header() {
             </>
           )}
 
-          {/* 🔒 V21-010 (Phase 2d): Desktop avatar — click opens Account page.
-              Replaces the old shop name badge + logout button.
-              On mobile, the avatar is already on the left side. */}
-          <button
-            onClick={handleAccountClick}
-            className="hidden lg:flex items-center gap-2 pl-3 ml-1 border-l border-border hover:bg-muted/50 rounded-lg p-1.5 transition"
-            title="View Account"
-          >
-            <div className="w-8 h-8 rounded-full bg-gradient-saffron flex items-center justify-center text-white text-xs font-bold">
-              {getInitials(ownerName).charAt(0)}
-            </div>
-            <div className="text-xs text-left">
-              <p className="font-semibold leading-tight">{shopName}</p>
-              <p className="text-muted-foreground leading-tight">{session?.user?.email || 'Owner'}</p>
-            </div>
-          </button>
+          {/* 🔒 V21-011 fix: Removed desktop avatar from top-right — it's now
+              at the bottom of the sidebar. Having it in both places was
+              redundant. The sidebar avatar opens the same Account page. */}
 
-          {/* Logout button — removed from header, now in Settings/More */}
+          {/* Logout button — removed from header, now in Account page */}
         </div>
       </div>
     </header>
