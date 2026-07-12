@@ -966,7 +966,7 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
             <div className="space-y-3">
               <div>
                 <Label>Amount (₹)</Label>
-                <Input type="number" value={form.totalAmount} onChange={(e) => setForm({ ...form, totalAmount: e.target.value })} />
+                <Input type="number" inputMode="decimal" value={form.totalAmount} onChange={(e) => setForm({ ...form, totalAmount: e.target.value })} />
               </div>
               <div>
                 <Label>Category</Label>
@@ -1045,10 +1045,10 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
                         <Input value={item.productName} onChange={(e) => updateItem(i, 'productName', e.target.value)} className="h-9" placeholder="Name" />
                       </div>
                       <div className="col-span-3 sm:col-span-1">
-                        <Input type="number" value={item.quantity} onChange={(e) => updateItem(i, 'quantity', parseFloat(e.target.value) || 0)} className="h-9" />
+                        <Input type="number" inputMode="decimal" value={item.quantity} onChange={(e) => updateItem(i, 'quantity', parseFloat(e.target.value) || 0)} className="h-9" />
                       </div>
                       <div className="col-span-4 sm:col-span-2">
-                        <Input type="number" value={item.unitPrice} onChange={(e) => updateItem(i, 'unitPrice', parseFloat(e.target.value) || 0)} className="h-9" />
+                        <Input type="number" inputMode="decimal" value={item.unitPrice} onChange={(e) => updateItem(i, 'unitPrice', parseFloat(e.target.value) || 0)} className="h-9" />
                       </div>
                       <div className="col-span-3 sm:col-span-1">
                         <Select value={String(item.gstRate)} onValueChange={(v) => updateItem(i, 'gstRate', parseFloat(v))}>
@@ -1071,7 +1071,7 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <Label>Discount (₹)</Label>
-                  <Input type="number" value={form.discountAmount} onChange={(e) => setForm({ ...form, discountAmount: e.target.value })} />
+                  <Input type="number" inputMode="decimal" value={form.discountAmount} onChange={(e) => setForm({ ...form, discountAmount: e.target.value })} />
                 </div>
                 <div>
                   <Label>Payment Mode</Label>
@@ -1084,7 +1084,7 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
                 </div>
                 <div>
                   <Label>Paid Amount (₹)</Label>
-                  <Input type="number" value={form.paidAmount} onChange={(e) => setForm({ ...form, paidAmount: e.target.value })} />
+                  <Input type="number" inputMode="decimal" value={form.paidAmount} onChange={(e) => setForm({ ...form, paidAmount: e.target.value })} />
                 </div>
               </div>
 

@@ -171,15 +171,15 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
           </div>
           <div>
             <Label>Purchase Price (₹) *</Label>
-            <Input type="number" value={form.purchasePrice} onChange={(e) => setForm({ ...form, purchasePrice: e.target.value })} placeholder="0" />
+            <Input type="number" inputMode="decimal" value={form.purchasePrice} onChange={(e) => setForm({ ...form, purchasePrice: e.target.value })} placeholder="0" />
           </div>
           <div>
             <Label>Sale Price (₹) *</Label>
-            <Input type="number" value={form.salePrice} onChange={(e) => setForm({ ...form, salePrice: e.target.value })} placeholder="0" />
+            <Input type="number" inputMode="decimal" value={form.salePrice} onChange={(e) => setForm({ ...form, salePrice: e.target.value })} placeholder="0" />
           </div>
           <div>
             <Label>MRP (₹)</Label>
-            <Input type="number" value={form.mrp} onChange={(e) => setForm({ ...form, mrp: e.target.value })} placeholder="optional" />
+            <Input type="number" inputMode="decimal" value={form.mrp} onChange={(e) => setForm({ ...form, mrp: e.target.value })} placeholder="optional" />
           </div>
           <div>
             <Label>GST Rate (%)</Label>
@@ -227,11 +227,11 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
           </div>
           <div>
             <Label>Opening Stock</Label>
-            <Input type="number" value={form.openingStock} onChange={(e) => setForm({ ...form, openingStock: e.target.value })} placeholder="0" />
+            <Input type="number" inputMode="decimal" value={form.openingStock} onChange={(e) => setForm({ ...form, openingStock: e.target.value })} placeholder="0" />
           </div>
           <div>
             <Label>Low Stock Alert At</Label>
-            <Input type="number" value={form.lowStockThreshold} onChange={(e) => setForm({ ...form, lowStockThreshold: e.target.value })} placeholder="5" />
+            <Input type="number" inputMode="decimal" value={form.lowStockThreshold} onChange={(e) => setForm({ ...form, lowStockThreshold: e.target.value })} placeholder="5" />
           </div>
         </div>
 
