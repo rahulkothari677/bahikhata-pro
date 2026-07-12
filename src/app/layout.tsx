@@ -5,8 +5,13 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { Providers } from "@/components/providers";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { Analytics } from "@vercel/analytics/react";
-import { SpeedInsights } from "@vercel/speed-insights/next";
+// 🔒 V20-007: Lazy-load analytics SDKs to reduce initial JS bundle.
+// These SDKs only report metrics AFTER the page loads, so they don't
+// need to be in the critical path. Using dynamic without ssr:false
+// (layout.tsx is a Server Component).
+import dynamic from "next/dynamic";
+const Analytics = dynamic(() => import("@vercel/analytics/react").then(m => ({ default: m.Analytics })))
+const SpeedInsights = dynamic(() => import("@vercel/speed-insights/next").then(m => ({ default: m.SpeedInsights })))
 
 // 🔒 V9 1.7a: Reduced to one font (was: Inter + Plus Jakarta Sans).
 // Plus Jakarta Sans was used for headings via --font-heading. Now --font-heading

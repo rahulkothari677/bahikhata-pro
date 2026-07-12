@@ -20,11 +20,14 @@ import { MoreScreen } from '@/components/layout/MoreScreen'
 import { Onboarding } from '@/components/layout/Onboarding'
 import { ThemePicker } from '@/components/common/ThemePicker'
 import { Dashboard } from '@/components/dashboard/Dashboard'
-import { Inventory } from '@/components/inventory/Inventory'
-import { Ledger } from '@/components/ledger/Ledger'
-import { LedgerSplitView } from '@/components/ledger/LedgerSplitView'
-import { IncomeExpense } from '@/components/income/IncomeExpense'
-import { Parties } from '@/components/parties/Parties'
+// 🔒 V20-008: Lazy-load non-default views to reduce initial bundle.
+// Dashboard is the default view, so it stays static. All other views
+// load on demand when the user navigates to them.
+const Inventory = dynamic(() => import('@/components/inventory/Inventory').then(m => ({ default: m.Inventory })), { ssr: false })
+const Ledger = dynamic(() => import('@/components/ledger/Ledger').then(m => ({ default: m.Ledger })), { ssr: false })
+const LedgerSplitView = dynamic(() => import('@/components/ledger/LedgerSplitView').then(m => ({ default: m.LedgerSplitView })), { ssr: false })
+const IncomeExpense = dynamic(() => import('@/components/income/IncomeExpense').then(m => ({ default: m.IncomeExpense })), { ssr: false })
+const Parties = dynamic(() => import('@/components/parties/Parties').then(m => ({ default: m.Parties })), { ssr: false })
 import { KeyboardShortcuts } from '@/components/common/KeyboardShortcuts'
 import { GlobalSearch } from '@/components/common/GlobalSearch'
 import { OfflineIndicator } from '@/components/common/OfflineIndicator'
