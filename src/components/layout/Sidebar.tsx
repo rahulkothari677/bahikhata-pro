@@ -51,11 +51,9 @@ const navItems: { id: ViewType; labelKey: string; descKey: string; icon: any; ba
   { id: 'income-expense', labelKey: 'nav.income', descKey: 'nav.income', icon: Wallet },
   { id: 'parties', labelKey: 'nav.parties', descKey: 'nav.parties', icon: Users },
   { id: 'reports', labelKey: 'nav.reports', descKey: 'nav.reports', icon: FileBarChart },
-  { id: 'pricing', labelKey: 'Plans & Pricing', descKey: 'Upgrade or manage subscription', icon: Crown },
-  { id: 'settings', labelKey: 'nav.settings', descKey: 'nav.settings', icon: Settings },
-  // NOTE: 'more' is intentionally NOT in the desktop sidebar.
-  // The sidebar already shows all items, so a 'More' button would duplicate.
-  // 'More' is a mobile-only concept (via MobileBottomNav) for secondary items.
+  // 🔒 V21-011 (Phase 3): Removed 'pricing' and 'settings' from sidebar —
+  // now in the Account page (accessible via avatar in top bar).
+  // Sidebar is now BUSINESS NAVIGATION ONLY.
 ]
 
 export function Sidebar() {
@@ -311,29 +309,15 @@ export function Sidebar() {
           </div>
         )}
 
-        {/* Footer — Clean, organized sections */}
+        {/* Footer — Profile button opens Account page */}
         {!sidebarCollapsed ? (
           <div className="border-t border-sidebar-border">
-            {/* NOTE: 'Upgrade to Pro' banner removed from sidebar footer.
-                The 'Plans & Pricing' nav item above already handles this,
-                so the duplicate banner was redundant. Mobile users see the
-                upgrade banner in the MoreScreen instead. */}
-
-            {/* Logout button — clean, full width */}
-            <div className="px-3 py-2">
-              <button
-                onClick={handleLogout}
-                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-rose-500 hover:bg-rose-500/10 transition text-sm"
-              >
-                <LogOut className="w-4 h-4" />
-                Logout
-              </button>
-            </div>
-
-            {/* Profile section — always at bottom */}
+            {/* 🔒 V21-011 (Phase 3): Removed Logout button — now in Account page.
+                Removed 'Upgrade to Pro' — now in Account page (Subscription).
+                The profile section now opens the Account page (not Settings). */}
             <button
-              onClick={() => setView('settings')}
-              className="w-full p-3 border-t border-sidebar-border flex items-center gap-3 hover:bg-sidebar-accent transition"
+              onClick={() => { setView('account'); setSidebarOpen(false) }}
+              className="w-full p-3 flex items-center gap-3 hover:bg-sidebar-accent transition"
             >
               <div className="w-9 h-9 rounded-full bg-gradient-saffron flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
                 {getInitials(userName)}
@@ -342,22 +326,17 @@ export function Sidebar() {
                 <p className="text-xs font-semibold text-sidebar-foreground truncate">{userName}</p>
                 <p className="text-[10px] text-sidebar-foreground/50 truncate">{shopName}</p>
               </div>
-              <Pencil className="w-3 h-3 text-sidebar-foreground/40 flex-shrink-0" />
             </button>
           </div>
         ) : (
-          /* Collapsed mode — icons only */
+          /* Collapsed mode — avatar only, opens Account page */
           <div className="border-t border-sidebar-border py-2 flex flex-col items-center gap-2">
-            {!isStaff && (
-              <button onClick={() => setView('pricing')} className="w-10 h-10 rounded-lg bg-gradient-to-r from-amber-500 to-orange-600 flex items-center justify-center" title="Upgrade to Pro">
-                <Crown className="w-4 h-4 text-white" />
-              </button>
-            )}
-            <button onClick={handleInstallApp} className="w-10 h-10 rounded-lg flex items-center justify-center text-sidebar-foreground/70 hover:bg-sidebar-accent" title="Install App">
-              <Download className="w-4 h-4" />
-            </button>
-            <button onClick={handleLogout} className="w-10 h-10 rounded-lg flex items-center justify-center text-rose-400 hover:bg-rose-500/10" title="Logout">
-              <LogOut className="w-4 h-4" />
+            <button
+              onClick={() => setView('account')}
+              className="w-10 h-10 rounded-full bg-gradient-saffron flex items-center justify-center text-white text-sm font-bold"
+              title="Account"
+            >
+              {getInitials(userName).charAt(0)}
             </button>
           </div>
         )}
