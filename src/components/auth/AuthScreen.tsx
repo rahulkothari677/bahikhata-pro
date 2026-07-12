@@ -8,9 +8,21 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { toast as sonnerToast } from 'sonner'
 import { getCachedSession } from '@/lib/offline-db'
+import { useAppStore } from '@/store/app-store'
+import { Globe } from 'lucide-react'
+
+// 🔒 V20-5C: Language options for the login screen toggle
+const LANGS = [
+  { code: 'en', label: 'EN' },
+  { code: 'hi', label: 'हिं' },
+  { code: 'gu', label: 'ગુ' },
+  { code: 'mr', label: 'मरा' },
+  { code: 'ta', label: 'தமி' },
+] as const
 
 export function AuthScreen() {
   const { data: session, status } = useSession()
+  const { language, setLanguage } = useAppStore()
   const [mode, setMode] = useState<'login' | 'signup'>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -107,6 +119,24 @@ export function AuthScreen() {
           </div>
           <h1 className="text-3xl font-bold tracking-tight">EkBook</h1>
           <p className="text-sm text-muted-foreground mt-1">India&apos;s Smartest Ledger App</p>
+
+          {/* 🔒 V20-5C: Language toggle on login screen — front and center */}
+          <div className="flex items-center justify-center gap-1.5 mt-3">
+            <Globe className="w-3.5 h-3.5 text-muted-foreground" />
+            {LANGS.map(l => (
+              <button
+                key={l.code}
+                onClick={() => setLanguage(l.code)}
+                className={`px-2 py-1 rounded-md text-xs font-medium transition ${
+                  language === l.code
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:bg-muted'
+                }`}
+              >
+                {l.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="bg-card rounded-2xl shadow-xl border border-border p-6 lg:p-8">
