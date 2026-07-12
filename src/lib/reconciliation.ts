@@ -71,12 +71,27 @@ export async function checkPartyBalances(userId: string): Promise<Reconciliation
     }
   }
 
-  // 🔒 V20-006: Tightened from < 0.01 to < 0.005. With the Prisma extension
-  // converting paise→rupees, values are already roundMoney'd at the source.
-  // A 0.01 tolerance could mask a 1-paisa rounding difference. 0.005 catches
-  // any drift while allowing for float representation noise in fromPaise().
-  const receivableMatches = Math.abs(totalReceivable - jsReceivable) < 0.005
-  const payableMatches = Math.abs(totalPayable - jsPayable) < 0.005
+  // 🔒 V20-023: Switched from < 0.005 to roundMoney(diff) === 0.
+  //
+  // The auditor's §3 [VERIFY] note recommended === 0 with integer paise storage.
+  // This is correct: the DB SUM of integer paise columns is always an integer,
+  // so two queries that compute the same sum will return the same paise value.
+  // fromPaise(samePaise) produces the same float, roundMoney(sameFloat) produces
+  // the same canonical float, and sameFloat - sameFloat === 0 exactly.
+  //
+  // The ONLY case where the values differ is a real data discrepancy (≥ 1 paise
+  // = ≥ 0.01 rupees), which should fail. The old < 0.005 tolerance could mask
+  // a 1-paisa rounding difference (0.01 >= 0.005 fails, but 0.004 would pass
+  // — and 0.004 can't happen with integer paise, so the tolerance was safe but
+  // unnecessarily loose).
+  //
+  // The roundMoney() on the difference eliminates any IEEE 754 float drift from
+  // the subtraction itself (e.g., 12.35 - 12.35 might = 0.0000000001 in float).
+  // roundMoney(0.0000000001) = 0, so === 0 is safe.
+  const receivableDiff = roundMoney(totalReceivable - jsReceivable)
+  const payableDiff = roundMoney(totalPayable - jsPayable)
+  const receivableMatches = receivableDiff === 0
+  const payableMatches = payableDiff === 0
   const passed = receivableMatches && payableMatches
 
   return {
@@ -141,10 +156,16 @@ export async function checkGstReconciliation(userId: string): Promise<Reconcilia
   const headerSgst = roundMoney(headerGst._sum.sgst || 0)
   const headerIgst = roundMoney(headerGst._sum.igst || 0)
 
-  // 🔒 V20-006: Tightened GST tolerance from < 0.01 to < 0.005
-  const cgstMatches = Math.abs(itemCgst - headerCgst) < 0.005
-  const sgstMatches = Math.abs(itemSgst - headerSgst) < 0.005
-  const igstMatches = Math.abs(itemIgst - headerIgst) < 0.005
+  // 🔒 V20-023: Switched from < 0.005 to roundMoney(diff) === 0.
+  // Same rationale as checkPartyBalances above — with integer paise storage,
+  // exact equality is correct and stricter. The roundMoney() on the difference
+  // eliminates IEEE 754 float drift from the subtraction.
+  const cgstDiff = roundMoney(itemCgst - headerCgst)
+  const sgstDiff = roundMoney(itemSgst - headerSgst)
+  const igstDiff = roundMoney(itemIgst - headerIgst)
+  const cgstMatches = cgstDiff === 0
+  const sgstMatches = sgstDiff === 0
+  const igstMatches = igstDiff === 0
   const passed = cgstMatches && sgstMatches && igstMatches
 
   return {
