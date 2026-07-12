@@ -41,6 +41,7 @@ import { useRatePrompt } from '@/hooks/use-rate-prompt'
 import { useStaffPermissions } from '@/hooks/use-staff-permissions'
 import type { ModuleKey } from '@/lib/staff-permissions'
 import { track, identifyUser, initAnalytics, EVENTS } from '@/lib/analytics'
+import { useBootstrap } from '@/hooks/use-bootstrap'
 
 // Lazy-load heavy components that are only used occasionally.
 // This splits them into separate JS chunks, loaded on-demand when the user
@@ -97,6 +98,13 @@ export default function Home() {
   // user has any data — replaces the separate /api/seed call. MUST be before
   // any early returns (React Rules of Hooks — hooks can't be conditional).
   const { data: dashboardData } = useDashboardThisMonth()
+
+  // 🔒 V21-007: Bootstrap consolidation — fetch settings + shops + subscription
+  // in ONE request after warmup completes. Primes the React Query cache so
+  // use-setting, use-shops, and use-subscription read from cache (no extra
+  // network requests). Reduces boot fan-out from ~14 to ~11 requests.
+  const dbWarmedUp = useAppStore((s) => s.dbWarmedUp)
+  useBootstrap(status === 'authenticated' && dbWarmedUp)
 
   // 🔒 V9 4.2: Compute showOnboarding early (needed by the firstRunComplete effect below)
   const hasNoData = dashboardData?.kpis?.productCount === 0 && dashboardData?.kpis?.partyCount === 0
