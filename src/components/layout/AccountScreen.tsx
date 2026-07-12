@@ -83,6 +83,22 @@ export function AccountScreen() {
   const handleItemClick = (item: AccountMenuItem) => {
     haptic.click()
     setPreviousView('account')
+
+    // 🔒 V21-012 (Phase 4a): Set the correct Settings tab before navigating
+    const tabMap: Record<string, 'profile' | 'features' | 'appearance' | 'data' | 'staff'> = {
+      'My Profile': 'profile',
+      'Security': 'profile',        // Security is part of profile tab for now
+      'App Settings': 'features',   // App Settings → features tab
+      'Data & Privacy': 'data',
+      'Staff & Access': 'staff',
+      'Refer & Earn': 'profile',    // Referral is part of profile tab for now
+      'Help & Support': 'profile',  // Help is part of profile tab for now
+      'About': 'profile',           // About is part of profile tab for now
+    }
+    if (item.label && tabMap[item.label]) {
+      useAppStore.getState().setPendingSettingsTab(tabMap[item.label])
+    }
+
     if (item.view) setView(item.view)
     if (item.action) item.action()
   }

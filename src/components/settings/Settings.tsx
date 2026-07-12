@@ -343,7 +343,20 @@ export function Settings() {
     }
   }
 
-  const [settingsTab, setSettingsTab] = useState<'profile' | 'features' | 'appearance' | 'data' | 'staff'>('profile')
+  // 🔒 V21-012 (Phase 4a): Read pending tab from store (set by Account page)
+  // so the Settings page opens on the correct tab when navigated from Account.
+  const pendingTab = useAppStore((s) => s.pendingSettingsTab)
+  const setPendingSettingsTab = useAppStore((s) => s.setPendingSettingsTab)
+  const [settingsTab, setSettingsTab] = useState<'profile' | 'features' | 'appearance' | 'data' | 'staff'>(pendingTab || 'profile')
+
+  // Clear the pending tab after using it (so a manual navigation to Settings
+  // doesn't open on a stale tab)
+  useEffect(() => {
+    if (pendingTab) {
+      setSettingsTab(pendingTab)
+      setPendingSettingsTab(null)
+    }
+  }, [pendingTab, setPendingSettingsTab])
 
   const tabs = [
     { id: 'profile', label: 'Profile', icon: Store },

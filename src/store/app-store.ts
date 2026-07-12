@@ -129,6 +129,10 @@ interface AppState {
   setPreviousView: (v: ViewType | null) => void
   pendingDateRange: { from: string; to: string; preset: string } | null
   setPendingDateRange: (r: { from: string; to: string; preset: string } | null) => void
+  // 🔒 V21-012 (Phase 4a): Pending settings tab — when the Account page
+  // navigates to Settings, it sets this so Settings opens on the right tab.
+  pendingSettingsTab: 'profile' | 'features' | 'appearance' | 'data' | 'staff' | null
+  setPendingSettingsTab: (tab: 'profile' | 'features' | 'appearance' | 'data' | 'staff' | null) => void
   features: FeatureFlags
   setFeature: (key: FeatureKey, enabled: boolean) => void
   resetFeatures: () => void
@@ -193,6 +197,9 @@ export const useAppStore = create<AppState>()(
       setPreviousView: (v) => set({ previousView: v }),
       pendingDateRange: null,
       setPendingDateRange: (r) => set({ pendingDateRange: r }),
+      // 🔒 V21-012 (Phase 4a)
+      pendingSettingsTab: null,
+      setPendingSettingsTab: (tab) => set({ pendingSettingsTab: tab }),
       features: DEFAULT_FEATURES,
       setFeature: (key, enabled) => set((s) => ({ features: { ...s.features, [key]: enabled } })),
       resetFeatures: () => set({ features: DEFAULT_FEATURES }),
