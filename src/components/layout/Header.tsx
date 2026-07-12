@@ -73,7 +73,9 @@ export function Header() {
   const shopName = settingData?.setting?.shopName || 'My Shop'
   const ownerName = settingData?.setting?.ownerName || session?.user?.name || 'Shop Owner'
 
-  const isDetailView = currentView === 'transaction-detail' || currentView === 'party-profile' || currentView === 'new-sale' || currentView === 'new-purchase'
+  // 🔒 V21-012 fix: Added 'pricing' and 'ai-comparison' and 'ai-usage' to
+  // isDetailView so they show a back button when navigated from Account page.
+  const isDetailView = currentView === 'transaction-detail' || currentView === 'party-profile' || currentView === 'new-sale' || currentView === 'new-purchase' || currentView === 'pricing' || currentView === 'ai-comparison' || currentView === 'ai-usage'
   const isNewEntryView = currentView === 'new-sale' || currentView === 'new-purchase'
   const showNewEntry = dialogViews.includes(currentView) && !isDetailView && !isNewEntryView
 

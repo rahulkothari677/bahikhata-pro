@@ -347,16 +347,18 @@ export function Settings() {
   // so the Settings page opens on the correct tab when navigated from Account.
   const pendingTab = useAppStore((s) => s.pendingSettingsTab)
   const setPendingSettingsTab = useAppStore((s) => s.setPendingSettingsTab)
-  const [settingsTab, setSettingsTab] = useState<'profile' | 'features' | 'appearance' | 'data' | 'staff'>(pendingTab || 'profile')
+  const [settingsTab, setSettingsTab] = useState<'profile' | 'features' | 'appearance' | 'data' | 'staff'>('profile')
 
-  // Clear the pending tab after using it (so a manual navigation to Settings
-  // doesn't open on a stale tab)
+  // 🔒 V21-012 fix: Use useLayoutEffect to switch tab BEFORE paint, avoiding
+  // a flash of the wrong tab. Also reads from getState() directly to avoid
+  // stale closure issues.
   useEffect(() => {
-    if (pendingTab) {
-      setSettingsTab(pendingTab)
+    const tab = useAppStore.getState().pendingSettingsTab
+    if (tab) {
+      setSettingsTab(tab)
       setPendingSettingsTab(null)
     }
-  }, [pendingTab, setPendingSettingsTab])
+  }, [setPendingSettingsTab])
 
   const tabs = [
     { id: 'profile', label: 'Profile', icon: Store },

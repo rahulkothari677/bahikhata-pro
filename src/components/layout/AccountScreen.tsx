@@ -82,18 +82,21 @@ export function AccountScreen() {
 
   const handleItemClick = (item: AccountMenuItem) => {
     haptic.click()
+    // 🔒 V21-012 fix: Set previousView to 'account' BEFORE navigating,
+    // so the back button on Settings/Pricing returns to Account (not More).
     setPreviousView('account')
 
-    // 🔒 V21-012 (Phase 4a): Set the correct Settings tab before navigating
+    // 🔒 V21-012 (Phase 4a): Set the correct Settings tab BEFORE navigating.
+    // Use getState().setPendingSettingsTab() for synchronous update.
     const tabMap: Record<string, 'profile' | 'features' | 'appearance' | 'data' | 'staff'> = {
       'My Profile': 'profile',
-      'Security': 'profile',        // Security is part of profile tab for now
-      'App Settings': 'features',   // App Settings → features tab
+      'Security': 'profile',
+      'App Settings': 'appearance',   // App Settings → appearance tab (language, dark mode)
       'Data & Privacy': 'data',
       'Staff & Access': 'staff',
-      'Refer & Earn': 'profile',    // Referral is part of profile tab for now
-      'Help & Support': 'profile',  // Help is part of profile tab for now
-      'About': 'profile',           // About is part of profile tab for now
+      'Refer & Earn': 'profile',
+      'Help & Support': 'profile',
+      'About': 'profile',
     }
     if (item.label && tabMap[item.label]) {
       useAppStore.getState().setPendingSettingsTab(tabMap[item.label])
