@@ -11,6 +11,7 @@ export type ViewType =
   | 'reports'
   | 'settings'
   | 'more'
+  | 'account'
   | 'transaction-detail'
   | 'party-profile'
   | 'new-sale'

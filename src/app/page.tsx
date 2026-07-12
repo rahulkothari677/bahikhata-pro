@@ -17,6 +17,7 @@ import { Sidebar } from '@/components/layout/Sidebar'
 import { Header } from '@/components/layout/Header'
 import { MobileBottomNav } from '@/components/layout/MobileBottomNav'
 import { MoreScreen } from '@/components/layout/MoreScreen'
+import { AccountScreen } from '@/components/layout/AccountScreen'
 import { Onboarding } from '@/components/layout/Onboarding'
 import { ThemePicker } from '@/components/common/ThemePicker'
 import { Dashboard } from '@/components/dashboard/Dashboard'
@@ -333,6 +334,29 @@ export default function Home() {
         {!showOnboarding && <OnboardingTour onDone={() => setTourDone(true)} />}
         {!showOnboarding && tourDone && <ConsentModal />}
         {/* 🔒 V9 4.2: RatePrompt + PWA install wait until first-run is complete */}
+        {firstRunComplete && <RatePromptModal open={shouldShowRatePrompt} onRated={onRated} onDismiss={onDismiss} />}
+        {firstRunComplete && features?.pwaInstall && <PWAInstallPrompt />}
+        <PaywallModal feature={paywallFeature} open={paywallOpen} onClose={closePaywall} />
+      </div>
+    )
+  }
+
+  // 🔒 V21-010 (Phase 2a): Account screen renders full-screen (like More screen)
+  if (currentView === 'account') {
+    return (
+      <div className="flex min-h-screen bg-background">
+        {features?.keyboardShortcuts && <KeyboardShortcuts />}
+        {features?.globalSearch && <GlobalSearch />}
+        <div className="flex-1 flex flex-col min-w-0">
+          <OfflineIndicator />
+          <AccountScreen />
+        </div>
+        <MobileBottomNav />
+        <ThemePicker open={showThemePicker} onDone={() => setThemePickerDone(true)} />
+        <Onboarding open={showOnboarding} onDone={() => setOnboardingDismissed(true)} />
+        {features?.pwaInstall && <PWAInstallPrompt />}
+        {!showOnboarding && <OnboardingTour onDone={() => setTourDone(true)} />}
+        {!showOnboarding && tourDone && <ConsentModal />}
         {firstRunComplete && <RatePromptModal open={shouldShowRatePrompt} onRated={onRated} onDismiss={onDismiss} />}
         {firstRunComplete && features?.pwaInstall && <PWAInstallPrompt />}
         <PaywallModal feature={paywallFeature} open={paywallOpen} onClose={closePaywall} />
