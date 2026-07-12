@@ -13,12 +13,15 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, useEffect, useCallback } from 'react'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { toast as sonnerToast } from 'sonner'
+import { useAppStore } from '@/store/app-store'
 
 const ACTIVE_SHOP_KEY = 'bahikhata:active-shop'
 
 export function useShops() {
   const queryClient = useQueryClient()
   const [activeShopId, setActiveShopId] = useState<string | null>(null)
+  // 🔒 V21-008: Wait for bootstrap to prime the cache before fetching.
+  const bootstrapDone = useAppStore((s) => s.bootstrapDone)
 
   const { data, isLoading } = useQuery({
     queryKey: ['shops'],
@@ -26,6 +29,8 @@ export function useShops() {
       const r = await offlineFetch('/api/shops')
       return r.json()
     },
+    // 🔒 V21-008: Don't fetch until bootstrap has primed the cache.
+    enabled: bootstrapDone,
   })
 
   const shops: any[] = data?.shops || []

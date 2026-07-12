@@ -78,6 +78,8 @@ export function useSubscription() {
   // Paywall state is GLOBAL via Zustand — BillScanner calling requireFeature()
   // will correctly show the PaywallModal in page.tsx.
   const { paywallOpen: showPaywall, paywallFeature, openPaywall, closePaywall } = useAppStore()
+  // 🔒 V21-008: Wait for bootstrap to prime the cache before fetching.
+  const bootstrapDone = useAppStore((s) => s.bootstrapDone)
 
   const { data } = useQuery({
     queryKey: ['subscription-status'],
@@ -86,6 +88,8 @@ export function useSubscription() {
       return r.json()
     },
     staleTime: 5 * 60 * 1000, // 5 min
+    // 🔒 V21-008: Don't fetch until bootstrap has primed the cache.
+    enabled: bootstrapDone,
   })
 
   const plan: Plan = (data?.current?.plan as Plan) || 'free'

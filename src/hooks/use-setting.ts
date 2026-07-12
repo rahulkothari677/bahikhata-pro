@@ -20,15 +20,24 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { useState, useEffect } from 'react'
+import { useAppStore } from '@/store/app-store'
 
 export function useSetting() {
   const queryClient = useQueryClient()
+  // 🔒 V21-008: Wait for bootstrap to prime the cache before fetching.
+  // Bootstrap consolidates settings + shops + subscription into ONE request.
+  // Without this gate, useSetting fires immediately and fetches /api/settings
+  // separately, defeating the consolidation.
+  const bootstrapDone = useAppStore((s) => s.bootstrapDone)
   const { data } = useQuery({
     queryKey: ['setting'],
     queryFn: async () => {
       const r = await offlineFetch('/api/settings')
       return r.json()
     },
+    // 🔒 V21-008: Don't fetch until bootstrap has primed the cache.
+    // Once primed, this hook reads from cache (no network request).
+    enabled: bootstrapDone,
   })
 
   const setting = data?.setting || {}

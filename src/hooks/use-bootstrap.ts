@@ -7,10 +7,14 @@
  * /api/bootstrap call. This reduces the boot fan-out from ~14 requests to
  * ~11 (3 become 1), which is critical when connection_limit=1 on Neon.
  *
+ * 🔒 V21-008: Sets bootstrapDone=true when complete, which gates the
+ * individual hooks (use-setting, use-shops, use-subscription). They read
+ * from the primed cache instead of fetching separately.
+ *
  * After fetching, primes the React Query cache for:
  *   - ['setting'] (used by use-setting.ts)
  *   - ['shops'] (used by use-shops.ts)
- *   - ['subscription'] (used by use-subscription.ts)
+ *   - ['subscription-status'] (used by use-subscription.ts)
  *
  * So when those hooks mount, they read from cache instantly — no extra
  * network request.
@@ -19,9 +23,11 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect } from 'react'
 import { offlineFetch } from '@/lib/offline-fetch'
+import { useAppStore } from '@/store/app-store'
 
 export function useBootstrap(enabled: boolean) {
   const queryClient = useQueryClient()
+  const setBootstrapDone = useAppStore((s) => s.setBootstrapDone)
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['bootstrap'],
@@ -35,8 +41,7 @@ export function useBootstrap(enabled: boolean) {
     retry: 1,
   })
 
-  // Prime the individual query caches so use-setting, use-shops, and
-  // use-subscription read from cache instead of fetching separately.
+  // Prime the individual query caches + set bootstrapDone flag
   useEffect(() => {
     if (!data) return
 
@@ -54,7 +59,12 @@ export function useBootstrap(enabled: boolean) {
     if (data.subscription) {
       queryClient.setQueryData(['subscription-status'], data.subscription)
     }
-  }, [data, queryClient])
+
+    // 🔒 V21-008: Signal that bootstrap is done — the individual hooks can
+    // now read from the primed cache instead of fetching separately.
+    setBootstrapDone(true)
+  }, [data, queryClient, setBootstrapDone])
 
   return { data, isLoading, error }
 }
+

@@ -139,6 +139,11 @@ interface AppState {
   // This prevents the dashboard query from racing with warmup for the DB connection.
   dbWarmedUp: boolean
   setDbWarmedUp: (done: boolean) => void
+  // 🔒 V21-008: Bootstrap flag — gates settings/shops/subscription hooks until
+  // bootstrap completes and primes the cache. Without this, the individual hooks
+  // fire immediately on mount and fetch separately (defeating the consolidation).
+  bootstrapDone: boolean
+  setBootstrapDone: (done: boolean) => void
   searchOpen: boolean
   setSearchOpen: (open: boolean) => void
   // Global paywall state — shared across all components via Zustand.
@@ -197,6 +202,9 @@ export const useAppStore = create<AppState>()(
       // 🔒 V21-006: DB warmup flag
       dbWarmedUp: false,
       setDbWarmedUp: (done) => set({ dbWarmedUp: done }),
+      // 🔒 V21-008: Bootstrap flag
+      bootstrapDone: false,
+      setBootstrapDone: (done) => set({ bootstrapDone: done }),
       searchOpen: false,
       setSearchOpen: (open) => set({ searchOpen: open }),
       paywallOpen: false,
