@@ -32,14 +32,32 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { getInitials, cn } from '@/lib/utils'
 import {
   ArrowLeft, Pencil, Calculator, Crown, Phone, Mail, Store,
+  ChevronRight, User, CreditCard, Shield, Settings as SettingsIcon,
+  Database, Users, Gift, HelpCircle, Info, Star, LogOut,
+  type LucideIcon,
 } from 'lucide-react'
 import type { ViewType } from '@/store/app-store'
+
+interface AccountMenuItem {
+  icon: LucideIcon
+  label: string
+  description?: string
+  view?: ViewType
+  action?: () => void
+  iconColor: string
+  iconBg: string
+}
+
+interface AccountMenuSection {
+  title?: string
+  items: AccountMenuItem[]
+}
 
 export function AccountScreen() {
   const { setView, previousView, setPreviousView } = useAppStore()
   const { data: session } = useSession()
   const { plan } = useSubscription()
-  const { isCA } = useStaffPermissions()
+  const { isCA, isOwner } = useStaffPermissions()
 
   // Fetch settings for profile data
   const { data: settingData } = useQuery({
@@ -62,6 +80,13 @@ export function AccountScreen() {
     setPreviousView(null)
   }
 
+  const handleItemClick = (item: AccountMenuItem) => {
+    haptic.click()
+    setPreviousView('account')
+    if (item.view) setView(item.view)
+    if (item.action) item.action()
+  }
+
   const handleEditProfile = () => {
     haptic.click()
     setPreviousView('account')
@@ -75,8 +100,113 @@ export function AccountScreen() {
     elite: { label: 'Elite', className: 'bg-violet-400 text-violet-900', icon: Crown },
   }
   const planBadge = planBadges[plan] || planBadges.free
-
   const PlanIcon = planBadge.icon
+
+  // ═══ 10 Menu Sections ═══
+  const sections: AccountMenuSection[] = [
+    {
+      title: 'Account',
+      items: [
+        {
+          icon: User,
+          label: 'My Profile',
+          description: 'Shop name, GSTIN, address, contact',
+          view: 'settings',
+          iconColor: 'text-blue-600',
+          iconBg: 'bg-blue-100',
+        },
+        {
+          icon: CreditCard,
+          label: 'Subscription',
+          description: 'Plan, usage, billing, upgrade',
+          view: 'pricing',
+          iconColor: 'text-amber-600 dark:text-amber-400',
+          iconBg: 'bg-amber-100',
+        },
+        {
+          icon: Shield,
+          label: 'Security',
+          description: 'App lock, change password',
+          view: 'settings',
+          iconColor: 'text-emerald-600 dark:text-emerald-400',
+          iconBg: 'bg-emerald-100',
+        },
+      ],
+    },
+    {
+      title: 'Preferences',
+      items: [
+        {
+          icon: SettingsIcon,
+          label: 'App Settings',
+          description: 'Language, dark mode, features',
+          view: 'settings',
+          iconColor: 'text-slate-600',
+          iconBg: 'bg-slate-100',
+        },
+        {
+          icon: Database,
+          label: 'Data & Privacy',
+          description: 'Export data, clear cache, delete account',
+          view: 'settings',
+          iconColor: 'text-violet-600',
+          iconBg: 'bg-violet-100',
+        },
+      ],
+    },
+    {
+      title: 'Business',
+      items: [
+        ...(isOwner ? [{
+          icon: Users,
+          label: 'Staff & Access',
+          description: 'Manage staff, CA access',
+          view: 'settings' as ViewType,
+          iconColor: 'text-indigo-600',
+          iconBg: 'bg-indigo-100',
+        }] : []),
+        {
+          icon: Gift,
+          label: 'Refer & Earn',
+          description: 'Invite friends, earn rewards',
+          view: 'settings' as ViewType,
+          iconColor: 'text-rose-600',
+          iconBg: 'bg-rose-100',
+        },
+      ],
+    },
+    {
+      title: 'Support',
+      items: [
+        {
+          icon: HelpCircle,
+          label: 'Help & Support',
+          description: 'FAQ, contact us, report a bug',
+          view: 'settings' as ViewType,
+          iconColor: 'text-blue-600',
+          iconBg: 'bg-blue-100',
+        },
+        {
+          icon: Star,
+          label: 'Rate EkBook',
+          description: 'Help others discover us',
+          action: () => {
+            window.open('https://play.google.com/store/apps/details?id=com.ekbook.app', '_blank')
+          },
+          iconColor: 'text-amber-600 dark:text-amber-400',
+          iconBg: 'bg-amber-100',
+        },
+        {
+          icon: Info,
+          label: 'About',
+          description: 'Version, privacy policy, terms',
+          view: 'settings' as ViewType,
+          iconColor: 'text-slate-600',
+          iconBg: 'bg-slate-100',
+        },
+      ],
+    },
+  ]
 
   return (
     <div className="min-h-screen bg-muted/30 w-full flex-1">
@@ -180,12 +310,71 @@ export function AccountScreen() {
           </div>
         </button>
 
-        {/* Placeholder for menu sections (Phase 2c) */}
-        <div className="bg-card rounded-2xl shadow-sm border border-border/60 p-8 text-center">
-          <p className="text-muted-foreground text-sm">
-            Menu sections will be added in Phase 2c
-          </p>
-        </div>
+        {/* ═══ Menu Sections ═══ */}
+        {sections.map((section, idx) => {
+          if (section.items.length === 0) return null
+          return (
+            <div key={idx}>
+              {section.title && (
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-2 mb-2">
+                  {section.title}
+                </p>
+              )}
+              <div className="bg-card rounded-2xl shadow-sm border border-border/60 overflow-hidden">
+                {section.items.map((item, i) => {
+                  const Icon = item.icon
+                  return (
+                    <button
+                      key={item.label}
+                      onClick={() => handleItemClick(item)}
+                      className={cn(
+                        'w-full flex items-center gap-3 p-3.5 hover:bg-muted/50 transition text-left active:bg-muted group',
+                        i > 0 && 'border-t border-border/40',
+                      )}
+                    >
+                      <div className={cn(
+                        'w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition group-hover:scale-105',
+                        item.iconBg
+                      )}>
+                        <Icon className={cn('w-5 h-5', item.iconColor)} />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm">{item.label}</p>
+                        {item.description && (
+                          <p className="text-xs text-muted-foreground truncate">{item.description}</p>
+                        )}
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition flex-shrink-0" />
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })}
+
+        {/* ═══ Logout Button ═══ */}
+        <button
+          onClick={() => {
+            haptic.warning()
+            import('next-auth/react').then(({ signOut }) => {
+              import('@/lib/offline-db').then(({ clearAllOfflineData }) => {
+                clearAllOfflineData().then(() => {
+                  signOut({ callbackUrl: '/' })
+                })
+              })
+            })
+          }}
+          className="w-full bg-card rounded-2xl p-4 shadow-sm border border-rose-200 flex items-center justify-center gap-2 text-rose-600 hover:bg-rose-50 transition active:scale-[0.98]"
+        >
+          <LogOut className="w-5 h-5" />
+          <span className="font-semibold">Logout</span>
+        </button>
+
+        {/* Version footer */}
+        <p className="text-center text-xs text-muted-foreground pt-2">
+          EkBook v1.0 · Made with love for Bharat 🇮🇳
+        </p>
       </div>
     </div>
   )
