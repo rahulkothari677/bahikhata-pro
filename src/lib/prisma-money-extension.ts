@@ -112,9 +112,22 @@ const MODEL_RELATIONS: Record<string, Record<string, string>> = {
 
 // ─── Helper: convert money columns in a single row (paise → rupees) ─────────
 // Also recursively converts nested relations (include: { items: true, party: true })
-function convertRowOnRead(model: string, row: any): any {
+//
+// 🔒 V21-004: Added depth guard (max 5 levels) to prevent infinite recursion
+// if a Prisma include ever creates a circular reference (e.g., Party →
+// transactions → Transaction → party → Party → …). Prisma includes don't
+// usually self-cycle, but the guard is a safety net. At depth 5, we stop
+// recursing and return the row as-is (its money columns may be in paise,
+// but that's better than a stack overflow).
+const MAX_RECURSION_DEPTH = 5
+function convertRowOnRead(model: string, row: any, depth: number = 0): any {
   const cols = MONEY_COLUMNS[model]
   if (!cols || !row) return row
+
+  // Depth guard — stop recursing if we've gone too deep (cycle detection)
+  if (depth >= MAX_RECURSION_DEPTH) {
+    return row
+  }
 
   const converted = { ...row }
 
@@ -130,9 +143,9 @@ function convertRowOnRead(model: string, row: any): any {
   for (const [relName, relModel] of Object.entries(relations)) {
     if (relName in converted && converted[relName] != null) {
       if (Array.isArray(converted[relName])) {
-        converted[relName] = converted[relName].map((r: any) => convertRowOnRead(relModel, r))
+        converted[relName] = converted[relName].map((r: any) => convertRowOnRead(relModel, r, depth + 1))
       } else if (typeof converted[relName] === 'object') {
-        converted[relName] = convertRowOnRead(relModel, converted[relName])
+        converted[relName] = convertRowOnRead(relModel, converted[relName], depth + 1)
       }
     }
   }
