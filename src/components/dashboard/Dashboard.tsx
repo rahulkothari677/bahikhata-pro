@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import dynamic from 'next/dynamic'
 import { useAppStore } from '@/store/app-store'
 import { useTranslation } from '@/hooks/use-translation'
 import { useDashboard } from '@/hooks/use-dashboard'
