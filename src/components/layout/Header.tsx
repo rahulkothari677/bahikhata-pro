@@ -140,15 +140,17 @@ export function Header() {
 
           {/* 🔒 V21-010 (Phase 2d): Profile avatar — click opens Account page.
               Replaces the "Dashboard" text title on the left side.
-              Inspired by CRED, PhonePe (avatar in top-left). */}
+              Inspired by CRED, PhonePe (avatar in top-left).
+              🔒 V21-010 fix: Hidden on desktop (lg:hidden) — desktop has the
+              avatar on the RIGHT side instead, so it only appears once. */}
           {!isDetailView && (
             <button
               onClick={handleAccountClick}
-              className="flex-shrink-0 active:scale-95 transition"
+              className="flex-shrink-0 active:scale-95 transition lg:hidden"
               title="View Account"
               aria-label="View Account"
             >
-              <Avatar className="w-9 h-9 lg:w-10 lg:h-10 border-2 border-primary/20 hover:border-primary/40 transition">
+              <Avatar className="w-9 h-9 border-2 border-primary/20 hover:border-primary/40 transition">
                 <AvatarFallback className="bg-gradient-saffron text-white text-sm font-bold">
                   {getInitials(ownerName)}
                 </AvatarFallback>
