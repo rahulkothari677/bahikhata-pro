@@ -579,3 +579,17 @@ function generateModelHandlers(modelName: string, prismaModel: string): Record<s
     },
   }
 }
+
+// ─── Testing exports (V20-014) ─────────────────────────────────────────────
+// 🔒 V20-014: Exported for the round-trip integration test (auditor §5.2).
+// These are the SAME functions used internally by the extension handlers.
+// Exporting them lets the test verify conversion logic without a live DB.
+// The test simulates the full round-trip: write (rupees→paise) → mock DB
+// storage → read (paise→rupees) → assert original value recovered.
+export const __testing = {
+  MONEY_COLUMNS,
+  MODEL_RELATIONS,
+  convertDataOnWrite,
+  convertRowOnRead,
+  convertNestedData,
+}

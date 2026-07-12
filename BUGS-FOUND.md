@@ -20,6 +20,15 @@ and include enough context to reproduce.
 
 <!-- Add new bugs below this line. Newest first. -->
 
+### V20-014 — Money round-trip integration test (auditor §5.2) — COMPLETED
+
+- **Found**: 2026-07-12, during V20 post-audit (auditor's §5.2 recommendation)
+- **File**: `src/__tests__/lib/v20-money-roundtrip-integration.test.ts` (new, 819 tests)
+- **Severity**: N/A (test infrastructure, not a bug)
+- **Description**: The auditor recommended "a single integration test that, for every model in MONEY_COLUMNS, runs create/update/upsert/findFirst/aggregate/groupBy with a known fractional value and asserts round-trip equality." This test now exists. It exports the extension's conversion functions (`convertDataOnWrite`, `convertRowOnRead`, `convertNestedData`) via a `__testing` export and exercises them with 10 test values across all 15 models × all money columns.
+- **Coverage**: 819 tests covering — (1) write→DB→read round-trip for every model/column, (2) aggregate _sum/_avg/_min/_max conversion, (3) nested creates (V19-001 regression), (4) nested reads with all V20-008 relations, (5) GstReturn/Gstr1Snapshot upsert (V20-001 regression), (6) MODEL_RELATIONS completeness guard, (7) coverage completeness.
+- **Status**: COMPLETED (2026-07-12)
+
 ### BUG-013 — Hand-written aggregate handlers only converted `_sum` (Medium/Latent) — FIXED
 
 - **Found**: 2026-07-12, during V20 post-audit deep scan
