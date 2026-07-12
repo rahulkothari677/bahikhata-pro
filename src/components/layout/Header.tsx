@@ -5,6 +5,9 @@ import { useAppStore, type ViewType } from '@/store/app-store'
 import { useTranslation } from '@/hooks/use-translation'
 import { Menu, Plus, Sparkles, ScanLine, ArrowLeft, Search, LogOut, Store, ChevronDown, Check, Globe } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { getInitials } from '@/lib/utils'
+import { haptic } from '@/lib/haptic'
 import { useQuery } from '@tanstack/react-query'
 import { useSession, signOut } from 'next-auth/react'
 import { clearAllOfflineData } from '@/lib/offline-db'
@@ -68,6 +71,7 @@ export function Header() {
   })
 
   const shopName = settingData?.setting?.shopName || 'My Shop'
+  const ownerName = settingData?.setting?.ownerName || session?.user?.name || 'Shop Owner'
 
   const isDetailView = currentView === 'transaction-detail' || currentView === 'party-profile' || currentView === 'new-sale' || currentView === 'new-purchase'
   const isNewEntryView = currentView === 'new-sale' || currentView === 'new-purchase'
@@ -99,6 +103,13 @@ export function Header() {
     setPreviousView(null)
   }
 
+  // 🔒 V21-010 (Phase 2d): Click avatar → open Account page
+  const handleAccountClick = () => {
+    haptic.click()
+    setPreviousView(currentView)
+    setView('account')
+  }
+
   const newEntryLabel = (() => {
     switch (currentView) {
       case 'dashboard': return t('action.new_sale')
@@ -126,10 +137,32 @@ export function Header() {
               <span className="hidden sm:inline">Back</span>
             </button>
           )}
-          <div className="min-w-0">
-            <h2 className="text-lg lg:text-xl font-bold tracking-tight truncate">{info.title}</h2>
-            <p className="text-xs text-muted-foreground truncate hidden sm:block">{info.subtitle}</p>
-          </div>
+
+          {/* 🔒 V21-010 (Phase 2d): Profile avatar — click opens Account page.
+              Replaces the "Dashboard" text title on the left side.
+              Inspired by CRED, PhonePe (avatar in top-left). */}
+          {!isDetailView && (
+            <button
+              onClick={handleAccountClick}
+              className="flex-shrink-0 active:scale-95 transition"
+              title="View Account"
+              aria-label="View Account"
+            >
+              <Avatar className="w-9 h-9 lg:w-10 lg:h-10 border-2 border-primary/20 hover:border-primary/40 transition">
+                <AvatarFallback className="bg-gradient-saffron text-white text-sm font-bold">
+                  {getInitials(ownerName)}
+                </AvatarFallback>
+              </Avatar>
+            </button>
+          )}
+
+          {/* Page title — only show on non-dashboard views (dashboard has the greeting) */}
+          {currentView !== 'dashboard' && (
+            <div className="min-w-0">
+              <h2 className="text-lg lg:text-xl font-bold tracking-tight truncate">{info.title}</h2>
+              <p className="text-xs text-muted-foreground truncate hidden sm:block">{info.subtitle}</p>
+            </div>
+          )}
 
           {/* Mobile shop switcher — shows current shop name, tap to switch */}
           {shops.length > 1 && (
@@ -252,25 +285,22 @@ export function Header() {
             </>
           )}
 
-          {/* Shop name badge + user menu */}
-          <div className="hidden lg:flex items-center gap-2 pl-3 ml-1 border-l border-border">
+          {/* 🔒 V21-010 (Phase 2d): Desktop avatar — click opens Account page.
+              Replaces the old shop name badge + logout button.
+              On mobile, the avatar is already on the left side. */}
+          <button
+            onClick={handleAccountClick}
+            className="hidden lg:flex items-center gap-2 pl-3 ml-1 border-l border-border hover:bg-muted/50 rounded-lg p-1.5 transition"
+            title="View Account"
+          >
             <div className="w-8 h-8 rounded-full bg-gradient-saffron flex items-center justify-center text-white text-xs font-bold">
-              {shopName.charAt(0)}
+              {getInitials(ownerName).charAt(0)}
             </div>
-            <div className="text-xs">
+            <div className="text-xs text-left">
               <p className="font-semibold leading-tight">{shopName}</p>
               <p className="text-muted-foreground leading-tight">{session?.user?.email || 'Owner'}</p>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 w-8 p-0 ml-1"
-              onClick={async () => { await clearAllOfflineData(); signOut({ callbackUrl: '/' }) }}
-              title={t('action.sign_out')}
-            >
-              <LogOut className="w-4 h-4" />
-            </Button>
-          </div>
+          </button>
 
           {/* Logout button — removed from header, now in Settings/More */}
         </div>
