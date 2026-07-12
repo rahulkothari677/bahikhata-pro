@@ -1,8 +1,12 @@
 import { PrismaClient } from '@prisma/client'
 import { withMoneyConversion } from './prisma-money-extension'
 
+// 🔒 V20 FIX: Use PrismaClient type for the global cache. The extension
+// modifies runtime behavior (paise↔rupees conversion) but not type signatures.
+// Casting to PrismaClient avoids Prisma's $extends type inference issues with
+// generated model handlers (bankStatement, gstReturn, etc.).
 const globalForPrisma = globalThis as unknown as {
-  prisma: ReturnType<typeof withMoneyConversion> | undefined
+  prisma: PrismaClient | undefined
 }
 
 // 🔒 SECURITY + PERFORMANCE: Only log queries in development.
@@ -10,10 +14,6 @@ const logConfig = process.env.NODE_ENV === 'development'
   ? ['query', 'error', 'warn'] as const
   : ['error', 'warn'] as const
 
-// 🔒 V18 Paise Migration Phase 4: Wrap PrismaClient with money conversion.
-// The extension auto-converts money columns: paise (Int in DB) ↔ rupees (Float in JS).
-// This means all existing application code continues to work with rupee values.
-// $queryRaw is NOT affected (Phase 2 SQL already handles paise conversion).
 const baseClient = new PrismaClient({
   log: [...logConfig],
   datasources: {
@@ -23,9 +23,12 @@ const baseClient = new PrismaClient({
   },
 })
 
-export const db =
-  globalForPrisma.prisma ??
-  withMoneyConversion(baseClient)
+// 🔒 V18 Paise Migration Phase 4: Wrap PrismaClient with money conversion.
+// The extension auto-converts money columns: paise (Int in DB) ↔ rupees (Float in JS).
+// $queryRaw is NOT affected (Phase 2 SQL already handles paise conversion).
+// Cast back to PrismaClient: the extension changes runtime behavior, not types.
+const extendedClient = withMoneyConversion(baseClient) as unknown as PrismaClient
+export const db = globalForPrisma.prisma ?? extendedClient
 
 // 🔒 V8.1: Retry wrapper for connection pool timeouts.
 // On Neon cold starts, the first query can timeout. Retrying after 2s

@@ -61,12 +61,18 @@ const MONEY_COLUMNS: Record<string, string[]> = {
 }
 
 // ─── Model relation mapping (for nested include conversion) ────────────────
+// 🔒 V20-002 FIX: Added BankStatement→BankTransaction relation.
+// Previously, bankStatement.findMany({ include: { transactions: true } })
+// did not convert nested BankTransaction.amount/.balance from paise to rupees,
+// causing bank reconciliation UI to show 100× inflated amounts.
 const MODEL_RELATIONS: Record<string, Record<string, string>> = {
   Transaction: { items: 'TransactionItem', party: 'Party' },
   TransactionItem: { transaction: 'Transaction', product: 'Product' },
   Payment: { party: 'Party' },
   Party: { transactions: 'Transaction', payments: 'Payment' },
   Product: {},
+  BankStatement: { transactions: 'BankTransaction' },
+  Gstr2bImport: { invoices: 'Gstr2bInvoice' },
 }
 
 // ─── Helper: convert money columns in a single row (paise → rupees) ─────────
@@ -481,6 +487,15 @@ function generateModelHandlers(modelName: string, prismaModel: string): Record<s
     },
     async deleteMany({ args, query }: any) {
       return query(args)
+    },
+    // 🔒 V20-001 FIX: upsert was missing — GST filing snapshots (GstReturn.upsert,
+    // Gstr1Snapshot.upsert) wrote rupee values into paise Int columns without
+    // conversion. This caused either a runtime crash (fractional values) or
+    // 100× understatement (whole rupees stored as paise).
+    async upsert({ args, query }: any) {
+      if (args.create) args.create = convertNestedData(modelName, args.create)
+      if (args.update) args.update = convertNestedData(modelName, args.update)
+      return convertRowOnRead(modelName, await query(args))
     },
     async aggregate({ args, query }: any) {
       const result = await query(args)

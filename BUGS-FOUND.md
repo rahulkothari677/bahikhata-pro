@@ -22,25 +22,7 @@ and include enough context to reproduce.
 
 ### BUG-010 — `item.discountAmount` input field is accepted but silently ignored (Low/APIDesign)
 
-- **Found**: 2026-07-11, during Phase 3 pre-change scan of `line-items.ts` + `validation.ts`
-- **File**: `src/lib/validation.ts:26` (Zod schema) + `src/lib/line-items.ts` (computeLineItems)
-- **Severity**: Low (API design issue, no data corruption)
-- **Description**: The `transactionItemSchema` accepts a `discountAmount` field per line item:
-  ```ts
-  discountAmount: z.coerce.number().min(0).optional().default(0)
-  ```
-  But `computeLineItems()` NEVER reads `item.discountAmount` from the input. It computes the per-item discount as the proportional share of the ORDER-level discount:
-  ```ts
-  const perItemDiscounts = distributeDiscountProportionally(grossAmounts, toMoney(orderDiscount))
-  const itemDiscount = roundMoney(perItemDiscounts[idx])
-  ```
-  So if a client sends `items: [{ productName: 'X', quantity: 2, unitPrice: 100, discountAmount: 50 }]`, the `discountAmount: 50` is **silently dropped**. The stored `discountAmount` will be the proportional share of the order-level discount (0 if no order discount).
-- **Impact**: 
-  - No data corruption (the stored value is always correct — proportional share of order discount)
-  - But: misleading API — the field suggests per-item discounts are supported, when they're not
-  - If a frontend developer builds a "per-item discount" UI based on this field, it will appear to work (no error) but the discount won't be applied
-- **Fix**: Either (a) remove `discountAmount` from the item input schema (breaking change for any client that sends it), or (b) implement per-item discount support in `computeLineItems` (add `item.discountAmount` to the per-item discount calculation). Option (b) is more user-friendly but changes behavior.
-- **Status**: OPEN — defer to a future API design cleanup sub-phase (not blocking paise migration)
+- **Status**: FIXED (2026-07-11, auditor commit 8d61e2f — removed from transactionItemSchema)
 
 ### BUG-009 — GSTR-1 reconciliation mismatch on demo data (Low/DataIssue)
 
@@ -56,14 +38,7 @@ and include enough context to reproduce.
 
 ### BUG-008 — csv-export.test.ts crashes Jest with unhandled rejection loop (Medium/TestInfra)
 
-- **Found**: 2026-07-11, during Phase 2D verification (broader test sweep)
-- **File**: `src/__tests__/lib/csv-export.test.ts` (test infrastructure)
-- **Severity**: Medium (test crashes Jest runner, blocking the test suite)
-- **Description**: Running `npx jest src/__tests__/lib/csv-export.test.ts` crashes the Node.js process with an unhandled rejection loop (~93 duplicate stack traces from `next/src/server/node-environment-extensions/unhandled-rejection.tsx`). The process exits with no test results.
-- **Verification**: Confirmed PRE-EXISTING — reproduced on `aa7edb7` (Phase 2C, before Phase 2D changes) via `git stash`. NOT caused by paise migration.
-- **Likely cause**: The test file probably imports something that triggers Next.js server-side environment extensions which conflict with Jest's jsdom environment. Could be a missing mock or an import of a route handler that pulls in next/server.
-- **Fix**: Investigate the test file's imports, add mocks for next/server components, or move to a different test environment. Defer to a dedicated test-infra fix sub-phase.
-- **Status**: OPEN — defer to a dedicated test-infra fix sub-phase (not blocking paise migration)
+- **Status**: FIXED (2026-07-11, auditor commit 8d61e2f — fixed async/await + jsdom anchor)
 
 ### BUG-007 — (MOVED to Fixed bugs section below)
 
@@ -87,16 +62,7 @@ and include enough context to reproduce.
 
 ### BUG-002 — `computePartyBalance` runs 2 sequential `Promise.all` batches (Low/Perf)
 
-- **Found**: 2026-07-11, during Phase 2B pre-change scan
-- **File**: `src/lib/party-balance.ts:83-120`
-- **Severity**: Low (performance)
-- **Description**: `computePartyBalance` makes 7 DB queries in 2 sequential batches:
-  - Batch 1 (line 83): `Promise.all([salesAgg, purchaseAgg, creditNoteAgg, debitNoteAgg, paymentsAgg])` — 5 queries
-  - Batch 2 (line 111): `Promise.all([receivedAgg, paidAgg])` — 2 queries
-  - Batch 2 does NOT depend on Batch 1 results. They could all run in parallel as a single `Promise.all` with 7 promises, saving 1 round-trip of latency.
-- **Impact**: Adds ~1 DB round-trip (~5-20ms on Neon) to every party-detail page load and every WhatsApp reminder send.
-- **Fix**: Merge both batches into a single `Promise.all([salesAgg, purchaseAgg, creditNoteAgg, debitNoteAgg, paymentsAgg, receivedAgg, paidAgg])`.
-- **Status**: OPEN — defer to a later sub-phase (not part of paise migration)
+- **Status**: FIXED (2026-07-11, auditor commit 8d61e2f — merged into single Promise.all)
 
 ### BUG-001 — (Reserved for first entry)
 
