@@ -33,6 +33,11 @@ function canonicalizeDate(d: Date): Date {
 
 export function useDashboard(dateRange: DateRange) {
   const { refreshKey } = useAppStore()
+  // 🔒 V21-006: Gate the network fetch behind DB warmup. The cached data
+  // (placeholderData) still shows instantly from IndexedDB — only the
+  // network fetch is deferred until warmup completes. This prevents the
+  // dashboard query from racing with warmup for the DB connection.
+  const dbWarmedUp = useAppStore((s) => s.dbWarmedUp)
 
   // Canonicalize dates to day granularity for stable cache keys
   const fromKey = canonicalizeDate(dateRange.from).toISOString()
@@ -76,6 +81,9 @@ export function useDashboard(dateRange: DateRange) {
       }
       return r.json()
     },
+    // 🔒 V21-006: Don't fetch until DB is warmed up. placeholderData (IndexedDB
+    // cache) still shows instantly — only the network fetch is deferred.
+    enabled: dbWarmedUp,
     staleTime: 60 * 1000,
     // 🔒 V9 M8: Use IndexedDB cached data as placeholder on first load.
     // Shows cached data instantly (~1ms from IndexedDB) while network loads.

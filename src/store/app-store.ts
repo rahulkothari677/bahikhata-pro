@@ -135,6 +135,10 @@ interface AppState {
   setThemeColor: (c: ThemeColor) => void
   language: string
   setLanguage: (l: string) => void
+  // 🔒 V21-006: DB warmup flag — gates dashboard queries until warmup completes.
+  // This prevents the dashboard query from racing with warmup for the DB connection.
+  dbWarmedUp: boolean
+  setDbWarmedUp: (done: boolean) => void
   searchOpen: boolean
   setSearchOpen: (open: boolean) => void
   // Global paywall state — shared across all components via Zustand.
@@ -190,6 +194,9 @@ export const useAppStore = create<AppState>()(
       setThemeColor: (c) => set({ themeColor: c }),
       language: 'en',
       setLanguage: (l) => set({ language: l }),
+      // 🔒 V21-006: DB warmup flag
+      dbWarmedUp: false,
+      setDbWarmedUp: (done) => set({ dbWarmedUp: done }),
       searchOpen: false,
       setSearchOpen: (open) => set({ searchOpen: open }),
       paywallOpen: false,

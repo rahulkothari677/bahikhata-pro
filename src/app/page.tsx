@@ -203,11 +203,19 @@ export default function Home() {
       isOnline()
     ) {
       warmupDone.current = true
-      // Fire warmup, then precache after it completes
+      // 🔒 V21-006: Fire warmup FIRST and ALONE, then set dbWarmedUp=true,
+      // then precache. This ensures the DB is awake before any data queries
+      // hit it. The dashboard query (useDashboardThisMonth) is gated by
+      // dbWarmedUp via useAppStore, so it won't fire until warmup completes.
       fetch('/api/warmup')
-        .then(() => precacheData())
+        .then(() => {
+          // DB is awake — release the dashboard query + precache
+          useAppStore.getState().setDbWarmedUp(true)
+          return precacheData()
+        })
         .catch(() => {
-          // Warmup failed — still try precache (DB might wake up on its own)
+          // Warmup failed — still release the queries (DB might wake up on its own)
+          useAppStore.getState().setDbWarmedUp(true)
           precacheData().catch(() => {})
         })
     }
