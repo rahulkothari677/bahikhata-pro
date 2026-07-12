@@ -22,50 +22,68 @@ export async function GET() {
     const { userId, error } = await getAuthUserIdOwnerOnly()
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+    // 🔒 V21-002: Get plan from getUserPlan FIRST — this reads from the JWT/session
+    // (fast, no DB) and is the authoritative source for plan. If the DB fails below,
+    // we can still return the plan + safe-default usage (0 used = full quota).
+    // This prevents a slow DB from locking a paying user out of their plan features.
     const plan = await getUserPlan(userId)
     const limits = PLAN_LIMITS[plan]
 
-    const user = await db.user.findUnique({
-      where: { id: userId },
-      select: { plan: true, renewsAt: true, trialEndsAt: true, cancelledAt: true },
-    })
+    // 🔒 V21-002: Wrap the DB-dependent queries in a try/catch so a slow/failed
+    // DB returns a DEGRADED response (plan + 0 usage) instead of a 500.
+    // The client treats degraded=true as "usage unknown, allow all" — never
+    // blocks a paying user from their plan features.
+    let aiScansUsed = 0
+    let voiceEntriesUsed = 0
+    let user: { plan?: string; renewsAt?: Date | null; trialEndsAt?: Date | null; cancelledAt?: Date | null } | null = null
+    let degraded = false
 
-    // 🔒 FIX M6: Query the DB for today's actual usage count. This is durable
-    // (survives serverless instance recycling), accurate (same source as the
-    // enforcement path), and doesn't consume quota (it's a SELECT, not a
-    // rateLimit call). Uses IST day boundary (consistent with usage-limits.ts).
-    const todayStart = istDayStart(new Date())
-    const [aiScansUsed, voiceEntriesUsed] = await Promise.all([
-      db.aiUsageLog.count({
-        where: {
-          userId,
-          feature: 'scan-bill',
-          createdAt: { gte: todayStart },
-          success: true,
-        },
-      }),
-      db.aiUsageLog.count({
-        where: {
-          userId,
-          feature: 'voice-parse',
-          createdAt: { gte: todayStart },
-          success: true,
-        },
-      }),
-    ])
+    try {
+      user = await db.user.findUnique({
+        where: { id: userId },
+        select: { plan: true, renewsAt: true, trialEndsAt: true, cancelledAt: true },
+      })
+
+      const todayStart = istDayStart(new Date())
+      ;[aiScansUsed, voiceEntriesUsed] = await Promise.all([
+        db.aiUsageLog.count({
+          where: {
+            userId,
+            feature: 'scan-bill',
+            createdAt: { gte: todayStart },
+            success: true,
+          },
+        }),
+        db.aiUsageLog.count({
+          where: {
+            userId,
+            feature: 'voice-parse',
+            createdAt: { gte: todayStart },
+            success: true,
+          },
+        }),
+      ])
+    } catch (dbError) {
+      // DB failed (pool timeout, connection error, etc.) — return degraded
+      // response with the plan (from JWT) + safe-default usage (0 used).
+      // The client should treat degraded=true as "usage unknown, allow all"
+      // so a slow DB never locks a paying user out of their plan.
+      console.error('[subscription/status] DB failed, returning degraded response:', dbError)
+      degraded = true
+    }
 
     const aiScansUsage = {
       used: aiScansUsed,
       limit: limits.dailyAiScans,
       remaining: Math.max(0, limits.dailyAiScans - aiScansUsed),
-      resetAt: new Date(todayStart.getTime() + 86400 * 1000).toISOString(),
+      resetAt: new Date(istDayStart(new Date()).getTime() + 86400 * 1000).toISOString(),
       period: 'daily' as const,
     }
     const voiceEntriesUsage = {
       used: voiceEntriesUsed,
       limit: limits.dailyVoiceEntries,
       remaining: Math.max(0, limits.dailyVoiceEntries - voiceEntriesUsed),
-      resetAt: new Date(todayStart.getTime() + 86400 * 1000).toISOString(),
+      resetAt: new Date(istDayStart(new Date()).getTime() + 86400 * 1000).toISOString(),
       period: 'daily' as const,
     }
 
@@ -81,6 +99,11 @@ export async function GET() {
         voiceEntries: voiceEntriesUsage,
       },
       plans: PLANS_CATALOG,
+      // 🔒 V21-002: degraded=true signals the client that usage counts may be
+      // stale (DB was slow/unavailable). The client should allow all plan
+      // features (don't gate on usage when we can't read it) and show a
+      // subtle "usage sync pending" indicator.
+      degraded,
     })
   } catch (error) {
     return apiError(error, 'Failed to fetch subscription status', 500)
