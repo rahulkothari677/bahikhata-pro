@@ -34,6 +34,7 @@ import {
   ArrowLeft, Pencil, Calculator, Crown, Phone, Mail, Store,
   ChevronRight, User, CreditCard, Shield, Settings as SettingsIcon,
   Database, Users, Gift, HelpCircle, Info, Star, LogOut,
+  BookOpenText, FileSpreadsheet,
   type LucideIcon,
 } from 'lucide-react'
 import type { ViewType } from '@/store/app-store'
@@ -501,6 +502,315 @@ function AccountSectionContent({
 
   // For sections that don't have dedicated content yet, show a placeholder
   const hasContent = tabMap[section]
+
+  // ═══ Security Page ═══
+  if (section === 'security') {
+    return (
+      <div className="space-y-4">
+        <div className="bg-card rounded-2xl shadow-sm border border-border/60 overflow-hidden">
+          <div className="p-4 border-b border-border/40">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
+                <Shield className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <div>
+                <p className="font-semibold text-sm">App Lock</p>
+                <p className="text-xs text-muted-foreground">Require PIN/biometric to open app</p>
+              </div>
+            </div>
+          </div>
+          <div className="p-4 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Biometric Lock</p>
+              <p className="text-xs text-muted-foreground">Use fingerprint or face ID</p>
+            </div>
+            <div className="w-11 h-6 bg-muted rounded-full flex items-center px-0.5 cursor-not-allowed opacity-50">
+              <div className="w-5 h-5 rounded-full bg-white shadow" />
+            </div>
+          </div>
+          <div className="p-4 border-t border-border/40 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">PIN Lock</p>
+              <p className="text-xs text-muted-foreground">4-digit PIN required on startup</p>
+            </div>
+            <div className="w-11 h-6 bg-muted rounded-full flex items-center px-0.5 cursor-not-allowed opacity-50">
+              <div className="w-5 h-5 rounded-full bg-white shadow" />
+            </div>
+          </div>
+          <div className="p-3 border-t border-border/40 bg-muted/30">
+            <p className="text-[11px] text-muted-foreground text-center">🔒 Coming soon in a future update</p>
+          </div>
+        </div>
+
+        <div className="bg-card rounded-2xl shadow-sm border border-border/60 overflow-hidden">
+          <div className="p-4 border-b border-border/40">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
+                <Shield className="w-5 h-5 text-blue-600" />
+              </div>
+              <div>
+                <p className="font-semibold text-sm">Change Password</p>
+                <p className="text-xs text-muted-foreground">Update your account password</p>
+              </div>
+            </div>
+          </div>
+          <div className="p-4 space-y-3">
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Current Password</label>
+              <input type="password" placeholder="••••••••" className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">New Password</label>
+              <input type="password" placeholder="••••••••" className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm" />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground mb-1 block">Confirm New Password</label>
+              <input type="password" placeholder="••••••••" className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm" />
+            </div>
+            <button className="w-full py-2.5 rounded-lg bg-gradient-saffron text-white text-sm font-medium mt-2">
+              Update Password
+            </button>
+          </div>
+        </div>
+
+        <div className="bg-card rounded-2xl shadow-sm border border-border/60 p-4">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-10 h-10 rounded-xl bg-violet-100 flex items-center justify-center">
+              <Info className="w-5 h-5 text-violet-600" />
+            </div>
+            <div>
+              <p className="font-semibold text-sm">Data Security</p>
+              <p className="text-xs text-muted-foreground">Your data is protected</p>
+            </div>
+          </div>
+          <div className="space-y-2 mt-3">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              All data is encrypted in transit (HTTPS/TLS)
+            </div>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              Passwords are hashed with bcrypt (never stored in plain text)
+            </div>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              Each shop's data is isolated (multi-tenant security)
+            </div>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              DPDP Act compliant — delete your data anytime
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ═══ Referral Page ═══
+  if (section === 'referral') {
+    return (
+      <div className="space-y-4">
+        <div className="bg-gradient-to-br from-rose-500 to-pink-600 rounded-2xl p-6 text-white shadow-lg text-center">
+          <Gift className="w-16 h-16 mx-auto mb-3 opacity-90" />
+          <h3 className="text-xl font-bold mb-1">Refer & Earn</h3>
+          <p className="text-sm text-white/80 mb-4">
+            Invite fellow shopkeepers to EkBook. When they sign up, you both get 1 month of Pro FREE.
+          </p>
+          <div className="bg-white/20 backdrop-blur-sm rounded-xl p-3 mb-3">
+            <p className="text-xs text-white/70 mb-1">Your Referral Code</p>
+            <p className="text-2xl font-bold tracking-wider">{session?.user?.email?.split('@')[0]?.toUpperCase()?.slice(0, 8) || 'EKBOOK'}</p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                const code = session?.user?.email?.split('@')[0]?.toUpperCase()?.slice(0, 8) || 'EKBOOK'
+                navigator.share?.({ title: 'EkBook — India\'s Smartest Ledger App', text: `Use my code ${code} to get 1 month Pro FREE on EkBook!`, url: 'https://bahikhata-pro.vercel.app' })
+                  || navigator.clipboard?.writeText(`Use my code ${code} to get 1 month Pro FREE on EkBook! https://bahikhata-pro.vercel.app`)
+              }}
+              className="flex-1 py-2.5 rounded-lg bg-white text-rose-600 text-sm font-bold"
+            >
+              Share
+            </button>
+            <button
+              onClick={() => {
+                const code = session?.user?.email?.split('@')[0]?.toUpperCase()?.slice(0, 8) || 'EKBOOK'
+                navigator.clipboard?.writeText(code)
+              }}
+              className="flex-1 py-2.5 rounded-lg bg-white/20 backdrop-blur-sm text-white text-sm font-medium"
+            >
+              Copy Code
+            </button>
+          </div>
+        </div>
+
+        <div className="bg-card rounded-2xl shadow-sm border border-border/60 p-4">
+          <p className="font-semibold text-sm mb-3">How It Works</p>
+          <div className="space-y-3">
+            <div className="flex items-start gap-3">
+              <div className="w-7 h-7 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 text-xs font-bold flex-shrink-0">1</div>
+              <div>
+                <p className="text-sm font-medium">Share your code</p>
+                <p className="text-xs text-muted-foreground">Send your referral code to fellow shopkeepers</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <div className="w-7 h-7 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 text-xs font-bold flex-shrink-0">2</div>
+              <div>
+                <p className="text-sm font-medium">They sign up</p>
+                <p className="text-xs text-muted-foreground">Your friend creates an EkBook account using your code</p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <div className="w-7 h-7 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 text-xs font-bold flex-shrink-0">3</div>
+              <div>
+                <p className="text-sm font-medium">You both earn</p>
+                <p className="text-xs text-muted-foreground">Both get 1 month of Pro features FREE</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-card rounded-2xl shadow-sm border border-border/60 p-4 text-center">
+          <p className="text-xs text-muted-foreground">No referrals yet. Start sharing your code!</p>
+        </div>
+      </div>
+    )
+  }
+
+  // ═══ Help & Support Page ═══
+  if (section === 'help') {
+    return (
+      <div className="space-y-4">
+        <div className="bg-card rounded-2xl shadow-sm border border-border/60 overflow-hidden">
+          <div className="p-4 border-b border-border/40">
+            <p className="font-semibold text-sm">Contact Us</p>
+          </div>
+          <a href="mailto:support@ekbook.app" className="flex items-center gap-3 p-4 hover:bg-muted/50 transition border-b border-border/40">
+            <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
+              <Mail className="w-5 h-5 text-blue-600" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-medium">Email Support</p>
+              <p className="text-xs text-muted-foreground">support@ekbook.app · We reply within 24 hours</p>
+            </div>
+            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+          </a>
+          <button
+            onClick={() => window.open('https://wa.me/918340228552?text=Hi%20EkBook%20team', '_blank')}
+            className="w-full flex items-center gap-3 p-4 hover:bg-muted/50 transition"
+          >
+            <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
+              <Phone className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="text-sm font-medium">WhatsApp Support</p>
+              <p className="text-xs text-muted-foreground">Quick help via WhatsApp chat</p>
+            </div>
+            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+          </button>
+        </div>
+
+        <div className="bg-card rounded-2xl shadow-sm border border-border/60 overflow-hidden">
+          <div className="p-4 border-b border-border/40">
+            <p className="font-semibold text-sm">Frequently Asked Questions</p>
+          </div>
+          {[
+            { q: 'Is my data safe?', a: 'Yes. All data is encrypted, passwords are hashed, and each shop\'s data is isolated. You can delete your data anytime.' },
+            { q: 'Does it work offline?', a: 'Yes! Create sales, add products, check inventory — everything works offline. Syncs automatically when online.' },
+            { q: 'Can I use it on mobile and desktop?', a: 'Yes. EkBook works on any device with a browser. Install as an app on your phone for the best experience.' },
+            { q: 'How do I file GST returns?', a: 'Go to Reports → GSTR-1 or GSTR-3B. Generate the JSON file and upload it to the GST portal. One-click export.' },
+            { q: 'How much does it cost?', a: 'Free forever for basic use. Pro plan starts at ₹99/month with unlimited AI scans, GST export, and more.' },
+          ].map((faq, i) => (
+            <details key={i} className={i > 0 ? 'border-t border-border/40' : ''}>
+              <summary className="p-4 cursor-pointer text-sm font-medium flex items-center justify-between">
+                {faq.q}
+                <span className="text-muted-foreground">+</span>
+              </summary>
+              <div className="px-4 pb-4 text-xs text-muted-foreground">{faq.a}</div>
+            </details>
+          ))}
+        </div>
+
+        <div className="bg-card rounded-2xl shadow-sm border border-border/60 p-4">
+          <p className="font-semibold text-sm mb-2">Report a Bug</p>
+          <p className="text-xs text-muted-foreground mb-3">
+            Found something broken? Let us know and we'll fix it ASAP.
+          </p>
+          <a href="mailto:support@ekbook.app?subject=Bug Report" className="block w-full py-2.5 rounded-lg border border-border text-center text-sm font-medium hover:bg-muted transition">
+            Report a Bug
+          </a>
+        </div>
+      </div>
+    )
+  }
+
+  // ═══ About Page ═══
+  if (section === 'about') {
+    return (
+      <div className="space-y-4">
+        <div className="bg-card rounded-2xl shadow-sm border border-border/60 p-6 text-center">
+          <div className="w-20 h-20 rounded-2xl bg-gradient-saffron flex items-center justify-center mx-auto mb-4 shadow-lg">
+            <BookOpenText className="w-10 h-10 text-white" />
+          </div>
+          <h3 className="text-xl font-bold">EkBook</h3>
+          <p className="text-sm text-muted-foreground mt-1">India's Smartest Ledger App</p>
+          <p className="text-xs text-muted-foreground mt-2">Version 1.0.0</p>
+          <div className="inline-flex items-center gap-1.5 mt-3 px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-medium">
+            🇮🇳 Made in India
+          </div>
+        </div>
+
+        <div className="bg-card rounded-2xl shadow-sm border border-border/60 overflow-hidden">
+          <a href="/privacy" className="flex items-center gap-3 p-4 hover:bg-muted/50 transition border-b border-border/40">
+            <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
+              <Shield className="w-5 h-5 text-blue-600" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-medium">Privacy Policy</p>
+              <p className="text-xs text-muted-foreground">How we handle your data</p>
+            </div>
+            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+          </a>
+          <a href="/terms" className="flex items-center gap-3 p-4 hover:bg-muted/50 transition border-b border-border/40">
+            <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center">
+              <FileSpreadsheet className="w-5 h-5 text-slate-600" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-medium">Terms of Service</p>
+              <p className="text-xs text-muted-foreground">Terms and conditions</p>
+            </div>
+            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+          </a>
+          <button
+            onClick={() => window.open('https://play.google.com/store/apps/details?id=com.ekbook.app', '_blank')}
+            className="w-full flex items-center gap-3 p-4 hover:bg-muted/50 transition"
+          >
+            <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center">
+              <Star className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+            </div>
+            <div className="flex-1 text-left">
+              <p className="text-sm font-medium">Rate EkBook</p>
+              <p className="text-xs text-muted-foreground">Help others discover us</p>
+            </div>
+            <ChevronRight className="w-4 h-4 text-muted-foreground" />
+          </button>
+        </div>
+
+        <div className="bg-card rounded-2xl shadow-sm border border-border/60 p-4 text-center">
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            EkBook is a GST-compliant ledger app built for Indian shopkeepers.
+            AI bill scanning, voice entry, GST filing, inventory management —
+            all in one app. Works offline. Free to start.
+          </p>
+          <p className="text-xs text-muted-foreground mt-3">
+            Made with ❤️ for Bharat 🇮🇳
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  // For sections that don't have dedicated content yet, show a placeholder
   if (!hasContent) {
     return (
       <div className="bg-card rounded-2xl shadow-sm border border-border/60 p-6 text-center">
