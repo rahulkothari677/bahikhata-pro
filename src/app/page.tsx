@@ -408,7 +408,14 @@ export default function Home() {
             {currentView === 'pricing' && (
               <div className="space-y-4">
                 <div className="flex items-center gap-3">
-                  <button onClick={() => setView('more')} className="p-2 -ml-2 rounded-lg hover:bg-muted">
+                  <button onClick={() => {
+                    // 🔒 V21-014 fix: Was hardcoded setView('more') — now uses
+                    // previousView so it goes back to wherever the user came from
+                    // (Account page, More section, etc.)
+                    const prev = useAppStore.getState().previousView
+                    setView(prev || 'more')
+                    useAppStore.getState().setPreviousView(null)
+                  }} className="p-2 -ml-2 rounded-lg hover:bg-muted">
                     <ArrowLeft className="w-5 h-5" />
                   </button>
                   <div>
