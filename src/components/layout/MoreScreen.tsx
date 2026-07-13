@@ -30,10 +30,12 @@ import { getInitials, cn } from '@/lib/utils'
 import { toast as sonnerToast } from 'sonner'
 import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
 import {
-  ChevronRight, Pencil, BarChart3, Truck, Wallet, Users,
+  ChevronRight, BarChart3, Truck, Wallet, Users,
   ScanLine, Sparkles, Settings as SettingsIcon, UserCog,
   Crown, HelpCircle, Phone, Info, Star, LogOut, ArrowLeft,
   FileSpreadsheet, Bell, Calculator, Package,
+  FileText, FileCheck, Lock, ShieldCheck, Banknote,
+  Store, Mic, ScanBarcode, Bot, Repeat, Send,
 } from 'lucide-react'
 import type { ViewType } from '@/store/app-store'
 import type { LucideIcon } from 'lucide-react'
@@ -45,35 +47,63 @@ interface MenuItem {
   view: ViewType
   iconColor: string
   iconBg: string
+  badge?: string
+  badgeColor?: string
 }
 
 interface MenuSection {
   title?: string
+  titleIcon?: LucideIcon
   items: MenuItem[]
 }
 
+// 🔒 V22-1 (Phase 1): Restructured More section into 4 categorized sections
+// with context-colored cards and badges.
+// GST & Tax = blue, Money & Banking = green, Business Management = amber, Smart Tools = violet
 const SECTIONS: MenuSection[] = [
   {
-    title: 'Business',
+    title: 'GST & Tax',
+    titleIcon: FileText,
     items: [
-      { icon: BarChart3, label: 'Reports', description: 'GST, P&L, sales analytics', view: 'reports', iconColor: 'text-rose-600', iconBg: 'bg-rose-100' },
-      { icon: Package, label: 'Inventory', description: 'Manage products, stock, prices', view: 'inventory', iconColor: 'text-amber-600 dark:text-amber-400', iconBg: 'bg-amber-100' },
-      { icon: Wallet, label: 'Income & Expense', description: 'Rent, salary, other income', view: 'income-expense', iconColor: 'text-emerald-600 dark:text-emerald-400', iconBg: 'bg-emerald-100' },
-      { icon: Users, label: 'Customers & Suppliers', description: 'Track dues & party balances', view: 'parties', iconColor: 'text-blue-600', iconBg: 'bg-blue-100' },
+      { icon: FileText, label: 'GSTR-1', description: 'Export & file returns', view: 'reports', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
+      { icon: FileCheck, label: 'GSTR-3B', description: 'Monthly summary return', view: 'reports', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
+      { icon: FileCheck, label: 'GSTR-2B', description: 'ITC reconciliation', view: 'reports', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
+      { icon: ShieldCheck, label: 'Reconciliation', description: 'Health check — do books tie out?', view: 'reports', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
+      { icon: Lock, label: 'Period Lock', description: 'Lock filed GST periods', view: 'settings', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
+    ],
+  },
+  {
+    title: 'Money & Banking',
+    titleIcon: Banknote,
+    items: [
+      { icon: Banknote, label: 'Bank Reconciliation', description: 'Match bank transactions', view: 'reports', iconColor: 'text-emerald-600 dark:text-emerald-400', iconBg: 'bg-emerald-100 dark:bg-emerald-950' },
+      { icon: Wallet, label: 'Income & Expense', description: 'Rent, salary, other income', view: 'income-expense', iconColor: 'text-emerald-600 dark:text-emerald-400', iconBg: 'bg-emerald-100 dark:bg-emerald-950' },
+      { icon: Repeat, label: 'Day-End Summary', description: 'Close the drawer — daily cash', view: 'dashboard', iconColor: 'text-emerald-600 dark:text-emerald-400', iconBg: 'bg-emerald-100 dark:bg-emerald-950' },
+      { icon: Send, label: 'WhatsApp Reminders', description: 'Send payment reminders to customers', view: 'parties', iconColor: 'text-emerald-600 dark:text-emerald-400', iconBg: 'bg-emerald-100 dark:bg-emerald-950' },
+    ],
+  },
+  {
+    title: 'Business Management',
+    titleIcon: Store,
+    items: [
+      { icon: Package, label: 'Inventory', description: 'Products, stock, prices', view: 'inventory', iconColor: 'text-amber-600 dark:text-amber-400', iconBg: 'bg-amber-100 dark:bg-amber-950' },
+      { icon: Users, label: 'Customers & Suppliers', description: 'Track dues & party balances', view: 'parties', iconColor: 'text-amber-600 dark:text-amber-400', iconBg: 'bg-amber-100 dark:bg-amber-950' },
+      { icon: BarChart3, label: 'Reports', description: 'P&L, stock, party statements', view: 'reports', iconColor: 'text-amber-600 dark:text-amber-400', iconBg: 'bg-amber-100 dark:bg-amber-950' },
+      { icon: Store, label: 'Multi-Shop Management', description: 'Switch or add shops', view: 'settings', iconColor: 'text-amber-600 dark:text-amber-400', iconBg: 'bg-amber-100 dark:bg-amber-950' },
+      { icon: UserCog, label: 'Staff & Access', description: 'Manage staff, CA access', view: 'settings', iconColor: 'text-amber-600 dark:text-amber-400', iconBg: 'bg-amber-100 dark:bg-amber-950' },
     ],
   },
   {
     title: 'Smart Tools',
+    titleIcon: Sparkles,
     items: [
-      { icon: ScanLine, label: 'AI Bill Scanner', description: 'Snap a bill, auto-fill everything', view: 'scanner', iconColor: 'text-violet-600', iconBg: 'bg-violet-100' },
+      { icon: ScanLine, label: 'AI Bill Scanner', description: 'Snap a bill, auto-fill everything', view: 'scanner', iconColor: 'text-violet-600 dark:text-violet-400', iconBg: 'bg-violet-100 dark:bg-violet-950', badge: 'AI', badgeColor: 'bg-violet-500 text-white' },
+      { icon: Mic, label: 'Voice Entry', description: 'Speak to create sales', view: 'new-sale', iconColor: 'text-violet-600 dark:text-violet-400', iconBg: 'bg-violet-100 dark:bg-violet-950', badge: 'AI', badgeColor: 'bg-violet-500 text-white' },
+      { icon: ScanBarcode, label: 'Barcode Scanner', description: 'Scan barcodes for fast billing', view: 'new-sale', iconColor: 'text-violet-600 dark:text-violet-400', iconBg: 'bg-violet-100 dark:bg-violet-950' },
+      { icon: Bot, label: 'AI Usage & Limits', description: 'Track AI scans, voice entries', view: 'ai-usage', iconColor: 'text-violet-600 dark:text-violet-400', iconBg: 'bg-violet-100 dark:bg-violet-950' },
+      { icon: Sparkles, label: 'Smart Insights', description: 'AI-powered alerts & suggestions', view: 'dashboard', iconColor: 'text-violet-600 dark:text-violet-400', iconBg: 'bg-violet-100 dark:bg-violet-950' },
     ],
   },
-  // 🔒 V21-011 (Phase 3): Removed Account section (Settings) — now in Account page
-  // 🔒 V21-011 (Phase 3): Removed Support section (Help, Contact, About, Rate) — now in Account page
-  // 🔒 V21-011 (Phase 3): Removed Premium banner — now in Account page (Subscription)
-  // 🔒 V21-011 (Phase 3): Removed Logout button — now in Account page
-  // 🔒 V21-011 (Phase 3): Removed Profile header — now in Account page
-  // More section is now BUSINESS TOOLS ONLY.
 ]
 
 export function MoreScreen() {
@@ -145,7 +175,7 @@ export function MoreScreen() {
         {/* 🔒 V21-011 (Phase 3): Profile header removed — now in Account page.
             The More section is now BUSINESS TOOLS ONLY. */}
 
-        {/* Menu Sections — filtered by staff permissions */}
+        {/* Menu Sections — 4 categorized sections with context colors */}
         {SECTIONS.map((section, idx) => {
           const visibleItems = section.items.filter((item) => {
             const moduleMap: Record<string, string> = {
@@ -161,19 +191,23 @@ export function MoreScreen() {
             return true
           })
           if (visibleItems.length === 0) return null
+          const SectionIcon = section.titleIcon
           return (
           <div key={idx}>
             {section.title && (
-              <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-2 mb-2">
-                {section.title}
-              </p>
+              <div className="flex items-center gap-2 px-2 mb-2">
+                {SectionIcon && <SectionIcon className="w-3.5 h-3.5 text-muted-foreground" />}
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  {section.title}
+                </p>
+              </div>
             )}
             <div className="bg-card rounded-2xl shadow-sm border border-border/60 overflow-hidden">
               {visibleItems.map((item, i) => {
                 const Icon = item.icon
                 return (
                   <button
-                    key={item.view}
+                    key={item.label}
                     onClick={() => handleItemClick(item.view)}
                     className={cn(
                       'w-full flex items-center gap-3 p-3 hover:bg-muted/50 transition text-left active:bg-muted group',
@@ -187,7 +221,17 @@ export function MoreScreen() {
                       <Icon className={cn('w-5 h-5', item.iconColor)} />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm">{item.label}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-sm">{item.label}</p>
+                        {item.badge && (
+                          <span className={cn(
+                            'text-[9px] px-1.5 py-0.5 rounded-full font-bold',
+                            item.badgeColor || 'bg-primary text-primary-foreground'
+                          )}>
+                            {item.badge}
+                          </span>
+                        )}
+                      </div>
                       {item.description && (
                         <p className="text-xs text-muted-foreground truncate">{item.description}</p>
                       )}

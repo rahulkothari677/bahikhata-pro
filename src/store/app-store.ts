@@ -19,6 +19,9 @@ export type ViewType =
   | 'pricing'
   | 'ai-comparison'
   | 'ai-usage'
+  // 🔒 V22-1: New views for categorized More section
+  | 'gst-tax'
+  | 'money-banking'
 
 export type ViewMode = 'grid' | 'list'
 
