@@ -109,6 +109,7 @@ export function Header() {
   const handleAccountClick = () => {
     haptic.click()
     setPreviousView(currentView)
+    useAppStore.getState().setAccountOriginView(currentView)
     setView('account')
   }
 

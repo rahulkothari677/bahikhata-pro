@@ -58,7 +58,7 @@ const navItems: { id: ViewType; labelKey: string; descKey: string; icon: any; ba
 
 export function Sidebar() {
   const { confirmDialog, dialog: confirmDialogEl } = useConfirmDialog()
-  const { currentView, setView, sidebarOpen, setSidebarOpen, sidebarCollapsed, toggleSidebarCollapsed, selectedTransactionType } = useAppStore()
+  const { currentView, setView, setPreviousView, sidebarOpen, setSidebarOpen, sidebarCollapsed, toggleSidebarCollapsed, selectedTransactionType } = useAppStore()
   const { t } = useTranslation()
   const { data: session } = useSession()
   const isStaff = session?.user?.role === 'staff'
@@ -316,7 +316,7 @@ export function Sidebar() {
                 Removed 'Upgrade to Pro' — now in Account page (Subscription).
                 The profile section now opens the Account page (not Settings). */}
             <button
-              onClick={() => { setView('account'); setSidebarOpen(false) }}
+              onClick={() => { setPreviousView(currentView); useAppStore.getState().setAccountOriginView(currentView); setView('account'); setSidebarOpen(false) }}
               className="w-full p-3 flex items-center gap-3 hover:bg-sidebar-accent transition"
             >
               <div className="w-9 h-9 rounded-full bg-gradient-saffron flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
@@ -332,7 +332,7 @@ export function Sidebar() {
           /* Collapsed mode — avatar only, opens Account page */
           <div className="border-t border-sidebar-border py-2 flex flex-col items-center gap-2">
             <button
-              onClick={() => setView('account')}
+              onClick={() => { setPreviousView(currentView); useAppStore.getState().setAccountOriginView(currentView); setView('account') }}
               className="w-10 h-10 rounded-full bg-gradient-saffron flex items-center justify-center text-white text-sm font-bold"
               title="Account"
             >

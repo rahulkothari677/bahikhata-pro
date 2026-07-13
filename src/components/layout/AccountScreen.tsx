@@ -82,9 +82,14 @@ export function AccountScreen() {
       // If in a section, go back to the account menu
       setAccountSection(null)
     } else {
-      // If on the menu, go back to the previous view
-      setView(previousView || 'dashboard')
+      // If on the menu, go back to the original view (where the user was
+      // before opening Account). Uses accountOriginView which is separate
+      // from previousView (previousView gets overwritten when navigating
+      // to pricing from the subscription section).
+      const origin = useAppStore.getState().accountOriginView
+      setView(origin || previousView || 'dashboard')
       setPreviousView(null)
+      useAppStore.getState().setAccountOriginView(null)
     }
   }
 
@@ -479,8 +484,11 @@ function AccountSectionContent({
         </p>
         <button
           onClick={() => {
+            // 🔒 V21-014 fix: Don't clear accountSection — keep it as 'subscription'
+            // so when the user comes back from pricing, they see the subscription
+            // section (not the Account menu). Set previousView to 'account' so
+            // the back button on pricing returns here.
             useAppStore.getState().setPreviousView('account')
-            useAppStore.getState().setAccountSection(null)
             useAppStore.getState().setView('pricing')
           }}
           className="px-4 py-2 rounded-lg bg-gradient-saffron text-white text-sm font-medium"

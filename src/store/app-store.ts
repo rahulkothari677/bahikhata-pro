@@ -138,6 +138,12 @@ interface AppState {
   // When null, shows the account menu (profile header + 10 items).
   accountSection: string | null
   setAccountSection: (section: string | null) => void
+  // 🔒 V21-014 fix: Tracks where the user was BEFORE opening the Account page.
+  // Used by the Account menu's back button to return to the original view.
+  // This is separate from previousView because previousView gets overwritten
+  // when navigating to pricing from the subscription section.
+  accountOriginView: ViewType | null
+  setAccountOriginView: (view: ViewType | null) => void
   features: FeatureFlags
   setFeature: (key: FeatureKey, enabled: boolean) => void
   resetFeatures: () => void
@@ -208,6 +214,9 @@ export const useAppStore = create<AppState>()(
       // 🔒 V21-014 (Phase 6)
       accountSection: null,
       setAccountSection: (section) => set({ accountSection: section }),
+      // 🔒 V21-014 fix
+      accountOriginView: null,
+      setAccountOriginView: (view) => set({ accountOriginView: view }),
       features: DEFAULT_FEATURES,
       setFeature: (key, enabled) => set((s) => ({ features: { ...s.features, [key]: enabled } })),
       resetFeatures: () => set({ features: DEFAULT_FEATURES }),
