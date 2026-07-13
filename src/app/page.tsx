@@ -63,6 +63,9 @@ const TransactionEntry = dynamic(() => import('@/components/ledger/TransactionEn
 const PartyProfile = dynamic(() => import('@/components/parties/PartyProfile').then(m => ({ default: m.PartyProfile })), { ssr: false })
 const BillScanner = dynamic(() => import('@/components/scanner/BillScanner').then(m => ({ default: m.BillScanner })), { ssr: false })
 const Reports = dynamic(() => import('@/components/reports/Reports').then(m => ({ default: m.Reports })), { ssr: false })
+// 🔒 V22-2 (Phase 2): Dedicated GST & Banking pages
+const GstTaxPage = dynamic(() => import('@/components/reports/GstTaxPage').then(m => ({ default: m.GstTaxPage })), { ssr: false })
+const MoneyBankingPage = dynamic(() => import('@/components/reports/MoneyBankingPage').then(m => ({ default: m.MoneyBankingPage })), { ssr: false })
 const Settings = dynamic(() => import('@/components/settings/Settings').then(m => ({ default: m.Settings })), { ssr: false })
 const PricingPlans = dynamic(() => import('@/components/subscription/PricingPlans').then(m => ({ default: m.PricingPlans })), { ssr: false })
 const AIComparison = dynamic(() => import('@/components/settings/AIComparison').then(m => ({ default: m.AIComparison })), { ssr: false })
@@ -359,6 +362,38 @@ export default function Home() {
         {!showOnboarding && tourDone && <ConsentModal />}
         {firstRunComplete && <RatePromptModal open={shouldShowRatePrompt} onRated={onRated} onDismiss={onDismiss} />}
         {firstRunComplete && features?.pwaInstall && <PWAInstallPrompt />}
+        <PaywallModal feature={paywallFeature} open={paywallOpen} onClose={closePaywall} />
+      </div>
+    )
+  }
+
+  // 🔒 V22-2 (Phase 2): GST & Tax page — full-screen
+  if (currentView === 'gst-tax') {
+    return (
+      <div className="flex min-h-screen bg-background">
+        {features?.keyboardShortcuts && <KeyboardShortcuts />}
+        {features?.globalSearch && <GlobalSearch />}
+        <div className="flex-1 flex flex-col min-w-0">
+          <OfflineIndicator />
+          <GstTaxPage />
+        </div>
+        <MobileBottomNav />
+        <PaywallModal feature={paywallFeature} open={paywallOpen} onClose={closePaywall} />
+      </div>
+    )
+  }
+
+  // 🔒 V22-2 (Phase 2): Money & Banking page — full-screen
+  if (currentView === 'money-banking') {
+    return (
+      <div className="flex min-h-screen bg-background">
+        {features?.keyboardShortcuts && <KeyboardShortcuts />}
+        {features?.globalSearch && <GlobalSearch />}
+        <div className="flex-1 flex flex-col min-w-0">
+          <OfflineIndicator />
+          <MoneyBankingPage />
+        </div>
+        <MobileBottomNav />
         <PaywallModal feature={paywallFeature} open={paywallOpen} onClose={closePaywall} />
       </div>
     )

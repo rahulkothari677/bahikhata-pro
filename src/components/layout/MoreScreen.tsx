@@ -59,27 +59,28 @@ interface MenuSection {
 
 // 🔒 V22-1 (Phase 1): Restructured More section into 4 categorized sections
 // with context-colored cards and badges.
+// 🔒 V22-2 (Phase 2): GST & Banking items now link to dedicated pages
 // GST & Tax = blue, Money & Banking = green, Business Management = amber, Smart Tools = violet
 const SECTIONS: MenuSection[] = [
   {
     title: 'GST & Tax',
     titleIcon: FileText,
     items: [
-      { icon: FileText, label: 'GSTR-1', description: 'Export & file returns', view: 'reports', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
-      { icon: FileCheck, label: 'GSTR-3B', description: 'Monthly summary return', view: 'reports', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
-      { icon: FileCheck, label: 'GSTR-2B', description: 'ITC reconciliation', view: 'reports', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
-      { icon: ShieldCheck, label: 'Reconciliation', description: 'Health check — do books tie out?', view: 'reports', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
-      { icon: Lock, label: 'Period Lock', description: 'Lock filed GST periods', view: 'settings', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
+      { icon: FileText, label: 'GSTR-1', description: 'Export & file returns', view: 'gst-tax', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
+      { icon: FileCheck, label: 'GSTR-3B', description: 'Monthly summary return', view: 'gst-tax', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
+      { icon: FileCheck, label: 'GSTR-2B', description: 'ITC reconciliation', view: 'gst-tax', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
+      { icon: ShieldCheck, label: 'Reconciliation', description: 'Health check — do books tie out?', view: 'gst-tax', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
+      { icon: Lock, label: 'Period Lock', description: 'Lock filed GST periods', view: 'gst-tax', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
     ],
   },
   {
     title: 'Money & Banking',
     titleIcon: Banknote,
     items: [
-      { icon: Banknote, label: 'Bank Reconciliation', description: 'Match bank transactions', view: 'reports', iconColor: 'text-emerald-600 dark:text-emerald-400', iconBg: 'bg-emerald-100 dark:bg-emerald-950' },
+      { icon: Banknote, label: 'Bank Reconciliation', description: 'Match bank transactions', view: 'money-banking', iconColor: 'text-emerald-600 dark:text-emerald-400', iconBg: 'bg-emerald-100 dark:bg-emerald-950' },
       { icon: Wallet, label: 'Income & Expense', description: 'Rent, salary, other income', view: 'income-expense', iconColor: 'text-emerald-600 dark:text-emerald-400', iconBg: 'bg-emerald-100 dark:bg-emerald-950' },
-      { icon: Repeat, label: 'Day-End Summary', description: 'Close the drawer — daily cash', view: 'dashboard', iconColor: 'text-emerald-600 dark:text-emerald-400', iconBg: 'bg-emerald-100 dark:bg-emerald-950' },
-      { icon: Send, label: 'WhatsApp Reminders', description: 'Send payment reminders to customers', view: 'parties', iconColor: 'text-emerald-600 dark:text-emerald-400', iconBg: 'bg-emerald-100 dark:bg-emerald-950' },
+      { icon: Repeat, label: 'Day-End Summary', description: 'Close the drawer — daily cash', view: 'money-banking', iconColor: 'text-emerald-600 dark:text-emerald-400', iconBg: 'bg-emerald-100 dark:bg-emerald-950' },
+      { icon: Send, label: 'WhatsApp Reminders', description: 'Send payment reminders to customers', view: 'money-banking', iconColor: 'text-emerald-600 dark:text-emerald-400', iconBg: 'bg-emerald-100 dark:bg-emerald-950' },
     ],
   },
   {
