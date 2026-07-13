@@ -136,6 +136,11 @@ interface AppState {
   // navigates to Settings, it sets this so Settings opens on the right tab.
   pendingSettingsTab: 'profile' | 'features' | 'appearance' | 'data' | 'staff' | null
   setPendingSettingsTab: (tab: 'profile' | 'features' | 'appearance' | 'data' | 'staff' | null) => void
+  // 🔒 V22-2 (Phase 2 fix): Pending report type — when GST & Tax or Banking
+  // page navigates to Reports, it sets this so Reports opens on that specific
+  // report type AND hides all other tabs (singleReportType mode).
+  pendingReportType: string | null
+  setPendingReportType: (type: string | null) => void
   // 🔒 V21-014 (Phase 6): Account section — when non-null, AccountScreen
   // renders a DEDICATED page for that section (no tabs, no menu).
   // When null, shows the account menu (profile header + 10 items).
@@ -214,6 +219,9 @@ export const useAppStore = create<AppState>()(
       // 🔒 V21-012 (Phase 4a)
       pendingSettingsTab: null,
       setPendingSettingsTab: (tab) => set({ pendingSettingsTab: tab }),
+      // 🔒 V22-2 (Phase 2 fix)
+      pendingReportType: null,
+      setPendingReportType: (type) => set({ pendingReportType: type }),
       // 🔒 V21-014 (Phase 6)
       accountSection: null,
       setAccountSection: (section) => set({ accountSection: section }),

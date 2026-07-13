@@ -2,7 +2,7 @@
 
 import { useTranslation } from '@/hooks/use-translation'
 import { useQuery, keepPreviousData } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAppStore } from '@/store/app-store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -36,13 +36,27 @@ import { ConsolidatedReport } from '@/components/reports/ConsolidatedReport'
 
 const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)', 'oklch(0.7 0.16 250)']
 
-export function Reports() {
+// 🔒 V22-2 fix: singleReportType prop — when set, hides ALL tab buttons
+// and locks to that specific report. Used by GST & Tax and Money & Banking
+// pages so each item opens ONLY its own report (not the full Reports page
+// with 11 tabs).
+export function Reports({ singleReportType }: { singleReportType?: string }) {
   const { t } = useTranslation()
   const { features } = useAppStore()
-  const [reportType, setReportType] = useState<'pl' | 'gst' | 'stock' | 'party' | 'debt-aging' | 'inventory-aging' | 'gstr-1' | 'gstr-3b' | 'gstr-2b' | 'bank-recon' | 'consolidated'>('pl')
+  const [reportType, setReportType] = useState<'pl' | 'gst' | 'stock' | 'party' | 'debt-aging' | 'inventory-aging' | 'gstr-1' | 'gstr-3b' | 'gstr-2b' | 'bank-recon' | 'consolidated'>(singleReportType as any || 'pl')
   const [dateRange, setDateRange] = useState<DateRange>(() => getPresetRange('thisMonth'))
   const [datePreset, setDatePreset] = useState<DatePreset>('thisMonth')
   const [exportingGstr, setExportingGstr] = useState(false)
+
+  // 🔒 V22-2 fix: Read pendingReportType from store on mount
+  useEffect(() => {
+    if (singleReportType) return // Don't override singleReportType mode
+    const pendingType = useAppStore.getState().pendingReportType
+    if (pendingType) {
+      setReportType(pendingType as any)
+      useAppStore.getState().setPendingReportType(null)
+    }
+  }, [singleReportType])
 
   const handleDateChange = (range: DateRange, preset: DatePreset) => {
     setDateRange(range)
@@ -289,6 +303,8 @@ export function Reports() {
       )}
 
       {/* Report type tabs — horizontally scrollable on mobile, grid on desktop */}
+      {/* 🔒 V22-2 fix: Hide ALL tabs when singleReportType is set */}
+      {!singleReportType && (
       <Tabs value={reportType} onValueChange={(v) => setReportType(v as any)}>
         {/* Mobile: horizontal scroll pills (single row, swipe to see more) */}
         <div className="lg:hidden no-print">
@@ -378,6 +394,7 @@ export function Reports() {
           <ConsolidatedReport />
         </TabsContent>
       </Tabs>
+      )}
     </div>
   )
 }

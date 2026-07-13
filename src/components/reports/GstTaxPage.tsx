@@ -105,13 +105,9 @@ export function GstTaxPage() {
     haptic.click()
     setPreviousView('gst-tax')
     if (tool.reportType && tool.view === 'reports') {
-      // Navigate to Reports with the specific report type
-      // We store the desired report type in the store so Reports can read it
-      useAppStore.getState().setPendingDateRange({
-        from: '',
-        to: '',
-        preset: tool.reportType,
-      })
+      // 🔒 V22-2 fix: Set pendingReportType so Reports opens on that specific
+      // report type AND hides all other tabs (singleReportType mode).
+      useAppStore.getState().setPendingReportType(tool.reportType)
       setView('reports')
     } else if (tool.view === 'settings') {
       useAppStore.getState().setAccountOriginView('gst-tax')

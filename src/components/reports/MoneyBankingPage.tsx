@@ -86,13 +86,13 @@ export function MoneyBankingPage() {
     haptic.click()
     setPreviousView('money-banking')
     if (tool.reportType) {
-      useAppStore.getState().setPendingDateRange({
-        from: '',
-        to: '',
-        preset: tool.reportType,
-      })
+      // 🔒 V22-2 fix: Set pendingReportType so Reports opens on that specific
+      // report type AND hides all other tabs (singleReportType mode).
+      useAppStore.getState().setPendingReportType(tool.reportType)
+      setView('reports')
+    } else {
+      setView(tool.view)
     }
-    setView(tool.view)
   }
 
   return (
