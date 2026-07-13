@@ -23,6 +23,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { useSession } from 'next-auth/react'
+import { lazy, Suspense } from 'react'
 import { useAppStore } from '@/store/app-store'
 import { useSubscription } from '@/hooks/use-subscription'
 import { useStaffPermissions } from '@/hooks/use-staff-permissions'
@@ -624,8 +625,13 @@ function AccountSectionContent({
             <button
               onClick={() => {
                 const code = session?.user?.email?.split('@')[0]?.toUpperCase()?.slice(0, 8) || 'EKBOOK'
-                navigator.share?.({ title: 'EkBook — India\'s Smartest Ledger App', text: `Use my code ${code} to get 1 month Pro FREE on EkBook!`, url: 'https://bahikhata-pro.vercel.app' })
-                  || navigator.clipboard?.writeText(`Use my code ${code} to get 1 month Pro FREE on EkBook! https://bahikhata-pro.vercel.app`)
+                const shareText = `Use my code ${code} to get 1 month Pro FREE on EkBook!`
+                const shareUrl = 'https://bahikhata-pro.vercel.app'
+                if (navigator.share) {
+                  navigator.share({ title: 'EkBook — India\'s Smartest Ledger App', text: shareText, url: shareUrl })
+                } else if (navigator.clipboard) {
+                  navigator.clipboard.writeText(`${shareText} ${shareUrl}`)
+                }
               }}
               className="flex-1 py-2.5 rounded-lg bg-white text-rose-600 text-sm font-bold"
             >
@@ -823,7 +829,11 @@ function AccountSectionContent({
   }
 
   // For sections with Settings content, render Settings with singleTab
-  // This imports the Settings component dynamically to avoid circular deps
-  const Settings = require('@/components/settings/Settings').Settings
-  return <Settings singleTab={tabMap[section]} />
+  // 🔒 V21-014 fix: Use lazy import instead of require() (eslint rule)
+  const SettingsComponent = lazy(() => import('@/components/settings/Settings').then(m => ({ default: m.Settings })))
+  return (
+    <Suspense fallback={<div className="bg-card rounded-2xl shadow-sm border border-border/60 p-8 text-center"><p className="text-muted-foreground text-sm">Loading...</p></div>}>
+      <SettingsComponent singleTab={tabMap[section]} />
+    </Suspense>
+  )
 }

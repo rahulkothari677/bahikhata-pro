@@ -199,7 +199,7 @@ export function Sidebar() {
                 ))}
                 {/* Add new shop */}
                 <button
-                  onClick={() => { setView('settings'); setShopDropdownOpen(false) }}
+                  onClick={() => { useAppStore.getState().setPreviousView(currentView); useAppStore.getState().setAccountOriginView(currentView); useAppStore.getState().setView('account'); useAppStore.getState().setAccountSection('profile'); setShopDropdownOpen(false) }}
                   className="w-full flex items-center gap-2 p-2 hover:bg-sidebar-primary/20 transition text-left border-t border-sidebar-border"
                 >
                   <Plus className="w-3.5 h-3.5 text-sidebar-primary flex-shrink-0" />
