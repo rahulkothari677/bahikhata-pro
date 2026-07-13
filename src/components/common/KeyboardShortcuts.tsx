@@ -123,10 +123,11 @@ export function KeyboardShortcuts() {
         return
       }
 
-      // T → Settings
+      // T → Account (was Settings — now routes to Account page)
       if (e.key === 't' || e.key === 'T') {
         e.preventDefault()
-        setView('settings')
+        useAppStore.getState().setAccountOriginView(currentView)
+        setView('account')
         return
       }
 

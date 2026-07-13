@@ -83,7 +83,9 @@ export function MobileBottomNav() {
   })
 
   // 'More' tab is active when on the More screen OR any secondary view reached from More
-  const isMoreActive = currentView === 'more' || ['inventory', 'income-expense', 'parties', 'scanner', 'reports', 'settings'].includes(currentView)
+  // 🔒 V22-0b/0d: Added 'account', 'pricing', 'ai-comparison', 'ai-usage' to isMoreActive
+  // so the More tab highlights when user is on these secondary views.
+  const isMoreActive = currentView === 'more' || currentView === 'account' || ['inventory', 'income-expense', 'parties', 'scanner', 'reports', 'settings', 'pricing', 'ai-comparison', 'ai-usage'].includes(currentView)
 
   // 🔒 V17 Audit Phase 10: Long-press handlers for the + button
   const handlePlusTouchStart = () => {

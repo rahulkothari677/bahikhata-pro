@@ -103,11 +103,8 @@ export function MoreScreen() {
     setView(view)
   }
 
-  const handleEditProfile = () => {
-    haptic.click()
-    setPreviousView('more')
-    setView('settings')
-  }
+  // 🔒 V21-011: handleEditProfile removed — profile header was moved to Account page.
+  // This was dead code after Phase 3 simplification.
 
   const handleBack = () => {
     haptic.click()

@@ -130,7 +130,7 @@ export function GlobalSearch() {
     { type: 'command', id: 'cmd-parties', title: 'Go to Parties', subtitle: 'Customers & suppliers', icon: Users, color: 'text-blue-600', keywords: 'parties customers suppliers dues balance', action: () => { setView('parties') } },
     { type: 'command', id: 'cmd-income', title: 'Go to Income & Expense', subtitle: 'Record rent, salary, other income', icon: Wallet, color: 'text-emerald-600 dark:text-emerald-400', keywords: 'income expense rent salary money', action: () => { setView('income-expense') } },
     { type: 'command', id: 'cmd-reports', title: 'Go to Reports', subtitle: 'P&L, GST, stock reports', icon: FileBarChart, color: 'text-rose-600', keywords: 'reports gst pl profit loss stock analysis', action: () => { setView('reports') } },
-    { type: 'command', id: 'cmd-settings', title: 'Go to Settings', subtitle: 'Shop profile, features, theme', icon: Settings, color: 'text-slate-600', keywords: 'settings profile theme features configuration', action: () => { setView('settings') } },
+    { type: 'command', id: 'cmd-account', title: 'Go to Account', subtitle: 'Profile, settings, security, preferences', icon: Settings, color: 'text-slate-600', keywords: 'settings profile theme features configuration account security', action: () => { useAppStore.getState().setAccountOriginView(useAppStore.getState().currentView); setView('account') } },
   ]
 
   // Filter commands by query — match title, subtitle, or keywords
