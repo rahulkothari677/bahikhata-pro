@@ -25,16 +25,18 @@ import { useQuery } from '@tanstack/react-query'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { useState } from 'react'
 import { motion } from 'framer-motion'
+import { useTranslation } from '@/hooks/use-translation'
 
 export function SmartInsights() {
   const { setView, setPreviousView, refreshKey } = useAppStore()
+  const { language } = useTranslation()
   const { data } = useDashboardData()
   const [expanded, setExpanded] = useState(true)
   const [dismissed, setDismissed] = useState<Set<number>>(new Set())
 
   if (!data) return null
 
-  const allInsights = computeInsights(data)
+  const allInsights = computeInsights(data, language)
   // Filter out dismissed insights (by index in the original array)
   const insights = allInsights.filter((_, i) => !dismissed.has(i))
 
@@ -114,14 +116,6 @@ export function SmartInsights() {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold">{insight.title}</p>
                   <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">{insight.description}</p>
-                  {/* 🔒 V22-12 (Batch B, Phase 6c): Conversational Hindi summary.
-                      Shows below the English description in a distinct style
-                      (italic + slightly larger) so it reads like a friendly note. */}
-                  {insight.hindiSummary && (
-                    <p className="text-[12px] text-foreground/70 mt-1 font-medium italic leading-relaxed">
-                      {insight.hindiSummary}
-                    </p>
-                  )}
                   {insight.action && (
                     <button
                       onClick={insight.action.onClick}
@@ -164,36 +158,51 @@ export function SmartInsights() {
 type Insight = {
   title: string
   description: string
-  hindiSummary?: string
   icon: any
   severity: 'critical' | 'warning' | 'info' | 'positive'
   action?: { label: string; onClick: () => void }
 }
 
-function computeInsights(data: any): Insight[] {
+// 🔒 V22-13 (Batch C, Item 0): Language-aware insight text.
+// Returns insight text in the user's selected app language.
+// Falls back to English for languages without translations (gu, mr, ta, te).
+// Only ONE language is shown at a time — no dual-language display.
+function insightText(
+  lang: string,
+  en: { title: string; description: string; actionLabel?: string },
+  hi: { title: string; description: string; actionLabel?: string },
+): { title: string; description: string; actionLabel?: string } {
+  if (lang === 'hi') return hi
+  // gu, mr, ta, te → fall back to English for now (future: add translations)
+  return en
+}
+
+function computeInsights(data: any, lang: string = 'en'): Insight[] {
   const insights: Insight[] = []
   const { kpis, lowStockProducts, topProducts, recentTransactions, salesTrend } = data
 
-  // ─── 0. Daily Summary (Hindi) — always shows at the top when there's data ──
-  // 🔒 V22-12 (Batch B, Phase 6c): Conversational Hindi summary.
-  // "Aaj ₹X bike, ₹Y udhaar baaki" — the exact pattern the user requested.
+  // ─── 0. Daily Summary — always shows at the top when there's data ──
   if (kpis && (kpis.todayRevenue > 0 || kpis.totalReceivable > 0)) {
-    const parts: string[] = []
-    if (kpis.todayRevenue > 0) {
-      parts.push(`Aaj ${formatINRCompact(kpis.todayRevenue)} bike`)
-    }
-    if (kpis.totalReceivable > 0) {
-      parts.push(`${formatINRCompact(kpis.totalReceivable)} udhaar baaki`)
-    }
-    if (kpis.todayTxnCount > 0) {
-      parts.push(`${kpis.todayTxnCount} bill`)
-    }
+    const text = insightText(lang,
+      {
+        title: kpis.todayRevenue > 0 ? "📊 Today's Summary" : '📊 Udhaar Summary',
+        description: kpis.todayRevenue > 0
+          ? `Today: ${formatINR(kpis.todayRevenue)} revenue from ${kpis.todayTxnCount} sale${kpis.todayTxnCount !== 1 ? 's' : ''}.${kpis.totalReceivable > 0 ? ` Outstanding: ${formatINR(kpis.totalReceivable)}.` : ''}`
+          : `No sales today yet. Outstanding receivable: ${formatINR(kpis.totalReceivable)}.`,
+      },
+      {
+        title: kpis.todayRevenue > 0 ? '📊 आज की सारांश' : '📊 उधार सारांश',
+        description: (() => {
+          const parts: string[] = []
+          if (kpis.todayRevenue > 0) parts.push(`आज ${formatINR(kpis.todayRevenue)} की बिक्री (${kpis.todayTxnCount} बिल)`)
+          if (kpis.totalReceivable > 0) parts.push(`बकाया: ${formatINR(kpis.totalReceivable)}`)
+          return parts.length > 0 ? parts.join(' · ') : 'आज कोई बिक्री नहीं'
+        })(),
+      },
+    )
     insights.push({
-      title: `📊 ${kpis.todayRevenue > 0 ? "Today's Summary" : "Udhaar Summary"}`,
-      description: kpis.todayRevenue > 0
-        ? `Today: ${formatINR(kpis.todayRevenue)} revenue from ${kpis.todayTxnCount} sale${kpis.todayTxnCount !== 1 ? 's' : ''}.${kpis.totalReceivable > 0 ? ` Outstanding: ${formatINR(kpis.totalReceivable)}.` : ''}`
-        : `No sales today yet. Outstanding receivable: ${formatINR(kpis.totalReceivable)}.`,
-      hindiSummary: parts.join(', '),
+      title: text.title,
+      description: text.description,
       icon: Sparkles,
       severity: 'info',
     })
@@ -202,30 +211,42 @@ function computeInsights(data: any): Insight[] {
   // ─── 1. Smart Reorder Suggestions ─────────────────────────────
   if (lowStockProducts && lowStockProducts.length > 0) {
     lowStockProducts.slice(0, 3).forEach((p: any) => {
-      // Estimate days until stockout based on sales velocity
       const salesVelocity = topProducts?.find((tp: any) => tp.id === p.id)?.quantity || 0
       const daysLeft = p.currentStock > 0 && salesVelocity > 0
         ? Math.ceil(p.currentStock / (salesVelocity / 30))
         : p.currentStock <= 0 ? 0 : 999
 
+      const text = insightText(lang,
+        {
+          title: p.currentStock <= 0
+            ? `📦 ${p.name} is OVERSOLD`
+            : daysLeft <= 7
+              ? `📦 ${p.name} runs out in ~${daysLeft} days`
+              : `📦 ${p.name} is running low`,
+          description: p.currentStock <= 0
+            ? `Oversold by ${Math.abs(p.currentStock)} ${p.unit}. Restock immediately — you're losing sales.`
+            : `${p.currentStock} ${p.unit} left · threshold: ${p.lowStockThreshold} ${p.unit}. Consider reordering soon.`,
+          actionLabel: 'Create Purchase',
+        },
+        {
+          title: p.currentStock <= 0
+            ? `📦 ${p.name} ज्यादा बिक गया`
+            : daysLeft <= 7
+              ? `📦 ${p.name} ${daysLeft} दिन में खत्म हो जाएगा`
+              : `📦 ${p.name} खत्म हो रहा है`,
+          description: p.currentStock <= 0
+            ? `${Math.abs(p.currentStock)} ${p.unit} ज्यादा बिका — जल्दी स्टॉक भरें, वरना बिक्री खोनी पड़ेगी।`
+            : `${p.currentStock} ${p.unit} बचे हैं · थ्रेशोल्ड: ${p.lowStockThreshold} ${p.unit}। जल्दी ऑर्डर करें।`,
+          actionLabel: 'खरीद दर्ज करें',
+        },
+      )
       insights.push({
-        title: p.currentStock <= 0
-          ? `📦 ${p.name} is OVERSOLD`
-          : daysLeft <= 7
-            ? `📦 ${p.name} runs out in ~${daysLeft} days`
-            : `📦 ${p.name} is running low`,
-        description: p.currentStock <= 0
-          ? `Oversold by ${Math.abs(p.currentStock)} ${p.unit}. Restock immediately — you're losing sales.`
-          : `${p.currentStock} ${p.unit} left · threshold: ${p.lowStockThreshold} ${p.unit}. Consider reordering soon.`,
-        hindiSummary: p.currentStock <= 0
-          ? `${p.name} ${Math.abs(p.currentStock)} ${p.unit} ज्यादा बिक गया — जल्दी स्टॉक भरें`
-          : daysLeft <= 7
-            ? `${p.name} ${daysLeft} दिन में खत्म हो जाएगा — ऑर्डर कर लें`
-            : `${p.name} खत्म हो रहा है — ${p.currentStock} ${p.unit} बचे हैं`,
+        title: text.title,
+        description: text.description,
         icon: Package,
         severity: p.currentStock <= 0 ? 'critical' : 'warning',
         action: {
-          label: 'Create Purchase',
+          label: text.actionLabel || 'Create Purchase',
           onClick: () => {
             useAppStore.getState().setPreviousView('dashboard')
             useAppStore.getState().setView('new-purchase')
@@ -239,38 +260,30 @@ function computeInsights(data: any): Insight[] {
   if (kpis) {
     const margin = kpis.todayRevenue > 0 ? (kpis.todayProfit / kpis.todayRevenue) * 100 : 0
     if (kpis.todayRevenue > 0 && margin < 10 && margin >= 0) {
-      insights.push({
-        title: `📊 Profit margin is thin (${margin.toFixed(1)}%)`,
-        description: `Today's margin is below 10%. Revenue: ${formatINR(kpis.todayRevenue)}, Profit: ${formatINR(kpis.todayProfit)}. Consider reviewing your pricing.`,
-        hindiSummary: `मार्जिन कम है (${margin.toFixed(1)}%) — दाम बढ़ाने पर विचार करें`,
-        icon: Percent,
-        severity: 'warning',
-      })
+      const text = insightText(lang,
+        { title: `📊 Profit margin is thin (${margin.toFixed(1)}%)`, description: `Today's margin is below 10%. Revenue: ${formatINR(kpis.todayRevenue)}, Profit: ${formatINR(kpis.todayProfit)}. Consider reviewing your pricing.` },
+        { title: `📊 मार्जिन कम है (${margin.toFixed(1)}%)`, description: `आज का मार्जिन 10% से कम है। बिक्री: ${formatINR(kpis.todayRevenue)}, प्रॉफिट: ${formatINR(kpis.todayProfit)}। दाम बढ़ाने पर विचार करें।` },
+      )
+      insights.push({ title: text.title, description: text.description, icon: Percent, severity: 'warning' })
     }
     if (kpis.todayProfit < 0 && kpis.todayRevenue > 0) {
-      insights.push({
-        title: `⚠️ Selling at a LOSS today`,
-        description: `Today's profit is negative (${formatINR(kpis.todayProfit)}). You're selling below cost price. Review your prices immediately.`,
-        hindiSummary: `आज घाटे में बिक्री हो रही है — दाम जांचें`,
-        icon: TrendingDown,
-        severity: 'critical',
-      })
+      const text = insightText(lang,
+        { title: `⚠️ Selling at a LOSS today`, description: `Today's profit is negative (${formatINR(kpis.todayProfit)}). You're selling below cost price. Review your prices immediately.` },
+        { title: `⚠️ आज घाटे में बिक्री हो रही है`, description: `आज का प्रॉफिट नेगेटिव है (${formatINR(kpis.todayProfit)})। आप कीमत से कम में बेच रहे हैं। तुरंत दाम जांचें।` },
+      )
+      insights.push({ title: text.title, description: text.description, icon: TrendingDown, severity: 'critical' })
     }
-    // Margin trend
     if (kpis.profitGrowth < -10) {
-      insights.push({
-        title: `📉 Profit down ${kpis.profitGrowth.toFixed(1)}% vs last period`,
-        description: `Your profit has dropped significantly. Check if costs have increased or if you're discounting too much.`,
-        hindiSummary: `पिछले महीने से प्रॉफिट ${Math.abs(kpis.profitGrowth).toFixed(0)}% कम है`,
-        icon: TrendingDown,
-        severity: 'warning',
-      })
+      const text = insightText(lang,
+        { title: `📉 Profit down ${kpis.profitGrowth.toFixed(1)}% vs last period`, description: `Your profit has dropped significantly. Check if costs have increased or if you're discounting too much.` },
+        { title: `📉 पिछले महीने से प्रॉफिट ${Math.abs(kpis.profitGrowth).toFixed(0)}% कम है`, description: `प्रॉफिट काफी कम हो गया है। जांचें कि खर्च बढ़े हैं या ज्यादा छूट दे रहे हैं।` },
+      )
+      insights.push({ title: text.title, description: text.description, icon: TrendingDown, severity: 'warning' })
     }
   }
 
   // ─── 3. Sales Pattern Detection ──────────────────────────────
   if (salesTrend && salesTrend.length >= 7) {
-    // Weekend vs weekday analysis
     const weekdaySales = salesTrend.filter((d: any) => {
       const day = new Date(d.date || d.label).getDay()
       return day >= 1 && day <= 5
@@ -289,27 +302,22 @@ function computeInsights(data: any): Insight[] {
 
     if (avgWeekend > avgWeekday * 1.3 && avgWeekday > 0) {
       const pct = ((avgWeekend / avgWeekday - 1) * 100).toFixed(0)
-      insights.push({
-        title: `🗓️ Weekends bring ${pct}% more sales`,
-        description: `Weekend avg: ${formatINRCompact(avgWeekend)} vs weekday: ${formatINRCompact(avgWeekday)}. Consider stocking up before weekends.`,
-        hindiSummary: `वीकेंड में ${pct}% ज्यादा बिक्री होती है`,
-        icon: Calendar,
-        severity: 'info',
-      })
+      const text = insightText(lang,
+        { title: `🗓️ Weekends bring ${pct}% more sales`, description: `Weekend avg: ${formatINRCompact(avgWeekend)} vs weekday: ${formatINRCompact(avgWeekday)}. Consider stocking up before weekends.` },
+        { title: `🗓️ वीकेंड में ${pct}% ज्यादा बिक्री होती है`, description: `वीकेंद औसत: ${formatINRCompact(avgWeekend)} vs वर्कडे: ${formatINRCompact(avgWeekday)}। वीकेंड से पहले स्टॉक बढ़ाएं।` },
+      )
+      insights.push({ title: text.title, description: text.description, icon: Calendar, severity: 'info' })
     }
 
-    // No sales in recent days
     const lastSale = recentTransactions?.find((t: any) => t.type === 'sale')
     if (lastSale) {
       const daysSinceLastSale = Math.floor((Date.now() - new Date(lastSale.date).getTime()) / (1000 * 60 * 60 * 24))
       if (daysSinceLastSale >= 3) {
-        insights.push({
-          title: `🔕 No sales in ${daysSinceLastSale} days`,
-          description: `It's been ${daysSinceLastSale} days since your last sale. Consider reaching out to regular customers or running a promotion.`,
-          hindiSummary: `${daysSinceLastSale} दिन से कोई बिक्री नहीं — ग्राहकों को संपर्क करें`,
-          icon: ShoppingCart,
-          severity: daysSinceLastSale >= 7 ? 'critical' : 'warning',
-        })
+        const text = insightText(lang,
+          { title: `🔕 No sales in ${daysSinceLastSale} days`, description: `It's been ${daysSinceLastSale} days since your last sale. Consider reaching out to regular customers or running a promotion.` },
+          { title: `🔕 ${daysSinceLastSale} दिन से कोई बिक्री नहीं`, description: `${daysSinceLastSale} दिन से कोई बिक्री नहीं हुई। नियमित ग्राहकों को संपर्क करें या ऑफर चलाएं।` },
+        )
+        insights.push({ title: text.title, description: text.description, icon: ShoppingCart, severity: daysSinceLastSale >= 7 ? 'critical' : 'warning' })
       }
     }
   }
@@ -318,14 +326,17 @@ function computeInsights(data: any): Insight[] {
   if (kpis && kpis.totalReceivable > 0) {
     const receivablePct = kpis.rangeRevenue > 0 ? (kpis.totalReceivable / kpis.rangeRevenue) * 100 : 0
     if (receivablePct > 30) {
+      const text = insightText(lang,
+        { title: `💰 Customers owe you ${formatINR(kpis.totalReceivable)}`, description: `That's ${receivablePct.toFixed(0)}% of your total revenue. Consider sending payment reminders via WhatsApp.`, actionLabel: 'Send Reminders' },
+        { title: `💰 ग्राहकों को ${formatINR(kpis.totalReceivable)} बकाया है`, description: `यह आपकी कुल बिक्री का ${receivablePct.toFixed(0)}% है। WhatsApp पर रिमाइंडर भेजने पर विचार करें।`, actionLabel: 'रिमाइंडर भेजें' },
+      )
       insights.push({
-        title: `💰 Customers owe you ${formatINR(kpis.totalReceivable)}`,
-        description: `That's ${receivablePct.toFixed(0)}% of your total revenue. Consider sending payment reminders via WhatsApp.`,
-        hindiSummary: `ग्राहकों को ${formatINRCompact(kpis.totalReceivable)} बकाया है — रिमाइंडर भेजें`,
+        title: text.title,
+        description: text.description,
         icon: User,
         severity: receivablePct > 50 ? 'critical' : 'warning',
         action: {
-          label: 'Send Reminders',
+          label: text.actionLabel || 'Send Reminders',
           onClick: () => {
             useAppStore.getState().setPreviousView('dashboard')
             useAppStore.getState().setView('parties')
@@ -337,13 +348,11 @@ function computeInsights(data: any): Insight[] {
 
   // ─── Positive insight ────────────────────────────────────────
   if (kpis && kpis.revenueGrowth > 20) {
-    insights.push({
-      title: `🚀 Revenue up ${kpis.revenueGrowth.toFixed(0)}% vs last period`,
-      description: `Great work! Your revenue is trending up significantly. Keep up the momentum.`,
-      hindiSummary: `पिछले महीने से ${kpis.revenueGrowth.toFixed(0)}% ज्यादा बिक्री — शाबाश!`,
-      icon: TrendingUp,
-      severity: 'positive',
-    })
+    const text = insightText(lang,
+      { title: `🚀 Revenue up ${kpis.revenueGrowth.toFixed(0)}% vs last period`, description: `Great work! Your revenue is trending up significantly. Keep up the momentum.` },
+      { title: `🚀 पिछले महीने से ${kpis.revenueGrowth.toFixed(0)}% ज्यादा बिक्री`, description: `शाबाश! आपकी बिक्री तेजी से बढ़ रही है। यही रफ्तार रखें!` },
+    )
+    insights.push({ title: text.title, description: text.description, icon: TrendingUp, severity: 'positive' })
   }
 
   return insights

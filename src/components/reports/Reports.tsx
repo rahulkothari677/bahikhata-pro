@@ -559,6 +559,9 @@ function PLReport({ data }: { data: any }) {
 
 function GSTReport({ data }: { data: any }) {
   const { t } = useTranslation()
+  // 🔒 V22-13 (Batch C, Phase 8f): Chart ↔ Table toggle for the slab summary.
+  // 'table' = default table view, 'chart' = grouped bar chart view.
+  const [slabView, setSlabView] = useState<'table' | 'chart'>('table')
   // 🔒 V11 FIX: Defensive destructuring with defaults. Was: `const { outputSales,
   // inputPurchases, netGSTPayable } = data` — if any field was undefined (e.g.,
   // partial API response, cache corruption, old cached data from a previous
@@ -647,24 +650,48 @@ function GSTReport({ data }: { data: any }) {
         </Card>
       </div>
 
-      {/* Slab table */}
+      {/* 🔒 V22-13 (Batch C, Phase 8f): Slab table with chart ↔ table toggle */}
       <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">GST Slab-wise Summary</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">GST Slab-wise Summary</CardTitle>
+            {/* Toggle: Table ↔ Chart */}
+            <div className="flex gap-1 bg-muted rounded-lg p-0.5">
+              <button
+                onClick={() => setSlabView('table')}
+                className={cn(
+                  'px-2.5 py-1 text-[11px] font-medium rounded-md transition',
+                  slabView === 'table' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground',
+                )}
+              >
+                Table
+              </button>
+              <button
+                onClick={() => setSlabView('chart')}
+                className={cn(
+                  'px-2.5 py-1 text-[11px] font-medium rounded-md transition',
+                  slabView === 'chart' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground',
+                )}
+              >
+                Chart
+              </button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
-          <div className="overflow-auto max-h-[60vh]">
-            <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-card z-10">
-                <tr className="border-b border-border text-left">
-                  <th className="py-2 px-2 font-medium text-muted-foreground">GST Rate</th>
-                  <th className="py-2 px-2 font-medium text-muted-foreground text-right">Sales Taxable</th>
-                  <th className="py-2 px-2 font-medium text-muted-foreground text-right">Output Tax</th>
-                  <th className="py-2 px-2 font-medium text-muted-foreground text-right">Purchase Taxable</th>
-                  <th className="py-2 px-2 font-medium text-muted-foreground text-right">Input Tax</th>
-                  <th className="py-2 px-2 font-medium text-muted-foreground text-right">Net Tax</th>
-                </tr>
-              </thead>
+          {slabView === 'table' ? (
+            <div className="overflow-auto max-h-[60vh]">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-card z-10">
+                  <tr className="border-b border-border text-left">
+                    <th className="py-2 px-2 font-medium text-muted-foreground">GST Rate</th>
+                    <th className="py-2 px-2 font-medium text-muted-foreground text-right">Sales Taxable</th>
+                    <th className="py-2 px-2 font-medium text-muted-foreground text-right">Output Tax</th>
+                    <th className="py-2 px-2 font-medium text-muted-foreground text-right">Purchase Taxable</th>
+                    <th className="py-2 px-2 font-medium text-muted-foreground text-right">Input Tax</th>
+                    <th className="py-2 px-2 font-medium text-muted-foreground text-right">Net Tax</th>
+                  </tr>
+                </thead>
               <tbody>
                 {[0, 5, 12, 18, 28].map(rate => {
                   const o = outputSales.bySlab.find((s: any) => s.rate === rate)
@@ -696,6 +723,35 @@ function GSTReport({ data }: { data: any }) {
               </tfoot>
             </table>
           </div>
+          ) : (
+            /* Chart view — grouped bar chart of output tax vs input tax by slab */
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart
+                data={[0, 5, 12, 18, 28].map(rate => {
+                  const o = outputSales.bySlab.find((s: any) => s.rate === rate)
+                  const i = inputPurchases.bySlab.find((s: any) => s.rate === rate)
+                  return {
+                    rate: `${rate}%`,
+                    'Output Tax': o ? o.cgst + o.sgst + o.igst : 0,
+                    'Input Tax': i ? i.cgst + i.sgst + i.igst : 0,
+                  }
+                }).filter(d => d['Output Tax'] > 0 || d['Input Tax'] > 0)}
+                margin={{ top: 10, right: 10, left: -10, bottom: 0 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" stroke={chartColors.grid} vertical={false} />
+                <XAxis dataKey="rate" tick={{ fontSize: 11, fill: chartColors.tick }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 10, fill: chartColors.tick }} axisLine={false} tickLine={false} tickFormatter={(v) => formatINRCompact(v)} width={50} />
+                <Tooltip
+                  cursor={{ fill: 'oklch(0.55 0.19 42 / 0.05)' }}
+                  contentStyle={chartColors.tooltipStyle} itemStyle={chartColors.tooltipItemStyle} labelStyle={chartColors.tooltipLabelStyle}
+                  formatter={(v: number) => formatINR(v)}
+                />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Bar dataKey="Output Tax" fill="oklch(0.58 0.22 25)" radius={[4, 4, 0, 0]} name="Output Tax (Sales)" />
+                <Bar dataKey="Input Tax" fill="oklch(0.62 0.15 155)" radius={[4, 4, 0, 0]} name="Input Tax (Purchases)" />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </CardContent>
       </Card>
     </div>

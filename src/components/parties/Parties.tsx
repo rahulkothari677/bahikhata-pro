@@ -20,11 +20,12 @@ import { ViewModeToggle } from '@/components/common/ViewModeToggle'
 import { EmptyState } from '@/components/common/EmptyState'
 import {
   Plus, Search, Users, Phone, User, ArrowDownRight, ArrowUpRight,
-  Building2, ChevronRight, Receipt,
+  Building2, ChevronRight, Receipt, Send,
 } from 'lucide-react'
 import { offlineFetch, isQueuedResponse, isOnline, OfflineError } from '@/lib/offline-fetch'
 import { OfflineNoData } from '@/components/common/OfflineNoData'
 import { haptic } from '@/lib/haptic'
+import { BulkRemindersModal } from '@/components/parties/BulkRemindersModal'
 
 export function Parties() {
   const {
@@ -35,6 +36,8 @@ export function Parties() {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'all' | 'customer' | 'supplier'>('all')
   const [dialogOpen, setDialogOpen] = useState(false)
+  // 🔒 V22-13 (Batch C, Phase 7f): Bulk reminders modal state
+  const [bulkRemindersOpen, setBulkRemindersOpen] = useState(false)
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['parties', refreshKey],
@@ -151,9 +154,22 @@ export function Parties() {
               </SelectContent>
             </Select>
             <ViewModeToggle mode={partiesViewMode} onChange={setPartiesViewMode} />
+            {/* 🔒 V22-13 (Batch C, Phase 7f): Bulk WhatsApp Reminders button */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => { haptic.click(); setBulkRemindersOpen(true) }}
+              className="gap-1.5 border-emerald-300 text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-950"
+            >
+              <Send className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Bulk Reminders</span>
+            </Button>
           </div>
         </CardContent>
       </Card>
+
+      {/* 🔒 V22-13 (Batch C, Phase 7f): Bulk Reminders Modal */}
+      <BulkRemindersModal open={bulkRemindersOpen} onClose={() => setBulkRemindersOpen(false)} />
 
       {/* Parties list */}
       {!isOnline() && !!error && !data ? (

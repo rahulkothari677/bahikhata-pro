@@ -1023,6 +1023,10 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
           <p className="text-xs text-muted-foreground">Choose a theme — sidebar, buttons, charts & accents all update together</p>
         </CardHeader>
         <CardContent>
+          {/* ─── Group: Theme & Language ─── */}
+          <div className="mb-2 px-1">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Theme &amp; Language</p>
+          </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {THEME_OPTIONS.map((theme) => (
               <button
@@ -1101,6 +1105,15 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
             </Select>
           </div>
 
+          {/* 🔒 V22-13 (Batch C, Phase 5b): Grouped section headers for better
+              discoverability. The Appearance tab has 11 settings — adding
+              visual group dividers makes them scannable. */}
+
+          {/* ─── Group: Display & Privacy ─── */}
+          <div className="mt-4 mb-2 px-1">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Display &amp; Privacy</p>
+          </div>
+
           {/* Dark Mode Toggle (moved from header) */}
           <div className="mt-3 flex items-center justify-between rounded-lg bg-muted/50 p-3">
             <div className="flex items-center gap-2">
@@ -1134,6 +1147,11 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
                 sonnerToast.success(`Profit ${checked ? 'hidden' : 'visible'}`)
               }}
             />
+          </div>
+
+          {/* ─── Group: Business Rules ─── */}
+          <div className="mt-4 mb-2 px-1">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Business Rules</p>
           </div>
 
           {/* 🔒 V12: Invoice round-off toggle */}
@@ -1170,6 +1188,11 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
               checked={stockPolicy === 'allow'}
               onCheckedChange={(checked) => persistStockPolicy(checked ? 'allow' : 'block')}
             />
+          </div>
+
+          {/* ─── Group: Security & Backup ─── */}
+          <div className="mt-4 mb-2 px-1">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Security &amp; Backup</p>
           </div>
 
           {/* 🔒 V22-7 (Phase 5): App Lock — PIN/biometric required on app launch.
@@ -1216,6 +1239,11 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
                 <SelectItem value="scanner">AI Scanner</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          {/* ─── Group: Notifications ─── */}
+          <div className="mt-4 mb-2 px-1">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Notifications</p>
           </div>
 
           {/* 🔒 V22-12 (Batch B, Phase 5d): Notification Preferences — granular
