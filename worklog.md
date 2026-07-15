@@ -5564,3 +5564,48 @@ Stage Summary:
 - Total reports: 11 → 15 (across 4 categories).
 - All 4 reports verified working with real data.
 - NEXT: Phase 8 — Design system polish (final visual refinements).
+
+---
+Task ID: v22-10-phase8
+Agent: main
+Task: V22 Phase 8 — Design system polish. Add smooth scroll, card-hover utility, focus-visible ring, entrance animations, and themed text selection.
+
+Work Log:
+- PRE-CHANGE RESEARCH:
+  * Read globals.css (1348 lines) — already has: 3-layer shadow-card, shimmer skeletons, bg-gradient-saffron, glass effect, custom scrollbars, print styles, prefers-reduced-motion overrides for splash animations.
+  * Confirmed focus-visible only exists on Button component (not global).
+  * Identified 5 high-impact, low-risk polish items that don't change layout.
+
+- IMPLEMENTATION (globals.css):
+  1. Smooth scrolling: html { scroll-behavior: smooth }
+  2. Themed ::selection: saffron tint background (light + dark variants)
+  3. .card-hover utility: translateY(-2px) + 3-layer shadow on hover, reset on active
+  4. .animate-fade-slide-up: 350ms ease-out entrance (fade + 8px slide)
+  5. .animate-stagger: sequential entrance using --stagger-index CSS variable
+  6. Global *:focus-visible: 2px solid themed ring + outline-offset
+  7. prefers-reduced-motion: disables all new animations + smooth scroll + hover lift
+
+- APPLIED TO COMPONENTS:
+  * ReportsHub.tsx: card-hover on 15 report cards + animate-fade-slide-up on header + category sections
+  * Dashboard.tsx: card-hover on 6 Quick Action buttons
+  * AccountScreen.tsx: card-hover on 4 Business Stats cards
+
+- VERIFICATION:
+  * npx tsc --noEmit: 0 errors
+  * npx jest: 1588/1588 pass
+  * npx next build: Compiled successfully in 38.6s
+  * npx eslint: clean
+
+- BROWSER TESTING:
+  * Verified card-hover CSS rule loaded: "FOUND card-hover"
+  * Verified ::selection rule loaded: "FOUND ::selection"
+  * Verified focus-visible rule loaded: "FOUND focus-visible"
+  * Verified fade-slide-up animation loaded: "FOUND fade-slide-up"
+  * 15 report cards have card-hover class
+  * 6 dashboard quick action buttons have card-hover class
+  * Focus-visible ring test: Tab key → button shows outline "oklch(0.55 0.19 42) solid 2px" (saffron ring)
+
+Stage Summary:
+- V22-10 Phase 8 COMPLETE. Pushed to GitHub (commit cb58ea5). Vercel deploy verified.
+- 5 design system polish items added, all respecting prefers-reduced-motion.
+- NEXT: Phase 9 — Final testing + deployment (comprehensive regression test across all features).
