@@ -8,7 +8,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { DateRangePicker, getPresetRange, type DateRange, type DatePreset } from '@/components/common/DateRangePicker'
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
@@ -33,6 +32,7 @@ import { Gstr3bReport } from '@/components/reports/Gstr3bReport'
 import { Gstr2bReconciliation } from '@/components/reports/Gstr2bReconciliation'
 import { BankReconciliation } from '@/components/reports/BankReconciliation'
 import { ConsolidatedReport } from '@/components/reports/ConsolidatedReport'
+import { ReportsHub } from '@/components/reports/ReportsHub'
 
 const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)', 'oklch(0.7 0.16 250)']
 
@@ -40,9 +40,16 @@ const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 
 // and locks to that specific report. Used by GST & Tax and Money & Banking
 // pages so each item opens ONLY its own report (not the full Reports page
 // with 11 tabs).
+//
+// 🔒 V22-5 (Phase 3): When NOT in single-report mode, renders <ReportsHub />
+// (Vyapar-style categorized grid) instead of the cramped 11-tab bar.
 export function Reports({ singleReportType }: { singleReportType?: string }) {
   const { t } = useTranslation()
   const { features, setView } = useAppStore()
+  // 🔒 V22-5: Subscribe to pendingReportType reactively so the ReportsHub
+  // can switch to single-report mode WITHOUT remounting (no setView call).
+  const pendingReportType = useAppStore(s => s.pendingReportType)
+  const setPendingReportType = useAppStore(s => s.setPendingReportType)
   const [reportType, setReportType] = useState<'pl' | 'gst' | 'stock' | 'party' | 'debt-aging' | 'inventory-aging' | 'gstr-1' | 'gstr-3b' | 'gstr-2b' | 'bank-recon' | 'consolidated'>(singleReportType as any || 'pl')
   const [dateRange, setDateRange] = useState<DateRange>(() => getPresetRange('thisMonth'))
   const [datePreset, setDatePreset] = useState<DatePreset>('thisMonth')
@@ -50,19 +57,20 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
   // 🔒 V22-3 fix: Track whether we're in single-report mode (from prop OR store)
   const [isSingleReport, setIsSingleReport] = useState(!!singleReportType)
 
-  // 🔒 V22-2 fix: Read pendingReportType from store on mount
+  // 🔒 V22-5: Read pendingReportType from store on mount AND whenever it changes.
+  // This lets the ReportsHub switch to single-report mode without remounting
+  // (no setView call needed — same currentView, just different pendingReportType).
   useEffect(() => {
     if (singleReportType) {
       setIsSingleReport(true)
       return // Don't override singleReportType mode
     }
-    const pendingType = useAppStore.getState().pendingReportType
-    if (pendingType) {
-      setReportType(pendingType as any)
+    if (pendingReportType) {
+      setReportType(pendingReportType as any)
       setIsSingleReport(true)
-      useAppStore.getState().setPendingReportType(null)
+      setPendingReportType(null)  // Clear so next navigation can set a new type
     }
-  }, [singleReportType])
+  }, [singleReportType, pendingReportType, setPendingReportType])
 
   const handleDateChange = (range: DateRange, preset: DatePreset) => {
     setDateRange(range)
@@ -138,7 +146,10 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['report', reportType, dateRange.from.toISOString(), dateRange.to.toISOString()],
-    enabled: reportType !== 'gstr-1' && reportType !== 'gstr-3b' && reportType !== 'gstr-2b' && reportType !== 'bank-recon' && reportType !== 'consolidated',
+    // 🔒 V22-5 (Phase 3): Only fetch when in single-report mode (not on ReportsHub).
+    // Without the isSingleReport gate, the query would fire on the hub with
+    // the default reportType='pl', wasting a request for data we never show.
+    enabled: isSingleReport && reportType !== 'gstr-1' && reportType !== 'gstr-3b' && reportType !== 'gstr-2b' && reportType !== 'bank-recon' && reportType !== 'consolidated',
     queryFn: async () => {
       // Debt aging uses party report data (includes transactions per party)
       // Inventory aging uses stock report data (includes products with createdAt)
@@ -213,7 +224,7 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
     }
   }
 
-  // 🔒 V22-3 (Phase 1): Title + back button when in singleReportType mode
+  // 🔒 V22-3 (Phase 1): Title + back button for single-report mode
   const reportTitles: Record<string, string> = {
     'gstr-1': 'GSTR-1 Report',
     'gstr-3b': 'GSTR-3B Report',
@@ -231,17 +242,28 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
     ? (reportTitles[reportType] || 'Report')
     : 'Reports'
 
+  // 🔒 V22-5 (Phase 3): Back button — exits single-report mode.
+  // If previousView is 'reports' (came from ReportsHub), stay on the reports
+  // view but reset to hub mode. Otherwise navigate to previousView (e.g. 'more').
+  const handleBackToHub = () => {
+    const prev = useAppStore.getState().previousView
+    setIsSingleReport(false)
+    useAppStore.getState().setPreviousView(null)
+    if (prev === 'reports') {
+      // Stay on reports view — will render ReportsHub since isSingleReport is now false
+      // No setView needed (currentView is already 'reports')
+    } else {
+      setView(prev || 'more')
+    }
+  }
+
   return (
     <div className="space-y-4">
       {/* 🔒 V22-3 (Phase 1): Title + back button for single-report mode */}
       {isSingleReport && (
         <div className="flex items-center gap-3 no-print">
           <button
-            onClick={() => {
-              const prev = useAppStore.getState().previousView
-              setView(prev || 'more')
-              useAppStore.getState().setPreviousView(null)
-            }}
+            onClick={handleBackToHub}
             className="p-2 -ml-2 rounded-lg hover:bg-muted"
           >
             <ArrowLeft className="w-5 h-5" />
@@ -254,8 +276,10 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
 
       {/* 🔒 V6 SC1/PP1: Loud truncation warning banner.
           Shows when the report is truncated (data.truncated === true).
-          Never let a user mistake an approximate tax/P&L figure for the real one. */}
-      {data?.truncated === true && (
+          Never let a user mistake an approximate tax/P&L figure for the real one.
+          🔒 V22-5 (Phase 3): Only show when a report is actually being viewed
+          (not on the ReportsHub grid). */}
+      {isSingleReport && data?.truncated === true && (
         <div className="rounded-lg bg-rose-50 dark:bg-rose-950/30 border-2 border-rose-300 dark:border-rose-700 p-4 no-print">
           <div className="flex items-start gap-3">
             <AlertTriangle className="w-5 h-5 text-rose-600 dark:text-rose-400 flex-shrink-0 mt-0.5" />
@@ -274,15 +298,20 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
         </div>
       )}
 
-      {/* Print-only header — visible only when printing */}
-      <div className="hidden print:block mb-4 pb-3 border-b-2 border-black">
-        <h1 className="text-2xl font-bold text-black capitalize">{reportType === 'pl' ? 'Profit & Loss Report' : reportType === 'gst' ? 'GST Report' : reportType === 'stock' ? 'Stock Report' : 'Party Statement'}</h1>
-        <p className="text-sm text-gray-700 mt-1">Period: {formatDate(dateRange.from)} to {formatDate(dateRange.to)}</p>
-        <p className="text-xs text-gray-500 mt-0.5">Generated by EkBook on {formatDate(new Date())}</p>
-      </div>
+      {/* Print-only header — visible only when printing.
+          🔒 V22-5 (Phase 3): Only show when a report is actually being viewed. */}
+      {isSingleReport && (
+        <div className="hidden print:block mb-4 pb-3 border-b-2 border-black">
+          <h1 className="text-2xl font-bold text-black capitalize">{reportType === 'pl' ? 'Profit & Loss Report' : reportType === 'gst' ? 'GST Report' : reportType === 'stock' ? 'Stock Report' : 'Party Statement'}</h1>
+          <p className="text-sm text-gray-700 mt-1">Period: {formatDate(dateRange.from)} to {formatDate(dateRange.to)}</p>
+          <p className="text-xs text-gray-500 mt-0.5">Generated by EkBook on {formatDate(new Date())}</p>
+        </div>
+      )}
 
-      {/* Period selector + export toolbar (hidden for GSTR-3B which has its own month picker) */}
-      {reportType !== 'gstr-1' && reportType !== 'gstr-3b' && reportType !== 'gstr-2b' && reportType !== 'bank-recon' && reportType !== 'consolidated' && (
+      {/* Period selector + export toolbar (hidden for GSTR-3B which has its own month picker).
+          🔒 V22-5 (Phase 3): Only show when a report is actually being viewed
+          (not on the ReportsHub grid). */}
+      {isSingleReport && reportType !== 'gstr-1' && reportType !== 'gstr-3b' && reportType !== 'gstr-2b' && reportType !== 'bank-recon' && reportType !== 'consolidated' && (
       <Card className="shadow-card border-border/60 no-print">
         <CardContent className="p-3 lg:p-4">
           <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
@@ -345,98 +374,11 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
       </Card>
       )}
 
-      {/* Report type tabs — horizontally scrollable on mobile, grid on desktop */}
-      {/* 🔒 V22-2 fix: Hide ALL tabs when in single-report mode */}
+      {/* 🔒 V22-5 (Phase 3): Vyapar-style categorized grid of reports.
+          Replaces the cramped 11-tab horizontal scroll bar that was hard to
+          browse on mobile. Each card opens a dedicated report page. */}
       {!isSingleReport && (
-      <Tabs value={reportType} onValueChange={(v) => setReportType(v as any)}>
-        {/* Mobile: horizontal scroll pills (single row, swipe to see more) */}
-        <div className="lg:hidden no-print">
-          <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-hide">
-            <ReportTabButton value="pl" active={reportType === 'pl'} icon={TrendingUp} label={t('reports.pl')} onClick={() => setReportType('pl')} />
-            <ReportTabButton value="gst" active={reportType === 'gst'} icon={Receipt} label="GST" onClick={() => setReportType('gst')} />
-            <ReportTabButton value="stock" active={reportType === 'stock'} icon={Package} label="Stock" onClick={() => setReportType('stock')} />
-            <ReportTabButton value="party" active={reportType === 'party'} icon={Users} label="Party" onClick={() => setReportType('party')} />
-            <ReportTabButton value="debt-aging" active={reportType === 'debt-aging'} icon={Clock} label="Debt Aging" onClick={() => setReportType('debt-aging')} />
-            <ReportTabButton value="inventory-aging" active={reportType === 'inventory-aging'} icon={AlertTriangle} label="Inv Aging" onClick={() => setReportType('inventory-aging')} />
-            <ReportTabButton value="gstr-1" active={reportType === 'gstr-1'} icon={FileText} label="GSTR-1" onClick={() => setReportType('gstr-1')} />
-            <ReportTabButton value="gstr-3b" active={reportType === 'gstr-3b'} icon={FileText} label="GSTR-3B" onClick={() => setReportType('gstr-3b')} />
-            <ReportTabButton value="gstr-2b" active={reportType === 'gstr-2b'} icon={FileCheck} label="GSTR-2B" onClick={() => setReportType('gstr-2b')} />
-            <ReportTabButton value="bank-recon" active={reportType === 'bank-recon'} icon={Banknote} label="Bank Recon" onClick={() => setReportType('bank-recon')} />
-            <ReportTabButton value="consolidated" active={reportType === 'consolidated'} icon={Store} label="Consolidated" onClick={() => setReportType('consolidated')} />
-          </div>
-        </div>
-
-        {/* Desktop: full grid (all 8 tabs visible) */}
-        <TabsList className="hidden lg:grid lg:grid-cols-8 w-full h-auto no-print">
-          <TabsTrigger value="pl" className="gap-1.5 py-2">
-            <TrendingUp className="w-3.5 h-3.5" /> {t('reports.pl')}
-          </TabsTrigger>
-          <TabsTrigger value="gst" className="gap-1.5 py-2">
-            <Receipt className="w-3.5 h-3.5" /> GST
-          </TabsTrigger>
-          <TabsTrigger value="stock" className="gap-1.5 py-2">
-            <Package className="w-3.5 h-3.5" /> Stock
-          </TabsTrigger>
-          <TabsTrigger value="party" className="gap-1.5 py-2">
-            <Users className="w-3.5 h-3.5" /> Party
-          </TabsTrigger>
-          <TabsTrigger value="debt-aging" className="gap-1.5 py-2">
-            <Clock className="w-3.5 h-3.5" /> Debt Aging
-          </TabsTrigger>
-          <TabsTrigger value="inventory-aging" className="gap-1.5 py-2">
-            <AlertTriangle className="w-3.5 h-3.5" /> Inv Aging
-          </TabsTrigger>
-          <TabsTrigger value="gstr-1" className="gap-1.5 py-2">
-            <FileText className="w-3.5 h-3.5" /> GSTR-1
-          </TabsTrigger>
-          <TabsTrigger value="gstr-3b" className="gap-1.5 py-2">
-            <FileText className="w-3.5 h-3.5" /> GSTR-3B
-          </TabsTrigger>
-          <TabsTrigger value="gstr-2b" className="gap-1.5 py-2">
-            <FileCheck className="w-3.5 h-3.5" /> GSTR-2B
-          </TabsTrigger>
-          <TabsTrigger value="bank-recon" className="gap-1.5 py-2">
-            <Banknote className="w-3.5 h-3.5" /> Bank Recon
-          </TabsTrigger>
-          <TabsTrigger value="consolidated" className="gap-1.5 py-2">
-            <Store className="w-3.5 h-3.5" /> Consolidated
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="pl" className="mt-4">
-          {error ? <ReportError message={(error as Error).message} /> : isLoading || !data ? <ReportSkeleton /> : <PLReport data={data} />}
-        </TabsContent>
-        <TabsContent value="gst" className="mt-4">
-          {error ? <ReportError message={(error as Error).message} /> : isLoading || !data ? <ReportSkeleton /> : <GSTReport data={data} />}
-        </TabsContent>
-        <TabsContent value="stock" className="mt-4">
-          {error ? <ReportError message={(error as Error).message} /> : isLoading || !data ? <ReportSkeleton /> : <StockReport data={data} />}
-        </TabsContent>
-        <TabsContent value="party" className="mt-4">
-          {error ? <ReportError message={(error as Error).message} /> : isLoading || !data ? <ReportSkeleton /> : <PartyReport data={data} />}
-        </TabsContent>
-        <TabsContent value="debt-aging" className="mt-4">
-          {error ? <ReportError message={(error as Error).message} /> : isLoading || !data ? <ReportSkeleton /> : <DebtAgingReport data={data} />}
-        </TabsContent>
-        <TabsContent value="inventory-aging" className="mt-4">
-          {error ? <ReportError message={(error as Error).message} /> : isLoading || !data ? <ReportSkeleton /> : <InventoryAgingReport data={data} />}
-        </TabsContent>
-        <TabsContent value="gstr-1" className="mt-4">
-          <Gstr1Report />
-        </TabsContent>
-        <TabsContent value="gstr-3b" className="mt-4">
-          <Gstr3bReport />
-        </TabsContent>
-        <TabsContent value="gstr-2b" className="mt-4">
-          <Gstr2bReconciliation />
-        </TabsContent>
-        <TabsContent value="bank-recon" className="mt-4">
-          <BankReconciliation />
-        </TabsContent>
-        <TabsContent value="consolidated" className="mt-4">
-          <ConsolidatedReport />
-        </TabsContent>
-      </Tabs>
+        <ReportsHub />
       )}
 
       {/* 🔒 V22-3 fix: When in single-report mode, render the report DIRECTLY
@@ -458,34 +400,6 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
         </>
       )}
     </div>
-  )
-}
-
-/**
- * ReportTabButton — pill-style tab button for mobile horizontal scroll.
- * Active state: primary background + white text.
- * Inactive: muted background + dark text.
- */
-function ReportTabButton({ active, icon: Icon, label, onClick }: {
-  value: string
-  active: boolean
-  icon: any
-  label: string
-  onClick: () => void
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        'flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all flex-shrink-0',
-        active
-          ? 'bg-primary text-primary-foreground shadow-md'
-          : 'bg-muted text-muted-foreground hover:bg-muted/80'
-      )}
-    >
-      <Icon className="w-3.5 h-3.5" />
-      {label}
-    </button>
   )
 }
 
