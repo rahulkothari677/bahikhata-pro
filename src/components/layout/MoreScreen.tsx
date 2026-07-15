@@ -36,6 +36,7 @@ import {
   FileSpreadsheet, Bell, Calculator, Package,
   FileText, FileCheck, Lock, ShieldCheck, Banknote,
   Store, Mic, ScanBarcode, Bot, Repeat, Send,
+  ShoppingCart, TrendingUp,
 } from 'lucide-react'
 import type { ViewType } from '@/store/app-store'
 import type { LucideIcon } from 'lucide-react'
@@ -57,10 +58,20 @@ interface MenuSection {
   items: MenuItem[]
 }
 
-// 🔒 V22-3 (Phase 1): Removed hub pages — each item navigates DIRECTLY to
-// its own report. No intermediate "GST Compliance Center" page.
-// GST & Tax = blue, Money & Banking = green, Business Management = amber, Smart Tools = violet
+// 🔒 V22-4 (Phase 2): Restructured into 6 categories — better discoverability
+// than Vyapar's 5 groups. Each category has a distinct color.
+// Sale & Purchase = indigo, GST & Tax = blue, Money & Banking = emerald,
+// Items & Stock = amber, Reports & Analytics = rose, Smart Tools = violet
 const SECTIONS: MenuSection[] = [
+  {
+    title: 'Sale & Purchase',
+    titleIcon: ShoppingCart,
+    items: [
+      { icon: ShoppingCart, label: 'New Sale', description: 'Record a sale invoice', view: 'new-sale', iconColor: 'text-indigo-600 dark:text-indigo-400', iconBg: 'bg-indigo-100 dark:bg-indigo-950' },
+      { icon: Truck, label: 'New Purchase', description: 'Record a purchase bill', view: 'new-purchase', iconColor: 'text-indigo-600 dark:text-indigo-400', iconBg: 'bg-indigo-100 dark:bg-indigo-950' },
+      { icon: Wallet, label: 'Income & Expense', description: 'Rent, salary, other income', view: 'income-expense', iconColor: 'text-indigo-600 dark:text-indigo-400', iconBg: 'bg-indigo-100 dark:bg-indigo-950' },
+    ],
+  },
   {
     title: 'GST & Tax',
     titleIcon: FileText,
@@ -68,9 +79,9 @@ const SECTIONS: MenuSection[] = [
       { icon: FileText, label: 'GSTR-1', description: 'Export & file outward supplies return', view: 'reports', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
       { icon: FileCheck, label: 'GSTR-3B', description: 'Monthly summary return', view: 'reports', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
       { icon: FileCheck, label: 'GSTR-2B', description: 'ITC reconciliation with 2B', view: 'reports', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
+      { icon: FileText, label: 'GST Summary', description: 'Tax liability by slab (5/12/18/28%)', view: 'reports', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
       { icon: ShieldCheck, label: 'Reconciliation', description: 'Health check — do books tie out?', view: 'reports', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
       { icon: Lock, label: 'Period Lock', description: 'Lock filed GST periods', view: 'reports', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
-      { icon: FileText, label: 'GST Summary', description: 'Tax liability by slab (5/12/18/28%)', view: 'reports', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
     ],
   },
   {
@@ -78,21 +89,26 @@ const SECTIONS: MenuSection[] = [
     titleIcon: Banknote,
     items: [
       { icon: Banknote, label: 'Bank Reconciliation', description: 'Match bank transactions', view: 'reports', iconColor: 'text-emerald-600 dark:text-emerald-400', iconBg: 'bg-emerald-100 dark:bg-emerald-950' },
-      { icon: Wallet, label: 'Income & Expense', description: 'Rent, salary, other income', view: 'income-expense', iconColor: 'text-emerald-600 dark:text-emerald-400', iconBg: 'bg-emerald-100 dark:bg-emerald-950' },
       { icon: Repeat, label: 'Day-End Summary', description: 'Close the drawer — daily cash', view: 'dashboard', iconColor: 'text-emerald-600 dark:text-emerald-400', iconBg: 'bg-emerald-100 dark:bg-emerald-950' },
       { icon: Send, label: 'WhatsApp Reminders', description: 'Send payment reminders', view: 'parties', iconColor: 'text-emerald-600 dark:text-emerald-400', iconBg: 'bg-emerald-100 dark:bg-emerald-950' },
-      { icon: BarChart3, label: 'P&L Statement', description: 'Profit & loss report', view: 'reports', iconColor: 'text-emerald-600 dark:text-emerald-400', iconBg: 'bg-emerald-100 dark:bg-emerald-950' },
     ],
   },
   {
-    title: 'Business Management',
-    titleIcon: Store,
+    title: 'Items & Stock',
+    titleIcon: Package,
     items: [
       { icon: Package, label: 'Inventory', description: 'Products, stock, prices', view: 'inventory', iconColor: 'text-amber-600 dark:text-amber-400', iconBg: 'bg-amber-100 dark:bg-amber-950' },
       { icon: Users, label: 'Customers & Suppliers', description: 'Track dues & party balances', view: 'parties', iconColor: 'text-amber-600 dark:text-amber-400', iconBg: 'bg-amber-100 dark:bg-amber-950' },
-      { icon: BarChart3, label: 'Reports', description: 'P&L, stock, party statements', view: 'reports', iconColor: 'text-amber-600 dark:text-amber-400', iconBg: 'bg-amber-100 dark:bg-amber-950' },
       { icon: Store, label: 'Multi-Shop Management', description: 'Switch or add shops', view: 'settings', iconColor: 'text-amber-600 dark:text-amber-400', iconBg: 'bg-amber-100 dark:bg-amber-950' },
       { icon: UserCog, label: 'Staff & Access', description: 'Manage staff, CA access', view: 'settings', iconColor: 'text-amber-600 dark:text-amber-400', iconBg: 'bg-amber-100 dark:bg-amber-950' },
+    ],
+  },
+  {
+    title: 'Reports & Analytics',
+    titleIcon: BarChart3,
+    items: [
+      { icon: TrendingUp, label: 'P&L Statement', description: 'Profit & loss report', view: 'reports', iconColor: 'text-rose-600 dark:text-rose-400', iconBg: 'bg-rose-100 dark:bg-rose-950' },
+      { icon: BarChart3, label: 'All Reports', description: 'Stock, party, aging, consolidated', view: 'reports', iconColor: 'text-rose-600 dark:text-rose-400', iconBg: 'bg-rose-100 dark:bg-rose-950' },
     ],
   },
   {
