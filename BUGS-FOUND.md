@@ -229,3 +229,24 @@ and include enough context to reproduce.
 - **User impact**: Users uploading large PDFs (e.g., detailed bank statements, multi-page GST certificates) over 4.5MB will see an upload failure. Most business documents (bills, ID proofs, single-page certificates) are well under this limit.
 - **Fix approach**: Use direct browser-to-Cloudinary uploads (unsigned upload preset) instead of routing through the serverless function. This bypasses Vercel's body size limit entirely. The serverless function would only store the metadata after the upload succeeds.
 - **Status**: OPEN — acceptable for now. The API's 10MB validation is still correct (it just won't be reached for files >4.5MB on Vercel). Users who need to upload larger files can split them or compress first.
+
+### BUG-018 — HSN Summary report 100× money bug (Critical/Paise) — FIXED
+
+- **Found**: 2026-07-16, during Audit V22 §5 verification
+- **File**: `src/app/api/reports/route.ts` — HSN Summary report type
+- **Severity**: Critical (100× inflated values — same class as V20-002)
+- **Description**: The HSN report's raw SQL returns paise (Int columns), but the code used `roundMoney()` without `fromPaise()` first → taxableValue, CGST, SGST, IGST, and totalTax all displayed 100× too large.
+- **Root cause**: Raw SQL `$queryRaw` bypasses the Prisma money extension. Every raw SQL query that returns money columns MUST convert paise→rupees via `fromPaise()` at the JS boundary. This was missed when the HSN report was added in V22-9.
+- **Fix applied**: 2026-07-16 (Audit V22 response). Added `fromPaise()` to all 5 raw SQL value conversions.
+- **Status**: FIXED
+
+### BUG-019 — Item-wise Profit report 100× money bug (Critical/Paise) — FIXED
+
+- **Found**: 2026-07-16, during Audit V22 §5 verification
+- **File**: `src/app/api/reports/route.ts` — Item-wise Profit report type
+- **Severity**: Critical (100× inflated values — same class as V20-002)
+- **Description**: Same class of bug as BUG-018. Raw SQL returns paise (Int columns for revenue and COGS), but the code used `roundMoney()` without `fromPaise()` → revenue, COGS, and profit all 100× too large. E.g., ₹5,700 showed as ₹5,70,000.
+- **Root cause**: Same as BUG-018 — raw SQL bypasses the money extension.
+- **Fix applied**: 2026-07-16 (Audit V22 response). Added `fromPaise()` to revenue and cogs conversions. Profit is computed from converted values.
+- **Browser verified**: Tata Tea Gold now shows ₹5,700 (was ₹5,70,000 before fix).
+- **Status**: FIXED

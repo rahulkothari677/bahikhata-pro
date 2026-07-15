@@ -5913,3 +5913,47 @@ V22 COMPLETION SUMMARY:
 - 3 open bugs (all acceptable for release)
 - 1588 tests passing, 0 TypeScript errors, 0 ESLint errors
 - V22 UI/UX overhaul COMPLETE.
+
+---
+Task ID: audit-v22-response
+Agent: main
+Task: V22 Audit response — read the auditor's V22 report, verify each finding, create fix plan, fix in batches, find new bugs, generate final report.
+
+Work Log:
+- AUDIT FINDINGS VERIFIED:
+  * §1 CONFIRMED: GSTR-3B 500 = unclosed COALESCE in GET handler. Two $queryRaw queries had unbalanced parens (7/6 and 6/5). The helper's equivalents were balanced (6/6, 5/5). The earlier BUG-014 "fix" (2-batch split) was a misdiagnosis — a SQL syntax error throws regardless of query ordering.
+  * §1.4 CONFIRMED: raw-sql-smoke test had a hardcoded list of 4 route files. gstr-3b/route.ts was NOT in the list → the paren bug wasn't caught.
+  * §4 CONFIRMED: Document Vault migration was hacked around (disabled, model removed, build script patched).
+  * §5 CONFIRMED + 2 NEW CRITICAL BUGS FOUND: HSN Summary and Item-wise Profit reports had 100× money bugs — raw SQL returns paise, code used roundMoney() without fromPaise().
+
+- FIXES APPLIED (5 items):
+  1. §1 GSTR-3B DRY fix: Replaced entire GET handler inline queries + computation with a call to computeGstr3bValues() helper. Deleted ~360 lines of duplicated code. One correct query path, both GET and POST.
+  2. BUG-018 HSN 100× fix: Added fromPaise() to all 5 raw SQL value conversions (taxableValue, cgst, sgst, igst, totalTax).
+  3. BUG-019 Item-wise Profit 100× fix: Added fromPaise() to revenue and cogs conversions.
+  4. §1.4 smoke test: Replaced hardcoded 4-file list with dynamic glob that finds ALL route files containing $queryRaw (8 files now). 8 new tests added.
+  5. §4 migration cleanup: Removed rolled-back hack from build script. Skipped migrate-with-retry.sh entirely (no pending migrations). Added TODO to re-enable when DIRECT_URL is set.
+
+- VERIFICATION:
+  * npx tsc --noEmit: 0 errors
+  * npx jest: 1596/1596 pass (40 suites, 8 new tests from expanded smoke test)
+  * npx next build: Compiled successfully in 62s
+  * npx eslint: clean
+
+- BROWSER TESTING:
+  * GSTR-3B: ✅ FIXED — report loads with data ("3.1 Outward Supplies", "4. Input Tax Credit", "Output: ₹1,898.63"). No more "Failed to compute GSTR-3B" error.
+  * Item-wise Profit: ✅ FIXED — Tata Tea Gold shows ₹5,700 (was ₹5,70,000 before fix). Values in correct rupees.
+  * HSN Summary: ✅ Correct empty state (demo products have no HSN codes). Fix verified via code review.
+  * Screenshot saved: audit-v22-gstr3b-fixed.png
+
+- DEPLOYMENT:
+  * 2 of 4 recent deploys passed on Vercel (71f710d + 0632b75)
+  * 2 failed (00c7df7 + 19cd9f1) due to DIRECT_URL not set
+  * Latest passing deploy includes ALL audit fixes
+  * TODO for founder: Set DIRECT_URL on Vercel to re-enable migrations + Document Vault
+
+Stage Summary:
+- Audit V22 response COMPLETE. All 5 findings addressed.
+- 3 critical bugs fixed: GSTR-3B 500, HSN 100×, Item-wise Profit 100×
+- 1 test hardening: raw-sql-smoke now scans ALL API $queryRaw files
+- 1 deployment cleanup: migration script skipped (no pending migrations)
+- 1596 tests passing, 0 TypeScript errors, 0 ESLint errors
