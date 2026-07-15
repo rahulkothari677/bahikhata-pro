@@ -73,6 +73,14 @@ const CATEGORIES: ReportCategory[] = [
         iconBg: 'bg-rose-100 dark:bg-rose-950',
       },
       {
+        type: 'item-profit',
+        icon: Package,
+        label: 'Item-wise Profit',
+        description: 'Per-product profit, qty sold & margins',
+        iconColor: 'text-rose-600 dark:text-rose-400',
+        iconBg: 'bg-rose-100 dark:bg-rose-950',
+      },
+      {
         type: 'party',
         icon: Users,
         label: 'Party Statement',

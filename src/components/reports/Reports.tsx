@@ -19,7 +19,7 @@ import {
   FileBarChart, TrendingUp, Receipt, Package, Users, Calendar,
   ArrowDownRight, ArrowUpRight, IndianRupee, Percent, FileText,
   FileSpreadsheet, Loader2, Download, Printer, Clock, AlertTriangle, Info,
-  AlertCircle, Coffee, FileCheck, Banknote, Store, ArrowLeft,
+  AlertCircle, Coffee, FileCheck, Banknote, Store, ArrowLeft, Wallet,
 } from 'lucide-react'
 import { toast as sonnerToast } from 'sonner'
 import { offlineFetch } from '@/lib/offline-fetch'
@@ -36,7 +36,9 @@ import { BillWiseProfit } from '@/components/reports/BillWiseProfit'
 import { HsnSummary } from '@/components/reports/HsnSummary'
 import { CashflowReport } from '@/components/reports/CashflowReport'
 import { TrialBalance } from '@/components/reports/TrialBalance'
+import { ItemWiseProfit } from '@/components/reports/ItemWiseProfit'
 import { ReportsHub } from '@/components/reports/ReportsHub'
+import { EmptyState } from '@/components/common/EmptyState'
 
 const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)', 'oklch(0.7 0.16 250)']
 
@@ -54,7 +56,7 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
   // can switch to single-report mode WITHOUT remounting (no setView call).
   const pendingReportType = useAppStore(s => s.pendingReportType)
   const setPendingReportType = useAppStore(s => s.setPendingReportType)
-  const [reportType, setReportType] = useState<'pl' | 'gst' | 'stock' | 'party' | 'debt-aging' | 'inventory-aging' | 'gstr-1' | 'gstr-3b' | 'gstr-2b' | 'bank-recon' | 'consolidated' | 'bill-profit' | 'hsn' | 'cashflow' | 'trial-balance'>(singleReportType as any || 'pl')
+  const [reportType, setReportType] = useState<'pl' | 'gst' | 'stock' | 'party' | 'debt-aging' | 'inventory-aging' | 'gstr-1' | 'gstr-3b' | 'gstr-2b' | 'bank-recon' | 'consolidated' | 'bill-profit' | 'hsn' | 'cashflow' | 'trial-balance' | 'item-profit'>(singleReportType as any || 'pl')
   const [dateRange, setDateRange] = useState<DateRange>(() => getPresetRange('thisMonth'))
   const [datePreset, setDatePreset] = useState<DatePreset>('thisMonth')
   const [exportingGstr, setExportingGstr] = useState(false)
@@ -247,6 +249,7 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
     'hsn': 'HSN Summary Report',
     'cashflow': 'Cashflow Report',
     'trial-balance': 'Trial Balance',
+    'item-profit': 'Item-wise Profit Report',
   }
   const currentTitle = isSingleReport
     ? (reportTitles[reportType] || 'Report')
@@ -414,6 +417,8 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
           {reportType === 'hsn' && (error ? <ReportError message={(error as Error).message} /> : isLoading || !data ? <ReportSkeleton /> : <HsnSummary data={data} />)}
           {reportType === 'cashflow' && (error ? <ReportError message={(error as Error).message} /> : isLoading || !data ? <ReportSkeleton /> : <CashflowReport data={data} />)}
           {reportType === 'trial-balance' && (error ? <ReportError message={(error as Error).message} /> : isLoading || !data ? <ReportSkeleton /> : <TrialBalance data={data} />)}
+          {/* 🔒 V22-12 (Batch B): Item-wise Profit report */}
+          {reportType === 'item-profit' && (error ? <ReportError message={(error as Error).message} /> : isLoading || !data ? <ReportSkeleton /> : <ItemWiseProfit data={data} />)}
         </>
       )}
     </div>
@@ -446,7 +451,14 @@ function PLReport({ data }: { data: any }) {
           </CardHeader>
           <CardContent>
             {expensesByCategory.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-8">No expenses in this period</p>
+              <EmptyState
+                icon={Wallet}
+                title="No expenses in this period"
+                description="Record rent, salary, electricity, or other business expenses to see them here."
+                action={{ label: 'Add Expense', onClick: () => useAppStore.getState().setView('income-expense') }}
+                color="rose"
+                compact
+              />
             ) : (
               <div className="space-y-2">
                 {expensesByCategory.map((e, i) => {
@@ -586,7 +598,14 @@ function GSTReport({ data }: { data: any }) {
           </CardHeader>
           <CardContent>
             {outputSales.bySlab.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-8">No sales in this period</p>
+              <EmptyState
+                icon={Receipt}
+                title="No sales in this period"
+                description="Record a sale to see your GST slab-wise summary here."
+                action={{ label: 'New Sale', onClick: () => useAppStore.getState().setView('new-sale') }}
+                color="emerald"
+                compact
+              />
             ) : (
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={outputSales.bySlab}>

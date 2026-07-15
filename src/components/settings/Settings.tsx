@@ -400,6 +400,39 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
     sonnerToast.success(`Default landing page: ${labels[view] || view}`)
   }
 
+  // 🔒 V22-12 (Batch B, Phase 5d): Notification Preferences — granular toggles
+  // for each notification type. Stored in localStorage as JSON.
+  // Read by NotificationCenter to filter which notifications to show.
+  const defaultNotifPrefs = {
+    lowStock: true,
+    receivable: true,
+    pendingSync: true,
+    announcements: true,
+  }
+  const [notifPrefs, setNotifPrefs] = useState(defaultNotifPrefs)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = localStorage.getItem('bahikhata:notif-prefs')
+        if (stored) setNotifPrefs({ ...defaultNotifPrefs, ...JSON.parse(stored) })
+      } catch { /* ignore parse errors */ }
+    }
+  }, [])
+  const updateNotifPref = (key: keyof typeof defaultNotifPrefs, enabled: boolean) => {
+    const updated = { ...notifPrefs, [key]: enabled }
+    setNotifPrefs(updated)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('bahikhata:notif-prefs', JSON.stringify(updated))
+    }
+    const labels: Record<string, string> = {
+      lowStock: 'Low stock alerts',
+      receivable: 'Receivable alerts',
+      pendingSync: 'Pending sync alerts',
+      announcements: 'Announcement banners',
+    }
+    sonnerToast.success(`${labels[key]} ${enabled ? 'enabled' : 'disabled'}`)
+  }
+
   // 🔒 V22-7 (Phase 5): Auto-backup state. Stores last backup timestamp.
   const [lastBackup, setLastBackup] = useState<string | null>(null)
   const [backingUp, setBackingUp] = useState(false)
@@ -1183,6 +1216,38 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
                 <SelectItem value="scanner">AI Scanner</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          {/* 🔒 V22-12 (Batch B, Phase 5d): Notification Preferences — granular
+              toggles for each notification type. Controls which notifications
+              appear in the NotificationCenter bell icon. */}
+          <div className="mt-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 p-3">
+            <div className="flex items-center gap-2 mb-3">
+              <Bell className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+              <div>
+                <p className="text-sm font-medium">Notification Preferences</p>
+                <p className="text-[11px] text-muted-foreground">Choose which alerts appear in the bell icon</p>
+              </div>
+            </div>
+            <div className="space-y-2.5">
+              {[
+                { key: 'lowStock' as const, label: 'Low stock & out-of-stock alerts', desc: 'Notify when products run low' },
+                { key: 'receivable' as const, label: 'Receivable (udhaar) alerts', desc: 'Notify when customers owe you money' },
+                { key: 'pendingSync' as const, label: 'Pending sync alerts', desc: 'Notify about offline changes waiting to sync' },
+                { key: 'announcements' as const, label: 'Announcement banners', desc: 'Show important updates from the team' },
+              ].map(item => (
+                <div key={item.key} className="flex items-center justify-between">
+                  <div className="flex-1 min-w-0 pr-2">
+                    <p className="text-xs font-medium">{item.label}</p>
+                    <p className="text-[10px] text-muted-foreground">{item.desc}</p>
+                  </div>
+                  <Switch
+                    checked={notifPrefs[item.key]}
+                    onCheckedChange={(checked) => updateNotifPref(item.key, checked)}
+                  />
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* 🔒 V22-7 (Phase 5): Auto-Backup — one-tap full data backup.

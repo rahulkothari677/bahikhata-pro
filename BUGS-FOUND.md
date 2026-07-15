@@ -207,3 +207,14 @@ and include enough context to reproduce.
 - **Fix applied**: 2026-07-15 (V22-6 Phase 4). Moved the `lazy()` call to module scope (top of file, after imports). Now the lazy component is created once and is stable across all renders. Settings form state is preserved.
 - **Verification**: Browser-tested — filled profile form fields, waited for background refetch, confirmed form values persisted.
 - **Status**: FIXED
+
+### BUG-016 — Bill-wise Profit report summary totals are incorrect when 500+ transactions exist (Medium/Reporting) — OPEN
+
+- **Found**: 2026-07-15, during V22-12 Batch B pre-change scan of Bill-wise Profit API
+- **File**: `src/app/api/reports/route.ts` — the `bill-profit` report type (lines 567-634)
+- **Severity**: Medium (incorrect financial summary for high-volume shops)
+- **Description**: The Bill-wise Profit report fetches transactions with `take: 500` (a safety cap to avoid loading too many rows). The per-bill rows are correctly truncated, BUT the summary totals (`totalRevenue`, `totalCogs`, `totalProfit`, `avgMargin`) are calculated from the truncated `bills` array (lines 615-618), NOT from all transactions. For shops with 500+ transactions in the date range, the summary would show incorrect totals — only reflecting the latest 500 bills, not all bills.
+- **User impact**: A shop with 600 sales in a month would see summary totals that only reflect the latest 500 sales, underreporting revenue/profit by ~17%. The per-bill table is also truncated (only shows 500 rows), but the summary should use SQL aggregation (like the Item-wise Profit report does) to compute accurate totals across ALL transactions.
+- **Root cause**: The bill-profit report loads raw transaction rows with items (for the per-invoice table), which requires `take: 500` to avoid memory issues. The summary was calculated from these truncated rows instead of using a separate SQL aggregate query.
+- **Fix approach**: Run a separate `db.transaction.aggregate` or raw SQL `SUM` query (without `take`) to compute the summary totals, while keeping the per-bill table capped at 500. The new Item-wise Profit report (`item-profit` type) already uses raw SQL `GROUP BY` which doesn't have this issue.
+- **Status**: OPEN — needs fix in a future batch. The Item-wise Profit report (added in V22-12 Batch B) is the recommended alternative for accurate per-product profit totals.

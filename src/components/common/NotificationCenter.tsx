@@ -58,6 +58,19 @@ export function NotificationCenter() {
   const { setView, setPreviousView } = useAppStore()
   const { canAccess } = useStaffPermissions()
 
+  // 🔒 V22-12 (Batch B, Phase 5d): Read notification preferences from localStorage.
+  // Defaults to all-enabled if not set or parse fails. Uses lazy useState
+  // initializer (reads once on mount, no useEffect needed).
+  const defaultNotifPrefs = { lowStock: true, receivable: true, pendingSync: true, announcements: true }
+  const [notifPrefs, setNotifPrefs] = useState(() => {
+    if (typeof window === 'undefined') return defaultNotifPrefs
+    try {
+      const stored = localStorage.getItem('bahikhata:notif-prefs')
+      if (stored) return { ...defaultNotifPrefs, ...JSON.parse(stored) }
+    } catch {}
+    return defaultNotifPrefs
+  })
+
   // Load seen/dismissed from localStorage on mount
   useEffect(() => {
     try {
@@ -84,7 +97,9 @@ export function NotificationCenter() {
   // Build notifications list
   const allNotifications: AppNotification[] = []
 
-  if (data?.kpis && canAccess('inventory')) {
+  // 🔒 V22-12 (Batch B, Phase 5d): Respect notification preferences — only
+  // add notifications for types the user has enabled.
+  if (notifPrefs.lowStock && data?.kpis && canAccess('inventory')) {
     const lowStock = data.lowStockProducts || []
     lowStock.slice(0, 5).forEach((p: any) => {
       allNotifications.push({
@@ -99,7 +114,7 @@ export function NotificationCenter() {
     })
   }
 
-  if (data?.kpis && canAccess('dashboard')) {
+  if (notifPrefs.receivable && data?.kpis && canAccess('dashboard')) {
     const receivable = data.kpis.totalReceivable || 0
     if (receivable > 0) {
       allNotifications.push({
@@ -114,7 +129,7 @@ export function NotificationCenter() {
     }
   }
 
-  if (!isOnline() && pendingWrites > 0) {
+  if (notifPrefs.pendingSync && !isOnline() && pendingWrites > 0) {
     allNotifications.push({
       id: 'pending-writes',
       type: 'warning',

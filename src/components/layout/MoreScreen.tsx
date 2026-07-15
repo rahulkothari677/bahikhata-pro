@@ -174,7 +174,7 @@ export function MoreScreen() {
       'Bank Reconciliation': 'bank-recon',
       'P&L Statement': 'pl',
       'Stock Summary': 'stock',
-      'Item-wise Profit': 'bill-profit',
+      'Item-wise Profit': 'item-profit',
     }
     if (label && reportTypeMap[label]) {
       useAppStore.getState().setPendingReportType(reportTypeMap[label])

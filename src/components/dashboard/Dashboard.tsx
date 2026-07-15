@@ -37,6 +37,7 @@ const AnalyticsInsights = dynamic(() => import('@/components/dashboard/Analytics
 import { useRecurringEntries } from '@/hooks/use-recurring-entries'
 import { toast as sonnerToast } from 'sonner'
 import { useCountUp } from '@/hooks/use-count-up'
+import { EmptyState } from '@/components/common/EmptyState'
 
 const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)']
 
@@ -847,7 +848,13 @@ export function Dashboard() {
           </CardHeader>
           <CardContent>
             {paymentModeSplit.length === 0 ? (
-              <div className="text-center py-10 text-sm text-muted-foreground">No data</div>
+              <EmptyState
+                icon={IndianRupee}
+                title="No payment data"
+                description="Sales will appear here once you record them."
+                color="amber"
+                compact
+              />
             ) : (
               <>
                 <ResponsiveContainer width="100%" height={180}>
@@ -998,7 +1005,14 @@ export function Dashboard() {
           </CardHeader>
           <CardContent>
             {recentTransactions.length === 0 ? (
-              <div className="text-center py-8 text-sm text-muted-foreground">No transactions yet</div>
+              <EmptyState
+                icon={Receipt}
+                title="No transactions yet"
+                description="Record your first sale or purchase to see it here."
+                action={{ label: 'New Sale', onClick: () => setView('new-sale') }}
+                color="emerald"
+                compact
+              />
             ) : (
               <div className="space-y-1.5 max-h-72 overflow-y-auto">
                 {recentTransactions.map((txn: any) => {

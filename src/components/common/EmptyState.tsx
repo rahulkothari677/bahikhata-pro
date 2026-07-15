@@ -1,8 +1,32 @@
 'use client'
 
-import { type LucideIcon } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+/**
+ * 🔒 V22-12 (Batch B, Phase 8b) — EmptyState
+ *
+ * Reusable illustrated empty state with an icon, title, description, and
+ * optional CTA buttons (primary + secondary). Replaces plain "No data" text
+ * with a friendly, actionable prompt.
+ *
+ * Inspired by: Stripe's empty states, Linear's "No results" illustrations.
+ *
+ * Backward-compatible with the previous EmptyState which used `size="compact"`
+ * and `secondaryAction`. The new `compact` boolean prop and `color` prop are
+ * additions.
+ *
+ * Usage:
+ * <EmptyState
+ *   icon={ShoppingCart}
+ *   title="No sales yet"
+ *   description="Record your first sale to see it here."
+ *   action={{ label: 'New Sale', onClick: () => setView('new-sale') }}
+ *   secondaryAction={{ label: 'Scan Bill', onClick: () => setView('scanner') }}
+ *   color="emerald"
+ *   compact
+ * />
+ */
+
 import { cn } from '@/lib/utils'
+import { ArrowRight, type LucideIcon } from 'lucide-react'
 
 interface EmptyStateProps {
   icon: LucideIcon
@@ -16,9 +40,43 @@ interface EmptyStateProps {
     label: string
     onClick: () => void
   }
+  color?: 'blue' | 'emerald' | 'amber' | 'rose' | 'violet' | 'slate'
+  compact?: boolean
+  size?: 'compact' | 'default'  // backward-compat: size="compact" = compact={true}
   className?: string
-  /** Size variant: 'default' for full-page empty states, 'compact' for inline (e.g. inside a card) */
-  size?: 'default' | 'compact'
+}
+
+const colorMap = {
+  blue: {
+    bg: 'bg-blue-100 dark:bg-blue-950',
+    text: 'text-blue-600 dark:text-blue-400',
+    btn: 'bg-blue-600 hover:bg-blue-700 text-white',
+  },
+  emerald: {
+    bg: 'bg-emerald-100 dark:bg-emerald-950',
+    text: 'text-emerald-600 dark:text-emerald-400',
+    btn: 'bg-emerald-600 hover:bg-emerald-700 text-white',
+  },
+  amber: {
+    bg: 'bg-amber-100 dark:bg-amber-950',
+    text: 'text-amber-600 dark:text-amber-400',
+    btn: 'bg-amber-600 hover:bg-amber-700 text-white',
+  },
+  rose: {
+    bg: 'bg-rose-100 dark:bg-rose-950',
+    text: 'text-rose-600 dark:text-rose-400',
+    btn: 'bg-rose-600 hover:bg-rose-700 text-white',
+  },
+  violet: {
+    bg: 'bg-violet-100 dark:bg-violet-950',
+    text: 'text-violet-600 dark:text-violet-400',
+    btn: 'bg-violet-600 hover:bg-violet-700 text-white',
+  },
+  slate: {
+    bg: 'bg-slate-100 dark:bg-slate-800',
+    text: 'text-slate-600 dark:text-slate-400',
+    btn: 'bg-slate-700 hover:bg-slate-800 text-white',
+  },
 }
 
 export function EmptyState({
@@ -27,95 +85,61 @@ export function EmptyState({
   description,
   action,
   secondaryAction,
+  color = 'slate',
+  compact = false,
+  size,
   className,
-  size = 'default',
 }: EmptyStateProps) {
-  const isCompact = size === 'compact'
-
+  // 🔒 Backward-compat: size="compact" maps to compact=true
+  const isCompact = compact || size === 'compact'
+  const colors = colorMap[color]
   return (
-    <div
-      className={cn(
-        'flex flex-col items-center justify-center text-center',
-        isCompact ? 'py-8 px-4' : 'py-16 px-4',
-        className,
-      )}
-    >
-      {/* Illustration container — gradient bg with decorative rings.
-          The icon sits in the center of a layered composition:
-          - Outer faint ring (largest, lowest opacity)
-          - Middle ring (medium opacity)
-          - Inner solid circle with the icon (gradient bg)
-          This gives a sense of depth and "illustration" rather than
-          just a flat icon in a box. */}
-      <div className={cn('relative flex items-center justify-center', isCompact ? 'mb-3' : 'mb-6')}>
-        {/* Outer ring — faint */}
-        <div
-          className={cn(
-            'absolute rounded-full bg-primary/5',
-            isCompact ? 'w-20 h-20' : 'w-32 h-32',
-          )}
-        />
-        {/* Middle ring — slightly more visible */}
-        <div
-          className={cn(
-            'absolute rounded-full bg-primary/10',
-            isCompact ? 'w-16 h-16' : 'w-24 h-24',
-          )}
-        />
-        {/* Inner circle with gradient + icon */}
-        <div
-          className={cn(
-            'relative rounded-2xl flex items-center justify-center bg-gradient-to-br from-primary/15 to-primary/5 border border-primary/20',
-            isCompact ? 'w-12 h-12' : 'w-20 h-20',
-          )}
-        >
-          <Icon
-            className={cn(
-              'text-primary',
-              isCompact ? 'w-6 h-6' : 'w-10 h-10',
-            )}
-            strokeWidth={1.5}
-          />
-        </div>
+    <div className={cn(
+      'flex flex-col items-center text-center',
+      isCompact ? 'py-6' : 'py-10',
+      className,
+    )}>
+      <div className={cn(
+        'rounded-2xl flex items-center justify-center mb-3',
+        isCompact ? 'w-12 h-12' : 'w-16 h-16',
+        colors.bg,
+      )}>
+        <Icon className={cn(isCompact ? 'w-6 h-6' : 'w-8 h-8', colors.text)} />
       </div>
-
-      <h3
-        className={cn(
-          'font-semibold text-foreground font-heading tracking-tight',
-          isCompact ? 'text-sm' : 'text-lg',
-        )}
-      >
-        {title}
-      </h3>
+      <p className={cn('font-semibold', isCompact ? 'text-sm' : 'text-base')}>{title}</p>
       {description && (
-        <p
-          className={cn(
-            'text-muted-foreground mt-1.5 max-w-md leading-relaxed',
-            isCompact ? 'text-xs' : 'text-sm',
-          )}
-        >
+        <p className={cn(
+          'text-muted-foreground mt-1 max-w-xs',
+          isCompact ? 'text-[11px]' : 'text-xs',
+        )}>
           {description}
         </p>
       )}
       {(action || secondaryAction) && (
-        <div className="flex gap-2 mt-5 flex-wrap justify-center">
+        <div className="flex items-center gap-2 mt-4">
           {action && (
-            <Button
+            <button
               onClick={action.onClick}
-              size={isCompact ? 'sm' : 'default'}
-              className="gap-2 bg-gradient-saffron shadow-md"
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-lg font-medium transition active:scale-95',
+                isCompact ? 'px-3 py-1.5 text-xs' : 'px-4 py-2 text-sm',
+                colors.btn,
+              )}
             >
               {action.label}
-            </Button>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
           )}
           {secondaryAction && (
-            <Button
+            <button
               onClick={secondaryAction.onClick}
-              variant="outline"
-              size={isCompact ? 'sm' : 'default'}
+              className={cn(
+                'inline-flex items-center rounded-lg font-medium transition active:scale-95 border border-border hover:bg-muted',
+                isCompact ? 'px-3 py-1.5 text-xs' : 'px-4 py-2 text-sm',
+              )}
             >
               {secondaryAction.label}
-            </Button>
+            </button>
           )}
         </div>
       )}

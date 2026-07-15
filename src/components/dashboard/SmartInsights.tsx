@@ -114,6 +114,14 @@ export function SmartInsights() {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold">{insight.title}</p>
                   <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">{insight.description}</p>
+                  {/* 🔒 V22-12 (Batch B, Phase 6c): Conversational Hindi summary.
+                      Shows below the English description in a distinct style
+                      (italic + slightly larger) so it reads like a friendly note. */}
+                  {insight.hindiSummary && (
+                    <p className="text-[12px] text-foreground/70 mt-1 font-medium italic leading-relaxed">
+                      {insight.hindiSummary}
+                    </p>
+                  )}
                   {insight.action && (
                     <button
                       onClick={insight.action.onClick}
@@ -156,6 +164,7 @@ export function SmartInsights() {
 type Insight = {
   title: string
   description: string
+  hindiSummary?: string
   icon: any
   severity: 'critical' | 'warning' | 'info' | 'positive'
   action?: { label: string; onClick: () => void }
@@ -164,6 +173,31 @@ type Insight = {
 function computeInsights(data: any): Insight[] {
   const insights: Insight[] = []
   const { kpis, lowStockProducts, topProducts, recentTransactions, salesTrend } = data
+
+  // ─── 0. Daily Summary (Hindi) — always shows at the top when there's data ──
+  // 🔒 V22-12 (Batch B, Phase 6c): Conversational Hindi summary.
+  // "Aaj ₹X bike, ₹Y udhaar baaki" — the exact pattern the user requested.
+  if (kpis && (kpis.todayRevenue > 0 || kpis.totalReceivable > 0)) {
+    const parts: string[] = []
+    if (kpis.todayRevenue > 0) {
+      parts.push(`Aaj ${formatINRCompact(kpis.todayRevenue)} bike`)
+    }
+    if (kpis.totalReceivable > 0) {
+      parts.push(`${formatINRCompact(kpis.totalReceivable)} udhaar baaki`)
+    }
+    if (kpis.todayTxnCount > 0) {
+      parts.push(`${kpis.todayTxnCount} bill`)
+    }
+    insights.push({
+      title: `📊 ${kpis.todayRevenue > 0 ? "Today's Summary" : "Udhaar Summary"}`,
+      description: kpis.todayRevenue > 0
+        ? `Today: ${formatINR(kpis.todayRevenue)} revenue from ${kpis.todayTxnCount} sale${kpis.todayTxnCount !== 1 ? 's' : ''}.${kpis.totalReceivable > 0 ? ` Outstanding: ${formatINR(kpis.totalReceivable)}.` : ''}`
+        : `No sales today yet. Outstanding receivable: ${formatINR(kpis.totalReceivable)}.`,
+      hindiSummary: parts.join(', '),
+      icon: Sparkles,
+      severity: 'info',
+    })
+  }
 
   // ─── 1. Smart Reorder Suggestions ─────────────────────────────
   if (lowStockProducts && lowStockProducts.length > 0) {
@@ -183,6 +217,11 @@ function computeInsights(data: any): Insight[] {
         description: p.currentStock <= 0
           ? `Oversold by ${Math.abs(p.currentStock)} ${p.unit}. Restock immediately — you're losing sales.`
           : `${p.currentStock} ${p.unit} left · threshold: ${p.lowStockThreshold} ${p.unit}. Consider reordering soon.`,
+        hindiSummary: p.currentStock <= 0
+          ? `${p.name} ${Math.abs(p.currentStock)} ${p.unit} ज्यादा बिक गया — जल्दी स्टॉक भरें`
+          : daysLeft <= 7
+            ? `${p.name} ${daysLeft} दिन में खत्म हो जाएगा — ऑर्डर कर लें`
+            : `${p.name} खत्म हो रहा है — ${p.currentStock} ${p.unit} बचे हैं`,
         icon: Package,
         severity: p.currentStock <= 0 ? 'critical' : 'warning',
         action: {
@@ -203,6 +242,7 @@ function computeInsights(data: any): Insight[] {
       insights.push({
         title: `📊 Profit margin is thin (${margin.toFixed(1)}%)`,
         description: `Today's margin is below 10%. Revenue: ${formatINR(kpis.todayRevenue)}, Profit: ${formatINR(kpis.todayProfit)}. Consider reviewing your pricing.`,
+        hindiSummary: `मार्जिन कम है (${margin.toFixed(1)}%) — दाम बढ़ाने पर विचार करें`,
         icon: Percent,
         severity: 'warning',
       })
@@ -211,6 +251,7 @@ function computeInsights(data: any): Insight[] {
       insights.push({
         title: `⚠️ Selling at a LOSS today`,
         description: `Today's profit is negative (${formatINR(kpis.todayProfit)}). You're selling below cost price. Review your prices immediately.`,
+        hindiSummary: `आज घाटे में बिक्री हो रही है — दाम जांचें`,
         icon: TrendingDown,
         severity: 'critical',
       })
@@ -220,6 +261,7 @@ function computeInsights(data: any): Insight[] {
       insights.push({
         title: `📉 Profit down ${kpis.profitGrowth.toFixed(1)}% vs last period`,
         description: `Your profit has dropped significantly. Check if costs have increased or if you're discounting too much.`,
+        hindiSummary: `पिछले महीने से प्रॉफिट ${Math.abs(kpis.profitGrowth).toFixed(0)}% कम है`,
         icon: TrendingDown,
         severity: 'warning',
       })
@@ -250,6 +292,7 @@ function computeInsights(data: any): Insight[] {
       insights.push({
         title: `🗓️ Weekends bring ${pct}% more sales`,
         description: `Weekend avg: ${formatINRCompact(avgWeekend)} vs weekday: ${formatINRCompact(avgWeekday)}. Consider stocking up before weekends.`,
+        hindiSummary: `वीकेंड में ${pct}% ज्यादा बिक्री होती है`,
         icon: Calendar,
         severity: 'info',
       })
@@ -263,6 +306,7 @@ function computeInsights(data: any): Insight[] {
         insights.push({
           title: `🔕 No sales in ${daysSinceLastSale} days`,
           description: `It's been ${daysSinceLastSale} days since your last sale. Consider reaching out to regular customers or running a promotion.`,
+          hindiSummary: `${daysSinceLastSale} दिन से कोई बिक्री नहीं — ग्राहकों को संपर्क करें`,
           icon: ShoppingCart,
           severity: daysSinceLastSale >= 7 ? 'critical' : 'warning',
         })
@@ -277,6 +321,7 @@ function computeInsights(data: any): Insight[] {
       insights.push({
         title: `💰 Customers owe you ${formatINR(kpis.totalReceivable)}`,
         description: `That's ${receivablePct.toFixed(0)}% of your total revenue. Consider sending payment reminders via WhatsApp.`,
+        hindiSummary: `ग्राहकों को ${formatINRCompact(kpis.totalReceivable)} बकाया है — रिमाइंडर भेजें`,
         icon: User,
         severity: receivablePct > 50 ? 'critical' : 'warning',
         action: {
@@ -295,6 +340,7 @@ function computeInsights(data: any): Insight[] {
     insights.push({
       title: `🚀 Revenue up ${kpis.revenueGrowth.toFixed(0)}% vs last period`,
       description: `Great work! Your revenue is trending up significantly. Keep up the momentum.`,
+      hindiSummary: `पिछले महीने से ${kpis.revenueGrowth.toFixed(0)}% ज्यादा बिक्री — शाबाश!`,
       icon: TrendingUp,
       severity: 'positive',
     })

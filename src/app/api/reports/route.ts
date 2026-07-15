@@ -883,6 +883,86 @@ export async function GET(req: NextRequest) {
       })
     }
 
+    // =====================================================================
+    // 🔒 V22-12 (Batch B, Phase 7e): ITEM-WISE PROFIT REPORT
+    // Per-product profit breakdown: product name, qty sold, revenue, COGS,
+    // profit, margin. Different from Bill-wise (which is per-invoice).
+    // Uses raw SQL GROUP BY for efficient aggregation across ALL transactions
+    // (no truncation, unlike bill-profit which caps at 500).
+    // Handles credit notes by negating their contribution.
+    // =====================================================================
+    if (type === 'item-profit') {
+      const itemRows = await db.$queryRaw<Array<{
+        productId: string | null
+        productName: string
+        totalQty: number
+        revenue: bigint
+        cogs: bigint
+      }>>`
+        SELECT
+          ti."productId" AS "productId",
+          ti."productName" AS "productName",
+          SUM(CASE WHEN t."type" = 'sale' THEN ti."quantity" ELSE -ti."quantity" END) AS "totalQty",
+          SUM(
+            CASE WHEN t."type" = 'sale'
+              THEN (ti."unitPrice" * ti."quantity" - ti."discountAmount")
+              ELSE -(ti."unitPrice" * ti."quantity" - ti."discountAmount")
+            END
+          ) AS "revenue",
+          SUM(
+            CASE WHEN t."type" = 'sale'
+              THEN (ti."purchasePriceAtSale" * ti."quantity")
+              ELSE -(ti."purchasePriceAtSale" * ti."quantity")
+            END
+          ) AS "cogs"
+        FROM "TransactionItem" ti
+        JOIN "Transaction" t ON ti."transactionId" = t."id"
+        WHERE t."userId" = ${userId}
+          AND t."deletedAt" IS NULL
+          AND t."type" IN ('sale', 'credit-note')
+          AND t."date" >= ${from}
+          AND t."date" <= ${to}
+        GROUP BY ti."productId", ti."productName"
+        ORDER BY "revenue" DESC
+      `
+
+      // Build the response with profit + margin computed in JS
+      const items = itemRows.map(row => {
+        const revenue = Number(row.revenue)
+        const cogs = Number(row.cogs)
+        const profit = revenue - cogs
+        const margin = revenue > 0 ? (profit / revenue) * 100 : 0
+        return {
+          productId: row.productId,
+          productName: row.productName,
+          totalQty: Math.round(row.totalQty * 100) / 100, // 2 decimal places
+          revenue: roundMoney(revenue),
+          cogs: roundMoney(cogs),
+          profit: roundMoney(profit),
+          margin: Math.round(margin * 10) / 10, // 1 decimal place
+        }
+      })
+
+      const totalRevenue = items.reduce((s, i) => s + i.revenue, 0)
+      const totalCogs = items.reduce((s, i) => s + i.cogs, 0)
+      const totalProfit = items.reduce((s, i) => s + i.profit, 0)
+      const avgMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0
+
+      return NextResponse.json({
+        type: 'item-profit',
+        period: { from, to },
+        truncated: false, // SQL GROUP BY covers ALL transactions — no truncation
+        summary: {
+          totalProducts: items.length,
+          totalRevenue: roundMoney(totalRevenue),
+          totalCogs: roundMoney(totalCogs),
+          totalProfit: roundMoney(totalProfit),
+          avgMargin: Math.round(avgMargin * 10) / 10,
+        },
+        items,
+      })
+    }
+
     return NextResponse.json({ error: 'Invalid report type' }, { status: 400 })
   } catch (error) {
     // 🔒 V11 FIX: Log the actual error with context so we can debug. Was:
