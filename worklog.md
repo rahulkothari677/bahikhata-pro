@@ -5868,3 +5868,48 @@ Stage Summary:
 - 1 infrastructure bug logged: BUG-017 (4.5MB upload limit).
 - ALL BATCHES (A, B, C, D) NOW COMPLETE. All 14 remaining items from the original plan are done.
 - NEXT: Phase 9 — Final testing + deployment (comprehensive regression test).
+
+---
+Task ID: v22-15-phase9
+Agent: main
+Task: V22 Phase 9 — Final testing + deployment. Comprehensive regression test + BUG-014 fix.
+
+Work Log:
+- REGRESSION TEST (browser-based, all areas):
+  * Dashboard: ✅ Quick Actions (6/6), KPI cards, Smart Insights, 5 charts, Payment Modes, Category Breakdown, Low Stock, Recent Transactions
+  * More menu: ✅ All 32 items across 6 categories
+  * Reports hub: ✅ All 16 reports present
+  * Account page: ✅ All 11 items (Plan card, My Profile, Business Card, Subscription, Security, App Settings, Feature Toggles, Data & Privacy, Staff & Access, Refer & Earn, Help & Support, About, Logout)
+  * Settings: ✅ All 10 items (Theme picker, Language, 4 group headers, App Lock, Default Landing Page, Notification Preferences, Backup & Restore)
+  * Feature Toggles: ✅ Search bar, 3 categories, toggles
+  * Document Vault: ✅ Title, Upload button, Empty state, Category filters
+
+- BUG-014 FIX (GSTR-3B API 500 error):
+  * Root cause: computeGstr3bValues fired 11 parallel queries in a single Promise.all. On Neon's free tier with connection_limit=1, this caused connection pool exhaustion → 500 error.
+  * Fix: Split 11 queries into 2 batches (6 + 5). Same pattern as Dashboard API.
+  * File: src/app/api/gstr-3b/route.ts
+
+- FINAL BUG STATUS:
+  * BUG-014: FIXED (2-batch query split)
+  * BUG-015: FIXED (lazy() moved to module scope, Phase 4)
+  * BUG-009: OPEN (demo data issue, not a code bug)
+  * BUG-016: OPEN (bill-profit truncation at 500+, Item-wise report is the alternative)
+  * BUG-017: OPEN (4.5MB Vercel body size limit, infrastructure)
+
+- VERIFICATION:
+  * npx tsc --noEmit: 0 errors
+  * npx jest: 1588/1588 pass (40 suites)
+  * npx next build: Compiled successfully in 57s
+  * npx eslint: clean
+
+V22 COMPLETION SUMMARY:
+- 15 phases completed (Phase 0-9 + Batches A-D)
+- 66 files changed, 4143 insertions(+), 354 deletions(-)
+- 16 reports (was 11)
+- 32 More menu items across 6 categories (was 19)
+- 3 new API endpoints (documents, item-profit report, bill-profit report)
+- 1 new DB model (Document Vault)
+- 5 bugs found and fixed (BUG-014, BUG-015 + 3 during batches)
+- 3 open bugs (all acceptable for release)
+- 1588 tests passing, 0 TypeScript errors, 0 ESLint errors
+- V22 UI/UX overhaul COMPLETE.
