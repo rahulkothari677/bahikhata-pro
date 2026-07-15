@@ -47,13 +47,19 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
   const [dateRange, setDateRange] = useState<DateRange>(() => getPresetRange('thisMonth'))
   const [datePreset, setDatePreset] = useState<DatePreset>('thisMonth')
   const [exportingGstr, setExportingGstr] = useState(false)
+  // 🔒 V22-3 fix: Track whether we're in single-report mode (from prop OR store)
+  const [isSingleReport, setIsSingleReport] = useState(!!singleReportType)
 
   // 🔒 V22-2 fix: Read pendingReportType from store on mount
   useEffect(() => {
-    if (singleReportType) return // Don't override singleReportType mode
+    if (singleReportType) {
+      setIsSingleReport(true)
+      return // Don't override singleReportType mode
+    }
     const pendingType = useAppStore.getState().pendingReportType
     if (pendingType) {
       setReportType(pendingType as any)
+      setIsSingleReport(true)
       useAppStore.getState().setPendingReportType(null)
     }
   }, [singleReportType])
@@ -221,14 +227,14 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
     'inventory-aging': 'Inventory Aging Report',
     'consolidated': 'Consolidated Report',
   }
-  const currentTitle = singleReportType
-    ? (reportTitles[singleReportType] || 'Report')
+  const currentTitle = isSingleReport
+    ? (reportTitles[reportType] || 'Report')
     : 'Reports'
 
   return (
     <div className="space-y-4">
       {/* 🔒 V22-3 (Phase 1): Title + back button for single-report mode */}
-      {singleReportType && (
+      {isSingleReport && (
         <div className="flex items-center gap-3 no-print">
           <button
             onClick={() => {
@@ -340,8 +346,8 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
       )}
 
       {/* Report type tabs — horizontally scrollable on mobile, grid on desktop */}
-      {/* 🔒 V22-2 fix: Hide ALL tabs when singleReportType is set */}
-      {!singleReportType && (
+      {/* 🔒 V22-2 fix: Hide ALL tabs when in single-report mode */}
+      {!isSingleReport && (
       <Tabs value={reportType} onValueChange={(v) => setReportType(v as any)}>
         {/* Mobile: horizontal scroll pills (single row, swipe to see more) */}
         <div className="lg:hidden no-print">
