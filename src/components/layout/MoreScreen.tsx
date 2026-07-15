@@ -57,30 +57,31 @@ interface MenuSection {
   items: MenuItem[]
 }
 
-// 🔒 V22-1 (Phase 1): Restructured More section into 4 categorized sections
-// with context-colored cards and badges.
-// 🔒 V22-2 (Phase 2): GST & Banking items now link to dedicated pages
+// 🔒 V22-3 (Phase 1): Removed hub pages — each item navigates DIRECTLY to
+// its own report. No intermediate "GST Compliance Center" page.
 // GST & Tax = blue, Money & Banking = green, Business Management = amber, Smart Tools = violet
 const SECTIONS: MenuSection[] = [
   {
     title: 'GST & Tax',
     titleIcon: FileText,
     items: [
-      { icon: FileText, label: 'GSTR-1', description: 'Export & file returns', view: 'gst-tax', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
-      { icon: FileCheck, label: 'GSTR-3B', description: 'Monthly summary return', view: 'gst-tax', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
-      { icon: FileCheck, label: 'GSTR-2B', description: 'ITC reconciliation', view: 'gst-tax', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
-      { icon: ShieldCheck, label: 'Reconciliation', description: 'Health check — do books tie out?', view: 'gst-tax', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
-      { icon: Lock, label: 'Period Lock', description: 'Lock filed GST periods', view: 'gst-tax', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
+      { icon: FileText, label: 'GSTR-1', description: 'Export & file outward supplies return', view: 'reports', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
+      { icon: FileCheck, label: 'GSTR-3B', description: 'Monthly summary return', view: 'reports', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
+      { icon: FileCheck, label: 'GSTR-2B', description: 'ITC reconciliation with 2B', view: 'reports', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
+      { icon: ShieldCheck, label: 'Reconciliation', description: 'Health check — do books tie out?', view: 'reports', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
+      { icon: Lock, label: 'Period Lock', description: 'Lock filed GST periods', view: 'reports', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
+      { icon: FileText, label: 'GST Summary', description: 'Tax liability by slab (5/12/18/28%)', view: 'reports', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
     ],
   },
   {
     title: 'Money & Banking',
     titleIcon: Banknote,
     items: [
-      { icon: Banknote, label: 'Bank Reconciliation', description: 'Match bank transactions', view: 'money-banking', iconColor: 'text-emerald-600 dark:text-emerald-400', iconBg: 'bg-emerald-100 dark:bg-emerald-950' },
+      { icon: Banknote, label: 'Bank Reconciliation', description: 'Match bank transactions', view: 'reports', iconColor: 'text-emerald-600 dark:text-emerald-400', iconBg: 'bg-emerald-100 dark:bg-emerald-950' },
       { icon: Wallet, label: 'Income & Expense', description: 'Rent, salary, other income', view: 'income-expense', iconColor: 'text-emerald-600 dark:text-emerald-400', iconBg: 'bg-emerald-100 dark:bg-emerald-950' },
-      { icon: Repeat, label: 'Day-End Summary', description: 'Close the drawer — daily cash', view: 'money-banking', iconColor: 'text-emerald-600 dark:text-emerald-400', iconBg: 'bg-emerald-100 dark:bg-emerald-950' },
-      { icon: Send, label: 'WhatsApp Reminders', description: 'Send payment reminders to customers', view: 'money-banking', iconColor: 'text-emerald-600 dark:text-emerald-400', iconBg: 'bg-emerald-100 dark:bg-emerald-950' },
+      { icon: Repeat, label: 'Day-End Summary', description: 'Close the drawer — daily cash', view: 'dashboard', iconColor: 'text-emerald-600 dark:text-emerald-400', iconBg: 'bg-emerald-100 dark:bg-emerald-950' },
+      { icon: Send, label: 'WhatsApp Reminders', description: 'Send payment reminders', view: 'parties', iconColor: 'text-emerald-600 dark:text-emerald-400', iconBg: 'bg-emerald-100 dark:bg-emerald-950' },
+      { icon: BarChart3, label: 'P&L Statement', description: 'Profit & loss report', view: 'reports', iconColor: 'text-emerald-600 dark:text-emerald-400', iconBg: 'bg-emerald-100 dark:bg-emerald-950' },
     ],
   },
   {
@@ -128,9 +129,34 @@ export function MoreScreen() {
   const email = session?.user?.email || ''
   const phone = setting.phone
 
-  const handleItemClick = (view: ViewType) => {
+  const handleItemClick = (view: ViewType, label?: string) => {
     haptic.click()
     setPreviousView('more')
+
+    // 🔒 V22-3 (Phase 1): Map item labels to report types so each opens
+    // DIRECTLY to its own report — no hub page, no tabs.
+    const reportTypeMap: Record<string, string> = {
+      'GSTR-1': 'gstr-1',
+      'GSTR-3B': 'gstr-3b',
+      'GSTR-2B': 'gstr-2b',
+      'GST Summary': 'gst',
+      'Bank Reconciliation': 'bank-recon',
+      'P&L Statement': 'pl',
+    }
+    if (label && reportTypeMap[label]) {
+      useAppStore.getState().setPendingReportType(reportTypeMap[label])
+      setView('reports')
+      return
+    }
+
+    // 🔒 V22-3: Reconciliation & Period Lock → Account → Data section
+    if (label === 'Reconciliation' || label === 'Period Lock') {
+      useAppStore.getState().setAccountOriginView('more')
+      useAppStore.getState().setView('account')
+      useAppStore.getState().setAccountSection('data')
+      return
+    }
+
     setView(view)
   }
 
@@ -209,7 +235,7 @@ export function MoreScreen() {
                 return (
                   <button
                     key={item.label}
-                    onClick={() => handleItemClick(item.view)}
+                    onClick={() => handleItemClick(item.view, item.label)}
                     className={cn(
                       'w-full flex items-center gap-3 p-3 hover:bg-muted/50 transition text-left active:bg-muted group',
                       i > 0 && 'border-t border-border/40',

@@ -20,7 +20,7 @@ import {
   FileBarChart, TrendingUp, Receipt, Package, Users, Calendar,
   ArrowDownRight, ArrowUpRight, IndianRupee, Percent, FileText,
   FileSpreadsheet, Loader2, Download, Printer, Clock, AlertTriangle, Info,
-  AlertCircle, Coffee, FileCheck, Banknote, Store,
+  AlertCircle, Coffee, FileCheck, Banknote, Store, ArrowLeft,
 } from 'lucide-react'
 import { toast as sonnerToast } from 'sonner'
 import { offlineFetch } from '@/lib/offline-fetch'
@@ -42,7 +42,7 @@ const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 
 // with 11 tabs).
 export function Reports({ singleReportType }: { singleReportType?: string }) {
   const { t } = useTranslation()
-  const { features } = useAppStore()
+  const { features, setView } = useAppStore()
   const [reportType, setReportType] = useState<'pl' | 'gst' | 'stock' | 'party' | 'debt-aging' | 'inventory-aging' | 'gstr-1' | 'gstr-3b' | 'gstr-2b' | 'bank-recon' | 'consolidated'>(singleReportType as any || 'pl')
   const [dateRange, setDateRange] = useState<DateRange>(() => getPresetRange('thisMonth'))
   const [datePreset, setDatePreset] = useState<DatePreset>('thisMonth')
@@ -207,8 +207,45 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
     }
   }
 
+  // 🔒 V22-3 (Phase 1): Title + back button when in singleReportType mode
+  const reportTitles: Record<string, string> = {
+    'gstr-1': 'GSTR-1 Report',
+    'gstr-3b': 'GSTR-3B Report',
+    'gstr-2b': 'GSTR-2B Reconciliation',
+    'gst': 'GST Summary Report',
+    'bank-recon': 'Bank Reconciliation',
+    'pl': 'Profit & Loss Report',
+    'stock': 'Stock Report',
+    'party': 'Party Statement',
+    'debt-aging': 'Debt Aging Report',
+    'inventory-aging': 'Inventory Aging Report',
+    'consolidated': 'Consolidated Report',
+  }
+  const currentTitle = singleReportType
+    ? (reportTitles[singleReportType] || 'Report')
+    : 'Reports'
+
   return (
     <div className="space-y-4">
+      {/* 🔒 V22-3 (Phase 1): Title + back button for single-report mode */}
+      {singleReportType && (
+        <div className="flex items-center gap-3 no-print">
+          <button
+            onClick={() => {
+              const prev = useAppStore.getState().previousView
+              setView(prev || 'more')
+              useAppStore.getState().setPreviousView(null)
+            }}
+            className="p-2 -ml-2 rounded-lg hover:bg-muted"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <div>
+            <h2 className="text-xl font-bold">{currentTitle}</h2>
+          </div>
+        </div>
+      )}
+
       {/* 🔒 V6 SC1/PP1: Loud truncation warning banner.
           Shows when the report is truncated (data.truncated === true).
           Never let a user mistake an approximate tax/P&L figure for the real one. */}
