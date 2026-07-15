@@ -5408,3 +5408,78 @@ Stage Summary:
 - Settings page now has: feature search bar, app lock toggle, auto-backup card.
 - New "Feature Toggles" menu item makes the Features tab reachable from the Account page.
 - NEXT: Phase 6 — Dashboard overhaul (improve KPI cards, charts, smart insights).
+
+---
+Task ID: v22-8-phase6
+Agent: main
+Task: V22 Phase 6 — Dashboard overhaul. Add quick action shortcuts row and revenue target progress card for faster access to common actions and better goal tracking.
+
+Work Log:
+- PRE-CHANGE RESEARCH:
+  * Read Dashboard.tsx (1277 lines) — already very comprehensive with: greeting banner, date range picker, 4 KPI cards, 5 secondary mini-stats, sparkline + donut mini-charts, full sales trend area chart, top products bar chart, payment mode pie, category breakdown, low stock alerts, recent transactions, GST summary.
+  * Read SmartInsights.tsx (316 lines) — AI-powered insights with 4 features (reorder suggestions, profit margin alerts, sales patterns, customer credit risk).
+  * Read BusinessHealthScore.tsx (223 lines) — business health scoring with low-data encouragement.
+  * Confirmed useBusinessGoals hook provides revenueTarget + expenseBudget.
+  * Identified 2 high-value additions that don't duplicate existing features: Quick Action Shortcuts + Revenue Target Progress.
+
+- IMPLEMENTATION — 2 new dashboard widgets:
+
+  1. Quick Action Shortcuts Row (Dashboard.tsx):
+     * Horizontal scrollable row of 6 one-tap action buttons.
+     * Inserted between the greeting banner (motion.div) and the date range selector.
+     * Actions: New Sale (emerald), Add Product (blue), Scan Bill (violet), Add Party (amber), Reports (rose), Income (teal).
+     * Each button: colored icon (w-9 h-9) + 10px label, min-width 72px, flex-shrink-0.
+     * Horizontally scrollable on mobile (scrollbar-hide class), static row on desktop.
+     * Sets previousView='dashboard' so back button returns to dashboard.
+     * active:scale-95 for tactile feedback.
+     * Inspired by PhonePe's quick actions row.
+
+  2. Revenue Target Progress Card (Dashboard.tsx):
+     * Shows progress toward the monthly revenue target.
+     * Only renders when revenueTarget > 0 (from useBusinessGoals hook).
+     * Inserted between the secondary KPIs row and the mini-charts row.
+     * Displays: Target icon (emerald gradient) + "Monthly Revenue Target" title + "₹X of ₹Y • This Month" subtitle.
+     * Right side: large percentage + remaining amount ("₹19.6K to go") or "Target reached! 🎉".
+     * Color-coded progress bar: rose-to-amber (<50%), amber-to-emerald (50-99%), emerald-to-teal (100%+).
+     * Animated width transition (700ms ease-out).
+     * Milestone markers at 0/25/50/75/100% below the bar.
+     * Math.min(100, ...) caps the bar at 100% even if revenue exceeds target.
+     * Math.max(2, ...) ensures the bar is always visible (min 2% width).
+     * Inspired by Stripe's revenue progress widgets.
+
+- VERIFICATION (all four checks):
+  * npx tsc --noEmit: 0 errors
+  * npx jest: 1588/1588 pass (40 suites)
+  * npx next build: Compiled successfully in 38.6s
+  * npx eslint: clean
+
+- BROWSER TESTING (agent-browser on https://bahikhata-pro.vercel.app):
+  Logged in with testuser-v22@example.com (existing account with demo data).
+  Desktop view:
+    ✅ Dashboard loads with all existing features intact (greeting banner, KPIs, charts)
+    ✅ Quick Action Shortcuts row renders between greeting banner and "Business Overview"
+    ✅ All 6 quick action buttons visible: New Sale, Add Product, Scan Bill, Add Party, Reports, Income
+    ✅ Each button has correct colored icon + label
+    ✅ Tapped "Add Product" → navigated to Inventory page (correct navigation)
+    ✅ Back button returned to Dashboard (previousView='dashboard' works)
+    ✅ Set revenue target to ₹50,000 via Account → My Profile → Monthly Business Goals
+    ✅ Returned to Dashboard → Revenue Target Progress card appeared
+    ✅ Card shows: "Monthly Revenue Target" / "₹30,359.85 of ₹50,000 • This Month" / "61%" / "₹19.6K to go"
+    ✅ Progress bar width = 60.7% (verified via JS eval)
+    ✅ Progress bar gradient = amber-to-emerald (correct for 50-99% range)
+    ✅ Milestone markers (0/25/50/75/100%) visible below the bar
+  Screenshots saved:
+    - /home/z/my-project/download/v22-8-phase6-quick-actions.png
+    - /home/z/my-project/download/v22-8-phase6-revenue-target.png
+
+- POST-CHANGE SCAN:
+  * No new bugs found.
+  * All existing dashboard features remain intact (no regressions).
+  * The Revenue Target card only shows when a target is set — users without a target see no change (clean UX).
+  * Quick Actions row is always visible — provides immediate value even for new users.
+
+Stage Summary:
+- V22-8 Phase 6 COMPLETE. Pushed to GitHub (commit 2c37644). Vercel deploy verified.
+- Dashboard now has: quick action shortcuts (6 one-tap buttons) + revenue target progress card.
+- Both features verified working end-to-end with real data.
+- NEXT: Phase 7 — Missing features (Bill-wise Profit, HSN Summary, Cashflow, Trial Balance, etc.).
