@@ -30,7 +30,8 @@ import { cn } from '@/lib/utils'
 import {
   TrendingUp, Users, Clock, FileText, FileCheck, ShieldCheck,
   Receipt, Package, AlertTriangle, Banknote, Store,
-  ChevronRight, BarChart3, type LucideIcon,
+  ChevronRight, BarChart3, Hash, Scale, Wallet,
+  type LucideIcon,
 } from 'lucide-react'
 
 interface ReportCard {
@@ -64,6 +65,14 @@ const CATEGORIES: ReportCategory[] = [
         iconBg: 'bg-rose-100 dark:bg-rose-950',
       },
       {
+        type: 'bill-profit',
+        icon: FileText,
+        label: 'Bill-wise Profit',
+        description: 'Per-invoice profit breakdown with margin %',
+        iconColor: 'text-rose-600 dark:text-rose-400',
+        iconBg: 'bg-rose-100 dark:bg-rose-950',
+      },
+      {
         type: 'party',
         icon: Users,
         label: 'Party Statement',
@@ -76,6 +85,14 @@ const CATEGORIES: ReportCategory[] = [
         icon: Clock,
         label: 'Debt Aging',
         description: 'Outstanding receivables by age bucket',
+        iconColor: 'text-rose-600 dark:text-rose-400',
+        iconBg: 'bg-rose-100 dark:bg-rose-950',
+      },
+      {
+        type: 'trial-balance',
+        icon: Scale,
+        label: 'Trial Balance',
+        description: 'Debit/credit balances — for CA accounting verification',
         iconColor: 'text-rose-600 dark:text-rose-400',
         iconBg: 'bg-rose-100 dark:bg-rose-950',
       },
@@ -118,6 +135,14 @@ const CATEGORIES: ReportCategory[] = [
         iconColor: 'text-blue-600 dark:text-blue-400',
         iconBg: 'bg-blue-100 dark:bg-blue-950',
       },
+      {
+        type: 'hsn',
+        icon: Hash,
+        label: 'HSN Summary',
+        description: 'HSN/SAC-wise tax summary for GSTR-1 filing',
+        iconColor: 'text-blue-600 dark:text-blue-400',
+        iconBg: 'bg-blue-100 dark:bg-blue-950',
+      },
     ],
   },
   {
@@ -153,6 +178,14 @@ const CATEGORIES: ReportCategory[] = [
         icon: Banknote,
         label: 'Bank Reconciliation',
         description: 'Match bank statement with recorded transactions',
+        iconColor: 'text-emerald-600 dark:text-emerald-400',
+        iconBg: 'bg-emerald-100 dark:bg-emerald-950',
+      },
+      {
+        type: 'cashflow',
+        icon: Wallet,
+        label: 'Cashflow Report',
+        description: 'Cash inflow vs outflow by category',
         iconColor: 'text-emerald-600 dark:text-emerald-400',
         iconBg: 'bg-emerald-100 dark:bg-emerald-950',
       },

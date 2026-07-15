@@ -32,6 +32,10 @@ import { Gstr3bReport } from '@/components/reports/Gstr3bReport'
 import { Gstr2bReconciliation } from '@/components/reports/Gstr2bReconciliation'
 import { BankReconciliation } from '@/components/reports/BankReconciliation'
 import { ConsolidatedReport } from '@/components/reports/ConsolidatedReport'
+import { BillWiseProfit } from '@/components/reports/BillWiseProfit'
+import { HsnSummary } from '@/components/reports/HsnSummary'
+import { CashflowReport } from '@/components/reports/CashflowReport'
+import { TrialBalance } from '@/components/reports/TrialBalance'
 import { ReportsHub } from '@/components/reports/ReportsHub'
 
 const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 80)', 'oklch(0.6 0.12 200)', 'oklch(0.65 0.22 15)', 'oklch(0.7 0.16 250)']
@@ -50,7 +54,7 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
   // can switch to single-report mode WITHOUT remounting (no setView call).
   const pendingReportType = useAppStore(s => s.pendingReportType)
   const setPendingReportType = useAppStore(s => s.setPendingReportType)
-  const [reportType, setReportType] = useState<'pl' | 'gst' | 'stock' | 'party' | 'debt-aging' | 'inventory-aging' | 'gstr-1' | 'gstr-3b' | 'gstr-2b' | 'bank-recon' | 'consolidated'>(singleReportType as any || 'pl')
+  const [reportType, setReportType] = useState<'pl' | 'gst' | 'stock' | 'party' | 'debt-aging' | 'inventory-aging' | 'gstr-1' | 'gstr-3b' | 'gstr-2b' | 'bank-recon' | 'consolidated' | 'bill-profit' | 'hsn' | 'cashflow' | 'trial-balance'>(singleReportType as any || 'pl')
   const [dateRange, setDateRange] = useState<DateRange>(() => getPresetRange('thisMonth'))
   const [datePreset, setDatePreset] = useState<DatePreset>('thisMonth')
   const [exportingGstr, setExportingGstr] = useState(false)
@@ -149,6 +153,8 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
     // 🔒 V22-5 (Phase 3): Only fetch when in single-report mode (not on ReportsHub).
     // Without the isSingleReport gate, the query would fire on the hub with
     // the default reportType='pl', wasting a request for data we never show.
+    // 🔒 V22-9 (Phase 7): Added bill-profit, hsn, cashflow, trial-balance — these
+    // DO use the API (unlike gstr-1/3b/2b/bank-recon/consolidated which have their own).
     enabled: isSingleReport && reportType !== 'gstr-1' && reportType !== 'gstr-3b' && reportType !== 'gstr-2b' && reportType !== 'bank-recon' && reportType !== 'consolidated',
     queryFn: async () => {
       // Debt aging uses party report data (includes transactions per party)
@@ -237,6 +243,10 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
     'debt-aging': 'Debt Aging Report',
     'inventory-aging': 'Inventory Aging Report',
     'consolidated': 'Consolidated Report',
+    'bill-profit': 'Bill-wise Profit Report',
+    'hsn': 'HSN Summary Report',
+    'cashflow': 'Cashflow Report',
+    'trial-balance': 'Trial Balance',
   }
   const currentTitle = isSingleReport
     ? (reportTitles[reportType] || 'Report')
@@ -308,9 +318,11 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
         </div>
       )}
 
-      {/* Period selector + export toolbar (hidden for GSTR-3B which has its own month picker).
+      {/* Period selector + export toolbar (hidden for reports that have their own month picker).
           🔒 V22-5 (Phase 3): Only show when a report is actually being viewed
-          (not on the ReportsHub grid). */}
+          (not on the ReportsHub grid).
+          🔒 V22-9 (Phase 7): bill-profit, hsn, cashflow, trial-balance DO use the
+          date range toolbar (unlike gstr-1/3b/2b/bank-recon/consolidated). */}
       {isSingleReport && reportType !== 'gstr-1' && reportType !== 'gstr-3b' && reportType !== 'gstr-2b' && reportType !== 'bank-recon' && reportType !== 'consolidated' && (
       <Card className="shadow-card border-border/60 no-print">
         <CardContent className="p-3 lg:p-4">
@@ -397,6 +409,11 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
           {reportType === 'gstr-2b' && <Gstr2bReconciliation />}
           {reportType === 'bank-recon' && <BankReconciliation />}
           {reportType === 'consolidated' && <ConsolidatedReport />}
+          {/* 🔒 V22-9 (Phase 7): 4 new reports */}
+          {reportType === 'bill-profit' && (error ? <ReportError message={(error as Error).message} /> : isLoading || !data ? <ReportSkeleton /> : <BillWiseProfit data={data} />)}
+          {reportType === 'hsn' && (error ? <ReportError message={(error as Error).message} /> : isLoading || !data ? <ReportSkeleton /> : <HsnSummary data={data} />)}
+          {reportType === 'cashflow' && (error ? <ReportError message={(error as Error).message} /> : isLoading || !data ? <ReportSkeleton /> : <CashflowReport data={data} />)}
+          {reportType === 'trial-balance' && (error ? <ReportError message={(error as Error).message} /> : isLoading || !data ? <ReportSkeleton /> : <TrialBalance data={data} />)}
         </>
       )}
     </div>

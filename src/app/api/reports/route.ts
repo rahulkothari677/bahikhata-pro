@@ -559,6 +559,330 @@ export async function GET(req: NextRequest) {
       })
     }
 
+    // =====================================================================
+    // 🔒 V22-9 (Phase 7): BILL-WISE PROFIT REPORT
+    // Per-invoice profit breakdown: invoice no, party, date, revenue, COGS, profit, margin.
+    // Uses SQL aggregation on TransactionItem for accurate per-item COGS.
+    // =====================================================================
+    if (type === 'bill-profit') {
+      // Fetch sales + credit notes with items in the date range.
+      // Bounded by transaction count in the range (typically <500/month).
+      const transactions = await db.transaction.findMany({
+        where: activeTransactionWhere(userId, {
+          type: { in: ['sale', 'credit-note'] },
+          date: { gte: from, lte: to },
+        }),
+        include: {
+          items: {
+            select: {
+              quantity: true,
+              unitPrice: true,
+              purchasePriceAtSale: true,
+              discountAmount: true,
+              productName: true,
+            },
+          },
+          party: { select: { name: true } },
+        },
+        orderBy: { date: 'desc' },
+        take: 500, // safety cap
+      })
+
+      const bills = transactions.map(t => {
+        const revenue = t.type === 'sale'
+          ? (t.subtotal - t.discountAmount)
+          : -((t.subtotal - t.discountAmount)) // credit note reverses
+        const cogs = t.items.reduce((sum, item) => {
+          const itemCogs = item.purchasePriceAtSale * item.quantity
+          return sum + (t.type === 'sale' ? itemCogs : -itemCogs)
+        }, 0)
+        const profit = revenue - cogs
+        const margin = revenue > 0 ? (profit / revenue) * 100 : 0
+        return {
+          id: t.id,
+          invoiceNo: t.invoiceNo || `#${t.invoiceSequence || '—'}`,
+          date: t.date,
+          type: t.type,
+          partyName: t.party?.name || t.payeeName || 'Walk-in customer',
+          itemCount: t.items.length,
+          revenue: roundMoney(revenue),
+          cogs: roundMoney(cogs),
+          profit: roundMoney(profit),
+          margin: Math.round(margin * 10) / 10, // 1 decimal place
+        }
+      })
+
+      const totalRevenue = bills.reduce((s, b) => s + b.revenue, 0)
+      const totalCogs = bills.reduce((s, b) => s + b.cogs, 0)
+      const totalProfit = bills.reduce((s, b) => s + b.profit, 0)
+      const avgMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0
+
+      return NextResponse.json({
+        type: 'bill-profit',
+        period: { from, to },
+        truncated: transactions.length >= 500,
+        truncatedHint: transactions.length >= 500 ? 'Showing the latest 500 bills. Narrow the date range to see older bills.' : undefined,
+        summary: {
+          totalBills: bills.length,
+          totalRevenue: roundMoney(totalRevenue),
+          totalCogs: roundMoney(totalCogs),
+          totalProfit: roundMoney(totalProfit),
+          avgMargin: Math.round(avgMargin * 10) / 10,
+        },
+        bills,
+      })
+    }
+
+    // =====================================================================
+    // 🔒 V22-9 (Phase 7): HSN SUMMARY REPORT
+    // HSN/SAC-wise summary for GSTR-1 filing. Groups by HSN code from TransactionItem.
+    // Required for GSTR-1 if turnover > ₹1.5 crore (but useful for all businesses).
+    // =====================================================================
+    if (type === 'hsn') {
+      // Aggregate TransactionItem by HSN code for sales in the date range.
+      // Uses raw SQL for efficient GROUP BY on the snapshot HSN field.
+      const hsnRows = await db.$queryRaw<Array<{
+        hsn: string
+        totalQty: number
+        taxableValue: bigint
+        totalCgst: bigint
+        totalSgst: bigint
+        totalIgst: bigint
+        totalTax: bigint
+      }>>`
+        SELECT
+          ti."hsn" AS hsn,
+          SUM(ti."quantity") AS "totalQty",
+          SUM(ti."unitPrice" * ti."quantity" - ti."discountAmount") AS "taxableValue",
+          SUM(ti."cgst") AS "totalCgst",
+          SUM(ti."sgst") AS "totalSgst",
+          SUM(ti."igst") AS "totalIgst",
+          SUM(ti."cgst" + ti."sgst" + ti."igst") AS "totalTax"
+        FROM "TransactionItem" ti
+        JOIN "Transaction" t ON ti."transactionId" = t."id"
+        WHERE t."userId" = ${userId}
+          AND t."deletedAt" IS NULL
+          AND t."type" = 'sale'
+          AND t."date" >= ${from}
+          AND t."date" <= ${to}
+          AND ti."hsn" IS NOT NULL
+          AND ti."hsn" != ''
+        GROUP BY ti."hsn"
+        ORDER BY "taxableValue" DESC
+      `
+
+      // Also fetch product names for each HSN (for the description column)
+      const hsnCodes = hsnRows.map(r => r.hsn)
+      const productsWithHsn = await db.product.findMany({
+        where: { userId, hsn: { in: hsnCodes } },
+        select: { hsn: true, name: true, gstRate: true, unit: true },
+        distinct: ['hsn'],
+      })
+      const hsnMetaMap = new Map(productsWithHsn.map(p => [p.hsn, p]))
+
+      const hsnSummary = hsnRows.map(row => {
+        const meta = hsnMetaMap.get(row.hsn)
+        return {
+          hsn: row.hsn,
+          description: meta?.name || '—',
+          unit: meta?.unit || 'pcs',
+          gstRate: meta?.gstRate || 0,
+          totalQty: Number(row.totalQty),
+          taxableValue: roundMoney(Number(row.taxableValue)),
+          cgst: roundMoney(Number(row.totalCgst)),
+          sgst: roundMoney(Number(row.totalSgst)),
+          igst: roundMoney(Number(row.totalIgst)),
+          totalTax: roundMoney(Number(row.totalTax)),
+        }
+      })
+
+      const totalTaxable = hsnSummary.reduce((s, h) => s + h.taxableValue, 0)
+      const totalTax = hsnSummary.reduce((s, h) => s + h.totalTax, 0)
+
+      return NextResponse.json({
+        type: 'hsn',
+        period: { from, to },
+        truncated: false,
+        summary: {
+          totalHsnCodes: hsnSummary.length,
+          totalTaxableValue: roundMoney(totalTaxable),
+          totalTax: roundMoney(totalTax),
+        },
+        hsnSummary,
+      })
+    }
+
+    // =====================================================================
+    // 🔒 V22-9 (Phase 7): CASHFLOW REPORT
+    // Cash inflow vs outflow by category. Shows where cash came from and where it went.
+    // Inflows: sales (cash/upi/card), payments received, income
+    // Outflows: purchases (cash/upi/card), payments paid, expenses
+    // =====================================================================
+    if (type === 'cashflow') {
+      const [salesAgg, purchaseAgg, incomeAgg, expenseAgg, paymentsReceivedAgg, paymentsPaidAgg] = await Promise.all([
+        // Sales by payment mode (inflow)
+        db.transaction.groupBy({
+          by: ['paymentMode'],
+          where: activeTransactionWhere(userId, { type: 'sale', date: { gte: from, lte: to } }),
+          _sum: { paidAmount: true, totalAmount: true },
+        }),
+        // Purchases by payment mode (outflow)
+        db.transaction.groupBy({
+          by: ['paymentMode'],
+          where: activeTransactionWhere(userId, { type: 'purchase', date: { gte: from, lte: to } }),
+          _sum: { paidAmount: true, totalAmount: true },
+        }),
+        // Income by category (inflow)
+        db.transaction.groupBy({
+          by: ['category'],
+          where: activeTransactionWhere(userId, { type: 'income', date: { gte: from, lte: to } }),
+          _sum: { totalAmount: true },
+        }),
+        // Expenses by category (outflow)
+        db.transaction.groupBy({
+          by: ['category'],
+          where: activeTransactionWhere(userId, { type: 'expense', date: { gte: from, lte: to } }),
+          _sum: { totalAmount: true },
+        }),
+        // Payments received from parties (inflow)
+        db.payment.groupBy({
+          by: ['mode'],
+          where: { userId, deletedAt: null, type: 'received', date: { gte: from, lte: to } },
+          _sum: { amount: true },
+        }),
+        // Payments paid to suppliers (outflow)
+        db.payment.groupBy({
+          by: ['mode'],
+          where: { userId, deletedAt: null, type: 'paid', date: { gte: from, lte: to } },
+          _sum: { amount: true },
+        }),
+      ])
+
+      // Build inflow items
+      const inflows: { label: string; amount: number }[] = []
+      salesAgg.forEach(row => {
+        const amount = row._sum.paidAmount || 0
+        if (amount > 0) inflows.push({ label: `Sales (${row.paymentMode})`, amount })
+      })
+      paymentsReceivedAgg.forEach(row => {
+        const amount = row._sum.amount || 0
+        if (amount > 0) inflows.push({ label: `Udhaar Received (${row.mode})`, amount })
+      })
+      incomeAgg.forEach(row => {
+        const amount = row._sum.totalAmount || 0
+        if (amount > 0) inflows.push({ label: row.category || 'Other Income', amount })
+      })
+
+      // Build outflow items
+      const outflows: { label: string; amount: number }[] = []
+      purchaseAgg.forEach(row => {
+        const amount = row._sum.paidAmount || 0
+        if (amount > 0) outflows.push({ label: `Purchases (${row.paymentMode})`, amount })
+      })
+      paymentsPaidAgg.forEach(row => {
+        const amount = row._sum.amount || 0
+        if (amount > 0) outflows.push({ label: `Udhaar Paid (${row.mode})`, amount })
+      })
+      expenseAgg.forEach(row => {
+        const amount = row._sum.totalAmount || 0
+        if (amount > 0) outflows.push({ label: row.category || 'Other Expense', amount })
+      })
+
+      const totalInflow = inflows.reduce((s, i) => s + i.amount, 0)
+      const totalOutflow = outflows.reduce((s, o) => s + o.amount, 0)
+      const netCashflow = totalInflow - totalOutflow
+
+      return NextResponse.json({
+        type: 'cashflow',
+        period: { from, to },
+        truncated: false,
+        summary: {
+          totalInflow: roundMoney(totalInflow),
+          totalOutflow: roundMoney(totalOutflow),
+          netCashflow: roundMoney(netCashflow),
+        },
+        inflows: inflows.sort((a, b) => b.amount - a.amount),
+        outflows: outflows.sort((a, b) => b.amount - a.amount),
+      })
+    }
+
+    // =====================================================================
+    // 🔒 V22-9 (Phase 7): TRIAL BALANCE REPORT
+    // Debit/Credit balances for all accounts. Used by CAs for accounting.
+    // Groups by transaction type: Sales (credit), Purchases (debit),
+    // Expenses (debit), Income (credit), Receivable (debit), Payable (credit).
+    // =====================================================================
+    if (type === 'trial-balance') {
+      const [typeAgg, receivableAgg, payableAgg] = await Promise.all([
+        // All transaction types in the date range
+        db.transaction.groupBy({
+          by: ['type'],
+          where: activeTransactionWhere(userId, { date: { gte: from, lte: to } }),
+          _sum: { totalAmount: true, paidAmount: true },
+        }),
+        // All-time receivable (sales - paid) — outstanding from customers
+        db.transaction.groupBy({
+          by: ['type'],
+          where: activeTransactionWhere(userId, { type: 'sale' }),
+          _sum: { totalAmount: true, paidAmount: true },
+        }),
+        // All-time payable (purchases - paid) — owed to suppliers
+        db.transaction.groupBy({
+          by: ['type'],
+          where: activeTransactionWhere(userId, { type: 'purchase' }),
+          _sum: { totalAmount: true, paidAmount: true },
+        }),
+      ])
+
+      // Build trial balance rows
+      const accounts: { name: string; debit: number; credit: number }[] = []
+
+      // Sales → Credit
+      const salesTotal = typeAgg.find(r => r.type === 'sale')?._sum.totalAmount || 0
+      const creditNoteTotal = typeAgg.find(r => r.type === 'credit-note')?._sum.totalAmount || 0
+      const netSales = salesTotal - creditNoteTotal
+      if (netSales !== 0) accounts.push({ name: 'Sales Account', debit: 0, credit: roundMoney(netSales) })
+
+      // Purchases → Debit
+      const purchaseTotal = typeAgg.find(r => r.type === 'purchase')?._sum.totalAmount || 0
+      const debitNoteTotal = typeAgg.find(r => r.type === 'debit-note')?._sum.totalAmount || 0
+      const netPurchases = purchaseTotal - debitNoteTotal
+      if (netPurchases !== 0) accounts.push({ name: 'Purchases Account', debit: roundMoney(netPurchases), credit: 0 })
+
+      // Expenses → Debit
+      const expenseTotal = typeAgg.find(r => r.type === 'expense')?._sum.totalAmount || 0
+      if (expenseTotal !== 0) accounts.push({ name: 'Expenses Account', debit: roundMoney(expenseTotal), credit: 0 })
+
+      // Income → Credit
+      const incomeTotal = typeAgg.find(r => r.type === 'income')?._sum.totalAmount || 0
+      if (incomeTotal !== 0) accounts.push({ name: 'Other Income Account', debit: 0, credit: roundMoney(incomeTotal) })
+
+      // Receivable (Sundry Debtors) → Debit (all-time outstanding)
+      const receivableTotal = (receivableAgg.find(r => r.type === 'sale')?._sum.totalAmount || 0) - (receivableAgg.find(r => r.type === 'sale')?._sum.paidAmount || 0)
+      if (receivableTotal !== 0) accounts.push({ name: 'Sundry Debtors (Receivable)', debit: roundMoney(receivableTotal), credit: 0 })
+
+      // Payable (Sundry Creditors) → Credit (all-time owed)
+      const payableTotal = (payableAgg.find(r => r.type === 'purchase')?._sum.totalAmount || 0) - (payableAgg.find(r => r.type === 'purchase')?._sum.paidAmount || 0)
+      if (payableTotal !== 0) accounts.push({ name: 'Sundry Creditors (Payable)', debit: 0, credit: roundMoney(payableTotal) })
+
+      const totalDebit = accounts.reduce((s, a) => s + a.debit, 0)
+      const totalCredit = accounts.reduce((s, a) => s + a.credit, 0)
+      const isBalanced = Math.abs(totalDebit - totalCredit) < 1 // within ₹1 tolerance for rounding
+
+      return NextResponse.json({
+        type: 'trial-balance',
+        period: { from, to },
+        truncated: false,
+        summary: {
+          totalDebit: roundMoney(totalDebit),
+          totalCredit: roundMoney(totalCredit),
+          difference: roundMoney(totalDebit - totalCredit),
+          isBalanced,
+        },
+        accounts,
+      })
+    }
+
     return NextResponse.json({ error: 'Invalid report type' }, { status: 400 })
   } catch (error) {
     // 🔒 V11 FIX: Log the actual error with context so we can debug. Was:
