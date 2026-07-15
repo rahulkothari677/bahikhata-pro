@@ -188,14 +188,15 @@ and include enough context to reproduce.
 
 ---
 
-### BUG-014 — GSTR-3B API returns 500 "Failed to compute GSTR-3B" (High/API)
+### BUG-014 — GSTR-3B API returns 500 "Failed to compute GSTR-3B" (High/API) — FIXED
 
 - **Found**: 2026-07-15, during browser testing of V22-3 Phase 1
 - **File**: `src/app/api/gstr-3b/route.ts` — the `computeGstr3bValues` function
 - **Severity**: High (GSTR-3B filing is a core compliance feature)
 - **Description**: The GSTR-3B API returns HTTP 500 for all months. The error is caught and returns `{ error: "Failed to compute GSTR-3B", errorId: "..." }`. The actual error is server-side and not visible without Vercel function logs.
-- **Root cause**: Unknown — needs Vercel function logs to diagnose. Likely related to the Prisma money extension converting aggregate `_sum` values, or a SQL query issue with the paise migration.
-- **Status**: OPEN — needs investigation with Vercel logs
+- **Root cause**: The `computeGstr3bValues` function fired 11 parallel queries in a single `Promise.all`. On Neon's free tier with `connection_limit=1`, this causes connection pool exhaustion — the queries queue behind a single connection, and some timeout before completing.
+- **Fix applied**: 2026-07-16 (V22-15 Phase 9). Split the 11 queries into 2 batches: Batch 1 (6 queries) wakes the DB, Batch 2 (5 queries) runs warm. Same pattern as the Dashboard API's 2-batch strategy.
+- **Status**: FIXED
 
 ### BUG-015 — `lazy()` called inside function body caused Settings to re-mount and lose state (High/UX) — FIXED
 

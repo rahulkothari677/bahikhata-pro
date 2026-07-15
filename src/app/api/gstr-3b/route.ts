@@ -42,9 +42,15 @@ export const maxDuration = 60
 // Previously the GET and POST handlers had copy-pasted 200+ line blocks.
 // Now both call this single function — any change automatically applies to both.
 async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd: Date) {
+  // 🔒 BUG-014 FIX (V22-15 Phase 9): Split 11 parallel queries into 2 batches.
+  // Was: all 11 in one Promise.all → connection pool exhaustion on Neon
+  // (connection_limit=1) → 500 error "Failed to compute GSTR-3B".
+  // Now: Batch 1 (6 queries) wakes the DB, Batch 2 (5 queries) runs warm.
+  // Same pattern as the Dashboard API's 2-batch strategy.
+
+  // === Batch 1: Simple aggregates + nil-rated/exempt (wakes the DB if cold) ===
   const [
     outwardSalesAgg, rcmInwardAgg, creditNoteAgg, nilRatedAgg, exemptAgg, nonGstAgg,
-    interstateB2cAgg, itcPurchasesAgg, rcmItcAgg, debitNoteAgg, exemptInwardAgg,
   ] = await Promise.all([
     db.transaction.aggregate({
       where: { userId, type: 'sale', deletedAt: null, isReverseCharge: false, date: { gte: periodStart, lt: periodEnd } },
@@ -96,6 +102,12 @@ async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd:
       where: { userId, type: 'income', deletedAt: null, date: { gte: periodStart, lt: periodEnd } },
       _sum: { totalAmount: true }, _count: true,
     }),
+  ])
+
+  // === Batch 2: Complex raw SQL queries (DB is now warm from Batch 1) ===
+  const [
+    interstateB2cAgg, itcPurchasesAgg, rcmItcAgg, debitNoteAgg, exemptInwardAgg,
+  ] = await Promise.all([
     db.$queryRaw<Array<{ taxableValuePaise: string; igstPaise: string }>>`
       SELECT
         COALESCE(SUM(t."subtotal"::numeric - COALESCE(t."discountAmount", 0)::numeric), 0)::text AS "taxableValuePaise",
