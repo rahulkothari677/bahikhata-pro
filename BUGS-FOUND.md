@@ -187,3 +187,12 @@ and include enough context to reproduce.
 - **Status**: FIXED
 
 ---
+
+### BUG-014 — GSTR-3B API returns 500 "Failed to compute GSTR-3B" (High/API)
+
+- **Found**: 2026-07-15, during browser testing of V22-3 Phase 1
+- **File**: `src/app/api/gstr-3b/route.ts` — the `computeGstr3bValues` function
+- **Severity**: High (GSTR-3B filing is a core compliance feature)
+- **Description**: The GSTR-3B API returns HTTP 500 for all months. The error is caught and returns `{ error: "Failed to compute GSTR-3B", errorId: "..." }`. The actual error is server-side and not visible without Vercel function logs.
+- **Root cause**: Unknown — needs Vercel function logs to diagnose. Likely related to the Prisma money extension converting aggregate `_sum` values, or a SQL query issue with the paise migration.
+- **Status**: OPEN — needs investigation with Vercel logs
