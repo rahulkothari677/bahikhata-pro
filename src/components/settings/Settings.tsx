@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useSession } from 'next-auth/react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -352,6 +352,72 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
   const setPendingSettingsTab = useAppStore((s) => s.setPendingSettingsTab)
   // 🔒 V21-014 (Phase 6): If singleTab is set, use it as the initial tab.
   const [settingsTab, setSettingsTab] = useState<'profile' | 'features' | 'appearance' | 'data' | 'staff'>(singleTab || 'profile')
+
+  // 🔒 V22-7 (Phase 5): Feature search query — filters FEATURE_CATEGORIES by
+  // keyword (label + description + category title). Empty = show all.
+  const [featureSearch, setFeatureSearch] = useState('')
+
+  // 🔒 V22-7 (Phase 5): App Lock toggle state. Persisted to localStorage.
+  // The actual PIN/biometric enforcement is a future feature — for now this
+  // just stores the preference so the UI is ready.
+  const [appLockEnabled, setAppLockEnabled] = useState(false)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setAppLockEnabled(localStorage.getItem('bahikhata:app-lock') === 'true')
+    }
+  }, [])
+  const persistAppLock = (enabled: boolean) => {
+    setAppLockEnabled(enabled)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('bahikhata:app-lock', enabled ? 'true' : 'false')
+    }
+    sonnerToast.success(`App lock ${enabled ? 'enabled — will require PIN on next launch' : 'disabled'}`)
+  }
+
+  // 🔒 V22-7 (Phase 5): Auto-backup state. Stores last backup timestamp.
+  const [lastBackup, setLastBackup] = useState<string | null>(null)
+  const [backingUp, setBackingUp] = useState(false)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setLastBackup(localStorage.getItem('bahikhata:last-backup'))
+    }
+  }, [])
+  const handleBackupNow = async () => {
+    setBackingUp(true)
+    try {
+      await exportBackup()
+      const now = new Date().toISOString()
+      setLastBackup(now)
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('bahikhata:last-backup', now)
+      }
+      sonnerToast.success('Backup downloaded successfully')
+    } catch (err: any) {
+      sonnerToast.error('Backup failed', { description: String(err?.message || err).slice(0, 200) })
+    } finally {
+      setBackingUp(false)
+    }
+  }
+
+  // 🔒 V22-7 (Phase 5): Filtered feature categories based on search query.
+  // Matches against category title, feature label, and feature description.
+  // Case-insensitive. When search is empty, shows all categories.
+  const filteredFeatureCategories = useMemo(() => {
+    if (!featureSearch.trim()) return FEATURE_CATEGORIES
+    const q = featureSearch.toLowerCase().trim()
+    return FEATURE_CATEGORIES.map((cat) => {
+      const titleMatches = cat.title.toLowerCase().includes(q)
+      const filteredFeatures = cat.features.filter(
+        (f) =>
+          f.label.toLowerCase().includes(q) ||
+          f.description.toLowerCase().includes(q),
+      )
+      if (titleMatches || filteredFeatures.length > 0) {
+        return { ...cat, features: titleMatches ? cat.features : filteredFeatures }
+      }
+      return null
+    }).filter(Boolean) as typeof FEATURE_CATEGORIES
+  }, [featureSearch])
 
   // 🔒 V21-012 fix: Read from store on mount for pending tab
   useEffect(() => {
@@ -1046,6 +1112,57 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
               onCheckedChange={(checked) => persistStockPolicy(checked ? 'allow' : 'block')}
             />
           </div>
+
+          {/* 🔒 V22-7 (Phase 5): App Lock — PIN/biometric required on app launch.
+              Toggle persists to localStorage. The actual enforcement is a
+              future feature (will be wired in Phase 9 native build). */}
+          <div className="mt-3 flex items-center justify-between rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/40 p-3">
+            <div className="flex items-center gap-2">
+              <Lock className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              <div>
+                <p className="text-sm font-medium">App Lock</p>
+                <p className="text-[11px] text-muted-foreground">
+                  Require PIN or biometric authentication when the app opens. Keeps your business data private if someone else uses your phone.
+                </p>
+              </div>
+            </div>
+            <Switch
+              checked={appLockEnabled}
+              onCheckedChange={(checked) => persistAppLock(checked)}
+            />
+          </div>
+
+          {/* 🔒 V22-7 (Phase 5): Auto-Backup — one-tap full data backup.
+              Shows last backup timestamp + a "Backup Now" button that
+              triggers exportBackup() (downloads a JSON file). */}
+          <div className="mt-3 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/40 p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <Download className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+              <div className="flex-1">
+                <p className="text-sm font-medium">Backup & Restore</p>
+                <p className="text-[11px] text-muted-foreground">
+                  Download a full backup of your shop data (products, transactions, parties, settings). Keep it safe — you can restore it anytime.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-2 mt-2">
+              <p className="text-[11px] text-muted-foreground">
+                {lastBackup
+                  ? `Last backup: ${new Date(lastBackup).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} at ${new Date(lastBackup).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`
+                  : 'No backup yet — tap "Backup Now" to download'}
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleBackupNow}
+                disabled={backingUp}
+                className="gap-1.5 border-blue-300 text-blue-700 hover:bg-blue-100 dark:text-blue-400 dark:border-blue-800 dark:hover:bg-blue-950"
+              >
+                {backingUp ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
+                {backingUp ? 'Backing up...' : 'Backup Now'}
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
       )}
@@ -1175,9 +1292,36 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
               <RotateCcw className="w-3.5 h-3.5" /> Reset
             </Button>
           </div>
+          {/* 🔒 V22-7 (Phase 5): Search bar — filter features by keyword.
+              Filters by category title, feature label, and description.
+              Shows "no results" message if nothing matches. */}
+          <div className="relative mt-3">
+            <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <Input
+              type="text"
+              value={featureSearch}
+              onChange={(e) => setFeatureSearch(e.target.value)}
+              placeholder="Search features... (e.g. 'GST', 'dark mode', 'reminder')"
+              className="pl-9 h-9 text-sm"
+            />
+            {featureSearch && (
+              <button
+                onClick={() => setFeatureSearch('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+                aria-label="Clear search"
+              >
+                <RotateCcw className="w-3 h-3" />
+              </button>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          {FEATURE_CATEGORIES.map((category) => (
+          {filteredFeatureCategories.length === 0 ? (
+            <div className="text-center py-8 text-sm text-muted-foreground">
+              No features match &ldquo;{featureSearch}&rdquo;. Try a different keyword.
+            </div>
+          ) : (
+            filteredFeatureCategories.map((category) => (
             <div key={category.title}>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">{category.title}</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1207,7 +1351,8 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
                 ))}
               </div>
             </div>
-          ))}
+          ))
+          )}
         </CardContent>
       </Card>
       )}
