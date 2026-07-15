@@ -5740,3 +5740,82 @@ Stage Summary:
 - 4 items completed: Item-wise Profit, Hindi insights, Notification prefs, Empty states.
 - 1 pre-existing bug logged: BUG-016 (bill-profit truncation issue).
 - NEXT: Batch C — 9 grouped Settings sections (5b), WhatsApp bulk reminders (7f), Business profile card (7h), Inline chart toggle (8f).
+
+---
+Task ID: v22-13-batch-c
+Agent: main
+Task: V22 Batch C — Fill gaps from the original plan. 5 items: Smart Insights language preference (user request), 9 grouped Settings sections, WhatsApp bulk reminders, Business profile card, Inline chart toggle.
+
+Work Log:
+- ITEM 0 — Smart Insights language preference (USER REQUEST):
+  * Removed the dual-language display (English + Hindi side by side)
+  * Smart Insights now follow the app's language preference exactly
+  * If app language is Hindi → insights show in Hindi only
+  * If app language is English → insights show in English only
+  * gu/mr/ta/te fall back to English (future: add translations)
+  * Added insightText() helper that picks the right language
+  * Removed hindiSummary field entirely — title + description are now in the selected language
+  * Action labels also translated (e.g., 'Create Purchase' → 'खरीद दर्ज करें')
+  * Browser-verified: English app → English insights only; Hindi app → Hindi insights only
+
+- ITEM 1 — 9 grouped Settings sections (Phase 5b):
+  * Added 5 visual group dividers to the Appearance tab:
+    - Theme & Language (theme picker + language toggle)
+    - Display & Privacy (dark mode + hide profit)
+    - Business Rules (round-off + stock policy)
+    - Security & Backup (app lock + default landing page + backup)
+    - Notifications (notification preferences)
+  * Pure visual improvement — no logic changes, low risk
+
+- ITEM 2 — WhatsApp Bulk Reminders (Phase 7f):
+  * New BulkRemindersModal component
+  * Shows all parties with outstanding receivable balances + phone numbers
+  * Multi-select with 'Select all' / 'Clear' buttons
+  * 'Step through' sending flow (browsers block multiple popups):
+    1. User selects parties → clicks 'Start Sending'
+    2. Opens first party's WhatsApp link
+    3. After sending, clicks 'Next' to open the next one
+    4. Shows progress + sent checkmarks
+  * Uses existing /api/whatsapp-reminder endpoint
+  * Added 'Bulk Reminders' button to Parties page toolbar
+  * Browser-verified: "WhatsApp Bulk Reminders" modal shows "4 customers with outstanding dues"
+
+- ITEM 3 — Business Profile Card (Phase 7h):
+  * New 'Business Card' menu item in Account → Account section
+  * Digital visiting card with saffron gradient background:
+    - Shop name + owner name (Proprietor)
+    - Phone, email, GSTIN, address
+    - QR code (vCard format, scannable by any phone)
+  * Two share buttons: 'Share Card' (navigator.share) + 'Send on WhatsApp'
+  * Tip card explaining how to use the QR code
+  * Browser-verified: "Proprietor: Test User" + "Scan to save" + "Share Card" + "Send on WhatsApp"
+
+- ITEM 4 — Inline chart toggle on reports (Phase 8f):
+  * Added Table ↔ Chart toggle to GST Slab-wise Summary card
+  * Table view: existing 6-column table (default)
+  * Chart view: grouped bar chart (Output Tax vs Input Tax by slab)
+  * Toggle uses pill-style buttons (Table | Chart)
+  * Chart filters out slabs with 0 data for cleaner visualization
+
+- BUG SCAN:
+  * Fixed: BulkRemindersModal used unnecessary '?includeBalances=true' param (API always returns balances). Simplified to plain '/api/parties'.
+  * Fixed: Business Card used invalid 'from-saffron-500' Tailwind class. Replaced with existing 'bg-gradient-saffron' utility class.
+  * No new bugs found in Smart Insights, Settings dividers, or chart toggle.
+
+- VERIFICATION (all four checks):
+  * npx tsc --noEmit: 0 errors
+  * npx jest: 1588/1588 pass (40 suites)
+  * npx next build: Compiled successfully in 47s
+  * npx eslint: clean (6 files)
+
+- BROWSER TESTING:
+  * Smart Insights: English app → English insights only (no Hindi). Hindi app → Hindi insights only (no English). Exactly as the user requested.
+  * Business Card: "Proprietor: Test User" + "Scan to save" + "Share Card" + "Send on WhatsApp" + tip card
+  * Bulk Reminders: "WhatsApp Bulk Reminders" modal + "4 customers with outstanding dues" + "Select all" button
+  * Screenshots saved: v22-13-batch-c-hindi-insights.png, v22-13-batch-c-business-card.png
+
+Stage Summary:
+- V22-13 Batch C COMPLETE. Pushed to GitHub (commit fbafca3). Vercel deploy verified.
+- 5 items completed: language-aware insights, grouped settings, bulk reminders, business card, chart toggle.
+- 2 bugs found and fixed during scan (invalid Tailwind class, unnecessary API param).
+- NEXT: Batch D — Document vault (Phase 7g), Skeleton loading on ALL views (Phase 8c).
