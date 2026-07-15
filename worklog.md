@@ -5609,3 +5609,76 @@ Stage Summary:
 - V22-10 Phase 8 COMPLETE. Pushed to GitHub (commit cb58ea5). Vercel deploy verified.
 - 5 design system polish items added, all respecting prefers-reduced-motion.
 - NEXT: Phase 9 — Final testing + deployment (comprehensive regression test across all features).
+
+---
+Task ID: v22-11-batch-a
+Agent: main
+Task: V22 Batch A — Fill gaps from the original plan. 4 quick wins: missing More menu items, Plan/Upgrade card, Switch Shop dropdown, Default Landing Page setting.
+
+Work Log:
+- AUDIT: Compared all 8 phases against the original plan. Found 16 items missing across 6 phases. Organized into 4 batches (A, B, C, D) by priority and effort.
+
+- ITEM 1 — Missing More menu items (Phase 2):
+  * Added 8 new items to the MoreScreen SECTIONS array:
+    - Sale & Purchase: Sale Return, Purchase Return, Estimates/Quotations (Soon badge)
+    - GST & Tax: HSN Summary
+    - Money & Banking: Cash in Hand
+    - Items & Stock: Stock Summary, Low Stock Alerts, Item-wise Profit
+  * Updated reportTypeMap in handleItemClick with 3 new report types: hsn, stock, bill-profit
+  * Added "Coming Soon" toast for Estimates/Quotations (future feature)
+  * New icon imports: Undo2, FilePlus2, Coins, AlertTriangle, Hash
+  * More menu now has 27 items across 6 categories (was 19)
+
+- ITEM 2 — Plan/Upgrade card at TOP of profile (Phase 4e):
+  * New gradient card above the profile header (Revolut pattern)
+  * 3 plan variants: Free (dark slate), Pro (amber), Elite (violet)
+  * Free: "Upgrade to Pro" + benefits (AI Scanner, GST Export, WhatsApp, Voice Entry) + "View Plans" badge
+  * Pro: "You're on Pro" + "Pro features active · Upgrade to Elite for more" + "Manage" badge
+  * Elite: "You're on Elite 👑" + "All features unlocked · Priority support" + "Manage" badge
+  * Tapping navigates to pricing page (sets previousView='account')
+  * Hidden for CA users (read-only access)
+
+- ITEM 3 — Switch Shop card (Phase 4f):
+  * New card below Business Stats row, only shows when shops.length > 1
+  * Expandable dropdown showing all shops with active shop highlighted (Check icon)
+  * Uses existing useShops hook (switchShop function)
+  * Outside-click handler closes the dropdown (useEffect + mousedown listener)
+  * BUG FIX during scan: Initially placed inside the profile header <button> → invalid HTML (nested <button>). Moved to a separate card below the business stats row.
+  * Hidden for CA users
+
+- ITEM 4 — Default Landing Page setting (Phase 5g):
+  * New violet card in Settings → Appearance tab (between App Lock and Backup)
+  * Select dropdown with 7 options: Dashboard, Sales, Purchases, Inventory, Parties, Reports, AI Scanner
+  * Persists to localStorage ('bahikhata:default-landing')
+  * Applied in page.tsx: useEffect on status='authenticated' reads localStorage and setView()
+  * Guarded by landingPageAppliedRef (fires only once per session)
+  * Staff permission check: won't navigate to a view the user can't access
+  * Toast confirmation: "Default landing page: X"
+  * New icon import: Home
+
+- VERIFICATION (all four checks):
+  * npx tsc --noEmit: 0 errors
+  * npx jest: 1588/1588 pass (40 suites)
+  * npx next build: Compiled successfully in 38.6s
+  * npx eslint: clean (4 files)
+
+- BROWSER TESTING (agent-browser on https://bahikhata-pro.vercel.app):
+  Mobile view (390x844):
+    ✅ More menu shows all 8 new items: Sale Return, Purchase Return, Estimates/Quotations (Soon badge), HSN Summary, Cash in Hand, Stock Summary, Low Stock Alerts, Item-wise Profit
+    ✅ Tapped Estimates/Quotations → toast "Estimates & Quotations coming soon!"
+  Desktop view (1440x900):
+    ✅ Account page shows Plan/Upgrade card at top: "Upgrade to Pro — AI Scanner · GST Export · WhatsApp · Voice Entry — VIEW PLANS"
+    ✅ Settings → Appearance shows "Default Landing Page" card between App Lock and Backup & Restore
+  Screenshots saved:
+    - /home/z/my-project/download/v22-11-batch-a-plan-card.png
+    - /home/z/my-project/download/v22-11-batch-a-default-landing.png
+  Note: Switch Shop card not visible in testing because test account has only 1 shop. Will show for multi-shop users.
+
+- POST-CHANGE SCAN:
+  * Found and fixed 1 bug: nested <button> HTML validation issue (Switch Shop dropdown inside profile button). Moved to separate card.
+  * No other bugs found.
+
+Stage Summary:
+- V22-11 Batch A COMPLETE. Pushed to GitHub (commit e813981). Vercel deploy verified.
+- 4 items completed: More menu items, Plan card, Switch Shop, Default Landing Page.
+- NEXT: Batch B — Item-wise Profit report (7e), Smart insights Hindi text (6c), Notification preferences (5d), Illustrated empty states (8b).
