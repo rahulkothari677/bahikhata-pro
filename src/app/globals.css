@@ -317,6 +317,99 @@
   animation: pulse-ring 2s infinite;
 }
 
+/* ============================================================
+   🔒 V22-10 (Phase 8): Design System Polish
+   High-impact, low-risk visual refinements that improve the overall
+   feel without changing layout or component structure.
+   ============================================================ */
+
+/* Smooth scrolling — makes anchor links + programmatic scrolls feel premium.
+   Respects prefers-reduced-motion (browser handles the override). */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Themed text selection — uses primary color tint instead of browser default.
+   Makes copy-paste interactions feel on-brand. */
+::selection {
+  background: oklch(0.55 0.19 42 / 0.15);
+  color: oklch(0.18 0.02 30);
+}
+.dark ::selection {
+  background: oklch(0.55 0.19 42 / 0.3);
+  color: oklch(0.96 0 0);
+}
+
+/* Premium card hover — reusable utility for interactive cards.
+   Adds a subtle lift + shadow increase on hover, with smooth transition.
+   Use on: report cards, menu items, stat cards, quick action buttons. */
+.card-hover {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 2px 4px oklch(0.18 0.02 30 / 0.06),
+    0 8px 16px -4px oklch(0.18 0.02 30 / 0.08),
+    0 20px 32px -12px oklch(0.18 0.02 30 / 0.06);
+}
+.dark .card-hover:hover {
+  box-shadow:
+    0 2px 4px oklch(0 0 0 / 0.3),
+    0 8px 16px -4px oklch(0 0 0 / 0.35),
+    0 20px 32px -12px oklch(0 0 0 / 0.4);
+}
+.card-hover:active {
+  transform: translateY(0);
+}
+
+/* Entrance animation — fade-in + slide-up for content areas.
+   Apply to cards/sections that load after data fetch.
+   Respects prefers-reduced-motion (see bottom of file). */
+@keyframes fade-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fade-slide-up {
+  animation: fade-slide-up 0.35s ease-out;
+}
+
+/* Staggered entrance — for lists/grids where items should appear in sequence.
+   Apply .animate-stagger to each item, with --stagger-index set inline. */
+@keyframes stagger-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.animate-stagger {
+  animation: stagger-in 0.4s ease-out backwards;
+  animation-delay: calc(var(--stagger-index, 0) * 0.05s);
+}
+
+/* Global focus-visible ring — ensures keyboard navigation is visible.
+   Applies a themed ring to any focusable element that doesn't
+   already have a custom focus style. */
+*:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: calc(var(--radius) - 4px);
+}
+/* Remove default outline when focus-visible ring is applied */
+*:focus:not(:focus-visible) {
+  outline: none;
+}
+
 /* Scanline animation for bill scanner loading state */
 @keyframes scanline {
   0% { top: 0%; opacity: 0; }
@@ -714,6 +807,21 @@
   }
   .animate-splash-progress {
     width: 100% !important;
+  }
+  /* 🔒 V22-10 (Phase 8): Disable new entrance animations for reduced motion */
+  .animate-fade-slide-up,
+  .animate-stagger {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  /* 🔒 V22-10 (Phase 8): Disable smooth scroll for reduced motion */
+  html {
+    scroll-behavior: auto !important;
+  }
+  /* 🔒 V22-10 (Phase 8): Disable card hover lift for reduced motion */
+  .card-hover:hover {
+    transform: none !important;
   }
 }
 

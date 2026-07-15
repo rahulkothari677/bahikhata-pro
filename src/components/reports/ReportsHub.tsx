@@ -216,7 +216,7 @@ export function ReportsHub() {
   return (
     <div className="space-y-5">
       {/* Page header */}
-      <div>
+      <div className="animate-fade-slide-up">
         <h2 className="text-xl font-bold">Reports</h2>
         <p className="text-sm text-muted-foreground mt-0.5">
           Pick a report — each opens as its own page with filters &amp; export.
@@ -224,10 +224,10 @@ export function ReportsHub() {
       </div>
 
       {/* Categorized sections */}
-      {CATEGORIES.map((category) => {
+      {CATEGORIES.map((category, catIdx) => {
         const TitleIcon = category.titleIcon
         return (
-          <div key={category.title}>
+          <div key={category.title} className="animate-fade-slide-up" style={{ '--stagger-index': catIdx } as any}>
             <div className="flex items-center gap-2 px-1 mb-2">
               <TitleIcon className={cn('w-3.5 h-3.5', category.accentColor)} />
               <p className={cn(
@@ -238,13 +238,14 @@ export function ReportsHub() {
               </p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
-              {category.reports.map((report) => {
+              {category.reports.map((report, repIdx) => {
                 const Icon = report.icon
                 return (
                   <button
                     key={report.type}
                     onClick={() => handleOpenReport(report.type)}
-                    className="group flex items-start gap-3 p-3 bg-card rounded-2xl border border-border/60 shadow-sm hover:shadow-md hover:border-primary/30 transition text-left active:bg-muted/50"
+                    className="card-hover group flex items-start gap-3 p-3 bg-card rounded-2xl border border-border/60 shadow-sm hover:border-primary/30 text-left active:bg-muted/50"
+                    style={{ '--stagger-index': repIdx } as any}
                   >
                     <div className={cn(
                       'w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 transition group-hover:scale-105',

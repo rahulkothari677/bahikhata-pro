@@ -508,7 +508,7 @@ export function AccountScreen() {
             return (
               <div
                 key={stat.label}
-                className="bg-card rounded-xl border border-border/60 shadow-sm p-2.5 flex flex-col items-center text-center"
+                className="card-hover bg-card rounded-xl border border-border/60 shadow-sm p-2.5 flex flex-col items-center text-center"
               >
                 <div className={cn(
                   'w-7 h-7 rounded-lg flex items-center justify-center mb-1.5',
