@@ -25,7 +25,7 @@ import { THEME_OPTIONS } from '@/components/providers/ThemeProvider'
 import {
   Store, Save, Database, Trash2, AlertTriangle, Moon, Keyboard,
   Search, MessageCircle, Sparkles, Bell, Repeat, FileSpreadsheet,
-  Users, Package, ScanLine, TrendingUp, Smartphone, RotateCcw, Palette, Check, Globe, Shield, EyeOff, Plus, Mic, Lock, Loader2, BarChart3,
+  Users, Package, ScanLine, TrendingUp, Smartphone, RotateCcw, Palette, Check, Globe, Shield, EyeOff, Plus, Mic, Lock, Loader2, BarChart3, Home,
 } from 'lucide-react'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { useSetting } from '@/hooks/use-setting'
@@ -372,6 +372,32 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
       localStorage.setItem('bahikhata:app-lock', enabled ? 'true' : 'false')
     }
     sonnerToast.success(`App lock ${enabled ? 'enabled — will require PIN on next launch' : 'disabled'}`)
+  }
+
+  // 🔒 V22-11 (Batch A, Phase 5g): Default Landing Page setting.
+  // Lets users choose which view opens on launch. Persisted to localStorage.
+  // Applied in page.tsx on first authentication.
+  const [defaultLanding, setDefaultLanding] = useState('dashboard')
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setDefaultLanding(localStorage.getItem('bahikhata:default-landing') || 'dashboard')
+    }
+  }, [])
+  const persistDefaultLanding = (view: string) => {
+    setDefaultLanding(view)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('bahikhata:default-landing', view)
+    }
+    const labels: Record<string, string> = {
+      dashboard: 'Dashboard',
+      sales: 'Sales Ledger',
+      purchases: 'Purchase Ledger',
+      inventory: 'Inventory',
+      parties: 'Parties',
+      reports: 'Reports',
+      scanner: 'AI Bill Scanner',
+    }
+    sonnerToast.success(`Default landing page: ${labels[view] || view}`)
   }
 
   // 🔒 V22-7 (Phase 5): Auto-backup state. Stores last backup timestamp.
@@ -1130,6 +1156,33 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
               checked={appLockEnabled}
               onCheckedChange={(checked) => persistAppLock(checked)}
             />
+          </div>
+
+          {/* 🔒 V22-11 (Batch A, Phase 5g): Default Landing Page setting.
+              Lets users choose which view opens on app launch.
+              Persisted to localStorage, applied in page.tsx. */}
+          <div className="mt-3 flex items-center justify-between rounded-lg bg-violet-50 dark:bg-violet-950/20 border border-violet-200 dark:border-violet-900/40 p-3">
+            <div className="flex items-center gap-2">
+              <Home className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+              <div>
+                <p className="text-sm font-medium">Default Landing Page</p>
+                <p className="text-[11px] text-muted-foreground">
+                  Choose which screen opens when you launch the app.
+                </p>
+              </div>
+            </div>
+            <Select value={defaultLanding} onValueChange={(v) => persistDefaultLanding(v)}>
+              <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="dashboard">Dashboard</SelectItem>
+                <SelectItem value="sales">Sales Ledger</SelectItem>
+                <SelectItem value="purchases">Purchase Ledger</SelectItem>
+                <SelectItem value="inventory">Inventory</SelectItem>
+                <SelectItem value="parties">Parties</SelectItem>
+                <SelectItem value="reports">Reports</SelectItem>
+                <SelectItem value="scanner">AI Scanner</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {/* 🔒 V22-7 (Phase 5): Auto-Backup — one-tap full data backup.

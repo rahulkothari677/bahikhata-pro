@@ -35,12 +35,13 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { useSession } from 'next-auth/react'
-import { lazy, Suspense, useMemo } from 'react'
+import { lazy, Suspense, useMemo, useState, useRef, useEffect } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { useAppStore } from '@/store/app-store'
 import { useSubscription } from '@/hooks/use-subscription'
 import { useStaffPermissions } from '@/hooks/use-staff-permissions'
 import { useDashboardThisMonth } from '@/hooks/use-dashboard'
+import { useShops } from '@/hooks/use-shops'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { haptic } from '@/lib/haptic'
 import { formatINRCompact } from '@/lib/utils'
@@ -50,7 +51,7 @@ import {
   ArrowLeft, Pencil, Calculator, Crown, Phone, Mail, Store,
   ChevronRight, User, CreditCard, Shield, Settings as SettingsIcon,
   Database, Users, Gift, HelpCircle, Info, Star, LogOut,
-  BookOpenText, FileSpreadsheet, Check,
+  BookOpenText, FileSpreadsheet, Check, Sparkles,
   Package, TrendingUp, Wallet, AlertCircle,
   type LucideIcon,
 } from 'lucide-react'
@@ -87,6 +88,22 @@ export function AccountScreen() {
   const { data: session } = useSession()
   const { plan } = useSubscription()
   const { isCA, isOwner } = useStaffPermissions()
+  // 🔒 V22-11 (Batch A, Phase 4f): Shop switcher — for multi-shop users.
+  const { shops, activeShop, switchShop } = useShops()
+  const [shopDropdownOpen, setShopDropdownOpen] = useState(false)
+  const shopDropdownRef = useRef<HTMLDivElement>(null)
+
+  // Close shop dropdown on outside click
+  useEffect(() => {
+    if (!shopDropdownOpen) return
+    const handleClickOutside = (e: MouseEvent) => {
+      if (shopDropdownRef.current && !shopDropdownRef.current.contains(e.target as Node)) {
+        setShopDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [shopDropdownOpen])
 
   // Fetch settings for profile data
   const { data: settingData } = useQuery({
@@ -407,6 +424,71 @@ export function AccountScreen() {
       <div className="max-w-2xl mx-auto px-4 py-4 space-y-4 pb-24"
            style={{ paddingBottom: 'calc(6rem + env(safe-area-inset-bottom))' }}>
 
+        {/* 🔒 V22-11 (Batch A, Phase 4e): Plan / Upgrade Card — Revolut pattern.
+            Shows current plan at the TOP of the profile (before the header).
+            - Free users: gradient card with "Upgrade to Pro" CTA + benefits
+            - Pro users: amber card with "You're on Pro" + renewal info
+            - Elite users: violet card with "You're on Elite" + premium badge
+            Tapping navigates to the pricing page. */}
+        {!isCA && (
+          <button
+            onClick={() => {
+              haptic.click()
+              setPreviousView('account')
+              useAppStore.getState().setAccountOriginView('account')
+              setView('pricing')
+            }}
+            className={cn(
+              'w-full rounded-2xl shadow-card relative overflow-hidden text-white transition active:scale-[0.98] text-left',
+              plan === 'elite'
+                ? 'bg-gradient-to-br from-violet-500 to-purple-700'
+                : plan === 'pro'
+                  ? 'bg-gradient-to-br from-amber-400 to-orange-600'
+                  : 'bg-gradient-to-br from-slate-700 to-slate-900',
+            )}
+          >
+            <div className="p-4 relative">
+              {/* Decorative circle */}
+              <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -mr-12 -mt-12 pointer-events-none" />
+              <div className="relative flex items-center gap-3">
+                <div className="w-11 h-11 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
+                  {plan === 'free' ? (
+                    <Sparkles className="w-5 h-5 text-white" />
+                  ) : (
+                    <Crown className="w-5 h-5 text-white" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  {plan === 'free' ? (
+                    <>
+                      <p className="font-bold text-sm">Upgrade to Pro</p>
+                      <p className="text-[11px] text-white/80 mt-0.5">
+                        AI Scanner · GST Export · WhatsApp · Voice Entry
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="font-bold text-sm">
+                        You're on {plan === 'elite' ? 'Elite' : 'Pro'} {plan === 'elite' && '👑'}
+                      </p>
+                      <p className="text-[11px] text-white/80 mt-0.5">
+                        {plan === 'elite'
+                          ? 'All features unlocked · Priority support'
+                          : 'Pro features active · Upgrade to Elite for more'}
+                      </p>
+                    </>
+                  )}
+                </div>
+                <div className="flex-shrink-0">
+                  <span className="text-[10px] font-bold uppercase tracking-wide bg-white/20 px-2 py-1 rounded-full">
+                    {plan === 'free' ? 'View Plans' : 'Manage'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </button>
+        )}
+
         {/* ═══ Profile Header — premium gradient banner ═══ */}
         <button
           onClick={isCA ? undefined : handleEditProfile}
@@ -467,8 +549,8 @@ export function AccountScreen() {
                   )}
                 </div>
                 <p className="text-sm text-white/85 truncate flex items-center gap-1.5 mt-0.5">
-                  <Store className="w-3.5 h-3.5" />
-                  {shopName}
+                  <Store className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span className="truncate">{activeShop?.name || shopName}</span>
                 </p>
                 {phone && (
                   <p className="text-xs text-white/75 truncate flex items-center gap-1.5 mt-0.5">
@@ -522,6 +604,57 @@ export function AccountScreen() {
             )
           })}
         </div>
+
+        {/* 🔒 V22-11 (Batch A, Phase 4f): Switch Shop card — for multi-shop users.
+            Only shows when user has 2+ shops. Single-shop users don't see this.
+            Separate card (NOT inside the profile button) to avoid nested-button
+            HTML validation issues. */}
+        {shops.length > 1 && !isCA && (
+          <div ref={shopDropdownRef} className="bg-card rounded-2xl border border-border/60 shadow-sm overflow-hidden">
+            <button
+              onClick={() => {
+                haptic.click()
+                setShopDropdownOpen(!shopDropdownOpen)
+              }}
+              className="w-full flex items-center gap-3 p-3 hover:bg-muted/50 transition"
+            >
+              <div className="w-9 h-9 rounded-lg bg-amber-100 dark:bg-amber-950 flex items-center justify-center flex-shrink-0">
+                <Store className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div className="flex-1 min-w-0 text-left">
+                <p className="text-xs text-muted-foreground">Active Shop</p>
+                <p className="text-sm font-medium truncate">{activeShop?.name || shopName}</p>
+              </div>
+              <ChevronRight className={cn(
+                'w-4 h-4 text-muted-foreground transition-transform',
+                shopDropdownOpen && 'rotate-90',
+              )} />
+            </button>
+            {shopDropdownOpen && (
+              <div className="border-t border-border/40 max-h-60 overflow-y-auto">
+                {shops.map(shop => (
+                  <button
+                    key={shop.id}
+                    onClick={() => {
+                      switchShop(shop.id)
+                      setShopDropdownOpen(false)
+                    }}
+                    className={cn(
+                      'w-full text-left px-3 py-2.5 hover:bg-muted/50 transition flex items-center gap-2',
+                      activeShop?.id === shop.id && 'bg-primary/5',
+                    )}
+                  >
+                    <Store className="w-3.5 h-3.5 flex-shrink-0 text-muted-foreground" />
+                    <span className="flex-1 text-sm truncate">{shop.name}</span>
+                    {activeShop?.id === shop.id && (
+                      <Check className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* 🔒 V22-6 (Phase 4): Profile Completion Progress Bar.
             LinkedIn-style: shows % complete + missing field hint.

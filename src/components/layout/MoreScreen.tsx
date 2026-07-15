@@ -37,6 +37,7 @@ import {
   FileText, FileCheck, Lock, ShieldCheck, Banknote,
   Store, Mic, ScanBarcode, Bot, Repeat, Send,
   ShoppingCart, TrendingUp,
+  Undo2, FilePlus2, Coins, AlertTriangle, Hash,
 } from 'lucide-react'
 import type { ViewType } from '@/store/app-store'
 import type { LucideIcon } from 'lucide-react'
@@ -62,6 +63,10 @@ interface MenuSection {
 // than Vyapar's 5 groups. Each category has a distinct color.
 // Sale & Purchase = indigo, GST & Tax = blue, Money & Banking = emerald,
 // Items & Stock = amber, Reports & Analytics = rose, Smart Tools = violet
+//
+// 🔒 V22-11 (Batch A): Added missing items to match the original plan:
+// Sale Return, Purchase Return, Estimates, Cash in Hand, Stock Summary,
+// Low Stock Alerts, Item-wise Profit, HSN Summary.
 const SECTIONS: MenuSection[] = [
   {
     title: 'Sale & Purchase',
@@ -69,6 +74,9 @@ const SECTIONS: MenuSection[] = [
     items: [
       { icon: ShoppingCart, label: 'New Sale', description: 'Record a sale invoice', view: 'new-sale', iconColor: 'text-indigo-600 dark:text-indigo-400', iconBg: 'bg-indigo-100 dark:bg-indigo-950' },
       { icon: Truck, label: 'New Purchase', description: 'Record a purchase bill', view: 'new-purchase', iconColor: 'text-indigo-600 dark:text-indigo-400', iconBg: 'bg-indigo-100 dark:bg-indigo-950' },
+      { icon: Undo2, label: 'Sale Return', description: 'Credit notes — return from customer', view: 'sales', iconColor: 'text-indigo-600 dark:text-indigo-400', iconBg: 'bg-indigo-100 dark:bg-indigo-950' },
+      { icon: Undo2, label: 'Purchase Return', description: 'Debit notes — return to supplier', view: 'purchases', iconColor: 'text-indigo-600 dark:text-indigo-400', iconBg: 'bg-indigo-100 dark:bg-indigo-950' },
+      { icon: FilePlus2, label: 'Estimates / Quotations', description: 'Create quotes for customers', view: 'new-sale', iconColor: 'text-indigo-600 dark:text-indigo-400', iconBg: 'bg-indigo-100 dark:bg-indigo-950', badge: 'Soon', badgeColor: 'bg-indigo-200 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300' },
       { icon: Wallet, label: 'Income & Expense', description: 'Rent, salary, other income', view: 'income-expense', iconColor: 'text-indigo-600 dark:text-indigo-400', iconBg: 'bg-indigo-100 dark:bg-indigo-950' },
     ],
   },
@@ -80,6 +88,7 @@ const SECTIONS: MenuSection[] = [
       { icon: FileCheck, label: 'GSTR-3B', description: 'Monthly summary return', view: 'reports', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
       { icon: FileCheck, label: 'GSTR-2B', description: 'ITC reconciliation with 2B', view: 'reports', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
       { icon: FileText, label: 'GST Summary', description: 'Tax liability by slab (5/12/18/28%)', view: 'reports', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
+      { icon: Hash, label: 'HSN Summary', description: 'HSN/SAC-wise tax summary for GSTR-1', view: 'reports', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
       { icon: ShieldCheck, label: 'Reconciliation', description: 'Health check — do books tie out?', view: 'reports', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
       { icon: Lock, label: 'Period Lock', description: 'Lock filed GST periods', view: 'reports', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
     ],
@@ -89,6 +98,7 @@ const SECTIONS: MenuSection[] = [
     titleIcon: Banknote,
     items: [
       { icon: Banknote, label: 'Bank Reconciliation', description: 'Match bank transactions', view: 'reports', iconColor: 'text-emerald-600 dark:text-emerald-400', iconBg: 'bg-emerald-100 dark:bg-emerald-950' },
+      { icon: Coins, label: 'Cash in Hand', description: 'Today\'s cash position & collections', view: 'dashboard', iconColor: 'text-emerald-600 dark:text-emerald-400', iconBg: 'bg-emerald-100 dark:bg-emerald-950' },
       { icon: Repeat, label: 'Day-End Summary', description: 'Close the drawer — daily cash', view: 'dashboard', iconColor: 'text-emerald-600 dark:text-emerald-400', iconBg: 'bg-emerald-100 dark:bg-emerald-950' },
       { icon: Send, label: 'WhatsApp Reminders', description: 'Send payment reminders', view: 'parties', iconColor: 'text-emerald-600 dark:text-emerald-400', iconBg: 'bg-emerald-100 dark:bg-emerald-950' },
     ],
@@ -98,6 +108,9 @@ const SECTIONS: MenuSection[] = [
     titleIcon: Package,
     items: [
       { icon: Package, label: 'Inventory', description: 'Products, stock, prices', view: 'inventory', iconColor: 'text-amber-600 dark:text-amber-400', iconBg: 'bg-amber-100 dark:bg-amber-950' },
+      { icon: BarChart3, label: 'Stock Summary', description: 'Stock valuation & sale value report', view: 'reports', iconColor: 'text-amber-600 dark:text-amber-400', iconBg: 'bg-amber-100 dark:bg-amber-950' },
+      { icon: AlertTriangle, label: 'Low Stock Alerts', description: 'Products running low — reorder now', view: 'inventory', iconColor: 'text-amber-600 dark:text-amber-400', iconBg: 'bg-amber-100 dark:bg-amber-950' },
+      { icon: TrendingUp, label: 'Item-wise Profit', description: 'Per-invoice profit breakdown & margins', view: 'reports', iconColor: 'text-amber-600 dark:text-amber-400', iconBg: 'bg-amber-100 dark:bg-amber-950' },
       { icon: Users, label: 'Customers & Suppliers', description: 'Track dues & party balances', view: 'parties', iconColor: 'text-amber-600 dark:text-amber-400', iconBg: 'bg-amber-100 dark:bg-amber-950' },
       { icon: Store, label: 'Multi-Shop Management', description: 'Switch or add shops', view: 'settings', iconColor: 'text-amber-600 dark:text-amber-400', iconBg: 'bg-amber-100 dark:bg-amber-950' },
       { icon: UserCog, label: 'Staff & Access', description: 'Manage staff, CA access', view: 'settings', iconColor: 'text-amber-600 dark:text-amber-400', iconBg: 'bg-amber-100 dark:bg-amber-950' },
@@ -151,17 +164,31 @@ export function MoreScreen() {
 
     // 🔒 V22-3 (Phase 1): Map item labels to report types so each opens
     // DIRECTLY to its own report — no hub page, no tabs.
+    // 🔒 V22-11 (Batch A): Added HSN Summary, Stock Summary, Item-wise Profit.
     const reportTypeMap: Record<string, string> = {
       'GSTR-1': 'gstr-1',
       'GSTR-3B': 'gstr-3b',
       'GSTR-2B': 'gstr-2b',
       'GST Summary': 'gst',
+      'HSN Summary': 'hsn',
       'Bank Reconciliation': 'bank-recon',
       'P&L Statement': 'pl',
+      'Stock Summary': 'stock',
+      'Item-wise Profit': 'bill-profit',
     }
     if (label && reportTypeMap[label]) {
       useAppStore.getState().setPendingReportType(reportTypeMap[label])
       setView('reports')
+      return
+    }
+
+    // 🔒 V22-11 (Batch A): Estimates / Quotations is a future feature.
+    // Show a "Coming Soon" toast instead of navigating.
+    if (label === 'Estimates / Quotations') {
+      sonnerToast.info('Estimates & Quotations coming soon!', {
+        description: 'We\'re building this feature — create professional quotes for your customers.',
+        duration: 4000,
+      })
       return
     }
 

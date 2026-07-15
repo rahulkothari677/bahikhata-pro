@@ -272,6 +272,39 @@ export default function Home() {
     }
   }, [currentView, status])
 
+  // 🔒 V22-11 (Batch A, Phase 5g): Default Landing Page setting.
+  // On first authentication, read the user's preferred landing page from
+  // localStorage and navigate there. Only fires once per session (guarded
+  // by a ref) so it doesn't override user navigation during the session.
+  const landingPageAppliedRef = useRef(false)
+  useEffect(() => {
+    if (status === 'authenticated' && !landingPageAppliedRef.current) {
+      landingPageAppliedRef.current = true
+      const savedLanding = typeof window !== 'undefined'
+        ? localStorage.getItem('bahikhata:default-landing')
+        : null
+      if (savedLanding) {
+        const validViews = ['dashboard', 'sales', 'purchases', 'inventory', 'parties', 'reports', 'scanner']
+        if (validViews.includes(savedLanding)) {
+          // Only apply if the user can access this view (staff permission check)
+          const moduleMap: Record<string, string> = {
+            'dashboard': 'dashboard',
+            'sales': 'sales',
+            'purchases': 'purchases',
+            'inventory': 'inventory',
+            'parties': 'parties',
+            'reports': 'reports',
+            'scanner': 'scanner',
+          }
+          const moduleKey = moduleMap[savedLanding]
+          if (!moduleKey || canAccess(moduleKey as any)) {
+            setView(savedLanding as any)
+          }
+        }
+      }
+    }
+  }, [status, canAccess, setView])
+
   // Skip the seed check entirely when offline (we can't reach the server, and
   // 🔒 V8 P3: Removed /api/seed from the initial load path. Was: 3 COUNT
   // queries on every app open, on the critical path. Now: the dashboard API
