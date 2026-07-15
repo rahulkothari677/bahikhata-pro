@@ -4,31 +4,46 @@
  * AccountScreen — full-screen profile/account page.
  *
  * 🔒 V21-010 (Phase 2b): Profile header added.
+ * 🔒 V22-6 (Phase 4): Advanced upgrades —
+ *   - CRED-style plan ring around avatar (gradient per plan)
+ *   - Business Stats row (Products, Customers, This Month, Receivable)
+ *   - LinkedIn-style profile completion progress bar
+ *   - Shop QR Code on profile page (vCard format, scannable by any phone)
  *
  * Design inspiration:
  * - CRED: Member-since ring around avatar, premium dark gradient
  * - PhonePe: Clean layout, name + phone + manage link
  * - Flipkart: Plan/membership badge (Free/Pro/Elite)
+ * - LinkedIn: Profile completion progress bar
+ * - Vyapar: Shop QR code for contact sharing
  *
  * The header is a gradient banner with:
- * - Large avatar (with initials, ring for premium plans)
+ * - Large avatar wrapped in plan-colored gradient ring
  * - User name + shop name
  * - Phone number (if set)
  * - Plan badge (Free/Pro/Elite)
  * - Edit profile button
  * - Decorative circles for depth
  *
- * Subsequent phases will add the 10 menu sections below this header.
+ * Below the header:
+ * - Business Stats row (4 quick stats from dashboard data)
+ * - Profile Completion progress bar (if < 100%)
+ * - 10 menu sections
+ * - Logout button
+ * - Version footer
  */
 
 import { useQuery } from '@tanstack/react-query'
 import { useSession } from 'next-auth/react'
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useMemo } from 'react'
+import { QRCodeSVG } from 'qrcode.react'
 import { useAppStore } from '@/store/app-store'
 import { useSubscription } from '@/hooks/use-subscription'
 import { useStaffPermissions } from '@/hooks/use-staff-permissions'
+import { useDashboardThisMonth } from '@/hooks/use-dashboard'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { haptic } from '@/lib/haptic'
+import { formatINRCompact } from '@/lib/utils'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { getInitials, cn } from '@/lib/utils'
 import {
@@ -36,9 +51,19 @@ import {
   ChevronRight, User, CreditCard, Shield, Settings as SettingsIcon,
   Database, Users, Gift, HelpCircle, Info, Star, LogOut,
   BookOpenText, FileSpreadsheet,
+  Package, TrendingUp, Wallet, AlertCircle,
   type LucideIcon,
 } from 'lucide-react'
 import type { ViewType } from '@/store/app-store'
+
+// 🔒 V22-6 (Phase 4) FIX: Move lazy() to module scope.
+// Was: `const SettingsComponent = lazy(...)` inside AccountSectionContent.
+// That created a NEW lazy component on every render, causing Settings to
+// re-mount and lose all its form state on any parent re-render.
+// Now: declared once at module scope, stable across renders.
+const SettingsComponent = lazy(() =>
+  import('@/components/settings/Settings').then(m => ({ default: m.Settings }))
+)
 
 interface AccountMenuItem {
   icon: LucideIcon
@@ -72,11 +97,68 @@ export function AccountScreen() {
     },
   })
 
+  // 🔒 V22-6 (Phase 4): Fetch dashboard data for business stats row.
+  // Reuses the shared useDashboardThisMonth hook so the data is cached
+  // and shared with the Dashboard view (no extra API call).
+  const { data: dashboardData } = useDashboardThisMonth()
+
   const setting = settingData?.setting || {}
   const userName = setting.ownerName || session?.user?.name || 'Shop Owner'
   const shopName = setting.shopName || 'My Shop'
   const email = session?.user?.email || ''
   const phone = setting.phone
+
+  // 🔒 V22-6 (Phase 4): Profile completion calculation.
+  // 6 fields checked: ownerName, shopName, phone, gstin, address, email.
+  // Each filled = 1/6 = ~16.67%. Returns { pct, missing: string[] }.
+  const profileCompletion = useMemo(() => {
+    const fields = [
+      { label: 'Owner Name', filled: !!(setting.ownerName && setting.ownerName.trim()) },
+      { label: 'Shop Name', filled: !!(setting.shopName && setting.shopName.trim()) },
+      { label: 'Phone', filled: !!(setting.phone && setting.phone.trim()) },
+      { label: 'GSTIN', filled: !!(setting.gstin && setting.gstin.trim()) },
+      { label: 'Address', filled: !!(setting.address && setting.address.trim()) },
+      { label: 'Email', filled: !!email },
+    ]
+    const filledCount = fields.filter(f => f.filled).length
+    const pct = Math.round((filledCount / fields.length) * 100)
+    const missing = fields.filter(f => !f.filled).map(f => f.label)
+    return { pct, filledCount, total: fields.length, missing }
+  }, [setting.ownerName, setting.shopName, setting.phone, setting.gstin, setting.address, email])
+
+  // 🔒 V22-6 (Phase 4): Business stats from dashboard data.
+  // Defensive defaults — if dashboard hasn't loaded yet, show 0/—.
+  const kpis = dashboardData?.kpis
+  const businessStats = useMemo(() => [
+    {
+      label: 'Products',
+      value: kpis?.productCount != null ? String(kpis.productCount) : '—',
+      icon: Package,
+      color: 'text-amber-600 dark:text-amber-400',
+      bg: 'bg-amber-100 dark:bg-amber-950',
+    },
+    {
+      label: 'Customers',
+      value: kpis?.partyCount != null ? String(kpis.partyCount) : '—',
+      icon: Users,
+      color: 'text-blue-600 dark:text-blue-400',
+      bg: 'bg-blue-100 dark:bg-blue-950',
+    },
+    {
+      label: 'This Month',
+      value: kpis?.rangeRevenue != null ? formatINRCompact(kpis.rangeRevenue) : '—',
+      icon: TrendingUp,
+      color: 'text-emerald-600 dark:text-emerald-400',
+      bg: 'bg-emerald-100 dark:bg-emerald-950',
+    },
+    {
+      label: 'Receivable',
+      value: kpis?.totalReceivable != null ? formatINRCompact(kpis.totalReceivable) : '—',
+      icon: Wallet,
+      color: 'text-rose-600 dark:text-rose-400',
+      bg: 'bg-rose-100 dark:bg-rose-950',
+    },
+  ], [kpis?.productCount, kpis?.partyCount, kpis?.rangeRevenue, kpis?.totalReceivable])
 
   const handleBack = () => {
     haptic.click()
@@ -134,11 +216,28 @@ export function AccountScreen() {
     setAccountSection('profile')
   }
 
-  // Plan badge styling
+  // 🔒 V22-6 (Phase 4): Plan styling — badge + ring gradient per plan.
+  // free = white/saffron ring, pro = amber ring, elite = violet ring.
+  // Inspired by CRED's member-since ring around the avatar.
   const planBadges = {
-    free: { label: 'Free', className: 'bg-white/20 text-white', icon: null as null | typeof Crown },
-    pro: { label: 'Pro', className: 'bg-amber-400 text-amber-900', icon: Crown },
-    elite: { label: 'Elite', className: 'bg-violet-400 text-violet-900', icon: Crown },
+    free: {
+      label: 'Free',
+      badgeClassName: 'bg-white/20 text-white',
+      ringGradient: 'from-slate-300 to-slate-500',
+      icon: null as null | typeof Crown,
+    },
+    pro: {
+      label: 'Pro',
+      badgeClassName: 'bg-amber-400 text-amber-900',
+      ringGradient: 'from-amber-300 via-amber-500 to-orange-500',
+      icon: Crown,
+    },
+    elite: {
+      label: 'Elite',
+      badgeClassName: 'bg-violet-400 text-violet-900',
+      ringGradient: 'from-violet-300 via-violet-500 to-purple-600',
+      icon: Crown,
+    },
   }
   const planBadge = planBadges[plan] || planBadges.free
   const PlanIcon = planBadge.icon
@@ -317,20 +416,28 @@ export function AccountScreen() {
             <div className="absolute top-1/2 left-0 w-20 h-20 bg-white/5 rounded-full -ml-10 pointer-events-none" />
 
             <div className="relative flex items-center gap-4">
-              {/* Avatar with ring for premium plans */}
+              {/* 🔒 V22-6 (Phase 4): Avatar with CRED-style plan ring.
+                  - Free: subtle white ring (default)
+                  - Pro: amber-to-orange gradient ring (premium feel)
+                  - Elite: violet-to-purple gradient ring (top-tier feel)
+                  The ring is a conic-gradient via Tailwind's bg-gradient-to-br
+                  applied to a wrapper div, with the avatar inside. */}
               <div className="relative flex-shrink-0">
-                <Avatar className={cn(
-                  "w-20 h-20 border-4 border-white/30",
-                  plan !== 'free' && "ring-2 ring-white/50 ring-offset-2 ring-offset-transparent"
-                )}>
-                  <AvatarFallback className="bg-white/20 backdrop-blur-sm text-white text-2xl font-bold">
-                    {getInitials(userName)}
-                  </AvatarFallback>
-                </Avatar>
-                {/* Plan badge on avatar */}
+                {/* Plan ring — gradient wrapper around the avatar */}
                 <div className={cn(
-                  "absolute -bottom-1 -right-1 px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 shadow-lg",
-                  planBadge.className
+                  "p-[3px] rounded-full bg-gradient-to-br shadow-lg",
+                  planBadge.ringGradient,
+                )}>
+                  <Avatar className="w-20 h-20 border-2 border-white/40">
+                    <AvatarFallback className="bg-white/20 backdrop-blur-sm text-white text-2xl font-bold">
+                      {getInitials(userName)}
+                    </AvatarFallback>
+                  </Avatar>
+                </div>
+                {/* Plan badge on avatar (bottom-right) */}
+                <div className={cn(
+                  "absolute -bottom-1 -right-1 px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 shadow-lg ring-2 ring-white/80",
+                  planBadge.badgeClassName
                 )}>
                   {PlanIcon && <PlanIcon className="w-2.5 h-2.5" />}
                   {planBadge.label}
@@ -381,6 +488,83 @@ export function AccountScreen() {
             </div>
           </div>
         </button>
+
+        {/* 🔒 V22-6 (Phase 4): Business Stats Row — 4 quick stats in a grid.
+            Uses dashboard data (cached via useDashboardThisMonth).
+            Shown as compact cards below the profile header. */}
+        <div className="grid grid-cols-4 gap-2">
+          {businessStats.map((stat) => {
+            const StatIcon = stat.icon
+            return (
+              <div
+                key={stat.label}
+                className="bg-card rounded-xl border border-border/60 shadow-sm p-2.5 flex flex-col items-center text-center"
+              >
+                <div className={cn(
+                  'w-7 h-7 rounded-lg flex items-center justify-center mb-1.5',
+                  stat.bg,
+                )}>
+                  <StatIcon className={cn('w-3.5 h-3.5', stat.color)} />
+                </div>
+                <p className="text-sm font-bold tabular-nums leading-tight">{stat.value}</p>
+                <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">{stat.label}</p>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* 🔒 V22-6 (Phase 4): Profile Completion Progress Bar.
+            LinkedIn-style: shows % complete + missing field hint.
+            - 100% → green + "Profile complete!"
+            - <100% → blue + "Add X, Y to complete" */}
+        {profileCompletion.pct < 100 && (
+          <button
+            onClick={handleEditProfile}
+            disabled={isCA}
+            className={cn(
+              "w-full bg-card rounded-2xl border border-border/60 shadow-sm p-3.5 text-left transition",
+              isCA ? "cursor-default opacity-70" : "hover:shadow-md active:scale-[0.99]",
+            )}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-950 flex items-center justify-center">
+                  <AlertCircle className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold">Profile {profileCompletion.pct}% complete</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    {profileCompletion.missing.length > 0
+                      ? `Add: ${profileCompletion.missing.slice(0, 3).join(', ')}${profileCompletion.missing.length > 3 ? '…' : ''}`
+                      : 'All fields filled'}
+                  </p>
+                </div>
+              </div>
+              {!isCA && (
+                <span className="text-[10px] font-medium text-primary">Complete →</span>
+              )}
+            </div>
+            {/* Progress bar */}
+            <div className="h-2 bg-muted rounded-full overflow-hidden">
+              <div
+                className={cn(
+                  'h-full rounded-full transition-all duration-500',
+                  profileCompletion.pct === 100
+                    ? 'bg-emerald-500'
+                    : profileCompletion.pct >= 67
+                      ? 'bg-emerald-400'
+                      : profileCompletion.pct >= 34
+                        ? 'bg-amber-400'
+                        : 'bg-rose-400',
+                )}
+                style={{ width: `${profileCompletion.pct}%` }}
+              />
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-1.5">
+              {profileCompletion.filledCount} of {profileCompletion.total} fields filled
+            </p>
+          </button>
+        )}
 
         {/* ═══ Menu Sections ═══ */}
         {sections.map((section, idx) => {
@@ -513,6 +697,95 @@ function AccountSectionContent({
 
   // For sections that don't have dedicated content yet, show a placeholder
   const hasContent = tabMap[section]
+
+  // ═══ Profile Page — QR Code card + Settings form ═══
+  // 🔒 V22-6 (Phase 4): Show a QR code at the top of the profile page that
+  // encodes the shop's vCard contact info (name, shop, phone, gstin, address).
+  // Customers/other shops can scan this to save the contact.
+  // Below the QR card, render the Settings (profile tab) form for editing.
+  if (section === 'profile') {
+    // Build vCard string (MECARD format — works with most Indian phones)
+    const vcardParts: string[] = []
+    if (setting.ownerName) vcardParts.push(`N:${setting.ownerName}`)
+    if (setting.shopName) vcardParts.push(`ORG:${setting.shopName}`)
+    if (setting.phone) vcardParts.push(`TEL:${setting.phone}`)
+    if (session?.user?.email) vcardParts.push(`EMAIL:${session.user.email}`)
+    if (setting.address) vcardParts.push(`ADR:${setting.address}`)
+    if (setting.gstin) vcardParts.push(`NOTE:GSTIN ${setting.gstin}`)
+    const vcard = `MECARD:${vcardParts.join(';')};;`
+
+    return (
+      <div className="space-y-4">
+        {/* QR Code Card */}
+        <div className="bg-card rounded-2xl shadow-sm border border-border/60 overflow-hidden">
+          <div className="p-4 border-b border-border/40">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-violet-100 dark:bg-violet-950 flex items-center justify-center">
+                <Store className="w-5 h-5 text-violet-600 dark:text-violet-400" />
+              </div>
+              <div>
+                <p className="font-semibold text-sm">Shop QR Code</p>
+                <p className="text-xs text-muted-foreground">Scan to save this shop's contact</p>
+              </div>
+            </div>
+          </div>
+          <div className="p-6 flex flex-col items-center">
+            {/* QR Code — white background for scanability */}
+            <div className="p-4 bg-white rounded-2xl shadow-inner">
+              <QRCodeSVG
+                value={vcard}
+                size={180}
+                level="M"
+                includeMargin={false}
+                className="rounded"
+              />
+            </div>
+            <p className="text-sm font-medium mt-3 text-center">{setting.shopName || 'My Shop'}</p>
+            {setting.ownerName && (
+              <p className="text-xs text-muted-foreground mt-0.5 text-center">{setting.ownerName}</p>
+            )}
+            <div className="flex gap-2 mt-4 w-full">
+              <button
+                onClick={() => {
+                  if (navigator.share) {
+                    navigator.share({
+                      title: setting.shopName || 'My Shop',
+                      text: `Contact for ${setting.shopName || 'My Shop'}${setting.phone ? ` — ${setting.phone}` : ''}`,
+                      url: window.location.href,
+                    }).catch(() => {})
+                  } else if (navigator.clipboard) {
+                    navigator.clipboard.writeText(vcard).then(() => {
+                      // Silently copied — no toast needed for QR
+                    }).catch(() => {})
+                  }
+                }}
+                className="flex-1 py-2 rounded-lg bg-gradient-saffron text-white text-xs font-medium"
+              >
+                Share
+              </button>
+              <button
+                onClick={() => {
+                  if (navigator.clipboard) {
+                    navigator.clipboard.writeText(vcard).then(() => {
+                      // Silently copied
+                    }).catch(() => {})
+                  }
+                }}
+                className="flex-1 py-2 rounded-lg border border-border text-xs font-medium hover:bg-muted transition"
+              >
+                Copy vCard
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Settings form (profile tab) */}
+        <Suspense fallback={<div className="bg-card rounded-2xl shadow-sm border border-border/60 p-8 text-center"><p className="text-muted-foreground text-sm">Loading...</p></div>}>
+          <SettingsComponent singleTab="profile" />
+        </Suspense>
+      </div>
+    )
+  }
 
   // ═══ Security Page ═══
   if (section === 'security') {
@@ -838,9 +1111,8 @@ function AccountSectionContent({
     )
   }
 
-  // For sections with Settings content, render Settings with singleTab
-  // 🔒 V21-014 fix: Use lazy import instead of require() (eslint rule)
-  const SettingsComponent = lazy(() => import('@/components/settings/Settings').then(m => ({ default: m.Settings })))
+  // For sections with Settings content, render Settings with singleTab.
+  // 🔒 V22-6 fix: SettingsComponent is now declared at module scope (above).
   return (
     <Suspense fallback={<div className="bg-card rounded-2xl shadow-sm border border-border/60 p-8 text-center"><p className="text-muted-foreground text-sm">Loading...</p></div>}>
       <SettingsComponent singleTab={tabMap[section]} />
