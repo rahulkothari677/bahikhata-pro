@@ -196,3 +196,14 @@ and include enough context to reproduce.
 - **Description**: The GSTR-3B API returns HTTP 500 for all months. The error is caught and returns `{ error: "Failed to compute GSTR-3B", errorId: "..." }`. The actual error is server-side and not visible without Vercel function logs.
 - **Root cause**: Unknown — needs Vercel function logs to diagnose. Likely related to the Prisma money extension converting aggregate `_sum` values, or a SQL query issue with the paise migration.
 - **Status**: OPEN — needs investigation with Vercel logs
+
+### BUG-015 — `lazy()` called inside function body caused Settings to re-mount and lose state (High/UX) — FIXED
+
+- **Found**: 2026-07-15, during V22-6 Phase 4 deep scan of AccountScreen.tsx
+- **File**: `src/components/layout/AccountScreen.tsx` — `AccountSectionContent` function
+- **Severity**: High (Settings form lost all unsaved changes on any parent re-render)
+- **Description**: The `lazy(() => import('@/components/settings/Settings'))` call was inside the `AccountSectionContent` function body. React's `lazy()` creates a new lazy component each time it's called. Since `AccountSectionContent` re-renders on every parent state change (e.g., when the settings query refetches, when the user types in a field, when the dashboard data loads), a NEW lazy component was created on every render. React treated this as a different component type → unmounted the old Settings → remounted a new one → all form state (typed text, selected values, dirty flags) was lost.
+- **User impact**: If a user was filling out the profile form (e.g., typing their GSTIN) and any background query refetched, the entire form would reset to empty. Extremely frustrating.
+- **Fix applied**: 2026-07-15 (V22-6 Phase 4). Moved the `lazy()` call to module scope (top of file, after imports). Now the lazy component is created once and is stable across all renders. Settings form state is preserved.
+- **Verification**: Browser-tested — filled profile form fields, waited for background refetch, confirmed form values persisted.
+- **Status**: FIXED

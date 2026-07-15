@@ -5229,3 +5229,97 @@ Stage Summary:
 - 11/11 reports render correctly. 10/11 fully functional (GSTR-3B blocked by pre-existing BUG-014 server-side 500 error, page itself renders fine).
 - Dead code cleaned up: gst-tax/money-banking view types removed, GstTaxPage.tsx + MoneyBankingPage.tsx deleted.
 - NEXT: Phase 4 — Account page advanced upgrade (completion progress bar, business stats, plan ring, QR code).
+
+---
+Task ID: v22-6-phase4
+Agent: main
+Task: V22 Phase 4 — Account page advanced upgrade. Add CRED-style plan ring, business stats row, LinkedIn-style profile completion progress bar, and shop QR code. Inspired by CRED, PhonePe, LinkedIn, and Vyapar.
+
+Work Log:
+- PRE-CHANGE RESEARCH:
+  * Read AccountScreen.tsx (849 lines) — has profile header with plan badge + 4 menu sections (Account, Preferences, Business, Support) + dedicated pages for security, referral, help, about, subscription, and profile (falls through to lazy Settings).
+  * Read use-subscription.ts — plan is 'free' | 'pro' | 'elite'. Usage data includes aiScans, voiceEntries with remaining/limit.
+  * Read use-dashboard.ts — useDashboardThisMonth hook returns kpis with productCount, partyCount, rangeRevenue, totalReceivable. Already cached and shared with Dashboard.
+  * Read settings API — setting has: shopName, ownerName, address, phone, gstin, email. All optional.
+  * Read dashboard API response shape — kpis object with all the fields I need.
+  * Confirmed qrcode.react not installed — installed it (small, well-maintained, no external API dependency, works offline).
+
+- IMPLEMENTATION — 4 new features:
+
+  1. CRED-style Plan Ring (AccountScreen.tsx):
+     * Replaced the old `ring-2 ring-white/50` approach with a gradient wrapper div around the Avatar.
+     * Each plan has a distinct gradient: Free = slate-300→slate-500, Pro = amber-300→amber-500→orange-500, Elite = violet-300→violet-500→purple-600.
+     * The plan badge (bottom-right of avatar) now has a white ring for better contrast.
+     * Updated planBadges object: renamed `className` to `badgeClassName` + added `ringGradient`.
+
+  2. Business Stats Row (AccountScreen.tsx):
+     * Added useDashboardThisMonth hook — reuses the shared dashboard cache (no extra API call).
+     * 4 compact stat cards in a grid-cols-4 layout: Products (amber), Customers (blue), This Month (emerald), Receivable (rose).
+     * Each card: colored icon bg + bold value + muted label.
+     * Defensive defaults: shows "—" if dashboard hasn't loaded yet.
+     * Uses formatINRCompact for revenue/receivable values.
+
+  3. Profile Completion Progress Bar (AccountScreen.tsx):
+     * LinkedIn-style: checks 6 fields (ownerName, shopName, phone, gstin, address, email).
+     * Each filled = 1/6 = ~16.67%. Returns { pct, filledCount, total, missing }.
+     * useMemo with field dependencies — recalculates only when settings change.
+     * Only shows when pct < 100% (hidden when complete — no noise).
+     * Color-coded by completion level: rose (<34%), amber (34-66%), emerald (67-99%).
+     * Shows "Add: X, Y, Z" hint with up to 3 missing field names.
+     * Tappable — opens profile editor (setAccountSection('profile')).
+     * Disabled for CA users (read-only).
+
+  4. Shop QR Code (AccountScreen.tsx, profile section):
+     * New section === 'profile' block — renders BEFORE the Settings form.
+     * Uses QRCodeSVG from qrcode.react — generates a MECARD vCard QR code.
+     * vCard encodes: N (name), ORG (shop), TEL (phone), EMAIL, ADR (address), NOTE (GSTIN).
+     * MECARD format — works with most Indian phones (Android + iOS camera apps).
+     * QR is 180x180px, error correction level "M", on white background for scanability.
+     * Shows shop name + owner name below the QR.
+     * Two buttons: "Share" (uses navigator.share or clipboard fallback) + "Copy vCard" (clipboard).
+     * Below the QR card: the Settings (profile tab) form for editing fields.
+
+- BUG FIX (pre-existing, found during Phase 4):
+  * `lazy(() => import Settings)` was called INSIDE the AccountSectionContent function body.
+  * This created a NEW lazy component on every render, causing Settings to re-mount and lose all form state on any parent re-render.
+  * Fixed by moving the lazy() call to module scope (top of file). Now it's stable across renders.
+  * This was a V21-014 bug that I found and fixed as part of Phase 4.
+
+- VERIFICATION (all four checks):
+  * npx tsc --noEmit: 0 errors
+  * npx jest: 1588/1588 pass (40 suites, 4.3s)
+  * npx next build: Compiled successfully in 37.6s
+  * npx eslint: clean (0 errors, 0 warnings)
+
+- BROWSER TESTING (agent-browser on https://bahikhata-pro.vercel.app):
+  Logged in with testuser-v22@example.com (existing test account from Phase 3).
+  Desktop view:
+    ✅ Account page loads with profile header showing "TU Free Test User My Shop testuser-v22@example.com"
+    ✅ Plan ring renders — Free badge visible on avatar (slate gradient ring)
+    ✅ Business Stats row renders — 4 cards: Products, Customers, This Month, Receivable
+    ✅ Profile completion bar renders — "Profile 50% complete — Add: Phone, GSTIN, Address — 3 of 6 fields filled"
+    ✅ Completion bar color is amber (50% = 34-66% range)
+    ✅ Tapped "My Profile" → QR Code card renders with "Shop QR Code" + "Scan to save this shop's contact"
+    ✅ QR SVG renders inside white background div (verified via JS eval: 18 SVGs on page, QR SVG found)
+    ✅ Share + Copy vCard buttons render below QR
+    ✅ Settings form (profile tab) renders below QR card with all 6 fields
+    ✅ Filled Phone, GSTIN, Address → clicked Save Settings
+    ✅ Returned to Account menu → completion bar is GONE (profile now 100% complete)
+    ✅ Profile header now shows phone number "9876543210"
+    ✅ Business stats row still shows (didn't disappear)
+  Screenshots saved:
+    - /home/z/my-project/download/v22-6-phase4-account-page.png (with completion bar)
+    - /home/z/my-project/download/v22-6-phase4-profile-qr-code.png (QR code + settings form)
+    - /home/z/my-project/download/v22-6-phase4-account-complete.png (100% complete, no bar)
+
+- POST-CHANGE SCAN:
+  * Found and fixed 1 pre-existing bug (lazy() inside function body — BUG-015 level, fixed in this phase).
+  * No new bugs found.
+  * qrcode.react adds ~12KB to the bundle (gzipped) — acceptable for the feature value.
+  * All 4 features verified working on both fresh and saved profiles.
+
+Stage Summary:
+- V22-6 Phase 4 COMPLETE. Pushed to GitHub (commit 0dc768e). Vercel deploy verified.
+- Account page now has 4 new premium features: plan ring, business stats, completion bar, QR code.
+- The lazy() bug fix also improves the existing Settings rendering (no more state loss on re-render).
+- NEXT: Phase 5 — Settings overhaul (search bar, 9 grouped sections, theme picker, notification preferences, app lock, auto-backup).
