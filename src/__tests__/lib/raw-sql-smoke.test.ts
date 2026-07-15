@@ -149,13 +149,28 @@ describe('V6 PP6/CR1 — raw SQL smoke tests (party route)', () => {
 })
 
 // Also scan other route files that use $queryRaw
-describe('V6 PP6 — raw SQL smoke tests (other routes)', () => {
-  const ROUTE_FILES = [
-    'src/app/api/dashboard/route.ts',
-    'src/app/api/reports/route.ts',
-    'src/app/api/gstr-export/route.ts',
-    'src/app/api/insights/route.ts',
-  ]
+// 🔒 AUDIT V22 FIX §1.4: Was a hardcoded list that MISSED gstr-3b/route.ts —
+// allowing an unbalanced-paren SQL bug to reach production. Now uses a glob
+// to find ALL route files containing $queryRaw, so no file can slip through.
+describe('V6 PP6 — raw SQL smoke tests (all API routes with $queryRaw)', () => {
+  // Dynamically find all route files that contain $queryRaw
+  const apiDir = path.join(process.cwd(), 'src', 'app', 'api')
+  const ROUTE_FILES: string[] = []
+  function findRouteFiles(dir: string) {
+    const entries = fs.readdirSync(dir, { withFileTypes: true })
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name)
+      if (entry.isDirectory()) {
+        findRouteFiles(fullPath)
+      } else if (entry.name === 'route.ts') {
+        const content = fs.readFileSync(fullPath, 'utf8')
+        if (content.includes('$queryRaw')) {
+          ROUTE_FILES.push(path.relative(process.cwd(), fullPath))
+        }
+      }
+    }
+  }
+  findRouteFiles(apiDir)
 
   for (const relPath of ROUTE_FILES) {
     const absPath = path.join(process.cwd(), relPath)

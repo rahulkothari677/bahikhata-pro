@@ -688,11 +688,13 @@ export async function GET(req: NextRequest) {
           unit: meta?.unit || 'pcs',
           gstRate: meta?.gstRate || 0,
           totalQty: Number(row.totalQty),
-          taxableValue: roundMoney(Number(row.taxableValue)),
-          cgst: roundMoney(Number(row.totalCgst)),
-          sgst: roundMoney(Number(row.totalSgst)),
-          igst: roundMoney(Number(row.totalIgst)),
-          totalTax: roundMoney(Number(row.totalTax)),
+          // 🔒 BUG-018 FIX (Audit V22 §5): Raw SQL returns paise (Int columns).
+          // Must convert via fromPaise() — the money extension does NOT touch $queryRaw.
+          taxableValue: roundMoney(fromPaise(Number(row.taxableValue))),
+          cgst: roundMoney(fromPaise(Number(row.totalCgst))),
+          sgst: roundMoney(fromPaise(Number(row.totalSgst))),
+          igst: roundMoney(fromPaise(Number(row.totalIgst))),
+          totalTax: roundMoney(fromPaise(Number(row.totalTax))),
         }
       })
 
@@ -928,8 +930,10 @@ export async function GET(req: NextRequest) {
 
       // Build the response with profit + margin computed in JS
       const items = itemRows.map(row => {
-        const revenue = Number(row.revenue)
-        const cogs = Number(row.cogs)
+        // 🔒 BUG-019 FIX (Audit V22 §5): Raw SQL returns paise (Int columns).
+        // Must convert via fromPaise() — the money extension does NOT touch $queryRaw.
+        const revenue = fromPaise(Number(row.revenue))
+        const cogs = fromPaise(Number(row.cogs))
         const profit = revenue - cogs
         const margin = revenue > 0 ? (profit / revenue) * 100 : 0
         return {

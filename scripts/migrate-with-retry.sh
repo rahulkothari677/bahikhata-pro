@@ -63,15 +63,6 @@ echo "[migrate] Step 1: Marking baseline migration as applied (no-op if already 
 npx prisma migrate resolve --applied 0_init 2>/dev/null || true
 echo "[migrate] Baseline resolve complete."
 
-# Step 1.5: Mark the disabled Document Vault migration as rolled back.
-# This heals P3009 (failed migration state) from earlier failed deploy attempts.
-# The migration was temporarily disabled because DIRECT_URL is not set on Vercel.
-# Marking it as rolled-back tells Prisma "this migration was intentionally not applied"
-# so migrate deploy doesn't see it as a failed state.
-echo "[migrate] Step 1.5: Marking disabled Document Vault migration as rolled back..."
-npx prisma migrate resolve --rolled-back 20260716000000_add_document_vault 2>/dev/null || true
-echo "[migrate] Document Vault resolve complete."
-
 # Step 2: migrate deploy with retries (retry ONLY on P1001 / connectivity).
 echo "[migrate] Step 2: Running migrate deploy (up to $MAX_RETRIES attempts)..."
 for i in $(seq 1 "$MAX_RETRIES"); do
