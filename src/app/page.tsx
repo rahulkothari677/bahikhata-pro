@@ -67,6 +67,8 @@ const Settings = dynamic(() => import('@/components/settings/Settings').then(m =
 const PricingPlans = dynamic(() => import('@/components/subscription/PricingPlans').then(m => ({ default: m.PricingPlans })), { ssr: false })
 const AIComparison = dynamic(() => import('@/components/settings/AIComparison').then(m => ({ default: m.AIComparison })), { ssr: false })
 const AIUsage = dynamic(() => import('@/components/settings/AIUsage').then(m => ({ default: m.AIUsage })), { ssr: false })
+// 🔒 V22-14 (Batch D, Phase 7g): Document Vault
+const DocumentVault = dynamic(() => import('@/components/documents/DocumentVault').then(m => ({ default: m.DocumentVault })), { ssr: false })
 
 export default function Home() {
   const { session, status, isOfflineSession } = useOfflineSession()
@@ -427,7 +429,7 @@ export default function Home() {
                 new Promise((r) => setTimeout(r, 3000)),
               ])
             }}
-            enabled={!['new-sale', 'new-purchase', 'transaction-detail', 'party-profile', 'scanner', 'pricing', 'reports', 'settings', 'ai-comparison', 'ai-usage'].includes(currentView)}
+            enabled={!['new-sale', 'new-purchase', 'transaction-detail', 'party-profile', 'scanner', 'pricing', 'reports', 'settings', 'ai-comparison', 'ai-usage', 'document-vault'].includes(currentView)}
           >
             {currentView === 'dashboard' && <Dashboard />}
             {currentView === 'inventory' && <Inventory />}
@@ -461,6 +463,7 @@ export default function Home() {
             )}
             {currentView === 'ai-comparison' && <AIComparison />}
             {currentView === 'ai-usage' && <AIUsage />}
+            {currentView === 'document-vault' && <DocumentVault />}
             {currentView === 'transaction-detail' && <TransactionDetail />}
             {currentView === 'party-profile' && <PartyProfile />}
             {currentView === 'new-sale' && <TransactionEntry type="sale" />}

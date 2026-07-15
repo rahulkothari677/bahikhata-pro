@@ -87,7 +87,7 @@ export function MobileBottomNav() {
   // so the More tab highlights when user is on these secondary views.
   // 🔒 V22-5 (Phase 3): Removed 'gst-tax'/'money-banking' — those hub pages were
   // deleted in Phase 1; their view types are gone too.
-  const isMoreActive = currentView === 'more' || currentView === 'account' || ['inventory', 'income-expense', 'parties', 'scanner', 'reports', 'settings', 'pricing', 'ai-comparison', 'ai-usage'].includes(currentView)
+  const isMoreActive = currentView === 'more' || currentView === 'account' || ['inventory', 'income-expense', 'parties', 'scanner', 'reports', 'settings', 'pricing', 'ai-comparison', 'ai-usage', 'document-vault'].includes(currentView)
 
   // 🔒 V17 Audit Phase 10: Long-press handlers for the + button
   const handlePlusTouchStart = () => {

@@ -218,3 +218,13 @@ and include enough context to reproduce.
 - **Root cause**: The bill-profit report loads raw transaction rows with items (for the per-invoice table), which requires `take: 500` to avoid memory issues. The summary was calculated from these truncated rows instead of using a separate SQL aggregate query.
 - **Fix approach**: Run a separate `db.transaction.aggregate` or raw SQL `SUM` query (without `take`) to compute the summary totals, while keeping the per-bill table capped at 500. The new Item-wise Profit report (`item-profit` type) already uses raw SQL `GROUP BY` which doesn't have this issue.
 - **Status**: OPEN — needs fix in a future batch. The Item-wise Profit report (added in V22-12 Batch B) is the recommended alternative for accurate per-product profit totals.
+
+### BUG-017 — Document Vault upload limited to ~4.5MB by Vercel serverless body size (Low/Infrastructure) — OPEN
+
+- **Found**: 2026-07-16, during V22-14 Batch D bug scan of Document Vault API
+- **File**: `src/app/api/documents/route.ts` — POST handler
+- **Severity**: Low (most business documents are under 4MB)
+- **Description**: The Document Vault API accepts file uploads via JSON body (base64-encoded). The API validates a 10MB max file size. However, Vercel's default serverless function body size limit is 4.5MB. Files larger than 4.5MB will fail with a 413 error from Vercel's infrastructure before the API's own validation runs.
+- **User impact**: Users uploading large PDFs (e.g., detailed bank statements, multi-page GST certificates) over 4.5MB will see an upload failure. Most business documents (bills, ID proofs, single-page certificates) are well under this limit.
+- **Fix approach**: Use direct browser-to-Cloudinary uploads (unsigned upload preset) instead of routing through the serverless function. This bypasses Vercel's body size limit entirely. The serverless function would only store the metadata after the upload succeeds.
+- **Status**: OPEN — acceptable for now. The API's 10MB validation is still correct (it just won't be reached for files >4.5MB on Vercel). Users who need to upload larger files can split them or compress first.

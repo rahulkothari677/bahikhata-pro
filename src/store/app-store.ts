@@ -19,6 +19,7 @@ export type ViewType =
   | 'pricing'
   | 'ai-comparison'
   | 'ai-usage'
+  | 'document-vault'
 
 export type ViewMode = 'grid' | 'list'
 

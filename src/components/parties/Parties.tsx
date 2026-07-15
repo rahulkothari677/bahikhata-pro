@@ -18,6 +18,7 @@ import { toast as sonnerToast } from 'sonner'
 import { formatINR, formatDate, cn, getInitials, formatINRCompact } from '@/lib/utils'
 import { ViewModeToggle } from '@/components/common/ViewModeToggle'
 import { EmptyState } from '@/components/common/EmptyState'
+import { ListItemSkeleton } from '@/components/common/Skeletons'
 import {
   Plus, Search, Users, Phone, User, ArrowDownRight, ArrowUpRight,
   Building2, ChevronRight, Receipt, Send,
@@ -183,9 +184,8 @@ export function Parties() {
           </CardContent>
         </Card>
       ) : isLoading ? (
-        <div className="space-y-2">
-          {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}
-        </div>
+        // 🔒 V22-14 (Batch D, Phase 8c): Premium skeleton with avatar + text lines
+        <ListItemSkeleton count={5} />
       ) : filtered.length === 0 ? (
         <Card className="shadow-card border-border/60">
           <CardContent className="p-0">

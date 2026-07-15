@@ -38,6 +38,7 @@ import {
   Store, Mic, ScanBarcode, Bot, Repeat, Send,
   ShoppingCart, TrendingUp,
   Undo2, FilePlus2, Coins, AlertTriangle, Hash,
+  FolderOpen,
 } from 'lucide-react'
 import type { ViewType } from '@/store/app-store'
 import type { LucideIcon } from 'lucide-react'
@@ -133,6 +134,7 @@ const SECTIONS: MenuSection[] = [
       { icon: ScanBarcode, label: 'Barcode Scanner', description: 'Scan barcodes for fast billing', view: 'new-sale', iconColor: 'text-violet-600 dark:text-violet-400', iconBg: 'bg-violet-100 dark:bg-violet-950' },
       { icon: Bot, label: 'AI Usage & Limits', description: 'Track AI scans, voice entries', view: 'ai-usage', iconColor: 'text-violet-600 dark:text-violet-400', iconBg: 'bg-violet-100 dark:bg-violet-950' },
       { icon: Sparkles, label: 'Smart Insights', description: 'AI-powered alerts & suggestions', view: 'dashboard', iconColor: 'text-violet-600 dark:text-violet-400', iconBg: 'bg-violet-100 dark:bg-violet-950' },
+      { icon: FolderOpen, label: 'Document Vault', description: 'Store bills, invoices, GST certificates', view: 'document-vault', iconColor: 'text-violet-600 dark:text-violet-400', iconBg: 'bg-violet-100 dark:bg-violet-950' },
     ],
   },
 ]
