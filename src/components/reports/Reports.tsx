@@ -438,6 +438,25 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
         </TabsContent>
       </Tabs>
       )}
+
+      {/* 🔒 V22-3 fix: When in single-report mode, render the report DIRECTLY
+          (not inside Tabs, which is hidden). This is why GSTR-1/GSTR-3B/etc.
+          were blank — the TabsContent was inside the hidden Tabs block. */}
+      {isSingleReport && (
+        <>
+          {reportType === 'pl' && (error ? <ReportError message={(error as Error).message} /> : isLoading || !data ? <ReportSkeleton /> : <PLReport data={data} />)}
+          {reportType === 'gst' && (error ? <ReportError message={(error as Error).message} /> : isLoading || !data ? <ReportSkeleton /> : <GSTReport data={data} />)}
+          {reportType === 'stock' && (error ? <ReportError message={(error as Error).message} /> : isLoading || !data ? <ReportSkeleton /> : <StockReport data={data} />)}
+          {reportType === 'party' && (error ? <ReportError message={(error as Error).message} /> : isLoading || !data ? <ReportSkeleton /> : <PartyReport data={data} />)}
+          {reportType === 'debt-aging' && (error ? <ReportError message={(error as Error).message} /> : isLoading || !data ? <ReportSkeleton /> : <DebtAgingReport data={data} />)}
+          {reportType === 'inventory-aging' && (error ? <ReportError message={(error as Error).message} /> : isLoading || !data ? <ReportSkeleton /> : <InventoryAgingReport data={data} />)}
+          {reportType === 'gstr-1' && <Gstr1Report />}
+          {reportType === 'gstr-3b' && <Gstr3bReport />}
+          {reportType === 'gstr-2b' && <Gstr2bReconciliation />}
+          {reportType === 'bank-recon' && <BankReconciliation />}
+          {reportType === 'consolidated' && <ConsolidatedReport />}
+        </>
+      )}
     </div>
   )
 }

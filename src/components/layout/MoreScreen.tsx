@@ -150,7 +150,10 @@ export function MoreScreen() {
     }
 
     // 🔒 V22-3: Reconciliation & Period Lock → Account → Data section
+    // But set previousView='more' so Account's back button goes directly
+    // back to More (not Account menu first).
     if (label === 'Reconciliation' || label === 'Period Lock') {
+      useAppStore.getState().setPreviousView('more')
       useAppStore.getState().setAccountOriginView('more')
       useAppStore.getState().setView('account')
       useAppStore.getState().setAccountSection('data')

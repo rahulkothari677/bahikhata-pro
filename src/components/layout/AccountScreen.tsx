@@ -81,13 +81,23 @@ export function AccountScreen() {
   const handleBack = () => {
     haptic.click()
     if (accountSection) {
-      // If in a section, go back to the account menu
-      setAccountSection(null)
+      // 🔒 V22-3 fix: If the user came directly from More (not from Account
+      // menu), back should go directly to More — not Account menu first.
+      // We check if previousView is 'more' OR accountOriginView is 'more'.
+      const origin = useAppStore.getState().accountOriginView
+      const prev = useAppStore.getState().previousView
+      if (prev === 'more' || origin === 'more') {
+        // Came from More → go back to More directly
+        setAccountSection(null)
+        setView('more')
+        setPreviousView(null)
+        useAppStore.getState().setAccountOriginView(null)
+      } else {
+        // Came from Account menu → go back to Account menu
+        setAccountSection(null)
+      }
     } else {
-      // If on the menu, go back to the original view (where the user was
-      // before opening Account). Uses accountOriginView which is separate
-      // from previousView (previousView gets overwritten when navigating
-      // to pricing from the subscription section).
+      // If on the menu, go back to the original view
       const origin = useAppStore.getState().accountOriginView
       setView(origin || previousView || 'dashboard')
       setPreviousView(null)
