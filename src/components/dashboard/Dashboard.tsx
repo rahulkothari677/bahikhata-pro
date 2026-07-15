@@ -460,6 +460,37 @@ export function Dashboard() {
         </div>
       </motion.div>
 
+      {/* 🔒 V22-8 (Phase 6): Quick Action Shortcuts — horizontal scrollable row
+          of 6 one-tap actions. Inspired by PhonePe's quick actions row.
+          Visible on all screen sizes; horizontally scrollable on mobile. */}
+      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
+        {[
+          { label: 'New Sale', icon: Plus, view: 'new-sale' as const, color: 'bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400' },
+          { label: 'Add Product', icon: Package, view: 'inventory' as const, color: 'bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400' },
+          { label: 'Scan Bill', icon: ScanLine, view: 'scanner' as const, color: 'bg-violet-100 dark:bg-violet-950 text-violet-600 dark:text-violet-400' },
+          { label: 'Add Party', icon: Wallet, view: 'parties' as const, color: 'bg-amber-100 dark:bg-amber-950 text-amber-600 dark:text-amber-400' },
+          { label: 'Reports', icon: Receipt, view: 'reports' as const, color: 'bg-rose-100 dark:bg-rose-950 text-rose-600 dark:text-rose-400' },
+          { label: 'Income', icon: HandCoins, view: 'income-expense' as const, color: 'bg-teal-100 dark:bg-teal-950 text-teal-600 dark:text-teal-400' },
+        ].map((action) => {
+          const ActionIcon = action.icon
+          return (
+            <button
+              key={action.label}
+              onClick={() => {
+                setPreviousView('dashboard')
+                setView(action.view)
+              }}
+              className="flex flex-col items-center gap-1.5 p-2.5 rounded-xl bg-card border border-border/60 shadow-sm hover:shadow-md hover:border-primary/30 transition flex-shrink-0 min-w-[72px] active:scale-95"
+            >
+              <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center', action.color)}>
+                <ActionIcon className="w-4 h-4" />
+              </div>
+              <span className="text-[10px] font-medium text-center leading-tight">{action.label}</span>
+            </button>
+          )
+        })}
+      </div>
+
       {/* Date range selector + KPI header — sticky on desktop so user can change dates without scrolling back to top */}
       <div className="flex items-center justify-between gap-3 flex-wrap lg:sticky lg:top-3 lg:z-20 lg:bg-background/80 lg:backdrop-blur-md lg:py-2 lg:-mx-2 lg:px-2 lg:rounded-lg">
         <div>
@@ -557,6 +588,77 @@ export function Dashboard() {
           onClick={() => setView('reports')}
         />
       </div>
+
+      {/* 🔒 V22-8 (Phase 6): Revenue Target Progress Card.
+          Shows progress toward the monthly revenue target (if set).
+          Uses the existing revenueTarget from useBusinessGoals.
+          Only shows when a revenue target is set AND there's range revenue.
+          Inspired by Stripe's revenue progress widgets. */}
+      {revenueTarget && revenueTarget > 0 && (
+        <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10 overflow-hidden">
+          <CardContent className="p-4">
+            <div className="flex items-start justify-between mb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-md">
+                  <Target className="w-4 h-4 text-white" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">Monthly Revenue Target</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {formatINR(kpis.rangeRevenue)} of {formatINR(revenueTarget)} • {rangeLabel}
+                  </p>
+                </div>
+              </div>
+              {(() => {
+                const pct = Math.min(100, (kpis.rangeRevenue / revenueTarget) * 100)
+                const remaining = Math.max(0, revenueTarget - kpis.rangeRevenue)
+                return (
+                  <div className="text-right">
+                    <p className={cn(
+                      'text-lg font-bold tabular-nums',
+                      pct >= 100 ? 'text-emerald-600 dark:text-emerald-400' : 'text-foreground',
+                    )}>
+                      {pct.toFixed(0)}%
+                    </p>
+                    {remaining > 0 ? (
+                      <p className="text-[10px] text-muted-foreground">{formatINRCompact(remaining)} to go</p>
+                    ) : (
+                      <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">Target reached! 🎉</p>
+                    )}
+                  </div>
+                )
+              })()}
+            </div>
+            {/* Progress bar */}
+            <div className="h-3 bg-muted rounded-full overflow-hidden relative">
+              {(() => {
+                const pct = Math.min(100, (kpis.rangeRevenue / revenueTarget) * 100)
+                return (
+                  <div
+                    className={cn(
+                      'h-full rounded-full transition-all duration-700 ease-out',
+                      pct >= 100
+                        ? 'bg-gradient-to-r from-emerald-400 to-teal-500'
+                        : pct >= 50
+                          ? 'bg-gradient-to-r from-amber-400 to-emerald-500'
+                          : 'bg-gradient-to-r from-rose-400 to-amber-500',
+                    )}
+                    style={{ width: `${Math.max(2, pct)}%` }}
+                  />
+                )
+              })()}
+            </div>
+            {/* Milestone markers */}
+            <div className="flex justify-between mt-1.5 text-[9px] text-muted-foreground">
+              <span>0%</span>
+              <span>25%</span>
+              <span>50%</span>
+              <span>75%</span>
+              <span>100%</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Mini-charts row — quick visual insights at a glance.
           Sparkline: last 7 days sales trend (no axes, just the line)
