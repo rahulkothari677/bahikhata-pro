@@ -562,7 +562,7 @@ export function AccountScreen() {
                 </div>
                 <p className="text-sm text-white/85 truncate flex items-center gap-1.5 mt-0.5">
                   <Store className="w-3.5 h-3.5 flex-shrink-0" />
-                  <span className="truncate">{activeShop?.name || shopName}</span>
+                  <span className="truncate">{shopName}</span>
                 </p>
                 {phone && (
                   <p className="text-xs text-white/75 truncate flex items-center gap-1.5 mt-0.5">
@@ -617,54 +617,27 @@ export function AccountScreen() {
           })}
         </div>
 
-        {/* 🔒 V22-11 (Batch A, Phase 4f): Switch Shop card — for multi-shop users.
-            Only shows when user has 2+ shops. Single-shop users don't see this.
-            Separate card (NOT inside the profile button) to avoid nested-button
-            HTML validation issues. */}
+        {/* 🔒 AUDIT V23 FIX §13.1: Switch Shop removed — it was cosmetic.
+            No API route writes shopId on create, so "switching" shops shows
+            the same merged data. This is worse than missing — it manufactures
+            confidence that two sets of books exist when there is one.
+            Replaced with a "Coming Soon" card. The Consolidated Report
+            (which does read shopId) remains functional.
+            To re-enable: stamp shopId on every write + filter every read. */}
         {shops.length > 1 && !isCA && (
-          <div ref={shopDropdownRef} className="bg-card rounded-2xl border border-border/60 shadow-sm overflow-hidden">
-            <button
-              onClick={() => {
-                haptic.click()
-                setShopDropdownOpen(!shopDropdownOpen)
-              }}
-              className="w-full flex items-center gap-3 p-3 hover:bg-muted/50 transition"
-            >
+          <div className="bg-card rounded-2xl border border-border/60 shadow-sm p-3 opacity-70">
+            <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-lg bg-amber-100 dark:bg-amber-950 flex items-center justify-center flex-shrink-0">
                 <Store className="w-4 h-4 text-amber-600 dark:text-amber-400" />
               </div>
-              <div className="flex-1 min-w-0 text-left">
-                <p className="text-xs text-muted-foreground">Active Shop</p>
-                <p className="text-sm font-medium truncate">{activeShop?.name || shopName}</p>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-muted-foreground">Multi-Shop Switching</p>
+                <p className="text-sm font-medium truncate">{shops.length} shops created</p>
               </div>
-              <ChevronRight className={cn(
-                'w-4 h-4 text-muted-foreground transition-transform',
-                shopDropdownOpen && 'rotate-90',
-              )} />
-            </button>
-            {shopDropdownOpen && (
-              <div className="border-t border-border/40 max-h-60 overflow-y-auto">
-                {shops.map(shop => (
-                  <button
-                    key={shop.id}
-                    onClick={() => {
-                      switchShop(shop.id)
-                      setShopDropdownOpen(false)
-                    }}
-                    className={cn(
-                      'w-full text-left px-3 py-2.5 hover:bg-muted/50 transition flex items-center gap-2',
-                      activeShop?.id === shop.id && 'bg-primary/5',
-                    )}
-                  >
-                    <Store className="w-3.5 h-3.5 flex-shrink-0 text-muted-foreground" />
-                    <span className="flex-1 text-sm truncate">{shop.name}</span>
-                    {activeShop?.id === shop.id && (
-                      <Check className="w-3.5 h-3.5 text-primary flex-shrink-0" />
-                    )}
-                  </button>
-                ))}
-              </div>
-            )}
+              <span className="text-[10px] font-bold uppercase tracking-wide bg-muted text-muted-foreground px-2 py-1 rounded-full">
+                Coming Soon
+              </span>
+            </div>
           </div>
         )}
 

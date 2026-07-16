@@ -146,15 +146,26 @@ async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd:
   ])
 
   // === Compute structured 3B values ===
-  const outwardTaxableValue = roundMoney((outwardSalesAgg._sum.subtotal || 0) - (outwardSalesAgg._sum.discountAmount || 0))
+
+  // 3.1(c): Nil-rated + exempt + non-GST (computed FIRST so 3.1(a) can subtract them)
+  // 🔒 V17 Audit §4.1: Nil-rated now sums 0%-rated line items (not whole invoices)
+  // 🔒 V17 PAISE MIGRATION Phase 2G: SQL returns paise; convert to rupees via fromPaise().
+  const nilRatedValue = fromPaise(Number(nilRatedAgg[0]?.totalValuePaise || 0))
+  // 🔒 V17 Audit §4.2: Exempt now reads from Product.gstTreatment='exempt' (was: hardcoded 0)
+  const exemptValue = fromPaise(Number(exemptAgg[0]?.totalValuePaise || 0))
+  const nonGstValue = roundMoney(nonGstAgg._sum.totalAmount || 0)
+
+  // 3.1(a): Outward taxable supplies (other than zero rated, nil rated and exempted)
+  // 🔒 AUDIT V23 FIX §13.2: Was SUM(subtotal - discount) over ALL sales → included
+  // 0%-GST and exempt items → double-counted with 3.1(c). Now: subtract nilRatedValue
+  // and exemptValue from the header total so 3.1(a) only covers taxable supplies.
+  const rawOutwardTaxable = roundMoney((outwardSalesAgg._sum.subtotal || 0) - (outwardSalesAgg._sum.discountAmount || 0))
+  const outwardTaxableValue = roundMoney(rawOutwardTaxable - nilRatedValue - exemptValue)
   const outwardCgst = roundMoney(outwardSalesAgg._sum.cgst || 0)
   const outwardSgst = roundMoney(outwardSalesAgg._sum.sgst || 0)
   const outwardIgst = roundMoney(outwardSalesAgg._sum.igst || 0)
   const zeroRatedTaxableValue = 0
   const zeroRatedIgst = 0
-  const nilRatedValue = fromPaise(Number(nilRatedAgg[0]?.totalValuePaise || 0))
-  const exemptValue = fromPaise(Number(exemptAgg[0]?.totalValuePaise || 0))
-  const nonGstValue = roundMoney(nonGstAgg._sum.totalAmount || 0)
   const rcmTaxableValue = roundMoney((rcmInwardAgg._sum.subtotal || 0) - (rcmInwardAgg._sum.discountAmount || 0))
   const rcmCgst = roundMoney(rcmInwardAgg._sum.cgst || 0)
   const rcmSgst = roundMoney(rcmInwardAgg._sum.sgst || 0)
