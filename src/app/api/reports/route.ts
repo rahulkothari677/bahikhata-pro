@@ -52,6 +52,17 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url)
     const type = searchParams.get('type') || 'pl'
+
+    // 🔒 AUDIT V23 FIX §3: Block profit-revealing reports for staff when hideProfit is on.
+    // bill-profit and item-profit expose per-invoice/per-product profit, COGS, and margin —
+    // the most profit-dense endpoints in the app. When the owner has enabled "hide profit
+    // from staff", these reports are meaningless without profit and must be blocked.
+    if (hideProfit && (type === 'bill-profit' || type === 'item-profit')) {
+      return NextResponse.json(
+        { error: 'Profit reports are not available with profit hiding enabled.' },
+        { status: 403 },
+      )
+    }
     const fromStr = searchParams.get('from')
     const toStr = searchParams.get('to')
 

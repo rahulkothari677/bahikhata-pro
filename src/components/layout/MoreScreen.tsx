@@ -111,7 +111,7 @@ const SECTIONS: MenuSection[] = [
       { icon: Package, label: 'Inventory', description: 'Products, stock, prices', view: 'inventory', iconColor: 'text-amber-600 dark:text-amber-400', iconBg: 'bg-amber-100 dark:bg-amber-950' },
       { icon: BarChart3, label: 'Stock Summary', description: 'Stock valuation & sale value report', view: 'reports', iconColor: 'text-amber-600 dark:text-amber-400', iconBg: 'bg-amber-100 dark:bg-amber-950' },
       { icon: AlertTriangle, label: 'Low Stock Alerts', description: 'Products running low — reorder now', view: 'inventory', iconColor: 'text-amber-600 dark:text-amber-400', iconBg: 'bg-amber-100 dark:bg-amber-950' },
-      { icon: TrendingUp, label: 'Item-wise Profit', description: 'Per-invoice profit breakdown & margins', view: 'reports', iconColor: 'text-amber-600 dark:text-amber-400', iconBg: 'bg-amber-100 dark:bg-amber-950' },
+      { icon: TrendingUp, label: 'Item-wise Profit', description: 'Per-product profit, qty sold & margins', view: 'reports', iconColor: 'text-amber-600 dark:text-amber-400', iconBg: 'bg-amber-100 dark:bg-amber-950' },
       { icon: Users, label: 'Customers & Suppliers', description: 'Track dues & party balances', view: 'parties', iconColor: 'text-amber-600 dark:text-amber-400', iconBg: 'bg-amber-100 dark:bg-amber-950' },
       { icon: Store, label: 'Multi-Shop Management', description: 'Switch or add shops', view: 'settings', iconColor: 'text-amber-600 dark:text-amber-400', iconBg: 'bg-amber-100 dark:bg-amber-950' },
       { icon: UserCog, label: 'Staff & Access', description: 'Manage staff, CA access', view: 'settings', iconColor: 'text-amber-600 dark:text-amber-400', iconBg: 'bg-amber-100 dark:bg-amber-950' },

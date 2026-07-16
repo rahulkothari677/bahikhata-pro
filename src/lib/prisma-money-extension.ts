@@ -407,6 +407,42 @@ export function withMoneyConversion(client: PrismaClient) {
           if (args.data) args.data = convertNestedData('TransactionItem', args.data)
           return query(args)
         },
+        // 🔒 AUDIT V23 FIX §1: Add aggregate + groupBy handlers.
+        // Without these, db.transactionItem.aggregate() returns raw paise
+        // while db.transaction.aggregate() returns rupees → 100× comparison
+        // mismatch in reconciliation.ts checkGstReconciliation().
+        // This is the same pattern as Transaction (lines 343-370) and Payment
+        // (lines 455-482) — copy + swap model name.
+        async aggregate({ args, query }) {
+          const result = await query(args)
+          const cols = MONEY_COLUMNS['TransactionItem'] || []
+          for (const aggKey of ['_sum', '_avg', '_min', '_max']) {
+            if ((result as any)[aggKey]) {
+              for (const col of cols) {
+                if (col in (result as any)[aggKey] && (result as any)[aggKey][col] != null) {
+                  (result as any)[aggKey][col] = fromPaise((result as any)[aggKey][col])
+                }
+              }
+            }
+          }
+          return result
+        },
+        async groupBy({ args, query }) {
+          const result = await query(args)
+          const cols = MONEY_COLUMNS['TransactionItem'] || []
+          return result.map((row: any) => {
+            for (const aggKey of ['_sum', '_avg', '_min', '_max']) {
+              if (row[aggKey]) {
+                for (const col of cols) {
+                  if (col in row[aggKey] && row[aggKey][col] != null) {
+                    row[aggKey][col] = fromPaise(row[aggKey][col])
+                  }
+                }
+              }
+            }
+            return row
+          })
+        },
       },
 
       // Payment

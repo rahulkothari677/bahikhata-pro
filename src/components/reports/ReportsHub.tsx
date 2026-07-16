@@ -99,8 +99,8 @@ const CATEGORIES: ReportCategory[] = [
       {
         type: 'trial-balance',
         icon: Scale,
-        label: 'Trial Balance',
-        description: 'Debit/credit balances — for CA accounting verification',
+        label: 'Account Summary',
+        description: 'Debit/credit balances — sales, purchases, receivables',
         iconColor: 'text-rose-600 dark:text-rose-400',
         iconBg: 'bg-rose-100 dark:bg-rose-950',
       },

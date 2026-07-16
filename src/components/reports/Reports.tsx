@@ -248,7 +248,7 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
     'bill-profit': 'Bill-wise Profit Report',
     'hsn': 'HSN Summary Report',
     'cashflow': 'Cashflow Report',
-    'trial-balance': 'Trial Balance',
+    'trial-balance': 'Account Summary',
     'item-profit': 'Item-wise Profit Report',
   }
   const currentTitle = isSingleReport

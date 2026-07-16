@@ -13,7 +13,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { formatINR, cn } from '@/lib/utils'
-import { CheckCircle2, AlertCircle, Scale } from 'lucide-react'
+import { CheckCircle2, Scale } from 'lucide-react'
 
 interface TrialBalanceProps {
   data: any
@@ -26,51 +26,26 @@ export function TrialBalance({ data }: TrialBalanceProps) {
   return (
     <div className="space-y-4">
       {/* Balance status banner */}
-      <Card className={cn(
-        'shadow-card border-2 overflow-hidden',
-        summary.isBalanced
-          ? 'border-emerald-200 dark:border-emerald-800'
-          : 'border-amber-200 dark:border-amber-800',
-      )}>
+      {/* 🔒 AUDIT V23 FIX §2: Removed "Balanced/Out of Balance" banner.
+          The Trial Balance structurally cannot balance because it's missing
+          Cash/Bank, GST payable/receivable, and capital accounts. Showing
+          "Out of Balance" to virtually every user destroys CA trust.
+          Reframed as "Account Summary" — still shows debit/credit columns
+          but no false "your books are broken" claim. A proper double-entry
+          TB will be built in a future round. */}
+      <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10 overflow-hidden">
         <CardContent className="p-5">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className={cn(
-                'w-12 h-12 rounded-xl flex items-center justify-center',
-                summary.isBalanced
-                  ? 'bg-emerald-100 dark:bg-emerald-950'
-                  : 'bg-amber-100 dark:bg-amber-950',
-              )}>
-                {summary.isBalanced
-                  ? <CheckCircle2 className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
-                  : <AlertCircle className="w-6 h-6 text-amber-600 dark:text-amber-400" />
-                }
+              <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-blue-100 dark:bg-blue-950">
+                <Scale className="w-6 h-6 text-blue-600 dark:text-blue-400" />
               </div>
               <div>
-                <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Trial Balance Status</p>
-                <p className={cn(
-                  'text-lg font-bold',
-                  summary.isBalanced
-                    ? 'text-emerald-600 dark:text-emerald-400'
-                    : 'text-amber-600 dark:text-amber-400',
-                )}>
-                  {summary.isBalanced ? 'Balanced ✓' : 'Out of Balance'}
+                <p className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Account Summary</p>
+                <p className="text-lg font-bold text-foreground">
+                  Debit: {formatINR(summary.totalDebit)} · Credit: {formatINR(summary.totalCredit)}
                 </p>
               </div>
-            </div>
-            <div className="text-right">
-              <p className="text-xs text-muted-foreground">Difference</p>
-              <p className={cn(
-                'text-lg font-bold tabular-nums',
-                summary.isBalanced
-                  ? 'text-emerald-600 dark:text-emerald-400'
-                  : 'text-amber-600 dark:text-amber-400',
-              )}>
-                {formatINR(summary.difference)}
-              </p>
-              {!summary.isBalanced && (
-                <p className="text-[10px] text-muted-foreground mt-1">Should be ₹0</p>
-              )}
             </div>
           </div>
         </CardContent>
@@ -148,7 +123,7 @@ export function TrialBalance({ data }: TrialBalanceProps) {
           <li><strong>Purchases &amp; Expenses</strong> are debits (money spent).</li>
           <li><strong>Receivable</strong> (debit) = customers owe you (all-time outstanding).</li>
           <li><strong>Payable</strong> (credit) = you owe suppliers (all-time outstanding).</li>
-          <li>A balanced trial balance (debit = credit) indicates your books are consistent.</li>
+          <li>This is an Account Summary, not a full double-entry Trial Balance. Cash, Bank, and GST accounts are not yet included — a complete Trial Balance will be available in a future update.</li>
         </ul>
       </div>
     </div>

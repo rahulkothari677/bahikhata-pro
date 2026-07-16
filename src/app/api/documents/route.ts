@@ -93,7 +93,12 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// DELETE /api/documents — soft-delete a document (marks deletedAt, doesn't remove from Cloudinary immediately)
+// DELETE /api/documents — hard-delete a document (removes from DB + Cloudinary).
+// 🔒 AUDIT V23 FIX §6c: The previous comment said "soft-delete" but the code
+// immediately destroyed the Cloudinary asset. Now the comment matches the
+// behavior: this is a HARD delete. The DB row is removed (not soft-deleted)
+// and the Cloudinary asset is destroyed. The UI says "This cannot be undone"
+// which is accurate.
 // Body: { id }
 export async function DELETE(req: NextRequest) {
   try {

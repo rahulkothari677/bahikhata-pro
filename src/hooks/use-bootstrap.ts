@@ -65,6 +65,19 @@ export function useBootstrap(enabled: boolean) {
     setBootstrapDone(true)
   }, [data, queryClient, setBootstrapDone])
 
+  // 🔒 AUDIT V23 FIX §5: Also set bootstrapDone=true on error.
+  // If bootstrap fails (403 for staff/CA, or network error), the gated hooks
+  // (useSetting, useShops, useSubscription) stay disabled all session —
+  // Switch Shop breaks for staff, settings may not load. By setting
+  // bootstrapDone=true on error, the individual hooks will fetch on their own
+  // (graceful degradation). The primed cache won't exist, but the hooks will
+  // query the API directly.
+  useEffect(() => {
+    if (error) {
+      setBootstrapDone(true)
+    }
+  }, [error, setBootstrapDone])
+
   return { data, isLoading, error }
 }
 

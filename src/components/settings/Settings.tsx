@@ -1195,23 +1195,23 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
             <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Security &amp; Backup</p>
           </div>
 
-          {/* 🔒 V22-7 (Phase 5): App Lock — PIN/biometric required on app launch.
-              Toggle persists to localStorage. The actual enforcement is a
-              future feature (will be wired in Phase 9 native build). */}
-          <div className="mt-3 flex items-center justify-between rounded-lg bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/40 p-3">
+          {/* 🔒 AUDIT V23 FIX §4: App Lock replaced with "Coming Soon" row.
+              The previous toggle was a placebo — it toasted "will require PIN"
+              but no enforcement existed. A false security promise is worse than
+              no feature. Replaced with a disabled row that honestly says Coming Soon. */}
+          <div className="mt-3 flex items-center justify-between rounded-lg bg-muted/50 border border-border/60 p-3 opacity-70">
             <div className="flex items-center gap-2">
-              <Lock className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              <Lock className="w-4 h-4 text-muted-foreground" />
               <div>
                 <p className="text-sm font-medium">App Lock</p>
                 <p className="text-[11px] text-muted-foreground">
-                  Require PIN or biometric authentication when the app opens. Keeps your business data private if someone else uses your phone.
+                  Require PIN or biometric to open the app.
                 </p>
               </div>
             </div>
-            <Switch
-              checked={appLockEnabled}
-              onCheckedChange={(checked) => persistAppLock(checked)}
-            />
+            <span className="text-[10px] font-bold uppercase tracking-wide bg-muted text-muted-foreground px-2 py-1 rounded-full">
+              Coming Soon
+            </span>
           </div>
 
           {/* 🔒 V22-11 (Batch A, Phase 5g): Default Landing Page setting.

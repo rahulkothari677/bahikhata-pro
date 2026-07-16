@@ -75,6 +75,33 @@ export function DocumentVault() {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+
+    // 🔒 AUDIT V23 FIX §6a: Client-side size check.
+    // Vercel serverless rejects request bodies over 4.5MB. Base64 encoding
+    // adds ~33%, so the effective file size limit is ~3.3MB. We check at 3MB
+    // to give a clear error message before the upload attempt.
+    const MAX_FILE_SIZE = 3 * 1024 * 1024 // 3MB
+    if (file.size > MAX_FILE_SIZE) {
+      sonnerToast.error('File too large', {
+        description: `Maximum file size is 3MB. Your file is ${(file.size / (1024 * 1024)).toFixed(1)}MB. Try compressing or cropping the image.`,
+        duration: 8000,
+      })
+      e.target.value = '' // reset input so the same file can be re-selected
+      return
+    }
+
+    // 🔒 AUDIT V23 FIX §6c: Server-side file type whitelist.
+    // Only accept images and PDFs — reject executables, HTML, etc.
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'application/pdf']
+    if (!allowedTypes.includes(file.type)) {
+      sonnerToast.error('Unsupported file type', {
+        description: `Only images (JPEG, PNG, WebP, GIF) and PDF files are allowed.`,
+        duration: 6000,
+      })
+      e.target.value = ''
+      return
+    }
+
     pendingFileRef.current = file
     setUploadName(file.name.replace(/\.[^/.]+$/, ''))  // filename without extension
     setUploadDialogOpen(true)
@@ -181,7 +208,7 @@ export function DocumentVault() {
           type="file"
           onChange={handleFileSelect}
           className="hidden"
-          accept="image/*,application/pdf,.doc,.docx"
+          accept="image/jpeg,image/png,image/webp,image/gif,application/pdf"
         />
         <Button
           onClick={() => fileInputRef.current?.click()}

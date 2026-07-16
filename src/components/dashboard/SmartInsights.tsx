@@ -191,7 +191,7 @@ function computeInsights(data: any, lang: string = 'en'): Insight[] {
           : `No sales today yet. Outstanding receivable: ${formatINR(kpis.totalReceivable)}.`,
       },
       {
-        title: kpis.todayRevenue > 0 ? '📊 आज की सारांश' : '📊 उधार सारांश',
+        title: kpis.todayRevenue > 0 ? '📊 आज का सारांश' : '📊 उधार सारांश',
         description: (() => {
           const parts: string[] = []
           if (kpis.todayRevenue > 0) parts.push(`आज ${formatINR(kpis.todayRevenue)} की बिक्री (${kpis.todayTxnCount} बिल)`)
