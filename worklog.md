@@ -5957,3 +5957,50 @@ Stage Summary:
 - 1 test hardening: raw-sql-smoke now scans ALL API $queryRaw files
 - 1 deployment cleanup: migration script skipped (no pending migrations)
 - 1596 tests passing, 0 TypeScript errors, 0 ESLint errors
+
+---
+Task ID: audit-v23-response
+Agent: main
+Task: V23 Audit response — verify each finding, fix in batches, find new bugs, generate report.
+
+Work Log:
+- AUDIT FINDINGS VERIFIED (all 6 confirmed):
+  * §1 CONFIRMED: TransactionItem has no aggregate/groupBy handler → 100× reconciliation bug
+  * §2 CONFIRMED: Trial Balance missing Cash/Bank/GST accounts → structurally cannot balance
+  * §3 CONFIRMED: bill-profit + item-profit don't apply hideProfit → staff profit leak
+  * §4 CONFIRMED: App Lock toggle is a placebo (no enforcement)
+  * §5 CONFIRMED: setBootstrapDone(true) only on success → staff/CA stranded
+  * §6 CONFIRMED: No client-side size check, no file type whitelist, delete comment mismatch
+
+- FIXES APPLIED (8 items):
+  1. §1: Added aggregate + groupBy handlers to TransactionItem in money extension
+  2. §2: Reframed Trial Balance as "Account Summary" — removed Balanced/Out-of-Balance banner + "books are consistent" note (interim fix per auditor recommendation)
+  3. §3: Return 403 for bill-profit + item-profit when hideProfit=true
+  4. §4: Replaced App Lock toggle with disabled "Coming Soon" row
+  5. §5: setBootstrapDone(true) on error in use-bootstrap.ts (graceful degradation)
+  6. §6a: Added 3MB client-side size check with clear error message
+  7. §6c: Added file type whitelist (JPEG/PNG/WebP/GIF/PDF) + updated accept attribute + fixed delete comment
+  8. §8.12: Fixed MoreScreen "Item-wise Profit" description typo + Hindi grammar fix
+
+- VERIFICATION:
+  * npx tsc --noEmit: 0 errors
+  * npx jest: 1596/1596 pass (40 suites)
+  * npx next build: Compiled successfully in 37s
+  * npx eslint: clean (11 files)
+
+- BROWSER TESTING:
+  * Account Summary (renamed from Trial Balance): ✅ Shows in ReportsHub with new name + description
+  * GSTR-3B: ✅ Still works ("3.1" sections load with data)
+  * Screenshot saved: audit-v23-gstr3b-still-works.png
+
+- NOT FIXED THIS ROUND (deferred to future):
+  * §2 proper double-entry Trial Balance (interim fix applied — renamed to Account Summary)
+  * §6b: Document Vault public URLs for ID proofs (needs Cloudinary authenticated upload type — future security enhancement)
+  * §8.3-8.11: Moderate findings (HSN shape, exports, truncation display, i18n, etc.)
+  * §9: UI/UX structural improvements (nav stack, report shell)
+
+Stage Summary:
+- Audit V23 response COMPLETE. 8 fixes deployed.
+- 2 new bugs logged: BUG-020 (TransactionItem aggregate), BUG-021 (profit-hiding bypass)
+- 3 critical + 3 high + 2 moderate findings addressed
+- 1596 tests passing, 0 TypeScript errors, 0 ESLint errors

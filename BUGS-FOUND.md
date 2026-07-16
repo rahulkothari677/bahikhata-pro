@@ -250,3 +250,21 @@ and include enough context to reproduce.
 - **Fix applied**: 2026-07-16 (Audit V22 response). Added `fromPaise()` to revenue and cogs conversions. Profit is computed from converted values.
 - **Browser verified**: Tata Tea Gold now shows ₹5,700 (was ₹5,70,000 before fix).
 - **Status**: FIXED
+
+### BUG-020 — TransactionItem missing aggregate handler in money extension (Critical/100×) — FIXED
+
+- **Found**: 2026-07-16, during Audit V23 §1
+- **File**: `src/lib/prisma-money-extension.ts` — transactionItem handler block
+- **Severity**: Critical (100× comparison mismatch in GST reconciliation)
+- **Description**: The transactionItem block had findMany/findFirst/findUnique/create/createMany/update/updateMany but NO aggregate or groupBy handler. db.transactionItem.aggregate() returned raw paise while db.transaction.aggregate() returned rupees → 100× mismatch in reconciliation.ts checkGstReconciliation() → false "books don't tie out" alert for every GST user.
+- **Fix applied**: 2026-07-16 (Audit V23 response). Added aggregate + groupBy handlers (copy of Transaction's pattern).
+- **Status**: FIXED
+
+### BUG-021 — Staff profit-hiding bypass in bill-profit + item-profit reports (Critical/Security) — FIXED
+
+- **Found**: 2026-07-16, during Audit V23 §3
+- **File**: `src/app/api/reports/route.ts`
+- **Severity**: Critical (staff could see owner's profit data despite hideProfit being enabled)
+- **Description**: hideProfit was only applied to the 'pl' report. bill-profit and item-profit returned full profit/COGS/margin to any staff with reports access.
+- **Fix applied**: 2026-07-16 (Audit V23 response). Return 403 for bill-profit + item-profit when hideProfit=true.
+- **Status**: FIXED
