@@ -92,6 +92,10 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
   const [form, setForm] = useState({
     shopName: '', ownerName: '', phone: '', email: '',
     gstin: '', state: '', address: '', upiId: '',
+    // 🔒 AUDIT V23 FIX §13.8: Add scanLang/voiceLang to form state.
+    // Was missing → selectors always showed 'Original' even after saving.
+    scanLang: 'original' as string,
+    voiceLang: 'original' as string,
   })
   const [saving, setSaving] = useState(false)
 
@@ -136,6 +140,10 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
         state: data.setting.state || '',
         address: data.setting.address || '',
         upiId: data.setting.upiId || '',
+        // 🔒 AUDIT V23 FIX §13.8: Hydrate scanLang/voiceLang from server.
+        // Was missing → selectors reset to 'Original' on every page load.
+        scanLang: data.setting.scanLang || 'original',
+        voiceLang: data.setting.voiceLang || 'original',
       })
       setRoundOffEnabled(data.setting.roundOffEnabled ?? false)
       setStockPolicy(data.setting.stockPolicy === 'allow' ? 'allow' : 'block')

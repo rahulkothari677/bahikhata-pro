@@ -57,6 +57,8 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import type { ViewType } from '@/store/app-store'
+// 🔒 AUDIT V23 FIX §13.7: Use real ReferralCard instead of fake email-prefix code
+import { ReferralCard } from '@/components/referral/ReferralCard'
 
 // 🔒 V22-6 (Phase 4) FIX: Move lazy() to module scope.
 // Was: `const SettingsComponent = lazy(...)` inside AccountSectionContent.
@@ -1083,34 +1085,22 @@ function AccountSectionContent({
           </div>
         </div>
 
-        <div className="bg-card rounded-2xl shadow-sm border border-border/60 overflow-hidden">
-          <div className="p-4 border-b border-border/40">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
-                <Shield className="w-5 h-5 text-blue-600" />
-              </div>
-              <div>
-                <p className="font-semibold text-sm">Change Password</p>
-                <p className="text-xs text-muted-foreground">Update your account password</p>
-              </div>
+        {/* 🔒 AUDIT V23 FIX §13.6: Change Password form was a decoration —
+            button had no onClick, inputs were uncontrolled, no API call.
+            Replaced with "Coming Soon" card. To re-enable: wire to real
+            endpoint using the existing password-reset hashing flow. */}
+        <div className="bg-card rounded-2xl shadow-sm border border-border/60 p-4 opacity-70">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
+              <Shield className="w-5 h-5 text-blue-600" />
             </div>
-          </div>
-          <div className="p-4 space-y-3">
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Current Password</label>
-              <input type="password" placeholder="••••••••" className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm" />
+            <div className="flex-1">
+              <p className="font-semibold text-sm">Change Password</p>
+              <p className="text-xs text-muted-foreground">Update your account password</p>
             </div>
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">New Password</label>
-              <input type="password" placeholder="••••••••" className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm" />
-            </div>
-            <div>
-              <label className="text-xs text-muted-foreground mb-1 block">Confirm New Password</label>
-              <input type="password" placeholder="••••••••" className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm" />
-            </div>
-            <button className="w-full py-2.5 rounded-lg bg-gradient-saffron text-white text-sm font-medium mt-2">
-              Update Password
-            </button>
+            <span className="text-[10px] font-bold uppercase tracking-wide bg-muted text-muted-foreground px-2 py-1 rounded-full">
+              Coming Soon
+            </span>
           </div>
         </div>
 
@@ -1148,82 +1138,12 @@ function AccountSectionContent({
   }
 
   // ═══ Referral Page ═══
+  // 🔒 AUDIT V23 FIX §13.7: Was showing a FAKE referral code (email prefix).
+  // The real referral system exists: /api/referral/code, /api/referral/apply,
+  // /api/referral/status, ReferralCard.tsx. Now using the real component.
   if (section === 'referral') {
-    return (
-      <div className="space-y-4">
-        <div className="bg-gradient-to-br from-rose-500 to-pink-600 rounded-2xl p-6 text-white shadow-lg text-center">
-          <Gift className="w-16 h-16 mx-auto mb-3 opacity-90" />
-          <h3 className="text-xl font-bold mb-1">Refer & Earn</h3>
-          <p className="text-sm text-white/80 mb-4">
-            Invite fellow shopkeepers to EkBook. When they sign up, you both get 1 month of Pro FREE.
-          </p>
-          <div className="bg-white/20 backdrop-blur-sm rounded-xl p-3 mb-3">
-            <p className="text-xs text-white/70 mb-1">Your Referral Code</p>
-            <p className="text-2xl font-bold tracking-wider">{session?.user?.email?.split('@')[0]?.toUpperCase()?.slice(0, 8) || 'EKBOOK'}</p>
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={() => {
-                const code = session?.user?.email?.split('@')[0]?.toUpperCase()?.slice(0, 8) || 'EKBOOK'
-                const shareText = `Use my code ${code} to get 1 month Pro FREE on EkBook!`
-                const shareUrl = 'https://bahikhata-pro.vercel.app'
-                if (navigator.share) {
-                  navigator.share({ title: 'EkBook — India\'s Smartest Ledger App', text: shareText, url: shareUrl })
-                } else if (navigator.clipboard) {
-                  navigator.clipboard.writeText(`${shareText} ${shareUrl}`)
-                }
-              }}
-              className="flex-1 py-2.5 rounded-lg bg-white text-rose-600 text-sm font-bold"
-            >
-              Share
-            </button>
-            <button
-              onClick={() => {
-                const code = session?.user?.email?.split('@')[0]?.toUpperCase()?.slice(0, 8) || 'EKBOOK'
-                navigator.clipboard?.writeText(code)
-              }}
-              className="flex-1 py-2.5 rounded-lg bg-white/20 backdrop-blur-sm text-white text-sm font-medium"
-            >
-              Copy Code
-            </button>
-          </div>
-        </div>
-
-        <div className="bg-card rounded-2xl shadow-sm border border-border/60 p-4">
-          <p className="font-semibold text-sm mb-3">How It Works</p>
-          <div className="space-y-3">
-            <div className="flex items-start gap-3">
-              <div className="w-7 h-7 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 text-xs font-bold flex-shrink-0">1</div>
-              <div>
-                <p className="text-sm font-medium">Share your code</p>
-                <p className="text-xs text-muted-foreground">Send your referral code to fellow shopkeepers</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <div className="w-7 h-7 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 text-xs font-bold flex-shrink-0">2</div>
-              <div>
-                <p className="text-sm font-medium">They sign up</p>
-                <p className="text-xs text-muted-foreground">Your friend creates an EkBook account using your code</p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3">
-              <div className="w-7 h-7 rounded-full bg-rose-100 flex items-center justify-center text-rose-600 text-xs font-bold flex-shrink-0">3</div>
-              <div>
-                <p className="text-sm font-medium">You both earn</p>
-                <p className="text-xs text-muted-foreground">Both get 1 month of Pro features FREE</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-card rounded-2xl shadow-sm border border-border/60 p-4 text-center">
-          <p className="text-xs text-muted-foreground">No referrals yet. Start sharing your code!</p>
-        </div>
-      </div>
-    )
+    return <ReferralCard />
   }
-
-  // ═══ Help & Support Page ═══
   if (section === 'help') {
     return (
       <div className="space-y-4">
