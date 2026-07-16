@@ -95,9 +95,24 @@ const DEFAULT_FEATURES: FeatureFlags = {
   businessAnalytics: true,
 }
 
+interface NavStackEntry {
+  view: ViewType
+  params?: Record<string, any>
+}
+
 interface AppState {
   currentView: ViewType
   setView: (v: ViewType) => void
+  // 🔒 AUDIT V23 FIX §9.1: Navigation stack — replaces the 5 parallel nav
+  // variables (previousView, accountOriginView, pendingSettingsTab,
+  // pendingReportType, accountSection) with a single stack.
+  // push(view, params) adds to the stack; pop() goes back.
+  // Android hardware-back maps to pop(). Old variables remain for backward
+  // compatibility during incremental migration.
+  navStack: NavStackEntry[]
+  pushView: (view: ViewType, params?: Record<string, any>) => void
+  popView: () => void
+  canGoBack: () => boolean
   sidebarOpen: boolean
   setSidebarOpen: (open: boolean) => void
   sidebarCollapsed: boolean
@@ -179,9 +194,26 @@ interface AppState {
 
 
 export const useAppStore = create<AppState>()(
-    (set) => ({
+    (set, get) => ({
       currentView: 'dashboard',
       setView: (v) => set({ currentView: v, sidebarOpen: false }),
+      // 🔒 AUDIT V23 FIX §9.1: Navigation stack implementation
+      navStack: [],
+      pushView: (view, params) => set((s) => ({
+        currentView: view,
+        navStack: [...s.navStack, { view: s.currentView, params }],
+        sidebarOpen: false,
+      })),
+      popView: () => set((s) => {
+        if (s.navStack.length === 0) return s
+        const prev = s.navStack[s.navStack.length - 1]
+        return {
+          currentView: prev.view,
+          navStack: s.navStack.slice(0, -1),
+          sidebarOpen: false,
+        }
+      }),
+      canGoBack: () => get().navStack.length > 0,
       sidebarOpen: false,
       setSidebarOpen: (open) => set({ sidebarOpen: open }),
       sidebarCollapsed: false,

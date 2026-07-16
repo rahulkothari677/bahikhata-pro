@@ -19,12 +19,14 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { useSession, signOut } from 'next-auth/react'
+import { useEffect } from 'react'
 import { useAppStore } from '@/store/app-store'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { clearAllOfflineData } from '@/lib/offline-db'
 import { useStaffPermissions } from '@/hooks/use-staff-permissions'
 import type { ModuleKey } from '@/lib/staff-permissions'
 import { haptic } from '@/lib/haptic'
+import { prefetchView } from '@/lib/prefetch' // 🔒 AUDIT V23 FIX §9.6: prefetch reports when More opens
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { getInitials, cn } from '@/lib/utils'
 import { toast as sonnerToast } from 'sonner'
@@ -144,6 +146,13 @@ export function MoreScreen() {
   const { data: session } = useSession()
   const { canAccess, isCA } = useStaffPermissions()
   const { confirmDialog, dialog: confirmDialogEl } = useConfirmDialog()
+
+  // 🔒 AUDIT V23 FIX §9.6: Prefetch the Reports bundle when More opens.
+  // Users opening More are about to tap a report — prefetching the chunk
+  // (which includes recharts ~2.4MB) means it's already loaded when they tap.
+  useEffect(() => {
+    prefetchView('reports')
+  }, [])
 
   // Fetch settings for profile header
   const { data: settingData } = useQuery({

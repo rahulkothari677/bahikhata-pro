@@ -38,6 +38,10 @@ export function useSetting() {
     // 🔒 V21-008: Don't fetch until bootstrap has primed the cache.
     // Once primed, this hook reads from cache (no network request).
     enabled: bootstrapDone,
+    // 🔒 AUDIT V23 FIX §5: Shared staleTime (5 min, matching bootstrap).
+    // Without this, the primed cache is instantly "stale" (default staleTime=0)
+    // and refetches on every mount, defeating the bootstrap consolidation.
+    staleTime: 5 * 60 * 1000, // 5 minutes
   })
 
   const setting = data?.setting || {}

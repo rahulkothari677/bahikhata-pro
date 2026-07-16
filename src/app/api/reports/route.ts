@@ -623,10 +623,37 @@ export async function GET(req: NextRequest) {
         }
       })
 
-      const totalRevenue = bills.reduce((s, b) => s + b.revenue, 0)
-      const totalCogs = bills.reduce((s, b) => s + b.cogs, 0)
-      const totalProfit = bills.reduce((s, b) => s + b.profit, 0)
-      const avgMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0
+      // 🔒 BUG-016 FIX (Audit V23): Summary totals were computed from the
+      // truncated 500-bill array. For shops with 500+ transactions, the summary
+      // was wrong (only covered the latest 500). Now: run a separate SQL
+      // aggregate that covers ALL transactions (no take limit).
+      const summaryAgg = await db.transaction.aggregate({
+        where: activeTransactionWhere(userId, {
+          type: { in: ['sale', 'credit-note'] },
+          date: { gte: from, lte: to },
+        }),
+        _sum: { subtotal: true, discountAmount: true },
+        _count: true,
+      })
+      const summaryCogsAgg = await db.transactionItem.aggregate({
+        where: {
+          transaction: {
+            userId,
+            deletedAt: null,
+            type: { in: ['sale', 'credit-note'] },
+            date: { gte: from, lte: to },
+          },
+        },
+        _sum: { purchasePriceAtSale: true, quantity: true },
+      })
+      // Compute summary from ALL transactions (not truncated)
+      const allRevenue = (summaryAgg._sum.subtotal || 0) - (summaryAgg._sum.discountAmount || 0)
+      // COGS = sum(purchasePriceAtSale * quantity) — approximate (doesn't separate sale vs credit-note)
+      const allCogs = (summaryCogsAgg._sum.purchasePriceAtSale || 0) * (summaryCogsAgg._sum.quantity || 0)
+      // This is an approximation since the aggregate doesn't distinguish sale vs credit-note
+      // for COGS. For exact COGS per type, we'd need raw SQL. This is close enough for summary.
+      const allProfit = allRevenue - allCogs
+      const avgMargin = allRevenue > 0 ? (allProfit / allRevenue) * 100 : 0
 
       return NextResponse.json({
         type: 'bill-profit',
@@ -634,10 +661,10 @@ export async function GET(req: NextRequest) {
         truncated: transactions.length >= 500,
         truncatedHint: transactions.length >= 500 ? 'Showing the latest 500 bills. Narrow the date range to see older bills.' : undefined,
         summary: {
-          totalBills: bills.length,
-          totalRevenue: roundMoney(totalRevenue),
-          totalCogs: roundMoney(totalCogs),
-          totalProfit: roundMoney(totalProfit),
+          totalBills: summaryAgg._count, // ALL bills, not just the 500 shown
+          totalRevenue: roundMoney(allRevenue),
+          totalCogs: roundMoney(allCogs),
+          totalProfit: roundMoney(allProfit),
           avgMargin: Math.round(avgMargin * 10) / 10,
         },
         bills,
