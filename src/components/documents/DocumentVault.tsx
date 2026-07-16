@@ -17,7 +17,7 @@
  */
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -56,6 +56,20 @@ export function DocumentVault() {
   const [uploadNotes, setUploadNotes] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const pendingFileRef = useRef<File | null>(null)
+
+  // 🔒 AUDIT V23 FIX §9.8: Escape key to close upload dialog (accessibility)
+  useEffect(() => {
+    if (!uploadDialogOpen) return
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !uploading) {
+        setUploadDialogOpen(false)
+        pendingFileRef.current = null
+        if (fileInputRef.current) fileInputRef.current.value = ''
+      }
+    }
+    document.addEventListener('keydown', handleEscape)
+    return () => document.removeEventListener('keydown', handleEscape)
+  }, [uploadDialogOpen, uploading])
 
   // Fetch documents
   const { data, isLoading } = useQuery({

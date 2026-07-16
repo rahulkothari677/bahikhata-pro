@@ -27,7 +27,6 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useToast } from '@/hooks/use-toast'
 import { toast as sonnerToast } from 'sonner'
 import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
 import {
@@ -55,7 +54,6 @@ const CA_BLOCKED_MODULES = [
 ]
 
 export function CAAccess() {
-  const { toast } = useToast()
   const queryClient = useQueryClient()
   const { confirmDialog, dialog: confirmDialogEl } = useConfirmDialog()
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -76,11 +74,11 @@ export function CAAccess() {
 
   const handleAdd = async () => {
     if (!form.email || !form.password) {
-      toast({ title: 'Email and password required', variant: 'destructive' })
+      sonnerToast.error('Email and password required')
       return
     }
     if (form.password.length < 8) {
-      toast({ title: 'Password must be at least 8 characters', variant: 'destructive' })
+      sonnerToast.error('Password must be at least 8 characters')
       return
     }
     setSaving(true)
@@ -99,7 +97,7 @@ export function CAAccess() {
       setDialogOpen(false)
       setForm({ name: '', email: '', password: '' })
     } catch (e: any) {
-      toast({ title: 'Failed to create CA account', description: e.message || 'Unknown error', variant: 'destructive' })
+      sonnerToast.error('Failed to create CA account', { description: e.message || 'Unknown error' })
     } finally {
       setSaving(false)
     }

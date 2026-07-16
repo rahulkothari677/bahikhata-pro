@@ -12,7 +12,6 @@ import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { useToast } from '@/hooks/use-toast'
 import { toast as sonnerToast } from 'sonner'
 import { formatINR, cn, getInitials } from '@/lib/utils'
 import {
@@ -71,7 +70,6 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
   const [affectsStock, setAffectsStock] = useState(false)
   const [originalTransactionId, setOriginalTransactionId] = useState<string | null>(null)
   const { setView, triggerRefresh, setScannerBillType, previousView, setPreviousView, features } = useAppStore()
-  const { toast } = useToast()
   const queryClient = useQueryClient()
 
   const [partyId, setPartyId] = useState('')
@@ -514,7 +512,7 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
 
   const handleSave = async () => {
     if (items.length === 0) {
-      toast({ title: 'Add at least one item', variant: 'destructive' })
+      sonnerToast.error('Add at least one item')
       return
     }
     // 🔒 V11 STOCK POLICY: Block save if stock would go negative (block mode).
@@ -628,7 +626,7 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
       setView(isSale ? 'sales' : 'purchases')
     } catch (e) {
       haptic.error()
-      toast({ title: 'Failed to save transaction', variant: 'destructive' })
+      sonnerToast.error('Failed to save transaction')
     } finally {
       setSaving(false)
     }
@@ -1524,7 +1522,6 @@ function AddPartyInline({ open, onOpenChange, defaultType, onAdded }: {
   defaultType: 'customer' | 'supplier'
   onAdded: (party: any) => void
 }) {
-  const { toast } = useToast()
   const [form, setForm] = useState({
     name: '', type: defaultType, phone: '', gstin: '', state: '', address: '',
   })
@@ -1538,7 +1535,7 @@ function AddPartyInline({ open, onOpenChange, defaultType, onAdded }: {
 
   const handleSave = async () => {
     if (!form.name.trim()) {
-      toast({ title: 'Name is required', variant: 'destructive' })
+      sonnerToast.error('Name is required')
       return
     }
     setSaving(true)
@@ -1562,7 +1559,7 @@ function AddPartyInline({ open, onOpenChange, defaultType, onAdded }: {
       onAdded(data.party)
       onOpenChange(false)
     } catch {
-      toast({ title: 'Failed to add', variant: 'destructive' })
+      sonnerToast.error('Failed to add')
     } finally {
       setSaving(false)
     }

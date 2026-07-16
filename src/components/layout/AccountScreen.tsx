@@ -405,6 +405,7 @@ export function AccountScreen() {
       <div className="sticky top-0 z-20 bg-background/80 backdrop-blur-md border-b border-border">
         <div className="flex items-center gap-3 px-4 py-3">
           <button
+            aria-label="Go back"
             onClick={handleBack}
             className="p-2 -ml-2 rounded-lg hover:bg-muted"
           >
@@ -1326,7 +1327,8 @@ function AccountSectionContent({
           </div>
           <h3 className="text-xl font-bold">EkBook</h3>
           <p className="text-sm text-muted-foreground mt-1">India's Smartest Ledger App</p>
-          <p className="text-xs text-muted-foreground mt-2">Version 1.0.0</p>
+          {/* 🔒 AUDIT V23 FIX §10: App version with build info for beta readiness */}
+          <p className="text-xs text-muted-foreground mt-2">EkBook v1.0.0 (Beta)</p>
           <div className="inline-flex items-center gap-1.5 mt-3 px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-medium">
             🇮🇳 Made in India
           </div>

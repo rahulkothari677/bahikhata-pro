@@ -13,7 +13,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAppStore } from '@/store/app-store'
 import { useTranslation } from '@/hooks/use-translation'
-import { useToast } from '@/hooks/use-toast'
 import { toast as sonnerToast } from 'sonner'
 import { formatINR, formatDate, cn, getInitials, formatINRCompact } from '@/lib/utils'
 import { ViewModeToggle } from '@/components/common/ViewModeToggle'
@@ -363,7 +362,6 @@ function PartyDialog({ open, onOpenChange, onSuccess }: {
   onOpenChange: (open: boolean) => void
   onSuccess?: () => void
 }) {
-  const { toast } = useToast()
   const [form, setForm] = useState({
     name: '', type: 'customer', phone: '', email: '', gstin: '',
     address: '', state: '', openingBalance: '',
@@ -378,7 +376,7 @@ function PartyDialog({ open, onOpenChange, onSuccess }: {
 
   const handleSave = async () => {
     if (!form.name.trim()) {
-      toast({ title: 'Name is required', variant: 'destructive' })
+      sonnerToast.error('Name is required')
       return
     }
     setSaving(true)
@@ -400,7 +398,7 @@ function PartyDialog({ open, onOpenChange, onSuccess }: {
       onOpenChange(false)
     } catch {
       haptic.error()
-      toast({ title: 'Failed to save party', variant: 'destructive' })
+      sonnerToast.error('Failed to save party')
     } finally {
       setSaving(false)
     }

@@ -134,6 +134,7 @@ export function Header() {
           {isDetailView && (
             <button
               onClick={handleBack}
+              aria-label="Go back"
               className="p-2.5 -ml-2 rounded-lg hover:bg-muted flex items-center gap-1 text-sm font-medium min-h-[44px]"
             >
               <ArrowLeft className="w-5 h-5" />

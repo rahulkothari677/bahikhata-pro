@@ -11,7 +11,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Search, Plus, X, Phone, User, ChevronDown, Check } from 'lucide-react'
 import { cn, getInitials } from '@/lib/utils'
 import { toast as sonnerToast } from 'sonner'
-import { useToast } from '@/hooks/use-toast'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 
 type PartyType = 'customer' | 'supplier' | 'both'
@@ -31,7 +30,6 @@ export function PartySelect({
   const [search, setSearch] = useState('')
   const [addDialogOpen, setAddDialogOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
-  const { toast } = useToast()
 
   const { data: partiesData, refetch } = useQuery({
     queryKey: ['parties', 'for-select'],
@@ -225,7 +223,6 @@ function AddPartyDialog({ open, onOpenChange, defaultType, onSuccess }: {
   defaultType: 'customer' | 'supplier'
   onSuccess: (party: any) => void
 }) {
-  const { toast } = useToast()
   const [form, setForm] = useState({
     name: '', type: defaultType, phone: '', email: '', gstin: '',
     address: '', state: '', openingBalance: '',
@@ -243,7 +240,7 @@ function AddPartyDialog({ open, onOpenChange, defaultType, onSuccess }: {
 
   const handleSave = async () => {
     if (!form.name.trim()) {
-      toast({ title: 'Name is required', variant: 'destructive' })
+      sonnerToast.error('Name is required')
       return
     }
     setSaving(true)
@@ -263,7 +260,7 @@ function AddPartyDialog({ open, onOpenChange, defaultType, onSuccess }: {
       const data = await r.json()
       onSuccess(data.party)
     } catch {
-      toast({ title: 'Failed to add party', variant: 'destructive' })
+      sonnerToast.error('Failed to add party')
     } finally {
       setSaving(false)
     }

@@ -13,7 +13,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
-import { useToast } from '@/hooks/use-toast'
 import { toast as sonnerToast } from 'sonner'
 import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
 import { formatINR, formatDateTime, formatDate, cn } from '@/lib/utils'
@@ -811,7 +810,6 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
   transaction: any
   onSuccess?: () => void
 }) {
-  const { toast } = useToast()
   const [saving, setSaving] = useState(false)
 
   // 🔒 Defensive: if transaction is somehow undefined (e.g. during a React
@@ -945,7 +943,7 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
       onOpenChange(false)
     } catch (e) {
       haptic.error()
-      toast({ title: 'Failed to update', variant: 'destructive' })
+      sonnerToast.error('Failed to update')
     } finally {
       setSaving(false)
     }

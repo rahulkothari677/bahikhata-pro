@@ -10,7 +10,6 @@ import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useToast } from '@/hooks/use-toast'
 import { toast as sonnerToast } from 'sonner'
 import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
 import {
@@ -47,7 +46,6 @@ const MODULE_ORDER: ModuleKey[] = [
 ]
 
 export function StaffManagement() {
-  const { toast } = useToast()
   const queryClient = useQueryClient()
   const { confirmDialog, dialog: confirmDialogEl } = useConfirmDialog()
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -70,7 +68,7 @@ export function StaffManagement() {
 
   const handleAdd = async () => {
     if (!form.email || !form.password) {
-      toast({ title: 'Email and password required', variant: 'destructive' })
+      sonnerToast.error('Email and password required')
       return
     }
     setSaving(true)
@@ -88,7 +86,7 @@ export function StaffManagement() {
       setDialogOpen(false)
       setForm({ name: '', email: '', password: '' })
     } catch (e: any) {
-      toast({ title: 'Failed to add staff', description: e.message || 'Unknown error', variant: 'destructive' })
+      sonnerToast.error('Failed to add staff', { description: e.message || 'Unknown error' })
     } finally {
       setSaving(false)
     }

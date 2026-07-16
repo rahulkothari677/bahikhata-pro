@@ -16,7 +16,6 @@ import { useShops } from '@/hooks/use-shops'
 import { exportBackup } from '@/lib/data-backup'
 import { useBusinessGoals } from '@/hooks/use-business-goals'
 import { Target, Download, Upload, Calendar, Clock, Coins, PackageX } from 'lucide-react'
-import { useToast } from '@/hooks/use-toast'
 import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
 import { toast as sonnerToast } from 'sonner'
 import { haptic } from '@/lib/haptic'
@@ -85,7 +84,6 @@ const FEATURE_CATEGORIES: { title: string; features: { key: FeatureKey; label: s
 // locks to that tab. Used by the Account page to render each section as a
 // dedicated standalone page (no tab navigation visible).
 export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | 'appearance' | 'data' | 'staff' }) {
-  const { toast } = useToast()
   const { confirmDialog, dialog: confirmDialogEl } = useConfirmDialog()
   const queryClient = useQueryClient()
   const { data: session } = useSession()
@@ -279,7 +277,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
 
   const handleSave = async () => {
     if (!form.shopName.trim()) {
-      toast({ title: 'Shop name is required', variant: 'destructive' })
+      sonnerToast.error('Shop name is required')
       return
     }
     setSaving(true)
@@ -296,7 +294,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
       queryClient.invalidateQueries({ queryKey: ['setting'] })
     } catch {
       haptic.error()
-      toast({ title: 'Failed to save settings', variant: 'destructive' })
+      sonnerToast.error('Failed to save settings')
     } finally {
       setSaving(false)
     }
@@ -315,7 +313,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
       }
     } catch {
       haptic.error()
-      toast({ title: 'Failed to reset data', variant: 'destructive' })
+      sonnerToast.error('Failed to reset data')
     }
   }
 
@@ -330,7 +328,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
       sonnerToast.success(`Cleared ${writes.length} pending write(s)`)
       window.location.reload()
     } catch {
-      toast({ title: 'Failed to clear pending writes', variant: 'destructive' })
+      sonnerToast.error('Failed to clear pending writes')
     }
   }
 
@@ -342,7 +340,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
       sonnerToast.success('Offline cache cleared. Reloading...')
       setTimeout(() => window.location.reload(), 1000)
     } catch {
-      toast({ title: 'Failed to clear cache', variant: 'destructive' })
+      sonnerToast.error('Failed to clear cache')
     }
   }
 

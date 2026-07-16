@@ -11,7 +11,6 @@ import { offlineFetch } from '@/lib/offline-fetch'
 import { formatINR } from '@/lib/utils'
 import { roundMoney } from '@/lib/money'
 import { resolveEnteredQuantity } from '@/lib/units'
-import { useToast } from '@/hooks/use-toast'
 import { useSubscription } from '@/hooks/use-subscription'
 import { haptic } from '@/lib/haptic'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -110,7 +109,6 @@ export function VoiceEntry({ onTransactionParsed, products = [] }: VoiceEntryPro
   const recognitionRef = useRef<any>(null)
   const processedFinalsRef = useRef<Set<number>>(new Set())
   const isRecordingRef = useRef(false)
-  const { toast } = useToast()
   const { requireFeature } = useSubscription()
 
   // Fetch user settings to get voiceLang (and stay in sync if changed elsewhere)
@@ -228,7 +226,7 @@ export function VoiceEntry({ onTransactionParsed, products = [] }: VoiceEntryPro
   const handleParse = async () => {
     const fullTranscript = accumulatedTranscript.trim()
     if (!fullTranscript) {
-      toast({ title: 'Nothing to parse', description: 'Record some audio first.', variant: 'destructive' })
+      sonnerToast.error('Nothing to parse', { description: 'Record some audio first.' })
       return
     }
 
@@ -325,7 +323,7 @@ export function VoiceEntry({ onTransactionParsed, products = [] }: VoiceEntryPro
         sonnerToast.success(`Parsed ${enrichedItems.length} items! ${matchedCount} prices auto-filled from inventory.`)
       } else {
         haptic.error()
-        toast({ title: 'Could not parse voice entry', description: data.error, variant: 'destructive' })
+        sonnerToast.error('Could not parse voice entry', { description: data.error })
       }
     } catch (e: any) {
       haptic.error()
@@ -340,7 +338,7 @@ export function VoiceEntry({ onTransactionParsed, products = [] }: VoiceEntryPro
 
   const handleApply = () => {
     if (!parsed || !parsed.items || parsed.items.length === 0) {
-      toast({ title: 'No items to apply', variant: 'destructive' })
+      sonnerToast.error('No items to apply')
       return
     }
     haptic.success()

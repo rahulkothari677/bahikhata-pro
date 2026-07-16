@@ -16,7 +16,7 @@
  * Uses the existing /api/whatsapp-reminder endpoint to generate each link.
  */
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { cn, formatINR } from '@/lib/utils'
@@ -36,8 +36,17 @@ export function BulkRemindersModal({ open, onClose }: BulkRemindersModalProps) {
   const [sending, setSending] = useState(false)
   const [currentIndex, setCurrentIndex] = useState<number | null>(null)
   const [sentIds, setSentIds] = useState<Set<string>>(new Set())
-  // 🔒 AUDIT V23 FIX §8.9: Pre-generated WhatsApp links (moved before early return for hooks rules)
   const [reminderLinks, setReminderLinks] = useState<{ partyId: string; url: string; name: string }[]>([])
+
+  // 🔒 AUDIT V23 FIX §9.8: Escape key to close modal (accessibility)
+  useEffect(() => {
+    if (!open) return
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !sending) onClose()
+    }
+    document.addEventListener('keydown', handleEscape)
+    return () => document.removeEventListener('keydown', handleEscape)
+  }, [open, sending, onClose])
 
   // Fetch all parties (API always includes balances)
   const { data, isLoading } = useQuery({

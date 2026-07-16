@@ -9,7 +9,6 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { useToast } from '@/hooks/use-toast'
 import { toast as sonnerToast } from 'sonner'
 import { formatINR, cn } from '@/lib/utils'
 import {
@@ -169,7 +168,6 @@ async function pickPhotoNative(): Promise<File | null> {
 export function BillScanner() {
   const { t } = useTranslation()
   const { setView, scannerBillType, setScannerBillType, setScannerResult } = useAppStore()
-  const { toast } = useToast()
   const { requireFeature } = useSubscription()
   const [scanning, setScanning] = useState(false)
   const [scanned, setScanned] = useState<any>(null)
@@ -274,11 +272,11 @@ export function BillScanner() {
       return
     }
     if (!file.type.startsWith('image/')) {
-      toast({ title: 'Please select an image file', variant: 'destructive' })
+      sonnerToast.error('Please select an image file')
       return
     }
     if (file.size > 10 * 1024 * 1024) {
-      toast({ title: 'Image too large. Max 10MB', variant: 'destructive' })
+      sonnerToast.error('Image too large. Max 10MB')
       return
     }
 
@@ -528,19 +526,11 @@ export function BillScanner() {
       if (file) {
         handleFile(file)
       } else {
-        toast({
-          title: 'Camera unavailable',
-          description: 'Camera may be in use by another app, or permission was denied. Check Android Settings → Apps → EkBook → Permissions.',
-          variant: 'destructive',
-        })
+        sonnerToast.error('Camera unavailable', { description: 'Camera may be in use by another app, or permission was denied. Check Android Settings → Apps → EkBook → Permissions.' })
       }
     } catch (err: any) {
       console.error('[Scanner] handleTakePhoto error:', err)
-      toast({
-        title: 'Camera error',
-        description: String(err?.message || err),
-        variant: 'destructive',
-      })
+      sonnerToast.error('Camera error', { description: String(err?.message || err) })
     }
   }
 
@@ -563,19 +553,11 @@ export function BillScanner() {
       if (file) {
         handleFile(file)
       } else {
-        toast({
-          title: 'Photo picker unavailable',
-          description: 'Could not open photo gallery. Check storage permissions in Android Settings.',
-          variant: 'destructive',
-        })
+        sonnerToast.error('Photo picker unavailable', { description: 'Could not open photo gallery. Check storage permissions in Android Settings.' })
       }
     } catch (err: any) {
       console.error('[Scanner] handlePickPhoto error:', err)
-      toast({
-        title: 'Photo picker error',
-        description: String(err?.message || err),
-        variant: 'destructive',
-      })
+      sonnerToast.error('Photo picker error', { description: String(err?.message || err) })
     }
   }
 

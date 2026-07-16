@@ -12,7 +12,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAppStore } from '@/store/app-store'
 import { useTranslation } from '@/hooks/use-translation'
-import { useToast } from '@/hooks/use-toast'
 import { toast as sonnerToast } from 'sonner'
 import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
 import { formatINR, formatDate, cn } from '@/lib/utils'
@@ -650,7 +649,6 @@ function IncomeExpenseDialog({ open, onOpenChange, type, onSuccess }: {
   onSuccess?: () => void
 }) {
   const isExpense = type === 'expense'
-  const { toast } = useToast()
   const [amount, setAmount] = useState('')
   const [category, setCategory] = useState('')
   const [customCategory, setCustomCategory] = useState('')
@@ -681,12 +679,12 @@ function IncomeExpenseDialog({ open, onOpenChange, type, onSuccess }: {
   const handleSave = async () => {
     const amt = parseFloat(amount)
     if (!amt || amt <= 0) {
-      toast({ title: 'Enter valid amount', variant: 'destructive' })
+      sonnerToast.error('Enter valid amount')
       return
     }
     const finalCategory = isCustomCategory ? customCategory.trim() : category
     if (!finalCategory) {
-      toast({ title: 'Select or enter a category', variant: 'destructive' })
+      sonnerToast.error('Select or enter a category')
       return
     }
     setSaving(true)
@@ -715,7 +713,7 @@ function IncomeExpenseDialog({ open, onOpenChange, type, onSuccess }: {
       onSuccess?.()
       onOpenChange(false)
     } catch {
-      toast({ title: 'Failed to save', variant: 'destructive' })
+      sonnerToast.error('Failed to save')
     } finally {
       setSaving(false)
     }

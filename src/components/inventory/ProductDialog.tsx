@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { useToast } from '@/hooks/use-toast'
 import { toast as sonnerToast } from 'sonner'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { haptic } from '@/lib/haptic'
@@ -40,7 +39,6 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
 }) {
   const [form, setForm] = useState(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
-  const { toast } = useToast()
 
   // Sync form when dialog opens or product changes
   useEffect(() => {
@@ -70,7 +68,7 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
 
   const handleSave = async () => {
     if (!form.name.trim()) {
-      toast({ title: 'Product name required', variant: 'destructive' })
+      sonnerToast.error('Product name required')
       return
     }
     // 🔒 V17 Audit Phase 1 P1.5: Client-side check for contradictory gstRate + gstTreatment.
@@ -78,10 +76,8 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
     // server-side, but the client-side check gives immediate feedback before the API call.
     const gstRateNum = parseFloat(form.gstRate) || 0
     if ((form.gstTreatment === 'exempt' || form.gstTreatment === 'nonGst') && gstRateNum > 0) {
-      toast({
-        title: 'Contradictory GST settings',
+      sonnerToast.error('Contradictory GST settings', {
         description: `${form.gstTreatment === 'exempt' ? 'Exempt' : 'Non-GST'} products must have GST rate 0%. Change the GST rate to 0% or set GST Treatment to Taxable/Nil-rated.`,
-        variant: 'destructive',
       })
       return
     }
@@ -131,7 +127,7 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
       onOpenChange(false)
     } catch (e) {
       haptic.error()
-      toast({ title: 'Failed to save product', variant: 'destructive' })
+      sonnerToast.error('Failed to save product')
     } finally {
       setSaving(false)
     }
