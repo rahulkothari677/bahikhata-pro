@@ -23,7 +23,7 @@ import {
 } from 'lucide-react'
 import { toast as sonnerToast } from 'sonner'
 import { offlineFetch } from '@/lib/offline-fetch'
-import { exportPLReportCSV, exportGSTReportCSV, exportStockReportCSV, exportPartyReportCSV } from '@/lib/csv-export'
+import { exportPLReportCSV, exportGSTReportCSV, exportStockReportCSV, exportPartyReportCSV, exportBillWiseProfitCSV, exportItemWiseProfitCSV, exportHsnSummaryCSV, exportCashflowCSV, exportTrialBalanceCSV } from '@/lib/csv-export'
 import { exportToTally } from '@/lib/tally-export'
 import { DebtAgingReport } from '@/components/reports/DebtAgingReport'
 import { InventoryAgingReport } from '@/components/reports/InventoryAgingReport'
@@ -203,6 +203,12 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
       else if (reportType === 'gst') await exportGSTReportCSV(data, periodLabel)
       else if (reportType === 'stock') await exportStockReportCSV(data)
       else if (reportType === 'party') await exportPartyReportCSV(data)
+      // 🔒 AUDIT V23 FIX §8.4: CSV export for new reports
+      else if (reportType === 'bill-profit') await exportBillWiseProfitCSV(data, periodLabel)
+      else if (reportType === 'item-profit') await exportItemWiseProfitCSV(data, periodLabel)
+      else if (reportType === 'hsn') await exportHsnSummaryCSV(data, periodLabel)
+      else if (reportType === 'cashflow') await exportCashflowCSV(data, periodLabel)
+      else if (reportType === 'trial-balance') await exportTrialBalanceCSV(data, periodLabel)
       sonnerToast.success('CSV ready — save or share from the popup', { id: toastId })
     } catch (err: any) {
       sonnerToast.error('CSV export failed', {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthContext } from '@/lib/get-auth'
-import { uploadDocument, deleteDocument } from '@/lib/cloudinary'
+import { uploadDocument, deleteDocument, getSignedDocumentUrl } from '@/lib/cloudinary'
 import { rateLimit } from '@/lib/rate-limit'
 import { apiError } from '@/lib/api-error'
 
@@ -27,7 +27,20 @@ export async function GET(req: NextRequest) {
       orderBy: { uploadedAt: 'desc' },
     })
 
-    return NextResponse.json({ documents })
+    // 🔒 AUDIT V23 FIX §6b: Generate short-lived signed URLs for each document.
+    // The stored cloudinaryUrl is NOT publicly accessible (type='authenticated'),
+    // so we generate a fresh signed URL that expires in 1 hour.
+    const documentsWithSignedUrls = documents.map(doc => {
+      const resourceType = doc.fileType.startsWith('image/') ? 'image' : 'raw'
+      const signedUrl = getSignedDocumentUrl(doc.cloudinaryPublicId, resourceType as any)
+      return {
+        ...doc,
+        // Use signed URL for viewing; fall back to stored URL if signing fails
+        viewUrl: signedUrl || doc.cloudinaryUrl,
+      }
+    })
+
+    return NextResponse.json({ documents: documentsWithSignedUrls })
   } catch (error) {
     return apiError(error, 'Failed to load documents', 500)
   }

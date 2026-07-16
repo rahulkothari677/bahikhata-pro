@@ -74,6 +74,11 @@ export async function uploadDocument(
     const result = await cloudinary.uploader.upload(dataUri, {
       folder: `ekbook/documents/${userId}`,
       resource_type: resourceType,
+      // 🔒 AUDIT V23 FIX §6b: Use 'authenticated' type for document privacy.
+      // Documents (ID proofs, bank statements, GST certificates) must NOT be
+      // publicly accessible. With type='authenticated', URLs require a signed
+      // token to access. The API generates short-lived signed URLs per view.
+      type: 'authenticated',
       // Only apply image transformations for images
       ...(isImage ? {
         transformation: [
@@ -100,10 +105,26 @@ export async function uploadDocument(
 // Delete a document from Cloudinary
 export async function deleteDocument(publicId: string, resourceType: 'image' | 'raw' = 'raw'): Promise<boolean> {
   try {
-    await cloudinary.uploader.destroy(publicId, { resource_type: resourceType })
+    await cloudinary.uploader.destroy(publicId, { resource_type: resourceType, type: 'authenticated' })
     return true
   } catch (error) {
     console.error('Cloudinary document delete error:', error)
     return false
+  }
+}
+
+// 🔒 AUDIT V23 FIX §6b: Generate a short-lived signed URL for viewing an
+// authenticated document. The URL expires after 1 hour, so even if it leaks
+// (WhatsApp forward, screenshot), it stops working quickly.
+export function getSignedDocumentUrl(publicId: string, resourceType: 'image' | 'raw' = 'image'): string {
+  try {
+    return cloudinary.utils.private_download_url(publicId, resourceType === 'image' ? 'jpg' : 'pdf', {
+      expires_at: Math.floor(Date.now() / 1000) + 3600, // 1 hour
+    })
+  } catch (error) {
+    console.error('Cloudinary signed URL error:', error)
+    // Fallback: return the stored URL (may not work for authenticated assets,
+    // but better than crashing)
+    return ''
   }
 }

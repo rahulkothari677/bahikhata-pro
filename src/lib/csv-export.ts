@@ -171,3 +171,71 @@ export async function exportPartyReportCSV(data: any) {
   ])
   await exportCSV('Party_Report', headers, rows)
 }
+
+// 🔒 AUDIT V23 FIX §8.4: CSV exports for the 5 new V22 reports.
+
+export async function exportBillWiseProfitCSV(data: any, periodLabel: string) {
+  const headers = ['Invoice', 'Date', 'Type', 'Party', 'Items', 'Revenue', 'COGS', 'Profit', 'Margin %']
+  const rows: (string | number)[][] = (data.bills || []).map((b: any) => [
+    b.invoiceNo,
+    new Date(b.date).toLocaleDateString('en-IN'),
+    b.type,
+    b.partyName,
+    b.itemCount,
+    b.revenue,
+    b.cogs,
+    b.profit,
+    b.margin,
+  ])
+  await exportCSV(`BillWise_Profit_${periodLabel.replace(/\s+/g, '_')}`, headers, rows)
+}
+
+export async function exportItemWiseProfitCSV(data: any, periodLabel: string) {
+  const headers = ['Product', 'Qty Sold', 'Revenue', 'COGS', 'Profit', 'Margin %']
+  const rows: (string | number)[][] = (data.items || []).map((i: any) => [
+    i.productName,
+    i.totalQty,
+    i.revenue,
+    i.cogs,
+    i.profit,
+    i.margin,
+  ])
+  await exportCSV(`ItemWise_Profit_${periodLabel.replace(/\s+/g, '_')}`, headers, rows)
+}
+
+export async function exportHsnSummaryCSV(data: any, periodLabel: string) {
+  const headers = ['HSN/SAC', 'Description', 'Qty', 'Unit', 'GST Rate %', 'Taxable Value', 'CGST', 'SGST', 'IGST', 'Total Tax']
+  const rows: (string | number)[][] = (data.hsnSummary || []).map((h: any) => [
+    h.hsn,
+    h.description,
+    h.totalQty,
+    h.unit,
+    h.gstRate,
+    h.taxableValue,
+    h.cgst,
+    h.sgst,
+    h.igst,
+    h.totalTax,
+  ])
+  await exportCSV(`HSN_Summary_${periodLabel.replace(/\s+/g, '_')}`, headers, rows)
+}
+
+export async function exportCashflowCSV(data: any, periodLabel: string) {
+  const headers = ['Type', 'Category', 'Amount']
+  const rows: (string | number)[][] = []
+  ;(data.inflows || []).forEach((i: any) => rows.push(['Inflow', i.label, i.amount]))
+  ;(data.outflows || []).forEach((o: any) => rows.push(['Outflow', o.label, o.amount]))
+  rows.push(['', 'Net Cashflow', data.summary?.netCashflow || 0])
+  await exportCSV(`Cashflow_${periodLabel.replace(/\s+/g, '_')}`, headers, rows)
+}
+
+export async function exportTrialBalanceCSV(data: any, periodLabel: string) {
+  const headers = ['Account', 'Debit', 'Credit']
+  const rows: (string | number)[][] = (data.accounts || []).map((a: any) => [
+    a.name,
+    a.debit || '',
+    a.credit || '',
+  ])
+  rows.push(['Total', data.summary?.totalDebit || 0, data.summary?.totalCredit || 0])
+  await exportCSV(`Account_Summary_${periodLabel.replace(/\s+/g, '_')}`, headers, rows)
+}

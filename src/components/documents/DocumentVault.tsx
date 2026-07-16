@@ -290,7 +290,7 @@ export function DocumentVault() {
                   )}>
                     {doc.fileType.startsWith('image/') ? (
                       <img
-                        src={doc.cloudinaryUrl}
+                        src={doc.viewUrl || doc.cloudinaryUrl}
                         alt={doc.name}
                         className="w-full h-full object-cover rounded-lg"
                         loading="lazy"
@@ -316,7 +316,7 @@ export function DocumentVault() {
                   <p className="text-[10px] text-muted-foreground mt-1">{formatDate(doc.uploadedAt)}</p>
                   {/* Open button */}
                   <a
-                    href={doc.cloudinaryUrl}
+                    href={doc.viewUrl || doc.cloudinaryUrl}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="mt-2 w-full inline-flex items-center justify-center gap-1 py-1.5 rounded-lg border border-border text-[11px] font-medium hover:bg-muted transition"
