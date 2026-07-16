@@ -266,12 +266,21 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     const monthlyData: { month: string; sales: number; purchases: number }[] = []
+    // 🔒 AUDIT V23 FIX §13.4: Fix timezone key mismatch.
+    // Was: istMonthStartOffset(now, -i).toISOString().slice(0,7) → "2026-06" for July
+    //   (because istMonthStartOffset subtracts IST_OFFSET_MS, shifting to June 30 UTC)
+    // SQL key: DATE_TRUNC('month', t.date AT TIME ZONE 'Asia/Kolkata') → "2026-07"
+    //   (naive timestamp read as UTC by JS → "2026-07-01T00:00:00Z" → "2026-07")
+    // Mismatch → current month's activity was absent from the chart.
+    // Fix: use Date.UTC(istYear, istMonth - i, 1) (no IST_OFFSET_MS subtraction)
+    //   → "2026-07-01T00:00:00Z" → "2026-07" → matches SQL key.
+    const istPartsNow = getISTDateParts(now)
     for (let i = 5; i >= 0; i--) {
-      const monthStart = istMonthStartOffset(now, -i)
-      const key = monthStart.toISOString().slice(0, 7)
+      const keyDate = new Date(Date.UTC(istPartsNow.year, istPartsNow.month - i, 1))
+      const key = keyDate.toISOString().slice(0, 7)
       const entry = monthlyMap.get(key) || { sales: 0, purchases: 0 }
       monthlyData.push({
-        month: monthStart.toLocaleDateString('en-IN', { month: 'short', timeZone: 'UTC' }),
+        month: keyDate.toLocaleDateString('en-IN', { month: 'short', timeZone: 'UTC' }),
         sales: entry.sales,
         purchases: entry.purchases,
       })

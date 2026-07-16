@@ -239,3 +239,34 @@ export async function exportTrialBalanceCSV(data: any, periodLabel: string) {
   rows.push(['Total', data.summary?.totalDebit || 0, data.summary?.totalCredit || 0])
   await exportCSV(`Account_Summary_${periodLabel.replace(/\s+/g, '_')}`, headers, rows)
 }
+
+// 🔒 AUDIT V23 FIX §13.5: CSV exports for debt-aging + inventory-aging.
+
+export async function exportDebtAgingCSV(data: any, periodLabel: string) {
+  const headers = ['Party Name', 'Type', 'Balance', 'Current', '1-30 days', '31-60 days', '61-90 days', '90+ days']
+  const rows: (string | number)[][] = (data.parties || []).map((p: any) => [
+    p.party.name,
+    p.party.type,
+    p.balance,
+    p.aging?.current || 0,
+    p.aging?.days30 || 0,
+    p.aging?.days60 || 0,
+    p.aging?.days90 || 0,
+    p.aging?.days90Plus || 0,
+  ])
+  await exportCSV(`Debt_Aging_${periodLabel.replace(/\s+/g, '_')}`, headers, rows)
+}
+
+export async function exportInventoryAgingCSV(data: any) {
+  const headers = ['Product', 'Category', 'Stock', 'Unit', 'Stock Value', 'Age (days)', 'Status']
+  const rows: (string | number)[][] = (data.products || []).map((p: any) => [
+    p.name,
+    p.category || '',
+    p.currentStock,
+    p.unit,
+    p.stockValue,
+    p.ageInDays || 0,
+    p.ageBucket || '',
+  ])
+  await exportCSV('Inventory_Aging', headers, rows)
+}

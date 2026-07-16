@@ -294,7 +294,7 @@ export async function GET(req: NextRequest) {
         monthYear,
         periodStart: periodStart.toISOString(),
         periodEnd: periodEnd.toISOString(),
-        monthLabel: new Date(periodStart).toLocaleDateString('en-IN', { month: 'long', year: 'numeric', timeZone: 'UTC' }),
+        monthLabel: new Date(periodStart).toLocaleDateString('en-IN', { month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' }),
       },
       // Section 3.1
       outwardTaxableValue,
