@@ -6004,3 +6004,25 @@ Stage Summary:
 - 2 new bugs logged: BUG-020 (TransactionItem aggregate), BUG-021 (profit-hiding bypass)
 - 3 critical + 3 high + 2 moderate findings addressed
 - 1596 tests passing, 0 TypeScript errors, 0 ESLint errors
+
+---
+Task ID: deferred-product-features
+Agent: main
+Task: Deferred items for future implementation (not bugs — product roadmap)
+
+DEFERRED PRODUCT FEATURES (do when user says):
+- Estimates/Quotations (§10.4) — stubbed with Coming Soon toast, reuses TransactionEntry
+- Daily digest notification (§10.5) — opt-in 9 PM IST, today's sales/profit/udhaar
+- Beta readiness kit (§10.1) — in-app Report a Problem, version string, crash-free metric
+- Onboarding to first value in <2 minutes (§10.2) — guided first sale flow
+- Auto-backup reminder (§10.3) — weekly notification if last backup >7 days
+- Regional language expansion (§10.6) — gu/mr/ta/te translations for new V22 surface
+
+DEFERRED STRUCTURAL ITEMS:
+- §9.3: Trust surface drill-downs (tap Sundry Debtors → list parties)
+- §9.4: Document Vault camera-capture + per-category empty states
+- §9.5: WhatsApp UPI deep link in reminders + per-language templates
+- §8.11: Full i18n for V22 surface (ReportsHub, reports, DocumentVault, etc.)
+- Recharts static import in Dashboard (§7.5 — still 2.4MB on every boot)
+- transactions?limit=200 → cursor pagination (V21 deferred)
+- Settings query dedupe — central useSetting hook for 10 components (partially done with staleTime)
