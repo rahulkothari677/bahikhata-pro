@@ -63,17 +63,6 @@ echo "[migrate] Step 1: Marking baseline migration as applied (no-op if already 
 npx prisma migrate resolve --applied 0_init 2>/dev/null || true
 echo "[migrate] Baseline resolve complete."
 
-# Step 1.5: Heal P3009 from the disabled Document Vault migration.
-# This migration was attempted but failed (DIRECT_URL not set on Vercel),
-# leaving a 'failed' state in _prisma_migrations. migrate deploy refuses
-# to proceed when it sees a failed migration (P3009). This resolve clears it.
-# Idempotent: if already resolved or never recorded, it's a no-op.
-# TODO: Remove this line once the failed state is cleared from production,
-# OR once DIRECT_URL is set and the migration is properly applied.
-echo "[migrate] Step 1.5: Healing P3009 from disabled Document Vault migration..."
-npx prisma migrate resolve --rolled-back 20260716000000_add_document_vault 2>/dev/null || true
-echo "[migrate] Document Vault resolve complete."
-
 # Step 2: migrate deploy with retries (retry ONLY on P1001 / connectivity).
 echo "[migrate] Step 2: Running migrate deploy (up to $MAX_RETRIES attempts)..."
 for i in $(seq 1 "$MAX_RETRIES"); do

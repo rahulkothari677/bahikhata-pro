@@ -18,7 +18,7 @@ export async function GET(req: NextRequest) {
     const { searchParams } = new URL(req.url)
     const category = searchParams.get('category')
 
-    const documents = await ((db as any).document).findMany({
+    const documents = await db.document.findMany({
       where: {
         userId: authCtx.userId,
         deletedAt: null,
@@ -73,7 +73,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Save metadata to DB
-    const document = await ((db as any).document).create({
+    const document = await db.document.create({
       data: {
         userId,
         name,
@@ -109,7 +109,7 @@ export async function DELETE(req: NextRequest) {
     }
 
     // Find the document (must belong to the user)
-    const document = await ((db as any).document).findFirst({
+    const document = await db.document.findFirst({
       where: { id: docId, userId, deletedAt: null },
     })
 
@@ -118,7 +118,7 @@ export async function DELETE(req: NextRequest) {
     }
 
     // Soft-delete in DB
-    await ((db as any).document).update({
+    await db.document.update({
       where: { id: docId },
       data: { deletedAt: new Date() },
     })

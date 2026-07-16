@@ -68,9 +68,8 @@ model User {
   invoiceCounter   InvoiceCounter?
   // 🔒 V13 L4: Back-relation for createdByUserId on Transaction
   transactionsCreated Transaction[] @relation("TransactionCreatedBy")
-  // 🔒 V22-14 (Batch D, Phase 7g): Document Vault — TEMPORARILY DISABLED
-  // Re-enable after setting DIRECT_URL on Vercel and applying the migration
-  // documents        Document[]
+  // 🔒 V22-14 (Batch D, Phase 7g): Document Vault
+  documents        Document[]
 
   @@index([plan])
   @@index([createdAt])
@@ -1468,32 +1467,30 @@ model InvoiceCounter {
 }
 
 // ==================== DOCUMENT VAULT (V22-14 Batch D, Phase 7g) ====================
-// TEMPORARILY DISABLED — re-enable after setting DIRECT_URL on Vercel
-// and applying the migration.
 // Stores uploaded business documents (bills, invoices, GST certificates,
 // bank statements, ID proofs) in Cloudinary with metadata in the DB.
 // Categories: bill | invoice | gst-certificate | bank-statement | id-proof | other
-// model Document {
-//   id                String   @id @default(cuid())
-//   userId            String // owner of this document
-//   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-//   shopId            String? // multi-shop: null = all shops
-//   name              String // user-provided filename or description
-//   category          String   @default("other") // bill | invoice | gst-certificate | bank-statement | id-proof | other
-//   fileType          String // mime type: image/jpeg, application/pdf, etc.
-//   fileSize          Int    @default(0) // in bytes
-//   // Cloudinary storage
-//   cloudinaryUrl     String // secure_url from Cloudinary
-//   cloudinaryPublicId String // public_id for deletion
-//   // Optional metadata
-//   notes             String?
-//   tags              String[] @default([]) // free-form tags for search
-//   uploadedAt        DateTime @default(now())
-//   updatedAt         DateTime @updatedAt
-//   // Soft delete for audit trail
-//   deletedAt         DateTime?
-//
-//   @@index([userId, deletedAt])
-//   @@index([userId, category])
-//   @@index([userId, uploadedAt])
-// }
+model Document {
+  id                String   @id @default(cuid())
+  userId            String // owner of this document
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  shopId            String? // multi-shop: null = all shops
+  name              String // user-provided filename or description
+  category          String   @default("other") // bill | invoice | gst-certificate | bank-statement | id-proof | other
+  fileType          String // mime type: image/jpeg, application/pdf, etc.
+  fileSize          Int    @default(0) // in bytes
+  // Cloudinary storage
+  cloudinaryUrl     String // secure_url from Cloudinary
+  cloudinaryPublicId String // public_id for deletion
+  // Optional metadata
+  notes             String?
+  tags              String[] @default([]) // free-form tags for search
+  uploadedAt        DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  // Soft delete for audit trail
+  deletedAt         DateTime?
+
+  @@index([userId, deletedAt])
+  @@index([userId, category])
+  @@index([userId, uploadedAt])
+}
