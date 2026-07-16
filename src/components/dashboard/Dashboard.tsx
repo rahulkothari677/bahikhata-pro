@@ -595,7 +595,22 @@ export function Dashboard() {
           Uses the existing revenueTarget from useBusinessGoals.
           Only shows when a revenue target is set AND there's range revenue.
           Inspired by Stripe's revenue progress widgets. */}
-      {revenueTarget && revenueTarget > 0 && (
+      {revenueTarget && revenueTarget > 0 && (() => {
+        // 🔒 AUDIT V23 FIX §8.6: Use this-month revenue for the Revenue Target card,
+        // not kpis.rangeRevenue which follows the selected dashboard range.
+        // "Today" selected → rangeRevenue = today's revenue → "Monthly Revenue Target 3%"
+        // is nonsense. This card always shows this-month progress regardless of range.
+        const now = new Date()
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
+        const thisMonthRevenue = kpis.rangeRevenue && datePreset === 'thisMonth'
+          ? kpis.rangeRevenue
+          : kpis.rangeRevenue && dateRange.from <= monthStart && dateRange.to >= now
+            ? kpis.rangeRevenue // range covers this month
+            : null // can't determine from current range — use rangeRevenue as fallback
+        const cardRevenue = thisMonthRevenue ?? kpis.rangeRevenue
+        const pct = Math.min(100, (cardRevenue / revenueTarget) * 100)
+        const remaining = Math.max(0, revenueTarget - cardRevenue)
+        return (
         <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10 overflow-hidden">
           <CardContent className="p-4">
             <div className="flex items-start justify-between mb-3">
@@ -606,15 +621,11 @@ export function Dashboard() {
                 <div>
                   <p className="text-sm font-semibold">Monthly Revenue Target</p>
                   <p className="text-[11px] text-muted-foreground">
-                    {formatINR(kpis.rangeRevenue)} of {formatINR(revenueTarget)} • {rangeLabel}
+                    {formatINR(cardRevenue)} of {formatINR(revenueTarget)} • This Month
                   </p>
                 </div>
               </div>
-              {(() => {
-                const pct = Math.min(100, (kpis.rangeRevenue / revenueTarget) * 100)
-                const remaining = Math.max(0, revenueTarget - kpis.rangeRevenue)
-                return (
-                  <div className="text-right">
+              <div className="text-right">
                     <p className={cn(
                       'text-lg font-bold tabular-nums',
                       pct >= 100 ? 'text-emerald-600 dark:text-emerald-400' : 'text-foreground',
@@ -627,27 +638,20 @@ export function Dashboard() {
                       <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">Target reached! 🎉</p>
                     )}
                   </div>
-                )
-              })()}
             </div>
             {/* Progress bar */}
             <div className="h-3 bg-muted rounded-full overflow-hidden relative">
-              {(() => {
-                const pct = Math.min(100, (kpis.rangeRevenue / revenueTarget) * 100)
-                return (
-                  <div
-                    className={cn(
-                      'h-full rounded-full transition-all duration-700 ease-out',
-                      pct >= 100
-                        ? 'bg-gradient-to-r from-emerald-400 to-teal-500'
+              <div
+                className={cn(
+                  'h-full rounded-full transition-all duration-700 ease-out',
+                  pct >= 100
+                    ? 'bg-gradient-to-r from-emerald-400 to-teal-500'
                         : pct >= 50
                           ? 'bg-gradient-to-r from-amber-400 to-emerald-500'
                           : 'bg-gradient-to-r from-rose-400 to-amber-500',
                     )}
                     style={{ width: `${Math.max(2, pct)}%` }}
                   />
-                )
-              })()}
             </div>
             {/* Milestone markers */}
             <div className="flex justify-between mt-1.5 text-[9px] text-muted-foreground">
@@ -659,7 +663,8 @@ export function Dashboard() {
             </div>
           </CardContent>
         </Card>
-      )}
+        );
+      })()}
 
       {/* Mini-charts row — quick visual insights at a glance.
           Sparkline: last 7 days sales trend (no axes, just the line)

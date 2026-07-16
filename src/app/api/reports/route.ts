@@ -271,7 +271,7 @@ export async function GET(req: NextRequest) {
           SELECT
             ti."gstRate",
             t."isInterState",
-            SUM(ROUND((ti."quantity"::numeric * ti."unitPrice" - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 2)) AS "taxablePaise",
+            SUM(ROUND((ti."quantity"::numeric * ti."unitPrice" - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 0)) AS "taxablePaise",
             SUM(COALESCE(ti."cgst", 0)::numeric) AS "cgstPaise",
             SUM(COALESCE(ti."sgst", 0)::numeric) AS "sgstPaise",
             SUM(COALESCE(ti."igst", 0)::numeric) AS "igstPaise",
@@ -297,7 +297,7 @@ export async function GET(req: NextRequest) {
         }>>`
           SELECT
             ti."gstRate",
-            SUM(ROUND((ti."quantity"::numeric * ti."unitPrice" - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 2)) AS "taxablePaise",
+            SUM(ROUND((ti."quantity"::numeric * ti."unitPrice" - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 0)) AS "taxablePaise",
             SUM(COALESCE(ti."cgst", 0)::numeric) AS "cgstPaise",
             SUM(COALESCE(ti."sgst", 0)::numeric) AS "sgstPaise",
             SUM(COALESCE(ti."igst", 0)::numeric) AS "igstPaise"
@@ -652,8 +652,12 @@ export async function GET(req: NextRequest) {
     if (type === 'hsn') {
       // Aggregate TransactionItem by HSN code for sales in the date range.
       // Uses raw SQL for efficient GROUP BY on the snapshot HSN field.
+      // 🔒 AUDIT V23 FIX §8.3: GROUP BY hsn + gstRate (was hsn only).
+      // GSTR-1 Table 12 requires rate-wise rows (HSN × UQC × rate).
+      // Also net of credit notes (was gross — inconsistent with rest of app).
       const hsnRows = await db.$queryRaw<Array<{
         hsn: string
+        gstRate: number
         totalQty: number
         taxableValue: bigint
         totalCgst: bigint
@@ -663,22 +667,42 @@ export async function GET(req: NextRequest) {
       }>>`
         SELECT
           ti."hsn" AS hsn,
-          SUM(ti."quantity") AS "totalQty",
-          SUM(ti."unitPrice" * ti."quantity" - ti."discountAmount") AS "taxableValue",
-          SUM(ti."cgst") AS "totalCgst",
-          SUM(ti."sgst") AS "totalSgst",
-          SUM(ti."igst") AS "totalIgst",
-          SUM(ti."cgst" + ti."sgst" + ti."igst") AS "totalTax"
+          ti."gstRate" AS "gstRate",
+          SUM(CASE WHEN t."type" = 'sale' THEN ti."quantity" ELSE -ti."quantity" END) AS "totalQty",
+          SUM(
+            CASE WHEN t."type" = 'sale'
+              THEN (ti."unitPrice" * ti."quantity" - ti."discountAmount")
+              ELSE -(ti."unitPrice" * ti."quantity" - ti."discountAmount")
+            END
+          ) AS "taxableValue",
+          SUM(
+            CASE WHEN t."type" = 'sale'
+              THEN ti."cgst" ELSE -ti."cgst" END
+          ) AS "totalCgst",
+          SUM(
+            CASE WHEN t."type" = 'sale'
+              THEN ti."sgst" ELSE -ti."sgst" END
+          ) AS "totalSgst",
+          SUM(
+            CASE WHEN t."type" = 'sale'
+              THEN ti."igst" ELSE -ti."igst" END
+          ) AS "totalIgst",
+          SUM(
+            CASE WHEN t."type" = 'sale'
+              THEN (ti."cgst" + ti."sgst" + ti."igst")
+              ELSE -(ti."cgst" + ti."sgst" + ti."igst")
+            END
+          ) AS "totalTax"
         FROM "TransactionItem" ti
         JOIN "Transaction" t ON ti."transactionId" = t."id"
         WHERE t."userId" = ${userId}
           AND t."deletedAt" IS NULL
-          AND t."type" = 'sale'
+          AND t."type" IN ('sale', 'credit-note')
           AND t."date" >= ${from}
           AND t."date" <= ${to}
           AND ti."hsn" IS NOT NULL
           AND ti."hsn" != ''
-        GROUP BY ti."hsn"
+        GROUP BY ti."hsn", ti."gstRate"
         ORDER BY "taxableValue" DESC
       `
 
@@ -697,7 +721,8 @@ export async function GET(req: NextRequest) {
           hsn: row.hsn,
           description: meta?.name || '—',
           unit: meta?.unit || 'pcs',
-          gstRate: meta?.gstRate || 0,
+          // 🔒 AUDIT V23 FIX §8.3: Use gstRate from the SQL GROUP BY (not arbitrary product)
+          gstRate: row.gstRate || 0,
           totalQty: Number(row.totalQty),
           // 🔒 BUG-018 FIX (Audit V22 §5): Raw SQL returns paise (Int columns).
           // Must convert via fromPaise() — the money extension does NOT touch $queryRaw.
@@ -732,7 +757,9 @@ export async function GET(req: NextRequest) {
     // Outflows: purchases (cash/upi/card), payments paid, expenses
     // =====================================================================
     if (type === 'cashflow') {
-      const [salesAgg, purchaseAgg, incomeAgg, expenseAgg, paymentsReceivedAgg, paymentsPaidAgg] = await Promise.all([
+      // 🔒 AUDIT V23 FIX §8.7: Add credit-note/debit-note refunds to cashflow.
+      // Credit notes (refunds to customers) are outflows, debit notes (refunds from suppliers) are inflows.
+      const [salesAgg, purchaseAgg, incomeAgg, expenseAgg, paymentsReceivedAgg, paymentsPaidAgg, creditNoteAgg, debitNoteAgg] = await Promise.all([
         // Sales by payment mode (inflow)
         db.transaction.groupBy({
           by: ['paymentMode'],
@@ -769,6 +796,16 @@ export async function GET(req: NextRequest) {
           where: { userId, deletedAt: null, type: 'paid', date: { gte: from, lte: to } },
           _sum: { amount: true },
         }),
+        // 🔒 AUDIT V23 FIX §8.7: Credit note refunds (outflow — money returned to customer)
+        db.transaction.aggregate({
+          where: activeTransactionWhere(userId, { type: 'credit-note', date: { gte: from, lte: to } }),
+          _sum: { paidAmount: true },
+        }),
+        // 🔒 AUDIT V23 FIX §8.7: Debit note refunds (inflow — money received from supplier)
+        db.transaction.aggregate({
+          where: activeTransactionWhere(userId, { type: 'debit-note', date: { gte: from, lte: to } }),
+          _sum: { paidAmount: true },
+        }),
       ])
 
       // Build inflow items
@@ -785,6 +822,9 @@ export async function GET(req: NextRequest) {
         const amount = row._sum.totalAmount || 0
         if (amount > 0) inflows.push({ label: row.category || 'Other Income', amount })
       })
+      // 🔒 AUDIT V23 FIX §8.7: Debit note refunds (inflow — money received from supplier)
+      const debitNoteRefund = debitNoteAgg._sum.paidAmount || 0
+      if (debitNoteRefund > 0) inflows.push({ label: 'Supplier Refunds (Debit Notes)', amount: debitNoteRefund })
 
       // Build outflow items
       const outflows: { label: string; amount: number }[] = []
@@ -800,6 +840,9 @@ export async function GET(req: NextRequest) {
         const amount = row._sum.totalAmount || 0
         if (amount > 0) outflows.push({ label: row.category || 'Other Expense', amount })
       })
+      // 🔒 AUDIT V23 FIX §8.7: Credit note refunds (outflow — money returned to customer)
+      const creditNoteRefund = creditNoteAgg._sum.paidAmount || 0
+      if (creditNoteRefund > 0) outflows.push({ label: 'Customer Refunds (Credit Notes)', amount: creditNoteRefund })
 
       const totalInflow = inflows.reduce((s, i) => s + i.amount, 0)
       const totalOutflow = outflows.reduce((s, o) => s + o.amount, 0)

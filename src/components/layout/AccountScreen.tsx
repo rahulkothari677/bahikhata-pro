@@ -860,13 +860,16 @@ function AccountSectionContent({
   // Below the QR card, render the Settings (profile tab) form for editing.
   if (section === 'profile') {
     // Build vCard string (MECARD format — works with most Indian phones)
+    // 🔒 AUDIT V23 FIX §8.12: Escape ; and , in values — MECARD uses these as delimiters.
+    // An address like "12, Main Rd; Nashik" would corrupt the QR's fields.
+    const escapeMecard = (val: string) => val.replace(/([;,:\\])/g, '\\$1')
     const vcardParts: string[] = []
-    if (setting.ownerName) vcardParts.push(`N:${setting.ownerName}`)
-    if (setting.shopName) vcardParts.push(`ORG:${setting.shopName}`)
-    if (setting.phone) vcardParts.push(`TEL:${setting.phone}`)
-    if (session?.user?.email) vcardParts.push(`EMAIL:${session.user.email}`)
-    if (setting.address) vcardParts.push(`ADR:${setting.address}`)
-    if (setting.gstin) vcardParts.push(`NOTE:GSTIN ${setting.gstin}`)
+    if (setting.ownerName) vcardParts.push(`N:${escapeMecard(setting.ownerName)}`)
+    if (setting.shopName) vcardParts.push(`ORG:${escapeMecard(setting.shopName)}`)
+    if (setting.phone) vcardParts.push(`TEL:${escapeMecard(setting.phone)}`)
+    if (session?.user?.email) vcardParts.push(`EMAIL:${escapeMecard(session.user.email)}`)
+    if (setting.address) vcardParts.push(`ADR:${escapeMecard(setting.address)}`)
+    if (setting.gstin) vcardParts.push(`NOTE:GSTIN ${escapeMecard(setting.gstin)}`)
     const vcard = `MECARD:${vcardParts.join(';')};;`
 
     return (
@@ -948,13 +951,15 @@ function AccountSectionContent({
   // or downloaded as an image.
   if (section === 'business-card') {
     // Build vCard for QR code (MECARD format)
+    // 🔒 AUDIT V23 FIX §8.12: Escape ; and , in values
+    const escapeMecard = (val: string) => val.replace(/([;,:\\])/g, '\\$1')
     const vcardParts: string[] = []
-    if (setting.ownerName) vcardParts.push(`N:${setting.ownerName}`)
-    if (setting.shopName) vcardParts.push(`ORG:${setting.shopName}`)
-    if (setting.phone) vcardParts.push(`TEL:${setting.phone}`)
-    if (session?.user?.email) vcardParts.push(`EMAIL:${session.user.email}`)
-    if (setting.address) vcardParts.push(`ADR:${setting.address}`)
-    if (setting.gstin) vcardParts.push(`NOTE:GSTIN ${setting.gstin}`)
+    if (setting.ownerName) vcardParts.push(`N:${escapeMecard(setting.ownerName)}`)
+    if (setting.shopName) vcardParts.push(`ORG:${escapeMecard(setting.shopName)}`)
+    if (setting.phone) vcardParts.push(`TEL:${escapeMecard(setting.phone)}`)
+    if (session?.user?.email) vcardParts.push(`EMAIL:${escapeMecard(session.user.email)}`)
+    if (setting.address) vcardParts.push(`ADR:${escapeMecard(setting.address)}`)
+    if (setting.gstin) vcardParts.push(`NOTE:GSTIN ${escapeMecard(setting.gstin)}`)
     const vcard = `MECARD:${vcardParts.join(';')};;`
 
     return (

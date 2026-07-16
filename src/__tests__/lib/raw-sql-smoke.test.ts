@@ -170,7 +170,24 @@ describe('V6 PP6 — raw SQL smoke tests (all API routes with $queryRaw)', () =>
       }
     }
   }
+  // 🔒 AUDIT V23 FIX §8.2: Also scan src/lib/ for raw SQL (party-balance.ts, reconciliation.ts, etc.)
+  const libDir = path.join(process.cwd(), 'src', 'lib')
+  function findLibFiles(dir: string) {
+    const entries = fs.readdirSync(dir, { withFileTypes: true })
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name)
+      if (entry.isDirectory()) {
+        findLibFiles(fullPath)
+      } else if (entry.name.endsWith('.ts')) {
+        const content = fs.readFileSync(fullPath, 'utf8')
+        if (content.includes('$queryRaw')) {
+          ROUTE_FILES.push(path.relative(process.cwd(), fullPath))
+        }
+      }
+    }
+  }
   findRouteFiles(apiDir)
+  findLibFiles(libDir)
 
   for (const relPath of ROUTE_FILES) {
     const absPath = path.join(process.cwd(), relPath)

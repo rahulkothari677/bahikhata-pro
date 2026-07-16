@@ -12,7 +12,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { formatINR, cn, formatDate } from '@/lib/utils'
-import { TrendingUp, TrendingDown, FileText } from 'lucide-react'
+import { TrendingUp, TrendingDown, FileText, AlertTriangle } from 'lucide-react'
 
 interface BillWiseProfitProps {
   data: any
@@ -21,9 +21,23 @@ interface BillWiseProfitProps {
 export function BillWiseProfit({ data }: BillWiseProfitProps) {
   const summary = data?.summary || { totalBills: 0, totalRevenue: 0, totalCogs: 0, totalProfit: 0, avgMargin: 0 }
   const bills = data?.bills || []
+  // 🔒 AUDIT V23 FIX §8.5: Show truncation warning when data is truncated.
+  const truncated = data?.truncated === true
+  const truncatedHint = data?.truncatedHint || 'Showing the latest 500 bills. Narrow the date range to see older bills.'
 
   return (
     <div className="space-y-4">
+      {/* 🔒 AUDIT V23 FIX §8.5: Truncation warning banner */}
+      {truncated && (
+        <div className="rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-3 flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">Incomplete data — summary covers only shown bills</p>
+            <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5">{truncatedHint}</p>
+          </div>
+        </div>
+      )}
+
       {/* Summary stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard label="Total Bills" value={String(summary.totalBills)} color="text-blue-600 dark:text-blue-400" bg="bg-blue-100 dark:bg-blue-950" />

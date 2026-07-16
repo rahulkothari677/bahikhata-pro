@@ -36,6 +36,8 @@ export function BulkRemindersModal({ open, onClose }: BulkRemindersModalProps) {
   const [sending, setSending] = useState(false)
   const [currentIndex, setCurrentIndex] = useState<number | null>(null)
   const [sentIds, setSentIds] = useState<Set<string>>(new Set())
+  // 🔒 AUDIT V23 FIX §8.9: Pre-generated WhatsApp links (moved before early return for hooks rules)
+  const [reminderLinks, setReminderLinks] = useState<{ partyId: string; url: string; name: string }[]>([])
 
   // Fetch all parties (API always includes balances)
   const { data, isLoading } = useQuery({
@@ -76,55 +78,69 @@ export function BulkRemindersModal({ open, onClose }: BulkRemindersModalProps) {
     setSelected(new Set())
   }
 
+  // 🔒 AUDIT V23 FIX §8.9: Pre-generate all WhatsApp links BEFORE the flow starts.
+  // Was: window.open() called after await fetch() — outside the user-gesture call stack.
+  // Safari/Chrome Android block this as a popup. Now: fetch all links upfront in
+  // startSending(), store them, and each "Next" tap opens synchronously (no await).
+
   const startSending = async () => {
     if (selected.size === 0) {
       sonnerToast.error('Select at least one party')
       return
     }
     setSending(true)
-    setCurrentIndex(0)
-    await sendReminderForIndex(0)
-  }
 
-  const sendReminderForIndex = async (index: number) => {
+    // Pre-generate all links in one batch (before any window.open)
     const selectedParties = partiesWithDues.filter((p: any) => selected.has(p.id))
-    if (index >= selectedParties.length) return
-    const party = selectedParties[index]
-    try {
-      const r = await offlineFetch('/api/whatsapp-reminder', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ partyId: party.id }),
-      })
-      const result = await r.json()
-      if (result.whatsappUrl) {
-        window.open(result.whatsappUrl, '_blank')
+    const links: { partyId: string; url: string; name: string }[] = []
+    for (const party of selectedParties) {
+      try {
+        const r = await offlineFetch('/api/whatsapp-reminder', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ partyId: party.id }),
+        })
+        const result = await r.json()
+        if (result.whatsappUrl) {
+          links.push({ partyId: party.id, url: result.whatsappUrl, name: party.name })
+        }
+      } catch {
+        sonnerToast.error(`Failed to generate reminder for ${party.name}`)
       }
-    } catch (err: any) {
-      sonnerToast.error(`Failed to generate reminder for ${party.name}`)
     }
+
+    if (links.length === 0) {
+      sonnerToast.error('No reminders could be generated')
+      setSending(false)
+      return
+    }
+
+    setReminderLinks(links)
+    setCurrentIndex(0)
+    // Open the first link synchronously (user gesture from the "Start Sending" click)
+    window.open(links[0].url, '_blank')
   }
 
-  const nextReminder = async () => {
+  const nextReminder = () => {
     haptic.click()
-    const selectedParties = partiesWithDues.filter((p: any) => selected.has(p.id))
     if (currentIndex === null) return
     // Mark current as sent
-    const currentParty = selectedParties[currentIndex]
-    if (currentParty) {
-      setSentIds(prev => new Set(prev).add(currentParty.id))
+    const currentLink = reminderLinks[currentIndex]
+    if (currentLink) {
+      setSentIds(prev => new Set(prev).add(currentLink.partyId))
     }
     const nextIndex = currentIndex + 1
-    if (nextIndex >= selectedParties.length) {
+    if (nextIndex >= reminderLinks.length) {
       // Done
       setSending(false)
       setCurrentIndex(null)
-      sonnerToast.success(`All ${selectedParties.length} reminders sent!`)
+      sonnerToast.success(`All ${reminderLinks.length} reminders opened!`)
       onClose()
       return
     }
     setCurrentIndex(nextIndex)
-    await sendReminderForIndex(nextIndex)
+    // Open next link synchronously (user gesture from the "Next" button click)
+    window.open(reminderLinks[nextIndex].url, '_blank')
   }
 
   const selectedParties = partiesWithDues.filter((p: any) => selected.has(p.id))
@@ -142,7 +158,7 @@ export function BulkRemindersModal({ open, onClose }: BulkRemindersModalProps) {
               <h3 className="font-bold text-sm">WhatsApp Bulk Reminders</h3>
               <p className="text-[11px] text-muted-foreground">
                 {sending
-                  ? `Sending ${currentIndex !== null ? currentIndex + 1 : 0} of ${selectedParties.length}`
+                  ? `Opening ${currentIndex !== null ? currentIndex + 1 : 0} of ${reminderLinks.length}`
                   : `${partiesWithDues.length} customers with outstanding dues`}
               </p>
             </div>
@@ -156,16 +172,13 @@ export function BulkRemindersModal({ open, onClose }: BulkRemindersModalProps) {
         </div>
 
         {/* Sending mode: show current party + Next button */}
-        {sending && currentIndex !== null && selectedParties[currentIndex] ? (
+        {sending && currentIndex !== null && reminderLinks[currentIndex] ? (
           <div className="flex-1 flex flex-col p-4">
             <div className="flex-1 flex flex-col items-center justify-center text-center py-6">
               <div className="w-16 h-16 rounded-2xl bg-emerald-100 dark:bg-emerald-950 flex items-center justify-center mb-3">
                 <User className="w-8 h-8 text-emerald-600 dark:text-emerald-400" />
               </div>
-              <p className="font-bold text-sm">{selectedParties[currentIndex].name}</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                Outstanding: {formatINR(selectedParties[currentIndex].balance || selectedParties[currentIndex].currentBalance || 0)}
-              </p>
+              <p className="font-bold text-sm">{reminderLinks[currentIndex].name}</p>
               <p className="text-[11px] text-muted-foreground mt-3 max-w-xs">
                 WhatsApp opened with a pre-filled reminder message. After sending, tap "Next" to continue.
               </p>
@@ -181,7 +194,7 @@ export function BulkRemindersModal({ open, onClose }: BulkRemindersModalProps) {
                 onClick={nextReminder}
                 className="flex-1 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium flex items-center justify-center gap-1.5"
               >
-                {currentIndex + 1 >= selectedParties.length ? 'Finish' : 'Next'}
+                {currentIndex + 1 >= reminderLinks.length ? 'Finish' : 'Next'}
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
