@@ -63,6 +63,17 @@ echo "[migrate] Step 1: Marking baseline migration as applied (no-op if already 
 npx prisma migrate resolve --applied 0_init 2>/dev/null || true
 echo "[migrate] Baseline resolve complete."
 
+# Step 1.5: Heal P3009 from the old failed migration.
+# When the migration was in _disabled_add_document_vault directory, Vercel
+# tried to apply it and failed (DIRECT_URL wasn't set). This left a 'failed'
+# record in _prisma_migrations with the name '_disabled_add_document_vault'.
+# Now the migration is back at '20260716000000_add_document_vault' but Prisma
+# still sees the old failed record → P3009 → blocks all new migrations.
+# Fix: mark the OLD failed migration name as rolled-back.
+echo "[migrate] Step 1.5: Healing P3009 from old _disabled_add_document_vault..."
+npx prisma migrate resolve --rolled-back _disabled_add_document_vault 2>/dev/null || true
+echo "[migrate] Old failed migration resolve complete."
+
 # Step 2: migrate deploy with retries (retry ONLY on P1001 / connectivity).
 echo "[migrate] Step 2: Running migrate deploy (up to $MAX_RETRIES attempts)..."
 for i in $(seq 1 "$MAX_RETRIES"); do
