@@ -599,20 +599,10 @@ export function Dashboard() {
           bottom of the dashboard shows BOTH revenue target AND expense budget
           with progress — more informative. The duplicate caused confusion
           (two progress bars for the same target on one screen) and the
-          auditor flagged it. The Business Goals card now moves to the
-          desktop right rail (see §2.4 fix below). */}
-
-      {/* 🔒 AUDIT V25 FIX §2.4 (Batch 3): Desktop 2-column layout.
-          On large screens (lg+), the dashboard splits into:
-            - Main column (1fr): mini-charts, sales trend, 3-col row, category
-              breakdown, recent transactions, day-end summary
-            - Right rail (360px): Business Goals, Health Score, Smart Insights,
-              Analytics Insights
-          On mobile/tablet, everything stacks in a single column (unchanged).
-          The right rail is sticky on desktop so it stays visible while
-          scrolling the main column. */}
-      <div className="lg:grid lg:grid-cols-[1fr_360px] lg:gap-5 lg:items-start">
-      <div className="space-y-3 lg:space-y-5 lg:col-span-1">
+          auditor flagged it. */}
+      {/* 🔒 AUDIT V25 BATCH 3b REVERT: §2.4 right-rail layout was reverted per
+          user feedback — the single-column layout looked better. Keeping the
+          duplicate removal above (§3 row 9) since that's a separate fix. */}
 
       {/* Mini-charts row — quick visual insights at a glance.
           Sparkline: last 7 days sales trend (no axes, just the line)
@@ -1092,13 +1082,7 @@ export function Dashboard() {
         </Card>
       )}
 
-      {/* 🔒 AUDIT V25 FIX §2.4 (Batch 3): End of main column. Right rail starts below. */}
-      </div>{/* /main column */}
-
-      {/* 🔒 AUDIT V25 FIX §2.4 (Batch 3): Right rail — Business Goals, Health Score,
-          Smart Insights, Analytics. Sticky on desktop so it stays visible while
-          scrolling the main column. Hidden visual change on mobile (stacks normally). */}
-      <div className="space-y-3 lg:space-y-5 lg:col-span-1 lg:sticky lg:top-4">
+      {/* 🔒 AUDIT V25 BATCH 3b REVERT: Removed right-rail wrapper. Single column again. */}
 
       {/* Business Goals — monthly revenue/expense targets with progress */}
       {(revenueTarget || expenseBudget) && kpis && (
@@ -1177,10 +1161,6 @@ export function Dashboard() {
 
       {/* V17-Ext 5.5: Business Analytics — best-sellers, dead stock, top customers, reorder */}
       {features?.businessAnalytics && <AnalyticsInsights />}
-
-      {/* 🔒 AUDIT V25 FIX §2.4 (Batch 3): End of right rail + grid. */}
-      </div>{/* /right rail */}
-      </div>{/* /grid */}
 
       {/* 🔒 V17-Ext §5.4: Day-end "Close the Drawer" dialog */}
       <DayEndSummary open={showDayEnd} onOpenChange={setShowDayEnd} />

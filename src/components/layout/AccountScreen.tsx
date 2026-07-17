@@ -51,7 +51,7 @@ import { getInitials, cn } from '@/lib/utils'
 import { APP_VERSION_LABEL } from '@/lib/app-version'
 import {
   ArrowLeft, Pencil, Calculator, Crown, Phone, Mail, Store,
-  ChevronRight, User, CreditCard, Shield, Settings as SettingsIcon,
+  ChevronRight, User, CreditCard, Shield, ShieldCheck, Settings as SettingsIcon,
   Database, Users, Gift, HelpCircle, Info, Star, LogOut,
   BookOpenText, FileSpreadsheet, Check, Sparkles, Share2, Send,
   Package, TrendingUp, Wallet, AlertCircle,
@@ -212,6 +212,11 @@ export function AccountScreen() {
     haptic.click()
 
     // 🔒 V21-014 (Phase 6): Open dedicated section page (not Settings with tabs)
+    // 🔒 AUDIT V25 FIX §3.5 (Batch 3b): 'Data & Privacy' split into 2 items:
+    // 'Accounting Controls' + 'Data & Backup'. Both map to the same 'data'
+    // section (Settings → data tab) — the visual sub-group headers inside
+    // make the categories clear. The item the user tapped determines which
+    // sub-group scrolls into view (handled in Settings.tsx via a hash).
     const sectionMap: Record<string, string> = {
       'My Profile': 'profile',
       'Business Card': 'business-card',
@@ -219,7 +224,8 @@ export function AccountScreen() {
       'Subscription': 'subscription',
       'App Settings': 'app-settings',
       'Feature Toggles': 'features',
-      'Data & Privacy': 'data',
+      'Accounting Controls': 'data',
+      'Data & Backup': 'data',
       'Staff & Access': 'staff',
       'Refer & Earn': 'referral',
       'Help & Support': 'help',
@@ -273,7 +279,10 @@ export function AccountScreen() {
     'subscription': 'Subscription',
     'app-settings': 'App Settings',
     'features': 'Feature Toggles',
-    'data': 'Data & Privacy',
+    // 🔒 AUDIT V25 FIX §3.5 (Batch 3b): Was 'Data & Privacy'. Now 'Data &
+    // Accounting' — neutral name that covers both sub-groups (Accounting
+    // Controls + Data & Backup) that live in this tab.
+    'data': 'Data & Accounting',
     'staff': 'Staff & Access',
     'referral': 'Refer & Earn',
     'help': 'Help & Support',
@@ -338,13 +347,28 @@ export function AccountScreen() {
           iconColor: 'text-violet-600 dark:text-violet-400',
           iconBg: 'bg-violet-100 dark:bg-violet-950',
         },
+        // 🔒 AUDIT V25 FIX §3.5 (Batch 3b): Split "Data & Privacy" into 2 items.
+        // Was: 1 item "Data & Privacy" that opened a tab mixing accounting
+        // controls (Reconciliation, Period Lock) with data/backup (Backup,
+        // Restore, Reset). A CA looking for period lock will not open
+        // "Data & Privacy". Now: 2 items pointing at the same tab, with
+        // visual sub-group headers inside Settings → data tab to make the
+        // categories clear.
+        {
+          icon: ShieldCheck,
+          label: 'Accounting Controls',
+          description: 'Reconciliation health check, period lock',
+          view: 'settings',
+          iconColor: 'text-amber-600 dark:text-amber-400',
+          iconBg: 'bg-amber-100 dark:bg-amber-950',
+        },
         {
           icon: Database,
-          label: 'Data & Privacy',
-          description: 'Export data, clear cache, delete account',
+          label: 'Data & Backup',
+          description: 'Backup, restore, clear cache, delete account',
           view: 'settings',
-          iconColor: 'text-violet-600',
-          iconBg: 'bg-violet-100',
+          iconColor: 'text-blue-600 dark:text-blue-400',
+          iconBg: 'bg-blue-100 dark:bg-blue-950',
         },
       ],
     },

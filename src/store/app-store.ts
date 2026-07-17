@@ -215,9 +215,30 @@ export const useAppStore = create<AppState>()(
       }),
       canGoBack: () => get().navStack.length > 0,
       // 🔒 AUDIT V25 FIX §4.1: sidebarOpen/setSidebarOpen removed.
-      sidebarCollapsed: false,
-      toggleSidebarCollapsed: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
-      setSidebarCollapsed: (c) => set({ sidebarCollapsed: c }),
+      // 🔒 AUDIT V25 FIX §3b.2 (Batch 3b): Sidebar collapsed by default on desktop.
+      // Was: sidebarCollapsed: false (expanded by default, user had to manually collapse).
+      // User feedback: the expanded sidebar takes too much space on first load.
+      // Now: defaults to true (collapsed, icon-only mode). User expands via the
+      // toggle button when they want full labels. Persisted to localStorage so
+      // the user's preference is remembered across sessions.
+      sidebarCollapsed: (() => {
+        if (typeof window === 'undefined') return true  // SSR default
+        const saved = localStorage.getItem('bahikhata:sidebar-collapsed')
+        return saved === null ? true : saved === 'true'  // default true if not set
+      })(),
+      toggleSidebarCollapsed: () => set((s) => {
+        const next = !s.sidebarCollapsed
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('bahikhata:sidebar-collapsed', String(next))
+        }
+        return { sidebarCollapsed: next }
+      }),
+      setSidebarCollapsed: (c) => {
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('bahikhata:sidebar-collapsed', String(c))
+        }
+        set({ sidebarCollapsed: c })
+      },
       refreshKey: 0,
       triggerRefresh: () => set((s) => ({ refreshKey: s.refreshKey + 1 })),
       scannerResult: null,

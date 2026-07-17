@@ -6322,3 +6322,58 @@ Stage Summary:
 - 1640 tests passing, 0 TypeScript errors, 0 ESLint errors, build clean.
 - Browser verification: deferred (per user instruction).
 - Awaiting user pass before Batch 4 decision (§6.1 navigation registry — large multi-day refactor, likely deferred to its own epic).
+
+---
+Task ID: audit-v25-batch-3b
+Agent: main
+Task: V25 Audit Batch 3b — Dashboard revert + sidebar collapse default + miscategorization (§3.5).
+
+Work Log:
+- User feedback after Batch 3: (1) Dashboard 2-column right-rail layout looked worse than single column. (2) Desktop sidebar should be collapsed by default. (3) Proceed with §3.5 miscategorization (originally deferred).
+
+§3b.1 — Revert Dashboard to single column:
+- Removed the lg:grid lg:grid-cols-[1fr_360px] wrapper + main column div + right rail div + closing tags.
+- Right-rail sections (Business Goals, Health Score, Smart Insights, Analytics) now stack below the main content as before — single column on all screen sizes.
+- KEPT the §3 row 9 fix (duplicate Revenue Target Progress Card removal) — that's a separate fix from the layout revert.
+- Files changed: Dashboard.tsx.
+
+§3b.2 — Sidebar collapsed by default on desktop:
+- Changed `sidebarCollapsed` default from `false` (expanded) to `true` (collapsed) in app-store.ts.
+- Added localStorage persistence (`bahikhata:sidebar-collapsed`) so user's preference is remembered across sessions. Both `toggleSidebarCollapsed` and `setSidebarCollapsed` now write to localStorage.
+- SSR-safe: returns `true` when typeof window === 'undefined'.
+- User now sees the icon-only collapsed sidebar on first load. Clicking the toggle button expands it (and remembers the choice).
+- Files changed: app-store.ts.
+
+§3b.3 — Rename "Data & Privacy" + reorganize Settings data tab:
+- AccountScreen: Renamed "Data & Privacy" item → "Data & Backup" (icon Database, blue) + added new "Accounting Controls" item (icon ShieldCheck, amber). Both map to the same `accountSection: 'data'` (Settings → data tab).
+- AccountScreen: Updated sectionMap to handle both new labels. Updated sectionTitles: 'data' now labeled "Data & Accounting" (neutral name covering both sub-groups).
+- AccountScreen: Added ShieldCheck to lucide imports.
+- Settings.tsx Data tab: Added 2 visual sub-group headers:
+  * "Accounting Controls" (amber, before Period Lock + Reconciliation) with subtitle "Reconciliation & period lock — for filing integrity"
+  * "Data & Backup" (blue, before Backup + Restore + Danger Zone) with subtitle "Backup, restore, clear cache, delete account"
+- A CA looking for period lock will now see the "Accounting Controls" signpost immediately.
+- Files changed: AccountScreen.tsx, Settings.tsx.
+
+§3b.4 — Move Business Goals out of Profile tab:
+- Removed Business Goals card from `settingsTab === 'profile'` section.
+- Added it to the Appearance tab, right before the existing "Business Rules" group (Round-off + Stock Policy).
+- Renamed the group header from "Business Rules" → "Business Rules & Goals" — single logical place for business configuration.
+- Profile tab now contains only owner/shop info (Shop Profile, Manage Shops, AI Scanner/Voice Language preferences).
+- Files changed: Settings.tsx.
+
+Additional existing bugs found during scan:
+- None. Checked all `settingsTab === 'profile'` cards (Shop Profile, Manage Shops, AI Bill Scanner Language, AI Voice Entry Language) — all are reasonable Profile-tab content. No other miscategorization bugs.
+
+Verification:
+- npx tsc --noEmit: 0 errors
+- npx eslint (changed files): 0 errors, 0 warnings
+- npx jest: 1640/1640 pass (42 suites)
+- npx next build: Compiled successfully (BUILD_ID present)
+
+Stage Summary:
+- V25 Audit Batch 3b COMPLETE. 4 sub-tasks addressed (dashboard revert, sidebar collapse default, §3.5 Data & Privacy split, §3.5 Business Goals move).
+- Files changed: 4 (Dashboard.tsx, Settings.tsx, AccountScreen.tsx, app-store.ts).
+- Net LOC: -50 (dashboard revert removed the grid wrapper + Business Goals move was net-zero).
+- 1640 tests passing, 0 TypeScript errors, 0 ESLint errors, build clean.
+- Browser verification: deferred (per user instruction).
+- Awaiting user pass before Batch 4 decision (§6.1 navigation registry — likely deferred to its own epic).

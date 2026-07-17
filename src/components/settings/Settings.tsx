@@ -678,81 +678,10 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
         </Card>
       )}
 
-      {/* Business Goals — monthly revenue/expense targets */}
-      {settingsTab === 'profile' && (
-        <Card className="shadow-card border-border/60">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Target className="w-5 h-5 text-primary" /> Monthly Business Goals
-            </CardTitle>
-            <p className="text-xs text-muted-foreground">Set targets for this month and track progress on dashboard</p>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div>
-              <Label>Revenue Target (₹)</Label>
-              <div className="flex gap-2 mt-1">
-                <Input
-                  type="number"
-                  value={revenueGoal}
-                  onChange={(e) => setRevenueGoal(e.target.value)}
-                  placeholder={revenueTarget ? String(revenueTarget) : 'e.g. 500000'}
-                  className="flex-1"
-                />
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    const amt = parseFloat(revenueGoal) || 0
-                    setRevenueTarget(amt)
-                    sonnerToast.success(amt > 0 ? `Revenue target set: ${formatINR(amt)}` : 'Revenue target removed')
-                    setRevenueGoal('')
-                  }}
-                >
-                  Set
-                </Button>
-              </div>
-              {revenueTarget ? (
-                <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1">
-                  Current target: {formatINR(revenueTarget)} — track progress on dashboard
-                </p>
-              ) : (
-                <p className="text-[11px] text-muted-foreground mt-1">No target set</p>
-              )}
-            </div>
-            <div>
-              <Label>Expense Budget (₹)</Label>
-              <div className="flex gap-2 mt-1">
-                <Input
-                  type="number"
-                  value={expenseGoal}
-                  onChange={(e) => setExpenseGoal(e.target.value)}
-                  placeholder={expenseBudget ? String(expenseBudget) : 'e.g. 100000'}
-                  className="flex-1"
-                />
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    const amt = parseFloat(expenseGoal) || 0
-                    setExpenseBudget(amt)
-                    sonnerToast.success(amt > 0 ? `Expense budget set: ${formatINR(amt)}` : 'Expense budget removed')
-                    setExpenseGoal('')
-                  }}
-                >
-                  Set
-                </Button>
-              </div>
-              {expenseBudget ? (
-                <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">
-                  Current budget: {formatINR(expenseBudget)} — track on Income & Expense page
-                </p>
-              ) : (
-                <p className="text-[11px] text-muted-foreground mt-1">No budget set</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* 🔒 AUDIT V25 FIX §3.5 (Batch 3b): Business Goals card MOVED to
+          Appearance tab (Business Rules & Goals group). Was in Profile tab
+          — but revenue/expense targets are business configuration, not
+          profile data. Profile tab now contains only owner/shop info. */}
 
       {/* ── DATA TAB ────────────────────────────────────────────────── */}
       {settingsTab === 'data' && isOwner && (
@@ -783,6 +712,15 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* 🔒 AUDIT V25 FIX §3.5 (Batch 3b): Visual sub-group header.
+              Separates accounting controls (Period Lock, Reconciliation) from
+              data/backup concerns below. A CA looking for period lock will
+              now see "Accounting Controls" as a clear signpost. */}
+          <div className="pt-2 pb-1 px-1">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Accounting Controls</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">Reconciliation & period lock — for filing integrity</p>
           </div>
 
           {/* 🔒 V17-Ext §5.1: Period Lock — protect filed GST periods from edits */}
@@ -925,6 +863,14 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
                 )}
               </div>
             </div>
+          </div>
+
+          {/* 🔒 AUDIT V25 FIX §3.5 (Batch 3b): Visual sub-group header.
+              Separates data/backup concerns (Backup, Restore, Danger Zone)
+              from accounting controls above. */}
+          <div className="pt-2 pb-1 px-1">
+            <p className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">Data &amp; Backup</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">Backup, restore, clear cache, delete account</p>
           </div>
 
           {/* 🔒 V17 Audit Phase 1 P1.6: Backup card moved OUT of the Danger Zone.
@@ -1189,10 +1135,88 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
             />
           </div>
 
-          {/* ─── Group: Business Rules ─── */}
+          {/* 🔒 AUDIT V25 FIX §3.5 (Batch 3b): Business Goals card MOVED here
+              from Profile tab. Revenue/expense targets are business
+              configuration, not profile data. Now lives in the Business
+              Rules & Goals group alongside Round-off + Stock Policy. */}
+          {/* ─── Group: Business Rules & Goals ─── */}
           <div className="mt-4 mb-2 px-1">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Business Rules</p>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Business Rules &amp; Goals</p>
           </div>
+
+          {/* Business Goals — monthly revenue/expense targets */}
+          <Card className="shadow-card border-border/60">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Target className="w-5 h-5 text-primary" /> Monthly Business Goals
+              </CardTitle>
+              <p className="text-xs text-muted-foreground">Set targets for this month and track progress on dashboard</p>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div>
+                <Label>Revenue Target (₹)</Label>
+                <div className="flex gap-2 mt-1">
+                  <Input
+                    type="number"
+                    value={revenueGoal}
+                    onChange={(e) => setRevenueGoal(e.target.value)}
+                    placeholder={revenueTarget ? String(revenueTarget) : 'e.g. 500000'}
+                    className="flex-1"
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      const amt = parseFloat(revenueGoal) || 0
+                      setRevenueTarget(amt)
+                      sonnerToast.success(amt > 0 ? `Revenue target set: ${formatINR(amt)}` : 'Revenue target removed')
+                      setRevenueGoal('')
+                    }}
+                  >
+                    Set
+                  </Button>
+                </div>
+                {revenueTarget ? (
+                  <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1">
+                    Current target: {formatINR(revenueTarget)} — track progress on dashboard
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground mt-1">No target set</p>
+                )}
+              </div>
+              <div>
+                <Label>Expense Budget (₹)</Label>
+                <div className="flex gap-2 mt-1">
+                  <Input
+                    type="number"
+                    value={expenseGoal}
+                    onChange={(e) => setExpenseGoal(e.target.value)}
+                    placeholder={expenseBudget ? String(expenseBudget) : 'e.g. 100000'}
+                    className="flex-1"
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      const amt = parseFloat(expenseGoal) || 0
+                      setExpenseBudget(amt)
+                      sonnerToast.success(amt > 0 ? `Expense budget set: ${formatINR(amt)}` : 'Expense budget removed')
+                      setExpenseGoal('')
+                    }}
+                  >
+                    Set
+                  </Button>
+                </div>
+                {expenseBudget ? (
+                  <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">
+                    Current budget: {formatINR(expenseBudget)} — track on Income & Expense page
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-muted-foreground mt-1">No budget set</p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
 
           {/* 🔒 V12: Invoice round-off toggle */}
           <div className="mt-3 flex items-center justify-between rounded-lg bg-muted/30 border border-border/60 p-3">
