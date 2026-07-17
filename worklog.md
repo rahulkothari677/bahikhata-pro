@@ -6196,3 +6196,65 @@ Stage Summary:
 - 1640 tests passing, 0 TypeScript errors, 0 ESLint errors, build clean.
 - Browser verification: deferred (per user instruction — will be done later when user provides guidance).
 - Awaiting user pass before Batch 2 (desktop parity quick wins — §2.1, §2.2, §2.3, §2.5).
+
+---
+Task ID: audit-v25-batch-2
+Agent: main
+Task: V25 Audit Batch 2 — Desktop parity quick wins (§2.1, §2.2, §2.3, §2.5).
+
+Work Log:
+- Verified all V25 §2 findings still hold post-Batch-1 (Batch 1 changed Sidebar/AppShell/page.tsx but didn't address parity gaps).
+- Confirmed AI Usage + AI Comparison were reachable on desktop but buried 3 levels deep (Settings → Features tab → footer buttons). Document Vault was 100% unreachable on desktop.
+
+§2.1 — Add Tools section to desktop Sidebar:
+- Added `toolsNavItems` array with 5 items: Document Vault, AI Usage, AI Comparison, Reconciliation, Period Lock.
+- Added collapsible "Tools" section below the main nav, separated by a divider. Defaults to collapsed (false). State persisted to localStorage (`bahikhata:sidebar-tools-open`).
+- Reconciliation + Period Lock deep-link to Account → data section (same pattern as MoreScreen:209-215).
+- Document Vault + AI Usage + AI Comparison navigate directly to their views.
+- Staff permissions: Document Vault gated by `canAccess('settings')`, AI tools gated by `isFlagEnabled('ai_scanner')`. CA can see Reconciliation + Period Lock (read-only audit).
+- Collapsed sidebar mode: shows a single "Tools" icon that expands the sidebar (since there's no room for the section in icon-only mode).
+- Added 4 new lucide imports: FolderOpen, Bot, ShieldCheck, Lock.
+- Added new views to prefetch.ts VIEW_IMPORTS map: document-vault, ai-usage, ai-comparison (so hover-prefetch works).
+- Files changed: Sidebar.tsx, prefetch.ts.
+
+§2.2 — Account + More render inside AppShell on desktop:
+- Changed AppShell chrome prop semantics from `boolean` to `'always' | 'desktop-only' | 'never'`.
+- Account + More branches now pass `sidebar="desktop-only"` (was `sidebar={false}`) — Sidebar stays visible on desktop, hidden on mobile (where they have their own top bar + bottom nav).
+- Account + More pass `header="never"` (they have their own top bar with back button).
+- Main views pass `sidebar="always" header="always"` (unchanged behavior).
+- Added `chromeClass()` helper that maps visibility → Tailwind classes (`hidden lg:flex` for desktop-only, `hidden` for never).
+- Updated `getShellPropsForView()` helper to use new types.
+- Files changed: AppShell.tsx (rewritten), page.tsx (3 branch prop updates).
+
+§2.3 — Fix Pricing back button fallback:
+- page.tsx:475 Pricing back button was `setView(prev || 'more')`. If previousView was null (e.g., after reload), desktop user landed on mobile More screen with no exit.
+- Changed fallback from `'more'` to `'dashboard'` — always safe, always has full chrome.
+- Files changed: page.tsx.
+
+§2.4 — NotificationCenter persistent in header:
+- Header.tsx:240 was `{currentView === 'dashboard' && <NotificationCenter />}`. Bell + low-stock/receivable alerts disappeared the moment user navigated anywhere — desktop users living in Sales split-view never saw notifications.
+- Removed the `currentView === 'dashboard'` gate. NotificationCenter now renders on all views where the Header is shown.
+- Verified NotificationCenter uses `useDashboardThisMonth()` (React Query cache) — no extra API calls per view.
+- Files changed: Header.tsx.
+
+Additional existing bugs found during scan (same anti-pattern class as §2.3):
+- BUG-033: Reports.tsx:291 `handleBackToHub` had the same `setView(prev || 'more')` anti-pattern as the Pricing back button. Fixed to `setView(prev || 'dashboard')`. Matches the pattern already used by MoreScreen.tsx and AccountScreen.tsx handleBack.
+- Grepped for other `|| 'more'` back-button fallbacks — no other instances found.
+
+Verification:
+- npx tsc --noEmit: 0 errors
+- npx eslint (changed files): 0 errors, 0 warnings
+- npx jest: 1640/1640 pass (42 suites)
+- npx next build: Compiled successfully (BUILD_ID present)
+
+Bug 说明 (existing bugs found during this batch):
+1. BUG-033 (Reports back button fallback) — found and fixed in this batch.
+2. Confirmed no other `|| 'more'` back-button fallbacks in the codebase.
+
+Stage Summary:
+- V25 Audit Batch 2 COMPLETE. All 4 §2 sub-findings addressed (§2.1, §2.2, §2.3, §2.4/§2.5a). §2.5b (AI Scan button desktop-only) is intentional asymmetry — left as-is per auditor's note.
+- Files changed: 5 (Sidebar.tsx, AppShell.tsx, page.tsx, Header.tsx, Reports.tsx, prefetch.ts).
+- 1 new bug found and fixed: BUG-033 (Reports back button).
+- 1640 tests passing, 0 TypeScript errors, 0 ESLint errors, build clean.
+- Browser verification: deferred (per user instruction).
+- Awaiting user pass before Batch 3 (dashboard right rail + de-duplication — §2.4 dashboard layout, §3 rows 7-9, §3.5 miscategorization).

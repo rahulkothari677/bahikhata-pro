@@ -280,6 +280,9 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
   // 🔒 V22-5 (Phase 3): Back button — exits single-report mode.
   // If previousView is 'reports' (came from ReportsHub), stay on the reports
   // view but reset to hub mode. Otherwise navigate to previousView (e.g. 'more').
+  // 🔒 AUDIT V25 FIX §2.3 (Batch 2 follow-up): Fallback was 'more' which
+  // stranded desktop users on the mobile More screen. Now fallback is
+  // 'dashboard' — always safe.
   const handleBackToHub = () => {
     const prev = useAppStore.getState().previousView
     setIsSingleReport(false)
@@ -288,7 +291,7 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
       // Stay on reports view — will render ReportsHub since isSingleReport is now false
       // No setView needed (currentView is already 'reports')
     } else {
-      setView(prev || 'more')
+      setView(prev || 'dashboard')
     }
   }
 

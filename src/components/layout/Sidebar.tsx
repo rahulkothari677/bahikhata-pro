@@ -25,6 +25,11 @@ import {
   BookOpenText,
   ChevronLeft,
   ChevronRight,
+  // 🔒 AUDIT V25 FIX §2.1 (Batch 2): Tools section icons.
+  FolderOpen,
+  Bot,
+  ShieldCheck,
+  Lock,
 } from 'lucide-react'
 // 🔒 AUDIT V25 FIX §4.2 follow-up: Removed 9 unused lucide imports
 // (Settings, Sparkles, Crown, HelpCircle, Info, Star, LogOut, Download,
@@ -45,6 +50,39 @@ const navItems: { id: ViewType; labelKey: string; descKey: string; icon: any; ba
   // Sidebar is now BUSINESS NAVIGATION ONLY.
 ]
 
+// 🔒 AUDIT V25 FIX §2.1 (Batch 2): Tools section — secondary nav for items
+// that were previously mobile-only (reachable only via MoreScreen, which is
+// mobile-only itself). The auditor flagged these as desktop parity gaps:
+// Document Vault was 100% unreachable on desktop; AI Usage + AI Comparison
+// were buried 3 levels deep in Settings → Features tab → footer buttons;
+// Reconciliation + Period Lock were miscategorized under "Data & Privacy".
+//
+// This Tools section renders below the main nav, separated by a divider.
+// Collapsible on desktop (toggle the section header). Gated by staff
+// permissions (CA can see Reconciliation + Period Lock for read-only audit,
+// staff cannot see Document Vault or AI tools).
+//
+// Note: Reconciliation + Period Lock don't have their own views — they
+// deep-link to Account → data section (same as MoreScreen does). The
+// other 3 tools have their own views and navigate directly.
+type ToolItem = {
+  id: string  // view ID or a special 'reconciliation' / 'period-lock' marker
+  label: string
+  desc: string
+  icon: any
+  badge?: string
+  // For tools that deep-link to Account → data section instead of a view
+  accountSection?: string
+}
+
+const toolsNavItems: ToolItem[] = [
+  { id: 'document-vault', label: 'Document Vault', desc: 'Bills, invoices, GST certs', icon: FolderOpen },
+  { id: 'ai-usage', label: 'AI Usage', desc: 'Track AI scans & cost', icon: Bot, badge: 'AI' },
+  { id: 'ai-comparison', label: 'AI Comparison', desc: 'Compare AI providers', icon: Bot, badge: 'AI' },
+  { id: 'reconciliation', label: 'Reconciliation', desc: 'Health check — books tie out?', icon: ShieldCheck, accountSection: 'data' },
+  { id: 'period-lock', label: 'Period Lock', desc: 'Lock filed GST periods', icon: Lock, accountSection: 'data' },
+]
+
 export function Sidebar() {
   // 🔒 AUDIT V25 FIX §4.2: useConfirmDialog removed — only handleLogout used it,
   // and handleLogout was orphaned dead code (removed above).
@@ -57,6 +95,18 @@ export function Sidebar() {
   const { isFlagEnabled } = useFeatureFlags()
   const { shops, activeShop, switchShop } = useShops()
   const [shopDropdownOpen, setShopDropdownOpen] = useState(false)
+  // 🔒 AUDIT V25 FIX §2.1 (Batch 2): Tools section collapsible state.
+  // Defaults to collapsed (false) — Tools are secondary, main nav stays primary.
+  // Persisted to localStorage so the user's preference is remembered.
+  const [toolsOpen, setToolsOpen] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem('bahikhata:sidebar-tools-open') === 'true'
+  })
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('bahikhata:sidebar-tools-open', toolsOpen ? 'true' : 'false')
+    }
+  }, [toolsOpen])
   // 🔒 FIX M9: Outside-click handler — was missing.
   const shopDropdownRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -262,6 +312,98 @@ export function Sidebar() {
             )
           })}
         </nav>
+
+        {/* 🔒 AUDIT V25 FIX §2.1 (Batch 2): Tools section — secondary nav for
+            items that were previously mobile-only (Document Vault, AI Usage,
+            AI Comparison) or buried 3 levels deep (Reconciliation, Period Lock).
+            Collapsible so the main nav stays primary. Hidden when sidebar is
+            collapsed (icons-only mode) — collapsed mode shows a single
+            "Tools" icon that expands the sidebar.
+            CA can see Reconciliation + Period Lock (read-only audit use).
+            Staff cannot see Document Vault or AI tools (gated by canAccess). */}
+        {!sidebarCollapsed && (
+          <div className="border-t border-sidebar-border">
+            <button
+              onClick={() => setToolsOpen(!toolsOpen)}
+              className="w-full flex items-center gap-2 px-5 py-2.5 text-sidebar-foreground/50 hover:text-sidebar-foreground/70 transition text-left"
+              aria-expanded={toolsOpen}
+              aria-label="Toggle Tools section"
+            >
+              <ChevronRight className={cn('w-3 h-3 transition-transform', toolsOpen && 'rotate-90')} />
+              <span className="text-[10px] font-bold uppercase tracking-wider">Tools</span>
+            </button>
+            {toolsOpen && (
+              <nav className="px-3 pb-3 space-y-1">
+                {toolsNavItems.filter(item => {
+                  // Gate by staff permissions + feature flags
+                  if (item.id === 'document-vault' && !canAccess('settings' as ModuleKey)) return false
+                  if ((item.id === 'ai-usage' || item.id === 'ai-comparison') && !isFlagEnabled('ai_scanner')) return false
+                  // CA can see reconciliation + period-lock (read-only audit)
+                  // Staff can see reconciliation (they have reports access)
+                  return true
+                }).map((item) => {
+                  const Icon = item.icon
+                  // Active state: view matches OR (for reconciliation/period-lock) we're on Account → data section
+                  const active = item.accountSection
+                    ? currentView === 'account' && useAppStore.getState().accountSection === item.accountSection
+                    : currentView === item.id
+                  const handleClick = () => {
+                    if (item.accountSection) {
+                      // Deep-link to Account → section (same pattern as MoreScreen)
+                      setPreviousView(currentView)
+                      useAppStore.getState().setAccountOriginView(currentView)
+                      useAppStore.getState().setAccountSection(item.accountSection)
+                      setView('account')
+                    } else {
+                      setView(item.id as ViewType)
+                    }
+                  }
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={handleClick}
+                      onMouseEnter={() => !item.accountSection && prefetchView(item.id)}
+                      onTouchStart={() => !item.accountSection && prefetchView(item.id)}
+                      className={cn(
+                        'w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all group relative',
+                        active
+                          ? 'bg-sidebar-primary/10 text-sidebar-primary'
+                          : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+                      )}
+                      title={item.label}
+                    >
+                      <Icon className={cn('w-4 h-4 flex-shrink-0', active && 'text-sidebar-primary')} />
+                      <div className="flex-1 text-left min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[13px] font-medium truncate">{item.label}</span>
+                          {item.badge && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-gradient-saffron text-white">
+                              {item.badge}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[10px] truncate text-sidebar-foreground/40">{item.desc}</p>
+                      </div>
+                    </button>
+                  )
+                })}
+              </nav>
+            )}
+          </div>
+        )}
+        {sidebarCollapsed && (
+          /* Collapsed mode — show a single "Tools" icon that expands the sidebar */
+          <div className="border-t border-sidebar-border py-2 flex justify-center">
+            <button
+              onClick={toggleSidebarCollapsed}
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent transition"
+              title="Expand sidebar to see Tools"
+              aria-label="Expand sidebar to see Tools"
+            >
+              <FolderOpen className="w-4 h-4" />
+            </button>
+          </div>
+        )}
 
         {/* V17-Ext Tier 3 Step 5: CA Mode indicator — shows when a CA is logged in */}
         {isCA && !sidebarCollapsed && (

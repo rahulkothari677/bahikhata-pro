@@ -386,3 +386,12 @@ and include enough context to reproduce.
   - For #6, #7: use existing `setPendingSettingsTab('staff')` before `setView('settings')` — Settings.tsx already reads this.
 - **Why deferred**: This is a deep-linking infrastructure task (5+ new store fields, modifications to Dashboard, Parties, Settings, TransactionEntry, MoreScreen). Better as its own batch (Batch 1b) after the dead-code cleanup ships. Not in scope of the §4 dead-code batch.
 - **Status**: OPEN — deferred to Batch 1b
+
+### BUG-033 — Reports back button stranded desktop users on mobile More screen (Medium/UX) — FIXED
+
+- **Found**: 2026-07-17, during V25 Audit Batch 2 §2.3 scan (same anti-pattern class as §2.3)
+- **File**: `src/components/reports/Reports.tsx:291`
+- **Severity**: Medium (desktop users landing on a single report with no previousView got stranded)
+- **Description**: `handleBackToHub` in Reports.tsx had the same anti-pattern as the Pricing back button (V25 §2.3): `setView(prev || 'more')`. If a user opened a report directly (e.g., via shared URL or after a page reload when previousView was null), the back button sent them to `'more'` — which on desktop used to render full-screen with no sidebar (the V25 §2.3 bug). Even after §2.3 fix makes More render with sidebar on desktop, sending users to More when they didn't come from More is still wrong behavior.
+- **Fix applied**: 2026-07-17 (Batch 2 §2.3 follow-up). Changed fallback from `'more'` to `'dashboard'` — always safe, always has full chrome. Matches the pattern already used by MoreScreen.tsx and AccountScreen.tsx handleBack.
+- **Status**: FIXED

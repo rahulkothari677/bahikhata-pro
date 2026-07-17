@@ -33,6 +33,10 @@ const VIEW_IMPORTS: Record<string, () => Promise<any>> = {
   parties: () => import('@/components/parties/Parties'),
   pricing: () => import('@/components/subscription/PricingPlans'),
   scanner: () => import('@/components/scanner/BillScanner'),
+  // 🔒 AUDIT V25 FIX §2.1 (Batch 2): Added Sidebar Tools views to prefetch map.
+  'document-vault': () => import('@/components/documents/DocumentVault'),
+  'ai-usage': () => import('@/components/settings/AIUsage'),
+  'ai-comparison': () => import('@/components/settings/AIComparison'),
 }
 
 // Map view IDs to their query keys + query functions.

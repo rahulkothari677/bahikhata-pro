@@ -391,19 +391,21 @@ export default function Home() {
     closePaywall,
   }
 
-  // More screen renders full-screen (no sidebar, no regular header)
+  // More screen renders full-screen on mobile (sidebar hidden, own top bar).
+  // On desktop, sidebar stays visible (§2.3 fix) so users don't lose primary nav.
   if (currentView === 'more') {
     return (
-      <AppShell {...shellProps} sidebar={false} header={false} mobileBottomNav={true}>
+      <AppShell {...shellProps} sidebar="desktop-only" header="never" mobileBottomNav={true}>
         <MoreScreen />
       </AppShell>
     )
   }
 
-  // 🔒 V21-010 (Phase 2a): Account screen renders full-screen (like More screen)
+  // 🔒 V21-010 (Phase 2a): Account screen — same pattern as More.
+  // Mobile: full-screen with own top bar. Desktop: sidebar stays visible (§2.3).
   if (currentView === 'account') {
     return (
-      <AppShell {...shellProps} sidebar={false} header={false} mobileBottomNav={true}>
+      <AppShell {...shellProps} sidebar="desktop-only" header="never" mobileBottomNav={true}>
         <AccountScreen />
       </AppShell>
     )
@@ -416,7 +418,7 @@ export default function Home() {
         onFinish={() => {
         setShowSplash(false)
       }} />}
-      <AppShell {...shellProps} sidebar={true} header={true} mobileBottomNav={true}>
+      <AppShell {...shellProps} sidebar="always" header="always" mobileBottomNav={true}>
         <main className="flex-1 p-3 lg:p-5 w-full min-w-0 pb-28 lg:pb-6">
           {/* PullToRefresh wraps all main content views. Disabled on form/detail
               views where pull-down might interfere with scrolling. */}
@@ -448,8 +450,12 @@ export default function Home() {
                     // 🔒 V21-014 fix: Was hardcoded setView('more') — now uses
                     // previousView so it goes back to wherever the user came from
                     // (Account page, More section, etc.)
+                    // 🔒 AUDIT V25 FIX §2.3 (Batch 2): Fallback was 'more' which
+                    // stranded desktop users on the mobile More screen (no sidebar,
+                    // no exit). Now fallback is 'dashboard' — always safe, always
+                    // has full chrome. If previousView exists, use it (real back nav).
                     const prev = useAppStore.getState().previousView
-                    setView(prev || 'more')
+                    setView(prev || 'dashboard')
                     useAppStore.getState().setPreviousView(null)
                   }} className="p-2 -ml-2 rounded-lg hover:bg-muted">
                     <ArrowLeft className="w-5 h-5" />

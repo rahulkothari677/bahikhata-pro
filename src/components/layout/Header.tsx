@@ -236,8 +236,13 @@ export function Header() {
             </>
           )}
 
-          {/* Notification center — only on Dashboard */}
-          {currentView === 'dashboard' && <NotificationCenter />}
+          {/* 🔒 AUDIT V25 FIX §2.4 (Batch 2): NotificationCenter now persistent
+              on ALL views (was gated to currentView === 'dashboard'). The bell
+              + its low-stock/receivable alerts disappeared the moment the user
+              navigated anywhere — desktop users living in the Sales split-view
+              never saw notifications. NotificationCenter uses useDashboardThisMonth
+              (React Query cache) so it doesn't make extra API calls per view. */}
+          <NotificationCenter />
 
           {/* 🔒 V8 U7: Language toggle — prominent in header for regional users.
               Cycles through the available languages. Quick access from any screen. */}

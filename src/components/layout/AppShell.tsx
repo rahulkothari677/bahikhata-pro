@@ -1,8 +1,8 @@
 'use client'
 
 /**
- * 🔒 AUDIT V25 FIX §4.4: AppShell — single source of truth for the app's
- * modal/overlay stack.
+ * 🔒 AUDIT V25 FIX §4.4 + §2.3 (Batch 2): AppShell — single source of truth
+ * for the app's modal/overlay stack + platform-aware chrome.
  *
  * Before this, page.tsx had THREE branches (More / Account / main) that
  * each duplicated the same 10-component stack:
@@ -18,27 +18,25 @@
  *
  * Every shell change had to be made 3× and one copy drifted (e.g., the
  * duplicate PWAInstallPrompt mount — §4.3). This component extracts the
- * shared stack into one place. The three branches now render:
+ * shared stack into one place.
  *
- *   <AppShell sidebar={false} mobileBottomNav={true}>
- *     <MoreScreen />
- *   </AppShell>
+ * 🔒 AUDIT V25 FIX §2.3 (Batch 2): chrome props are now platform-aware.
+ *   sidebar:    'always' (default) | 'desktop-only' | 'never'
+ *   header:     'always' (default) | 'desktop-only' | 'never'
+ *   mobileBottomNav: boolean (default true)
  *
- *   <AppShell sidebar={false} mobileBottomNav={true}>
- *     <AccountScreen />
- *   </AppShell>
+ * Account + More pass sidebar='desktop-only' so the Sidebar stays visible
+ * on desktop (users don't lose primary nav when opening their profile)
+ * but hides on mobile (where they have their own top bar + bottom nav).
+ * Main views pass sidebar='always'.
  *
- *   <AppShell sidebar={true} mobileBottomNav={true} header={true}>
- *     {currentView === 'dashboard' && <Dashboard />}
- *     ...
- *   </AppShell>
- *
- * The `sidebar`/`header`/`mobileBottomNav` props let each branch pick
- * which chrome to show. The modal stack is always the same.
+ * Account + More pass header='never' because they have their own top bar
+ * with a back button. Main views pass header='always'.
  */
 
 import { type ReactNode } from 'react'
 import { type ViewType, type PaywallFeature } from '@/store/app-store'
+import { cn } from '@/lib/utils'
 import { Sidebar } from './Sidebar'
 import { Header } from './Header'
 import { MobileBottomNav } from './MobileBottomNav'
@@ -53,13 +51,16 @@ import { RatePromptModal } from '@/components/common/RatePromptModal'
 import { PWAInstallPrompt } from '@/components/common/PWAInstallPrompt'
 import { PaywallModal } from '@/components/common/PaywallModal'
 
+/** When to show a chrome element (Sidebar / Header). */
+type ChromeVisibility = 'always' | 'desktop-only' | 'never'
+
 interface AppShellProps {
   children: ReactNode
-  /** Show the desktop Sidebar (default: true). Set false for full-screen views like More/Account on mobile. */
-  sidebar?: boolean
-  /** Show the Header bar (default: true). Set false for full-screen views. */
-  header?: boolean
-  /** Show the MobileBottomNav (default: true). Set false for views that have their own back button. */
+  /** When to show the desktop Sidebar. Default: 'always'. */
+  sidebar?: ChromeVisibility
+  /** When to show the Header bar. Default: 'always'. */
+  header?: ChromeVisibility
+  /** Show the MobileBottomNav (mobile only via lg:hidden). Default: true. */
   mobileBottomNav?: boolean
   /** Feature flags from useFeatureFlags (passed in by parent to avoid double-fetch). */
   features: Record<string, boolean> | undefined
@@ -82,10 +83,19 @@ interface AppShellProps {
   closePaywall: () => void
 }
 
+/** Map ChromeVisibility → CSS classes that control when the element shows. */
+function chromeClass(v: ChromeVisibility): string {
+  switch (v) {
+    case 'always': return ''  // no extra class — visible on all viewports
+    case 'desktop-only': return 'hidden lg:flex'  // hidden on mobile, flex on desktop
+    case 'never': return 'hidden'  // never visible
+  }
+}
+
 export function AppShell({
   children,
-  sidebar = true,
-  header = true,
+  sidebar = 'always',
+  header = 'always',
   mobileBottomNav = true,
   features,
   showThemePicker,
@@ -102,23 +112,41 @@ export function AppShell({
   paywallOpen,
   closePaywall,
 }: AppShellProps) {
+  // 🔒 AUDIT V25 FIX §2.3: For 'desktop-only' sidebar, we still render the
+  // <Sidebar/> element (so it hydrates and is ready when the user resizes
+  // to desktop), but wrap it in a div with `hidden lg:block` so it doesn't
+  // take space on mobile. For 'never', we skip rendering entirely.
+  const sidebarWrapperClass = chromeClass(sidebar)
+  const headerClass = chromeClass(header)
+  const showSidebar = sidebar !== 'never'
+  const showHeader = header !== 'never'
+
   return (
     <div className="flex min-h-screen bg-background">
       {/* Global overlays — always present regardless of branch */}
       {features?.keyboardShortcuts && <KeyboardShortcuts />}
       {features?.globalSearch && <GlobalSearch />}
 
-      {/* Desktop sidebar — only when this branch wants it */}
-      {sidebar && <Sidebar />}
+      {/* Desktop sidebar — wrapped so 'desktop-only' hides it on mobile */}
+      {showSidebar && (
+        <div className={sidebarWrapperClass}>
+          <Sidebar />
+        </div>
+      )}
 
       {/* Main content column */}
       <div className="flex-1 flex flex-col min-w-0">
         <OfflineIndicator />
-        {header && <Header />}
+        {showHeader && (
+          <div className={headerClass}>
+            <Header />
+          </div>
+        )}
         {children}
       </div>
 
-      {/* Mobile bottom nav — only when this branch wants it */}
+      {/* Mobile bottom nav — only when this branch wants it.
+          MobileBottomNav itself is lg:hidden, so it only shows on mobile. */}
       {mobileBottomNav && <MobileBottomNav />}
 
       {/* 🔒 AUDIT V25 FIX §4.3: PWAInstallPrompt mounted ONCE (was 2× per branch).
@@ -149,24 +177,25 @@ export function AppShell({
 
 /**
  * Helper: get the ViewType → AppShell props mapping.
- * Full-screen views (More, Account) get sidebar=false, header=false.
- * Everything else gets the full chrome.
+ *
+ * 🔒 AUDIT V25 FIX §2.3 (Batch 2): Account and More now render INSIDE the
+ * shell on desktop (sidebar='desktop-only'). On mobile they stay full-screen
+ * (sidebar='never' effectively, via the desktop-only class). They have their
+ * own top bar with back button, so header='never' for both platforms.
  */
 export function getShellPropsForView(view: ViewType): {
-  sidebar: boolean
-  header: boolean
+  sidebar: ChromeVisibility
+  header: ChromeVisibility
   mobileBottomNav: boolean
 } {
-  // 🔒 AUDIT V25 §2.3 (Batch 2 — not yet implemented): On desktop, Account
-  // and More should render INSIDE the shell (sidebar stays). For now,
-  // keeping the full-screen mobile pattern to avoid changing behavior
-  // in this dead-code-cleanup batch.
   if (view === 'more' || view === 'account') {
-    return { sidebar: false, header: false, mobileBottomNav: true }
+    // 🔒 §2.3: Sidebar stays visible on desktop (desktop-only), hidden on mobile.
+    // Header is 'never' — these screens have their own top bar with back button.
+    return { sidebar: 'desktop-only', header: 'never', mobileBottomNav: true }
   }
-  // New-entry / detail views: full-screen, no bottom nav (they have own back btn)
+  // New-entry / detail views: full chrome, no bottom nav (they have own back btn)
   if (['new-sale', 'new-purchase', 'transaction-detail', 'party-profile'].includes(view)) {
-    return { sidebar: true, header: true, mobileBottomNav: false }
+    return { sidebar: 'always', header: 'always', mobileBottomNav: false }
   }
-  return { sidebar: true, header: true, mobileBottomNav: true }
+  return { sidebar: 'always', header: 'always', mobileBottomNav: true }
 }
