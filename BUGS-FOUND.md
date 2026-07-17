@@ -268,3 +268,57 @@ and include enough context to reproduce.
 - **Description**: hideProfit was only applied to the 'pl' report. bill-profit and item-profit returned full profit/COGS/margin to any staff with reports access.
 - **Fix applied**: 2026-07-16 (Audit V23 response). Return 403 for bill-profit + item-profit when hideProfit=true.
 - **Status**: FIXED
+
+### BUG-022 — AccountScreen footer version string hardcoded, drift from About page (Low/Maintenance) — FIXED
+
+- **Found**: 2026-07-17, during Audit V23 Batch L §13.9e scan
+- **File**: `src/components/layout/AccountScreen.tsx` (line 779 footer + line 1242 About)
+- **Severity**: Low (cosmetic, but erodes trust — beta testers couldn't tell which version they were on)
+- **Description**: Two hardcoded version strings lived in different files:
+  - AccountScreen footer: `"EkBook v1.0 · Made with love for Bharat 🇮🇳"`
+  - About page: `"EkBook v1.0.0 (Beta)"`
+  They had drifted: footer said v1.0, About said v1.0.0. Bumping the version required editing two files and hoping they stayed in sync.
+- **Fix applied**: 2026-07-17 (Batch L §13.9e). Created `src/lib/app-version.ts` with single `APP_VERSION_LABEL` constant (defaults to `'1.0.0-beta'`, overridable via `NEXT_PUBLIC_APP_VERSION` env var for Vercel build-specific versioning). Both surfaces now import and render the same constant.
+- **Status**: FIXED
+
+### BUG-023 — Analytics `email_hash` trait was reversible base64, not a hash (High/PII) — FIXED
+
+- **Found**: 2026-07-17, during Audit V23 Batch L §13.9g scan
+- **File**: `src/app/page.tsx:258` (post-auth identify), `src/components/auth/AuthScreen.tsx:110` (post-login identify)
+- **Severity**: High (PII leak — emails could be recovered from analytics events)
+- **Description**: The `email_hash` trait sent to PostHog was computed as `btoa(email).slice(0, 16)`. Base64 is an ENCODING, not a hash — it's fully reversible. Truncating to 16 chars still leaks ~12 chars of the actual email. Anyone with access to the PostHog dashboard could decode these back to plaintext emails for short addresses. The trait name `email_hash` claimed it was hashed when it wasn't.
+  Worse: AuthScreen.tsx used the same `btoa(email).slice(0,16)` AS the `userId` placeholder passed to `identifyUser()` — meaning the reversible value was the analytics userId itself, not just a trait. A user's email-derived ID was the primary key in the analytics platform.
+- **Fix applied**: 2026-07-17 (Batch L §13.9g).
+  - Added `hashEmail()` async helper in `src/lib/analytics.ts` using Web Crypto `subtle.digest('SHA-256', ...)` — a true one-way hash, hex-encoded, first 16 chars (64 bits, good attribution uniqueness).
+  - Returns empty string in SSR or non-secure contexts (subtle requires HTTPS or localhost) — callers skip the trait rather than fall back to btoa.
+  - `page.tsx`: identify fires immediately (no delay), then async hash resolves and enriches with the real `email_hash` trait. Raw email never reaches the platform.
+  - `AuthScreen.tsx`: post-login identify uses the SHA-256 hash as both userId placeholder AND `email_hash` trait. Once the real session loads, `page.tsx` re-identifies with the real DB userId.
+- **Verification**: tsc 0 errors, jest 1616/1616, build clean. No `btoa(email)` left in src/ (only comment references documenting the prior bug).
+- **Status**: FIXED
+
+### BUG-024 — Logout button silently failed if clearAllOfflineData threw (Medium/UX) — FIXED
+
+- **Found**: 2026-07-17, during Audit V23 Batch L §13.9d scan
+- **File**: `src/components/layout/AccountScreen.tsx:742-758`
+- **Severity**: Medium (user taps Logout, nothing happens, no feedback)
+- **Description**: The onClick handler was a chain of `.then()` calls with no `.catch`:
+  ```
+  import(next-auth).then(({ signOut }) =>
+    import(offline-db).then(({ clearAllOfflineData }) =>
+      clearAllOfflineData().then(() => signOut(...))))
+  ```
+  If `clearAllOfflineData()` threw (e.g., IndexedDB blocked by browser privacy mode, quota error, or a corrupted object store), the promise rejected, no `.catch` handled it, and `signOut()` never ran. The user tapped Logout, the button did nothing, no toast, no error, no redirect.
+- **Fix applied**: 2026-07-17 (Batch L §13.9d). Rewrote as async/await with try/catch around each step:
+  - `clearAllOfflineData` failure is logged but non-fatal (`console.warn`).
+  - `signOut` runs unconditionally afterward.
+  - If even `signOut` throws, last-resort `window.location.href = '/'` ensures the user is never stuck on a dead button.
+- **Status**: FIXED
+
+### BUG-025 — GSTR-3B 3.1(e) nonGstValue inflated by all income types (Medium/GST-filing) — FIXED
+
+- **Found**: 2026-07-17, during Audit V23 Batch L §13.9i scan
+- **File**: `src/app/api/gstr-3b/route.ts:101-104`
+- **Severity**: Medium (wrong 3.1(e) value on every GSTR-3B that has non-supply income)
+- **Description**: `nonGstValue` was computed as `SUM(totalAmount) WHERE type='income'` over ALL income transactions. But the income categories defined in `IncomeExpense.tsx` include 'Commission', 'Interest', 'Rent Received', 'Discount Received', 'Refund', 'Miscellaneous' — these are NON-SUPPLY income (interest on bank deposits, rent of own property, etc.), NOT outward supplies of goods/services. They do NOT belong in 3.1(e) "Non-GST outward supplies". Including them inflated 3.1(e) for every shop that records interest or commission income — a kirana with ₹2,000 bank interest would see ₹2,000 wrongly added to 3.1(e).
+- **Fix applied**: 2026-07-17 (Batch L §13.9i). Filter to `category: 'Scrap Sale'` only — the one income category that could plausibly be a non-GST outward supply (casual sale of capital assets like scrap). Most kirana users now correctly get `nonGstValue=0`. TODO added in code for a proper `isNonGstSupply` flag on Transaction for users who genuinely sell non-GST goods (alcohol, petrol, lottery).
+- **Status**: FIXED
