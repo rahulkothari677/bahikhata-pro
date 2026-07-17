@@ -531,6 +531,16 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
       sonnerToast.error('Add at least one item')
       return
     }
+    // 🔒 AUDIT V25 FIX §6.2 (Batch 7): Credit/debit notes require a party.
+    // A return without a party can't reduce any balance — it's a silent no-op.
+    // Block early on the client so the user gets immediate feedback.
+    if (isNote && !partyId) {
+      sonnerToast.error('Party required for returns', {
+        description: 'A credit/debit note must be linked to a customer or supplier so their balance can be adjusted. For walk-in returns, adjust stock in Inventory instead.',
+        duration: 6000,
+      })
+      return
+    }
     // 🔒 V11 STOCK POLICY: Block save if stock would go negative (block mode).
     // The Save button is also disabled, but the user might press Enter to save.
     if (hasStockBlock) {

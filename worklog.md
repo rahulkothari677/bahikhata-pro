@@ -6582,3 +6582,44 @@ Stage Summary:
 - 1640 tests passing, 0 TypeScript errors, 0 NEW ESLint errors, build clean.
 - Browser verification: partial (AuthScreen loads; signup blocked by sandbox Neon network instability).
 - Awaiting user pass before Batch 7 (V24 §6 moderate accounting items).
+
+---
+Task ID: audit-v25-batch-7
+Agent: main
+Task: V25 Audit Batch 7 — V24 §6 moderate accounting items (§6.2, §6.3, §6.6).
+
+Work Log:
+- Re-verified all 3 V24 §6 sub-findings against current codebase.
+
+§7.1 — V24 §6.2: Block credit/debit notes without a party:
+- Confirmed: validation.ts allows `partyId: nullable().optional()` for ALL types including credit-note/debit-note. No server-side validation blocks a note without a party.
+- A credit note with no party is a silent no-op: GST flows correctly (uses subtotal, not paidAmount), but party balance, dashboard receivable, debt-aging, and WhatsApp reminder all ignore it. The user thinks they recorded a return, but nothing changed in the khata.
+- Fix: Added server-side validation in BOTH POST (transactions/route.ts) and PUT (transactions/[id]/route.ts) — rejects with 400 + clear error message: "Credit/debit notes require a party. A return must be linked to a customer or supplier so their balance can be adjusted."
+- Also added client-side guard in TransactionEntry.tsx handleSave — shows toast immediately: "Party required for returns" before making the API call.
+- Files changed: transactions/route.ts, transactions/[id]/route.ts, TransactionEntry.tsx.
+
+§7.2 — V24 §6.3: Income/expense party ledger effect:
+- Investigated: The V24 auditor said "POST stores partyId on income/expense but computePartyBalance doesn't include them." However, during investigation I found that the IncomeExpense UI component NEVER sends `partyId` — it uses free-text `payeeName` + `payeePhone` instead. The `partyId` field exists in the schema + API (added by V19-005) but is unused by the UI.
+- Decision: No fix needed. The auditor's concern is theoretical — users can't currently attach a party to income/expense via the UI. If a future feature adds a party picker, the clarification should be added then.
+- Logged as BUG-036 (WONTFIX — no user-facing issue).
+
+§7.3 — V24 §6.6: Invoice PDF per-line total spot check:
+- Verified: `computeLineItems` recomputes `item.total` on every write (line 201 of line-items.ts: `total: fromPaise(itemTotalPaise)`). The stored value is always fresh after create/edit.
+- The only risk is manual DB editing — out of scope.
+- Decision: No fix needed. Verified CLEAN.
+
+Additional existing bugs found during scan:
+- BUG-036 (income/expense partyId unused by UI) — logged as WONTFIX.
+
+Verification:
+- npx tsc --noEmit: 0 errors
+- npx eslint: 0 NEW errors (5 pre-existing in transactions/route.ts + [id]/route.ts about `module` variable)
+- npx jest: 1640/1640 pass (42 suites)
+- npx next build: Compiled successfully (BUILD_ID present)
+
+Stage Summary:
+- V25 Audit Batch 7 COMPLETE. 1 fix applied (§6.2 block notes without party). 2 findings verified clean/wontfix (§6.3, §6.6).
+- Files changed: 3 (transactions/route.ts, transactions/[id]/route.ts, TransactionEntry.tsx).
+- 1 new bug logged: BUG-036 (WONTFIX).
+- 1640 tests passing, 0 TypeScript errors, 0 NEW ESLint errors, build clean.
+- Awaiting user pass before Batch 8 decision (§6.1 Navigation registry — likely deferred to its own epic).

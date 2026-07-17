@@ -423,6 +423,26 @@ export async function POST(req: NextRequest) {
     // Includes the FIX M3 snap-to-total clamp for explicit values.
     const finalPaid = resolveFinalPaid(type, paidAmount, totalAmount)
 
+    // 🔒 AUDIT V25 FIX §6.2 (Batch 7): Block credit/debit notes without a party.
+    // A credit note with no partyId (walk-in) can't reduce any balance — there's
+    // nobody to credit. The note would be a silent no-op: GST flows correctly
+    // (uses subtotal, not paidAmount), but the party balance, dashboard
+    // receivable, debt-aging, and WhatsApp reminder all ignore it. The user
+    // thinks they recorded a return, but nothing changed in the khata.
+    // Fix: reject with a clear error message. If the user genuinely has a
+    // walk-in return (no customer account), they should use the cash-refund
+    // path (paidAmount = totalAmount) so the money is at least reflected in
+    // cash/day-end. But that requires a party for the payment record too.
+    // Simplest honest answer: returns require a party. Walk-in returns are
+    // a stock adjustment, not a khata transaction — record them via inventory
+    // stock adjustment instead.
+    if (isNoteType(type) && !partyId) {
+      return NextResponse.json({
+        error: 'Credit/debit notes require a party',
+        message: 'A return must be linked to a customer or supplier so their balance can be adjusted. For walk-in returns with no customer account, adjust the stock directly in Inventory instead.',
+      }, { status: 400 })
+    }
+
     // 🔒 AUDIT V24 §2: Validate credit/debit notes against their original
     // invoice — ownership, type pairing (CN→sale, DN→purchase), same party,
     // and a cumulative cap (Σ notes ≤ original total). Prevents phantom

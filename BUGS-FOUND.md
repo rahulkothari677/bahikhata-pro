@@ -421,3 +421,12 @@ and include enough context to reproduce.
 - **Fix applied**: 2026-07-17 (Batch 6 §6.0). Parallelized the 3 independent pre-checks (party findFirst + period lock + balance computation) into ONE Promise.all. They don't depend on each other. Cuts 3 sequential round-trips → 1 parallel round-trip. Also parallelized the transactions POST's `products.findMany` + `setting.findUnique` into ONE Promise.all. Saves ~600-800ms per save.
 - **Note**: The bigger remaining bottleneck is Neon cold-start (3-5s on first request after idle). That's an infrastructure issue (Neon's auto-suspend) — fix is to enable Neon's "Always On" or use a connection pooler. Code-level parallelization only helps the warm-path queries.
 - **Status**: FIXED (code-level; Neon cold-start is infrastructure)
+
+### BUG-036 — V24 §6.3: Income/Expense partyId unused by UI (Low/Latent) — WONTFIX (no user-facing issue)
+
+- **Found**: 2026-07-17, during V25 Batch 7 §7.2 scan
+- **File**: `src/components/income/IncomeExpense.tsx`, `src/app/api/transactions/route.ts:235`
+- **Severity**: Low (latent — API supports partyId on income/expense but UI never sends it)
+- **Description**: V24 §6.3 flagged that income/expense transactions store `partyId` but `computePartyBalance` doesn't include them. However, during V25 Batch 7 investigation, I found that the IncomeExpense UI component NEVER sends `partyId` — it uses free-text `payeeName` + `payeePhone` instead. The `partyId` field exists in the schema + API (added by V19-005) but is unused by the UI. So in practice, income/expense transactions never have a `partyId` set — the link is always informational only (payee name/phone text, not a party relationship).
+- **Decision**: No fix needed. The auditor's concern ("users expect it to settle udhaar, it silently doesn't") is theoretical — users can't currently attach a party to income/expense via the UI. If a future feature adds a party picker to income/expense, the clarification ("this doesn't affect the party's balance") should be added then. For now, this is a latent capability, not a user-facing bug.
+- **Status**: WONTFIX (no user-facing issue; revisit if income/expense party picker is added)

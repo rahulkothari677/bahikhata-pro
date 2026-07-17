@@ -340,6 +340,15 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     // Includes the FIX M3 snap-to-total clamp for explicit values.
     const finalPaid = resolveFinalPaid(type, paidAmount, totalAmount)
 
+    // 🔒 AUDIT V25 FIX §6.2 (Batch 7): Block credit/debit notes without a party
+    // on edit too (same check as POST). A note without a party is a silent no-op.
+    if (isNoteType(type) && !partyId) {
+      return NextResponse.json({
+        error: 'Credit/debit notes require a party',
+        message: 'A return must be linked to a customer or supplier so their balance can be adjusted.',
+      }, { status: 400 })
+    }
+
     // 🔒 AUDIT V24 §2: Same note-vs-original validation as POST, excluding this
     // note itself from the cumulative cap (we're replacing its old value).
     if (isNoteType(type) && originalTransactionId) {
