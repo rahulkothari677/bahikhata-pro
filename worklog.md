@@ -6423,3 +6423,32 @@ Stage Summary:
 - 1640 tests passing, 0 TypeScript errors, 0 ESLint errors, build clean.
 - Browser verification: deferred (per user instruction).
 - §6.1 Navigation registry: deferred to its own epic (multi-day refactor).
+
+---
+Task ID: audit-v25-batch-4b
+Agent: main
+Task: V25 Audit Batch 4b — Revert Business Health Score placement (user feedback).
+
+Work Log:
+- User feedback after Batch 4: "the earlier version was best for placement of the card so do that the same." Reverting §4.2 (Health Score below GST summary) — restoring Health Score to standalone full-width card below Business Goals.
+- Keeping §4.1 (Smart Insights + Analytics side-by-side in 2-col grid) — user did not complain about that.
+
+§4b.1 — Revert Health Score placement:
+- Removed the `<div className="space-y-4">` vertical stack wrapper around GST summary + Health Score.
+- Restored GST summary as a standalone Card in the right column of the "Recent transactions & GST summary" 2-col grid (its original state before Batch 4).
+- Added BusinessHealthScore back as a standalone full-width card below Business Goals, before the Smart Insights + Analytics 2-col row.
+- Final dashboard order: ... Business Goals → Business Health Score (full-width) → Smart Insights + Analytics (2-col) → DayEndSummary modal.
+- Files changed: Dashboard.tsx.
+
+Verification:
+- npx tsc --noEmit: 0 errors
+- npx eslint: 0 errors, 0 warnings
+- npx jest: 1640/1640 pass (42 suites)
+- npx next build: Compiled successfully (BUILD_ID present)
+
+Stage Summary:
+- V25 Audit Batch 4b COMPLETE. Health Score placement reverted per user feedback.
+- Files changed: 1 (Dashboard.tsx).
+- 1640 tests passing, 0 TypeScript errors, 0 ESLint errors, build clean.
+- Browser verification: deferred.
+- Awaiting user's ZIP file for deep re-analysis + remaining task list + execution plan.
