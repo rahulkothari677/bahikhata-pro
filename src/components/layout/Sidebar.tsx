@@ -2,7 +2,7 @@
 
 import { useAppStore, type ViewType } from '@/store/app-store'
 import { useTranslation } from '@/hooks/use-translation'
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useMemo } from 'react'
 import { useSession } from 'next-auth/react'
 import { cn, getInitials } from '@/lib/utils'
 import { useQuery } from '@tanstack/react-query'
@@ -12,76 +12,24 @@ import { useStaffPermissions } from '@/hooks/use-staff-permissions'
 import type { ModuleKey } from '@/lib/staff-permissions'
 import { useShops } from '@/hooks/use-shops'
 import { prefetchView } from '@/lib/prefetch'  // 🔒 V11 §3.3
+// 🔒 AUDIT V25 §6.1 (Batch 8 Phase 2): Sidebar now renders from the NavRegistry.
+import { NAV_REGISTRY, getByFrequency, filterByPermissions, type NavDestination } from '@/lib/nav-registry'
+import { handleNavAction } from '@/lib/handle-nav-action'
 import { Store, Plus, ChevronDown, Check, Calculator } from 'lucide-react'
 import {
-  LayoutDashboard,
-  Package,
-  ShoppingCart,
-  Truck,
-  Wallet,
-  Users,
-  ScanLine,
-  FileBarChart,
   BookOpenText,
   ChevronLeft,
   ChevronRight,
-  // 🔒 AUDIT V25 FIX §2.1 (Batch 2): Tools section icons.
   FolderOpen,
-  Bot,
-  ShieldCheck,
-  Lock,
 } from 'lucide-react'
 // 🔒 AUDIT V25 FIX §4.2 follow-up: Removed 9 unused lucide imports
 // (Settings, Sparkles, Crown, HelpCircle, Info, Star, LogOut, Download,
 // Pencil, MoreHorizontal) — they were left over from V21-011 when the
 // Sidebar buttons that used them were removed.
-
-const navItems: { id: ViewType; labelKey: string; descKey: string; icon: any; badge?: string }[] = [
-  { id: 'dashboard', labelKey: 'nav.dashboard', descKey: 'dash.business_overview', icon: LayoutDashboard },
-  { id: 'scanner', labelKey: 'nav.scanner', descKey: 'nav.scanner', icon: ScanLine, badge: 'AI' },
-  { id: 'sales', labelKey: 'nav.sales', descKey: 'nav.sales', icon: ShoppingCart },
-  { id: 'purchases', labelKey: 'nav.purchases', descKey: 'nav.purchases', icon: Truck },
-  { id: 'inventory', labelKey: 'nav.inventory', descKey: 'nav.inventory', icon: Package },
-  { id: 'income-expense', labelKey: 'nav.income', descKey: 'nav.income', icon: Wallet },
-  { id: 'parties', labelKey: 'nav.parties', descKey: 'nav.parties', icon: Users },
-  { id: 'reports', labelKey: 'nav.reports', descKey: 'nav.reports', icon: FileBarChart },
-  // 🔒 V21-011 (Phase 3): Removed 'pricing' and 'settings' from sidebar —
-  // now in the Account page (accessible via avatar in top bar).
-  // Sidebar is now BUSINESS NAVIGATION ONLY.
-]
-
-// 🔒 AUDIT V25 FIX §2.1 (Batch 2): Tools section — secondary nav for items
-// that were previously mobile-only (reachable only via MoreScreen, which is
-// mobile-only itself). The auditor flagged these as desktop parity gaps:
-// Document Vault was 100% unreachable on desktop; AI Usage + AI Comparison
-// were buried 3 levels deep in Settings → Features tab → footer buttons;
-// Reconciliation + Period Lock were miscategorized under "Data & Privacy".
-//
-// This Tools section renders below the main nav, separated by a divider.
-// Collapsible on desktop (toggle the section header). Gated by staff
-// permissions (CA can see Reconciliation + Period Lock for read-only audit,
-// staff cannot see Document Vault or AI tools).
-//
-// Note: Reconciliation + Period Lock don't have their own views — they
-// deep-link to Account → data section (same as MoreScreen does). The
-// other 3 tools have their own views and navigate directly.
-type ToolItem = {
-  id: string  // view ID or a special 'reconciliation' / 'period-lock' marker
-  label: string
-  desc: string
-  icon: any
-  badge?: string
-  // For tools that deep-link to Account → data section instead of a view
-  accountSection?: string
-}
-
-const toolsNavItems: ToolItem[] = [
-  { id: 'document-vault', label: 'Document Vault', desc: 'Bills, invoices, GST certs', icon: FolderOpen },
-  { id: 'ai-usage', label: 'AI Usage', desc: 'Track AI scans & cost', icon: Bot, badge: 'AI' },
-  { id: 'ai-comparison', label: 'AI Comparison', desc: 'Compare AI providers', icon: Bot, badge: 'AI' },
-  { id: 'reconciliation', label: 'Reconciliation', desc: 'Health check — books tie out?', icon: ShieldCheck, accountSection: 'data' },
-  { id: 'period-lock', label: 'Period Lock', desc: 'Lock filed GST periods', icon: Lock, accountSection: 'data' },
-]
+// 🔒 AUDIT V25 §6.1 (Batch 8 Phase 2): navItems + toolsNavItems arrays REMOVED.
+// Sidebar now renders from the NavRegistry (src/lib/nav-registry.ts).
+// The registry is the single source of truth — adding a new feature there
+// automatically makes it appear in the Sidebar with correct permissions.
 
 export function Sidebar() {
   // 🔒 AUDIT V25 FIX §4.2: useConfirmDialog removed — only handleLogout used it,
@@ -107,6 +55,24 @@ export function Sidebar() {
       localStorage.setItem('bahikhata:sidebar-tools-open', toolsOpen ? 'true' : 'false')
     }
   }, [toolsOpen])
+
+  // 🔒 AUDIT V25 §6.1 (Batch 8 Phase 2): Main nav + Tools items from the NavRegistry.
+  // Filters by frequency + category + permissions + feature flags + platform.
+  // Was: hardcoded navItems + toolsNavItems arrays with inline permission checks.
+  const isOwner = session?.user?.role === 'owner'
+  const mainNavItems = useMemo(() => {
+    return filterByPermissions(
+      getByFrequency('primary').filter(d => d.category !== 'account' && (d.platforms || ['desktop']).includes('desktop')),
+      { canAccess, isFlagEnabled: isFlagEnabled as any, isOwner }
+    )
+  }, [canAccess, isFlagEnabled, isOwner])
+  const toolsItems = useMemo(() => {
+    return filterByPermissions(
+      getByFrequency('secondary').filter(d => d.category === 'tools' && (d.platforms || ['desktop']).includes('desktop')),
+      { canAccess, isFlagEnabled: isFlagEnabled as any, isOwner }
+    )
+  }, [canAccess, isFlagEnabled, isOwner])
+
   // 🔒 FIX M9: Outside-click handler — was missing.
   const shopDropdownRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -234,43 +200,22 @@ export function Sidebar() {
           </div>
         )}
 
-        {/* Navigation */}
+        {/* Navigation — rendered from NavRegistry (V25 §6.1 Phase 2) */}
         <nav className={cn('flex-1 overflow-y-auto px-3 py-4 space-y-1', sidebarCollapsed && 'lg:px-2')}>
-          {navItems.filter(item => {
-            if (item.id === 'scanner' && !isFlagEnabled('ai_scanner')) return false
-            // V17-Ext Tier 3 Step 5: CAs cannot see Pricing (owner-only upgrade feature)
-            if (item.id === 'pricing' && isCA) return false
-            // Gate by staff permissions — map ViewType to ModuleKey
-            const moduleMap: Record<string, string> = {
-              'dashboard': 'dashboard',
-              'sales': 'sales',
-              'purchases': 'purchases',
-              'inventory': 'inventory',
-              'scanner': 'scanner',
-              'reports': 'reports',
-              'income-expense': 'incomeExpense',
-              'parties': 'parties',
-              'settings': 'settings',
-              'pricing': 'pricing', // pricing is always visible (owner only feature)
-            }
-            const moduleKey = moduleMap[item.id]
-            if (moduleKey && moduleKey !== 'pricing') {
-              return canAccess(moduleKey as ModuleKey)
-            }
-            return true
-          }).map((item) => {
+          {mainNavItems.map((item: NavDestination) => {
             const Icon = item.icon
-            const active = currentView === item.id ||
-              (currentView === 'transaction-detail' && ((selectedTransactionType === 'purchase' && item.id === 'purchases') || (selectedTransactionType !== 'purchase' && item.id === 'sales'))) ||
-              (currentView === 'new-sale' && item.id === 'sales') ||
-              (currentView === 'new-purchase' && item.id === 'purchases') ||
-              (currentView === 'party-profile' && item.id === 'parties')
+            const itemId = item.view || item.id
+            const active = currentView === itemId ||
+              (currentView === 'transaction-detail' && ((selectedTransactionType === 'purchase' && itemId === 'purchases') || (selectedTransactionType !== 'purchase' && itemId === 'sales'))) ||
+              (currentView === 'new-sale' && itemId === 'sales') ||
+              (currentView === 'new-purchase' && itemId === 'purchases') ||
+              (currentView === 'party-profile' && itemId === 'parties')
             return (
               <button
                 key={item.id}
-                onClick={() => setView(item.id)}
-                onMouseEnter={() => prefetchView(item.id)}  // 🔒 V11 §3.3
-                onTouchStart={() => prefetchView(item.id)}  // 🔒 V11 §3.3
+                onClick={() => handleNavAction(item)}
+                onMouseEnter={() => item.view && prefetchView(item.view)}  // 🔒 V11 §3.3
+                onTouchStart={() => item.view && prefetchView(item.view)}  // 🔒 V11 §3.3
                 className={cn(
                   'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all group relative',
                   sidebarCollapsed && 'lg:justify-center lg:px-2',
@@ -278,13 +223,13 @@ export function Sidebar() {
                     ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-lg'
                     : 'text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
                 )}
-                title={sidebarCollapsed ? t(item.labelKey) : undefined}
+                title={sidebarCollapsed ? item.label : undefined}
               >
                 <Icon className={cn('w-[18px] h-[18px] flex-shrink-0', active && 'text-white')} />
                 {!sidebarCollapsed && (
                   <div className="flex-1 text-left min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium truncate">{t(item.labelKey)}</span>
+                      <span className="text-sm font-medium truncate">{item.label}</span>
                       {item.badge && (
                         <span className={cn(
                           'text-[9px] px-1.5 py-0.5 rounded-full font-bold',
@@ -300,7 +245,7 @@ export function Sidebar() {
                       'text-[11px] truncate',
                       active ? 'text-white/70' : 'text-sidebar-foreground/50'
                     )}>
-                      {t(item.descKey)}
+                      {item.description || item.label}
                     </p>
                   </div>
                 )}
@@ -313,14 +258,9 @@ export function Sidebar() {
           })}
         </nav>
 
-        {/* 🔒 AUDIT V25 FIX §2.1 (Batch 2): Tools section — secondary nav for
-            items that were previously mobile-only (Document Vault, AI Usage,
-            AI Comparison) or buried 3 levels deep (Reconciliation, Period Lock).
-            Collapsible so the main nav stays primary. Hidden when sidebar is
-            collapsed (icons-only mode) — collapsed mode shows a single
-            "Tools" icon that expands the sidebar.
-            CA can see Reconciliation + Period Lock (read-only audit use).
-            Staff cannot see Document Vault or AI tools (gated by canAccess). */}
+        {/* 🔒 AUDIT V25 §6.1 (Batch 8 Phase 2): Tools section rendered from
+            NavRegistry. Was hardcoded toolsNavItems with inline filtering.
+            Now uses toolsItems (filtered from registry by permissions + flags). */}
         {!sidebarCollapsed && (
           <div className="border-t border-sidebar-border">
             <button
@@ -334,36 +274,18 @@ export function Sidebar() {
             </button>
             {toolsOpen && (
               <nav className="px-3 pb-3 space-y-1">
-                {toolsNavItems.filter(item => {
-                  // Gate by staff permissions + feature flags
-                  if (item.id === 'document-vault' && !canAccess('settings' as ModuleKey)) return false
-                  if ((item.id === 'ai-usage' || item.id === 'ai-comparison') && !isFlagEnabled('ai_scanner')) return false
-                  // CA can see reconciliation + period-lock (read-only audit)
-                  // Staff can see reconciliation (they have reports access)
-                  return true
-                }).map((item) => {
+                {toolsItems.map((item: NavDestination) => {
                   const Icon = item.icon
-                  // Active state: view matches OR (for reconciliation/period-lock) we're on Account → data section
-                  const active = item.accountSection
-                    ? currentView === 'account' && useAppStore.getState().accountSection === item.accountSection
-                    : currentView === item.id
-                  const handleClick = () => {
-                    if (item.accountSection) {
-                      // Deep-link to Account → section (same pattern as MoreScreen)
-                      setPreviousView(currentView)
-                      useAppStore.getState().setAccountOriginView(currentView)
-                      useAppStore.getState().setAccountSection(item.accountSection)
-                      setView('account')
-                    } else {
-                      setView(item.id as ViewType)
-                    }
-                  }
+                  // Active state: view matches OR (for navigate-account items) we're on Account → data section
+                  const active = item.actionKind === 'navigate-account'
+                    ? currentView === 'account' && useAppStore.getState().accountSection === item.actionParams?.accountSection
+                    : currentView === (item.view || item.id)
                   return (
                     <button
                       key={item.id}
-                      onClick={handleClick}
-                      onMouseEnter={() => !item.accountSection && prefetchView(item.id)}
-                      onTouchStart={() => !item.accountSection && prefetchView(item.id)}
+                      onClick={() => handleNavAction(item)}
+                      onMouseEnter={() => item.view && prefetchView(item.view)}
+                      onTouchStart={() => item.view && prefetchView(item.view)}
                       className={cn(
                         'w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all group relative',
                         active
@@ -382,7 +304,7 @@ export function Sidebar() {
                             </span>
                           )}
                         </div>
-                        <p className="text-[10px] truncate text-sidebar-foreground/40">{item.desc}</p>
+                        <p className="text-[10px] truncate text-sidebar-foreground/40">{item.description}</p>
                       </div>
                     </button>
                   )
