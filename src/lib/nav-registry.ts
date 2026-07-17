@@ -465,6 +465,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'reports',
     subcategory: 'financial',
     frequency: 'secondary',
+    surfaces: ['reports-hub'],
+    sortOrder: 1,
   },
   {
     id: 'bill-profit',
@@ -478,6 +480,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'reports',
     subcategory: 'financial',
     frequency: 'secondary',
+    surfaces: ['reports-hub'],
+    sortOrder: 2,
   },
   {
     id: 'item-profit',
@@ -491,6 +495,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'reports',
     subcategory: 'financial',
     frequency: 'secondary',
+    surfaces: ['reports-hub'],
+    sortOrder: 3,
   },
   {
     id: 'party-statement',
@@ -504,6 +510,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'reports',
     subcategory: 'financial',
     frequency: 'secondary',
+    surfaces: ['reports-hub'],
+    sortOrder: 4,
   },
   {
     id: 'debt-aging',
@@ -517,6 +525,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'reports',
     subcategory: 'financial',
     frequency: 'secondary',
+    surfaces: ['reports-hub'],
+    sortOrder: 5,
   },
   {
     id: 'trial-balance',
@@ -530,6 +540,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'reports',
     subcategory: 'financial',
     frequency: 'secondary',
+    surfaces: ['reports-hub'],
+    sortOrder: 6,
   },
   // GST reports (ReportsHub)
   {
@@ -544,6 +556,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'reports',
     subcategory: 'gst',
     frequency: 'secondary',
+    surfaces: ['reports-hub'],
+    sortOrder: 1,
   },
   {
     id: 'gstr-3b',
@@ -557,6 +571,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'reports',
     subcategory: 'gst',
     frequency: 'secondary',
+    surfaces: ['reports-hub'],
+    sortOrder: 2,
   },
   {
     id: 'gstr-2b',
@@ -570,6 +586,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'reports',
     subcategory: 'gst',
     frequency: 'secondary',
+    surfaces: ['reports-hub'],
+    sortOrder: 3,
   },
   {
     id: 'gst-summary',
@@ -583,6 +601,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'reports',
     subcategory: 'gst',
     frequency: 'secondary',
+    surfaces: ['reports-hub'],
+    sortOrder: 4,
   },
   {
     id: 'hsn-summary',
@@ -596,6 +616,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'reports',
     subcategory: 'gst',
     frequency: 'secondary',
+    surfaces: ['reports-hub'],
+    sortOrder: 5,
   },
   // Inventory reports (ReportsHub)
   {
@@ -610,6 +632,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'reports',
     subcategory: 'inventory-reports',
     frequency: 'secondary',
+    surfaces: ['reports-hub'],
+    sortOrder: 1,
   },
   {
     id: 'inventory-aging',
@@ -623,6 +647,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'reports',
     subcategory: 'inventory-reports',
     frequency: 'secondary',
+    surfaces: ['reports-hub'],
+    sortOrder: 2,
   },
   // Banking reports (ReportsHub)
   {
@@ -637,6 +663,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'reports',
     subcategory: 'banking',
     frequency: 'secondary',
+    surfaces: ['reports-hub'],
+    sortOrder: 2,
   },
   {
     id: 'consolidated',
@@ -650,6 +678,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'reports',
     subcategory: 'banking',
     frequency: 'secondary',
+    surfaces: ['reports-hub'],
+    sortOrder: 3,
   },
 
   // ═══ tools ═══════════════════════════════════════════════════════════
