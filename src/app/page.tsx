@@ -121,7 +121,27 @@ export default function Home() {
 
   // 🔒 V9 4.2: Compute showOnboarding early (needed by the firstRunComplete effect below)
   const hasNoData = dashboardData?.kpis?.productCount === 0 && dashboardData?.kpis?.partyCount === 0
-  const showOnboarding = !onboardingDismissed && !isOfflineSession && dashboardData !== undefined && hasNoData && themePickerDone
+
+  // 🔒 AUDIT V25 FIX BUG-029 (Batch 5): Was `showOnboarding = ... && themePickerDone`.
+  // When themePickerDone flipped to true, showThemePicker became false AND
+  // showOnboarding became true in the SAME render. But Radix Dialog keeps the
+  // ThemePicker mounted for ~300ms during its exit animation → both dialogs
+  // were in the DOM simultaneously, competing for overlay/click focus.
+  // Now: delay showOnboarding by 400ms after themePickerDone becomes true,
+  // so ThemePicker's exit animation completes before Onboarding opens.
+  const [onboardingReady, setOnboardingReady] = useState(false)
+  useEffect(() => {
+    if (!themePickerDone) {
+      setOnboardingReady(false)
+      return
+    }
+    // ThemePicker is animating out — wait for its exit animation to complete
+    // before opening Onboarding. 400ms covers the standard Radix fade/slide.
+    const timer = setTimeout(() => setOnboardingReady(true), 400)
+    return () => clearTimeout(timer)
+  }, [themePickerDone])
+
+  const showOnboarding = !onboardingDismissed && !isOfflineSession && dashboardData !== undefined && hasNoData && onboardingReady
 
   // Redirect staff to their first allowed view if they try to access a blocked module
   useEffect(() => {

@@ -1453,3 +1453,39 @@ html {
     opacity: 0.4 !important;
   }
 }
+
+/* 🔒 AUDIT V25 FIX BUG-028 (Batch 5): Radix Dialog exit-animation timeout fallback.
+ *
+ * Problem: Radix Dialog unmounts only after its CSS exit animation fires
+ * `animationend`. In throttled environments (background tab, battery-saver,
+ * embedded webviews, automation), the animation can stall — the overlay
+ * stays in the DOM with data-state="closed" and intercepts ALL clicks.
+ * The app appears frozen.
+ *
+ * Fix: Force pointer-events: none on data-state="closed" overlays + content
+ * after a 500ms delay (covers the standard Radix fade/slide duration which
+ * is 200ms + buffer). The element is still in the DOM until Radix cleans it
+ * up, but it no longer blocks clicks. This is a CSS-only safety net — no
+ * JS changes needed across the 30+ Dialog consumers.
+ *
+ * The @starting-style rule would be cleaner, but browser support is still
+ * spotty. This approach works everywhere.
+ */
+@keyframes dialog-closed-fallback {
+  from { pointer-events: auto; }
+  to { pointer-events: none; }
+}
+
+[data-state="closed"].fixed.inset-0.z-50,
+[data-state="closed"][data-slot="dialog-overlay"],
+[data-state="closed"][data-slot="dialog-content"] {
+  /* Force pointer-events off after 500ms — covers the case where the
+     exit animation's animationend event never fires. */
+  animation: dialog-closed-fallback 0s ease 0.5s forwards;
+}
+
+/* Also cover the Sheet component (mobile bottom-sheet) — same Radix pattern */
+[data-state="closed"][data-slot="sheet-overlay"],
+[data-state="closed"][data-slot="sheet-content"] {
+  animation: dialog-closed-fallback 0s ease 0.5s forwards;
+}

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUserIdWithModule, getAuthContextForWrite } from '@/lib/get-auth'
-import { withCache } from '@/lib/cache'
+import { withCache, noStore } from '@/lib/cache'
 import { roundMoney } from '@/lib/money'
 import { apiError } from '@/lib/api-error'
 import { getReceivablePayable } from '@/lib/party-balance'
@@ -46,7 +46,10 @@ export async function GET() {
     })
 
     if (parties.length === 0) {
-      return withCache({ parties: [] }, { maxAge: 60, swr: 300 })
+      // 🔒 AUDIT V25 FIX BUG-031 (Batch 5): Was withCache({ maxAge: 60, swr: 300 }).
+      // Money-bearing endpoint — stale party balances for up to 60s after a
+      // return/payment erode trust. Now noStore (always fresh).
+      return noStore({ parties: [] })
     }
 
     // 🔒 V7 H1+H2: Use the shared helper. This computes balances with
@@ -72,7 +75,14 @@ export async function GET() {
       }
     })
 
-    return withCache({ parties: partiesWithBalance }, { maxAge: 60, swr: 300 })
+    // 🔒 AUDIT V25 FIX BUG-031 (Batch 5): Was withCache({ maxAge: 60, swr: 300 }).
+    // Money-bearing endpoint — party balances + receivable/payable totals must
+    // always be fresh. A shopkeeper who just recorded a ₹700 credit note (after
+    // a ₹1,000 sale) would see the stale ₹1,000 balance for up to 60s while the
+    // browser HTTP cache served the old response. Now noStore (always fresh).
+    // React-query invalidation still refetches after a mutation; this fix ensures
+    // the refetch actually hits the server instead of returning the cached 200.
+    return noStore({ parties: partiesWithBalance })
   } catch (error) {
     // 🔒 V11 §4.2: Use apiError() for consistent errorId logging.
     return apiError(error, 'Failed to load parties. The database might be warming up — please retry.', 503)

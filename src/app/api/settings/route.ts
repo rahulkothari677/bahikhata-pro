@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUserIdWithModule } from '@/lib/get-auth'
-import { withCache } from '@/lib/cache'
+import { withCache, noStore } from '@/lib/cache'
 import { apiError } from '@/lib/api-error'
 
 // GET /api/settings
@@ -11,7 +11,10 @@ export async function GET() {
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const setting = await db.setting.findUnique({ where: { userId } })
-    return withCache({ setting: setting || { shopName: 'My Shop' } }, { maxAge: 120, swr: 600 })
+    // 🔒 AUDIT V25 FIX BUG-031 (Batch 5): Was withCache({ maxAge: 120, swr: 600 }).
+    // Settings contain shopName, GSTIN, address, phone — all displayed on invoices.
+    // A stale GSTIN on an invoice PDF is a compliance issue. Now noStore (always fresh).
+    return noStore({ setting: setting || { shopName: 'My Shop' } })
   } catch (error) {
     // 🔒 V19-025 FIX: Return 500 on error, not 200 with fake defaults.
     // Previously: returned 200 + { shopName: 'My Shop' } on DB failure →

@@ -4,7 +4,7 @@ import { Prisma } from '@prisma/client'
 import { getAuthContext } from '@/lib/get-auth'
 import { canAccessModule } from '@/lib/staff-permissions'
 import { shouldHideProfit, stripDashboardProfit } from '@/lib/profit-visibility'
-import { withCache } from '@/lib/cache'
+import { withCache, noStore } from '@/lib/cache'
 import { activeTransactionWhere } from '@/lib/query-helpers'
 import { roundMoney, fromPaise } from '@/lib/money'
 import { getReceivablePayable } from '@/lib/party-balance'
@@ -586,10 +586,13 @@ export async function GET(req: NextRequest) {
       recentTransactions: recentTransactionsData,
     }
 
-    return withCache(
-      hideProfit ? stripDashboardProfit(dashboardData) : dashboardData,
-      { maxAge: 30, swr: 300 }
-    )
+    // 🔒 AUDIT V25 FIX BUG-031 (Batch 5): Was withCache({ maxAge: 30, swr: 300 }).
+    // The dashboard is the MOST money-bearing endpoint (revenue, profit,
+    // receivable, payable, KPIs). A shopkeeper who just made a sale would see
+    // stale revenue for up to 30s. Now noStore (always fresh). React-query
+    // invalidation refetches after a mutation; this ensures the refetch
+    // actually hits the server instead of returning the cached 200.
+    return noStore(hideProfit ? stripDashboardProfit(dashboardData) : dashboardData)
   } catch (error) {
     // 🔒 V9 2.5 FIX: Log full error server-side only (Sentry captures it too).
     // Was: returning error.message + String(error) to the client — leaked

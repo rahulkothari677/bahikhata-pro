@@ -6452,3 +6452,70 @@ Stage Summary:
 - 1640 tests passing, 0 TypeScript errors, 0 ESLint errors, build clean.
 - Browser verification: deferred.
 - Awaiting user's ZIP file for deep re-analysis + remaining task list + execution plan.
+
+---
+Task ID: audit-v25-batch-5
+Agent: main
+Task: V25 Audit Batch 5 — High-priority open bugs (BUG-028, BUG-029, BUG-030, BUG-031 + BUG-034 found during scan).
+
+Work Log:
+- Deep research: studied withCache helper, useCountUp hook, Radix Dialog component, ThemePicker/Onboarding first-run flow, credit-note profit preview computation.
+
+§5.1 — BUG-031: Money-bearing endpoints noStore (was withCache):
+- Found 5 endpoints using withCache for money-bearing data:
+  * /api/parties (maxAge: 60, swr: 300) — party balances
+  * /api/transactions (maxAge: 30, swr: 300) — transaction totals + profit
+  * /api/products (maxAge: 60, swr: 300) — stock counts + prices
+  * /api/settings (maxAge: 120, swr: 600) — shopName, GSTIN, address, phone
+  * /api/dashboard (maxAge: 30, swr: 300) — revenue, profit, receivable, payable, KPIs
+- All 5 switched to noStore() (Cache-Control: no-store, max-age=0).
+- React-query invalidation refetches after a mutation; this fix ensures the refetch actually hits the server instead of returning the cached 200.
+- Files changed: parties/route.ts, transactions/route.ts, products/route.ts, settings/route.ts, dashboard/route.ts.
+- BUG-034 logged (dashboard cache — same class as BUG-031, found during scan).
+
+§5.2 — BUG-030: Credit-note profit reversal label:
+- Root cause: TransactionEntry.tsx called computeLineItems with `type` (the prop, always 'sale'/'purchase') instead of `actualType` (which becomes 'credit-note'/'debit-note' when entering a return). So the preview computed profit as POSITIVE (sale-style) even for credit notes, showing "Gross Profit ₹90 (30.0%)" in green for a ₹300 return.
+- Fix 1: Pass `actualType` to computeLineItems. Now credit notes compute NEGATIVE profit (reversal), matching the server's stored sign.
+- Fix 2: Added `!isNote` guard to the green "Gross Profit" row (only shows for sales, not notes).
+- Fix 3: Added new rose "Profit Reversed" row for credit/debit notes showing the absolute value + negative sign + TrendingDown icon. Only shows when isNote && totalProfit < 0.
+- Files changed: TransactionEntry.tsx (computeLineItems call + new profit row + TrendingDown import).
+
+§5.3 — BUG-029: First-run modal stacking:
+- Root cause: When themePickerDone flipped to true, showThemePicker became false AND showOnboarding became true in the SAME render. But Radix Dialog keeps the ThemePicker mounted for ~300ms during its exit animation → both dialogs were in the DOM simultaneously, competing for overlay/click focus.
+- Fix: Added `onboardingReady` state + useEffect with 400ms setTimeout after themePickerDone becomes true. Onboarding now opens only after ThemePicker's exit animation completes.
+- Reset to false when themePickerDone is false (covers edge case where user resets).
+- Files changed: page.tsx.
+
+§5.4 — BUG-028: Radix dialog exit-animation freeze + count-up visibility:
+- Part 1 (useCountUp): Added two safeguards:
+  * If document.visibilityState === 'hidden' on mount, skip animation entirely — render final value immediately. rAF won't fire reliably in a backgrounded tab.
+  * Added fallback timer (2x duration + 100ms buffer) — if rAF hasn't completed the animation within this window, jump to final value. Covers rAF starvation (throttled compositor, battery-saver, embedded webviews, automation).
+- Part 2 (Radix Dialog): Added CSS-only fallback in globals.css:
+  * New `dialog-closed-fallback` keyframe that force-sets pointer-events: none.
+  * Applied to [data-state="closed"] overlays + content for Dialog + Sheet components.
+  * Delayed by 500ms (covers standard Radix fade/slide duration which is 200ms + buffer).
+  * CSS-only — no JS changes needed across the 30+ Dialog consumers.
+  * The element stays in the DOM until Radix cleans it up, but no longer blocks clicks.
+- Files changed: use-count-up.ts, globals.css.
+
+Additional existing bugs found during scan:
+- BUG-034 (/api/dashboard was also cached — same class as BUG-031). Found and fixed in this batch.
+
+Verification:
+- npx tsc --noEmit: 0 errors
+- npx eslint (changed files): 0 NEW errors (2 pre-existing errors in transactions/route.ts about `module` variable — not introduced by this batch)
+- npx jest: 1640/1640 pass (42 suites)
+- npx next build: Compiled successfully (BUILD_ID present)
+
+Browser testing:
+- Attempted but BLOCKED. Local .env has SQLite path (file:/home/z/my-p...) but prisma/schema.prisma requires postgresql provider. Next.js server starts but crashes within ~2s when trying to connect to DB.
+- Without a real Neon DATABASE_URL or the production Vercel URL, cannot browser-verify post-login screens.
+- User asked to attempt browser testing in Batch 5; if it works, do it for all phases. Unfortunately it doesn't work in this sandbox.
+- Continued with code-level verification (tsc/jest/build/eslint) + will provide manual verification guide.
+
+Stage Summary:
+- V25 Audit Batch 5 COMPLETE. 4 open bugs fixed (BUG-028, BUG-029, BUG-030, BUG-031) + 1 new bug found and fixed (BUG-034).
+- Files changed: 8 (parties/route.ts, transactions/route.ts, products/route.ts, settings/route.ts, dashboard/route.ts, TransactionEntry.tsx, page.tsx, use-count-up.ts, globals.css).
+- 1640 tests passing, 0 TypeScript errors, 0 NEW ESLint errors, build clean.
+- Browser verification: blocked (no real DATABASE_URL). Manual verification guide provided.
+- Awaiting user pass before Batch 6 (MoreScreen deep-link bugs — BUG-032).

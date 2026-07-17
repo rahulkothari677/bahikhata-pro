@@ -395,3 +395,12 @@ and include enough context to reproduce.
 - **Description**: `handleBackToHub` in Reports.tsx had the same anti-pattern as the Pricing back button (V25 §2.3): `setView(prev || 'more')`. If a user opened a report directly (e.g., via shared URL or after a page reload when previousView was null), the back button sent them to `'more'` — which on desktop used to render full-screen with no sidebar (the V25 §2.3 bug). Even after §2.3 fix makes More render with sidebar on desktop, sending users to More when they didn't come from More is still wrong behavior.
 - **Fix applied**: 2026-07-17 (Batch 2 §2.3 follow-up). Changed fallback from `'more'` to `'dashboard'` — always safe, always has full chrome. Matches the pattern already used by MoreScreen.tsx and AccountScreen.tsx handleBack.
 - **Status**: FIXED
+
+### BUG-034 — /api/dashboard was also cached (maxAge: 30, swr: 300) — same class as BUG-031 (High/Money) — FIXED
+
+- **Found**: 2026-07-17, during V25 Batch 5 §5.1 scan (same anti-pattern class as BUG-031)
+- **File**: `src/app/api/dashboard/route.ts:589`
+- **Severity**: High (dashboard is the MOST money-bearing endpoint — revenue, profit, receivable, payable, KPIs)
+- **Description**: Same anti-pattern as BUG-031. The dashboard GET handler used `withCache({ maxAge: 30, swr: 300 })`. A shopkeeper who just made a sale would see stale revenue/KPIs for up to 30s while the browser HTTP cache served the old response. React-query invalidation refetched, but the refetch could return the cached 200 instead of hitting the server.
+- **Fix applied**: 2026-07-17 (Batch 5 §5.1 follow-up). Replaced `withCache(...)` with `noStore(...)`. Dashboard data is now always fresh.
+- **Status**: FIXED

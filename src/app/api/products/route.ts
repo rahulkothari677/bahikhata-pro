@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUserIdWithModule } from '@/lib/get-auth'
-import { withCache } from '@/lib/cache'
+import { withCache, noStore } from '@/lib/cache'
 import { checkEntityLimit } from '@/lib/usage-limits'
 import { validateBody, createProductSchema, updateProductSchema } from '@/lib/validation'
 import { apiError } from '@/lib/api-error'
@@ -33,7 +33,10 @@ export async function GET() {
       isOversold: p.currentStock < 0,  // 🔒 V11: distinct flag for OVERSOLD badge
     }))
 
-    return withCache({ products: productsWithStock }, { maxAge: 60, swr: 300 })
+    // 🔒 AUDIT V25 FIX BUG-031 (Batch 5): Was withCache({ maxAge: 60, swr: 300 }).
+    // Money-bearing endpoint — stock counts + sale prices must always be fresh.
+    // A shopkeeper who just made a sale would see stale stock for up to 60s.
+    return noStore({ products: productsWithStock })
   } catch (error) {
     // 🔒 V11 §4.2: Use apiError() for consistent errorId logging.
     // Was: console.error + generic 503 with no errorId.

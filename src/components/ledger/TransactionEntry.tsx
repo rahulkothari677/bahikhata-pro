@@ -16,7 +16,7 @@ import { toast as sonnerToast } from 'sonner'
 import { formatINR, cn, getInitials } from '@/lib/utils'
 import {
   ShoppingCart, Truck, Plus, X, Search, ChevronDown, ChevronRight,
-  TrendingUp, Calendar, User, ScanLine, Folder, FolderOpen,
+  TrendingUp, TrendingDown, Calendar, User, ScanLine, Folder, FolderOpen,
   Package, Phone, IndianRupee, Save, Trash2, Check, AlertCircle, Mic, Clock, AlertTriangle,
   FileDown,
 } from 'lucide-react'
@@ -448,7 +448,15 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
     productMap,
     isInterState,
     orderDiscount: totalDiscount,
-    type,
+    // 🔒 AUDIT V25 FIX BUG-030 (Batch 5): Was passing `type` (the prop, always
+    // 'sale' or 'purchase'). When entering a credit/debit note, `actualType`
+    // is 'credit-note'/'debit-note' but `type` is still 'sale'/'purchase'.
+    // computeLineItems uses the type to decide profit sign — credit notes
+    // should compute NEGATIVE profit (reversal). Passing `type` meant the
+    // preview showed positive green "Gross Profit ₹90" for a ₹300 credit note,
+    // which is profit being REVERSED, not earned. Now passes `actualType` so
+    // the preview matches the server's stored sign.
+    type: actualType,
   })
   const subtotal = preview.subtotal
   const totalGst = roundMoney(preview.cgst + preview.sgst + preview.igst)
@@ -1511,7 +1519,7 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
                     <span className="font-bold text-rose-600 dark:text-rose-400">{formatINR(due)}</span>
                   </div>
                 )}
-                {isSale && totalProfit > 0 && (
+                {isSale && !isNote && totalProfit > 0 && (
                   <div className="flex items-center justify-between text-sm bg-emerald-50 -mx-4 px-4 py-2 rounded-lg">
                     <span className="text-emerald-700 dark:text-emerald-300 font-medium flex items-center gap-1">
                       <TrendingUp className="w-3.5 h-3.5" /> Gross Profit
@@ -1519,6 +1527,22 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
                     <span className="font-bold text-emerald-700 dark:text-emerald-300">
                       {formatINR(totalProfit)}
                       <span className="text-[10px] ml-1">({totalAmount > 0 ? ((totalProfit / totalAmount) * 100).toFixed(1) : 0}%)</span>
+                    </span>
+                  </div>
+                )}
+                {/* 🔒 AUDIT V25 FIX BUG-030 (Batch 5): Credit/debit notes REVERSE
+                    profit, not earn it. Show a rose "Profit reversed" row with
+                    the absolute value + negative sign so the user understands
+                    the direction. Server stores negative; UI shows the magnitude
+                    with a clear "reversed" label + down-arrow icon. */}
+                {isNote && totalProfit < 0 && (
+                  <div className="flex items-center justify-between text-sm bg-rose-50 dark:bg-rose-950/20 -mx-4 px-4 py-2 rounded-lg">
+                    <span className="text-rose-700 dark:text-rose-300 font-medium flex items-center gap-1">
+                      <TrendingDown className="w-3.5 h-3.5" /> Profit Reversed
+                    </span>
+                    <span className="font-bold text-rose-700 dark:text-rose-300">
+                      −{formatINR(Math.abs(totalProfit))}
+                      <span className="text-[10px] ml-1">({totalAmount > 0 ? ((Math.abs(totalProfit) / totalAmount) * 100).toFixed(1) : 0}%)</span>
                     </span>
                   </div>
                 )}

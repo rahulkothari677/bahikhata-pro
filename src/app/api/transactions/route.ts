@@ -3,7 +3,7 @@ import { db } from '@/lib/db'
 import { getAuthContext, assertCanWrite } from '@/lib/get-auth'
 import { canAccessModule, type ModuleKey } from '@/lib/staff-permissions'
 import { shouldHideProfit, stripTransactionsProfit } from '@/lib/profit-visibility'
-import { withCache } from '@/lib/cache'
+import { withCache, noStore } from '@/lib/cache'
 import { roundMoney, calculateGst, splitGst, distributeDiscountProportionally, toMoney } from '@/lib/money'
 import { deriveInterStateStatus } from '@/lib/gst'
 import { validateBody, createTransactionSchema } from '@/lib/validation'
@@ -129,7 +129,10 @@ export async function GET(req: NextRequest) {
     const hideProfit = await shouldHideProfit(userId, authCtx.role)
     const finalTransactions = hideProfit ? stripTransactionsProfit(trimmed) : trimmed
 
-    return withCache({ transactions: finalTransactions, hasMore, nextCursor }, { maxAge: 30, swr: 300 })
+    // 🔒 AUDIT V25 FIX BUG-031 (Batch 5): Was withCache({ maxAge: 30, swr: 300 }).
+    // Money-bearing endpoint — transaction totals + profit must always be fresh.
+    // A shopkeeper who just created a sale would see stale ledger for up to 30s.
+    return noStore({ transactions: finalTransactions, hasMore, nextCursor })
   } catch (error) {
     // 🔒 V7 H4: Return 503 on DB error, NOT an empty 200. Was: returned
     // { transactions: [] } → user saw empty ledger during a DB blip and
