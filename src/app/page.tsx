@@ -81,26 +81,11 @@ export default function Home() {
   // The CapacitorBridge hides the native splash immediately, and this web
   // splash takes over with the same saffron background (seamless transition).
   //
-  // 🔒 AUDIT V23 FIX §13.9h: Skip splash on warm reloads (when the same
-  // browser session has already booted the app this tab-session). The
-  // premium animated splash adds fixed seconds to the boot path that
-  // V21/V22 fought to shrink — making the user watch it again on every
-  // warm reload (e.g., navigating back from an external link, or
-  // window.location.reload()) is user-hostile on low-end phones.
-  // Cold starts (new tab, no sessionStorage flag) still show the splash.
-  const [showSplash, setShowSplash] = useState(() => {
-    if (typeof window === 'undefined') return true
-    // Warm reload — already booted this tab-session. Skip splash.
-    if (sessionStorage.getItem('bahikhata:splash-shown') === '1') return false
-    return true
-  })
-  useEffect(() => {
-    // Mark that we've shown the splash this tab-session. Future reloads
-    // within the same tab will skip the splash.
-    if (showSplash) {
-      sessionStorage.setItem('bahikhata:splash-shown', '1')
-    }
-  }, [showSplash])
+  // 🔒 AUDIT V23 §13.9h REVERTED (user feedback): The sessionStorage warm-reload
+  // skip was added in Batch L but the user reported "splash screen isn't coming."
+  // Reverted — splash now shows on every page load (cold + warm). The premium
+  // animation is part of the app's identity.
+  const [showSplash, setShowSplash] = useState(true)
   // 🔒 V9 4.2: First-run modal orchestrator — gate low-priority modals until
   // the user has completed onboarding + tour. Prevents modal pile-up:
   // SplashScreen → ThemePicker → Onboarding → Tour → Consent → RatePrompt → PWA
