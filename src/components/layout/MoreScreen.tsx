@@ -229,11 +229,18 @@ export function MoreScreen() {
   const handleLogout = async () => {
     if (!await confirmDialog('Are you sure you want to logout?', { title: 'Logout', confirmLabel: 'Logout', destructive: false })) return
     haptic.warning()
+    // 🔒 AUDIT V23 FIX §13.9d (Batch L follow-up): Same anti-pattern as
+    // AccountScreen — if clearAllOfflineData throws, signOut never ran.
     try {
       await clearAllOfflineData()
+    } catch (e) {
+      console.warn('[logout] clearAllOfflineData failed (non-fatal):', e)
+    }
+    try {
       signOut({ callbackUrl: '/' })
-    } catch {
-      sonnerToast.error('Failed to logout')
+    } catch (e) {
+      console.error('[logout] signOut failed:', e)
+      if (typeof window !== 'undefined') window.location.href = '/'
     }
   }
 
