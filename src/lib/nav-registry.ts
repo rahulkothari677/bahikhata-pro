@@ -792,6 +792,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'tools',
     subcategory: 'smart-tools',
     frequency: 'secondary',
+    surfaces: ['more'],
+    sortOrder: 3,
   },
   {
     id: 'smart-insights',
@@ -837,6 +839,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'tools',
     subcategory: 'money-banking',
     frequency: 'secondary',
+    surfaces: ['more'],
+    sortOrder: 3,
   },
 
   // ═══ account ═════════════════════════════════════════════════════════
@@ -959,6 +963,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'account',
     subcategory: 'preferences',
     frequency: 'tertiary',
+    surfaces: ['account'],
+    sortOrder: 4,
   },
   // Business section (AccountScreen)
   {
@@ -1063,6 +1069,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'account',
     subcategory: 'support',
     frequency: 'tertiary',
+    surfaces: ['account'],
+    sortOrder: 4,
   },
 ]
 

@@ -183,4 +183,31 @@ describe('Navigation Registry (V25 §6.1 Phase 1)', () => {
     const tertiary = getByFrequency('tertiary')
     expect(tertiary.length).toBeGreaterThanOrEqual(10)
   })
+
+  // ─── Phase 8: Single source of truth verification ─────────────────
+
+  it('Phase 8: should have every surface covered by at least one destination', () => {
+    const surfaces = ['sidebar-main', 'sidebar-tools', 'bottom-nav', 'more', 'reports-hub', 'account', 'global-search']
+    for (const surface of surfaces) {
+      const items = NAV_REGISTRY.filter(d => d.surfaces?.includes(surface as any))
+      expect(items.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('Phase 8: should have surfaces field on every destination', () => {
+    for (const d of NAV_REGISTRY) {
+      expect(d.surfaces).toBeDefined()
+      expect(d.surfaces!.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('Phase 8: should have at least 5 items per major surface', () => {
+    expect(NAV_REGISTRY.filter(d => d.surfaces?.includes('sidebar-main')).length).toBeGreaterThanOrEqual(8)
+    expect(NAV_REGISTRY.filter(d => d.surfaces?.includes('sidebar-tools')).length).toBeGreaterThanOrEqual(5)
+    expect(NAV_REGISTRY.filter(d => d.surfaces?.includes('bottom-nav')).length).toBeGreaterThanOrEqual(3)
+    expect(NAV_REGISTRY.filter(d => d.surfaces?.includes('more')).length).toBeGreaterThanOrEqual(15)
+    expect(NAV_REGISTRY.filter(d => d.surfaces?.includes('reports-hub')).length).toBeGreaterThanOrEqual(16)
+    expect(NAV_REGISTRY.filter(d => d.surfaces?.includes('account')).length).toBeGreaterThanOrEqual(10)
+    expect(NAV_REGISTRY.filter(d => d.surfaces?.includes('global-search')).length).toBeGreaterThanOrEqual(10)
+  })
 })

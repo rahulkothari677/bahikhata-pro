@@ -51,20 +51,21 @@ export function MobileBottomNav() {
     return () => document.removeEventListener('mousedown', handleClick)
   }, [showQuickMenu])
 
-  // Don't show on auth screen or new entry/detail pages (those have their own back button)
-  // The More screen KEEPS the bottom nav so users can switch tabs without going back
-  const hideOnViews: ViewType[] = ['new-sale', 'new-purchase', 'transaction-detail', 'party-profile']
-  if (hideOnViews.includes(currentView)) return null
-
   // 🔒 AUDIT V25 §6.1 (Batch 8 Phase 3): Tabs from NavRegistry, filtered by
   // surfaces: ['bottom-nav'] + permissions. Was: hardcoded TABS array with
   // inline moduleMap permission check.
+  // NOTE: useMemo must be called BEFORE any conditional return (Rules of Hooks).
   const visibleTabs = useMemo(() => {
     return filterByPermissions(
       NAV_REGISTRY.filter(d => d.surfaces?.includes('bottom-nav')),
       { canAccess, isFlagEnabled: () => true, isOwner: true }
     ).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
   }, [canAccess])
+
+  // Don't show on auth screen or new entry/detail pages (those have their own back button)
+  // The More screen KEEPS the bottom nav so users can switch tabs without going back
+  const hideOnViews: ViewType[] = ['new-sale', 'new-purchase', 'transaction-detail', 'party-profile']
+  if (hideOnViews.includes(currentView)) return null
 
   // 🔒 AUDIT V25 FIX §4.6: isMoreActive was highlighting the "More" tab for
   // 10 secondary views (inventory, income-expense, parties, scanner, reports,
