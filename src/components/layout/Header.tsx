@@ -36,7 +36,7 @@ const viewTitleKeys: Record<string, { titleKey: string; subtitleKey: string }> =
 const dialogViews: ViewType[] = ['dashboard', 'inventory', 'sales', 'purchases', 'income-expense', 'parties']
 
 export function Header() {
-  const { currentView, setSidebarOpen, setView, fireTriggerNewEntry, previousView, setPreviousView, features, setFeature, setSearchOpen, selectedTransactionType } = useAppStore()
+  const { currentView, setView, fireTriggerNewEntry, previousView, setPreviousView, features, setFeature, setSearchOpen, selectedTransactionType } = useAppStore()
   const { isFlagEnabled } = useFeatureFlags()
   const { data: session } = useSession()
   const { t } = useTranslation()

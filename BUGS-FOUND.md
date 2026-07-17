@@ -364,3 +364,25 @@ and include enough context to reproduce.
 - **Found**: 2026-07-17 (auditor browser-verification session)
 - **Description**: `/api/parties` responses carry `withCache` max-age 30s. React-query invalidation refetches after a save, but the browser HTTP cache can satisfy that refetch with the stale response (observed: balance showed ₹1,000 for ~30s after a credit note; `cache:'no-store'` returned ₹700). Money-bearing endpoints should send `Cache-Control: no-store` (or the client should refetch with cache-busting) — a shopkeeper seeing a stale khata for 30s after recording a return will distrust the number.
 - **Status**: OPEN
+
+### BUG-032 — MoreScreen 8 items navigate to wrong/under-delivering views (Medium/UX) — OPEN (deferred to Batch 1b)
+
+- **Found**: 2026-07-17, during V25 Audit Batch 1 pre-change scan of MoreScreen.tsx
+- **Files**: `src/components/layout/MoreScreen.tsx` (lines 80, 81, 104, 105, 106, 118, 119, 138)
+- **Severity**: Medium (8 More directory entries promise features but under-deliver on tap)
+- **Description**: 8 items in MoreScreen's SECTIONS array navigate to a view that doesn't match the label's promise:
+  1. **Sale Return** (line 80): label says "Credit notes — return from customer" but `view: 'sales'` opens the sales ledger. No credit-note creation flow is triggered.
+  2. **Purchase Return** (line 81): label says "Debit notes — return to supplier" but `view: 'purchases'` opens the purchase ledger. No debit-note creation flow.
+  3. **Cash in Hand** (line 104): label says "Today's cash position & collections" but `view: 'dashboard'` opens the plain dashboard with no scroll-to-cash-in-hand or modal.
+  4. **Day-End Summary** (line 105): label says "Close the drawer — daily cash" but `view: 'dashboard'` opens the dashboard without triggering the Close Drawer dialog (which is local state in Dashboard.tsx).
+  5. **WhatsApp Reminders** (line 106): label says "Send payment reminders" but `view: 'parties'` opens the parties list. The BulkRemindersModal is local state in Parties.tsx — no way to auto-open it from More.
+  6. **Multi-Shop Management** (line 118): label says "Switch or add shops" but `view: 'settings'` opens Settings on the Profile tab. No "Shops" tab exists in the Settings tab bar (it's a singleTab prop thing).
+  7. **Staff & Access** (line 119): label says "Manage staff, CA access" but `view: 'settings'` opens Settings on the Profile tab. The Staff tab exists but isn't auto-selected.
+  8. **Smart Insights** (line 138): label says "AI-powered alerts & suggestions" but `view: 'dashboard'` opens the dashboard without scrolling to the SmartInsights section (which sits ~6 screens down — see V25 §2.4).
+- **Fix approach**: Requires deep-linking infrastructure that doesn't exist yet:
+  - For #1, #2: navigate to `new-sale` / `new-purchase` with a `isNote: true` param (or add a `view: 'new-credit-note'` / `'new-debit-note'`).
+  - For #3, #4, #8: add a `triggerDayEnd` / `scrollTarget` store field (similar to existing `triggerNewEntry` counter pattern) that Dashboard subscribes to.
+  - For #5: add a `triggerBulkReminders` store field that Parties subscribes to (or move BulkRemindersModal open state to the store).
+  - For #6, #7: use existing `setPendingSettingsTab('staff')` before `setView('settings')` — Settings.tsx already reads this.
+- **Why deferred**: This is a deep-linking infrastructure task (5+ new store fields, modifications to Dashboard, Parties, Settings, TransactionEntry, MoreScreen). Better as its own batch (Batch 1b) after the dead-code cleanup ships. Not in scope of the §4 dead-code batch.
+- **Status**: OPEN — deferred to Batch 1b

@@ -3,19 +3,15 @@
 import { useAppStore, type ViewType } from '@/store/app-store'
 import { useTranslation } from '@/hooks/use-translation'
 import { useState, useRef, useEffect } from 'react'
-import { useSession, signOut } from 'next-auth/react'
+import { useSession } from 'next-auth/react'
 import { cn, getInitials } from '@/lib/utils'
 import { useQuery } from '@tanstack/react-query'
 import { offlineFetch } from '@/lib/offline-fetch'
-import { clearAllOfflineData } from '@/lib/offline-db'
-import { clearRecentProducts } from '@/lib/recent-products'
-import { toast as sonnerToast } from 'sonner'
 import { useFeatureFlags } from '@/hooks/use-feature-flags'
 import { useStaffPermissions } from '@/hooks/use-staff-permissions'
 import type { ModuleKey } from '@/lib/staff-permissions'
 import { useShops } from '@/hooks/use-shops'
 import { prefetchView } from '@/lib/prefetch'  // 🔒 V11 §3.3
-import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
 import { Store, Plus, ChevronDown, Check, Calculator } from 'lucide-react'
 import {
   LayoutDashboard,
@@ -26,21 +22,14 @@ import {
   Users,
   ScanLine,
   FileBarChart,
-  Settings,
   BookOpenText,
-  X,
-  Sparkles,
   ChevronLeft,
   ChevronRight,
-  Crown,
-  HelpCircle,
-  Info,
-  Star,
-  LogOut,
-  Download,
-  Pencil,
-  MoreHorizontal,
 } from 'lucide-react'
+// 🔒 AUDIT V25 FIX §4.2 follow-up: Removed 9 unused lucide imports
+// (Settings, Sparkles, Crown, HelpCircle, Info, Star, LogOut, Download,
+// Pencil, MoreHorizontal) — they were left over from V21-011 when the
+// Sidebar buttons that used them were removed.
 
 const navItems: { id: ViewType; labelKey: string; descKey: string; icon: any; badge?: string }[] = [
   { id: 'dashboard', labelKey: 'nav.dashboard', descKey: 'dash.business_overview', icon: LayoutDashboard },
@@ -57,11 +46,13 @@ const navItems: { id: ViewType; labelKey: string; descKey: string; icon: any; ba
 ]
 
 export function Sidebar() {
-  const { confirmDialog, dialog: confirmDialogEl } = useConfirmDialog()
-  const { currentView, setView, setPreviousView, sidebarOpen, setSidebarOpen, sidebarCollapsed, toggleSidebarCollapsed, selectedTransactionType } = useAppStore()
+  // 🔒 AUDIT V25 FIX §4.2: useConfirmDialog removed — only handleLogout used it,
+  // and handleLogout was orphaned dead code (removed above).
+  const { currentView, setView, setPreviousView, sidebarCollapsed, toggleSidebarCollapsed, selectedTransactionType } = useAppStore()
   const { t } = useTranslation()
   const { data: session } = useSession()
-  const isStaff = session?.user?.role === 'staff'
+  // 🔒 AUDIT V25 FIX §4.2 follow-up: isStaff removed — was unused after
+  // handleLogout was deleted. Staff gating is handled by canAccess() below.
   const { canAccess, isCA } = useStaffPermissions()
   const { isFlagEnabled } = useFeatureFlags()
   const { shops, activeShop, switchShop } = useShops()
@@ -91,41 +82,22 @@ export function Sidebar() {
   const userName = setting.ownerName || session?.user?.name || 'Shop Owner'
   const shopName = setting.shopName || 'My Shop'
 
-  const handleLogout = async () => {
-    if (!await confirmDialog('Are you sure you want to logout?', { title: 'Logout', confirmLabel: 'Logout', destructive: false })) return
-    // 🔒 AUDIT V23 FIX §13.9d (Batch L follow-up): Same anti-pattern as
-    // AccountScreen — if clearAllOfflineData throws, signOut never ran.
-    // Now: offline-clear failures are non-fatal; signOut always runs.
-    try {
-      await clearAllOfflineData()
-      clearRecentProducts()
-    } catch (e) {
-      console.warn('[logout] clearAllOfflineData failed (non-fatal):', e)
-    }
-    try {
-      signOut({ callbackUrl: '/' })
-    } catch (e) {
-      console.error('[logout] signOut failed:', e)
-      if (typeof window !== 'undefined') window.location.href = '/'
-    }
-  }
-
-  const handleInstallApp = () => {
-    sonnerToast.info('Install EkBook as an app', {
-      description: 'Click the install icon in your browser address bar, or use "Install app" from the browser menu.',
-      duration: 6000,
-    })
-  }
+  // 🔒 AUDIT V25 FIX §4.2: Removed orphaned handleLogout + handleInstallApp.
+  // Both were defined but never referenced — V21-011 removed the Sidebar
+  // buttons that called them, but left the handlers behind. Dead code
+  // that confused the next edit. Logout now lives in AccountScreen +
+  // MoreScreen (the only places that actually render a Logout button).
+  // Install-App is handled by PWAInstallPrompt component.
 
   return (
     <>
-      {/* Mobile overlay */}
-      {sidebarOpen && (
-        <div
-          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
+      {/* 🔒 AUDIT V25 FIX §4.1: Removed dead mobile drawer apparatus.
+          setSidebarOpen(true) was called NOWHERE in the codebase — the
+          overlay (was here), slide animation conditional, and X close
+          button were all dead code. The mobile sidebar drawer was
+          replaced by MobileBottomNav + MoreScreen long ago, but the
+          drawer machinery was left behind. Sidebar is now desktop-only
+          (lg:sticky) — mobile uses bottom-nav + More. */}
 
       <aside
         className={cn(
@@ -134,7 +106,9 @@ export function Sidebar() {
           'bg-sidebar text-sidebar-foreground',
           'flex flex-col',
           'transition-all duration-300 ease-out',
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
+          // On mobile, sidebar is always translated off-screen (drawer is dead).
+          // On desktop, sidebar is always visible (sticky).
+          '-translate-x-full lg:translate-x-0',
           sidebarCollapsed ? 'lg:w-20 w-72' : 'w-72'
         )}
       >
@@ -154,14 +128,6 @@ export function Sidebar() {
               </div>
             )}
           </div>
-          {!sidebarCollapsed && (
-            <button
-              onClick={() => setSidebarOpen(false)}
-              className="lg:hidden text-sidebar-foreground/70 hover:text-sidebar-foreground"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          )}
         </div>
 
         {/* Collapse toggle (desktop only) */}
@@ -324,7 +290,7 @@ export function Sidebar() {
                 Removed 'Upgrade to Pro' — now in Account page (Subscription).
                 The profile section now opens the Account page (not Settings). */}
             <button
-              onClick={() => { setPreviousView(currentView); useAppStore.getState().setAccountOriginView(currentView); setView('account'); setSidebarOpen(false) }}
+              onClick={() => { setPreviousView(currentView); useAppStore.getState().setAccountOriginView(currentView); setView('account') }}
               className="w-full p-3 flex items-center gap-3 hover:bg-sidebar-accent transition"
             >
               <div className="w-9 h-9 rounded-full bg-gradient-saffron flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
@@ -349,7 +315,6 @@ export function Sidebar() {
           </div>
         )}
       </aside>
-      {confirmDialogEl}
     </>
   )
 }

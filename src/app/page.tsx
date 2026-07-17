@@ -13,13 +13,14 @@ import { precacheData } from '@/lib/precache'
 import { useDashboardThisMonth } from '@/hooks/use-dashboard'
 import { toast as sonnerToast } from 'sonner'
 import { AuthScreen } from '@/components/auth/AuthScreen'
-import { Sidebar } from '@/components/layout/Sidebar'
-import { Header } from '@/components/layout/Header'
-import { MobileBottomNav } from '@/components/layout/MobileBottomNav'
 import { MoreScreen } from '@/components/layout/MoreScreen'
 import { AccountScreen } from '@/components/layout/AccountScreen'
-import { Onboarding } from '@/components/layout/Onboarding'
-import { ThemePicker } from '@/components/common/ThemePicker'
+// 🔒 AUDIT V25 FIX §4.4: AppShell replaces the triplicated modal stack.
+// Sidebar, Header, MobileBottomNav, Onboarding, ThemePicker,
+// KeyboardShortcuts, GlobalSearch, OfflineIndicator, PWAInstallPrompt,
+// OnboardingTour, ConsentModal, RatePromptModal, PaywallModal are now
+// imported ONCE inside AppShell.tsx — no longer duplicated 3× in page.tsx.
+import { AppShell } from '@/components/layout/AppShell'
 import { Dashboard } from '@/components/dashboard/Dashboard'
 // 🔒 V20-008: Lazy-load non-default views to reduce initial bundle.
 // Dashboard is the default view, so it stays static. All other views
@@ -29,14 +30,6 @@ const Ledger = dynamic(() => import('@/components/ledger/Ledger').then(m => ({ d
 const LedgerSplitView = dynamic(() => import('@/components/ledger/LedgerSplitView').then(m => ({ default: m.LedgerSplitView })), { ssr: false })
 const IncomeExpense = dynamic(() => import('@/components/income/IncomeExpense').then(m => ({ default: m.IncomeExpense })), { ssr: false })
 const Parties = dynamic(() => import('@/components/parties/Parties').then(m => ({ default: m.Parties })), { ssr: false })
-import { KeyboardShortcuts } from '@/components/common/KeyboardShortcuts'
-import { GlobalSearch } from '@/components/common/GlobalSearch'
-import { OfflineIndicator } from '@/components/common/OfflineIndicator'
-import { PWAInstallPrompt } from '@/components/common/PWAInstallPrompt'
-import { OnboardingTour } from '@/components/common/OnboardingTour'
-import { ConsentModal } from '@/components/common/ConsentModal'
-import { RatePromptModal } from '@/components/common/RatePromptModal'
-import { PaywallModal } from '@/components/common/PaywallModal'
 import { SplashScreen } from '@/components/common/SplashScreen'
 import { useRatePrompt } from '@/hooks/use-rate-prompt'
 import { useStaffPermissions } from '@/hooks/use-staff-permissions'
@@ -376,50 +369,43 @@ export default function Home() {
   // them up so the firstRunComplete effect can reference showOnboarding).
   const showThemePicker = !themePickerDone && !!session
 
+  // 🔒 AUDIT V25 FIX §4.3 + §4.4: Replaced 3 triplicated branches (More,
+  // Account, main) with a single <AppShell> wrapper. AppShell owns the
+  // modal/overlay stack ONCE (was 3×, with PWAInstallPrompt mounted 2× per
+  // branch = 6 competing instances). Each branch now passes its content
+  // as children + picks which chrome to show via props.
+  const shellProps = {
+    features,
+    showThemePicker,
+    showOnboarding,
+    tourDone,
+    firstRunComplete,
+    onThemePickerDone: () => setThemePickerDone(true),
+    onOnboardingDone: () => setOnboardingDismissed(true),
+    onTourDone: () => setTourDone(true),
+    shouldShowRatePrompt,
+    onRated,
+    onDismiss,
+    paywallFeature,
+    paywallOpen,
+    closePaywall,
+  }
+
   // More screen renders full-screen (no sidebar, no regular header)
   if (currentView === 'more') {
     return (
-      <div className="flex min-h-screen bg-background">
-        {features?.keyboardShortcuts && <KeyboardShortcuts />}
-        {features?.globalSearch && <GlobalSearch />}
-        <div className="flex-1 flex flex-col min-w-0">
-          <OfflineIndicator />
-          <MoreScreen />
-        </div>
-        <MobileBottomNav />
-        <ThemePicker open={showThemePicker} onDone={() => setThemePickerDone(true)} />
-        <Onboarding open={showOnboarding} onDone={() => setOnboardingDismissed(true)} />
-        {features?.pwaInstall && <PWAInstallPrompt />}
-        {!showOnboarding && <OnboardingTour onDone={() => setTourDone(true)} />}
-        {!showOnboarding && tourDone && <ConsentModal />}
-        {/* 🔒 V9 4.2: RatePrompt + PWA install wait until first-run is complete */}
-        {firstRunComplete && <RatePromptModal open={shouldShowRatePrompt} onRated={onRated} onDismiss={onDismiss} />}
-        {firstRunComplete && features?.pwaInstall && <PWAInstallPrompt />}
-        <PaywallModal feature={paywallFeature} open={paywallOpen} onClose={closePaywall} />
-      </div>
+      <AppShell {...shellProps} sidebar={false} header={false} mobileBottomNav={true}>
+        <MoreScreen />
+      </AppShell>
     )
   }
 
   // 🔒 V21-010 (Phase 2a): Account screen renders full-screen (like More screen)
   if (currentView === 'account') {
     return (
-      <div className="flex min-h-screen bg-background">
-        {features?.keyboardShortcuts && <KeyboardShortcuts />}
-        {features?.globalSearch && <GlobalSearch />}
-        <div className="flex-1 flex flex-col min-w-0">
-          <OfflineIndicator />
-          <AccountScreen />
-        </div>
-        <MobileBottomNav />
-        <ThemePicker open={showThemePicker} onDone={() => setThemePickerDone(true)} />
-        <Onboarding open={showOnboarding} onDone={() => setOnboardingDismissed(true)} />
-        {features?.pwaInstall && <PWAInstallPrompt />}
-        {!showOnboarding && <OnboardingTour onDone={() => setTourDone(true)} />}
-        {!showOnboarding && tourDone && <ConsentModal />}
-        {firstRunComplete && <RatePromptModal open={shouldShowRatePrompt} onRated={onRated} onDismiss={onDismiss} />}
-        {firstRunComplete && features?.pwaInstall && <PWAInstallPrompt />}
-        <PaywallModal feature={paywallFeature} open={paywallOpen} onClose={closePaywall} />
-      </div>
+      <AppShell {...shellProps} sidebar={false} header={false} mobileBottomNav={true}>
+        <AccountScreen />
+      </AppShell>
     )
   }
 
@@ -430,16 +416,7 @@ export default function Home() {
         onFinish={() => {
         setShowSplash(false)
       }} />}
-      <div className="flex min-h-screen bg-background">
-      {features?.keyboardShortcuts && <KeyboardShortcuts />}
-      {features?.globalSearch && <GlobalSearch />}
-
-      <Sidebar />
-
-      <div className="flex-1 flex flex-col min-w-0">
-        <OfflineIndicator />
-        <Header />
-
+      <AppShell {...shellProps} sidebar={true} header={true} mobileBottomNav={true}>
         <main className="flex-1 p-3 lg:p-5 w-full min-w-0 pb-28 lg:pb-6">
           {/* PullToRefresh wraps all main content views. Disabled on form/detail
               views where pull-down might interfere with scrolling. */}
@@ -498,24 +475,7 @@ export default function Home() {
         <footer className="mt-auto border-t border-border py-3 px-4 lg:px-6 text-center text-[11px] text-muted-foreground no-print hidden lg:block">
           <p>EkBook — Made with love for Bharat</p>
         </footer>
-      </div>
-
-      <MobileBottomNav />
-
-      <ThemePicker open={showThemePicker} onDone={() => setThemePickerDone(true)} />
-      <Onboarding open={showOnboarding} onDone={() => setOnboardingDismissed(true)} />
-
-      {features?.pwaInstall && firstRunComplete && <PWAInstallPrompt />}
-      {/* Only show tour + consent AFTER onboarding is dismissed.
-          Tour shows first, then ConsentModal shows after tour is done.
-          This prevents focus-trap conflicts between Radix Dialog (ConsentModal)
-          and the tour's plain div overlay (z-[100]). */}
-      {!showOnboarding && <OnboardingTour onDone={() => setTourDone(true)} />}
-      {!showOnboarding && tourDone && <ConsentModal />}
-      {/* 🔒 V9 4.2: RatePrompt waits until first-run is complete */}
-      {firstRunComplete && <RatePromptModal open={shouldShowRatePrompt} onRated={onRated} onDismiss={onDismiss} />}
-      <PaywallModal feature={paywallFeature} open={paywallOpen} onClose={closePaywall} />
-      </div>
+      </AppShell>
     </>
   )
 }

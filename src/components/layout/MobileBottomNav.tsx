@@ -44,7 +44,7 @@ const TABS: Tab[] = [
 ]
 
 export function MobileBottomNav() {
-  const { currentView, setView } = useAppStore()
+  const { currentView, setView, previousView } = useAppStore()
   const { t } = useTranslation()
   const { canAccess, isCA } = useStaffPermissions()
 
@@ -82,12 +82,28 @@ export function MobileBottomNav() {
     return true
   })
 
-  // 'More' tab is active when on the More screen OR any secondary view reached from More
-  // 🔒 V22-0b/0d: Added 'account', 'pricing', 'ai-comparison', 'ai-usage' to isMoreActive
-  // so the More tab highlights when user is on these secondary views.
-  // 🔒 V22-5 (Phase 3): Removed 'gst-tax'/'money-banking' — those hub pages were
-  // deleted in Phase 1; their view types are gone too.
-  const isMoreActive = currentView === 'more' || currentView === 'account' || ['inventory', 'income-expense', 'parties', 'scanner', 'reports', 'settings', 'pricing', 'ai-comparison', 'ai-usage', 'document-vault'].includes(currentView)
+  // 🔒 AUDIT V25 FIX §4.6: isMoreActive was highlighting the "More" tab for
+  // 10 secondary views (inventory, income-expense, parties, scanner, reports,
+  // settings, pricing, ai-comparison, ai-usage, document-vault) — even when
+  // the user navigated to them from the Sidebar or from a dashboard quick
+  // action. Opening Reports from the dashboard highlighted "More" even
+  // though the user never touched More.
+  //
+  // Fix: More highlights ONLY when:
+  //   (a) currentView IS 'more' (user is on the More screen itself), OR
+  //   (b) currentView IS 'account' (Account is reached from More on mobile), OR
+  //   (c) previousView === 'more' (user actually came FROM More).
+  //
+  // This way, if the user opens Inventory from the Sidebar, Home tab stays
+  // active (or no tab highlights — visually honest). If they open Inventory
+  // from More, More stays highlighted until they navigate elsewhere.
+  //
+  // Without the §6.1 registry (deferred), we can't know which tab "owns"
+  // each view — previousView is the best proxy.
+  const isMoreActive =
+    currentView === 'more' ||
+    currentView === 'account' ||
+    previousView === 'more'
 
   // 🔒 V17 Audit Phase 10: Long-press handlers for the + button
   const handlePlusTouchStart = () => {

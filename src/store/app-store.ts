@@ -113,8 +113,10 @@ interface AppState {
   pushView: (view: ViewType, params?: Record<string, any>) => void
   popView: () => void
   canGoBack: () => boolean
-  sidebarOpen: boolean
-  setSidebarOpen: (open: boolean) => void
+  // 🔒 AUDIT V25 FIX §4.1: sidebarOpen/setSidebarOpen removed — dead state.
+  // The mobile sidebar drawer was dead code (setSidebarOpen(true) was called
+  // nowhere). Sidebar is now desktop-only via lg:sticky; mobile uses
+  // MobileBottomNav + MoreScreen.
   sidebarCollapsed: boolean
   toggleSidebarCollapsed: () => void
   setSidebarCollapsed: (c: boolean) => void
@@ -196,13 +198,12 @@ interface AppState {
 export const useAppStore = create<AppState>()(
     (set, get) => ({
       currentView: 'dashboard',
-      setView: (v) => set({ currentView: v, sidebarOpen: false }),
+      setView: (v) => set({ currentView: v }),
       // 🔒 AUDIT V23 FIX §9.1: Navigation stack implementation
       navStack: [],
       pushView: (view, params) => set((s) => ({
         currentView: view,
         navStack: [...s.navStack, { view: s.currentView, params }],
-        sidebarOpen: false,
       })),
       popView: () => set((s) => {
         if (s.navStack.length === 0) return s
@@ -210,12 +211,10 @@ export const useAppStore = create<AppState>()(
         return {
           currentView: prev.view,
           navStack: s.navStack.slice(0, -1),
-          sidebarOpen: false,
         }
       }),
       canGoBack: () => get().navStack.length > 0,
-      sidebarOpen: false,
-      setSidebarOpen: (open) => set({ sidebarOpen: open }),
+      // 🔒 AUDIT V25 FIX §4.1: sidebarOpen/setSidebarOpen removed.
       sidebarCollapsed: false,
       toggleSidebarCollapsed: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
       setSidebarCollapsed: (c) => set({ sidebarCollapsed: c }),

@@ -6126,3 +6126,73 @@ Stage Summary:
 - 1 additional existing bug found and fixed: BUG-026 (Sidebar + MoreScreen logout).
 - Files changed (follow-up): 2 (Sidebar.tsx, MoreScreen.tsx).
 - Honest limitation: in-sandbox browser verification was blocked by DB connectivity. Code-level verification (tsc/jest/build/eslint) all clean. Manual verification guide provided for the user to run on Vercel.
+
+---
+Task ID: audit-v25-batch-1
+Agent: main
+Task: V25 Audit Batch 1 — Dead code cleanup (§4.1, §4.2, §4.3, §4.4, §4.6).
+
+Work Log:
+- Pulled latest from origin/main (V24 batch 1 + batch 2 were already pushed by user).
+- Rebased local Batch L follow-up commit onto V24 HEAD. Resolved BUGS-FOUND.md conflict by taking the remote side (V24 added BUG-027..031; my local commit was BUG-026 which was already on remote).
+- Confirmed all V25 §4 findings still hold post-V24 (V24 touched Ledger/TransactionEntry/reports — didn't touch Sidebar/AppShell/page.tsx structure).
+
+§4.1 — Delete dead mobile sidebar drawer:
+- `setSidebarOpen(true)` was called NOWHERE in the codebase (verified by grep).
+- Sidebar.tsx had full mobile drawer apparatus: overlay (line 123), slide animation conditional (line 137), X close button (lines 158-164). All dead.
+- Removed overlay div, removed `sidebarOpen ?` conditional in `aside` className (now always `-translate-x-full lg:translate-x-0`), removed X close button.
+- Removed `sidebarOpen`/`setSidebarOpen` from `app-store.ts` (state field, setter, and 3 reset-on-nav calls in setView/pushView/popView).
+- Removed `setSidebarOpen` from `Header.tsx` destructuring (was destructured but never used).
+- Removed `setSidebarOpen(false)` call from Sidebar's account-nav button (no-op since drawer is always closed).
+- Files changed: Sidebar.tsx, Header.tsx, app-store.ts.
+
+§4.2 — Delete orphaned handlers:
+- Sidebar.tsx had `handleLogout` (line 94) and `handleInstallApp` (line 113) defined but never referenced. V21-011 removed the buttons that called them but left the handlers behind.
+- Removed both handlers.
+- Also removed `useConfirmDialog` (only handleLogout used it), `signOut` import, `clearAllOfflineData` import, `clearRecentProducts` import, `sonnerToast` import, `confirmDialogEl` render.
+- Also removed `isStaff` variable (was unused after handleLogout deletion).
+- Also removed 9 unused lucide imports (Settings, Sparkles, Crown, HelpCircle, Info, Star, LogOut, Download, Pencil, MoreHorizontal) — leftover from V21-011.
+- Files changed: Sidebar.tsx.
+
+§4.3 — Dedupe PWAInstallPrompt:
+- page.tsx had `PWAInstallPrompt` mounted TWICE per branch (once unconditionally on `features?.pwaInstall`, once on `firstRunComplete && features?.pwaInstall`). 3 branches × 2 mounts = 6 competing instances of the same component listening for `beforeinstallprompt`.
+- Now: single mount in AppShell, gated by `features?.pwaInstall && firstRunComplete` so it doesn't show during onboarding.
+- Files changed: AppShell.tsx (new), page.tsx.
+
+§4.4 — Extract AppShell wrapper:
+- page.tsx had 3 branches (More / Account / main) each duplicating the same 10-component modal/overlay stack: KeyboardShortcuts, GlobalSearch, ThemePicker, Onboarding, PWAInstallPrompt (×2), OnboardingTour, ConsentModal, RatePromptModal, PaywallModal.
+- Created `src/components/layout/AppShell.tsx` — single source of truth for the shell. Takes `sidebar`/`header`/`mobileBottomNav` props so each branch picks its chrome; modal stack is always the same.
+- Refactored page.tsx to use `<AppShell>` for all 3 branches. MoreScreen and AccountScreen pass `sidebar={false} header={false}` (mobile full-screen pattern — V25 §2.3 will fix this in Batch 2). Main branch passes `sidebar={true} header={true}`.
+- Removed 13 now-redundant imports from page.tsx (Sidebar, Header, MobileBottomNav, Onboarding, ThemePicker, KeyboardShortcuts, GlobalSearch, OfflineIndicator, PWAInstallPrompt, OnboardingTour, ConsentModal, RatePromptModal, PaywallModal) — all now imported once inside AppShell.
+- Added `getShellPropsForView()` helper for future use (Batch 2 will use it to render Account/More inside the shell on desktop).
+- Files changed: AppShell.tsx (new, ~170 LOC), page.tsx (significant refactor — net -50 LOC).
+
+§4.6 — Fix isMoreActive:
+- MobileBottomNav's `isMoreActive` highlighted the "More" tab for 10 secondary views (inventory, income-expense, parties, scanner, reports, settings, pricing, ai-comparison, ai-usage, document-vault) — even when the user navigated to them from the Sidebar or a dashboard quick action.
+- Now: More highlights ONLY when (a) currentView IS 'more', OR (b) currentView IS 'account', OR (c) previousView === 'more' (user actually came FROM More).
+- Without the §6.1 registry (deferred), previousView is the best proxy for "which tab owns this view".
+- Files changed: MobileBottomNav.tsx.
+
+Additional existing bugs found during pre-change scan:
+- BUG-032: 8 MoreScreen items navigate to wrong/under-delivering views (Sale Return, Purchase Return, Cash in Hand, Day-End Summary, WhatsApp Reminders, Multi-Shop, Staff & Access, Smart Insights). Each promises a feature but the tap just opens a parent view with no deep-link. Deferred to Batch 1b — requires deep-linking infrastructure (triggerDayEnd store field, scroll targets, setPendingSettingsTab for Settings deep-links) that doesn't exist yet.
+
+Verification:
+- npx tsc --noEmit: 0 errors
+- npx eslint (changed files): 0 errors, 0 warnings
+- npx jest: 1640/1640 pass (42 suites — V24 added 24 new tests since V23)
+- npx next build: Compiled successfully (BUILD_ID present)
+
+Bug 说明 (existing bugs found during this batch):
+1. BUG-032 (8 MoreScreen deep-link bugs) — logged, deferred to Batch 1b.
+2. Sidebar.tsx had 9 unused lucide imports (Settings, Sparkles, Crown, HelpCircle, Info, Star, LogOut, Download, Pencil, MoreHorizontal) — leftover from V21-011 button removal. Removed.
+3. Sidebar.tsx had unused `isStaff` variable — leftover from handleLogout deletion. Removed.
+
+Stage Summary:
+- V25 Audit Batch 1 COMPLETE. All 5 §4 sub-findings addressed (§4.1, §4.2, §4.3, §4.4, §4.6). §4.5 was a duplicate of §3 row 9 (revenue target widgets) — deferred to Batch 3.
+- Files added: 1 (AppShell.tsx, ~170 LOC).
+- Files changed: 4 (Sidebar.tsx, MobileBottomNav.tsx, page.tsx, app-store.ts, Header.tsx).
+- Net LOC change: -50 (more deletion than addition — dead code cleanup).
+- 1 new bug logged (BUG-032) — deferred to Batch 1b.
+- 1640 tests passing, 0 TypeScript errors, 0 ESLint errors, build clean.
+- Browser verification: deferred (per user instruction — will be done later when user provides guidance).
+- Awaiting user pass before Batch 2 (desktop parity quick wins — §2.1, §2.2, §2.3, §2.5).
