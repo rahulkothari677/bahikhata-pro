@@ -29,8 +29,24 @@
  */
 
 import { roundMoney } from '@/lib/money'
+import { deriveStateCode } from '@/lib/gst-states'
 
 // ─── Input types ──────────────────────────────────────────────────────────
+
+// 🔒 AUDIT V24 follow-up (POS fix): Place of Supply must be the BUYER's state,
+// not the shop's. Was: every section used `shop.stateCode` — so an inter-state
+// B2B/B2CL invoice carried pos = home state together with IGST amounts, which
+// the GST portal cross-validates and rejects (pos == supplier state implies
+// CGST/SGST, not IGST). For intra-state and walk-in sales the fallback chain
+// (party GSTIN → party state → shop GSTIN → shop state) lands on the shop's
+// code, so those are unchanged.
+function placeOfSupply(txn: Gstr1Transaction, shop: ShopInfo): string {
+  return (
+    deriveStateCode(txn.partyGstin, txn.partyState, shop.gstin, shop.state) ||
+    shop.stateCode ||
+    '00'
+  )
+}
 
 /** A transaction row with its items, as fetched from the DB. */
 export interface Gstr1Transaction {
@@ -219,7 +235,7 @@ export function buildB2B(txns: Gstr1Transaction[], shop: ShopInfo): Gstr1B2bEntr
 
   for (const txn of b2bSales) {
     const ctin = txn.partyGstin!
-    const pos = shop.stateCode || '00'
+    const pos = placeOfSupply(txn, shop)
     const inv: Gstr1B2bInvoice = {
       inum: txn.invoiceNo || txn.id,
       idt: formatPortalDate(txn.date),
@@ -257,7 +273,7 @@ export function buildB2CL(txns: Gstr1Transaction[], shop: ShopInfo): Gstr1B2clEn
   const byPos = new Map<string, Gstr1B2clEntry['inv']>()
 
   for (const txn of b2clSales) {
-    const pos = shop.stateCode || '00'
+    const pos = placeOfSupply(txn, shop)
     const inv = {
       inum: txn.invoiceNo || txn.id,
       idt: formatPortalDate(txn.date),
@@ -290,7 +306,7 @@ export function buildB2CS(txns: Gstr1Transaction[], shop: ShopInfo): Gstr1B2csEn
   const agg = new Map<string, { txval: number; iamt: number; camt: number; samt: number; csamt: number; rt: number; pos: string }>()
 
   for (const txn of b2csSales) {
-    const pos = shop.stateCode || '00'
+    const pos = placeOfSupply(txn, shop)
     for (const item of txn.items) {
       const key = `${item.gstRate}|${pos}`
       const existing = agg.get(key) || { txval: 0, iamt: 0, camt: 0, samt: 0, csamt: 0, rt: item.gstRate, pos }
@@ -328,7 +344,7 @@ export function buildCDNR(txns: Gstr1Transaction[], shop: ShopInfo): Gstr1CdnrEn
 
   for (const txn of notes) {
     const ctin = txn.partyGstin!
-    const pos = shop.stateCode || '00'
+    const pos = placeOfSupply(txn, shop)
     const nt = {
       nt_num: txn.invoiceNo || txn.id,
       nt_dt: formatPortalDate(txn.date),
@@ -362,15 +378,13 @@ export function buildCDNUR(txns: Gstr1Transaction[], shop: ShopInfo): Gstr1Cdnur
     (t.type === 'credit-note' || t.type === 'debit-note') &&
     (!t.partyGstin || t.partyGstin.length < 15)
   )
-  const pos = shop.stateCode || '00'
-
   return notes.map(txn => ({
     typ: 'B2CL' as const,
     nt_num: txn.invoiceNo || txn.id,
     nt_dt: formatPortalDate(txn.date),
     val: roundMoney(txn.totalAmount),
     ntty: (txn.type === 'credit-note' ? 'C' : 'D') as 'C' | 'D',
-    pos,
+    pos: placeOfSupply(txn, shop),
     rchrg: 'N' as const,
     itms: txn.items.map(item => ({
       rt: item.gstRate,

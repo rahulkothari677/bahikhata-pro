@@ -84,6 +84,10 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
   const [isInterState, setIsInterState] = useState(false)
   const [paymentMode, setPaymentMode] = useState('cash')
   const [paidAmount, setPaidAmount] = useState('')
+  // 🔒 AUDIT V24 §1: For credit/debit notes, paidAmount means "cash refunded".
+  // Default OFF = pure khata adjustment (send paidAmount 0). See the refund
+  // toggle in the payment card below.
+  const [cashRefund, setCashRefund] = useState(false)
   const [discountAmount, setDiscountAmount] = useState('')
   const [notes, setNotes] = useState('')
 
@@ -467,7 +471,11 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
   // Per-row computed lines (normalized quantity/unit + line total) for display.
   const previewLines = preview.txItems
   const paid = parseFloat(paidAmount) || 0
-  const finalPaid = paidAmount === '' ? totalAmount : paid
+  // 🔒 AUDIT V24 §1: For notes, "paid" = cash refunded (0 unless the refund
+  // toggle is ON). For sales/purchases, empty = full payment (unchanged).
+  const finalPaid = isNote
+    ? (cashRefund ? (paidAmount === '' ? totalAmount : paid) : 0)
+    : (paidAmount === '' ? totalAmount : paid)
   const due = roundMoney(totalAmount - finalPaid)
 
   // 🔒 V11 STOCK POLICY: Live stock check per cart item. Computes which items
@@ -539,7 +547,15 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
           invoiceNo: invoiceNo || null,
           isInterState,
           paymentMode,
-          paidAmount: paidAmount === '' ? undefined : Number(paidAmount),
+          // 🔒 AUDIT V24 §1: Notes ALWAYS send an explicit paidAmount (cash
+          // refunded): 0 when the refund toggle is off (khata adjustment — the
+          // common case), the entered refund (or the full total) when on. The
+          // server defaults a missing note paidAmount to 0, so "full refund with
+          // empty field" must be sent explicitly (the server's ₹1 snap absorbs
+          // any round-off residue). Sales/purchases keep "empty = full payment".
+          paidAmount: isNote
+            ? (cashRefund ? (paidAmount === '' ? totalAmount : Number(paidAmount)) : 0)
+            : (paidAmount === '' ? undefined : Number(paidAmount)),
           discountAmount: totalDiscount,
           notes,
           // V17-Ext Tier 3: Credit/Debit Note fields
@@ -1383,19 +1399,60 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
                 </Select>
               </div>
 
-              <div>
-                <Label>Paid Amount (₹)</Label>
-                <Input
-                  type="number"
-                  inputMode="decimal"
-                  value={paidAmount}
-                  onChange={(e) => setPaidAmount(e.target.value)}
-                  placeholder={`Full: ${totalAmount.toFixed(0)}`}
-                  className="mt-1"
-                  onKeyDown={(e) => { if (e.key === 'Enter') handleSave() }}
-                />
-                <p className="text-[10px] text-muted-foreground mt-1">Leave empty for full payment</p>
-              </div>
+              {/* 🔒 AUDIT V24 §1: For credit/debit notes, "Paid Amount" means CASH
+                  REFUNDED — and the common case is a pure khata adjustment (no cash).
+                  The old sale-style field ("Leave empty for full payment") silently
+                  meant "fully cash-refunded", so the return never reduced the
+                  customer's balance. Notes now get an explicit refund toggle:
+                  OFF (default) = adjust in khata (paidAmount 0), ON = cash refund. */}
+              {isNote ? (
+                <>
+                  <div className="flex items-center justify-between rounded-lg bg-muted/50 p-3">
+                    <div>
+                      <Label className="cursor-pointer text-sm">
+                        {isCreditNote ? 'Cash refunded to customer?' : 'Cash refunded by supplier?'}
+                      </Label>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        {cashRefund
+                          ? 'Money was returned in cash/UPI — balance stays unchanged'
+                          : `OFF: adjusts the party's khata by ${formatINR(totalAmount)}`}
+                      </p>
+                    </div>
+                    <Switch checked={cashRefund} onCheckedChange={setCashRefund} />
+                  </div>
+                  {cashRefund && (
+                    <div>
+                      <Label>Refund Amount (₹)</Label>
+                      <Input
+                        type="number"
+                        inputMode="decimal"
+                        value={paidAmount}
+                        onChange={(e) => setPaidAmount(e.target.value)}
+                        placeholder={`Full refund: ${totalAmount.toFixed(0)}`}
+                        className="mt-1"
+                        onKeyDown={(e) => { if (e.key === 'Enter') handleSave() }}
+                      />
+                      <p className="text-[10px] text-muted-foreground mt-1">
+                        Leave empty for a full cash refund. Any un-refunded portion adjusts the khata.
+                      </p>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div>
+                  <Label>Paid Amount (₹)</Label>
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    value={paidAmount}
+                    onChange={(e) => setPaidAmount(e.target.value)}
+                    placeholder={`Full: ${totalAmount.toFixed(0)}`}
+                    className="mt-1"
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleSave() }}
+                  />
+                  <p className="text-[10px] text-muted-foreground mt-1">Leave empty for full payment</p>
+                </div>
+              )}
             </div>
           </Card>
 
@@ -1435,12 +1492,23 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
                   <span className="font-semibold">Total</span>
                   <span className="text-xl font-bold">{formatINR(totalAmount)}</span>
                 </div>
-                {due > 0 && (
-                  <div className="flex items-center justify-between text-sm bg-rose-50 -mx-4 px-4 py-2 rounded-lg">
-                    <span className="text-rose-600 font-medium flex items-center gap-1">
+                {/* 🔒 AUDIT V24 §1: For notes, the "unpaid" portion is the khata
+                    ADJUSTMENT (it reduces/increases the party balance) — show it
+                    as such, not as scary red "Outstanding". */}
+                {isNote && due > 0 && (
+                  <div className="flex items-center justify-between text-sm bg-emerald-50 dark:bg-emerald-950/30 -mx-4 px-4 py-2 rounded-lg">
+                    <span className="text-emerald-700 dark:text-emerald-300 font-medium flex items-center gap-1">
+                      <AlertCircle className="w-3.5 h-3.5" /> Adjusted in khata
+                    </span>
+                    <span className="font-bold text-emerald-700 dark:text-emerald-300">{formatINR(due)}</span>
+                  </div>
+                )}
+                {!isNote && due > 0 && (
+                  <div className="flex items-center justify-between text-sm bg-rose-50 dark:bg-rose-950/30 -mx-4 px-4 py-2 rounded-lg">
+                    <span className="text-rose-600 dark:text-rose-400 font-medium flex items-center gap-1">
                       <AlertCircle className="w-3.5 h-3.5" /> Outstanding
                     </span>
-                    <span className="font-bold text-rose-600">{formatINR(due)}</span>
+                    <span className="font-bold text-rose-600 dark:text-rose-400">{formatINR(due)}</span>
                   </div>
                 )}
                 {isSale && totalProfit > 0 && (

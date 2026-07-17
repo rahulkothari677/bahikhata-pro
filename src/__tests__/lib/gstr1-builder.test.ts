@@ -27,7 +27,7 @@ import {
   type Gstr1Item,
   type ShopInfo,
 } from '@/lib/gstr1-builder'
-import { stateNameToCode, deriveStateCode } from '@/lib/gst'
+import { stateNameToCode, deriveStateCode } from '@/lib/gst-states'
 import { roundMoney } from '@/lib/money'
 
 // ─── Test fixtures ────────────────────────────────────────────────────────

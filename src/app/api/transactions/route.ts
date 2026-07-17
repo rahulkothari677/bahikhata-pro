@@ -12,6 +12,8 @@ import { computeLineItems, buildPriceWarnings } from '@/lib/line-items'
 import { normalizeToUnit } from '@/lib/units'
 import { encodeKeysetCursor, buildKeysetWhere } from '@/lib/pagination'
 import { assertPeriodNotLocked, PeriodLockedError } from '@/lib/period-lock'
+import { resolveFinalPaid, isNoteType } from '@/lib/paid-amount'
+import { validateNoteAgainstOriginal } from '@/lib/note-validation'
 
 // GET /api/transactions - list with filters (type, from, to, limit)
 export async function GET(req: NextRequest) {
@@ -402,16 +404,28 @@ export async function POST(req: NextRequest) {
     }
 
     const discount = orderDiscount  // stored in the header; already folded into per-item taxable
-    const paid = parseFloat(paidAmount)
-    let finalPaid = isNaN(paid) ? totalAmount : paid
+    // 🔒 AUDIT V24 §1: paidAmount resolution is centralized in resolveFinalPaid().
+    // For credit/debit notes a MISSING paid amount now defaults to 0 (khata
+    // adjustment) instead of totalAmount ("fully cash-refunded") — the old
+    // default made a sales return reduce the customer's balance by ₹0.
+    // Includes the FIX M3 snap-to-total clamp for explicit values.
+    const finalPaid = resolveFinalPaid(type, paidAmount, totalAmount)
 
-    // 🔒 FIX M3: If the client sent a paidAmount that's within ₹1 of the
-    // post-round-off total, snap it to the total. This prevents a phantom
-    // due/overpay of up to ₹0.50 when the client computed paidAmount from
-    // the pre-round-off total (the C5 client-side fix handles the empty case,
-    // but this catches the explicit-value case too).
-    if (!isNaN(paid) && Math.abs(totalAmount - finalPaid) < 1) {
-      finalPaid = totalAmount
+    // 🔒 AUDIT V24 §2: Validate credit/debit notes against their original
+    // invoice — ownership, type pairing (CN→sale, DN→purchase), same party,
+    // and a cumulative cap (Σ notes ≤ original total). Prevents phantom
+    // negative receivables and GST understatement from over-crediting.
+    if (isNoteType(type) && originalTransactionId) {
+      const noteCheck = await validateNoteAgainstOriginal(db, {
+        userId,
+        type,
+        partyId: partyId || null,
+        originalTransactionId,
+        noteTotal: totalAmount,
+      })
+      if (!noteCheck.ok) {
+        return NextResponse.json({ error: noteCheck.error, message: noteCheck.message }, { status: noteCheck.status })
+      }
     }
 
     // 🔒 AUDIT FIX N3 (v3): Invoice sequence generation is now INSIDE the

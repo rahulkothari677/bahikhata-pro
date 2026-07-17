@@ -5,6 +5,7 @@ import { canAccessModule } from '@/lib/staff-permissions'
 import { shouldHideProfit, stripReportProfit } from '@/lib/profit-visibility'
 import { roundMoney, fromPaise } from '@/lib/money'
 import { activeTransactionWhere } from '@/lib/query-helpers'
+import { getReceivablePayable } from '@/lib/party-balance'
 import { istMonthStart } from '@/lib/timezone'
 import { apiError } from '@/lib/api-error'
 import {
@@ -896,61 +897,83 @@ export async function GET(req: NextRequest) {
     // Expenses (debit), Income (credit), Receivable (debit), Payable (credit).
     // =====================================================================
     if (type === 'trial-balance') {
-      const [typeAgg, receivableAgg, payableAgg] = await Promise.all([
-        // All transaction types in the date range
+      // 🔒 AUDIT V23 §2 REWORK. The old implementation had three defects:
+      //   (a) Sundry Debtors/Creditors = SUM(sale/purchase total − paidAmount)
+      //       — which IGNORED the Payment table, credit/debit notes, and
+      //       opening balances (payments live in Payment, not paidAmount).
+      //       The numbers disagreed with the Parties screen and dashboard.
+      //   (b) Sales/Purchases used GST-INCLUSIVE totalAmount — in accounting,
+      //       Sales is the taxable value and GST is a separate liability.
+      //   (c) It claimed "Balanced ✓ / Out of Balance" — but this app records
+      //       single-entry data (no Cash/Capital ledgers), so a self-balancing
+      //       trial balance is STRUCTURALLY impossible here. Nearly every real
+      //       shop showed "Out of Balance", implying their books were broken.
+      // Now: taxable-value Sales/Purchases + explicit GST Output/Input rows,
+      // Debtors/Creditors from getReceivablePayable (the single source of
+      // truth — matches every other screen), and an honest single-entry
+      // framing instead of a balanced/unbalanced verdict.
+      const [typeAgg, receivablePayable] = await Promise.all([
+        // All transaction types in the date range (taxable + GST components)
         db.transaction.groupBy({
           by: ['type'],
           where: activeTransactionWhere(userId, { date: { gte: from, lte: to } }),
-          _sum: { totalAmount: true, paidAmount: true },
+          _sum: { totalAmount: true, subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true },
         }),
-        // All-time receivable (sales - paid) — outstanding from customers
-        db.transaction.groupBy({
-          by: ['type'],
-          where: activeTransactionWhere(userId, { type: 'sale' }),
-          _sum: { totalAmount: true, paidAmount: true },
-        }),
-        // All-time payable (purchases - paid) — owed to suppliers
-        db.transaction.groupBy({
-          by: ['type'],
-          where: activeTransactionWhere(userId, { type: 'purchase' }),
-          _sum: { totalAmount: true, paidAmount: true },
-        }),
+        // All-time receivable/payable — the SAME helper the dashboard and
+        // Parties screen use (opening balances + notes + Payment table).
+        getReceivablePayable(userId),
       ])
 
-      // Build trial balance rows
+      const sumOfType = (t: string) => {
+        const r = typeAgg.find(x => x.type === t)
+        return {
+          totalAmount: r?._sum.totalAmount || 0,
+          taxable: (r?._sum.subtotal || 0) - (r?._sum.discountAmount || 0),
+          gst: (r?._sum.cgst || 0) + (r?._sum.sgst || 0) + (r?._sum.igst || 0),
+        }
+      }
+      const sale = sumOfType('sale')
+      const creditNote = sumOfType('credit-note')
+      const purchase = sumOfType('purchase')
+      const debitNote = sumOfType('debit-note')
+      const expense = sumOfType('expense')
+      const income = sumOfType('income')
+
+      // Build trial balance rows. pushAccount flips the column when a net
+      // value goes negative (e.g. a return-heavy period where credit notes
+      // exceed sales): a negative credit IS a debit — never render "—" for
+      // a real balance, and never emit negative numbers the UI hides.
       const accounts: { name: string; debit: number; credit: number }[] = []
+      const pushAccount = (name: string, side: 'debit' | 'credit', value: number) => {
+        const v = roundMoney(value)
+        if (v === 0) return
+        const effectiveSide = v > 0 ? side : side === 'debit' ? 'credit' : 'debit'
+        accounts.push({
+          name,
+          debit: effectiveSide === 'debit' ? Math.abs(v) : 0,
+          credit: effectiveSide === 'credit' ? Math.abs(v) : 0,
+        })
+      }
 
-      // Sales → Credit
-      const salesTotal = typeAgg.find(r => r.type === 'sale')?._sum.totalAmount || 0
-      const creditNoteTotal = typeAgg.find(r => r.type === 'credit-note')?._sum.totalAmount || 0
-      const netSales = salesTotal - creditNoteTotal
-      if (netSales !== 0) accounts.push({ name: 'Sales Account', debit: 0, credit: roundMoney(netSales) })
-
-      // Purchases → Debit
-      const purchaseTotal = typeAgg.find(r => r.type === 'purchase')?._sum.totalAmount || 0
-      const debitNoteTotal = typeAgg.find(r => r.type === 'debit-note')?._sum.totalAmount || 0
-      const netPurchases = purchaseTotal - debitNoteTotal
-      if (netPurchases !== 0) accounts.push({ name: 'Purchases Account', debit: roundMoney(netPurchases), credit: 0 })
-
+      // Sales → Credit at TAXABLE value, net of credit notes
+      pushAccount('Sales Account (taxable)', 'credit', sale.taxable - creditNote.taxable)
+      // GST collected on sales → a LIABILITY (you owe it to the government)
+      pushAccount('GST Output Payable', 'credit', sale.gst - creditNote.gst)
+      // Purchases → Debit at TAXABLE value, net of debit notes
+      pushAccount('Purchases Account (taxable)', 'debit', purchase.taxable - debitNote.taxable)
+      // GST paid on purchases → an ASSET (input tax credit)
+      pushAccount('GST Input Credit', 'debit', purchase.gst - debitNote.gst)
       // Expenses → Debit
-      const expenseTotal = typeAgg.find(r => r.type === 'expense')?._sum.totalAmount || 0
-      if (expenseTotal !== 0) accounts.push({ name: 'Expenses Account', debit: roundMoney(expenseTotal), credit: 0 })
-
+      pushAccount('Expenses Account', 'debit', expense.totalAmount)
       // Income → Credit
-      const incomeTotal = typeAgg.find(r => r.type === 'income')?._sum.totalAmount || 0
-      if (incomeTotal !== 0) accounts.push({ name: 'Other Income Account', debit: 0, credit: roundMoney(incomeTotal) })
-
-      // Receivable (Sundry Debtors) → Debit (all-time outstanding)
-      const receivableTotal = (receivableAgg.find(r => r.type === 'sale')?._sum.totalAmount || 0) - (receivableAgg.find(r => r.type === 'sale')?._sum.paidAmount || 0)
-      if (receivableTotal !== 0) accounts.push({ name: 'Sundry Debtors (Receivable)', debit: roundMoney(receivableTotal), credit: 0 })
-
-      // Payable (Sundry Creditors) → Credit (all-time owed)
-      const payableTotal = (payableAgg.find(r => r.type === 'purchase')?._sum.totalAmount || 0) - (payableAgg.find(r => r.type === 'purchase')?._sum.paidAmount || 0)
-      if (payableTotal !== 0) accounts.push({ name: 'Sundry Creditors (Payable)', debit: 0, credit: roundMoney(payableTotal) })
+      pushAccount('Other Income Account', 'credit', income.totalAmount)
+      // Sundry Debtors/Creditors — all-time, from the canonical balance helper
+      // (openingBalance + sales − returns − payments, per party, aggregated).
+      pushAccount('Sundry Debtors (Receivable)', 'debit', receivablePayable.totalReceivable)
+      pushAccount('Sundry Creditors (Payable)', 'credit', receivablePayable.totalPayable)
 
       const totalDebit = accounts.reduce((s, a) => s + a.debit, 0)
       const totalCredit = accounts.reduce((s, a) => s + a.credit, 0)
-      const isBalanced = Math.abs(totalDebit - totalCredit) < 1 // within ₹1 tolerance for rounding
 
       return NextResponse.json({
         type: 'trial-balance',
@@ -960,7 +983,11 @@ export async function GET(req: NextRequest) {
           totalDebit: roundMoney(totalDebit),
           totalCredit: roundMoney(totalCredit),
           difference: roundMoney(totalDebit - totalCredit),
-          isBalanced,
+          // 🔒 V23 §2: single-entry books can't produce a self-balancing TB
+          // (no Cash/Bank/Capital ledgers exist). The UI shows an honest
+          // "derived from single-entry records" note instead of a
+          // balanced/unbalanced verdict.
+          singleEntry: true,
         },
         accounts,
       })

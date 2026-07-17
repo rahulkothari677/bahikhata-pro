@@ -11,6 +11,8 @@ import { normalizeToUnit } from '@/lib/units'
 import { apiError } from '@/lib/api-error'
 import { assertPeriodNotLocked, PeriodLockedError } from '@/lib/period-lock'
 import { logFieldChanges, TRACKED_TRANSACTION_FIELDS } from '@/lib/field-audit'
+import { resolveFinalPaid, isNoteType } from '@/lib/paid-amount'
+import { validateNoteAgainstOriginal } from '@/lib/note-validation'
 
 // GET /api/transactions/[id] - get single transaction with all details
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -333,12 +335,25 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       totalAmount = rounded
     }
 
-    const paid = parseFloat(paidAmount)
-    let finalPaid = isNaN(paid) ? totalAmount : paid
+    // 🔒 AUDIT V24 §1: Shared resolution with POST — for credit/debit notes a
+    // missing paidAmount defaults to 0 (khata adjustment), not totalAmount.
+    // Includes the FIX M3 snap-to-total clamp for explicit values.
+    const finalPaid = resolveFinalPaid(type, paidAmount, totalAmount)
 
-    // 🔒 FIX M3: Same clamp as POST — snap to totalAmount if within ₹1.
-    if (!isNaN(paid) && Math.abs(totalAmount - finalPaid) < 1) {
-      finalPaid = totalAmount
+    // 🔒 AUDIT V24 §2: Same note-vs-original validation as POST, excluding this
+    // note itself from the cumulative cap (we're replacing its old value).
+    if (isNoteType(type) && originalTransactionId) {
+      const noteCheck = await validateNoteAgainstOriginal(db, {
+        userId,
+        type,
+        partyId: partyId || null,
+        originalTransactionId,
+        noteTotal: totalAmount,
+        excludeNoteId: id,
+      })
+      if (!noteCheck.ok) {
+        return NextResponse.json({ error: noteCheck.error, message: noteCheck.message }, { status: noteCheck.status })
+      }
     }
 
     // 🔒 ATOMICITY (Audit fix C3) + STOCK (Audit fix H1):
