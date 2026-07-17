@@ -6089,3 +6089,40 @@ Stage Summary:
 - Files added: 2 (src/lib/app-version.ts, scripts/batch-l-settings-dark-mode.py)
 - 1616 tests passing, 0 TypeScript errors, 0 ESLint errors, build clean
 - All Part-2 findings (§13.1-§13.9) now addressed. Only §13.10 (verified clean) remains untouched by design.
+
+---
+Task ID: audit-v23-batch-l-followup
+Agent: main
+Task: Batch L follow-up — find additional existing bugs in same anti-pattern class + browser verify.
+
+Work Log:
+- User flagged that Batch L response missed: (1) browser verification, (2) verification guide, (3) additional existing bugs in the same class as the audit findings.
+- Scanned for related anti-patterns:
+  * btoa(email) PII leaks — clean (only comment references remain in analytics.ts).
+  * Other `localStorage.getItem` reads in render — clean (the two remaining are inside useEffect, not render).
+  * Other hardcoded version strings — clean (only app-version.ts references remain).
+  * Other unhandled-promise logout chains — FOUND 2 more: Sidebar.tsx + MoreScreen.tsx had the same clearAllOfflineData().then(signOut()) pattern with no .catch. Logged as BUG-026 and fixed both to match the AccountScreen pattern from BUG-024.
+  * Other `type:'income'` aggregates that should be filtered — checked reports/route.ts (P&L), those correctly want ALL income. No other bugs in this class.
+
+- Browser verification attempt:
+  * Dev server (next dev) and prod server (next start) both started successfully but kept dying after ~10-20 seconds in this sandbox environment.
+  * Root cause: DATABASE_URL points to remote Neon production DB; the sandbox cannot maintain a long-lived outbound connection to Neon. Sign-up flow needs DB to create a user, so post-login screens (Settings, Account) could not be verified end-to-end in the sandbox.
+  * What WAS verified in-browser: AuthScreen renders correctly (all 5 language buttons, Sign In / Create Account tabs, email/password fields). The app shell loads cleanly. The new SHA-256 hashEmail helper is wired (no console errors on load).
+  * What was NOT verified in-browser: dark-mode Settings → Data tab visual, Day-End time selector state update, formatINR in toasts, APP_VERSION_LABEL in footer + About, GSTR-3B 3.1(e) value, splash skip on warm reload.
+  * Code-level verification (tsc 0 errors, eslint clean, jest 1616/1616 pass, build clean) covers the static guarantees. The user should verify the visual/UX fixes on the Vercel deployment using the guide below.
+
+Verification guide for the user (do these on the Vercel deployment):
+1. §13.9a Dark-mode Data tab — open Settings → Data tab in DARK mode. All 6 cards (Offline Data, Period Lock, Health Check, Backup, Restore, Danger Zone) should have dark backgrounds (slate-950/20 with the appropriate color tint), readable text, and dark-mode hover states on buttons. Before the fix: glaring light-blue/amber/emerald/rose panels in dark mode.
+2. §13.9b Day-End time selector — open Settings → Appearance → Day-End Summary Time. Pick a new time (e.g. 14:00). The Select should IMMEDIATELY show "14:00" as the selected value. Before the fix: stayed at the old value until you triggered an unrelated re-render.
+3. §13.9c Business-goals ₹ format — Settings → Business Goals. Enter 500000 as revenue target, tap Set. Toast should say "Revenue target set: ₹5,00,000" (with ₹ symbol and Indian comma grouping). Before the fix: "Revenue target set: 500000" (raw number). Same for expense budget.
+4. §13.9d Logout resilience — this is hard to verify without breaking IndexedDB. Open browser DevTools → Application → IndexedDB → block the bahikhata DB (or delete it). Tap Logout. Should still log you out (not show "Failed to logout" toast). Before the fix: dead button.
+5. §13.9e Version string — open Account page (tap avatar). Footer at the bottom should say "EkBook v1.0.0-beta · Made with love for Bharat 🇮🇳". Open About sub-page. Should say "EkBook v1.0.0-beta" (matching). Before the fix: footer said "v1.0", About said "v1.0.0 (Beta)".
+6. §13.9f Help FAQ GSTR — open Help & Support → FAQ. The "How do I file GST returns?" answer should now distinguish GSTR-1 (JSON, portal-ready) from GSTR-3B (CSV summary). Before the fix: claimed both were JSON.
+7. §13.9g email_hash PII — open browser DevTools → Network tab. Sign up / log in. Look for the PostHog `identify` request payload. The `email_hash` trait should be a 16-char hex string (e.g. "a3f2b1c9...") — NOT base64. Before the fix: 16-char base64 that decoded to ~12 chars of your email.
+8. §13.9h Splash on warm reload — open the app fresh (new tab). Watch the splash animation. Now press Ctrl+R (or Cmd+R) to reload. The splash should NOT appear on the reload. Before the fix: splash re-played on every reload.
+9. §13.9i GSTR-3B 3.1(e) — open Reports → GSTR-3B for the current month. If you have any income entries (Commission, Interest, etc.), the "3.1(e) Non-GST outward supplies" row should be 0 (or only show "Scrap Sale" income). Before the fix: 3.1(e) showed the sum of ALL income categories.
+
+Stage Summary:
+- 1 additional existing bug found and fixed: BUG-026 (Sidebar + MoreScreen logout).
+- Files changed (follow-up): 2 (Sidebar.tsx, MoreScreen.tsx).
+- Honest limitation: in-sandbox browser verification was blocked by DB connectivity. Code-level verification (tsc/jest/build/eslint) all clean. Manual verification guide provided for the user to run on Vercel.

@@ -322,3 +322,15 @@ and include enough context to reproduce.
 - **Description**: `nonGstValue` was computed as `SUM(totalAmount) WHERE type='income'` over ALL income transactions. But the income categories defined in `IncomeExpense.tsx` include 'Commission', 'Interest', 'Rent Received', 'Discount Received', 'Refund', 'Miscellaneous' — these are NON-SUPPLY income (interest on bank deposits, rent of own property, etc.), NOT outward supplies of goods/services. They do NOT belong in 3.1(e) "Non-GST outward supplies". Including them inflated 3.1(e) for every shop that records interest or commission income — a kirana with ₹2,000 bank interest would see ₹2,000 wrongly added to 3.1(e).
 - **Fix applied**: 2026-07-17 (Batch L §13.9i). Filter to `category: 'Scrap Sale'` only — the one income category that could plausibly be a non-GST outward supply (casual sale of capital assets like scrap). Most kirana users now correctly get `nonGstValue=0`. TODO added in code for a proper `isNonGstSupply` flag on Transaction for users who genuinely sell non-GST goods (alcohol, petrol, lottery).
 - **Status**: FIXED
+
+### BUG-026 — Sidebar + MoreScreen logout had same clearAllOfflineData anti-pattern as AccountScreen (Medium/UX) — FIXED
+
+- **Found**: 2026-07-17, during Audit V23 Batch L follow-up scan
+- **Files**: `src/components/layout/Sidebar.tsx:94-103`, `src/components/layout/MoreScreen.tsx:229-238`
+- **Severity**: Medium (logout button silently fails on IDB errors — same class as BUG-024)
+- **Description**: When I fixed BUG-024 (AccountScreen logout chain with no .catch), I should have grepped for the same pattern elsewhere. Found two more logout handlers with the identical bug:
+  - Sidebar `handleLogout`: `try { await clearAllOfflineData(); clearRecentProducts(); signOut(...) } catch { toast('Failed to logout') }`
+  - MoreScreen `handleLogout`: `try { await clearAllOfflineData(); signOut(...) } catch { toast('Failed to logout') }`
+  In both: if `clearAllOfflineData()` throws (IndexedDB blocked by browser privacy mode, quota error, corrupted store), `signOut()` never runs. User taps Logout, sees "Failed to logout" toast, and is stuck on a dead button. The toast is also misleading — logout itself didn't fail, only the offline-cache clear did.
+- **Fix applied**: 2026-07-17 (Batch L follow-up). Both handlers now wrap `clearAllOfflineData()` in its own try/catch (failure logged but non-fatal), then `signOut()` runs unconditionally in a separate try/catch with a `window.location.href = '/'` fallback if even signOut throws. Matches the AccountScreen pattern from BUG-024.
+- **Status**: FIXED
