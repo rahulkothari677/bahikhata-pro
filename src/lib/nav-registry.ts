@@ -83,6 +83,16 @@ export type NavFrequency = 'primary' | 'secondary' | 'tertiary'
 // secondary = Sidebar Tools section + MoreScreen sections
 // tertiary  = AccountScreen menu + GlobalSearch commands
 
+/** Which surfaces show this destination. Controls where each item appears. */
+export type NavSurface =
+  | 'sidebar-main'      // Sidebar primary nav
+  | 'sidebar-tools'     // Sidebar Tools section (collapsible)
+  | 'bottom-nav'        // MobileBottomNav tabs
+  | 'more'              // MoreScreen sections
+  | 'reports-hub'       // ReportsHub grid
+  | 'account'           // AccountScreen menu
+  | 'global-search'     // GlobalSearch commands
+
 export interface NavDestination {
   /** Unique identifier (e.g. 'gstr-1', 'reconciliation', 'dashboard') */
   id: string
@@ -92,6 +102,10 @@ export interface NavDestination {
   description?: string
   /** Icon component */
   icon: LucideIcon
+  /** Sort order within its surface (lower = higher up). Optional — default 0. */
+  sortOrder?: number
+  /** Which surfaces should show this destination. Default: inferred from frequency. */
+  surfaces?: NavSurface[]
   /** Tailwind text color class for the icon */
   iconColor?: string
   /** Tailwind bg color class for the icon container */
@@ -172,6 +186,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     actionKind: 'navigate',
     category: 'core',
     frequency: 'primary',
+    surfaces: ['sidebar-main', 'bottom-nav', 'global-search'],
+    sortOrder: 1,
     moduleKey: 'dashboard',
   },
 
@@ -187,6 +203,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     actionKind: 'navigate',
     category: 'transactions',
     frequency: 'primary',
+    surfaces: ['sidebar-main', 'bottom-nav', 'global-search'],
+    sortOrder: 3,
     moduleKey: 'sales',
   },
   {
@@ -200,6 +218,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     actionKind: 'navigate',
     category: 'transactions',
     frequency: 'primary',
+    surfaces: ['sidebar-main', 'bottom-nav', 'global-search'],
+    sortOrder: 4,
     moduleKey: 'purchases',
   },
   {
@@ -292,6 +312,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'transactions',
     subcategory: 'sale-purchase',
     frequency: 'primary',
+    surfaces: ['sidebar-main', 'more', 'global-search'],
+    sortOrder: 6,
     moduleKey: 'incomeExpense',
   },
 
@@ -307,6 +329,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     actionKind: 'navigate',
     category: 'inventory',
     frequency: 'primary',
+    surfaces: ['sidebar-main', 'more', 'global-search'],
+    sortOrder: 5,
     moduleKey: 'inventory',
   },
   {
@@ -335,6 +359,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     actionKind: 'navigate',
     category: 'parties',
     frequency: 'primary',
+    surfaces: ['sidebar-main', 'more', 'global-search'],
+    sortOrder: 7,
     moduleKey: 'parties',
   },
   {
@@ -362,6 +388,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     actionKind: 'navigate',
     category: 'reports',
     frequency: 'primary',
+    surfaces: ['sidebar-main', 'more', 'global-search'],
+    sortOrder: 8,
     moduleKey: 'reports',
   },
   // GST & Tax section (MoreScreen pointers + ReportsHub leaves)
@@ -377,6 +405,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'reports',
     subcategory: 'gst-tax',
     frequency: 'secondary',
+    surfaces: ['sidebar-tools', 'more'],
+    sortOrder: 4,
   },
   {
     id: 'period-lock',
@@ -390,6 +420,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'reports',
     subcategory: 'gst-tax',
     frequency: 'secondary',
+    surfaces: ['sidebar-tools', 'more'],
+    sortOrder: 5,
   },
   {
     id: 'bank-reconciliation',
@@ -618,6 +650,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     actionKind: 'navigate',
     category: 'tools',
     frequency: 'primary',
+    surfaces: ['sidebar-main', 'more', 'global-search'],
+    sortOrder: 2,
     moduleKey: 'scanner',
     featureFlag: 'aiScanner',
   },
@@ -633,6 +667,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'tools',
     frequency: 'secondary',
     moduleKey: 'settings',
+    surfaces: ['sidebar-tools', 'more'],
+    sortOrder: 1,
   },
   {
     id: 'ai-usage',
@@ -648,6 +684,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'tools',
     frequency: 'secondary',
     featureFlag: 'aiScanner',
+    surfaces: ['sidebar-tools', 'more'],
+    sortOrder: 2,
   },
   {
     id: 'ai-comparison',
@@ -663,6 +701,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'tools',
     frequency: 'secondary',
     featureFlag: 'aiScanner',
+    surfaces: ['sidebar-tools', 'more'],
+    sortOrder: 3,
   },
   {
     id: 'voice-entry',

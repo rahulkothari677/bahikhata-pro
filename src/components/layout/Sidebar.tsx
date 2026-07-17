@@ -57,20 +57,20 @@ export function Sidebar() {
   }, [toolsOpen])
 
   // 🔒 AUDIT V25 §6.1 (Batch 8 Phase 2): Main nav + Tools items from the NavRegistry.
-  // Filters by frequency + category + permissions + feature flags + platform.
+  // Filters by surfaces + permissions + feature flags + platform, sorted by sortOrder.
   // Was: hardcoded navItems + toolsNavItems arrays with inline permission checks.
   const isOwner = session?.user?.role === 'owner'
   const mainNavItems = useMemo(() => {
     return filterByPermissions(
-      getByFrequency('primary').filter(d => d.category !== 'account' && (d.platforms || ['desktop']).includes('desktop')),
+      NAV_REGISTRY.filter(d => d.surfaces?.includes('sidebar-main') && (d.platforms || ['desktop']).includes('desktop')),
       { canAccess, isFlagEnabled: isFlagEnabled as any, isOwner }
-    )
+    ).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
   }, [canAccess, isFlagEnabled, isOwner])
   const toolsItems = useMemo(() => {
     return filterByPermissions(
-      getByFrequency('secondary').filter(d => d.category === 'tools' && (d.platforms || ['desktop']).includes('desktop')),
+      NAV_REGISTRY.filter(d => d.surfaces?.includes('sidebar-tools') && (d.platforms || ['desktop']).includes('desktop')),
       { canAccess, isFlagEnabled: isFlagEnabled as any, isOwner }
-    )
+    ).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
   }, [canAccess, isFlagEnabled, isOwner])
 
   // 🔒 FIX M9: Outside-click handler — was missing.
