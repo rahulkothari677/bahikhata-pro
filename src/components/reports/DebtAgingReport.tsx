@@ -22,23 +22,32 @@ export function DebtAgingReport({ data }: { data: any }) {
   const parties = data?.parties || []
   const now = new Date()
 
-  // Build aging buckets per party
+  // 🔒 AUDIT V24 §6.1 REWORK. The old code aged per-invoice dues from
+  // `p.transactions` — an array the party report has returned EMPTY since the
+  // SQL-aggregation refactor. Every bucket summed to 0, so this report told
+  // every shop "No outstanding dues — all customers have paid" regardless of
+  // reality. The most dangerous possible failure for a udhaar-tracking app.
+  //
+  // Now: each party's NET balance (canonical — includes payments & credit
+  // notes) is aged by their OLDEST not-fully-paid invoice date, which the
+  // party report supplies as `oldestUnpaidSaleDate`. This is deliberately
+  // conservative (the whole balance ages by the oldest debt) and labeled
+  // approximate — true per-invoice aging needs payment-to-invoice allocation,
+  // which this app's single Payment stream doesn't record.
   const agedParties = parties
     .filter((p: any) => p.balance > 0)
     .map((p: any) => {
-      const transactions = (p.transactions || []).filter((t: any) =>
-        roundMoney(t.totalAmount - t.paidAmount) > 0 && t.type === 'sale'
-      )
+      const oldest = p.oldestUnpaidSaleDate ? new Date(p.oldestUnpaidSaleDate) : null
+      const days = oldest
+        ? Math.max(0, Math.floor((now.getTime() - oldest.getTime()) / (1000 * 60 * 60 * 24)))
+        : 0 // balance from opening balance / no unpaid invoice on record → treat as current
+      const due = roundMoney(p.balance)
       const buckets = { current: 0, overdue: 0, serious: 0, critical: 0 }
-      transactions.forEach((t: any) => {
-        const days = Math.floor((now.getTime() - new Date(t.date).getTime()) / (1000 * 60 * 60 * 24))
-        const due = roundMoney(t.totalAmount - t.paidAmount)
-        if (days <= 30) buckets.current += due
-        else if (days <= 60) buckets.overdue += due
-        else if (days <= 90) buckets.serious += due
-        else buckets.critical += due
-      })
-      return { ...p, buckets, totalDue: p.balance }
+      if (days <= 30) buckets.current = due
+      else if (days <= 60) buckets.overdue = due
+      else if (days <= 90) buckets.serious = due
+      else buckets.critical = due
+      return { ...p, buckets, totalDue: due, oldestDays: days }
     })
     .filter((p: any) => p.totalDue > 0)
     .sort((a: any, b: any) => b.totalDue - a.totalDue)
@@ -101,7 +110,9 @@ export function DebtAgingReport({ data }: { data: any }) {
           <CardTitle className="text-base flex items-center gap-2">
             <Clock className="w-4 h-4" /> Customer-wise Debt Aging
           </CardTitle>
-          <p className="text-xs text-muted-foreground">{agedParties.length} customers with outstanding dues</p>
+          <p className="text-xs text-muted-foreground">
+            {agedParties.length} customers with outstanding dues · aged by each customer&apos;s oldest unpaid invoice (approximate — part-payments settle oldest first)
+          </p>
         </CardHeader>
         <CardContent>
           <div className="overflow-auto max-h-[60vh] thin-scrollbar">

@@ -55,5 +55,14 @@ export function resolveFinalPaid(type: string, paidRaw: unknown, totalAmount: nu
     finalPaid = roundMoney(totalAmount)
   }
 
+  // 🔒 AUDIT V24 §6.4: Clamp paid ≤ total. An overpaid invoice made
+  // salesOutstanding NEGATIVE, silently turning the excess into an untracked
+  // "advance" with no record it was one. Genuine advances belong in the
+  // Payment flow (which warns on over-outstanding); an invoice can't collect
+  // more than its own value. Same rule caps a note's refund at the note value.
+  if (finalPaid > totalAmount) {
+    finalPaid = roundMoney(totalAmount)
+  }
+
   return roundMoney(finalPaid)
 }

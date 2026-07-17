@@ -476,12 +476,17 @@ export async function GET(req: NextRequest) {
     // filtered for the period summary.
     // =====================================================================
     if (type === 'party') {
-      // 🔒 V11 §2.3: Parallelized parties findMany with the 2 groupBy queries.
-      // Was: parties (await) → Promise.all([periodPartyAgg, allTimePartyAgg])
-      // = 2 sequential round-trips. Now: 1 parallel batch of 3 queries.
-      // (The groupBy queries don't depend on the parties list — they filter
-      // by userId directly, not by party IDs.)
-      const [parties, periodPartyAgg, allTimePartyAgg] = await Promise.all([
+      // 🔒 AUDIT V24 §6.1 REWORK: The old "all-time aggregates" balance here
+      // summed only sale/purchase (totalAmount − paidAmount) — it IGNORED the
+      // Payment table, credit/debit notes, and therefore disagreed with the
+      // Parties screen, dashboard, and WhatsApp reminders (which all use
+      // getReceivablePayable). The Party Statement's Balance column — and the
+      // Debt Aging report built on it — showed stale, overstated dues.
+      // Now: balance comes from the SAME canonical helper as everywhere else,
+      // and we also fetch each party's oldest unpaid sale date so Debt Aging
+      // can age real balances (it previously iterated an always-empty
+      // transactions array and told every shop "no outstanding dues").
+      const [parties, periodPartyAgg, receivablePayable, oldestUnpaidRows] = await Promise.all([
         db.party.findMany({ where: { userId, deletedAt: null } }),
         // 1. Period activity (date-filtered) — for totalSales/totalPurchases columns
         db.transaction.groupBy({
@@ -493,20 +498,29 @@ export async function GET(req: NextRequest) {
           _sum: { totalAmount: true, paidAmount: true },
           _count: true,
         }),
-        // 2. 🔒 V7 M3: All-time aggregates for the correct cumulative balance
-        db.transaction.groupBy({
-          by: ['partyId', 'type'],
-          where: activeTransactionWhere(userId, {
-            partyId: { not: null },
-          }),
-          _sum: { totalAmount: true, paidAmount: true },
-        }),
+        // 2. Canonical all-time balances (opening + notes + Payment table)
+        getReceivablePayable(userId),
+        // 3. Oldest not-fully-paid sale per party — for Debt Aging.
+        //    Column-to-column comparison (totalAmount > paidAmount) needs raw
+        //    SQL; only dates are read, so no paise conversion is involved.
+        db.$queryRaw<Array<{ partyId: string; oldestUnpaidSaleDate: Date }>>`
+          SELECT "partyId", MIN("date") AS "oldestUnpaidSaleDate"
+          FROM "Transaction"
+          WHERE "userId" = ${userId}
+            AND "deletedAt" IS NULL
+            AND "type" = 'sale'
+            AND "partyId" IS NOT NULL
+            AND "totalAmount" > "paidAmount"
+          GROUP BY "partyId"
+        `,
       ])
+      const oldestUnpaidMap = new Map(oldestUnpaidRows.map(r => [r.partyId, r.oldestUnpaidSaleDate]))
 
       const partyMap = new Map<string, {
         party: any;
         transactions: any[];
-        balance: number;           // cumulative (all-time)
+        balance: number;           // cumulative (all-time, canonical formula)
+        oldestUnpaidSaleDate: string | null;  // 🔒 V24 §6.1: for Debt Aging
         periodActivity: number;    // net activity in the selected period
         totalSales: number;        // period sales
         totalPurchases: number;    // period purchases
@@ -515,10 +529,16 @@ export async function GET(req: NextRequest) {
       }>()
 
       parties.forEach(p => {
+        // 🔒 V24 §6.1: Balance from the canonical helper — same number the
+        // Parties screen, dashboard, and WhatsApp reminders show. (The helper
+        // already includes openingBalance, credit/debit notes, and Payments.)
+        const canonical = receivablePayable.partyBalances.get(p.id)
+        const oldestUnpaid = oldestUnpaidMap.get(p.id)
         partyMap.set(p.id, {
           party: p,
           transactions: [],
-          balance: p.openingBalance,  // start with opening; all-time agg adds to this
+          balance: roundMoney(canonical?.balance ?? p.openingBalance),
+          oldestUnpaidSaleDate: oldestUnpaid ? new Date(oldestUnpaid).toISOString() : null,
           periodActivity: 0,
           totalSales: 0,
           totalPurchases: 0,
@@ -526,20 +546,6 @@ export async function GET(req: NextRequest) {
           totalReceived: 0,
         })
       })
-
-      // Apply ALL-TIME aggregates → cumulative balance
-      for (const row of allTimePartyAgg) {
-        if (!row.partyId) continue
-        const entry = partyMap.get(row.partyId)
-        if (!entry) continue
-        const totalAmount = row._sum.totalAmount || 0
-        const paidAmount = row._sum.paidAmount || 0
-        if (row.type === 'sale') {
-          entry.balance = roundMoney(entry.balance + (totalAmount - paidAmount))
-        } else if (row.type === 'purchase') {
-          entry.balance = roundMoney(entry.balance - (totalAmount - paidAmount))
-        }
-      }
 
       // Apply PERIOD aggregates → activity columns
       for (const row of periodPartyAgg) {

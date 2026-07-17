@@ -42,10 +42,47 @@ export async function POST(req: NextRequest) {
     const results = {
       products: { imported: 0, skipped: 0 },
       parties: { imported: 0, skipped: 0 },
-      transactions: { imported: 0, skipped: 0 },
+      // 🔒 AUDIT V24 §5: `quarantined` counts rows whose header money did NOT
+      // reconcile with their own items (edited/corrupted/truncated backup).
+      // They are skipped WITH a reason instead of being imported silently
+      // wrong — a ledger must never accept numbers it can't verify.
+      transactions: { imported: 0, skipped: 0, quarantined: 0, quarantineReasons: [] as string[] },
       payments: { imported: 0, skipped: 0 },
       shops: { imported: 0, skipped: 0 },
       settings: { updated: false },
+    }
+
+    // 🔒 AUDIT V24 §5: Integrity check — the header GST/total must tie to the
+    // row's own items (within 5p float tolerance per component). The old code
+    // copied whatever the JSON said; a hand-edited or schema-drifted backup
+    // imported with header ≠ items and every report silently disagreed with
+    // the invoice from day one.
+    const TOLERANCE = 0.05
+    const headerTiesToItems = (txn: any): string | null => {
+      const items: any[] = Array.isArray(txn.items) ? txn.items : []
+      if (txn.type === 'income' || txn.type === 'expense') return null  // no items to tie to
+      if (items.length === 0) return 'no line items'
+      const sum = (f: (i: any) => number) => items.reduce((s, i) => s + (Number(f(i)) || 0), 0)
+      const itemCgst = sum(i => i.cgst)
+      const itemSgst = sum(i => i.sgst)
+      const itemIgst = sum(i => i.igst)
+      const itemGross = sum(i => (Number(i.quantity) || 0) * (Number(i.unitPrice) || 0))
+      const header = {
+        cgst: Number(txn.cgst) || 0,
+        sgst: Number(txn.sgst) || 0,
+        igst: Number(txn.igst) || 0,
+        subtotal: Number(txn.subtotal) || 0,
+        discountAmount: Number(txn.discountAmount) || 0,
+        roundOff: Number(txn.roundOff) || 0,
+        totalAmount: Number(txn.totalAmount) || 0,
+      }
+      if (Math.abs(header.cgst - itemCgst) > TOLERANCE) return `header CGST ${header.cgst} ≠ items ${itemCgst.toFixed(2)}`
+      if (Math.abs(header.sgst - itemSgst) > TOLERANCE) return `header SGST ${header.sgst} ≠ items ${itemSgst.toFixed(2)}`
+      if (Math.abs(header.igst - itemIgst) > TOLERANCE) return `header IGST ${header.igst} ≠ items ${itemIgst.toFixed(2)}`
+      if (Math.abs(header.subtotal - itemGross) > TOLERANCE) return `header subtotal ${header.subtotal} ≠ items ${itemGross.toFixed(2)}`
+      const expectedTotal = header.subtotal - header.discountAmount + itemCgst + itemSgst + itemIgst + header.roundOff
+      if (Math.abs(header.totalAmount - expectedTotal) > TOLERANCE) return `total ${header.totalAmount} ≠ computed ${expectedTotal.toFixed(2)}`
+      return null
     }
 
     // === Restore shops (first — other entities reference shopId) ===
@@ -149,6 +186,18 @@ export async function POST(req: NextRequest) {
     if (data.transactions && Array.isArray(data.transactions)) {
       for (const txn of data.transactions) {
         try {
+          // 🔒 AUDIT V24 §5: quarantine rows whose header doesn't tie to items
+          const integrityError = headerTiesToItems(txn)
+          if (integrityError) {
+            results.transactions.quarantined++
+            if (results.transactions.quarantineReasons.length < 20) {
+              results.transactions.quarantineReasons.push(
+                `${txn.invoiceNo || txn.date || 'row ' + (results.transactions.imported + results.transactions.skipped + results.transactions.quarantined)}: ${integrityError}`,
+              )
+            }
+            continue
+          }
+
           // Find matching party by name (best effort — IDs don't match)
           let partyId: string | null = null
           if (txn.partyName || txn.partyId) {

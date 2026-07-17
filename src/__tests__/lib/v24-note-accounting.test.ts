@@ -59,6 +59,12 @@ describe('V24 §1 — resolveFinalPaid (note paidAmount semantics)', () => {
     expect(resolveFinalPaid('sale', -50, 1000)).toBe(0)
   })
 
+  test('V24 §6.4: overpayment clamps to total (no negative outstanding / phantom advance)', () => {
+    expect(resolveFinalPaid('sale', 1500, 1000)).toBe(1000)
+    expect(resolveFinalPaid('purchase', 2000.75, 2000)).toBe(2000)   // snap zone
+    expect(resolveFinalPaid('credit-note', 500, 300)).toBe(300)      // refund capped at note value
+  })
+
   test('isNoteType classifier', () => {
     expect(isNoteType('credit-note')).toBe(true)
     expect(isNoteType('debit-note')).toBe(true)

@@ -983,10 +983,21 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
                       })
                       const result = await r.json()
                       if (!r.ok) throw new Error(result.error || result.message || 'Restore failed')
-                      sonnerToast.success('Restore complete!', {
-                        description: `Products: ${result.results.products.imported} imported. Parties: ${result.results.parties.imported}. Transactions: ${result.results.transactions.imported}.`,
-                        duration: 10000,
-                      })
+                      // 🔒 AUDIT V24 §5: If any rows were quarantined (header money
+                      // didn't tie to its own items), say so LOUDLY — a partial
+                      // restore that looks complete is how wrong books are born.
+                      const quarantined = result.results.transactions.quarantined || 0
+                      if (quarantined > 0) {
+                        sonnerToast.warning(`Restore finished — ${quarantined} transaction(s) NOT imported`, {
+                          description: `They failed integrity checks (invoice totals don't match their items — possibly an edited or corrupted backup). Imported: ${result.results.transactions.imported}. First issues: ${(result.results.transactions.quarantineReasons || []).slice(0, 3).join('; ')}`,
+                          duration: 20000,
+                        })
+                      } else {
+                        sonnerToast.success('Restore complete!', {
+                          description: `Products: ${result.results.products.imported} imported. Parties: ${result.results.parties.imported}. Transactions: ${result.results.transactions.imported}.`,
+                          duration: 10000,
+                        })
+                      }
                     } catch (err: any) {
                       sonnerToast.error('Restore failed', {
                         description: err.message,

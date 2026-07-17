@@ -509,7 +509,11 @@ export function Dashboard() {
           animateValue={kpis.todayRevenue}
           icon={IndianRupee}
           gradient="from-amber-500 to-orange-600"
-          subtitle={`${kpis.todayTxnCount} ${t('dash.sales_word')}`}
+          // 🔒 AUDIT V24 §3: This figure is GST-INCLUSIVE (Σ totalAmount, net of
+          // credit notes) while the P&L "Revenue" is taxable (ex-GST). Same word,
+          // two numbers = instant distrust. Label the basis explicitly here and
+          // on the P&L report so the difference reads as intentional.
+          subtitle={`${kpis.todayTxnCount} ${t('dash.sales_word')} • ${t('dash.incl_gst')}`}
           onClick={() => navigateToSalesWithDate(todayStart, new Date(), 'Today')}
         />
         {!hideProfit && (
@@ -529,7 +533,7 @@ export function Dashboard() {
           animateValue={kpis.rangeRevenue}
           icon={Wallet}
           gradient="from-rose-500 to-pink-600"
-          subtitle={`${kpis.rangeTxnCount} ${t('dash.sales_word')} • ${kpis.revenueGrowth >= 0 ? '↑' : '↓'} ${Math.abs(kpis.revenueGrowth).toFixed(1)}% vs prev`}
+          subtitle={`${kpis.rangeTxnCount} ${t('dash.sales_word')} (${t('dash.incl_gst')}) • ${kpis.revenueGrowth >= 0 ? '↑' : '↓'} ${Math.abs(kpis.revenueGrowth).toFixed(1)}% vs prev`}
           trend={kpis.revenueGrowth >= 0 ? 'up' : 'down'}
           onClick={() => navigateToSalesWithDate(dateRange.from, dateRange.to, rangeLabel)}
         />

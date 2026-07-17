@@ -230,9 +230,22 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
       const toastId = sonnerToast.loading('Exporting Tally XML...')
       const r = await offlineFetch(`/api/transactions?limit=500`)
       const txnData = await r.json()
+      // 🔒 AUDIT V24 §6.7: The endpoint caps at 500 rows. A shop with more
+      // transactions was silently getting a TRUNCATED ledger in Tally — the
+      // same class of quiet under-reporting the GST exports hard-block on.
+      // Surface it loudly instead of pretending the export is complete.
+      if (txnData.hasMore) {
+        sonnerToast.warning('Tally export is limited to the latest 500 transactions', {
+          id: toastId,
+          description: 'Older transactions are NOT included in this file. Full-history export is coming; until then, import the rest from an earlier export or narrow your books in Tally accordingly.',
+          duration: 12000,
+        })
+      }
       const setting = (await offlineFetch('/api/settings').then(r => r.json())).setting
       await exportToTally(txnData.transactions || [], setting, 'all')
-      sonnerToast.success('Tally XML ready — save or share from the popup', { id: toastId })
+      if (!txnData.hasMore) {
+        sonnerToast.success('Tally XML ready — save or share from the popup', { id: toastId })
+      }
     } catch (err: any) {
       sonnerToast.error('Failed to export Tally XML', {
         description: String(err?.message || err).slice(0, 200),
@@ -458,7 +471,7 @@ function PLReport({ data }: { data: any }) {
     <div className="space-y-4">
       {/* Top metrics */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <ReportStatCard label="Revenue (Sales)" value={formatINR(summary.totalRevenue)} icon={IndianRupee} color="text-amber-600 dark:text-amber-400" bg="bg-amber-100" />
+        <ReportStatCard label="Revenue (excl. GST)" value={formatINR(summary.totalRevenue)} icon={IndianRupee} color="text-amber-600 dark:text-amber-400" bg="bg-amber-100" />
         <ReportStatCard label="Gross Profit" value={formatINR(summary.grossProfit)} icon={TrendingUp} color="text-emerald-600 dark:text-emerald-400" bg="bg-emerald-100" />
         <ReportStatCard label="Total Expenses" value={formatINR(summary.totalExpenses)} icon={ArrowUpRight} color="text-rose-600" bg="bg-rose-100" />
         <ReportStatCard label="Net Profit" value={formatINR(summary.netProfit)} icon={Percent} color={summary.netProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'} bg={summary.netProfit >= 0 ? 'bg-emerald-100' : 'bg-rose-100'} />
@@ -544,7 +557,7 @@ function PLReport({ data }: { data: any }) {
         <CardContent>
           <div className="space-y-2 text-sm">
             <div className="flex justify-between py-1.5 border-b border-border">
-              <span className="text-muted-foreground">Revenue (Sales Subtotal)</span>
+              <span className="text-muted-foreground">Revenue (Sales, excl. GST)</span>
               <span className="font-medium">{formatINR(summary.totalRevenue)}</span>
             </div>
             <div className="flex justify-between py-1.5 border-b border-border">

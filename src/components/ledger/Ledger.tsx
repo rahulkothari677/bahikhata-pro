@@ -11,6 +11,7 @@ import { useAppStore } from '@/store/app-store'
 import { formatINR, formatDate, formatDateTime, formatINRCompact, cn } from '@/lib/utils'
 import { roundMoney } from '@/lib/money'
 import { useTranslation } from '@/hooks/use-translation'
+import { useSubscription } from '@/hooks/use-subscription'
 import { ViewModeToggle } from '@/components/common/ViewModeToggle'
 import { DateRangePicker, getPresetRange, getPresetLabel, type DateRange, type DatePreset } from '@/components/common/DateRangePicker'
 import { EmptyState } from '@/components/common/EmptyState'
@@ -334,25 +335,30 @@ export function Ledger({ type }: { type: LedgerType }) {
     return () => clearInterval(interval)
   }, [type, isSale, targetView, setView, setPreviousView])
 
+  // 🔒 AUDIT V24 follow-up: split-view access check for the free-desktop
+  // row-click fallback (see handleViewTransaction).
+  const { canUse } = useSubscription()
+
   const handleViewTransaction = (txnId: string) => {
     setSelectedTransactionId(txnId)
     setSelectedTransactionType(type)
     setPreviousView(isSale ? 'sales' : 'purchases')
-    // On desktop (lg+), the LedgerSplitView will show the detail inline.
-    // On mobile, we navigate to the full-page transaction-detail view.
-    // Split view requires Pro subscription — if not Pro, always navigate to detail page.
-    if (window.matchMedia('(max-width: 1023px)').matches) {
+    // On desktop (lg+) WITH split-view access, LedgerSplitView shows the
+    // detail inline (it checks selectedTransactionId + canUse('split_view')).
+    // Everyone else — mobile, AND free-plan users on desktop — must navigate
+    // to the full-page detail view.
+    //
+    // 🔒 AUDIT V24 follow-up BUG FIX (found in browser verification): the old
+    // code had four lines of comments describing exactly this free-desktop
+    // fallback ("we need to also navigate to detail for free users on
+    // desktop") — and never implemented it. Result: a free-plan user on
+    // desktop clicked a sale/purchase row and NOTHING happened. The split
+    // pane silently refused (Pro gate) and no navigation occurred, making
+    // every transaction unopenable on the desktop free plan.
+    const isMobile = window.matchMedia('(max-width: 1023px)').matches
+    if (isMobile || !canUse('split_view')) {
       setView('transaction-detail')
     }
-    // On desktop with Pro, we stay on the sales/purchases view — the split view
-    // detects selectedTransactionId and shows the detail panel on the right.
-    // Free users on desktop: LedgerSplitView won't show detail (canUse check fails),
-    // so we need to navigate to the detail page.
-    // This is handled by the LedgerSplitView component — if canUse('split_view') is false,
-    // showDetail is false, and the user just sees the list.
-    // We need to also navigate to detail for free users on desktop:
-    // Check if user has Pro by seeing if the split view would show
-    // For simplicity, free users on desktop also navigate to detail page
   }
 
   const handleNewEntry = () => {

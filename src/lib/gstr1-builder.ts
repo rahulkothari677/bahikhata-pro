@@ -223,6 +223,15 @@ function itemTaxable(item: Gstr1Item): number {
   return roundMoney(item.quantity * item.unitPrice - (item.discountAmount || 0))
 }
 
+// ─── B2CL threshold ──────────────────────────────────────────────
+// 🔒 AUDIT V24 §4: Inter-state B2C invoices ABOVE this value (GST-inclusive
+// invoice value) are reported invoice-wise in B2CL; at or below, they are
+// rate-aggregated in B2CS. ₹2,50,000 historically; reduced to ₹1,00,000 w.e.f.
+// 01-Aug-2024 by CBIC Notification No. 12/2024–Central Tax. If this changes
+// again (or period-aware filing of pre-Aug-2024 months is needed), update or
+// parameterize HERE — it is deliberately the single source for both sections.
+export const B2CL_INVOICE_VALUE_THRESHOLD = 100000
+
 // ─── Section builders ─────────────────────────────────────────────────────
 
 /**
@@ -268,7 +277,7 @@ export function buildB2CL(txns: Gstr1Transaction[], shop: ShopInfo): Gstr1B2clEn
     t.type === 'sale' &&
     t.isInterState &&
     (!t.partyGstin || t.partyGstin.length < 15) &&
-    t.totalAmount > 100000
+    t.totalAmount > B2CL_INVOICE_VALUE_THRESHOLD
   )
   const byPos = new Map<string, Gstr1B2clEntry['inv']>()
 
@@ -299,7 +308,7 @@ export function buildB2CS(txns: Gstr1Transaction[], shop: ShopInfo): Gstr1B2csEn
   const b2csSales = txns.filter(t =>
     t.type === 'sale' &&
     (!t.partyGstin || t.partyGstin.length < 15) &&
-    (!t.isInterState || t.totalAmount <= 100000)
+    (!t.isInterState || t.totalAmount <= B2CL_INVOICE_VALUE_THRESHOLD)
   )
 
   // Aggregate by (rate, pos)

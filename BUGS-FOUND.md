@@ -334,3 +334,33 @@ and include enough context to reproduce.
   In both: if `clearAllOfflineData()` throws (IndexedDB blocked by browser privacy mode, quota error, corrupted store), `signOut()` never runs. User taps Logout, sees "Failed to logout" toast, and is stuck on a dead button. The toast is also misleading — logout itself didn't fail, only the offline-cache clear did.
 - **Fix applied**: 2026-07-17 (Batch L follow-up). Both handlers now wrap `clearAllOfflineData()` in its own try/catch (failure logged but non-fatal), then `signOut()` runs unconditionally in a separate try/catch with a `window.location.href = '/'` fallback if even signOut throws. Matches the AccountScreen pattern from BUG-024.
 - **Status**: FIXED
+
+### BUG-027 — Desktop free-plan users could not open ANY transaction (High/UX) — FIXED
+- **Found**: 2026-07-17 (auditor browser-verification session, V24 batch 2)
+- **Severity**: High — clicking a sale/purchase row on desktop did nothing for free-plan users
+- **Description**: `Ledger.tsx handleViewTransaction` only navigated to `transaction-detail` on mobile (`max-width: 1023px`). On desktop it relied on `LedgerSplitView` showing the detail pane — but the split view is Pro-gated (`canUse('split_view')`). The code contained four lines of comments describing exactly the needed free-desktop fallback ("we need to also navigate to detail for free users on desktop") and never implemented it. Result: on the desktop free plan, every transaction row was unopenable — no detail, no edit, no PDF, no credit note.
+- **Repro**: free-plan account, viewport ≥1024px, Sales Ledger → click any row → nothing happens.
+- **Fix applied**: 2026-07-17 — `handleViewTransaction` now navigates to `transaction-detail` when `isMobile || !canUse('split_view')` (same `useSubscription().canUse` gate the split view uses). Browser-verified: row click now opens the detail page on a free desktop account.
+- **Status**: FIXED
+
+### BUG-028 — Interactivity depends on exit animations completing (Medium/UX-robustness) — OPEN
+- **Found**: 2026-07-17 (auditor browser-verification session)
+- **Severity**: Medium (freeze only under throttled rendering; but the failure mode is total click-blocking)
+- **Description**: Radix dialogs (Onboarding, ThemePicker, and by extension every Dialog) unmount only after their CSS exit animation fires `animationend`. In any environment where the compositor is throttled or rAF is paused (backgrounded tab, aggressive battery-saver, embedded webviews, automation), a closed dialog's invisible overlay stays in the DOM with `data-state="closed"` and intercepts ALL clicks — the app appears completely frozen. Directly observed: both first-run dialogs stuck at `data-state="closed"` with `playState: "running"` exit animations that never ended; every sidebar click was eaten by the invisible overlay. Related: `useCountUp` KPI values render ₹0 forever when rAF is paused (dashboard "Today's Revenue" showed ₹0 while the hero text showed ₹700).
+- **Suggested fix**: (a) add a timeout fallback to dialog unmounts (if animationend hasn't fired within ~400ms of state=closed, force-remove/hide); (b) ensure count-up hooks render the FINAL value immediately when `document.visibilityState === 'hidden'` or on rAF starvation; (c) audit for other animation-load-bearing UI (splash `onFinish`).
+- **Status**: OPEN
+
+### BUG-029 — First-run Theme Picker and Onboarding dialogs can stack (Low/UX) — OPEN
+- **Found**: 2026-07-17 (auditor browser-verification session)
+- **Description**: On a brand-new account, the ThemePicker and the Onboarding welcome dialog can both be mounted simultaneously (two stacked modals with competing overlays; which one receives clicks depends on DOM order). `showOnboarding` gates on `themePickerDone`, but the transition frame where the picker closes and onboarding opens leaves both in the DOM (compounded by BUG-028 in throttled environments). Sequence the two flows explicitly (single first-run wizard) instead of two independent modals.
+- **Status**: OPEN
+
+### BUG-030 — Credit-note entry summary shows profit REVERSAL as positive "Gross Profit" (Low/cosmetic) — OPEN
+- **Found**: 2026-07-17 (auditor browser-verification session)
+- **Description**: While creating a credit note, the live summary shows "Gross Profit ₹90 (30.0%)" in positive green for a ₹300 return — but this is profit being REVERSED, not earned (server correctly stores negative). Label it "Profit reversed: −₹90" (rose) when `isNote`.
+- **Status**: OPEN
+
+### BUG-031 — Party balances can appear stale for up to 30s after a return/payment (Low/UX) — OPEN
+- **Found**: 2026-07-17 (auditor browser-verification session)
+- **Description**: `/api/parties` responses carry `withCache` max-age 30s. React-query invalidation refetches after a save, but the browser HTTP cache can satisfy that refetch with the stale response (observed: balance showed ₹1,000 for ~30s after a credit note; `cache:'no-store'` returned ₹700). Money-bearing endpoints should send `Cache-Control: no-store` (or the client should refetch with cache-busting) — a shopkeeper seeing a stale khata for 30s after recording a return will distrust the number.
+- **Status**: OPEN
