@@ -15,37 +15,23 @@
  *
  * "More" opens the MoreScreen (Income/Expense, Parties, Scanner, Reports,
  * Settings, Support).
+ *
+ * 🔒 AUDIT V25 §6.1 (Batch 8 Phase 3): TABS array removed — now renders
+ * from the NavRegistry, filtered by surfaces: ['bottom-nav'].
  */
 
 import { useAppStore, type ViewType } from '@/store/app-store'
-import { LayoutDashboard, ShoppingCart, Package, Menu, Plus, Calculator, Truck, Wallet } from 'lucide-react'
+import { Menu, Plus, Calculator, ShoppingCart, Truck, Wallet } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useTranslation } from '@/hooks/use-translation'
 import { haptic } from '@/lib/haptic'
 import { useStaffPermissions } from '@/hooks/use-staff-permissions'
-import type { ModuleKey } from '@/lib/staff-permissions'
 import { prefetchView } from '@/lib/prefetch'  // 🔒 V11 §3.3
-import { useState, useRef, useEffect } from 'react'
-
-interface Tab {
-  view: ViewType
-  icon: typeof LayoutDashboard
-  labelKey: string
-  label: string
-}
-
-const TABS: Tab[] = [
-  { view: 'dashboard', icon: LayoutDashboard, labelKey: 'nav.dashboard', label: 'Home' },
-  { view: 'sales', icon: ShoppingCart, labelKey: 'nav.sales', label: 'Sales' },
-  // Center "+" button is separate (not in this array)
-  // 🔒 V17 Audit Phase 10: Purchases replaces Inventory in bottom nav (more frequently accessed)
-  { view: 'purchases', icon: Truck, labelKey: 'nav.purchases', label: 'Buy' },
-  // "More" is also separate (Inventory is now in More)
-]
+import { useState, useRef, useEffect, useMemo } from 'react'
+// 🔒 AUDIT V25 §6.1 (Batch 8 Phase 3): BottomNav now renders from the NavRegistry.
+import { NAV_REGISTRY, filterByPermissions, type NavDestination } from '@/lib/nav-registry'
 
 export function MobileBottomNav() {
   const { currentView, setView, previousView } = useAppStore()
-  const { t } = useTranslation()
   const { canAccess, isCA } = useStaffPermissions()
 
   // 🔒 V17 Audit Phase 10: Long-press quick-action menu state
@@ -70,17 +56,15 @@ export function MobileBottomNav() {
   const hideOnViews: ViewType[] = ['new-sale', 'new-purchase', 'transaction-detail', 'party-profile']
   if (hideOnViews.includes(currentView)) return null
 
-  // Filter tabs by staff permissions
-  const visibleTabs = TABS.filter(tab => {
-    const moduleMap: Record<string, string> = {
-      'dashboard': 'dashboard',
-      'sales': 'sales',
-      'purchases': 'purchases',
-    }
-    const moduleKey = moduleMap[tab.view]
-    if (moduleKey) return canAccess(moduleKey as ModuleKey)
-    return true
-  })
+  // 🔒 AUDIT V25 §6.1 (Batch 8 Phase 3): Tabs from NavRegistry, filtered by
+  // surfaces: ['bottom-nav'] + permissions. Was: hardcoded TABS array with
+  // inline moduleMap permission check.
+  const visibleTabs = useMemo(() => {
+    return filterByPermissions(
+      NAV_REGISTRY.filter(d => d.surfaces?.includes('bottom-nav')),
+      { canAccess, isFlagEnabled: () => true, isOwner: true }
+    ).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
+  }, [canAccess])
 
   // 🔒 AUDIT V25 FIX §4.6: isMoreActive was highlighting the "More" tab for
   // 10 secondary views (inventory, income-expense, parties, scanner, reports,
@@ -147,22 +131,23 @@ export function MobileBottomNav() {
       >
         <div className="flex items-center justify-around h-16 px-2 relative">
           {/* Left side: Dashboard + Sales */}
-          {visibleTabs.slice(0, 2).map((tab) => {
+          {visibleTabs.slice(0, 2).map((tab: NavDestination) => {
             const Icon = tab.icon
-            const isActive = currentView === tab.view
+            const tabView = tab.view || 'dashboard'
+            const isActive = currentView === tabView
             return (
               <button
-                key={tab.view}
-                onClick={() => { haptic.click(); setView(tab.view) }}
-                onTouchStart={() => prefetchView(tab.view)}
+                key={tab.id}
+                onClick={() => { haptic.click(); setView(tabView) }}
+                onTouchStart={() => prefetchView(tabView)}
                 className={cn(
                   'flex flex-col items-center justify-center gap-0.5 flex-1 h-full transition-colors',
                   isActive ? 'text-primary' : 'text-muted-foreground',
                 )}
-                aria-label={t(tab.labelKey) || tab.label}
+                aria-label={tab.label}
               >
                 <Icon className="w-5 h-5" strokeWidth={isActive ? 2.5 : 2} />
-                <span className="text-[10px] font-medium">{t(tab.labelKey) || tab.label}</span>
+                <span className="text-[10px] font-medium">{tab.label}</span>
               </button>
             )
           })}
@@ -220,23 +205,24 @@ export function MobileBottomNav() {
             )}
           </div>
 
-          {/* Right side: Inventory + More */}
-          {visibleTabs.slice(2).map((tab) => {
+          {/* Right side: Purchases + More */}
+          {visibleTabs.slice(2).map((tab: NavDestination) => {
             const Icon = tab.icon
-            const isActive = currentView === tab.view
+            const tabView = tab.view || 'dashboard'
+            const isActive = currentView === tabView
             return (
               <button
-                key={tab.view}
-                onClick={() => { haptic.click(); setView(tab.view) }}
-                onTouchStart={() => prefetchView(tab.view)}
+                key={tab.id}
+                onClick={() => { haptic.click(); setView(tabView) }}
+                onTouchStart={() => prefetchView(tabView)}
                 className={cn(
                   'flex flex-col items-center justify-center gap-0.5 flex-1 h-full transition-colors',
                   isActive ? 'text-primary' : 'text-muted-foreground',
                 )}
-                aria-label={t(tab.labelKey) || tab.label}
+                aria-label={tab.label}
               >
                 <Icon className="w-5 h-5" strokeWidth={isActive ? 2.5 : 2} />
-                <span className="text-[10px] font-medium">{t(tab.labelKey) || tab.label}</span>
+                <span className="text-[10px] font-medium">{tab.label}</span>
               </button>
             )
           })}
