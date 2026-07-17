@@ -143,6 +143,18 @@ interface AppState {
   triggerNewEntry: number
   triggerNewEntryView: ViewType | null
   fireTriggerNewEntry: () => void
+  // 🔒 AUDIT V25 FIX BUG-032 (Batch 6): Deep-link triggers for MoreScreen items.
+  // These use the same counter pattern as triggerNewEntry — components subscribe
+  // to the counter and fire their action when it increments.
+  triggerDayEnd: number
+  fireTriggerDayEnd: () => void
+  triggerBulkReminders: number
+  fireTriggerBulkReminders: () => void
+  // Scroll target for dashboard deep-links (e.g., 'smart-insights', 'cash-in-hand').
+  // Dashboard reads this on mount + scrolls to the element with matching id.
+  // Cleared after scrolling so it doesn't re-trigger on every mount.
+  scrollTarget: string | null
+  setScrollTarget: (target: string | null) => void
   previousView: ViewType | null
   setPreviousView: (v: ViewType | null) => void
   pendingDateRange: { from: string; to: string; preset: string } | null
@@ -262,6 +274,13 @@ export const useAppStore = create<AppState>()(
       triggerNewEntry: 0,
       triggerNewEntryView: null,
       fireTriggerNewEntry: () => set((s) => ({ triggerNewEntry: s.triggerNewEntry + 1, triggerNewEntryView: s.currentView })),
+      // 🔒 AUDIT V25 FIX BUG-032 (Batch 6): Deep-link trigger implementations.
+      triggerDayEnd: 0,
+      fireTriggerDayEnd: () => set((s) => ({ triggerDayEnd: s.triggerDayEnd + 1 })),
+      triggerBulkReminders: 0,
+      fireTriggerBulkReminders: () => set((s) => ({ triggerBulkReminders: s.triggerBulkReminders + 1 })),
+      scrollTarget: null,
+      setScrollTarget: (target) => set({ scrollTarget: target }),
       previousView: null,
       setPreviousView: (v) => set({ previousView: v }),
       pendingDateRange: null,

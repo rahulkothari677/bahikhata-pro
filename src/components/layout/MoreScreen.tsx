@@ -215,6 +215,85 @@ export function MoreScreen() {
       return
     }
 
+    // 🔒 AUDIT V25 FIX BUG-032 (Batch 6): Deep-link handlers for items that
+    // previously just opened a parent view with no specific action. Each
+    // triggers a store counter/flag + navigates to the parent view; the parent
+    // component subscribes to the trigger and fires the specific action.
+    //
+    // Day-End Summary: opens Dashboard + triggers the Close Drawer dialog.
+    if (label === 'Day-End Summary') {
+      useAppStore.getState().setPreviousView('more')
+      useAppStore.getState().fireTriggerDayEnd()
+      setView('dashboard')
+      return
+    }
+
+    // Cash in Hand: opens Dashboard + scrolls to the greeting hero card.
+    if (label === 'Cash in Hand') {
+      useAppStore.getState().setPreviousView('more')
+      useAppStore.getState().setScrollTarget('cash-in-hand')
+      setView('dashboard')
+      return
+    }
+
+    // Smart Insights: opens Dashboard + scrolls to the Smart Insights card.
+    if (label === 'Smart Insights') {
+      useAppStore.getState().setPreviousView('more')
+      useAppStore.getState().setScrollTarget('smart-insights')
+      setView('dashboard')
+      return
+    }
+
+    // WhatsApp Reminders: opens Parties + triggers the BulkRemindersModal.
+    if (label === 'WhatsApp Reminders') {
+      useAppStore.getState().setPreviousView('more')
+      useAppStore.getState().fireTriggerBulkReminders()
+      setView('parties')
+      return
+    }
+
+    // Multi-Shop Management: opens Settings → profile tab (shops are managed
+    // in the Profile tab's "Manage Shops" card). Deep-link via pendingSettingsTab.
+    if (label === 'Multi-Shop Management') {
+      useAppStore.getState().setPreviousView('more')
+      useAppStore.getState().setPendingSettingsTab('profile')
+      setView('settings')
+      return
+    }
+
+    // Staff & Access: opens Settings → staff tab. Deep-link via pendingSettingsTab.
+    if (label === 'Staff & Access') {
+      useAppStore.getState().setPreviousView('more')
+      useAppStore.getState().setPendingSettingsTab('staff')
+      setView('settings')
+      return
+    }
+
+    // Sale Return: opens the sale ledger + the user taps a sale → "Credit Note".
+    // We can't auto-open a specific sale (don't know which one), so at least
+    // navigate to the sales ledger where the user can pick the sale to return.
+    // The existing view: 'sales' is correct — just add a toast hint.
+    if (label === 'Sale Return') {
+      useAppStore.getState().setPreviousView('more')
+      sonnerToast.info('Pick a sale to return', {
+        description: 'Tap any sale in the list → "Credit Note" to record a return.',
+        duration: 5000,
+      })
+      setView('sales')
+      return
+    }
+
+    // Purchase Return: same pattern — navigate to purchase ledger + toast hint.
+    if (label === 'Purchase Return') {
+      useAppStore.getState().setPreviousView('more')
+      sonnerToast.info('Pick a purchase to return', {
+        description: 'Tap any purchase in the list → "Debit Note" to record a return to supplier.',
+        duration: 5000,
+      })
+      setView('purchases')
+      return
+    }
+
     setView(view)
   }
 

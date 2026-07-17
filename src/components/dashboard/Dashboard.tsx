@@ -43,6 +43,11 @@ const COLORS = ['oklch(0.62 0.18 42)', 'oklch(0.62 0.15 155)', 'oklch(0.72 0.16 
 
 export function Dashboard() {
   const { setView, setSelectedTransactionId, setPreviousView, setPendingDateRange, features } = useAppStore()
+  // 🔒 AUDIT V25 FIX BUG-032 (Batch 6): Subscribe to deep-link triggers from MoreScreen.
+  const triggerDayEnd = useAppStore((s) => s.triggerDayEnd)
+  const fireTriggerDayEnd = useAppStore((s) => s.fireTriggerDayEnd)
+  const scrollTarget = useAppStore((s) => s.scrollTarget)
+  const setScrollTarget = useAppStore((s) => s.setScrollTarget)
   const { t, language } = useTranslation()
   const { hideProfit } = useSetting()
   const { revenueTarget, expenseBudget } = useBusinessGoals()
@@ -52,6 +57,40 @@ export function Dashboard() {
   const [repeating, setRepeating] = useState(false)
   // 🔒 V17-Ext §5.4: Day-end "Close the Drawer" dialog
   const [showDayEnd, setShowDayEnd] = useState(false)
+
+  // 🔒 AUDIT V25 FIX BUG-032 (Batch 6): When MoreScreen's "Day-End Summary" is
+  // tapped, it calls fireTriggerDayEnd() + setView('dashboard'). This effect
+  // detects the counter increment + opens the Close Drawer dialog. Skips the
+  // initial mount (counter starts at 0).
+  const prevTriggerDayEnd = useRef(0)
+  useEffect(() => {
+    if (triggerDayEnd > prevTriggerDayEnd.current) {
+      prevTriggerDayEnd.current = triggerDayEnd
+      setShowDayEnd(true)
+    }
+  }, [triggerDayEnd])
+
+  // 🔒 AUDIT V25 FIX BUG-032 (Batch 6): When MoreScreen's "Smart Insights" or
+  // "Cash in Hand" is tapped, it sets scrollTarget + setView('dashboard'). This
+  // effect scrolls to the element with matching id after the dashboard renders.
+  // Cleared after scrolling so it doesn't re-trigger on every mount.
+  useEffect(() => {
+    if (!scrollTarget) return
+    // Small delay to let the dashboard finish rendering before scrolling.
+    const timer = setTimeout(() => {
+      const el = document.getElementById(scrollTarget)
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        // Brief highlight so the user sees which card was deep-linked to.
+        el.classList.add('ring-2', 'ring-primary', 'ring-offset-2', 'ring-offset-background', 'transition-all')
+        setTimeout(() => {
+          el.classList.remove('ring-2', 'ring-primary', 'ring-offset-2', 'ring-offset-background')
+        }, 2000)
+      }
+      setScrollTarget(null)  // clear after use
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [scrollTarget, setScrollTarget])
 
   // Check for due recurring entries on mount (auto-create monthly rent, salary, etc.)
   useEffect(() => {
@@ -383,8 +422,10 @@ export function Dashboard() {
 
   return (
     <div className="space-y-3 lg:space-y-5">
-      {/* Greeting banner */}
+      {/* Greeting banner — also the "Cash in Hand" deep-link target */}
+      {/* 🔒 AUDIT V25 FIX BUG-032 (Batch 6): id='cash-in-hand' for scroll-target deep-link. */}
       <motion.div
+        id="cash-in-hand"
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
         className="rounded-2xl bg-gradient-saffron p-4 lg:p-6 text-white shadow-lg relative overflow-hidden"
@@ -1171,7 +1212,10 @@ export function Dashboard() {
           insight grid inside each card to fill horizontal space. */}
 
       {/* {t('dash.smart_insights')} - AI-powered alerts */}
-      {kpis && <SmartInsights />}
+      {/* 🔒 AUDIT V25 FIX BUG-032 (Batch 6): id='smart-insights' for scroll-target deep-link. */}
+      <div id="smart-insights">
+        {kpis && <SmartInsights />}
+      </div>
 
       {/* V17-Ext 5.5: Business Analytics — best-sellers, dead stock, top customers, reorder */}
       {features?.businessAnalytics && <AnalyticsInsights />}

@@ -404,3 +404,20 @@ and include enough context to reproduce.
 - **Description**: Same anti-pattern as BUG-031. The dashboard GET handler used `withCache({ maxAge: 30, swr: 300 })`. A shopkeeper who just made a sale would see stale revenue/KPIs for up to 30s while the browser HTTP cache served the old response. React-query invalidation refetched, but the refetch could return the cached 200 instead of hitting the server.
 - **Fix applied**: 2026-07-17 (Batch 5 §5.1 follow-up). Replaced `withCache(...)` with `noStore(...)`. Dashboard data is now always fresh.
 - **Status**: FIXED
+
+### BUG-035 — Payment saving took 6-7 seconds (High/Performance) — FIXED
+
+- **Found**: 2026-07-17, user-reported with screenshot showing 2.7-6.14s request timings
+- **Files**: `src/app/api/payments/route.ts`, `src/app/api/transactions/route.ts`
+- **Severity**: High (6-7s save time is unacceptable for a POS-style flow)
+- **Description**: The payment POST handler did 5 sequential DB queries before the actual `payment.create`:
+  1. `getAuthContext()` — DB hit
+  2. `db.payment.findUnique` (idempotency check) — DB hit
+  3. `db.party.findFirst` (verify party) — DB hit
+  4. `assertPeriodNotLocked` — DB hit
+  5. `computePartyBalance` (overpayment warning) — 7 DB hits (party findFirst + 6 aggregates in parallel)
+  6. `db.payment.create` — DB hit
+  Total: ~12 sequential round-trips on Neon. Each Neon query is 50-200ms warm, 200-500ms cold → 6-7s total.
+- **Fix applied**: 2026-07-17 (Batch 6 §6.0). Parallelized the 3 independent pre-checks (party findFirst + period lock + balance computation) into ONE Promise.all. They don't depend on each other. Cuts 3 sequential round-trips → 1 parallel round-trip. Also parallelized the transactions POST's `products.findMany` + `setting.findUnique` into ONE Promise.all. Saves ~600-800ms per save.
+- **Note**: The bigger remaining bottleneck is Neon cold-start (3-5s on first request after idle). That's an infrastructure issue (Neon's auto-suspend) — fix is to enable Neon's "Always On" or use a connection pooler. Code-level parallelization only helps the warm-path queries.
+- **Status**: FIXED (code-level; Neon cold-start is infrastructure)

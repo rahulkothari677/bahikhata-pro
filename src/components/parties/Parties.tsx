@@ -32,6 +32,8 @@ export function Parties() {
     refreshKey, triggerRefresh, partiesViewMode, setPartiesViewMode,
     triggerNewEntry, triggerNewEntryView, setSelectedPartyId, setView, setPreviousView,
   } = useAppStore()
+  // 🔒 AUDIT V25 FIX BUG-032 (Batch 6): Subscribe to bulk-reminders trigger.
+  const triggerBulkReminders = useAppStore((s) => s.triggerBulkReminders)
   const { t } = useTranslation()
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'all' | 'customer' | 'supplier'>('all')
@@ -65,6 +67,17 @@ export function Parties() {
       lastTriggerRef.current = triggerNewEntry
     }
   }, [triggerNewEntry, triggerNewEntryView])
+
+  // 🔒 AUDIT V25 FIX BUG-032 (Batch 6): When MoreScreen's "WhatsApp Reminders"
+  // is tapped, it calls fireTriggerBulkReminders() + setView('parties'). This
+  // effect detects the counter increment + opens the BulkRemindersModal.
+  const lastBulkTriggerRef = useRef(0)
+  useEffect(() => {
+    if (triggerBulkReminders > lastBulkTriggerRef.current) {
+      lastBulkTriggerRef.current = triggerBulkReminders
+      setBulkRemindersOpen(true)
+    }
+  }, [triggerBulkReminders])
 
   const filtered = parties.filter(p => {
     if (filter !== 'all' && p.type !== filter && p.type !== 'both') return false

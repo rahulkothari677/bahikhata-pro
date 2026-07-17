@@ -257,16 +257,25 @@ export async function POST(req: NextRequest) {
 
     // Get product details for profit calc (for sales)
     const productIds = items.map((i: any) => i.productId).filter(Boolean)
-    const products = productIds.length > 0 ? await db.product.findMany({ where: { id: { in: productIds }, userId } }) : []
+
+    // 🔒 AUDIT V25 BATCH 6.0 (user-reported perf issue): Was 2 sequential DB
+    // queries (products findMany + setting findUnique). Parallelized into ONE
+    // Promise.all — they don't depend on each other. Saves ~200ms on Neon.
+    const [products, setting] = await Promise.all([
+      productIds.length > 0
+        ? db.product.findMany({ where: { id: { in: productIds }, userId } })
+        : Promise.resolve([] as Awaited<ReturnType<typeof db.product.findMany>>),
+      db.setting.findUnique({
+        where: { userId },
+        select: { roundOffEnabled: true, stockPolicy: true },
+      }),
+    ])
     const productMap = new Map(products.map(p => [p.id, p]))
 
     // 🔒 V11 STOCK POLICY: Fetch the shop's stock policy early so we can
     // block or warn before computing anything. Also fetches roundOffEnabled
     // (used later for invoice round-off). Single PK lookup on Setting (~1-2ms).
-    const setting = await db.setting.findUnique({
-      where: { userId },
-      select: { roundOffEnabled: true, stockPolicy: true },
-    })
+    // (Now fetched in parallel with products above.)
     const stockPolicy = setting?.stockPolicy || 'block'  // default: block
 
     // V17-Ext Tier 3: Stock direction for credit/debit notes.
