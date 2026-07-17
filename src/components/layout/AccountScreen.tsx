@@ -48,6 +48,7 @@ import { toast as sonnerToast } from 'sonner'
 import { formatINRCompact } from '@/lib/utils'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { getInitials, cn } from '@/lib/utils'
+import { APP_VERSION_LABEL } from '@/lib/app-version'
 import {
   ArrowLeft, Pencil, Calculator, Crown, Phone, Mail, Store,
   ChevronRight, User, CreditCard, Shield, Settings as SettingsIcon,
@@ -741,15 +742,32 @@ export function AccountScreen() {
 
         {/* ═══ Logout Button ═══ */}
         <button
-          onClick={() => {
+          onClick={async () => {
             haptic.warning()
-            import('next-auth/react').then(({ signOut }) => {
-              import('@/lib/offline-db').then(({ clearAllOfflineData }) => {
-                clearAllOfflineData().then(() => {
-                  signOut({ callbackUrl: '/' })
-                })
-              })
-            })
+            // 🔒 AUDIT V23 FIX §13.9d: Was a chain of dynamic-import .then()
+            // calls with no .catch. If clearAllOfflineData() threw (e.g.,
+            // IndexedDB blocked by browser), signOut never ran — the button
+            // silently did nothing. Now: signOut runs unconditionally at the
+            // end, and offline-clear failures are logged but non-fatal.
+            try {
+              const { clearAllOfflineData } = await import('@/lib/offline-db')
+              try {
+                await clearAllOfflineData()
+              } catch (e) {
+                console.warn('[logout] clearAllOfflineData failed (non-fatal):', e)
+              }
+            } catch (e) {
+              console.warn('[logout] offline-db module load failed (non-fatal):', e)
+            }
+            try {
+              const { signOut } = await import('next-auth/react')
+              await signOut({ callbackUrl: '/' })
+            } catch (e) {
+              console.error('[logout] signOut failed:', e)
+              // Last-resort hard redirect so the user is never stuck on a
+              // button that does nothing.
+              if (typeof window !== 'undefined') window.location.href = '/'
+            }
           }}
           className="w-full bg-card rounded-2xl p-4 shadow-sm border border-rose-200 flex items-center justify-center gap-2 text-rose-600 hover:bg-rose-50 transition active:scale-[0.98]"
         >
@@ -759,7 +777,7 @@ export function AccountScreen() {
 
         {/* Version footer */}
         <p className="text-center text-xs text-muted-foreground pt-2">
-          EkBook v1.0 · Made with love for Bharat 🇮🇳
+          {APP_VERSION_LABEL} · Made with love for Bharat 🇮🇳
         </p>
       </div>
       )}
@@ -1184,7 +1202,7 @@ function AccountSectionContent({
             { q: 'Is my data safe?', a: 'Yes. All data is encrypted, passwords are hashed, and each shop\'s data is isolated. You can delete your data anytime.' },
             { q: 'Does it work offline?', a: 'Yes! Create sales, add products, check inventory — everything works offline. Syncs automatically when online.' },
             { q: 'Can I use it on mobile and desktop?', a: 'Yes. EkBook works on any device with a browser. Install as an app on your phone for the best experience.' },
-            { q: 'How do I file GST returns?', a: 'Go to Reports → GSTR-1 or GSTR-3B. Generate the JSON file and upload it to the GST portal. One-click export.' },
+            { q: 'How do I file GST returns?', a: 'Go to Reports → GSTR-1 or GSTR-3B. GSTR-1 exports a portal-ready JSON (upload directly to gst.gov.in); GSTR-3B exports a CSV summary you can copy into the portal. One-click export.' },
             { q: 'How much does it cost?', a: 'Free forever for basic use. Pro plan starts at ₹99/month with unlimited AI scans, GST export, and more.' },
           ].map((faq, i) => (
             <details key={i} className={i > 0 ? 'border-t border-border/40' : ''}>
@@ -1221,7 +1239,7 @@ function AccountSectionContent({
           <h3 className="text-xl font-bold">EkBook</h3>
           <p className="text-sm text-muted-foreground mt-1">India's Smartest Ledger App</p>
           {/* 🔒 AUDIT V23 FIX §10: App version with build info for beta readiness */}
-          <p className="text-xs text-muted-foreground mt-2">EkBook v1.0.0 (Beta)</p>
+          <p className="text-xs text-muted-foreground mt-2">{APP_VERSION_LABEL}</p>
           <div className="inline-flex items-center gap-1.5 mt-3 px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-medium">
             🇮🇳 Made in India
           </div>

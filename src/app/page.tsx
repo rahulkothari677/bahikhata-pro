@@ -41,7 +41,7 @@ import { SplashScreen } from '@/components/common/SplashScreen'
 import { useRatePrompt } from '@/hooks/use-rate-prompt'
 import { useStaffPermissions } from '@/hooks/use-staff-permissions'
 import type { ModuleKey } from '@/lib/staff-permissions'
-import { track, identifyUser, initAnalytics, EVENTS } from '@/lib/analytics'
+import { track, identifyUser, initAnalytics, EVENTS, hashEmail } from '@/lib/analytics'
 import { useBootstrap } from '@/hooks/use-bootstrap'
 
 // Lazy-load heavy components that are only used occasionally.
@@ -87,10 +87,27 @@ export default function Home() {
   // splash), but the user wants the premium animated splash everywhere.
   // The CapacitorBridge hides the native splash immediately, and this web
   // splash takes over with the same saffron background (seamless transition).
+  //
+  // 🔒 AUDIT V23 FIX §13.9h: Skip splash on warm reloads (when the same
+  // browser session has already booted the app this tab-session). The
+  // premium animated splash adds fixed seconds to the boot path that
+  // V21/V22 fought to shrink — making the user watch it again on every
+  // warm reload (e.g., navigating back from an external link, or
+  // window.location.reload()) is user-hostile on low-end phones.
+  // Cold starts (new tab, no sessionStorage flag) still show the splash.
   const [showSplash, setShowSplash] = useState(() => {
     if (typeof window === 'undefined') return true
+    // Warm reload — already booted this tab-session. Skip splash.
+    if (sessionStorage.getItem('bahikhata:splash-shown') === '1') return false
     return true
   })
+  useEffect(() => {
+    // Mark that we've shown the splash this tab-session. Future reloads
+    // within the same tab will skip the splash.
+    if (showSplash) {
+      sessionStorage.setItem('bahikhata:splash-shown', '1')
+    }
+  }, [showSplash])
   // 🔒 V9 4.2: First-run modal orchestrator — gate low-priority modals until
   // the user has completed onboarding + tour. Prevents modal pile-up:
   // SplashScreen → ThemePicker → Onboarding → Tour → Consent → RatePrompt → PWA
@@ -254,9 +271,16 @@ export default function Home() {
 
   useEffect(() => {
     if (status === 'authenticated' && session?.user?.id) {
-      identifyUser(session.user.id, {
-        email_hash: session.user.email ? btoa(session.user.email).slice(0, 16) : undefined,
-      })
+      // 🔒 AUDIT V23 FIX §13.9g: Real SHA-256 email hash (was btoa which is reversible).
+      // Fire identify immediately for attribution, then enrich with email_hash
+      // when the async hash resolves. The hash is non-blocking so app_opened
+      // still tracks on first render.
+      identifyUser(session.user.id)
+      if (session.user.email) {
+        hashEmail(session.user.email).then((h) => {
+          if (h) identifyUser(session.user.id, { email_hash: h })
+        })
+      }
       // Track app_opened once per session (not on every re-render)
       track(EVENTS.APP_OPENED, {
         isOfflineSession,

@@ -98,8 +98,28 @@ async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd:
         AND t."date" < ${periodEnd}
         AND p."gstTreatment" = 'exempt'
     `,
+    // 🔒 AUDIT V23 FIX §13.9i: nonGstValue (GSTR-3B 3.1(e) "Non-GST outward
+    // supplies") was previously computed from ALL income transactions. But
+    // income categories like 'Commission', 'Interest', 'Rent Received',
+    // 'Discount Received', 'Refund', 'Miscellaneous' are NON-SUPPLY income
+    // (interest on bank deposits, rent of own property, etc.) — they are NOT
+    // outward supplies of goods/services and do NOT belong in 3.1(e).
+    // Including them inflated 3.1(e) for every kirana shop that records
+    // interest or commission income.
+    //
+    // The only income category that could plausibly be a non-GST outward
+    // supply (i.e., a supply of goods that is NOT liable to GST — alcohol,
+    // petrol, lottery, etc.) is 'Scrap Sale' (casual sale of capital assets).
+    // Filter to that category only. TODO: add a proper isNonGstSupply flag
+    // on Transaction for users who genuinely sell non-GST goods.
     db.transaction.aggregate({
-      where: { userId, type: 'income', deletedAt: null, date: { gte: periodStart, lt: periodEnd } },
+      where: {
+        userId,
+        type: 'income',
+        deletedAt: null,
+        date: { gte: periodStart, lt: periodEnd },
+        category: 'Scrap Sale',
+      },
       _sum: { totalAmount: true }, _count: true,
     }),
   ])

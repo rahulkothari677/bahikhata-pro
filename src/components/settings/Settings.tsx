@@ -28,7 +28,7 @@ import {
 } from 'lucide-react'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { useSetting } from '@/hooks/use-setting'
-import { cn } from '@/lib/utils'
+import { cn, formatINR } from '@/lib/utils'
 
 const FEATURE_CATEGORIES: { title: string; features: { key: FeatureKey; label: string; description: string; icon: any }[] }[] = [
   {
@@ -389,6 +389,17 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
       setDefaultLanding(localStorage.getItem('bahikhata:default-landing') || 'dashboard')
     }
   }, [])
+
+  // 🔒 AUDIT V23 FIX §13.9b: Day-End Summary Time — was reading localStorage
+  // directly in render, so after picking a new time the Select didn't visually
+  // update until an unrelated re-render. Move to state + hydrate on mount so
+  // the control reflects the saved value immediately and updates on change.
+  const [dayEndTime, setDayEndTime] = useState('18')
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setDayEndTime(localStorage.getItem('bahikhata:day-end-time') || '18')
+    }
+  }, [])
   const persistDefaultLanding = (view: string) => {
     setDefaultLanding(view)
     if (typeof window !== 'undefined') {
@@ -690,7 +701,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
                   onClick={() => {
                     const amt = parseFloat(revenueGoal) || 0
                     setRevenueTarget(amt)
-                    sonnerToast.success(amt > 0 ? `Revenue target set: ${amt}` : 'Revenue target removed')
+                    sonnerToast.success(amt > 0 ? `Revenue target set: ${formatINR(amt)}` : 'Revenue target removed')
                     setRevenueGoal('')
                   }}
                 >
@@ -699,7 +710,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
               </div>
               {revenueTarget ? (
                 <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1">
-                  Current target: {revenueTarget} — track progress on dashboard
+                  Current target: {formatINR(revenueTarget)} — track progress on dashboard
                 </p>
               ) : (
                 <p className="text-[11px] text-muted-foreground mt-1">No target set</p>
@@ -721,7 +732,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
                   onClick={() => {
                     const amt = parseFloat(expenseGoal) || 0
                     setExpenseBudget(amt)
-                    sonnerToast.success(amt > 0 ? `Expense budget set: ${amt}` : 'Expense budget removed')
+                    sonnerToast.success(amt > 0 ? `Expense budget set: ${formatINR(amt)}` : 'Expense budget removed')
                     setExpenseGoal('')
                   }}
                 >
@@ -730,7 +741,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
               </div>
               {expenseBudget ? (
                 <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">
-                  Current budget: {expenseBudget} — track on Income & Expense page
+                  Current budget: {formatINR(expenseBudget)} — track on Income & Expense page
                 </p>
               ) : (
                 <p className="text-[11px] text-muted-foreground mt-1">No budget set</p>
@@ -745,25 +756,25 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
       <Card className="shadow-card border-border/60">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Database className="w-5 h-5 text-violet-600" /> Data Management
+            <Database className="w-5 h-5 text-violet-600 dark:text-violet-400" /> Data Management
           </CardTitle>
           <p className="text-xs text-muted-foreground">Manage your app data</p>
         </CardHeader>
         <CardContent className="space-y-3">
           {/* Offline cache management */}
-          <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+          <div className="rounded-lg border border-blue-200 dark:border-blue-900/40 bg-blue-50 dark:bg-blue-950/20 p-4">
             <div className="flex items-start gap-3">
-              <Database className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+              <Database className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
-                <p className="font-semibold text-blue-900 text-sm">Offline Data</p>
-                <p className="text-xs text-blue-700 mt-1">
+                <p className="font-semibold text-blue-900 dark:text-blue-100 text-sm">Offline Data</p>
+                <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
                   Clear locally cached data or stuck pending writes. Your cloud data is never affected.
                 </p>
                 <div className="flex gap-2 mt-3 flex-wrap">
-                  <Button variant="outline" size="sm" className="gap-2 border-blue-300 text-blue-700 hover:bg-blue-100" onClick={handleClearPendingWrites}>
+                  <Button variant="outline" size="sm" className="gap-2 border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/40" onClick={handleClearPendingWrites}>
                     <Trash2 className="w-4 h-4" /> Clear Pending Writes
                   </Button>
-                  <Button variant="outline" size="sm" className="gap-2 border-blue-300 text-blue-700 hover:bg-blue-100" onClick={handleClearOfflineCache}>
+                  <Button variant="outline" size="sm" className="gap-2 border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/40" onClick={handleClearOfflineCache}>
                     <Database className="w-4 h-4" /> Clear Offline Cache
                   </Button>
                 </div>
@@ -772,19 +783,19 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
           </div>
 
           {/* 🔒 V17-Ext §5.1: Period Lock — protect filed GST periods from edits */}
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+          <div className="rounded-lg border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-950/20 p-4">
             <div className="flex items-start gap-3">
               <Shield className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <p className="font-semibold text-amber-900 text-sm">Period Lock (Financial-Year lock)</p>
+                  <p className="font-semibold text-amber-900 dark:text-amber-100 text-sm">Period Lock (Financial-Year lock)</p>
                   {lockedUntil ? (
                     <Badge className="bg-amber-600 text-white hover:bg-amber-700">Locked</Badge>
                   ) : (
                     <Badge variant="secondary">Unlocked</Badge>
                   )}
                 </div>
-                <p className="text-xs text-amber-800 mt-1">
+                <p className="text-xs text-amber-800 dark:text-amber-200 mt-1">
                   Once you file GST for a period, lock it. No one (not even staff) can edit, delete,
                   or create transactions dated on or before the lock date. This protects your filed
                   returns from accidental or fraudulent changes.
@@ -792,7 +803,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
 
                 {lockedUntil ? (
                   <div className="mt-3 space-y-2">
-                    <div className="flex items-center gap-2 text-sm text-amber-900">
+                    <div className="flex items-center gap-2 text-sm text-amber-900 dark:text-amber-100">
                       <Calendar className="w-4 h-4" />
                       <span>
                         Locked until:{' '}
@@ -806,7 +817,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
                     <Button
                       variant="outline"
                       size="sm"
-                      className="gap-2 border-amber-400 text-amber-800 hover:bg-amber-100"
+                      className="gap-2 border-amber-400 dark:border-amber-800 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/40"
                       onClick={handleUnlock}
                       disabled={savingLock}
                     >
@@ -818,7 +829,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
                   <div className="mt-3 space-y-2">
                     <div className="flex items-end gap-2 flex-wrap">
                       <div className="flex-1 min-w-[160px]">
-                        <Label className="text-xs text-amber-900">Lock until date (inclusive)</Label>
+                        <Label className="text-xs text-amber-900 dark:text-amber-100">Lock until date (inclusive)</Label>
                         <Input
                           type="date"
                           value={lockDateInput}
@@ -848,12 +859,12 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
           </div>
 
           {/* 🔒 V17-Ext §5.1: Reconciliation Health Check */}
-          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+          <div className="rounded-lg border border-emerald-200 dark:border-emerald-900/40 bg-emerald-50 dark:bg-emerald-950/20 p-4">
             <div className="flex items-start gap-3">
               <Check className="w-5 h-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
-                <p className="font-semibold text-emerald-900 text-sm">Health Check (Reconciliation)</p>
-                <p className="text-xs text-emerald-800 mt-1">
+                <p className="font-semibold text-emerald-900 dark:text-emerald-100 text-sm">Health Check (Reconciliation)</p>
+                <p className="text-xs text-emerald-800 dark:text-emerald-200 mt-1">
                   Verify your books are balanced. Checks that party balances match dashboard totals,
                   per-item GST matches invoice headers, and no orphaned data exists. Run this before
                   filing GST or at month-end to catch any issues.
@@ -861,7 +872,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
                 <Button
                   variant="outline"
                   size="sm"
-                  className="mt-3 gap-2 border-emerald-400 text-emerald-800 hover:bg-emerald-100"
+                  className="mt-3 gap-2 border-emerald-400 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-100 dark:hover:bg-emerald-900/40"
                   onClick={handleRunHealthCheck}
                   disabled={runningHealthCheck}
                 >
@@ -878,7 +889,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
                         All checks passed — your books are balanced.
                       </div>
                     ) : (
-                      <div className="flex items-center gap-2 text-sm text-rose-700 font-medium">
+                      <div className="flex items-center gap-2 text-sm text-rose-700 dark:text-rose-300 font-medium">
                         <AlertTriangle className="w-4 h-4" />
                         Some checks failed — see details below.
                       </div>
@@ -888,7 +899,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
                         key={i}
                         className={cn(
                           'flex items-start gap-2 rounded-md p-2 text-xs',
-                          check.passed ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                          check.passed ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200' : 'bg-rose-100 dark:bg-rose-950/40 text-rose-800 dark:text-rose-200'
                         )}
                       >
                         {check.passed ? (
@@ -917,19 +928,19 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
               Was: safe "Download Backup" action grouped with destructive "Reset All Data"
               inside a rose-bordered danger card. Now: separate blue card above the danger
               zone so the user doesn't confuse a safe action with a destructive one. */}
-          <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+          <div className="rounded-lg border border-blue-200 dark:border-blue-900/40 bg-blue-50 dark:bg-blue-950/20 p-4">
             <div className="flex items-start gap-3">
-              <Download className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+              <Download className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
-                <p className="font-semibold text-blue-900 text-sm">Backup Your Data</p>
-                <p className="text-xs text-blue-700 mt-1">
+                <p className="font-semibold text-blue-900 dark:text-blue-100 text-sm">Backup Your Data</p>
+                <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
                   Download all your products, transactions, parties, and settings as a JSON file.
                   Use this to migrate to a new device or keep a safe copy.
                 </p>
                 <Button
                   variant="outline"
                   size="sm"
-                  className="mt-2 gap-2 border-blue-300 text-blue-700 hover:bg-blue-100"
+                  className="mt-2 gap-2 border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/40"
                   onClick={async () => {
                     try {
                       await exportBackup()
@@ -946,11 +957,11 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
           </div>
 
           {/* 🔒 V17 Audit Phase 9: Restore from Backup — upload a JSON backup file */}
-          <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+          <div className="rounded-lg border border-emerald-200 dark:border-emerald-900/40 bg-emerald-50 dark:bg-emerald-950/20 p-4">
             <div className="flex items-start gap-3">
               <Upload className="w-5 h-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
-                <p className="font-semibold text-emerald-900 text-sm">Restore from Backup</p>
+                <p className="font-semibold text-emerald-900 dark:text-emerald-100 text-sm">Restore from Backup</p>
                 <p className="text-xs text-emerald-700 dark:text-emerald-300 mt-1">
                   Upload a previously downloaded backup JSON file to restore your data.
                   This MERGES with existing data — items with the same SKU or name are skipped.
@@ -991,7 +1002,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
                 <Button
                   variant="outline"
                   size="sm"
-                  className="mt-2 gap-2 border-emerald-300 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100"
+                  className="mt-2 gap-2 border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40"
                   onClick={() => document.getElementById('restore-backup-upload')?.click()}
                 >
                   <Upload className="w-4 h-4" /> Upload Backup File
@@ -1001,12 +1012,12 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
           </div>
 
           {/* Danger zone — destructive actions only (no safe actions mixed in) */}
-          <div className="rounded-lg border border-rose-200 bg-rose-50 p-4">
+          <div className="rounded-lg border border-rose-200 dark:border-rose-900/40 bg-rose-50 dark:bg-rose-950/20 p-4">
             <div className="flex items-start gap-3">
-              <AlertTriangle className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" />
+              <AlertTriangle className="w-5 h-5 text-rose-600 dark:text-rose-400 flex-shrink-0 mt-0.5" />
               <div className="flex-1">
-                <p className="font-semibold text-rose-900 text-sm">Danger Zone</p>
-                <p className="text-xs text-rose-700 mt-1">
+                <p className="font-semibold text-rose-900 dark:text-rose-100 text-sm">Danger Zone</p>
+                <p className="text-xs text-rose-700 dark:text-rose-300 mt-1">
                   This will permanently delete all products, transactions, parties and settings. Useful if you want to start fresh.
                 </p>
                 <Button variant="destructive" size="sm" className="mt-3 gap-2" onClick={handleResetData}>
@@ -1101,7 +1112,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
                 <p className="text-[11px] text-muted-foreground">When to show daily summary card on dashboard</p>
               </div>
             </div>
-            <Select value={typeof window !== 'undefined' ? (localStorage.getItem('bahikhata:day-end-time') || '18') : '18'} onValueChange={(v) => { localStorage.setItem('bahikhata:day-end-time', v); sonnerToast.success(`Summary shows at ${v}:00`) }}>
+            <Select value={dayEndTime} onValueChange={(v) => { setDayEndTime(v); if (typeof window !== 'undefined') localStorage.setItem('bahikhata:day-end-time', v); sonnerToast.success(`Summary shows at ${v}:00`) }}>
               <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {Array.from({ length: 12 }, (_, i) => i + 10).map(h => (

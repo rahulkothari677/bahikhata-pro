@@ -69,6 +69,44 @@ export function resetUser() {
   try { posthog.reset() } catch {}
 }
 
+/**
+ * 🔒 AUDIT V23 FIX §13.9g: Real PII-safe email hash for analytics.
+ *
+ * Before: `btoa(email).slice(0, 16)` — truncated base64 of the email.
+ * Base64 is REVERSIBLE (it's an encoding, not a hash), and truncating
+ * to 16 chars still leaks ~12 chars of the email to anyone who reads
+ * the analytics event. The trait was named `email_hash` but it was
+ * neither a hash nor safe. The auditor flagged this as PII in
+ * analytics under a name that claims otherwise.
+ *
+ * Now: SHA-256 (hex, first 16 chars). SHA-256 is a one-way function —
+ * you cannot recover the email from the hash. Truncating to 16 hex
+ * chars (64 bits) gives good attribution uniqueness without leaking
+ * anything reversible. This is the same approach Stripe / Segment
+ * recommend for `email_hash` traits.
+ *
+ * Async because Web Crypto's subtle.digest is async. Callers that used
+ * to do `btoa(email).slice(0,16)` synchronously now await this helper.
+ */
+export async function hashEmail(email: string): Promise<string> {
+  if (typeof window === 'undefined' || !window.crypto?.subtle) {
+    // SSR or non-secure context (subtle requires HTTPS or localhost) —
+    // return empty so callers can skip the trait rather than fall back
+    // to the reversible btoa approach.
+    return ''
+  }
+  try {
+    const encoded = new TextEncoder().encode(email.toLowerCase().trim())
+    const digest = await window.crypto.subtle.digest('SHA-256', encoded)
+    const hex = Array.from(new Uint8Array(digest))
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('')
+    return hex.slice(0, 16)
+  } catch {
+    return ''
+  }
+}
+
 export function track(event: string, properties?: Record<string, any>) {
   if (!isInitialized || !hasConsent) return
   try {

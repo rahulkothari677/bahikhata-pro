@@ -6026,3 +6026,66 @@ DEFERRED STRUCTURAL ITEMS:
 - Recharts static import in Dashboard (§7.5 — still 2.4MB on every boot)
 - transactions?limit=200 → cursor pagination (V21 deferred)
 - Settings query dedupe — central useSetting hook for 10 components (partially done with staleTime)
+
+---
+Task ID: audit-v23-batch-l
+Agent: main
+Task: V23 Audit Batch L — §13.9 grouped moderate findings (last of §13.x).
+
+Work Log:
+- §13.9a: Dark-mode variants for Settings → Data tab.
+  * All 6 cards (Offline Data, Period Lock, Health Check, Backup, Restore, Danger Zone) now have paired dark: variants for bg/border/text/hover.
+  * Pattern matches what Appearance tab already uses (bg-{c}-50 dark:bg-{c}-950/20 etc.).
+  * Script: scripts/batch-l-settings-dark-mode.py (scoped to Data tab region only — won't touch other tabs).
+  * 52 token updates across ~30 lines.
+
+- §13.9b: Day-End time selector in Settings → Appearance.
+  * Was: `<Select value={localStorage.getItem(...)}>` reading localStorage in render → no visual update after picking a new time until unrelated re-render.
+  * Now: useState('18') + useEffect hydration, persisted on change. Select updates instantly.
+
+- §13.9c: Business-goals toasts/labels.
+  * Was: `Revenue target set: 500000` (raw number).
+  * Now: `Revenue target set: ₹5,00,000` (formatINR). Same for expense budget toast + "Current target/budget" labels.
+
+- §13.9d: Logout chain had no .catch.
+  * Was: `import(next-auth).then(import(offline-db).then(clearAllOfflineData().then(signOut)))` — any throw (IndexedDB blocked) swallowed signOut entirely. Button silently did nothing.
+  * Now: async/await with try/catch around each step. signOut always runs. Last-resort window.location.href = '/' if even signOut throws.
+
+- §13.9e: Version strings disagree.
+  * Was: footer "EkBook v1.0" vs About "EkBook v1.0.0 (Beta)".
+  * Now: Single APP_VERSION_LABEL constant in src/lib/app-version.ts. Both surfaces read from it. Supports NEXT_PUBLIC_APP_VERSION env override for build-specific versioning.
+
+- §13.9f: Help FAQ GSTR export claim was wrong.
+  * Was: "Generate the JSON file and upload it to the GST portal."
+  * Truth: GSTR-1 exports JSON (portal-ready). GSTR-3B exports CSV only (you copy values into the portal).
+  * Now: FAQ explicitly distinguishes the two formats.
+
+- §13.9g: Analytics email_hash was reversible.
+  * Was: `btoa(email).slice(0, 16)` — base64 is an ENCODING not a hash. Truncated base64 leaks ~12 chars of the email. Trait named `email_hash` was neither a hash nor safe.
+  * Now: hashEmail() helper in analytics.ts uses Web Crypto SHA-256 (hex, 16 chars). Async (subtle.digest is async). Wired into both page.tsx (post-auth identify) and AuthScreen.tsx (post-login identify). Raw email never reaches the analytics platform.
+
+- §13.9h: Splash on every full load.
+  * Was: V20-019 made splash show on every full page load (even warm reloads within the same tab-session). Premium animation adds fixed seconds to the boot path that V21/V22 fought to shrink.
+  * Now: sessionStorage flag (`bahikhata:splash-shown`). Cold start (new tab) → splash shows. Warm reload (same tab) → splash skipped. User still sees premium animation on first visit; doesn't re-watch it on every reload.
+
+- §13.9i: nonGstValue inflated by non-supply income.
+  * Was: `nonGstValue = SUM(totalAmount) WHERE type='income'` — included ALL income categories (Commission, Interest, Rent Received, etc.).
+  * But 3.1(e) "Non-GST outward supplies" is for supplies of goods/services NOT liable to GST (alcohol, petrol). Interest/commission/rent are NON-SUPPLY income — they don't belong in 3.1(e).
+  * Now: filter `category: 'Scrap Sale'` only. Most kirana users get nonGstValue=0 (correct). TODO added in code for a proper isNonGstSupply flag.
+
+Verification:
+- npx tsc --noEmit: 0 errors
+- npx eslint (changed files): 0 errors, 0 warnings
+- npx jest: 1616/1616 pass (41 suites)
+- npx next build: Compiled successfully (BUILD_ID present)
+
+Bug 说明 (existing bugs found during scan):
+- AccountScreen.tsx line 762 footer: hardcoded "EkBook v1.0" string was a separate hardcoded value from the About page's "EkBook v1.0.0 (Beta)" — they had drifted. (No code bug per se, but a maintenance/discovery gap: there was no single source of truth.) Fixed by centralizing in app-version.ts.
+- AuthScreen.tsx login identify: original code used `btoa(email).slice(0,16)` AS the userId placeholder — meaning the analytics platform got the truncated base64 (which decodes to ~12 chars of the actual email) as both userId AND email_hash. This is a PII leak masquerading as a hash. Fixed by using the real SHA-256 hash as the userId placeholder.
+
+Stage Summary:
+- V23 Audit Batch L COMPLETE. All 9 sub-items of §13.9 addressed.
+- Files changed: 6 (Settings.tsx, AccountScreen.tsx, page.tsx, AuthScreen.tsx, analytics.ts, gstr-3b/route.ts)
+- Files added: 2 (src/lib/app-version.ts, scripts/batch-l-settings-dark-mode.py)
+- 1616 tests passing, 0 TypeScript errors, 0 ESLint errors, build clean
+- All Part-2 findings (§13.1-§13.9) now addressed. Only §13.10 (verified clean) remains untouched by design.

@@ -10,7 +10,7 @@ import { toast as sonnerToast } from 'sonner'
 import { getCachedSession } from '@/lib/offline-db'
 import { useAppStore } from '@/store/app-store'
 import { useTranslation } from '@/hooks/use-translation'
-import { track, identifyUser, EVENTS } from '@/lib/analytics'
+import { track, identifyUser, EVENTS, hashEmail } from '@/lib/analytics'
 import { Globe } from 'lucide-react'
 
 // 🔒 V20-5C: Language options for the login screen toggle
@@ -106,8 +106,16 @@ export function AuthScreen() {
           track(EVENTS.LOGIN, { method: 'email' })
         }
         // identifyUser will be called again after session loads with the real userId,
-        // but calling it here with the email hash ensures the login event is attributed.
-        try { identifyUser(btoa(email).slice(0, 16)) } catch {}
+        // but calling it here ensures the login event is attributed.
+        // 🔒 AUDIT V23 FIX §13.9g: Was btoa(email).slice(0,16) — a REVERSIBLE encoding
+        // used as the userId placeholder. Now: SHA-256 hash (async) so the raw email
+        // never reaches the analytics platform. Once the hash resolves, identify
+        // with the hash as both userId and the email_hash trait.
+        try {
+          hashEmail(email).then((h) => {
+            if (h) identifyUser(h, { email_hash: h })
+          })
+        } catch {}
         // Small delay to let session propagate
         setTimeout(() => window.location.reload(), 500)
       } else {
