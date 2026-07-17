@@ -1072,6 +1072,52 @@ export const NAV_REGISTRY: NavDestination[] = [
     surfaces: ['account'],
     sortOrder: 4,
   },
+
+  // ═══ GlobalSearch-only commands (not shown in any nav surface) ═══════
+  // These are quick-action shortcuts in the Ctrl+K search dialog.
+  // They do NOT appear in Sidebar, MoreScreen, ReportsHub, or AccountScreen.
+  {
+    id: 'add-product',
+    label: 'Add Product',
+    description: 'Add a new product to inventory',
+    icon: Plus,
+    iconColor: 'text-violet-600',
+    iconBg: 'bg-violet-100 dark:bg-violet-950',
+    view: 'inventory',
+    actionKind: 'navigate',
+    category: 'inventory',
+    frequency: 'primary',
+    surfaces: ['global-search'],
+    keywords: 'add new product create inventory item',
+  },
+  {
+    id: 'add-party',
+    label: 'Add Customer/Supplier',
+    description: 'Add a new party',
+    icon: UserPlus,
+    iconColor: 'text-blue-600',
+    iconBg: 'bg-blue-100 dark:bg-blue-950',
+    view: 'parties',
+    actionKind: 'navigate',
+    category: 'parties',
+    frequency: 'primary',
+    surfaces: ['global-search'],
+    keywords: 'add new customer supplier party create',
+  },
+  {
+    id: 'go-to-account',
+    label: 'Go to Account',
+    description: 'Profile, settings, security, preferences',
+    icon: SettingsIcon,
+    iconColor: 'text-slate-600',
+    iconBg: 'bg-slate-100',
+    actionKind: 'navigate-account',
+    actionParams: { accountSection: 'profile' },
+    category: 'account',
+    frequency: 'tertiary',
+    surfaces: ['global-search'],
+    keywords: 'settings profile theme features configuration account security',
+  },
 ]
 
 // ─── Helper functions ──────────────────────────────────────────────────
@@ -1133,51 +1179,7 @@ export function groupBySubcategory(destinations: NavDestination[]): Map<NavSubca
   const groups = new Map<NavSubcategoryId | undefined, NavDestination[]>()
   for (const d of destinations) {
     const key = d.subcategory
-    if (!groups.has(key)) groups.set(key, [
-  // ═══ GlobalSearch-only commands (not shown in any nav surface) ═══════
-  {
-    id: 'add-product',
-    label: 'Add Product',
-    description: 'Add a new product to inventory',
-    icon: Plus,
-    iconColor: 'text-violet-600',
-    iconBg: 'bg-violet-100 dark:bg-violet-950',
-    view: 'inventory',
-    actionKind: 'navigate',
-    category: 'inventory',
-    frequency: 'primary',
-    surfaces: ['global-search'],
-    keywords: 'add new product create inventory item',
-  },
-  {
-    id: 'add-party',
-    label: 'Add Customer/Supplier',
-    description: 'Add a new party',
-    icon: UserPlus,
-    iconColor: 'text-blue-600',
-    iconBg: 'bg-blue-100 dark:bg-blue-950',
-    view: 'parties',
-    actionKind: 'navigate',
-    category: 'parties',
-    frequency: 'primary',
-    surfaces: ['global-search'],
-    keywords: 'add new customer supplier party create',
-  },
-  {
-    id: 'go-to-account',
-    label: 'Go to Account',
-    description: 'Profile, settings, security, preferences',
-    icon: SettingsIcon,
-    iconColor: 'text-slate-600',
-    iconBg: 'bg-slate-100',
-    actionKind: 'navigate-account',
-    category: 'account',
-    frequency: 'tertiary',
-    surfaces: ['global-search'],
-    keywords: 'settings profile theme features configuration account security',
-  },
-
-])
+    if (!groups.has(key)) groups.set(key, [])
     groups.get(key)!.push(d)
   }
   return groups
