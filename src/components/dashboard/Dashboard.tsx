@@ -1164,17 +1164,17 @@ export function Dashboard() {
           but user feedback said the earlier version looked better). */}
       {kpis && kpis.rangeTxnCount > 0 && <BusinessHealthScore kpis={kpis} />}
 
-      {/* 🔒 AUDIT V25 BATCH 4 (user request): Smart Insights + Business Analytics
-          side-by-side in a 2-column grid (was 2 separate full-width cards
-          stacked vertically). Both are vertical content cards (lists of insights)
-          that pair well visually. On mobile they stack normally (grid-cols-1). */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* {t('dash.smart_insights')} - AI-powered alerts */}
-        {kpis && <SmartInsights />}
+      {/* 🔒 AUDIT V25 BATCH 4c (user request): Smart Insights + Business Analytics
+          reverted to standalone full-width (was 2-col grid in Batch 4). User
+          feedback: content was too cramped in 2-col. Now full-width with
+          improved internal readability — larger text, more padding, 2-col
+          insight grid inside each card to fill horizontal space. */}
 
-        {/* V17-Ext 5.5: Business Analytics — best-sellers, dead stock, top customers, reorder */}
-        {features?.businessAnalytics && <AnalyticsInsights />}
-      </div>
+      {/* {t('dash.smart_insights')} - AI-powered alerts */}
+      {kpis && <SmartInsights />}
+
+      {/* V17-Ext 5.5: Business Analytics — best-sellers, dead stock, top customers, reorder */}
+      {features?.businessAnalytics && <AnalyticsInsights />}
 
       {/* 🔒 V17-Ext §5.4: Day-end "Close the Drawer" dialog */}
       <DayEndSummary open={showDayEnd} onOpenChange={setShowDayEnd} />

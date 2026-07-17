@@ -91,7 +91,12 @@ export function AnalyticsInsights() {
       </div>
 
       {expanded && (
-        <div className="p-2 space-y-2">
+        <div className="p-3">
+          {/* 🔒 AUDIT V25 BATCH 4c (user request): 4 analytics sections now in
+              a 2-col grid on desktop (was single column). Fills the full-width
+              container better. Each section has larger text + more padding for
+              readability. Stacks on mobile. */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
           {/* 1. Top Sellers */}
           {hasBestSellers && (
             <AnalyticsSection
@@ -180,6 +185,7 @@ export function AnalyticsInsights() {
               }}
             />
           )}
+          </div>{/* /2-col grid */}
         </div>
       )}
     </div>
@@ -203,29 +209,33 @@ function AnalyticsSection({
     <motion.div
       initial={{ opacity: 0, y: 5 }}
       animate={{ opacity: 1, y: 0 }}
-      className="rounded-xl border border-border/40 bg-background/50 p-2.5"
+      className="rounded-xl border border-border/40 bg-background/50 p-3"
     >
       {/* Section header */}
-      <div className="flex items-center gap-2 mb-2">
-        <div className={cn('w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0', iconBg)}>
+      <div className="flex items-center gap-2 mb-2.5">
+        <div className={cn('w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0', iconBg)}>
           <span className={iconColor}>{icon}</span>
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-xs font-bold text-foreground">{title}</p>
-          <p className="text-[10px] text-muted-foreground">{subtitle}</p>
+          {/* 🔒 AUDIT V25 BATCH 4c: Larger title (was text-xs, now text-sm) +
+              subtitle (was text-[10px], now text-[11px]) for readability. */}
+          <p className="text-sm font-bold text-foreground">{title}</p>
+          <p className="text-[11px] text-muted-foreground">{subtitle}</p>
         </div>
       </div>
 
       {/* Entries */}
-      <div className="space-y-1">
+      {/* 🔒 AUDIT V25 BATCH 4c: More vertical spacing (was space-y-1, now space-y-1.5)
+          + larger entry text (was text-sm, now text-[13px]) for readability. */}
+      <div className="space-y-1.5">
         {entries.map((entry, i) => (
-          <div key={i} className="flex items-center justify-between gap-2 text-sm py-0.5">
+          <div key={i} className="flex items-center justify-between gap-2 text-[13px] py-0.5">
             <div className="flex items-center gap-2 min-w-0 flex-1">
-              <span className="text-[10px] font-bold text-muted-foreground w-4 flex-shrink-0">{entry.rank}</span>
+              <span className="text-[11px] font-bold text-muted-foreground w-4 flex-shrink-0">{entry.rank}</span>
               <div className="min-w-0">
                 <p className="truncate">{entry.label}</p>
                 {entry.sublabel && (
-                  <p className="text-[10px] text-muted-foreground truncate">{entry.sublabel}</p>
+                  <p className="text-[11px] text-muted-foreground truncate">{entry.sublabel}</p>
                 )}
               </div>
             </div>
@@ -238,10 +248,10 @@ function AnalyticsSection({
       {action && (
         <button
           onClick={action.onClick}
-          className="text-[11px] font-semibold text-blue-600 hover:underline flex items-center gap-1 mt-2"
+          className="text-xs font-semibold text-blue-600 hover:underline inline-flex items-center gap-1 mt-2.5"
         >
           {action.label}
-          <ArrowRight className="w-3 h-3" />
+          <ArrowRight className="w-3.5 h-3.5" />
         </button>
       )}
     </motion.div>

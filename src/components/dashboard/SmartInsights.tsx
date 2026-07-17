@@ -79,74 +79,82 @@ export function SmartInsights() {
       </div>
 
       {expanded && (
-        <div className="p-1.5 space-y-1">
-          {insights.map((insight, displayIndex) => {
-            // Find the original index for dismissal tracking
-            const originalIndex = allInsights.indexOf(insight)
-            const Icon = insight.icon
-            return (
-              <motion.div
-                key={originalIndex}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: displayIndex * 0.05 }}
-                className={cn(
-                  'flex items-start gap-3 p-3 rounded-xl border transition group',
-                  insight.severity === 'critical' && 'bg-rose-50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/50',
-                  insight.severity === 'warning' && 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/50',
-                  insight.severity === 'info' && 'bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900/50',
-                  insight.severity === 'positive' && 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/50',
-                )}
-              >
-                <div className={cn(
-                  'w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0',
-                  insight.severity === 'critical' && 'bg-rose-100 dark:bg-rose-900/40',
-                  insight.severity === 'warning' && 'bg-amber-100 dark:bg-amber-900/40',
-                  insight.severity === 'info' && 'bg-blue-100 dark:bg-blue-900/40',
-                  insight.severity === 'positive' && 'bg-emerald-100 dark:bg-emerald-900/40',
-                )}>
-                  <Icon className={cn(
-                    'w-4 h-4',
-                    insight.severity === 'critical' && 'text-rose-600',
-                    insight.severity === 'warning' && 'text-amber-600 dark:text-amber-400',
-                    insight.severity === 'info' && 'text-blue-600',
-                    insight.severity === 'positive' && 'text-emerald-600 dark:text-emerald-400',
-                  )} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold">{insight.title}</p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">{insight.description}</p>
-                  {insight.action && (
-                    <button
-                      onClick={insight.action.onClick}
-                      className={cn(
-                        'text-[11px] font-semibold mt-2 hover:underline flex items-center gap-1 rounded-full px-2.5 py-1 transition',
-                        insight.severity === 'critical' && 'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300 hover:bg-rose-200 dark:hover:bg-rose-900/60',
-                        insight.severity === 'warning' && 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/60',
-                        insight.severity === 'info' && 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/60',
-                        insight.severity === 'positive' && 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-900/60',
-                      )}
-                    >
-                      {insight.action.label}
-                      <ArrowRight className="w-3 h-3" />
-                    </button>
+        <div className="p-3 space-y-2">
+          {/* 🔒 AUDIT V25 BATCH 4c (user request): Insight cards now in a 2-col
+              grid on desktop (was single column). Fills the full-width container
+              better — no more "blank" look. Each insight card has larger text
+              + more padding for readability. Stacks on mobile. */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
+            {insights.map((insight, displayIndex) => {
+              // Find the original index for dismissal tracking
+              const originalIndex = allInsights.indexOf(insight)
+              const Icon = insight.icon
+              return (
+                <motion.div
+                  key={originalIndex}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: displayIndex * 0.05 }}
+                  className={cn(
+                    'flex items-start gap-3 p-3.5 rounded-xl border transition group',
+                    insight.severity === 'critical' && 'bg-rose-50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/50',
+                    insight.severity === 'warning' && 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/50',
+                    insight.severity === 'info' && 'bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900/50',
+                    insight.severity === 'positive' && 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900/50',
                   )}
-                </div>
-                {/* Dismiss button — appears on hover */}
-                <button
-                  onClick={() => dismissInsight(originalIndex)}
-                  className="text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition flex-shrink-0 -mt-1 -mr-1 p-1"
-                  aria-label="Dismiss insight"
-                  title="Dismiss"
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <line x1="18" y1="6" x2="6" y2="18"></line>
-                    <line x1="6" y1="6" x2="18" y2="18"></line>
-                  </svg>
-                </button>
-              </motion.div>
-            )
-          })}
+                  <div className={cn(
+                    'w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0',
+                    insight.severity === 'critical' && 'bg-rose-100 dark:bg-rose-900/40',
+                    insight.severity === 'warning' && 'bg-amber-100 dark:bg-amber-900/40',
+                    insight.severity === 'info' && 'bg-blue-100 dark:bg-blue-900/40',
+                    insight.severity === 'positive' && 'bg-emerald-100 dark:bg-emerald-900/40',
+                  )}>
+                    <Icon className={cn(
+                      'w-5 h-5',
+                      insight.severity === 'critical' && 'text-rose-600',
+                      insight.severity === 'warning' && 'text-amber-600 dark:text-amber-400',
+                      insight.severity === 'info' && 'text-blue-600',
+                      insight.severity === 'positive' && 'text-emerald-600 dark:text-emerald-400',
+                    )} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold leading-snug">{insight.title}</p>
+                    {/* 🔒 AUDIT V25 BATCH 4c: Larger description text (was text-[11px],
+                        now text-[13px]) + more line height for readability. */}
+                    <p className="text-[13px] text-muted-foreground mt-1 leading-relaxed">{insight.description}</p>
+                    {insight.action && (
+                      <button
+                        onClick={insight.action.onClick}
+                        className={cn(
+                          'text-xs font-semibold mt-2.5 hover:underline inline-flex items-center gap-1 rounded-full px-3 py-1.5 transition',
+                          insight.severity === 'critical' && 'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300 hover:bg-rose-200 dark:hover:bg-rose-900/60',
+                          insight.severity === 'warning' && 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/60',
+                          insight.severity === 'info' && 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/60',
+                          insight.severity === 'positive' && 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-900/60',
+                        )}
+                      >
+                        {insight.action.label}
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                  {/* Dismiss button — appears on hover */}
+                  <button
+                    onClick={() => dismissInsight(originalIndex)}
+                    className="text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition flex-shrink-0 -mt-1 -mr-1 p-1"
+                    aria-label="Dismiss insight"
+                    title="Dismiss"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <line x1="18" y1="6" x2="6" y2="18"></line>
+                      <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                  </button>
+                </motion.div>
+              )
+            })}
+          </div>
         </div>
       )}
     </div>
