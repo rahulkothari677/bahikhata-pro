@@ -1021,25 +1021,39 @@ export function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* {t('dash.gst_summary')} summary */}
-        <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base font-semibold">{t('dash.gst_summary')} ({rangeLabel})</CardTitle>
-              <Button variant="ghost" size="sm" className="text-xs h-7 gap-1" onClick={() => setView('reports')}>
-                {t('dash.full_report')} <ArrowRight className="w-3 h-3" />
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <GstMiniStat label="Output Tax (Sales)" value={gstSummary.outputTax} color="text-amber-600 dark:text-amber-400" />
-              <GstMiniStat label="Input Tax (Purchase)" value={gstSummary.inputTax} color="text-emerald-600 dark:text-emerald-400" />
-              <GstMiniStat label="CGST + SGST" value={gstSummary.cgst + gstSummary.sgst} color="text-violet-600" />
-              <GstMiniStat label="Net GST Payable" value={gstSummary.netPayable} color={gstSummary.netPayable >= 0 ? 'text-rose-600' : 'text-emerald-600 dark:text-emerald-400'} highlight />
-            </div>
-          </CardContent>
-        </Card>
+        {/* 🔒 AUDIT V25 BATCH 4 (user request): Right column now stacks 2 cards
+            vertically — GST summary (short, just 4 mini-stats) on top, then
+            Business Health Score below. Previously the GST summary column had
+            empty space below it (Recent Transactions on the left is taller).
+            Now that space is filled with the Health Score gauge + factor bars.
+            On mobile (grid-cols-1) both cards stack normally in order. */}
+        <div className="space-y-4">
+          {/* {t('dash.gst_summary')} summary */}
+          <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base font-semibold">{t('dash.gst_summary')} ({rangeLabel})</CardTitle>
+                <Button variant="ghost" size="sm" className="text-xs h-7 gap-1" onClick={() => setView('reports')}>
+                  {t('dash.full_report')} <ArrowRight className="w-3 h-3" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <GstMiniStat label="Output Tax (Sales)" value={gstSummary.outputTax} color="text-amber-600 dark:text-amber-400" />
+                <GstMiniStat label="Input Tax (Purchase)" value={gstSummary.inputTax} color="text-emerald-600 dark:text-emerald-400" />
+                <GstMiniStat label="CGST + SGST" value={gstSummary.cgst + gstSummary.sgst} color="text-violet-600" />
+                <GstMiniStat label="Net GST Payable" value={gstSummary.netPayable} color={gstSummary.netPayable >= 0 ? 'text-rose-600' : 'text-emerald-600 dark:text-emerald-400'} highlight />
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Business Health Score — fills the space below the short GST summary.
+              User feedback: GST summary has just a few lines so it doesn't need
+              that much space. Health Score sits below it, same column width.
+              At desktop 2-col width (~600px), the gauge + 5 factor bars fit cleanly. */}
+          {kpis && kpis.rangeTxnCount > 0 && <BusinessHealthScore kpis={kpis} />}
+        </div>
       </div>
 
       {/* Day-end summary card — shows after 6 PM with today's business summary */}
@@ -1153,14 +1167,18 @@ export function Dashboard() {
         </div>
       )}
 
-      {/* Business Health Score — overall wellness indicator */}
-      {kpis && kpis.rangeTxnCount > 0 && <BusinessHealthScore kpis={kpis} />}
+      {/* 🔒 AUDIT V25 BATCH 4 (user request): Smart Insights + Business Analytics
+          side-by-side in a 2-column grid (was 2 separate full-width cards
+          stacked vertically). Both are vertical content cards (lists of insights)
+          that pair well visually. On mobile they stack normally (grid-cols-1).
+          Business Health Score was moved up to sit below GST summary (see above). */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* {t('dash.smart_insights')} - AI-powered alerts */}
+        {kpis && <SmartInsights />}
 
-      {/* {t('dash.smart_insights')} - AI-powered alerts */}
-      {kpis && <SmartInsights />}
-
-      {/* V17-Ext 5.5: Business Analytics — best-sellers, dead stock, top customers, reorder */}
-      {features?.businessAnalytics && <AnalyticsInsights />}
+        {/* V17-Ext 5.5: Business Analytics — best-sellers, dead stock, top customers, reorder */}
+        {features?.businessAnalytics && <AnalyticsInsights />}
+      </div>
 
       {/* 🔒 V17-Ext §5.4: Day-end "Close the Drawer" dialog */}
       <DayEndSummary open={showDayEnd} onOpenChange={setShowDayEnd} />

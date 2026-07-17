@@ -6377,3 +6377,49 @@ Stage Summary:
 - 1640 tests passing, 0 TypeScript errors, 0 ESLint errors, build clean.
 - Browser verification: deferred (per user instruction).
 - Awaiting user pass before Batch 4 decision (§6.1 navigation registry — likely deferred to its own epic).
+
+---
+Task ID: audit-v25-batch-4
+Agent: main
+Task: V25 Audit Batch 4 — Dashboard layout refinement (user request).
+
+Work Log:
+- User feedback after Batch 3b: (1) Smart Insights + Business Analytics should be in 2-column row (side-by-side). (2) Business Health Score should sit below GST summary card (since GST summary is short and leaves empty space). (3) Everything must look clean + aligned.
+- §6.1 Navigation registry (the original Batch 4 scope) is deferred to its own epic — user explicitly asked for the dashboard layout work instead.
+
+§4.1 — Smart Insights + Business Analytics side-by-side:
+- Wrapped `<SmartInsights />` + `<AnalyticsInsights />` in a `grid grid-cols-1 lg:grid-cols-2 gap-4` div.
+- Was: 2 separate full-width cards stacked vertically (lots of vertical space).
+- Now: side-by-side on desktop (each ~50% width), stack on mobile.
+- Both are vertical content cards (lists of insights) that pair well visually.
+- Files changed: Dashboard.tsx.
+
+§4.2 — Business Health Score moved below GST summary:
+- Removed the standalone full-width `<BusinessHealthScore />` render that was below Business Goals.
+- Wrapped the GST summary card + Business Health Score in a vertical stack `<div className="space-y-4">` inside the right column of the existing "Recent transactions & GST summary" 2-col grid (line 930).
+- The GST summary card (short — just header + 4 mini-stat tiles) was leaving empty space below it because Recent Transactions (left column) is taller. Health Score now fills that space.
+- BusinessHealthScore is a horizontal card (circular gauge on left + 5 factor progress bars on right). At desktop 2-col width (~600px), the gauge (96px) + gap + factor list (~480px) fit cleanly.
+- On mobile (grid-cols-1), both cards stack in order: GST summary → Health Score → (then Day-end, Business Goals, Smart Insights + Analytics).
+- Files changed: Dashboard.tsx.
+
+§4.3 — Visual alignment verification:
+- Confirmed BusinessHealthScore uses `flex items-center gap-4` with `flex-1 min-w-0` on the factor list — handles narrow widths gracefully (text truncates, bars stay 16px = w-16).
+- Confirmed the GST summary 4-col grid (`grid-cols-2 lg:grid-cols-4`) doesn't conflict with the new vertical stack wrapper.
+- No orphaned divs or empty comment blocks left behind.
+
+Additional existing bugs found during scan:
+- None. Checked other 2-col grids in Dashboard (mini-charts row at line 610, 3-col row at line 746) — no height-mismatch issues that would benefit from the same treatment. The user specifically called out the GST summary card.
+
+Verification:
+- npx tsc --noEmit: 0 errors
+- npx eslint (changed files): 0 errors, 0 warnings
+- npx jest: 1640/1640 pass (42 suites)
+- npx next build: Compiled successfully (BUILD_ID present)
+
+Stage Summary:
+- V25 Audit Batch 4 COMPLETE. 2 layout changes addressed (Smart Insights + Analytics 2-col, Health Score below GST summary).
+- Files changed: 1 (Dashboard.tsx).
+- Net LOC: +5 (small refactor — moved existing components into new wrappers).
+- 1640 tests passing, 0 TypeScript errors, 0 ESLint errors, build clean.
+- Browser verification: deferred (per user instruction).
+- §6.1 Navigation registry: deferred to its own epic (multi-day refactor).
