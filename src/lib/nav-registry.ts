@@ -853,6 +853,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'account',
     subcategory: 'account-info',
     frequency: 'tertiary',
+    surfaces: ['account'],
+    sortOrder: 1,
   },
   {
     id: 'business-card',
@@ -866,6 +868,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'account',
     subcategory: 'account-info',
     frequency: 'tertiary',
+    surfaces: ['account'],
+    sortOrder: 2,
   },
   {
     id: 'subscription',
@@ -879,6 +883,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'account',
     subcategory: 'account-info',
     frequency: 'tertiary',
+    surfaces: ['account'],
+    sortOrder: 3,
   },
   {
     id: 'security',
@@ -892,6 +898,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'account',
     subcategory: 'account-info',
     frequency: 'tertiary',
+    surfaces: ['account'],
+    sortOrder: 4,
   },
   // Preferences section (AccountScreen)
   {
@@ -906,6 +914,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'account',
     subcategory: 'preferences',
     frequency: 'tertiary',
+    surfaces: ['account'],
+    sortOrder: 1,
   },
   {
     id: 'feature-toggles',
@@ -919,6 +929,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'account',
     subcategory: 'preferences',
     frequency: 'tertiary',
+    surfaces: ['account'],
+    sortOrder: 2,
   },
   {
     id: 'accounting-controls',
@@ -932,6 +944,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'account',
     subcategory: 'preferences',
     frequency: 'tertiary',
+    surfaces: ['account'],
+    sortOrder: 3,
   },
   {
     id: 'data-backup',
@@ -974,6 +988,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'account',
     subcategory: 'business',
     frequency: 'secondary',
+    surfaces: ['more', 'account'],
+    sortOrder: 2,
     ownerOnly: true,
   },
   {
@@ -988,6 +1004,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'account',
     subcategory: 'business',
     frequency: 'tertiary',
+    surfaces: ['account'],
+    sortOrder: 1,
   },
   // Support section (AccountScreen)
   {
@@ -1002,6 +1020,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'account',
     subcategory: 'support',
     frequency: 'tertiary',
+    surfaces: ['account'],
+    sortOrder: 1,
   },
   {
     id: 'rate-ekbook',
@@ -1014,6 +1034,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'account',
     subcategory: 'support',
     frequency: 'tertiary',
+    surfaces: ['account'],
+    sortOrder: 2,
   },
   {
     id: 'about',
@@ -1027,6 +1049,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'account',
     subcategory: 'support',
     frequency: 'tertiary',
+    surfaces: ['account'],
+    sortOrder: 3,
   },
   {
     id: 'logout',

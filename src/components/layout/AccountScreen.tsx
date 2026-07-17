@@ -48,6 +48,9 @@ import { toast as sonnerToast } from 'sonner'
 import { formatINRCompact } from '@/lib/utils'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { getInitials, cn } from '@/lib/utils'
+// 🔒 AUDIT V25 §6.1 (Batch 8 Phase 7): AccountScreen now renders from the NavRegistry.
+import { NAV_REGISTRY, type NavDestination } from '@/lib/nav-registry'
+import { handleNavAction } from '@/lib/handle-nav-action'
 import { APP_VERSION_LABEL } from '@/lib/app-version'
 import {
   ArrowLeft, Pencil, Calculator, Crown, Phone, Mail, Store,
@@ -70,19 +73,16 @@ const SettingsComponent = lazy(() =>
   import('@/components/settings/Settings').then(m => ({ default: m.Settings }))
 )
 
-interface AccountMenuItem {
-  icon: LucideIcon
-  label: string
-  description?: string
-  view?: ViewType
-  action?: () => void
-  iconColor: string
-  iconBg: string
-}
+// 🔒 AUDIT V25 §6.1 (Batch 8 Phase 7): AccountScreen now renders from the NavRegistry.
+// AccountMenuItem + AccountMenuSection interfaces removed — registry types replace them.
+// sections array + handleItemClick replaced with registry-driven grouping + handleNavAction().
 
-interface AccountMenuSection {
-  title?: string
-  items: AccountMenuItem[]
+// Section metadata: maps subcategory → title for AccountScreen sections.
+const ACCOUNT_SECTION_META: Partial<Record<string, { title: string }>> = {
+  'account-info': { title: 'Account' },
+  'preferences':  { title: 'Preferences' },
+  'business':     { title: 'Business' },
+  'support':      { title: 'Support' },
 }
 
 export function AccountScreen() {
@@ -91,7 +91,7 @@ export function AccountScreen() {
   const setAccountSection = useAppStore((s) => s.setAccountSection)
   const { data: session } = useSession()
   const { plan } = useSubscription()
-  const { isCA, isOwner } = useStaffPermissions()
+  const { isCA, isOwner, canAccess } = useStaffPermissions()
   // 🔒 V22-11 (Batch A, Phase 4f): Shop switcher — for multi-shop users.
   const { shops, activeShop, switchShop } = useShops()
   const [shopDropdownOpen, setShopDropdownOpen] = useState(false)
@@ -208,36 +208,32 @@ export function AccountScreen() {
     }
   }
 
-  const handleItemClick = (item: AccountMenuItem) => {
-    haptic.click()
+  // 🔒 AUDIT V25 §6.1 (Batch 8 Phase 7): handleItemClick removed — replaced
+  // by handleAccountItemClick in the useMemo below. The old 30-line
+  // sectionMap + label-matching is now handled by the registry's
+  // actionKind: 'navigate-account' + actionParams.accountSection.
 
-    // 🔒 V21-014 (Phase 6): Open dedicated section page (not Settings with tabs)
-    // 🔒 AUDIT V25 FIX §3.5 (Batch 3b): 'Data & Privacy' split into 2 items:
-    // 'Accounting Controls' + 'Data & Backup'. Both map to the same 'data'
-    // section (Settings → data tab) — the visual sub-group headers inside
-    // make the categories clear. The item the user tapped determines which
-    // sub-group scrolls into view (handled in Settings.tsx via a hash).
-    const sectionMap: Record<string, string> = {
-      'My Profile': 'profile',
-      'Business Card': 'business-card',
-      'Security': 'security',
-      'Subscription': 'subscription',
-      'App Settings': 'app-settings',
-      'Feature Toggles': 'features',
-      'Accounting Controls': 'data',
-      'Data & Backup': 'data',
-      'Staff & Access': 'staff',
-      'Refer & Earn': 'referral',
-      'Help & Support': 'help',
-      'About': 'about',
+  // 🔒 AUDIT V23 FIX §13.9d (Batch L follow-up): Logout handler — extracted
+  // from the inline onClick so the registry's custom action can call it.
+  const handleLogout = async () => {
+    haptic.warning()
+    try {
+      const { clearAllOfflineData } = await import('@/lib/offline-db')
+      try {
+        await clearAllOfflineData()
+      } catch (e) {
+        console.warn('[logout] clearAllOfflineData failed (non-fatal):', e)
+      }
+    } catch (e) {
+      console.warn('[logout] offline-db module load failed (non-fatal):', e)
     }
-    if (item.label && sectionMap[item.label]) {
-      setAccountSection(sectionMap[item.label])
-      return
+    try {
+      const { signOut } = await import('next-auth/react')
+      await signOut({ callbackUrl: '/' })
+    } catch (e) {
+      console.error('[logout] signOut failed:', e)
+      if (typeof window !== 'undefined') window.location.href = '/'
     }
-
-    // For items without a dedicated section (like Rate EkBook), use action
-    if (item.action) item.action()
   }
 
   const handleEditProfile = () => {
@@ -272,6 +268,8 @@ export function AccountScreen() {
   const PlanIcon = planBadge.icon
 
   // ═══ Section titles for dedicated pages ═══
+  // 🔒 AUDIT V25 §6.1 (Batch 8 Phase 7): Was a hardcoded Record. Now derived
+  // from the registry — the label field IS the section title.
   const sectionTitles: Record<string, string> = {
     'profile': 'My Profile',
     'business-card': 'Business Card',
@@ -279,9 +277,6 @@ export function AccountScreen() {
     'subscription': 'Subscription',
     'app-settings': 'App Settings',
     'features': 'Feature Toggles',
-    // 🔒 AUDIT V25 FIX §3.5 (Batch 3b): Was 'Data & Privacy'. Now 'Data &
-    // Accounting' — neutral name that covers both sub-groups (Accounting
-    // Controls + Data & Backup) that live in this tab.
     'data': 'Data & Accounting',
     'staff': 'Staff & Access',
     'referral': 'Refer & Earn',
@@ -289,142 +284,54 @@ export function AccountScreen() {
     'about': 'About',
   }
 
-  // ═══ 10 Menu Sections ═══
-  const sections: AccountMenuSection[] = [
-    {
-      title: 'Account',
-      items: [
-        {
-          icon: User,
-          label: 'My Profile',
-          description: 'Shop name, GSTIN, address, contact',
-          view: 'settings',
-          iconColor: 'text-blue-600',
-          iconBg: 'bg-blue-100',
-        },
-        {
-          icon: Store,
-          label: 'Business Card',
-          description: 'Shareable digital visiting card with QR',
-          view: 'settings',
-          iconColor: 'text-violet-600 dark:text-violet-400',
-          iconBg: 'bg-violet-100 dark:bg-violet-950',
-        },
-        {
-          icon: CreditCard,
-          label: 'Subscription',
-          description: 'Plan, usage, billing, upgrade',
-          view: 'pricing',
-          iconColor: 'text-amber-600 dark:text-amber-400',
-          iconBg: 'bg-amber-100',
-        },
-        {
-          icon: Shield,
-          label: 'Security',
-          description: 'App lock, change password',
-          view: 'settings',
-          iconColor: 'text-emerald-600 dark:text-emerald-400',
-          iconBg: 'bg-emerald-100',
-        },
-      ],
-    },
-    {
-      title: 'Preferences',
-      items: [
-        {
-          icon: SettingsIcon,
-          label: 'App Settings',
-          description: 'Language, dark mode, theme, app lock, backup',
-          view: 'settings',
-          iconColor: 'text-slate-600',
-          iconBg: 'bg-slate-100',
-        },
-        {
-          icon: Check,
-          label: 'Feature Toggles',
-          description: 'Search & toggle 20+ features on/off',
-          view: 'settings',
-          iconColor: 'text-violet-600 dark:text-violet-400',
-          iconBg: 'bg-violet-100 dark:bg-violet-950',
-        },
-        // 🔒 AUDIT V25 FIX §3.5 (Batch 3b): Split "Data & Privacy" into 2 items.
-        // Was: 1 item "Data & Privacy" that opened a tab mixing accounting
-        // controls (Reconciliation, Period Lock) with data/backup (Backup,
-        // Restore, Reset). A CA looking for period lock will not open
-        // "Data & Privacy". Now: 2 items pointing at the same tab, with
-        // visual sub-group headers inside Settings → data tab to make the
-        // categories clear.
-        {
-          icon: ShieldCheck,
-          label: 'Accounting Controls',
-          description: 'Reconciliation health check, period lock',
-          view: 'settings',
-          iconColor: 'text-amber-600 dark:text-amber-400',
-          iconBg: 'bg-amber-100 dark:bg-amber-950',
-        },
-        {
-          icon: Database,
-          label: 'Data & Backup',
-          description: 'Backup, restore, clear cache, delete account',
-          view: 'settings',
-          iconColor: 'text-blue-600 dark:text-blue-400',
-          iconBg: 'bg-blue-100 dark:bg-blue-950',
-        },
-      ],
-    },
-    {
-      title: 'Business',
-      items: [
-        ...(isOwner ? [{
-          icon: Users,
-          label: 'Staff & Access',
-          description: 'Manage staff, CA access',
-          view: 'settings' as ViewType,
-          iconColor: 'text-indigo-600',
-          iconBg: 'bg-indigo-100',
-        }] : []),
-        {
-          icon: Gift,
-          label: 'Refer & Earn',
-          description: 'Invite friends, earn rewards',
-          view: 'settings' as ViewType,
-          iconColor: 'text-rose-600',
-          iconBg: 'bg-rose-100',
-        },
-      ],
-    },
-    {
-      title: 'Support',
-      items: [
-        {
-          icon: HelpCircle,
-          label: 'Help & Support',
-          description: 'FAQ, contact us, report a bug',
-          view: 'settings' as ViewType,
-          iconColor: 'text-blue-600',
-          iconBg: 'bg-blue-100',
-        },
-        {
-          icon: Star,
-          label: 'Rate EkBook',
-          description: 'Help others discover us',
-          action: () => {
-            window.open('https://play.google.com/store/apps/details?id=com.ekbook.app', '_blank')
-          },
-          iconColor: 'text-amber-600 dark:text-amber-400',
-          iconBg: 'bg-amber-100',
-        },
-        {
-          icon: Info,
-          label: 'About',
-          description: 'Version, privacy policy, terms',
-          view: 'settings' as ViewType,
-          iconColor: 'text-slate-600',
-          iconBg: 'bg-slate-100',
-        },
-      ],
-    },
-  ]
+  // 🔒 AUDIT V25 §6.1 (Batch 8 Phase 7): Menu sections from NavRegistry,
+  // filtered by surfaces: ['account'] + permissions. Grouped by subcategory.
+  // Was: hardcoded sections array (14 items in 4 sections with inline sectionMap).
+  const { accountSections, handleAccountItemClick } = useMemo(() => {
+    const items = NAV_REGISTRY
+      .filter(d => d.surfaces?.includes('account'))
+      .filter(d => !d.ownerOnly || isOwner)  // owner-only gating
+      .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
+
+    // Group by subcategory
+    const grouped = new Map<string, NavDestination[]>()
+    for (const d of items) {
+      const key = d.subcategory || 'other'
+      if (!grouped.has(key)) grouped.set(key, [])
+      grouped.get(key)!.push(d)
+    }
+
+    // Build ordered section list based on ACCOUNT_SECTION_META
+    const sections: { subcategory: string; title: string; items: NavDestination[] }[] = []
+    for (const [subcat, sectionItems] of grouped) {
+      if (ACCOUNT_SECTION_META[subcat]) {
+        sections.push({
+          subcategory: subcat,
+          title: ACCOUNT_SECTION_META[subcat]!.title,
+          items: sectionItems,
+        })
+      }
+    }
+
+    // Click handler — uses handleNavAction for standard items, custom for Rate/Logout
+    const handleClick = (dest: NavDestination) => {
+      haptic.click()
+      if (dest.actionKind === 'custom') {
+        // Custom actions handled inline
+        if (dest.id === 'rate-ekbook') {
+          window.open('https://play.google.com/store/apps/details?id=com.ekbook.app', '_blank')
+        } else if (dest.id === 'logout') {
+          handleLogout()
+        }
+        return
+      }
+      // Standard items use handleNavAction — which calls setAccountSection +
+      // setView('account') for navigate-account items.
+      handleNavAction(dest)
+    }
+
+    return { accountSections: sections, handleAccountItemClick: handleClick }
+  }, [isOwner])
 
   return (
     <div className="min-h-screen bg-muted/30 w-full flex-1">
@@ -721,23 +628,23 @@ export function AccountScreen() {
           </button>
         )}
 
-        {/* ═══ Menu Sections ═══ */}
-        {sections.map((section, idx) => {
+        {/* ═══ Menu Sections — rendered from NavRegistry (V25 §6.1 Phase 7) ═══ */}
+        {accountSections.map((section, idx) => {
           if (section.items.length === 0) return null
           return (
-            <div key={idx}>
+            <div key={section.subcategory}>
               {section.title && (
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-2 mb-2">
                   {section.title}
                 </p>
               )}
               <div className="bg-card rounded-2xl shadow-sm border border-border/60 overflow-hidden">
-                {section.items.map((item, i) => {
+                {section.items.map((item: NavDestination, i: number) => {
                   const Icon = item.icon
                   return (
                     <button
-                      key={item.label}
-                      onClick={() => handleItemClick(item)}
+                      key={item.id}
+                      onClick={() => handleAccountItemClick(item)}
                       className={cn(
                         'w-full flex items-center gap-3 p-3.5 hover:bg-muted/50 transition text-left active:bg-muted group',
                         i > 0 && 'border-t border-border/40',
@@ -745,9 +652,9 @@ export function AccountScreen() {
                     >
                       <div className={cn(
                         'w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition group-hover:scale-105',
-                        item.iconBg
+                        item.iconBg || 'bg-muted'
                       )}>
-                        <Icon className={cn('w-5 h-5', item.iconColor)} />
+                        <Icon className={cn('w-5 h-5', item.iconColor || 'text-muted-foreground')} />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-sm">{item.label}</p>
