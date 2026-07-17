@@ -234,6 +234,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'transactions',
     subcategory: 'sale-purchase',
     frequency: 'secondary',
+    surfaces: ['more', 'global-search'],
+    sortOrder: 1,
   },
   {
     id: 'new-purchase',
@@ -247,6 +249,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'transactions',
     subcategory: 'sale-purchase',
     frequency: 'secondary',
+    surfaces: ['more', 'global-search'],
+    sortOrder: 2,
   },
   {
     id: 'sale-return',
@@ -257,6 +261,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     iconBg: INDIGO_BG,
     view: 'sales',
     actionKind: 'toast-navigate',
+    surfaces: ['more'],
+    sortOrder: 3,
     actionParams: {
       toastTitle: 'Pick a sale to return',
       toastDescription: 'Tap any sale in the list → "Credit Note" to record a return.',
@@ -274,6 +280,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     iconBg: INDIGO_BG,
     view: 'purchases',
     actionKind: 'toast-navigate',
+    surfaces: ['more'],
+    sortOrder: 4,
     actionParams: {
       toastTitle: 'Pick a purchase to return',
       toastDescription: 'Tap any purchase in the list → "Debit Note" to record a return to supplier.',
@@ -292,6 +300,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     badge: 'Soon',
     badgeColor: 'bg-indigo-200 text-indigo-700 dark:bg-indigo-900 dark:text-indigo-300',
     actionKind: 'coming-soon',
+    surfaces: ['more'],
+    sortOrder: 5,
     actionParams: {
       toastTitle: 'Estimates & Quotations coming soon!',
       toastDescription: 'We\'re building this feature — create professional quotes for your customers.',
@@ -345,6 +355,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'inventory',
     subcategory: 'items-stock',
     frequency: 'secondary',
+    surfaces: ['more'],
+    sortOrder: 2,
   },
 
   // ═══ parties ═════════════════════════════════════════════════════════
@@ -374,6 +386,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'parties',
     subcategory: 'money-banking',
     frequency: 'secondary',
+    surfaces: ['more'],
+    sortOrder: 4,
   },
 
   // ═══ reports ═════════════════════════════════════════════════════════
@@ -435,6 +449,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'reports',
     subcategory: 'money-banking',
     frequency: 'secondary',
+    surfaces: ['more', 'reports-hub'],
+    sortOrder: 1,
   },
   // Financial reports (ReportsHub)
   {
@@ -718,6 +734,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'tools',
     subcategory: 'smart-tools',
     frequency: 'secondary',
+    surfaces: ['more'],
+    sortOrder: 2,
   },
   {
     id: 'barcode-scanner',
@@ -745,6 +763,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'tools',
     subcategory: 'smart-tools',
     frequency: 'secondary',
+    surfaces: ['more'],
+    sortOrder: 5,
   },
   {
     id: 'cash-in-hand',
@@ -759,6 +779,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'tools',
     subcategory: 'money-banking',
     frequency: 'secondary',
+    surfaces: ['more'],
+    sortOrder: 2,
   },
   {
     id: 'day-end-summary',
@@ -894,6 +916,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'account',
     subcategory: 'business',
     frequency: 'secondary',
+    surfaces: ['more'],
+    sortOrder: 1,
   },
   {
     id: 'staff-access',
