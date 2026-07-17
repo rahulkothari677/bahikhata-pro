@@ -36,11 +36,13 @@ import {
   ScanLine, Sparkles, Settings as SettingsIcon, UserCog,
   Crown, HelpCircle, Phone, Info, Star, LogOut, ArrowLeft,
   FileSpreadsheet, Bell, Calculator, Package,
-  FileText, FileCheck, Lock, ShieldCheck, Banknote,
+  FileText, Lock, ShieldCheck, Banknote,
   Store, Mic, ScanBarcode, Bot, Repeat, Send,
-  ShoppingCart, TrendingUp,
-  Undo2, FilePlus2, Coins, AlertTriangle, Hash,
+  ShoppingCart,
+  Undo2, FilePlus2, Coins, AlertTriangle,
   FolderOpen,
+  // 🔒 AUDIT V25 FIX §3 rows 1-2 (Batch 3): Removed FileCheck, Hash, TrendingUp
+  // (were used by GST/P&L/Item-wise leaf items that got de-duplicated).
 } from 'lucide-react'
 import type { ViewType } from '@/store/app-store'
 import type { LucideIcon } from 'lucide-react'
@@ -87,11 +89,13 @@ const SECTIONS: MenuSection[] = [
     title: 'GST & Tax',
     titleIcon: FileText,
     items: [
-      { icon: FileText, label: 'GSTR-1', description: 'Export & file outward supplies return', view: 'reports', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
-      { icon: FileCheck, label: 'GSTR-3B', description: 'Monthly summary return', view: 'reports', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
-      { icon: FileCheck, label: 'GSTR-2B', description: 'ITC reconciliation with 2B', view: 'reports', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
-      { icon: FileText, label: 'GST Summary', description: 'Tax liability by slab (5/12/18/28%)', view: 'reports', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
-      { icon: Hash, label: 'HSN Summary', description: 'HSN/SAC-wise tax summary for GSTR-1', view: 'reports', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
+      // 🔒 AUDIT V25 FIX §3 rows 1-2 (Batch 3): Removed 5 GST leaf items
+      // (GSTR-1, GSTR-3B, GSTR-2B, GST Summary, HSN Summary) that were
+      // duplicated in ReportsHub. Replaced with a single "All GST Reports"
+      // pointer that opens ReportsHub (the canonical place for reports).
+      // Users couldn't form a mental model of where reports live when the
+      // same 5 items appeared in both More AND ReportsHub.
+      { icon: FileText, label: 'All GST Reports', description: 'GSTR-1, 3B, 2B, GST Summary, HSN', view: 'reports', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
       { icon: ShieldCheck, label: 'Reconciliation', description: 'Health check — do books tie out?', view: 'reports', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
       { icon: Lock, label: 'Period Lock', description: 'Lock filed GST periods', view: 'reports', iconColor: 'text-blue-600 dark:text-blue-400', iconBg: 'bg-blue-100 dark:bg-blue-950' },
     ],
@@ -111,9 +115,10 @@ const SECTIONS: MenuSection[] = [
     titleIcon: Package,
     items: [
       { icon: Package, label: 'Inventory', description: 'Products, stock, prices', view: 'inventory', iconColor: 'text-amber-600 dark:text-amber-400', iconBg: 'bg-amber-100 dark:bg-amber-950' },
-      { icon: BarChart3, label: 'Stock Summary', description: 'Stock valuation & sale value report', view: 'reports', iconColor: 'text-amber-600 dark:text-amber-400', iconBg: 'bg-amber-100 dark:bg-amber-950' },
+      // 🔒 AUDIT V25 FIX §3 rows 1-2 (Batch 3): Removed Stock Summary +
+      // Item-wise Profit leaves (duplicated in ReportsHub). Replaced with
+      // a single "All Reports" pointer.
       { icon: AlertTriangle, label: 'Low Stock Alerts', description: 'Products running low — reorder now', view: 'inventory', iconColor: 'text-amber-600 dark:text-amber-400', iconBg: 'bg-amber-100 dark:bg-amber-950' },
-      { icon: TrendingUp, label: 'Item-wise Profit', description: 'Per-product profit, qty sold & margins', view: 'reports', iconColor: 'text-amber-600 dark:text-amber-400', iconBg: 'bg-amber-100 dark:bg-amber-950' },
       { icon: Users, label: 'Customers & Suppliers', description: 'Track dues & party balances', view: 'parties', iconColor: 'text-amber-600 dark:text-amber-400', iconBg: 'bg-amber-100 dark:bg-amber-950' },
       { icon: Store, label: 'Multi-Shop Management', description: 'Switch or add shops', view: 'settings', iconColor: 'text-amber-600 dark:text-amber-400', iconBg: 'bg-amber-100 dark:bg-amber-950' },
       { icon: UserCog, label: 'Staff & Access', description: 'Manage staff, CA access', view: 'settings', iconColor: 'text-amber-600 dark:text-amber-400', iconBg: 'bg-amber-100 dark:bg-amber-950' },
@@ -123,8 +128,9 @@ const SECTIONS: MenuSection[] = [
     title: 'Reports & Analytics',
     titleIcon: BarChart3,
     items: [
-      { icon: TrendingUp, label: 'P&L Statement', description: 'Profit & loss report', view: 'reports', iconColor: 'text-rose-600 dark:text-rose-400', iconBg: 'bg-rose-100 dark:bg-rose-950' },
-      { icon: BarChart3, label: 'All Reports', description: 'Stock, party, aging, consolidated', view: 'reports', iconColor: 'text-rose-600 dark:text-rose-400', iconBg: 'bg-rose-100 dark:bg-rose-950' },
+      // 🔒 AUDIT V25 FIX §3 rows 1-2 (Batch 3): Removed P&L Statement leaf
+      // (duplicated in ReportsHub). "All Reports" is the canonical pointer.
+      { icon: BarChart3, label: 'All Reports', description: 'P&L, stock, party, aging, consolidated, item-wise profit', view: 'reports', iconColor: 'text-rose-600 dark:text-rose-400', iconBg: 'bg-rose-100 dark:bg-rose-950' },
     ],
   },
   {
@@ -175,17 +181,12 @@ export function MoreScreen() {
 
     // 🔒 V22-3 (Phase 1): Map item labels to report types so each opens
     // DIRECTLY to its own report — no hub page, no tabs.
-    // 🔒 V22-11 (Batch A): Added HSN Summary, Stock Summary, Item-wise Profit.
+    // 🔒 AUDIT V25 FIX §3 rows 1-2 (Batch 3): Removed GSTR-1, GSTR-3B, GSTR-2B,
+    // GST Summary, HSN Summary, P&L Statement, Stock Summary, Item-wise Profit
+    // from this map — those leaf items were removed from More (duplicated in
+    // ReportsHub). Only Bank Reconciliation remains as a deep-link.
     const reportTypeMap: Record<string, string> = {
-      'GSTR-1': 'gstr-1',
-      'GSTR-3B': 'gstr-3b',
-      'GSTR-2B': 'gstr-2b',
-      'GST Summary': 'gst',
-      'HSN Summary': 'hsn',
       'Bank Reconciliation': 'bank-recon',
-      'P&L Statement': 'pl',
-      'Stock Summary': 'stock',
-      'Item-wise Profit': 'item-profit',
     }
     if (label && reportTypeMap[label]) {
       useAppStore.getState().setPendingReportType(reportTypeMap[label])

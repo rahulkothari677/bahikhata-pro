@@ -57,7 +57,10 @@ const FEATURE_CATEGORIES: { title: string; features: { key: FeatureKey; label: s
   {
     title: 'Appearance',
     features: [
-      { key: 'darkMode', label: 'Dark Mode', description: 'Switch between light and dark themes', icon: Moon },
+      // 🔒 AUDIT V25 FIX §3 row 8 (Batch 3): Removed duplicate Dark Mode toggle.
+      // V19-034 removed one duplicate but this entry remained. The Appearance
+      // tab has its own Dark Mode toggle (the canonical one). Two toggles for
+      // the same feature in the same Settings screen was confusing.
       { key: 'keyboardShortcuts', label: 'Keyboard Shortcuts', description: 'Press N/S/I/D/R/A for quick navigation', icon: Keyboard },
       { key: 'globalSearch', label: 'Global Search (Ctrl+K)', description: 'Search products, parties & transactions anywhere', icon: Search },
       { key: 'pwaInstall', label: 'PWA Install Prompt', description: 'Show install as app prompt', icon: Smartphone },
@@ -928,6 +931,13 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
               Was: safe "Download Backup" action grouped with destructive "Reset All Data"
               inside a rose-bordered danger card. Now: separate blue card above the danger
               zone so the user doesn't confuse a safe action with a destructive one. */}
+          {/* 🔒 AUDIT V25 FIX §3 row 7 (Batch 3): Unified backup card — consolidated
+              the 3 separate backup cards (Data tab "Backup Your Data" + Data tab
+              "Restore from Backup" + Appearance tab "Backup & Restore") into ONE
+              card here in the Data tab. The Appearance tab duplicate is removed.
+              This card now shows last-backup timestamp + uses handleBackupNow
+              (which tracks backingUp state). Restore stays as a separate card
+              below — it's a different action (upload vs download). */}
           <div className="rounded-lg border border-blue-200 dark:border-blue-900/40 bg-blue-50 dark:bg-blue-950/20 p-4">
             <div className="flex items-start gap-3">
               <Download className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
@@ -937,21 +947,23 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
                   Download all your products, transactions, parties, and settings as a JSON file.
                   Use this to migrate to a new device or keep a safe copy.
                 </p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="mt-2 gap-2 border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/40"
-                  onClick={async () => {
-                    try {
-                      await exportBackup()
-                      sonnerToast.success('Backup downloaded!')
-                    } catch {
-                      sonnerToast.error('Failed to create backup')
-                    }
-                  }}
-                >
-                  <Download className="w-4 h-4" /> Download Backup
-                </Button>
+                <div className="flex items-center justify-between gap-2 mt-3 flex-wrap">
+                  <p className="text-[11px] text-blue-700 dark:text-blue-300">
+                    {lastBackup
+                      ? `Last backup: ${new Date(lastBackup).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} at ${new Date(lastBackup).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`
+                      : 'No backup yet — tap "Backup Now" to download'}
+                  </p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-2 border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/40"
+                    onClick={handleBackupNow}
+                    disabled={backingUp}
+                  >
+                    {backingUp ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                    {backingUp ? 'Backing up...' : 'Backup Now'}
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
@@ -1306,37 +1318,11 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
             </div>
           </div>
 
-          {/* 🔒 V22-7 (Phase 5): Auto-Backup — one-tap full data backup.
-              Shows last backup timestamp + a "Backup Now" button that
-              triggers exportBackup() (downloads a JSON file). */}
-          <div className="mt-3 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/40 p-3">
-            <div className="flex items-center gap-2 mb-2">
-              <Download className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-              <div className="flex-1">
-                <p className="text-sm font-medium">Backup & Restore</p>
-                <p className="text-[11px] text-muted-foreground">
-                  Download a full backup of your shop data (products, transactions, parties, settings). Keep it safe — you can restore it anytime.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center justify-between gap-2 mt-2">
-              <p className="text-[11px] text-muted-foreground">
-                {lastBackup
-                  ? `Last backup: ${new Date(lastBackup).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} at ${new Date(lastBackup).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`
-                  : 'No backup yet — tap "Backup Now" to download'}
-              </p>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleBackupNow}
-                disabled={backingUp}
-                className="gap-1.5 border-blue-300 text-blue-700 hover:bg-blue-100 dark:text-blue-400 dark:border-blue-800 dark:hover:bg-blue-950"
-              >
-                {backingUp ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
-                {backingUp ? 'Backing up...' : 'Backup Now'}
-              </Button>
-            </div>
-          </div>
+          {/* 🔒 AUDIT V25 FIX §3 row 7 (Batch 3): Removed duplicate "Backup &
+              Restore" card from Appearance tab. The canonical backup card now
+              lives in the Data tab (with last-backup timestamp + Backup Now
+              button + Restore from Backup below). The Appearance tab duplicate
+              was 1 of 3 backup cards in Settings — confusing. */}
         </CardContent>
       </Card>
       )}

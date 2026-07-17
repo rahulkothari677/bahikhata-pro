@@ -6258,3 +6258,67 @@ Stage Summary:
 - 1640 tests passing, 0 TypeScript errors, 0 ESLint errors, build clean.
 - Browser verification: deferred (per user instruction).
 - Awaiting user pass before Batch 3 (dashboard right rail + de-duplication — §2.4 dashboard layout, §3 rows 7-9, §3.5 miscategorization).
+
+---
+Task ID: audit-v25-batch-3
+Agent: main
+Task: V25 Audit Batch 3 — Dashboard right rail + de-duplication (§2.4, §3 rows 1-2, 7-9).
+
+Work Log:
+- Verified all V25 §2.4 + §3 findings still hold post-Batch-2.
+- Decision: Deferred §3.5 miscategorization rename to a future Batch 3b. Requires more thought (rename "Data & Privacy" → split into "Accounting Controls" + "Data & Backup") and possibly a new Settings tab. Would balloon this batch. The duplication removal (higher impact) ships now.
+
+§2.4 — Dashboard right rail (lg:grid-cols-[1fr_360px]):
+- Wrapped main content (mini-charts, sales trend, 3-col row, category breakdown, recent transactions, day-end summary) in a main-column div.
+- Wrapped right-rail sections (Business Goals, Business Health Score, Smart Insights, Analytics Insights) in a right-rail div with `lg:sticky lg:top-4` so it stays visible while scrolling.
+- Wrapped both in a `lg:grid lg:grid-cols-[1fr_360px] lg:gap-5 lg:items-start` grid.
+- Greeting banner, Quick Actions, Date selector, KPI cards stay full-width above the grid (unchanged).
+- Mobile/tablet: single column, no visual change (lg: prefixes only kick in at ≥1024px).
+- Files changed: Dashboard.tsx.
+
+§3 row 9 — Delete duplicate revenue-target widget:
+- Removed "Revenue Target Progress Card" (was lines 597-671, Stripe-style progress card showing only revenue).
+- Kept "Business Goals" card (shows BOTH revenue target AND expense budget with progress — more informative).
+- The Business Goals card now lives in the right rail (per §2.4 above).
+- Files changed: Dashboard.tsx.
+
+§3 row 8 — Delete duplicate Dark Mode toggle:
+- Removed `darkMode` entry from FEATURE_CATEGORIES.Appearance array in Settings.tsx (line 60).
+- The Appearance tab's own Dark Mode toggle (line ~1139) is the canonical one.
+- V19-034 previously removed one duplicate; this removes the second.
+- Kept `Moon` import (still used by the canonical toggle).
+- Files changed: Settings.tsx.
+
+§3 rows 1-2 — De-duplicate More (directory mode):
+- Removed 5 GST leaf items from MoreScreen "GST & Tax" section: GSTR-1, GSTR-3B, GSTR-2B, GST Summary, HSN Summary (all duplicated in ReportsHub).
+- Replaced with a single "All GST Reports →" pointer that opens ReportsHub.
+- Kept Reconciliation + Period Lock (they deep-link to Account, not ReportsHub).
+- Removed Stock Summary + Item-wise Profit leaves from "Items & Stock" section (duplicated in ReportsHub).
+- Removed P&L Statement leaf from "Reports & Analytics" section (duplicated in ReportsHub). "All Reports" remains as the canonical pointer.
+- Cleaned up dead reportTypeMap entries (8 entries removed: gstr-1, gstr-3b, gstr-2b, gst, hsn, pl, stock, item-profit). Only Bank Reconciliation deep-link remains.
+- Removed 3 unused lucide imports: FileCheck, Hash, TrendingUp.
+- Files changed: MoreScreen.tsx.
+
+§3 row 7 — Consolidate 3 backup cards into 1:
+- Enhanced the Data tab "Backup Your Data" card to show last-backup timestamp + use handleBackupNow (which tracks backingUp state).
+- Removed the duplicate "Backup & Restore" card from the Appearance tab (was lines 1321-1351).
+- The Data tab now has: 1 unified Backup card (with timestamp + Backup Now button) + 1 Restore card (separate concern, upload vs download).
+- Was: 3 backup cards in Settings (Data tab Backup + Data tab Restore + Appearance tab Backup & Restore). Now: 2 cards in Data tab only.
+- Files changed: Settings.tsx.
+
+Additional existing bugs found during scan:
+- None. Grepped for other duplicate feature toggles (lowStockAlerts, reorderAlerts, profitTracking) — all singletons. Grepped for other duplicate widgets on same screen — none found. Grepped for orphaned imports — none found.
+
+Verification:
+- npx tsc --noEmit: 0 errors
+- npx eslint (changed files): 0 errors, 0 warnings
+- npx jest: 1640/1640 pass (42 suites)
+- npx next build: Compiled successfully (BUILD_ID present)
+
+Stage Summary:
+- V25 Audit Batch 3 COMPLETE. 4 §3 sub-findings addressed (rows 1-2, 7, 8, 9) + §2.4 dashboard right rail. §3.5 miscategorization rename deferred to Batch 3b.
+- Files changed: 3 (Dashboard.tsx, Settings.tsx, MoreScreen.tsx).
+- Net LOC: -120 (significant dead code + duplicate removal; added right-rail grid wrapper).
+- 1640 tests passing, 0 TypeScript errors, 0 ESLint errors, build clean.
+- Browser verification: deferred (per user instruction).
+- Awaiting user pass before Batch 4 decision (§6.1 navigation registry — large multi-day refactor, likely deferred to its own epic).

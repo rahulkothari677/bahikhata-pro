@@ -594,81 +594,25 @@ export function Dashboard() {
         />
       </div>
 
-      {/* 🔒 V22-8 (Phase 6): Revenue Target Progress Card.
-          Shows progress toward the monthly revenue target (if set).
-          Uses the existing revenueTarget from useBusinessGoals.
-          Only shows when a revenue target is set AND there's range revenue.
-          Inspired by Stripe's revenue progress widgets. */}
-      {revenueTarget && revenueTarget > 0 && (() => {
-        // 🔒 AUDIT V23 FIX §8.6: Use this-month revenue for the Revenue Target card,
-        // not kpis.rangeRevenue which follows the selected dashboard range.
-        // "Today" selected → rangeRevenue = today's revenue → "Monthly Revenue Target 3%"
-        // is nonsense. This card always shows this-month progress regardless of range.
-        const now = new Date()
-        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1)
-        const thisMonthRevenue = kpis.rangeRevenue && datePreset === 'thisMonth'
-          ? kpis.rangeRevenue
-          : kpis.rangeRevenue && dateRange.from <= monthStart && dateRange.to >= now
-            ? kpis.rangeRevenue // range covers this month
-            : null // can't determine from current range — use rangeRevenue as fallback
-        const cardRevenue = thisMonthRevenue ?? kpis.rangeRevenue
-        const pct = Math.min(100, (cardRevenue / revenueTarget) * 100)
-        const remaining = Math.max(0, revenueTarget - cardRevenue)
-        return (
-        <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10 overflow-hidden">
-          <CardContent className="p-4">
-            <div className="flex items-start justify-between mb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-md">
-                  <Target className="w-4 h-4 text-white" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold">Monthly Revenue Target</p>
-                  <p className="text-[11px] text-muted-foreground">
-                    {formatINR(cardRevenue)} of {formatINR(revenueTarget)} • This Month
-                  </p>
-                </div>
-              </div>
-              <div className="text-right">
-                    <p className={cn(
-                      'text-lg font-bold tabular-nums',
-                      pct >= 100 ? 'text-emerald-600 dark:text-emerald-400' : 'text-foreground',
-                    )}>
-                      {pct.toFixed(0)}%
-                    </p>
-                    {remaining > 0 ? (
-                      <p className="text-[10px] text-muted-foreground">{formatINRCompact(remaining)} to go</p>
-                    ) : (
-                      <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">Target reached! 🎉</p>
-                    )}
-                  </div>
-            </div>
-            {/* Progress bar */}
-            <div className="h-3 bg-muted rounded-full overflow-hidden relative">
-              <div
-                className={cn(
-                  'h-full rounded-full transition-all duration-700 ease-out',
-                  pct >= 100
-                    ? 'bg-gradient-to-r from-emerald-400 to-teal-500'
-                        : pct >= 50
-                          ? 'bg-gradient-to-r from-amber-400 to-emerald-500'
-                          : 'bg-gradient-to-r from-rose-400 to-amber-500',
-                    )}
-                    style={{ width: `${Math.max(2, pct)}%` }}
-                  />
-            </div>
-            {/* Milestone markers */}
-            <div className="flex justify-between mt-1.5 text-[9px] text-muted-foreground">
-              <span>0%</span>
-              <span>25%</span>
-              <span>50%</span>
-              <span>75%</span>
-              <span>100%</span>
-            </div>
-          </CardContent>
-        </Card>
-        );
-      })()}
+      {/* 🔒 AUDIT V25 FIX §3 row 9 (Batch 3): Removed duplicate Revenue Target
+          Progress Card (was lines 597-671). The "Business Goals" card at the
+          bottom of the dashboard shows BOTH revenue target AND expense budget
+          with progress — more informative. The duplicate caused confusion
+          (two progress bars for the same target on one screen) and the
+          auditor flagged it. The Business Goals card now moves to the
+          desktop right rail (see §2.4 fix below). */}
+
+      {/* 🔒 AUDIT V25 FIX §2.4 (Batch 3): Desktop 2-column layout.
+          On large screens (lg+), the dashboard splits into:
+            - Main column (1fr): mini-charts, sales trend, 3-col row, category
+              breakdown, recent transactions, day-end summary
+            - Right rail (360px): Business Goals, Health Score, Smart Insights,
+              Analytics Insights
+          On mobile/tablet, everything stacks in a single column (unchanged).
+          The right rail is sticky on desktop so it stays visible while
+          scrolling the main column. */}
+      <div className="lg:grid lg:grid-cols-[1fr_360px] lg:gap-5 lg:items-start">
+      <div className="space-y-3 lg:space-y-5 lg:col-span-1">
 
       {/* Mini-charts row — quick visual insights at a glance.
           Sparkline: last 7 days sales trend (no axes, just the line)
@@ -1148,6 +1092,14 @@ export function Dashboard() {
         </Card>
       )}
 
+      {/* 🔒 AUDIT V25 FIX §2.4 (Batch 3): End of main column. Right rail starts below. */}
+      </div>{/* /main column */}
+
+      {/* 🔒 AUDIT V25 FIX §2.4 (Batch 3): Right rail — Business Goals, Health Score,
+          Smart Insights, Analytics. Sticky on desktop so it stays visible while
+          scrolling the main column. Hidden visual change on mobile (stacks normally). */}
+      <div className="space-y-3 lg:space-y-5 lg:col-span-1 lg:sticky lg:top-4">
+
       {/* Business Goals — monthly revenue/expense targets with progress */}
       {(revenueTarget || expenseBudget) && kpis && (
         <div className="rounded-2xl bg-card border border-border/60 border-t-2 border-t-primary/10 shadow-card overflow-hidden">
@@ -1225,6 +1177,10 @@ export function Dashboard() {
 
       {/* V17-Ext 5.5: Business Analytics — best-sellers, dead stock, top customers, reorder */}
       {features?.businessAnalytics && <AnalyticsInsights />}
+
+      {/* 🔒 AUDIT V25 FIX §2.4 (Batch 3): End of right rail + grid. */}
+      </div>{/* /right rail */}
+      </div>{/* /grid */}
 
       {/* 🔒 V17-Ext §5.4: Day-end "Close the Drawer" dialog */}
       <DayEndSummary open={showDayEnd} onOpenChange={setShowDayEnd} />
