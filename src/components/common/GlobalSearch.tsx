@@ -1,14 +1,17 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useAppStore } from '@/store/app-store'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
-import { Search, ShoppingCart, Truck, Package, Users, Receipt, ArrowRight, TrendingUp, IndianRupee, LayoutDashboard, Wallet, FileBarChart, Settings, Plus, UserPlus, ScanLine, Bell } from 'lucide-react'
+import { Search, ArrowRight, ShoppingCart, Truck, Receipt } from 'lucide-react'
 import { cn, formatINR, formatDate } from '@/lib/utils'
 import { offlineFetch } from '@/lib/offline-fetch'
+// 🔒 AUDIT V25 §6.1 (Batch 8 Phase 6): GlobalSearch now renders commands from
+// the NavRegistry, filtered by surfaces: ['global-search'].
+import { NAV_REGISTRY, type NavDestination } from '@/lib/nav-registry'
+import { handleNavAction } from '@/lib/handle-nav-action'
 
 type SearchResult = {
   type: 'product' | 'party' | 'transaction'
@@ -78,7 +81,7 @@ export function GlobalSearch() {
         title: p.name,
         subtitle: `${p.category || 'Uncategorized'} • Stock: ${p.currentStock} ${p.unit}`,
         meta: formatINR(p.salePrice),
-        icon: Package,
+        icon: ShoppingCart,
         color: 'text-amber-600 dark:text-amber-400',
       })
     })
@@ -93,7 +96,7 @@ export function GlobalSearch() {
         title: p.name,
         subtitle: `${p.phone || 'No phone'} • ${p.type}`,
         meta: p.balance !== 0 ? formatINR(p.balance) : undefined,
-        icon: Users,
+        icon: Truck,
         color: p.type === 'customer' ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400',
       })
     })
@@ -114,37 +117,34 @@ export function GlobalSearch() {
     })
   }
 
-  // All available commands — shown when no query, filtered when typing
-  const allCommands = [
-    // Actions (create new)
-    { type: 'command', id: 'cmd-new-sale', title: 'New Sale', subtitle: 'Record a new sale transaction', icon: ShoppingCart, color: 'text-emerald-600 dark:text-emerald-400', keywords: 'new sale create add record', action: () => { setPreviousView(useAppStore.getState().currentView); setView('new-sale') } },
-    { type: 'command', id: 'cmd-new-purchase', title: 'New Purchase', subtitle: 'Record a new stock purchase', icon: Truck, color: 'text-amber-600 dark:text-amber-400', keywords: 'new purchase create add record buy stock', action: () => { setPreviousView(useAppStore.getState().currentView); setView('new-purchase') } },
-    { type: 'command', id: 'cmd-add-product', title: 'Add Product', subtitle: 'Add a new product to inventory', icon: Plus, color: 'text-violet-600', keywords: 'add new product create inventory item', action: () => { setView('inventory') } },
-    { type: 'command', id: 'cmd-add-party', title: 'Add Customer/Supplier', subtitle: 'Add a new party', icon: UserPlus, color: 'text-blue-600', keywords: 'add new customer supplier party create', action: () => { setView('parties') } },
-    { type: 'command', id: 'cmd-scan', title: 'Scan Bill with AI', subtitle: 'Snap a bill photo, auto-fill data', icon: ScanLine, color: 'text-amber-600 dark:text-amber-400', keywords: 'scan bill ai camera photo ocr', action: () => { setView('scanner') } },
-    // Navigation (go to)
-    { type: 'command', id: 'cmd-dashboard', title: 'Go to Dashboard', subtitle: 'View overview & charts', icon: LayoutDashboard, color: 'text-primary', keywords: 'dashboard home overview charts stats kpi', action: () => { setView('dashboard') } },
-    { type: 'command', id: 'cmd-sales', title: 'Go to Sales Ledger', subtitle: 'View all sales transactions', icon: ShoppingCart, color: 'text-emerald-600 dark:text-emerald-400', keywords: 'sales ledger transactions history', action: () => { setView('sales') } },
-    { type: 'command', id: 'cmd-purchases', title: 'Go to Purchase Ledger', subtitle: 'View all purchase transactions', icon: Truck, color: 'text-amber-600 dark:text-amber-400', keywords: 'purchases ledger transactions buy stock', action: () => { setView('purchases') } },
-    { type: 'command', id: 'cmd-inventory', title: 'Go to Inventory', subtitle: 'Manage products & stock', icon: Package, color: 'text-violet-600', keywords: 'inventory products stock items', action: () => { setView('inventory') } },
-    { type: 'command', id: 'cmd-parties', title: 'Go to Parties', subtitle: 'Customers & suppliers', icon: Users, color: 'text-blue-600', keywords: 'parties customers suppliers dues balance', action: () => { setView('parties') } },
-    { type: 'command', id: 'cmd-income', title: 'Go to Income & Expense', subtitle: 'Record rent, salary, other income', icon: Wallet, color: 'text-emerald-600 dark:text-emerald-400', keywords: 'income expense rent salary money', action: () => { setView('income-expense') } },
-    { type: 'command', id: 'cmd-reports', title: 'Go to Reports', subtitle: 'P&L, GST, stock reports', icon: FileBarChart, color: 'text-rose-600', keywords: 'reports gst pl profit loss stock analysis', action: () => { setView('reports') } },
-    { type: 'command', id: 'cmd-account', title: 'Go to Account', subtitle: 'Profile, settings, security, preferences', icon: Settings, color: 'text-slate-600', keywords: 'settings profile theme features configuration account security', action: () => { useAppStore.getState().setAccountOriginView(useAppStore.getState().currentView); setView('account') } },
-  ]
+  // 🔒 AUDIT V25 §6.1 (Batch 8 Phase 6): Commands from NavRegistry, filtered by
+  // surfaces: ['global-search']. Was: hardcoded allCommands array (13 items with
+  // inline action functions). Now: registry-driven, with handleNavAction() for clicks.
+  const allCommands = useMemo(() => {
+    return NAV_REGISTRY
+      .filter(d => d.surfaces?.includes('global-search'))
+      .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
+  }, [])
 
-  // Filter commands by query — match title, subtitle, or keywords
+  // Filter commands by query — match label, description, or keywords
   const filteredCommands = q
     ? allCommands.filter(c =>
-        c.title.toLowerCase().includes(q) ||
-        c.subtitle.toLowerCase().includes(q) ||
-        c.keywords.toLowerCase().includes(q)
+        c.label.toLowerCase().includes(q) ||
+        (c.description?.toLowerCase().includes(q)) ||
+        (c.keywords?.toLowerCase().includes(q))
       )
     : allCommands
 
   const handleSelect = (result: any) => {
     if (result.type === 'command') {
-      result.action()
+      // 🔒 AUDIT V25 §6.1 (Phase 6): Use shared handleNavAction for registry commands.
+      // Was: inline action() functions per command. Now: single shared handler.
+      const dest = result as NavDestination
+      if (dest.actionKind === 'custom') {
+        // Custom actions (none in GlobalSearch currently — all are navigate-based)
+        return
+      }
+      handleNavAction(dest)
       setSearchOpen(false)
     } else if (result.type === 'product') {
       setPreviousView(useAppStore.getState().currentView)
@@ -164,7 +164,9 @@ export function GlobalSearch() {
   }
 
   // Combined list: commands first, then search results
-  const allResults = [...filteredCommands, ...results]
+  // Convert NavDestination[] to a format compatible with the rendering
+  const commandResults = filteredCommands.map(c => ({ type: 'command' as const, ...c }))
+  const allResults = [...commandResults, ...results]
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') {
@@ -210,12 +212,12 @@ export function GlobalSearch() {
           ) : (
             <div className="p-2">
               {/* Commands section */}
-              {filteredCommands.length > 0 && (
+              {commandResults.length > 0 && (
                 <>
                   <p className="text-[10px] uppercase text-muted-foreground font-medium px-2 py-1">
                     {q ? 'Matching commands' : 'Quick Actions'}
                   </p>
-                  {filteredCommands.map((cmd) => {
+                  {commandResults.map((cmd) => {
                     const globalIdx = allResults.indexOf(cmd)
                     const Icon = cmd.icon
                     return (
@@ -228,10 +230,10 @@ export function GlobalSearch() {
                           globalIdx === selectedIndex ? 'bg-primary/10' : 'hover:bg-muted'
                         )}
                       >
-                        <Icon className={cn('w-4 h-4 flex-shrink-0', cmd.color)} />
+                        <Icon className={cn('w-4 h-4 flex-shrink-0', cmd.iconColor || 'text-muted-foreground')} />
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{cmd.title}</p>
-                          <p className="text-[11px] text-muted-foreground truncate">{cmd.subtitle}</p>
+                          <p className="text-sm font-medium truncate">{cmd.label}</p>
+                          <p className="text-[11px] text-muted-foreground truncate">{cmd.description}</p>
                         </div>
                         <ArrowRight className="w-3 h-3 text-muted-foreground" />
                       </button>
@@ -247,7 +249,7 @@ export function GlobalSearch() {
                     {results.length} search result{results.length !== 1 ? 's' : ''}
                   </p>
                   {results.map((result) => {
-                    const globalIdx = allResults.indexOf(result) + filteredCommands.length
+                    const globalIdx = allResults.indexOf(result)
                     const Icon = result.icon
                     return (
                       <button

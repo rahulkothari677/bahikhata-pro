@@ -33,6 +33,7 @@ import {
   User, Store, CreditCard, Shield, Settings as SettingsIcon, Check,
   Database, UserCog, Gift, HelpCircle, Star, LogOut, Info,
   TrendingUp, Clock, Scale, Receipt, Hash, Wallet as WalletIcon,
+  Plus, UserPlus,
   type LucideIcon,
 } from 'lucide-react'
 import type { ViewType, FeatureKey } from '@/store/app-store'
@@ -106,6 +107,8 @@ export interface NavDestination {
   sortOrder?: number
   /** Which surfaces should show this destination. Default: inferred from frequency. */
   surfaces?: NavSurface[]
+  /** Search keywords for GlobalSearch filtering (space-separated). Optional. */
+  keywords?: string
   /** Tailwind text color class for the icon */
   iconColor?: string
   /** Tailwind bg color class for the icon container */
@@ -188,6 +191,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'primary',
     surfaces: ['sidebar-main', 'bottom-nav', 'global-search'],
     sortOrder: 1,
+    keywords: 'dashboard home overview charts stats kpi',
     moduleKey: 'dashboard',
   },
 
@@ -205,6 +209,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'primary',
     surfaces: ['sidebar-main', 'bottom-nav', 'global-search'],
     sortOrder: 3,
+    keywords: 'sales ledger transactions history sell',
     moduleKey: 'sales',
   },
   {
@@ -220,6 +225,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'primary',
     surfaces: ['sidebar-main', 'bottom-nav', 'global-search'],
     sortOrder: 4,
+    keywords: 'purchases ledger transactions buy stock',
     moduleKey: 'purchases',
   },
   {
@@ -236,6 +242,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'secondary',
     surfaces: ['more', 'global-search'],
     sortOrder: 1,
+    keywords: 'new sale create add record',
   },
   {
     id: 'new-purchase',
@@ -251,6 +258,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'secondary',
     surfaces: ['more', 'global-search'],
     sortOrder: 2,
+    keywords: 'new purchase create add record buy stock',
   },
   {
     id: 'sale-return',
@@ -324,6 +332,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'primary',
     surfaces: ['sidebar-main', 'more', 'global-search'],
     sortOrder: 6,
+    keywords: 'income expense rent salary money',
     moduleKey: 'incomeExpense',
   },
 
@@ -341,6 +350,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'primary',
     surfaces: ['sidebar-main', 'more', 'global-search'],
     sortOrder: 5,
+    keywords: 'inventory products stock items',
     moduleKey: 'inventory',
   },
   {
@@ -373,6 +383,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'primary',
     surfaces: ['sidebar-main', 'more', 'global-search'],
     sortOrder: 7,
+    keywords: 'parties customers suppliers dues balance',
     moduleKey: 'parties',
   },
   {
@@ -404,6 +415,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'primary',
     surfaces: ['sidebar-main', 'more', 'global-search'],
     sortOrder: 8,
+    keywords: 'reports gst pl profit loss stock analysis',
     moduleKey: 'reports',
   },
   // GST & Tax section (MoreScreen pointers + ReportsHub leaves)
@@ -698,6 +710,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'primary',
     surfaces: ['sidebar-main', 'more', 'global-search'],
     sortOrder: 2,
+    keywords: 'scan bill ai camera photo ocr scanner',
     moduleKey: 'scanner',
     featureFlag: 'aiScanner',
   },
@@ -1088,7 +1101,51 @@ export function groupBySubcategory(destinations: NavDestination[]): Map<NavSubca
   const groups = new Map<NavSubcategoryId | undefined, NavDestination[]>()
   for (const d of destinations) {
     const key = d.subcategory
-    if (!groups.has(key)) groups.set(key, [])
+    if (!groups.has(key)) groups.set(key, [
+  // ═══ GlobalSearch-only commands (not shown in any nav surface) ═══════
+  {
+    id: 'add-product',
+    label: 'Add Product',
+    description: 'Add a new product to inventory',
+    icon: Plus,
+    iconColor: 'text-violet-600',
+    iconBg: 'bg-violet-100 dark:bg-violet-950',
+    view: 'inventory',
+    actionKind: 'navigate',
+    category: 'inventory',
+    frequency: 'primary',
+    surfaces: ['global-search'],
+    keywords: 'add new product create inventory item',
+  },
+  {
+    id: 'add-party',
+    label: 'Add Customer/Supplier',
+    description: 'Add a new party',
+    icon: UserPlus,
+    iconColor: 'text-blue-600',
+    iconBg: 'bg-blue-100 dark:bg-blue-950',
+    view: 'parties',
+    actionKind: 'navigate',
+    category: 'parties',
+    frequency: 'primary',
+    surfaces: ['global-search'],
+    keywords: 'add new customer supplier party create',
+  },
+  {
+    id: 'go-to-account',
+    label: 'Go to Account',
+    description: 'Profile, settings, security, preferences',
+    icon: SettingsIcon,
+    iconColor: 'text-slate-600',
+    iconBg: 'bg-slate-100',
+    actionKind: 'navigate-account',
+    category: 'account',
+    frequency: 'tertiary',
+    surfaces: ['global-search'],
+    keywords: 'settings profile theme features configuration account security',
+  },
+
+])
     groups.get(key)!.push(d)
   }
   return groups
