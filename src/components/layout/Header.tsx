@@ -6,7 +6,7 @@ import { useTranslation } from '@/hooks/use-translation'
 import { Menu, Plus, Sparkles, ScanLine, ArrowLeft, Search, LogOut, Store, ChevronDown, Check, Globe } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { getInitials } from '@/lib/utils'
+import { getInitials, cn } from '@/lib/utils'
 import { haptic } from '@/lib/haptic'
 import { useQuery } from '@tanstack/react-query'
 import { useSession, signOut } from 'next-auth/react'
@@ -75,8 +75,8 @@ export function Header() {
 
   // 🔒 V21-012 fix: Added 'pricing' and 'ai-comparison' and 'ai-usage' to
   // isDetailView so they show a back button when navigated from Account page.
-  const isDetailView = currentView === 'transaction-detail' || currentView === 'party-profile' || currentView === 'new-sale' || currentView === 'new-purchase' || currentView === 'pricing' || currentView === 'ai-comparison' || currentView === 'ai-usage'
-  const isNewEntryView = currentView === 'new-sale' || currentView === 'new-purchase'
+  const isDetailView = currentView === 'transaction-detail' || currentView === 'party-profile' || currentView === 'new-sale' || currentView === 'new-purchase' || currentView === 'new-estimate' || currentView === 'pricing' || currentView === 'ai-comparison' || currentView === 'ai-usage'
+  const isNewEntryView = currentView === 'new-sale' || currentView === 'new-purchase' || currentView === 'new-estimate'
   const showNewEntry = dialogViews.includes(currentView) && !isDetailView && !isNewEntryView
 
   const handleNewEntry = () => {
@@ -309,37 +309,49 @@ export function Header() {
 
 /**
  * 🔒 V8 U7: LanguageToggle — quick language switcher in the header.
- * Cycles through available languages. Saves to Settings via PUT /api/settings.
+ * 🔒 FIX: Was a cycle button (click through 10 languages one at a time).
+ * Now a dropdown popover — user picks their language from a list.
+ * Also fixes the toggle bug where display didn't match the language
+ * (was saving voiceLang instead of language to the server).
  */
 function LanguageToggle() {
   const { language, setLanguage } = useTranslation()
+  const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
 
   const LANGS = [
     { code: 'en', label: 'EN', name: 'English' },
-    { code: 'hi', label: 'हि', name: 'हिन्दी' },
-    { code: 'mr', label: 'मर', name: 'मराठी' },
-    { code: 'ta', label: 'த', name: 'தமிழ்' },
-    { code: 'te', label: 'తె', name: 'తెలుగు' },
+    { code: 'hi', label: 'हिं', name: 'हिंदी' },
     { code: 'gu', label: 'ગુ', name: 'ગુજરાતી' },
-    { code: 'bn', label: 'বাং', name: 'বাংলা' },
-    { code: 'kn', label: 'ಕ', name: 'ಕನ್ನಡ' },
-    { code: 'ml', label: 'മ', name: 'മലയാളം' },
-    { code: 'pa', label: 'ਪੰ', name: 'ਪੰਜਾਬੀ' },
+    { code: 'mr', label: 'मरा', name: 'मराठी' },
+    { code: 'ta', label: 'தமி', name: 'தமிழ்' },
+    { code: 'te', label: 'తెలు', name: 'తెలుగు' },
   ]
 
   const currentLang = LANGS.find(l => l.code === language) || LANGS[0]
 
-  const cycle = async () => {
-    const currentIdx = LANGS.findIndex(l => l.code === language)
-    const nextLang = LANGS[(currentIdx + 1) % LANGS.length]
-    setLanguage(nextLang.code)
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return
+    const handleClick = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [open])
+
+  const selectLang = async (code: string) => {
+    setLanguage(code)
+    setOpen(false)
     setSaving(true)
     try {
       await offlineFetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ voiceLang: nextLang.code }),
+        body: JSON.stringify({ language: code }),
         offline: { invalidate: ['/api/settings'] },
       })
     } catch {
@@ -350,16 +362,36 @@ function LanguageToggle() {
   }
 
   return (
-    <Button
-      size="iconTouch"
-      variant="ghost"
-      onClick={cycle}
-      disabled={saving}
-      className="flex-shrink-0"
-      title={`Language: ${currentLang.name} — click to switch`}
-      aria-label={`Switch language (current: ${currentLang.name})`}
-    >
-      <span className="text-sm font-bold">{currentLang.label}</span>
-    </Button>
+    <div ref={ref} className="relative flex-shrink-0">
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={() => setOpen(!open)}
+        disabled={saving}
+        className="px-2 py-1 gap-1"
+        title={`Language: ${currentLang.name}`}
+        aria-label={`Select language (current: ${currentLang.name})`}
+      >
+        <Globe className="w-4 h-4" />
+        <span className="text-xs font-bold">{currentLang.label}</span>
+      </Button>
+      {open && (
+        <div className="absolute right-0 top-full mt-1 bg-popover border border-border rounded-xl shadow-xl py-1 min-w-[140px] z-50">
+          {LANGS.map(lang => (
+            <button
+              key={lang.code}
+              onClick={() => selectLang(lang.code)}
+              className={cn(
+                'w-full flex items-center justify-between px-3 py-2 hover:bg-muted transition text-left text-sm',
+                lang.code === language && 'bg-primary/10 font-semibold text-primary'
+              )}
+            >
+              <span>{lang.name}</span>
+              {lang.code === language && <Check className="w-3.5 h-3.5 text-primary" />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }

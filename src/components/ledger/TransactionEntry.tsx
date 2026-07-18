@@ -660,7 +660,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       queryClient.invalidateQueries({ queryKey: ['transactions'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       triggerRefresh()
-      setView(isSale ? 'sales' : 'purchases')
+      setView(estimateMode ? 'sales' : (isSale ? 'sales' : 'purchases'))
     } catch (e) {
       haptic.error()
       sonnerToast.error('Failed to save transaction')
@@ -673,7 +673,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
     if (previousView) {
       setView(previousView)
     } else {
-      setView(isSale ? 'sales' : 'purchases')
+      setView(estimateMode ? 'sales' : (isSale ? 'sales' : 'purchases'))
     }
     setPreviousView(null)
   }

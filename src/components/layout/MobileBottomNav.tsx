@@ -66,7 +66,7 @@ export function MobileBottomNav() {
 
   // Don't show on auth screen or new entry/detail pages (those have their own back button)
   // The More screen KEEPS the bottom nav so users can switch tabs without going back
-  const hideOnViews: ViewType[] = ['new-sale', 'new-purchase', 'transaction-detail', 'party-profile']
+  const hideOnViews: ViewType[] = ['new-sale', 'new-purchase', 'new-estimate', 'transaction-detail', 'party-profile']
   if (hideOnViews.includes(currentView)) return null
 
   // 🔒 AUDIT V25 FIX §4.6: isMoreActive was highlighting the "More" tab for
