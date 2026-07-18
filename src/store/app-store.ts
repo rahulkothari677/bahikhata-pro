@@ -156,6 +156,10 @@ interface AppState {
   // Cleared after scrolling so it doesn't re-trigger on every mount.
   scrollTarget: string | null
   setScrollTarget: (target: string | null) => void
+  // 🔒 Feature Phase 6: Guided returns — returnMode flag shows a banner on the
+  // sales/purchase ledger telling the user to pick a transaction to return.
+  returnMode: 'sale' | 'purchase' | null
+  setReturnMode: (mode: 'sale' | 'purchase' | null) => void
   previousView: ViewType | null
   setPreviousView: (v: ViewType | null) => void
   pendingDateRange: { from: string; to: string; preset: string } | null
@@ -282,6 +286,9 @@ export const useAppStore = create<AppState>()(
       fireTriggerBulkReminders: () => set((s) => ({ triggerBulkReminders: s.triggerBulkReminders + 1 })),
       scrollTarget: null,
       setScrollTarget: (target) => set({ scrollTarget: target }),
+      // 🔒 Feature Phase 6: Guided returns
+      returnMode: null,
+      setReturnMode: (mode) => set({ returnMode: mode }),
       previousView: null,
       setPreviousView: (v) => set({ previousView: v }),
       pendingDateRange: null,

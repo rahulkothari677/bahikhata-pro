@@ -21,7 +21,7 @@ import { ContextMenu, type ContextMenuItem } from '@/components/common/ContextMe
 import {
   Search, ShoppingCart, Truck, Receipt, IndianRupee,
   TrendingUp, Calendar, User, ScanLine, ChevronRight, Plus, X,
-  Edit2, Trash2, Eye, Printer, AlertCircle, RefreshCw,
+  Edit2, Trash2, Eye, Printer, AlertCircle, RefreshCw, Undo2,
 } from 'lucide-react'
 import { offlineFetch, isQueuedResponse, isOnline, OfflineError } from '@/lib/offline-fetch'
 import { OfflineNoData } from '@/components/common/OfflineNoData'
@@ -343,6 +343,8 @@ export function Ledger({ type }: { type: LedgerType }) {
     setSelectedTransactionId(txnId)
     setSelectedTransactionType(type)
     setPreviousView(isSale ? 'sales' : 'purchases')
+    // 🔒 Feature Phase 6: Clear return mode when user picks a transaction
+    useAppStore.getState().setReturnMode(null)
     // On desktop (lg+) WITH split-view access, LedgerSplitView shows the
     // detail inline (it checks selectedTransactionId + canUse('split_view')).
     // Everyone else — mobile, AND free-plan users on desktop — must navigate
@@ -368,6 +370,35 @@ export function Ledger({ type }: { type: LedgerType }) {
 
   return (
     <div className="space-y-4">
+      {/* 🔒 Feature Phase 6: Guided returns — banner shown when the user
+          tapped "Sale Return" or "Purchase Return" in MoreScreen. Tells
+          them to pick a transaction, then tap "Credit Note" / "Debit Note"
+          on the detail page to record the return. */}
+      {useAppStore.getState().returnMode === type && (
+        <div className="rounded-2xl bg-indigo-50 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-900/40 p-4 flex items-start gap-3">
+          <div className="w-9 h-9 rounded-lg bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center flex-shrink-0">
+            <Undo2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-indigo-900 dark:text-indigo-100">
+              {isSale ? 'Record a Sale Return' : 'Record a Purchase Return'}
+            </p>
+            <p className="text-xs text-indigo-700 dark:text-indigo-300 mt-0.5">
+              Tap a {isSale ? 'sale' : 'purchase'} below to open it, then tap
+              "{isSale ? 'Credit Note' : 'Debit Note'}" to record the return.
+              You can return all or some items.
+            </p>
+          </div>
+          <button
+            onClick={() => useAppStore.getState().setReturnMode(null)}
+            className="text-indigo-400 hover:text-indigo-600 dark:hover:text-indigo-200 p-1 -mt-1 -mr-1"
+            aria-label="Cancel return mode"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Stats — with colored top accent bars like KPI cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <div className="rounded-2xl bg-card border border-border/60 shadow-card overflow-hidden">

@@ -289,7 +289,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     descKey: 'nav.desc.sale-return',
     actionParams: {
       toastTitle: 'Pick a sale to return',
-      toastDescription: 'Tap any sale in the list → "Credit Note" to record a return.',
+      toastDescription: 'Tap any sale → "Credit Note" to record a return.',
     },
     category: 'transactions',
     subcategory: 'sale-purchase',
@@ -310,7 +310,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     descKey: 'nav.desc.purchase-return',
     actionParams: {
       toastTitle: 'Pick a purchase to return',
-      toastDescription: 'Tap any purchase in the list → "Debit Note" to record a return to supplier.',
+      toastDescription: 'Tap any purchase → "Debit Note" to record a return to supplier.',
     },
     category: 'transactions',
     subcategory: 'sale-purchase',

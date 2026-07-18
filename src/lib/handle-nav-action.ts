@@ -83,6 +83,10 @@ export function handleNavAction(
           duration: 5000,
         })
       }
+      // 🔒 Feature Phase 6: Set returnMode for sale-return / purchase-return
+      // so the Ledger shows a "Pick a sale to return" banner.
+      if (dest.id === 'sale-return') store.setReturnMode('sale')
+      else if (dest.id === 'purchase-return') store.setReturnMode('purchase')
       if (dest.view) store.setView(dest.view)
       break
 
