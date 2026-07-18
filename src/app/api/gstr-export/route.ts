@@ -7,6 +7,7 @@ import { istMonthStart, getISTDateParts, isSameISTMonth, istDateString, istYearM
 import { apiError } from '@/lib/api-error'
 import { captureGstFilingError } from '@/lib/sentry-gst'
 import { deriveStateCode } from '@/lib/gst'
+import { getPriorFYBounds } from '@/lib/fiscal-year'
 
 // ⏱️ Vercel serverless timeout — GSTR export aggregates all transactions
 // in a period and generates CSV/JSON. Can take several seconds at scale.
@@ -365,7 +366,10 @@ export async function GET(req: NextRequest) {
     // The per-invoice aggregation includes credit-note items (via the CDN section),
     // so the summary must also subtract credit-note taxable to match.
     // Without this, per-invoice taxable > summary taxable → reconciliation fails.
-    const [saleAgg, creditNoteAgg] = await Promise.all([
+    //
+    // 🔒 V26 BUG-052: Also fetch debit-note aggregate for cur_gt computation
+    // (was missing — the legacy route only fetched sale + credit-note).
+    const [saleAgg, creditNoteAgg, debitNoteAgg] = await Promise.all([
       db.transaction.aggregate({
         where: activeTransactionWhere(userId, {
           type: 'sale',
@@ -396,7 +400,44 @@ export async function GET(req: NextRequest) {
         },
         _count: true,
       }),
+      // 🔒 V26 BUG-052: debit notes increase outward supply (additional consideration)
+      db.transaction.aggregate({
+        where: activeTransactionWhere(userId, {
+          type: 'debit-note',
+          date: { gte: from, lte: to },
+        }),
+        _sum: {
+          subtotal: true,
+          discountAmount: true,
+        },
+        _count: true,
+      }),
     ])
+
+    // 🔒 V26 BUG-052: Compute cur_gt (current-period outward turnover) and
+    // gt (prior-FY outward turnover). Was: both hardcoded 0. Same formula as
+    // the canonical /api/gstr-1 route (N9 fix): Σ(sale taxable) − Σ(credit-note
+    // taxable) + Σ(debit-note taxable), where taxable = subtotal − discountAmount.
+    const saleTaxable = roundMoney((saleAgg._sum.subtotal || 0) - (saleAgg._sum.discountAmount || 0))
+    const creditNoteTaxable = roundMoney((creditNoteAgg._sum.subtotal || 0) - (creditNoteAgg._sum.discountAmount || 0))
+    const debitNoteTaxable = roundMoney((debitNoteAgg._sum.subtotal || 0) - (debitNoteAgg._sum.discountAmount || 0))
+    const cur_gt = roundMoney(saleTaxable - creditNoteTaxable + debitNoteTaxable)
+
+    // Prior-FY turnover via raw SQL (same as /api/gstr-1 N9 fix).
+    const priorFY = getPriorFYBounds(fromParts.year, fromParts.month + 1)
+    const priorFyRows = await db.$queryRaw<Array<{ turnoverPaise: bigint }>>`
+      SELECT
+        COALESCE(SUM(CASE WHEN "type" = 'sale' THEN "subtotal" - "discountAmount" ELSE 0 END), 0) -
+        COALESCE(SUM(CASE WHEN "type" = 'credit-note' THEN "subtotal" - "discountAmount" ELSE 0 END), 0) +
+        COALESCE(SUM(CASE WHEN "type" = 'debit-note' THEN "subtotal" - "discountAmount" ELSE 0 END), 0) AS "turnoverPaise"
+      FROM "Transaction"
+      WHERE "userId" = ${userId}
+        AND "deletedAt" IS NULL
+        AND "type" IN ('sale', 'credit-note', 'debit-note')
+        AND "date" >= ${priorFY.start}
+        AND "date" < ${priorFY.end}
+    `
+    const gt = fromPaise(Number(priorFyRows[0]?.turnoverPaise ?? 0))
 
     // Net totals: sale - credit-note
     const summaryAgg = {
@@ -422,8 +463,10 @@ export async function GET(req: NextRequest) {
       // intended month, but the isWholeMonthBoundary case (line 84-91) explicitly
       // allows `to` to be the 1st of the NEXT month.
       fp: `${String(fromParts.month + 1).padStart(2, '0')}${fromParts.year}`,
-      gt: 0,
-      cur_gt: 0,
+      // 🔒 V26 BUG-052: populate gt + cur_gt (was hardcoded 0). Same formula
+      // as the canonical /api/gstr-1 route (N9 fix).
+      gt,
+      cur_gt,
       b2b: b2bInvoices,
       // 🔒 V7 M2: B2CL = inter-state B2C above threshold. Was: only filtered
       // on total >= 100000, ignoring isInterState. Intra-state high-value

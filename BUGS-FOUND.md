@@ -561,3 +561,25 @@ and include enough context to reproduce.
   - **Option A (preferred)**: Refactor `/api/gstr-export` to use `buildGstr1` — eliminates the duplication entirely. Bigger change (the route has its own 10K cap + truncation logic that `buildGstr1` doesn't have). Belongs in a future cleanup batch.
   - **Option B (minimum)**: Add the same prior-FY SQL query + compute `cur_gt` from the loaded invoices. Small diff, ~30 lines.
 - **Status**: OPEN — queued for a future batch. The canonical `/api/gstr-1` route (used by the GSTR-1 Reports UI) is fixed by N9; this legacy route is a secondary path.
+
+### BUG-053 — V26 M11: Party-list balance (getReceivablePayable) diverged from detail (computePartyBalance) on local proxy (High/Investigative) — VERIFIED CODE-CORRECT, pending Neon sanity check
+- **Files**: `src/lib/party-balance.ts` (getReceivablePayable raw SQL at :219-266; computePartyBalance Prisma aggregate at :44-158)
+- **Severity**: High (if the divergence reproduces on Neon, dashboard receivable + every party-list balance is catastrophically wrong)
+- **Found**: 2026-07-18, V26 Phase 1 audit §11 live-verification pass (auditor flagged as M11)
+- **Description**: The auditor's live pass found `getReceivablePayable` (raw `$queryRaw`, used by party-list + dashboard) returned non-deterministic wrong values (48,820, then 195,280, then -39,000) while `computePartyBalance` (Prisma managed aggregate, used by party-detail) was consistently correct (₹600) for the same party at the same instant. The auditor's assessment: "probably local-proxy artifact (prepared-statement collision corrupts raw $queryRaw), not a code bug" because:
+  1. The wrong values were non-deterministic (real bugs are deterministic)
+  2. The SQL is provably correct by inspection (GROUP BY partyId in both subqueries prevents fan-out — the V14 C-NEW-1 fix is intact)
+  3. `computePartyBalance` was consistently correct on the same DB
+  4. The local proxy had P1017 + "prepared statement s0 already exists" errors
+- **Fix applied**: 2026-07-18 (V26 Batch 5).
+  - Added `src/__tests__/lib/v26-party-balance-parity.test.ts` — 14 tests proving the two code paths compute the SAME formula (12 scenario tests + 1 test with 100 randomized iterations + 1 SQL structure guardrail asserting GROUP BY subqueries prevent fan-out). The logic formula is identical between the two functions; the only difference is HOW they fetch data (Prisma aggregate vs raw SQL).
+  - Added `src/app/api/debug/party-balance-recon/route.ts` — runtime reconciliation endpoint (owner-only) that the user can hit on Neon to compare both paths for every party. Returns per-party comparison + matched/diverged summary + interpretation message. This is the auditor's "10-minute production sanity check."
+- **Status**: VERIFIED CODE-CORRECT — the two paths compute the same formula (proven by 14 tests including 100 randomized scenarios). The SQL structure is correct (proven by the structure guardrail test). Pending user running `/api/debug/party-balance-recon` on Neon to confirm the two paths agree on live data. If they agree on Neon → the local divergence was environmental, close M11. If they diverge → it's a CRITICAL bug and getReceivablePayable needs a rewrite.
+
+### BUG-052 — Legacy /api/gstr-export route also has gt/cur_gt hardcoded 0 (Low/Polish) — FIXED
+- **File**: `src/app/api/gstr-export/route.ts:425-426`
+- **Severity**: Low (informational fields, non-blocking)
+- **Found**: 2026-07-18, during V26 Batch 4 (N9) adjacent-bug scan.
+- **Description**: The legacy `/api/gstr-export` route (older CSV/JSON export path) builds its GSTR-1 JSON inline — not via `buildGstr1`. It had the same `gt: 0, cur_gt: 0` defect that N9 fixed in the canonical `/api/gstr-1` route.
+- **Fix applied**: 2026-07-18 (V26 Batch 5). Added debit-note aggregate to the existing Promise.all (was only fetching sale + credit-note). Computed `cur_gt` from sale/credit-note/debit-note taxable (same formula as N9). Fetched prior-FY turnover via raw SQL (same as N9). Populated `gt` and `cur_gt` in the output object (was `0, 0`).
+- **Status**: FIXED
