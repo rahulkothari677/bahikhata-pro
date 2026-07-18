@@ -7229,3 +7229,50 @@ Stage Summary:
   2. Hit /api/debug/party-balance-recon again — divergence should now be 0
   3. Re-download GSTR-1 JSON — doc_issue 'to' field should now be a real invoice number, not a CUID
   4. Re-validate GSTR-1 JSON — doc_issue error should be gone. sply_ty errors are a validator issue, not an app bug (verify against official gst.gov.in offline tool).
+
+---
+Task ID: audit-v26-batch-9
+Agent: main
+Task: Fix GSTR-1 nil section structure (BUG-059) + investigate Anita ₹990 divergence (BUG-058 update).
+
+Work Log:
+- Analyzed user's two responses:
+  1. Repair endpoint found 0 NULL paidAmounts → NULL theory was WRONG
+  2. Recon still shows ₹990 divergence for Anita → COALESCE fix didn't help (because there are no NULLs to COALESCE)
+  3. GSTR-1 nil section has wrong structure → sply_ty should be supply type, not exemption type
+
+§1 — BUG-059: GSTR-1 nil section restructure:
+- File: src/lib/gstr1-builder.ts (buildNIL function + Gstr1NilEntry interface)
+- Was: 3 entries with sply_ty = 'NIL'/'EXPT'/'NGST' + description + txval
+- Fix: up to 4 entries with sply_ty = 'INTRAB2B'/'INTRB2B'/'INTRAB2C'/'INTRB2C' + nil_amt + expt_amt + ngsup_amt
+- Supply type derived from: isInterState (inter vs intra) × partyGstin presence (B2B vs B2C)
+- Only entries with non-zero amounts are emitted (was always 3 dummy entries even when empty)
+- expt_amt and ngsup_amt stay 0 — Product.gstTreatment not yet tracked in builder input
+- Updated Gstr1NilEntry interface
+- 6 new/updated NIL tests + 3 existing tests updated (gstr1-builder.test.ts + v26-gstr1-turnover.test.ts)
+
+§2 — BUG-058: Anita ₹990 divergence investigation update:
+- COALESCE fix is deployed and correct (defends against NULL paidAmount)
+- But repair endpoint found 0 NULL paidAmounts → NULL theory was WRONG
+- Recon still shows ₹990 divergence → COALESCE didn't help (no NULLs to COALESCE)
+- 10 of 11 parties match perfectly → NOT a live code bug, specific to Anita's data
+- Confirmed Party.openingBalance IS in MONEY_COLUMNS → correctly converted by money extension
+- Cannot determine root cause without the detail endpoint output
+- NEXT STEP: user needs to hit /api/debug/party-balance-detail?partyId=cmqt2fqof0017jv04tkyie2i3
+  - The componentComparison field will show EXACTLY which component differs
+  - The rawTransactions + rawPayments arrays will show the actual data
+  - The dataQuality scan will check for other anomalies (stale note defaults, orphaned notes, etc.)
+
+Verification:
+- npx tsc --noEmit: 0 errors
+- npx eslint: 0 errors, 0 warnings
+- npx jest: 1810/1810 pass (53 suites) — was 1807; +3 net new
+- npx next build: Compiled successfully (BUILD_ID: 87Z0xmm9NCyWk9T99_C8z)
+
+Stage Summary:
+- V26 Batch 9 COMPLETE. GSTR-1 nil section restructured (BUG-059 FIXED).
+- Anita ₹990 divergence: COALESCE fix is correct but NOT the root cause. Need detail endpoint output to continue investigation.
+- Files changed: 4 (src/lib/gstr1-builder.ts, src/__tests__/lib/gstr1-builder.test.ts, src/__tests__/lib/v26-gstr1-turnover.test.ts, BUGS-FOUND.md).
+- 1810 tests passing (was 1807; +3 net new), 0 TypeScript errors, 0 ESLint errors, build clean.
+- Pushed to GitHub: commit 5445ff8. Vercel auto-deploying.
+- User action needed: hit /api/debug/party-balance-detail?partyId=cmqt2fqof0017jv04tkyie2i3 and send me the full JSON response. The componentComparison will pinpoint the root cause.
