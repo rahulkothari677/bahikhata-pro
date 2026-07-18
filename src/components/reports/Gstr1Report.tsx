@@ -64,7 +64,17 @@ export function Gstr1Report() {
       sonnerToast.error('No GSTR-1 data to download. Check if the API returned an error.')
       return
     }
-    const json = JSON.stringify({ gstr1: data.gstr1 }, null, 2)
+    // 🔒 V26 BUG-054: Was `JSON.stringify({ gstr1: data.gstr1 }, null, 2)` —
+    // this wrapped the entire GSTR-1 data inside an outer `{ "gstr1": {…} }`
+    // object. The GST portal's JSON schema requires `gstin` and `fp` (along
+    // with every other top-level field) to sit at the ROOT of the file, not
+    // nested inside a `"gstr1"` wrapper. Portal validators reject the wrapped
+    // file with "Missing required key(s): gstin, fp" — they're not missing,
+    // just one level too deep.
+    //
+    // Fix: stringify `data.gstr1` directly. The downloaded file now starts
+    // with `{ "gstin": "...", "fp": "072026", "gt": …, "cur_gt": …, "b2b": […] }`.
+    const json = JSON.stringify(data.gstr1, null, 2)
     const blob = new Blob([json], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
