@@ -357,39 +357,88 @@ export function Dashboard() {
           onChange={handleDateChange}
           onPresetChange={setDatePreset}
         />
-        {/* Empty state hero */}
-        <div className="rounded-2xl bg-gradient-saffron p-8 lg:p-12 text-white shadow-lg relative overflow-hidden text-center">
+        {/* 🔒 Feature Phase 7: Guided first-sale flow — get new users to their
+            first value in <2 minutes. The old empty state had 3 equal buttons
+            (Record a Sale, Add Products, Scan a Bill) with no clear primary
+            action. The new version has a prominent "Record Your First Sale"
+            CTA with a 2-step guide that's faster to complete.
+
+            Step 1: Add a product (quick inline — name + price only)
+            Step 2: Record a sale with that product
+            Both steps link directly to the respective entry screens.
+
+            The "or try demo data" option seeds sample data for users who
+            want to explore before entering real data.
+        */}
+        <div className="rounded-2xl bg-gradient-saffron p-6 lg:p-10 text-white shadow-lg relative overflow-hidden">
           <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32" />
           <div className="relative z-10">
-            <BookOpenText className="w-12 h-12 text-white mb-4" />
-            <h2 className="text-2xl font-bold mb-2">Welcome to EkBook!</h2>
-            <p className="text-white/80 text-sm max-w-md mx-auto mb-6">
-              Your dashboard will come alive once you start recording sales. Here's how to get started in 2 minutes:
+            <BookOpenText className="w-10 h-10 text-white mb-3" />
+            <h2 className="text-xl lg:text-2xl font-bold mb-1">Welcome to EkBook! 🎉</h2>
+            <p className="text-white/80 text-sm mb-5">
+              Let's record your first sale — it takes less than 2 minutes.
             </p>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl mx-auto">
+
+            {/* Step-by-step guide */}
+            <div className="space-y-3 max-w-lg">
+              {/* Step 1: Add a product */}
               <button
-                onClick={() => setView('new-sale')}
-                className="bg-white/20 hover:bg-white/30 rounded-xl p-4 text-left transition active:scale-95"
+                onClick={() => {
+                  setPreviousView('dashboard')
+                  setView('inventory')
+                  sonnerToast.info('Step 1: Add a product', {
+                    description: 'Tap "Add Product" and enter the name + sale price. Then come back to record your first sale.',
+                    duration: 8000,
+                  })
+                }}
+                className="w-full bg-white/15 hover:bg-white/25 rounded-xl p-4 text-left transition active:scale-[0.98] flex items-center gap-3 group"
               >
-                <Plus className="w-6 h-6 mb-2" />
-                <p className="font-semibold text-sm">1. Record a Sale</p>
-                <p className="text-xs text-white/70 mt-1">Tap here to create your first sale entry</p>
+                <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center font-bold text-sm flex-shrink-0">1</div>
+                <div className="flex-1">
+                  <p className="font-semibold text-sm flex items-center gap-1.5">
+                    <Package className="w-4 h-4" /> Add your first product
+                  </p>
+                  <p className="text-xs text-white/70 mt-0.5">Enter a product name + price (30 seconds)</p>
+                </div>
+                <ArrowRight className="w-4 h-4 text-white/60 group-hover:text-white group-hover:translate-x-0.5 transition" />
               </button>
+
+              {/* Step 2: Record a sale */}
               <button
-                onClick={() => setView('inventory')}
-                className="bg-white/20 hover:bg-white/30 rounded-xl p-4 text-left transition active:scale-95"
+                onClick={() => {
+                  setPreviousView('dashboard')
+                  setView('new-sale')
+                  sonnerToast.info('Step 2: Record your first sale', {
+                    description: 'Select a product, enter the quantity, and tap Save. Your dashboard will come alive!',
+                    duration: 8000,
+                  })
+                }}
+                className="w-full bg-white text-saffron-600 rounded-xl p-4 text-left transition active:scale-[0.98] flex items-center gap-3 shadow-lg group"
               >
-                <Package className="w-6 h-6 mb-2" />
-                <p className="font-semibold text-sm">2. Add Products</p>
-                <p className="text-xs text-white/70 mt-1">Add your inventory items with prices</p>
+                <div className="w-8 h-8 rounded-full bg-saffron-600/10 flex items-center justify-center font-bold text-sm flex-shrink-0">2</div>
+                <div className="flex-1">
+                  <p className="font-semibold text-sm flex items-center gap-1.5">
+                    <Plus className="w-4 h-4" /> Record your first sale
+                  </p>
+                  <p className="text-xs text-saffron-600/70 mt-0.5">Pick a product, enter qty, tap Save (60 seconds)</p>
+                </div>
+                <ArrowRight className="w-4 h-4 text-saffron-600/60 group-hover:text-saffron-600 group-hover:translate-x-0.5 transition" />
               </button>
+
+              {/* Or: Scan a bill */}
               <button
-                onClick={() => setView('scanner')}
-                className="bg-white/20 hover:bg-white/30 rounded-xl p-4 text-left transition active:scale-95"
+                onClick={() => {
+                  setPreviousView('dashboard')
+                  setView('scanner')
+                }}
+                className="w-full bg-white/10 hover:bg-white/20 rounded-xl p-3 text-left transition active:scale-[0.98] flex items-center gap-3 group"
               >
-                <ScanLine className="w-6 h-6 mb-2" />
-                <p className="font-semibold text-sm">3. Scan a Bill</p>
-                <p className="text-xs text-white/70 mt-1">AI scans any bill automatically</p>
+                <ScanLine className="w-5 h-5 text-white/80 flex-shrink-0" />
+                <div className="flex-1">
+                  <p className="font-medium text-sm text-white/90">Or: Scan a bill with AI</p>
+                  <p className="text-xs text-white/60 mt-0.5">Snap a photo — we'll auto-fill everything</p>
+                </div>
+                <ArrowRight className="w-3.5 h-3.5 text-white/40 group-hover:text-white/70 transition" />
               </button>
             </div>
           </div>
