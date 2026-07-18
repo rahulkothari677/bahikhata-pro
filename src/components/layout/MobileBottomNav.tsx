@@ -29,8 +29,10 @@ import { prefetchView } from '@/lib/prefetch'  // 🔒 V11 §3.3
 import { useState, useRef, useEffect, useMemo } from 'react'
 // 🔒 AUDIT V25 §6.1 (Batch 8 Phase 3): BottomNav now renders from the NavRegistry.
 import { NAV_REGISTRY, filterByPermissions, type NavDestination } from '@/lib/nav-registry'
+import { useTranslation } from '@/hooks/use-translation'
 
 export function MobileBottomNav() {
+  const { t } = useTranslation()
   const { currentView, setView, previousView } = useAppStore()
   const { canAccess, isCA } = useStaffPermissions()
 
@@ -145,10 +147,10 @@ export function MobileBottomNav() {
                   'flex flex-col items-center justify-center gap-0.5 flex-1 h-full transition-colors',
                   isActive ? 'text-primary' : 'text-muted-foreground',
                 )}
-                aria-label={tab.label}
+                aria-label={tab.labelKey ? t(tab.labelKey) : tab.label}
               >
                 <Icon className="w-5 h-5" strokeWidth={isActive ? 2.5 : 2} />
-                <span className="text-[10px] font-medium">{tab.label}</span>
+                <span className="text-[10px] font-medium">{tab.labelKey ? t(tab.labelKey) : tab.label}</span>
               </button>
             )
           })}
@@ -220,10 +222,10 @@ export function MobileBottomNav() {
                   'flex flex-col items-center justify-center gap-0.5 flex-1 h-full transition-colors',
                   isActive ? 'text-primary' : 'text-muted-foreground',
                 )}
-                aria-label={tab.label}
+                aria-label={tab.labelKey ? t(tab.labelKey) : tab.label}
               >
                 <Icon className="w-5 h-5" strokeWidth={isActive ? 2.5 : 2} />
-                <span className="text-[10px] font-medium">{tab.label}</span>
+                <span className="text-[10px] font-medium">{tab.labelKey ? t(tab.labelKey) : tab.label}</span>
               </button>
             )
           })}

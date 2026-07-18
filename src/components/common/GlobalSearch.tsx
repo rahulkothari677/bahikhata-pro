@@ -12,6 +12,7 @@ import { offlineFetch } from '@/lib/offline-fetch'
 // the NavRegistry, filtered by surfaces: ['global-search'].
 import { NAV_REGISTRY, type NavDestination } from '@/lib/nav-registry'
 import { handleNavAction } from '@/lib/handle-nav-action'
+import { useTranslation } from '@/hooks/use-translation'
 
 type SearchResult = {
   type: 'product' | 'party' | 'transaction'
@@ -24,6 +25,7 @@ type SearchResult = {
 }
 
 export function GlobalSearch() {
+  const { t } = useTranslation()
   const { searchOpen, setSearchOpen, setView, setSelectedTransactionId, setSelectedPartyId, setPreviousView } = useAppStore()
   const [query, setQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
@@ -232,8 +234,8 @@ export function GlobalSearch() {
                       >
                         <Icon className={cn('w-4 h-4 flex-shrink-0', cmd.iconColor || 'text-muted-foreground')} />
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{cmd.label}</p>
-                          <p className="text-[11px] text-muted-foreground truncate">{cmd.description}</p>
+                          <p className="text-sm font-medium truncate">{cmd.labelKey ? t(cmd.labelKey) : cmd.label}</p>
+                          <p className="text-[11px] text-muted-foreground truncate">{cmd.descKey ? t(cmd.descKey) : cmd.description}</p>
                         </div>
                         <ArrowRight className="w-3 h-3 text-muted-foreground" />
                       </button>

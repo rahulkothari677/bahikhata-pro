@@ -28,6 +28,7 @@ import { useMemo } from 'react'
 import { NAV_REGISTRY, groupBySubcategory, type NavDestination, type NavSubcategoryId } from '@/lib/nav-registry'
 import { handleNavAction } from '@/lib/handle-nav-action'
 import { BarChart3, FileText, Package, Banknote, ChevronRight, type LucideIcon } from 'lucide-react'
+import { useTranslation } from '@/hooks/use-translation'
 
 // Section metadata: maps subcategory → { title, titleIcon, accentColor } for ReportsHub.
 // Matches the 4 categories from the old CATEGORIES array.
@@ -39,6 +40,7 @@ const CATEGORY_META: Partial<Record<NavSubcategoryId, { title: string; titleIcon
 }
 
 export function ReportsHub() {
+  const { t } = useTranslation()
   // 🔒 AUDIT V25 §6.1 (Batch 8 Phase 5): Report items from NavRegistry, filtered
   // by surfaces: ['reports-hub'] + grouped by subcategory.
   const { categories } = useMemo(() => {
@@ -110,9 +112,9 @@ export function ReportsHub() {
                       <Icon className={cn('w-5 h-5', report.iconColor || 'text-muted-foreground')} />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-sm leading-tight">{report.label}</p>
+                      <p className="font-semibold text-sm leading-tight">{report.labelKey ? t(report.labelKey) : report.label}</p>
                       <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                        {report.description}
+                        {report.descKey ? t(report.descKey) : report.description}
                       </p>
                     </div>
                     <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition flex-shrink-0 mt-0.5" />

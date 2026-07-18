@@ -223,13 +223,13 @@ export function Sidebar() {
                     ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-lg'
                     : 'text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
                 )}
-                title={sidebarCollapsed ? item.label : undefined}
+                title={sidebarCollapsed ? item.labelKey ? t(item.labelKey) : item.label : undefined}
               >
                 <Icon className={cn('w-[18px] h-[18px] flex-shrink-0', active && 'text-white')} />
                 {!sidebarCollapsed && (
                   <div className="flex-1 text-left min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium truncate">{item.label}</span>
+                      <span className="text-sm font-medium truncate">{item.labelKey ? t(item.labelKey) : item.label}</span>
                       {item.badge && (
                         <span className={cn(
                           'text-[9px] px-1.5 py-0.5 rounded-full font-bold',
@@ -245,7 +245,7 @@ export function Sidebar() {
                       'text-[11px] truncate',
                       active ? 'text-white/70' : 'text-sidebar-foreground/50'
                     )}>
-                      {item.description || item.label}
+                      {item.descKey ? t(item.descKey) : (item.description || (item.labelKey ? t(item.labelKey) : item.label))}
                     </p>
                   </div>
                 )}
@@ -292,19 +292,19 @@ export function Sidebar() {
                           ? 'bg-sidebar-primary/10 text-sidebar-primary'
                           : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
                       )}
-                      title={item.label}
+                      title={item.labelKey ? t(item.labelKey) : item.label}
                     >
                       <Icon className={cn('w-4 h-4 flex-shrink-0', active && 'text-sidebar-primary')} />
                       <div className="flex-1 text-left min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="text-[13px] font-medium truncate">{item.label}</span>
+                          <span className="text-[13px] font-medium truncate">{item.labelKey ? t(item.labelKey) : item.label}</span>
                           {item.badge && (
                             <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-gradient-saffron text-white">
                               {item.badge}
                             </span>
                           )}
                         </div>
-                        <p className="text-[10px] truncate text-sidebar-foreground/40">{item.description}</p>
+                        <p className="text-[10px] truncate text-sidebar-foreground/40">{item.descKey ? t(item.descKey) : item.description}</p>
                       </div>
                     </button>
                   )

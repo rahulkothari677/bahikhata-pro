@@ -109,6 +109,10 @@ export interface NavDestination {
   surfaces?: NavSurface[]
   /** Search keywords for GlobalSearch filtering (space-separated). Optional. */
   keywords?: string
+  /** i18n key for the label. If set, surfaces use t(labelKey) instead of label. */
+  labelKey?: string
+  /** i18n key for the description. If set, surfaces use t(descKey) instead of description. */
+  descKey?: string
   /** Tailwind text color class for the icon */
   iconColor?: string
   /** Tailwind bg color class for the icon container */
@@ -192,6 +196,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     surfaces: ['sidebar-main', 'bottom-nav', 'global-search'],
     sortOrder: 1,
     keywords: 'dashboard home overview charts stats kpi',
+    labelKey: 'nav.label.dashboard',
+    descKey: 'nav.desc.dashboard',
     moduleKey: 'dashboard',
   },
 
@@ -210,6 +216,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     surfaces: ['sidebar-main', 'bottom-nav', 'global-search'],
     sortOrder: 3,
     keywords: 'sales ledger transactions history sell',
+    labelKey: 'nav.label.sales',
+    descKey: 'nav.desc.sales',
     moduleKey: 'sales',
   },
   {
@@ -226,6 +234,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     surfaces: ['sidebar-main', 'bottom-nav', 'global-search'],
     sortOrder: 4,
     keywords: 'purchases ledger transactions buy stock',
+    labelKey: 'nav.label.purchases',
+    descKey: 'nav.desc.purchases',
     moduleKey: 'purchases',
   },
   {
@@ -243,6 +253,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     surfaces: ['more', 'global-search'],
     sortOrder: 1,
     keywords: 'new sale create add record',
+    labelKey: 'nav.label.new-sale',
+    descKey: 'nav.desc.new-sale',
   },
   {
     id: 'new-purchase',
@@ -259,6 +271,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     surfaces: ['more', 'global-search'],
     sortOrder: 2,
     keywords: 'new purchase create add record buy stock',
+    labelKey: 'nav.label.new-purchase',
+    descKey: 'nav.desc.new-purchase',
   },
   {
     id: 'sale-return',
@@ -271,6 +285,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     actionKind: 'toast-navigate',
     surfaces: ['more'],
     sortOrder: 3,
+    labelKey: 'nav.label.sale-return',
+    descKey: 'nav.desc.sale-return',
     actionParams: {
       toastTitle: 'Pick a sale to return',
       toastDescription: 'Tap any sale in the list → "Credit Note" to record a return.',
@@ -290,6 +306,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     actionKind: 'toast-navigate',
     surfaces: ['more'],
     sortOrder: 4,
+    labelKey: 'nav.label.purchase-return',
+    descKey: 'nav.desc.purchase-return',
     actionParams: {
       toastTitle: 'Pick a purchase to return',
       toastDescription: 'Tap any purchase in the list → "Debit Note" to record a return to supplier.',
@@ -310,6 +328,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     actionKind: 'coming-soon',
     surfaces: ['more'],
     sortOrder: 5,
+    labelKey: 'nav.label.estimates',
+    descKey: 'nav.desc.estimates',
     actionParams: {
       toastTitle: 'Estimates & Quotations coming soon!',
       toastDescription: 'We\'re building this feature — create professional quotes for your customers.',
@@ -333,6 +353,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     surfaces: ['sidebar-main', 'more', 'global-search'],
     sortOrder: 6,
     keywords: 'income expense rent salary money',
+    labelKey: 'nav.label.income-expense',
+    descKey: 'nav.desc.income-expense',
     moduleKey: 'incomeExpense',
   },
 
@@ -351,6 +373,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     surfaces: ['sidebar-main', 'more', 'global-search'],
     sortOrder: 5,
     keywords: 'inventory products stock items',
+    labelKey: 'nav.label.inventory',
+    descKey: 'nav.desc.inventory',
     moduleKey: 'inventory',
   },
   {
@@ -367,6 +391,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'secondary',
     surfaces: ['more'],
     sortOrder: 2,
+    labelKey: 'nav.label.low-stock-alerts',
+    descKey: 'nav.desc.low-stock-alerts',
   },
 
   // ═══ parties ═════════════════════════════════════════════════════════
@@ -384,6 +410,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     surfaces: ['sidebar-main', 'more', 'global-search'],
     sortOrder: 7,
     keywords: 'parties customers suppliers dues balance',
+    labelKey: 'nav.label.parties',
+    descKey: 'nav.desc.parties',
     moduleKey: 'parties',
   },
   {
@@ -399,6 +427,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'secondary',
     surfaces: ['more'],
     sortOrder: 4,
+    labelKey: 'nav.label.whatsapp-reminders',
+    descKey: 'nav.desc.whatsapp-reminders',
   },
 
   // ═══ reports ═════════════════════════════════════════════════════════
@@ -416,6 +446,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     surfaces: ['sidebar-main', 'more', 'global-search'],
     sortOrder: 8,
     keywords: 'reports gst pl profit loss stock analysis',
+    labelKey: 'nav.label.reports',
+    descKey: 'nav.desc.reports',
     moduleKey: 'reports',
   },
   // GST & Tax section (MoreScreen pointers + ReportsHub leaves)
@@ -433,6 +465,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'secondary',
     surfaces: ['sidebar-tools', 'more'],
     sortOrder: 4,
+    labelKey: 'nav.label.reconciliation',
+    descKey: 'nav.desc.reconciliation',
   },
   {
     id: 'period-lock',
@@ -448,6 +482,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'secondary',
     surfaces: ['sidebar-tools', 'more'],
     sortOrder: 5,
+    labelKey: 'nav.label.period-lock',
+    descKey: 'nav.desc.period-lock',
   },
   {
     id: 'bank-reconciliation',
@@ -463,6 +499,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'secondary',
     surfaces: ['more', 'reports-hub'],
     sortOrder: 1,
+    labelKey: 'nav.label.bank-reconciliation',
+    descKey: 'nav.desc.bank-reconciliation',
   },
   // Financial reports (ReportsHub)
   {
@@ -479,6 +517,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'secondary',
     surfaces: ['reports-hub'],
     sortOrder: 1,
+    labelKey: 'nav.label.pl',
+    descKey: 'nav.desc.pl',
   },
   {
     id: 'bill-profit',
@@ -494,6 +534,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'secondary',
     surfaces: ['reports-hub'],
     sortOrder: 2,
+    labelKey: 'nav.label.bill-profit',
+    descKey: 'nav.desc.bill-profit',
   },
   {
     id: 'item-profit',
@@ -509,6 +551,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'secondary',
     surfaces: ['reports-hub'],
     sortOrder: 3,
+    labelKey: 'nav.label.item-profit',
+    descKey: 'nav.desc.item-profit',
   },
   {
     id: 'party-statement',
@@ -524,6 +568,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'secondary',
     surfaces: ['reports-hub'],
     sortOrder: 4,
+    labelKey: 'nav.label.party-statement',
+    descKey: 'nav.desc.party-statement',
   },
   {
     id: 'debt-aging',
@@ -539,6 +585,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'secondary',
     surfaces: ['reports-hub'],
     sortOrder: 5,
+    labelKey: 'nav.label.debt-aging',
+    descKey: 'nav.desc.debt-aging',
   },
   {
     id: 'trial-balance',
@@ -554,6 +602,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'secondary',
     surfaces: ['reports-hub'],
     sortOrder: 6,
+    labelKey: 'nav.label.trial-balance',
+    descKey: 'nav.desc.trial-balance',
   },
   // GST reports (ReportsHub)
   {
@@ -570,6 +620,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'secondary',
     surfaces: ['reports-hub'],
     sortOrder: 1,
+    labelKey: 'nav.label.gstr-1',
+    descKey: 'nav.desc.gstr-1',
   },
   {
     id: 'gstr-3b',
@@ -585,6 +637,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'secondary',
     surfaces: ['reports-hub'],
     sortOrder: 2,
+    labelKey: 'nav.label.gstr-3b',
+    descKey: 'nav.desc.gstr-3b',
   },
   {
     id: 'gstr-2b',
@@ -600,6 +654,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'secondary',
     surfaces: ['reports-hub'],
     sortOrder: 3,
+    labelKey: 'nav.label.gstr-2b',
+    descKey: 'nav.desc.gstr-2b',
   },
   {
     id: 'gst-summary',
@@ -615,6 +671,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'secondary',
     surfaces: ['reports-hub'],
     sortOrder: 4,
+    labelKey: 'nav.label.gst-summary',
+    descKey: 'nav.desc.gst-summary',
   },
   {
     id: 'hsn-summary',
@@ -630,6 +688,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'secondary',
     surfaces: ['reports-hub'],
     sortOrder: 5,
+    labelKey: 'nav.label.hsn-summary',
+    descKey: 'nav.desc.hsn-summary',
   },
   // Inventory reports (ReportsHub)
   {
@@ -646,6 +706,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'secondary',
     surfaces: ['reports-hub'],
     sortOrder: 1,
+    labelKey: 'nav.label.stock-report',
+    descKey: 'nav.desc.stock-report',
   },
   {
     id: 'inventory-aging',
@@ -661,6 +723,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'secondary',
     surfaces: ['reports-hub'],
     sortOrder: 2,
+    labelKey: 'nav.label.inventory-aging',
+    descKey: 'nav.desc.inventory-aging',
   },
   // Banking reports (ReportsHub)
   {
@@ -677,6 +741,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'secondary',
     surfaces: ['reports-hub'],
     sortOrder: 2,
+    labelKey: 'nav.label.cashflow',
+    descKey: 'nav.desc.cashflow',
   },
   {
     id: 'consolidated',
@@ -692,6 +758,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'secondary',
     surfaces: ['reports-hub'],
     sortOrder: 3,
+    labelKey: 'nav.label.consolidated',
+    descKey: 'nav.desc.consolidated',
   },
 
   // ═══ tools ═══════════════════════════════════════════════════════════
@@ -711,6 +779,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     surfaces: ['sidebar-main', 'more', 'global-search'],
     sortOrder: 2,
     keywords: 'scan bill ai camera photo ocr scanner',
+    labelKey: 'nav.label.scanner',
+    descKey: 'nav.desc.scanner',
     moduleKey: 'scanner',
     featureFlag: 'aiScanner',
   },
@@ -728,6 +798,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     moduleKey: 'settings',
     surfaces: ['sidebar-tools', 'more'],
     sortOrder: 1,
+    labelKey: 'nav.label.document-vault',
+    descKey: 'nav.desc.document-vault',
   },
   {
     id: 'ai-usage',
@@ -745,6 +817,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     featureFlag: 'aiScanner',
     surfaces: ['sidebar-tools', 'more'],
     sortOrder: 2,
+    labelKey: 'nav.label.ai-usage',
+    descKey: 'nav.desc.ai-usage',
   },
   {
     id: 'ai-comparison',
@@ -762,6 +836,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     featureFlag: 'aiScanner',
     surfaces: ['sidebar-tools', 'more'],
     sortOrder: 3,
+    labelKey: 'nav.label.ai-comparison',
+    descKey: 'nav.desc.ai-comparison',
   },
   {
     id: 'voice-entry',
@@ -779,6 +855,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'secondary',
     surfaces: ['more'],
     sortOrder: 2,
+    labelKey: 'nav.label.voice-entry',
+    descKey: 'nav.desc.voice-entry',
   },
   {
     id: 'barcode-scanner',
@@ -794,6 +872,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'secondary',
     surfaces: ['more'],
     sortOrder: 3,
+    labelKey: 'nav.label.barcode-scanner',
+    descKey: 'nav.desc.barcode-scanner',
   },
   {
     id: 'smart-insights',
@@ -810,6 +890,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'secondary',
     surfaces: ['more'],
     sortOrder: 5,
+    labelKey: 'nav.label.smart-insights',
+    descKey: 'nav.desc.smart-insights',
   },
   {
     id: 'cash-in-hand',
@@ -826,6 +908,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'secondary',
     surfaces: ['more'],
     sortOrder: 2,
+    labelKey: 'nav.label.cash-in-hand',
+    descKey: 'nav.desc.cash-in-hand',
   },
   {
     id: 'day-end-summary',
@@ -841,6 +925,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'secondary',
     surfaces: ['more'],
     sortOrder: 3,
+    labelKey: 'nav.label.day-end-summary',
+    descKey: 'nav.desc.day-end-summary',
   },
 
   // ═══ account ═════════════════════════════════════════════════════════
@@ -859,6 +945,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'tertiary',
     surfaces: ['account'],
     sortOrder: 1,
+    labelKey: 'nav.label.my-profile',
+    descKey: 'nav.desc.my-profile',
   },
   {
     id: 'business-card',
@@ -874,6 +962,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'tertiary',
     surfaces: ['account'],
     sortOrder: 2,
+    labelKey: 'nav.label.business-card',
+    descKey: 'nav.desc.business-card',
   },
   {
     id: 'subscription',
@@ -889,6 +979,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'tertiary',
     surfaces: ['account'],
     sortOrder: 3,
+    labelKey: 'nav.label.subscription',
+    descKey: 'nav.desc.subscription',
   },
   {
     id: 'security',
@@ -904,6 +996,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'tertiary',
     surfaces: ['account'],
     sortOrder: 4,
+    labelKey: 'nav.label.security',
+    descKey: 'nav.desc.security',
   },
   // Preferences section (AccountScreen)
   {
@@ -920,6 +1014,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'tertiary',
     surfaces: ['account'],
     sortOrder: 1,
+    labelKey: 'nav.label.app-settings',
+    descKey: 'nav.desc.app-settings',
   },
   {
     id: 'feature-toggles',
@@ -935,6 +1031,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'tertiary',
     surfaces: ['account'],
     sortOrder: 2,
+    labelKey: 'nav.label.feature-toggles',
+    descKey: 'nav.desc.feature-toggles',
   },
   {
     id: 'accounting-controls',
@@ -950,6 +1048,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'tertiary',
     surfaces: ['account'],
     sortOrder: 3,
+    labelKey: 'nav.label.accounting-controls',
+    descKey: 'nav.desc.accounting-controls',
   },
   {
     id: 'data-backup',
@@ -965,6 +1065,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'tertiary',
     surfaces: ['account'],
     sortOrder: 4,
+    labelKey: 'nav.label.data-backup',
+    descKey: 'nav.desc.data-backup',
   },
   // Business section (AccountScreen)
   {
@@ -981,6 +1083,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'secondary',
     surfaces: ['more'],
     sortOrder: 1,
+    labelKey: 'nav.label.multi-shop-management',
+    descKey: 'nav.desc.multi-shop-management',
   },
   {
     id: 'staff-access',
@@ -996,6 +1100,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'secondary',
     surfaces: ['more', 'account'],
     sortOrder: 2,
+    labelKey: 'nav.label.staff-access',
+    descKey: 'nav.desc.staff-access',
     ownerOnly: true,
   },
   {
@@ -1012,6 +1118,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'tertiary',
     surfaces: ['account'],
     sortOrder: 1,
+    labelKey: 'nav.label.refer-earn',
+    descKey: 'nav.desc.refer-earn',
   },
   // Support section (AccountScreen)
   {
@@ -1028,6 +1136,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'tertiary',
     surfaces: ['account'],
     sortOrder: 1,
+    labelKey: 'nav.label.help-support',
+    descKey: 'nav.desc.help-support',
   },
   {
     id: 'rate-ekbook',
@@ -1042,6 +1152,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'tertiary',
     surfaces: ['account'],
     sortOrder: 2,
+    labelKey: 'nav.label.rate-ekbook',
+    descKey: 'nav.desc.rate-ekbook',
   },
   {
     id: 'about',
@@ -1057,6 +1169,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'tertiary',
     surfaces: ['account'],
     sortOrder: 3,
+    labelKey: 'nav.label.about',
+    descKey: 'nav.desc.about',
   },
   {
     id: 'logout',
@@ -1071,6 +1185,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'tertiary',
     surfaces: ['account'],
     sortOrder: 4,
+    labelKey: 'nav.label.logout',
+    descKey: 'nav.desc.logout',
   },
 
   // ═══ GlobalSearch-only commands (not shown in any nav surface) ═══════
@@ -1089,6 +1205,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'primary',
     surfaces: ['global-search'],
     keywords: 'add new product create inventory item',
+    labelKey: 'nav.label.add-product',
+    descKey: 'nav.desc.add-product',
   },
   {
     id: 'add-party',
@@ -1103,6 +1221,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'primary',
     surfaces: ['global-search'],
     keywords: 'add new customer supplier party create',
+    labelKey: 'nav.label.add-party',
+    descKey: 'nav.desc.add-party',
   },
   {
     id: 'go-to-account',
@@ -1117,6 +1237,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'tertiary',
     surfaces: ['global-search'],
     keywords: 'settings profile theme features configuration account security',
+    labelKey: 'nav.label.go-to-account',
+    descKey: 'nav.desc.go-to-account',
   },
 ]
 

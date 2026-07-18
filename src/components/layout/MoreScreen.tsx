@@ -47,6 +47,7 @@ import {
 } from 'lucide-react'
 import type { ViewType } from '@/store/app-store'
 import type { LucideIcon } from 'lucide-react'
+import { useTranslation } from '@/hooks/use-translation'
 
 // 🔒 AUDIT V25 §6.1 (Batch 8 Phase 4): SECTIONS array + MenuItem/MenuSection
 // interfaces REMOVED. MoreScreen now renders from the NavRegistry, filtered by
@@ -66,6 +67,7 @@ const SECTION_META: Partial<Record<NavSubcategoryId, { title: string; titleIcon:
 }
 
 export function MoreScreen() {
+  const { t } = useTranslation()
   const { setView, previousView, setPreviousView } = useAppStore()
   const { data: session } = useSession()
   const { canAccess, isCA } = useStaffPermissions()
@@ -215,7 +217,7 @@ export function MoreScreen() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <p className="font-medium text-sm">{item.label}</p>
+                        <p className="font-medium text-sm">{item.labelKey ? t(item.labelKey) : item.label}</p>
                         {item.badge && (
                           <span className={cn(
                             'text-[9px] px-1.5 py-0.5 rounded-full font-bold',
@@ -225,8 +227,8 @@ export function MoreScreen() {
                           </span>
                         )}
                       </div>
-                      {item.description && (
-                        <p className="text-xs text-muted-foreground truncate">{item.description}</p>
+                      {item.descKey ? t(item.descKey) : item.description && (
+                        <p className="text-xs text-muted-foreground truncate">{item.descKey ? t(item.descKey) : item.description}</p>
                       )}
                     </div>
                     <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition flex-shrink-0" />

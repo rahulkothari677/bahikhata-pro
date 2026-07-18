@@ -63,6 +63,7 @@ import {
 import type { ViewType } from '@/store/app-store'
 // 🔒 AUDIT V23 FIX §13.7: Use real ReferralCard instead of fake email-prefix code
 import { ReferralCard } from '@/components/referral/ReferralCard'
+import { useTranslation } from '@/hooks/use-translation'
 
 // 🔒 V22-6 (Phase 4) FIX: Move lazy() to module scope.
 // Was: `const SettingsComponent = lazy(...)` inside AccountSectionContent.
@@ -86,6 +87,7 @@ const ACCOUNT_SECTION_META: Partial<Record<string, { title: string }>> = {
 }
 
 export function AccountScreen() {
+  const { t } = useTranslation()
   const { setView, previousView, setPreviousView } = useAppStore()
   const accountSection = useAppStore((s) => s.accountSection)
   const setAccountSection = useAppStore((s) => s.setAccountSection)
@@ -657,7 +659,7 @@ export function AccountScreen() {
                         <Icon className={cn('w-5 h-5', item.iconColor || 'text-muted-foreground')} />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm">{item.label}</p>
+                        <p className="font-medium text-sm">{item.labelKey ? t(item.labelKey) : item.label}</p>
                         {item.description && (
                           <p className="text-xs text-muted-foreground truncate">{item.description}</p>
                         )}
