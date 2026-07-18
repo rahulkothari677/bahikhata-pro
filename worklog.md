@@ -7383,3 +7383,58 @@ Stage Summary:
 - Pushed to GitHub: commit 02c1d9b. Vercel auto-deploying.
 - User action: hit /api/debug/party-balance-recon again — all 11 parties should now match (0 diverged).
 - This should be the FINAL fix for M11. The root cause was a money extension double-conversion bug specific to Payment aggregates, now eliminated by using raw SQL (same path as getReceivablePayable).
+
+---
+Task ID: audit-v26-batch-12
+Agent: main
+Task: V26 AUDITOR hardening — repair endpoint safety fix + 3 auditor findings logged + Phase 1b checklist documented.
+
+Work Log:
+- Read auditor's review of V26 Batches 10-11. Three key instructions:
+  1. URGENT: Repair endpoint heuristic is dangerous — must require explicit payment IDs
+  2. Write-path root cause unidentified — plumbing fix is correct but the mechanism that wrote bad data is unknown
+  3. Phase 1b is now a short checklist, fold into Phase 2
+
+§1 — BUG-060: Repair endpoint hardening (CRITICAL SAFETY):
+- File: src/app/api/debug/repair-payment-amount/route.ts
+- Was: blanket heuristic flagged every payment >₹100 divisible by 100, live mode divided ALL by 100
+- DANGER: ₹200/₹500/₹1,000 cash payments are the norm in kirana — would corrupt them all
+- Fix: completely rewrote endpoint:
+  * Without paymentIds param: SCAN mode only (dry-run, no repairs). Reports all payments + flags suspicious with warning.
+  * With paymentIds=id1,id2 param: REPAIR mode — divides ONLY specified IDs by 100. No blanket heuristic.
+  * Each suspicious payment has a `warning` field: "may be legitimate, only repair if you have independent confirmation."
+  * Returns notFoundIds for any IDs that don't belong to this user.
+- The old `dryRun=false` blanket-repair behavior is GONE. You can no longer accidentally divide all payments by 100.
+
+§2 — BUG-061: Write-path root cause UNIDENTIFIED (logged, not fixed):
+- Auditor verified the money extension code has exactly ONE conversion each way (one toPaise on write, one fromPaise on read).
+- The "double-conversion" blame in the Batch 11 commit message was incorrect — the code doesn't double-convert.
+- The plumbing fix (raw SQL for payments) is correct and guarantees the two balance functions can't diverge.
+- But the MECHANISM that wrote 100,000 paise instead of 1,000 paise for Anita's ₹10 payment is unknown.
+- Most likely: an older deployed build was running when the payment was created (2026-07-08). The pre-V18-Phase-4 SQL had a `* 100` pattern that could have been applied twice if both old and new code paths ran.
+- Standing watch: weekly 5-minute check — create ₹10 payment on Neon, verify both screens show ₹10.
+
+§3 — BUG-062: B2CS-vs-CDNUR classification (logged for portal-upload verification):
+- V26 N2 fix classifies notes using the NOTE's own isInterState + totalAmount, not the ORIGINAL invoice's.
+- Defensible (notes typically inherit from original at creation time) but not strictly correct per GST rules.
+- Watch during real portal upload. If portal rejects, add original-invoice lookup.
+
+§4 — Phase 1b checklist (fold into Phase 2 opening week):
+1. One real GST-portal upload of the JSON (user needs GSTIN) — only remaining unverified step for M1/M2/BUG-059
+2. GSTR-2B reconciliation + e-invoice IRN internals — only two money modules never deep-audited
+3. Repair-endpoint hardening (DONE in this batch) + weekly Neon payment watch
+4. B2CS-vs-CDNUR classification verification during portal upload (BUG-062)
+
+Verification:
+- npx tsc --noEmit: 0 errors
+- npx eslint: 0 errors, 0 warnings
+- npx jest: 1812/1812 pass (53 suites) — all green
+- npx next build: Compiled successfully (BUILD_ID: pjGK-sJXtiI--JnY3S0ix)
+
+Stage Summary:
+- V26 Batch 12 COMPLETE. Auditor's urgent safety fix applied.
+- Files changed: 2 (src/app/api/debug/repair-payment-amount/route.ts, BUGS-FOUND.md).
+- 3 new bugs logged: BUG-060 (FIXED), BUG-061 (OPEN — standing watch), BUG-062 (OPEN — defer to portal upload).
+- 1812 tests passing, 0 TypeScript errors, 0 ESLint errors, build clean.
+- Pushed to GitHub: commit d0e3f97. Vercel auto-deploying.
+- V26 Phase 1 (Money & Accounting Engine) is now SUBSTANTIALLY COMPLETE. Phase 1b is a short checklist folded into Phase 2. The auditor recommends starting Phase 2 (Security) with the 1b checklist alongside.
