@@ -654,3 +654,31 @@ and include enough context to reproduce.
 ### BUG-058 — V26 M11: getReceivablePayable SQL NULL paidAmount fix — PARTILY RESOLVED (COALESCE added, but Anita's ₹990 persists)
 - **Status**: UPDATE — The COALESCE fix is deployed and correct (defends against NULL paidAmount). However, the user's Neon recon shows Anita's ₹990 divergence PERSISTS even though the repair endpoint found 0 NULL paidAmounts. This means the divergence has a DIFFERENT root cause than NULL paidAmount.
 - **Next step**: User needs to hit `/api/debug/party-balance-detail?partyId=cmqt2fqof0017jv04tkyie2i3` to see the component-by-component breakdown. The `componentComparison` field will show EXACTLY which component (openingBalance, salesOutstanding, purchaseOutstanding, creditNoteOutstanding, debitNoteOutstanding, paymentsReceived, paymentsPaid) differs between the Prisma path and the SQL path. That will pinpoint the root cause.
+
+### BUG-060 — V26 AUDITOR: Repair endpoint heuristic is dangerous (Critical/Safety) — FIXED
+- **File**: `src/app/api/debug/repair-payment-amount/route.ts`
+- **Severity**: Critical (would corrupt legitimate payments if run in live mode)
+- **Found**: 2026-07-19, auditor review of V26 Batch 10
+- **Description**: The repair endpoint's heuristic flagged every payment > ₹100 divisible by 100 as "suspicious." In live mode (`dryRun=false`), it divided ALL flagged amounts by 100. This is DANGEROUS — most cash payments in a kirana shop are ₹200, ₹500, ₹1,000 (all divisible by 100 and > ₹100). Running live mode would corrupt every legitimate round-amount cash payment, turning ₹500 into ₹5.
+- **Auditor quote**: "Its heuristic flags every legitimate payment that's a multiple of ₹100 — ₹200, ₹500, ₹1,000, i.e. most cash payments in a kirana — and live mode divides all flagged amounts by 100 blanket-style. It must be changed to accept explicit payment IDs first."
+- **Fix applied**: 2026-07-19 (V26 Batch 12). Completely rewrote the endpoint:
+  - Without `paymentIds` param: SCAN mode only (dry-run, no repairs). Reports all payments + flags suspicious ones with a warning that "suspicious" does NOT mean "definitely wrong."
+  - With `paymentIds=id1,id2` param: REPAIR mode — divides ONLY the specified payment IDs by 100. No blanket heuristic. The user must manually review the scan output and pass explicit IDs.
+  - Each suspicious payment now includes a `warning` field: "This payment matches the 100x heuristic but may be legitimate. Only repair if you have independent confirmation."
+- **Status**: FIXED
+
+### BUG-061 — V26 AUDITOR: Write-path root cause for 100× inflated payment UNIDENTIFIED (Medium/Investigative) — OPEN
+- **Files**: Unknown (the code path that created Anita's ₹1,000 payment as 100,000 paise instead of 1,000 paise)
+- **Severity**: Medium (the plumbing fix in Batch 11 prevents the two balance functions from diverging, but if the write-path bug still exists in a deployed build, new payments could be created 100× inflated)
+- **Found**: 2026-07-19, auditor review of V26 Batch 11
+- **Description**: The auditor verified that the money extension code has exactly ONE conversion each way (one `toPaise` on write, one `fromPaise` on read) — the "double-conversion" blame in the Batch 11 commit message contradicts the code. The plumbing fix (raw SQL for payments in `computePartyBalance`) is harmless and guarantees the two balance functions can't diverge, but the MECHANISM that wrote bad data into Neon is unidentified. Most likely an older deployed build (the payment was created on 2026-07-08; if a pre-V18-Phase-4 build was deployed at that time, the `* 100` SQL pattern from the old code could have been applied twice).
+- **Standing watch**: Weekly 5-minute check — create a ₹10 payment on Neon, verify both the party-detail and party-list screens show ₹10. If it ever recurs, it's a live hunt for the write-path bug.
+- **Status**: OPEN — root cause unidentified. Plumbing fix prevents divergence; standing watch will catch recurrence.
+
+### BUG-062 — V26 AUDITOR: B2CS-vs-CDNUR classification uses note's own value/state, not original invoice lookup (Low/GST-filing) — OPEN
+- **File**: `src/lib/gstr1-builder.ts` (buildB2CS + buildCDNUR)
+- **Severity**: Low (defensible interpretation, but should be verified against a real portal upload)
+- **Found**: 2026-07-19, auditor review of V26 N2 fix
+- **Description**: The V26 N2 fix classifies credit/debit notes for unregistered parties using the NOTE's own `isInterState` and `totalAmount` fields, rather than looking up the ORIGINAL invoice's `isInterState` and `totalAmount`. Per strict GST rules, the B2CS-vs-CDNUR classification should be based on the ORIGINAL supply's characteristics (the note inherits the original's supply type). The current code is defensible (the note typically inherits `isInterState` from the original at creation time), but if a note is ever created with different `isInterState` than its original (e.g. user edits), the classification could be wrong.
+- **Watch**: Verify against the real GST-portal upload. If the portal accepts it, the current approach is fine. If the portal rejects it, add a lookup to the original transaction.
+- **Status**: OPEN — deferred to Phase 1b checklist (verify during real portal upload).
