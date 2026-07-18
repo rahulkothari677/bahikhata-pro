@@ -57,13 +57,21 @@ import { useTranslation } from '@/hooks/use-translation'
 
 // Section metadata: maps subcategory → title + titleIcon for MoreScreen sections.
 // Only the subcategories that appear in MoreScreen are defined here.
+// 🔒 V26 BUG-047: Added 'financial', 'gst', 'inventory-reports', 'banking' so
+// the 15 reports newly surfaced in More (via surfaces: ['more', 'reports-hub'])
+// actually render under titled sections. Without these mappings the items
+// pass the filter but get dropped by `if (subcat && SECTION_META[subcat])`.
 const SECTION_META: Partial<Record<NavSubcategoryId, { title: string; titleIcon: LucideIcon }>> = {
-  'sale-purchase':     { title: 'Sale & Purchase', titleIcon: ShoppingCart },
-  'gst-tax':           { title: 'GST & Tax', titleIcon: FileText },
-  'money-banking':     { title: 'Money & Banking', titleIcon: Banknote },
-  'items-stock':       { title: 'Items & Stock', titleIcon: Package },
-  'reports-analytics': { title: 'Reports & Analytics', titleIcon: BarChart3 },
-  'smart-tools':       { title: 'Smart Tools', titleIcon: Sparkles },
+  'sale-purchase':       { title: 'Sale & Purchase',   titleIcon: ShoppingCart },
+  'gst-tax':             { title: 'GST & Tax',         titleIcon: FileText },
+  'gst':                 { title: 'GST Reports',       titleIcon: FileText },
+  'money-banking':       { title: 'Money & Banking',   titleIcon: Banknote },
+  'banking':             { title: 'Banking Reports',   titleIcon: Banknote },
+  'items-stock':         { title: 'Items & Stock',     titleIcon: Package },
+  'inventory-reports':   { title: 'Inventory Reports', titleIcon: Package },
+  'reports-analytics':   { title: 'Reports & Analytics', titleIcon: BarChart3 },
+  'financial':           { title: 'Financial Reports', titleIcon: BarChart3 },
+  'smart-tools':         { title: 'Smart Tools',       titleIcon: Sparkles },
 }
 
 export function MoreScreen() {
