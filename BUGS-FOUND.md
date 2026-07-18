@@ -506,3 +506,34 @@ and include enough context to reproduce.
 - **Description**: Same class as BUG-021 (fixed in V24). Two endpoints skipped `shouldHideProfit` entirely: `/api/insights` (margin-drop/-up insights surfaced from `grossProfit`) and `/api/reports/consolidated` (per-shop `profit` + `netProfit` rendered in UI columns). Found by V26 Phase 1 audit (M4 + M5).
 - **Fix applied**: 2026-07-18 (V26 Batch 1, N4). `insights/route.ts` switched from `getAuthUserIdWithModule('dashboard')` to `getAuthContext()`, computes `hideProfit = await shouldHideProfit(userId, role)`, and skips the entire `profit`-category insight block when hidden. `consolidated/route.ts` computes `hideProfit` and strips `profit`/`netProfit` from each shop row + total when hidden. `ConsolidatedReport.tsx` hides the Profit + Net Profit columns/cards when those fields are `undefined`. Added CI guardrail test `v26-profit-leak-guard.test.ts` that scans every route under `src/app/api` and fails CI if a profit-bearing route doesn't call `shouldHideProfit` (stops the recurring BUG-021 → M4/M5 → next-leak pattern). 10 new tests added.
 - **Status**: FIXED
+
+### BUG-047 — More screen: GST & TAX / Reports & Analytics sections are sparse because 14 reports are registered `reports-hub` only (High/UX) — OPEN
+- **Files**: `src/lib/nav-registry.ts` (14 destinations with `surfaces: ['reports-hub']` only); `src/components/layout/MoreScreen.tsx` (renders from registry filtered by `surfaces.includes('more')`)
+- **Severity**: High (the "More" screen's category headers promise reports they don't contain — every section feels half-empty)
+- **Found**: 2026-07-18, during V26 Batch 1 verification (user-flagged via screenshots 697 + 698)
+- **Description**: 14 report destinations are registered with `surfaces: ['reports-hub']` only — none include `'more'`. The MoreScreen filter `NAV_REGISTRY.filter(d => d.surfaces?.includes('more'))` excludes them, so:
+  - **GST & TAX section** shows only Reconciliation + Period Lock — missing GSTR-1, GSTR-3B, GSTR-2B Reconciliation, GST Summary, HSN Summary (5 GST reports)
+  - **Reports & Analytics section** is empty (no P&L, Trial Balance, Bill-wise Profit, Item-wise Profit, Party Statement, Debt Aging, Cashflow, Stock Report, Inventory Aging, Consolidated)
+  - **Items & Stock section** shows only Low Stock Alerts — missing Stock Report + Inventory Aging
+  - **Money & Banking section** shows Bank Reconciliation + Cash in Hand + Day-End Summary + WhatsApp Reminders — missing Cashflow + Consolidated
+- **Affected destinations** (all `surfaces: ['reports-hub']` only): `pl`, `bill-profit`, `item-profit`, `party-statement`, `debt-aging`, `trial-balance`, `gstr-1`, `gstr-3b`, `gstr-2b`, `gst-summary`, `hsn-summary`, `stock-report`, `inventory-aging`, `cashflow`, `consolidated`.
+- **Fix options**:
+  - **Option A (preferred)**: Add `'more'` to each report's `surfaces` array. They appear under their existing subcategory (`gst`, `financial`, `inventory-reports`, `banking`). No new component code needed. Cost: 14 one-line edits + verify More screen layout doesn't get too tall.
+  - **Option B**: Add a single "All GST Reports →" / "All Financial Reports →" pointer in each sparse section that opens ReportsHub. Lower clutter but adds a navigation hop.
+- **Status**: OPEN — queued for Batch 2b (after N5 restore) or as a standalone UX batch. User to confirm preference.
+
+### BUG-048 — Stale Vercel deployment: cash-in-hand i18n key leak visible in production (Medium/UX) — FIXED by deployment
+- **Files**: `src/lib/i18n.ts` (keys `nav.label.cash-in-hand` + `nav.desc.cash-in-hand` exist in `en` line 302/361 + `hi` line 737/779; missing in `gu`/`mr`/`ta`/`te` blocks but `getTranslation()` falls back to `en`)
+- **Severity**: Medium (visible garbage text in production)
+- **Found**: 2026-07-18, user-flagged via Screenshot 698 (mobile More screen showing literal `nav.label.cash-in-hand` + `nav.desc.cash-in-hand` strings)
+- **Description**: The keys exist correctly in `en` and `hi`. The fallback chain `translations[lang]?.[key] || translations.en[key] || key` correctly returns the English value for `gu`/`mr`/`ta`/`te` (verified by jest test). However, the user's Vercel deployment was stale (no push since prior to fix) — so the production site still showed the raw keys. After pushing Batch 1 (commit c7baf65) on 2026-07-18, Vercel will redeploy and the leak will disappear.
+- **Fix applied**: 2026-07-18 (push c7baf65 triggers Vercel auto-deploy). Code itself was already correct at HEAD `6a3fbb4`.
+- **Follow-up**: Add the missing keys to `gu`/`mr`/`ta`/`te` blocks so non-en/hi users get their language instead of English fallback. Low priority.
+- **Status**: FIXED (pending Vercel deployment completing ~2-3 min after push).
+
+### BUG-049 — i18n missing translations for nav.label/nav.desc keys in gu/mr/ta/te (Low/UX) — OPEN
+- **Files**: `src/lib/i18n.ts`
+- **Severity**: Low (users in Gujarati/Marathi/Tamil/Telugu see English fallback for nav labels)
+- **Description**: All `nav.label.*` and `nav.desc.*` keys (added in V25 Batch 8 Phase 4) only exist in `en` and `hi`. The `gu`, `mr`, `ta`, `te` blocks are missing them. The fallback chain correctly returns the English value, so the app is functional — but the localization is incomplete. Notable gaps: every nav label/desc key (~50+ strings).
+- **Fix**: Add the translated keys to each language block. Best done by a native speaker; machine translation is acceptable for an MVP.
+- **Status**: OPEN — low priority, queued for i18n cleanup batch.
