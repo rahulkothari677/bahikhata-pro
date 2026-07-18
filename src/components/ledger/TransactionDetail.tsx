@@ -394,6 +394,34 @@ export function TransactionDetail() {
             <FileText className="w-4 h-4" /> Credit Note
           </Button>
         )}
+        {/* 🔒 V26 FIX N1: Create Debit Note button (purchases only) — was 100%
+            missing. The server + entry form + validation all support debit notes,
+            but the UI entry point didn't exist. Purchase returns were completely
+            unreachable on BOTH platforms. */}
+        {isPurchase && (
+          <Button
+            variant="outline"
+            size="touch"
+            className="gap-2 border-violet-300 text-violet-700 hover:bg-violet-50"
+            onClick={() => {
+              useAppStore.getState().setSelectedTransactionId(null)
+              ;(window as any).__ledgerPreset = {
+                type: 'debit-note',
+                data: {
+                  partyId: txn.partyId,
+                  partyName: txn.party?.name,
+                  date: new Date().toISOString().slice(0, 10),
+                  originalTransactionId: txn.id,
+                  noteType: 'D',
+                },
+              }
+              useAppStore.getState().setPreviousView('transaction-detail')
+              useAppStore.getState().setView('new-purchase')
+            }}
+          >
+            <FileText className="w-4 h-4" /> Debit Note
+          </Button>
+        )}
         {/* 🔒 Feature Phase 3: Convert Estimate to Sale — creates a new sale
             from the estimate's items. The estimate stays in the DB (not deleted)
             so the user can see it was converted. */}

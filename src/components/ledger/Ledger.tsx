@@ -128,7 +128,10 @@ export function Ledger({ type }: { type: LedgerType }) {
     // V17-Ext Tier 3: Sales ledger includes credit notes; Purchase ledger
     // includes debit notes. They're related transactions the shopkeeper
     // needs to see in the same list.
-    const types = isSale ? ['sale', 'credit-note'] : ['purchase', 'debit-note']
+    // 🔒 V26 FIX N2: Sales ledger also includes estimates so they're visible
+    // and the "Convert to Sale" button is reachable. Without this, estimates
+    // were a black hole — createable but never viewable.
+    const types = isSale ? ['sale', 'credit-note', 'estimate'] : ['purchase', 'debit-note']
     const qp = new URLSearchParams({ type: types.join(','), limit: '50' })
     if (showVoided) qp.set('voided', 'true')
     if (dateRange) {
@@ -766,6 +769,12 @@ export function Ledger({ type }: { type: LedgerType }) {
                         {t.type === 'debit-note' && (
                           <Badge className="text-[9px] py-0 bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400">
                             Debit Note
+                          </Badge>
+                        )}
+                        {/* 🔒 V26 FIX N2: Estimate badge so estimates are visually distinguishable */}
+                        {t.type === 'estimate' && (
+                          <Badge className="text-[9px] py-0 bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400">
+                            Estimate
                           </Badge>
                         )}
                         {t.invoiceNo && (

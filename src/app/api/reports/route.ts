@@ -642,23 +642,30 @@ export async function GET(req: NextRequest) {
         _sum: { subtotal: true, discountAmount: true },
         _count: true,
       })
-      const summaryCogsAgg = await db.transactionItem.aggregate({
-        where: {
-          transaction: {
-            userId,
-            deletedAt: null,
-            type: { in: ['sale', 'credit-note'] },
-            date: { gte: from, lte: to },
-          },
-        },
-        _sum: { purchasePriceAtSale: true, quantity: true },
-      })
-      // Compute summary from ALL transactions (not truncated)
+      // 🔒 V26 FIX N3: Was computing Σ(price) × Σ(qty) — mathematically wrong.
+      // For items A: cost ₹10 × qty 2, B: cost ₹100 × qty 1, the old formula
+      // computed (10+100) × (2+1) = ₹330 instead of the correct 20+100 = ₹120.
+      // Now uses raw SQL SUM(purchasePriceAtSale * quantity) with sign-aware
+      // credit-note handling (same pattern as the item-profit report).
       const allRevenue = (summaryAgg._sum.subtotal || 0) - (summaryAgg._sum.discountAmount || 0)
-      // COGS = sum(purchasePriceAtSale * quantity) — approximate (doesn't separate sale vs credit-note)
-      const allCogs = (summaryCogsAgg._sum.purchasePriceAtSale || 0) * (summaryCogsAgg._sum.quantity || 0)
-      // This is an approximation since the aggregate doesn't distinguish sale vs credit-note
-      // for COGS. For exact COGS per type, we'd need raw SQL. This is close enough for summary.
+      const summaryCogsResult = await db.$queryRaw`
+        SELECT
+          COALESCE(SUM(
+            CASE
+              WHEN t."type" = 'sale' THEN ti."purchasePriceAtSale" * ti."quantity"
+              WHEN t."type" = 'credit-note' THEN -(ti."purchasePriceAtSale" * ti."quantity")
+              ELSE 0
+            END
+          ), 0) AS "totalCogsPaise"
+        FROM "TransactionItem" ti
+        JOIN "Transaction" t ON ti."transactionId" = t."id"
+        WHERE t."userId" = ${userId}
+          AND t."deletedAt" IS NULL
+          AND t."type" IN ('sale', 'credit-note')
+          AND t."date" >= ${from}
+          AND t."date" <= ${to}
+      `
+      const allCogs = fromPaise(Number((summaryCogsResult as any)[0]?.totalCogsPaise || 0))
       const allProfit = allRevenue - allCogs
       const avgMargin = allRevenue > 0 ? (allProfit / allRevenue) * 100 : 0
 

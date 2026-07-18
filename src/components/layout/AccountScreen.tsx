@@ -1076,7 +1076,7 @@ function AccountSectionContent({
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              Each shop's data is isolated (multi-tenant security)
+              Your data is protected with bank-grade encryption
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
@@ -1132,7 +1132,7 @@ function AccountSectionContent({
             <p className="font-semibold text-sm">Frequently Asked Questions</p>
           </div>
           {[
-            { q: 'Is my data safe?', a: 'Yes. All data is encrypted, passwords are hashed, and each shop\'s data is isolated. You can delete your data anytime.' },
+            { q: 'Is my data safe?', a: 'Yes. All data is encrypted, passwords are hashed, and your account is protected with multi-tenant isolation. You can delete your data anytime.' },
             { q: 'Does it work offline?', a: 'Yes! Create sales, add products, check inventory — everything works offline. Syncs automatically when online.' },
             { q: 'Can I use it on mobile and desktop?', a: 'Yes. EkBook works on any device with a browser. Install as an app on your phone for the best experience.' },
             { q: 'How do I file GST returns?', a: 'Go to Reports → GSTR-1 or GSTR-3B. GSTR-1 exports a portal-ready JSON (upload directly to gst.gov.in); GSTR-3B exports a CSV summary you can copy into the portal. One-click export.' },

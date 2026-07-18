@@ -615,7 +615,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
           <CardContent>
             <div className="space-y-2">
               {shops.map(shop => (
-                <div key={shop.id} className={`flex items-center gap-3 p-3 rounded-lg border transition ${activeShop?.id === shop.id ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/30'}`}>
+                <div key={shop.id} className={`flex items-center gap-3 p-3 rounded-lg border transition ${shop.isDefault ? 'border-primary bg-primary/5' : 'border-border'}`}>
                   <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
                     <Store className="w-4 h-4 text-primary" />
                   </div>
@@ -625,12 +625,11 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
                       {shop.gstin ? `GSTIN: ${shop.gstin}` : 'No GSTIN'} {shop.isDefault ? ' · Default' : ''}
                     </p>
                   </div>
-                  {activeShop?.id === shop.id ? (
-                    <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 text-[10px]">Active</Badge>
-                  ) : (
-                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => switchShop(shop.id)}>
-                      Switch
-                    </Button>
+                  {/* 🔒 V26 FIX N4: Switch button removed — was cosmetic. Multi-shop
+                      data scoping is coming soon. Shops can still be created + their
+                      GSTIN used in the Consolidated Report. */}
+                  {shop.isDefault && (
+                    <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 text-[10px]">Default</Badge>
                   )}
                 </div>
               ))}
