@@ -7438,3 +7438,37 @@ Stage Summary:
 - 1812 tests passing, 0 TypeScript errors, 0 ESLint errors, build clean.
 - Pushed to GitHub: commit d0e3f97. Vercel auto-deploying.
 - V26 Phase 1 (Money & Accounting Engine) is now SUBSTANTIALLY COMPLETE. Phase 1b is a short checklist folded into Phase 2. The auditor recommends starting Phase 2 (Security) with the 1b checklist alongside.
+
+---
+Task ID: audit-v26-batch-13
+Agent: main
+Task: Fix BUG-061 (write-path regression tests) + BUG-062 (B2CS-vs-CDNUR original-invoice lookup). User asked: 'what about BUG-061 and BUG-062. why? will you fix it.'
+
+Work Log:
+- BUG-061: investigated the payment write path. Traced BOTH code paths that create payments:
+  1. API route (payments/route.ts:190): amount: roundMoney(amt) → extension's create handler → toPaise → stored. ONE conversion.
+  2. Restore route (import/restore/route.ts:301): amount: payment.amount (rupees from backup) → extension → toPaise → stored. ONE conversion.
+  - Confirmed auditor's assessment: current code has exactly ONE conversion each way. The 100x inflation was from an older deployed build.
+  - Added 6 regression tests in v26-payment-write-path.test.ts that verify the stored paise value is correct for ₹10, ₹0.10, ₹500, ₹1,000 payments + round-trip + double-conversion documentation.
+
+- BUG-062: fixed the B2CS-vs-CDNUR classification to look up the original invoice:
+  - Added originalTransactionId to Gstr1Transaction interface (optional field).
+  - New resolveNoteClassification(note, txns) helper: looks up the original transaction by originalTransactionId and returns its isInterState + totalAmount. Falls back to note's own values if original not found.
+  - Updated buildB2CS: b2csNotes filter now uses resolveNoteClassification instead of the note's own isInterState/totalAmount.
+  - Updated buildCDNUR: same — uses resolveNoteClassification for the inter-state + threshold check.
+  - Updated GSTR-1 API route: both GET + POST now pass originalTransactionId to the builder.
+  - Existing N2 tests still pass (they don't set originalTransactionId → fallback to note's own values, which is the pre-BUG-062 behavior).
+
+Verification:
+- npx tsc --noEmit: 0 errors
+- npx eslint: 0 errors, 0 warnings
+- npx jest: 1818/1818 pass (54 suites) — was 1812; +6 new from BUG-061 tests
+- npx next build: Compiled successfully (BUILD_ID: d5fguMDOkIiDlpZvPu2Jx)
+
+Stage Summary:
+- V26 Batch 13 COMPLETE. Both BUG-061 and BUG-062 addressed.
+- BUG-061: investigated (current code is correct), added regression tests to catch if it ever reappears.
+- BUG-062: FIXED — B2CS-vs-CDNUR now looks up original invoice's isInterState + totalAmount.
+- Files changed: 3 (src/lib/gstr1-builder.ts, src/app/api/gstr-1/route.ts, src/__tests__/lib/v26-payment-write-path.test.ts [new]).
+- 1818 tests passing (was 1812; +6 new), 0 TypeScript errors, 0 ESLint errors, build clean.
+- Pushed to GitHub: commit 6d8c90d. Vercel auto-deploying.
