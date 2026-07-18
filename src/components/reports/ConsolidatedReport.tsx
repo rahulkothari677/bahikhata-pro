@@ -125,12 +125,12 @@ export function ConsolidatedReport() {
         <div className="flex items-center justify-between">
           <div>
             <p className="text-white/80 text-xs font-medium uppercase tracking-wide">
-              {viewMode === 'pl' && 'Consolidated Net Profit'}
+              {viewMode === 'pl' && (total.netProfit === undefined ? 'Consolidated Revenue' : 'Consolidated Net Profit')}
               {viewMode === 'gst' && 'Consolidated Net GST Payable'}
               {viewMode === 'stock' && 'Consolidated Stock Value'}
             </p>
             <p className="text-3xl font-bold tabular-nums mt-1">
-              {viewMode === 'pl' && formatINR(total.netProfit)}
+              {viewMode === 'pl' && (total.netProfit === undefined ? formatINR(total.revenue) : formatINR(total.netProfit))}
               {viewMode === 'gst' && formatINR(total.netGST)}
               {viewMode === 'stock' && formatINR(total.stockValue)}
             </p>
@@ -142,9 +142,11 @@ export function ConsolidatedReport() {
             {viewMode === 'pl' && (
               <>
                 <p>Revenue: {formatINR(total.revenue)}</p>
-                <p>Profit: {formatINR(total.profit)}</p>
+                {/* 🔒 V26 N4: hide Profit/Net Profit when undefined (staff + hideProfit) */}
+                {total.profit !== undefined && <p>Profit: {formatINR(total.profit)}</p>}
                 <p>Expenses: {formatINR(total.expenses)}</p>
                 <p>Income: {formatINR(total.income)}</p>
+                {total.netProfit !== undefined && <p>Net Profit: {formatINR(total.netProfit)}</p>}
               </>
             )}
             {viewMode === 'gst' && (
@@ -178,9 +180,14 @@ export function ConsolidatedReport() {
                 {viewMode === 'pl' && (
                   <>
                     <th className="text-right py-1.5 font-medium">Revenue</th>
-                    <th className="text-right py-1.5 font-medium">Profit</th>
+                    {/* 🔒 V26 N4: Profit + Net Profit columns hidden when undefined (staff + hideProfit) */}
+                    {shops.some((s: any) => s.profit !== undefined) && (
+                      <th className="text-right py-1.5 font-medium">Profit</th>
+                    )}
                     <th className="text-right py-1.5 font-medium">Expenses</th>
-                    <th className="text-right py-1.5 font-medium">Net Profit</th>
+                    {shops.some((s: any) => s.netProfit !== undefined) && (
+                      <th className="text-right py-1.5 font-medium">Net Profit</th>
+                    )}
                   </>
                 )}
                 {viewMode === 'gst' && (
@@ -218,10 +225,13 @@ export function ConsolidatedReport() {
                       {viewMode === 'pl' && (
                         <>
                           <td className="text-right py-2 tabular-nums">{formatINR(shop.revenue)}</td>
-                          <td className="text-right py-2 tabular-nums text-emerald-600 dark:text-emerald-400">{formatINR(shop.profit)}</td>
+                          {/* 🔒 V26 N4: render profit/netProfit cells only when defined */}
+                          {shop.profit !== undefined && (
+                            <td className="text-right py-2 tabular-nums text-emerald-600 dark:text-emerald-400">{formatINR(shop.profit)}</td>
+                          )}
                           <td className="text-right py-2 tabular-nums text-rose-600">{formatINR(shop.expenses)}</td>
-                          <td className={cn('text-right py-2 tabular-nums font-semibold', shop.netProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600')}>
-                            {formatINR(shop.netProfit)}
+                          <td className={cn('text-right py-2 tabular-nums font-semibold', shop.netProfit === undefined ? '' : shop.netProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600')}>
+                            {shop.netProfit !== undefined ? formatINR(shop.netProfit) : '—'}
                           </td>
                         </>
                       )}
@@ -273,11 +283,15 @@ export function ConsolidatedReport() {
                 {viewMode === 'pl' && (
                   <>
                     <td className="text-right py-2 tabular-nums">{formatINR(total.revenue)}</td>
-                    <td className="text-right py-2 tabular-nums text-emerald-600 dark:text-emerald-400">{formatINR(total.profit)}</td>
+                    {total.profit !== undefined && (
+                      <td className="text-right py-2 tabular-nums text-emerald-600 dark:text-emerald-400">{formatINR(total.profit)}</td>
+                    )}
                     <td className="text-right py-2 tabular-nums text-rose-600">{formatINR(total.expenses)}</td>
-                    <td className={cn('text-right py-2 tabular-nums', total.netProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600')}>
-                      {formatINR(total.netProfit)}
-                    </td>
+                    {total.netProfit !== undefined && (
+                      <td className={cn('text-right py-2 tabular-nums', total.netProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600')}>
+                        {formatINR(total.netProfit)}
+                      </td>
+                    )}
                   </>
                 )}
                 {viewMode === 'gst' && (

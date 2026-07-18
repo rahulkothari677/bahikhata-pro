@@ -248,7 +248,14 @@ describe('V24 POS fix — GSTR-1 place of supply is the buyer state', () => {
   })
 
   test('CDNUR: unregistered inter-state credit note carries buyer state', () => {
-    const cn = interStateTxn({ type: 'credit-note', partyGstin: null, partyState: 'Delhi' })
+    // 🔒 V26 N2: CDNUR is now restricted to inter-state B2CL originals
+    // (totalAmount > ₹1L). The default interStateTxn fixture has totalAmount
+    // 5900, which is below the B2CL threshold and would go to B2CS netting
+    // instead. Bump the total above the threshold to qualify for CDNUR.
+    const cn = interStateTxn({
+      type: 'credit-note', partyGstin: null, partyState: 'Delhi',
+      totalAmount: 150000,
+    })
     const result = buildCDNUR([cn], SHOP)
     expect(result[0].pos).toBe('07')
   })

@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthContext } from '@/lib/get-auth'
 import { canAccessModule } from '@/lib/staff-permissions'
+import { shouldHideProfit } from '@/lib/profit-visibility'
 import { apiError } from '@/lib/api-error'
-import { buildConsolidatedReport } from '@/lib/consolidated-reports'
+import { buildConsolidatedReport, type ConsolidatedReport, type ShopAggregates } from '@/lib/consolidated-reports'
 
 /**
  * GET /api/reports/consolidated?from=&to=
@@ -12,8 +13,30 @@ import { buildConsolidatedReport } from '@/lib/consolidated-reports'
  * Per-shop breakdown + consolidated total. Covers P&L, GST, and stock.
  *
  * Auth: owner or CA (reports module). Staff with reports permission can access.
+ *
+ * 🔒 V26 N4: When hideProfit is on AND caller is staff, the profit + netProfit
+ * fields are stripped from each shop row and the consolidated total before
+ * returning (revenue/expenses/GST/stock remain). The UI hides the Profit and
+ * Net Profit columns when those fields are undefined.
  */
 export const maxDuration = 60
+
+/**
+ * Strip profit + netProfit from the consolidated report when hideProfit is on.
+ * Returns a new object — does not mutate the input.
+ */
+function stripConsolidatedProfit(report: ConsolidatedReport): ConsolidatedReport {
+  const stripShop = (s: ShopAggregates): ShopAggregates => ({
+    ...s,
+    profit: undefined as unknown as number,
+    netProfit: undefined as unknown as number,
+  })
+  return {
+    ...report,
+    shops: report.shops.map(stripShop),
+    total: stripShop(report.total),
+  }
+}
 
 export async function GET(req: NextRequest) {
   try {
@@ -24,6 +47,10 @@ export async function GET(req: NextRequest) {
     if (!canAccessModule(authCtx.role, authCtx.permissions, 'reports')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
+
+    // 🔒 V26 N4: hideProfit gate — same pattern as reports/route.ts.
+    // Owners always see profit; staff only see it if the owner hasn't hidden it.
+    const hideProfit = await shouldHideProfit(userId, authCtx.role)
 
     const { searchParams } = new URL(req.url)
     const fromStr = searchParams.get('from')
@@ -86,7 +113,10 @@ export async function GET(req: NextRequest) {
     // Build the consolidated report
     const report = buildConsolidatedReport(shops, transactions, products, from, to)
 
-    return NextResponse.json(report)
+    // 🔒 V26 N4: Strip profit + netProfit when hideProfit is on.
+    const finalReport = hideProfit ? stripConsolidatedProfit(report) : report
+
+    return NextResponse.json(finalReport)
   } catch (err) {
     return apiError(err, 'Failed to generate consolidated report', 500)
   }

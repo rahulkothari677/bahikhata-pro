@@ -99,13 +99,19 @@ export interface Gstr1B2bInvoice {
   pos: string        // place of supply (2-digit state code)
   rchrg: 'Y' | 'N'  // reverse charge
   inv_typ: 'R' | 'SEWP' | 'SEWOP' | 'DE'  // R=regular, SEWP=export w/ payment, SEWOP=export w/o payment, DE=deemed
+  // 🔒 V26 N1: GSTN offline-tool schema requires each line item wrapped in
+  // { num, itm_det: {…} } with a 1-based serial. A flat `itms: [{rt, txval, …}]`
+  // array is rejected by the portal on upload.
   itms: Array<{
-    rt: number       // GST rate
-    txval: number    // taxable value
-    iamt: number     // IGST
-    camt: number     // CGST
-    samt: number     // SGST
-    csamt: number    // CESS
+    num: number      // 1-based line serial
+    itm_det: {
+      rt: number     // GST rate
+      txval: number  // taxable value
+      iamt: number   // IGST
+      camt: number   // CGST
+      samt: number   // SGST
+      csamt: number  // CESS
+    }
   }>
 }
 
@@ -120,7 +126,9 @@ export interface Gstr1B2clEntry {
     inum: string
     idt: string
     val: number
-    itms: Array<{ rt: number; txval: number; iamt: number }>
+    // 🔒 V26 N1: B2CL itm_det carries only {txval, rt, iamt, csamt} per GSTN
+    // schema — inter-state supplies have IGST only, no CGST/SGST.
+    itms: Array<{ num: number; itm_det: { rt: number; txval: number; iamt: number; csamt: number } }>
   }>
 }
 
@@ -145,7 +153,8 @@ export interface Gstr1CdnrEntry {
     pos: string
     rchrg: 'Y' | 'N'
     typ: 'R' | 'SEWP' | 'SEWOP' | 'DE'
-    itms: Array<{ rt: number; txval: number; iamt: number; camt: number; samt: number; csamt: number }>
+    // 🔒 V26 N1: same { num, itm_det } wrapper as B2B.
+    itms: Array<{ num: number; itm_det: { rt: number; txval: number; iamt: number; camt: number; samt: number; csamt: number } }>
   }>
 }
 
@@ -157,7 +166,8 @@ export interface Gstr1CdnurEntry {
   ntty: 'C' | 'D'
   pos: string
   rchrg: 'Y' | 'N'
-  itms: Array<{ rt: number; txval: number; iamt: number; camt: number; samt: number; csamt: number }>
+  // 🔒 V26 N1: same { num, itm_det } wrapper as B2B.
+  itms: Array<{ num: number; itm_det: { rt: number; txval: number; iamt: number; camt: number; samt: number; csamt: number } }>
 }
 
 export interface Gstr1HsnEntry {
@@ -252,13 +262,16 @@ export function buildB2B(txns: Gstr1Transaction[], shop: ShopInfo): Gstr1B2bEntr
       pos,
       rchrg: txn.isReverseCharge ? 'Y' : 'N',
       inv_typ: 'R',  // Regular (no export tracking)
-      itms: txn.items.map(item => ({
-        rt: item.gstRate,
-        txval: itemTaxable(item),
-        iamt: roundMoney(item.igst),
-        camt: roundMoney(item.cgst),
-        samt: roundMoney(item.sgst),
-        csamt: roundMoney(item.csamt || 0),
+      itms: txn.items.map((item, i) => ({
+        num: i + 1,
+        itm_det: {
+          rt: item.gstRate,
+          txval: itemTaxable(item),
+          iamt: roundMoney(item.igst),
+          camt: roundMoney(item.cgst),
+          samt: roundMoney(item.sgst),
+          csamt: roundMoney(item.csamt || 0),
+        },
       })),
     }
     if (!byGstin.has(ctin)) byGstin.set(ctin, [])
@@ -287,10 +300,14 @@ export function buildB2CL(txns: Gstr1Transaction[], shop: ShopInfo): Gstr1B2clEn
       inum: txn.invoiceNo || txn.id,
       idt: formatPortalDate(txn.date),
       val: roundMoney(txn.totalAmount),
-      itms: txn.items.map(item => ({
-        rt: item.gstRate,
-        txval: itemTaxable(item),
-        iamt: roundMoney(item.igst),
+      itms: txn.items.map((item, i) => ({
+        num: i + 1,
+        itm_det: {
+          rt: item.gstRate,
+          txval: itemTaxable(item),
+          iamt: roundMoney(item.igst),
+          csamt: roundMoney(item.csamt || 0),
+        },
       })),
     }
     if (!byPos.has(pos)) byPos.set(pos, [])
@@ -303,10 +320,24 @@ export function buildB2CL(txns: Gstr1Transaction[], shop: ShopInfo): Gstr1B2clEn
 /**
  * Build B2CS section: small B2C sales (inter-state OR intra-state, ≤ ₹1 lakh).
  * Aggregates by rate + POS — ONE entry per (rate, pos) combination.
+ *
+ * 🔒 V26 N2: Credit/debit notes for unregistered parties whose original
+ * supply is B2CS (unregistered AND (intra-state OR totalAmount ≤ threshold))
+ * are NETTED into B2CS as reductions. A (rate, pos) row may legitimately
+ * go NEGATIVE — the GST portal accepts negative B2CS adjustments. These
+ * notes do NOT go to CDNUR (CDNUR is reserved for inter-state B2CL originals).
  */
 export function buildB2CS(txns: Gstr1Transaction[], shop: ShopInfo): Gstr1B2csEntry[] {
+  // Sales that are B2CS: unregistered + (intra-state OR ≤ threshold)
   const b2csSales = txns.filter(t =>
     t.type === 'sale' &&
+    (!t.partyGstin || t.partyGstin.length < 15) &&
+    (!t.isInterState || t.totalAmount <= B2CL_INVOICE_VALUE_THRESHOLD)
+  )
+  // 🔒 V26 N2: Notes whose original supply is B2CS — same criterion applied
+  // to the note itself (the note inherits isInterState from the original).
+  const b2csNotes = txns.filter(t =>
+    (t.type === 'credit-note' || t.type === 'debit-note') &&
     (!t.partyGstin || t.partyGstin.length < 15) &&
     (!t.isInterState || t.totalAmount <= B2CL_INVOICE_VALUE_THRESHOLD)
   )
@@ -314,18 +345,26 @@ export function buildB2CS(txns: Gstr1Transaction[], shop: ShopInfo): Gstr1B2csEn
   // Aggregate by (rate, pos)
   const agg = new Map<string, { txval: number; iamt: number; camt: number; samt: number; csamt: number; rt: number; pos: string }>()
 
+  const addToAgg = (item: Gstr1Item, pos: string, sign: 1 | -1) => {
+    const key = `${item.gstRate}|${pos}`
+    const existing = agg.get(key) || { txval: 0, iamt: 0, camt: 0, samt: 0, csamt: 0, rt: item.gstRate, pos }
+    existing.txval = roundMoney(existing.txval + sign * itemTaxable(item))
+    existing.iamt = roundMoney(existing.iamt + sign * item.igst)
+    existing.camt = roundMoney(existing.camt + sign * item.cgst)
+    existing.samt = roundMoney(existing.samt + sign * item.sgst)
+    existing.csamt = roundMoney(existing.csamt + sign * (item.csamt || 0))
+    agg.set(key, existing)
+  }
+
   for (const txn of b2csSales) {
     const pos = placeOfSupply(txn, shop)
-    for (const item of txn.items) {
-      const key = `${item.gstRate}|${pos}`
-      const existing = agg.get(key) || { txval: 0, iamt: 0, camt: 0, samt: 0, csamt: 0, rt: item.gstRate, pos }
-      existing.txval = roundMoney(existing.txval + itemTaxable(item))
-      existing.iamt = roundMoney(existing.iamt + item.igst)
-      existing.camt = roundMoney(existing.camt + item.cgst)
-      existing.samt = roundMoney(existing.samt + item.sgst)
-      existing.csamt = roundMoney(existing.csamt + (item.csamt || 0))
-      agg.set(key, existing)
-    }
+    for (const item of txn.items) addToAgg(item, pos, 1)
+  }
+  // 🔒 V26 N2: Subtract B2CS notes (credit notes reduce, debit notes increase)
+  for (const txn of b2csNotes) {
+    const pos = placeOfSupply(txn, shop)
+    const sign: 1 | -1 = txn.type === 'credit-note' ? -1 : 1
+    for (const item of txn.items) addToAgg(item, pos, sign)
   }
 
   return Array.from(agg.values()).map(a => ({
@@ -362,13 +401,16 @@ export function buildCDNR(txns: Gstr1Transaction[], shop: ShopInfo): Gstr1CdnrEn
       pos,
       rchrg: 'N' as const,
       typ: 'R' as const,
-      itms: txn.items.map(item => ({
-        rt: item.gstRate,
-        txval: itemTaxable(item),
-        iamt: roundMoney(item.igst),
-        camt: roundMoney(item.cgst),
-        samt: roundMoney(item.sgst),
-        csamt: roundMoney(item.csamt || 0),
+      itms: txn.items.map((item, i) => ({
+        num: i + 1,
+        itm_det: {
+          rt: item.gstRate,
+          txval: itemTaxable(item),
+          iamt: roundMoney(item.igst),
+          camt: roundMoney(item.cgst),
+          samt: roundMoney(item.sgst),
+          csamt: roundMoney(item.csamt || 0),
+        },
       })),
     }
     if (!byGstin.has(ctin)) byGstin.set(ctin, [])
@@ -379,13 +421,22 @@ export function buildCDNR(txns: Gstr1Transaction[], shop: ShopInfo): Gstr1CdnrEn
 }
 
 /**
- * Build CDNUR section: credit/debit notes for parties WITHOUT a GSTIN (unregistered).
+ * Build CDNUR section: credit/debit notes for parties WITHOUT a GSTIN (unregistered)
+ * whose original supply was B2CL (inter-state AND original invoice > ₹1 lakh).
  * Flat array (no ctin grouping).
+ *
+ * 🔒 V26 N2: CDNUR (Table 9B) only accepts `typ` B2CL or exports, and B2CL
+ * implies an INTER-STATE POS. An intra-state unregistered note in CDNUR with
+ * `typ:'B2CL'` is portal-rejected. B2CS notes (intra-state OR ≤ threshold)
+ * are netted into B2CS by buildB2CS — they must NOT appear here. Exports
+ * (EXPWP/EXPWOP) are out of scope until the app tracks export invoices.
  */
 export function buildCDNUR(txns: Gstr1Transaction[], shop: ShopInfo): Gstr1CdnurEntry[] {
   const notes = txns.filter(t =>
     (t.type === 'credit-note' || t.type === 'debit-note') &&
-    (!t.partyGstin || t.partyGstin.length < 15)
+    (!t.partyGstin || t.partyGstin.length < 15) &&
+    t.isInterState &&
+    t.totalAmount > B2CL_INVOICE_VALUE_THRESHOLD
   )
   return notes.map(txn => ({
     typ: 'B2CL' as const,
@@ -395,13 +446,16 @@ export function buildCDNUR(txns: Gstr1Transaction[], shop: ShopInfo): Gstr1Cdnur
     ntty: (txn.type === 'credit-note' ? 'C' : 'D') as 'C' | 'D',
     pos: placeOfSupply(txn, shop),
     rchrg: 'N' as const,
-    itms: txn.items.map(item => ({
-      rt: item.gstRate,
-      txval: itemTaxable(item),
-      iamt: roundMoney(item.igst),
-      camt: roundMoney(item.cgst),
-      samt: roundMoney(item.sgst),
-      csamt: roundMoney(item.csamt || 0),
+    itms: txn.items.map((item, i) => ({
+      num: i + 1,
+      itm_det: {
+        rt: item.gstRate,
+        txval: itemTaxable(item),
+        iamt: roundMoney(item.igst),
+        camt: roundMoney(item.cgst),
+        samt: roundMoney(item.sgst),
+        csamt: roundMoney(item.csamt || 0),
+      },
     })),
   }))
 }

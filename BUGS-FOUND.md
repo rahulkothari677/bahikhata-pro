@@ -478,3 +478,31 @@ and include enough context to reproduce.
 - **Description**: The `ai-usage` destination is shown in the Sidebar Tools section and MoreScreen for every user with the `aiScanner` feature flag, but `/api/ai-usage` is founder-only (403 "Access denied. Founder only."). Observed in browser verification: a regular account clicking Sidebar → Tools → AI Usage gets a completely EMPTY main area (the component's `if (!data) return null` path swallows the failure instead of showing its error card — likely `offlineFetch` masking the 403 on retry). Either (a) gate the registry entry to founder accounts, or (b) build a user-facing usage view (the per-user scan/voice counters already exist in `usage-limits.ts`) — option (b) matches the entry's "Track AI scans & cost" promise.
 - **Found**: 2026-07-18 during V26 Batch 2 browser verification.
 - **Status**: OPEN
+
+### BUG-043 — V26 N1 regression: GSTR-1 `itms` flat shape was portal-rejected (Critical/GST-filing) — FIXED
+- **File**: `src/lib/gstr1-builder.ts` (B2B :255, B2CL :290, CDNR :365, CDNUR :398 — line numbers pre-fix)
+- **Severity**: Critical (the JSON the app told users to "upload to gst.gov.in" would be rejected by the portal)
+- **Description**: Every section builder emitted a flat `itms: [{rt, txval, iamt, camt, samt, csamt}]` array. The GSTN offline-tool / portal schema requires `itms: [{num, itm_det: {…}}]` with a 1-based serial. Portal validation fails on the first invoice. Found by V26 Phase 1 audit (M1).
+- **Fix applied**: 2026-07-18 (V26 Batch 1, N1). All 4 section builders updated to wrap each line in `{num, itm_det: {…}}`. B2CL `itm_det` carries only `{rt, txval, iamt, csamt}` (no camt/samt — inter-state IGST only). TypeScript interfaces updated. 10 new regression tests added in `gstr1-builder.test.ts`.
+- **Status**: FIXED — pending product owner upload test to gst.gov.in offline tool for final confirmation.
+
+### BUG-044 — V26 N2: B2C credit notes mis-routed (B2CS overstated, CDNUR portal-rejected) (Critical/GST-filing) — FIXED
+- **File**: `src/lib/gstr1-builder.ts` (buildB2CS :307-341, buildCDNUR :385-407 — line numbers pre-fix)
+- **Severity**: Critical (wrong filed turnover + portal-rejected file)
+- **Description**: Two compounded defects: (1) `buildB2CS` filtered `type === 'sale'` only — never subtracted credit notes, so B2CS outward supply was overstated by the whole return. (2) `buildCDNUR` stamped `typ: 'B2CL'` on EVERY unregistered-party note regardless of state or value — an intra-state B2C note in CDNUR with `typ:'B2CL'` is portal-rejected (B2CL requires inter-state POS). Found by V26 Phase 1 audit (M2).
+- **Fix applied**: 2026-07-18 (V26 Batch 1, N2). `buildB2CS` now includes unregistered credit/debit notes whose original supply is B2CS (unregistered AND (intra-state OR ≤ ₹1L threshold)), subtracting their values from the matching (rate, pos) aggregate. A row may legitimately go negative (portal accepts negative B2CS adjustments). `buildCDNUR` now filters to only notes where original was B2CL (`isInterState && totalAmount > B2CL_INVOICE_VALUE_THRESHOLD`). 4 new regression tests added.
+- **Status**: FIXED — pending product owner upload test to gst.gov.in offline tool for final confirmation.
+
+### BUG-045 — V26 N3: Editing an original invoice down wasn't re-validated against linked notes (High/Money-integrity) — FIXED
+- **File**: `src/app/api/transactions/[id]/route.ts` (PUT handler)
+- **Severity**: High (phantom negative party balance + over-reversed GST liability)
+- **Description**: The cap `Σ(notes) ≤ original.totalAmount` was enforced on note create/edit (`validateNoteAgainstOriginal`) and on original DELETE (linked-notes guard at :558), but missing on original PUT. Editing a ₹1,000 invoice (with a ₹800 CN against it) down to ₹300 produced a phantom −₹500 party balance and over-reversed GST liability by ₹500. Found by V26 Phase 1 audit (M3).
+- **Fix applied**: 2026-07-18 (V26 Batch 1, N3). Added `checkLinkedNotesCap` pure helper in `src/lib/linked-notes-guard.ts`. Route calls it after `computeLineItems` and rejects with 400 when `linkedNotesTotal > newTotalAmount`. Only applies to `sale`/`purchase` (notes/income/expense are skipped). 9 new regression tests added in `v26-linked-notes-edit-guard.test.ts`.
+- **Status**: FIXED
+
+### BUG-046 — V26 N4: insights + consolidated leaked profit to staff with hideProfit on (High/Security) — FIXED
+- **Files**: `src/app/api/insights/route.ts`, `src/app/api/reports/consolidated/route.ts`, `src/lib/consolidated-reports.ts`, `src/components/reports/ConsolidatedReport.tsx`
+- **Severity**: High (staff the owner explicitly hid profit from could read the exact margin + per-shop profit)
+- **Description**: Same class as BUG-021 (fixed in V24). Two endpoints skipped `shouldHideProfit` entirely: `/api/insights` (margin-drop/-up insights surfaced from `grossProfit`) and `/api/reports/consolidated` (per-shop `profit` + `netProfit` rendered in UI columns). Found by V26 Phase 1 audit (M4 + M5).
+- **Fix applied**: 2026-07-18 (V26 Batch 1, N4). `insights/route.ts` switched from `getAuthUserIdWithModule('dashboard')` to `getAuthContext()`, computes `hideProfit = await shouldHideProfit(userId, role)`, and skips the entire `profit`-category insight block when hidden. `consolidated/route.ts` computes `hideProfit` and strips `profit`/`netProfit` from each shop row + total when hidden. `ConsolidatedReport.tsx` hides the Profit + Net Profit columns/cards when those fields are `undefined`. Added CI guardrail test `v26-profit-leak-guard.test.ts` that scans every route under `src/app/api` and fails CI if a profit-bearing route doesn't call `shouldHideProfit` (stops the recurring BUG-021 → M4/M5 → next-leak pattern). 10 new tests added.
+- **Status**: FIXED

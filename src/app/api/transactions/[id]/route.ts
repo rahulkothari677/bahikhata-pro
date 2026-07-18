@@ -13,6 +13,7 @@ import { assertPeriodNotLocked, PeriodLockedError } from '@/lib/period-lock'
 import { logFieldChanges, TRACKED_TRANSACTION_FIELDS } from '@/lib/field-audit'
 import { resolveFinalPaid, isNoteType } from '@/lib/paid-amount'
 import { validateNoteAgainstOriginal } from '@/lib/note-validation'
+import { checkLinkedNotesCap } from '@/lib/linked-notes-guard'
 
 // GET /api/transactions/[id] - get single transaction with all details
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -363,6 +364,19 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       if (!noteCheck.ok) {
         return NextResponse.json({ error: noteCheck.error, message: noteCheck.message }, { status: noteCheck.status })
       }
+    }
+
+    // 🔒 V26 N3: Re-validate original-invoice edits against its linked notes.
+    // The cap Σ(notes) ≤ original.totalAmount is enforced on note create/edit
+    // and on original DELETE, but was missing on original PUT — so editing a
+    // ₹1,000 invoice (with a ₹800 CN against it) down to ₹300 produced a
+    // phantom −₹500 party balance and over-reversed GST liability.
+    const linkedNotesCheck = await checkLinkedNotesCap(db, id, totalAmount, type)
+    if (!linkedNotesCheck.ok) {
+      return NextResponse.json(
+        { error: linkedNotesCheck.error, message: linkedNotesCheck.message },
+        { status: linkedNotesCheck.status },
+      )
     }
 
     // 🔒 ATOMICITY (Audit fix C3) + STOCK (Audit fix H1):

@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getAuthUserIdWithModule } from '@/lib/get-auth'
+import { getAuthContext } from '@/lib/get-auth'
+import { canAccessModule } from '@/lib/staff-permissions'
+import { shouldHideProfit } from '@/lib/profit-visibility'
 import { roundMoney, fromPaise } from '@/lib/money'
 import { activeTransactionWhere } from '@/lib/query-helpers'
 import { getReceivablePayable } from '@/lib/party-balance'
@@ -26,8 +28,23 @@ export const maxDuration = 60
 // all-time transactions.
 export async function GET() {
   try {
-    const { userId, error } = await getAuthUserIdWithModule('dashboard')
-    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // 🔒 V26 N4: Switched from getAuthUserIdWithModule('dashboard') to
+    // getAuthContext() so we can read the caller's role and gate profit-bearing
+    // insights behind shouldHideProfit. Without this gate, a staff member the
+    // owner explicitly hid profit from could read the exact profit margin and
+    // its trend from the insights feed (and via the raw /api/insights response).
+    const authCtx = await getAuthContext()
+    if (authCtx.error || !authCtx.userId) return authCtx.error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const userId = authCtx.userId
+
+    if (!canAccessModule(authCtx.role, authCtx.permissions, 'dashboard')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+
+    // 🔒 V26 N4: When the owner has hidden profit from staff and the caller is
+    // staff, the entire profit-category insight block (margin-drop, margin-up,
+    // and any future insight whose category === 'profit') is skipped.
+    const hideProfit = await shouldHideProfit(userId, authCtx.role)
 
     const now = new Date()
     const sevenDaysAgo = new Date(now.getTime() - 7 * 86400000)
@@ -232,7 +249,12 @@ export async function GET() {
     // Net profit = Σ grossProfit (sale positive + credit-note negative).
     // Net revenue = Σ totalAmount(sale) - Σ totalAmount(credit-note).
     // Was: type='sale' only → margin overstated (credit notes excluded).
-    if (last30Sales.length > 0 && prev30Sales.length > 0) {
+    //
+    // 🔒 V26 N4: Skip the entire profit-category insight block when hideProfit
+    // is on. The exact profit margin (and its trend) is the number the owner
+    // hid — surfacing "margin dropped 5.2%" leaks both the absolute margin and
+    // the delta. Stock/dues/sales insights remain (they don't reveal profit).
+    if (!hideProfit && last30Sales.length > 0 && prev30Sales.length > 0) {
       const lastProfit = last30Sales.reduce((s, t) => s + (t.grossProfit || 0), 0)
       const lastRevenue = last30Sales.reduce((s, t) => {
         return t.type === 'credit-note' ? s - t.totalAmount : s + t.totalAmount

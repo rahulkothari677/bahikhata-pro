@@ -6623,3 +6623,76 @@ Stage Summary:
 - 1 new bug logged: BUG-036 (WONTFIX).
 - 1640 tests passing, 0 TypeScript errors, 0 NEW ESLint errors, build clean.
 - Awaiting user pass before Batch 8 decision (§6.1 Navigation registry — likely deferred to its own epic).
+
+---
+Task ID: audit-v26-batch-1
+Agent: main
+Task: V26 Phase 1 Audit Batch 1 — Filing-critical + role-leak (N1, N2, N3, N4 per masterplan).
+
+Work Log:
+- Read worklog for prior V25 batch context (last entry was audit-v25-batch-7).
+- Pulled latest from origin/main: local was at 4238d2c (V26 Batch 1), remote was at 6a3fbb4 (V26 Batch 2 = audit base). Fast-forwarded.
+- Confirmed all 4 audit findings (M1→N1, M2→N2, M3→N3, M4+M5→N4) still open at 6a3fbb4 despite prior commit messages — implemented per auditor's exact spec.
+
+§1.1 — N1: GSTR-1 itms wrapped in { num, itm_det } per GSTN schema:
+- Updated 4 TypeScript interfaces: Gstr1B2bInvoice.itms, Gstr1B2clEntry.inv[].itms, Gstr1CdnrEntry.nt[].itms, Gstr1CdnurEntry.itms → Array<{ num: number; itm_det: {…} }>.
+- B2CL itm_det carries only {rt, txval, iamt, csamt} per schema (inter-state → IGST only, no camt/samt).
+- Updated 4 section builders (B2B :265, B2CL :303, CDNR :404, CDNUR :449) to wrap each line with 1-based serial num.
+- B2CS unchanged (correctly flat — rate-aggregated, no per-invoice itms).
+- Updated existing V17 cross-path-consistency test that referenced item.txval directly → item.itm_det.txval.
+- Added 6 new N1 regression tests in gstr1-builder.test.ts.
+- Files changed: src/lib/gstr1-builder.ts, src/__tests__/lib/gstr1-builder.test.ts.
+
+§1.2 — N2: B2C credit notes net into B2CS; CDNUR restricted to inter-state B2CL originals:
+- buildB2CS: added b2csNotes filter (unregistered AND (intra-state OR ≤ ₹1L threshold)). Refactored aggregation into shared addToAgg helper with sign parameter. Credit notes subtract, debit notes add. A row may legitimately go negative — no clamping (portal accepts negative B2CS adjustments).
+- buildCDNUR: tightened filter to (note type) AND (unregistered) AND (isInterState) AND (totalAmount > B2CL_INVOICE_VALUE_THRESHOLD). Excludes everything else (handled by B2CS netting).
+- Updated existing V17 CDNUR test that expected intra-state unregistered notes in CDNUR (now goes to B2CS netting).
+- Updated V24 POS-fix test fixture to use totalAmount: 150000 (>₹1L threshold) so the inter-state credit note qualifies for CDNUR under the new filter.
+- Added 4 new N2 regression tests (intra-state netting, inter-state B2CL → CDNUR, negative B2CS row, debit note increase).
+- Files changed: src/lib/gstr1-builder.ts, src/__tests__/lib/gstr1-builder.test.ts, src/__tests__/lib/v24-note-accounting.test.ts.
+
+§1.3 — N3: Re-validate original-invoice PUT against linked notes:
+- Created pure helper src/lib/linked-notes-guard.ts exporting checkLinkedNotesCap(db, transactionId, newTotalAmount, type).
+- Helper aggregates linked notes (originalTransactionId=id, deletedAt:null, type IN [credit-note, debit-note]) and rejects when sum > newTotalAmount. Only applies to sale/purchase (notes/income/expense skipped).
+- Route handler src/app/api/transactions/[id]/route.ts PUT now calls helper after computeLineItems + note-vs-original validation, before the $transaction. Returns 400 with clear message: "This invoice has ₹X of credit/debit notes against it; its total can't be reduced below that. Edit or delete the notes first."
+- Added 9 new N3 regression tests in src/__tests__/lib/v26-linked-notes-edit-guard.test.ts (rejects below cap, allows at cap, allows above cap, allows with no notes, allows unchanged total, applies to purchases, skips notes/income/expense, verifies deletedAt:null filter).
+- Files changed: src/app/api/transactions/[id]/route.ts, src/lib/linked-notes-guard.ts (new), src/__tests__/lib/v26-linked-notes-edit-guard.test.ts (new).
+
+§1.4 — N4: Strip profit for insights + consolidated when hideProfit is on + CI guardrail:
+- insights/route.ts: switched from getAuthUserIdWithModule('dashboard') to getAuthContext(). Added canAccessModule('dashboard') permission gate. Computes hideProfit = await shouldHideProfit(userId, role). When hideProfit is true, the entire profit-category insight block (margin-drop, margin-up) is skipped. Stock/dues/sales insights remain.
+- consolidated/route.ts: added shouldHideProfit import + gate. When hideProfit is true, calls stripConsolidatedProfit(report) which sets profit + netProfit to undefined on each shop row + total. Revenue/expenses/GST/stock remain.
+- ConsolidatedReport.tsx: hides Profit + Net Profit columns when undefined. Banner swaps "Consolidated Net Profit" → "Consolidated Revenue" + shows revenue as the headline number. Total row conditionally renders profit/netProfit cells with '—' fallback.
+- Added CI guardrail test src/__tests__/lib/v26-profit-leak-guard.test.ts that scans every route.ts under src/app/api and fails CI if a profit-bearing route (mentions grossProfit/profit/margin in code) doesn't call shouldHideProfit. Allowlist: src/app/api/import/restore/route.ts (write-only path, founder-only per audit M6).
+- Added 7 new N4 behavioral tests in src/__tests__/lib/v26-profit-hiding.test.ts (stripConsolidatedProfit removes profit+netProfit, retains other fields; builder retains profit normally; UI undefined check; idempotent stripping; insights profit-category filter for hideProfit true/false/empty).
+- Files changed: src/app/api/insights/route.ts, src/app/api/reports/consolidated/route.ts, src/components/reports/ConsolidatedReport.tsx, src/__tests__/lib/v26-profit-hiding.test.ts (new), src/__tests__/lib/v26-profit-leak-guard.test.ts (new).
+
+Additional existing bugs found during scan:
+- BUG-043 (GSTR-1 itms flat shape → portal-rejected) — V26 N1, found and fixed in this batch.
+- BUG-044 (B2C credit notes mis-routed) — V26 N2, found and fixed in this batch.
+- BUG-045 (PUT original invoice not re-validated against linked notes) — V26 N3, found and fixed in this batch.
+- BUG-046 (insights + consolidated leaked profit to staff) — V26 N4, found and fixed in this batch.
+- All 4 logged in BUGS-FOUND.md.
+
+Verification:
+- npx tsc --noEmit: 0 errors
+- npx eslint (changed files): 0 errors, 0 warnings
+- npx jest: 1693/1693 pass (47 suites) — was 1665/1665 at audit base; +28 new tests
+- npx next build: Compiled successfully (BUILD_ID present: De7kJ5GTbOhxDmHU6w7B2)
+
+Bug-scan while in the area:
+- Confirmed all 4 gstr1-builder section builders (B2B/B2CL/CDNR/CDNUR) now use wrapped shape. B2CS correctly flat.
+- Confirmed Gstr1Report.tsx UI doesn't read itms fields directly — only downloads JSON. No UI changes needed.
+- Confirmed /api/gstr-1/route.ts computes summary totals from builderTxns, not from gstr1.itms — no breaking change.
+- Profit-leak CI guardrail passes — only restore route is allowlisted (write-only path, founder-only).
+
+Manual gate (cannot self-perform):
+- Product owner to upload a demo-shop GSTR-1 JSON to gst.gov.in offline tool to confirm portal acceptance of the new {num, itm_det} shape + B2CS netting + CDNUR filter. Until this gate passes, Batch 1 is technically not portal-verified. If portal still rejects, fix forward per user's instruction ("still you have to do the task properly so auditor will analyse further and then will see").
+
+Stage Summary:
+- V26 Phase 1 Batch 1 COMPLETE. All 4 N-fixes (N1, N2, N3, N4) implemented + tested + lint-clean + build-clean.
+- Files changed: 9 (src/lib/gstr1-builder.ts, src/lib/linked-notes-guard.ts [new], src/app/api/transactions/[id]/route.ts, src/app/api/insights/route.ts, src/app/api/reports/consolidated/route.ts, src/components/reports/ConsolidatedReport.tsx, src/__tests__/lib/gstr1-builder.test.ts, src/__tests__/lib/v24-note-accounting.test.ts, src/__tests__/lib/v26-linked-notes-edit-guard.test.ts [new], src/__tests__/lib/v26-profit-hiding.test.ts [new], src/__tests__/lib/v26-profit-leak-guard.test.ts [new]).
+- 4 new bugs logged: BUG-043, BUG-044, BUG-045, BUG-046 (all FIXED).
+- 1693 tests passing (was 1665; +28 new), 0 TypeScript errors, 0 ESLint errors, build clean.
+- 3 guardrails added: profit-leak CI guardrail, linked-notes cap regression suite, GSTR-1 {num, itm_det} schema regression suite.
+- Browser verification: deferred (sandbox Neon network instability per V25 Batch 6 — Vercel deployment works).
+- Awaiting user pass before Batch 2 (N5 — restore, Option A: restore-into-empty with full stock rebuild).
