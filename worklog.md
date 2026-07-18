@@ -7058,3 +7058,49 @@ Stage Summary:
 - V26 PHASE 1 IS NOW FULLY COMPLETE including the auditor's updated M11 finding. All 11 findings (M1-M11) addressed. 2 open items require user action:
   1. Portal upload test for GSTR-1 (M1/M2) — user needs to upload JSON to gst.gov.in offline tool
   2. Neon sanity check for M11 — user needs to hit /api/debug/party-balance-recon on Neon
+
+---
+Task ID: audit-v26-batch-6
+Agent: main
+Task: V26 BUG-054 fix — GSTR-1 JSON download wrapped in extra { gstr1: ... } envelope. User-found via live testing with a GSTR-1 JSON schema validator.
+
+Work Log:
+- User reported: GSTR-1 JSON download is wrapped in an extra outer { gstr1: ... } envelope, causing GST portal validators to reject it with "Missing required key(s): gstin, fp."
+- Pre-change scan: read Gstr1Report.tsx (545 lines, full). Confirmed line 67: `JSON.stringify({ gstr1: data.gstr1 }, null, 2)` — wraps data.gstr1 in an outer { gstr1: ... } object before stringifying.
+- Checked all other report components for the same wrapping pattern:
+  * Gstr3bReport.tsx: CSV download only (no JSON download). Clean.
+  * Gstr2bReconciliation.tsx: no JSON download (only POST body for upload). Clean.
+  * TransactionDetail.tsx:1375: IRN request JSON download — already stringifies data.irnRequest directly (no wrapper). Clean.
+  * /api/gstr-export route: returns NextResponse.json(output) where output is the GSTR-1 object at root (correct shape). Only used by Reports.tsx for internal truncated-flag check, not for user-facing JSON download. Clean.
+  * Conclusion: only Gstr1Report.tsx:67 had the bug.
+
+§1 — Fix applied:
+- File: src/components/reports/Gstr1Report.tsx, handleDownloadJSON function (line 67).
+- Changed: `JSON.stringify({ gstr1: data.gstr1 }, null, 2)` → `JSON.stringify(data.gstr1, null, 2)`
+- Added explanatory comment documenting the portal schema requirement (gstin + fp at root, not nested inside gstr1 wrapper).
+- The downloaded file now starts with `{ "gstin": "...", "fp": "072026", "gt": …, "cur_gt": …, "b2b": […] }` directly — no wrapper.
+
+§2 — Regression test (src/__tests__/lib/v26-gstr1-download-shape.test.ts):
+- 4 new tests:
+  1. THE BUG (regression): download must NOT wrap gstr1 in outer object — replicates both the fixed and buggy stringification, asserts fixed has gstin+fp at root and no gstr1 wrapper, asserts buggy has gstr1 wrapper.
+  2. Downloaded JSON has all required GSTN top-level fields at root (gstin, fp, gt, cur_gt, b2b, b2cl, b2cs, cdnr, cdnur, hsn, nil, doc_issue).
+  3. Downloaded JSON starts with `{ "gstin"` (not `{ "gstr1"`) — quick textual check.
+  4. Structural guardrail: reads component source, strips comments, asserts fixed code present (`JSON.stringify(data.gstr1, null, 2)`) and buggy code absent (`JSON.stringify({ gstr1: data.gstr1 }, ...)`). If a future refactor re-introduces the wrapper, this test fails.
+- All 4 tests pass.
+
+§3 — Adjacent bugs found during scan:
+- None new. All other report exports are clean (verified above).
+
+Verification:
+- npx tsc --noEmit: 0 errors
+- npx eslint (2 changed files): 0 errors, 0 warnings
+- npx jest: 1792/1792 pass (52 suites) — was 1788; +4 new tests
+- npx next build: Compiled successfully (BUILD_ID: ATdBv5fYXv2Xs357W8jT2)
+
+Stage Summary:
+- V26 BUG-054 fix COMPLETE. GSTR-1 JSON download no longer wrapped in extra envelope.
+- Files changed: 3 (src/components/reports/Gstr1Report.tsx, src/__tests__/lib/v26-gstr1-download-shape.test.ts [new], BUGS-FOUND.md).
+- 1 new bug logged: BUG-054 (FIXED).
+- 1792 tests passing (was 1788; +4 new), 0 TypeScript errors, 0 ESLint errors, build clean.
+- Pushed to GitHub: commit 7c5bc67. Vercel auto-deploying.
+- This was the bug the user found via live testing with a GSTR-1 JSON schema validator. After Vercel deploys (~2-3 min), the user should re-download a GSTR-1 JSON and re-validate it — the file should now pass with 0 errors.
