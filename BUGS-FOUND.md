@@ -594,3 +594,18 @@ and include enough context to reproduce.
 - **Other report exports checked**: Gstr3bReport (CSV only, no JSON download — clean), Gstr2bReconciliation (no JSON download — clean), TransactionDetail IRN download (already stringifies directly — clean), legacy /api/gstr-export route (returns JSON at root, only used for internal validation not user download — clean). Only Gstr1Report had the bug.
 - **Regression test**: 4 new tests in `v26-gstr1-download-shape.test.ts` — (1) download must NOT wrap gstr1 in outer object, (2) all required GSTN top-level fields at root, (3) JSON starts with `{ "gstin"` not `{ "gstr1"`, (4) structural guardrail on component source (strips comments, asserts fixed code present + buggy code absent).
 - **Status**: FIXED
+
+### BUG-055 — GSTR-1 JSON download allowed with empty shop GSTIN (High/GST-filing) — FIXED
+- **File**: `src/components/reports/Gstr1Report.tsx` (handleDownloadJSON + missing-GSTIN banner)
+- **Severity**: High (downloaded JSON is always rejected by the GST portal with "Missing required key(s): gstin")
+- **Found**: 2026-07-19, user live testing after BUG-054 fix (wrapping bug was fixed, but new error surfaced: `gstin` present but empty string `"gstin": ""`)
+- **Description**: The code path `setting.gstin` → `shopGstin` → `shop.gstin` → `buildGstr1` → `gstin: shop.gstin || ''` correctly passes whatever is in the DB. But when the shop has no GSTIN configured, the downloaded JSON has `"gstin": ""` (empty string), which the GST portal rejects. The app let the user download a useless file and discover the rejection at the portal.
+- **Root cause**: Not a code bug in the data path — the code faithfully passes the (missing) GSTIN. The bug is the absence of a download-block + clear warning when the shop has no GSTIN configured. The existing "Missing shop details" warning at the bottom of the report was too passive (amber, at the bottom, didn't block the download button).
+- **Fix applied**: 2026-07-19 (V26 Batch 7).
+  - handleDownloadJSON now checks `data?.shop?.gstin` BEFORE stringifying. If missing, shows a clear error toast: "Cannot download GSTR-1 — shop GSTIN is not set" with description "Go to Settings → Shop Profile to set your GSTIN, then retry." Does NOT download the file.
+  - Added a prominent rose/red block-banner at the TOP of the Gstr1Report (above the month picker) that explicitly says "GSTR-1 JSON download is blocked — shop GSTIN is not set" + explains why + tells the user where to fix it. This replaces the passive amber warning at the bottom (which remains for the stateCode-missing case, but the GSTIN case now has the prominent block).
+- **Other GSTIN-related paths checked**: The `fp` (filing period) format `MMYYYY` (e.g. "072026") is correct per GSTN schema — confirmed no change needed.
+- **Regression test**: 2 new tests in `v26-gstr1-download-shape.test.ts`:
+  - Download handler blocks when `data?.shop?.gstin` is missing (structural guardrail on source)
+  - Prominent block-banner renders (rose/red, not amber) when shop.gstin is missing
+- **Status**: FIXED

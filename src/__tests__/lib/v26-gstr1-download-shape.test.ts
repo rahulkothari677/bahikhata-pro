@@ -136,4 +136,37 @@ describe('V26 BUG-054 — GSTR-1 JSON download must not be wrapped in { gstr1: .
     // The buggy code (must NOT be present in actual code): JSON.stringify({ gstr1: data.gstr1 }, null, 2)
     expect(codeOnly).not.toMatch(/JSON\.stringify\(\s*\{\s*gstr1:\s*data\.gstr1\s*\}/)
   })
+
+  test('V26 BUG-055: download handler blocks when shop.gstin is missing', () => {
+    // Structural guardrail: read the component source and assert the download
+    // handler checks data?.shop?.gstin BEFORE stringifying. If a future
+    // refactor removes the block, this test fails.
+    const src = fs.readFileSync(
+      path.join(process.cwd(), 'src/components/reports/Gstr1Report.tsx'),
+      'utf8',
+    )
+
+    const downloadHandlerMatch = src.match(/handleDownloadJSON[\s\S]*?sonnerToast\.success\('GSTR-1 JSON downloaded/)
+    expect(downloadHandlerMatch).not.toBeNull()
+    const handlerBody = downloadHandlerMatch![0]
+
+    // The block must check data?.shop?.gstin and return early if missing.
+    expect(handlerBody).toMatch(/data\?\.shop\?\.gstin/)
+    expect(handlerBody).toMatch(/Cannot download GSTR-1.*shop GSTIN is not set/)
+  })
+
+  test('V26 BUG-055: prominent block-banner renders when shop.gstin is missing', () => {
+    // Structural guardrail: the component must render a prominent banner
+    // (rose/red, not amber) at the TOP of the report when shop.gstin is missing.
+    const src = fs.readFileSync(
+      path.join(process.cwd(), 'src/components/reports/Gstr1Report.tsx'),
+      'utf8',
+    )
+
+    // The block-banner must be present in the JSX
+    expect(src).toMatch(/GSTR-1 JSON download is blocked.*shop GSTIN is not set/)
+    // It must be rose/red (not the old amber warning)
+    expect(src).toMatch(/border-rose-300/)
+    expect(src).toMatch(/bg-rose-50/)
+  })
 })

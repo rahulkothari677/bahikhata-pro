@@ -42,6 +42,12 @@ describe('🔒 V16 C5 — Soft-delete filter sweep (no query may miss deletedAt:
     ['app/api/transactions/[id]/restore/route.ts', 'restore endpoint must find soft-deleted rows to restore them'],
     ['app/api/transactions/route.ts', 'GET uses a `where` variable that filters deletedAt: null (or deletedAt: { not: null } for voided view); POST idempotency check uses findUnique by clientMutationId which is exempt'],
     ['app/api/seed/route.ts', 'seed "has any data" check — counting soft-deleted rows is fine (we dont want to re-seed over any historical data)'],
+    // Debug diagnostic endpoints (owner-only). These INTENTIONALLY query
+    // without deletedAt: null to surface stale/deleted rows for the M11
+    // investigation — the whole point is to show every row including
+    // soft-deleted ones so we can spot data-integrity issues.
+    ['app/api/debug/party-balance-detail/route.ts', 'owner-only diagnostic: intentionally shows ALL rows including soft-deleted to detect stale data'],
+    ['app/api/debug/party-balance-recon/route.ts', 'owner-only diagnostic: reconciliation endpoint, uses computePartyBalance + getReceivablePayable which both filter deletedAt internally'],
     // Reports/GSTR/Insights are a known larger audit pass — they pre-date the
     // soft-delete contract and many calls operate on raw SQL with their own
     // deletedAt handling. Adding them as exceptions for now; a V17 follow-up

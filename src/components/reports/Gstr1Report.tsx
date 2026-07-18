@@ -64,6 +64,20 @@ export function Gstr1Report() {
       sonnerToast.error('No GSTR-1 data to download. Check if the API returned an error.')
       return
     }
+    // 🔒 V26 BUG-055: Block download when shop has no GSTIN configured.
+    // The GST portal's JSON schema requires `gstin` to be a non-empty 15-char
+    // string. Without it, the downloaded file has `"gstin": ""` and the portal
+    // rejects it with "Missing required key(s): gstin." Better to block the
+    // download here with a clear action ("set your GSTIN in Settings") than
+    // let the user download a useless file and discover the rejection at the
+    // portal.
+    if (!data?.shop?.gstin) {
+      sonnerToast.error('Cannot download GSTR-1 — shop GSTIN is not set', {
+        description: 'The GST portal requires a valid 15-character GSTIN at the top of the file. Go to Settings → Shop Profile to set your GSTIN, then retry.',
+        duration: 10000,
+      })
+      return
+    }
     // 🔒 V26 BUG-054: Was `JSON.stringify({ gstr1: data.gstr1 }, null, 2)` —
     // this wrapped the entire GSTR-1 data inside an outer `{ "gstr1": {…} }`
     // object. The GST portal's JSON schema requires `gstin` and `fp` (along
@@ -210,6 +224,25 @@ export function Gstr1Report() {
 
   return (
     <div className="space-y-4">
+      {/* 🔒 V26 BUG-055: Prominent block-banner when shop has no GSTIN.
+          JSON download is blocked — the portal would reject the file with
+          "Missing required key(s): gstin" because gstin would be empty. */}
+      {!data?.shop?.gstin && (
+        <div className="rounded-xl border border-rose-300 bg-rose-50 dark:bg-rose-950/30 dark:border-rose-800 p-4 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-rose-600 dark:text-rose-400 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-rose-800 dark:text-rose-200">
+              GSTR-1 JSON download is blocked — shop GSTIN is not set
+            </p>
+            <p className="text-xs text-rose-700 dark:text-rose-300 mt-1">
+              The GST portal requires a valid 15-character GSTIN at the top of the file. Without it, the downloaded
+              JSON would have <code className="bg-rose-100 dark:bg-rose-900/40 px-1 rounded">"gstin": ""</code> and be
+              rejected. Go to <strong>Settings → Shop Profile</strong> to set your GSTIN, then come back and retry.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Month picker + filing status */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div className="flex items-center gap-2">

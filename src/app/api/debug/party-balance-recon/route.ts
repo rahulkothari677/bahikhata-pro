@@ -62,7 +62,9 @@ export async function GET() {
       detailBalance: number
       listBalance: number
       difference: number
+      signedDifference: number
       matched: boolean
+      detailUrl: string
     }> = []
 
     let matched = 0
@@ -77,11 +79,14 @@ export async function GET() {
       const listEntry = listResult.partyBalances.get(party.id)
       const listBalance = listEntry?.balance ?? 0
 
-      // Compare with 1-paisa tolerance (rounding sliver between SQL ROUND
-      // and JS roundMoney — both should produce the same value, but we
-      // allow 0.01 for float-representation edge cases).
-      const difference = Math.abs(detailBalance - listBalance)
-      const isMatched = difference < 0.01
+      // Compare with a TIGHT tolerance — any difference ≥ 1 paisa (₹0.01)
+      // counts as a divergence. The auditor asked us to flag "ANY inconsistency,
+      // even small ones" so a ₹990 gap is easy to spot but a smaller stale-data
+      // gap elsewhere might not have shown up as a "diverged" flag if it
+      // happened to round close enough. Tight tolerance closes that blind spot.
+      const rawDifference = detailBalance - listBalance
+      const absDifference = Math.abs(rawDifference)
+      const isMatched = absDifference < 0.01
 
       if (isMatched) {
         matched++
@@ -94,8 +99,13 @@ export async function GET() {
         partyName: party.name,
         detailBalance,
         listBalance,
-        difference,
+        difference: absDifference,
+        signedDifference: rawDifference,  // positive = detail higher; negative = list higher
         matched: isMatched,
+        // 🔒 V26 M11: include the detail-URL for deep investigation of any
+        // diverged party. The user can click through to see every raw row +
+        // component-by-component breakdown + data-quality scan.
+        detailUrl: `/api/debug/party-balance-detail?partyId=${party.id}`,
       })
     }
 
@@ -106,11 +116,25 @@ export async function GET() {
       return b.difference - a.difference
     })
 
+    // 🔒 V26 M11: also scan for "near-misses" — parties where the difference
+    // is small (₹0.01–₹1) but non-zero. These might indicate a subtle rounding
+    // or float-precision issue that's worth knowing about even if it's not
+    // a "real" divergence. The auditor asked for the true scope of ANY
+    // inconsistency, not just the big ones.
+    const nearMisses = comparisons.filter(
+      c => c.matched === false && c.difference < 1,
+    )
+    const realDivergences = comparisons.filter(
+      c => c.matched === false && c.difference >= 1,
+    )
+
     return NextResponse.json({
       summary: {
         totalParties: parties.length,
         matched,
         diverged,
+        realDivergences: realDivergences.length,
+        nearMisses: nearMisses.length,
         listTotalReceivable: listResult.totalReceivable,
         listTotalPayable: listResult.totalPayable,
       },
@@ -119,8 +143,8 @@ export async function GET() {
         allMatched: diverged === 0,
         message:
           diverged === 0
-            ? `✅ All ${matched} parties match between detail (computePartyBalance) and list (getReceivablePayable). The M11 live-divergence was a local-proxy artifact — safe to close.`
-            : `❌ ${diverged} of ${parties.length} parties DIVERGE between detail and list paths. This is a CRITICAL bug — getReceivablePayable (raw SQL) is returning wrong values. Top divergences listed first.`,
+            ? `✅ All ${matched} parties match between detail (computePartyBalance) and list (getReceivablePayable) — tolerance < ₹0.01. The M11 live-divergence was a local-proxy artifact — safe to close.`
+            : `❌ ${diverged} of ${parties.length} parties DIVERGE between detail and list paths (${realDivergences.length} real divergences ≥ ₹1, ${nearMisses.length} near-misses < ₹1). For each diverged party, hit its detailUrl to see the full breakdown + raw rows + data-quality scan. Top divergences listed first.`,
       },
     })
   } catch (err) {

@@ -47,6 +47,13 @@ const ALLOWLIST: string[] = [
   // and then reads the restored transactions via GET" — and GET already has
   // its own shouldHideProfit gate (verified by this guardrail).
   'src/app/api/import/restore/route.ts',
+  // Debug diagnostic endpoints (owner-only, gated by role !== 'owner' check).
+  // These return raw grossProfit values for diagnostic purposes — the owner
+  // is the only caller and they already see profit. The profit-leak guardrail
+  // is about STAFF seeing profit the owner hid — debug endpoints are not
+  // reachable by staff. If these endpoints ever become staff-accessible, the
+  // gate must be added.
+  'src/app/api/debug/party-balance-detail/route.ts',
 ]
 
 /** Tokens that indicate a route is profit-bearing. */
