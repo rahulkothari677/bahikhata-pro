@@ -190,7 +190,7 @@ describe('V26 N9 — buildGstr1 populates cur_gt + gt', () => {
     expect(result.fp).toBe('072026')
     expect(result.b2b).toHaveLength(1)  // SALE is B2B (party has GSTIN)
     expect(result.cdnr).toHaveLength(1)  // CREDIT_NOTE is CDNR (party has GSTIN)
-    expect(result.nil.inv).toHaveLength(3)
+    expect(result.nil.inv).toHaveLength(0)  // V26 BUG-059: no nil-rated items → 0 entries (was 3 dummy)
   })
 })
 

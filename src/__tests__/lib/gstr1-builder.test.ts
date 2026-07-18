@@ -239,28 +239,72 @@ describe('🔒 V17 Audit Phase 3 — HSN section', () => {
 // ─── NIL ──────────────────────────────────────────────────────────────────
 
 describe('🔒 V17 Audit Phase 3 — NIL section', () => {
-  test('nil-rated = items with gstRate=0', () => {
+  test('nil-rated = items with gstRate=0, classified by supply type', () => {
     const saleWith0: Gstr1Transaction = {
-      ...B2C_SALE,
+      ...B2C_SALE,  // B2C_SALE is intra-state, unregistered (no GSTIN) → INTRAB2C
       items: [SALE_ITEM_0],
     }
     const result = buildNIL([saleWith0])
-    const nilEntry = result.inv.find(e => e.sply_ty === 'NIL')
-    expect(nilEntry).toBeDefined()
-    expect(nilEntry!.txval).toBe(60)  // 2 × 30
+    // Should have 1 entry: INTRAB2C with nil_amt = 60 (2 × 30)
+    expect(result.inv).toHaveLength(1)
+    expect(result.inv[0].sply_ty).toBe('INTRAB2C')
+    expect(result.inv[0].nil_amt).toBe(60)
+    expect(result.inv[0].expt_amt).toBe(0)
+    expect(result.inv[0].ngsup_amt).toBe(0)
   })
 
-  test('exempt and non-GST default to 0 (no gstTreatment UI yet for items)', () => {
+  test('B2B nil-rated sale → INTRAB2B supply type', () => {
+    const b2bSaleWith0: Gstr1Transaction = {
+      ...B2B_SALE,  // B2B_SALE is intra-state, registered (has GSTIN) → INTRAB2B
+      items: [SALE_ITEM_0],
+    }
+    const result = buildNIL([b2bSaleWith0])
+    expect(result.inv).toHaveLength(1)
+    expect(result.inv[0].sply_ty).toBe('INTRAB2B')
+    expect(result.inv[0].nil_amt).toBe(60)
+  })
+
+  test('inter-state nil-rated sale → INTRB2C or INTRB2B', () => {
+    const interStateB2C: Gstr1Transaction = {
+      ...B2C_SALE,
+      isInterState: true,
+      partyState: 'Gujarat',
+      items: [SALE_ITEM_0],
+    }
+    const result = buildNIL([interStateB2C])
+    expect(result.inv).toHaveLength(1)
+    expect(result.inv[0].sply_ty).toBe('INTRB2C')
+    expect(result.inv[0].nil_amt).toBe(60)
+  })
+
+  test('exempt and non-GST default to 0 (no gstTreatment tracking yet)', () => {
     const result = buildNIL([B2B_SALE])
-    const exemptEntry = result.inv.find(e => e.sply_ty === 'EXPT')
-    const nonGstEntry = result.inv.find(e => e.sply_ty === 'NGST')
-    expect(exemptEntry!.txval).toBe(0)
-    expect(nonGstEntry!.txval).toBe(0)
+    // B2B_SALE has gstRate=18, so nil_amt=0 → no entry emitted
+    expect(result.inv).toHaveLength(0)
   })
 
-  test('always returns 3 entries (NIL, EXPT, NGST)', () => {
+  test('empty input → empty inv array (not 3 dummy entries)', () => {
     const result = buildNIL([])
-    expect(result.inv).toHaveLength(3)
+    expect(result.inv).toHaveLength(0)
+  })
+
+  test('multiple supply types for same nil-rated amount → separate entries', () => {
+    const intraB2C: Gstr1Transaction = {
+      ...B2C_SALE,  // intra-state, unregistered → INTRAB2C
+      items: [SALE_ITEM_0],
+    }
+    const interB2C: Gstr1Transaction = {
+      ...B2C_SALE,
+      isInterState: true, partyState: 'Gujarat',  // inter-state, unregistered → INTRB2C
+      items: [SALE_ITEM_0],
+    }
+    const result = buildNIL([intraB2C, interB2C])
+    expect(result.inv).toHaveLength(2)
+    const supplyTypes = result.inv.map(e => e.sply_ty).sort()
+    expect(supplyTypes).toEqual(['INTRAB2C', 'INTRB2C'])
+    // Each has nil_amt = 60
+    expect(result.inv[0].nil_amt).toBe(60)
+    expect(result.inv[1].nil_amt).toBe(60)
   })
 })
 
@@ -329,7 +373,9 @@ describe('🔒 V17 Audit Phase 3 — Full GSTR-1 build', () => {
     expect(result.b2cs).toHaveLength(1)
     expect(result.cdnr).toHaveLength(1)
     expect(result.hsn.data.length).toBeGreaterThan(0)
-    expect(result.nil.inv).toHaveLength(3)
+    // 🔒 V26 BUG-059: nil section now uses supply-type buckets, not 3 dummy entries.
+    // B2B_SALE + B2C_SALE have gstRate=18/5, so no nil-rated items → 0 entries.
+    expect(result.nil.inv).toHaveLength(0)
     expect(result.doc_issue.doc_det.length).toBeGreaterThan(0)
   })
 
@@ -341,7 +387,7 @@ describe('🔒 V17 Audit Phase 3 — Full GSTR-1 build', () => {
     expect(result.cdnr).toHaveLength(0)
     expect(result.cdnur).toHaveLength(0)
     expect(result.hsn.data).toHaveLength(0)
-    expect(result.nil.inv).toHaveLength(3)  // always 3 (NIL, EXPT, NGST)
+    expect(result.nil.inv).toHaveLength(0)  // V26 BUG-059: no nil-rated items → 0 entries (was always 3 dummy)
     expect(result.doc_issue.doc_det).toHaveLength(0)
   })
 })

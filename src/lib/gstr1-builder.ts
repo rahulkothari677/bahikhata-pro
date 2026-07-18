@@ -185,9 +185,14 @@ export interface Gstr1HsnEntry {
 }
 
 export interface Gstr1NilEntry {
-  sply_ty: 'NIL' | 'EXPT' | 'NGST'
-  description: string
-  txval: number
+  // 🔒 V26 BUG-059: sply_ty represents the SUPPLY TYPE (inter/intra-state ×
+  // B2B/B2C), NOT the exemption category. The old code used 'NIL'/'EXPT'/'NGST'
+  // which the portal rejects — those are amounts WITHIN each supply-type entry,
+  // not the supply type itself.
+  sply_ty: 'INTRAB2B' | 'INTRB2B' | 'INTRAB2C' | 'INTRB2C'
+  nil_amt: number    // nil-rated supplies amount for this supply type
+  expt_amt: number   // exempt supplies amount for this supply type
+  ngsup_amt: number  // non-GST supplies amount for this supply type
 }
 
 export interface Gstr1DocEntry {
@@ -524,27 +529,77 @@ function mapUnitToUqc(unit: string): string {
 
 /**
  * Build NIL section: nil-rated, exempt, and non-GST outward supplies.
- * For now, nil-rated = items with gstRate=0 on non-RCM sales.
- * Exempt and non-GST are 0 until products have gstTreatment set.
+ *
+ * 🔒 V26 BUG-059: Completely restructured. Was emitting 3 entries with
+ * sply_ty = 'NIL'/'EXPT'/'NGST' — but the GSTN schema requires sply_ty to
+ * be the SUPPLY TYPE (inter/intra-state × B2B/B2C), with separate amount
+ * fields (nil_amt, expt_amt, ngsup_amt) WITHIN each entry.
+ *
+ * Correct structure (max 4 entries, one per supply type):
+ *   { "sply_ty": "INTRAB2B", "nil_amt": 1000, "expt_amt": 0, "ngsup_amt": 0 }
+ *   { "sply_ty": "INTRAB2C", "nil_amt": 500, "expt_amt": 0, "ngsup_amt": 0 }
+ *
+ * Supply type derivation:
+ *   - isInterState=true + party has GSTIN → INTRB2B (inter-state B2B)
+ *   - isInterState=true + no GSTIN       → INTRB2C (inter-state B2C)
+ *   - isInterState=false + party has GSTIN → INTRAB2B (intra-state B2B)
+ *   - isInterState=false + no GSTIN       → INTRAB2C (intra-state B2C)
+ *
+ * Amount classification:
+ *   - nil_amt: items with gstRate=0 (nil-rated — 0% GST but taxable supply)
+ *   - expt_amt: items marked as exempt (not yet tracked — Product.gstTreatment
+ *     is not available in the builder's input; stays 0 until the app tracks it)
+ *   - ngsup_amt: items marked as non-GST (same — stays 0 until tracked)
+ *
+ * Only entries with at least one non-zero amount are included.
  */
 export function buildNIL(txns: Gstr1Transaction[]): { inv: Gstr1NilEntry[] } {
   const sales = txns.filter(t => t.type === 'sale' && !t.isReverseCharge)
-  let nilValue = 0
+
+  // 4 supply-type buckets
+  const buckets: Record<'INTRAB2B' | 'INTRB2B' | 'INTRAB2C' | 'INTRB2C', {
+    nil_amt: number; expt_amt: number; ngsup_amt: number
+  }> = {
+    INTRAB2B: { nil_amt: 0, expt_amt: 0, ngsup_amt: 0 },
+    INTRB2B: { nil_amt: 0, expt_amt: 0, ngsup_amt: 0 },
+    INTRAB2C: { nil_amt: 0, expt_amt: 0, ngsup_amt: 0 },
+    INTRB2C: { nil_amt: 0, expt_amt: 0, ngsup_amt: 0 },
+  }
+
   for (const txn of sales) {
+    // Determine supply type
+    const isB2B = !!(txn.partyGstin && txn.partyGstin.length >= 15)
+    const sply_ty: 'INTRAB2B' | 'INTRB2B' | 'INTRAB2C' | 'INTRB2C' = txn.isInterState
+      ? (isB2B ? 'INTRB2B' : 'INTRB2C')
+      : (isB2B ? 'INTRAB2B' : 'INTRAB2C')
+
     for (const item of txn.items) {
+      const taxable = itemTaxable(item)
+      // nil-rated = gstRate is 0 (0% GST but still a taxable supply)
       if (item.gstRate === 0) {
-        nilValue = roundMoney(nilValue + itemTaxable(item))
+        buckets[sply_ty].nil_amt = roundMoney(buckets[sply_ty].nil_amt + taxable)
       }
+      // expt_amt and ngsup_amt stay 0 — the app doesn't track gstTreatment
+      // on items yet (Product.gstTreatment exists in the schema but isn't
+      // passed to the builder). When it is, add:
+      //   if (item.gstTreatment === 'exempt') buckets[sply_ty].expt_amt += taxable
+      //   if (item.gstTreatment === 'nonGst') buckets[sply_ty].ngsup_amt += taxable
     }
   }
 
-  return {
-    inv: [
-      { sply_ty: 'NIL', description: 'Nil rated supplies', txval: nilValue },
-      { sply_ty: 'EXPT', description: 'Exempted supplies', txval: 0 },
-      { sply_ty: 'NGST', description: 'Non-GST supplies', txval: 0 },
-    ],
-  }
+  // Only include buckets with at least one non-zero amount
+  const inv: Gstr1NilEntry[] = (Object.entries(buckets) as Array<
+    [keyof typeof buckets, typeof buckets['INTRAB2B']]>
+  )
+    .filter(([_, v]) => v.nil_amt > 0 || v.expt_amt > 0 || v.ngsup_amt > 0)
+    .map(([sply_ty, v]) => ({
+      sply_ty,
+      nil_amt: v.nil_amt,
+      expt_amt: v.expt_amt,
+      ngsup_amt: v.ngsup_amt,
+    }))
+
+  return { inv }
 }
 
 /**

@@ -638,3 +638,19 @@ and include enough context to reproduce.
 - **Data repair**: Added `/api/debug/repair-null-paidamount` endpoint (owner-only). Scans all transactions for NULL paidAmount, sets them to 0, reports affected parties + sample rows. This cleans up existing NULL values at rest (the SQL COALESCE fix handles them at read time, but the data should also be consistent at rest).
 - **Regression test**: 3 new SQL structure tests in `v26-batch8-fixes.test.ts` — COALESCE("paidAmount", 0) appears 4 times, COALESCE("amount", 0) appears 2 times, bare "totalAmount" - "paidAmount" without COALESCE does NOT appear.
 - **Status**: FIXED (SQL fix) + repair endpoint available for data cleanup.
+
+### BUG-059 — GSTR-1 nil section had wrong structure (sply_ty = exemption type instead of supply type) (Critical/GST-filing) — FIXED
+- **File**: `src/lib/gstr1-builder.ts` (buildNIL function + Gstr1NilEntry interface)
+- **Severity**: Critical (portal rejects with "Invalid sply_ty: NIL/EXPT/NGST (allowed: INTRB2B, INTRAB2B, INTRB2C, INTRAB2C)")
+- **Found**: 2026-07-19, user live testing with GSTR-1 JSON schema validator (screenshot 714)
+- **Description**: The nil section (Table 8) used `sply_ty` values 'NIL'/'EXPT'/'NGST' — treating the exemption category as the main classification. But the GSTN schema requires `sply_ty` to represent the SUPPLY TYPE (inter/intra-state × B2B/B2C), with separate amount fields (`nil_amt`, `expt_amt`, `ngsup_amt`) WITHIN each entry. The old structure had 3 entries (one per exemption type) with a single `txval` field; the correct structure has up to 4 entries (one per supply type) with 3 separate amount fields.
+- **Fix applied**: 2026-07-19 (V26 Batch 9). Completely restructured buildNIL:
+  - Gstr1NilEntry interface updated: `sply_ty` now `'INTRAB2B' | 'INTRB2B' | 'INTRAB2C' | 'INTRB2C'`; fields are `nil_amt`, `expt_amt`, `ngsup_amt` (replaces old `description` + `txval`).
+  - buildNIL now: (a) determines supply type per transaction from `isInterState` + party GSTIN presence, (b) aggregates nil-rated amounts (gstRate=0) into the correct supply-type bucket, (c) only emits entries with non-zero amounts (was always 3 dummy entries).
+  - expt_amt and ngsup_amt stay 0 — the app doesn't track `Product.gstTreatment` on items yet (the field exists in the schema but isn't passed to the builder). When it is, the builder can be extended to classify exempt/non-GST items.
+- **Regression tests**: 6 new/updated NIL tests in `gstr1-builder.test.ts` — nil-rated classified by supply type, B2B → INTRAB2B, inter-state → INTRB2C, exempt/non-GST default 0, empty input → 0 entries (was 3), multiple supply types → separate entries. Also updated 3 existing tests that asserted `nil.inv.length === 3`.
+- **Status**: FIXED
+
+### BUG-058 — V26 M11: getReceivablePayable SQL NULL paidAmount fix — PARTILY RESOLVED (COALESCE added, but Anita's ₹990 persists)
+- **Status**: UPDATE — The COALESCE fix is deployed and correct (defends against NULL paidAmount). However, the user's Neon recon shows Anita's ₹990 divergence PERSISTS even though the repair endpoint found 0 NULL paidAmounts. This means the divergence has a DIFFERENT root cause than NULL paidAmount.
+- **Next step**: User needs to hit `/api/debug/party-balance-detail?partyId=cmqt2fqof0017jv04tkyie2i3` to see the component-by-component breakdown. The `componentComparison` field will show EXACTLY which component (openingBalance, salesOutstanding, purchaseOutstanding, creditNoteOutstanding, debitNoteOutstanding, paymentsReceived, paymentsPaid) differs between the Prisma path and the SQL path. That will pinpoint the root cause.
