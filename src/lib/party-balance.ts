@@ -102,15 +102,29 @@ export async function computePartyBalance(
       where: { userId, partyId, type: 'debit-note', deletedAt: null },
       _sum: { totalAmount: true, paidAmount: true },
     }),
-    // 🔒 FIX H3 + V15 M-3: standalone payments per type, filter deletedAt: null
-    db.payment.aggregate({
-      where: { userId, partyId, type: 'received', deletedAt: null },
-      _sum: { amount: true },
-    }),
-    db.payment.aggregate({
-      where: { userId, partyId, type: 'paid', deletedAt: null },
-      _sum: { amount: true },
-    }),
+    // 🔒 V26 M11 FINAL FIX: Payment aggregates now use RAW SQL instead of
+    // Prisma's aggregate. The money extension's aggregate handler was
+    // double-converting Payment._sum.amount (fromPaise applied twice),
+    // producing 0.1 instead of 10 for a ₹10 payment. Raw SQL bypasses the
+    // extension entirely — we read the raw paise value and convert via
+    // fromPaise ourselves, exactly like getReceivablePayable does. This
+    // guarantees both paths use the SAME computation and can't diverge.
+    db.$queryRaw<Array<{ totalPaise: bigint }>>`
+      SELECT COALESCE(SUM("amount"), 0) AS "totalPaise"
+      FROM "Payment"
+      WHERE "userId" = ${userId}
+        AND "partyId" = ${partyId}
+        AND "type" = 'received'
+        AND "deletedAt" IS NULL
+    `,
+    db.$queryRaw<Array<{ totalPaise: bigint }>>`
+      SELECT COALESCE(SUM("amount"), 0) AS "totalPaise"
+      FROM "Payment"
+      WHERE "userId" = ${userId}
+        AND "partyId" = ${partyId}
+        AND "type" = 'paid'
+        AND "deletedAt" IS NULL
+    `,
   ])
 
   const totalSales = roundMoney(salesAgg._sum.totalAmount || 0)
@@ -128,9 +142,10 @@ export async function computePartyBalance(
     (debitNoteAgg._sum.totalAmount || 0) - (debitNoteAgg._sum.paidAmount || 0)
   )
 
-  // 🔒 FIX H3: Payments reduce the outstanding balance
-  const paymentsReceived = roundMoney(receivedAgg._sum.amount || 0)
-  const paymentsPaid = roundMoney(paidAgg._sum.amount || 0)
+  // 🔒 V26 M11 FINAL FIX: Payment amounts from raw SQL (paise) → fromPaise → rupees.
+  // No money extension involved — same path as getReceivablePayable.
+  const paymentsReceived = fromPaise(Number(receivedAgg[0]?.totalPaise ?? 0))
+  const paymentsPaid = fromPaise(Number(paidAgg[0]?.totalPaise ?? 0))
 
   const balance = roundMoney(
     party.openingBalance

@@ -224,35 +224,62 @@ function configureMocks() {
   // TypeScript overloads don't play well with jest.spyOn's type inference.
   // jest.restoreAllMocks() won't restore this — but we re-assign in every
   // beforeEach call via configureMocks(), so it's always fresh.
-  ;(db as any).$queryRaw = (jest.fn() as any).mockResolvedValue([
-    {
-      partyId: PARTY_ID,
-      openingBalancePaise: String(OPENING_BALANCE * 100),
-      salesOutstandingPaise: String(
-        FIXTURE_TRANSACTIONS
-          .filter(t => t.type === 'sale' && t.deletedAt === null)
-          .reduce((s, t) => s + (t.totalAmount - t.paidAmount), 0) * 100
-      ),
-      purchaseOutstandingPaise: String(
-        FIXTURE_TRANSACTIONS
-          .filter(t => t.type === 'purchase' && t.deletedAt === null)
-          .reduce((s, t) => s + (t.totalAmount - t.paidAmount), 0) * 100
-      ),
-      creditNoteOutstandingPaise: '0',
-      debitNoteOutstandingPaise: '0',
-      paymentsReceivedPaise: String(
-        FIXTURE_PAYMENTS
+  //
+  // 🔒 V26 M11: computePartyBalance now uses $queryRaw for payment aggregates
+  // (bypassing the money extension's double-converting aggregate handler).
+  // The mock must differentiate between:
+  //   1. getReceivablePayable's party-list query (returns array of party rows)
+  //   2. computePartyBalance's payment queries (returns [{ totalPaise }])
+  // We check the SQL string to determine which query it is.
+  ;(db as any).$queryRaw = (jest.fn() as any).mockImplementation((strings: TemplateStringsArray, ...values: any[]) => {
+    const sql = strings.join('?')
+    // computePartyBalance's payment queries: SELECT COALESCE(SUM("amount")...
+    if (sql.includes('SELECT COALESCE(SUM("amount")')) {
+      // Determine if it's 'received' or 'paid' by checking the SQL
+      if (sql.includes("'received'")) {
+        const total = FIXTURE_PAYMENTS
           .filter(p => p.type === 'received' && p.deletedAt === null)
-          .reduce((s, p) => s + p.amount, 0) * 100
-      ),
-      paymentsPaidPaise: String(
-        FIXTURE_PAYMENTS
+          .reduce((s, p) => s + p.amount, 0) * 100  // convert rupees to paise
+        return Promise.resolve([{ totalPaise: BigInt(total) }])
+      }
+      if (sql.includes("'paid'")) {
+        const total = FIXTURE_PAYMENTS
           .filter(p => p.type === 'paid' && p.deletedAt === null)
           .reduce((s, p) => s + p.amount, 0) * 100
-      ),
-      transactionCount: BigInt(FIXTURE_TRANSACTIONS.filter(t => t.deletedAt === null).length),
-    },
-  ] as any)
+        return Promise.resolve([{ totalPaise: BigInt(total) }])
+      }
+    }
+    // Default: getReceivablePayable's party-list query
+    return Promise.resolve([
+      {
+        partyId: PARTY_ID,
+        openingBalancePaise: String(OPENING_BALANCE * 100),
+        salesOutstandingPaise: String(
+          FIXTURE_TRANSACTIONS
+            .filter(t => t.type === 'sale' && t.deletedAt === null)
+            .reduce((s, t) => s + (t.totalAmount - t.paidAmount), 0) * 100
+        ),
+        purchaseOutstandingPaise: String(
+          FIXTURE_TRANSACTIONS
+            .filter(t => t.type === 'purchase' && t.deletedAt === null)
+            .reduce((s, t) => s + (t.totalAmount - t.paidAmount), 0) * 100
+        ),
+        creditNoteOutstandingPaise: '0',
+        debitNoteOutstandingPaise: '0',
+        paymentsReceivedPaise: String(
+          FIXTURE_PAYMENTS
+            .filter(p => p.type === 'received' && p.deletedAt === null)
+            .reduce((s, p) => s + p.amount, 0) * 100
+        ),
+        paymentsPaidPaise: String(
+          FIXTURE_PAYMENTS
+            .filter(p => p.type === 'paid' && p.deletedAt === null)
+            .reduce((s, p) => s + p.amount, 0) * 100
+        ),
+        transactionCount: BigInt(FIXTURE_TRANSACTIONS.filter(t => t.deletedAt === null).length),
+      },
+    ] as any)
+  })
 }
 
 // ============================================================
