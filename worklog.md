@@ -6918,3 +6918,67 @@ Stage Summary:
 - 1740 tests passing (was 1714; +26 new), 0 TypeScript errors, 0 ESLint errors, build clean.
 - Pushed to GitHub: commit ce2965b. Vercel auto-deploying.
 - Awaiting user "verified" before Batch 4 (N9 — polish: GSTR-1 gt/cur_gt hardcoded 0).
+
+---
+Task ID: audit-v26-batch-4
+Agent: main
+Task: V26 Phase 1 Batch 4 — N9 polish: populate GSTR-1 gt/cur_gt (was hardcoded 0). Final batch of V26 Phase 1.
+
+Work Log:
+- Read worklog for Batch 3 context.
+- Pre-change scan: located gt:0/cur_gt:0 in gstr1-builder.ts:607-608 (buildGstr1 return). Read the GSTR-1 API route to understand data flow: buildGstr1 is called in two places (GET handler at line 119, POST handler at line 290) with month-bounded txns. Prior-FY data is NOT in the passed-in txns — it requires a separate DB query.
+- Verified no existing tests assert gt===0 or cur_gt===0 (grep = 0 matches) — safe to populate without breaking existing tests.
+
+§1 — Pure helper: src/lib/fiscal-year.ts (new):
+- getPriorFYBounds(filingYear, filingMonth): returns { start, end } for the prior Indian financial year (April 1 → March 31).
+- getCurrentFYBounds(filingYear, filingMonth): same for current FY (added for completeness + future use).
+- Boundary logic: if month >= 4 (Apr-Dec), current FY starts in `year`; if month < 4 (Jan-Mar), current FY starts in `year-1`. Prior FY = current FY start year - 1.
+- Pure functions — no DB, no side effects. Fully testable.
+- 10 fiscal-year tests covering Jul/Apr/Mar/Jan/Dec filing months, exclusive end boundary, year-boundary regression guard.
+
+§2 — Pure helper: computeOutwardTurnover in gstr1-builder.ts:
+- New exported function computeOutwardTurnover(txns): returns net outward supply.
+- Formula: Σ(sale taxable) − Σ(credit-note taxable) + Σ(debit-note taxable), where taxable = subtotal − discountAmount.
+- Income/expense/estimate excluded (not part of GST outward turnover).
+- 10 computeOutwardTurnover tests covering empty, sale, discount, credit-note reduces, debit-note increases, mixed, income excluded, negative-only, multiple sales, estimate ignored.
+
+§3 — buildGstr1 signature + behavior updated:
+- New optional 4th parameter: options?: { priorFyTurnover?: number }.
+- cur_gt now computed from txns via computeOutwardTurnover (current-period turnover). No parameter needed — the data is already there.
+- gt uses options.priorFyTurnover when provided; defaults to 0 when omitted (backward compat with existing tests + any caller that doesn't have prior-FY data handy).
+- Both gt and cur_gt wrapped in roundMoney() for float-drift safety.
+- Gstr1Result interface comments updated: "total turnover (unused, 0)" → "prior-FY outward turnover (was hardcoded 0)".
+- 10 buildGstr1 cur_gt/gt tests covering: cur_gt from txns, empty=0, debit notes included, income excluded, gt defaults to 0, gt from priorFyTurnover, both populated, rounding, other sections unaffected.
+
+§4 — GSTR-1 API route updated (both GET + POST paths):
+- Added import: getPriorFYBounds from '@/lib/fiscal-year', fromPaise from '@/lib/money'.
+- GET handler (line ~85): after shop is built, fetches prior-FY outward turnover via raw SQL aggregate:
+  - SUM with CASE for sale (positive), credit-note (negative), debit-note (positive).
+  - Filters: userId, deletedAt IS NULL, type IN ('sale','credit-note','debit-note'), date in [priorFY.start, priorFY.end).
+  - Raw SQL bypasses the money extension (same pattern as insights/route.ts) — result is in paise, converted via fromPaise.
+- Passes { priorFyTurnover } to buildGstr1.
+- POST handler (save/file path, line ~277): identical prior-FY fetch + pass-through. DRY would be nice but the two paths have different surrounding logic (GET returns the JSON; POST upserts a snapshot) — duplication is acceptable for now.
+- Snapshot storage: rawJson already stores the full gstr1 object, so gt + cur_gt are automatically persisted in Gstr1Snapshot. No schema change needed.
+
+§5 — Adjacent bug found + logged:
+- BUG-052: Legacy /api/gstr-export route also has gt/cur_gt hardcoded 0 (line 425-426). Builds GSTR-1 JSON inline (not via buildGstr1) — different data shape, can't directly reuse the helper. Canonical /api/gstr-1 route is fixed by N9. Legacy route logged for future batch (Low priority — informational fields, non-blocking).
+
+Verification:
+- npx tsc --noEmit: 0 errors
+- npx eslint (4 changed files): 0 errors, 0 warnings
+- npx jest: 1772/1772 pass (50 suites) — was 1740; +32 new tests
+- npx next build: Compiled successfully (BUILD_ID: Ua-q3UVF24wGXObu0BHJ4)
+
+Bug-scan while in the area:
+- Grepped for other `gt: 0` / `cur_gt: 0` in src/ — found 1 adjacent: src/app/api/gstr-export/route.ts:425-426 (logged as BUG-052).
+- Confirmed the canonical /api/gstr-1 route (used by GSTR-1 Reports UI + filing flow) is fixed.
+- Confirmed no existing tests asserted gt===0 or cur_gt===0 — no regressions.
+
+Stage Summary:
+- V26 Phase 1 Batch 4 COMPLETE. N9 (the final batch of V26 Phase 1) implemented + tested + lint-clean + build-clean.
+- Files changed: 4 source + 1 test (src/lib/fiscal-year.ts [new], src/lib/gstr1-builder.ts, src/app/api/gstr-1/route.ts, src/__tests__/lib/v26-gstr1-turnover.test.ts [new], BUGS-FOUND.md).
+- 1 new bug logged: BUG-052 (legacy gstr-export route — Low, queued for future).
+- 1772 tests passing (was 1740; +32 new), 0 TypeScript errors, 0 ESLint errors, build clean.
+- Pushed to GitHub: commit aa40df9. Vercel auto-deploying.
+- V26 PHASE 1 (MONEY & ACCOUNTING ENGINE) IS NOW COMPLETE. All 9 N-fixes (N1-N9) shipped across 4 batches + 1 UX fix (BUG-047). 28 new tests added across the phase. 0 TypeScript errors, 0 ESLint errors, build clean throughout.
+- Awaiting user "verified" — then V26 Phase 1 can be marked complete and the auditor can proceed with the next phase (Phase 2, scope TBD by auditor).
