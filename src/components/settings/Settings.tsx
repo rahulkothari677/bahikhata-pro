@@ -429,6 +429,8 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
     receivable: true,
     pendingSync: true,
     announcements: true,
+    dailyDigest: true,     // 🔒 Feature Phase 4: Daily digest card on dashboard
+    backupReminder: true,  // 🔒 Feature Phase 5: Auto-backup reminder card
   }
   const [notifPrefs, setNotifPrefs] = useState(defaultNotifPrefs)
   useEffect(() => {
@@ -1328,6 +1330,8 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
                 { key: 'receivable' as const, label: 'Receivable (udhaar) alerts', desc: 'Notify when customers owe you money' },
                 { key: 'pendingSync' as const, label: 'Pending sync alerts', desc: 'Notify about offline changes waiting to sync' },
                 { key: 'announcements' as const, label: 'Announcement banners', desc: 'Show important updates from the team' },
+                { key: 'dailyDigest' as const, label: 'Daily digest card', desc: 'Show today\'s summary on dashboard after 9 PM' },
+                { key: 'backupReminder' as const, label: 'Auto-backup reminder', desc: 'Remind to backup if last backup is >7 days old' },
               ].map(item => (
                 <div key={item.key} className="flex items-center justify-between">
                   <div className="flex-1 min-w-0 pr-2">

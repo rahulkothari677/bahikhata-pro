@@ -18,6 +18,7 @@ import {
   ArrowUpRight, ArrowDownRight, AlertTriangle, IndianRupee,
   Receipt, Boxes, PiggyBank, ScanLine, ArrowRight, Plus, CloudOff, Repeat, Loader2,
   BookOpenText, Share2, Calendar, Target, HandCoins, FileText,
+  AlertCircle, Send,
 } from 'lucide-react'
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell,
@@ -1198,6 +1199,83 @@ export function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* 🔒 Feature Phase 4: Daily Digest card — shows after 9 PM IST with
+          today's business summary. Opt-in via Settings → Notifications. */}
+      {kpis && kpis.todayTxnCount > 0 && (() => {
+        // Check if daily digest is enabled + it's after 9 PM IST
+        const now = new Date()
+        const istHour = (now.getUTCHours() + 5 + (now.getUTCMinutes() >= 30 ? 1 : 0)) % 24
+        if (istHour < 21) return null  // Only show after 9 PM IST
+        try {
+          const prefs = JSON.parse(localStorage.getItem('bahikhata:notif-prefs') || '{}')
+          if (prefs.dailyDigest === false) return null  // Opt-out
+        } catch { /* default to showing */ }
+
+        const digestText = `📊 EkBook Daily Digest\n\nSales today: ${kpis.todayTxnCount}\nRevenue: ${formatINR(kpis.todayRevenue)}\nProfit: ${formatINR(kpis.todayProfit)}\nReceivable: ${formatINR(kpis.totalReceivable)}\n\n— Sent from EkBook`
+
+        return (
+          <div className="rounded-2xl bg-gradient-to-r from-indigo-500 to-blue-600 p-4 text-white shadow-card relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -mr-10 -mt-10 pointer-events-none" />
+            <div className="relative flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-lg bg-white/20 backdrop-blur-sm flex items-center justify-center">
+                  <Repeat className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold">Today's Digest</p>
+                  <p className="text-[11px] text-white/80">
+                    {kpis.todayTxnCount} sales · {formatINR(kpis.todayRevenue)} revenue · {formatINR(kpis.todayProfit)} profit
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  const url = `https://wa.me/?text=${encodeURIComponent(digestText)}`
+                  window.open(url, '_blank')
+                }}
+                className="text-xs font-medium bg-white/20 hover:bg-white/30 rounded-full px-3 py-1.5 transition flex items-center gap-1"
+              >
+                <Send className="w-3 h-3" /> Share
+              </button>
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* 🔒 Feature Phase 5: Auto-backup reminder — shows if last backup
+          is >7 days old. Opt-in via Settings → Notifications. */}
+      {(() => {
+        try {
+          const prefs = JSON.parse(localStorage.getItem('bahikhata:notif-prefs') || '{}')
+          if (prefs.backupReminder === false) return null
+          const lastBackup = localStorage.getItem('bahikhata:last-backup')
+          if (!lastBackup) return null  // Never backed up — don't nag on first use
+          const daysSince = (Date.now() - new Date(lastBackup).getTime()) / (1000 * 60 * 60 * 24)
+          if (daysSince < 7) return null  // Recent backup — no reminder needed
+          return (
+            <div className="rounded-2xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 p-4">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-lg bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center flex-shrink-0">
+                  <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">Backup Reminder</p>
+                  <p className="text-xs text-amber-700 dark:text-amber-300 mt-0.5">
+                    Your last backup was {Math.floor(daysSince)} days ago. Back up your data regularly to prevent loss.
+                  </p>
+                  <button
+                    onClick={() => setView('settings')}
+                    className="text-xs font-semibold text-amber-700 dark:text-amber-300 hover:underline mt-2 flex items-center gap-1"
+                  >
+                    Go to Backup <ArrowRight className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          )
+        } catch { return null }
+      })()}
 
       {/* Business Health Score — overall wellness indicator.
           🔒 AUDIT V25 BATCH 4b REVERT: Restored to standalone full-width card
