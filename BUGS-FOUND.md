@@ -537,3 +537,19 @@ and include enough context to reproduce.
 - **Description**: All `nav.label.*` and `nav.desc.*` keys (added in V25 Batch 8 Phase 4) only exist in `en` and `hi`. The `gu`, `mr`, `ta`, `te` blocks are missing them. The fallback chain correctly returns the English value, so the app is functional — but the localization is incomplete. Notable gaps: every nav label/desc key (~50+ strings).
 - **Fix**: Add the translated keys to each language block. Best done by a native speaker; machine translation is acceptable for an MVP.
 - **Status**: OPEN — low priority, queued for i18n cleanup batch.
+
+### BUG-050 — V26 N5: rebuildProductStock is not atomic (Low/Edge-case) — OPEN
+- **File**: `src/lib/restore-utils.ts` (`rebuildProductStock`)
+- **Severity**: Low (only matters if a DB error occurs mid-rebuild)
+- **Description**: `rebuildProductStock` issues one `updateMany` per product sequentially — not wrapped in a `$transaction`. If a DB error occurs partway through (e.g. Neon cold-start timeout after 50 products), some products have the rebuilt stock and others retain the backup's stored `currentStock` — a partial state. The product-creation step in the restore route still sets `currentStock: product.currentStock || product.openingStock || 0` (line 162), so the un-rebuilt products would have the backup's value.
+- **Workaround**: If restore fails mid-rebuild, the user can re-trigger by deleting all data (Danger Zone) and restoring again. The restore route already requires an empty shop, so this is the natural recovery path.
+- **Proper fix**: Wrap the rebuild loop in `db.$transaction(async (tx) => { ... })` and pass `tx` to the helper instead of `db`. Same for `relinkTransactionItemsToProducts`. Trivial change but requires the helper signatures to accept a transaction client (which they already do via the `RestoreDb` interface).
+- **Status**: OPEN — low priority, queued for a follow-up batch. The current behavior is still strictly better than pre-N5 (no rebuild at all).
+
+### BUG-051 — V26 N5: restore-utils.ts uses findMany+JS reduce instead of SQL aggregate (Low/Perf) — OPEN
+- **File**: `src/lib/restore-utils.ts` (`rebuildProductStock`)
+- **Severity**: Low (only matters for very large backups — 10K+ transactions)
+- **Description**: `rebuildProductStock` fetches all TransactionItem rows for the user and aggregates in JS, rather than running a SQL `GROUP BY productId` with conditional SUMs. For 10K-transaction backups this is O(items) memory + O(products) round-trips. A raw SQL aggregate would be O(products) round-trips with O(products) memory.
+- **Why this way**: The helper accepts an injected `RestoreDb` handle (for testability with a stub). Running raw SQL through the stub is awkward. The current implementation is portable across Postgres (prod) + SQLite (tests).
+- **Proper fix**: Add an optional `aggregateStockByProduct` method to the `RestoreDb` interface that runs raw SQL in prod and is mocked in tests. Or: bypass the helper interface in the restore route and call `db.$queryRaw` directly for the aggregate, then pass the result to a pure aggregation function.
+- **Status**: OPEN — low priority. Acceptable for a one-time restore operation; if restore latency becomes a user complaint, swap to SQL aggregate without changing the public contract.

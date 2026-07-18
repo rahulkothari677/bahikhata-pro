@@ -3,6 +3,11 @@ import { db } from '@/lib/db'
 import { getAuthUserIdOwnerOnly } from '@/lib/get-auth'
 import { apiError } from '@/lib/api-error'
 import { logAudit } from '@/lib/audit'
+import {
+  assertShopIsEmpty,
+  relinkTransactionItemsToProducts,
+  rebuildProductStock,
+} from '@/lib/restore-utils'
 
 /**
  * POST /api/import/restore
@@ -14,10 +19,19 @@ import { logAudit } from '@/lib/audit'
  * Restores: products, parties, transactions (+ items), payments, settings, shops.
  * Skips: audit logs, field change logs (these are system-generated, not restorable).
  *
- * IMPORTANT: This MERGES with existing data — it does NOT delete existing data.
- * If a product with the same SKU already exists, it's skipped (not overwritten).
- * If a party with the same phone+name already exists, it's skipped.
- * Transactions are always created as new (new IDs, new invoice numbers).
+ * 🔒 V26 N5 (Option A): Restore is now a restore-INTO-EMPTY operation only.
+ * Before importing, we assert the shop has zero transactions/products/parties/
+ * payments. If non-empty, restore is rejected with a clear message pointing the
+ * user to the Danger Zone reset flow. This stops the V24 §5 / V26 M6 defect
+ * where restore silently merged into existing data: party balances
+ * double-counted (recomputed from transactions), stock frozen (no rebuild),
+ * products permanently unlinked (productId: null).
+ *
+ * After import:
+ *   1. Re-link TransactionItems to Products by productName (best-effort).
+ *   2. Rebuild Product.currentStock from openingStock + Σ(purchase+credit-note)
+ *      − Σ(sale+debit-note). Stock is always derived from transactions — never
+ *      trusts the backup's stored currentStock.
  *
  * Auth: owner only.
  */
@@ -36,6 +50,15 @@ export async function POST(req: NextRequest) {
         error: 'Invalid backup file',
         message: 'The uploaded file is not a valid EkBook backup. Make sure it was exported from Settings → Backup.',
       }, { status: 400 })
+    }
+
+    // 🔒 V26 N5: Block restore into a non-empty shop. Option A per the masterplan.
+    const shopCheck = await assertShopIsEmpty(db as any, userId)
+    if (!shopCheck.ok) {
+      return NextResponse.json(
+        { error: shopCheck.error, message: shopCheck.message },
+        { status: shopCheck.status },
+      )
     }
 
     const data = backup.data
@@ -311,6 +334,18 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // 🔒 V26 N5 (Option A): Post-import integrity pass.
+    //   1. Re-link TransactionItems to Products by productName (best-effort).
+    //      Before this, every restored item was created with productId: null,
+    //      so item-profit and stock-value reports computed against orphan rows.
+    //   2. Rebuild Product.currentStock from openingStock + transactions.
+    //      Before this, restore trusted the backup's stored currentStock —
+    //      which could disagree with the restored transaction history (hand-
+    //      edited/truncated/older-schema backup). After rebuild, stock is
+    //      always derived from transactions (single source of truth).
+    const relinkResult = await relinkTransactionItemsToProducts(db as any, userId)
+    const rebuildResult = await rebuildProductStock(db as any, userId)
+
     // Audit log the restore
     await logAudit({
       userId,
@@ -320,13 +355,29 @@ export async function POST(req: NextRequest) {
       metadata: {
         version: backup.version,
         ...results,
+        relinked: relinkResult.relinked,
+        unmatched: relinkResult.unmatched,
+        stockRebuilt: rebuildResult.rebuilt,
       },
     })
 
+    // 🔒 V26 N5: Honest success message — explicitly state stock was rebuilt
+    // and how many items were re-linked. If unmatched > 0, warn the user that
+    // those items won't appear in product-linked reports.
+    let message = `Restore complete — ${results.transactions.imported} transactions, ${results.products.imported} products, stock rebuilt for ${rebuildResult.rebuilt} products, ${relinkResult.relinked} items re-linked to catalog.`
+    if (relinkResult.unmatched > 0) {
+      message += ` ${relinkResult.unmatched} item(s) could not be matched to a product by name and will not appear in product-linked reports (item-profit, stock-value).`
+    }
+
     return NextResponse.json({
       success: true,
-      message: 'Restore complete. Some items may have been skipped if they already existed.',
-      results,
+      message,
+      results: {
+        ...results,
+        relinked: relinkResult.relinked,
+        unmatched: relinkResult.unmatched,
+        stockRebuilt: rebuildResult.rebuilt,
+      },
     })
   } catch (err) {
     return apiError(err, 'Failed to restore data', 500)

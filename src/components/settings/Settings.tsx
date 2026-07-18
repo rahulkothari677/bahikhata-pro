@@ -905,7 +905,10 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
             </div>
           </div>
 
-          {/* 🔒 V17 Audit Phase 9: Restore from Backup — upload a JSON backup file */}
+          {/* 🔒 V17 Audit Phase 9: Restore from Backup — upload a JSON backup file
+              🔒 V26 N5: Honest copy — restore REPLACES all current data (not merges).
+              The backend blocks restore into a non-empty shop; the UI must say so
+              up front so the user knows to reset first if needed. */}
           <div className="rounded-lg border border-emerald-200 dark:border-emerald-900/40 bg-emerald-50 dark:bg-emerald-950/20 p-4">
             <div className="flex items-start gap-3">
               <Upload className="w-5 h-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
@@ -913,7 +916,9 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
                 <p className="font-semibold text-emerald-900 dark:text-emerald-100 text-sm">Restore from Backup</p>
                 <p className="text-xs text-emerald-700 dark:text-emerald-300 mt-1">
                   Upload a previously downloaded backup JSON file to restore your data.
-                  This MERGES with existing data — items with the same SKU or name are skipped.
+                  This <strong>REPLACES all current data</strong> — restore only works on an empty shop.
+                  If you have existing data, go to Danger Zone below and tap "Reset All Data" first.
+                  After restore, stock is rebuilt from transactions and items are re-linked to your catalog by name.
                 </p>
                 <input
                   type="file"
@@ -921,6 +926,15 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
                   onChange={async (e) => {
                     const file = e.target.files?.[0]
                     if (!file) return
+                    // 🔒 V26 N5: Explicit confirmation — restore is destructive (replaces all data).
+                    const confirmed = await confirmDialog(
+                      'Restore will REPLACE all your current data with the backup. Stock will be rebuilt from transactions. Continue?',
+                      { title: 'Restore from Backup', confirmLabel: 'Restore', destructive: true },
+                    )
+                    if (!confirmed) {
+                      e.target.value = ''
+                      return
+                    }
                     try {
                       const text = await file.text()
                       const backup = JSON.parse(text)
@@ -936,14 +950,22 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
                       // didn't tie to its own items), say so LOUDLY — a partial
                       // restore that looks complete is how wrong books are born.
                       const quarantined = result.results.transactions.quarantined || 0
+                      const relinked = result.results.relinked || 0
+                      const unmatched = result.results.unmatched || 0
+                      const stockRebuilt = result.results.stockRebuilt || 0
                       if (quarantined > 0) {
                         sonnerToast.warning(`Restore finished — ${quarantined} transaction(s) NOT imported`, {
                           description: `They failed integrity checks (invoice totals don't match their items — possibly an edited or corrupted backup). Imported: ${result.results.transactions.imported}. First issues: ${(result.results.transactions.quarantineReasons || []).slice(0, 3).join('; ')}`,
                           duration: 20000,
                         })
+                      } else if (unmatched > 0) {
+                        sonnerToast.warning(`Restore complete — ${unmatched} item(s) not linked to catalog`, {
+                          description: `Products: ${result.results.products.imported}. Transactions: ${result.results.transactions.imported}. Stock rebuilt for ${stockRebuilt} products. ${relinked} items re-linked; ${unmatched} could not be matched by name (won't appear in product-linked reports).`,
+                          duration: 15000,
+                        })
                       } else {
                         sonnerToast.success('Restore complete!', {
-                          description: `Products: ${result.results.products.imported} imported. Parties: ${result.results.parties.imported}. Transactions: ${result.results.transactions.imported}.`,
+                          description: `Products: ${result.results.products.imported}. Transactions: ${result.results.transactions.imported}. Stock rebuilt for ${stockRebuilt} products. ${relinked} items re-linked to catalog.`,
                           duration: 10000,
                         })
                       }
