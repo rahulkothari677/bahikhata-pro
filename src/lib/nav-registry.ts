@@ -283,7 +283,11 @@ export const NAV_REGISTRY: NavDestination[] = [
     iconBg: INDIGO_BG,
     view: 'sales',
     actionKind: 'toast-navigate',
-    surfaces: ['more'],
+    // 🔒 V26 FIX N5: was ['more'] only → desktop users had NO way to discover
+    // returns (More is only reachable from the lg:hidden mobile bottom nav).
+    // Now also in the desktop Sidebar Tools section and Ctrl+K search.
+    surfaces: ['more', 'sidebar-tools', 'global-search'],
+    keywords: 'sale return credit note refund customer wapas',
     sortOrder: 3,
     labelKey: 'nav.label.sale-return',
     descKey: 'nav.desc.sale-return',
@@ -304,7 +308,9 @@ export const NAV_REGISTRY: NavDestination[] = [
     iconBg: INDIGO_BG,
     view: 'purchases',
     actionKind: 'toast-navigate',
-    surfaces: ['more'],
+    // 🔒 V26 FIX N5: same desktop-discoverability fix as sale-return above.
+    surfaces: ['more', 'sidebar-tools', 'global-search'],
+    keywords: 'purchase return debit note refund supplier wapas',
     sortOrder: 4,
     labelKey: 'nav.label.purchase-return',
     descKey: 'nav.desc.purchase-return',
@@ -384,7 +390,9 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'inventory',
     subcategory: 'items-stock',
     frequency: 'secondary',
-    surfaces: ['more'],
+    // 🔒 V26 FIX N5: desktop-discoverable via Ctrl+K (Inventory itself is in the sidebar)
+    surfaces: ['more', 'global-search'],
+    keywords: 'low stock alert reorder running out kam',
     sortOrder: 2,
     labelKey: 'nav.label.low-stock-alerts',
     descKey: 'nav.desc.low-stock-alerts',
@@ -420,7 +428,10 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'parties',
     subcategory: 'money-banking',
     frequency: 'secondary',
-    surfaces: ['more'],
+    // 🔒 V26 FIX N5: was ['more'] only — desktop users had no named entry
+    // (only the Bulk Reminders button inside Parties). Now in Sidebar Tools + Ctrl+K.
+    surfaces: ['more', 'sidebar-tools', 'global-search'],
+    keywords: 'whatsapp reminder payment udhaar collect dunning message',
     sortOrder: 4,
     labelKey: 'nav.label.whatsapp-reminders',
     descKey: 'nav.desc.whatsapp-reminders',
@@ -848,7 +859,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'tools',
     subcategory: 'smart-tools',
     frequency: 'secondary',
-    surfaces: ['more'],
+    surfaces: ['more', 'global-search'],  // 🔒 V26 FIX N5
+    keywords: 'voice entry speak bol ke sale mic',
     sortOrder: 2,
     labelKey: 'nav.label.voice-entry',
     descKey: 'nav.desc.voice-entry',
@@ -865,7 +877,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'tools',
     subcategory: 'smart-tools',
     frequency: 'secondary',
-    surfaces: ['more'],
+    surfaces: ['more', 'global-search'],  // 🔒 V26 FIX N5
+    keywords: 'barcode scan billing fast qr',
     sortOrder: 3,
     labelKey: 'nav.label.barcode-scanner',
     descKey: 'nav.desc.barcode-scanner',
@@ -883,7 +896,10 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'tools',
     subcategory: 'smart-tools',
     frequency: 'secondary',
-    surfaces: ['more'],
+    // 🔒 V26 FIX N5: desktop had NO entry naming Smart Insights (V25 §2.4's
+    // surviving half). Ctrl+K now jumps straight to the dashboard section.
+    surfaces: ['more', 'global-search'],
+    keywords: 'smart insights ai alerts suggestions tips',
     sortOrder: 5,
     labelKey: 'nav.label.smart-insights',
     descKey: 'nav.desc.smart-insights',
@@ -901,7 +917,8 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'tools',
     subcategory: 'money-banking',
     frequency: 'secondary',
-    surfaces: ['more'],
+    surfaces: ['more', 'global-search'],  // 🔒 V26 FIX N5
+    keywords: 'cash in hand drawer galla today collections',
     sortOrder: 2,
     labelKey: 'nav.label.cash-in-hand',
     descKey: 'nav.desc.cash-in-hand',
@@ -918,7 +935,10 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'tools',
     subcategory: 'money-banking',
     frequency: 'secondary',
-    surfaces: ['more'],
+    // 🔒 V26 FIX N5: Sidebar Tools + Ctrl+K — desktop had only the dashboard
+    // hero button, with no named "Day-End" entry anywhere.
+    surfaces: ['more', 'sidebar-tools', 'global-search'],
+    keywords: 'day end summary close drawer daily cash hisab',
     sortOrder: 3,
     labelKey: 'nav.label.day-end-summary',
     descKey: 'nav.desc.day-end-summary',
@@ -1076,7 +1096,10 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'account',
     subcategory: 'business',
     frequency: 'secondary',
-    surfaces: ['more'],
+    // 🔒 V26 FIX N5: desktop-discoverable via Ctrl+K (Manage Shops = create
+    // shops + per-shop GSTIN for the Consolidated Report; switching is removed)
+    surfaces: ['more', 'global-search'],
+    keywords: 'multi shop manage shops branch add new shop',
     sortOrder: 1,
     labelKey: 'nav.label.multi-shop-management',
     descKey: 'nav.desc.multi-shop-management',

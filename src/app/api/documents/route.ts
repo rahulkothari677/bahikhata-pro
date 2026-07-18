@@ -72,6 +72,21 @@ export async function POST(req: NextRequest) {
     const validCategories = ['bill', 'invoice', 'gst-certificate', 'bank-statement', 'id-proof', 'other']
     const finalCategory = validCategories.includes(category) ? category : 'other'
 
+    // 🔒 V26 FIX N13 (V23 §6 residual): server-side file-type whitelist.
+    // fileType was client-supplied and passed straight to storage — an .html
+    // (XSS-adjacent when served) or .exe uploaded fine. Only document formats
+    // the vault can actually preview/serve safely are accepted.
+    const ALLOWED_FILE_TYPES = new Set([
+      'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif', 'image/heic', 'image/heif',
+      'application/pdf',
+    ])
+    if (!ALLOWED_FILE_TYPES.has(String(fileType).toLowerCase())) {
+      return NextResponse.json(
+        { error: 'Unsupported file type. Allowed: JPG, PNG, WebP, HEIC images and PDF.' },
+        { status: 415 },
+      )
+    }
+
     // Validate file size (max 10MB via base64 length check)
     const base64Content = fileData.split(',')[1] || fileData
     const estimatedSize = (base64Content.length * 3) / 4

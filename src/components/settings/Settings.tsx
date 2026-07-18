@@ -367,22 +367,11 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
   // keyword (label + description + category title). Empty = show all.
   const [featureSearch, setFeatureSearch] = useState('')
 
-  // 🔒 V22-7 (Phase 5): App Lock toggle state. Persisted to localStorage.
-  // The actual PIN/biometric enforcement is a future feature — for now this
-  // just stores the preference so the UI is ready.
-  const [appLockEnabled, setAppLockEnabled] = useState(false)
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      setAppLockEnabled(localStorage.getItem('bahikhata:app-lock') === 'true')
-    }
-  }, [])
-  const persistAppLock = (enabled: boolean) => {
-    setAppLockEnabled(enabled)
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('bahikhata:app-lock', enabled ? 'true' : 'false')
-    }
-    sonnerToast.success(`App lock ${enabled ? 'enabled — will require PIN on next launch' : 'disabled'}`)
-  }
+  // 🔒 V26 (V23 §4 cleanup): App Lock placebo state/handler REMOVED. The toggle
+  // UI was already replaced with an honest "Coming Soon" row, but the dead
+  // persistAppLock handler (with its lying "will require PIN on next launch"
+  // toast) and the localStorage flag were left behind. Deleted so the next
+  // edit can't accidentally re-wire a false security promise.
 
   // 🔒 V22-11 (Batch A, Phase 5g): Default Landing Page setting.
   // Lets users choose which view opens on launch. Persisted to localStorage.

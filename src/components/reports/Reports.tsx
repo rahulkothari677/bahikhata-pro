@@ -808,12 +808,17 @@ function StockReport({ data }: { data: any }) {
   const potentialProfit = data?.potentialProfit ?? 0
   const lowStockCount = data?.lowStockCount ?? 0
   const products = data?.products || []
+  // 🔒 V26 FIX N6: When "hide profit from staff" is on, the API omits the
+  // cost/profit fields entirely (totalStockValue, potentialProfit, per-product
+  // purchasePrice/stockValue). Detect that and hide the corresponding cards
+  // and columns instead of rendering ₹NaN.
+  const hideCost = data?.totalStockValue === undefined
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <ReportStatCard label="Total Stock Value" value={formatINR(totalStockValue)} icon={Package} color="text-amber-600 dark:text-amber-400" bg="bg-amber-100" />
+        {!hideCost && <ReportStatCard label="Total Stock Value" value={formatINR(totalStockValue)} icon={Package} color="text-amber-600 dark:text-amber-400" bg="bg-amber-100" />}
         <ReportStatCard label="Potential Sale Value" value={formatINR(totalPotentialValue)} icon={IndianRupee} color="text-emerald-600 dark:text-emerald-400" bg="bg-emerald-100" />
-        <ReportStatCard label="Potential Profit" value={formatINR(potentialProfit)} icon={TrendingUp} color="text-violet-600" bg="bg-violet-100" />
+        {!hideCost && <ReportStatCard label="Potential Profit" value={formatINR(potentialProfit)} icon={TrendingUp} color="text-violet-600" bg="bg-violet-100" />}
         <ReportStatCard label="Low Stock Items" value={String(lowStockCount)} icon={ArrowUpRight} color="text-rose-600" bg="bg-rose-100" />
       </div>
 
@@ -829,9 +834,9 @@ function StockReport({ data }: { data: any }) {
                   <th className="py-2 px-2 font-medium text-muted-foreground">Product</th>
                   <th className="py-2 px-2 font-medium text-muted-foreground">Category</th>
                   <th className="py-2 px-2 font-medium text-muted-foreground text-right">Stock</th>
-                  <th className="py-2 px-2 font-medium text-muted-foreground text-right">Buy Price</th>
+                  {!hideCost && <th className="py-2 px-2 font-medium text-muted-foreground text-right">Buy Price</th>}
                   <th className="py-2 px-2 font-medium text-muted-foreground text-right">Sale Price</th>
-                  <th className="py-2 px-2 font-medium text-muted-foreground text-right">Stock Value</th>
+                  {!hideCost && <th className="py-2 px-2 font-medium text-muted-foreground text-right">Stock Value</th>}
                   <th className="py-2 px-2 font-medium text-muted-foreground text-right">Sale Value</th>
                   <th className="py-2 px-2 font-medium text-muted-foreground text-center">Status</th>
                 </tr>
@@ -842,9 +847,9 @@ function StockReport({ data }: { data: any }) {
                     <td className="py-2 px-2 font-medium">{p.name}</td>
                     <td className="py-2 px-2 text-muted-foreground">{p.category || '—'}</td>
                     <td className="py-2 px-2 text-right">{p.currentStock} {p.unit}</td>
-                    <td className="py-2 px-2 text-right">{formatINR(p.purchasePrice)}</td>
+                    {!hideCost && <td className="py-2 px-2 text-right">{formatINR(p.purchasePrice)}</td>}
                     <td className="py-2 px-2 text-right">{formatINR(p.salePrice)}</td>
-                    <td className="py-2 px-2 text-right font-medium">{formatINR(p.stockValue)}</td>
+                    {!hideCost && <td className="py-2 px-2 text-right font-medium">{formatINR(p.stockValue)}</td>}
                     <td className="py-2 px-2 text-right">{formatINR(p.potentialSaleValue)}</td>
                     <td className="py-2 px-2 text-center">
                       {p.isLowStock ? (

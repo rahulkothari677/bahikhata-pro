@@ -29,9 +29,9 @@ export async function GET(req: NextRequest) {
     // V17-Ext Tier 3: Handle comma-separated types (e.g. "sale,credit-note")
     // from the ledger. Use the first type for permission check.
     const primaryType = type?.split(',')[0] || type
-    const module: ModuleKey = primaryType === 'purchase' || primaryType === 'debit-note' ? 'purchases' : primaryType === 'income' || primaryType === 'expense' ? 'incomeExpense' : 'sales'
-    if (!canAccessModule(authCtx.role, authCtx.permissions, module)) {
-      return NextResponse.json({ error: 'Forbidden', message: `You don't have permission to access ${module}.` }, { status: 403 })
+    const moduleKey: ModuleKey = primaryType === 'purchase' || primaryType === 'debit-note' ? 'purchases' : primaryType === 'income' || primaryType === 'expense' ? 'incomeExpense' : 'sales'
+    if (!canAccessModule(authCtx.role, authCtx.permissions, moduleKey)) {
+      return NextResponse.json({ error: 'Forbidden', message: `You don't have permission to access ${moduleKey}.` }, { status: 403 })
     }
 
     const voided = searchParams.get('voided') === 'true'
@@ -169,8 +169,8 @@ export async function POST(req: NextRequest) {
 
     // 🔒 FIX H1: Check staff permission based on transaction type
     // V17-Ext Tier 3: credit-note maps to sales, debit-note maps to purchases
-    const module: ModuleKey = type === 'purchase' || type === 'debit-note' ? 'purchases' : type === 'income' || type === 'expense' ? 'incomeExpense' : 'sales'
-    if (!canAccessModule(authCtx.role, authCtx.permissions, module)) {
+    const moduleKey: ModuleKey = type === 'purchase' || type === 'debit-note' ? 'purchases' : type === 'income' || type === 'expense' ? 'incomeExpense' : 'sales'
+    if (!canAccessModule(authCtx.role, authCtx.permissions, moduleKey)) {
       return NextResponse.json({ error: 'Forbidden', message: `You don't have permission to create ${type} transactions.` }, { status: 403 })
     }
 

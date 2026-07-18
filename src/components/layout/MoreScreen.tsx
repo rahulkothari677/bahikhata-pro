@@ -227,8 +227,14 @@ export function MoreScreen() {
                           </span>
                         )}
                       </div>
-                      {item.descKey ? t(item.descKey) : item.description && (
-                        <p className="text-xs text-muted-foreground truncate">{item.descKey ? t(item.descKey) : item.description}</p>
+                      {/* 🔒 V26 FIX N10: ternary precedence bug — `a ? x : b && <p>` rendered
+                          the translated description as a BARE unstyled text node for every
+                          registry item with a descKey (i.e. all of them), breaking the row
+                          typography. Wrap first, translate inside. */}
+                      {(item.descKey || item.description) && (
+                        <p className="text-xs text-muted-foreground truncate">
+                          {item.descKey ? t(item.descKey) : item.description}
+                        </p>
                       )}
                     </div>
                     <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition flex-shrink-0" />

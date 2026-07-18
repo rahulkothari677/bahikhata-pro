@@ -140,18 +140,34 @@ export async function exportGSTReportCSV(data: any, periodLabel: string) {
  * Export Stock report data to CSV.
  */
 export async function exportStockReportCSV(data: any) {
-  const headers = ['Product', 'Category', 'Stock', 'Unit', 'Buy Price', 'Sale Price', 'Stock Value', 'Sale Value', 'Status']
-  const rows: (string | number)[][] = (data.products || []).map((p: any) => [
-    p.name,
-    p.category || '',
-    p.currentStock,
-    p.unit || '',
-    p.purchasePrice,
-    p.salePrice,
-    p.stockValue,
-    p.potentialSaleValue,
-    p.isLowStock ? 'Low Stock' : 'OK',
-  ])
+  // 🔒 V26 FIX N6: when "hide profit from staff" is on, the API omits
+  // purchasePrice/stockValue entirely — drop those columns instead of
+  // writing "undefined" into the CSV.
+  const hideCost = (data.products || [])[0]?.purchasePrice === undefined && data.totalStockValue === undefined
+  const headers = hideCost
+    ? ['Product', 'Category', 'Stock', 'Unit', 'Sale Price', 'Sale Value', 'Status']
+    : ['Product', 'Category', 'Stock', 'Unit', 'Buy Price', 'Sale Price', 'Stock Value', 'Sale Value', 'Status']
+  const rows: (string | number)[][] = (data.products || []).map((p: any) => hideCost
+    ? [
+        p.name,
+        p.category || '',
+        p.currentStock,
+        p.unit || '',
+        p.salePrice,
+        p.potentialSaleValue,
+        p.isLowStock ? 'Low Stock' : 'OK',
+      ]
+    : [
+        p.name,
+        p.category || '',
+        p.currentStock,
+        p.unit || '',
+        p.purchasePrice,
+        p.salePrice,
+        p.stockValue,
+        p.potentialSaleValue,
+        p.isLowStock ? 'Low Stock' : 'OK',
+      ])
   await exportCSV('Stock_Report', headers, rows)
 }
 

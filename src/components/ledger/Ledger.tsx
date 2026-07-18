@@ -280,7 +280,12 @@ export function Ledger({ type }: { type: LedgerType }) {
   // but real net is ₹4000).
   // Sales ledger: sales ADD, credit notes SUBTRACT.
   // Purchase ledger: purchases ADD, debit notes SUBTRACT.
+  // 🔒 V26 FIX N2 follow-up: estimates are QUOTATIONS, not revenue — they must
+  // be visible in the list but excluded from every money summary. Without this
+  // exclusion, adding estimates to the ledger (FIX N2) silently inflated the
+  // "Total" and "Received" cards by the quoted amounts.
   const totalAmount = filtered.reduce((s, t) => {
+    if (t.type === 'estimate') return s
     if (isSale) {
       return t.type === 'credit-note' ? s - t.totalAmount : s + t.totalAmount
     } else {
@@ -302,6 +307,7 @@ export function Ledger({ type }: { type: LedgerType }) {
   // Credit notes have paidAmount (the refund issued) — SUBTRACT for sales.
   // Debit notes have paidAmount (the refund received) — SUBTRACT for purchases.
   const totalPaid = filtered.reduce((s, t) => {
+    if (t.type === 'estimate') return s  // 🔒 V26 N2 follow-up: quotes collect nothing
     if (isSale) {
       return t.type === 'credit-note' ? s - (t.paidAmount || 0) : s + (t.paidAmount || 0)
     } else {
@@ -739,10 +745,12 @@ export function Ledger({ type }: { type: LedgerType }) {
                         {/* Amount — larger, bolder, tabular nums for alignment */}
                         <div className="text-right flex-shrink-0">
                           <p className={cn('font-bold text-base tabular-nums', accentColor)}>{formatINR(t.totalAmount)}</p>
-                          {due > 0 && (
+                          {due > 0 && t.type !== 'estimate' && (
                             <p className="text-[11px] text-rose-600 mt-0.5 tabular-nums">Due: {formatINR(due)}</p>
                           )}
-                          {isSale && !hideProfit && (
+                          {/* 🔒 V26 N2 follow-up: profit line only for real sales — an estimate's
+                              profit isn't earned yet, and credit notes render their own line below */}
+                          {t.type === 'sale' && !hideProfit && (
                             <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-0.5 tabular-nums">+{formatINR(t.grossProfit)}</p>
                           )}
                           {/* 🔒 V17 Audit Phase 4: credit-note grossProfit is NEGATIVE, so use < 0 */}
@@ -780,16 +788,22 @@ export function Ledger({ type }: { type: LedgerType }) {
                         {t.invoiceNo && (
                           <Badge variant="outline" className="text-[10px] py-0">{t.invoiceNo}</Badge>
                         )}
-                        <Badge variant="secondary" className="text-[10px] py-0 uppercase">{t.paymentMode}</Badge>
-                        {/* Payment status badge */}
-                        {due > 0 ? (
-                          <Badge variant="destructive" className="text-[9px] py-0">
-                            {due === t.totalAmount ? 'Unpaid' : 'Partial'}
-                          </Badge>
-                        ) : (
-                          <Badge className="text-[9px] py-0 bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
-                            Paid
-                          </Badge>
+                        {/* 🔒 V26 N2 follow-up: estimates have no payment — the mode and
+                            Paid/Unpaid badges would mislead (server stores paid=total on quotes) */}
+                        {t.type !== 'estimate' && (
+                          <>
+                            <Badge variant="secondary" className="text-[10px] py-0 uppercase">{t.paymentMode}</Badge>
+                            {/* Payment status badge */}
+                            {due > 0 ? (
+                              <Badge variant="destructive" className="text-[9px] py-0">
+                                {due === t.totalAmount ? 'Unpaid' : 'Partial'}
+                              </Badge>
+                            ) : (
+                              <Badge className="text-[9px] py-0 bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
+                                Paid
+                              </Badge>
+                            )}
+                          </>
                         )}
                       </div>
 
@@ -840,13 +854,16 @@ export function Ledger({ type }: { type: LedgerType }) {
                   <p className="text-[10px] text-muted-foreground mt-1">{formatDateTime(t.date)}</p>
                   <div className="mt-2 pt-2 border-t border-border flex items-center justify-between">
                     <span className={cn('font-bold', accentColor)}>{formatINRCompact(t.totalAmount)}</span>
-                    {due > 0 ? (
+                    {/* 🔒 V26 N2 follow-up: quotes have no payment status */}
+                    {t.type === 'estimate' ? (
+                      <Badge className="text-[9px] bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400">Estimate</Badge>
+                    ) : due > 0 ? (
                       <Badge variant="destructive" className="text-[9px]">Due {formatINRCompact(due)}</Badge>
                     ) : (
                       <Badge variant="secondary" className="text-[9px] bg-emerald-100 text-emerald-700 dark:text-emerald-300">{t('stat.paid')}</Badge>
                     )}
                   </div>
-                  {isSale && !hideProfit && (
+                  {t.type === 'sale' && !hideProfit && (
                     <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1">+{formatINRCompact(t.grossProfit)} profit</p>
                   )}
                   {/* 🔒 V17 Audit Phase 4: credit-note grossProfit is NEGATIVE, so use < 0 */}

@@ -191,7 +191,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       notes,
       items,
     })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [partyId, date, invoiceNo, isInterState, paymentMode, paidAmount, discountAmount, notes, items, presetChecked, presetLoaded])
 
   // Fetch products

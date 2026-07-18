@@ -174,10 +174,16 @@ export function AIComparison() {
     <div className="space-y-6 p-4 lg:p-6 max-w-7xl mx-auto">
       {/* Header */}
       <div className="flex items-center gap-3">
+        {/* 🔒 V26 FIX N8: was hardcoded setView('account') — wrong whenever the
+            user arrived from Sidebar → Tools (desktop) or More (mobile). */}
         <button
-          onClick={() => { useAppStore.getState().setPreviousView('account'); setView('account') }}
+          onClick={() => {
+            const prev = useAppStore.getState().previousView
+            useAppStore.getState().setPreviousView(null)
+            setView(prev || 'dashboard')
+          }}
           className="p-2 -ml-2 rounded-lg hover:bg-muted"
-          aria-label="Back to account"
+          aria-label="Go back"
         >
           <ArrowLeft className="w-5 h-5" />
         </button>

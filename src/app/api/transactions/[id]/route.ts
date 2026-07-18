@@ -65,8 +65,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     // 🔒 FIX H1: Check staff permission based on transaction type
-    const module: ModuleKey = transaction.type === 'purchase' ? 'purchases' : transaction.type === 'income' || transaction.type === 'expense' ? 'incomeExpense' : 'sales'
-    if (!canAccessModule(authCtx.role, authCtx.permissions, module)) {
+    const moduleKey: ModuleKey = transaction.type === 'purchase' ? 'purchases' : transaction.type === 'income' || transaction.type === 'expense' ? 'incomeExpense' : 'sales'
+    if (!canAccessModule(authCtx.role, authCtx.permissions, moduleKey)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
@@ -94,8 +94,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     // 🔒 FIX H1: Check staff permission based on transaction type
     // V17-Ext Tier 3: credit-note maps to sales, debit-note maps to purchases
-    const module: ModuleKey = existing.type === 'purchase' || existing.type === 'debit-note' ? 'purchases' : existing.type === 'income' || existing.type === 'expense' ? 'incomeExpense' : 'sales'
-    if (!canAccessModule(authCtx.role, authCtx.permissions, module)) {
+    const moduleKey: ModuleKey = existing.type === 'purchase' || existing.type === 'debit-note' ? 'purchases' : existing.type === 'income' || existing.type === 'expense' ? 'incomeExpense' : 'sales'
+    if (!canAccessModule(authCtx.role, authCtx.permissions, moduleKey)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
@@ -530,8 +530,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
     // 🔒 FIX H1: Check staff permission based on transaction type
     // V17-Ext Tier 3: credit-note maps to sales, debit-note maps to purchases
-    const module: ModuleKey = existing.type === 'purchase' || existing.type === 'debit-note' ? 'purchases' : existing.type === 'income' || existing.type === 'expense' ? 'incomeExpense' : 'sales'
-    if (!canAccessModule(authCtx.role, authCtx.permissions, module)) {
+    const moduleKey: ModuleKey = existing.type === 'purchase' || existing.type === 'debit-note' ? 'purchases' : existing.type === 'income' || existing.type === 'expense' ? 'incomeExpense' : 'sales'
+    if (!canAccessModule(authCtx.role, authCtx.permissions, moduleKey)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 

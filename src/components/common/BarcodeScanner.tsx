@@ -159,7 +159,7 @@ export function BarcodeScanner({
     return () => {
       stopCamera()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [])
 
   // Handle Escape key to close

@@ -22,6 +22,8 @@ import {
   calculateGstPaise,
   splitGstPaise,
   formatINR,
+  calculateGst,
+  splitGst,
 } from '@/lib/money'
 
 describe('🔒 V17 Paise Migration Phase 1 — Additive helpers', () => {
@@ -267,7 +269,7 @@ describe('🔒 V17 Paise Migration Phase 1 — Additive helpers', () => {
       ]
       for (const { amount, rate } of testCases) {
         const paiseResult = calculateGstPaise(toPaise(amount), rate)
-        const rupeeResult = toPaise(require('@/lib/money').calculateGst(amount, rate))
+        const rupeeResult = toPaise(calculateGst(amount, rate))
         expect(paiseResult).toBe(rupeeResult)
       }
     })
@@ -276,7 +278,7 @@ describe('🔒 V17 Paise Migration Phase 1 — Additive helpers', () => {
       const testCases = [1800, 1801, 3600, 99, 100, 101, 2500]
       for (const gstRupees of testCases) {
         const paiseResult = splitGstPaise(toPaise(gstRupees))
-        const rupeeResult = require('@/lib/money').splitGst(gstRupees)
+        const rupeeResult = splitGst(gstRupees)
         expect(paiseResult.cgst).toBe(toPaise(rupeeResult.cgst))
         expect(paiseResult.sgst).toBe(toPaise(rupeeResult.sgst))
       }

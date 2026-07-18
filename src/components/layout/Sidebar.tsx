@@ -10,12 +10,11 @@ import { offlineFetch } from '@/lib/offline-fetch'
 import { useFeatureFlags } from '@/hooks/use-feature-flags'
 import { useStaffPermissions } from '@/hooks/use-staff-permissions'
 import type { ModuleKey } from '@/lib/staff-permissions'
-import { useShops } from '@/hooks/use-shops'
 import { prefetchView } from '@/lib/prefetch'  // 🔒 V11 §3.3
 // 🔒 AUDIT V25 §6.1 (Batch 8 Phase 2): Sidebar now renders from the NavRegistry.
-import { NAV_REGISTRY, getByFrequency, filterByPermissions, type NavDestination } from '@/lib/nav-registry'
+import { NAV_REGISTRY, filterByPermissions, type NavDestination } from '@/lib/nav-registry'
 import { handleNavAction } from '@/lib/handle-nav-action'
-import { Store, Plus, ChevronDown, Check, Calculator } from 'lucide-react'
+import { Calculator } from 'lucide-react'
 import {
   BookOpenText,
   ChevronLeft,
@@ -41,8 +40,9 @@ export function Sidebar() {
   // handleLogout was deleted. Staff gating is handled by canAccess() below.
   const { canAccess, isCA } = useStaffPermissions()
   const { isFlagEnabled } = useFeatureFlags()
-  const { shops, activeShop, switchShop } = useShops()
-  const [shopDropdownOpen, setShopDropdownOpen] = useState(false)
+  // 🔒 V26 FIX N4 follow-up: useShops() call + shopDropdown state/ref/effect
+  // removed — the switcher UI was deleted (N4) but its dead machinery (and an
+  // unnecessary shops query subscription) was left behind.
   // 🔒 AUDIT V25 FIX §2.1 (Batch 2): Tools section collapsible state.
   // Defaults to collapsed (false) — Tools are secondary, main nav stays primary.
   // Persisted to localStorage so the user's preference is remembered.
@@ -60,31 +60,23 @@ export function Sidebar() {
   // Filters by surfaces + permissions + feature flags + platform, sorted by sortOrder.
   // Was: hardcoded navItems + toolsNavItems arrays with inline permission checks.
   const isOwner = session?.user?.role === 'owner'
+  // 🔒 V26 FIX N11: platforms default was `['desktop']` here but the registry
+  // documents (and getByPlatform implements) "default: both platforms". No
+  // entry sets `platforms` today, so behavior is identical — but the first
+  // mobile-only entry would have silently appeared in the desktop sidebar's
+  // filter logic inverted. Unified on the documented both-platforms default.
   const mainNavItems = useMemo(() => {
     return filterByPermissions(
-      NAV_REGISTRY.filter(d => d.surfaces?.includes('sidebar-main') && (d.platforms || ['desktop']).includes('desktop')),
+      NAV_REGISTRY.filter(d => d.surfaces?.includes('sidebar-main') && (d.platforms || ['mobile', 'desktop']).includes('desktop')),
       { canAccess, isFlagEnabled: isFlagEnabled as any, isOwner }
     ).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
   }, [canAccess, isFlagEnabled, isOwner])
   const toolsItems = useMemo(() => {
     return filterByPermissions(
-      NAV_REGISTRY.filter(d => d.surfaces?.includes('sidebar-tools') && (d.platforms || ['desktop']).includes('desktop')),
+      NAV_REGISTRY.filter(d => d.surfaces?.includes('sidebar-tools') && (d.platforms || ['mobile', 'desktop']).includes('desktop')),
       { canAccess, isFlagEnabled: isFlagEnabled as any, isOwner }
     ).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
   }, [canAccess, isFlagEnabled, isOwner])
-
-  // 🔒 FIX M9: Outside-click handler — was missing.
-  const shopDropdownRef = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (!shopDropdownOpen) return
-    const handleClickOutside = (e: MouseEvent) => {
-      if (shopDropdownRef.current && !shopDropdownRef.current.contains(e.target as Node)) {
-        setShopDropdownOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [shopDropdownOpen])
 
   // Fetch settings for profile section
   const { data: settingData } = useQuery({
@@ -238,9 +230,16 @@ export function Sidebar() {
                 {toolsItems.map((item: NavDestination) => {
                   const Icon = item.icon
                   // Active state: view matches OR (for navigate-account items) we're on Account → data section
+                  // 🔒 V26 FIX N5 follow-up: toast-navigate / trigger items (Sale Return,
+                  // Day-End, WhatsApp Reminders) point at a shared view ('sales',
+                  // 'dashboard', 'parties') — highlighting them whenever that view is
+                  // open would falsely mark e.g. "Sale Return" active on every Sales
+                  // visit. They never own a view, so they are never "active".
                   const active = item.actionKind === 'navigate-account'
                     ? currentView === 'account' && useAppStore.getState().accountSection === item.actionParams?.accountSection
-                    : currentView === (item.view || item.id)
+                    : ['toast-navigate', 'navigate-day-end', 'navigate-bulk', 'navigate-scroll'].includes(item.actionKind || '')
+                      ? false
+                      : currentView === (item.view || item.id)
                   return (
                     <button
                       key={item.id}

@@ -36,19 +36,24 @@ export function SwipeToDelete({
 }: SwipeToDeleteProps) {
   const [dragX, setDragX] = useState(0)
   const [showDesktopDelete, setShowDesktopDelete] = useState(false)
+  // 🔒 V26 lint fix: `dragging` was a ref read during render (the transition
+  // style) — refs must not be read in render (react-hooks/react-compiler rule,
+  // and the style genuinely wouldn't update if the ref changed without a
+  // re-render). It's state now; re-renders already happen on every move via
+  // setDragX, so this adds at most one extra render per gesture start/end.
+  const [dragging, setDragging] = useState(false)
   const startX = useRef<number | null>(null)
-  const dragging = useRef(false)
   const { confirmDialog, dialog: confirmDialogEl } = useConfirmDialog()
 
   const DELETE_THRESHOLD = 80 // px to swipe before delete action triggers
 
   const handleTouchStart = (e: React.TouchEvent) => {
     startX.current = e.touches[0].clientX
-    dragging.current = true
+    setDragging(true)
   }
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (!dragging.current || startX.current === null) return
+    if (startX.current === null) return
     const delta = e.touches[0].clientX - startX.current
     // Only allow left swipe (negative delta)
     if (delta < 0) {
@@ -57,7 +62,8 @@ export function SwipeToDelete({
   }
 
   const handleTouchEnd = () => {
-    dragging.current = false
+    setDragging(false)
+    startX.current = null
     if (dragX < -DELETE_THRESHOLD) {
       // Snap to delete position (show button)
       setDragX(-80)
@@ -112,7 +118,7 @@ export function SwipeToDelete({
         onTouchEnd={handleTouchEnd}
         style={{
           transform: `translateX(${dragX}px)`,
-          transition: dragging.current ? 'none' : 'transform 0.2s ease-out',
+          transition: dragging ? 'none' : 'transform 0.2s ease-out',
         }}
         className="relative z-0 bg-card"
       >

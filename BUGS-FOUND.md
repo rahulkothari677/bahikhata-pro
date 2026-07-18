@@ -439,3 +439,42 @@ and include enough context to reproduce.
 - **Description**: The Settings → About card showed "1.0.0" as a hardcoded string instead of using `APP_VERSION_LABEL`. The AccountScreen footer and About page already used `APP_VERSION_LABEL`, but this third location was missed during the V23 Batch L fix (BUG-022).
 - **Fix applied**: 2026-07-18 (Feature Phase 2). Replaced hardcoded "1.0.0" with `{APP_VERSION_LABEL}`. Added the import.
 - **Status**: FIXED
+
+### BUG-038 — Estimates inflated the Sales ledger's "Total" and "Received" summary cards (High/Money-display) — FIXED
+- **File**: `src/components/ledger/Ledger.tsx` (summary reducers + row badges)
+- **Severity**: High (wrong money numbers on a primary screen)
+- **Description**: The V26 N2 fix added `'estimate'` to the sales ledger type filter so estimates become visible — but the summary reducers (`totalAmount`, `totalPaid`) treated every non-credit-note row as a sale. A ₹50,000 quotation added ₹50,000 to "Total" AND ₹50,000 to "Received" (the server stores `paidAmount = totalAmount` for estimates via the non-note default in `resolveFinalPaid`). Rows also showed a green "Paid" badge and a profit line for quotes.
+- **Fix applied**: 2026-07-18 (V26 Batch 2). Estimates excluded from both reducers; payment-mode/Paid/Unpaid badges and the profit line hidden on estimate rows (an indigo "Estimate" badge identifies them instead).
+- **Status**: FIXED
+
+### BUG-039 — "Cash in Hand" More entry rendered its raw i18n key (Medium/UX) — FIXED
+- **File**: `src/lib/i18n.ts` (en + hi blocks)
+- **Severity**: Medium (visible garbage text on the More screen)
+- **Description**: `nav-registry.ts` referenced `nav.label.cash-in-hand` / `nav.desc.cash-in-hand`, but neither key existed in ANY language block. `getTranslation()` falls back en → key, so the More screen literally displayed "nav.label.cash-in-hand". Caught by the new `v26-nav-registry-lint.test.ts` guardrail on its first run.
+- **Fix applied**: 2026-07-18 (V26 Batch 2). Keys added to en + hi (gu/mr/ta/te fall back to en by design).
+- **Status**: FIXED
+
+### BUG-040 — MoreScreen rendered every row description as unstyled bare text (Medium/UX) — FIXED
+- **File**: `src/components/layout/MoreScreen.tsx`
+- **Severity**: Medium (broken typography on every More row)
+- **Description**: JSX ternary precedence bug: `{item.descKey ? t(item.descKey) : item.description && (<p …>…</p>)}` — for every registry item with a `descKey` (all of them), the translated description rendered as a bare text node without the `text-xs text-muted-foreground truncate` wrapper.
+- **Fix applied**: 2026-07-18 (V26 Batch 2). Wrapped first, translated inside the `<p>`.
+- **Status**: FIXED
+
+### BUG-041 — Deferred (logged for a future batch) — OPEN
+- **Items**:
+  1. **In-UI back vs hardware back unsynced** (V26 §3.2 systemic): in-UI back buttons `setView(previousView)`, which the history hook treats as FORWARD navigation — after an in-UI back from a child→child pair, the next hardware-back returns the user to the screen they just left. Proper fix: a single store-level `goBack()` that calls `history.back()` when the hook's stack has depth > 1. Touches every back call site — needs its own tested batch.
+  2. **Restore leaves `productId: null`** (V24 §5 residual): restored transactions stay unlinked from inventory; the restore-complete dialog should say so explicitly.
+  3. **i18n on report bodies** (V23 §8.11): TrialBalance/ReportsHub/DocumentVault/BulkReminders bodies are English-only; server-composed cashflow labels bake English into API responses.
+  4. **`resolveFinalPaid` snap-zone on notes** (V26 N14): an explicit partial refund within ₹1 of the note total silently becomes a full refund.
+  5. **HSN description/unit from arbitrary product + no UQC mapping** (V23 §8.3 residual).
+  6. **Estimates have no number sequence** (invoiceNo stays null — correct for GST, but an EST-XXXX series needs a schema migration for `estimateSeq`).
+  7. **Pre-fix Cloudinary documents**: any documents uploaded before the `type: 'authenticated'` fix are still public-type assets — one-time migration owed if beta users uploaded documents before 2026-07-17.
+- **Status**: OPEN — tracked for next batch
+
+### BUG-042 — AI Usage page renders a BLANK screen for non-founder accounts (Medium/UX) — OPEN
+- **Files**: `src/app/api/ai-usage/route.ts:28-32`, `src/components/settings/AIUsage.tsx:98`, `src/lib/nav-registry.ts` (ai-usage entry)
+- **Severity**: Medium (dead-end screen reachable from primary nav)
+- **Description**: The `ai-usage` destination is shown in the Sidebar Tools section and MoreScreen for every user with the `aiScanner` feature flag, but `/api/ai-usage` is founder-only (403 "Access denied. Founder only."). Observed in browser verification: a regular account clicking Sidebar → Tools → AI Usage gets a completely EMPTY main area (the component's `if (!data) return null` path swallows the failure instead of showing its error card — likely `offlineFetch` masking the 403 on retry). Either (a) gate the registry entry to founder accounts, or (b) build a user-facing usage view (the per-user scan/voice counters already exist in `usage-limits.ts`) — option (b) matches the entry's "Track AI scans & cost" promise.
+- **Found**: 2026-07-18 during V26 Batch 2 browser verification.
+- **Status**: OPEN

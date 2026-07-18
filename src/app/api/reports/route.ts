@@ -453,6 +453,26 @@ export async function GET(req: NextRequest) {
       const totalStockValue = roundMoney(stockReport.reduce((s, p) => s + p.stockValue, 0))
       const totalPotentialValue = roundMoney(stockReport.reduce((s, p) => s + p.potentialSaleValue, 0))
 
+      // 🔒 V26 FIX N6 (V23 §3 residual): The stock report leaked cost & margin
+      // data to staff with "hide profit" enabled — purchasePrice per product,
+      // cost-based stockValue, and potentialProfit. With salePrice also in the
+      // response, per-product margin was one subtraction away. Strip the
+      // cost/profit fields; keep quantities, sale prices, and low-stock flags
+      // so the report stays useful for stock-keeping staff.
+      if (hideProfit) {
+        const strippedProducts = stockReport
+          .sort((a, b) => b.potentialSaleValue - a.potentialSaleValue)
+          .map(({ purchasePrice: _pp, stockValue: _sv, ...rest }) => rest)
+        return NextResponse.json({
+          type: 'stock',
+          period: { from, to },
+          truncated: false,
+          products: strippedProducts,
+          totalPotentialValue,
+          lowStockCount: stockReport.filter(p => p.isLowStock).length,
+        })
+      }
+
       return NextResponse.json({
         type: 'stock',
         period: { from, to },

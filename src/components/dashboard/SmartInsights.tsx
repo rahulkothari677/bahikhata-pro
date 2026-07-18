@@ -32,21 +32,24 @@ export function SmartInsights() {
   const { language } = useTranslation()
   const { data } = useDashboardData()
   const [expanded, setExpanded] = useState(true)
-  const [dismissed, setDismissed] = useState<Set<number>>(new Set())
+  // 🔒 V26 (V23 §8.12 residual): dismissal was keyed by array INDEX — when the
+  // dashboard refetched and the computed insight list shifted, the wrong
+  // insight got hidden. Now keyed by the insight's title (stable per insight
+  // type), so a dismissal survives data refreshes and list reordering.
+  const [dismissed, setDismissed] = useState<Set<string>>(new Set())
 
   if (!data) return null
 
   const allInsights = computeInsights(data, language)
-  // Filter out dismissed insights (by index in the original array)
-  const insights = allInsights.filter((_, i) => !dismissed.has(i))
+  const insights = allInsights.filter((ins) => !dismissed.has(ins.title))
 
   if (insights.length === 0) return null
 
   const criticalCount = insights.filter(i => i.severity === 'critical').length
   const warningCount = insights.filter(i => i.severity === 'warning').length
 
-  const dismissInsight = (originalIndex: number) => {
-    setDismissed(prev => new Set(prev).add(originalIndex))
+  const dismissInsight = (title: string) => {
+    setDismissed(prev => new Set(prev).add(title))
   }
 
   return (
@@ -86,12 +89,10 @@ export function SmartInsights() {
               + more padding for readability. Stacks on mobile. */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-2">
             {insights.map((insight, displayIndex) => {
-              // Find the original index for dismissal tracking
-              const originalIndex = allInsights.indexOf(insight)
               const Icon = insight.icon
               return (
                 <motion.div
-                  key={originalIndex}
+                  key={insight.title}
                   initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: displayIndex * 0.05 }}
@@ -141,7 +142,7 @@ export function SmartInsights() {
                   </div>
                   {/* Dismiss button — appears on hover */}
                   <button
-                    onClick={() => dismissInsight(originalIndex)}
+                    onClick={() => dismissInsight(insight.title)}
                     className="text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition flex-shrink-0 -mt-1 -mr-1 p-1"
                     aria-label="Dismiss insight"
                     title="Dismiss"

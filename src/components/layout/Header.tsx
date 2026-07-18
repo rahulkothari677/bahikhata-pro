@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useAppStore, type ViewType } from '@/store/app-store'
 import { useTranslation } from '@/hooks/use-translation'
-import { Menu, Plus, Sparkles, ScanLine, ArrowLeft, Search, LogOut, Store, ChevronDown, Check, Globe } from 'lucide-react'
+import { Plus, Sparkles, ArrowLeft, Search, Check, Globe } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { getInitials, cn } from '@/lib/utils'
@@ -14,7 +14,6 @@ import { clearAllOfflineData } from '@/lib/offline-db'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { useFeatureFlags } from '@/hooks/use-feature-flags'
 import { NotificationCenter } from '@/components/common/NotificationCenter'
-import { useShops } from '@/hooks/use-shops'
 
 const viewTitleKeys: Record<string, { titleKey: string; subtitleKey: string }> = {
   dashboard: { titleKey: 'nav.dashboard', subtitleKey: 'nav.dashboard' },
@@ -40,20 +39,9 @@ export function Header() {
   const { isFlagEnabled } = useFeatureFlags()
   const { data: session } = useSession()
   const { t } = useTranslation()
-  const { shops, activeShop, switchShop } = useShops()
-  const [shopDropdownOpen, setShopDropdownOpen] = useState(false)
-  // 🔒 FIX M9: Outside-click handler — was missing, dropdown stayed open forever.
-  const shopDropdownRef = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    if (!shopDropdownOpen) return
-    const handleClickOutside = (e: MouseEvent) => {
-      if (shopDropdownRef.current && !shopDropdownRef.current.contains(e.target as Node)) {
-        setShopDropdownOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [shopDropdownOpen])
+  // 🔒 V26 FIX N4 follow-up: useShops() call + shopDropdown state/ref/effect
+  // removed — the Header switcher UI was deleted (N4) but its dead machinery
+  // (and an unnecessary shops query subscription) was left behind.
   const titleKeys = viewTitleKeys[currentView] || { titleKey: 'nav.dashboard', subtitleKey: 'nav.dashboard' }
   // Override for transaction detail - show Purchase Ledger if it's a purchase
   if (currentView === 'transaction-detail' && selectedTransactionType === 'purchase') {
@@ -75,7 +63,13 @@ export function Header() {
 
   // 🔒 V21-012 fix: Added 'pricing' and 'ai-comparison' and 'ai-usage' to
   // isDetailView so they show a back button when navigated from Account page.
-  const isDetailView = currentView === 'transaction-detail' || currentView === 'party-profile' || currentView === 'new-sale' || currentView === 'new-purchase' || currentView === 'new-estimate' || currentView === 'pricing' || currentView === 'ai-comparison' || currentView === 'ai-usage'
+  // 🔒 V26 FIX N8+N15: pricing / ai-comparison / ai-usage REMOVED from this
+  // list — those pages render their own back button, so the Header back was a
+  // second, sometimes-disagreeing one (AIUsage's hardcoded 'account' vs this
+  // previousView). One back per screen; the in-page ones now use previousView.
+  // settings + document-vault ADDED — they previously had NO back affordance
+  // on either platform (desktop users had to click an unrelated sidebar item).
+  const isDetailView = currentView === 'transaction-detail' || currentView === 'party-profile' || currentView === 'new-sale' || currentView === 'new-purchase' || currentView === 'new-estimate' || currentView === 'settings' || currentView === 'document-vault'
   const isNewEntryView = currentView === 'new-sale' || currentView === 'new-purchase' || currentView === 'new-estimate'
   const showNewEntry = dialogViews.includes(currentView) && !isDetailView && !isNewEntryView
 

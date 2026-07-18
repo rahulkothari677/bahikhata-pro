@@ -124,7 +124,7 @@ export function usePullToRefresh({ onRefresh, threshold = THRESHOLD, enabled = t
       window.removeEventListener('touchend', handleTouchEnd)
       window.removeEventListener('touchcancel', handleTouchEnd)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [enabled, threshold])
 
   return {

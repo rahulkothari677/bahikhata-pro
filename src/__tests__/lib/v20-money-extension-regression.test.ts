@@ -27,10 +27,14 @@ import { describe, test, expect } from '@jest/globals'
 import * as fs from 'fs'
 import * as path from 'path'
 
+// 🔒 V26 fix (V23 §8.1 brittleness note): normalize CRLF → LF. The parser
+// below searches for '\n}\n'; on a Windows checkout (core.autocrlf) the file
+// contains '\r\n}\r\n', so the block extraction silently failed and 9 tests
+// in this suite errored with "received value must not be null nor undefined".
 const extSource = fs.readFileSync(
   path.join(process.cwd(), 'src/lib/prisma-money-extension.ts'),
   'utf-8',
-)
+).replace(/\r\n/g, '\n')
 
 // Extract the MODEL_RELATIONS object from the source code.
 // We parse it loosely (not a full TS parser) because the object is simple.
