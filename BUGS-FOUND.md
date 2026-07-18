@@ -507,20 +507,18 @@ and include enough context to reproduce.
 - **Fix applied**: 2026-07-18 (V26 Batch 1, N4). `insights/route.ts` switched from `getAuthUserIdWithModule('dashboard')` to `getAuthContext()`, computes `hideProfit = await shouldHideProfit(userId, role)`, and skips the entire `profit`-category insight block when hidden. `consolidated/route.ts` computes `hideProfit` and strips `profit`/`netProfit` from each shop row + total when hidden. `ConsolidatedReport.tsx` hides the Profit + Net Profit columns/cards when those fields are `undefined`. Added CI guardrail test `v26-profit-leak-guard.test.ts` that scans every route under `src/app/api` and fails CI if a profit-bearing route doesn't call `shouldHideProfit` (stops the recurring BUG-021 → M4/M5 → next-leak pattern). 10 new tests added.
 - **Status**: FIXED
 
-### BUG-047 — More screen: GST & TAX / Reports & Analytics sections are sparse because 14 reports are registered `reports-hub` only (High/UX) — OPEN
-- **Files**: `src/lib/nav-registry.ts` (14 destinations with `surfaces: ['reports-hub']` only); `src/components/layout/MoreScreen.tsx` (renders from registry filtered by `surfaces.includes('more')`)
+### BUG-047 — More screen: GST & TAX / Reports & Analytics sections are sparse because 15 reports are registered `reports-hub` only (High/UX) — FIXED
+- **Files**: `src/lib/nav-registry.ts` (15 destinations with `surfaces: ['reports-hub']` only); `src/components/layout/MoreScreen.tsx` (renders from registry filtered by `surfaces.includes('more')`)
 - **Severity**: High (the "More" screen's category headers promise reports they don't contain — every section feels half-empty)
 - **Found**: 2026-07-18, during V26 Batch 1 verification (user-flagged via screenshots 697 + 698)
-- **Description**: 14 report destinations are registered with `surfaces: ['reports-hub']` only — none include `'more'`. The MoreScreen filter `NAV_REGISTRY.filter(d => d.surfaces?.includes('more'))` excludes them, so:
+- **Description**: 15 report destinations are registered with `surfaces: ['reports-hub']` only — none include `'more'`. The MoreScreen filter `NAV_REGISTRY.filter(d => d.surfaces?.includes('more'))` excludes them, so:
   - **GST & TAX section** shows only Reconciliation + Period Lock — missing GSTR-1, GSTR-3B, GSTR-2B Reconciliation, GST Summary, HSN Summary (5 GST reports)
   - **Reports & Analytics section** is empty (no P&L, Trial Balance, Bill-wise Profit, Item-wise Profit, Party Statement, Debt Aging, Cashflow, Stock Report, Inventory Aging, Consolidated)
   - **Items & Stock section** shows only Low Stock Alerts — missing Stock Report + Inventory Aging
   - **Money & Banking section** shows Bank Reconciliation + Cash in Hand + Day-End Summary + WhatsApp Reminders — missing Cashflow + Consolidated
 - **Affected destinations** (all `surfaces: ['reports-hub']` only): `pl`, `bill-profit`, `item-profit`, `party-statement`, `debt-aging`, `trial-balance`, `gstr-1`, `gstr-3b`, `gstr-2b`, `gst-summary`, `hsn-summary`, `stock-report`, `inventory-aging`, `cashflow`, `consolidated`.
-- **Fix options**:
-  - **Option A (preferred)**: Add `'more'` to each report's `surfaces` array. They appear under their existing subcategory (`gst`, `financial`, `inventory-reports`, `banking`). No new component code needed. Cost: 14 one-line edits + verify More screen layout doesn't get too tall.
-  - **Option B**: Add a single "All GST Reports →" / "All Financial Reports →" pointer in each sparse section that opens ReportsHub. Lower clutter but adds a navigation hop.
-- **Status**: OPEN — queued for Batch 2b (after N5 restore) or as a standalone UX batch. User to confirm preference.
+- **Fix applied**: 2026-07-18 (commit fda27f7, Option A from the original bug log). Changed `surfaces` from `['reports-hub']` to `['more', 'reports-hub']` for all 15 destinations. Also added `moduleKey: 'reports'` to each — without this, staff without reports permission would have been able to see/click them in More (permission-bypass regression). Also added 4 new subcategory mappings to `MoreScreen.tsx` `SECTION_META` (`financial`, `gst`, `inventory-reports`, `banking`) so the reports actually render under titled sections — without these mappings the items pass the filter but get dropped by `if (subcat && SECTION_META[subcat])`, a silent no-op.
+- **Status**: FIXED
 
 ### BUG-048 — Stale Vercel deployment: cash-in-hand i18n key leak visible in production (Medium/UX) — FIXED by deployment
 - **Files**: `src/lib/i18n.ts` (keys `nav.label.cash-in-hand` + `nav.desc.cash-in-hand` exist in `en` line 302/361 + `hi` line 737/779; missing in `gu`/`mr`/`ta`/`te` blocks but `getTranslation()` falls back to `en`)

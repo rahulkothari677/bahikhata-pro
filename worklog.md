@@ -6765,3 +6765,48 @@ Stage Summary:
 - 1714 tests passing (was 1693; +21 new), 0 TypeScript errors, 0 ESLint errors, build clean.
 - Pushed to GitHub: commit bc94efe. Vercel auto-deploying.
 - Awaiting user "verified" before Batch 3 (N6, N7, N8 — smaller money edges: estimate→sale discount, snap-zone, Product extension trap).
+
+---
+Task ID: audit-v26-batch-2b
+Agent: main
+Task: V26 BUG-047 fix — surface 15 reports in More screen (was reports-hub only). User-flagged: "you haven't fixed still the gst and other features which is not visible in the mobile more nav bar."
+
+Work Log:
+- Acknowledged: I logged BUG-047 in Batch 1 but did not actually fix it. User correctly called this out. Fixing now.
+- Pre-change scan: confirmed 15 destinations in src/lib/nav-registry.ts with `surfaces: ['reports-hub']` only (line numbers 524, 541, 558, 575, 592, 609, 627, 644, 661, 678, 695, 713, 730, 748, 765). All are report destinations that should appear in More.
+- Verified none had `moduleKey` set — if I just added 'more' to surfaces without moduleKey, staff without reports permission would see/click them (permission-bypass regression). So both changes are needed together.
+
+§1 — nav-registry.ts: 15 surface + moduleKey edits:
+- All 15 destinations: changed `surfaces: ['reports-hub']` → `surfaces: ['more', 'reports-hub']`.
+- All 15 destinations: added `moduleKey: 'reports'` so filterByPermissions gates them behind reports module access (matching the existing 'reports' nav entry at line 457).
+- Updated section comments from "(ReportsHub)" → "(ReportsHub + More)" for clarity.
+- Files changed: src/lib/nav-registry.ts.
+
+§2 — MoreScreen.tsx SECTION_META: 4 new subcategory mappings:
+- Pre-fix: SECTION_META only had 'gst-tax', 'money-banking', 'items-stock', 'reports-analytics', 'sale-purchase', 'smart-tools'. The 15 reports use subcategories 'financial', 'gst', 'inventory-reports', 'banking' — none of which were in SECTION_META.
+- The MoreScreen rendering loop is `if (subcat && SECTION_META[subcat])` — items whose subcategory isn't in SECTION_META are SILENTLY DROPPED. So just adding 'more' to surfaces without these mappings would have been a no-op. (Important catch — would have looked "fixed" in code but produced no visible change.)
+- Added 4 new mappings: 'gst' → "GST Reports" (FileText), 'financial' → "Financial Reports" (BarChart3), 'inventory-reports' → "Inventory Reports" (Package), 'banking' → "Banking Reports" (Banknote).
+- Added comment explaining the dependency.
+- Files changed: src/components/layout/MoreScreen.tsx.
+
+After fix, More screen sections will contain:
+- GST & Tax (existing): Reconciliation, Period Lock
+- GST Reports (new): GSTR-1, GSTR-3B, GSTR-2B Reconciliation, GST Summary, HSN Summary
+- Financial Reports (new): P&L, Bill-wise Profit, Item-wise Profit, Party Statement, Debt Aging, Account Summary
+- Inventory Reports (new): Stock Report, Inventory Aging
+- Banking Reports (new): Cashflow Report, Consolidated Report
+- (existing sections unchanged: Sale & Purchase, Money & Banking, Items & Stock, Smart Tools)
+
+Verification:
+- npx tsc --noEmit: 0 errors
+- npx eslint src/lib/nav-registry.ts src/components/layout/MoreScreen.tsx: 0 errors, 0 warnings
+- npx jest: 1714/1714 pass (48 suites) — unchanged, no behavior change in tests
+- npx next build: Compiled successfully (BUILD_ID: Q0chhhBXAKfrqj1Ivr_4U)
+- v26-nav-registry-lint.test.ts: all 5 parity checks pass (ids unique, surfaces non-empty, mobile→desktop reachable, labelKey/descKey resolve)
+
+Stage Summary:
+- V26 BUG-047 fix COMPLETE. All 15 reports now appear in More screen under their respective subcategory headings.
+- Files changed: 2 (src/lib/nav-registry.ts, src/components/layout/MoreScreen.tsx).
+- Pushed to GitHub: commit fda27f7. Vercel auto-deploying.
+- BUGS-FOUND.md updated: BUG-047 status changed OPEN → FIXED.
+- Awaiting Vercel deploy + user verification, then proceeding to Batch 3 (N6, N7, N8 — smaller money edges: estimate→sale discount, snap-zone, Product extension trap).
