@@ -550,6 +550,17 @@ export function buildNIL(txns: Gstr1Transaction[]): { inv: Gstr1NilEntry[] } {
 /**
  * Build DOC section: document issuance summary.
  * Counts invoices and credit notes issued (no cancellation tracking yet).
+ *
+ * 🔒 V26 BUG-056: Was using `t.invoiceNo || t.id` as the document number
+ * fallback. When a sale has no user-provided invoiceNo, `t.id` is a CUID
+ * (~25 chars). The GST portal's doc_issue schema requires `from` and `to`
+ * to be ≤ 16 characters. The CUID fallback produced a 25-char string that
+ * the portal rejects with "Documents Sr. No. 'to' exceeds 16 characters."
+ *
+ * Fix: only include NUMBERED invoices in the from/to range. Unnumbered
+ * invoices are still counted in `totnum` (the portal expects the total
+ * count), but they don't appear in the from/to range. This matches the
+ * portal's intent: from/to is the range of NUMBERED documents.
  */
 export function buildDOC(txns: Gstr1Transaction[]): { doc_det: Gstr1DocEntry[] } {
   const sales = txns.filter(t => t.type === 'sale')
@@ -558,15 +569,18 @@ export function buildDOC(txns: Gstr1Transaction[]): { doc_det: Gstr1DocEntry[] }
   const doc_det: Gstr1DocEntry[] = []
 
   if (sales.length > 0) {
-    const invoiceNos = sales.map(t => t.invoiceNo || t.id).sort()
+    // 🔒 V26 BUG-056: Only use sales with a real invoiceNo for from/to.
+    // Unnumbered sales are still counted in totnum but excluded from the range.
+    const numberedSales = sales.filter(t => t.invoiceNo && t.invoiceNo.trim().length > 0)
+    const invoiceNos = numberedSales.map(t => t.invoiceNo!).sort()
     doc_det.push({
       doc_num: 1,
       doc_typ: 'Invoices for outward supply',
       docs: [{
         num: 1,
         from: invoiceNos[0] || '',
-        to: invoiceNos[invoiceNos.length - 1] || '',
-        totnum: sales.length,
+        to: invoiceNos.length > 0 ? invoiceNos[invoiceNos.length - 1] : '',
+        totnum: sales.length,  // total count includes unnumbered
         cancel: 0,  // no cancellation tracking yet
         net_issue: sales.length,
       }],
@@ -574,14 +588,16 @@ export function buildDOC(txns: Gstr1Transaction[]): { doc_det: Gstr1DocEntry[] }
   }
 
   if (creditNotes.length > 0) {
-    const cnNos = creditNotes.map(t => t.invoiceNo || t.id).sort()
+    // 🔒 V26 BUG-056: Same fix for credit notes — only numbered ones for from/to.
+    const numberedCNs = creditNotes.filter(t => t.invoiceNo && t.invoiceNo.trim().length > 0)
+    const cnNos = numberedCNs.map(t => t.invoiceNo!).sort()
     doc_det.push({
       doc_num: 2,
       doc_typ: 'Credit Notes',
       docs: [{
         num: 1,
         from: cnNos[0] || '',
-        to: cnNos[cnNos.length - 1] || '',
+        to: cnNos.length > 0 ? cnNos[cnNos.length - 1] : '',
         totnum: creditNotes.length,
         cancel: 0,
         net_issue: creditNotes.length,

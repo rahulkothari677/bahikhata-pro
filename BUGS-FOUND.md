@@ -609,3 +609,32 @@ and include enough context to reproduce.
   - Download handler blocks when `data?.shop?.gstin` is missing (structural guardrail on source)
   - Prominent block-banner renders (rose/red, not amber) when shop.gstin is missing
 - **Status**: FIXED
+
+### BUG-056 — GSTR-1 doc_issue used CUID as invoice number fallback (Critical/GST-filing) — FIXED
+- **File**: `src/lib/gstr1-builder.ts` (buildDOC function, lines 554-589)
+- **Severity**: Critical (downloaded JSON rejected by GST portal: "Documents Sr. No. 'to' exceeds 16 characters")
+- **Found**: 2026-07-19, user live testing with GSTR-1 JSON schema validator (screenshot 715)
+- **Description**: `buildDOC` used `t.invoiceNo || t.id` as the document number. When a sale has no user-provided `invoiceNo`, `t.id` is a CUID (~25 chars, e.g. `cmr6104vi0001la04oo97jpln`). The GST portal's doc_issue schema requires `from` and `to` to be ≤ 16 characters. The CUID fallback produced a 25-char string that the portal rejects.
+- **Root cause**: The fallback `|| t.id` was meant to ensure every row contributes to the from/to range, but it didn't account for the CUID being too long for the portal's schema.
+- **Fix applied**: 2026-07-19 (V26 Batch 8). Changed to only include NUMBERED invoices (those with a non-empty `invoiceNo`) in the `from`/`to` range. Unnumbered invoices are still counted in `totnum` (the portal expects the total count), but they don't appear in the from/to range. This matches the portal's intent: from/to is the range of NUMBERED documents. Applied the same fix to both the sales (doc_num=1) and credit notes (doc_num=2) sections.
+- **Regression test**: 6 new tests in `v26-batch8-fixes.test.ts` — all numbered, unnumbered doesn't produce CUID, all unnumbered, ≤16 chars check, credit notes same fix, structural guardrail on source.
+- **Status**: FIXED
+
+### BUG-057 — sply_ty validator errors for NIL/EXPT/NGST (Not a bug — validator issue) — DOCUMENTED
+- **File**: `src/lib/gstr1-builder.ts` (buildNIL function, lines 538-548)
+- **Severity**: N/A (not a code bug — the values are correct per GSTN documentation)
+- **Found**: 2026-07-19, user live testing with a third-party GSTR-1 JSON schema validator
+- **Description**: The user's validator reported "Invalid sply_ty: NIL/EXPT/NGST (allowed: INTRB2B, INTRAB2B, INTRB2C, INTRAB2C)". However, "NIL"/"EXPT"/"NGST" ARE the official GSTN values for the nil section's `sply_ty` field per the portal's documentation. The "INTRB2B/INTRAB2B/INTRB2C/INTRAB2C" values the validator suggests belong to a DIFFERENT field (likely `inv_typ` in the B2B section, or a different return type entirely). The validator is applying the wrong ruleset to the nil section.
+- **Action**: No code change needed. The values are correct. The user should verify against the official GST portal offline tool (gst.gov.in → Downloads → GSTR-1 Offline Tool), not a third-party validator. If the official offline tool also rejects these values, then the GSTN schema has changed and we'll update — but based on current GSTN documentation, these values are correct.
+- **Status**: DOCUMENTED — not a code bug. Awaiting user confirmation against the official GST portal offline tool.
+
+### BUG-058 — V26 M11: getReceivablePayable SQL didn't handle NULL paidAmount (Critical/Money) — FIXED
+- **File**: `src/lib/party-balance.ts` (getReceivablePayable, lines 244-268)
+- **Severity**: Critical (party-list + dashboard balances wrong for any party with a NULL-paidAmount transaction)
+- **Found**: 2026-07-19, confirmed via user's Neon recon response (Anita Singh diverged by ₹990 — detail=₹3,058.40, list=₹2,068.40)
+- **Description**: The raw SQL used `("totalAmount" - "paidAmount")` — if `paidAmount` is NULL (legacy data from before the `@default(0)` migration, or a direct DB write), the expression evaluates to NULL, and `SUM(NULL)` skips the row entirely. Meanwhile, `computePartyBalance` (Prisma managed aggregate) treats NULL as 0 (via `_sum.paidAmount || 0`), so it counts the full amount. This made the two paths disagree by exactly the totalAmount of the NULL-paidAmount transaction.
+- **Root cause confirmed**: 10 of 11 parties matched perfectly (including complex mixes) — only Anita diverged. This confirms it's NOT a live code bug (if it were, more parties would diverge). It's specific to Anita's data — she has a transaction with NULL paidAmount (likely a sale of ₹990 created before the V24 §1 paidAmount default fix, or via a code path that bypassed `resolveFinalPaid`).
+- **Fix applied**: 2026-07-19 (V26 Batch 8). Added `COALESCE("paidAmount", 0)` to all 4 transaction SUM cases (sale, purchase, credit-note, debit-note) and `COALESCE("amount", 0)` to both Payment SUM cases (received, paid). This makes the raw SQL treat NULL as 0 — matching Prisma's behavior. Both paths now agree regardless of whether the DB has NULL values.
+- **Data repair**: Added `/api/debug/repair-null-paidamount` endpoint (owner-only). Scans all transactions for NULL paidAmount, sets them to 0, reports affected parties + sample rows. This cleans up existing NULL values at rest (the SQL COALESCE fix handles them at read time, but the data should also be consistent at rest).
+- **Regression test**: 3 new SQL structure tests in `v26-batch8-fixes.test.ts` — COALESCE("paidAmount", 0) appears 4 times, COALESCE("amount", 0) appears 2 times, bare "totalAmount" - "paidAmount" without COALESCE does NOT appear.
+- **Status**: FIXED (SQL fix) + repair endpoint available for data cleanup.

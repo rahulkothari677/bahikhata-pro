@@ -241,10 +241,19 @@ export async function getReceivablePayable(
     LEFT JOIN (
       SELECT
         "partyId",
-        SUM(CASE WHEN "type" = 'sale' THEN ("totalAmount" - "paidAmount")::numeric ELSE 0 END) AS "salesOutstandingPaise",
-        SUM(CASE WHEN "type" = 'purchase' THEN ("totalAmount" - "paidAmount")::numeric ELSE 0 END) AS "purchaseOutstandingPaise",
-        SUM(CASE WHEN "type" = 'credit-note' THEN ("totalAmount" - "paidAmount")::numeric ELSE 0 END) AS "creditNoteOutstandingPaise",
-        SUM(CASE WHEN "type" = 'debit-note' THEN ("totalAmount" - "paidAmount")::numeric ELSE 0 END) AS "debitNoteOutstandingPaise",
+        -- 🔒 V26 M11 FIX: COALESCE("paidAmount", 0) handles NULL paidAmount.
+        -- Was: totalAmount minus paidAmount directly — if paidAmount is NULL
+        -- (legacy data from before the default-0 migration, or a direct DB
+        -- write), the expression evaluates to NULL, and SUM skips the row.
+        -- This made getReceivablePayable (raw SQL) return a LOWER balance than
+        -- computePartyBalance (Prisma managed aggregate, which treats NULL as
+        -- 0 via _sum.paidAmount or 0). For Anita Singh, this caused a Rs 990
+        -- divergence — she had a sale with NULL paidAmount that SQL skipped
+        -- but Prisma counted. COALESCE makes both paths agree.
+        SUM(CASE WHEN "type" = 'sale' THEN ("totalAmount" - COALESCE("paidAmount", 0))::numeric ELSE 0 END) AS "salesOutstandingPaise",
+        SUM(CASE WHEN "type" = 'purchase' THEN ("totalAmount" - COALESCE("paidAmount", 0))::numeric ELSE 0 END) AS "purchaseOutstandingPaise",
+        SUM(CASE WHEN "type" = 'credit-note' THEN ("totalAmount" - COALESCE("paidAmount", 0))::numeric ELSE 0 END) AS "creditNoteOutstandingPaise",
+        SUM(CASE WHEN "type" = 'debit-note' THEN ("totalAmount" - COALESCE("paidAmount", 0))::numeric ELSE 0 END) AS "debitNoteOutstandingPaise",
         COUNT(CASE WHEN "type" IN ('sale', 'purchase', 'credit-note', 'debit-note') THEN 1 END) AS "txnCount"
       FROM "Transaction"
       WHERE "userId" = ${userId}
@@ -254,8 +263,9 @@ export async function getReceivablePayable(
     LEFT JOIN (
       SELECT
         "partyId",
-        SUM(CASE WHEN "type" = 'received' THEN "amount"::numeric ELSE 0 END) AS "paymentsReceivedPaise",
-        SUM(CASE WHEN "type" = 'paid' THEN "amount"::numeric ELSE 0 END) AS "paymentsPaidPaise"
+        -- 🔒 V26 M11 FIX: COALESCE on Payment.amount too (same NULL defense).
+        SUM(CASE WHEN "type" = 'received' THEN COALESCE("amount", 0)::numeric ELSE 0 END) AS "paymentsReceivedPaise",
+        SUM(CASE WHEN "type" = 'paid' THEN COALESCE("amount", 0)::numeric ELSE 0 END) AS "paymentsPaidPaise"
       FROM "Payment"
       WHERE "userId" = ${userId}
         AND "deletedAt" IS NULL

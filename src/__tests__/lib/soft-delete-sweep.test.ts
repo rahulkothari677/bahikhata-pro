@@ -48,6 +48,7 @@ describe('🔒 V16 C5 — Soft-delete filter sweep (no query may miss deletedAt:
     // soft-deleted ones so we can spot data-integrity issues.
     ['app/api/debug/party-balance-detail/route.ts', 'owner-only diagnostic: intentionally shows ALL rows including soft-deleted to detect stale data'],
     ['app/api/debug/party-balance-recon/route.ts', 'owner-only diagnostic: reconciliation endpoint, uses computePartyBalance + getReceivablePayable which both filter deletedAt internally'],
+    ['app/api/debug/repair-null-paidamount/route.ts', 'owner-only repair: intentionally scans ALL rows (including soft-deleted) to fix NULL paidAmount — even soft-deleted rows should be repaired for data consistency at rest'],
     // Reports/GSTR/Insights are a known larger audit pass — they pre-date the
     // soft-delete contract and many calls operate on raw SQL with their own
     // deletedAt handling. Adding them as exceptions for now; a V17 follow-up
