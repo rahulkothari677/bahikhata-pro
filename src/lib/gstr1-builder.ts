@@ -206,8 +206,8 @@ export interface Gstr1DocEntry {
 export interface Gstr1Result {
   gstin: string
   fp: string         // filing period (MMYYYY)
-  gt: number         // total turnover (unused, 0)
-  cur_gt: number     // current period turnover (unused, 0)
+  gt: number         // 🔒 V26 N9: prior-FY outward turnover (was hardcoded 0)
+  cur_gt: number     // 🔒 V26 N9: current-period outward turnover (was hardcoded 0)
   b2b: Gstr1B2bEntry[]
   b2cl: Gstr1B2clEntry[]
   b2cs: Gstr1B2csEntry[]
@@ -593,19 +593,76 @@ export function buildDOC(txns: Gstr1Transaction[]): { doc_det: Gstr1DocEntry[] }
 }
 
 /**
+ * 🔒 V26 N9: Compute net outward-supply turnover from a set of transactions.
+ *
+ * Used for the GSTR-1 `gt` (prior-FY turnover) and `cur_gt` (current-period
+ * turnover) fields, which were hardcoded 0 before N9. The portal treats these
+ * as informational (non-blocking), but a world-class filing export populates
+ * them.
+ *
+ * Turnover = value of all outward supplies (net of returns):
+ *   Σ(sale taxable) − Σ(credit-note taxable) + Σ(debit-note taxable)
+ *
+ * where taxable = subtotal − discountAmount. Income/expense are NOT part of
+ * outward supply for GST turnover purposes (income is non-supply income;
+ * expense is non-supply expense).
+ *
+ * Pure function — fully testable without DB.
+ *
+ * @param txns  transactions to aggregate (any period)
+ * @returns     net outward turnover in rupees
+ */
+export function computeOutwardTurnover(txns: Gstr1Transaction[]): number {
+  let turnover = 0
+  for (const t of txns) {
+    const taxable = roundMoney(t.subtotal - (t.discountAmount || 0))
+    if (t.type === 'sale') {
+      turnover = roundMoney(turnover + taxable)
+    } else if (t.type === 'credit-note') {
+      // Credit notes reduce outward supply (sales return)
+      turnover = roundMoney(turnover - taxable)
+    } else if (t.type === 'debit-note') {
+      // Debit notes increase outward supply (additional consideration)
+      turnover = roundMoney(turnover + taxable)
+    }
+    // income / expense / estimate: not part of GST outward turnover
+  }
+  return turnover
+}
+
+/**
  * Build the complete GSTR-1 JSON structure from all transactions.
  * This is the main entry point — the API route calls this.
+ *
+ * 🔒 V26 N9: `cur_gt` (current-period turnover) is now computed from `txns`
+ * via computeOutwardTurnover. `gt` (prior-FY turnover) requires data outside
+ * the current period, so the caller passes it via `options.priorFyTurnover`.
+ * When omitted, `gt` defaults to 0 (preserving pre-N9 behavior for callers
+ * that don't have prior-FY data handy — e.g. tests).
+ *
+ * @param txns        transactions for the filing period (1 month)
+ * @param shop        shop info (GSTIN, state)
+ * @param monthYear   filing period string (MMYYYY, e.g. "072026")
+ * @param options     optional: { priorFyTurnover?: number } — prior-FY outward
+ *                    turnover in rupees, fetched by the caller via a separate
+ *                    DB query against the prior financial year
  */
 export function buildGstr1(
   txns: Gstr1Transaction[],
   shop: ShopInfo,
   monthYear: string,
+  options?: { priorFyTurnover?: number },
 ): Gstr1Result {
+  // 🔒 V26 N9: cur_gt = current-period outward turnover (computed from txns).
+  // gt = prior-FY outward turnover (passed by caller; defaults to 0).
+  const cur_gt = computeOutwardTurnover(txns)
+  const gt = options?.priorFyTurnover ?? 0
+
   return {
     gstin: shop.gstin || '',
     fp: monthYear,
-    gt: 0,
-    cur_gt: 0,
+    gt: roundMoney(gt),
+    cur_gt: roundMoney(cur_gt),
     b2b: buildB2B(txns, shop),
     b2cl: buildB2CL(txns, shop),
     b2cs: buildB2CS(txns, shop),

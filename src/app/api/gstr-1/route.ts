@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthContext, assertCanWrite } from '@/lib/get-auth'
 import { canAccessModule } from '@/lib/staff-permissions'
-import { roundMoney } from '@/lib/money'
+import { roundMoney, fromPaise } from '@/lib/money'
 import { istMonthStartOffset, getISTDateParts } from '@/lib/timezone'
 import { apiError } from '@/lib/api-error'
 import { captureGstFilingError } from '@/lib/sentry-gst'
 import { logAudit } from '@/lib/audit'
 import { deriveStateCode } from '@/lib/gst'
 import { buildGstr1, type Gstr1Transaction, type ShopInfo } from '@/lib/gstr1-builder'
+import { getPriorFYBounds } from '@/lib/fiscal-year'
 
 /**
  * GET /api/gstr-1?month=2026-07
@@ -81,6 +82,25 @@ export async function GET(req: NextRequest) {
       stateCode: shopStateCode,
     }
 
+    // 🔒 V26 N9: Fetch prior-FY outward turnover for the `gt` field.
+    // Indian FY: April 1 → March 31. Raw SQL aggregate — the money extension
+    // doesn't intercept $queryRaw, so we get paise back and convert via
+    // fromPaise. Same pattern as insights/route.ts.
+    const priorFY = getPriorFYBounds(year, month)
+    const priorFyRows = await db.$queryRaw<Array<{ turnoverPaise: bigint }>>`
+      SELECT
+        COALESCE(SUM(CASE WHEN "type" = 'sale' THEN "subtotal" - "discountAmount" ELSE 0 END), 0) -
+        COALESCE(SUM(CASE WHEN "type" = 'credit-note' THEN "subtotal" - "discountAmount" ELSE 0 END), 0) +
+        COALESCE(SUM(CASE WHEN "type" = 'debit-note' THEN "subtotal" - "discountAmount" ELSE 0 END), 0) AS "turnoverPaise"
+      FROM "Transaction"
+      WHERE "userId" = ${userId}
+        AND "deletedAt" IS NULL
+        AND "type" IN ('sale', 'credit-note', 'debit-note')
+        AND "date" >= ${priorFY.start}
+        AND "date" < ${priorFY.end}
+    `
+    const priorFyTurnover = fromPaise(Number(priorFyRows[0]?.turnoverPaise ?? 0))
+
     // Transform DB rows to builder input
     const builderTxns: Gstr1Transaction[] = txns.map(t => ({
       id: t.id,
@@ -116,7 +136,7 @@ export async function GET(req: NextRequest) {
     }))
 
     // Build the GSTR-1 JSON
-    const gstr1 = buildGstr1(builderTxns, shop, monthYear)
+    const gstr1 = buildGstr1(builderTxns, shop, monthYear, { priorFyTurnover })
 
     // Compute summary totals
     const totalTaxableValue = roundMoney(
@@ -254,6 +274,22 @@ export async function POST(req: NextRequest) {
     const shopStateCode = deriveStateCode(null, null, shopGstin, shopState)
     const shop: ShopInfo = { gstin: shopGstin, state: shopState, stateCode: shopStateCode }
 
+    // 🔒 V26 N9: Fetch prior-FY outward turnover for the `gt` field (same as GET).
+    const priorFY = getPriorFYBounds(year, month)
+    const priorFyRows = await db.$queryRaw<Array<{ turnoverPaise: bigint }>>`
+      SELECT
+        COALESCE(SUM(CASE WHEN "type" = 'sale' THEN "subtotal" - "discountAmount" ELSE 0 END), 0) -
+        COALESCE(SUM(CASE WHEN "type" = 'credit-note' THEN "subtotal" - "discountAmount" ELSE 0 END), 0) +
+        COALESCE(SUM(CASE WHEN "type" = 'debit-note' THEN "subtotal" - "discountAmount" ELSE 0 END), 0) AS "turnoverPaise"
+      FROM "Transaction"
+      WHERE "userId" = ${userId}
+        AND "deletedAt" IS NULL
+        AND "type" IN ('sale', 'credit-note', 'debit-note')
+        AND "date" >= ${priorFY.start}
+        AND "date" < ${priorFY.end}
+    `
+    const priorFyTurnover = fromPaise(Number(priorFyRows[0]?.turnoverPaise ?? 0))
+
     const builderTxns: Gstr1Transaction[] = txns.map(t => ({
       id: t.id,
       type: t.type,
@@ -287,7 +323,7 @@ export async function POST(req: NextRequest) {
       })),
     }))
 
-    const gstr1 = buildGstr1(builderTxns, shop, monthYear)
+    const gstr1 = buildGstr1(builderTxns, shop, monthYear, { priorFyTurnover })
 
     const totalTaxableValue = roundMoney(
       builderTxns.filter(t => t.type === 'sale').reduce((s, t) => s + t.subtotal - t.discountAmount, 0)

@@ -551,3 +551,13 @@ and include enough context to reproduce.
 - **Why this way**: The helper accepts an injected `RestoreDb` handle (for testability with a stub). Running raw SQL through the stub is awkward. The current implementation is portable across Postgres (prod) + SQLite (tests).
 - **Proper fix**: Add an optional `aggregateStockByProduct` method to the `RestoreDb` interface that runs raw SQL in prod and is mocked in tests. Or: bypass the helper interface in the restore route and call `db.$queryRaw` directly for the aggregate, then pass the result to a pure aggregation function.
 - **Status**: OPEN — low priority. Acceptable for a one-time restore operation; if restore latency becomes a user complaint, swap to SQL aggregate without changing the public contract.
+
+### BUG-052 — Legacy /api/gstr-export route also has gt/cur_gt hardcoded 0 (Low/Polish) — OPEN
+- **File**: `src/app/api/gstr-export/route.ts:425-426`
+- **Severity**: Low (informational fields, non-blocking — same class as M10/BUG-043..046 but in a different code path)
+- **Found**: 2026-07-18, during V26 Batch 4 (N9) adjacent-bug scan.
+- **Description**: The legacy `/api/gstr-export` route (older CSV/JSON export path) builds its GSTR-1 JSON INLINE — not via `buildGstr1`. It has the same `gt: 0, cur_gt: 0` defect that N9 just fixed in the canonical `/api/gstr-1` route. The legacy route uses a different data shape (per-invoice `b2bInvoices`/`b2cInvoices`/`cdnSection` arrays, plus a `truncated` flag) so it can't directly reuse `buildGstr1`.
+- **Fix options**:
+  - **Option A (preferred)**: Refactor `/api/gstr-export` to use `buildGstr1` — eliminates the duplication entirely. Bigger change (the route has its own 10K cap + truncation logic that `buildGstr1` doesn't have). Belongs in a future cleanup batch.
+  - **Option B (minimum)**: Add the same prior-FY SQL query + compute `cur_gt` from the loaded invoices. Small diff, ~30 lines.
+- **Status**: OPEN — queued for a future batch. The canonical `/api/gstr-1` route (used by the GSTR-1 Reports UI) is fixed by N9; this legacy route is a secondary path.
