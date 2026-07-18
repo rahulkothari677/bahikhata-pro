@@ -7104,3 +7104,71 @@ Stage Summary:
 - 1792 tests passing (was 1788; +4 new), 0 TypeScript errors, 0 ESLint errors, build clean.
 - Pushed to GitHub: commit 7c5bc67. Vercel auto-deploying.
 - This was the bug the user found via live testing with a GSTR-1 JSON schema validator. After Vercel deploys (~2-3 min), the user should re-download a GSTR-1 JSON and re-validate it — the file should now pass with 0 errors.
+
+---
+Task ID: audit-v26-batch-7
+Agent: main
+Task: Two issues from user's live testing — (1) GSTR-1 JSON has empty gstin after BUG-054 fix, (2) Anita Singh ₹990 divergence needs deep investigation.
+
+Work Log:
+- Read user's two messages: (1) GSTR-1 JSON now has gstin at root (BUG-054 fixed) but value is empty string — portal still rejects. (2) Auditor's smart analysis of M11: could be live code bug OR stale data from before V24 §1 paidAmount default fix. Need to inspect Anita's records + create a fresh test party to tell them apart. Also: flag ANY inconsistency, not just big ones.
+
+§1 — ISSUE 1: BUG-055 empty-gstin block
+- Pre-change scan: traced code path setting.gstin → shopGstin → shop.gstin → buildGstr1 → `gstin: shop.gstin || ''` (line 662 of gstr1-builder.ts). Confirmed: code faithfully passes whatever is in the DB. When shop has no GSTIN, shopGstin is null, and the JSON has `gstin: ""`.
+- Root cause: NOT a code bug in the data path. The bug is the absence of a download-block + clear warning. The existing "Missing shop details" warning at the bottom (lines 362-371) was too passive — amber, at the bottom, didn't block the download button.
+- Fix applied:
+  * handleDownloadJSON: added early return if `!data?.shop?.gstin` — shows error toast "Cannot download GSTR-1 — shop GSTIN is not set" with description pointing to Settings → Shop Profile. Does NOT download the file.
+  * Added prominent rose/red block-banner at TOP of Gstr1Report (above month picker) — "GSTR-1 JSON download is blocked — shop GSTIN is not set" + explains why + tells user where to fix.
+  * Confirmed `fp` format MMYYYY (e.g. "072026") is correct per GSTN schema — no change needed.
+- 2 new regression tests in v26-gstr1-download-shape.test.ts:
+  * Download handler blocks when data?.shop?.gstin is missing (structural guardrail)
+  * Prominent block-banner renders (rose/red, not amber) when shop.gstin is missing
+- Files changed: src/components/reports/Gstr1Report.tsx, src/__tests__/lib/v26-gstr1-download-shape.test.ts.
+
+§2 — ISSUE 2: M11 per-party deep diagnostic
+- Auditor's analysis: ₹990 divergence for Anita Singh could be (a) live code bug OR (b) stale data from before V24 §1 paidAmount default fix. The way to tell: inspect Anita's actual records + create a fresh test party with the same transaction pattern.
+- New endpoint: /api/debug/party-balance-detail?partyId=<id>
+  * Owner-only (gated by role !== 'owner' check).
+  * Returns FULL breakdown for a single party:
+    - computePartyBalance output (Prisma managed aggregate, used by party-detail endpoint)
+    - getReceivablePayable output (raw $queryRaw, used by party-list + dashboard)
+    - Component-by-component comparison: openingBalance, salesOutstanding, purchaseOutstanding, creditNoteOutstanding, debitNoteOutstanding, paymentsReceived, paymentsPaid — each with {detail, list, diff}
+    - Every raw transaction row (including soft-deleted, with paise→rupees conversion + isStaleNoteDefault flag for notes with paidAmount=totalAmount)
+    - Every raw payment row
+    - Data-quality scan: NULL paidAmount count + rows, stale note paidAmount=totalAmount count + rows (pre-V24-§1 default), deleted-but-linked count + originals, orphaned notes count
+    - Human-readable interpretation that names the root cause based on what was found
+  * The interpretation logic:
+    - If NULL paidAmount found → likely root cause (SQL's totalAmount-NULL=NULL, SUM skips; Prisma's _sum returns null, JS coerces to 0 → deterministic divergence equal to the NULL row's totalAmount)
+    - If stale note paidAmount=totalAmount found → pre-V24-§1 stale default (both functions read same value, so doesn't cause divergence BETWEEN them, but balance itself is wrong)
+    - If deleted-but-linked found → data-integrity issue (not a divergence cause)
+    - If none of the above but components still differ → subtle SQL-vs-Prisma difference, send to developer
+- Enhanced /api/debug/party-balance-recon:
+  * Tighter tolerance (< ₹0.01) — flags ANY inconsistency, even small ones (auditor's ask)
+  * Splits diverged into realDivergences (≥₹1) + nearMisses (<₹1) in the summary
+  * Each diverged party now has a `detailUrl` for one-click deep investigation
+  * Added `signedDifference` (positive = detail higher, negative = list higher) to help identify the direction of the divergence
+- Files changed: src/app/api/debug/party-balance-detail/route.ts [new], src/app/api/debug/party-balance-recon/route.ts.
+
+§3 — Guardrail-test updates (both guardrails caught real issues):
+- profit-leak-guard.test.ts: my detail route includes grossProfit in the select but doesn't call shouldHideProfit. This is correct for a debug endpoint (owner-only, owner already sees profit) — added to ALLOWLIST with justification comment.
+- soft-delete-sweep.test.ts: my detail route intentionally queries WITHOUT deletedAt:null to show stale/deleted rows for diagnosis (the whole point of the diagnostic). Added both /api/debug/* endpoints to ALLOWED_EXCEPTIONS with justification comments.
+- Both guardrail tests now pass.
+
+§4 — Adjacent bugs found during scan:
+- None new beyond BUG-055. The M11 diagnostic endpoints are diagnostic tools, not bug fixes — they help the user (and me) determine whether Anita's ₹990 divergence is a live bug or stale data.
+
+Verification:
+- npx tsc --noEmit: 0 errors (fixed 2 initial errors: Payment has no updatedAt column; originalIds needed `as string` cast for the null-filtered array)
+- npx eslint (5 changed files): 0 errors, 0 warnings
+- npx jest: 1796/1796 pass (52 suites) — was 1792; +4 new tests + 2 guardrail tests fixed
+- npx next build: Compiled successfully (BUILD_ID: HQ5o-L2BWzws2imYTV92R)
+
+Stage Summary:
+- V26 Batch 7 COMPLETE. Both user-reported issues addressed.
+- Files changed: 7 (src/components/reports/Gstr1Report.tsx, src/app/api/debug/party-balance-detail/route.ts [new], src/app/api/debug/party-balance-recon/route.ts, src/__tests__/lib/v26-gstr1-download-shape.test.ts, src/__tests__/lib/v26-profit-leak-guard.test.ts, src/__tests__/lib/soft-delete-sweep.test.ts, BUGS-FOUND.md).
+- 1 new bug logged: BUG-055 (FIXED).
+- 1796 tests passing (was 1792; +4 new), 0 TypeScript errors, 0 ESLint errors, build clean.
+- Pushed to GitHub: commit 3bdab26. Vercel auto-deploying.
+- Two user actions needed after Vercel deploys:
+  1. Set shop GSTIN in Settings → Shop Profile (if not set), then re-download GSTR-1 JSON → re-validate → should now pass with 0 errors.
+  2. Hit /api/debug/party-balance-recon on Neon → for each diverged party, hit its detailUrl → send me the full JSON response. The interpretation field will name the root cause — if it's NULL paidAmount or stale note defaults, I'll write a one-time repair script + count how many other parties have the same pattern. If it's a subtle SQL-vs-Prisma difference, I'll investigate deeper.
