@@ -119,6 +119,10 @@ export async function GET(req: NextRequest) {
       partyName: t.party?.name || null,
       partyGstin: t.party?.gstin || null,
       partyState: t.party?.state || null,
+      // 🔒 V26 BUG-062: pass originalTransactionId so the builder can look up
+      // the original invoice's isInterState + totalAmount for B2CS-vs-CDNUR
+      // classification (instead of using the note's own potentially-stale values).
+      originalTransactionId: t.originalTransactionId || null,
       items: t.items.map(item => ({
         productId: item.productId,
         productName: item.productName,

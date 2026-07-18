@@ -67,6 +67,14 @@ export interface Gstr1Transaction {
   partyGstin: string | null
   partyState: string | null
   items: Gstr1Item[]
+  // 🔒 V26 BUG-062: originalTransactionId for note-vs-original classification.
+  // When a credit/debit note is created against an original sale/purchase,
+  // the note's B2CS-vs-CDNUR classification should be based on the ORIGINAL
+  // invoice's isInterState + totalAmount, not the note's own values.
+  // (The note typically inherits these from the original at creation time,
+  // but if the original is later edited, the note's stale values would
+  // produce wrong classification. Looking up the original is strictly correct.)
+  originalTransactionId?: string | null
 }
 
 export interface Gstr1Item {
@@ -323,6 +331,47 @@ export function buildB2CL(txns: Gstr1Transaction[], shop: ShopInfo): Gstr1B2clEn
 }
 
 /**
+ * 🔒 V26 BUG-062: Resolve the classification values (isInterState, totalAmount)
+ * for a credit/debit note by looking up its original transaction.
+ *
+ * Per strict GST rules, the B2CS-vs-CDNUR classification of a note should be
+ * based on the ORIGINAL supply's characteristics, not the note's own values.
+ * The note typically inherits isInterState from the original at creation time,
+ * but if the original is later edited (e.g. totalAmount changes), the note's
+ * stale values would produce wrong classification.
+ *
+ * This helper:
+ *   1. If the note has an originalTransactionId AND the original is in the
+ *      txns array → use the original's isInterState + totalAmount.
+ *   2. Otherwise → fall back to the note's own values (the pre-BUG-062 behavior,
+ *      which is correct when the note hasn't been edited independently).
+ *
+ * @param note   the credit/debit note transaction
+ * @param txns   all transactions in the filing period (for lookup)
+ * @returns      { isInterState, totalAmount } from the original or the note itself
+ */
+function resolveNoteClassification(
+  note: Gstr1Transaction,
+  txns: Gstr1Transaction[],
+): { isInterState: boolean; totalAmount: number } {
+  if (note.originalTransactionId) {
+    const original = txns.find(t => t.id === note.originalTransactionId)
+    if (original) {
+      return {
+        isInterState: original.isInterState,
+        totalAmount: original.totalAmount,
+      }
+    }
+  }
+  // Fallback: use the note's own values (correct when the note hasn't been
+  // edited independently of the original).
+  return {
+    isInterState: note.isInterState,
+    totalAmount: note.totalAmount,
+  }
+}
+
+/**
  * Build B2CS section: small B2C sales (inter-state OR intra-state, ≤ ₹1 lakh).
  * Aggregates by rate + POS — ONE entry per (rate, pos) combination.
  *
@@ -339,13 +388,16 @@ export function buildB2CS(txns: Gstr1Transaction[], shop: ShopInfo): Gstr1B2csEn
     (!t.partyGstin || t.partyGstin.length < 15) &&
     (!t.isInterState || t.totalAmount <= B2CL_INVOICE_VALUE_THRESHOLD)
   )
-  // 🔒 V26 N2: Notes whose original supply is B2CS — same criterion applied
-  // to the note itself (the note inherits isInterState from the original).
-  const b2csNotes = txns.filter(t =>
-    (t.type === 'credit-note' || t.type === 'debit-note') &&
-    (!t.partyGstin || t.partyGstin.length < 15) &&
-    (!t.isInterState || t.totalAmount <= B2CL_INVOICE_VALUE_THRESHOLD)
-  )
+  // 🔒 V26 N2 + BUG-062: Notes whose ORIGINAL supply is B2CS.
+  // Uses resolveNoteClassification to look up the original invoice's
+  // isInterState + totalAmount (falls back to note's own values if the
+  // original isn't in the txns array).
+  const b2csNotes = txns.filter(t => {
+    if (t.type !== 'credit-note' && t.type !== 'debit-note') return false
+    if (t.partyGstin && t.partyGstin.length >= 15) return false  // registered → CDNR
+    const orig = resolveNoteClassification(t, txns)
+    return !orig.isInterState || orig.totalAmount <= B2CL_INVOICE_VALUE_THRESHOLD
+  })
 
   // Aggregate by (rate, pos)
   const agg = new Map<string, { txval: number; iamt: number; camt: number; samt: number; csamt: number; rt: number; pos: string }>()
@@ -437,12 +489,16 @@ export function buildCDNR(txns: Gstr1Transaction[], shop: ShopInfo): Gstr1CdnrEn
  * (EXPWP/EXPWOP) are out of scope until the app tracks export invoices.
  */
 export function buildCDNUR(txns: Gstr1Transaction[], shop: ShopInfo): Gstr1CdnurEntry[] {
-  const notes = txns.filter(t =>
-    (t.type === 'credit-note' || t.type === 'debit-note') &&
-    (!t.partyGstin || t.partyGstin.length < 15) &&
-    t.isInterState &&
-    t.totalAmount > B2CL_INVOICE_VALUE_THRESHOLD
-  )
+  // 🔒 V26 N2 + BUG-062: CDNUR (Table 9B) only accepts typ B2CL or exports,
+  // and B2CL implies an INTER-STATE POS. Uses resolveNoteClassification to
+  // look up the original invoice's isInterState + totalAmount (falls back to
+  // note's own values if the original isn't in the txns array).
+  const notes = txns.filter(t => {
+    if (t.type !== 'credit-note' && t.type !== 'debit-note') return false
+    if (t.partyGstin && t.partyGstin.length >= 15) return false  // registered → CDNR
+    const orig = resolveNoteClassification(t, txns)
+    return orig.isInterState && orig.totalAmount > B2CL_INVOICE_VALUE_THRESHOLD
+  })
   return notes.map(txn => ({
     typ: 'B2CL' as const,
     nt_num: txn.invoiceNo || txn.id,
