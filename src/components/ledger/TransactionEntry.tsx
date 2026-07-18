@@ -58,10 +58,13 @@ type ItemRow = {
   unit: string
 }
 
-export function TransactionEntry({ type }: { type: LedgerType }) {
+export function TransactionEntry({ type, estimateMode = false }: { type: LedgerType; estimateMode?: boolean }) {
   const isSale = type === 'sale'
+  // 🔒 Feature Phase 3: estimateMode — when true, the form saves with type='estimate'
+  // instead of 'sale'. Estimates don't affect stock, party balance, or GST.
+  // The UI shows "Estimate" instead of "Sale" + hides the payment field.
   // V17-Ext Tier 3: actualType can be overridden by preset to 'credit-note' or 'debit-note'
-  const [actualType, setActualType] = useState<string>(type)
+  const [actualType, setActualType] = useState<string>(estimateMode ? 'estimate' : type)
   const isCreditNote = actualType === 'credit-note'
   const isDebitNote = actualType === 'debit-note'
   const isNote = isCreditNote || isDebitNote
@@ -559,12 +562,12 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          type: actualType,
+          type: actualType,  // 🔒 Feature Phase 3: sends 'estimate' when in estimateMode
           partyId: partyId || null,
           date,
           invoiceNo: invoiceNo || null,
           isInterState,
-          paymentMode,
+          paymentMode: estimateMode ? 'cash' : paymentMode,  // Estimates don't have payment
           // 🔒 AUDIT V24 §1: Notes ALWAYS send an explicit paidAmount (cash
           // refunded): 0 when the refund toggle is off (khata adjustment — the
           // common case), the entered refund (or the full total) when on. The
@@ -602,10 +605,10 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
       })
       if (!r.ok) throw new Error('Failed')
       if (isQueuedResponse(r)) {
-        sonnerToast.success(`${isNote ? (isCreditNote ? 'Credit Note' : 'Debit Note') : (isSale ? 'Sale' : 'Purchase')} saved offline — will sync when online`)
+        sonnerToast.success(`${isNote ? (isCreditNote ? 'Credit Note' : 'Debit Note') : estimateMode ? 'Estimate' : (isSale ? 'Sale' : 'Purchase')} saved offline — will sync when online`)
       } else {
         const data = await r.json()
-        sonnerToast.success(`${isNote ? (isCreditNote ? 'Credit Note' : 'Debit Note') : (isSale ? 'Sale' : 'Purchase')} recorded successfully!`)
+        sonnerToast.success(`${isNote ? (isCreditNote ? 'Credit Note' : 'Debit Note') : estimateMode ? 'Estimate' : (isSale ? 'Sale' : 'Purchase')} recorded successfully!`)
 
         // 🔒 V20-025: Track transaction creation event
         const txType = isNote ? (isCreditNote ? 'credit-note' : 'debit-note') : (isSale ? 'sale' : 'purchase')
@@ -773,7 +776,7 @@ export function TransactionEntry({ type }: { type: LedgerType }) {
           </div>
           <div>
             <h2 className="text-lg font-bold font-heading tracking-tight">
-              {isCreditNote ? 'Credit Note' : isDebitNote ? 'Debit Note' : `New ${isSale ? 'Sale' : 'Purchase'}`}
+              {isCreditNote ? 'Credit Note' : isDebitNote ? 'Debit Note' : estimateMode ? 'New Estimate' : `New ${isSale ? 'Sale' : 'Purchase'}`}
             </h2>
             <p className="text-xs text-muted-foreground">Fill in the details below</p>
           </div>

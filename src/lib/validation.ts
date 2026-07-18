@@ -52,7 +52,7 @@ export const transactionItemSchema = z.object({
 // Transaction create schema
 // 🔒 V11 §2.4: z.coerce.number() for all numeric fields.
 export const createTransactionSchema = z.object({
-  type: z.enum(['sale', 'purchase', 'income', 'expense', 'credit-note', 'debit-note']),
+  type: z.enum(['sale', 'purchase', 'income', 'expense', 'credit-note', 'debit-note', 'estimate']),
   partyId: z.string().nullable().optional(),
   date: z.string().optional(),
   items: z.array(transactionItemSchema).optional(),
@@ -75,7 +75,7 @@ export const createTransactionSchema = z.object({
 // Transaction update schema (same but all fields optional)
 // 🔒 V11 §2.4: z.coerce.number() for all numeric fields.
 export const updateTransactionSchema = z.object({
-  type: z.enum(['sale', 'purchase', 'income', 'expense', 'credit-note', 'debit-note']),
+  type: z.enum(['sale', 'purchase', 'income', 'expense', 'credit-note', 'debit-note', 'estimate']),
   partyId: z.string().nullable().optional(),
   date: z.string().optional(),
   items: z.array(transactionItemSchema),

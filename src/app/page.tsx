@@ -483,6 +483,12 @@ export default function Home() {
             {currentView === 'party-profile' && <PartyProfile />}
             {currentView === 'new-sale' && <TransactionEntry type="sale" />}
             {currentView === 'new-purchase' && <TransactionEntry type="purchase" />}
+            {/* 🔒 Feature Phase 3: Estimates/Quotations — reuses TransactionEntry
+                with type="sale" but sets a global flag so the save uses type='estimate'.
+                Estimates don't affect stock, party balance, or GST. They can be
+                converted to a sale later via the "Convert to Sale" button on the
+                transaction detail page. */}
+            {currentView === 'new-estimate' && <TransactionEntry type="sale" estimateMode={true} />}
           </PullToRefresh>
         </main>
 

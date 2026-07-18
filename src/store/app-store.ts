@@ -16,6 +16,7 @@ export type ViewType =
   | 'party-profile'
   | 'new-sale'
   | 'new-purchase'
+  | 'new-estimate'
   | 'pricing'
   | 'ai-comparison'
   | 'ai-usage'

@@ -394,6 +394,43 @@ export function TransactionDetail() {
             <FileText className="w-4 h-4" /> Credit Note
           </Button>
         )}
+        {/* 🔒 Feature Phase 3: Convert Estimate to Sale — creates a new sale
+            from the estimate's items. The estimate stays in the DB (not deleted)
+            so the user can see it was converted. */}
+        {txn.type === 'estimate' && (
+          <Button
+            variant="default"
+            size="touch"
+            className="gap-2 bg-gradient-saffron text-white"
+            onClick={() => {
+              // Pre-fill the New Sale form with the estimate's items
+              ;(window as any).__ledgerPreset = {
+                type: 'sale',
+                data: {
+                  partyId: txn.partyId,
+                  partyName: txn.party?.name,
+                  date: new Date().toISOString().slice(0, 10),
+                  items: txn.items?.map((item: any) => ({
+                    productId: item.productId || '',
+                    name: item.productName,
+                    quantity: item.quantity,
+                    unitPrice: item.unitPrice,
+                    gstRate: item.gstRate,
+                    unit: item.unit || 'pcs',
+                  })),
+                },
+              }
+              useAppStore.getState().setPreviousView('transaction-detail')
+              useAppStore.getState().setView('new-sale')
+              sonnerToast.success('Estimate loaded as new sale', {
+                description: 'Review the details and tap Save to convert this estimate into a sale.',
+                duration: 5000,
+              })
+            }}
+          >
+            <ShoppingCart className="w-4 h-4" /> Convert to Sale
+          </Button>
+        )}
         <div className="flex-1" />
         <Button variant="outline" size="touch" onClick={handleDelete} className="gap-2 text-rose-600 hover:text-rose-700 hover:bg-rose-50">
           <Trash2 className="w-4 h-4" /> Delete
