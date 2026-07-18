@@ -46,5 +46,18 @@ if (SENTRY_DSN) {
       /moz-extension:/,
       /safari-web-extension:/,
     ],
+
+    // 🔒 Feature Phase 2: Crash-free metric — increment local crash counter
+    // on every error captured by Sentry. Used by the "Report a Problem" form
+    // and the About page to show the user their crash-free session %.
+    beforeSend(event) {
+      try {
+        const current = parseInt(localStorage.getItem('bahikhata:crash-count') || '0')
+        localStorage.setItem('bahikhata:crash-count', String(current + 1))
+      } catch {
+        // localStorage not available — skip silently
+      }
+      return event
+    },
   })
 }

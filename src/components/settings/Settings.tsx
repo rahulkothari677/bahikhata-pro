@@ -29,6 +29,7 @@ import {
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { useSetting } from '@/hooks/use-setting'
 import { cn, formatINR } from '@/lib/utils'
+import { APP_VERSION_LABEL } from '@/lib/app-version'
 
 const FEATURE_CATEGORIES: { title: string; features: { key: FeatureKey; label: string; description: string; icon: any }[] }[] = [
   {
@@ -1578,7 +1579,9 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
           <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
             <div className="rounded-lg bg-muted/50 p-2">
               <p className="font-medium">Version</p>
-              <p className="text-muted-foreground">1.0.0</p>
+              {/* 🔒 Feature Phase 2: Use APP_VERSION_LABEL (was hardcoded "1.0.0" —
+                  same bug class as BUG-022, version string drift). */}
+              <p className="text-muted-foreground">{APP_VERSION_LABEL}</p>
             </div>
             <div className="rounded-lg bg-muted/50 p-2">
               <p className="font-medium">Built for</p>

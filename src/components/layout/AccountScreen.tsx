@@ -1148,13 +1148,42 @@ function AccountSectionContent({
           ))}
         </div>
 
+        {/* 🔒 Feature Phase 2: Beta Readiness Kit — enhanced "Report a Problem"
+            with auto-filled debug info (device, version, current view, crash count).
+            Was: simple mailto link with no context. Now: pre-fills email body with
+            useful debug info so the support team can reproduce the issue faster. */}
         <div className="bg-card rounded-2xl shadow-sm border border-border/60 p-4">
-          <p className="font-semibold text-sm mb-2">Report a Bug</p>
+          <p className="font-semibold text-sm mb-2">Report a Problem</p>
           <p className="text-xs text-muted-foreground mb-3">
-            Found something broken? Let us know and we'll fix it ASAP.
+            Found something broken or not working right? Let us know and we'll fix it ASAP.
+            Your report includes debug info (app version, device, crash count) to help us diagnose faster.
           </p>
-          <a href="mailto:support@ekbook.app?subject=Bug Report" className="block w-full py-2.5 rounded-lg border border-border text-center text-sm font-medium hover:bg-muted transition">
-            Report a Bug
+          {/* Auto-collected debug info — shown to the user so they know what's included */}
+          <div className="bg-muted/50 rounded-lg p-3 mb-3 text-[11px] text-muted-foreground space-y-0.5">
+            <p><span className="font-medium">App version:</span> {APP_VERSION_LABEL}</p>
+            <p><span className="font-medium">Device:</span> {typeof navigator !== 'undefined' ? navigator.userAgent.split(') ')[0].split('(')[1] || 'Unknown' : 'Unknown'}</p>
+            <p><span className="font-medium">Screen:</span> {typeof window !== 'undefined' ? `${window.innerWidth}×${window.innerHeight}` : 'Unknown'}</p>
+            <p><span className="font-medium">Crash-free sessions:</span> {(() => {
+              try {
+                const total = parseInt(localStorage.getItem('bahikhata:session-count') || '0')
+                const crashed = parseInt(localStorage.getItem('bahikhata:crash-count') || '0')
+                return `${total - crashed}/${total} (${total > 0 ? Math.round((1 - crashed / total) * 100) : 100}%)`
+              } catch { return 'Unknown' }
+            })()}</p>
+          </div>
+          <a
+            href={`mailto:support@ekbook.app?subject=${encodeURIComponent(`Bug Report — ${APP_VERSION_LABEL}`)}&body=${encodeURIComponent(
+              `Hi EkBook team,\n\nI encountered a problem:\n\n[Describe what happened here]\n\n--- Debug Info ---\nApp version: ${APP_VERSION_LABEL}\nDevice: ${typeof navigator !== 'undefined' ? navigator.userAgent : 'Unknown'}\nScreen: ${typeof window !== 'undefined' ? `${window.innerWidth}x${window.innerHeight}` : 'Unknown'}\nURL: ${typeof window !== 'undefined' ? window.location.href : 'Unknown'}\nCrash-free sessions: ${(() => {
+                try {
+                  const total = parseInt(localStorage.getItem('bahikhata:session-count') || '0')
+                  const crashed = parseInt(localStorage.getItem('bahikhata:crash-count') || '0')
+                  return `${total - crashed}/${total}`
+                } catch { return 'Unknown' }
+              })()}\n------------------`
+            )}`}
+            className="block w-full py-2.5 rounded-lg border border-border text-center text-sm font-medium hover:bg-muted transition"
+          >
+            Report a Problem
           </a>
         </div>
       </div>
@@ -1173,6 +1202,17 @@ function AccountSectionContent({
           <p className="text-sm text-muted-foreground mt-1">India's Smartest Ledger App</p>
           {/* 🔒 AUDIT V23 FIX §10: App version with build info for beta readiness */}
           <p className="text-xs text-muted-foreground mt-2">{APP_VERSION_LABEL}</p>
+          {/* 🔒 Feature Phase 2: Crash-free metric for beta readiness */}
+          <p className="text-[11px] text-muted-foreground mt-1">
+            {(() => {
+              try {
+                const total = parseInt(localStorage.getItem('bahikhata:session-count') || '0')
+                const crashed = parseInt(localStorage.getItem('bahikhata:crash-count') || '0')
+                const pct = total > 0 ? Math.round((1 - crashed / total) * 100) : 100
+                return `Crash-free: ${pct}% (${Math.max(0, total - crashed)}/${total} sessions)`
+              } catch { return '' }
+            })()}
+          </p>
           <div className="inline-flex items-center gap-1.5 mt-3 px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-medium">
             🇮🇳 Made in India
           </div>

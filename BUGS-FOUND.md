@@ -430,3 +430,12 @@ and include enough context to reproduce.
 - **Description**: V24 §6.3 flagged that income/expense transactions store `partyId` but `computePartyBalance` doesn't include them. However, during V25 Batch 7 investigation, I found that the IncomeExpense UI component NEVER sends `partyId` — it uses free-text `payeeName` + `payeePhone` instead. The `partyId` field exists in the schema + API (added by V19-005) but is unused by the UI. So in practice, income/expense transactions never have a `partyId` set — the link is always informational only (payee name/phone text, not a party relationship).
 - **Decision**: No fix needed. The auditor's concern ("users expect it to settle udhaar, it silently doesn't") is theoretical — users can't currently attach a party to income/expense via the UI. If a future feature adds a party picker to income/expense, the clarification ("this doesn't affect the party's balance") should be added then. For now, this is a latent capability, not a user-facing bug.
 - **Status**: WONTFIX (no user-facing issue; revisit if income/expense party picker is added)
+
+### BUG-037 — Settings About card had hardcoded "1.0.0" version (Low/Maintenance) — FIXED
+
+- **Found**: 2026-07-18, during Feature Phase 2 pre-change scan
+- **File**: `src/components/settings/Settings.tsx:1581`
+- **Severity**: Low (version string drift — same class as BUG-022)
+- **Description**: The Settings → About card showed "1.0.0" as a hardcoded string instead of using `APP_VERSION_LABEL`. The AccountScreen footer and About page already used `APP_VERSION_LABEL`, but this third location was missed during the V23 Batch L fix (BUG-022).
+- **Fix applied**: 2026-07-18 (Feature Phase 2). Replaced hardcoded "1.0.0" with `{APP_VERSION_LABEL}`. Added the import.
+- **Status**: FIXED

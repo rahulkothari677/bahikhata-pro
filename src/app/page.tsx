@@ -36,6 +36,7 @@ import { useStaffPermissions } from '@/hooks/use-staff-permissions'
 import type { ModuleKey } from '@/lib/staff-permissions'
 import { track, identifyUser, initAnalytics, EVENTS, hashEmail } from '@/lib/analytics'
 import { useBootstrap } from '@/hooks/use-bootstrap'
+import { trackSessionStart } from '@/lib/crash-tracker'
 
 // Lazy-load heavy components that are only used occasionally.
 // This splits them into separate JS chunks, loaded on-demand when the user
@@ -263,8 +264,10 @@ export default function Home() {
   }, [showOnboarding, themePickerDone, tourDone])
 
   // 🔒 V20-025: Analytics — init on mount, identify user on auth, track app_opened
+  // 🔒 Feature Phase 2: Track session start for crash-free metric.
   useEffect(() => {
     initAnalytics()
+    trackSessionStart()
   }, [])
 
   useEffect(() => {
