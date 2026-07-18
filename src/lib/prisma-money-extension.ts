@@ -254,6 +254,50 @@ export function withMoneyConversion(client: PrismaClient) {
           if (args.update) args.update = convertNestedData('Product', args.update)
           return convertRowOnRead('Product', await query(args))
         },
+        // 🔒 V26 N8: delete returns the deleted row with money cols in raw
+        // paise — convert to rupees. The single existing call site
+        // (products/route.ts:171) discards the return, so this is latent —
+        // but the next reader who uses `const deleted = await db.product.delete()`
+        // and reads `deleted.salePrice` would otherwise ship a 100× bug.
+        async delete({ model, operation, args, query }) {
+          return convertRowOnRead('Product', await query(args))
+        },
+        async deleteMany({ model, operation, args, query }) {
+          return query(args)
+        },
+        // 🔒 V26 N8: aggregate returns _sum/_avg/_min/_max in paise — convert
+        // ALL 4 to rupees. Same pattern as Transaction/Payment/TransactionItem.
+        async aggregate({ model, operation, args, query }) {
+          const result = await query(args)
+          const cols = MONEY_COLUMNS['Product'] || []
+          for (const aggKey of ['_sum', '_avg', '_min', '_max']) {
+            if ((result as any)[aggKey]) {
+              for (const col of cols) {
+                if (col in (result as any)[aggKey] && (result as any)[aggKey][col] != null) {
+                  (result as any)[aggKey][col] = fromPaise((result as any)[aggKey][col])
+                }
+              }
+            }
+          }
+          return result
+        },
+        // 🔒 V26 N8: same _sum/_avg/_min/_max conversion for groupBy.
+        async groupBy({ model, operation, args, query }) {
+          const result = await query(args)
+          const cols = MONEY_COLUMNS['Product'] || []
+          return result.map((row: any) => {
+            for (const aggKey of ['_sum', '_avg', '_min', '_max']) {
+              if (row[aggKey]) {
+                for (const col of cols) {
+                  if (col in row[aggKey] && row[aggKey][col] != null) {
+                    row[aggKey][col] = fromPaise(row[aggKey][col])
+                  }
+                }
+              }
+            }
+            return row
+          })
+        },
       },
 
       // Party

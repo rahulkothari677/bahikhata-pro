@@ -47,11 +47,24 @@ export function resolveFinalPaid(type: string, paidRaw: unknown, totalAmount: nu
   let finalPaid = toMoney(paid)
   if (finalPaid < 0) finalPaid = 0  // zod already enforces min(0); belt-and-braces
 
-  // 🔒 FIX M3 (unchanged behavior): explicit paid within ₹1 of the total snaps
-  // to the total — prevents phantom dues when the client computed paid from a
-  // pre-round-off total. NOT applied to notes when the value is 0 (a ₹0 refund
-  // on a sub-₹1 note must stay 0 — it's a khata adjustment, not a payment).
-  if (Math.abs(totalAmount - finalPaid) < 1 && !(isNoteType(type) && finalPaid === 0)) {
+  // 🔒 V26 N7: Narrowed snap-zone. Was: any value within ₹1 of total snapped
+  // to total (Math.abs(totalAmount - finalPaid) < 1) — which silently upgraded
+  // a genuine ₹999.50 partial on a ₹1,000 invoice to "fully paid" (vanishing
+  // ₹0.50 of receivable), and a ₹4.50 refund on a ₹5 credit note to "full
+  // refund" (writing off ₹0.50 of khata).
+  //
+  // The original FIX M3 intent was to absorb pre-round-off client values —
+  // but those are always paid ≥ total by a rounding sliver (e.g. ₹1000.50 on
+  // a ₹1000 invoice), never paid < total. So narrowing to "paid ≥ total −
+  // 0.005 AND paid ≤ total + 1" preserves the round-off absorption while
+  // stopping the silent partial-to-full upgrade.
+  //
+  // Notes (credit/debit) get an even stricter rule: no upward snap at all.
+  // A note refund is entered deliberately; precision matters more than
+  // convenience. A ₹4.50 refund on a ₹5 note stays ₹4.50.
+  const isNote = isNoteType(type)
+  const withinUpperSnapBand = finalPaid >= totalAmount - 0.005 && finalPaid <= totalAmount + 1
+  if (!isNote && withinUpperSnapBand) {
     finalPaid = roundMoney(totalAmount)
   }
 

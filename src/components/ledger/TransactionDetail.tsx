@@ -432,12 +432,16 @@ export function TransactionDetail() {
             className="gap-2 bg-gradient-saffron text-white"
             onClick={() => {
               // Pre-fill the New Sale form with the estimate's items
+              // 🔒 V26 N6: carry over the order-level discountAmount — was
+              // dropped, so the converted sale's total was higher than the
+              // quoted estimate by the discount amount.
               ;(window as any).__ledgerPreset = {
                 type: 'sale',
                 data: {
                   partyId: txn.partyId,
                   partyName: txn.party?.name,
                   date: new Date().toISOString().slice(0, 10),
+                  discountAmount: txn.discountAmount || 0,
                   items: txn.items?.map((item: any) => ({
                     productId: item.productId || '',
                     name: item.productName,

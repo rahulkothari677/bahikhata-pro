@@ -50,9 +50,21 @@ describe('V24 §1 — resolveFinalPaid (note paidAmount semantics)', () => {
     expect(resolveFinalPaid('credit-note', 0, 0.6)).toBe(0)
   })
 
-  test('FIX M3 snap: explicit paid within ₹1 of total snaps to total', () => {
-    expect(resolveFinalPaid('sale', 999.6, 1000)).toBe(1000)
-    expect(resolveFinalPaid('credit-note', 299.5, 300)).toBe(300)  // full-refund w/ round-off residue
+  test('FIX M3 snap (narrowed by V26 N7): explicit paid ABOVE total snaps to total', () => {
+    // 🔒 V26 N7: snap-zone was narrowed. Was: any value within ₹1 of total
+    // (Math.abs(total - paid) < 1) snapped. This silently upgraded genuine
+    // partials (₹999.50 on ₹1000) to "fully paid". Now: only paid ≥ total −
+    // 0.005 AND paid ≤ total + 1 snaps (the pre-round-off artifact case,
+    // which is always paid ≥ total). Notes get no upward snap at all.
+    //
+    // OLD test (now invalid): expect(resolveFinalPaid('sale', 999.6, 1000)).toBe(1000)
+    //   — 999.6 is a genuine partial, not a round-off artifact.
+    // NEW: 999.6 stays as-is (partial). 1000.50 snaps (round-off artifact).
+    expect(resolveFinalPaid('sale', 999.6, 1000)).toBe(999.6)  // V26 N7: stays partial
+    expect(resolveFinalPaid('sale', 1000.5, 1000)).toBe(1000)  // round-off artifact: snaps
+    expect(resolveFinalPaid('sale', 1000.99, 1000)).toBe(1000)  // within ₹1 upper band: snaps
+    // Notes no longer snap upward (V26 N7) — a ₹299.50 refund on a ₹300 note stays ₹299.50
+    expect(resolveFinalPaid('credit-note', 299.5, 300)).toBe(299.5)
   })
 
   test('negative paid clamps to 0 (zod blocks this upstream; belt-and-braces)', () => {
