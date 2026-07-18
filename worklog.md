@@ -6696,3 +6696,72 @@ Stage Summary:
 - 3 guardrails added: profit-leak CI guardrail, linked-notes cap regression suite, GSTR-1 {num, itm_det} schema regression suite.
 - Browser verification: deferred (sandbox Neon network instability per V25 Batch 6 — Vercel deployment works).
 - Awaiting user pass before Batch 2 (N5 — restore, Option A: restore-into-empty with full stock rebuild).
+
+---
+Task ID: audit-v26-batch-2
+Agent: main
+Task: V26 Phase 1 Audit Batch 2 — N5 restore integrity (Option A: restore-into-empty + stock rebuild + product re-link per masterplan).
+
+Work Log:
+- Read worklog for Batch 1 context (audit-v26-batch-1).
+- Per framework: pre-change scan first. Read src/app/api/import/restore/route.ts (335 lines, full), src/app/api/export/full/route.ts (backup shape), src/components/settings/Settings.tsx restore card (lines 908-994), prisma schema for Product + TransactionItem.
+- Confirmed auditor's M6 finding: restore trusts stored currentStock (line 139), creates items with productId: null (line 238), no stock rebuild, merge behavior double-counts party balances. All 4 defects confirmed at HEAD 6a3fbb4.
+
+§1 — Pre-change: pushed Batch 1 to Vercel + logged BUG-047/048/049:
+- User flagged that Batch 1 wasn't pushed and verification instructions weren't provided. Fixed both.
+- Pushed commit c7baf65 (V26 Phase 1 Batch 1: N1-N4 fixes) to origin/main. Vercel auto-deploying.
+- Analyzed screenshots 697 + 698 via VLM:
+  * Screenshot 697: GST & TAX section shows only Reconciliation + Period Lock (5 GST reports missing). Confirmed by code: 14 reports registered surfaces:['reports-hub'] only — never 'more'. Logged BUG-047.
+  * Screenshot 698: cash-in-hand nav.label leak visible. Verified i18n keys exist correctly in en (line 302/361) + hi (line 737/779); getTranslation() fallback chain returns English value for gu/mr/ta/te. Leak was from stale Vercel deployment. Logged BUG-048 (FIXED by deployment). Follow-up BUG-049 (gu/mr/ta/te missing nav keys — Low, queued for i18n cleanup).
+
+§2 — N5.1: Created src/lib/restore-utils.ts with 3 testable helpers:
+- assertShopIsEmpty(db, userId): counts transactions + products + parties + payments. Returns ok:false with 400-ready message if total > 0. Message tells user to reset via Danger Zone.
+- relinkTransactionItemsToProducts(db, userId): builds productName → productId lookup (lowercase, first-wins on duplicates). Finds all items with productId:null. Groups updates by productId to minimize round-trips. Returns {relinked, unmatched}.
+- rebuildProductStock(db, userId): fetches all products + all transactionItems with transaction join. Aggregates per-product delta using same direction logic as transactions/[id]/route.ts PUT (sale=-1, purchase=+1, credit-note+affectsStock=+1, debit-note+affectsStock=-1, income/expense=0). Updates each product's currentStock = openingStock + delta. Returns {rebuilt}.
+- All 3 helpers take an injected RestoreDb handle (same pattern as note-validation.ts + linked-notes-guard.ts) for testability without DB.
+
+§3 — N5.2: Updated src/app/api/import/restore/route.ts:
+- Added imports: assertShopIsEmpty, relinkTransactionItemsToProducts, rebuildProductStock.
+- After backup validation: call assertShopIsEmpty(db, userId). Return 400 with shopCheck.message if non-empty.
+- After all entity imports + before audit log: call relink + rebuild.
+- Updated audit log metadata to include relinked, unmatched, stockRebuilt.
+- Honest success message: 'Restore complete — N transactions, M products, stock rebuilt for X products, Y items re-linked to catalog.' + warning suffix if unmatched > 0.
+- Updated docstring to reflect Option A semantics (replaces, not merges; stock rebuilt; items re-linked).
+
+§4 — N5.3: Updated src/components/settings/Settings.tsx restore card:
+- Honest copy: 'REPLACES all current data' (was: 'MERGES with existing data — items with the same SKU or name are skipped').
+- Tells user to reset first via Danger Zone if shop is non-empty.
+- Mentions stock rebuild + item re-linking up front.
+- Added explicit confirmation dialog before file picker opens (destructive: true). User must confirm before file is read.
+- Updated success toast to include stockRebuilt + relinked counts.
+- New warning toast variant when unmatched > 0 (distinct from quarantined transactions warning).
+
+§5 — N5.4: Created src/__tests__/lib/v26-restore-guard.test.ts with 21 tests:
+- assertShopIsEmpty: 7 tests (empty, transactions-only, products-only, parties-only, payments-only, all-four, message check).
+- relinkTransactionItemsToProducts: 5 tests (case-insensitive match, unmatched, first-wins on duplicates, empty shop, no catalog).
+- rebuildProductStock: 9 tests (sale/purchase, credit-note affectsStock true/false, debit-note affectsStock=true, income/expense skip, null-productId skip, no-transactions, multiple products, THE BUG test: stored currentStock is ignored — only openingStock + transactions matter).
+- All tests use stub db handle — no real DB needed.
+
+§6 — Adjacent bugs found during scan (logged in BUGS-FOUND.md):
+- BUG-050 (rebuildProductStock not atomic — Low, edge-case): rebuild loop issues one updateMany per product, not wrapped in $transaction. If DB fails partway, partial state. Workaround: re-restore after Danger Zone reset. Proper fix: wrap in $transaction, pass tx to helpers.
+- BUG-051 (rebuild uses findMany+JS reduce instead of SQL aggregate — Low, perf): matters for 10K+ transaction backups. Acceptable for one-time restore operation.
+
+Verification:
+- npx tsc --noEmit: 0 errors
+- npx eslint (4 changed files): 0 errors, 0 warnings
+- npx jest: 1714/1714 pass (48 suites) — was 1714? Actually was 1693 after Batch 1; +21 new tests = 1714.
+- npx next build: Compiled successfully (BUILD_ID: ukAI1PrhVIG8xDjL_Qoxs)
+
+Bug-scan while in the area:
+- Confirmed restore route no longer trusts stored currentStock (rebuild overwrites it).
+- Confirmed relink handles case-insensitive + duplicate names safely (first-wins).
+- Confirmed rebuild direction logic matches transactions/[id]/route.ts PUT (sale=-1, purchase=+1, credit-note+affectsStock=+1, debit-note+affectsStock=-1, income/expense=0).
+- Confirmed confirmation dialog uses existing useConfirmDialog hook (same as Danger Zone reset).
+
+Stage Summary:
+- V26 Phase 1 Batch 2 COMPLETE. N5 implemented per Option A (user-chosen).
+- Files changed: 5 (src/lib/restore-utils.ts [new], src/app/api/import/restore/route.ts, src/components/settings/Settings.tsx, src/__tests__/lib/v26-restore-guard.test.ts [new], BUGS-FOUND.md).
+- 2 new bugs logged: BUG-050, BUG-051 (both OPEN, Low severity, queued for follow-up).
+- 1714 tests passing (was 1693; +21 new), 0 TypeScript errors, 0 ESLint errors, build clean.
+- Pushed to GitHub: commit bc94efe. Vercel auto-deploying.
+- Awaiting user "verified" before Batch 3 (N6, N7, N8 — smaller money edges: estimate→sale discount, snap-zone, Product extension trap).
