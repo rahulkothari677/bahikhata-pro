@@ -6810,3 +6810,111 @@ Stage Summary:
 - Pushed to GitHub: commit fda27f7. Vercel auto-deploying.
 - BUGS-FOUND.md updated: BUG-047 status changed OPEN → FIXED.
 - Awaiting Vercel deploy + user verification, then proceeding to Batch 3 (N6, N7, N8 — smaller money edges: estimate→sale discount, snap-zone, Product extension trap).
+
+---
+Task ID: audit-v26-batch-2b
+Agent: main
+Task: V26 BUG-047 fix — surface 15 reports in More screen (was reports-hub only). User-flagged: "you haven't fixed still the gst and other features which is not visible in the mobile more nav bar."
+
+Work Log:
+- Acknowledged: I logged BUG-047 in Batch 1 but did not actually fix it. User correctly called this out. Fixing now.
+- Pre-change scan: confirmed 15 destinations in src/lib/nav-registry.ts with `surfaces: ['reports-hub']` only (line numbers 524, 541, 558, 575, 592, 609, 627, 644, 661, 678, 695, 713, 730, 748, 765). All are report destinations that should appear in More.
+- Verified none had `moduleKey` set — if I just added 'more' to surfaces without moduleKey, staff without reports permission would see/click them (permission-bypass regression). So both changes are needed together.
+
+§1 — nav-registry.ts: 15 surface + moduleKey edits:
+- All 15 destinations: changed `surfaces: ['reports-hub']` → `surfaces: ['more', 'reports-hub']`.
+- All 15 destinations: added `moduleKey: 'reports'` so filterByPermissions gates them behind reports module access (matching the existing 'reports' nav entry at line 457).
+- Updated section comments from "(ReportsHub)" → "(ReportsHub + More)" for clarity.
+- Files changed: src/lib/nav-registry.ts.
+
+§2 — MoreScreen.tsx SECTION_META: 4 new subcategory mappings:
+- Pre-fix: SECTION_META only had 'gst-tax', 'money-banking', 'items-stock', 'reports-analytics', 'sale-purchase', 'smart-tools'. The 15 reports use subcategories 'financial', 'gst', 'inventory-reports', 'banking' — none of which were in SECTION_META.
+- The MoreScreen rendering loop is `if (subcat && SECTION_META[subcat])` — items whose subcategory isn't in SECTION_META are SILENTLY DROPPED. So just adding 'more' to surfaces without these mappings would have been a no-op. (Important catch — would have looked "fixed" in code but produced no visible change.)
+- Added 4 new mappings: 'gst' → "GST Reports" (FileText), 'financial' → "Financial Reports" (BarChart3), 'inventory-reports' → "Inventory Reports" (Package), 'banking' → "Banking Reports" (Banknote).
+- Added comment explaining the dependency.
+- Files changed: src/components/layout/MoreScreen.tsx.
+
+After fix, More screen sections will contain:
+- GST & Tax (existing): Reconciliation, Period Lock
+- GST Reports (new): GSTR-1, GSTR-3B, GSTR-2B Reconciliation, GST Summary, HSN Summary
+- Financial Reports (new): P&L, Bill-wise Profit, Item-wise Profit, Party Statement, Debt Aging, Account Summary
+- Inventory Reports (new): Stock Report, Inventory Aging
+- Banking Reports (new): Cashflow Report, Consolidated Report
+- (existing sections unchanged: Sale & Purchase, Money & Banking, Items & Stock, Smart Tools)
+
+Verification:
+- npx tsc --noEmit: 0 errors
+- npx eslint src/lib/nav-registry.ts src/components/layout/MoreScreen.tsx: 0 errors, 0 warnings
+- npx jest: 1714/1714 pass (48 suites) — unchanged, no behavior change in tests
+- npx next build: Compiled successfully (BUILD_ID: Q0chhhBXAKfrqj1Ivr_4U)
+- v26-nav-registry-lint.test.ts: all 5 parity checks pass (ids unique, surfaces non-empty, mobile→desktop reachable, labelKey/descKey resolve)
+
+Stage Summary:
+- V26 BUG-047 fix COMPLETE. All 15 reports now appear in More screen under their respective subcategory headings.
+- Files changed: 2 (src/lib/nav-registry.ts, src/components/layout/MoreScreen.tsx).
+- Pushed to GitHub: commit fda27f7. Vercel auto-deploying.
+- BUGS-FOUND.md updated: BUG-047 status changed OPEN → FIXED.
+- Awaiting Vercel deploy + user verification, then proceeding to Batch 3 (N6, N7, N8 — smaller money edges: estimate→sale discount, snap-zone, Product extension trap).
+
+---
+Task ID: audit-v26-batch-3
+Agent: main
+Task: V26 Phase 1 Batch 3 — N6 (estimate→sale discount), N7 (snap-zone narrowed), N8 (Product money-extension complete) per masterplan.
+
+Work Log:
+- Read worklog for Batch 2 + Batch 2b context.
+- Pre-change scan: read all 3 target files (TransactionDetail.tsx:425-465, paid-amount.ts:39-68, prisma-money-extension.ts:218-257). Confirmed all 3 findings still open at HEAD.
+- For N8: also checked Transaction block (:300-380) + Payment block (:460-525) for the delete/aggregate/groupBy pattern to copy.
+
+§1 — N6: Estimate→Sale conversion carries order-level discount:
+- File: src/components/ledger/TransactionDetail.tsx (line 437 area, Convert to Sale onClick handler).
+- Added `discountAmount: txn.discountAmount || 0` to the `__ledgerPreset.data` object.
+- Confirmed TransactionEntry.tsx:155 already reads `draft.discountAmount` (`if (typeof draft.discountAmount !== 'undefined') setDiscountAmount(draft.discountAmount)`), so the preset shape was the missing link.
+- Worked example from audit: estimate ₹1,000 taxable + ₹100 order discount + 18% GST → total ₹1,062. Convert to sale with old code → new sale computed with discount ₹0 → subtotal ₹1,000, GST ₹180, total ₹1,180 — ₹118 higher than the quote. Fixed: discount carried, total matches estimate.
+- 3 new tests in v26-batch3-money-edges.test.ts (preset shape includes discountAmount, no-discount carries 0, structural guardrail on source).
+- Files changed: src/components/ledger/TransactionDetail.tsx.
+
+§2 — N7: resolveFinalPaid snap-zone narrowed:
+- File: src/lib/paid-amount.ts (resolveFinalPaid, lines 50-69).
+- Was: `if (Math.abs(totalAmount - finalPaid) < 1 && !(isNoteType(type) && finalPaid === 0))` — any value within ₹1 of total snapped to total.
+- Now: `const withinUpperSnapBand = finalPaid >= totalAmount - 0.005 && finalPaid <= totalAmount + 1; if (!isNote && withinUpperSnapBand) snap`.
+- Key insight: the original FIX M3 intent was to absorb pre-round-off client values, but those are ALWAYS `paid ≥ total` by a rounding sliver (e.g. ₹1000.50 on ₹1000). Genuine partials are `paid < total`. Narrowing to upper-band-only preserves the round-off absorption while stopping the silent partial-to-full upgrade.
+- Notes (credit/debit) get an even stricter rule: NO upward snap at all. A note refund is entered deliberately; precision matters more than convenience. A ₹4.50 refund on a ₹5 note stays ₹4.50.
+- Updated existing V24 snap test to reflect the new contract: ₹999.6 stays partial (was: snapped to 1000), ₹1000.5 still snaps (round-off artifact), ₹299.5 on a ₹300 note stays ₹299.5 (was: snapped to 300).
+- 16 new + updated tests in v26-batch3-money-edges.test.ts covering: partials below total stay partial (₹999.50, ₹999.99, ₹995), round-off artifacts above total snap (₹1000.50, ₹1000.99), outside upper band clamped by §6.4 (₹1001.01), notes never snap upward (₹4.50 on ₹5, ₹4.99 on ₹5), regression guards for V24 §1 missing-paid defaults + ₹0-on-sub-₹1-note.
+- Files changed: src/lib/paid-amount.ts, src/__tests__/lib/v24-note-accounting.test.ts.
+
+§3 — N8: Product money-extension has all 4 missing handlers:
+- File: src/lib/prisma-money-extension.ts (product block, lines 218-301).
+- Added 4 new handlers to the product block (was missing all 4):
+  - `delete`: calls `convertRowOnRead('Product', await query(args))` so the returned row's money cols (purchasePrice, salePrice, mrp) are in rupees, not paise.
+  - `deleteMany`: passthrough (returns count, no money cols).
+  - `aggregate`: iterates `_sum/_avg/_min/_max` and calls `fromPaise` on each Product money column. Same pattern as Transaction/Payment/TransactionItem.
+  - `groupBy`: same `_sum/_avg/_min/_max` conversion, applied to each grouped row.
+- Confirmed the single existing call site (products/route.ts:171: `await db.product.delete({ where: { id } })`) discards the return — no live bug today. But the next reader who writes `const deleted = await db.product.delete()` and reads `deleted.salePrice` would ship a 100× bug. This is the recurring whitelist trap (BUG-020, BUG-011 — same class).
+- 6 new structural tests in v26-batch3-money-edges.test.ts asserting: all 12 ops are defined in the product block, delete calls convertRowOnRead('Product', ...), aggregate + groupBy iterate _sum/_avg/_min/_max and call fromPaise, Product is in MONEY_COLUMNS.
+- Files changed: src/lib/prisma-money-extension.ts.
+
+§4 — Adjacent bugs found during scan:
+- None new. Confirmed the only existing `db.product.delete` call site (products/route.ts:171) discards the return — so N8 is purely defensive (latent trap fix). No live 100× bug today.
+- Grepped for other `Math.abs.*< 1` snap patterns in src/lib — only the one in paid-amount.ts (now narrowed). No other snap zones to fix.
+
+Verification:
+- npx tsc --noEmit: 0 errors
+- npx eslint (5 changed files): 0 errors, 0 warnings
+- npx jest: 1740/1740 pass (49 suites) — was 1714; +26 new tests
+- npx next build: Compiled successfully (BUILD_ID: 1jAV6iH6Yk8HWZR70DIWk)
+
+Bug-scan while in the area:
+- Confirmed TransactionDetail.tsx Convert to Sale is the only estimate→sale preset path (no other entry points to worry about).
+- Confirmed paid-amount.ts is the only file with snap-zone logic (grep `Math.abs.*< 1` in src/lib = 1 match, the one we narrowed).
+- Confirmed products/route.ts:171 is the only `db.product.delete` call site in src/ (grep = 1 match, discards return).
+- Confirmed no `db.product.aggregate` or `db.product.groupBy` call sites exist yet in src/ — N8 is purely future-proofing.
+
+Stage Summary:
+- V26 Phase 1 Batch 3 COMPLETE. All 3 N-fixes (N6, N7, N8) implemented + tested + lint-clean + build-clean.
+- Files changed: 5 (src/components/ledger/TransactionDetail.tsx, src/lib/paid-amount.ts, src/lib/prisma-money-extension.ts, src/__tests__/lib/v24-note-accounting.test.ts, src/__tests__/lib/v26-batch3-money-edges.test.ts [new]).
+- 0 new BUGS-FOUND entries (no adjacent bugs found).
+- 1740 tests passing (was 1714; +26 new), 0 TypeScript errors, 0 ESLint errors, build clean.
+- Pushed to GitHub: commit ce2965b. Vercel auto-deploying.
+- Awaiting user "verified" before Batch 4 (N9 — polish: GSTR-1 gt/cur_gt hardcoded 0).
