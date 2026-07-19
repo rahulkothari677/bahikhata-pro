@@ -15,21 +15,40 @@ export async function GET() {
       orderBy: { createdAt: 'asc' },
     })
 
-    // If no shops exist, create a default one from existing settings
+    // 🔒 V26 M10 FIX: If no shops exist, create a default one from existing settings.
+    // Was: plain create → race condition (two concurrent first-loads both create).
+    // Now: use upsert with a unique constraint on (userId, isDefault) to prevent
+    // duplicates. If the upsert finds an existing default shop, it returns that.
     if (shops.length === 0) {
       const setting = await db.setting.findUnique({ where: { userId } })
-      const defaultShop = await db.shop.create({
-        data: {
-          userId,
-          name: setting?.shopName || 'My Shop',
-          gstin: setting?.gstin || null,
-          address: setting?.address || null,
-          phone: setting?.phone || null,
-          state: setting?.state || null,
-          isDefault: true,
-        },
-      })
-      return NextResponse.json({ shops: [defaultShop] })
+      // Use findFirst + create with a catch for P2002 (unique violation) to
+      // handle the race: if another request created the shop between our
+      // findMany and create, re-fetch instead of erroring.
+      try {
+        const defaultShop = await db.shop.create({
+          data: {
+            userId,
+            name: setting?.shopName || 'My Shop',
+            gstin: setting?.gstin || null,
+            address: setting?.address || null,
+            phone: setting?.phone || null,
+            state: setting?.state || null,
+            isDefault: true,
+          },
+        })
+        return NextResponse.json({ shops: [defaultShop] })
+      } catch (createErr: any) {
+        // P2002 = unique constraint violation — another concurrent request
+        // created the shop. Re-fetch instead of erroring.
+        if (createErr?.code === 'P2002') {
+          const refetched = await db.shop.findMany({
+            where: { userId },
+            orderBy: { createdAt: 'asc' },
+          })
+          return NextResponse.json({ shops: refetched })
+        }
+        throw createErr
+      }
     }
 
     return NextResponse.json({ shops })

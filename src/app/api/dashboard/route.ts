@@ -516,7 +516,7 @@ export async function GET(req: NextRequest) {
     // oversold products contribute 0 to the total (their value is already
     // realized through sales, not sitting in inventory).
     const totalStockValue = roundMoney(
-      allProducts.reduce((s, p) => s + Math.max(0, p.currentStock) * p.purchasePrice, 0)
+      allProducts.reduce((s, p) => s + roundMoney(Math.max(0, p.currentStock) * p.purchasePrice), 0)
     )
 
     // === Recent transactions (not range-dependent, always latest) ===

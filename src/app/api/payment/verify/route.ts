@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { rateLimit, rateLimitedResponse } from '@/lib/rate-limit'
 import { getAuthUserIdOwnerOnly } from '@/lib/get-auth'
 import { db } from '@/lib/db'
+import { fromPaise } from '@/lib/money'
 import crypto from 'crypto'
 import { apiError } from '@/lib/api-error'
 import Razorpay from 'razorpay'
@@ -158,7 +159,7 @@ export async function POST(req: NextRequest) {
     const endDate = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000)
 
     // Calculate the actual amount in rupees (from paise)
-    const amountInr = amount / 100
+    const amountInr = fromPaise(amount)
 
     // Check if this payment was already processed (idempotency fast-path).
     // If a Subscription row with this paymentId exists, the payment was

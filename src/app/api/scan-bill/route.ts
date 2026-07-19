@@ -57,6 +57,17 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const { imageBase64, imageUrl, billType = 'purchase' } = body
 
+    // 🔒 V26 M14 FIX: Validate billType + scanLang. Was: unvalidated — any
+    // string could be stored as billType and interpolated into the AI prompt.
+    if (!['sale', 'purchase'].includes(billType)) {
+      return NextResponse.json({ error: 'billType must be "sale" or "purchase"' }, { status: 400 })
+    }
+    const scanLang = body.scanLang || 'original'
+    const VALID_SCAN_LANGS = ['original', 'en', 'hi', 'gu', 'mr', 'ta', 'te']
+    if (!VALID_SCAN_LANGS.includes(scanLang)) {
+      return NextResponse.json({ error: `scanLang must be one of: ${VALID_SCAN_LANGS.join(', ')}` }, { status: 400 })
+    }
+
     // Accept either a Cloudinary URL or base64
     const imageSource = imageUrl || imageBase64
 
@@ -191,7 +202,7 @@ Return JSON only, no commentary, no markdown formatting.`
 
     // Language instruction (appended to prompt)
     // 'original' = keep bill language, otherwise translate item names to selected language
-    const scanLang = body.scanLang || 'original'
+    // scanLang was already validated + declared at line 65 (V26 M14 fix)
     const langInstruction = scanLang === 'original'
       ? '\n\nIMPORTANT: Return item names in the SAME language as written on the bill. Do NOT translate.'
       : `\n\nIMPORTANT: Return all item names in ${getLanguageName(scanLang)} language. Translate if the bill is in a different language.`
@@ -349,15 +360,43 @@ Return JSON only, no commentary, no markdown formatting.`
     // LLMs are unreliable at multi-number math. We recompute subtotal, GST, and
     // total from the item-level data using money.ts helpers. If the AI's total
     // doesn't match our computed total, we flag it as "needs review".
+    //
+    // 🔒 V26 H9 FIX: Was: GST computed on pre-discount gross (quantity * unitPrice).
+    // The actual save (computeLineItems) computes GST on POST-DISCOUNT taxable
+    // (order discount distributed proportionally). So the preview showed different
+    // GST than what would be saved. Now: distribute the discount proportionally
+    // across items BEFORE computing GST, matching computeLineItems' behavior.
     const aiTotalAmount = Number(parsed.totalAmount) || 0
-    const computedSubtotal = roundMoney(
+    const grossSubtotal = roundMoney(
       parsed.items.reduce((s: number, i: any) => s + (i.quantity * i.unitPrice), 0)
     )
     const computedDiscount = Number(parsed.discountAmount) || 0
+
+    // Distribute discount proportionally across items (matching computeLineItems)
     let computedGst = 0
-    parsed.items.forEach((item: any) => {
-      computedGst = roundMoney(computedGst + calculateGst(item.quantity * item.unitPrice, item.gstRate))
-    })
+    let computedSubtotal = 0
+    if (grossSubtotal > 0 && computedDiscount > 0) {
+      // Proportional discount distribution
+      let remainingDiscount = computedDiscount
+      parsed.items.forEach((item: any, idx: number) => {
+        const itemGross = roundMoney(item.quantity * item.unitPrice)
+        const isLast = idx === parsed.items.length - 1
+        const itemDiscount = isLast
+          ? remainingDiscount  // last item absorbs rounding residual
+          : roundMoney((itemGross / grossSubtotal) * computedDiscount)
+        remainingDiscount = roundMoney(remainingDiscount - itemDiscount)
+        const itemTaxable = roundMoney(itemGross - itemDiscount)
+        computedSubtotal = roundMoney(computedSubtotal + itemGross)
+        computedGst = roundMoney(computedGst + calculateGst(itemTaxable, item.gstRate))
+      })
+    } else {
+      // No discount — simple path
+      computedSubtotal = grossSubtotal
+      parsed.items.forEach((item: any) => {
+        computedGst = roundMoney(computedGst + calculateGst(item.quantity * item.unitPrice, item.gstRate))
+      })
+    }
+
     const { cgst: computedCgst, sgst: computedSgst } = splitGst(computedGst)
     const computedTotal = roundMoney(computedSubtotal - computedDiscount + computedGst)
 

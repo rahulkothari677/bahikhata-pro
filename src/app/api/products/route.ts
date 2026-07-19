@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { getAuthUserIdWithModule } from '@/lib/get-auth'
 import { withCache, noStore } from '@/lib/cache'
 import { checkEntityLimit } from '@/lib/usage-limits'
+import { roundMoney } from '@/lib/money'
 import { validateBody, createProductSchema, updateProductSchema } from '@/lib/validation'
 import { apiError } from '@/lib/api-error'
 
@@ -28,7 +29,7 @@ export async function GET() {
       // which went negative when stock was oversold, making inventory totals
       // misleading. The actual currentStock is still shown (truth); only the
       // VALUE is clamped for display so totals don't go negative.
-      stockValue: Math.max(0, p.currentStock) * p.purchasePrice,
+      stockValue: roundMoney(Math.max(0, p.currentStock) * p.purchasePrice),
       isLowStock: p.currentStock <= p.lowStockThreshold,
       isOversold: p.currentStock < 0,  // 🔒 V11: distinct flag for OVERSOLD badge
     }))

@@ -172,6 +172,18 @@ export async function POST(req: NextRequest) {
     const body = await req.json()
     const { transactionId, irn, signedQR } = body
 
+    // 🔒 V26 H7 FIX: Input validation. Was: no type checks, no length limits.
+    // Now: validate types + lengths before processing.
+    if (typeof transactionId !== 'string' || transactionId.length > 100) {
+      return NextResponse.json({ error: 'Invalid transactionId' }, { status: 400 })
+    }
+    if (typeof irn !== 'string' || irn.length > 100) {
+      return NextResponse.json({ error: 'Invalid IRN' }, { status: 400 })
+    }
+    if (signedQR !== undefined && signedQR !== null && (typeof signedQR !== 'string' || signedQR.length > 10000)) {
+      return NextResponse.json({ error: 'Invalid signedQR (too long)' }, { status: 400 })
+    }
+
     if (!transactionId || !irn) {
       return NextResponse.json({ error: 'transactionId and irn are required' }, { status: 400 })
     }

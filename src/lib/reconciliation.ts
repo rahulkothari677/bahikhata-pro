@@ -138,13 +138,19 @@ export async function checkGstReconciliation(userId: string): Promise<Reconcilia
   // This caused a false "GST mismatch" whenever credit notes or debit notes
   // had GST. Now both queries use the same type filter for an apples-to-apples
   // comparison.
+  //
+  // 🔒 V26 M11 FIX: Was: type filter ['sale', 'purchase'] only — credit notes
+  // and debit notes were excluded, so the reconciliation check couldn't detect
+  // header-vs-item GST drift on notes. Now: include all four transaction types
+  // that carry GST, matching what the GST reports actually file.
+  const TXN_TYPES = ['sale', 'purchase', 'credit-note', 'debit-note']
   const [itemGst, headerGst] = await Promise.all([
     db.transactionItem.aggregate({
-      where: { transaction: { userId, deletedAt: null, type: { in: ['sale', 'purchase'] } } },
+      where: { transaction: { userId, deletedAt: null, type: { in: TXN_TYPES } } },
       _sum: { cgst: true, sgst: true, igst: true },
     }),
     db.transaction.aggregate({
-      where: { userId, deletedAt: null, type: { in: ['sale', 'purchase'] } },
+      where: { userId, deletedAt: null, type: { in: TXN_TYPES } },
       _sum: { cgst: true, sgst: true, igst: true },
     }),
   ])

@@ -28,14 +28,11 @@ export async function DELETE() {
     const { userId, error } = await getAuthUserIdOwnerOnly()
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    // Log the deletion request FIRST (before deleting user, so audit log has userId)
-    await logAudit({
-      userId,
-      action: AUDIT_ACTIONS.DATA_RESET,
-      entityType: 'user',
-      entityId: userId,
-      metadata: { reason: 'User requested account deletion' },
-    })
+    // 🔒 V26 M1 FIX: Log the deletion AFTER the $transaction succeeds.
+    // Was: logAudit ran BEFORE the transaction → if the transaction rolled back,
+    // the audit log still said "data reset" (misleading for compliance).
+    // Now: logAudit runs after successful deletion. The userId is captured
+    // before deletion so the log can reference it.
 
     // 1. Get the user record (for email — needed to clean up passwordResetToken
     //    which is keyed by email, not userId).
@@ -130,6 +127,21 @@ export async function DELETE() {
       // Finally, delete the user account itself
       db.user.delete({ where: { id: userId } }),
     ])
+
+    // 🔒 V26 M1: Log AFTER successful deletion (was: before $transaction).
+    // Note: the user row is now deleted, but logAudit stores userId as a
+    // string — it doesn't need the row to exist.
+    try {
+      await logAudit({
+        userId,
+        action: AUDIT_ACTIONS.DATA_RESET,
+        entityType: 'user',
+        entityId: userId,
+        metadata: { reason: 'User requested account deletion', deletedAt: new Date().toISOString() },
+      })
+    } catch {
+      // Non-critical — the deletion succeeded, audit log is secondary
+    }
 
     return NextResponse.json({
       success: true,
