@@ -7655,3 +7655,57 @@ Stage Summary:
 - Self-audit batch 1 shipped: 2 CRITICAL + 3 HIGH fixed.
 - Comprehensive report saved for auditor review.
 - Remaining 6 HIGH + 15 MEDIUM + 14 LOW findings queued for subsequent batches.
+
+---
+Task ID: audit-v26-self-audit-batch-2
+Agent: main
+Task: Fix remaining HIGH findings (H1, H5, H6, H8) + MEDIUM findings (M3, M12) from comprehensive self-audit.
+
+Work Log:
+§1 — H1: Credit-note cap check race condition:
+- Moved validateNoteAgainstOriginal INSIDE createTransactionWithStock (runs in $transaction).
+- Passes `tx` instead of `db` to the validation function.
+- Throws NOTE_VALIDATION_FAILED error which is caught and returned as 400 to client.
+- The check + create are now atomic — two concurrent notes can't both pass the cap.
+
+§2 — H5: Settings PUT validation:
+- Added per-field validation: GSTIN regex, email regex, stockPolicy enum, UPI VPA regex.
+- Added length limits: shopName/ownerName ≤200, address ≤2000, phone ≤20, state ≤100.
+- Sanitized booleans (hideProfit, roundOffEnabled) with !! coercion.
+
+§3 — H6: Staff PATCH zod validation:
+- Imported validateBody + updateStaffSchema from validation.ts.
+- Replaced raw body type assertion with validateBody(updateStaffSchema, body).
+
+§4 — H8: Product openingStock race condition:
+- Wrapped the openingStock read + currentStock increment in a $transaction.
+- Re-reads openingStock inside the transaction for an atomic delta computation.
+- Prevents race where concurrent sale decrements currentStock between read and update.
+
+§5 — M3: Cron secret timing-safe comparison:
+- Replaced `!==` with crypto.timingSafeEqual + Buffer comparison.
+- Added `import crypto from 'crypto'`.
+
+§6 — M12: Analytics tiedUpValue profit leak:
+- Gated tiedUpValue by hideProfit (set to 0 when hidden).
+- Also clamped at 0 for negative stock (Math.max(0, currentStock)).
+
+Adjacent bugs found during scan:
+- None new beyond the self-audit report findings.
+
+Remaining self-audit findings (queued for future batches):
+- H7: e-invoice IRN POST missing zod validation
+- H9: scan-bill GST preview mismatch with discount
+- M1, M2, M4-M11, M13-M15: medium findings
+- L1-L14: low findings
+- Pre-existing tsc errors in reconciliation.ts + subscription.ts (not from my changes)
+
+Verification:
+- jest: 1818/1818 pass (54 suites)
+- next build: compiled successfully
+- tsc: 0 errors on changed files
+
+Stage Summary:
+- Self-audit batch 2 shipped: 4 HIGH + 2 MEDIUM fixed.
+- Remaining: 2 HIGH (H7, H9) + 13 MEDIUM + 14 LOW queued.
+- Total self-audit fixes shipped: 2 CRITICAL + 7 HIGH + 2 MEDIUM across 2 batches.
