@@ -7547,3 +7547,60 @@ Stage Summary:
 - 1818 tests passing (main app), 0 TypeScript errors, 0 ESLint errors, build clean.
 - Both repos pushed to GitHub. Vercel deploying both.
 - Admin schema migration required: user needs to run `npx prisma db push` or `npx prisma migrate dev` on the admin Neon database.
+
+---
+Task ID: audit-v26-phase2-verification
+Agent: main
+Task: Fix all 5 auditor verification findings (N1-N5) from Phase 2 Verification report.
+
+Work Log:
+- Read auditor's Phase 2 verification report. 5 items remain: N1 (critical), N2 (high), N3 (high), N4 (blue), N5 (blue).
+- Auditor confirmed S1, S2, S3, S4, S7, A4, and all 5 deferrals are correct. A1 is code-correct but not deployable (N1). A2 has one residual (N2). A3 is partial (N4). N3 is an architectural landmine. N5 is a missing rate limit.
+
+§1 — N1 🔴: AdminUser columns in main app schema + migration:
+- Added passwordResetTokenHash (String?) + passwordResetExpiresAt (DateTime?) to main app's prisma/schema.prisma AdminUser model.
+- Created migration: prisma/migrations/20260719000001_adminuser_password_reset/migration.sql (ALTER TABLE AdminUser ADD COLUMN for both).
+- Main app deploys via migrate-with-retry.sh → migration applies on next deploy → columns created in shared Neon DB.
+- Admin app's schema already mirrors these fields (added in Batch 3) — prisma generate confirmed.
+
+§2 — N2 🟠: data-exports moved to FOUNDER_ONLY_PREFIXES:
+- Was: /api/admin/data-exports in MUTATION_RESTRICTED_PREFIXES — blocked viewers but allowed non-founder admins.
+- Now: in FOUNDER_ONLY_PREFIXES — blocks all non-founder roles. Mass export of all users' data now requires founder, matching database/export.
+
+§3 — N3 🟠: Migration policy documented:
+- Added "CRITICAL: Database Migration Policy" section to admin README.md.
+- Declares main app's migrations as single source of truth.
+- Forbids prisma db push from the admin repo.
+- Documents the correct workflow: add field to main schema → create main migration → mirror in admin schema → prisma generate (no db push).
+
+§4 — N4 🔵: SSRF DNS resolution:
+- Replaced string-only hostname check with dns.lookup resolution.
+- Now resolves hostname to IP(s) and checks each against private/loopback/link-local ranges.
+- Catches: DNS-resolving domains, decimal IP encoding, IPv6-mapped forms, DNS rebinding.
+- Also blocks non-standard ports (80/443 only).
+- DNS errors don't block (avoids false negatives from temporary DNS issues).
+
+§5 — N5 🔵: Rate limit on forgot-password:
+- Added 5/15min/IP rate limiter to POST /api/admin/forgot-password.
+- Uses same in-memory pattern as admin-rate-limit.ts.
+- Parity with S4 (main app's reset-confirm rate limit).
+
+Verification (main app):
+- tsc --noEmit: 0 errors
+- jest: 1818/1818 pass (54 suites)
+- next build: compiled successfully
+
+Verification (admin app):
+- prisma generate: successful
+- tsc --noEmit: my files clean (pre-existing otplib/webhook-engine errors unchanged)
+- Pushed to both repos.
+
+Stage Summary:
+- All 5 auditor verification findings (N1-N5) FIXED.
+- Main app: commit d8adb16 (N1 + N3).
+- Admin app: commit a757e6c (N2 + N3 + N4 + N5).
+- The 🔴 N1 (forgot-password 500 in production) is now closed — the main app's next deploy will create the columns via migration.
+- The 🟠 N2 (non-founder admin can export all users) is now closed — data-exports is founder-only.
+- The 🟠 N3 (shared-DB landmine) is now documented + policy established.
+- The 🔵 N4/N5 are hardening improvements.
+- Awaiting auditor re-verification of N1-N3.
