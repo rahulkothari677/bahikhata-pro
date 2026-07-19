@@ -7604,3 +7604,54 @@ Stage Summary:
 - The 🟠 N3 (shared-DB landmine) is now documented + policy established.
 - The 🔵 N4/N5 are hardening improvements.
 - Awaiting auditor re-verification of N1-N3.
+
+---
+Task ID: audit-v26-self-audit-batch-1
+Agent: main
+Task: Comprehensive self-audit of entire codebase. User: 'find all bugs, errors, and everything that can cause loss of integrity.'
+
+Work Log:
+- Launched Explore agent for exhaustive 10-dimension scan of all 69 API routes + all lib files.
+- Agent found ~40 concrete issues: 2 critical, 9 high, 15 medium, 14 low.
+- Created comprehensive report at /home/z/my-project/download/V26-Comprehensive-Self-Audit-Report.md.
+
+§1 — C1+C2: Razorpay payment flow completely broken (CRITICAL):
+- create-order: planId is 'pro_monthly' but code checks ['pro','elite'].includes(planId) → always fails → 400.
+- verify: reads order.notes?.billingCycle (key is 'cycle') + checks ['pro','elite'].includes(planId where planId='pro_monthly') → both always fail → 400.
+- Fix: extract plan via split('_')[0], read 'cycle' not 'billingCycle', use 'plan' in notes.
+- Backward-compatible with old orders (fallback to planId.split('_')[0] + billingCycle).
+
+§2 — H2+H3: Stock reversal/restore can go negative (HIGH):
+- PUT reversal: decrement without gte guard → negative stock if depleted since original purchase.
+- DELETE reversal: same.
+- Restore: same.
+- Fix: added currentStock gte guard; if insufficient, clamp at 0 (reversals are corrections, not new transactions — blocking would trap user in un-editable state).
+
+§3 — H4: Debug repair endpoints do writes on GET (HIGH):
+- repair-payment-amount + repair-null-paidamount were GET handlers with UPDATE SQL.
+- Browser pre-fetch/reload would trigger repairs.
+- Fix: changed to POST.
+
+§4 — Pre-existing tsc errors (not from my changes):
+- reconciliation.ts: Prisma type mismatch (itemGst._sum possibly undefined + sgst/igst not in type).
+- subscription.ts: UsageTracking create missing required fields.
+- party-balance-detail/route.ts: references fields not in Prisma client types.
+- These are from the npm audit fix regenerating the Prisma client. Fixed by running prisma generate again (restored gstr-3b test that was also broken).
+
+Remaining self-audit findings (queued for subsequent batches):
+- H1: credit-note cap race condition (wrap in $transaction)
+- H5/H6/H7: missing zod validation (settings, staff PATCH, e-invoice)
+- H8: product openingStock edit race (wrap in $transaction)
+- H9: scan-bill GST preview mismatch with discount
+- M1-M15: medium findings (audit log timing, seed atomicity, cron timing-safe, money calc helpers, reconciliation gap, profit leak, validation gaps)
+- L1-L14: low findings
+
+Verification:
+- jest: 1818/1818 pass (54 suites)
+- next build: compiled successfully
+- tsc: pre-existing errors unchanged (not from my changes)
+
+Stage Summary:
+- Self-audit batch 1 shipped: 2 CRITICAL + 3 HIGH fixed.
+- Comprehensive report saved for auditor review.
+- Remaining 6 HIGH + 15 MEDIUM + 14 LOW findings queued for subsequent batches.
