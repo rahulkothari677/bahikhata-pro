@@ -1,5 +1,17 @@
 'use client'
 
+/**
+ * Sidebar — desktop navigation.
+ *
+ * 🔒 V26 P9: Redesigned Tools section.
+ * Was: flat list of 10+ items dumped together.
+ * Now: tools grouped by subcategory with colorful sub-headers,
+ * matching the main nav's visual quality. Collapsible groups.
+ *
+ * Design reference: Linear (grouped sidebar), Notion (collapsible sections),
+ * Stripe Dashboard (categorized nav).
+ */
+
 import { useAppStore, type ViewType } from '@/store/app-store'
 import { useTranslation } from '@/hooks/use-translation'
 import { useState, useRef, useEffect, useMemo } from 'react'
@@ -10,42 +22,44 @@ import { offlineFetch } from '@/lib/offline-fetch'
 import { useFeatureFlags } from '@/hooks/use-feature-flags'
 import { useStaffPermissions } from '@/hooks/use-staff-permissions'
 import type { ModuleKey } from '@/lib/staff-permissions'
-import { prefetchView } from '@/lib/prefetch'  // 🔒 V11 §3.3
-// 🔒 AUDIT V25 §6.1 (Batch 8 Phase 2): Sidebar now renders from the NavRegistry.
-import { NAV_REGISTRY, filterByPermissions, type NavDestination } from '@/lib/nav-registry'
+import { prefetchView } from '@/lib/prefetch'
+import { NAV_REGISTRY, filterByPermissions, groupBySubcategory, type NavDestination, type NavSubcategoryId } from '@/lib/nav-registry'
 import { handleNavAction } from '@/lib/handle-nav-action'
 import { Calculator } from 'lucide-react'
 import {
   BookOpenText,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   FolderOpen,
+  ShoppingCart, Users, Package, Banknote,
+  FileText, BarChart3, Sparkles, Store,
 } from 'lucide-react'
-// 🔒 AUDIT V25 FIX §4.2 follow-up: Removed 9 unused lucide imports
-// (Settings, Sparkles, Crown, HelpCircle, Info, Star, LogOut, Download,
-// Pencil, MoreHorizontal) — they were left over from V21-011 when the
-// Sidebar buttons that used them were removed.
-// 🔒 AUDIT V25 §6.1 (Batch 8 Phase 2): navItems + toolsNavItems arrays REMOVED.
-// Sidebar now renders from the NavRegistry (src/lib/nav-registry.ts).
-// The registry is the single source of truth — adding a new feature there
-// automatically makes it appear in the Sidebar with correct permissions.
+import type { LucideIcon } from 'lucide-react'
+
+// 🔒 V26 P9: Sub-headers for the Tools section, grouped by subcategory.
+// Same SECTION_META as MoreScreen — consistent visual language across platforms.
+const TOOLS_SECTION_META: Partial<Record<NavSubcategoryId, { title: string; accentColor: string }>> = {
+  'sale-purchase':       { title: 'Transactions',      accentColor: 'text-indigo-500 dark:text-indigo-400' },
+  'parties':             { title: 'Parties',            accentColor: 'text-indigo-500 dark:text-indigo-400' },
+  'items-stock':         { title: 'Stock',              accentColor: 'text-amber-500 dark:text-amber-400' },
+  'money-banking':       { title: 'Banking',            accentColor: 'text-emerald-500 dark:text-emerald-400' },
+  'gst-tax':             { title: 'Controls',           accentColor: 'text-blue-500 dark:text-blue-400' },
+  'financial':           { title: 'Financial',          accentColor: 'text-rose-500 dark:text-rose-400' },
+  'gst':                 { title: 'GST',                accentColor: 'text-blue-500 dark:text-blue-400' },
+  'banking':             { title: 'Banking',            accentColor: 'text-emerald-500 dark:text-emerald-400' },
+  'inventory-reports':   { title: 'Inventory',          accentColor: 'text-amber-500 dark:text-amber-400' },
+  'smart-tools':         { title: 'AI Tools',           accentColor: 'text-violet-500 dark:text-violet-400' },
+  'business':            { title: 'Business',           accentColor: 'text-amber-500 dark:text-amber-400' },
+}
 
 export function Sidebar() {
-  // 🔒 AUDIT V25 FIX §4.2: useConfirmDialog removed — only handleLogout used it,
-  // and handleLogout was orphaned dead code (removed above).
   const { currentView, setView, setPreviousView, sidebarCollapsed, toggleSidebarCollapsed, selectedTransactionType } = useAppStore()
   const { t } = useTranslation()
   const { data: session } = useSession()
-  // 🔒 AUDIT V25 FIX §4.2 follow-up: isStaff removed — was unused after
-  // handleLogout was deleted. Staff gating is handled by canAccess() below.
   const { canAccess, isCA } = useStaffPermissions()
   const { isFlagEnabled } = useFeatureFlags()
-  // 🔒 V26 FIX N4 follow-up: useShops() call + shopDropdown state/ref/effect
-  // removed — the switcher UI was deleted (N4) but its dead machinery (and an
-  // unnecessary shops query subscription) was left behind.
-  // 🔒 AUDIT V25 FIX §2.1 (Batch 2): Tools section collapsible state.
-  // Defaults to collapsed (false) — Tools are secondary, main nav stays primary.
-  // Persisted to localStorage so the user's preference is remembered.
+
   const [toolsOpen, setToolsOpen] = useState(() => {
     if (typeof window === 'undefined') return false
     return localStorage.getItem('bahikhata:sidebar-tools-open') === 'true'
@@ -56,21 +70,14 @@ export function Sidebar() {
     }
   }, [toolsOpen])
 
-  // 🔒 AUDIT V25 §6.1 (Batch 8 Phase 2): Main nav + Tools items from the NavRegistry.
-  // Filters by surfaces + permissions + feature flags + platform, sorted by sortOrder.
-  // Was: hardcoded navItems + toolsNavItems arrays with inline permission checks.
   const isOwner = session?.user?.role === 'owner'
-  // 🔒 V26 FIX N11: platforms default was `['desktop']` here but the registry
-  // documents (and getByPlatform implements) "default: both platforms". No
-  // entry sets `platforms` today, so behavior is identical — but the first
-  // mobile-only entry would have silently appeared in the desktop sidebar's
-  // filter logic inverted. Unified on the documented both-platforms default.
   const mainNavItems = useMemo(() => {
     return filterByPermissions(
       NAV_REGISTRY.filter(d => d.surfaces?.includes('sidebar-main') && (d.platforms || ['mobile', 'desktop']).includes('desktop')),
       { canAccess, isFlagEnabled: isFlagEnabled as any, isOwner }
     ).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
   }, [canAccess, isFlagEnabled, isOwner])
+
   const toolsItems = useMemo(() => {
     return filterByPermissions(
       NAV_REGISTRY.filter(d => d.surfaces?.includes('sidebar-tools') && (d.platforms || ['mobile', 'desktop']).includes('desktop')),
@@ -78,7 +85,33 @@ export function Sidebar() {
     ).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
   }, [canAccess, isFlagEnabled, isOwner])
 
-  // Fetch settings for profile section
+  // 🔒 V26 P9: Group tools by subcategory for sub-headers
+  const groupedTools = useMemo(() => {
+    const grouped = groupBySubcategory(toolsItems)
+    // Build ordered list based on TOOLS_SECTION_META
+    const ordered: { subcategory: NavSubcategoryId; title: string; accentColor: string; items: NavDestination[] }[] = []
+    for (const [subcat, items] of grouped) {
+      if (subcat && TOOLS_SECTION_META[subcat] && items.length > 0) {
+        ordered.push({
+          subcategory: subcat,
+          ...TOOLS_SECTION_META[subcat]!,
+          items,
+        })
+      }
+    }
+    // Also include any tools without a subcategory in an "Other" group
+    const uncategorized = grouped.get(undefined)
+    if (uncategorized && uncategorized.length > 0) {
+      ordered.push({
+        subcategory: 'other' as NavSubcategoryId,
+        title: 'Other',
+        accentColor: 'text-muted-foreground',
+        items: uncategorized,
+      })
+    }
+    return ordered
+  }, [toolsItems])
+
   const { data: settingData } = useQuery({
     queryKey: ['setting'],
     queryFn: async () => {
@@ -90,23 +123,8 @@ export function Sidebar() {
   const userName = setting.ownerName || session?.user?.name || 'Shop Owner'
   const shopName = setting.shopName || 'My Shop'
 
-  // 🔒 AUDIT V25 FIX §4.2: Removed orphaned handleLogout + handleInstallApp.
-  // Both were defined but never referenced — V21-011 removed the Sidebar
-  // buttons that called them, but left the handlers behind. Dead code
-  // that confused the next edit. Logout now lives in AccountScreen +
-  // MoreScreen (the only places that actually render a Logout button).
-  // Install-App is handled by PWAInstallPrompt component.
-
   return (
     <>
-      {/* 🔒 AUDIT V25 FIX §4.1: Removed dead mobile drawer apparatus.
-          setSidebarOpen(true) was called NOWHERE in the codebase — the
-          overlay (was here), slide animation conditional, and X close
-          button were all dead code. The mobile sidebar drawer was
-          replaced by MobileBottomNav + MoreScreen long ago, but the
-          drawer machinery was left behind. Sidebar is now desktop-only
-          (lg:sticky) — mobile uses bottom-nav + More. */}
-
       <aside
         className={cn(
           'fixed lg:sticky top-0 left-0 z-50 lg:z-auto',
@@ -114,8 +132,6 @@ export function Sidebar() {
           'bg-sidebar text-sidebar-foreground',
           'flex flex-col',
           'transition-all duration-300 ease-out',
-          // On mobile, sidebar is always translated off-screen (drawer is dead).
-          // On desktop, sidebar is always visible (sticky).
           '-translate-x-full lg:translate-x-0',
           sidebarCollapsed ? 'lg:w-20 w-72' : 'w-72'
         )}
@@ -132,13 +148,13 @@ export function Sidebar() {
             {!sidebarCollapsed && (
               <div>
                 <h1 className="text-lg font-bold text-sidebar-foreground tracking-tight">EkBook</h1>
-                <p className="text-[10px] text-sidebar-foreground/50 font-medium tracking-wide">{t('nav.smart_ledger')}</p>
+                <p className="text-[10px] text-sidebar-foreground/60 font-medium tracking-wide">{t('nav.smart_ledger')}</p>
               </div>
             )}
           </div>
         </div>
 
-        {/* Collapse toggle (desktop only) */}
+        {/* Collapse toggle */}
         <button
           onClick={toggleSidebarCollapsed}
           className="hidden lg:flex absolute -right-3 top-20 z-50 w-6 h-6 rounded-full bg-sidebar-border text-sidebar-foreground items-center justify-center hover:bg-sidebar-primary hover:text-white transition shadow-md"
@@ -147,13 +163,7 @@ export function Sidebar() {
           {sidebarCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronLeft className="w-3.5 h-3.5" />}
         </button>
 
-        {/* 🔒 V26 FIX N4: Switch Shop dropdown REMOVED — was cosmetic (no shopId
-            written or filtered anywhere). V23 §13.1 flagged this as a
-            data-integrity illusion. The shop name now shows in the profile
-            footer at the bottom of the sidebar. Manage Shops is still
-            available via Account → Profile. */}
-
-        {/* Navigation — rendered from NavRegistry (V25 §6.1 Phase 2) */}
+        {/* Main Navigation */}
         <nav className={cn('flex-1 overflow-y-auto px-3 py-4 space-y-1', sidebarCollapsed && 'lg:px-2')}>
           {mainNavItems.map((item: NavDestination) => {
             const Icon = item.icon
@@ -167,8 +177,8 @@ export function Sidebar() {
               <button
                 key={item.id}
                 onClick={() => handleNavAction(item)}
-                onMouseEnter={() => item.view && prefetchView(item.view)}  // 🔒 V11 §3.3
-                onTouchStart={() => item.view && prefetchView(item.view)}  // 🔒 V11 §3.3
+                onMouseEnter={() => item.view && prefetchView(item.view)}
+                onTouchStart={() => item.view && prefetchView(item.view)}
                 className={cn(
                   'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all group relative',
                   sidebarCollapsed && 'lg:justify-center lg:px-2',
@@ -194,6 +204,7 @@ export function Sidebar() {
                         </span>
                       )}
                     </div>
+                    {/* 🔒 V26 P9: Increased opacity from /50 to /65 for better readability */}
                     <p className={cn(
                       'text-[11px] truncate',
                       active ? 'text-white/80' : 'text-sidebar-foreground/65'
@@ -202,7 +213,6 @@ export function Sidebar() {
                     </p>
                   </div>
                 )}
-                {/* Show badge in collapsed mode as a dot */}
                 {sidebarCollapsed && item.badge && (
                   <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-gradient-saffron" />
                 )}
@@ -211,74 +221,80 @@ export function Sidebar() {
           })}
         </nav>
 
-        {/* 🔒 AUDIT V25 §6.1 (Batch 8 Phase 2): Tools section rendered from
-            NavRegistry. Was hardcoded toolsNavItems with inline filtering.
-            Now uses toolsItems (filtered from registry by permissions + flags). */}
+        {/* 🔒 V26 P9: Redesigned Tools section — grouped by subcategory with colorful sub-headers */}
         {!sidebarCollapsed && (
           <div className="border-t border-sidebar-border">
             <button
               onClick={() => setToolsOpen(!toolsOpen)}
-              className="w-full flex items-center gap-2 px-5 py-2.5 text-sidebar-foreground/50 hover:text-sidebar-foreground/70 transition text-left"
+              className="w-full flex items-center gap-2 px-5 py-2.5 text-sidebar-foreground/60 hover:text-sidebar-foreground/80 transition text-left"
               aria-expanded={toolsOpen}
               aria-label="Toggle Tools section"
             >
               <ChevronRight className={cn('w-3 h-3 transition-transform', toolsOpen && 'rotate-90')} />
               <span className="text-[10px] font-bold uppercase tracking-wider">Tools</span>
+              <span className="text-[9px] text-sidebar-foreground/40 ml-auto">{toolsItems.length} items</span>
             </button>
             {toolsOpen && (
-              <nav className="px-3 pb-3 space-y-1">
-                {toolsItems.map((item: NavDestination) => {
-                  const Icon = item.icon
-                  // Active state: view matches OR (for navigate-account items) we're on Account → data section
-                  // 🔒 V26 FIX N5 follow-up: toast-navigate / trigger items (Sale Return,
-                  // Day-End, WhatsApp Reminders) point at a shared view ('sales',
-                  // 'dashboard', 'parties') — highlighting them whenever that view is
-                  // open would falsely mark e.g. "Sale Return" active on every Sales
-                  // visit. They never own a view, so they are never "active".
-                  const active = item.actionKind === 'navigate-account'
-                    ? currentView === 'account' && useAppStore.getState().accountSection === item.actionParams?.accountSection
-                    : ['toast-navigate', 'navigate-day-end', 'navigate-bulk', 'navigate-scroll'].includes(item.actionKind || '')
-                      ? false
-                      : currentView === (item.view || item.id)
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={() => handleNavAction(item)}
-                      onMouseEnter={() => item.view && prefetchView(item.view)}
-                      onTouchStart={() => item.view && prefetchView(item.view)}
-                      className={cn(
-                        'w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all group relative',
-                        active
-                          ? 'bg-sidebar-primary/10 text-sidebar-primary'
-                          : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
-                      )}
-                      title={item.labelKey ? t(item.labelKey) : item.label}
-                    >
-                      <Icon className={cn('w-4 h-4 flex-shrink-0', active && 'text-sidebar-primary')} />
-                      <div className="flex-1 text-left min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[13px] font-medium truncate">{item.labelKey ? t(item.labelKey) : item.label}</span>
-                          {item.badge && (
-                            <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-gradient-saffron text-white">
-                              {item.badge}
-                            </span>
+              <nav className="px-3 pb-3 space-y-3 max-h-[40vh] overflow-y-auto">
+                {/* 🔒 V26 P9: Group tools by subcategory with colorful sub-headers */}
+                {groupedTools.map((group) => (
+                  <div key={group.subcategory}>
+                    {/* Sub-header */}
+                    <div className={cn('flex items-center gap-1.5 px-3 py-1')}>
+                      <span className={cn('text-[9px] font-bold uppercase tracking-wider', group.accentColor)}>
+                        {group.title}
+                      </span>
+                      <div className="flex-1 h-px bg-sidebar-border/50" />
+                    </div>
+                    {/* Items in this group */}
+                    {group.items.map((item: NavDestination) => {
+                      const Icon = item.icon
+                      const active = item.actionKind === 'navigate-account'
+                        ? currentView === 'account' && useAppStore.getState().accountSection === item.actionParams?.accountSection
+                        : ['toast-navigate', 'navigate-day-end', 'navigate-bulk', 'navigate-scroll'].includes(item.actionKind || '')
+                          ? false
+                          : currentView === (item.view || item.id)
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => handleNavAction(item)}
+                          onMouseEnter={() => item.view && prefetchView(item.view)}
+                          onTouchStart={() => item.view && prefetchView(item.view)}
+                          className={cn(
+                            'w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all group relative',
+                            active
+                              ? 'bg-sidebar-primary/10 text-sidebar-primary'
+                              : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
                           )}
-                        </div>
-                        <p className="text-[10px] truncate text-sidebar-foreground/60">{item.descKey ? t(item.descKey) : item.description}</p>
-                      </div>
-                    </button>
-                  )
-                })}
+                          title={item.labelKey ? t(item.labelKey) : item.label}
+                        >
+                          <Icon className={cn('w-4 h-4 flex-shrink-0', active && 'text-sidebar-primary')} />
+                          <div className="flex-1 text-left min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-[13px] font-medium truncate">{item.labelKey ? t(item.labelKey) : item.label}</span>
+                              {item.badge && (
+                                <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-gradient-saffron text-white">
+                                  {item.badge}
+                                </span>
+                              )}
+                            </div>
+                            {/* 🔒 V26 P9: Increased from /40 to /60 for readability */}
+                            <p className="text-[10px] truncate text-sidebar-foreground/60">{item.descKey ? t(item.descKey) : item.description}</p>
+                          </div>
+                        </button>
+                      )
+                    })}
+                  </div>
+                ))}
               </nav>
             )}
           </div>
         )}
         {sidebarCollapsed && (
-          /* Collapsed mode — show a single "Tools" icon that expands the sidebar */
           <div className="border-t border-sidebar-border py-2 flex justify-center">
             <button
               onClick={toggleSidebarCollapsed}
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-sidebar-foreground/50 hover:text-sidebar-foreground hover:bg-sidebar-accent transition"
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent transition"
               title="Expand sidebar to see Tools"
               aria-label="Expand sidebar to see Tools"
             >
@@ -287,7 +303,7 @@ export function Sidebar() {
           </div>
         )}
 
-        {/* V17-Ext Tier 3 Step 5: CA Mode indicator — shows when a CA is logged in */}
+        {/* CA Mode indicator */}
         {isCA && !sidebarCollapsed && (
           <div className="px-3 py-2 border-t border-sidebar-border">
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-violet-500/10 border border-violet-500/20">
@@ -307,12 +323,9 @@ export function Sidebar() {
           </div>
         )}
 
-        {/* Footer — Profile button opens Account page */}
+        {/* Footer — Profile button */}
         {!sidebarCollapsed ? (
           <div className="border-t border-sidebar-border">
-            {/* 🔒 V21-011 (Phase 3): Removed Logout button — now in Account page.
-                Removed 'Upgrade to Pro' — now in Account page (Subscription).
-                The profile section now opens the Account page (not Settings). */}
             <button
               onClick={() => { setPreviousView(currentView); useAppStore.getState().setAccountOriginView(currentView); setView('account') }}
               className="w-full p-3 flex items-center gap-3 hover:bg-sidebar-accent transition"
@@ -322,12 +335,12 @@ export function Sidebar() {
               </div>
               <div className="flex-1 min-w-0 text-left">
                 <p className="text-xs font-semibold text-sidebar-foreground truncate">{userName}</p>
-                <p className="text-[10px] text-sidebar-foreground/50 truncate">{shopName}</p>
+                {/* 🔒 V26 P9: Increased from /50 to /60 for readability */}
+                <p className="text-[10px] text-sidebar-foreground/60 truncate">{shopName}</p>
               </div>
             </button>
           </div>
         ) : (
-          /* Collapsed mode — avatar only, opens Account page */
           <div className="border-t border-sidebar-border py-2 flex flex-col items-center gap-2">
             <button
               onClick={() => { setPreviousView(currentView); useAppStore.getState().setAccountOriginView(currentView); setView('account') }}
