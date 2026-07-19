@@ -102,7 +102,14 @@ export async function POST(req: NextRequest) {
     }
     const { partyId, amount, type, mode, date, notes } = validation.data
     const amt = amount
-    const clientMutationId = (body as any).clientMutationId as string | undefined
+    // 🔒 V26 R2 (Phase 5): Read x-client-mutation-id from HEADER (where the
+    // offline queue puts it) instead of body (where no client sends it).
+    // Was: `body.clientMutationId` — always undefined → the entire V19-007
+    // idempotency block was dead code → payment replay duplicated payments.
+    // Body fallback kept for backward compat with any client that does send it.
+    const clientMutationId =
+      (req.headers.get('x-client-mutation-id') as string | undefined) ||
+      (body as any).clientMutationId as string | undefined
 
     // 🔒 V19-007: Idempotency check — prevents duplicate payments from offline
     // sync replays. Same pattern as transactions POST.
@@ -187,18 +194,39 @@ export async function POST(req: NextRequest) {
     const exceedsOutstanding =
       !directionMismatch && amt > roundMoney(currentOutstanding + 0.01) // 0.01 epsilon for float
 
-    const payment = await db.payment.create({
-      data: {
-        userId,
-        partyId,
-        amount: roundMoney(amt),
-        type,
-        mode: mode,
-        date: paymentDate,
-        notes: notes || null,
-        clientMutationId: clientMutationId || null,  // 🔒 V19-007: idempotency
-      },
-    })
+    // 🔒 V26 R2 (Phase 5): Wrap payment.create in try/catch for P2002.
+    // The idempotency check at the top is check-then-act (READ COMMITTED:
+    // two simultaneous replays both see no existing payment, both attempt
+    // insert, second one P2002s on the @unique constraint). Catch P2002 →
+    // re-fetch by clientMutationId → return the existing payment with
+    // idempotent:true flag. Same pattern as payment/verify route.
+    let payment
+    try {
+      payment = await db.payment.create({
+        data: {
+          userId,
+          partyId,
+          amount: roundMoney(amt),
+          type,
+          mode: mode,
+          date: paymentDate,
+          notes: notes || null,
+          clientMutationId: clientMutationId || null,  // 🔒 V19-007: idempotency
+        },
+      })
+    } catch (createError: any) {
+      if (createError?.code === 'P2002' && clientMutationId) {
+        // Concurrent replay raced us — re-fetch and return idempotent.
+        const existing = await db.payment.findUnique({
+          where: { clientMutationId },
+          select: { id: true, amount: true, type: true, partyId: true, date: true, mode: true, notes: true },
+        })
+        if (existing) {
+          return NextResponse.json({ payment: existing, idempotent: true })
+        }
+      }
+      throw createError
+    }
 
     // 🔒 V15 M-1: Build a meaningful, rare warning (or none).
     let warning: string | null = null

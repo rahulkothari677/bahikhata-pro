@@ -117,8 +117,30 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     }
 
     // 7. Create the sale + mark estimate as converted (atomic)
+    // 🔒 V26 R1 (Phase 5): Compare-and-swap INSIDE the $transaction.
+    // Was: unconditional `tx.transaction.update({ where: { id: estimate.id } })`
+    // → two concurrent converts both pass the early `convertedToTransactionId`
+    // check (which runs OUTSIDE the tx, READ COMMITTED → both see null) →
+    // both create sales + double stock decrement.
+    // Now: `updateMany` with `convertedToTransactionId: null` in the WHERE
+    // clause acts as a compare-and-swap. If claimed.count === 0, another
+    // request won the race — throw CONVERT_RACE → outer catch returns the
+    // existing 409 body. The early check at :56 stays as a fast path (saves
+    // the $transaction round-trip for the common double-click case).
     const sale = await db.$transaction(async (tx) => {
-      // Generate invoice number
+      // 7a. Compare-and-swap: stamp convertedAt ONLY if not already claimed.
+      // (Set convertedToTransactionId after we know the new sale id.)
+      const claimed = await tx.transaction.updateMany({
+        where: { id: estimate.id, userId, convertedToTransactionId: null, deletedAt: null },
+        data: { convertedAt: new Date() },
+      })
+      if (claimed.count === 0) {
+        const err: any = new Error('CONVERT_RACE')
+        err.code = 'CONVERT_RACE'
+        throw err
+      }
+
+      // 7b. Generate invoice number
       const counter = await tx.invoiceCounter.upsert({
         where: { userId },
         update: { seq: { increment: 1 } },
@@ -127,7 +149,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       })
       const invoiceNo = `INV-${String(counter.seq).padStart(4, '0')}`
 
-      // Create the sale from the estimate's items
+      // 7c. Create the sale from the estimate's items
       const newSale = await tx.transaction.create({
         data: {
           userId,
@@ -153,16 +175,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         include: { items: true, party: true },
       })
 
-      // Mark the estimate as converted
+      // 7d. Link estimate → new sale (now we have the sale id).
       await tx.transaction.update({
         where: { id: estimate.id },
-        data: {
-          convertedToTransactionId: newSale.id,
-          convertedAt: new Date(),
-        },
+        data: { convertedToTransactionId: newSale.id },
       })
 
-      // Apply stock adjustments for the new sale
+      // 7e. Apply stock adjustments for the new sale
       const stockPolicy = setting?.stockPolicy || 'allow'
       if (stockPolicy === 'block') {
         for (const item of computed.txItems) {
@@ -205,6 +224,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         error: 'Not enough stock',
         message: `Cannot convert — not enough stock for ${err.productName} (need ${err.requestedQty} units). Record a purchase first or enable "Allow overselling" in Settings.`,
       }, { status: 400 })
+    }
+    // 🔒 V26 R1 (Phase 5): Catch CONVERT_RACE — another concurrent convert
+    // won the race. Return the existing 409 body. Re-fetch the estimate to
+    // surface the winning sale's id for the client.
+    if (err?.code === 'CONVERT_RACE') {
+      const fresh = await db.transaction.findUnique({
+        where: { id: err.estimateId || (await params).id },
+        select: { convertedToTransactionId: true, convertedAt: true },
+      })
+      return NextResponse.json({
+        error: 'Already converted',
+        message: `This estimate was just converted by another request. Converted at ${fresh?.convertedAt ? new Date(fresh.convertedAt).toLocaleDateString('en-IN') : 'unknown date'}.`,
+        convertedToTransactionId: fresh?.convertedToTransactionId,
+      }, { status: 409 })
     }
     return apiError(err, 'Failed to convert estimate', 500)
   }

@@ -228,26 +228,45 @@ export async function POST(req: NextRequest) {
       // of the zod-validated value. Use validation.data.totalAmount (already
       // coerced to number by z.coerce.number()).
       const amount = validation.data.totalAmount || 0
-      const transaction = await db.transaction.create({
-        data: {
-          userId,
-          type,
-          partyId: partyId || null,  // 🔒 V19-005 FIX: was missing — income/expense can be linked to a party
-          category: category || null,
-          date: new Date(date || new Date()),
-          subtotal: amount,
-          totalAmount: amount,
-          paidAmount: amount,
-          paymentMode: paymentMode || 'cash',
-          notes: notes || null,
-          invoiceNo: invoiceNo || null,
-          payeeName: payeeName || null,
-          createdByUserId: authCtx.actingUserId,  // 🔒 V13 L4: staff accountability
-          payeePhone: payeePhone || null,
-        },
-        include: { items: true, party: true },
-      })
-      return NextResponse.json({ transaction })
+      // 🔒 V26 R2 (Phase 5): Wrap income/expense create in try/catch for P2002.
+      // Was: no clientMutationId in the data block → dedup lookup at :189 could
+      // never match → queued income/expense replays duplicated. Now: store the
+      // ID (from header, already fetched at :186) + catch P2002 for the
+      // simultaneous-replay race.
+      try {
+        const transaction = await db.transaction.create({
+          data: {
+            userId,
+            type,
+            partyId: partyId || null,  // 🔒 V19-005 FIX: was missing — income/expense can be linked to a party
+            category: category || null,
+            date: new Date(date || new Date()),
+            subtotal: amount,
+            totalAmount: amount,
+            paidAmount: amount,
+            paymentMode: paymentMode || 'cash',
+            notes: notes || null,
+            invoiceNo: invoiceNo || null,
+            payeeName: payeeName || null,
+            createdByUserId: authCtx.actingUserId,  // 🔒 V13 L4: staff accountability
+            payeePhone: payeePhone || null,
+            clientMutationId: clientMutationId || null,  // 🔒 V26 R2: idempotency
+          },
+          include: { items: true, party: true },
+        })
+        return NextResponse.json({ transaction })
+      } catch (createError: any) {
+        if (createError?.code === 'P2002' && clientMutationId) {
+          const existing = await db.transaction.findUnique({
+            where: { clientMutationId },
+            select: { id: true, type: true, totalAmount: true, date: true, partyId: true },
+          })
+          if (existing) {
+            return NextResponse.json({ transaction: existing, idempotent: true })
+          }
+        }
+        throw createError
+      }
     }
 
     // For sale/purchase - compute from items
@@ -625,12 +644,29 @@ export async function POST(req: NextRequest) {
           })
           break
         } catch (err: any) {
-          // P2002 = unique constraint violation on invoiceNo (extremely unlikely
-          // with the atomic counter, but handle it just in case)
-          if (err?.code === 'P2002' && attempt < 2) {
-            // The counter already incremented, so the next attempt will get a
-            // new sequence number automatically. Just retry.
-            continue
+          // 🔒 V26 R2 (Phase 5): Distinguish P2002 on clientMutationId (race
+          // with simultaneous replay — return idempotent) vs P2002 on invoiceNo
+          // (retry with new sequence). Prisma's P2002 carries meta.target = the
+          // field name array that triggered the unique violation.
+          if (err?.code === 'P2002') {
+            const target = err?.meta?.target as string[] | undefined
+            const isMutationIdConflict = target?.includes('clientMutationId')
+            if (isMutationIdConflict && clientMutationId) {
+              // Concurrent replay raced us — re-fetch and return idempotent.
+              const existing = await db.transaction.findUnique({
+                where: { clientMutationId },
+                select: { id: true, type: true, totalAmount: true, date: true, partyId: true, invoiceNo: true },
+              })
+              if (existing) {
+                return NextResponse.json({ transaction: existing, idempotent: true })
+              }
+            }
+            // invoiceNo conflict (extremely unlikely with the atomic counter)
+            if (attempt < 2) {
+              // The counter already incremented, so the next attempt will get a
+              // new sequence number automatically. Just retry.
+              continue
+            }
           }
           throw err
         }

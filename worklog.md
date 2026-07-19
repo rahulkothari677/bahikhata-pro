@@ -7824,3 +7824,58 @@ Stage Summary:
 - The N1 systemic fix (store navStack as single back-nav model) is queued for a follow-up batch — it touches use-browser-back-button.ts + AccountScreen + Reports + every screen with sub-state, ~1 focused day per auditor's estimate.
 - The N8 i18n translation task (135 missing keys × 4 languages = 540 translations) is queued for a separate batch — mechanical but voluminous.
 - All Phase 4 P-items (P1-P11) and N-items N1-N23 are now either fixed or explicitly deferred with reasoning.
+
+---
+Task ID: audit-v26-phase5-batch-1
+Agent: main
+Task: Phase 5 Engineering Resilience audit — Batch 1: R2 (idempotency) + R1 (convert race). Both are in auditor's "would not launch without" list. Both kill the most probable real-world money duplication paths.
+
+Work Log:
+- Read full Phase 5 report (40KB, 262 lines) — 22 findings, 3 🔴 + 6 🟠 + 7 🟡 + 6 🔵.
+- Auditor's priority order: R2 → R1 → R3 → R4 → R5 → R7 → R6 → R8 → R9 → R10-R16 → R17-R22.
+- Batch 1 handles the top-2: R2 + R1.
+
+§1 — R2 🔴 Idempotency machinery (4 sub-fixes + CI guard):
+
+R2.1 — offline-fetch.ts: ensureMutationIdHeader() called BEFORE first fetch.
+- Was: UUID only generated in queueForSync AFTER fetch threw → if server committed but response lost (mobile network blip), queued replay carried brand-new UUID → duplicate sale.
+- Now: same ID flows through both online fetch AND queued replay → server's existing dedup block fires.
+- Added `ensureMutationIdHeader(fetchOpts)` helper. Returns new RequestInit with header set (does not mutate caller's object). Respects caller-provided ID.
+
+R2.2 — payments/route.ts: read x-client-mutation-id from HEADER.
+- Was: `body.clientMutationId` — always undefined (no client sends it in body) → entire V19-007 dedup block was dead code → payment replay duplicated.
+- Now: `req.headers.get('x-client-mutation-id') || body.clientMutationId` (header first, body as backward-compat fallback).
+
+R2.3 — transactions/route.ts income/expense branch: store clientMutationId.
+- Was: income/expense create data block had no clientMutationId → dedup lookup could never match → queued income/expense replays duplicated.
+- Now: `clientMutationId: clientMutationId || null` added to data block (header already fetched at line 186).
+
+R2.4 — P2002 catch on clientMutationId @unique constraint (3 routes):
+- payments/route.ts: try/catch around payment.create → on P2002, re-fetch by clientMutationId → return {idempotent:true}. Same pattern as payment/verify (the house pattern).
+- transactions/route.ts: sale/purchase P2002 handler now distinguishes clientMutationId conflict (return idempotent) vs invoiceNo conflict (retry with new sequence) via err.meta.target.
+- transactions/route.ts: income/expense branch also wrapped in try/catch for P2002.
+- This closes the simultaneous-replay race (two concurrent replays both miss the check, one P2002s, we treat as idempotent success).
+
+R2.5 — CI guard test: src/__tests__/lib/v26-phase5-idempotency-guard.test.ts.
+- 5 grep-shaped assertions: (1) offline-fetch has ensureMutationIdHeader; (2) payments reads header; (3) transactions stores clientMutationId in income/expense + has P2002 catch with isMutationIdConflict; (4) convert route has compare-and-swap + CONVERT_RACE; (5) verify route still has P2002 catch (house pattern reference).
+- Keeps this phase's bug classes closed in CI.
+
+§2 — R1 🔴 Estimate→sale conversion race (compare-and-swap):
+
+- transactions/[id]/convert/route.ts: replaced unconditional `tx.transaction.update({where:{id}})` with compare-and-swap INSIDE the $transaction.
+- Step 7a: `tx.transaction.updateMany({ where: { id, userId, convertedToTransactionId: null, deletedAt: null }, data: { convertedAt: new Date() } })`. If claimed.count === 0 → throw CONVERT_RACE.
+- Step 7d: after creating the sale, link estimate → sale via `tx.transaction.update({ where: { id: estimate.id }, data: { convertedToTransactionId: newSale.id } })`.
+- Outer catch: catches CONVERT_RACE → re-fetches estimate → returns existing 409 body with the winning sale's id.
+- Early check at line 56 stays as fast path (saves $transaction round-trip for common double-click case).
+- Behavioral test: src/__tests__/lib/v26-phase5-convert-race.test.ts (4 tests covering first-wins, second-loses, soft-deleted, sequential double-click + 2 R2 tests for header flow).
+
+Verification:
+- tsc --noEmit: 0 errors
+- jest: 1830/1830 pass (56 suites) — was 1819, +11 from 2 new test files
+- next build: clean
+- eslint src/: 0 errors
+
+Stage Summary:
+- Phase 5 Batch 1 COMPLETE: R2 (5 sub-fixes + CI guard) + R1 (compare-and-swap + behavioral test).
+- Both critical money-duplication findings closed. The most probable real-world money duplication paths (lost-response replay, simultaneous replay, concurrent convert) are now blocked.
+- Next batches per auditor's priority: Batch 2 (R3+R19+R4+R5 — restore rework + FOR UPDATE locks), Batch 3 (R7+R6 — dead-letter UI + bank import), Batch 4 (R8+R9+R10+R11+R12 — timeouts + webhook + quick wins), Batch 5 (R13-R16 — validation + error UX), Batch 6 (R17-R22 — polish + CI).

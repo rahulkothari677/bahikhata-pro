@@ -322,18 +322,29 @@ async function handleMutation(
 ): Promise<Response> {
   const queueable = offlineOpts?.queueable !== false // default true
 
+  // 🔒 V26 R2 (Phase 5): Ensure x-client-mutation-id header is set BEFORE the
+  // first online attempt. Was: ID generated only in queueForSync AFTER fetch
+  // threw → if the server committed but the response was lost (mobile network
+  // blip — the single most common failure in this app's target environment),
+  // the queued replay carried a brand-new UUID the server had never seen →
+  // duplicate sale/payment. Now: same ID flows through both the online fetch
+  // AND the queued replay, so the server's existing dedup block fires.
+  const enhancedOpts = ensureMutationIdHeader(fetchOpts)
+
   // Online: just send it, then invalidate caches
   if (isOnline()) {
     try {
-      const res = await fetch(url, fetchOpts)
+      const res = await fetch(url, enhancedOpts)
       if (res.ok && offlineOpts?.invalidate?.length) {
         await Promise.all(offlineOpts.invalidate.map((p) => clearCacheByUrlPrefix(p)))
       }
       return res
     } catch (err) {
-      // Network failed mid-write — queue it (if allowed)
+      // Network failed mid-write — queue it (if allowed).
+      // Pass enhancedOpts (with the same x-client-mutation-id) so the replay
+      // carries the same ID the first attempt had — server dedups correctly.
       if (queueable) {
-        await queueForSync(url, method, fetchOpts, offlineOpts?.invalidate || [])
+        await queueForSync(url, method, enhancedOpts, offlineOpts?.invalidate || [])
         await notifyPendingCount()
         return queuedResponse()
       }
@@ -346,9 +357,34 @@ async function handleMutation(
     throw new OfflineError('This action requires internet connection.')
   }
 
-  await queueForSync(url, method, fetchOpts, offlineOpts?.invalidate || [])
+  await queueForSync(url, method, enhancedOpts, offlineOpts?.invalidate || [])
   await notifyPendingCount()
   return queuedResponse()
+}
+
+/**
+ * 🔒 V26 R2 (Phase 5): Ensure fetchOpts has an x-client-mutation-id header.
+ * If the caller already provided one (X-Client-Mutation-Id or x-client-mutation-id),
+ * keep it. Otherwise, generate a fresh UUID. Returns a NEW RequestInit with
+ * the header set — does not mutate the caller's object.
+ *
+ * This MUST run before the first online fetch so that if the response is lost
+ * after the server commits, the queued replay carries the same ID the server
+ * saw on the first attempt → server's dedup block fires → no duplicate.
+ */
+function ensureMutationIdHeader(fetchOpts: RequestInit): RequestInit {
+  const existingHeaders = (fetchOpts.headers || {}) as Record<string, string>
+  const hasMutationId =
+    existingHeaders['x-client-mutation-id'] ||
+    existingHeaders['X-Client-Mutation-Id']
+  if (hasMutationId) {
+    return fetchOpts // caller controls the ID; respect it
+  }
+  const newHeaders: Record<string, string> = {
+    ...(existingHeaders as Record<string, string>),
+    'x-client-mutation-id': generateMutationId(),
+  }
+  return { ...fetchOpts, headers: newHeaders }
 }
 
 function queuedResponse(): Response {
