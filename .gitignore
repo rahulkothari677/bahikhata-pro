@@ -79,3 +79,4 @@ worklog.md
 tool-results/
 # Lighthouse CI reports (V20-016)
 .lighthouseci/
+bahikhata-admin/
