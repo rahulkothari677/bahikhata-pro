@@ -63,7 +63,7 @@ import { useTranslation } from '@/hooks/use-translation'
 // pass the filter but get dropped by `if (subcat && SECTION_META[subcat])`.
 const SECTION_META: Partial<Record<NavSubcategoryId, { title: string; titleIcon: LucideIcon }>> = {
   'sale-purchase':       { title: 'Sale & Purchase',   titleIcon: ShoppingCart },
-  'gst-tax':             { title: 'GST & Tax',         titleIcon: FileText },
+  'gst-tax':             { title: 'Accounting Controls', titleIcon: FileText }, // 🔒 V26 P3: renamed from "GST & Tax" — the section only has Reconciliation + Period Lock, not GST reports
   'gst':                 { title: 'GST Reports',       titleIcon: FileText },
   'money-banking':       { title: 'Money & Banking',   titleIcon: Banknote },
   'banking':             { title: 'Banking Reports',   titleIcon: Banknote },
@@ -72,6 +72,7 @@ const SECTION_META: Partial<Record<NavSubcategoryId, { title: string; titleIcon:
   'reports-analytics':   { title: 'Reports & Analytics', titleIcon: BarChart3 },
   'financial':           { title: 'Financial Reports', titleIcon: BarChart3 },
   'smart-tools':         { title: 'Smart Tools',       titleIcon: Sparkles },
+  'business':            { title: 'Business',          titleIcon: Store }, // 🔒 V26 P1: added so multi-shop-management + staff-access render
 }
 
 export function MoreScreen() {

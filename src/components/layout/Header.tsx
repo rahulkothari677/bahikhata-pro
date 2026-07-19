@@ -29,6 +29,12 @@ const viewTitleKeys: Record<string, { titleKey: string; subtitleKey: string }> =
   'party-profile': { titleKey: 'nav.parties', subtitleKey: 'nav.parties' },
   'new-sale': { titleKey: 'action.new_sale', subtitleKey: 'action.new_sale' },
   'new-purchase': { titleKey: 'action.new_purchase', subtitleKey: 'action.new_purchase' },
+  // 🔒 V26 P6: Added missing title keys (was: fell back to 'nav.dashboard')
+  'new-estimate': { titleKey: 'nav.label.estimates', subtitleKey: 'nav.label.estimates' },
+  'document-vault': { titleKey: 'nav.label.document-vault', subtitleKey: 'nav.label.document-vault' },
+  'ai-usage': { titleKey: 'nav.label.ai-usage', subtitleKey: 'nav.label.ai-usage' },
+  'ai-comparison': { titleKey: 'nav.label.ai-comparison', subtitleKey: 'nav.label.ai-comparison' },
+  'pricing': { titleKey: 'nav.label.subscription', subtitleKey: 'nav.label.subscription' },
 }
 
 // Views where "New Entry" should trigger a dialog (not navigate)

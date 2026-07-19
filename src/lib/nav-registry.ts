@@ -334,7 +334,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'transactions',
     subcategory: 'sale-purchase',
     frequency: 'secondary',
-    surfaces: ['more', 'global-search'],
+    surfaces: ['more', 'sidebar-tools', 'global-search'],  // 🔒 V26 P5: added sidebar-tools,
     sortOrder: 5,
     labelKey: 'nav.label.estimates',
     descKey: 'nav.desc.estimates',
@@ -362,6 +362,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   // ═══ inventory ════════════════════════════════════════════════════════
   {
     id: 'inventory',
+    subcategory: 'items-stock',
     label: 'Inventory',
     description: 'Products, stock, prices',
     icon: Package,
@@ -401,6 +402,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   // ═══ parties ═════════════════════════════════════════════════════════
   {
     id: 'parties',
+    subcategory: 'money-banking',
     label: 'Parties',
     description: 'Customers & suppliers — track dues & balances',
     icon: Users,
@@ -440,6 +442,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   // ═══ reports ═════════════════════════════════════════════════════════
   {
     id: 'reports',
+    subcategory: 'reports-analytics',
     label: 'Reports',
     description: 'All reports — P&L, GST, stock, party, aging',
     icon: FileBarChart,
@@ -786,6 +789,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   // ═══ tools ═══════════════════════════════════════════════════════════
   {
     id: 'scanner',
+    subcategory: 'smart-tools',
     label: 'AI Bill Scanner',
     description: 'Snap a bill, auto-fill everything',
     icon: ScanLine,
@@ -807,6 +811,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   },
   {
     id: 'document-vault',
+    subcategory: 'smart-tools',
     label: 'Document Vault',
     description: 'Store bills, invoices, GST certificates',
     icon: FolderOpen,
@@ -824,6 +829,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   },
   {
     id: 'ai-usage',
+    subcategory: 'smart-tools',
     label: 'AI Usage',
     description: 'Track AI scans & cost',
     icon: Bot,
@@ -843,6 +849,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   },
   {
     id: 'ai-comparison',
+    subcategory: 'smart-tools',
     label: 'AI Comparison',
     description: 'Compare AI providers',
     icon: Bot,
@@ -874,7 +881,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'tools',
     subcategory: 'smart-tools',
     frequency: 'secondary',
-    surfaces: ['more', 'global-search'],  // 🔒 V26 FIX N5
+    surfaces: ['more', 'sidebar-tools', 'global-search'],  // 🔒 V26 P5: added sidebar-tools
     keywords: 'voice entry speak bol ke sale mic',
     sortOrder: 2,
     labelKey: 'nav.label.voice-entry',
@@ -892,7 +899,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'tools',
     subcategory: 'smart-tools',
     frequency: 'secondary',
-    surfaces: ['more', 'global-search'],  // 🔒 V26 FIX N5
+    surfaces: ['more', 'sidebar-tools', 'global-search'],  // 🔒 V26 P5: added sidebar-tools
     keywords: 'barcode scan billing fast qr',
     sortOrder: 3,
     labelKey: 'nav.label.barcode-scanner',
@@ -913,7 +920,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'secondary',
     // 🔒 V26 FIX N5: desktop had NO entry naming Smart Insights (V25 §2.4's
     // surviving half). Ctrl+K now jumps straight to the dashboard section.
-    surfaces: ['more', 'global-search'],
+    surfaces: ['more', 'sidebar-tools', 'global-search'],  // 🔒 V26 P5: added sidebar-tools,
     keywords: 'smart insights ai alerts suggestions tips',
     sortOrder: 5,
     labelKey: 'nav.label.smart-insights',
@@ -932,7 +939,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'tools',
     subcategory: 'money-banking',
     frequency: 'secondary',
-    surfaces: ['more', 'global-search'],  // 🔒 V26 FIX N5
+    surfaces: ['more', 'sidebar-tools', 'global-search'],  // 🔒 V26 P5: added sidebar-tools
     keywords: 'cash in hand drawer galla today collections',
     sortOrder: 2,
     labelKey: 'nav.label.cash-in-hand',
@@ -1111,9 +1118,9 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'account',
     subcategory: 'business',
     frequency: 'secondary',
-    // 🔒 V26 FIX N5: desktop-discoverable via Ctrl+K (Manage Shops = create
-    // shops + per-shop GSTIN for the Consolidated Report; switching is removed)
-    surfaces: ['more', 'global-search'],
+    // 🔒 V26 P4: Added 'account' surface so it's reachable from AccountScreen
+    // (was: only 'more' + 'global-search' → unreachable on desktop except Ctrl+K)
+    surfaces: ['more', 'global-search', 'account'],
     keywords: 'multi shop manage shops branch add new shop',
     sortOrder: 1,
     labelKey: 'nav.label.multi-shop-management',

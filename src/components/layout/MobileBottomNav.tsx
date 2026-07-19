@@ -6,8 +6,10 @@
  * Shows on screens < lg (1024px). Hidden on desktop where the sidebar
  * is always visible.
  *
- * 🔒 V17 Audit Phase 10: Now 6 tabs (Purchases moved from More to bottom nav):
- *   [Dashboard] [Sales] [ + New ] [Purchases] [Stock] [More]
+ * 🔒 V26 P7: Updated — 4 tabs + center + button (was: stale comment claimed 6 tabs with "Stock"):
+ *   [Dashboard] [Sales] [ + New ] [Purchases] [More]
+ * Inventory/Parties/Reports are reachable via the More screen (V26 P1 fix
+ * added missing subcategories so they render in MoreScreen sections).
  *
  * The center "+" button is elevated and highlighted. Tapping it goes to
  * New Sale. Long-pressing it opens a quick-action menu (New Sale /
