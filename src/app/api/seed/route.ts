@@ -44,15 +44,30 @@ export async function DELETE() {
     const { userId, error } = await getAuthUserIdOwnerOnly()
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    // Cascade delete in dependency order, scoped to this user
-    await db.transactionItem.deleteMany({
-      where: { transaction: { userId } },
+    // 🔒 V26 M2 FIX: Wrap all deletes in a $transaction (was: sequential,
+    // non-atomic — a failure midway left a half-wiped shop). Also added
+    // missing tables that were not cleaned up.
+    // Using the callback form so we can catch individual table errors
+    // (some tables may not exist if migrations haven't run).
+    await db.$transaction(async (tx) => {
+      await tx.transactionItem.deleteMany({ where: { transaction: { userId } } })
+      await tx.transaction.deleteMany({ where: { userId } })
+      await tx.payment.deleteMany({ where: { userId } })
+      // Optional tables — wrap in try/catch (may not exist in all deployments)
+      try { await tx.document.deleteMany({ where: { userId } }) } catch {}
+      try { await tx.bankStatement.deleteMany({ where: { userId } }) } catch {}
+      try { await tx.gstr1Snapshot.deleteMany({ where: { userId } }) } catch {}
+      try { await tx.gstReturn.deleteMany({ where: { userId } }) } catch {}
+      try { await tx.scanComparison.deleteMany({ where: { userId } }) } catch {}
+      try { await tx.aiUsageLog.deleteMany({ where: { userId } }) } catch {}
+      try { await tx.auditLog.deleteMany({ where: { userId } }) } catch {}
+      try { await tx.fieldChangeLog.deleteMany({ where: { changedByUserId: userId } }) } catch {}
+      try { await tx.invoiceCounter.deleteMany({ where: { userId } }) } catch {}
+      await tx.party.deleteMany({ where: { userId } })
+      await tx.product.deleteMany({ where: { userId } })
+      try { await tx.shop.deleteMany({ where: { userId } }) } catch {}
+      // Setting is kept (so the user can re-seed without re-onboarding)
     })
-    await db.transaction.deleteMany({ where: { userId } })
-    await db.payment.deleteMany({ where: { userId } })
-    await db.party.deleteMany({ where: { userId } })
-    await db.product.deleteMany({ where: { userId } })
-    await db.setting.deleteMany({ where: { userId } })
     return NextResponse.json({ success: true })
   } catch (error) {
     return apiError(error, 'Failed to delete data', 500)

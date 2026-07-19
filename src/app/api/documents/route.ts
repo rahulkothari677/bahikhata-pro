@@ -61,11 +61,34 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json()
-    const { name, category, fileType, fileData, notes, tags } = body
+    let { name, category, fileType, fileData, notes, tags } = body
 
     // Validate required fields
     if (!name || !fileType || !fileData) {
       return NextResponse.json({ error: 'Missing required fields: name, fileType, fileData' }, { status: 400 })
+    }
+
+    // 🔒 V26 M15 FIX: Length limits on user-supplied strings. Was: no limits —
+    // a 1MB name or 10KB tag string would be stored in the DB.
+    if (typeof name !== 'string' || name.length > 200) {
+      return NextResponse.json({ error: 'name must be a string ≤200 characters' }, { status: 400 })
+    }
+    if (notes !== undefined && notes !== null && (typeof notes !== 'string' || notes.length > 2000)) {
+      return NextResponse.json({ error: 'notes must be ≤2000 characters' }, { status: 400 })
+    }
+    if (tags !== undefined && tags !== null) {
+      if (!Array.isArray(tags)) {
+        return NextResponse.json({ error: 'tags must be an array' }, { status: 400 })
+      }
+      // Limit to 20 tags, each ≤100 chars
+      if (tags.length > 20) {
+        return NextResponse.json({ error: 'Maximum 20 tags allowed' }, { status: 400 })
+      }
+      for (const tag of tags) {
+        if (typeof tag !== 'string' || tag.length > 100) {
+          return NextResponse.json({ error: 'Each tag must be ≤100 characters' }, { status: 400 })
+        }
+      }
     }
 
     // Validate category

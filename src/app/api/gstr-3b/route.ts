@@ -81,7 +81,14 @@ async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd:
         AND t."date" >= ${periodStart}
         AND t."date" < ${periodEnd}
         AND ti."gstRate" = 0
-        AND (p."gstTreatment" IS NULL OR p."gstTreatment" = 'taxable' OR p."gstTreatment" = 'nil')
+        -- 🔒 V26 M13 FIX: Was: (p."gstTreatment" IS NULL OR p."gstTreatment" = 'taxable' OR p."gstTreatment" = 'nil')
+        -- This folded legacy products with NULL gstTreatment into nil-rated (3.1c).
+        -- A legacy product that was actually taxable@0% got counted as nil-rated
+        -- instead of taxable (3.1a) — wrong GST return classification.
+        -- Now: only count as nil-rated if explicitly marked 'nil'. NULL and 'taxable'
+        -- with gstRate=0 go to 3.1(a) outward taxable supplies (which is correct —
+        -- 0% GST is still a taxable supply, not nil-rated).
+        AND p."gstTreatment" = 'nil'
     `,
     db.$queryRaw<Array<{ totalValuePaise: string }>>`
       SELECT COALESCE(SUM(
