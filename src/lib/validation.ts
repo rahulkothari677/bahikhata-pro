@@ -300,3 +300,44 @@ export const fileGstr3bSchema = z.object({
   interest: z.coerce.number().min(0).optional().default(0),
   tdsTcsAdjustment: z.coerce.number().optional().default(0),
 })
+
+// 🔒 V26 R13 (Phase 5): Shape-only schemas for routes the auditor flagged as
+// having no validation. These are minimal — they enforce types + lengths but
+// don't change existing behavior. The manual checks in each route stay as the
+// authoritative validation; these schemas just add a first-pass 400 for
+// malformed payloads instead of letting bad types reach Prisma (500).
+
+// Document upload schema (POST /api/documents)
+export const createDocumentSchema = z.object({
+  name: z.string().min(1, 'name is required').max(200),
+  category: z.string().max(100).optional(),
+  fileType: z.string().min(1, 'fileType is required').max(50),
+  fileData: z.string().min(100, 'fileData is required'),
+  notes: z.string().max(2000).optional(),
+  tags: z.array(z.string().max(100)).max(20).optional(),
+})
+
+// Shop create schema (POST /api/shops)
+export const createShopSchema = z.object({
+  name: z.string().min(1, 'name is required').max(200),
+  gstin: z.string().max(15).optional(),
+  address: z.string().max(2000).optional(),
+  phone: z.string().max(20).optional(),
+  state: z.string().max(100).optional(),
+  isDefault: z.boolean().optional(),
+})
+
+// Bank-recon transaction PATCH schema (PATCH /api/bank-recon/transaction/[id])
+// The route takes { action: 'unmatch' | 'match', transactionId?, paymentId? }.
+export const updateBankReconTxnSchema = z.object({
+  action: z.enum(['unmatch', 'match'], { message: 'action must be "unmatch" or "match"' }),
+  transactionId: z.string().max(100).optional(),
+  paymentId: z.string().max(100).optional(),
+})
+
+// E-invoice IRN schema (POST /api/e-invoice/irn)
+export const createIrnSchema = z.object({
+  transactionId: z.string().min(1, 'transactionId is required').max(100),
+  irn: z.string().min(1, 'irn is required').max(100),
+  signedQR: z.string().max(10000).optional(),
+})

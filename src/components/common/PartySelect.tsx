@@ -12,6 +12,7 @@ import { Search, Plus, X, Phone, User, ChevronDown, Check } from 'lucide-react'
 import { cn, getInitials } from '@/lib/utils'
 import { toast as sonnerToast } from 'sonner'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
+import { readError } from '@/lib/read-error'
 
 type PartyType = 'customer' | 'supplier' | 'both'
 
@@ -251,7 +252,7 @@ function AddPartyDialog({ open, onOpenChange, defaultType, onSuccess }: {
         body: JSON.stringify(form),
         offline: { invalidate: ['/api/parties', '/api/dashboard'] },
       })
-      if (!r.ok) throw new Error('Failed')
+      if (!r.ok) throw new Error(await readError(r))
       if (isQueuedResponse(r)) {
         sonnerToast.success('Saved offline — will sync when online')
         onOpenChange(false)

@@ -12,6 +12,7 @@ import { haptic } from '@/lib/haptic'
 import { track, EVENTS } from '@/lib/analytics'
 import { TrendingUp } from 'lucide-react'
 import { formatINR } from '@/lib/utils'
+import { readError } from '@/lib/read-error'
 
 const GST_RATES = [0, 5, 12, 18, 28]
 const UNITS = ['pcs', 'kg', 'gm', 'ltr', 'ml', 'm', 'box', 'dozen', 'packet']
@@ -112,7 +113,7 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
         body: JSON.stringify(payload),
         offline: { invalidate: ['/api/products', '/api/dashboard'] },
       })
-      if (!r.ok) throw new Error('Failed')
+      if (!r.ok) throw new Error(await readError(r))
       if (isQueuedResponse(r)) {
         sonnerToast.success('Saved offline — will sync when online')
       } else {

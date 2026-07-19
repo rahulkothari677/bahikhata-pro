@@ -23,6 +23,7 @@ import {
   ChevronDown, ChevronUp, ShoppingBag,
 } from 'lucide-react'
 import { format } from 'date-fns'
+import { readError } from '@/lib/read-error'
 
 type ViewMode = 'pl' | 'gst' | 'stock'
 
@@ -37,7 +38,7 @@ export function ConsolidatedReport() {
       const r = await offlineFetch(
         `/api/reports/consolidated?from=${dateRange.from.toISOString()}&to=${dateRange.to.toISOString()}`
       )
-      if (!r.ok) throw new Error('Failed to load consolidated report')
+      if (!r.ok) throw new Error(await readError(r))
       return r.json()
     },
   })

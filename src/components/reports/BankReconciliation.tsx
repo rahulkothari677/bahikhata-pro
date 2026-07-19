@@ -28,6 +28,7 @@ import {
   FileText, ChevronDown, ChevronUp,
 } from 'lucide-react'
 import { format } from 'date-fns'
+import { readError } from '@/lib/read-error'
 
 export function BankReconciliation() {
   const queryClient = useQueryClient()
@@ -40,7 +41,7 @@ export function BankReconciliation() {
     queryKey: ['bank-recon'],
     queryFn: async () => {
       const r = await offlineFetch('/api/bank-recon/reconcile')
-      if (!r.ok) throw new Error('Failed to load bank reconciliation')
+      if (!r.ok) throw new Error(await readError(r))
       return r.json()
     },
   })

@@ -29,6 +29,7 @@ import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
 import { haptic } from '@/lib/haptic'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { computeStatementRunningBalance } from '@/lib/statement-balance'
+import { readError } from '@/lib/read-error'
 
 export function PartyProfile() {
   const { selectedPartyId, setView, setPreviousView, triggerRefresh, previousView, features } = useAppStore()
@@ -188,7 +189,7 @@ export function PartyProfile() {
         }),
         offline: { invalidate: ['/api/parties', '/api/dashboard'] },
       })
-      if (!r.ok) throw new Error('Failed')
+      if (!r.ok) throw new Error(await readError(r))
       const data = await r.json()
       sonnerToast.success(paymentType === 'received' ? 'Payment received!' : 'Payment recorded!')
       // 🔒 FIX M-NEW-1: Show double-counting warning if the server detected it

@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import { formatDate, cn } from '@/lib/utils'
 import { offlineFetch } from '@/lib/offline-fetch'
+import { readError } from '@/lib/read-error'
 import {
   DEFAULT_STAFF_PERMISSIONS,
   MODULE_LABELS,
@@ -129,7 +130,7 @@ export function StaffManagement() {
         body: JSON.stringify({ permissions: newPerms }),
         offline: { queueable: false },
       })
-      if (!r.ok) throw new Error('Failed')
+      if (!r.ok) throw new Error(await readError(r))
       sonnerToast.success(`${MODULE_LABELS[module].label} ${enabled ? 'enabled' : 'disabled'}`)
     } catch {
       sonnerToast.error('Failed to update permissions')

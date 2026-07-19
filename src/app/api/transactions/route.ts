@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { db, withConnectionRetry } from '@/lib/db'
 import { getAuthContext, assertCanWrite } from '@/lib/get-auth'
 import { canAccessModule, type ModuleKey } from '@/lib/staff-permissions'
 import { shouldHideProfit, stripTransactionsProfit } from '@/lib/profit-visibility'
@@ -105,7 +105,8 @@ export async function GET(req: NextRequest) {
     // view only needs: productName + quantity (for the 4-item preview) + count.
     // Now: uses `select` to fetch only the fields the list view actually uses.
     // Full item details are fetched via /api/transactions/[id] when expanded.
-    const transactions = await db.transaction.findMany({
+    // 🔒 V26 R15 (Phase 5): Wrapped in withConnectionRetry for Neon cold-start.
+    const transactions = await withConnectionRetry(() => db.transaction.findMany({
       where,
       include: {
         items: { select: { productName: true, quantity: true } },
@@ -114,7 +115,7 @@ export async function GET(req: NextRequest) {
       // 🔒 FIX M4: Order by date desc, then id desc for stable cursor pagination.
       orderBy: [{ date: 'desc' }, { id: 'desc' }],
       take: limit + 1,  // fetch one extra to detect "has more"
-    })
+    }))
 
     // 🔒 FIX M4: If we got limit+1 rows, there are more — trim the extra.
     const hasMore = transactions.length > limit

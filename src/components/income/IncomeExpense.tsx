@@ -18,6 +18,7 @@ import { formatINR, formatDate, cn } from '@/lib/utils'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { useExpenseBudgets } from '@/hooks/use-expense-budgets'
 import { useRecurringEntries, type RecurringEntry } from '@/hooks/use-recurring-entries'
+import { readError } from '@/lib/read-error'
 import {
   Plus, Wallet, Trash2, ArrowDownRight, ArrowUpRight, Receipt,
   Target, Edit2, X, Repeat, Calendar,
@@ -704,7 +705,7 @@ function IncomeExpenseDialog({ open, onOpenChange, type, onSuccess }: {
         }),
         offline: { invalidate: ['/api/transactions', '/api/dashboard'] },
       })
-      if (!r.ok) throw new Error('Failed')
+      if (!r.ok) throw new Error(await readError(r))
       if (isQueuedResponse(r)) {
         sonnerToast.success('Saved offline — will sync when online')
       } else {

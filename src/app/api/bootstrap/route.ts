@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getAuthUserIdOwnerOnly } from '@/lib/get-auth'
 import { getUserPlan, PLAN_LIMITS } from '@/lib/usage-limits'
-import { db } from '@/lib/db'
+import { db, withConnectionRetry } from '@/lib/db'
 import { apiError } from '@/lib/api-error'
 import { istDayStart } from '@/lib/timezone'
 
@@ -53,20 +53,25 @@ export async function GET() {
 
     try {
       const todayStart = istDayStart(new Date())
-      const [settingRow, shopsResult, userRow, aiScansCount, voiceEntriesCount] = await Promise.all([
-        db.setting.findUnique({ where: { userId } }),
-        db.shop.findMany({ where: { userId }, orderBy: { createdAt: 'asc' } }),
-        db.user.findUnique({
-          where: { id: userId },
-          select: { plan: true, renewsAt: true, trialEndsAt: true, cancelledAt: true },
-        }),
-        db.aiUsageLog.count({
-          where: { userId, feature: 'scan-bill', createdAt: { gte: todayStart }, success: true },
-        }),
-        db.aiUsageLog.count({
-          where: { userId, feature: 'voice-parse', createdAt: { gte: todayStart }, success: true },
-        }),
-      ])
+      // 🔒 V26 R15 (Phase 5): Wrapped in withConnectionRetry for Neon cold-start.
+      // Bootstrap is the FIRST call after auth — if it 500s on a cold pool, the
+      // user sees a blank screen. The retry gives Neon ~2s to wake up.
+      const [settingRow, shopsResult, userRow, aiScansCount, voiceEntriesCount] = await withConnectionRetry(() =>
+        Promise.all([
+          db.setting.findUnique({ where: { userId } }),
+          db.shop.findMany({ where: { userId }, orderBy: { createdAt: 'asc' } }),
+          db.user.findUnique({
+            where: { id: userId },
+            select: { plan: true, renewsAt: true, trialEndsAt: true, cancelledAt: true },
+          }),
+          db.aiUsageLog.count({
+            where: { userId, feature: 'scan-bill', createdAt: { gte: todayStart }, success: true },
+          }),
+          db.aiUsageLog.count({
+            where: { userId, feature: 'voice-parse', createdAt: { gte: todayStart }, success: true },
+          }),
+        ]),
+      )
 
       settings = settingRow
       shops = shopsResult

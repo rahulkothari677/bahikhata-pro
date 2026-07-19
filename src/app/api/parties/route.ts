@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { db, withConnectionRetry } from '@/lib/db'
 import { getAuthUserIdWithModule, getAuthContextForWrite } from '@/lib/get-auth'
 import { withCache, noStore } from '@/lib/cache'
 import { roundMoney } from '@/lib/money'
@@ -26,7 +26,10 @@ export async function GET() {
     // UI shows a retry state.
     //
     // 🔒 V7 L7: Removed duplicated console.error.
-    const parties = await db.party.findMany({
+    // 🔒 V26 R15 (Phase 5): Wrapped in withConnectionRetry — Neon cold-start
+    // pool timeouts surface as raw 500s on the first tap after idle. Was: only
+    // the dashboard had the retry wrapper.
+    const parties = await withConnectionRetry(() => db.party.findMany({
       where: { userId, deletedAt: null },
       orderBy: { name: 'asc' },
       select: {
@@ -43,7 +46,7 @@ export async function GET() {
         updatedAt: true,
         shopId: true,
       },
-    })
+    }))
 
     if (parties.length === 0) {
       // 🔒 AUDIT V25 FIX BUG-031 (Batch 5): Was withCache({ maxAge: 60, swr: 300 }).

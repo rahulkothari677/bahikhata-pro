@@ -26,6 +26,7 @@ import { offlineFetch, isQueuedResponse, isOnline, OfflineError } from '@/lib/of
 import { OfflineNoData } from '@/components/common/OfflineNoData'
 import { haptic } from '@/lib/haptic'
 import { BulkRemindersModal } from '@/components/parties/BulkRemindersModal'
+import { readError } from '@/lib/read-error'
 
 export function Parties() {
   const {
@@ -400,7 +401,7 @@ function PartyDialog({ open, onOpenChange, onSuccess }: {
         body: JSON.stringify(form),
         offline: { invalidate: ['/api/parties', '/api/dashboard'] },
       })
-      if (!r.ok) throw new Error('Failed')
+      if (!r.ok) throw new Error(await readError(r))
       if (isQueuedResponse(r)) {
         sonnerToast.success('Saved offline — will sync when online')
       } else {

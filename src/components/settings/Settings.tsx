@@ -31,6 +31,7 @@ import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { useSetting } from '@/hooks/use-setting'
 import { cn, formatINR } from '@/lib/utils'
 import { APP_VERSION_LABEL } from '@/lib/app-version'
+import { readError } from '@/lib/read-error'
 
 const FEATURE_CATEGORIES: { title: string; features: { key: FeatureKey; label: string; description: string; icon: any }[] }[] = [
   {
@@ -222,7 +223,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
         body: JSON.stringify({ lockedUntil: lockDate.toISOString() }),
         offline: { invalidate: ['/api/settings'] },
       })
-      if (!r.ok) throw new Error('Failed')
+      if (!r.ok) throw new Error(await readError(r))
       setLockedUntil(lockDate.toISOString())
       sonnerToast.success(`Period locked until ${new Date(dateStr).toLocaleDateString('en-IN')}. Transactions dated on or before this date can no longer be edited.`)
       haptic.success()
@@ -248,7 +249,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
         body: JSON.stringify({ lockedUntil: null }),
         offline: { invalidate: ['/api/settings'] },
       })
-      if (!r.ok) throw new Error('Failed')
+      if (!r.ok) throw new Error(await readError(r))
       setLockedUntil(null)
       setLockDateInput('')
       sonnerToast.success('Period unlocked. You can now edit all transactions.')
@@ -270,7 +271,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
     setRunningHealthCheck(true)
     try {
       const r = await offlineFetch('/api/reconciliation')
-      if (!r.ok) throw new Error('Failed')
+      if (!r.ok) throw new Error(await readError(r))
       const data = await r.json()
       setHealthCheck(data)
       if (data.allPassed) {
@@ -304,7 +305,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
         body: JSON.stringify({ ...form, hideProfit, roundOffEnabled, stockPolicy, scanLang: (form as any).scanLang, voiceLang: (form as any).voiceLang }),
         offline: { invalidate: ['/api/settings', '/api/dashboard'] },
       })
-      if (!r.ok) throw new Error('Failed')
+      if (!r.ok) throw new Error(await readError(r))
       sonnerToast.success(isQueuedResponse(r) ? 'Saved offline — will sync when online' : 'Settings saved')
       haptic.success()
       queryClient.invalidateQueries({ queryKey: ['setting'] })

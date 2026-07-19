@@ -8117,3 +8117,92 @@ Stage Summary:
 - Phase 5 Batch 4 COMPLETE: R8 + R9 + R10 + R11 + R12 (5 findings, all 🟠/🟡).
 - All 5 "would not launch without" items were closed in Batches 1-3. This batch closes the auditor's "fix in the first post-launch sprint" tier (R5-R9).
 - Remaining Phase 5 batches: Batch 5 (R13-R16 — validation + error UX + cold-start retry + error boundaries), Batch 6 (R17-R22 — polish + CI).
+
+---
+Task ID: audit-v26-phase5-batch-5
+Agent: main
+Task: Phase 5 Engineering Resilience audit — Batch 5: R13 (schema validation patchwork) + R14 (client error messages) + R15 (cold-start retry) + R16 (error boundaries + ChunkLoadError). All 🟡 severity, focused on error UX surface.
+
+Work Log:
+
+§1 — R13 🟡 Schema validation patchwork:
+
+R13.1 — settings/route.ts: non-string fallthrough now rejects with 400.
+- Was: `typeof body.X === 'string' ? body.X.slice(0, N) : body.X` → `{ shopName: 123 }` reached Prisma and 500'd.
+- Now: each string field (shopName, ownerName, address, phone, gstin, state, scanLang, voiceLang, upiId) has a type-check guard that returns 400 with "X must be text" before the slice.
+- The manual length + regex checks (GSTIN, email, UPI, stockPolicy enum) stay as the authoritative validation.
+
+R13.2 — 4 previously-unvalidated routes now have zod schemas:
+- validation.ts: added createDocumentSchema, createShopSchema, updateBankReconTxnSchema, createIrnSchema (shape-only — types + lengths, no behavior change).
+- documents/route.ts POST: validateBody(createDocumentSchema, body) before the manual checks.
+- shops/route.ts POST: validateBody(createShopSchema, body).
+- bank-recon/transaction/[id]/route.ts PATCH: validateBody(updateBankReconTxnSchema, body). Schema matches the {action, transactionId?, paymentId?} shape (not the matchStatus shape I initially wrote).
+- e-invoice/irn/route.ts POST: validateBody(createIrnSchema, body).
+
+§2 — R14 🟡 Client error message preservation:
+
+- New shared helper: src/lib/readError.ts.
+  - `export async function readError(r: Response): Promise<string>`
+  - Reads JSON body, prefers `message` (user-facing) over `error` (short code).
+  - Handles zod's `{ error: { message: '...' } }` shape + `{ errors: [...] }` array.
+  - Status-based fallback: 401 → "sign in again", 403 → "no permission", 404 → "may have been deleted", 429 → "too many requests", 5xx → "server error".
+  - Final fallback: "Something went wrong".
+- Replaced 20 `throw new Error('Failed...')` sites across 14 component files with `throw new Error(await readError(r))`. Python script did the bulk replacement + import insertion; manual fix for the multi-line import edge case (script initially inserted in the middle of a multi-line lucide-react import).
+- Files: DocumentVault (2), ProductDialog (1), BulkRemindersModal (1), PartyProfile (1), Parties (1), ConsolidatedReport (1), BankReconciliation (1), IncomeExpense (1), StaffManagement (1), Settings (4), DayEndSummary (1), PartySelect (1), TransactionDetail (1), TransactionEntry (3).
+
+§3 — R15 🟡 Cold-start retry on read paths:
+
+- withConnectionRetry was only used by dashboard/route.ts. R15 wraps the remaining read-heavy GETs:
+  - parties/route.ts GET: db.party.findMany wrapped.
+  - products/route.ts GET: db.product.findMany wrapped.
+  - transactions/route.ts GET: db.transaction.findMany wrapped.
+  - bootstrap/route.ts GET: Promise.all of 5 queries wrapped (bootstrap is the FIRST call after auth — if it 500s on a cold pool, the user sees a blank screen).
+- Auditor's warning honored: "never blind-retry mutations." Only GET read paths are wrapped. The POST handler in transactions/route.ts does NOT call withConnectionRetry (verified by the CI guard test).
+
+§4 — R16 🟡 Error boundaries + ChunkLoadError recovery:
+
+R16.1 — Route-level error.tsx:
+- New file: src/app/error.tsx.
+- Catches errors thrown by any route component (Dashboard, Sales, Parties, etc.).
+- Branded UI with amber warning icon, Hindi/English message ("कुछ गड़बड़ हो गई। रीलोड करें — आपका डेटा सुरक्षित है।"), "Try again" (calls reset) + "Go home" buttons.
+- ChunkLoadError detection: shows "App update available — reload to get the latest version" + forces hard reload.
+- Shows error.digest (Sentry error ID) for debugging.
+
+R16.1 — Global error boundary:
+- New file: src/app/global-error.tsx.
+- Catches errors in the ROOT layout itself (auth shell, providers, ThemeProvider, AppShell).
+- Renders its own <html><body> with inline styles (no Tailwind dependency, no providers) so it works even when the entire app fails to bootstrap.
+- Same Hindi/English message + "Try again" button.
+
+R16.2 — ChunkLoadError auto-reload:
+- crash-tracker.ts: new registerChunkLoadErrorHandler() function.
+- Listens for both 'error' and 'unhandledrejection' (dynamic imports reject as promises).
+- Detects ChunkLoadError by name + message patterns ("Loading chunk", "Loading CSS chunk").
+- sessionStorage loop guard: first ChunkLoadError → set flag → reload. If the reloaded page ALSO throws ChunkLoadError → flag is set → don't reload (let the error boundary show the manual "Reload" button). On successful mount after reload → clear flag (next deploy cycle can auto-reload again).
+- Idempotent (window.__bahikhataChunkHandlerRegistered flag) — safe in React Strict Mode.
+- Registered in page.tsx on app mount (alongside trackSessionStart).
+
+§5 — CI guard test (src/__tests__/lib/v26-phase5-validation-errorux.test.ts):
+- 14 grep-shaped CI assertions:
+  - R13.1: settings PUT has type checks returning 400 for all 9 string fields.
+  - R13.2: 4 routes import + call validateBody with their respective schemas; schemas exist in validation.ts.
+  - R14: readError helper exists with message/error/zod-errors extraction + status fallbacks; all 14 component files import + use readError(r), no remaining bare `throw new Error('Failed')`.
+  - R15: withConnectionRetry used on dashboard + parties + products + transactions + bootstrap; NOT used inside the POST handler of transactions/route.ts.
+  - R16.1: error.tsx + global-error.tsx exist with reset function, Reload/Go home buttons, Hindi text, ChunkLoadError detection.
+  - R16.2: registerChunkLoadErrorHandler exists with both event listeners, ChunkLoadError patterns, sessionStorage guard, idempotency flag; page.tsx registers it on mount.
+- 8 behavioral unit tests:
+  - R14 readError message extraction (7 scenarios: message preferred, error fallback, zod errors array, 401/404/500 status fallbacks, generic fallback).
+  - R16 ChunkLoadError detection (5 scenarios: name match, message match, CSS chunk, regular error rejection, null/undefined safety) + loop guard (3 scenarios: first reload, second reload blocked, flag cleared on success).
+
+Verification:
+- tsc --noEmit: 0 errors
+- jest: 1907/1907 pass (60 suites) — was 1885, +22 from new test file
+- next build: clean
+- eslint src/: 0 errors
+
+Stage Summary:
+- Phase 5 Batch 5 COMPLETE: R13 + R14 + R15 + R16 (4 findings, all 🟡 severity).
+- All "would not launch without" items (R1-R4, R7) were closed in Batches 1-3.
+- All "fix in first post-launch sprint" items (R5-R9) were closed in Batches 2-4.
+- This batch closes the 🟡 tier (R10-R16): validation, error UX, cold-start, error boundaries.
+- Remaining: Batch 6 (R17-R22 — 🔵 polish: recharts lazy-load, Sentry scrub, GET take guard, migration SQL lint, email timeout).

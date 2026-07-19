@@ -4,6 +4,7 @@ import { getAuthContext } from '@/lib/get-auth'
 import { uploadDocument, deleteDocument, getSignedDocumentUrl } from '@/lib/cloudinary'
 import { rateLimit } from '@/lib/rate-limit'
 import { apiError } from '@/lib/api-error'
+import { validateBody, createDocumentSchema } from '@/lib/validation'
 
 // File uploads to Cloudinary can take time — allow up to 60s
 export const maxDuration = 60
@@ -61,6 +62,13 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json()
+    // 🔒 V26 R13 (Phase 5): First-pass zod validation (was: no schema — manual
+    // checks only, which let bad types reach Prisma and 500). The manual
+    // length checks below stay as the authoritative validation.
+    const validation = validateBody(createDocumentSchema, body)
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 })
+    }
     let { name, category, fileType, fileData, notes, tags } = body
 
     // Validate required fields

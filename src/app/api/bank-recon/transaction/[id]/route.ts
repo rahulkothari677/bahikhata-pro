@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthContextForWrite } from '@/lib/get-auth'
 import { apiError } from '@/lib/api-error'
+import { validateBody, updateBankReconTxnSchema } from '@/lib/validation'
 
 /**
  * PATCH /api/bank-recon/transaction/[id]
@@ -33,9 +34,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     const { id } = await params
     const body = await req.json()
+    // 🔒 V26 R13 (Phase 5): First-pass zod validation (was: no schema).
+    const validation = validateBody(updateBankReconTxnSchema, body)
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 })
+    }
     const { action, transactionId, paymentId } = body
 
-    // Validate action
+    // Validate action (zod already enforces the enum, but keep the manual check
+    // for the error message shape the client expects).
     if (!['unmatch', 'match'].includes(action)) {
       return NextResponse.json({ error: 'action must be "unmatch" or "match"' }, { status: 400 })
     }

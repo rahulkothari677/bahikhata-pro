@@ -29,6 +29,7 @@ import { cn, formatDate } from '@/lib/utils'
 import { haptic } from '@/lib/haptic'
 import { toast as sonnerToast } from 'sonner'
 import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
+import { readError } from '@/lib/read-error'
 import {
   Upload, FileText, FileImage, FileCheck, Banknote, IdCard,
   File, Trash2, Search, Loader2, X, Download, FolderOpen,
@@ -77,7 +78,7 @@ export function DocumentVault() {
     queryFn: async () => {
       const url = filter === 'all' ? '/api/documents' : `/api/documents?category=${filter}`
       const r = await offlineFetch(url)
-      if (!r.ok) throw new Error('Failed to load documents')
+      if (!r.ok) throw new Error(await readError(r))
       return r.json()
     },
   })
@@ -183,7 +184,7 @@ export function DocumentVault() {
     haptic.warning()
     try {
       const r = await offlineFetch(`/api/documents?id=${docId}`, { method: 'DELETE' })
-      if (!r.ok) throw new Error('Failed to delete')
+      if (!r.ok) throw new Error(await readError(r))
       sonnerToast.success('Document deleted')
       queryClient.invalidateQueries({ queryKey: ['documents'] })
     } catch {

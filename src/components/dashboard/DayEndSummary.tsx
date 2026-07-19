@@ -18,6 +18,7 @@ import {
 import { offlineFetch } from '@/lib/offline-fetch'
 import { toast as sonnerToast } from 'sonner'
 import { haptic } from '@/lib/haptic'
+import { readError } from '@/lib/read-error'
 
 /**
  * 🔒 V17-Ext §5.4: Daily "Close the Drawer" summary.
@@ -38,7 +39,7 @@ export function DayEndSummary({ open, onOpenChange }: { open: boolean; onOpenCha
     queryKey: ['day-summary'],
     queryFn: async () => {
       const r = await offlineFetch('/api/day-summary')
-      if (!r.ok) throw new Error('Failed')
+      if (!r.ok) throw new Error(await readError(r))
       return r.json()
     },
     enabled: open, // only fetch when the dialog is open

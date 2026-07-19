@@ -22,6 +22,7 @@ import { offlineFetch } from '@/lib/offline-fetch'
 import { cn, formatINR } from '@/lib/utils'
 import { haptic } from '@/lib/haptic'
 import { toast as sonnerToast } from 'sonner'
+import { readError } from '@/lib/read-error'
 import {
   X, Send, Check, ChevronRight, User, Loader2, MessageCircle,
 } from 'lucide-react'
@@ -53,7 +54,7 @@ export function BulkRemindersModal({ open, onClose }: BulkRemindersModalProps) {
     queryKey: ['parties-for-reminders'],
     queryFn: async () => {
       const r = await offlineFetch('/api/parties')
-      if (!r.ok) throw new Error('Failed to load parties')
+      if (!r.ok) throw new Error(await readError(r))
       return r.json()
     },
     enabled: open,

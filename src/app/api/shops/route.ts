@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { getAuthUserIdOwnerOnly } from '@/lib/get-auth'
 import { checkEntityLimit } from '@/lib/usage-limits'
 import { apiError } from '@/lib/api-error'
+import { validateBody, createShopSchema } from '@/lib/validation'
 
 // GET /api/shops — list all shops for the current user
 export async function GET() {
@@ -76,6 +77,11 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json()
+    // 🔒 V26 R13 (Phase 5): First-pass zod validation (was: no schema).
+    const validation = validateBody(createShopSchema, body)
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 })
+    }
     const { name, gstin, address, phone, state } = body
 
     if (!name?.trim()) {

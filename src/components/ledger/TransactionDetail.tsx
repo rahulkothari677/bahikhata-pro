@@ -28,6 +28,7 @@ import { amountToWords } from '@/lib/amount-to-words'
 import { generateInvoicePDF } from '@/lib/invoice-pdf'
 import { haptic } from '@/lib/haptic'
 import { useSetting } from '@/hooks/use-setting'
+import { readError } from '@/lib/read-error'
 
 const PAYMENT_MODES = [
   { value: 'cash', label: 'Cash' },
@@ -1036,7 +1037,7 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
         body: JSON.stringify(body),
         offline: { invalidate: ['/api/transactions', '/api/dashboard', '/api/products', '/api/parties'] },
       })
-      if (!r.ok) throw new Error('Failed')
+      if (!r.ok) throw new Error(await readError(r))
       sonnerToast.success(isQueuedResponse(r) ? 'Saved offline — will sync when online' : 'Transaction updated')
       haptic.success()
       onSuccess?.()

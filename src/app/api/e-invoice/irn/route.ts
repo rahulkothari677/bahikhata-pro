@@ -5,6 +5,7 @@ import { canAccessModule } from '@/lib/staff-permissions'
 import { roundMoney } from '@/lib/money'
 import { apiError } from '@/lib/api-error'
 import { deriveStateCode } from '@/lib/gst'
+import { validateBody, createIrnSchema } from '@/lib/validation'
 import {
   buildIrnRequest,
   isValidIrn,
@@ -170,6 +171,11 @@ export async function POST(req: NextRequest) {
     if (writeError) return writeError
 
     const body = await req.json()
+    // 🔒 V26 R13 (Phase 5): First-pass zod validation (was: manual type checks only).
+    const validation = validateBody(createIrnSchema, body)
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 })
+    }
     const { transactionId, irn, signedQR } = body
 
     // 🔒 V26 H7 FIX: Input validation. Was: no type checks, no length limits.

@@ -38,6 +38,7 @@ import { useRatePrompt } from '@/hooks/use-rate-prompt'
 import { roundMoney, splitGst } from '@/lib/money'
 import { computeLineItems } from '@/lib/line-items'
 import { baseUnitOf, subUnitsFor, normalizeUnitName, resolveEnteredQuantity, normalizeToUnit, isCountUnit, stepForUnit } from '@/lib/units'
+import { readError } from '@/lib/read-error'
 
 const PAYMENT_MODES = [
   { value: 'cash', label: 'Cash' },
@@ -421,7 +422,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
     setLoadingOriginal(true)
     try {
       const r = await offlineFetch(`/api/transactions/${originalTransactionId}`)
-      if (!r.ok) throw new Error('Failed to fetch original transaction')
+      if (!r.ok) throw new Error(await readError(r))
       const data = await r.json()
       const originalItems = data.transaction?.items || []
       if (originalItems.length === 0) {
@@ -624,7 +625,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
         }),
         offline: { invalidate: ['/api/transactions', '/api/dashboard', '/api/products', '/api/parties', '/api/insights'] },
       })
-      if (!r.ok) throw new Error('Failed')
+      if (!r.ok) throw new Error(await readError(r))
       if (isQueuedResponse(r)) {
         sonnerToast.success(`${isNote ? (isCreditNote ? 'Credit Note' : 'Debit Note') : estimateMode ? 'Estimate' : (isSale ? 'Sale' : 'Purchase')} saved offline — will sync when online`)
       } else {
@@ -1672,7 +1673,7 @@ function AddPartyInline({ open, onOpenChange, defaultType, onAdded }: {
         body: JSON.stringify(form),
         offline: { invalidate: ['/api/parties', '/api/dashboard'] },
       })
-      if (!r.ok) throw new Error('Failed')
+      if (!r.ok) throw new Error(await readError(r))
       if (isQueuedResponse(r)) {
         sonnerToast.success('Saved offline — will sync when online')
         onOpenChange(false)

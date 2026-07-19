@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db } from '@/lib/db'
+import { db, withConnectionRetry } from '@/lib/db'
 import { getAuthUserIdWithModule } from '@/lib/get-auth'
 import { withCache, noStore } from '@/lib/cache'
 import { checkEntityLimit } from '@/lib/usage-limits'
@@ -17,10 +17,11 @@ export async function GET() {
     // Was: O(all transaction items) per request — fetch all items, compute stock.
     // Now: O(1) — just read the column. The column is maintained atomically
     // on every transaction create/edit/delete (inside $transaction).
-    const products = await db.product.findMany({
+    // 🔒 V26 R15 (Phase 5): Wrapped in withConnectionRetry for Neon cold-start.
+    const products = await withConnectionRetry(() => db.product.findMany({
       where: { userId },
       orderBy: { name: 'asc' },
-    })
+    }))
 
     const productsWithStock = products.map(p => ({
       ...p,
