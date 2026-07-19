@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getAuthContext } from '@/lib/get-auth'
+import { requireFounder, isRepairAllowed } from '@/lib/debug-auth'
 import { computePartyBalance, getReceivablePayable } from '@/lib/party-balance'
 import { apiError } from '@/lib/api-error'
 
@@ -36,15 +36,9 @@ export const maxDuration = 60
 
 export async function GET() {
   try {
-    const authCtx = await getAuthContext()
-    if (authCtx.error || !authCtx.userId) {
-      return authCtx.error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    // Owner-only — this is a diagnostic tool that reads all party balances.
-    if (authCtx.role !== 'owner') {
-      return NextResponse.json({ error: 'Owner only' }, { status: 403 })
-    }
-    const userId = authCtx.userId
+    const founderCheck = await requireFounder()
+    if ('error' in founderCheck) return founderCheck.error
+    const userId = founderCheck.userId
 
     // Path 1: getReceivablePayable (raw SQL) — returns ALL parties at once.
     const listResult = await getReceivablePayable(userId)

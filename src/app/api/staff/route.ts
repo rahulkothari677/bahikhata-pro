@@ -180,9 +180,17 @@ export async function PATCH(req: NextRequest) {
     // Merge with defaults to ensure all keys are present
     const mergedPerms = { ...DEFAULT_STAFF_PERMISSIONS, ...permissions }
 
+    // 🔒 V26 S1 FIX: Bump tokenVersion on permission change so the staff
+    // member's existing JWT is invalidated within ~5 seconds (Redis cache TTL).
+    // Was: only updated permissions — the staff member kept their OLD permissions
+    // in their JWT until it expired (7 days) or they manually logged out.
+    // Now: tokenVersion bump forces re-login, which re-reads the new permissions.
     const updated = await db.user.update({
       where: { id },
-      data: { permissions: mergedPerms },
+      data: {
+        permissions: mergedPerms,
+        tokenVersion: { increment: 1 },  // 🔒 V26 S1: invalidate existing session
+      },
       select: {
         id: true,
         name: true,
@@ -192,6 +200,11 @@ export async function PATCH(req: NextRequest) {
         createdAt: true,
       },
     })
+
+    // 🔒 V26 S1: Invalidate the Redis cache so the revocation takes effect
+    // within ~5s instead of waiting for the 5s TTL to expire naturally.
+    const { invalidateTokenVersionCache } = await import('@/lib/auth')
+    await invalidateTokenVersionCache(id)
 
     return NextResponse.json({ staff: { ...updated, permissions: parsePermissions(updated.permissions) } })
   } catch (error) {
@@ -217,7 +230,32 @@ export async function DELETE(req: NextRequest) {
     })
     if (!staff) return NextResponse.json({ error: 'Staff not found' }, { status: 404 })
 
-    await db.user.delete({ where: { id } })
+    // 🔒 V26 S1 FIX: Bump tokenVersion BEFORE deleting the user, then invalidate
+    // the cache. This ensures the deleted staff member's JWT is revoked within
+    // ~5 seconds (Redis TTL). Was: just deleted the row — the jwt callback's
+    // getCachedTokenVersion returned 0 for the missing user (same as a fresh
+    // account's default), so the revocation check passed and the session stayed
+    // valid for up to 7 days.
+    //
+    // We do the bump + delete in a transaction for atomicity. The bump updates
+    // the row before delete so the cache invalidation can read the new version.
+    // After delete, getCachedTokenVersion will return null (user not found),
+    // which the jwt callback now treats as "revoke" (V26 S1 fix in auth.ts).
+    await db.$transaction(async (tx) => {
+      // Bump tokenVersion (this row will be deleted immediately after, but
+      // the cache invalidation below needs to run against the user ID).
+      await tx.user.update({
+        where: { id },
+        data: { tokenVersion: { increment: 1 } },
+      })
+      await tx.user.delete({ where: { id } })
+    })
+
+    // Invalidate the Redis cache so the revocation takes effect within ~5s
+    // instead of waiting for the cache TTL to expire.
+    const { invalidateTokenVersionCache } = await import('@/lib/auth')
+    await invalidateTokenVersionCache(id)
+
     return NextResponse.json({ success: true })
   } catch (error) {
     console.error('Staff DELETE error:', error)

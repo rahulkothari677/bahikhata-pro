@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getAuthContext } from '@/lib/get-auth'
+import { requireFounder, isRepairAllowed } from '@/lib/debug-auth'
 import { apiError } from '@/lib/api-error'
 
 /**
@@ -26,14 +26,19 @@ export const maxDuration = 60
 
 export async function GET() {
   try {
-    const authCtx = await getAuthContext()
-    if (authCtx.error || !authCtx.userId) {
-      return authCtx.error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const founderCheck = await requireFounder()
+    if ('error' in founderCheck) return founderCheck.error
+    const userId = founderCheck.userId
+
+    // 🔒 V26 S2: In production, repair endpoints must be explicitly enabled
+    // via ALLOW_REPAIR_ENDPOINTS=true. This prevents accidental data mutation
+    // in production unless deliberately enabled.
+    if (!isRepairAllowed()) {
+      return NextResponse.json({
+        error: 'Repair endpoints disabled in production',
+        message: 'Set ALLOW_REPAIR_ENDPOINTS=true in production to enable this endpoint.',
+      }, { status: 403 })
     }
-    if (authCtx.role !== 'owner') {
-      return NextResponse.json({ error: 'Owner only' }, { status: 403 })
-    }
-    const userId = authCtx.userId
 
     // ─── Scan: find NULL paidAmount transactions BEFORE repair ─────────
     // Raw SQL because Prisma's TS types reject `paidAmount: null` on a

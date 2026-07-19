@@ -41,6 +41,9 @@ async function getCachedTokenVersion(userId: string): Promise<number | null> {
     try {
       const cached = await redis.get(cacheKey)
       if (cached !== null) {
+        // 🔒 V26 S1: "deleted" sentinel means the user was deleted (cached
+        // for 60s to reduce DB load). Return null to signal "revoke."
+        if (cached === 'deleted') return null
         return Number(cached)
       }
       // Cache miss — read from DB, cache for 5 seconds
@@ -48,7 +51,18 @@ async function getCachedTokenVersion(userId: string): Promise<number | null> {
         where: { id: userId },
         select: { tokenVersion: true },
       })
-      const version = dbUser?.tokenVersion ?? 0
+      // 🔒 V26 S1 FIX: If the user doesn't exist (deleted staff), return null
+      // (signal "revoked") instead of coercing to 0 (which is a VALID version
+      // for freshly-created accounts, letting deleted staff keep access).
+      // The jwt callback checks for null and treats it as "revoke."
+      if (!dbUser) {
+        // Cache the "deleted" state for 60 seconds (longer than the 5s for
+        // live users — deleted users don't come back, so a longer cache is
+        // safe and reduces DB load from repeated checks on stale tokens).
+        await redis.set(cacheKey, 'deleted', { ex: 60 })
+        return null
+      }
+      const version = dbUser.tokenVersion
       await redis.set(cacheKey, String(version), { ex: 5 }) // 5 second TTL
       return version
     } catch {
@@ -61,7 +75,9 @@ async function getCachedTokenVersion(userId: string): Promise<number | null> {
     where: { id: userId },
     select: { tokenVersion: true },
   })
-  return dbUser?.tokenVersion ?? 0
+  // 🔒 V26 S1 FIX: same null-for-deleted-user logic in the fallback path
+  if (!dbUser) return null
+  return dbUser.tokenVersion
 }
 
 /**
@@ -187,8 +203,14 @@ export const authOptions: NextAuthOptions = {
         try {
           const currentVersion = await getCachedTokenVersion(token.id as string)
           const jwtTokenVersion = (token.tokenVersion as number) ?? 0
-          if (currentVersion !== null && currentVersion !== jwtTokenVersion) {
-            // tokenVersion mismatch → session revoked
+          // 🔒 V26 S1 FIX: currentVersion === null means the user was deleted
+          // (getCachedTokenVersion returns null for non-existent users, not 0).
+          // Treat null as "revoke" — a deleted staff member's session must die.
+          // Was: `if (currentVersion !== null && currentVersion !== jwtTokenVersion)`
+          // — this SKIPPED the revocation check when currentVersion was null,
+          // letting deleted staff keep access (because 0 === 0 for fresh accounts).
+          if (currentVersion === null || currentVersion !== jwtTokenVersion) {
+            // tokenVersion mismatch OR user deleted → session revoked
             return { ...token, id: undefined as any, tokenVersion: undefined as any }
           }
           token.lastVersionCheck = Date.now()
@@ -206,6 +228,9 @@ export const authOptions: NextAuthOptions = {
               select: { tokenVersion: true },
             })
             const jwtTokenVersion = (token.tokenVersion as number) ?? 0
+            // 🔒 V26 S1 FIX: !dbUser (deleted user) → revoke (was: kept access
+            // because the check `dbUser.tokenVersion !== jwtTokenVersion` would
+            // throw on null, caught by the try/catch, and session stayed valid).
             if (!dbUser || dbUser.tokenVersion !== jwtTokenVersion) {
               return { ...token, id: undefined as any, tokenVersion: undefined as any }
             }
