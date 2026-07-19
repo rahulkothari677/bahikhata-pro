@@ -599,7 +599,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
             <CardTitle className="flex items-center gap-2">
               <Store className="w-5 h-5 text-primary" /> Manage Shops
             </CardTitle>
-            <p className="text-xs text-muted-foreground">Create and switch between multiple shops</p>
+            <p className="text-xs text-muted-foreground">Add shops and their GSTINs for consolidated reporting</p>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">

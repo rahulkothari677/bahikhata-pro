@@ -234,7 +234,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     try {
-      localStorage.setItem('bahakhata-themeColor', JSON.stringify(themeColor))
+      localStorage.setItem('bahikhata-themeColor', JSON.stringify(themeColor))  // 🔒 V26 N5: typo fixed (was 'bahakhata' → 'bahikhata')
     } catch (e) {}
   }, [themeColor])
 

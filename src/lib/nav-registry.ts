@@ -428,7 +428,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     iconBg: EMERALD_BG,
     actionKind: 'navigate-bulk',
     category: 'parties',
-    subcategory: 'money-banking',
+    subcategory: 'parties',  // 🔒 V26 N18: moved from 'money-banking' — reminders are about customers
     frequency: 'secondary',
     // 🔒 V26 FIX N5: was ['more'] only — desktop users had no named entry
     // (only the Bulk Reminders button inside Parties). Now in Sidebar Tools + Ctrl+K.
@@ -1133,7 +1133,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   {
     id: 'multi-shop-management',
     label: 'Multi-Shop Management',
-    description: 'Switch or add shops',
+    description: 'Manage shops for consolidated reporting',  // 🔒 V26 N14: was "Switch or add shops" — switching was removed in V26 N4
     icon: Store,
     iconColor: AMBER,
     iconBg: AMBER_BG,

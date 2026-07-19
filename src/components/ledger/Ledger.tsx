@@ -37,6 +37,7 @@ export function Ledger({ type }: { type: LedgerType }) {
     refreshKey, triggerRefresh, setView, setScannerBillType,
     transactionsViewMode, setTransactionsViewMode, triggerNewEntry, triggerNewEntryView,
     setSelectedTransactionId, setSelectedTransactionType, setPreviousView, pendingDateRange, setPendingDateRange,
+    returnMode,  // 🔒 V26 N11: reactive subscription so dismiss re-renders
   } = useAppStore()
   const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
@@ -383,7 +384,10 @@ export function Ledger({ type }: { type: LedgerType }) {
           tapped "Sale Return" or "Purchase Return" in MoreScreen. Tells
           them to pick a transaction, then tap "Credit Note" / "Debit Note"
           on the detail page to record the return. */}
-      {useAppStore.getState().returnMode === type && (
+      {/* 🔒 V26 N11: Use reactive subscription to returnMode instead of getState().
+          Was: useAppStore.getState().returnMode — non-reactive, so setting
+          returnMode=null (dismiss X) didn't trigger a re-render → banner stayed. */}
+      {returnMode === type && (
         <div className="rounded-2xl bg-indigo-50 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-900/40 p-4 flex items-start gap-3">
           <div className="w-9 h-9 rounded-lg bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center flex-shrink-0">
             <Undo2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />

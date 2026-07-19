@@ -48,12 +48,13 @@ export function Header() {
   // 🔒 V26 FIX N4 follow-up: useShops() call + shopDropdown state/ref/effect
   // removed — the Header switcher UI was deleted (N4) but its dead machinery
   // (and an unnecessary shops query subscription) was left behind.
-  const titleKeys = viewTitleKeys[currentView] || { titleKey: 'nav.dashboard', subtitleKey: 'nav.dashboard' }
-  // Override for transaction detail - show Purchase Ledger if it's a purchase
-  if (currentView === 'transaction-detail' && selectedTransactionType === 'purchase') {
-    titleKeys.titleKey = 'nav.purchases'
-    titleKeys.subtitleKey = 'nav.purchases'
-  }
+  // 🔒 V26 N10: Compute titleKeys WITHOUT mutating the module-level viewTitleKeys
+  // object. Was: `titleKeys.titleKey = 'nav.purchases'` mutated the shared object,
+  // so after viewing one purchase, every subsequent sale detail showed "Purchase Ledger".
+  const baseTitleKeys = viewTitleKeys[currentView] || { titleKey: 'nav.dashboard', subtitleKey: 'nav.dashboard' }
+  const titleKeys = (currentView === 'transaction-detail' && selectedTransactionType === 'purchase')
+    ? { titleKey: 'nav.purchases', subtitleKey: 'nav.purchases' }
+    : baseTitleKeys
   const info = { title: t(titleKeys.titleKey), subtitle: t(titleKeys.subtitleKey) }
 
   const { data: settingData } = useQuery({
