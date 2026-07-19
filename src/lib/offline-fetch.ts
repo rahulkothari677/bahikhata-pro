@@ -102,7 +102,7 @@ export function onOnlineChange(fn: () => void): () => void {
 // ────────────────────────────────────────────────────────────────────────────
 
 const syncListeners = new Set<() => void>()
-const syncFailedListeners = new Set<(detail: { failed: number; synced: number; deadLetterCount?: number }) => void>()
+const syncFailedListeners = new Set<(detail: { failed: number; synced: number; rejected?: number; deadLetterCount?: number }) => void>()
 
 export function onSyncComplete(fn: () => void): () => void {
   syncListeners.add(fn)
@@ -112,7 +112,7 @@ export function onSyncComplete(fn: () => void): () => void {
 // 🔒 FIX C3: Listener for sync failures. The UI can subscribe to show a
 // toast when offline writes fail to sync (e.g., validation error, deleted
 // product, stock policy block).
-export function onSyncFailed(fn: (detail: { failed: number; synced: number; deadLetterCount?: number }) => void): () => void {
+export function onSyncFailed(fn: (detail: { failed: number; synced: number; rejected?: number; deadLetterCount?: number }) => void): () => void {
   syncFailedListeners.add(fn)
   return () => syncFailedListeners.delete(fn)
 }
@@ -344,9 +344,17 @@ async function handleMutation(
       // Pass enhancedOpts (with the same x-client-mutation-id) so the replay
       // carries the same ID the first attempt had — server dedups correctly.
       if (queueable) {
-        await queueForSync(url, method, enhancedOpts, offlineOpts?.invalidate || [])
-        await notifyPendingCount()
-        return queuedResponse()
+        // 🔒 V26 R7 (Phase 5): Catch IDB queue failure (was: silently
+        // swallowed inside queuePendingWrite → user saw "Saved offline ✓"
+        // while nothing was saved). Now: queuePendingWrite throws, we catch
+        // here and return an honest 503 so the form's error path fires.
+        try {
+          await queueForSync(url, method, enhancedOpts, offlineOpts?.invalidate || [])
+          await notifyPendingCount()
+          return queuedResponse()
+        } catch (queueErr) {
+          return queueErrorResponse(queueErr)
+        }
       }
       throw err
     }
@@ -357,9 +365,37 @@ async function handleMutation(
     throw new OfflineError('This action requires internet connection.')
   }
 
-  await queueForSync(url, method, enhancedOpts, offlineOpts?.invalidate || [])
-  await notifyPendingCount()
-  return queuedResponse()
+  // 🔒 V26 R7 (Phase 5): Same honest-error pattern for the offline path.
+  try {
+    await queueForSync(url, method, enhancedOpts, offlineOpts?.invalidate || [])
+    await notifyPendingCount()
+    return queuedResponse()
+  } catch (queueErr) {
+    return queueErrorResponse(queueErr)
+  }
+}
+
+/**
+ * 🔒 V26 R7 (Phase 5): Honest error response when the offline queue itself
+ * fails (IDB unavailable, quota exhausted, iOS-Safari private mode, ITP
+ * storage eviction). Returns a 503 so the form's existing error path fires
+ * and the user knows the entry was NOT saved.
+ *
+ * Was: queuePendingWrite silently swallowed errors, handleMutation returned
+ * queuedResponse() (202 "Saved offline ✓") unconditionally → user recorded
+ * sales all day into a void.
+ */
+function queueErrorResponse(err: unknown): Response {
+  console.error('[offline] queue write failed — storage unavailable:', err)
+  return new Response(
+    JSON.stringify({
+      success: false,
+      error: 'Could not save offline — storage unavailable. This entry was NOT saved.',
+      message: 'Your browser\'s storage is unavailable (private mode, quota full, or storage was cleared). Please use a normal browser tab, free up storage, or wait until you have a stable internet connection.',
+      storageError: true,
+    }),
+    { status: 503, headers: { 'Content-Type': 'application/json', 'X-bahikhata-Source': 'offline-queue-error' } },
+  )
 }
 
 /**
@@ -455,13 +491,14 @@ function generateMutationId(): string {
 
 let syncing = false
 
-export async function syncPendingWrites(): Promise<{ synced: number; failed: number }> {
-  if (syncing) return { synced: 0, failed: 0 }
-  if (!isOnline()) return { synced: 0, failed: 0 }
+export async function syncPendingWrites(): Promise<{ synced: number; failed: number; rejected: number }> {
+  if (syncing) return { synced: 0, failed: 0, rejected: 0 }
+  if (!isOnline()) return { synced: 0, failed: 0, rejected: 0 }
 
   syncing = true
   let synced = 0
   let failed = 0
+  let rejected = 0  // 🔒 V26 R7 (Phase 5): 409/422 counted separately (was: counted as 'synced').
 
   try {
     const pending = await getPendingWrites()
@@ -481,13 +518,33 @@ export async function syncPendingWrites(): Promise<{ synced: number; failed: num
           body: w.body,
           headers: w.headers,
         })
-        if (res.ok || res.status === 409 || res.status === 422) {
-          // 409/422 = server rejected (e.g. duplicate) — drop from queue, don't retry
+        if (res.ok) {
           await deletePendingWrite(w.id)
           if (w.invalidates?.length) {
             await Promise.all(w.invalidates.map((p) => clearCacheByUrlPrefix(p)))
           }
           synced++
+        } else if (res.status === 409 || res.status === 422) {
+          // 🔒 V26 R7 (Phase 5): 409/422 = server rejected (e.g. duplicate,
+          // validation conflict, period lock). Drop from queue (don't retry —
+          // the server will reject every replay), but count as `rejected`
+          // (NOT `synced`). Include in the syncFailed notification so the user
+          // knows a queued edit hit a real conflict and vanished from the
+          // queue with no UI feedback.
+          //
+          // Was: counted as `synced` → green sync badge even though a queued
+          // party-edit hit a real conflict. Today 422 is only scan/voice
+          // (never queued) and 409s are mostly benign ("already converted"),
+          // so impact was low — but a queued party-edit hitting a real
+          // conflict vanished silently.
+          const errorBody = await res.text().catch(() => '')
+          console.warn(`[offline-sync] Server rejected queued write (${res.status}):`, {
+            url: w.url,
+            status: res.status,
+            body: errorBody.slice(0, 500),
+          })
+          await deletePendingWrite(w.id)
+          rejected++
         } else if (res.status >= 500) {
           // 🔒 V9 2.9: Skip and continue (was: break). Track attempts.
           // After MAX_ATTEMPTS, drop the item (quarantine) so it doesn't block forever.
@@ -557,11 +614,13 @@ export async function syncPendingWrites(): Promise<{ synced: number; failed: num
     // 🔒 FIX C3+M1: If any writes failed, notify the user so they know data
     // didn't sync. Include the dead-letter count so the user knows how many
     // entries are permanently stuck and need manual review.
-    if (failed > 0) {
+    // 🔒 V26 R7: Also notify if any writes were rejected (409/422) so the
+    // user knows a queued edit hit a real conflict.
+    if (failed > 0 || rejected > 0) {
       const deadLetterCount = await getDeadLetterCount()
       syncFailedListeners.forEach((l) => {
         try {
-          l({ failed, synced, deadLetterCount })
+          l({ failed, synced, rejected, deadLetterCount })
         } catch {
           /* ignore */
         }
@@ -571,7 +630,7 @@ export async function syncPendingWrites(): Promise<{ synced: number; failed: num
     syncing = false
   }
 
-  return { synced, failed }
+  return { synced, failed, rejected }
 }
 
 export async function getLastSyncAt(): Promise<number | null> {

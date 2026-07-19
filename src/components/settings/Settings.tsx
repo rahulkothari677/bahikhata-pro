@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select'
 import { StaffManagement } from '@/components/settings/StaffManagement'
 import { CAAccess } from '@/components/settings/CAAccess'
+import { UnsyncedEntries } from '@/components/settings/UnsyncedEntries'
 import { useShops } from '@/hooks/use-shops'
 import { exportBackup } from '@/lib/data-backup'
 import { useBusinessGoals } from '@/hooks/use-business-goals'
@@ -1001,6 +1002,13 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
               </div>
             </div>
           </div>
+
+          {/* 🔒 V26 R7 (Phase 5): Unsynced Entries card.
+              Surfaces the dead-letter store (was: zero UI consumers — the
+              saveToDeadLetter comment promised review+re-enter, but no screen
+              existed). Hidden when the store is empty (no noise on the Data
+              tab for the vast majority of users who never hit a dead-letter). */}
+          <UnsyncedEntries />
 
           {/* Danger zone — destructive actions only (no safe actions mixed in) */}
           <div className="rounded-lg border border-rose-200 dark:border-rose-900/40 bg-rose-50 dark:bg-rose-950/20 p-4">

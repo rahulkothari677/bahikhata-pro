@@ -7961,3 +7961,88 @@ Stage Summary:
 - All 5 "would not launch without" items from auditor's Section 12 are now fixed (R2+R1 in Batch 1, R3+R4 + dead-letter UI of R7 in this batch + Batch 3).
 - The 3 critical concurrency holes are closed: restore no longer strands users with partial books; concurrent PUTs no longer corrupt stock; concurrent notes no longer exceed the invoice cap.
 - Remaining Phase 5 batches: Batch 3 (R7 dead-letter UI + R6 bank import), Batch 4 (R8 timeouts + R9 webhook + R10-R12 quick wins), Batch 5 (R13-R16 validation + error UX), Batch 6 (R17-R22 polish + CI).
+
+---
+Task ID: audit-v26-phase5-batch-3
+Agent: main
+Task: Phase 5 Engineering Resilience audit — Batch 3: R7 (offline queue silent-loss + dead-letter UI — the 5th and final "would not launch without" item) + R6 (bank import dedup rework with new schema constraints).
+
+Work Log:
+
+§1 — R7 🟠 Three silent-loss paths in the offline queue:
+
+R7.1 — queuePendingWrite throws on IDB failure (was: silently swallowed).
+- src/lib/offline-db.ts: removed the `try { ... } catch { /* ignore */ }` wrapper.
+- Now: direct `await tx(...)` call → throws on failure.
+- src/lib/offline-fetch.ts handleMutation: catches the throw via try/catch around queueForSync, returns a new `queueErrorResponse()` (503 with `{ storageError: true, message: 'This entry was NOT saved.' }`).
+- Was: queuePendingWrite silently swallowed → handleMutation returned queuedResponse() (202 "Saved offline ✓") unconditionally → user recorded sales all day into a void on iOS-Safari private mode / quota exhaustion / ITP storage eviction.
+- Now: form's existing error path fires; user knows the entry was NOT saved.
+
+R7.2 — Unsynced Entries screen (was: dead-letter store had ZERO UI consumers).
+- New component: src/components/settings/UnsyncedEntries.tsx.
+- Lists each dead-letter item with a human-readable label via describeItem() helper:
+  - POST /api/transactions → "Sale — ₹1,240, 3 items, Rajesh" (parses body JSON for type/totalAmount/items/partyName).
+  - POST /api/payments → "Payment received — ₹500".
+  - PUT /api/parties/abc → "Party edit — Rajesh".
+  - Fallback: `${method} ${url}`.
+- Retry button: re-queues via queuePendingWrite + deletes from dead-letter + triggers syncPendingWrites.
+- Discard button: deletes from dead-letter.
+- Clear all button: clearDeadLetter().
+- Persistent badge shows count when > 0.
+- Hidden when store is empty (no noise on the Data tab for the vast majority of users).
+- Mounted in Settings.tsx Data section, between the Backup card and the Danger Zone.
+
+R7.3 — 409/422 counted as `rejected` (was: counted as `synced`).
+- src/lib/offline-fetch.ts syncPendingWrites: split the `if (res.ok || 409 || 422)` branch into two: `if (res.ok)` → synced++; `else if (409 || 422)` → rejected++.
+- Return type changed: `{ synced, failed, rejected }`.
+- onSyncFailed listener type updated: `rejected?: number` added.
+- The 409/422 branch still drops from queue (server will reject every replay) but now logs the rejection + counts it separately.
+- syncFailedListeners fire when `failed > 0 || rejected > 0` (was: only when `failed > 0`).
+- src/app/page.tsx: syncFailed toast now includes "N entries were rejected by the server (duplicate or validation conflict) and removed from the queue." + points user to "Settings → Data → Unsynced Entries" for dead-letter review.
+
+§2 — R6 🟠 Bank import dedup rework:
+
+R6.1 — Schema: added csvHash + rowHash with @unique constraints.
+- prisma/schema.prisma:
+  - BankStatement.csvHash String @default("") + @@unique([userId, csvHash]).
+  - BankTransaction.rowHash String @default("") + @@unique([userId, rowHash]).
+- Migration: prisma/migrations/20260720000002_bank_statement_dedup_hashes/migration.sql.
+  - Idempotent (ADD COLUMN IF NOT EXISTS, CREATE UNIQUE INDEX IF NOT EXISTS).
+  - Backfills existing rows with '' (so the NOT NULL + unique constraint can be added without NULL ambiguity).
+  - Sets NOT NULL + DEFAULT '' on both columns.
+
+R6.2 — Import route rework (src/app/api/bank-recon/import/route.ts):
+- Deleted dead `existingStatement` block (was: computed but never referenced).
+- Deleted 200-char prefix match (was: `rawCsv: { startsWith: csvFingerprint.slice(0, 200) }`).
+- Added: csvHash = sha256(csv.trim()). Pre-check via findUnique on the unique index (friendly 409 with original import date).
+- Added: P2002 catch on bankStatement.create (concurrent/double-click race → 409 with existing id).
+- Added: rowHash = sha256(`${userId}|${date.toISOString().slice(0,10)}|${description.trim()}|${amount}`) per row.
+- Flattened the nested create: bankStatement.create first, then bankTransaction.createMany({ skipDuplicates: true }).
+- Reports `skippedDuplicates` in the summary so the user sees "142 rows imported, 58 already present".
+- Row cap: > 5000 rows → 400 with "split the statement" message.
+- Updates bankStatement.txnCount to reflect actual inserted count when skippedDuplicates > 0.
+
+§3 — CI guard test (src/__tests__/lib/v26-phase5-offline-queue-bank-import.test.ts):
+- 9 grep-shaped CI assertions:
+  - R7.1: queuePendingWrite has no try/catch swallowing; handleMutation has queueErrorResponse with 503 + storageError.
+  - R7.2: UnsyncedEntries component exists with getDeadLetterItems/deleteDeadLetterItem/queuePendingWrite imports + Retry/Discard/describeItem/JSON.parse; Settings.tsx renders <UnsyncedEntries/>.
+  - R7.3: `let rejected = 0` in syncPendingWrites; 409/422 branch increments rejected; return type + listener type include rejected; page.tsx surfaces rejected to user.
+  - R6.1: schema has csvHash + rowHash with @default("") + @@unique; migration SQL is idempotent with both columns + indexes.
+  - R6.2: import route computes csvHash + rowHash; uses createMany skipDuplicates; reports skippedDuplicates; P2002 catch; row cap 5000; no dead existingStatement variable; no rawCsv startsWith.
+- 7 behavioral unit tests:
+  - R6 csvHash determinism + difference; rowHash determinism + amount-sensitivity; overlapping-statement rowHash collision (dedup fires).
+  - R7 describeItem helper: sale with items+party; payment received; malformed body fallback.
+
+Verification:
+- tsc --noEmit: 0 errors
+- jest: 1865/1865 pass (58 suites) — was 1849, +16 from new test file
+- next build: clean
+- eslint src/: 0 errors
+
+Stage Summary:
+- Phase 5 Batch 3 COMPLETE: R7 (3 sub-fixes + new UI component) + R6 (schema + migration + route rework).
+- ALL 5 "would not launch without" items from auditor's Section 12 are now fixed:
+  - ✅ R2+R1 (Batch 1): money duplication
+  - ✅ R3+R4+R5 (Batch 2): partial-restore deadlock + concurrent-PUT stock corruption + concurrent-note cap violation
+  - ✅ R7 dead-letter UI (this batch): offline entries no longer evaporate behind a success toast
+- Remaining Phase 5 batches: Batch 4 (R8 timeouts + R9 webhook + R10-R12 quick wins), Batch 5 (R13-R16 validation + error UX), Batch 6 (R17-R22 polish + CI).

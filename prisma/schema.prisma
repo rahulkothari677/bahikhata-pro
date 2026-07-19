@@ -703,9 +703,16 @@ model BankStatement {
   txnCount        Int      @default(0)
   matchedCount    Int      @default(0)  // auto-matched on import
   rawCsv          String?  // original CSV (for audit/re-import)
+  // 🔒 V26 R6 (Phase 5): sha256 of the trimmed CSV. Unique per user → catches
+  // exact-duplicate imports (double-click, concurrent tab, queue replay) via
+  // a database constraint, not check-then-act. Was: 200-char prefix match
+  // (false positives on banks with fixed header blocks; false negatives on
+  // overlapping date ranges — every overlapping row imported twice).
+  csvHash         String   @default("")
 
   transactions    BankTransaction[]
 
+  @@unique([userId, csvHash])
   @@index([userId, importedAt])
 }
 
@@ -721,6 +728,14 @@ model BankTransaction {
   amount          Int    // positive = credit (money in), negative = debit (money out)
   balance         Int?   // running balance (if provided by bank)
 
+  // 🔒 V26 R6 (Phase 5): sha256 of `${userId}|${date.toISOString().slice(0,10)}|${description.trim()}|${amount}`.
+  // Unique per user → catches per-row duplicates (overlapping statements
+  // imported twice = same row hash → skipDuplicates). Was: NO per-row dedup
+  // at all → "last 3 months" downloaded in March, then again in April:
+  // different first row → both statements import → every overlapping row
+  // imported twice, doubling the recon workload and producing bogus unmatched rows.
+  rowHash         String   @default("")
+
   // Matching status
   matchStatus     String   @default("unmatched") // unmatched | matched | ignored
   matchedPaymentId String? // FK to Payment (if matched)
@@ -732,6 +747,7 @@ model BankTransaction {
 
   createdAt       DateTime @default(now())
 
+  @@unique([userId, rowHash])
   @@index([userId, date])
   @@index([bankStatementId])
   @@index([matchStatus])

@@ -296,11 +296,14 @@ export interface PendingWrite {
 }
 
 export async function queuePendingWrite(w: Omit<PendingWrite, 'id' | 'timestamp'>): Promise<void> {
-  try {
-    await tx(STORE_PENDING, 'readwrite', (s) => s.add({ ...w, timestamp: Date.now() } as PendingWrite))
-  } catch {
-    /* ignore */
-  }
+  // 🔒 V26 R7 (Phase 5): THROW on IDB failure (was: silently swallowed with
+  // `catch { /* ignore */ }`). The old behavior meant iOS-Safari private mode,
+  // quota exhaustion, or ITP storage eviction — real conditions on cheap
+  // Android/iPhone browsers — caused the user to record sales all day into a
+  // void while the UI toasting "Saved offline ✓". Now: throw → caller
+  // (handleMutation) catches and returns an honest 503-style response so the
+  // form's existing error path fires and the user knows the entry was NOT saved.
+  await tx(STORE_PENDING, 'readwrite', (s) => s.add({ ...w, timestamp: Date.now() } as PendingWrite))
 }
 
 export async function getPendingWrites(): Promise<PendingWrite[]> {

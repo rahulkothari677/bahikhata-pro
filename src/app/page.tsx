@@ -202,11 +202,17 @@ export default function Home() {
   // their offline sale/purchase didn't reach the server. Was: silent data
   // loss — the user saw "Saved offline. Will sync when online" but the sale
   // was silently discarded if the server returned a 4xx error during sync.
+  // 🔒 V26 R7 (Phase 5): Also handle `rejected` (409/422 — server rejected a
+  // queued write, e.g. duplicate or validation conflict). Don't retry —
+  // surface to the user so they know a queued edit hit a real conflict.
   useEffect(() => {
-    const unsub = onSyncFailed(({ failed, synced, deadLetterCount }) => {
+    const unsub = onSyncFailed(({ failed, synced, rejected, deadLetterCount }) => {
       const descParts = [`${failed} entr${failed === 1 ? 'y' : 'ies'} failed to sync${synced > 0 ? ` (${synced} synced successfully)` : ''}.`]
+      if (rejected && rejected > 0) {
+        descParts.push(`${rejected} entr${rejected === 1 ? 'y' : 'ies'} were rejected by the server (duplicate or validation conflict) and removed from the queue.`)
+      }
       if (deadLetterCount && deadLetterCount > 0) {
-        descParts.push(`${deadLetterCount} entr${deadLetterCount === 1 ? 'y' : 'ies'} could not be synced and need manual review. Please re-enter them.`)
+        descParts.push(`${deadLetterCount} entr${deadLetterCount === 1 ? 'y' : 'ies'} could not be synced and need manual review. Please re-enter them in Settings → Data → Unsynced Entries.`)
       }
       sonnerToast.error('Some entries could not sync', {
         description: descParts.join(' '),

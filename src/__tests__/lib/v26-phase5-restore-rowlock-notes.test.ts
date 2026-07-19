@@ -213,7 +213,7 @@ describe('V26 Phase 5 R4 — FOR UPDATE closes the concurrent-PUT race', () => {
   })
 
   test('PUT racing DELETE: PUT throws EDIT_GONE (row was soft-deleted meanwhile)', async () => {
-    let row = { id: 'txn-1', deletedAt: null }
+    let row: { id: string; deletedAt: Date | null } = { id: 'txn-1', deletedAt: null }
 
     // PUT pre-fetches existing (alive).
     const existingAtPreFetch = { ...row }
