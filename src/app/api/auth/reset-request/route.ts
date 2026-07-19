@@ -133,35 +133,50 @@ export async function POST(req: NextRequest) {
 
     if (isEmailConfigured()) {
       // Email provider configured — send the reset link via email.
-      const emailResult = await sendEmail({
-        to: emailLower,
-        subject: 'Reset your EkBook password',
-        html: `
-          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px;">
-            <h2 style="color: #f59e0b;">Reset your EkBook password</h2>
-            <p>We received a request to reset the password for your EkBook account.</p>
-            <p style="margin: 24px 0;">
-              <a href="${resetLink}" style="background: #f59e0b; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; display: inline-block; font-weight: 600;">
-                Reset Password
-              </a>
-            </p>
-            <p style="color: #6b7280; font-size: 14px;">
-              Or copy this link into your browser:<br>
-              <span style="word-break: break-all; color: #2563eb;">${resetLink}</span>
-            </p>
-            <p style="color: #6b7280; font-size: 14px;">
-              This link expires in 1 hour. If you didn't request a password reset, you can safely ignore this email.
-            </p>
-            <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;">
-            <p style="color: #9ca3af; font-size: 12px;">
-              EkBook — India's ledger app for shop owners. If you need help, reply to this email.
-            </p>
-          </div>
-        `,
-        text: `Reset your EkBook password\n\nWe received a request to reset the password for your EkBook account.\n\nReset link (expires in 1 hour):\n${resetLink}\n\nIf you didn't request this, you can safely ignore this email.`,
-      })
+      // 🔒 V26 R22 (Phase 5): Wrap sendEmail in try/catch so a throw (timeout,
+      // network error, Resend SDK crash) returns the SAME generic response as
+      // a successful send. Was: sendEmail throw would land in the outer catch
+      // at line 187 → return { error: 'Failed to process request' } → the
+      // client could distinguish "email exists + send failed" from "email
+      // doesn't exist" (both should return the same generic message per C1).
+      let emailResult: { ok: boolean; reason?: string; detail?: string } | null = null
+      try {
+        emailResult = await sendEmail({
+          to: emailLower,
+          subject: 'Reset your EkBook password',
+          html: `
+            <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px;">
+              <h2 style="color: #f59e0b;">Reset your EkBook password</h2>
+              <p>We received a request to reset the password for your EkBook account.</p>
+              <p style="margin: 24px 0;">
+                <a href="${resetLink}" style="background: #f59e0b; color: white; padding: 12px 24px; border-radius: 8px; text-decoration: none; display: inline-block; font-weight: 600;">
+                  Reset Password
+                </a>
+              </p>
+              <p style="color: #6b7280; font-size: 14px;">
+                Or copy this link into your browser:<br>
+                <span style="word-break: break-all; color: #2563eb;">${resetLink}</span>
+              </p>
+              <p style="color: #6b7280; font-size: 14px;">
+                This link expires in 1 hour. If you didn't request a password reset, you can safely ignore this email.
+              </p>
+              <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 24px 0;">
+              <p style="color: #9ca3af; font-size: 12px;">
+                EkBook — India's ledger app for shop owners. If you need help, reply to this email.
+              </p>
+            </div>
+          `,
+          text: `Reset your EkBook password\n\nWe received a request to reset the password for your EkBook account.\n\nReset link (expires in 1 hour):\n${resetLink}\n\nIf you didn't request this, you can safely ignore this email.`,
+        })
+      } catch (sendErr) {
+        // sendEmail threw (timeout, network error, SDK crash) — log + alert,
+        // but return the generic response so the client can't distinguish
+        // send-failure from no-account.
+        console.error('[reset-request] sendEmail threw:', sendErr)
+        emailResult = { ok: false, reason: 'exception', detail: String(sendErr).slice(0, 200) }
+      }
 
-      if (!emailResult.ok) {
+      if (emailResult && !emailResult.ok) {
         // Email failed to send — log a founder alert so the founder can
         // manually help this user. Don't reveal the failure to the user
         // (they could be an attacker probing the system).

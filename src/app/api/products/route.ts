@@ -21,6 +21,7 @@ export async function GET() {
     const products = await withConnectionRetry(() => db.product.findMany({
       where: { userId },
       orderBy: { name: 'asc' },
+      take: 5000,  // 🔒 V26 R20 (Phase 5): fuse — not pagination. Kirana scale ≤2k products.
     }))
 
     const productsWithStock = products.map(p => ({

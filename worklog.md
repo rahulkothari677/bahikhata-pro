@@ -8206,3 +8206,89 @@ Stage Summary:
 - All "fix in first post-launch sprint" items (R5-R9) were closed in Batches 2-4.
 - This batch closes the 🟡 tier (R10-R16): validation, error UX, cold-start, error boundaries.
 - Remaining: Batch 6 (R17-R22 — 🔵 polish: recharts lazy-load, Sentry scrub, GET take guard, migration SQL lint, email timeout).
+
+---
+Task ID: audit-v26-phase5-batch-6
+Agent: main
+Task: Phase 5 Engineering Resilience audit — Batch 6 (FINAL): R17 (recharts lazy-load) + R18 (Sentry polish) + R20 (GET take guard) + R21 (migration SQL lint) + R22 (reset-request wrap). All 🔵 low-severity polish + CI guards. R19 (restore N+1) was already done in Batch 2.
+
+Work Log:
+
+§1 — R17 🔵 recharts lazy-load (open since V21):
+- New file: src/components/dashboard/DashboardCharts.tsx.
+  - Contains ALL 5 chart sections (sparkline, donut, sales trend, top products, payment mode pie).
+  - Imports recharts + chartColors + all chart UI components (Card, Button, Badge, EmptyState, etc.).
+  - Exports DashboardCharts({ salesTrend, kpis, hideProfit, topProducts, paymentModeSplit, t, setView }).
+- Dashboard.tsx: removed static `import { ... } from 'recharts'` + `import { chartColors }`.
+  - Added `const DashboardCharts = dynamic(() => import('./DashboardCharts').then(m => m.DashboardCharts), { ssr: false, loading: () => <Skeleton/> })`.
+  - Replaced 240 lines of inline chart JSX with `<DashboardCharts {...chartProps} />`.
+  - Skeleton fallback shows 4 pulse placeholders while the chunk loads.
+- Result: recharts (~200KB) is now in a separate chunk that only loads when the Dashboard renders — NOT on the login page or first paint.
+
+§2 — R18 🔵 Sentry observability polish (4 sub-fixes):
+
+R18.1 — sentry.client.config.ts: pinned replay masking.
+- Added `integrations: [Sentry.replayIntegration({ maskAllText: true, blockAllMedia: true })]`.
+- Was: relying on Sentry's default masking, which could change in a future SDK version → customer names/amounts could start shipping to Sentry's replay storage.
+
+R18.2 — sentry.client.config.ts: beforeSend only counts real crashes.
+- Was: every event (including handled network noise captured by automatic instrumentation) incremented the crash counter → crash-free % shown to users was fake-bad.
+- Now: only counts when `event.exception` is present AND (unhandled OR level is error/fatal). Non-exception events (transactions, breadcrumbs) and handled info-level captures don't count.
+
+R18.3 — sentry.server.config.ts: added beforeSend scrub.
+- Deletes event.extra + breadcrumb payload keys matching `/amount|phone|gstin|email|password|token|secret|upi/i`.
+- Was: no server beforeSend scrub → Prisma validation errors (which embed field values like names, amounts) were visible in Sentry's Vercel logs.
+
+R18.4 — api-error.ts: log safe error info, not the whole object.
+- Was: `console.error(..., error, ...)` — Prisma validation errors embed field values (names, amounts) into the error object, which then land in Vercel logs.
+- Now: `console.error(..., { message: err.message, code: err.code, stack: err.stack.split('\n').slice(0,5).join('\n') }, ...)`. Only safe fields logged.
+
+§3 — R20 🔵 GET take guard:
+- parties/route.ts GET: added `take: 5000` (fuse, not pagination — kirana scale ≤2k parties).
+- products/route.ts GET: added `take: 5000` (same pattern).
+
+§4 — R21 🔵 Migration SQL lint (CI guard):
+- New test: v26-phase5-polish-ci.test.ts includes a jest guard that walks prisma/migrations/**/*.sql and fails on:
+  - CREATE INDEX CONCURRENTLY (not allowed inside a transaction — the V12 outage class).
+  - DROP TABLE without IF EXISTS (non-idempotent).
+  - ALTER TABLE DROP COLUMN without `-- audited:destructive` comment on the preceding line.
+- Strips SQL comments (-- lines) before checking, so the audit patterns can appear in explanatory comments without triggering a false positive.
+- The V12 outage class becomes un-shippable — any future migration that uses these patterns will fail CI.
+
+§5 — R22 🔵 reset-request try/catch wrap:
+- reset-request/route.ts: wrapped `await sendEmail(...)` in try/catch.
+- Was: if sendEmail threw (timeout, network error, SDK crash), the throw landed in the outer catch → returned `{ error: 'Failed to process request' }` → the client could distinguish "email exists + send failed" from "email doesn't exist" (both should return the same generic message per C1 security fix).
+- Now: the catch sets `emailResult = { ok: false, reason: 'exception' }` → the generic "If the email exists, a reset link has been sent." response is returned regardless. Founder alert is still logged so the founder can manually intervene.
+- email.ts timeout (AbortSignal.timeout(10_000)) was already done in R8.1 (Batch 4).
+
+§6 — CI guard test (src/__tests__/lib/v26-phase5-polish-ci.test.ts):
+- 9 grep-shaped CI assertions covering all 5 findings:
+  - R17: Dashboard no longer statically imports recharts/chartColors; DashboardCharts.tsx exists with recharts import + chart types + dynamic import with ssr:false.
+  - R18.1: sentry.client.config.ts has replayIntegration with maskAllText + blockAllMedia.
+  - R18.2: beforeSend checks event.exception (hasException variable).
+  - R18.3: sentry.server.config.ts has beforeSend with SENSITIVE_KEY_RE + scrubs event.extra + breadcrumbs.
+  - R18.4: api-error.ts logs safeErrorInfo with err.message + err.code + err.stack (truncated to 5 frames).
+  - R20: parties + products GET have take: 5000.
+  - R21: no migration SQL uses CREATE INDEX CONCURRENTLY / DROP TABLE without IF EXISTS / ALTER TABLE DROP COLUMN without -- audited:destructive.
+  - R22: reset-request wraps sendEmail in try/catch with emailResult = { ok: false, reason: 'exception' } in the catch.
+
+Verification:
+- tsc --noEmit: 0 errors
+- jest: 1916/1916 pass (61 suites) — was 1907, +9 from new test file
+- next build: clean
+- eslint src/: 0 errors
+
+Stage Summary:
+- Phase 5 Batch 6 COMPLETE — ALL 22 Phase 5 findings are now fixed or explicitly deferred with reasoning.
+- The 6-batch Phase 5 execution plan is fully shipped:
+  - Batch 1: R2+R1 (🔴🔴 money duplication)
+  - Batch 2: R3+R19+R4+R5 (🔴🟠🟠 restore + row-lock + note-cap)
+  - Batch 3: R7+R6 (🟠🟠 dead-letter UI + bank import)
+  - Batch 4: R8+R9+R10+R11+R12 (🟠🟠🟡🟡🟡 timeouts + webhook + quick wins)
+  - Batch 5: R13+R14+R15+R16 (🟡🟡🟡🟡 validation + error UX)
+  - Batch 6: R17+R18+R20+R21+R22 (🔵🔵🔵🔵🔵 polish + CI guards)
+- All 5 "would not launch without" items closed (Batches 1-3).
+- All 🟠 high-severity items closed (Batches 2-4).
+- All 🟡 medium-severity items closed (Batch 4-5).
+- All 🔵 low-severity items closed (this batch).
+- 8 new CI guard test files added across the 6 batches, keeping every bug class closed in CI.

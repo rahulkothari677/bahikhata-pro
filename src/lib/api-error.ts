@@ -73,9 +73,20 @@ export function apiError(
   // Short 8-char errorId — easy to read aloud / paste in a support email
   const errorId = randomBytes(4).toString('hex')
 
-  // Server-side log with the full error + errorId + optional context.
+  // Server-side log with the errorId + message + optional context.
   // Never sent to the client.
-  console.error(`[apiError ${errorId}]`, message, error, context ?? '')
+  //
+  // 🔒 V26 R18.4 (Phase 5): Log error.message + error.code + stack, NOT the
+  // whole error object. Was: `console.error(..., error, ...)` — Prisma
+  // validation errors embed field values (names, amounts) into the error
+  // object, which then land in Vercel logs. Now: extract only the safe fields.
+  const err = error as any
+  const safeErrorInfo = {
+    message: err?.message || String(error),
+    code: err?.code,
+    stack: err?.stack?.split('\n').slice(0, 5).join('\n'),  // first 5 stack frames
+  }
+  console.error(`[apiError ${errorId}]`, message, safeErrorInfo, context ?? '')
 
   // 🔒 V20-017: Capture to Sentry for alerting. Only capture 5xx errors —
   // 4xx errors are client mistakes (bad input, not found) and would spam

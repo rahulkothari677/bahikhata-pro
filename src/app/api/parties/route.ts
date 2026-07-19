@@ -32,6 +32,7 @@ export async function GET() {
     const parties = await withConnectionRetry(() => db.party.findMany({
       where: { userId, deletedAt: null },
       orderBy: { name: 'asc' },
+      take: 5000,  // 🔒 V26 R20 (Phase 5): fuse — not pagination. Kirana scale ≤2k parties.
       select: {
         id: true,
         name: true,
