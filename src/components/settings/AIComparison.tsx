@@ -542,7 +542,7 @@ function ProviderResultCard({
               </summary>
               <ul className="mt-1 space-y-0.5">
                 {result.parsed.items.map((item: any, idx: number) => (
-                  <li key={idx} className="text-[11px]">
+                  <li key={idx} className="text-2xs">
                     {item.name} × {item.quantity} {item.unit} = ₹{Number(item.total).toFixed(2)}
                   </li>
                 ))}
@@ -567,7 +567,7 @@ function HistoryRow({ item }: { item: HistoryItem }) {
     <div className="border rounded-lg p-2 text-xs">
       <div className="flex items-center justify-between mb-1">
         <span className="font-medium truncate">{item.imageName || 'Untitled bill'}</span>
-        <span className="text-muted-foreground text-[10px]">{dateStr}</span>
+        <span className="text-muted-foreground text-3xs">{dateStr}</span>
       </div>
       <div className="grid grid-cols-3 gap-2">
         {PROVIDERS.map((p) => {
@@ -575,17 +575,17 @@ function HistoryRow({ item }: { item: HistoryItem }) {
           const score = item[`${p.key}Score`]
           return (
             <div key={p.key} className="text-center">
-              <div className="text-[10px] text-muted-foreground">{p.name.split(' ')[0]}</div>
+              <div className="text-3xs text-muted-foreground">{p.name.split(' ')[0]}</div>
               {result === null ? (
-                <div className="text-[10px] text-muted-foreground">—</div>
+                <div className="text-3xs text-muted-foreground">—</div>
               ) : score !== null ? (
                 <div className={`font-bold ${score >= 75 ? 'text-emerald-600 dark:text-emerald-400' : score >= 50 ? 'text-amber-600 dark:text-amber-400' : 'text-red-600 dark:text-red-400'}`}>
                   {score}/100
                 </div>
               ) : result.success ? (
-                <div className="text-emerald-600 dark:text-emerald-400 text-[10px]">✓ unscored</div>
+                <div className="text-emerald-600 dark:text-emerald-400 text-3xs">✓ unscored</div>
               ) : (
-                <div className="text-red-600 dark:text-red-400 text-[10px]">✗ failed</div>
+                <div className="text-red-600 dark:text-red-400 text-3xs">✗ failed</div>
               )}
             </div>
           )

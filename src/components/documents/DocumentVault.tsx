@@ -325,16 +325,16 @@ export function DocumentVault() {
                   {/* Name + category */}
                   <p className="text-sm font-medium truncate" title={doc.name}>{doc.name}</p>
                   <div className="flex items-center justify-between mt-1">
-                    <Badge variant="outline" className="text-[9px]">{catMeta.label}</Badge>
-                    <span className="text-[10px] text-muted-foreground">{formatFileSize(doc.fileSize)}</span>
+                    <Badge variant="outline" className="text-3xs">{catMeta.label}</Badge>
+                    <span className="text-3xs text-muted-foreground">{formatFileSize(doc.fileSize)}</span>
                   </div>
-                  <p className="text-[10px] text-muted-foreground mt-1">{formatDate(doc.uploadedAt)}</p>
+                  <p className="text-3xs text-muted-foreground mt-1">{formatDate(doc.uploadedAt)}</p>
                   {/* Open button */}
                   <a
                     href={doc.viewUrl || doc.cloudinaryUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="mt-2 w-full inline-flex items-center justify-center gap-1 py-1.5 rounded-lg border border-border text-[11px] font-medium hover:bg-muted transition"
+                    className="mt-2 w-full inline-flex items-center justify-center gap-1 py-1.5 rounded-lg border border-border text-2xs font-medium hover:bg-muted transition"
                   >
                     <Download className="w-3 h-3" />
                     Open
@@ -365,7 +365,7 @@ export function DocumentVault() {
                 <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/50">
                   <File className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                   <span className="text-xs truncate flex-1">{pendingFileRef.current.name}</span>
-                  <span className="text-[10px] text-muted-foreground">{formatFileSize(pendingFileRef.current.size)}</span>
+                  <span className="text-3xs text-muted-foreground">{formatFileSize(pendingFileRef.current.size)}</span>
                 </div>
               )}
               {/* Name */}
@@ -386,7 +386,7 @@ export function DocumentVault() {
                       key={cat.value}
                       onClick={() => setUploadCategory(cat.value)}
                       className={cn(
-                        'px-2.5 py-1 rounded-full text-[11px] font-medium transition',
+                        'px-2.5 py-1 rounded-full text-2xs font-medium transition',
                         uploadCategory === cat.value
                           ? 'bg-primary text-primary-foreground'
                           : 'bg-muted text-muted-foreground hover:bg-muted/80',

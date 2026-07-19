@@ -408,7 +408,7 @@ export function Gstr3bReport() {
               </tr>
             </tbody>
           </table>
-          <p className="text-[10px] text-muted-foreground mt-2">
+          <p className="text-3xs text-muted-foreground mt-2">
             Credit notes reduce your output tax liability (sales returns).
             Debit notes reduce your input tax credit (purchase returns).
             Both are already included in the Net Tax Payable calculation above.
@@ -509,7 +509,7 @@ function SummaryCard({ icon, label, value, color, bg, highlight, isCount }: {
         <span className={color}>{icon}</span>
       </div>
       <div className="min-w-0">
-        <p className="text-[10px] text-muted-foreground uppercase tracking-wide truncate">{label}</p>
+        <p className="text-3xs text-muted-foreground uppercase tracking-wide truncate">{label}</p>
         <p className={cn('text-base font-bold tabular-nums', color)}>
           {isCount ? value : formatINR(value)}
         </p>

@@ -152,7 +152,7 @@ export function MobileBottomNav() {
                 aria-label={tab.labelKey ? t(tab.labelKey) : tab.label}
               >
                 <Icon className="w-5 h-5" strokeWidth={isActive ? 2.5 : 2} />
-                <span className="text-[10px] font-medium">{tab.labelKey ? t(tab.labelKey) : tab.label}</span>
+                <span className="text-3xs font-medium">{tab.labelKey ? t(tab.labelKey) : tab.label}</span>
               </button>
             )
           })}
@@ -167,7 +167,7 @@ export function MobileBottomNav() {
                 <div className="w-12 h-12 -mt-6 rounded-full bg-violet-600 text-white flex items-center justify-center shadow-lg shadow-violet-600/30">
                   <Calculator className="w-6 h-6" strokeWidth={2.5} />
                 </div>
-                <span className="text-[10px] font-medium text-violet-600 dark:text-violet-400">CA Mode</span>
+                <span className="text-3xs font-medium text-violet-600 dark:text-violet-400">CA Mode</span>
               </div>
             ) : (
               <>
@@ -227,7 +227,7 @@ export function MobileBottomNav() {
                 aria-label={tab.labelKey ? t(tab.labelKey) : tab.label}
               >
                 <Icon className="w-5 h-5" strokeWidth={isActive ? 2.5 : 2} />
-                <span className="text-[10px] font-medium">{tab.labelKey ? t(tab.labelKey) : tab.label}</span>
+                <span className="text-3xs font-medium">{tab.labelKey ? t(tab.labelKey) : tab.label}</span>
               </button>
             )
           })}
@@ -241,7 +241,7 @@ export function MobileBottomNav() {
             aria-label="More"
           >
             <Menu className="w-5 h-5" strokeWidth={isMoreActive ? 2.5 : 2} />
-            <span className="text-[10px] font-medium">More</span>
+            <span className="text-3xs font-medium">More</span>
           </button>
         </div>
       </nav>

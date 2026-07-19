@@ -330,7 +330,7 @@ function SummaryCard({ icon, label, count, itc, color, bg, active, onClick }: {
         <span className={color}>{icon}</span>
       </div>
       <div className="min-w-0">
-        <p className="text-[10px] text-muted-foreground uppercase tracking-wide truncate">{label}</p>
+        <p className="text-3xs text-muted-foreground uppercase tracking-wide truncate">{label}</p>
         <p className={cn('text-base font-bold tabular-nums', color)}>{count} invoice(s)</p>
         <p className="text-xs text-muted-foreground tabular-nums">ITC: {formatINR(itc)}</p>
       </div>
@@ -358,7 +358,7 @@ function MatchedTable({ items }: { items: any[] }) {
         <tbody>
           {items.map((m, i) => (
             <tr key={i} className="border-b border-border/30">
-              <td className="py-1.5 font-mono text-[10px]">{m.supplierGstin}</td>
+              <td className="py-1.5 font-mono text-3xs">{m.supplierGstin}</td>
               <td className="py-1.5">{m.invoiceNumber}</td>
               <td className="text-right py-1.5 tabular-nums">{formatINR(m.twoBTaxable)}</td>
               <td className="text-right py-1.5 tabular-nums">{m.twoBIgst ? formatINR(m.twoBIgst) : '-'}</td>
@@ -367,9 +367,9 @@ function MatchedTable({ items }: { items: any[] }) {
               <td className="text-right py-1.5 tabular-nums font-medium">{formatINR(m.twoBTotal)}</td>
               <td className="text-center py-1.5">
                 {m.status === 'matched' ? (
-                  <Badge className="bg-emerald-600 text-white text-[10px]">✓ Match</Badge>
+                  <Badge className="bg-emerald-600 text-white text-3xs">✓ Match</Badge>
                 ) : (
-                  <Badge className="bg-amber-600 text-white text-[10px]">Amt Δ₹{m.amountDifference?.toFixed(2)}</Badge>
+                  <Badge className="bg-amber-600 text-white text-3xs">Amt Δ₹{m.amountDifference?.toFixed(2)}</Badge>
                 )}
               </td>
             </tr>
@@ -399,7 +399,7 @@ function BooksOnlyTable({ items }: { items: any[] }) {
           {items.map((b, i) => (
             <tr key={i} className="border-b border-border/30">
               <td className="py-1.5">{b.partyName}</td>
-              <td className="py-1.5 font-mono text-[10px]">{b.partyGstin}</td>
+              <td className="py-1.5 font-mono text-3xs">{b.partyGstin}</td>
               <td className="py-1.5">{b.invoiceNumber}</td>
               <td className="text-right py-1.5 tabular-nums">{formatINR(b.taxableValue)}</td>
               <td className="text-right py-1.5 tabular-nums text-amber-600 dark:text-amber-400">{formatINR(b.igst + b.cgst + b.sgst)}</td>
@@ -432,7 +432,7 @@ function TwoBOnlyTable({ items }: { items: any[] }) {
         <tbody>
           {items.map((t, i) => (
             <tr key={i} className="border-b border-border/30">
-              <td className="py-1.5 font-mono text-[10px]">{t.supplierGstin}</td>
+              <td className="py-1.5 font-mono text-3xs">{t.supplierGstin}</td>
               <td className="py-1.5">{t.invoiceNumber}</td>
               <td className="py-1.5">{t.invoiceDate || '-'}</td>
               <td className="text-right py-1.5 tabular-nums">{formatINR(t.taxableValue)}</td>

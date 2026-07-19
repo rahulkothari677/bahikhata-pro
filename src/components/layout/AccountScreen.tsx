@@ -410,7 +410,7 @@ export function AccountScreen() {
                   {plan === 'free' ? (
                     <>
                       <p className="font-bold text-sm">Upgrade to Pro</p>
-                      <p className="text-[11px] text-white/80 mt-0.5">
+                      <p className="text-2xs text-white/80 mt-0.5">
                         AI Scanner · GST Export · WhatsApp · Voice Entry
                       </p>
                     </>
@@ -419,7 +419,7 @@ export function AccountScreen() {
                       <p className="font-bold text-sm">
                         You're on {plan === 'elite' ? 'Elite' : 'Pro'} {plan === 'elite' && '👑'}
                       </p>
-                      <p className="text-[11px] text-white/80 mt-0.5">
+                      <p className="text-2xs text-white/80 mt-0.5">
                         {plan === 'elite'
                           ? 'All features unlocked · Priority support'
                           : 'Pro features active · Upgrade to Elite for more'}
@@ -428,7 +428,7 @@ export function AccountScreen() {
                   )}
                 </div>
                 <div className="flex-shrink-0">
-                  <span className="text-[10px] font-bold uppercase tracking-wide bg-white/20 px-2 py-1 rounded-full">
+                  <span className="text-3xs font-bold uppercase tracking-wide bg-white/20 px-2 py-1 rounded-full">
                     {plan === 'free' ? 'View Plans' : 'Manage'}
                   </span>
                 </div>
@@ -476,7 +476,7 @@ export function AccountScreen() {
                 </div>
                 {/* Plan badge on avatar (bottom-right) */}
                 <div className={cn(
-                  "absolute -bottom-1 -right-1 px-2 py-0.5 rounded-full text-[10px] font-bold flex items-center gap-1 shadow-lg ring-2 ring-white/80",
+                  "absolute -bottom-1 -right-1 px-2 py-0.5 rounded-full text-3xs font-bold flex items-center gap-1 shadow-lg ring-2 ring-white/80",
                   planBadge.badgeClassName
                 )}>
                   {PlanIcon && <PlanIcon className="w-2.5 h-2.5" />}
@@ -491,7 +491,7 @@ export function AccountScreen() {
                     {userName}
                   </p>
                   {isCA && (
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-white/25 text-white whitespace-nowrap flex items-center gap-1">
+                    <span className="text-3xs px-1.5 py-0.5 rounded-full font-bold bg-white/25 text-white whitespace-nowrap flex items-center gap-1">
                       <Calculator className="w-2.5 h-2.5" /> CA
                     </span>
                   )}
@@ -513,7 +513,7 @@ export function AccountScreen() {
                   </p>
                 )}
                 {isCA && (
-                  <p className="text-[11px] text-white/60 truncate mt-1">
+                  <p className="text-2xs text-white/60 truncate mt-1">
                     Read-only access — ask the owner to make changes
                   </p>
                 )}
@@ -538,7 +538,7 @@ export function AccountScreen() {
             return (
               <div
                 key={stat.label}
-                className="card-hover bg-card rounded-xl border border-border/60 shadow-sm p-2.5 flex flex-col items-center text-center"
+                className="card-hover bg-card rounded-xl border border-border/60 shadow-card p-2.5 flex flex-col items-center text-center"
               >
                 <div className={cn(
                   'w-7 h-7 rounded-lg flex items-center justify-center mb-1.5',
@@ -547,7 +547,7 @@ export function AccountScreen() {
                   <StatIcon className={cn('w-3.5 h-3.5', stat.color)} />
                 </div>
                 <p className="text-sm font-bold tabular-nums leading-tight">{stat.value}</p>
-                <p className="text-[10px] text-muted-foreground leading-tight mt-0.5">{stat.label}</p>
+                <p className="text-3xs text-muted-foreground leading-tight mt-0.5">{stat.label}</p>
               </div>
             )
           })}
@@ -561,7 +561,7 @@ export function AccountScreen() {
             (which does read shopId) remains functional.
             To re-enable: stamp shopId on every write + filter every read. */}
         {shops.length > 1 && !isCA && (
-          <div className="bg-card rounded-2xl border border-border/60 shadow-sm p-3 opacity-70">
+          <div className="bg-card rounded-2xl border border-border/60 shadow-card p-3 opacity-70">
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-lg bg-amber-100 dark:bg-amber-950 flex items-center justify-center flex-shrink-0">
                 <Store className="w-4 h-4 text-amber-600 dark:text-amber-400" />
@@ -570,7 +570,7 @@ export function AccountScreen() {
                 <p className="text-xs text-muted-foreground">Multi-Shop Switching</p>
                 <p className="text-sm font-medium truncate">{shops.length} shops created</p>
               </div>
-              <span className="text-[10px] font-bold uppercase tracking-wide bg-muted text-muted-foreground px-2 py-1 rounded-full">
+              <span className="text-3xs font-bold uppercase tracking-wide bg-muted text-muted-foreground px-2 py-1 rounded-full">
                 Coming Soon
               </span>
             </div>
@@ -586,7 +586,7 @@ export function AccountScreen() {
             onClick={handleEditProfile}
             disabled={isCA}
             className={cn(
-              "w-full bg-card rounded-2xl border border-border/60 shadow-sm p-3.5 text-left transition",
+              "w-full bg-card rounded-2xl border border-border/60 shadow-card p-3.5 text-left transition",
               isCA ? "cursor-default opacity-70" : "hover:shadow-md active:scale-[0.99]",
             )}
           >
@@ -597,7 +597,7 @@ export function AccountScreen() {
                 </div>
                 <div>
                   <p className="text-xs font-semibold">Profile {profileCompletion.pct}% complete</p>
-                  <p className="text-[10px] text-muted-foreground">
+                  <p className="text-3xs text-muted-foreground">
                     {profileCompletion.missing.length > 0
                       ? `Add: ${profileCompletion.missing.slice(0, 3).join(', ')}${profileCompletion.missing.length > 3 ? '…' : ''}`
                       : 'All fields filled'}
@@ -605,7 +605,7 @@ export function AccountScreen() {
                 </div>
               </div>
               {!isCA && (
-                <span className="text-[10px] font-medium text-primary">Complete →</span>
+                <span className="text-3xs font-medium text-primary">Complete →</span>
               )}
             </div>
             {/* Progress bar */}
@@ -624,7 +624,7 @@ export function AccountScreen() {
                 style={{ width: `${profileCompletion.pct}%` }}
               />
             </div>
-            <p className="text-[10px] text-muted-foreground mt-1.5">
+            <p className="text-3xs text-muted-foreground mt-1.5">
               {profileCompletion.filledCount} of {profileCompletion.total} fields filled
             </p>
           </button>
@@ -640,7 +640,7 @@ export function AccountScreen() {
                   {section.title}
                 </p>
               )}
-              <div className="bg-card rounded-2xl shadow-sm border border-border/60 overflow-hidden">
+              <div className="bg-card rounded-2xl shadow-card border border-border/60 overflow-hidden">
                 {section.items.map((item: NavDestination, i: number) => {
                   const Icon = item.icon
                   return (
@@ -702,7 +702,7 @@ export function AccountScreen() {
               if (typeof window !== 'undefined') window.location.href = '/'
             }
           }}
-          className="w-full bg-card rounded-2xl p-4 shadow-sm border border-rose-200 flex items-center justify-center gap-2 text-rose-600 hover:bg-rose-50 transition active:scale-[0.98]"
+          className="w-full bg-card rounded-2xl p-4 shadow-card border border-rose-200 flex items-center justify-center gap-2 text-rose-600 hover:bg-rose-50 transition active:scale-[0.98]"
         >
           <LogOut className="w-5 h-5" />
           <span className="font-semibold">Logout</span>
@@ -754,7 +754,7 @@ function AccountSectionContent({
   // For subscription, redirect to pricing page
   if (section === 'subscription') {
     return (
-      <div className="bg-card rounded-2xl shadow-sm border border-border/60 p-6 text-center">
+      <div className="bg-card rounded-2xl shadow-card border border-border/60 p-6 text-center">
         <CreditCard className="w-12 h-12 text-amber-500 mx-auto mb-3" />
         <p className="font-semibold mb-1">Manage Subscription</p>
         <p className="text-sm text-muted-foreground mb-4">
@@ -802,7 +802,7 @@ function AccountSectionContent({
     return (
       <div className="space-y-4">
         {/* QR Code Card */}
-        <div className="bg-card rounded-2xl shadow-sm border border-border/60 overflow-hidden">
+        <div className="bg-card rounded-2xl shadow-card border border-border/60 overflow-hidden">
           <div className="p-4 border-b border-border/40">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-violet-100 dark:bg-violet-950 flex items-center justify-center">
@@ -865,7 +865,7 @@ function AccountSectionContent({
         </div>
 
         {/* Settings form (profile tab) */}
-        <Suspense fallback={<div className="bg-card rounded-2xl shadow-sm border border-border/60 p-8 text-center"><p className="text-muted-foreground text-sm">Loading...</p></div>}>
+        <Suspense fallback={<div className="bg-card rounded-2xl shadow-card border border-border/60 p-8 text-center"><p className="text-muted-foreground text-sm">Loading...</p></div>}>
           <SettingsComponent singleTab="profile" />
         </Suspense>
       </div>
@@ -902,7 +902,7 @@ function AccountSectionContent({
             <div className="relative flex items-start justify-between gap-4">
               <div className="flex-1 min-w-0">
                 {/* Shop name */}
-                <p className="text-[10px] uppercase tracking-wider text-white/70 font-semibold">Business Name</p>
+                <p className="text-3xs uppercase tracking-wider text-white/70 font-semibold">Business Name</p>
                 <h3 className="text-xl font-bold mt-0.5 truncate">{setting.shopName || 'My Shop'}</h3>
 
                 {/* Owner name */}
@@ -936,7 +936,7 @@ function AccountSectionContent({
 
                 {/* Address */}
                 {setting.address && (
-                  <p className="text-[11px] text-white/65 mt-2 leading-relaxed">
+                  <p className="text-2xs text-white/65 mt-2 leading-relaxed">
                     {setting.address}
                   </p>
                 )}
@@ -952,7 +952,7 @@ function AccountSectionContent({
                     includeMargin={false}
                   />
                 </div>
-                <p className="text-[9px] text-white/60 text-center mt-1">Scan to save</p>
+                <p className="text-3xs text-white/60 text-center mt-1">Scan to save</p>
               </div>
             </div>
           </div>
@@ -1001,7 +1001,7 @@ function AccountSectionContent({
   if (section === 'security') {
     return (
       <div className="space-y-4">
-        <div className="bg-card rounded-2xl shadow-sm border border-border/60 overflow-hidden">
+        <div className="bg-card rounded-2xl shadow-card border border-border/60 overflow-hidden">
           <div className="p-4 border-b border-border/40">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
@@ -1032,7 +1032,7 @@ function AccountSectionContent({
             </div>
           </div>
           <div className="p-3 border-t border-border/40 bg-muted/30">
-            <p className="text-[11px] text-muted-foreground text-center">🔒 Coming soon in a future update</p>
+            <p className="text-2xs text-muted-foreground text-center">🔒 Coming soon in a future update</p>
           </div>
         </div>
 
@@ -1040,7 +1040,7 @@ function AccountSectionContent({
             button had no onClick, inputs were uncontrolled, no API call.
             Replaced with "Coming Soon" card. To re-enable: wire to real
             endpoint using the existing password-reset hashing flow. */}
-        <div className="bg-card rounded-2xl shadow-sm border border-border/60 p-4 opacity-70">
+        <div className="bg-card rounded-2xl shadow-card border border-border/60 p-4 opacity-70">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
               <Shield className="w-5 h-5 text-blue-600" />
@@ -1049,13 +1049,13 @@ function AccountSectionContent({
               <p className="font-semibold text-sm">Change Password</p>
               <p className="text-xs text-muted-foreground">Update your account password</p>
             </div>
-            <span className="text-[10px] font-bold uppercase tracking-wide bg-muted text-muted-foreground px-2 py-1 rounded-full">
+            <span className="text-3xs font-bold uppercase tracking-wide bg-muted text-muted-foreground px-2 py-1 rounded-full">
               Coming Soon
             </span>
           </div>
         </div>
 
-        <div className="bg-card rounded-2xl shadow-sm border border-border/60 p-4">
+        <div className="bg-card rounded-2xl shadow-card border border-border/60 p-4">
           <div className="flex items-center gap-3 mb-2">
             <div className="w-10 h-10 rounded-xl bg-violet-100 flex items-center justify-center">
               <Info className="w-5 h-5 text-violet-600" />
@@ -1098,7 +1098,7 @@ function AccountSectionContent({
   if (section === 'help') {
     return (
       <div className="space-y-4">
-        <div className="bg-card rounded-2xl shadow-sm border border-border/60 overflow-hidden">
+        <div className="bg-card rounded-2xl shadow-card border border-border/60 overflow-hidden">
           <div className="p-4 border-b border-border/40">
             <p className="font-semibold text-sm">Contact Us</p>
           </div>
@@ -1127,7 +1127,7 @@ function AccountSectionContent({
           </button>
         </div>
 
-        <div className="bg-card rounded-2xl shadow-sm border border-border/60 overflow-hidden">
+        <div className="bg-card rounded-2xl shadow-card border border-border/60 overflow-hidden">
           <div className="p-4 border-b border-border/40">
             <p className="font-semibold text-sm">Frequently Asked Questions</p>
           </div>
@@ -1152,14 +1152,14 @@ function AccountSectionContent({
             with auto-filled debug info (device, version, current view, crash count).
             Was: simple mailto link with no context. Now: pre-fills email body with
             useful debug info so the support team can reproduce the issue faster. */}
-        <div className="bg-card rounded-2xl shadow-sm border border-border/60 p-4">
+        <div className="bg-card rounded-2xl shadow-card border border-border/60 p-4">
           <p className="font-semibold text-sm mb-2">Report a Problem</p>
           <p className="text-xs text-muted-foreground mb-3">
             Found something broken or not working right? Let us know and we'll fix it ASAP.
             Your report includes debug info (app version, device, crash count) to help us diagnose faster.
           </p>
           {/* Auto-collected debug info — shown to the user so they know what's included */}
-          <div className="bg-muted/50 rounded-lg p-3 mb-3 text-[11px] text-muted-foreground space-y-0.5">
+          <div className="bg-muted/50 rounded-lg p-3 mb-3 text-2xs text-muted-foreground space-y-0.5">
             <p><span className="font-medium">App version:</span> {APP_VERSION_LABEL}</p>
             <p><span className="font-medium">Device:</span> {typeof navigator !== 'undefined' ? navigator.userAgent.split(') ')[0].split('(')[1] || 'Unknown' : 'Unknown'}</p>
             <p><span className="font-medium">Screen:</span> {typeof window !== 'undefined' ? `${window.innerWidth}×${window.innerHeight}` : 'Unknown'}</p>
@@ -1194,7 +1194,7 @@ function AccountSectionContent({
   if (section === 'about') {
     return (
       <div className="space-y-4">
-        <div className="bg-card rounded-2xl shadow-sm border border-border/60 p-6 text-center">
+        <div className="bg-card rounded-2xl shadow-card border border-border/60 p-6 text-center">
           <div className="w-20 h-20 rounded-2xl bg-gradient-saffron flex items-center justify-center mx-auto mb-4 shadow-lg">
             <BookOpenText className="w-10 h-10 text-white" />
           </div>
@@ -1203,7 +1203,7 @@ function AccountSectionContent({
           {/* 🔒 AUDIT V23 FIX §10: App version with build info for beta readiness */}
           <p className="text-xs text-muted-foreground mt-2">{APP_VERSION_LABEL}</p>
           {/* 🔒 Feature Phase 2: Crash-free metric for beta readiness */}
-          <p className="text-[11px] text-muted-foreground mt-1">
+          <p className="text-2xs text-muted-foreground mt-1">
             {(() => {
               try {
                 const total = parseInt(localStorage.getItem('bahikhata:session-count') || '0')
@@ -1218,7 +1218,7 @@ function AccountSectionContent({
           </div>
         </div>
 
-        <div className="bg-card rounded-2xl shadow-sm border border-border/60 overflow-hidden">
+        <div className="bg-card rounded-2xl shadow-card border border-border/60 overflow-hidden">
           <a href="/privacy" className="flex items-center gap-3 p-4 hover:bg-muted/50 transition border-b border-border/40">
             <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center">
               <Shield className="w-5 h-5 text-blue-600" />
@@ -1254,7 +1254,7 @@ function AccountSectionContent({
           </button>
         </div>
 
-        <div className="bg-card rounded-2xl shadow-sm border border-border/60 p-4 text-center">
+        <div className="bg-card rounded-2xl shadow-card border border-border/60 p-4 text-center">
           <p className="text-xs text-muted-foreground leading-relaxed">
             EkBook is a GST-compliant ledger app built for Indian shopkeepers.
             AI bill scanning, voice entry, GST filing, inventory management —
@@ -1271,7 +1271,7 @@ function AccountSectionContent({
   // For sections that don't have dedicated content yet, show a placeholder
   if (!hasContent) {
     return (
-      <div className="bg-card rounded-2xl shadow-sm border border-border/60 p-6 text-center">
+      <div className="bg-card rounded-2xl shadow-card border border-border/60 p-6 text-center">
         <p className="text-muted-foreground text-sm">
           This section is coming soon. We're building it to match the quality
           of top apps like PhonePe and CRED.
@@ -1283,7 +1283,7 @@ function AccountSectionContent({
   // For sections with Settings content, render Settings with singleTab.
   // 🔒 V22-6 fix: SettingsComponent is now declared at module scope (above).
   return (
-    <Suspense fallback={<div className="bg-card rounded-2xl shadow-sm border border-border/60 p-8 text-center"><p className="text-muted-foreground text-sm">Loading...</p></div>}>
+    <Suspense fallback={<div className="bg-card rounded-2xl shadow-card border border-border/60 p-8 text-center"><p className="text-muted-foreground text-sm">Loading...</p></div>}>
       <SettingsComponent singleTab={tabMap[section]} />
     </Suspense>
   )

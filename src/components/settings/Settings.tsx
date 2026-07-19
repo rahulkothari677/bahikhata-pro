@@ -345,7 +345,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
       sonnerToast.success(`Cleared ${writes.length} pending write(s)`)
       window.location.reload()
     } catch {
-      sonnerToast.error('Failed to clear pending writes')
+      sonnerToast.error("Couldn't clear the offline queue — try again.")
     }
   }
 
@@ -354,7 +354,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
     try {
       const { clearAllOfflineData } = await import('@/lib/offline-fetch')
       await clearAllOfflineData()
-      sonnerToast.success('Offline cache cleared. Reloading...')
+      sonnerToast.success('Cache cleared. Reloading…')
       setTimeout(() => window.location.reload(), 1000)
     } catch {
       sonnerToast.error('Failed to clear cache')
@@ -621,7 +621,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{shop.name}</p>
-                    <p className="text-[11px] text-muted-foreground truncate">
+                    <p className="text-2xs text-muted-foreground truncate">
                       {shop.gstin ? `GSTIN: ${shop.gstin}` : 'No GSTIN'} {shop.isDefault ? ' · Default' : ''}
                     </p>
                   </div>
@@ -629,7 +629,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
                       data scoping is coming soon. Shops can still be created + their
                       GSTIN used in the Consolidated Report. */}
                   {shop.isDefault && (
-                    <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 text-[10px]">Default</Badge>
+                    <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 text-3xs">Default</Badge>
                   )}
                 </div>
               ))}
@@ -721,8 +721,8 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
               data/backup concerns below. A CA looking for period lock will
               now see "Accounting Controls" as a clear signpost. */}
           <div className="pt-2 pb-1 px-1">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Accounting Controls</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">Reconciliation & period lock — for filing integrity</p>
+            <p className="text-3xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Accounting Controls</p>
+            <p className="text-3xs text-muted-foreground mt-0.5">Reconciliation & period lock — for filing integrity</p>
           </div>
 
           {/* 🔒 V17-Ext §5.1: Period Lock — protect filed GST periods from edits */}
@@ -871,8 +871,8 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
               Separates data/backup concerns (Backup, Restore, Danger Zone)
               from accounting controls above. */}
           <div className="pt-2 pb-1 px-1">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">Data &amp; Backup</p>
-            <p className="text-[10px] text-muted-foreground mt-0.5">Backup, restore, clear cache, delete account</p>
+            <p className="text-3xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">Data &amp; Backup</p>
+            <p className="text-3xs text-muted-foreground mt-0.5">Backup, restore, clear cache, delete account</p>
           </div>
 
           {/* 🔒 V17 Audit Phase 1 P1.6: Backup card moved OUT of the Danger Zone.
@@ -896,7 +896,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
                   Use this to migrate to a new device or keep a safe copy.
                 </p>
                 <div className="flex items-center justify-between gap-2 mt-3 flex-wrap">
-                  <p className="text-[11px] text-blue-700 dark:text-blue-300">
+                  <p className="text-2xs text-blue-700 dark:text-blue-300">
                     {lastBackup
                       ? `Last backup: ${new Date(lastBackup).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })} at ${new Date(lastBackup).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}`
                       : 'No backup yet — tap "Backup Now" to download'}
@@ -1042,7 +1042,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
         <CardContent>
           {/* ─── Group: Theme & Language ─── */}
           <div className="mb-2 px-1">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Theme &amp; Language</p>
+            <p className="text-3xs font-bold uppercase tracking-wider text-muted-foreground">Theme &amp; Language</p>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {THEME_OPTIONS.map((theme) => (
@@ -1068,7 +1068,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
                   )}
                 </div>
                 <p className="text-sm font-semibold">{theme.label}</p>
-                <p className="text-[11px] text-muted-foreground">{theme.description}</p>
+                <p className="text-2xs text-muted-foreground">{theme.description}</p>
               </button>
             ))}
           </div>
@@ -1080,7 +1080,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
               <Globe className="w-4 h-4 text-muted-foreground" />
               <div>
                 <p className="text-sm font-medium">Language / ભાષા / भाषा / மொழி / భాష</p>
-                <p className="text-[11px] text-muted-foreground">Choose your preferred language</p>
+                <p className="text-2xs text-muted-foreground">Choose your preferred language</p>
               </div>
             </div>
             <div className="flex gap-1 bg-background rounded-lg p-0.5 flex-wrap">
@@ -1109,7 +1109,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
               <Clock className="w-4 h-4 text-muted-foreground" />
               <div>
                 <p className="text-sm font-medium">Day-End Summary Time</p>
-                <p className="text-[11px] text-muted-foreground">When to show daily summary card on dashboard</p>
+                <p className="text-2xs text-muted-foreground">When to show daily summary card on dashboard</p>
               </div>
             </div>
             <Select value={dayEndTime} onValueChange={(v) => { setDayEndTime(v); if (typeof window !== 'undefined') localStorage.setItem('bahikhata:day-end-time', v); sonnerToast.success(`Summary shows at ${v}:00`) }}>
@@ -1128,7 +1128,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
 
           {/* ─── Group: Display & Privacy ─── */}
           <div className="mt-4 mb-2 px-1">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Display &amp; Privacy</p>
+            <p className="text-3xs font-bold uppercase tracking-wider text-muted-foreground">Display &amp; Privacy</p>
           </div>
 
           {/* Dark Mode Toggle (moved from header) */}
@@ -1137,7 +1137,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
               <Moon className="w-4 h-4 text-muted-foreground" />
               <div>
                 <p className="text-sm font-medium">Dark Mode</p>
-                <p className="text-[11px] text-muted-foreground">Switch between light and dark themes</p>
+                <p className="text-2xs text-muted-foreground">Switch between light and dark themes</p>
               </div>
             </div>
             <Switch
@@ -1152,7 +1152,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
               <EyeOff className="w-4 h-4 text-amber-600 dark:text-amber-400" />
               <div>
                 <p className="text-sm font-medium">Hide Profit</p>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-2xs text-muted-foreground">
                   Hide profit figures from dashboard, ledger, and transaction details. Useful when staff or customers are looking at your screen. Profit is still calculated — just hidden from view.
                 </p>
               </div>
@@ -1172,7 +1172,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
               Rules & Goals group alongside Round-off + Stock Policy. */}
           {/* ─── Group: Business Rules & Goals ─── */}
           <div className="mt-4 mb-2 px-1">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Business Rules &amp; Goals</p>
+            <p className="text-3xs font-bold uppercase tracking-wider text-muted-foreground">Business Rules &amp; Goals</p>
           </div>
 
           {/* Business Goals — monthly revenue/expense targets */}
@@ -1208,11 +1208,11 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
                   </Button>
                 </div>
                 {revenueTarget ? (
-                  <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-1">
+                  <p className="text-2xs text-emerald-600 dark:text-emerald-400 mt-1">
                     Current target: {formatINR(revenueTarget)} — track progress on dashboard
                   </p>
                 ) : (
-                  <p className="text-[11px] text-muted-foreground mt-1">No target set</p>
+                  <p className="text-2xs text-muted-foreground mt-1">No target set</p>
                 )}
               </div>
               <div>
@@ -1239,11 +1239,11 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
                   </Button>
                 </div>
                 {expenseBudget ? (
-                  <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">
+                  <p className="text-2xs text-amber-600 dark:text-amber-400 mt-1">
                     Current budget: {formatINR(expenseBudget)} — track on Income & Expense page
                   </p>
                 ) : (
-                  <p className="text-[11px] text-muted-foreground mt-1">No budget set</p>
+                  <p className="text-2xs text-muted-foreground mt-1">No budget set</p>
                 )}
               </div>
             </CardContent>
@@ -1255,7 +1255,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
               <Coins className="w-4 h-4 text-muted-foreground" />
               <div>
                 <p className="text-sm font-medium">Round off invoice total</p>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-2xs text-muted-foreground">
                   Round the grand total of each sale to the nearest rupee and show a &ldquo;Round Off&rdquo; line on the invoice (e.g. ₹1,062.40 → ₹1,062).
                 </p>
               </div>
@@ -1272,7 +1272,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
               <PackageX className="w-4 h-4 text-muted-foreground" />
               <div className="flex-1">
                 <p className="text-sm font-medium">Allow overselling (kirana mode)</p>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-2xs text-muted-foreground">
                   {stockPolicy === 'allow'
                     ? 'ON: You can sell more than you have in stock. A warning shows, but the sale goes through. Useful for shops that sell first and record purchases later.'
                     : 'OFF (default): You cannot sell more than you have in stock. The sale is blocked until you record a purchase. Keeps your stock numbers accurate.'}
@@ -1287,7 +1287,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
 
           {/* ─── Group: Security & Backup ─── */}
           <div className="mt-4 mb-2 px-1">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Security &amp; Backup</p>
+            <p className="text-3xs font-bold uppercase tracking-wider text-muted-foreground">Security &amp; Backup</p>
           </div>
 
           {/* 🔒 AUDIT V23 FIX §4: App Lock replaced with "Coming Soon" row.
@@ -1299,12 +1299,12 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
               <Lock className="w-4 h-4 text-muted-foreground" />
               <div>
                 <p className="text-sm font-medium">App Lock</p>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-2xs text-muted-foreground">
                   Require PIN or biometric to open the app.
                 </p>
               </div>
             </div>
-            <span className="text-[10px] font-bold uppercase tracking-wide bg-muted text-muted-foreground px-2 py-1 rounded-full">
+            <span className="text-3xs font-bold uppercase tracking-wide bg-muted text-muted-foreground px-2 py-1 rounded-full">
               Coming Soon
             </span>
           </div>
@@ -1317,7 +1317,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
               <Home className="w-4 h-4 text-violet-600 dark:text-violet-400" />
               <div>
                 <p className="text-sm font-medium">Default Landing Page</p>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-2xs text-muted-foreground">
                   Choose which screen opens when you launch the app.
                 </p>
               </div>
@@ -1338,7 +1338,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
 
           {/* ─── Group: Notifications ─── */}
           <div className="mt-4 mb-2 px-1">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Notifications</p>
+            <p className="text-3xs font-bold uppercase tracking-wider text-muted-foreground">Notifications</p>
           </div>
 
           {/* 🔒 V22-12 (Batch B, Phase 5d): Notification Preferences — granular
@@ -1349,7 +1349,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
               <Bell className="w-4 h-4 text-amber-600 dark:text-amber-400" />
               <div>
                 <p className="text-sm font-medium">Notification Preferences</p>
-                <p className="text-[11px] text-muted-foreground">Choose which alerts appear in the bell icon</p>
+                <p className="text-2xs text-muted-foreground">Choose which alerts appear in the bell icon</p>
               </div>
             </div>
             <div className="space-y-2.5">
@@ -1364,7 +1364,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
                 <div key={item.key} className="flex items-center justify-between">
                   <div className="flex-1 min-w-0 pr-2">
                     <p className="text-xs font-medium">{item.label}</p>
-                    <p className="text-[10px] text-muted-foreground">{item.desc}</p>
+                    <p className="text-3xs text-muted-foreground">{item.desc}</p>
                   </div>
                   <Switch
                     checked={notifPrefs[item.key]}
@@ -1427,7 +1427,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
                 <option value="ml">മലയാളം (Malayalam)</option>
                 <option value="pa">ਪੰਜਾਬੀ (Punjabi)</option>
               </select>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-2xs text-muted-foreground">
                 "Original" keeps the item names in whatever language the bill is written in (Hindi bill → Hindi names, English bill → English names).
               </p>
             </div>
@@ -1478,7 +1478,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
                 <option value="ml">മലയാളം (Malayalam)</option>
                 <option value="pa">ਪੰਜਾਬੀ (Punjabi)</option>
               </select>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-2xs text-muted-foreground">
                 "Original" listens in Hindi (default) and keeps the spoken language in the parsed result — e.g. if you speak Marathi, item names stay in Marathi. Pick "English" if you want the AI to translate spoken words into English item names.
               </p>
             </div>
@@ -1553,9 +1553,9 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-medium">{label}</p>
-                        {features[key] && <Badge className="text-[9px] bg-emerald-100 text-emerald-700 dark:text-emerald-300">ON</Badge>}
+                        {features[key] && <Badge className="text-3xs bg-emerald-100 text-emerald-700 dark:text-emerald-300">ON</Badge>}
                       </div>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">{description}</p>
+                      <p className="text-2xs text-muted-foreground mt-0.5">{description}</p>
                     </div>
                     <Switch
                       checked={features[key]}

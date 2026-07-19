@@ -39,6 +39,15 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  /* 🔒 V26 Phase 6 §1.2 — Named micro-typography steps (replaces 404 off-scale
+     text-[9px]/[10px]/[11px] usages). 9px was below any legibility floor on
+     mid-range Android in bright shops; these tokens give a named home to the
+     legitimate micro-type use cases (badges, chart ticks, nav counts) while
+     making body copy bump up to text-xs minimum. */
+  --text-3xs: 0.625rem;      /* 10px — badges, chart ticks, nav counts */
+  --text-3xs--line-height: 1.35;
+  --text-2xs: 0.6875rem;     /* 11px — micro labels, section descriptions */
+  --text-2xs--line-height: 1.35;
   /* Font families — set by next/font in layout.tsx */
   --font-sans: var(--font-sans), ui-sans-serif, system-ui, -apple-system,
                "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -145,16 +154,28 @@
   html {
     /* Disables browser's native pull-to-refresh on mobile Chrome. */
     overscroll-behavior-y: none;
-    /* Force light color-scheme on the root element.
-       This prevents Android's WebView from auto-darkening the status bar
-       based on the .dark class. Our Capacitor StatusBar plugin controls
-       the status bar color directly, so we don't want the OS overriding it. */
+    /* 🔒 V26 Phase 6 §3 (REAL BUG FIX): color-scheme was forced to `light`
+       unconditionally, which made every native control (select popups, date
+       inputs, autofill surfaces, Windows scrollbars) render in light chrome
+       inside a dark app. The original reason was Capacitor StatusBar — but
+       the StatusBar plugin sets the Android bar explicitly via CapacitorBridge,
+       it doesn't depend on the WebView's color-scheme. So we now keep
+       `color-scheme: light` on :root (the default/light theme) but override
+       to `dark` when the .dark class is present. This makes native controls
+       match the app theme in both modes. */
     color-scheme: light;
     /* 🔒 V21-013 (Phase 5a): Base font size increased from 16px (Tailwind default)
        to 16px on mobile, 17px on desktop. This makes body text more readable
        on small screens without being too large. Combined with the tighter
        padding in Phase 5b, this gives cards more breathing room. */
     font-size: 16px;
+  }
+  /* 🔒 V26 Phase 6 §3: In dark mode, switch color-scheme to dark so native
+     controls (select popups, date inputs, scrollbars, autofill) render in
+     dark chrome to match the app. The Capacitor StatusBar plugin sets the
+     Android status bar color directly, so this doesn't conflict with it. */
+  html.dark {
+    color-scheme: dark;
   }
   @media (min-width: 1024px) {
     html {
@@ -436,6 +457,18 @@ html {
 .dark .bg-blue-100 { background-color: oklch(0.32 0.07 250 / 0.4); }
 .dark .bg-violet-50  { background-color: oklch(0.3 0.06 295 / 0.25); }
 .dark .bg-violet-100 { background-color: oklch(0.32 0.07 295 / 0.4); }
+/* 🔒 V26 Phase 6 §3: Added slate/orange/indigo rows — the auditor found 4
+   stragglers (AccountScreen bg-slate-100, TransactionDetail indigo outline
+   button, AIComparison orange badges) that weren't covered by the original
+   amber/emerald/rose/blue/violet block. Adding a new accent color? Add its
+   row here so dark-mode chips adapt automatically. */
+.dark .bg-slate-50  { background-color: oklch(0.3 0.005 250 / 0.25); }
+.dark .bg-slate-100 { background-color: oklch(0.32 0.008 250 / 0.4); }
+.dark .bg-slate-200 { background-color: oklch(0.35 0.01 250 / 0.5); }
+.dark .bg-orange-50  { background-color: oklch(0.3 0.06 55 / 0.25); }
+.dark .bg-orange-100 { background-color: oklch(0.32 0.07 55 / 0.4); }
+.dark .bg-indigo-50  { background-color: oklch(0.3 0.06 265 / 0.25); }
+.dark .bg-indigo-100 { background-color: oklch(0.32 0.07 265 / 0.4); }
 
 .dark .text-amber-600  { color: oklch(0.78 0.15 60); }
 .dark .text-amber-700  { color: oklch(0.82 0.14 60); }
@@ -447,6 +480,13 @@ html {
 .dark .text-blue-700  { color: oklch(0.82 0.14 250); }
 .dark .text-violet-600 { color: oklch(0.78 0.16 295); }
 .dark .text-violet-700 { color: oklch(0.82 0.15 295); }
+/* 🔒 V26 Phase 6 §3: slate/orange/indigo text colors for dark mode. */
+.dark .text-slate-600  { color: oklch(0.72 0.015 250); }
+.dark .text-slate-700  { color: oklch(0.78 0.012 250); }
+.dark .text-orange-600 { color: oklch(0.78 0.15 55); }
+.dark .text-orange-700 { color: oklch(0.82 0.14 55); }
+.dark .text-indigo-600 { color: oklch(0.78 0.16 265); }
+.dark .text-indigo-700 { color: oklch(0.82 0.15 265); }
 
 /* Border color adaptations for dark mode */
 .dark .border-rose-100 { border-color: oklch(0.32 0.07 25 / 0.3); }

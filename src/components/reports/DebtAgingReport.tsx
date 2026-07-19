@@ -92,11 +92,11 @@ export function DebtAgingReport({ data }: { data: any }) {
             <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-1">
                 <div className={cn('w-2.5 h-2.5 rounded-full', bucket.bg)} />
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold">{bucket.sublabel}</p>
+                <p className="text-3xs text-muted-foreground uppercase tracking-wide font-semibold">{bucket.sublabel}</p>
               </div>
-              <p className="text-[11px] text-muted-foreground mb-1">{bucket.label}</p>
+              <p className="text-2xs text-muted-foreground mb-1">{bucket.label}</p>
               <p className={cn('text-lg font-bold', bucket.color)}>{formatINR(totals[bucket.key])}</p>
-              <p className="text-[10px] text-muted-foreground mt-0.5">
+              <p className="text-3xs text-muted-foreground mt-0.5">
                 {totalDue > 0 ? `${((totals[bucket.key] / totalDue) * 100).toFixed(0)}% of total` : ''}
               </p>
             </CardContent>
@@ -160,7 +160,7 @@ export function DebtAgingReport({ data }: { data: any }) {
                 <p className="text-xs font-medium text-rose-700 dark:text-rose-400">
                   {formatINR(totals.critical)} is overdue by 90+ days
                 </p>
-                <p className="text-[11px] text-rose-600 dark:text-rose-500 mt-0.5">
+                <p className="text-2xs text-rose-600 dark:text-rose-500 mt-0.5">
                   Consider sending payment reminders or following up with these customers. Long-overdue dues may need to be written off.
                 </p>
               </div>

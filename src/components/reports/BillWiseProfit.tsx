@@ -33,7 +33,7 @@ export function BillWiseProfit({ data }: BillWiseProfitProps) {
           <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
           <div>
             <p className="text-xs font-semibold text-amber-800 dark:text-amber-300">Incomplete data — summary covers only shown bills</p>
-            <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5">{truncatedHint}</p>
+            <p className="text-2xs text-amber-700 dark:text-amber-400 mt-0.5">{truncatedHint}</p>
           </div>
         </div>
       )}
@@ -82,7 +82,7 @@ export function BillWiseProfit({ data }: BillWiseProfitProps) {
                         <div className="flex items-center gap-1.5">
                           {bill.invoiceNo}
                           {bill.type === 'credit-note' && (
-                            <Badge variant="outline" className="text-[9px] text-rose-600 border-rose-300">CN</Badge>
+                            <Badge variant="outline" className="text-3xs text-rose-600 border-rose-300">CN</Badge>
                           )}
                         </div>
                       </td>
@@ -139,7 +139,7 @@ function StatCard({ label, value, color, bg }: { label: string; value: string; c
       <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center mb-2', bg)}>
         <FileText className={cn('w-4 h-4', color)} />
       </div>
-      <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold">{label}</p>
+      <p className="text-3xs text-muted-foreground uppercase tracking-wide font-semibold">{label}</p>
       <p className={cn('text-lg font-bold tabular-nums mt-0.5', color)}>{value}</p>
     </div>
   )

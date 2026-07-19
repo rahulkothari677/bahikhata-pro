@@ -421,11 +421,11 @@ export function Ledger({ type }: { type: LedgerType }) {
               <div className="w-7 h-7 rounded-lg bg-amber-500/10 flex items-center justify-center">
                 <Receipt className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
               </div>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">{isSale ? 'Total Sales' : 'Total Purchases'}</p>
+              <p className="text-3xs text-muted-foreground uppercase tracking-wide font-medium">{isSale ? 'Total Sales' : 'Total Purchases'}</p>
             </div>
             <p className="text-xl font-bold tabular-nums">{formatINR(totalAmount)}</p>
             {/* 🔒 V19-019 FIX: Label makes clear this is the loaded subset, not all-time total */}
-            <p className="text-[11px] text-muted-foreground">{filtered.length} transactions{hasNextPage ? ' (loaded)' : ''}</p>
+            <p className="text-2xs text-muted-foreground">{filtered.length} transactions{hasNextPage ? ' (loaded)' : ''}</p>
           </div>
         </div>
         {isSale && !hideProfit && (
@@ -436,10 +436,10 @@ export function Ledger({ type }: { type: LedgerType }) {
                 <div className="w-7 h-7 rounded-lg bg-emerald-500/10 flex items-center justify-center">
                   <TrendingUp className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                 </div>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">{t('stat.gross_profit')}</p>
+                <p className="text-3xs text-muted-foreground uppercase tracking-wide font-medium">{t('stat.gross_profit')}</p>
               </div>
               <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">{formatINR(totalProfit)}</p>
-              <p className="text-[11px] text-muted-foreground">{totalAmount > 0 ? ((totalProfit / totalAmount) * 100).toFixed(1) : 0}% margin</p>
+              <p className="text-2xs text-muted-foreground">{totalAmount > 0 ? ((totalProfit / totalAmount) * 100).toFixed(1) : 0}% margin</p>
             </div>
           </div>
         )}
@@ -450,7 +450,7 @@ export function Ledger({ type }: { type: LedgerType }) {
               <div className="w-7 h-7 rounded-lg bg-violet-500/10 flex items-center justify-center">
                 <IndianRupee className="w-3.5 h-3.5 text-violet-600" />
               </div>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">{t('stat.paid')}</p>
+              <p className="text-3xs text-muted-foreground uppercase tracking-wide font-medium">{t('stat.paid')}</p>
             </div>
             <p className="text-xl font-bold tabular-nums">{formatINR(totalPaid)}</p>
           </div>
@@ -462,7 +462,7 @@ export function Ledger({ type }: { type: LedgerType }) {
               <div className="w-7 h-7 rounded-lg bg-rose-500/10 flex items-center justify-center">
                 <IndianRupee className="w-3.5 h-3.5 text-rose-600" />
               </div>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">{isSale ? 'Outstanding' : 'Pending Payment'}</p>
+              <p className="text-3xs text-muted-foreground uppercase tracking-wide font-medium">{isSale ? 'Outstanding' : 'Pending Payment'}</p>
             </div>
             <p className="text-xl font-bold text-rose-600 tabular-nums">{formatINR(totalDue)}</p>
           </div>
@@ -572,7 +572,7 @@ export function Ledger({ type }: { type: LedgerType }) {
           {sorted.length > 0 && !bulkMode && (
             <button
               onClick={() => setBulkMode(true)}
-              className="mt-2 text-[11px] text-muted-foreground hover:text-primary transition"
+              className="mt-2 text-2xs text-muted-foreground hover:text-primary transition"
             >
               Select multiple →
             </button>
@@ -581,7 +581,7 @@ export function Ledger({ type }: { type: LedgerType }) {
           {/* Sort buttons row */}
           {sorted.length > 0 && (
             <div className="mt-3 flex items-center gap-2 flex-wrap">
-              <span className="text-[11px] text-muted-foreground font-medium">Sort by:</span>
+              <span className="text-2xs text-muted-foreground font-medium">Sort by:</span>
               {([
                 { key: 'date', label: 'Date', icon: Calendar },
                 { key: 'amount', label: 'Amount', icon: IndianRupee },
@@ -741,7 +741,7 @@ export function Ledger({ type }: { type: LedgerType }) {
                             {t.party?.name || 'Walk-in Customer'}
                           </p>
                           {/* Secondary info — smaller, muted */}
-                          <div className="flex items-center gap-2 mt-0.5 text-[11px] text-muted-foreground flex-wrap">
+                          <div className="flex items-center gap-2 mt-0.5 text-2xs text-muted-foreground flex-wrap">
                             <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{formatDateTime(t.date)}</span>
                             <span className="flex items-center gap-1"><User className="w-3 h-3" />{t.items?.length || 0} items</span>
                           </div>
@@ -750,16 +750,16 @@ export function Ledger({ type }: { type: LedgerType }) {
                         <div className="text-right flex-shrink-0">
                           <p className={cn('font-bold text-base tabular-nums', accentColor)}>{formatINR(t.totalAmount)}</p>
                           {due > 0 && t.type !== 'estimate' && (
-                            <p className="text-[11px] text-rose-600 mt-0.5 tabular-nums">Due: {formatINR(due)}</p>
+                            <p className="text-2xs text-rose-600 mt-0.5 tabular-nums">Due: {formatINR(due)}</p>
                           )}
                           {/* 🔒 V26 N2 follow-up: profit line only for real sales — an estimate's
                               profit isn't earned yet, and credit notes render their own line below */}
                           {t.type === 'sale' && !hideProfit && (
-                            <p className="text-[11px] text-emerald-600 dark:text-emerald-400 mt-0.5 tabular-nums">+{formatINR(t.grossProfit)}</p>
+                            <p className="text-2xs text-emerald-600 dark:text-emerald-400 mt-0.5 tabular-nums">+{formatINR(t.grossProfit)}</p>
                           )}
                           {/* 🔒 V17 Audit Phase 4: credit-note grossProfit is NEGATIVE, so use < 0 */}
                           {t.type === 'credit-note' && !hideProfit && t.grossProfit < 0 && (
-                            <p className="text-[11px] text-rose-500 mt-0.5 tabular-nums">-{formatINR(Math.abs(t.grossProfit))}</p>
+                            <p className="text-2xs text-rose-500 mt-0.5 tabular-nums">-{formatINR(Math.abs(t.grossProfit))}</p>
                           )}
                         </div>
                       </div>
@@ -768,42 +768,42 @@ export function Ledger({ type }: { type: LedgerType }) {
                       <div className="flex items-center gap-2 mt-2 flex-wrap">
                         {/* 🔒 V8 U1: Voided badge — shows when viewing soft-deleted transactions */}
                         {showVoided && (
-                          <Badge className="text-[9px] py-0 bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 gap-1">
+                          <Badge className="text-3xs py-0 bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 gap-1">
                             <Trash2 className="w-2.5 h-2.5" /> Voided
                           </Badge>
                         )}
                         {/* V17-Ext Tier 3: Credit/Debit Note badge */}
                         {t.type === 'credit-note' && (
-                          <Badge className="text-[9px] py-0 bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400">
+                          <Badge className="text-3xs py-0 bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400">
                             Credit Note
                           </Badge>
                         )}
                         {t.type === 'debit-note' && (
-                          <Badge className="text-[9px] py-0 bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400">
+                          <Badge className="text-3xs py-0 bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400">
                             Debit Note
                           </Badge>
                         )}
                         {/* 🔒 V26 FIX N2: Estimate badge so estimates are visually distinguishable */}
                         {t.type === 'estimate' && (
-                          <Badge className="text-[9px] py-0 bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400">
+                          <Badge className="text-3xs py-0 bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400">
                             Estimate
                           </Badge>
                         )}
                         {t.invoiceNo && (
-                          <Badge variant="outline" className="text-[10px] py-0">{t.invoiceNo}</Badge>
+                          <Badge variant="outline" className="text-3xs py-0">{t.invoiceNo}</Badge>
                         )}
                         {/* 🔒 V26 N2 follow-up: estimates have no payment — the mode and
                             Paid/Unpaid badges would mislead (server stores paid=total on quotes) */}
                         {t.type !== 'estimate' && (
                           <>
-                            <Badge variant="secondary" className="text-[10px] py-0 uppercase">{t.paymentMode}</Badge>
+                            <Badge variant="secondary" className="text-3xs py-0 uppercase">{t.paymentMode}</Badge>
                             {/* Payment status badge */}
                             {due > 0 ? (
-                              <Badge variant="destructive" className="text-[9px] py-0">
+                              <Badge variant="destructive" className="text-3xs py-0">
                                 {due === t.totalAmount ? 'Unpaid' : 'Partial'}
                               </Badge>
                             ) : (
-                              <Badge className="text-[9px] py-0 bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
+                              <Badge className="text-3xs py-0 bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
                                 Paid
                               </Badge>
                             )}
@@ -814,12 +814,12 @@ export function Ledger({ type }: { type: LedgerType }) {
                       {t.items?.length > 0 && (
                         <div className="mt-2 flex flex-wrap gap-1">
                           {t.items.slice(0, 4).map((item: any, i: number) => (
-                            <span key={i} className="text-[11px] bg-muted px-2 py-0.5 rounded-md">
+                            <span key={i} className="text-2xs bg-muted px-2 py-0.5 rounded-md">
                               {item.productName} × {item.quantity}
                             </span>
                           ))}
                           {t.items.length > 4 && (
-                            <span className="text-[11px] text-muted-foreground px-2 py-0.5">+{t.items.length - 4} more</span>
+                            <span className="text-2xs text-muted-foreground px-2 py-0.5">+{t.items.length - 4} more</span>
                           )}
                         </div>
                       )}
@@ -854,25 +854,25 @@ export function Ledger({ type }: { type: LedgerType }) {
                     <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
                   </div>
                   <p className="font-semibold text-sm truncate">{t.party?.name || 'Walk-in'}</p>
-                  {t.invoiceNo && <p className="text-[10px] text-muted-foreground">{t.invoiceNo}</p>}
-                  <p className="text-[10px] text-muted-foreground mt-1">{formatDateTime(t.date)}</p>
+                  {t.invoiceNo && <p className="text-3xs text-muted-foreground">{t.invoiceNo}</p>}
+                  <p className="text-3xs text-muted-foreground mt-1">{formatDateTime(t.date)}</p>
                   <div className="mt-2 pt-2 border-t border-border flex items-center justify-between">
                     <span className={cn('font-bold', accentColor)}>{formatINRCompact(t.totalAmount)}</span>
                     {/* 🔒 V26 N2 follow-up: quotes have no payment status */}
                     {t.type === 'estimate' ? (
-                      <Badge className="text-[9px] bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400">Estimate</Badge>
+                      <Badge className="text-3xs bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400">Estimate</Badge>
                     ) : due > 0 ? (
-                      <Badge variant="destructive" className="text-[9px]">Due {formatINRCompact(due)}</Badge>
+                      <Badge variant="destructive" className="text-3xs">Due {formatINRCompact(due)}</Badge>
                     ) : (
-                      <Badge variant="secondary" className="text-[9px] bg-emerald-100 text-emerald-700 dark:text-emerald-300">{t('stat.paid')}</Badge>
+                      <Badge variant="secondary" className="text-3xs bg-emerald-100 text-emerald-700 dark:text-emerald-300">{t('stat.paid')}</Badge>
                     )}
                   </div>
                   {t.type === 'sale' && !hideProfit && (
-                    <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1">+{formatINRCompact(t.grossProfit)} profit</p>
+                    <p className="text-3xs text-emerald-600 dark:text-emerald-400 mt-1">+{formatINRCompact(t.grossProfit)} profit</p>
                   )}
                   {/* 🔒 V17 Audit Phase 4: credit-note grossProfit is NEGATIVE, so use < 0 */}
                   {t.type === 'credit-note' && !hideProfit && t.grossProfit < 0 && (
-                    <p className="text-[10px] text-rose-500 mt-1">-{formatINRCompact(Math.abs(t.grossProfit))} profit reversed</p>
+                    <p className="text-3xs text-rose-500 mt-1">-{formatINRCompact(Math.abs(t.grossProfit))} profit reversed</p>
                   )}
                 </CardContent>
               </Card>

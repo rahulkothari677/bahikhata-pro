@@ -660,7 +660,7 @@ export function BillScanner() {
             >
               <Truck className={cn('w-6 h-6 mb-2', billType === 'purchase' ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground')} />
               <p className="font-semibold text-sm">{t('scanner.purchase_bill')}</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">{t('scanner.goods_bought')}</p>
+              <p className="text-2xs text-muted-foreground mt-0.5">{t('scanner.goods_bought')}</p>
             </button>
             <button
               onClick={() => setBillType('sale')}
@@ -673,7 +673,7 @@ export function BillScanner() {
             >
               <ShoppingCart className={cn('w-6 h-6 mb-2', billType === 'sale' ? 'text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground')} />
               <p className="font-semibold text-sm">{t('scanner.sales_bill')}</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">{t('scanner.goods_sold')}</p>
+              <p className="text-2xs text-muted-foreground mt-0.5">{t('scanner.goods_sold')}</p>
             </button>
           </div>
 
@@ -768,7 +768,7 @@ export function BillScanner() {
                       <Upload className="w-5 h-5" /> {t('scanner.upload_image')}
                     </Button>
                   </div>
-                  <p className="text-[11px] text-muted-foreground mt-4">
+                  <p className="text-2xs text-muted-foreground mt-4">
                     Supports JPG, PNG • Max 10MB • Works best with clear photos
                   </p>
 
@@ -777,17 +777,17 @@ export function BillScanner() {
                     <div className="rounded-lg bg-muted/50 p-3 text-left">
                       <Sparkles className="w-4 h-4 text-primary mb-1" />
                       <p className="text-xs font-semibold">Auto-Extract Items</p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">Name, qty, price, GST all filled</p>
+                      <p className="text-2xs text-muted-foreground mt-0.5">Name, qty, price, GST all filled</p>
                     </div>
                     <div className="rounded-lg bg-muted/50 p-3 text-left">
                       <FileText className="w-4 h-4 text-primary mb-1" />
                       <p className="text-xs font-semibold">Smart Tax Split</p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">CGST/SGST/IGST auto-detected</p>
+                      <p className="text-2xs text-muted-foreground mt-0.5">CGST/SGST/IGST auto-detected</p>
                     </div>
                     <div className="rounded-lg bg-muted/50 p-3 text-left">
                       <Check className="w-4 h-4 text-primary mb-1" />
                       <p className="text-xs font-semibold">Verify & Edit</p>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">Add, remove or change anything</p>
+                      <p className="text-2xs text-muted-foreground mt-0.5">Add, remove or change anything</p>
                     </div>
                   </div>
                 </>
@@ -828,7 +828,7 @@ export function BillScanner() {
                   </div>
                   <div>
                     <p className="text-sm font-bold font-heading">{billType === 'sale' ? 'Sales Bill' : 'Purchase Bill'}</p>
-                    <p className="text-[10px] text-white/70">
+                    <p className="text-3xs text-white/70">
                       AI Extracted
                       {scanned.overallConfidence !== undefined && (
                         <span className="ml-1">· {Math.round(scanned.overallConfidence * 100)}% confidence</span>
@@ -854,19 +854,19 @@ export function BillScanner() {
               {/* 2 rows, 2 columns each — bigger text, clearly visible */}
               <div className="grid grid-cols-2 gap-x-4 gap-y-2">
                 <div>
-                  <p className="text-[10px] text-white/60 uppercase tracking-wide">Invoice</p>
+                  <p className="text-3xs text-white/60 uppercase tracking-wide">Invoice</p>
                   <p className="font-semibold text-sm">{scanned.invoiceNo || '—'}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-white/60 uppercase tracking-wide">Date</p>
+                  <p className="text-3xs text-white/60 uppercase tracking-wide">Date</p>
                   <p className="font-semibold text-sm">{scanned.date || '—'}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-white/60 uppercase tracking-wide">Party</p>
+                  <p className="text-3xs text-white/60 uppercase tracking-wide">Party</p>
                   <p className="font-semibold text-sm truncate">{scanned.sellerName || 'Walk-in'}</p>
                 </div>
                 <div>
-                  <p className="text-[10px] text-white/60 uppercase tracking-wide">Payment</p>
+                  <p className="text-3xs text-white/60 uppercase tracking-wide">Payment</p>
                   <p className="font-semibold text-sm capitalize">{scanned.paymentMode || 'cash'}</p>
                 </div>
               </div>
@@ -951,7 +951,7 @@ export function BillScanner() {
                     >
                       {/* Row 1: Number + Name (full width) + Total + Delete */}
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="font-bold text-muted-foreground flex-shrink-0 w-5 h-5 rounded-full bg-primary/10 text-primary text-[10px] flex items-center justify-center">
+                        <span className="font-bold text-muted-foreground flex-shrink-0 w-5 h-5 rounded-full bg-primary/10 text-primary text-3xs flex items-center justify-center">
                           {i + 1}
                         </span>
                         <input
@@ -969,7 +969,7 @@ export function BillScanner() {
                         {item.confidence !== undefined && (
                           <span
                             className={cn(
-                              'flex-shrink-0 flex items-center gap-1 text-[10px] font-medium px-1.5 py-0.5 rounded',
+                              'flex-shrink-0 flex items-center gap-1 text-3xs font-medium px-1.5 py-0.5 rounded',
                               item.confidence >= 0.8 ? 'text-emerald-700 bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-400' :
                               item.confidence >= 0.5 ? 'text-amber-700 bg-amber-100 dark:bg-amber-950/40 dark:text-amber-400' :
                               'text-rose-700 bg-rose-100 dark:bg-rose-950/40 dark:text-rose-400'
@@ -999,7 +999,7 @@ export function BillScanner() {
                       {/* Row 2: Qty + Unit + Price + GST — flat, no inner boxes, bigger */}
                       <div className="flex items-center gap-2 pl-7">
                         <div className="flex-1 min-w-0 flex items-center gap-1">
-                          <span className="text-[10px] text-muted-foreground w-7">Qty</span>
+                          <span className="text-3xs text-muted-foreground w-7">Qty</span>
                           <input
                             type="number"
                             value={item.quantity}
@@ -1018,7 +1018,7 @@ export function BillScanner() {
                         </div>
                         <span className="text-muted-foreground flex-shrink-0 text-xs">×</span>
                         <div className="flex-1 min-w-0 flex items-center gap-1">
-                          <span className="text-[10px] text-muted-foreground w-8">₹</span>
+                          <span className="text-3xs text-muted-foreground w-8">₹</span>
                           <input
                             type="number"
                             value={item.unitPrice}
@@ -1064,13 +1064,13 @@ export function BillScanner() {
                   <span className="font-medium tabular-nums">{formatINR(totalGst)}</span>
                 </div>
                 {(scanned.cgst > 0 || scanned.sgst > 0) && (
-                  <div className="flex justify-between text-[11px] text-muted-foreground pl-4">
+                  <div className="flex justify-between text-2xs text-muted-foreground pl-4">
                     <span>CGST + SGST</span>
                     <span className="tabular-nums">{formatINR(scanned.cgst)} + {formatINR(scanned.sgst)}</span>
                   </div>
                 )}
                 {scanned.igst > 0 && (
-                  <div className="flex justify-between text-[11px] text-muted-foreground pl-4">
+                  <div className="flex justify-between text-2xs text-muted-foreground pl-4">
                     <span>IGST</span>
                     <span className="tabular-nums">{formatINR(scanned.igst)}</span>
                   </div>
@@ -1098,7 +1098,7 @@ export function BillScanner() {
                   <ArrowRight className="w-3.5 h-3.5" />
                 </Button>
               </div>
-              <p className="text-[10px] text-muted-foreground text-center mt-1.5">
+              <p className="text-3xs text-muted-foreground text-center mt-1.5">
                 Pre-fills the {billType === 'sale' ? 'sales' : 'purchase'} form — just review and save!
               </p>
             </CardContent>

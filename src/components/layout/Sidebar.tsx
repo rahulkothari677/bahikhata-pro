@@ -158,7 +158,7 @@ export function Sidebar() {
             {!sidebarCollapsed && (
               <div>
                 <h1 className="text-lg font-bold text-sidebar-foreground tracking-tight">EkBook</h1>
-                <p className="text-[10px] text-sidebar-foreground/60 font-medium tracking-wide">{t('nav.smart_ledger')}</p>
+                <p className="text-3xs text-sidebar-foreground/60 font-medium tracking-wide">{t('nav.smart_ledger')}</p>
               </div>
             )}
           </div>
@@ -205,7 +205,7 @@ export function Sidebar() {
                       <span className="text-sm font-medium truncate">{item.labelKey ? t(item.labelKey) : item.label}</span>
                       {item.badge && (
                         <span className={cn(
-                          'text-[9px] px-1.5 py-0.5 rounded-full font-bold',
+                          'text-3xs px-1.5 py-0.5 rounded-full font-bold',
                           active
                             ? 'bg-white/20 text-white'
                             : 'bg-gradient-saffron text-white'
@@ -216,7 +216,7 @@ export function Sidebar() {
                     </div>
                     {/* 🔒 V26 P9: Increased opacity from /50 to /65 for better readability */}
                     <p className={cn(
-                      'text-[11px] truncate',
+                      'text-2xs truncate',
                       active ? 'text-white/80' : 'text-sidebar-foreground/65'
                     )}>
                       {item.descKey ? t(item.descKey) : (item.description || (item.labelKey ? t(item.labelKey) : item.label))}
@@ -243,7 +243,7 @@ export function Sidebar() {
               <Calculator className="w-4 h-4 text-violet-400 flex-shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-semibold text-violet-300">CA Mode</p>
-                <p className="text-[10px] text-violet-400/70">Read-only access</p>
+                <p className="text-3xs text-violet-400/70">Read-only access</p>
               </div>
             </div>
           </div>
@@ -269,7 +269,7 @@ export function Sidebar() {
               <div className="flex-1 min-w-0 text-left">
                 <p className="text-xs font-semibold text-sidebar-foreground truncate">{userName}</p>
                 {/* 🔒 V26 P9: Increased from /50 to /60 for readability */}
-                <p className="text-[10px] text-sidebar-foreground/60 truncate">{shopName}</p>
+                <p className="text-3xs text-sidebar-foreground/60 truncate">{shopName}</p>
               </div>
             </button>
           </div>

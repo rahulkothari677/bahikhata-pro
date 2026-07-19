@@ -112,7 +112,7 @@ export function PaywallModal({
               />
             </div>
             {usageStat.remaining === 0 && (
-              <p className="text-[11px] text-muted-foreground mt-1.5">
+              <p className="text-2xs text-muted-foreground mt-1.5">
                 Resets on {new Date(usageStat.resetAt).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}.
                 {currentPlan === 'free' ? ' Upgrade to Pro for 50 scans/day (Unlimited).' : ' Upgrade to Elite for 100/day.'}
               </p>

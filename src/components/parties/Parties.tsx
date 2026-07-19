@@ -110,7 +110,7 @@ export function Parties() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <Users className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">{t('stat.total_parties')}</p>
+              <p className="text-2xs text-muted-foreground uppercase tracking-wide font-medium">{t('stat.total_parties')}</p>
             </div>
             <p className="text-xl font-bold">{parties.length}</p>
           </CardContent>
@@ -119,7 +119,7 @@ export function Parties() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <User className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">{t('stat.customers')}</p>
+              <p className="text-2xs text-muted-foreground uppercase tracking-wide font-medium">{t('stat.customers')}</p>
             </div>
             <p className="text-xl font-bold">{customers}</p>
           </CardContent>
@@ -128,7 +128,7 @@ export function Parties() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <ArrowDownRight className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">{t('dash.receivable')}</p>
+              <p className="text-2xs text-muted-foreground uppercase tracking-wide font-medium">{t('dash.receivable')}</p>
             </div>
             <p className="text-xl font-bold text-emerald-600 dark:text-emerald-400">{formatINR(totalReceivable)}</p>
           </CardContent>
@@ -137,7 +137,7 @@ export function Parties() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <ArrowUpRight className="w-4 h-4 text-rose-600" />
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">{t('dash.payable')}</p>
+              <p className="text-2xs text-muted-foreground uppercase tracking-wide font-medium">{t('dash.payable')}</p>
             </div>
             <p className="text-xl font-bold text-rose-600">{formatINR(totalPayable)}</p>
           </CardContent>
@@ -248,7 +248,7 @@ export function Parties() {
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
                         <h3 className="font-semibold text-sm truncate group-hover:text-primary transition">{p.name}</h3>
-                        <Badge variant="secondary" className="text-[10px] py-0 capitalize mt-0.5">{p.type}</Badge>
+                        <Badge variant="secondary" className="text-3xs py-0 capitalize mt-0.5">{p.type}</Badge>
                       </div>
                       <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary flex-shrink-0" />
                     </div>
@@ -270,7 +270,7 @@ export function Parties() {
 
                     <div className="mt-3 pt-3 border-t border-border flex items-center justify-between">
                       <div>
-                        <p className="text-[10px] text-muted-foreground uppercase">Balance</p>
+                        <p className="text-3xs text-muted-foreground uppercase">Balance</p>
                         <p className={cn(
                           'text-sm font-bold',
                           p.balance > 0 ? 'text-emerald-600 dark:text-emerald-400' : p.balance < 0 ? 'text-rose-600' : 'text-muted-foreground'
@@ -279,14 +279,14 @@ export function Parties() {
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="text-[10px] text-muted-foreground uppercase">Txns</p>
+                        <p className="text-3xs text-muted-foreground uppercase">Txns</p>
                         <p className="text-sm font-medium">{p.transactionCount}</p>
                       </div>
                     </div>
 
                     {p.balance !== 0 && (
                       <div className={cn(
-                        'mt-2 text-[11px] px-2 py-1 rounded-md',
+                        'mt-2 text-2xs px-2 py-1 rounded-md',
                         p.balance > 0 ? 'bg-emerald-50 text-emerald-700 dark:text-emerald-300' : 'bg-rose-50 text-rose-700'
                       )}>
                         {p.balance > 0 ? 'They owe you' : 'You owe them'}
@@ -334,16 +334,16 @@ export function Parties() {
                         </Avatar>
                         <div>
                           <p className="font-medium group-hover:text-primary transition">{p.name}</p>
-                          {p.gstin && <p className="text-[10px] font-mono text-muted-foreground">{p.gstin}</p>}
+                          {p.gstin && <p className="text-3xs font-mono text-muted-foreground">{p.gstin}</p>}
                         </div>
                       </div>
                     </td>
                     <td className="py-3 px-2">
-                      <Badge variant="secondary" className="text-[10px] capitalize">{p.type}</Badge>
+                      <Badge variant="secondary" className="text-3xs capitalize">{p.type}</Badge>
                     </td>
                     <td className="py-3 px-2 text-muted-foreground">
                       {p.phone || '—'}
-                      {p.state && <span className="block text-[10px]">{p.state}</span>}
+                      {p.state && <span className="block text-3xs">{p.state}</span>}
                     </td>
                     <td className="py-3 px-2 text-right">{p.transactionCount}</td>
                     <td className={cn('py-3 px-2 text-right font-semibold',

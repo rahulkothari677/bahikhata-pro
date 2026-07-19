@@ -201,7 +201,7 @@ export function NotificationCenter() {
       >
         <Bell className="w-5 h-5 lg:w-4 lg:h-4" />
         {totalCount > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-bold flex items-center justify-center z-10">
+          <span className="absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 rounded-full bg-rose-500 text-white text-3xs font-bold flex items-center justify-center z-10">
             {totalCount > 9 ? '9+' : totalCount}
           </span>
         )}
@@ -229,7 +229,7 @@ export function NotificationCenter() {
                 <SheetTitle className="text-base font-bold font-heading tracking-tight text-white">
                   Notifications
                 </SheetTitle>
-                <SheetDescription className="text-[11px] text-white/80">
+                <SheetDescription className="text-2xs text-white/80">
                   {totalCount === 0
                     ? 'All caught up'
                     : unseenCount > 0
@@ -279,7 +279,7 @@ export function NotificationCenter() {
                 {/* Unread section */}
                 {unread.length > 0 && (
                   <>
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground px-2 py-1">
+                    <p className="text-3xs font-semibold uppercase tracking-wide text-muted-foreground px-2 py-1">
                       New ({unread.length})
                     </p>
                     {unread.map((n, i) => (
@@ -301,7 +301,7 @@ export function NotificationCenter() {
                     {unread.length > 0 && (
                       <div className="flex items-center gap-2 px-2 py-3">
                         <div className="flex-1 h-px bg-border" />
-                        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Earlier</span>
+                        <span className="text-3xs font-semibold uppercase tracking-wide text-muted-foreground">Earlier</span>
                         <div className="flex-1 h-px bg-border" />
                       </div>
                     )}
@@ -440,7 +440,7 @@ function SwipeableNotification({
             <button
               onClick={(e) => { e.stopPropagation(); haptic.click(); onAction() }}
               className={cn(
-                'text-[11px] font-semibold mt-1.5 flex items-center gap-1 rounded-full px-2.5 py-1 transition',
+                'text-2xs font-semibold mt-1.5 flex items-center gap-1 rounded-full px-2.5 py-1 transition',
                 n.type === 'error' && 'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300 hover:bg-rose-200 dark:hover:bg-rose-900/60',
                 n.type === 'warning' && 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/60',
                 n.type === 'info' && 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-900/60',

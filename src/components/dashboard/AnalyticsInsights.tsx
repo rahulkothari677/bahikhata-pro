@@ -74,7 +74,7 @@ export function AnalyticsInsights() {
             </div>
             <div>
               <h3 className="text-sm font-bold font-heading tracking-tight">Business Analytics</h3>
-              <p className="text-[10px] text-white/80">
+              <p className="text-3xs text-white/80">
                 {criticalCount > 0 && `${criticalCount} action items · `}
                 {activeSections} insights · Updated 5 min ago
               </p>
@@ -218,24 +218,24 @@ function AnalyticsSection({
         </div>
         <div className="flex-1 min-w-0">
           {/* 🔒 AUDIT V25 BATCH 4c: Larger title (was text-xs, now text-sm) +
-              subtitle (was text-[10px], now text-[11px]) for readability. */}
+              subtitle (was text-3xs, now text-2xs) for readability. */}
           <p className="text-sm font-bold text-foreground">{title}</p>
-          <p className="text-[11px] text-muted-foreground">{subtitle}</p>
+          <p className="text-2xs text-muted-foreground">{subtitle}</p>
         </div>
       </div>
 
       {/* Entries */}
       {/* 🔒 AUDIT V25 BATCH 4c: More vertical spacing (was space-y-1, now space-y-1.5)
-          + larger entry text (was text-sm, now text-[13px]) for readability. */}
+          + larger entry text (was text-sm, now text-xs) for readability. */}
       <div className="space-y-1.5">
         {entries.map((entry, i) => (
-          <div key={i} className="flex items-center justify-between gap-2 text-[13px] py-0.5">
+          <div key={i} className="flex items-center justify-between gap-2 text-xs py-0.5">
             <div className="flex items-center gap-2 min-w-0 flex-1">
-              <span className="text-[11px] font-bold text-muted-foreground w-4 flex-shrink-0">{entry.rank}</span>
+              <span className="text-2xs font-bold text-muted-foreground w-4 flex-shrink-0">{entry.rank}</span>
               <div className="min-w-0">
                 <p className="truncate">{entry.label}</p>
                 {entry.sublabel && (
-                  <p className="text-[11px] text-muted-foreground truncate">{entry.sublabel}</p>
+                  <p className="text-2xs text-muted-foreground truncate">{entry.sublabel}</p>
                 )}
               </div>
             </div>

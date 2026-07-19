@@ -114,7 +114,7 @@ export function ReferralCard() {
               style={{ width: `${progress}%` }}
             />
           </div>
-          <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
+          <div className="flex justify-between text-3xs text-muted-foreground mt-1">
             <span>0</span><span>1</span><span>2</span><span>3</span>
           </div>
         </div>

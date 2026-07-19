@@ -122,7 +122,7 @@ function StatCard({ label, value, color, bg }: { label: string; value: string; c
       <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center mb-2', bg)}>
         <Package className={cn('w-4 h-4', color)} />
       </div>
-      <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold">{label}</p>
+      <p className="text-3xs text-muted-foreground uppercase tracking-wide font-semibold">{label}</p>
       <p className={cn('text-lg font-bold tabular-nums mt-0.5', color)}>{value}</p>
     </div>
   )

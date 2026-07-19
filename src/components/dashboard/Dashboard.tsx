@@ -503,7 +503,7 @@ export function Dashboard() {
               {t('dash.today_made')} <span className="font-bold text-white">{formatINR(kpis.todayRevenue)}</span> {t('dash.from')} <span className="font-bold text-white">{kpis.todayTxnCount}</span> {t('dash.sales_word')}
               {/* 🔒 V17 Audit Phase 1 P0.3: Show "net of returns" badge if credit notes exist today */}
               {kpis.todayCreditNoteCount > 0 && (
-                <span className="ml-2 inline-flex items-center gap-1 text-[11px] bg-white/20 px-2 py-0.5 rounded-full">
+                <span className="ml-2 inline-flex items-center gap-1 text-2xs bg-white/20 px-2 py-0.5 rounded-full">
                   <FileText className="w-3 h-3" />
                   {kpis.todayCreditNoteCount} return{kpis.todayCreditNoteCount !== 1 ? 's' : ''} netted
                 </span>
@@ -585,12 +585,12 @@ export function Dashboard() {
                 setPreviousView('dashboard')
                 setView(action.view)
               }}
-              className="card-hover flex flex-col items-center gap-1.5 p-2.5 rounded-xl bg-card border border-border/60 shadow-sm hover:border-primary/30 flex-shrink-0 min-w-[72px] active:scale-95"
+              className="card-hover flex flex-col items-center gap-1.5 p-2.5 rounded-xl bg-card border border-border/60 shadow-card hover:border-primary/30 flex-shrink-0 min-w-[72px] active:scale-95"
             >
               <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center', action.color)}>
                 <ActionIcon className="w-4 h-4" />
               </div>
-              <span className="text-[10px] font-medium text-center leading-tight">{action.label}</span>
+              <span className="text-3xs font-medium text-center leading-tight">{action.label}</span>
             </button>
           )
         })}
@@ -789,9 +789,9 @@ export function Dashboard() {
                   <div key={p.id} className="flex items-center justify-between p-2.5 rounded-lg bg-rose-50/50 dark:bg-rose-950/30 border border-rose-100 dark:border-rose-900">
                     <div className="min-w-0">
                       <p className="text-sm font-medium truncate">{p.name}</p>
-                      <p className="text-[11px] text-muted-foreground">{p.category} • Stock: {p.currentStock} {p.unit}</p>
+                      <p className="text-2xs text-muted-foreground">{p.category} • Stock: {p.currentStock} {p.unit}</p>
                     </div>
-                    <Badge variant="destructive" className="text-[10px]">
+                    <Badge variant="destructive" className="text-3xs">
                       {p.currentStock === 0 ? t('dash.out_of_stock') : t('dash.low_stock_short')}
                     </Badge>
                   </div>
@@ -864,7 +864,7 @@ export function Dashboard() {
                         <p className="text-sm font-semibold truncate">
                           {txn.partyName || 'Walk-in Customer'}
                         </p>
-                        <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+                        <p className="text-2xs text-muted-foreground flex items-center gap-1.5">
                           <span className="capitalize">{txn.type}</span>
                           <span>•</span>
                           <span>{relativeTime(txn.date)}</span>
@@ -884,7 +884,7 @@ export function Dashboard() {
                           {isInflow ? '+' : '-'}{formatINRCompact(txn.totalAmount)}
                         </p>
                         {isSale && txn.profit !== undefined && !hideProfit && (
-                          <p className="text-[10px] text-muted-foreground tabular-nums">
+                          <p className="text-3xs text-muted-foreground tabular-nums">
                             +{formatINRCompact(txn.profit)}
                           </p>
                         )}
@@ -937,15 +937,15 @@ export function Dashboard() {
             <div className="grid grid-cols-3 gap-3 text-center">
               <div>
                 <p className="text-2xl font-bold">{kpis.todayTxnCount}</p>
-                <p className="text-[11px] text-white/80 uppercase tracking-wide">Sales</p>
+                <p className="text-2xs text-white/80 uppercase tracking-wide">Sales</p>
               </div>
               <div>
                 <p className="text-2xl font-bold">{formatINRCompact(kpis.todayRevenue)}</p>
-                <p className="text-[11px] text-white/80 uppercase tracking-wide">Revenue</p>
+                <p className="text-2xs text-white/80 uppercase tracking-wide">Revenue</p>
               </div>
               <div>
                 <p className="text-2xl font-bold">{formatINRCompact(kpis.totalReceivable)}</p>
-                <p className="text-[11px] text-white/80 uppercase tracking-wide">Receivable</p>
+                <p className="text-2xs text-white/80 uppercase tracking-wide">Receivable</p>
               </div>
             </div>
             {features?.whatsappSharing && (
@@ -976,7 +976,7 @@ export function Dashboard() {
               </div>
               <div>
                 <p className="text-sm font-bold font-heading">Monthly Goals</p>
-                <p className="text-[10px] text-white/80">Track your progress this month</p>
+                <p className="text-3xs text-white/80">Track your progress this month</p>
               </div>
             </div>
           </div>
@@ -995,7 +995,7 @@ export function Dashboard() {
                     style={{ width: `${Math.min(100, (kpis.rangeRevenue / revenueTarget) * 100)}%` }}
                   />
                 </div>
-                <p className="text-[10px] text-muted-foreground mt-0.5 tabular-nums">
+                <p className="text-3xs text-muted-foreground mt-0.5 tabular-nums">
                   {kpis.rangeRevenue >= revenueTarget
                     ? '🎉 Target achieved!'
                     : `${((kpis.rangeRevenue / revenueTarget) * 100).toFixed(0)}% — ${formatINRCompact(revenueTarget - kpis.rangeRevenue)} to go`}
@@ -1018,7 +1018,7 @@ export function Dashboard() {
                     style={{ width: `${Math.min(100, ((kpis.rangeExpenses || 0) / expenseBudget) * 100)}%` }}
                   />
                 </div>
-                <p className="text-[10px] text-muted-foreground mt-0.5 tabular-nums">
+                <p className="text-3xs text-muted-foreground mt-0.5 tabular-nums">
                   {(kpis.rangeExpenses || 0) > expenseBudget
                     ? `⚠️ Over budget by ${formatINRCompact((kpis.rangeExpenses || 0) - expenseBudget)}`
                     : `${formatINRCompact(expenseBudget - (kpis.rangeExpenses || 0))} remaining`}
@@ -1058,7 +1058,7 @@ export function Dashboard() {
                 </div>
                 <div>
                   <p className="text-sm font-bold">Today's Digest</p>
-                  <p className="text-[11px] text-white/80">
+                  <p className="text-2xs text-white/80">
                     {kpis.todayTxnCount} sales · {formatINR(kpis.todayRevenue)} revenue · {formatINR(kpis.todayProfit)} profit
                   </p>
                 </div>
@@ -1176,9 +1176,9 @@ function KPICard({ title, value, icon: Icon, gradient, subtitle, trend, onClick,
               </div>
             )}
           </div>
-          <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">{title}</p>
+          <p className="text-2xs text-muted-foreground font-medium uppercase tracking-wide">{title}</p>
           <p className="text-xl lg:text-2xl font-bold mt-0.5 tracking-tight tabular-nums">{displayValue}</p>
-          {subtitle && <p className="text-[11px] text-muted-foreground mt-1 truncate">{subtitle}</p>}
+          {subtitle && <p className="text-2xs text-muted-foreground mt-1 truncate">{subtitle}</p>}
         </div>
       </div>
     </motion.div>
@@ -1202,7 +1202,7 @@ function MiniStatCard({ label, value, icon: Icon, color, subtitle, onClick }: {
 
   return (
     <div
-      className={`rounded-2xl bg-card border border-border/60 shadow-card hover:shadow-md transition cursor-pointer ${onClick ? 'hover:scale-[1.02]' : ''}`}
+      className={`rounded-2xl bg-card border border-border/60 shadow-card hover:shadow-card transition cursor-pointer ${onClick ? 'hover:scale-[1.02]' : ''}`}
       onClick={onClick}
     >
       <div className="p-3 lg:p-4">
@@ -1210,10 +1210,10 @@ function MiniStatCard({ label, value, icon: Icon, color, subtitle, onClick }: {
           <div className={cn('w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0', bgClass)}>
             <Icon className={cn('w-3.5 h-3.5', color)} />
           </div>
-          <p className="text-[10px] lg:text-[11px] text-muted-foreground font-medium uppercase tracking-wide leading-tight truncate">{label}</p>
+          <p className="text-3xs lg:text-2xs text-muted-foreground font-medium uppercase tracking-wide leading-tight truncate">{label}</p>
         </div>
         <p className="text-base lg:text-lg font-bold tracking-tight tabular-nums">{value}</p>
-        {subtitle && <p className="text-[10px] text-muted-foreground mt-0.5">{subtitle}</p>}
+        {subtitle && <p className="text-3xs text-muted-foreground mt-0.5">{subtitle}</p>}
       </div>
     </div>
   )
@@ -1227,7 +1227,7 @@ function GstMiniStat({ label, value, color, highlight }: {
 }) {
   return (
     <div className={cn('rounded-lg p-3 border', highlight ? 'bg-muted/50 border-primary/30' : 'bg-card border-border')}>
-      <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">{label}</p>
+      <p className="text-3xs text-muted-foreground uppercase tracking-wide font-medium">{label}</p>
       <p className={cn('text-base font-bold mt-1', color)}>{formatINR(value)}</p>
     </div>
   )

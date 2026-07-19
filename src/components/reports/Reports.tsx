@@ -702,8 +702,8 @@ function GSTReport({ data }: { data: any }) {
               <button
                 onClick={() => setSlabView('table')}
                 className={cn(
-                  'px-2.5 py-1 text-[11px] font-medium rounded-md transition',
-                  slabView === 'table' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground',
+                  'px-2.5 py-1 text-2xs font-medium rounded-md transition',
+                  slabView === 'table' ? 'bg-card text-foreground shadow-card' : 'text-muted-foreground',
                 )}
               >
                 Table
@@ -711,8 +711,8 @@ function GSTReport({ data }: { data: any }) {
               <button
                 onClick={() => setSlabView('chart')}
                 className={cn(
-                  'px-2.5 py-1 text-[11px] font-medium rounded-md transition',
-                  slabView === 'chart' ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground',
+                  'px-2.5 py-1 text-2xs font-medium rounded-md transition',
+                  slabView === 'chart' ? 'bg-card text-foreground shadow-card' : 'text-muted-foreground',
                 )}
               >
                 Chart
@@ -853,9 +853,9 @@ function StockReport({ data }: { data: any }) {
                     <td className="py-2 px-2 text-right">{formatINR(p.potentialSaleValue)}</td>
                     <td className="py-2 px-2 text-center">
                       {p.isLowStock ? (
-                        <Badge variant="destructive" className="text-[10px]">Low</Badge>
+                        <Badge variant="destructive" className="text-3xs">Low</Badge>
                       ) : (
-                        <Badge variant="secondary" className="text-[10px] bg-emerald-100 text-emerald-700 dark:text-emerald-300">OK</Badge>
+                        <Badge variant="secondary" className="text-3xs bg-emerald-100 text-emerald-700 dark:text-emerald-300">OK</Badge>
                       )}
                     </td>
                   </tr>
@@ -902,7 +902,7 @@ function PartyReport({ data }: { data: any }) {
                   <tr key={p.party.id} className="border-b border-border/50 hover:bg-muted/30">
                     <td className="py-2 px-2 font-medium">{p.party.name}</td>
                     <td className="py-2 px-2">
-                      <Badge variant="outline" className="text-[10px] capitalize">{p.party.type}</Badge>
+                      <Badge variant="outline" className="text-3xs capitalize">{p.party.type}</Badge>
                     </td>
                     <td className="py-2 px-2 text-right text-emerald-600 dark:text-emerald-400">{p.totalSales > 0 ? formatINR(p.totalSales) : '—'}</td>
                     <td className="py-2 px-2 text-right text-amber-600 dark:text-amber-400">{p.totalPurchases > 0 ? formatINR(p.totalPurchases) : '—'}</td>
@@ -946,7 +946,7 @@ function ReportStatCard({ label, value, icon: Icon, color, bg }: { label: string
           <div className={`w-9 h-9 rounded-lg bg-gradient-to-br ${gradient} flex items-center justify-center shadow-md flex-shrink-0`}>
             <Icon className="w-4 h-4 text-white" />
           </div>
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold leading-tight">{label}</p>
+          <p className="text-3xs text-muted-foreground uppercase tracking-wide font-semibold leading-tight">{label}</p>
         </div>
         <p className={cn('text-xl font-bold tracking-tight tabular-nums', textColor)}>{value}</p>
       </div>

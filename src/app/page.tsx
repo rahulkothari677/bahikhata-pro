@@ -504,7 +504,7 @@ export default function Home() {
           </PullToRefresh>
         </main>
 
-        <footer className="mt-auto border-t border-border py-3 px-4 lg:px-6 text-center text-[11px] text-muted-foreground no-print hidden lg:block">
+        <footer className="mt-auto border-t border-border py-3 px-4 lg:px-6 text-center text-2xs text-muted-foreground no-print hidden lg:block">
           <p>EkBook — Made with love for Bharat</p>
         </footer>
       </AppShell>

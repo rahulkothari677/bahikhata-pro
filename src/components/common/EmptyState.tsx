@@ -27,6 +27,7 @@
 
 import { cn } from '@/lib/utils'
 import { ArrowRight, type LucideIcon } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 
 interface EmptyStateProps {
   icon: LucideIcon
@@ -110,7 +111,7 @@ export function EmptyState({
       {description && (
         <p className={cn(
           'text-muted-foreground mt-1 max-w-xs',
-          isCompact ? 'text-[11px]' : 'text-xs',
+          isCompact ? 'text-2xs' : 'text-xs',
         )}>
           {description}
         </p>
@@ -118,28 +119,26 @@ export function EmptyState({
       {(action || secondaryAction) && (
         <div className="flex items-center gap-2 mt-4">
           {action && (
-            <button
+            // 🔒 V26 Phase 6 §1.4: Use <Button> instead of raw <button> — gets
+            // focus-visible ring, consistent padding/radius, and theme-aware
+            // colors for free. The className override applies the color variant.
+            <Button
+              size={isCompact ? 'sm' : 'default'}
               onClick={action.onClick}
-              className={cn(
-                'inline-flex items-center gap-1.5 rounded-lg font-medium transition active:scale-95',
-                isCompact ? 'px-3 py-1.5 text-xs' : 'px-4 py-2 text-sm',
-                colors.btn,
-              )}
+              className={cn('gap-1.5', colors.btn)}
             >
               {action.label}
               <ArrowRight className="w-3.5 h-3.5" />
-            </button>
+            </Button>
           )}
           {secondaryAction && (
-            <button
+            <Button
+              size={isCompact ? 'sm' : 'default'}
+              variant="outline"
               onClick={secondaryAction.onClick}
-              className={cn(
-                'inline-flex items-center rounded-lg font-medium transition active:scale-95 border border-border hover:bg-muted',
-                isCompact ? 'px-3 py-1.5 text-xs' : 'px-4 py-2 text-sm',
-              )}
             >
               {secondaryAction.label}
-            </button>
+            </Button>
           )}
         </div>
       )}

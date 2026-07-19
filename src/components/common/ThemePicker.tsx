@@ -92,7 +92,7 @@ export function ThemePicker({ open, onDone }: { open: boolean; onDone: () => voi
                     className="w-full aspect-square rounded-lg mb-1.5"
                     style={{ background: theme.swatch }}
                   />
-                  <p className="text-[10px] font-medium text-center leading-tight">{theme.label}</p>
+                  <p className="text-3xs font-medium text-center leading-tight">{theme.label}</p>
                   {selectedColor === theme.id && (
                     <div className="absolute top-1 right-1 w-4 h-4 rounded-full bg-primary flex items-center justify-center">
                       <Check className="w-2.5 h-2.5 text-primary-foreground" strokeWidth={3} />

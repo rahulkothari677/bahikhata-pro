@@ -157,13 +157,13 @@ export function CAAccess() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{ca.name || 'No name'}</p>
-                    <p className="text-[11px] text-muted-foreground truncate">{ca.email}</p>
+                    <p className="text-2xs text-muted-foreground truncate">{ca.email}</p>
                   </div>
                   <div className="flex flex-col items-end gap-1 flex-shrink-0">
-                    <Badge className="text-[10px] bg-violet-100 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300 hover:bg-violet-100">
+                    <Badge className="text-3xs bg-violet-100 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300 hover:bg-violet-100">
                       <Eye className="w-3 h-3 mr-1" /> Read-only
                     </Badge>
-                    <p className="text-[10px] text-muted-foreground">Added {formatDate(ca.createdAt)}</p>
+                    <p className="text-3xs text-muted-foreground">Added {formatDate(ca.createdAt)}</p>
                   </div>
                   <Button
                     variant="ghost"
@@ -183,7 +183,7 @@ export function CAAccess() {
             <p className="text-xs text-violet-700 dark:text-violet-300 font-medium flex items-center gap-1.5">
               <ShieldCheck className="w-3.5 h-3.5" /> What a CA can do:
             </p>
-            <ul className="text-[11px] text-violet-600 dark:text-violet-400 mt-1 space-y-0.5">
+            <ul className="text-2xs text-violet-600 dark:text-violet-400 mt-1 space-y-0.5">
               {CA_ACCESSIBLE_MODULES.map((m) => (
                 <li key={m}>• {m}</li>
               ))}
@@ -191,7 +191,7 @@ export function CAAccess() {
             <p className="text-xs text-rose-600 dark:text-rose-400 font-medium flex items-center gap-1.5 mt-2.5">
               <Lock className="w-3.5 h-3.5" /> What a CA cannot do:
             </p>
-            <ul className="text-[11px] text-rose-500 dark:text-rose-400 mt-1 space-y-0.5">
+            <ul className="text-2xs text-rose-500 dark:text-rose-400 mt-1 space-y-0.5">
               {CA_BLOCKED_MODULES.map((m) => (
                 <li key={m}>• {m}</li>
               ))}
@@ -235,7 +235,7 @@ export function CAAccess() {
                   placeholder="Min 8 characters"
                   className="mt-1"
                 />
-                <p className="text-[11px] text-muted-foreground mt-1">
+                <p className="text-2xs text-muted-foreground mt-1">
                   Share these credentials with your accountant. They can log in at the same URL
                   with read-only access to view your reports, ledgers, and party statements.
                   They will not be able to create, edit, or delete anything.

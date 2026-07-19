@@ -89,7 +89,7 @@ export function DraftManagerModal({
           <p className="text-xs text-muted-foreground">
             Drafts auto-expire after 24 hours. {drafts.length} saved.
             <br />
-            <span className="text-[10px]">Tap a draft to view its contents.</span>
+            <span className="text-3xs">Tap a draft to view its contents.</span>
           </p>
         </DialogHeader>
 
@@ -134,12 +134,12 @@ export function DraftManagerModal({
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-sm font-semibold truncate">{label}</span>
                           {isActive && (
-                            <Badge variant="secondary" className="text-[9px] bg-primary/10 text-primary">
+                            <Badge variant="secondary" className="text-3xs bg-primary/10 text-primary">
                               Current
                             </Badge>
                           )}
                         </div>
-                        <div className="flex items-center gap-3 mt-1 text-[11px] text-muted-foreground">
+                        <div className="flex items-center gap-3 mt-1 text-2xs text-muted-foreground">
                           <span className="flex items-center gap-1">
                             <Clock className="w-3 h-3" />
                             {formatAgo(draft.savedAt)}

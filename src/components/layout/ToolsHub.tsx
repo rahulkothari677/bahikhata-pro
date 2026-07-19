@@ -121,7 +121,7 @@ export function ToolsHub() {
                       haptic.click()
                       handleNavAction(tool, { previousView: 'tools' })
                     }}
-                    className="card-hover group flex items-start gap-3 p-3 bg-card rounded-2xl border border-border/60 shadow-sm hover:border-primary/30 text-left active:bg-muted/50"
+                    className="card-hover group flex items-start gap-3 p-3 bg-card rounded-2xl border border-border/60 shadow-card hover:border-primary/30 text-left active:bg-muted/50"
                     style={{ '--stagger-index': toolIdx } as any}
                   >
                     <div className={cn(
@@ -153,7 +153,7 @@ export function ToolsHub() {
 
       {/* Footer hint — same style as ReportsHub */}
       <div className="pt-2 pb-1 text-center">
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-2xs text-muted-foreground">
           Tip: use Ctrl+K (Cmd+K on Mac) to quickly search and jump to any tool.
         </p>
       </div>

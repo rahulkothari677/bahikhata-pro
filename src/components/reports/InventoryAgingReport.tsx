@@ -72,11 +72,11 @@ export function InventoryAgingReport({ data }: { data: any }) {
             <CardContent className="p-4">
               <div className="flex items-center gap-2 mb-1">
                 <div className={cn('w-2.5 h-2.5 rounded-full', bucket.bg)} />
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold">{bucket.sublabel}</p>
+                <p className="text-3xs text-muted-foreground uppercase tracking-wide font-semibold">{bucket.sublabel}</p>
               </div>
-              <p className="text-[11px] text-muted-foreground mb-1">{bucket.label}</p>
+              <p className="text-2xs text-muted-foreground mb-1">{bucket.label}</p>
               <p className={cn('text-lg font-bold', bucket.color)}>{formatINR(bucket.value)}</p>
-              <p className="text-[10px] text-muted-foreground mt-0.5">
+              <p className="text-3xs text-muted-foreground mt-0.5">
                 {bucket.count} product{bucket.count !== 1 ? 's' : ''}
                 {totalValue > 0 ? ` · ${((bucket.value / totalValue) * 100).toFixed(0)}%` : ''}
               </p>
@@ -93,7 +93,7 @@ export function InventoryAgingReport({ data }: { data: any }) {
             <p className="text-xs font-medium text-rose-700 dark:text-rose-400">
               {formatINR(bucketValues.dead)} tied up in dead stock (90+ days)
             </p>
-            <p className="text-[11px] text-rose-600 dark:text-rose-500 mt-0.5">
+            <p className="text-2xs text-rose-600 dark:text-rose-500 mt-0.5">
               Consider discounting or liquidating these products to free up capital. Dead stock reduces your business health score.
             </p>
           </div>
@@ -130,9 +130,9 @@ export function InventoryAgingReport({ data }: { data: any }) {
                     <td className="py-2 px-2 text-right font-medium">{formatINR(p.stockValue || 0)}</td>
                     <td className="py-2 px-2 text-right text-muted-foreground">{p.ageDays}</td>
                     <td className="py-2 px-2 text-center">
-                      {p.bucket === 'fresh' && <Badge className="text-[9px] bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">Fresh</Badge>}
-                      {p.bucket === 'slow' && <Badge className="text-[9px] bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">Slow</Badge>}
-                      {p.bucket === 'dead' && <Badge variant="destructive" className="text-[9px]">Dead Stock</Badge>}
+                      {p.bucket === 'fresh' && <Badge className="text-3xs bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">Fresh</Badge>}
+                      {p.bucket === 'slow' && <Badge className="text-3xs bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400">Slow</Badge>}
+                      {p.bucket === 'dead' && <Badge variant="destructive" className="text-3xs">Dead Stock</Badge>}
                     </td>
                   </tr>
                 ))}

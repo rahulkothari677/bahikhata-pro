@@ -139,7 +139,7 @@ export function BusinessHealthScore({ kpis }: { kpis: any }) {
             </div>
             <div>
               <p className="text-sm font-bold font-heading tracking-tight">Business Health Score</p>
-              <p className="text-[10px] text-white/80">Overall business wellness indicator</p>
+              <p className="text-3xs text-white/80">Overall business wellness indicator</p>
             </div>
           </div>
         </div>
@@ -171,7 +171,7 @@ export function BusinessHealthScore({ kpis }: { kpis: any }) {
           </div>
           <div>
             <p className="text-sm font-bold font-heading tracking-tight">Business Health Score</p>
-            <p className="text-[10px] text-white/80">Overall business wellness indicator</p>
+            <p className="text-3xs text-white/80">Overall business wellness indicator</p>
           </div>
         </div>
       </div>
@@ -192,7 +192,7 @@ export function BusinessHealthScore({ kpis }: { kpis: any }) {
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
               <span className={cn('text-2xl font-bold tabular-nums', text)}>{displayScore}</span>
-              <span className="text-[9px] text-muted-foreground">/ 100</span>
+              <span className="text-3xs text-muted-foreground">/ 100</span>
             </div>
           </div>
 
@@ -205,7 +205,7 @@ export function BusinessHealthScore({ kpis }: { kpis: any }) {
             <div className="space-y-1">
               {factors.map(f => (
                 <div key={f.label} className="flex items-center gap-2">
-                  <span className="text-[10px] text-muted-foreground flex-1 truncate">{f.label}</span>
+                  <span className="text-3xs text-muted-foreground flex-1 truncate">{f.label}</span>
                   <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
                     <div
                       className={cn('h-full rounded-full', f.score >= 60 ? 'bg-emerald-500' : f.score >= 40 ? 'bg-amber-500' : 'bg-rose-500')}

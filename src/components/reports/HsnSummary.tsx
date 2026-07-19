@@ -31,21 +31,21 @@ export function HsnSummary({ data }: HsnSummaryProps) {
           <div className="w-9 h-9 rounded-lg flex items-center justify-center mb-2 bg-blue-100 dark:bg-blue-950">
             <Hash className="w-4 h-4 text-blue-600 dark:text-blue-400" />
           </div>
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold">HSN Codes</p>
+          <p className="text-3xs text-muted-foreground uppercase tracking-wide font-semibold">HSN Codes</p>
           <p className="text-lg font-bold tabular-nums mt-0.5 text-blue-600 dark:text-blue-400">{summary.totalHsnCodes}</p>
         </div>
         <div className="rounded-2xl bg-card border border-border/60 shadow-card p-4">
           <div className="w-9 h-9 rounded-lg flex items-center justify-center mb-2 bg-amber-100 dark:bg-amber-950">
             <Hash className="w-4 h-4 text-amber-600 dark:text-amber-400" />
           </div>
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold">Total Taxable Value</p>
+          <p className="text-3xs text-muted-foreground uppercase tracking-wide font-semibold">Total Taxable Value</p>
           <p className="text-lg font-bold tabular-nums mt-0.5 text-amber-600 dark:text-amber-400">{formatINR(summary.totalTaxableValue)}</p>
         </div>
         <div className="rounded-2xl bg-card border border-border/60 shadow-card p-4">
           <div className="w-9 h-9 rounded-lg flex items-center justify-center mb-2 bg-violet-100 dark:bg-violet-950">
             <Hash className="w-4 h-4 text-violet-600 dark:text-violet-400" />
           </div>
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-semibold">Total Tax</p>
+          <p className="text-3xs text-muted-foreground uppercase tracking-wide font-semibold">Total Tax</p>
           <p className="text-lg font-bold tabular-nums mt-0.5 text-violet-600 dark:text-violet-400">{formatINR(summary.totalTax)}</p>
         </div>
       </div>
@@ -89,7 +89,7 @@ export function HsnSummary({ data }: HsnSummaryProps) {
                       <td className="py-2 px-2 truncate max-w-[200px]">{row.description}</td>
                       <td className="py-2 px-2 text-right text-muted-foreground">{row.totalQty} {row.unit}</td>
                       <td className="py-2 px-2 text-center">
-                        <Badge variant="outline" className="text-[10px]">{row.gstRate}%</Badge>
+                        <Badge variant="outline" className="text-3xs">{row.gstRate}%</Badge>
                       </td>
                       <td className="py-2 px-2 text-right font-medium">{formatINR(row.taxableValue)}</td>
                       <td className="py-2 px-2 text-right text-muted-foreground">{row.cgst > 0 ? formatINR(row.cgst) : '—'}</td>

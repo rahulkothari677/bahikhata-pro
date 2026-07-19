@@ -106,7 +106,7 @@ export function IncomeExpense() {
               <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-md">
                 <ArrowDownRight className="w-4 h-4 text-white" />
               </div>
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Income</p>
+              <p className="text-2xs text-muted-foreground uppercase tracking-wide font-medium">Income</p>
             </div>
             <p className="text-2xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{formatINR(totalIncome)}</p>
           </div>
@@ -119,7 +119,7 @@ export function IncomeExpense() {
               <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-rose-500 to-red-600 flex items-center justify-center shadow-md">
                 <ArrowUpRight className="w-4 h-4 text-white" />
               </div>
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Expenses</p>
+              <p className="text-2xs text-muted-foreground uppercase tracking-wide font-medium">Expenses</p>
             </div>
             <p className="text-2xl font-bold tabular-nums text-rose-600">{formatINR(totalExpense)}</p>
           </div>
@@ -132,7 +132,7 @@ export function IncomeExpense() {
               <div className={cn('w-9 h-9 rounded-lg bg-gradient-to-br flex items-center justify-center shadow-md', netCashflow >= 0 ? 'from-violet-500 to-purple-600' : 'from-amber-500 to-orange-600')}>
                 <Wallet className="w-4 h-4 text-white" />
               </div>
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">Net Cashflow</p>
+              <p className="text-2xs text-muted-foreground uppercase tracking-wide font-medium">Net Cashflow</p>
             </div>
             <p className={cn('text-2xl font-bold tabular-nums', netCashflow >= 0 ? 'text-violet-600' : 'text-amber-600 dark:text-amber-400')}>
               {netCashflow >= 0 ? '+' : ''}{formatINR(netCashflow)}
@@ -174,11 +174,11 @@ export function IncomeExpense() {
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-medium">{cat}</span>
                         {progress.exceeded && (
-                          <Badge variant="destructive" className="text-[9px] py-0">Over budget</Badge>
+                          <Badge variant="destructive" className="text-3xs py-0">Over budget</Badge>
                         )}
                       </div>
                       <div className="flex items-center gap-2">
-                        <span className="text-[11px] text-muted-foreground">
+                        <span className="text-2xs text-muted-foreground">
                           {formatINR(progress.spent)} / {formatINR(progress.budget)}
                         </span>
                         <button
@@ -201,7 +201,7 @@ export function IncomeExpense() {
                         style={{ width: `${Math.min(100, progress.pct)}%` }}
                       />
                     </div>
-                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                    <p className="text-3xs text-muted-foreground mt-0.5">
                       {progress.exceeded
                         ? `${formatINR(progress.spent - progress.budget)} over budget`
                         : `${formatINR(progress.remaining)} remaining (${progress.pct.toFixed(0)}% used)`}
@@ -256,7 +256,7 @@ export function IncomeExpense() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{entry.category}</p>
-                      <p className="text-[11px] text-muted-foreground flex items-center gap-2">
+                      <p className="text-2xs text-muted-foreground flex items-center gap-2">
                         <span className="flex items-center gap-0.5"><Calendar className="w-3 h-3" /> Day {entry.dayOfMonth}</span>
                         <span>·</span>
                         <span className="capitalize">{entry.type}</span>
@@ -268,7 +268,7 @@ export function IncomeExpense() {
                       <p className={cn('text-sm font-semibold', entry.type === 'expense' ? 'text-rose-600' : 'text-emerald-600 dark:text-emerald-400')}>
                         {formatINR(entry.amount)}
                       </p>
-                      <p className="text-[10px] text-muted-foreground">per month</p>
+                      <p className="text-3xs text-muted-foreground">per month</p>
                     </div>
                     <button
                       onClick={() => { removeRecurring(entry.id); sonnerToast.success('Recurring entry removed') }}
@@ -280,7 +280,7 @@ export function IncomeExpense() {
                 ))}
               </div>
             )}
-            <p className="text-[10px] text-muted-foreground mt-2">
+            <p className="text-3xs text-muted-foreground mt-2">
               Entries are created automatically on the specified day each month when you open the app.
             </p>
           </CardContent>
@@ -349,7 +349,7 @@ export function IncomeExpense() {
                           <p className="font-semibold text-sm truncate group-hover:text-primary transition">
                             {t.category || 'Other'}
                           </p>
-                          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground mt-0.5">
+                          <div className="flex items-center gap-1.5 text-2xs text-muted-foreground mt-0.5">
                             <span>{formatDate(t.date)}</span>
                             <span>•</span>
                             <span className="uppercase">{t.paymentMode}</span>
@@ -361,7 +361,7 @@ export function IncomeExpense() {
                             )}
                           </div>
                           {t.notes && (
-                            <p className="text-[10px] text-muted-foreground mt-0.5 truncate italic">{t.notes}</p>
+                            <p className="text-3xs text-muted-foreground mt-0.5 truncate italic">{t.notes}</p>
                           )}
                         </div>
                         <div className="text-right flex-shrink-0">
@@ -448,7 +448,7 @@ export function IncomeExpense() {
             >
               <ArrowDownRight className="w-6 h-6 mb-2 text-emerald-600 dark:text-emerald-400" />
               <p className="font-semibold text-sm">Add Income</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">Commission, interest, etc.</p>
+              <p className="text-2xs text-muted-foreground mt-0.5">Commission, interest, etc.</p>
             </button>
             <button
               onClick={() => { setDialogType('expense'); setDialogOpen(true); setChoiceOpen(false) }}
@@ -456,7 +456,7 @@ export function IncomeExpense() {
             >
               <ArrowUpRight className="w-6 h-6 mb-2 text-rose-600" />
               <p className="font-semibold text-sm">Add Expense</p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">Rent, salary, bills</p>
+              <p className="text-2xs text-muted-foreground mt-0.5">Rent, salary, bills</p>
             </button>
           </div>
         </DialogContent>
@@ -493,7 +493,7 @@ export function IncomeExpense() {
                 placeholder="e.g. 15000"
                 className="mt-1"
               />
-              <p className="text-[11px] text-muted-foreground mt-1">
+              <p className="text-2xs text-muted-foreground mt-1">
                 You'll see a progress bar on this page showing how much you've spent vs budget.
               </p>
             </div>
@@ -606,7 +606,7 @@ export function IncomeExpense() {
                 className="mt-1"
               />
             </div>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-2xs text-muted-foreground">
               This entry will be created automatically on day {recurDay} of every month when you open the app.
             </p>
           </div>
@@ -753,7 +753,7 @@ function IncomeExpenseDialog({ open, onOpenChange, type, onSuccess }: {
               <button
                 type="button"
                 onClick={() => setIsCustomCategory(!isCustomCategory)}
-                className="text-[11px] text-primary hover:underline"
+                className="text-2xs text-primary hover:underline"
               >
                 {isCustomCategory ? '← Choose from list' : '+ Custom category'}
               </button>
@@ -777,7 +777,7 @@ function IncomeExpenseDialog({ open, onOpenChange, type, onSuccess }: {
 
           {/* Payee info - who you paid / received from */}
           <div className="rounded-lg bg-muted/30 p-3 space-y-2">
-            <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">
+            <p className="text-2xs font-medium text-muted-foreground uppercase tracking-wide">
               {isExpense ? 'Paid To' : 'Received From'} (optional)
             </p>
             <div className="grid grid-cols-2 gap-2">

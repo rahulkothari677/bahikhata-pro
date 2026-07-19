@@ -102,7 +102,7 @@ export function ReportsHub() {
                       // currentView ('reports') so the back button returns here.
                       handleNavAction(report)
                     }}
-                    className="card-hover group flex items-start gap-3 p-3 bg-card rounded-2xl border border-border/60 shadow-sm hover:border-primary/30 text-left active:bg-muted/50"
+                    className="card-hover group flex items-start gap-3 p-3 bg-card rounded-2xl border border-border/60 shadow-card hover:border-primary/30 text-left active:bg-muted/50"
                     style={{ '--stagger-index': repIdx } as any}
                   >
                     <div className={cn(
@@ -128,7 +128,7 @@ export function ReportsHub() {
 
       {/* Footer hint */}
       <div className="pt-2 pb-1 text-center">
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-2xs text-muted-foreground">
           Tip: use the date picker at the top of each report to change the period.
         </p>
       </div>

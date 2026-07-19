@@ -65,7 +65,7 @@ export function SmartInsights() {
             </div>
             <div>
               <h3 className="text-sm font-bold font-heading tracking-tight">Smart Insights</h3>
-              <p className="text-[10px] text-white/80">
+              <p className="text-3xs text-white/80">
                 {criticalCount > 0 && `${criticalCount} critical · `}
                 {warningCount > 0 && `${warningCount} warnings · `}
                 AI-powered business intelligence
@@ -121,9 +121,9 @@ export function SmartInsights() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold leading-snug">{insight.title}</p>
-                    {/* 🔒 AUDIT V25 BATCH 4c: Larger description text (was text-[11px],
-                        now text-[13px]) + more line height for readability. */}
-                    <p className="text-[13px] text-muted-foreground mt-1 leading-relaxed">{insight.description}</p>
+                    {/* 🔒 AUDIT V25 BATCH 4c: Larger description text (was text-2xs,
+                        now text-xs) + more line height for readability. */}
+                    <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{insight.description}</p>
                     {insight.action && (
                       <button
                         onClick={insight.action.onClick}

@@ -223,7 +223,7 @@ export function UnsyncedEntries() {
             <div>
               <CardTitle className="text-sm flex items-center gap-2">
                 Unsynced Entries
-                <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
+                <Badge variant="destructive" className="text-3xs px-1.5 py-0">
                   {items.length}
                 </Badge>
               </CardTitle>

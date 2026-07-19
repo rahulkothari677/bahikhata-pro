@@ -95,7 +95,7 @@ export function CashflowReport({ data }: CashflowReportProps) {
                           style={{ width: `${Math.max(2, pct)}%` }}
                         />
                       </div>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">{pct.toFixed(1)}% of inflow</p>
+                      <p className="text-3xs text-muted-foreground mt-0.5">{pct.toFixed(1)}% of inflow</p>
                     </div>
                   )
                 })}
@@ -134,7 +134,7 @@ export function CashflowReport({ data }: CashflowReportProps) {
                           style={{ width: `${Math.max(2, pct)}%` }}
                         />
                       </div>
-                      <p className="text-[10px] text-muted-foreground mt-0.5">{pct.toFixed(1)}% of outflow</p>
+                      <p className="text-3xs text-muted-foreground mt-0.5">{pct.toFixed(1)}% of outflow</p>
                     </div>
                   )
                 })}

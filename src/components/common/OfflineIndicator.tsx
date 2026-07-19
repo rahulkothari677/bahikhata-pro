@@ -151,7 +151,7 @@ export function OfflineIndicator() {
               </button>
             )}
             {!online && (
-              <span className="hidden sm:flex items-center gap-1 text-[11px] opacity-80 flex-shrink-0">
+              <span className="hidden sm:flex items-center gap-1 text-2xs opacity-80 flex-shrink-0">
                 <Clock className="w-3 h-3" />
                 Changes will sync automatically
               </span>

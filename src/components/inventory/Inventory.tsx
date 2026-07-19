@@ -122,7 +122,7 @@ export function Inventory() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <Package className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">{t('stat.total_products')}</p>
+              <p className="text-2xs text-muted-foreground uppercase tracking-wide font-medium">{t('stat.total_products')}</p>
             </div>
             <p className="text-xl font-bold">{products.length}</p>
           </CardContent>
@@ -131,7 +131,7 @@ export function Inventory() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <IndianRupee className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">{t('dash.stock_value')}</p>
+              <p className="text-2xs text-muted-foreground uppercase tracking-wide font-medium">{t('dash.stock_value')}</p>
             </div>
             <p className="text-xl font-bold">{formatINR(totalStockValue)}</p>
           </CardContent>
@@ -140,7 +140,7 @@ export function Inventory() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <TrendingUp className="w-4 h-4 text-violet-600" />
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">{t('stat.potential_profit')}</p>
+              <p className="text-2xs text-muted-foreground uppercase tracking-wide font-medium">{t('stat.potential_profit')}</p>
             </div>
             <p className="text-xl font-bold">{formatINR(totalPotentialProfit)}</p>
           </CardContent>
@@ -149,7 +149,7 @@ export function Inventory() {
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
               <AlertTriangle className="w-4 h-4 text-rose-600" />
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wide font-medium">{t('stat.low_out_stock')}</p>
+              <p className="text-2xs text-muted-foreground uppercase tracking-wide font-medium">{t('stat.low_out_stock')}</p>
             </div>
             <p className="text-xl font-bold">{lowStockCount} <span className="text-sm text-muted-foreground">/ {outOfStockCount}</span></p>
           </CardContent>
@@ -176,7 +176,7 @@ export function Inventory() {
               )}
             >
               All Products
-              <span className={cn('text-[10px]', !inventoryCategory ? 'text-primary-foreground/70' : 'text-muted-foreground')}>
+              <span className={cn('text-3xs', !inventoryCategory ? 'text-primary-foreground/70' : 'text-muted-foreground')}>
                 {products.length}
               </span>
             </button>
@@ -193,7 +193,7 @@ export function Inventory() {
               >
                 {inventoryCategory === cat ? <FolderOpen className="w-3 h-3" /> : <Folder className="w-3 h-3" />}
                 {cat}
-                <span className={cn('text-[10px]', inventoryCategory === cat ? 'text-primary-foreground/70' : 'text-muted-foreground')}>
+                <span className={cn('text-3xs', inventoryCategory === cat ? 'text-primary-foreground/70' : 'text-muted-foreground')}>
                   {categoryCounts.get(cat) || 0}
                 </span>
               </button>
@@ -338,9 +338,9 @@ export function Inventory() {
                       <td className="py-3 px-4">
                         <div className="font-medium">{p.name}</div>
                         <div className="flex flex-wrap items-center gap-1 mt-0.5">
-                          {p.sku && <Badge variant="outline" className="text-[10px] py-0">{p.sku}</Badge>}
-                          {p.category && <Badge variant="secondary" className="text-[10px] py-0">{p.category}</Badge>}
-                          <Badge variant="outline" className="text-[10px] py-0">GST {p.gstRate}%</Badge>
+                          {p.sku && <Badge variant="outline" className="text-3xs py-0">{p.sku}</Badge>}
+                          {p.category && <Badge variant="secondary" className="text-3xs py-0">{p.category}</Badge>}
+                          <Badge variant="outline" className="text-3xs py-0">GST {p.gstRate}%</Badge>
                         </div>
                       </td>
                       <td className="py-3 px-2 text-right">{formatINR(p.purchasePrice)}</td>
@@ -349,20 +349,20 @@ export function Inventory() {
                         p.currentStock <= 0 ? 'text-rose-600' :
                         p.isLowStock ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'
                       )}>
-                        {p.currentStock} <span className="text-[10px] text-muted-foreground">{p.unit}</span>
+                        {p.currentStock} <span className="text-3xs text-muted-foreground">{p.unit}</span>
                       </td>
                       <td className="py-3 px-2 text-right">{formatINR(p.stockValue)}</td>
                       <td className="py-3 px-2 text-right text-emerald-600 dark:text-emerald-400 font-medium">
                         {formatINR(profit)}
-                        <span className="text-[10px] text-muted-foreground ml-1">({margin.toFixed(0)}%)</span>
+                        <span className="text-3xs text-muted-foreground ml-1">({margin.toFixed(0)}%)</span>
                       </td>
                       <td className="py-3 px-2 text-center">
                         {p.isLowStock ? (
-                          <Badge variant="destructive" className="text-[10px]">
+                          <Badge variant="destructive" className="text-3xs">
                             {p.currentStock <= 0 ? 'Out' : 'Low'}
                           </Badge>
                         ) : (
-                          <Badge variant="secondary" className="text-[10px] bg-emerald-100 text-emerald-700 dark:text-emerald-300">OK</Badge>
+                          <Badge variant="secondary" className="text-3xs bg-emerald-100 text-emerald-700 dark:text-emerald-300">OK</Badge>
                         )}
                       </td>
                       <td className="py-3 px-2">
@@ -439,8 +439,8 @@ function ProductGridCard({ product: p, onEdit }: { product: any; onEdit: () => v
           <div className="min-w-0 flex-1">
             <h3 className="font-semibold text-sm truncate">{p.name}</h3>
             <div className="flex flex-wrap items-center gap-1 mt-0.5">
-              {p.category && <Badge variant="secondary" className="text-[10px] py-0">{p.category}</Badge>}
-              {p.sku && <span className="text-[10px] text-muted-foreground font-mono">{p.sku}</span>}
+              {p.category && <Badge variant="secondary" className="text-3xs py-0">{p.category}</Badge>}
+              {p.sku && <span className="text-3xs text-muted-foreground font-mono">{p.sku}</span>}
             </div>
           </div>
           <Button
@@ -457,14 +457,14 @@ function ProductGridCard({ product: p, onEdit }: { product: any; onEdit: () => v
         {/* Price row — sale price prominent, buy price secondary */}
         <div className="flex items-baseline justify-between mb-2">
           <div>
-            <p className="text-[10px] text-muted-foreground uppercase">Sale Price</p>
+            <p className="text-3xs text-muted-foreground uppercase">Sale Price</p>
             <p className="text-lg font-bold tabular-nums">{formatINR(p.salePrice)}</p>
           </div>
           <div className="text-right">
-            <p className="text-[10px] text-muted-foreground uppercase">Profit</p>
+            <p className="text-3xs text-muted-foreground uppercase">Profit</p>
             <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">
               +{formatINR(profit)}
-              <span className="text-[10px] text-muted-foreground ml-0.5">({margin.toFixed(0)}%)</span>
+              <span className="text-3xs text-muted-foreground ml-0.5">({margin.toFixed(0)}%)</span>
             </p>
           </div>
         </div>
@@ -472,7 +472,7 @@ function ProductGridCard({ product: p, onEdit }: { product: any; onEdit: () => v
         {/* Stock indicator — visual bar */}
         <div className="mt-2 pt-2 border-t border-border">
           <div className="flex items-center justify-between mb-1">
-            <span className="text-[10px] text-muted-foreground uppercase">Stock</span>
+            <span className="text-3xs text-muted-foreground uppercase">Stock</span>
             <span className={cn(
               'text-xs font-bold tabular-nums',
               p.currentStock <= 0 ? 'text-rose-600' :

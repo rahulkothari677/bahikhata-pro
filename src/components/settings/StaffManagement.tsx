@@ -187,11 +187,11 @@ export function StaffManagement() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{s.name || 'No name'}</p>
-                      <p className="text-[11px] text-muted-foreground truncate">{s.email}</p>
+                      <p className="text-2xs text-muted-foreground truncate">{s.email}</p>
                     </div>
                     <div className="text-right flex-shrink-0">
-                      <Badge variant="secondary" className="text-[10px]">{enabledCount} modules</Badge>
-                      <p className="text-[10px] text-muted-foreground mt-1">Added {formatDate(s.createdAt)}</p>
+                      <Badge variant="secondary" className="text-3xs">{enabledCount} modules</Badge>
+                      <p className="text-3xs text-muted-foreground mt-1">Added {formatDate(s.createdAt)}</p>
                     </div>
                     <button
                       onClick={() => setExpandedId(isExpanded ? null : s.id)}
@@ -218,7 +218,7 @@ export function StaffManagement() {
                           Module Access
                         </p>
                         {savingPermsId === s.id && (
-                          <span className="text-[10px] text-muted-foreground">Saving...</span>
+                          <span className="text-3xs text-muted-foreground">Saving...</span>
                         )}
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -244,7 +244,7 @@ export function StaffManagement() {
                                 </div>
                                 <div className="min-w-0">
                                   <p className="text-xs font-medium truncate">{MODULE_LABELS[module].label}</p>
-                                  <p className="text-[10px] text-muted-foreground truncate">{MODULE_LABELS[module].description}</p>
+                                  <p className="text-3xs text-muted-foreground truncate">{MODULE_LABELS[module].description}</p>
                                 </div>
                               </div>
                               <Switch
@@ -256,7 +256,7 @@ export function StaffManagement() {
                           )
                         })}
                       </div>
-                      <p className="text-[10px] text-muted-foreground mt-2 flex items-center gap-1">
+                      <p className="text-3xs text-muted-foreground mt-2 flex items-center gap-1">
                         <Lock className="w-3 h-3" />
                         Changes save instantly. Staff will see only enabled modules on next login.
                       </p>
@@ -270,7 +270,7 @@ export function StaffManagement() {
 
         <div className="mt-3 rounded-lg bg-blue-50 dark:bg-blue-950/30 p-3 border border-blue-100 dark:border-blue-900">
           <p className="text-xs text-blue-700 dark:text-blue-300 font-medium">Default staff access:</p>
-          <ul className="text-[11px] text-blue-600 dark:text-blue-400 mt-1 space-y-0.5">
+          <ul className="text-2xs text-blue-600 dark:text-blue-400 mt-1 space-y-0.5">
             <li>• Sales, Purchases, Inventory, AI Scanner</li>
             <li>• Tap a staff member to customize module access</li>
           </ul>
@@ -313,7 +313,7 @@ export function StaffManagement() {
                 placeholder="Min 6 characters"
                 className="mt-1"
               />
-              <p className="text-[11px] text-muted-foreground mt-1">
+              <p className="text-2xs text-muted-foreground mt-1">
                 Share these credentials with your employee. They can log in at the same URL.
                 Default access: Sales, Purchases, Inventory, Scanner. You can customize after adding.
               </p>

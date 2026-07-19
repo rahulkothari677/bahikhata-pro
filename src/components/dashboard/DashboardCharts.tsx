@@ -60,7 +60,7 @@ export function DashboardCharts({
           <CardContent className="p-4">
             <div className="flex items-start justify-between mb-2">
               <div>
-                <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">Sales Trend</p>
+                <p className="text-2xs text-muted-foreground font-medium uppercase tracking-wide">Sales Trend</p>
                 <p className="text-lg font-bold tabular-nums mt-0.5">{formatINR(kpis.rangeRevenue)}</p>
               </div>
               {kpis.revenueGrowth !== 0 && (

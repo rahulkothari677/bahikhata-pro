@@ -202,7 +202,7 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
                   <SelectItem key={t.value} value={t.value}>
                     <div className="flex flex-col">
                       <span>{t.label}</span>
-                      <span className="text-[10px] text-muted-foreground">{t.desc}</span>
+                      <span className="text-3xs text-muted-foreground">{t.desc}</span>
                     </div>
                   </SelectItem>
                 ))}

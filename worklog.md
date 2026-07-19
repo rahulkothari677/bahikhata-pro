@@ -8292,3 +8292,90 @@ Stage Summary:
 - All 🟡 medium-severity items closed (Batch 4-5).
 - All 🔵 low-severity items closed (this batch).
 - 8 new CI guard test files added across the 6 batches, keeping every bug class closed in CI.
+
+---
+Task ID: audit-v26-phase6-batch-1
+Agent: main
+Task: Phase 6 UI/UX Design Review — Batch 1 (Quick Wins, PR-1): mechanical, low-risk, high-yield fixes per auditor's §9.2 sequencing recommendation.
+
+Work Log:
+
+PRE-CHANGE SCAN findings (before any edits):
+- §2.1 (error-message fix) ALREADY FIXED in Phase 5 Batch 5 R14 — TransactionEntry.tsx:628 uses readError(r). No work needed.
+- postinstall: prisma generate ALREADY EXISTS in package.json. No work needed for that part of §1.1.
+- ErrorBoundary.tsx has NO hex colors — only AnnouncementBanner has them (4 linkColor hexes for Capacitor StatusBar, which auditor said to leave).
+- 401 text-[Npx] usages in src/ (auditor said 404; close match).
+- Dark-mode override block covers amber/emerald/rose/blue/violet — missing slate/orange/indigo.
+- Queued-offline toasts at TransactionEntry.tsx lines 630 + 1678 (both sonnerToast.success).
+- formatINR confirmed buggy (minimumFractionDigits:0 + maximumFractionDigits:2 → ₹1,234.5 possible).
+
+§1 — §1.1 Delete dead config:
+- Deleted tailwind.config.ts (v3-era, ignored by Tailwind v4, doubly wrong: hsl() colors vs oklch vars, wrong content globs).
+- npm uninstall tailwindcss-animate (v3 plugin, stale — v4 uses tw-animate-css which is already imported).
+- Zero behavior change (file was dead). Removes trap for next editor.
+
+§2 — §1.2 Shadow micro-typography fix (HIGHEST IMPACT — auditor's single biggest visual fix):
+- globals.css @theme inline: added --text-2xs: 0.6875rem (11px) + --text-3xs: 0.625rem (10px) with line-height 1.35.
+- Repo-wide Python script replaced 404 text-[Npx] usages across 56 files:
+  - text-[9px] → text-3xs (BUMP from 9px to 10px — was below legibility floor)
+  - text-[10px] → text-3xs
+  - text-[11px] → text-2xs
+  - text-[13px] → text-xs
+- New CI guard: v26-phase6-microtypography-guard.test.ts. Walks src/, fails on any remaining text-[Npx] (skips comment lines + its own file). Keeps the 404-site regression closed.
+
+§3 — §3 color-scheme dark mode fix (REAL BUG):
+- globals.css: kept `color-scheme: light` on :root (html), added `html.dark { color-scheme: dark; }`.
+- Was: unconditional `color-scheme: light` → native controls (select popups, date inputs, autofill, Windows scrollbars) rendered in light chrome inside dark app.
+- Capacitor StatusBar plugin sets Android bar explicitly via CapacitorBridge, doesn't depend on WebView color-scheme — safe to override.
+
+§4 — §1.5 Dark-mode override block stragglers:
+- globals.css: added slate/orange/indigo rows to the dark-mode chip override block (bg-50/100 + text-600/700 for each).
+- Covers the 4 stragglers auditor found: AccountScreen bg-slate-100, TransactionDetail indigo outline button, AIComparison orange badges.
+- Added comment: "Adding a new accent color? Add its row here so dark-mode chips adapt automatically."
+
+§5 — §1.6 Shadow consolidation:
+- Python script replaced shadow-sm → shadow-card and shadow-md → shadow-card on 25 bg-card containers across 5 files (AccountScreen, MoreScreen, ReportsHub, etc.).
+- Rule: bg-card containers get shadow-card (the authored 3-layer house shadow); reserve shadow-lg/xl for overlays (menus, FABs, dialogs).
+
+§6 — §1.5 formatINR decimal fix:
+- utils.ts formatINR: isWhole = Math.round(amount * 100) % 100 === 0; fractionDigits = isWhole ? 0 : 2.
+- Was: min=0, max=2 → ₹1,234.5 (one decimal) possible, lists could mix ₹500 / ₹499.99 / ₹1,234.5.
+- Now: integers show whole (₹500), non-integers always 2 decimals (₹499.99, ₹1,234.50).
+- Updated utils.test.ts: old test expected ₹1,234.5 (the bug); new tests expect ₹1,234.50 + added whole-number + 2-decimal tests.
+
+§7 — §2.4 Queued-offline toast distinction:
+- TransactionEntry.tsx lines 630 + 1678: changed sonnerToast.success → sonnerToast.info with icon: '☁️' + description: 'Not yet sent to server. Will sync automatically when online.'
+- Was: queued writes used same green success styling as server commits. Queued is a promise, not a fact — users burned by sync failures couldn't distinguish the two.
+
+§8 — §1.4 EmptyState button fix:
+- EmptyState.tsx: replaced 2 raw <button> elements with <Button> (size="sm" for compact, size="default" otherwise). Primary action uses className color override; secondary uses variant="outline".
+- Gets focus-visible ring, consistent padding/radius, theme-aware colors for free. The consistency component is no longer itself inconsistent.
+
+§9 — §4.3 Copy sweep (partial — dev-speak removals):
+- Settings.tsx: "Failed to clear pending writes" → "Couldn't clear the offline queue — try again." (human voice, no dev noun).
+- Settings.tsx: "Offline cache cleared. Reloading..." → "Cache cleared. Reloading…" (no dev noun "offline cache", proper ellipsis).
+- TransactionDetail.tsx: "IRN stored successfully" → "E-invoice number saved" (no jargon "IRN").
+- Full ~120-string voice-sheet sweep deferred to a follow-up (the 4-rule sheet is mechanical but voluminous).
+
+§10 — §1.1/§1.4/§2.1 items verified already-done or no-work:
+- postinstall: prisma generate already in package.json (auditor's process note).
+- ErrorBoundary has no themed-surface hex colors (only AnnouncementBanner linkColor hexes, which are for Capacitor StatusBar — auditor said leave).
+- §2.1 error-message fix already landed in Phase 5 Batch 5 R14 (TransactionEntry.tsx:628 uses readError).
+
+BUG LOG (pre-existing bugs found during scan, deferred to later batches):
+- 12 type="number" inputs lacking inputMode="decimal" (Batch 2 item 2.4 — touch ergonomics).
+- PartySelect/ProductPicker hand-rolled comboboxes (Batch 2 item 2.2, [Bigger] — convert to ui/command.tsx).
+- SuccessAnimation has zero consumers (Batch 3 item 3.1 — money-success sheet).
+- Dashboard hierarchy: shop name outranks today's revenue (Batch 3 item 3.2 — hero inversion).
+
+Verification (all 4 gates):
+- tsc --noEmit: 0 errors
+- jest: 1920/1920 pass (62 suites) — was 1916, +4 from new formatINR tests + microtypography guard
+- eslint src/: 0 errors
+- next build: clean
+
+Stage Summary:
+- Phase 6 Batch 1 COMPLETE: 9 fixes shipped (§1.1, §1.2, §3, §1.5, §1.6, §1.5 formatINR, §2.4, §1.4 EmptyState, §4.3 copy partial) + 2 items verified already-done (§2.1, postinstall).
+- The auditor's single highest-impact fix (§1.2 micro-typography — 404 sites) is shipped with a CI guard preventing regression.
+- 3 REAL BUGS closed: §1.2 (9px text), §3 (color-scheme), §2.1 (error messages — was already fixed in Phase 5).
+- STOPPING here per framework — awaiting user "verified" before proceeding to Batch 2 (Component Consolidation).

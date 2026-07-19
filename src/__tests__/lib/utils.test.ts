@@ -7,12 +7,25 @@
 import { formatINR, formatINRCompact, formatDate, cn, getInitials } from '@/lib/utils'
 
 describe('formatINR', () => {
+  // 🔒 V26 Phase 6 §1.5: formatINR now uses fintech convention — integers show
+  // whole (₹500), non-integers always show 2 decimals (₹1,234.50, not ₹1,234.5).
   test('formats positive numbers with ₹ symbol', () => {
-    expect(formatINR(1234.5)).toBe('₹1,234.5')
+    expect(formatINR(1234.5)).toBe('₹1,234.50')
   })
 
   test('formats 0 correctly', () => {
     expect(formatINR(0)).toBe('₹0')
+  })
+
+  test('formats whole numbers without decimals', () => {
+    expect(formatINR(500)).toBe('₹500')
+    expect(formatINR(1234)).toBe('₹1,234')
+  })
+
+  test('formats non-whole numbers with exactly 2 decimals', () => {
+    expect(formatINR(499.99)).toBe('₹499.99')
+    expect(formatINR(1234.5)).toBe('₹1,234.50')
+    expect(formatINR(1234.05)).toBe('₹1,234.05')
   })
 
   test('formats large numbers with Indian grouping (lakhs)', () => {

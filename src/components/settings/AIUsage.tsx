@@ -153,12 +153,12 @@ export function AIUsage() {
             <div>
               <p className="text-xs text-muted-foreground">Input (per 1M tokens)</p>
               <p className="font-bold">₹{data.currentPricing.inputPer1MInr.toFixed(2)}</p>
-              <p className="text-[10px] text-muted-foreground">${data.currentPricing.inputPer1M} USD</p>
+              <p className="text-3xs text-muted-foreground">${data.currentPricing.inputPer1M} USD</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Output (per 1M tokens)</p>
               <p className="font-bold">₹{data.currentPricing.outputPer1MInr.toFixed(2)}</p>
-              <p className="text-[10px] text-muted-foreground">${data.currentPricing.outputPer1M} USD</p>
+              <p className="text-3xs text-muted-foreground">${data.currentPricing.outputPer1M} USD</p>
             </div>
           </div>
         </CardContent>
@@ -285,10 +285,10 @@ export function AIUsage() {
                       <span className="text-muted-foreground">·</span>
                       <span className="capitalize text-muted-foreground">{call.provider}</span>
                       <span className="text-muted-foreground">·</span>
-                      <span className="font-mono text-[10px] text-muted-foreground truncate">{call.model}</span>
+                      <span className="font-mono text-3xs text-muted-foreground truncate">{call.model}</span>
                     </div>
                     {!call.success && call.errorMessage && (
-                      <p className="text-red-600 dark:text-red-400 text-[10px] mt-0.5 truncate">
+                      <p className="text-red-600 dark:text-red-400 text-3xs mt-0.5 truncate">
                         {call.errorMessage}
                       </p>
                     )}
@@ -299,7 +299,7 @@ export function AIUsage() {
                   </div>
                   <div className="text-right flex-shrink-0 text-muted-foreground">
                     <div>{call.durationMs}ms</div>
-                    <div className="text-[10px]">
+                    <div className="text-3xs">
                       {new Date(call.createdAt).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
                     </div>
                   </div>
@@ -323,12 +323,12 @@ export function AIUsage() {
             <div>
               <p className="text-xs text-muted-foreground">If usage stays at today's rate</p>
               <p className="font-bold text-lg">{fmtCost(data.periods.today.costInr * 30)}</p>
-              <p className="text-[10px] text-muted-foreground">projected monthly cost</p>
+              <p className="text-3xs text-muted-foreground">projected monthly cost</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">At 1,000 active users (your usage)</p>
               <p className="font-bold text-lg">{fmtCost(data.periods.month.costInr * 1000)}</p>
-              <p className="text-[10px] text-muted-foreground">projected monthly cost at scale</p>
+              <p className="text-3xs text-muted-foreground">projected monthly cost at scale</p>
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Avg cost per AI call</p>
@@ -337,7 +337,7 @@ export function AIUsage() {
                   ? fmtCost(data.periods.month.costInr / data.periods.month.calls)
                   : '—'}
               </p>
-              <p className="text-[10px] text-muted-foreground">this month average</p>
+              <p className="text-3xs text-muted-foreground">this month average</p>
             </div>
           </div>
         </CardContent>
@@ -355,16 +355,16 @@ function PeriodCard({ label, stats, highlight }: { label: string; stats: PeriodS
       <CardContent className="p-4">
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{label}</span>
-          <Badge variant="outline" className="text-[10px]">{stats.calls} calls</Badge>
+          <Badge variant="outline" className="text-3xs">{stats.calls} calls</Badge>
         </div>
         <div className="space-y-1">
           <div>
-            <p className="text-[10px] text-muted-foreground">Total cost</p>
+            <p className="text-3xs text-muted-foreground">Total cost</p>
             <p className={`font-bold text-lg ${highlight ? 'text-primary' : ''}`}>
               {fmtCost(stats.costInr)}
             </p>
           </div>
-          <div className="grid grid-cols-2 gap-1 text-[11px]">
+          <div className="grid grid-cols-2 gap-1 text-2xs">
             <div>
               <span className="text-muted-foreground">In: </span>
               <span className="font-mono">{fmt(stats.inputTokens)}</span>

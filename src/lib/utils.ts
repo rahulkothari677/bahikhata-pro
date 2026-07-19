@@ -9,11 +9,17 @@ export function cn(...inputs: ClassValue[]) {
 // Indian Rupee formatting — full amount with proper grouping
 // e.g. ₹1,23,456.78 (Indian numbering: lakhs, not millions)
 export function formatINR(amount: number, withSymbol = true): string {
+  // 🔒 V26 Phase 6 §1.5: Fintech convention — integers show whole (₹500),
+  // non-integers always show 2 decimals (₹499.99, not ₹499.9 or ₹500).
+  // Was: minimumFractionDigits:0 + maximumFractionDigits:2 → could produce
+  // ₹1,234.5 (one decimal), and lists could mix ₹500 / ₹499.99 / ₹1,234.5.
+  const isWhole = Math.round(amount * 100) % 100 === 0
+  const fractionDigits = isWhole ? 0 : 2
   const formatter = new Intl.NumberFormat('en-IN', {
     style: withSymbol ? 'currency' : 'decimal',
     currency: 'INR',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
+    minimumFractionDigits: fractionDigits,
+    maximumFractionDigits: fractionDigits,
   })
   return formatter.format(amount)
 }

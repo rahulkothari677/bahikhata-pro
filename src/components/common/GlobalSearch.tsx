@@ -222,7 +222,7 @@ export function GlobalSearch() {
             onKeyDown={handleKeyDown}
             className="flex-1 bg-transparent outline-none text-lg"
           />
-          <Badge variant="outline" className="text-[10px]">Esc</Badge>
+          <Badge variant="outline" className="text-3xs">Esc</Badge>
         </div>
 
         {/* Results — unified list of commands + search results */}
@@ -238,7 +238,7 @@ export function GlobalSearch() {
               {/* Commands section */}
               {commandResults.length > 0 && (
                 <>
-                  <p className="text-[10px] uppercase text-muted-foreground font-medium px-2 py-1">
+                  <p className="text-3xs uppercase text-muted-foreground font-medium px-2 py-1">
                     {q ? 'Matching commands' : 'Quick Actions'}
                   </p>
                   {commandResults.map((cmd) => {
@@ -257,7 +257,7 @@ export function GlobalSearch() {
                         <Icon className={cn('w-4 h-4 flex-shrink-0', cmd.iconColor || 'text-muted-foreground')} />
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium truncate">{cmd.labelKey ? t(cmd.labelKey) : cmd.label}</p>
-                          <p className="text-[11px] text-muted-foreground truncate">{cmd.descKey ? t(cmd.descKey) : cmd.description}</p>
+                          <p className="text-2xs text-muted-foreground truncate">{cmd.descKey ? t(cmd.descKey) : cmd.description}</p>
                         </div>
                         <ArrowRight className="w-3 h-3 text-muted-foreground" />
                       </button>
@@ -269,7 +269,7 @@ export function GlobalSearch() {
               {/* Search results section */}
               {results.length > 0 && (
                 <>
-                  <p className="text-[10px] uppercase text-muted-foreground font-medium px-2 py-1 mt-2">
+                  <p className="text-3xs uppercase text-muted-foreground font-medium px-2 py-1 mt-2">
                     {results.length} search result{results.length !== 1 ? 's' : ''}
                   </p>
                   {results.map((result) => {
@@ -288,10 +288,10 @@ export function GlobalSearch() {
                         <Icon className={cn('w-4 h-4 flex-shrink-0', result.color)} />
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium truncate">{result.title}</p>
-                          <p className="text-[11px] text-muted-foreground truncate">{result.subtitle}</p>
+                          <p className="text-2xs text-muted-foreground truncate">{result.subtitle}</p>
                         </div>
                         {result.meta && (
-                          <Badge variant="outline" className="text-[10px]">{result.meta}</Badge>
+                          <Badge variant="outline" className="text-3xs">{result.meta}</Badge>
                         )}
                         <ArrowRight className="w-3 h-3 text-muted-foreground" />
                       </button>
@@ -304,7 +304,7 @@ export function GlobalSearch() {
         </div>
 
         {/* Footer */}
-        <div className="p-2 border-t border-border flex items-center justify-between text-[10px] text-muted-foreground">
+        <div className="p-2 border-t border-border flex items-center justify-between text-3xs text-muted-foreground">
           <div className="flex items-center gap-3 px-2">
             <span>↑↓ Navigate</span>
             <span>↵ Select</span>

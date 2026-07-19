@@ -254,7 +254,7 @@ export function ConsolidatedReport() {
                     {isExpanded && (
                       <tr className="bg-muted/20">
                         <td colSpan={viewMode === 'pl' ? 5 : viewMode === 'gst' ? 4 : 3} className="py-2 px-6">
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-[11px]">
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-2xs">
                             <div>
                               <p className="text-muted-foreground">Purchases</p>
                               <p className="font-medium tabular-nums">{shop.purchaseCount}</p>
