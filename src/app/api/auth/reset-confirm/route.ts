@@ -4,6 +4,7 @@ import { db } from '@/lib/db'
 import bcrypt from 'bcryptjs'
 import crypto from 'crypto'
 import { invalidateTokenVersionCache } from '@/lib/auth'
+import { rateLimit, getClientIP, rateLimitedResponse } from '@/lib/rate-limit'
 
 /**
  * POST /api/auth/reset-confirm
@@ -15,9 +16,18 @@ import { invalidateTokenVersionCache } from '@/lib/auth'
  * the in-memory Map. The token is hashed (SHA-256) on the server and looked
  * up by hash — the raw token is never stored.
  *
+ * 🔒 V26 S4: Added rate limiting (10/min/IP). Was: no rate limit on
+ * reset-confirm (reset-request was limited but reset-confirm was not).
+ * The 256-bit token makes brute-force infeasible, but rate limiting is
+ * defense-in-depth + makes repeated invalid-token attempts observable.
+ *
  * Body: { token: string, password: string }
  */
 export async function POST(req: NextRequest) {
+  // 🔒 V26 S4: Rate limit — 10 attempts per minute per IP
+  const ip = getClientIP(req)
+  const rl = await rateLimit(`reset-confirm:${ip}`, { limit: 10, windowSec: 60 })
+  if (!rl.success) return rateLimitedResponse(rl)
   try {
     const body = await req.json()
     const validation = validateBody(resetConfirmSchema, body)
