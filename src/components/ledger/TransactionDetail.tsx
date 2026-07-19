@@ -1064,20 +1064,20 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
           {isIncomeOrExpense ? (
             <div className="space-y-3">
               <div>
-                <Label>Amount (₹)</Label>
-                <Input type="number" inputMode="decimal" value={form.totalAmount} onChange={(e) => setForm({ ...form, totalAmount: e.target.value })} />
+                <Label htmlFor="field-amount">Amount (₹)</Label>
+                <Input id="field-amount" type="number" inputMode="decimal" value={form.totalAmount} onChange={(e) => setForm({ ...form, totalAmount: e.target.value })} />
               </div>
               <div>
-                <Label>Category</Label>
-                <Input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
+                <Label htmlFor="field-category">Category</Label>
+                <Input id="field-category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label>Date</Label>
-                  <Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
+                  <Label htmlFor="field-date">Date</Label>
+                  <Input id="field-date" type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
                 </div>
                 <div>
-                  <Label>Payment Mode</Label>
+                  <Label htmlFor="field-payment-mode">Payment Mode</Label>
                   <Select value={form.paymentMode} onValueChange={(v) => setForm({ ...form, paymentMode: v })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -1087,15 +1087,15 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
                 </div>
               </div>
               <div>
-                <Label>Notes</Label>
-                <Input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+                <Label htmlFor="field-notes">Notes</Label>
+                <Input id="field-notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
               </div>
             </div>
           ) : (
             <>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <Label>{isSale ? 'Customer' : 'Supplier'}</Label>
+                  <Label htmlFor="field-issale-customer-supplier">{isSale ? 'Customer' : 'Supplier'}</Label>
                   <Select value={form.partyId} onValueChange={(v) => setForm({ ...form, partyId: v })}>
                     <SelectTrigger><SelectValue placeholder="Select party" /></SelectTrigger>
                     <SelectContent>
@@ -1106,17 +1106,17 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
                   </Select>
                 </div>
                 <div>
-                  <Label>Date</Label>
-                  <Input type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
+                  <Label htmlFor="field-date-2">Date</Label>
+                  <Input id="field-date-2" type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
                 </div>
                 <div>
-                  <Label>Invoice No.</Label>
-                  <Input value={form.invoiceNo} onChange={(e) => setForm({ ...form, invoiceNo: e.target.value })} />
+                  <Label htmlFor="field-invoice-no">Invoice No.</Label>
+                  <Input id="field-invoice-no" value={form.invoiceNo} onChange={(e) => setForm({ ...form, invoiceNo: e.target.value })} />
                 </div>
               </div>
 
               <div className="flex items-center justify-between rounded-lg bg-muted/50 p-3">
-                <Label className="cursor-pointer">Inter-state (IGST)</Label>
+                <Label className="cursor-pointer" htmlFor="field-inter-state-igst">Inter-state (IGST)</Label>
                 {/* 🔒 V19-021: isInterState is server-derived from party state, not user-settable.
                     Display as read-only to avoid confusion. */}
                 <Switch checked={form.isInterState} disabled />
@@ -1124,7 +1124,7 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
 
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <Label>Items</Label>
+                  <Label htmlFor="field-items">Items</Label>
                   <Button variant="outline" size="sm" onClick={addItem} className="h-7 gap-1">
                     <Plus className="w-3.5 h-3.5" /> Add Item
                   </Button>
@@ -1169,11 +1169,11 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <Label>Discount (₹)</Label>
-                  <Input type="number" inputMode="decimal" value={form.discountAmount} onChange={(e) => setForm({ ...form, discountAmount: e.target.value })} />
+                  <Label htmlFor="field-discount">Discount (₹)</Label>
+                  <Input id="field-discount" type="number" inputMode="decimal" value={form.discountAmount} onChange={(e) => setForm({ ...form, discountAmount: e.target.value })} />
                 </div>
                 <div>
-                  <Label>Payment Mode</Label>
+                  <Label htmlFor="field-payment-mode-2">Payment Mode</Label>
                   <Select value={form.paymentMode} onValueChange={(v) => setForm({ ...form, paymentMode: v })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -1182,14 +1182,14 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
                   </Select>
                 </div>
                 <div>
-                  <Label>Paid Amount (₹)</Label>
-                  <Input type="number" inputMode="decimal" value={form.paidAmount} onChange={(e) => setForm({ ...form, paidAmount: e.target.value })} />
+                  <Label htmlFor="field-paid-amount">Paid Amount (₹)</Label>
+                  <Input id="field-paid-amount" type="number" inputMode="decimal" value={form.paidAmount} onChange={(e) => setForm({ ...form, paidAmount: e.target.value })} />
                 </div>
               </div>
 
               <div>
-                <Label>Notes</Label>
-                <Input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+                <Label htmlFor="field-notes-2">Notes</Label>
+                <Input id="field-notes-2" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
               </div>
             </>
           )}
@@ -1524,7 +1524,7 @@ function EInvoiceCard({ txn }: { txn: any }) {
               Paste the IRN and signed QR from the NIC portal response:
             </p>
             <div>
-              <Label className="text-xs">IRN (64 characters) *</Label>
+              <Label className="text-xs" htmlFor="field-irn-64-characters">IRN (64 characters) *</Label>
               <textarea
                 value={irnInput}
                 onChange={(e) => setIrnInput(e.target.value)}
@@ -1534,7 +1534,7 @@ function EInvoiceCard({ txn }: { txn: any }) {
               />
             </div>
             <div>
-              <Label className="text-xs">Signed QR (optional)</Label>
+              <Label className="text-xs" htmlFor="field-signed-qr-optional">Signed QR (optional)</Label>
               <textarea
                 value={qrInput}
                 onChange={(e) => setQrInput(e.target.value)}

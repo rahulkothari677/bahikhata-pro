@@ -1,11 +1,12 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { useState } from 'react'
 import { useAppStore, type ViewType } from '@/store/app-store'
 import { useTranslation } from '@/hooks/use-translation'
 import { Plus, Sparkles, ArrowLeft, Search, Check, Globe } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { getInitials, cn } from '@/lib/utils'
 import { haptic } from '@/lib/haptic'
 import { useQuery } from '@tanstack/react-query'
@@ -281,12 +282,15 @@ export function Header() {
  * Now a dropdown popover — user picks their language from a list.
  * Also fixes the toggle bug where display didn't match the language
  * (was saving voiceLang instead of language to the server).
+ *
+ * 🔒 V26 Phase 6 §1.4: Converted from hand-rolled absolute-positioned menu
+ * with outside-click useEffect to Radix DropdownMenu. Gets keyboard nav
+ * (arrow keys, typeahead), focus management, Escape-to-close, and focus
+ * return for free. Was: no keyboard support, no focus return.
  */
 function LanguageToggle() {
   const { language, setLanguage } = useTranslation()
-  const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
 
   const LANGS = [
     { code: 'en', label: 'EN', name: 'English' },
@@ -299,21 +303,8 @@ function LanguageToggle() {
 
   const currentLang = LANGS.find(l => l.code === language) || LANGS[0]
 
-  // Close on outside click
-  useEffect(() => {
-    if (!open) return
-    const handleClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [open])
-
   const selectLang = async (code: string) => {
     setLanguage(code)
-    setOpen(false)
     setSaving(true)
     try {
       await offlineFetch('/api/settings', {
@@ -330,36 +321,35 @@ function LanguageToggle() {
   }
 
   return (
-    <div ref={ref} className="relative flex-shrink-0">
-      <Button
-        size="sm"
-        variant="ghost"
-        onClick={() => setOpen(!open)}
-        disabled={saving}
-        className="px-2 py-1 gap-1"
-        title={`Language: ${currentLang.name}`}
-        aria-label={`Select language (current: ${currentLang.name})`}
-      >
-        <Globe className="w-4 h-4" />
-        <span className="text-xs font-bold">{currentLang.label}</span>
-      </Button>
-      {open && (
-        <div className="absolute right-0 top-full mt-1 bg-popover border border-border rounded-xl shadow-xl py-1 min-w-[140px] z-50">
-          {LANGS.map(lang => (
-            <button
-              key={lang.code}
-              onClick={() => selectLang(lang.code)}
-              className={cn(
-                'w-full flex items-center justify-between px-3 py-2 hover:bg-muted transition text-left text-sm',
-                lang.code === language && 'bg-primary/10 font-semibold text-primary'
-              )}
-            >
-              <span>{lang.name}</span>
-              {lang.code === language && <Check className="w-3.5 h-3.5 text-primary" />}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={saving}
+          className="px-2 py-1 gap-1"
+          title={`Language: ${currentLang.name}`}
+          aria-label={`Select language (current: ${currentLang.name})`}
+        >
+          <Globe className="w-4 h-4" />
+          <span className="text-xs font-bold">{currentLang.label}</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-[140px]">
+        {LANGS.map(lang => (
+          <DropdownMenuItem
+            key={lang.code}
+            onClick={() => selectLang(lang.code)}
+            className={cn(
+              'flex items-center justify-between cursor-pointer',
+              lang.code === language && 'bg-primary/10 font-semibold text-primary'
+            )}
+          >
+            <span>{lang.name}</span>
+            {lang.code === language && <Check className="w-3.5 h-3.5 text-primary" />}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }

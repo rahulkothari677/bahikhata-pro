@@ -208,8 +208,8 @@ export function CAAccess() {
             </DialogHeader>
             <div className="space-y-3 py-2">
               <div>
-                <Label>Name</Label>
-                <Input
+                <Label htmlFor="field-name">Name</Label>
+                <Input id="field-name"
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   placeholder="e.g. CA Rajesh Kumar"
@@ -217,8 +217,8 @@ export function CAAccess() {
                 />
               </div>
               <div>
-                <Label>Email *</Label>
-                <Input
+                <Label htmlFor="field-email">Email *</Label>
+                <Input id="field-email"
                   type="email"
                   value={form.email}
                   onChange={(e) => setForm({ ...form, email: e.target.value })}
@@ -227,8 +227,8 @@ export function CAAccess() {
                 />
               </div>
               <div>
-                <Label>Password *</Label>
-                <Input
+                <Label htmlFor="field-password">Password *</Label>
+                <Input id="field-password"
                   type="password"
                   value={form.password}
                   onChange={(e) => setForm({ ...form, password: e.target.value })}

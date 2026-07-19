@@ -142,10 +142,10 @@ export function PasswordReset({ onBack }: PasswordResetProps) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div>
-        <Label>Email</Label>
+        <Label htmlFor="field-email">Email</Label>
         <div className="relative mt-1">
           <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input
+          <Input id="field-email"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}

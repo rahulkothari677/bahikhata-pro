@@ -556,37 +556,37 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <Label>Shop Name *</Label>
-              <Input value={form.shopName} onChange={(e) => setForm({ ...form, shopName: e.target.value })} placeholder="e.g. Sharma Kirana Store" />
+              <Label htmlFor="field-shop-name">Shop Name *</Label>
+              <Input id="field-shop-name" value={form.shopName} onChange={(e) => setForm({ ...form, shopName: e.target.value })} placeholder="e.g. Sharma Kirana Store" />
             </div>
             <div>
-              <Label>Owner Name</Label>
-              <Input value={form.ownerName} onChange={(e) => setForm({ ...form, ownerName: e.target.value })} placeholder="Your name" />
+              <Label htmlFor="field-owner-name">Owner Name</Label>
+              <Input id="field-owner-name" value={form.ownerName} onChange={(e) => setForm({ ...form, ownerName: e.target.value })} placeholder="Your name" />
             </div>
             <div>
-              <Label>Phone</Label>
-              <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="10-digit mobile" />
+              <Label htmlFor="field-phone">Phone</Label>
+              <Input id="field-phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="10-digit mobile" />
             </div>
             <div>
-              <Label>Email</Label>
-              <Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="email@example.com" />
+              <Label htmlFor="field-email">Email</Label>
+              <Input id="field-email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="email@example.com" />
             </div>
             <div>
-              <Label>GSTIN</Label>
-              <Input value={form.gstin} onChange={(e) => setForm({ ...form, gstin: e.target.value })} placeholder="15-digit GST number" className="font-mono uppercase" />
+              <Label htmlFor="field-gstin">GSTIN</Label>
+              <Input id="field-gstin" value={form.gstin} onChange={(e) => setForm({ ...form, gstin: e.target.value })} placeholder="15-digit GST number" className="font-mono uppercase" />
             </div>
             <div>
-              <Label>State</Label>
-              <Input value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} placeholder="e.g. Uttar Pradesh" />
+              <Label htmlFor="field-state">State</Label>
+              <Input id="field-state" value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} placeholder="e.g. Uttar Pradesh" />
             </div>
             <div className="sm:col-span-2">
-              <Label>Address</Label>
-              <Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="Full shop address" />
+              <Label htmlFor="field-address">Address</Label>
+              <Input id="field-address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="Full shop address" />
             </div>
             {/* V17-Ext 5.4: UPI ID for udhaar collection links */}
             <div>
-              <Label>UPI ID (for payment collection)</Label>
-              <Input value={form.upiId} onChange={(e) => setForm({ ...form, upiId: e.target.value })} placeholder="e.g. shop@paytm, 9876543210@ybl" className="font-mono lowercase" />
+              <Label htmlFor="field-upi-id-for-payment-collection">UPI ID (for payment collection)</Label>
+              <Input id="field-upi-id-for-payment-collection" value={form.upiId} onChange={(e) => setForm({ ...form, upiId: e.target.value })} placeholder="e.g. shop@paytm, 9876543210@ybl" className="font-mono lowercase" />
               <p className="text-xs text-muted-foreground mt-1">
                 Your UPI VPA. When you send an udhaar reminder via WhatsApp, it will include a
                 one-tap payment link for this amount.
@@ -638,8 +638,8 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
             {/* Add new shop */}
             {newShopOpen ? (
               <div className="mt-3 p-3 rounded-lg border border-primary/30 bg-primary/5 space-y-2">
-                <Label>New Shop Name</Label>
-                <Input
+                <Label htmlFor="field-new-shop-name">New Shop Name</Label>
+                <Input id="field-new-shop-name"
                   value={newShopName}
                   onChange={(e) => setNewShopName(e.target.value)}
                   placeholder="e.g. Sharma Kirana Store - Branch 2"
@@ -772,8 +772,8 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
                   <div className="mt-3 space-y-2">
                     <div className="flex items-end gap-2 flex-wrap">
                       <div className="flex-1 min-w-[160px]">
-                        <Label className="text-xs text-amber-900 dark:text-amber-100">Lock until date (inclusive)</Label>
-                        <Input
+                        <Label className="text-xs text-amber-900 dark:text-amber-100" htmlFor="field-lock-until-date-inclusive">Lock until date (inclusive)</Label>
+                        <Input id="field-lock-until-date-inclusive"
                           type="date"
                           value={lockDateInput}
                           onChange={(e) => setLockDateInput(e.target.value)}
@@ -1185,10 +1185,10 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
             </CardHeader>
             <CardContent className="space-y-3">
               <div>
-                <Label>Revenue Target (₹)</Label>
+                <Label htmlFor="field-revenue-target">Revenue Target (₹)</Label>
                 <div className="flex gap-2 mt-1">
-                  <Input
-                    type="number"
+                  <Input id="field-revenue-target"
+                    inputMode="decimal" type="number"
                     value={revenueGoal}
                     onChange={(e) => setRevenueGoal(e.target.value)}
                     placeholder={revenueTarget ? String(revenueTarget) : 'e.g. 500000'}
@@ -1216,10 +1216,10 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
                 )}
               </div>
               <div>
-                <Label>Expense Budget (₹)</Label>
+                <Label htmlFor="field-expense-budget">Expense Budget (₹)</Label>
                 <div className="flex gap-2 mt-1">
-                  <Input
-                    type="number"
+                  <Input id="field-expense-budget"
+                    inputMode="decimal" type="number"
                     value={expenseGoal}
                     onChange={(e) => setExpenseGoal(e.target.value)}
                     placeholder={expenseBudget ? String(expenseBudget) : 'e.g. 100000'}

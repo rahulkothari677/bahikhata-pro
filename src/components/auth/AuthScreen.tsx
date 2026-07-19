@@ -216,10 +216,10 @@ export function AuthScreen() {
           <form onSubmit={handleSubmit} className="space-y-4">
             {mode === 'signup' && (
               <div>
-                <Label>{t('auth.name')}</Label>
+                <Label htmlFor="field-t-auth-name">{t('auth.name')}</Label>
                 <div className="relative mt-1">
                   <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                  <Input
+                  <Input id="field-t-auth-name"
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
@@ -232,10 +232,10 @@ export function AuthScreen() {
             )}
 
             <div>
-              <Label>{t('auth.email')}</Label>
+              <Label htmlFor="field-t-auth-email">{t('auth.email')}</Label>
               <div className="relative mt-1">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
+                <Input id="field-t-auth-email"
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -248,10 +248,10 @@ export function AuthScreen() {
             </div>
 
             <div>
-              <Label>{t('auth.password')}</Label>
+              <Label htmlFor="field-t-auth-password">{t('auth.password')}</Label>
               <div className="relative mt-1">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
+                <Input id="field-t-auth-password"
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}

@@ -80,7 +80,7 @@ export function PartySelect({
 
   return (
     <div className="relative" ref={ref}>
-      {label && <Label>{label}</Label>}
+      {label && <Label htmlFor="field-label">{label}</Label>}
 
       {/* Selected state */}
       {selectedParty ? (
@@ -278,24 +278,24 @@ function AddPartyDialog({ open, onOpenChange, defaultType, onSuccess }: {
         </DialogHeader>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 py-2">
           <div className="sm:col-span-2">
-            <Label>Name *</Label>
-            <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={`${defaultType === 'customer' ? 'Customer' : 'Supplier'} name`} autoFocus />
+            <Label htmlFor="field-name">Name *</Label>
+            <Input id="field-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={`${defaultType === 'customer' ? 'Customer' : 'Supplier'} name`} autoFocus />
           </div>
           <div>
-            <Label>Phone</Label>
-            <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="10-digit mobile" />
+            <Label htmlFor="field-phone">Phone</Label>
+            <Input id="field-phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="10-digit mobile" />
           </div>
           <div>
-            <Label>State</Label>
-            <Input value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} placeholder="e.g. Uttar Pradesh" />
+            <Label htmlFor="field-state">State</Label>
+            <Input id="field-state" value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} placeholder="e.g. Uttar Pradesh" />
           </div>
           <div className="sm:col-span-2">
-            <Label>GSTIN</Label>
-            <Input value={form.gstin} onChange={(e) => setForm({ ...form, gstin: e.target.value })} placeholder="15-digit GST number (optional)" className="font-mono" />
+            <Label htmlFor="field-gstin">GSTIN</Label>
+            <Input id="field-gstin" value={form.gstin} onChange={(e) => setForm({ ...form, gstin: e.target.value })} placeholder="15-digit GST number (optional)" className="font-mono" />
           </div>
           <div className="sm:col-span-2">
-            <Label>Address</Label>
-            <Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="Full address (optional)" />
+            <Label htmlFor="field-address">Address</Label>
+            <Input id="field-address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="Full address (optional)" />
           </div>
         </div>
         <DialogFooter>

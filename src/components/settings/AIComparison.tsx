@@ -291,7 +291,7 @@ export function AIComparison() {
 
           <div className="flex flex-col md:flex-row gap-3 items-end">
             <div className="flex-1 w-full">
-              <Label className="text-xs">Bill type</Label>
+              <Label className="text-xs" htmlFor="field-bill-type">Bill type</Label>
               <div className="flex gap-2 mt-1">
                 <Button
                   type="button"
@@ -371,8 +371,8 @@ export function AIComparison() {
             </p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div>
-                <Label className="text-xs">Seller / Party name</Label>
-                <Input
+                <Label className="text-xs" htmlFor="field-seller-party-name">Seller / Party name</Label>
+                <Input id="field-seller-party-name"
                   value={groundTruth.sellerName}
                   onChange={(e) => setGroundTruth({ ...groundTruth, sellerName: e.target.value })}
                   placeholder="e.g. Sharma Traders"
@@ -380,9 +380,9 @@ export function AIComparison() {
                 />
               </div>
               <div>
-                <Label className="text-xs">Total amount (₹)</Label>
-                <Input
-                  type="number"
+                <Label className="text-xs" htmlFor="field-total-amount">Total amount (₹)</Label>
+                <Input id="field-total-amount"
+                  inputMode="decimal" type="number"
                   value={groundTruth.totalAmount}
                   onChange={(e) => setGroundTruth({ ...groundTruth, totalAmount: e.target.value })}
                   placeholder="e.g. 450"
@@ -390,9 +390,9 @@ export function AIComparison() {
                 />
               </div>
               <div>
-                <Label className="text-xs">Number of items</Label>
-                <Input
-                  type="number"
+                <Label className="text-xs" htmlFor="field-number-of-items">Number of items</Label>
+                <Input id="field-number-of-items"
+                  inputMode="decimal" type="number"
                   value={groundTruth.itemsCount}
                   onChange={(e) => setGroundTruth({ ...groundTruth, itemsCount: e.target.value })}
                   placeholder="e.g. 5"

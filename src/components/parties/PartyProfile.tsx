@@ -989,7 +989,7 @@ export function PartyProfile() {
           </DialogHeader>
           <div className="space-y-3">
             <div>
-              <Label>Payment Type</Label>
+              <Label htmlFor="field-payment-type">Payment Type</Label>
               <Select value={paymentType} onValueChange={(v) => setPaymentType(v as 'received' | 'paid')}>
                 <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -999,10 +999,9 @@ export function PartyProfile() {
               </Select>
             </div>
             <div>
-              <Label>Amount (₹)</Label>
-              <Input
-                type="number"
-                inputMode="decimal"
+              <Label htmlFor="field-amount">Amount (₹)</Label>
+              <Input id="field-amount"
+                inputMode="decimal" type="number"
                 value={paymentAmount}
                 onChange={(e) => setPaymentAmount(e.target.value)}
                 placeholder="0"
@@ -1011,7 +1010,7 @@ export function PartyProfile() {
               />
             </div>
             <div>
-              <Label>Payment Mode</Label>
+              <Label htmlFor="field-payment-mode">Payment Mode</Label>
               <Select value={paymentMode} onValueChange={setPaymentMode}>
                 <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -1023,8 +1022,8 @@ export function PartyProfile() {
               </Select>
             </div>
             <div>
-              <Label>Notes (optional)</Label>
-              <Input
+              <Label htmlFor="field-notes-optional">Notes (optional)</Label>
+              <Input id="field-notes-optional"
                 value={paymentNotes}
                 onChange={(e) => setPaymentNotes(e.target.value)}
                 placeholder="e.g. Part payment for July"

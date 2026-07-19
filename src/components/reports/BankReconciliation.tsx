@@ -109,8 +109,8 @@ export function BankReconciliation() {
           </p>
           <div className="flex gap-2 items-end">
             <div className="flex-1">
-              <Label className="text-xs">Bank Name (optional)</Label>
-              <Input
+              <Label className="text-xs" htmlFor="field-bank-name-optional">Bank Name (optional)</Label>
+              <Input id="field-bank-name-optional"
                 value={bankName}
                 onChange={(e) => setBankName(e.target.value)}
                 placeholder="e.g. HDFC, SBI"

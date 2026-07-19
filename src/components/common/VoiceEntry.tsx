@@ -559,7 +559,7 @@ export function VoiceEntry({ onTransactionParsed, products = [] }: VoiceEntryPro
                       <div className="flex-1 min-w-0 flex items-center gap-1">
                         <span className="text-3xs text-muted-foreground w-7">Qty</span>
                         <input
-                          type="number"
+                          inputMode="decimal" type="number"
                           value={item.quantity || ''}
                           onChange={(e) => {
                             const newItems = [...parsed.items]
@@ -589,7 +589,7 @@ export function VoiceEntry({ onTransactionParsed, products = [] }: VoiceEntryPro
                       <div className="flex-1 min-w-0 flex items-center gap-1">
                         <span className="text-3xs text-muted-foreground w-4">₹</span>
                         <input
-                          type="number"
+                          inputMode="decimal" type="number"
                           value={item.unitPrice || ''}
                           onChange={(e) => {
                             const newItems = [...parsed.items]

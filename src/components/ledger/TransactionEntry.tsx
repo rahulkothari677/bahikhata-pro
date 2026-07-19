@@ -889,7 +889,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {/* Category selector */}
                 <div>
-                  <Label className="text-2xs uppercase text-muted-foreground">Category</Label>
+                  <Label className="text-2xs uppercase text-muted-foreground" htmlFor="field-category">Category</Label>
                   <Select
                     value={selectedCategory || '__all__'}
                     onValueChange={(v) => setSelectedCategory(v === '__all__' ? null : v)}
@@ -914,10 +914,10 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
 
                 {/* Product search */}
                 <div className="sm:col-span-2">
-                  <Label className="text-2xs uppercase text-muted-foreground">Search Product</Label>
+                  <Label className="text-2xs uppercase text-muted-foreground" htmlFor="field-search-product">Search Product</Label>
                   <div className="relative mt-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
+                    <Input id="field-search-product"
                       placeholder="Type name, SKU, HSN, or scan barcode..."
                       value={productSearch}
                       onChange={(e) => setProductSearch(e.target.value)}
@@ -1164,8 +1164,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                         {/* Row 2: Qty + Unit selector + Price + GST — fills FULL width */}
                         <div className="flex items-center gap-1 pl-5 mt-1">
                           <Input
-                            type="number"
-                            inputMode="decimal"
+                            inputMode="decimal" type="number"
                             value={item.quantity}
                             onChange={(e) => {
                               const val = parseFloat(e.target.value) || 0
@@ -1194,8 +1193,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                           <span className="text-3xs text-muted-foreground flex-shrink-0">×</span>
                           <span className="text-3xs text-muted-foreground flex-shrink-0">₹</span>
                           <Input
-                            type="number"
-                            inputMode="decimal"
+                            inputMode="decimal" type="number"
                             value={item.unitPrice}
                             onChange={(e) => handleUpdateItem(i, 'unitPrice', parseFloat(e.target.value) || 0)}
                             className="flex-1 min-w-0 h-8 text-center text-sm tabular-nums"
@@ -1250,8 +1248,8 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
           {/* Notes */}
           <Card className="shadow-card border-border/60">
             <div className="p-4">
-              <Label>Notes (optional)</Label>
-              <Input
+              <Label htmlFor="field-notes-optional">Notes (optional)</Label>
+              <Input id="field-notes-optional"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Any additional notes about this transaction..."
@@ -1264,7 +1262,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                     {isCreditNote ? 'Credit Note' : 'Debit Note'} Details
                   </p>
                   <div>
-                    <Label className="text-xs">Reason</Label>
+                    <Label className="text-xs" htmlFor="field-reason">Reason</Label>
                     <select
                       value={noteReason}
                       onChange={(e) => setNoteReason(e.target.value)}
@@ -1413,30 +1411,30 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
               </h3>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label>Date</Label>
-                  <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="mt-1" />
+                  <Label htmlFor="field-date">Date</Label>
+                  <Input id="field-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className="mt-1" />
                 </div>
                 <div>
-                  <Label>Invoice No.</Label>
-                  <Input value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} placeholder="Optional" className="mt-1" />
+                  <Label htmlFor="field-invoice-no">Invoice No.</Label>
+                  <Input id="field-invoice-no" value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} placeholder="Optional" className="mt-1" />
                 </div>
               </div>
 
               <div className="flex items-center justify-between rounded-lg bg-muted/50 p-3">
                 <div>
-                  <Label className="cursor-pointer text-sm">Inter-state (IGST)</Label>
+                  <Label className="cursor-pointer text-sm" htmlFor="field-inter-state-igst">Inter-state (IGST)</Label>
                   <p className="text-2xs text-muted-foreground mt-0.5">ON if other state</p>
                 </div>
                 <Switch checked={isInterState} onCheckedChange={setIsInterState} />
               </div>
 
               <div>
-                <Label>Discount (₹)</Label>
-                <Input type="number" inputMode="decimal" value={discountAmount} onChange={(e) => setDiscountAmount(e.target.value)} placeholder="0" className="mt-1" onKeyDown={(e) => { if (e.key === 'Enter') handleSave() }} />
+                <Label htmlFor="field-discount">Discount (₹)</Label>
+                <Input id="field-discount" type="number" inputMode="decimal" value={discountAmount} onChange={(e) => setDiscountAmount(e.target.value)} placeholder="0" className="mt-1" onKeyDown={(e) => { if (e.key === 'Enter') handleSave() }} />
               </div>
 
               <div>
-                <Label>Payment Mode</Label>
+                <Label htmlFor="field-payment-mode">Payment Mode</Label>
                 <Select value={paymentMode} onValueChange={setPaymentMode}>
                   <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -1468,10 +1466,9 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                   </div>
                   {cashRefund && (
                     <div>
-                      <Label>Refund Amount (₹)</Label>
-                      <Input
-                        type="number"
-                        inputMode="decimal"
+                      <Label htmlFor="field-refund-amount">Refund Amount (₹)</Label>
+                      <Input id="field-refund-amount"
+                        inputMode="decimal" type="number"
                         value={paidAmount}
                         onChange={(e) => setPaidAmount(e.target.value)}
                         placeholder={`Full refund: ${totalAmount.toFixed(0)}`}
@@ -1486,10 +1483,9 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                 </>
               ) : (
                 <div>
-                  <Label>Paid Amount (₹)</Label>
-                  <Input
-                    type="number"
-                    inputMode="decimal"
+                  <Label htmlFor="field-paid-amount">Paid Amount (₹)</Label>
+                  <Input id="field-paid-amount"
+                    inputMode="decimal" type="number"
                     value={paidAmount}
                     onChange={(e) => setPaidAmount(e.target.value)}
                     placeholder={`Full: ${totalAmount.toFixed(0)}`}
@@ -1711,26 +1707,26 @@ function AddPartyInline({ open, onOpenChange, defaultType, onAdded }: {
         </DialogHeader>
         <div className="space-y-3 py-2">
           <div>
-            <Label>Name *</Label>
-            <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} autoFocus className="mt-1" />
+            <Label htmlFor="field-name">Name *</Label>
+            <Input id="field-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} autoFocus className="mt-1" />
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label>Phone</Label>
-              <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="mt-1" />
+              <Label htmlFor="field-phone">Phone</Label>
+              <Input id="field-phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="mt-1" />
             </div>
             <div>
-              <Label>State</Label>
-              <Input value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} className="mt-1" />
+              <Label htmlFor="field-state">State</Label>
+              <Input id="field-state" value={form.state} onChange={(e) => setForm({ ...form, state: e.target.value })} className="mt-1" />
             </div>
           </div>
           <div>
-            <Label>GSTIN</Label>
-            <Input value={form.gstin} onChange={(e) => setForm({ ...form, gstin: e.target.value })} className="mt-1 font-mono" />
+            <Label htmlFor="field-gstin">GSTIN</Label>
+            <Input id="field-gstin" value={form.gstin} onChange={(e) => setForm({ ...form, gstin: e.target.value })} className="mt-1 font-mono" />
           </div>
           <div>
-            <Label>Address</Label>
-            <Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} className="mt-1" />
+            <Label htmlFor="field-address">Address</Label>
+            <Input id="field-address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} className="mt-1" />
           </div>
         </div>
         <DialogFooter className="gap-2">

@@ -186,10 +186,9 @@ export function DayEndSummary({ open, onOpenChange }: { open: boolean; onOpenCha
             ) : (
               <div className="space-y-3 rounded-lg border border-border p-3">
                 <div>
-                  <Label className="text-xs">Counted Cash in Drawer</Label>
-                  <Input
-                    type="number"
-                    inputMode="decimal"
+                  <Label className="text-xs" htmlFor="field-counted-cash-in-drawer">Counted Cash in Drawer</Label>
+                  <Input id="field-counted-cash-in-drawer"
+                    inputMode="decimal" type="number"
                     value={actualCash}
                     onChange={(e) => setActualCash(e.target.value)}
                     placeholder="0"

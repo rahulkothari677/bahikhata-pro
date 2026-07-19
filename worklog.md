@@ -8379,3 +8379,63 @@ Stage Summary:
 - The auditor's single highest-impact fix (§1.2 micro-typography — 404 sites) is shipped with a CI guard preventing regression.
 - 3 REAL BUGS closed: §1.2 (9px text), §3 (color-scheme), §2.1 (error messages — was already fixed in Phase 5).
 - STOPPING here per framework — awaiting user "verified" before proceeding to Batch 2 (Component Consolidation).
+
+---
+Task ID: audit-v26-phase6-batch-2
+Agent: main
+Task: Phase 6 UI/UX Design Review — Batch 2 (Component Consolidation, PR-2): structural, medium-risk fixes per auditor's §9.2 sequencing recommendation.
+
+Work Log:
+
+PRE-CHANGE SCAN findings:
+- 107 <Label> usages, only 4 htmlFor — confirmed the a11y gap.
+- 18 actual <input type="number"> lacking inputMode (some grep results were recharts XAxis, filtered out).
+- PartyProfile has 10 size="sm" buttons in the action row (32px, sub-44 touch target).
+- MoreScreen back button is p-2 (~36px, sub-44).
+- Header LanguageToggle is a hand-rolled absolute-positioned menu with outside-click useEffect.
+- TransactionDetail spinner is button-internal (Loader2 inside a Download button) — auditor said spinners are acceptable for button-internal busy states. No change needed.
+
+§1 — §5.2 Label/Input association (REAL BUG):
+- Python script swept 16 files, adding htmlFor="field-{slug}" to <Label> and id="field-{slug}" to the following <Input> within 3 lines.
+- 178 htmlFor/id additions across: ProductDialog (21), TransactionEntry (28), TransactionDetail (25), Settings (24), IncomeExpense (18), PartySelect (11), Parties (13), PartyProfile (6), AuthScreen (6), StaffManagement (6), CAAccess (6), AIComparison (7), DayEndSummary (2), PasswordReset (2), BankReconciliation (2), BillScanner (1).
+- htmlFor count went from 4 → 106.
+- New CI guard: v26-phase6-label-association-guard.test.ts. Verifies every <Label htmlFor="x"> followed by <Input> has matching id. Also asserts htmlFor count ≥ 90 (regression floor).
+- One Label with dynamic content (TransactionEntry.tsx:1458 — "Cash refunded?" toggle label) was skipped by the regex; it's a Switch label (Radix Switch has its own aria), acceptable.
+
+§2 — §1.4 Header LanguageToggle → Radix DropdownMenu:
+- Replaced hand-rolled absolute-positioned <div> menu with outside-click useEffect → Radix <DropdownMenu> + <DropdownMenuTrigger> + <DropdownMenuContent> + <DropdownMenuItem>.
+- Gets keyboard nav (arrow keys, typeahead), focus management, Escape-to-close, focus return for free. Was: no keyboard support, no focus return.
+- Removed now-unused useRef + useEffect imports from Header.tsx.
+
+§3 — §5.1 Touch-target fixes:
+- Button.tsx sm size: added `min-h-11 lg:min-h-8` — all size="sm" buttons now meet 44px touch target on mobile, stay 32px on desktop. Was: h-8 (32px) everywhere — sub-44 on mobile. Affects PartyProfile's 10 action buttons + every other size="sm" button in the app.
+- MoreScreen back button: `p-2` → `min-h-[44px] min-w-[44px] flex items-center justify-center` + aria-label="Go back". Now matches Header's 44px back button.
+
+§4 — §5.1 inputMode on type="number" inputs:
+- Python script added `inputMode="decimal"` to 18 type="number" inputs across 9 files (PartyProfile, Parties, IncomeExpense, AIComparison, Settings, DayEndSummary, BillScanner, VoiceEntry, TransactionEntry).
+- 6 duplicate inputMode lines removed (script added to the type="number" line but some tags already had inputMode on a different line).
+- Mobile keyboards now show the numeric keypad with decimal key for all amount/quantity fields.
+
+§5 — Items deferred to Batch 3 or later:
+- §1.4 MobileBottomNav quick-action menu → Radix DropdownMenu: deferred — the long-press FAB menu has custom haptic + animation behavior that's not a drop-in conversion. Will handle in Batch 3 if time allows.
+- §1.4 PartySelect/ProductPicker → combobox via ui/command.tsx: deferred ([Bigger] per auditor) — highest-frequency inputs, needs careful spec.
+- §1.4 Hand-rolled cards → <Card>: deferred — 49 hand-rolled bg-card divs, mechanical but voluminous; will address in a follow-up.
+- §6.5 Skeleton discipline: deferred — TransactionDetail spinner is button-internal (acceptable per auditor); AuthScreen spinner is acceptable for a loading gate.
+- §6.6 Number transitions (useCountUp on balance): deferred to Batch 3 (experience investments).
+
+Bug log (pre-existing, deferred):
+- MobileBottomNav long-press menu: hand-rolled, no keyboard support (Batch 3 candidate).
+- PartySelect/ProductPicker: hand-rolled comboboxes, no keyboard nav (Batch 3 [Bigger]).
+- 49 hand-rolled bg-card divs with varying padding (follow-up mechanical sweep).
+
+Verification (all 4 gates green):
+- tsc --noEmit: 0 errors
+- jest: 1922/1922 pass (63 suites) — was 1920, +2 from label-association guard
+- eslint src/: 0 errors
+- next build: clean
+
+Stage Summary:
+- Phase 6 Batch 2 COMPLETE: 4 fixes shipped (§5.2 labels, §1.4 LanguageToggle, §5.1 touch targets, §5.1 inputMode).
+- The REAL BUG (§5.2 — labels not associated with inputs) is closed: 106 htmlFor associations, CI guard prevents regression.
+- 3 hand-rolled menus remain (MobileBottomNav, PartySelect, ProductPicker) — deferred to Batch 3 / follow-up.
+- STOPPING here per framework — awaiting user "verified" before proceeding to Batch 3 (Experience Investments).

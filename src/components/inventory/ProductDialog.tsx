@@ -147,23 +147,23 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
         </DialogHeader>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-2">
           <div className="sm:col-span-2">
-            <Label>Product Name *</Label>
-            <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Aashirvaad Atta 5kg" />
+            <Label htmlFor="field-product-name">Product Name *</Label>
+            <Input id="field-product-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Aashirvaad Atta 5kg" />
           </div>
           <div>
-            <Label>SKU / Code</Label>
-            <Input value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} placeholder="e.g. ATA001" />
+            <Label htmlFor="field-sku-code">SKU / Code</Label>
+            <Input id="field-sku-code" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} placeholder="e.g. ATA001" />
           </div>
           <div>
-            <Label>Category</Label>
-            <Input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="e.g. Flour" />
+            <Label htmlFor="field-category">Category</Label>
+            <Input id="field-category" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} placeholder="e.g. Flour" />
           </div>
           <div>
-            <Label>HSN/SAC Code</Label>
-            <Input value={form.hsn} onChange={(e) => setForm({ ...form, hsn: e.target.value })} placeholder="e.g. 1101" />
+            <Label htmlFor="field-hsn-sac-code">HSN/SAC Code</Label>
+            <Input id="field-hsn-sac-code" value={form.hsn} onChange={(e) => setForm({ ...form, hsn: e.target.value })} placeholder="e.g. 1101" />
           </div>
           <div>
-            <Label>Unit</Label>
+            <Label htmlFor="field-unit">Unit</Label>
             <Select value={form.unit} onValueChange={(v) => setForm({ ...form, unit: v })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -172,19 +172,19 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
             </Select>
           </div>
           <div>
-            <Label>Purchase Price (₹) *</Label>
-            <Input type="number" inputMode="decimal" value={form.purchasePrice} onChange={(e) => setForm({ ...form, purchasePrice: e.target.value })} placeholder="0" />
+            <Label htmlFor="field-purchase-price">Purchase Price (₹) *</Label>
+            <Input id="field-purchase-price" type="number" inputMode="decimal" value={form.purchasePrice} onChange={(e) => setForm({ ...form, purchasePrice: e.target.value })} placeholder="0" />
           </div>
           <div>
-            <Label>Sale Price (₹) *</Label>
-            <Input type="number" inputMode="decimal" value={form.salePrice} onChange={(e) => setForm({ ...form, salePrice: e.target.value })} placeholder="0" />
+            <Label htmlFor="field-sale-price">Sale Price (₹) *</Label>
+            <Input id="field-sale-price" type="number" inputMode="decimal" value={form.salePrice} onChange={(e) => setForm({ ...form, salePrice: e.target.value })} placeholder="0" />
           </div>
           <div>
-            <Label>MRP (₹)</Label>
-            <Input type="number" inputMode="decimal" value={form.mrp} onChange={(e) => setForm({ ...form, mrp: e.target.value })} placeholder="optional" />
+            <Label htmlFor="field-mrp">MRP (₹)</Label>
+            <Input id="field-mrp" type="number" inputMode="decimal" value={form.mrp} onChange={(e) => setForm({ ...form, mrp: e.target.value })} placeholder="optional" />
           </div>
           <div>
-            <Label>GST Rate (%)</Label>
+            <Label htmlFor="field-gst-rate">GST Rate (%)</Label>
             <Select value={form.gstRate} onValueChange={(v) => setForm({ ...form, gstRate: v })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -194,7 +194,7 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
           </div>
           {/* 🔒 V17 Audit §4.2: GST treatment — for GSTR-3B 3.1(c) nil/exempt/non-GST breakdown */}
           <div>
-            <Label>GST Treatment</Label>
+            <Label htmlFor="field-gst-treatment">GST Treatment</Label>
             <Select value={form.gstTreatment} onValueChange={(v) => setForm({ ...form, gstTreatment: v })}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
@@ -228,12 +228,12 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
             </label>
           </div>
           <div>
-            <Label>Opening Stock</Label>
-            <Input type="number" inputMode="decimal" value={form.openingStock} onChange={(e) => setForm({ ...form, openingStock: e.target.value })} placeholder="0" />
+            <Label htmlFor="field-opening-stock">Opening Stock</Label>
+            <Input id="field-opening-stock" type="number" inputMode="decimal" value={form.openingStock} onChange={(e) => setForm({ ...form, openingStock: e.target.value })} placeholder="0" />
           </div>
           <div>
-            <Label>Low Stock Alert At</Label>
-            <Input type="number" inputMode="decimal" value={form.lowStockThreshold} onChange={(e) => setForm({ ...form, lowStockThreshold: e.target.value })} placeholder="5" />
+            <Label htmlFor="field-low-stock-alert-at">Low Stock Alert At</Label>
+            <Input id="field-low-stock-alert-at" type="number" inputMode="decimal" value={form.lowStockThreshold} onChange={(e) => setForm({ ...form, lowStockThreshold: e.target.value })} placeholder="5" />
           </div>
         </div>
 

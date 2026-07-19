@@ -472,7 +472,7 @@ export function IncomeExpense() {
           </DialogHeader>
           <div className="space-y-3 py-2">
             <div>
-              <Label>Category</Label>
+              <Label htmlFor="field-category">Category</Label>
               <Select value={budgetCategory} onValueChange={setBudgetCategory}>
                 <SelectTrigger className="mt-1">
                   <SelectValue placeholder="Select expense category" />
@@ -485,9 +485,9 @@ export function IncomeExpense() {
               </Select>
             </div>
             <div>
-              <Label>Monthly Budget Amount (₹)</Label>
-              <Input
-                type="number"
+              <Label htmlFor="field-monthly-budget-amount">Monthly Budget Amount (₹)</Label>
+              <Input id="field-monthly-budget-amount"
+                inputMode="decimal" type="number"
                 value={budgetAmount}
                 onChange={(e) => setBudgetAmount(e.target.value)}
                 placeholder="e.g. 15000"
@@ -547,7 +547,7 @@ export function IncomeExpense() {
               </Button>
             </div>
             <div>
-              <Label>Category</Label>
+              <Label htmlFor="field-category-2">Category</Label>
               <Select value={recurCategory} onValueChange={setRecurCategory}>
                 <SelectTrigger className="mt-1">
                   <SelectValue placeholder="Select category" />
@@ -561,9 +561,9 @@ export function IncomeExpense() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>Amount (₹)</Label>
-                <Input
-                  type="number"
+                <Label htmlFor="field-amount">Amount (₹)</Label>
+                <Input id="field-amount"
+                  inputMode="decimal" type="number"
                   value={recurAmount}
                   onChange={(e) => setRecurAmount(e.target.value)}
                   placeholder="e.g. 15000"
@@ -571,7 +571,7 @@ export function IncomeExpense() {
                 />
               </div>
               <div>
-                <Label>Day of Month</Label>
+                <Label htmlFor="field-day-of-month">Day of Month</Label>
                 <Select value={recurDay} onValueChange={setRecurDay}>
                   <SelectTrigger className="mt-1">
                     <SelectValue />
@@ -585,7 +585,7 @@ export function IncomeExpense() {
               </div>
             </div>
             <div>
-              <Label>Payment Mode</Label>
+              <Label htmlFor="field-payment-mode">Payment Mode</Label>
               <Select value={recurPaymentMode} onValueChange={setRecurPaymentMode}>
                 <SelectTrigger className="mt-1">
                   <SelectValue />
@@ -598,8 +598,8 @@ export function IncomeExpense() {
               </Select>
             </div>
             <div>
-              <Label>Notes (optional)</Label>
-              <Input
+              <Label htmlFor="field-notes-optional">Notes (optional)</Label>
+              <Input id="field-notes-optional"
                 value={recurNotes}
                 onChange={(e) => setRecurNotes(e.target.value)}
                 placeholder="e.g. Monthly shop rent"
@@ -733,9 +733,9 @@ function IncomeExpenseDialog({ open, onOpenChange, type, onSuccess }: {
         </DialogHeader>
         <div className="space-y-3 py-2">
           <div>
-            <Label>Amount (₹) *</Label>
-            <Input
-              type="number"
+            <Label htmlFor="field-amount-2">Amount (₹) *</Label>
+            <Input id="field-amount-2"
+              inputMode="decimal" type="number"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="0"
@@ -749,7 +749,7 @@ function IncomeExpenseDialog({ open, onOpenChange, type, onSuccess }: {
           {/* Category with custom option */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <Label>Category *</Label>
+              <Label htmlFor="field-category-3">Category *</Label>
               <button
                 type="button"
                 onClick={() => setIsCustomCategory(!isCustomCategory)}
@@ -799,11 +799,11 @@ function IncomeExpenseDialog({ open, onOpenChange, type, onSuccess }: {
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label>Date</Label>
-              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+              <Label htmlFor="field-date">Date</Label>
+              <Input id="field-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
             </div>
             <div>
-              <Label>Payment Mode</Label>
+              <Label htmlFor="field-payment-mode-2">Payment Mode</Label>
               <Select value={paymentMode} onValueChange={setPaymentMode}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
@@ -813,8 +813,8 @@ function IncomeExpenseDialog({ open, onOpenChange, type, onSuccess }: {
             </div>
           </div>
           <div>
-            <Label>Notes (optional)</Label>
-            <Input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. Monthly shop rent" />
+            <Label htmlFor="field-notes-optional-2">Notes (optional)</Label>
+            <Input id="field-notes-optional-2" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. Monthly shop rent" />
           </div>
         </div>
         <DialogFooter>

@@ -647,7 +647,7 @@ export function BillScanner() {
       {/* Bill type selector */}
       <Card className="shadow-card border-border/60">
         <CardContent className="p-4">
-          <Label className="text-xs uppercase tracking-wide text-muted-foreground">I am scanning a...</Label>
+          <Label className="text-xs uppercase tracking-wide text-muted-foreground" htmlFor="field-i-am-scanning-a">I am scanning a...</Label>
           <div className="grid grid-cols-2 gap-3 mt-2">
             <button
               onClick={() => setBillType('purchase')}
@@ -1001,7 +1001,7 @@ export function BillScanner() {
                         <div className="flex-1 min-w-0 flex items-center gap-1">
                           <span className="text-3xs text-muted-foreground w-7">Qty</span>
                           <input
-                            type="number"
+                            inputMode="decimal" type="number"
                             value={item.quantity}
                             onChange={(e) => updateItem(i, 'quantity', Number(e.target.value))}
                             className="w-full min-w-0 bg-background border border-border rounded tabular-nums focus:ring-1 focus:ring-primary text-center text-sm px-1 py-1"
@@ -1020,7 +1020,7 @@ export function BillScanner() {
                         <div className="flex-1 min-w-0 flex items-center gap-1">
                           <span className="text-3xs text-muted-foreground w-8">₹</span>
                           <input
-                            type="number"
+                            inputMode="decimal" type="number"
                             value={item.unitPrice}
                             onChange={(e) => updateItem(i, 'unitPrice', Number(e.target.value))}
                             className="w-full min-w-0 bg-background border border-border rounded tabular-nums focus:ring-1 focus:ring-primary text-center text-sm px-1 py-1"
