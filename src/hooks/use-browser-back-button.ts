@@ -50,7 +50,12 @@ const MAX_STACK_DEPTH = 15
 
 // Views that RESET the navigation stack when navigated to via bottom nav.
 // These are the "root" destinations — tapping them starts a new context.
-const ROOT_VIEWS: ViewType[] = ['dashboard', 'sales', 'inventory', 'more']
+// 🔒 V26 N2: ROOT_VIEWS updated to match actual bottom-nav tabs.
+// Was: ['dashboard', 'sales', 'inventory', 'more'] — 'purchases' was missing
+// (a bottom-nav tab treated as child push), 'inventory' was included
+// (no longer a tab, only reachable via More → treated as root → back skips More).
+// Now: ['dashboard', 'sales', 'purchases', 'more'] — matches the 4 bottom-nav tabs.
+const ROOT_VIEWS: ViewType[] = ['dashboard', 'sales', 'purchases', 'more']
 
 // 🔒 V11 FIX: Module-level mirror of the view stack, so CapacitorBridge can
 // check "can the user go back within the app?" without accessing the hook's
@@ -227,6 +232,11 @@ export function useBrowserBackButton() {
         setSelectedTransactionId(null)
         setSelectedTransactionType(null)
         setSelectedPartyId(null)
+        // 🔒 V26 N6: Clear accountSection when leaving Account via hardware back.
+        // Was: accountSection persisted → next Account open landed in stale section.
+        if (previousView !== 'account') {
+          useAppStore.getState().setAccountSection(null)
+        }
         setView(previousView)
       }
       // If stack is just [dashboard], don't pop — next back press exits
