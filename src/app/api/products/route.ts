@@ -135,9 +135,30 @@ export async function PUT(req: NextRequest) {
     if (v.gstRate !== undefined) updateData.gstRate = v.gstRate
     if (v.openingStock !== undefined) {
       updateData.openingStock = v.openingStock
-      // If openingStock changes, adjust currentStock by the same delta
+      // 🔒 V26 H8 FIX: If openingStock changes, adjust currentStock by the
+      // same delta. Was: read existing.openingStock → compute delta → increment.
+      // Race: between read and update, a concurrent sale could decrement
+      // currentStock, making the delta wrong. Now: use a conditional update
+      // that reads openingStock inside the same atomic operation via a
+      // $transaction. The increment is still correct because we re-read
+      // the current openingStock inside the transaction.
       const delta = v.openingStock - existing.openingStock
-      updateData.currentStock = { increment: delta }
+      // Wrap in $transaction to make the read+write atomic
+      await db.$transaction(async (tx) => {
+        const fresh = await tx.product.findFirst({ where: { id, userId }, select: { openingStock: true } })
+        if (!fresh) throw new Error('Product not found')
+        const freshDelta = v.openingStock! - fresh.openingStock
+        await tx.product.update({
+          where: { id },
+          data: {
+            openingStock: v.openingStock,
+            currentStock: { increment: freshDelta },
+          },
+        })
+      })
+      // Don't include openingStock/currentStock in the outer updateData —
+      // they were already updated inside the transaction above.
+      delete updateData.openingStock
     }
     if (v.lowStockThreshold !== undefined) updateData.lowStockThreshold = v.lowStockThreshold
     if (v.notes !== undefined) updateData.notes = v.notes

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import crypto from 'crypto'
 import { db } from '@/lib/db'
 import { runReconciliationChecks } from '@/lib/reconciliation'
 import { apiError } from '@/lib/api-error'
@@ -53,7 +54,12 @@ export async function GET(req: NextRequest) {
     )
   }
 
-  if (authHeader !== `Bearer ${expectedSecret}`) {
+  // 🔒 V26 M3 FIX: Use crypto.timingSafeEqual instead of !== to prevent
+  // timing attacks on the cron secret.
+  const expectedAuth = `Bearer ${expectedSecret}`
+  const authBuf = Buffer.from(authHeader || '')
+  const expectedBuf = Buffer.from(expectedAuth)
+  if (authBuf.length !== expectedBuf.length || (authBuf.length > 0 && !crypto.timingSafeEqual(authBuf, expectedBuf))) {
     return NextResponse.json(
       { error: 'Unauthorized — invalid or missing CRON_SECRET' },
       { status: 401 },

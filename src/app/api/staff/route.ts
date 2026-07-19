@@ -11,6 +11,7 @@ import {
 } from '@/lib/staff-permissions'
 import { checkEntityLimit } from '@/lib/usage-limits'
 import { apiError } from '@/lib/api-error'
+import { validateBody, updateStaffSchema } from '@/lib/validation'
 
 // GET /api/staff - list all sub-accounts (staff + CA) for the current owner
 export async function GET() {
@@ -170,12 +171,14 @@ export async function PATCH(req: NextRequest) {
       }, { status: 400 })
     }
 
+    // 🔒 V26 H6 FIX: Use validateBody with updateStaffSchema. Was: raw body
+    // with type assertion — arbitrary keys in permissions were spread and stored.
     const body = await req.json()
-    const { permissions } = body as { permissions: StaffPermissions }
-
-    if (!permissions || typeof permissions !== 'object') {
-      return NextResponse.json({ error: 'Permissions object required' }, { status: 400 })
+    const validation = validateBody(updateStaffSchema, body)
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 })
     }
+    const { permissions } = validation.data
 
     // Merge with defaults to ensure all keys are present
     const mergedPerms = { ...DEFAULT_STAFF_PERMISSIONS, ...permissions }

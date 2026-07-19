@@ -88,7 +88,7 @@ export async function GET() {
         name: p.name,
         currentStock: p.currentStock,
         unit: p.unit || 'pcs',
-        tiedUpValue: roundMoney(p.currentStock * (p.purchasePrice || 0)),
+        tiedUpValue: hideProfit ? 0 : roundMoney(Math.max(0, p.currentStock) * (p.purchasePrice || 0)),  // 🔒 V26 M12: gate by hideProfit + clamp at 0
       }))
       .sort((a, b) => b.tiedUpValue - a.tiedUpValue)
       .slice(0, 5)

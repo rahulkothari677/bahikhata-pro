@@ -447,18 +447,12 @@ export async function POST(req: NextRequest) {
     // invoice — ownership, type pairing (CN→sale, DN→purchase), same party,
     // and a cumulative cap (Σ notes ≤ original total). Prevents phantom
     // negative receivables and GST understatement from over-crediting.
-    if (isNoteType(type) && originalTransactionId) {
-      const noteCheck = await validateNoteAgainstOriginal(db, {
-        userId,
-        type,
-        partyId: partyId || null,
-        originalTransactionId,
-        noteTotal: totalAmount,
-      })
-      if (!noteCheck.ok) {
-        return NextResponse.json({ error: noteCheck.error, message: noteCheck.message }, { status: noteCheck.status })
-      }
-    }
+    //
+    // 🔒 V26 H1 FIX: Was: validation ran OUTSIDE the $transaction → race
+    // condition (two concurrent notes each read alreadyNoted=0, both pass).
+    // Now: validation runs INSIDE the $transaction (in createTransactionWithStock)
+    // so the check + create are atomic. The tx handle is passed to
+    // validateNoteAgainstOriginal instead of db.
 
     // 🔒 AUDIT FIX N3 (v3): Invoice sequence generation is now INSIDE the
     // $transaction with retry-on-P2002. Was: max()+1 OUTSIDE the transaction
@@ -512,6 +506,27 @@ export async function POST(req: NextRequest) {
         })
         invoiceSequence = counter.debitNoteSeq
         finalInvoiceNo = `DN-${String(invoiceSequence).padStart(4, '0')}`
+      }
+
+      // 🔒 V26 H1 FIX: Note validation now runs INSIDE the $transaction.
+      // This closes the race condition where two concurrent notes each read
+      // alreadyNoted=0 and both pass the cap check. Now the check + create
+      // are atomic within the same transaction.
+      if (isNoteType(type) && originalTransactionId) {
+        const noteCheck = await validateNoteAgainstOriginal(tx, {
+          userId,
+          type,
+          partyId: partyId || null,
+          originalTransactionId,
+          noteTotal: totalAmount,
+        })
+        if (!noteCheck.ok) {
+          const err: any = new Error('NOTE_VALIDATION_FAILED')
+          err.status = noteCheck.status
+          err.error = noteCheck.error
+          err.userMessage = noteCheck.message
+          throw err
+        }
       }
 
       const txn = await tx.transaction.create({
@@ -630,6 +645,15 @@ export async function POST(req: NextRequest) {
           message: `Another sale just took the last ${err.requestedQty} units of ${err.productName}. Please try again or record a purchase first.`,
           hint: 'To allow overselling, go to Settings and turn on "Allow overselling (kirana mode)".',
         }, { status: 400 })
+      }
+      // 🔒 V26 H1: Catch the NOTE_VALIDATION_FAILED error from inside the
+      // $transaction. The note cap check failed atomically — return the
+      // validation error to the client.
+      if (err?.message === 'NOTE_VALIDATION_FAILED') {
+        return NextResponse.json(
+          { error: err.error, message: err.userMessage },
+          { status: err.status || 400 },
+        )
       }
       throw err
     }

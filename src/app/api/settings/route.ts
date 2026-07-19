@@ -31,30 +31,49 @@ export async function PUT(req: NextRequest) {
 
     const body = await req.json()
 
-    // 🔒 V17-Ext §5.1: Build the update object conditionally for lockedUntil.
-    // Same "only update if explicitly provided" pattern as parties PUT (H6 fix).
-    // The UI sends lockedUntil as:
-    //   - An ISO date string → set the lock to that date
-    //   - null → explicitly unlock (remove the lock)
-    //   - undefined → don't touch the lock (a settings save from a UI section
-    //     that doesn't know about period lock shouldn't wipe it)
-    // We validate the date format here — if it's a non-null string that can't
-    // be parsed as a date, return 400 (don't silently store garbage).
-    const updateData: any = {
-      shopName: body.shopName,
-      ownerName: body.ownerName,
-      address: body.address,
-      phone: body.phone,
-      gstin: body.gstin,
-      state: body.state,
-      email: body.email,
-      hideProfit: body.hideProfit,
-      roundOffEnabled: body.roundOffEnabled,  // 🔒 V12
-      scanLang: body.scanLang,
-      voiceLang: body.voiceLang,
-      stockPolicy: body.stockPolicy,  // 🔒 V11: 'block' | 'allow'
-      upiId: body.upiId,  // V17-Ext 5.4: UPI VPA for collection links
+    // 🔒 V26 H5 FIX: Validate inputs before storing. Was: raw body taken
+    // with no length limits, no GSTIN format, no email format, no enum check.
+    // Now: sanitize each field with length limits + format validation.
+    const MAX_NAME = 200
+    const MAX_TEXT = 2000
+    const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/
+
+    const sanitized: any = {}
+    if (body.shopName !== undefined) sanitized.shopName = typeof body.shopName === 'string' ? body.shopName.slice(0, MAX_NAME) : body.shopName
+    if (body.ownerName !== undefined) sanitized.ownerName = typeof body.ownerName === 'string' ? body.ownerName.slice(0, MAX_NAME) : body.ownerName
+    if (body.address !== undefined) sanitized.address = typeof body.address === 'string' ? body.address.slice(0, MAX_TEXT) : body.address
+    if (body.phone !== undefined) sanitized.phone = typeof body.phone === 'string' ? body.phone.slice(0, 20) : body.phone
+    if (body.gstin !== undefined) {
+      if (body.gstin !== null && body.gstin !== '' && !GSTIN_REGEX.test(body.gstin)) {
+        return NextResponse.json({ error: 'Invalid GSTIN format. Must be 15 characters (e.g. 27ABCDE1234F1Z5).' }, { status: 400 })
+      }
+      sanitized.gstin = body.gstin
     }
+    if (body.state !== undefined) sanitized.state = typeof body.state === 'string' ? body.state.slice(0, 100) : body.state
+    if (body.email !== undefined) {
+      if (body.email !== null && body.email !== '' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(body.email)) {
+        return NextResponse.json({ error: 'Invalid email format' }, { status: 400 })
+      }
+      sanitized.email = body.email
+    }
+    if (body.hideProfit !== undefined) sanitized.hideProfit = !!body.hideProfit
+    if (body.roundOffEnabled !== undefined) sanitized.roundOffEnabled = !!body.roundOffEnabled
+    if (body.scanLang !== undefined) sanitized.scanLang = typeof body.scanLang === 'string' ? body.scanLang.slice(0, 20) : body.scanLang
+    if (body.voiceLang !== undefined) sanitized.voiceLang = typeof body.voiceLang === 'string' ? body.voiceLang.slice(0, 20) : body.voiceLang
+    if (body.stockPolicy !== undefined) {
+      if (!['block', 'allow'].includes(body.stockPolicy)) {
+        return NextResponse.json({ error: 'stockPolicy must be "block" or "allow"' }, { status: 400 })
+      }
+      sanitized.stockPolicy = body.stockPolicy
+    }
+    if (body.upiId !== undefined) {
+      if (body.upiId !== null && body.upiId !== '' && !/^[\w.\-]{2,256}@[a-zA-Z]{2,64}$/.test(body.upiId)) {
+        return NextResponse.json({ error: 'Invalid UPI ID format (e.g. name@bank)' }, { status: 400 })
+      }
+      sanitized.upiId = body.upiId
+    }
+
+    const updateData: any = sanitized
 
     if (body.lockedUntil !== undefined) {
       if (body.lockedUntil === null) {
