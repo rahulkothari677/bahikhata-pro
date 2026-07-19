@@ -1,13 +1,16 @@
 'use client'
 
 /**
- * 🔒 V26 P10: ToolsHub — a beautiful card-based tools page for desktop.
+ * 🔒 V26 P10: ToolsHub — card-based tools page for desktop.
  *
  * Replaces the old collapsible "Tools" section at the bottom of the sidebar.
- * Now "Tools" is a main-nav entry that opens this page — same pattern as Reports.
+ * "Tools" is now a main-nav entry that opens this page — same pattern as Reports.
  *
- * Design reference: ReportsHub (categorized cards), Linear (tool grid),
- * Stripe Dashboard (feature cards with hover effects).
+ * 🔒 V26 P11: Card styling EXACTLY matches ReportsHub — same button-based
+ * layout, same classes (card-hover, p-3, rounded-2xl, gap-2.5), same grid.
+ * Was: used Card component with different sizing → inconsistent.
+ *
+ * Design reference: ReportsHub (identical card layout), Linear, Stripe.
  */
 
 import { useMemo } from 'react'
@@ -18,15 +21,15 @@ import { useTranslation } from '@/hooks/use-translation'
 import { NAV_REGISTRY, filterByPermissions, groupBySubcategory, type NavDestination, type NavSubcategoryId } from '@/lib/nav-registry'
 import { handleNavAction } from '@/lib/handle-nav-action'
 import { haptic } from '@/lib/haptic'
-import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import {
-  ChevronRight, ArrowLeft, ShoppingCart, Users, Package,
+  ChevronRight, ShoppingCart, Users, Package,
   Banknote, FileText, BarChart3, Sparkles, Store,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { useSession } from 'next-auth/react'
 
+// Same category metadata as ReportsHub — consistent visual language
 const TOOLS_CATEGORY_META: Partial<Record<NavSubcategoryId, { title: string; titleIcon: LucideIcon; accentColor: string }>> = {
   'sale-purchase':       { title: 'Transactions',      titleIcon: ShoppingCart, accentColor: 'text-indigo-600 dark:text-indigo-400' },
   'parties':             { title: 'Parties',            titleIcon: Users, accentColor: 'text-cyan-600 dark:text-cyan-400' },
@@ -68,91 +71,73 @@ export function ToolsHub() {
         })
       }
     }
+    // Include uncategorized items
+    const uncategorized = grouped.get(undefined)
+    if (uncategorized && uncategorized.length > 0) {
+      ordered.push({
+        subcategory: 'other' as NavSubcategoryId,
+        title: 'Other',
+        titleIcon: ChevronRight,
+        accentColor: 'text-muted-foreground',
+        tools: uncategorized,
+      })
+    }
     return ordered
   }, [toolsItems])
 
-  const handleBack = () => {
-    haptic.click()
-    setView(previousView || 'dashboard')
-    setPreviousView(null)
-  }
-
-  const handleToolClick = (dest: NavDestination) => {
-    haptic.click()
-    handleNavAction(dest, { previousView: 'tools' })
-  }
-
   return (
-    <div className="space-y-6 p-4 lg:p-6">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={handleBack}
-          className="p-2 -ml-2 rounded-lg hover:bg-muted transition lg:hidden"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </button>
-        <div>
-          <h2 className="text-xl font-bold">Tools</h2>
-          <p className="text-sm text-muted-foreground">Quick access to all your business tools</p>
-        </div>
+    <div className="space-y-5">
+      {/* Page header — same style as ReportsHub */}
+      <div className="animate-fade-slide-up">
+        <h2 className="text-xl font-bold">Tools</h2>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          Quick access to all your business tools — voice entry, scanner, reminders, and more.
+        </p>
       </div>
 
-      {/* Tool categories — card-based layout like ReportsHub */}
-      {categories.map((category) => {
-        const CategoryIcon = category.titleIcon
+      {/* Categorized sections — EXACT same card layout as ReportsHub */}
+      {categories.map((category, catIdx) => {
+        const TitleIcon = category.titleIcon
         return (
-          <div key={category.subcategory}>
-            {/* Category header */}
-            <div className="flex items-center gap-2 px-2 mb-3">
-              {CategoryIcon && <CategoryIcon className={cn('w-4 h-4', category.accentColor)} />}
-              <h3 className={cn('text-sm font-semibold', category.accentColor)}>
+          <div key={category.subcategory} className="animate-fade-slide-up" style={{ '--stagger-index': catIdx } as any}>
+            {/* Category header — same style as ReportsHub */}
+            <div className="flex items-center gap-2 px-1 mb-2">
+              <TitleIcon className={cn('w-3.5 h-3.5', category.accentColor)} />
+              <p className={cn(
+                'text-xs font-semibold uppercase tracking-wider',
+                category.accentColor,
+              )}>
                 {category.title}
-              </h3>
-              <div className="flex-1 h-px bg-border/40" />
-              <span className="text-[10px] text-muted-foreground">{category.tools.length}</span>
+              </p>
             </div>
-
-            {/* Tool cards grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {category.tools.map((tool) => {
+            {/* Tool cards — EXACT same grid + classes as ReportsHub */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+              {category.tools.map((tool: NavDestination, toolIdx: number) => {
                 const Icon = tool.icon
                 return (
-                  <Card
+                  <button
                     key={tool.id}
-                    className="cursor-pointer hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 border-border/60 group"
-                    onClick={() => handleToolClick(tool)}
+                    onClick={() => {
+                      haptic.click()
+                      handleNavAction(tool, { previousView: 'tools' })
+                    }}
+                    className="card-hover group flex items-start gap-3 p-3 bg-card rounded-2xl border border-border/60 shadow-sm hover:border-primary/30 text-left active:bg-muted/50"
+                    style={{ '--stagger-index': toolIdx } as any}
                   >
-                    <CardContent className="p-4 flex items-start gap-3">
-                      <div className={cn(
-                        'w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 transition group-hover:scale-110',
-                        tool.iconBg || 'bg-muted'
-                      )}>
-                        <Icon className={cn('w-5 h-5', tool.iconColor || 'text-muted-foreground')} />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <p className="font-medium text-sm truncate">
-                            {tool.labelKey ? t(tool.labelKey) : tool.label}
-                          </p>
-                          {tool.badge && (
-                            <span className={cn(
-                              'text-[9px] px-1.5 py-0.5 rounded-full font-bold',
-                              tool.badgeColor || 'bg-primary text-primary-foreground'
-                            )}>
-                              {tool.badge}
-                            </span>
-                          )}
-                        </div>
-                        {(tool.descKey || tool.description) && (
-                          <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
-                            {tool.descKey ? t(tool.descKey) : tool.description}
-                          </p>
-                        )}
-                      </div>
-                      <ChevronRight className="w-4 h-4 text-muted-foreground/50 group-hover:text-primary group-hover:translate-x-0.5 transition flex-shrink-0" />
-                    </CardContent>
-                  </Card>
+                    <div className={cn(
+                      'w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 transition group-hover:scale-105',
+                      tool.iconBg || 'bg-muted',
+                    )}>
+                      <Icon className={cn('w-5 h-5', tool.iconColor || 'text-muted-foreground')} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-sm leading-tight">{tool.labelKey ? t(tool.labelKey) : tool.label}</p>
+                      <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
+                        {tool.descKey ? t(tool.descKey) : tool.description}
+                      </p>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition flex-shrink-0 mt-0.5" />
+                  </button>
                 )
               })}
             </div>
@@ -165,6 +150,13 @@ export function ToolsHub() {
           <p className="text-sm text-muted-foreground">No tools available.</p>
         </div>
       )}
+
+      {/* Footer hint — same style as ReportsHub */}
+      <div className="pt-2 pb-1 text-center">
+        <p className="text-[11px] text-muted-foreground">
+          Tip: use Ctrl+K (Cmd+K on Mac) to quickly search and jump to any tool.
+        </p>
+      </div>
     </div>
   )
 }
