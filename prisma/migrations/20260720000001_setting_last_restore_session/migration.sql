@@ -1,0 +1,15 @@
+-- 🔒 V26 R3 (Phase 5): Add Setting.lastRestoreSessionId for resume-after-kill.
+--
+-- Phase 5 audit (R3 🔴): restore was non-atomic + capped at 60s + assertShopIsEmpty
+-- blocked retry → a 500+ row backup timed out mid-restore, leaving partial books
+-- AND a retry that was permanently blocked. The only path forward was destructive
+-- account-reset. This was a data-loss-equivalent outage for the user whose trust
+-- matters most (migrating from another app / recovering a device).
+--
+-- Fix: store the incoming restoreSessionId here. On retry, assertShopIsEmpty
+-- rework: empty shop → proceed; non-empty BUT matching restoreSessionId → resume
+-- (skip rows whose invoiceNo+date+totalAmount already exist); else → 409.
+-- Write the marker before the first chunk, clear it on completion.
+--
+-- Idempotent: ALTER TABLE ADD COLUMN IF NOT EXISTS (safe to re-run).
+ALTER TABLE "Setting" ADD COLUMN IF NOT EXISTS "lastRestoreSessionId" TEXT;

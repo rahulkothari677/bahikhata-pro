@@ -43,6 +43,10 @@ export interface NoteValidationDb {
     findFirst(args: any): Promise<any>
     aggregate(args: any): Promise<any>
   }
+  // 🔒 V26 R5 (Phase 5): $queryRaw is needed for the FOR UPDATE lock.
+  // Optional on the interface so test stubs don't need to implement it
+  // (the lock is a no-op in unit tests; it only fires against real Postgres).
+  $queryRaw?(sql: TemplateStringsArray, ...values: any[]): Promise<any>
 }
 
 const EXPECTED_ORIGINAL_TYPE: Record<string, string> = {
@@ -58,6 +62,21 @@ export async function validateNoteAgainstOriginal(
 
   const expectedType = EXPECTED_ORIGINAL_TYPE[type]
   if (!expectedType) return { ok: true }  // not a note — nothing to validate
+
+  // 🔒 V26 R5 (Phase 5): Lock the original invoice row INSIDE the caller's
+  // $transaction (db here is the tx handle when called from a $transaction
+  // callback). This serializes note-writers + original-editers + original-
+  // deleters per invoice. Without the lock, READ COMMITTED means two
+  // concurrent note-creates each aggregate the committed notes (Σ=0), both
+  // pass the cap, both insert, both commit → Σ = 1,200 against a ₹1,000
+  // invoice. Being inside a $transaction changes nothing about what the
+  // aggregate can see — only a row lock does.
+  //
+  // The lock is a no-op in unit tests (test stubs don't implement $queryRaw);
+  // it only fires against real Postgres. Skipped if $queryRaw is unavailable.
+  if (db.$queryRaw) {
+    await db.$queryRaw`SELECT id FROM "Transaction" WHERE id = ${originalTransactionId} AND "deletedAt" IS NULL FOR UPDATE`
+  }
 
   // Rule 1: exists + owned by this user + not voided.
   const original = await db.transaction.findFirst({

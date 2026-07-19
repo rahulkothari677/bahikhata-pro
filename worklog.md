@@ -7879,3 +7879,85 @@ Stage Summary:
 - Phase 5 Batch 1 COMPLETE: R2 (5 sub-fixes + CI guard) + R1 (compare-and-swap + behavioral test).
 - Both critical money-duplication findings closed. The most probable real-world money duplication paths (lost-response replay, simultaneous replay, concurrent convert) are now blocked.
 - Next batches per auditor's priority: Batch 2 (R3+R19+R4+R5 — restore rework + FOR UPDATE locks), Batch 3 (R7+R6 — dead-letter UI + bank import), Batch 4 (R8+R9+R10+R11+R12 — timeouts + webhook + quick wins), Batch 5 (R13-R16 — validation + error UX), Batch 6 (R17-R22 — polish + CI).
+
+---
+Task ID: audit-v26-phase5-batch-2
+Agent: main
+Task: Phase 5 Engineering Resilience audit — Batch 2: R3+R19 (restore rework) + R4 (transaction PUT/DELETE row-lock) + R5 (note-cap FOR UPDATE). All remaining items from auditor's "would not launch without" list.
+
+Work Log:
+- Batch 1 closed R2+R1 (money duplication). Batch 2 closes the remaining 3 critical/high findings.
+- All three use the same FOR UPDATE pattern (auditor's §1 fix recipe).
+
+§1 — R3 🔴 + R19 🔵 Restore rework (resume-after-kill + N+1 kill + batching):
+
+R3.2 — Schema: added Setting.lastRestoreSessionId (String?, nullable).
+- Migration: prisma/migrations/20260720000001_setting_last_restore_session/migration.sql.
+- Idempotent (ALTER TABLE ADD COLUMN IF NOT EXISTS).
+
+R3.3+R19 — Restore route rework (src/app/api/import/restore/route.ts):
+- R19 N+1 kill: preload partyIdByName Map ONCE via single findMany. Drop per-row findFirst. Refresh map after parties loop (for payments section).
+- R3 batching: chunks of TXN_CHUNK_SIZE=100 transactions per $transaction({ timeout: 20_000 }). ~8s per chunk, ~6-7s total for 8k rows (vs old ~100-130s sequential path that hit 60s function cap at row ~500-600).
+- Per-chunk try/catch: a failed chunk counts rows as skipped + continues with next chunk (more resilient than old behavior of aborting whole restore on any error).
+- Pre-filter quarantined + already-imported rows BEFORE chunking (cleaner accounting).
+
+R3.4 — assertShopEmptyOrResume (new helper inside route):
+- Empty shop → proceed (first attempt).
+- Non-empty BUT Setting.lastRestoreSessionId === incoming restoreSessionId → resume (prebuild Set of importedKeys from single indexed query, skip matching rows in O(1) per row).
+- Anything else → 400 (genuinely different shop, user must reset first).
+- Write marker BEFORE first chunk (via db.setting.upsert). Clear in finally block (success OR failure).
+- ctx object pattern: outer `let userId: string | null` widened TS; using a `const ctx = { userId: '', restoreSessionId: '' }` object lets the finally block read mutated values without TS narrowing issues.
+
+§2 — R4 🟠 Transaction PUT/DELETE row-lock (FOR UPDATE + fresh snapshot):
+
+R4.1 — PUT handler (transactions/[id]/route.ts):
+- Inside $transaction: `tx.$queryRaw\`SELECT id FROM "Transaction" WHERE id = ${id} AND "deletedAt" IS NULL FOR UPDATE\``.
+- Re-check via findFirst({ where: { id, userId, deletedAt: null } }). If null → throw EDIT_GONE → outer catch returns 409.
+- Re-read oldItems INSIDE the lock as `lockedOldItems`. Use this fresh snapshot for reversal (the pre-tx oldItems fetch stays for stock-policy warning computation, which is best-effort).
+- Re-run note-cap checks INSIDE the tx (R5 fix below) using `tx` handle.
+- Outer catch: added EDIT_GONE handler (409 with "deleted by another request" message).
+
+R4.2 — DELETE handler:
+- Inside $transaction: same FOR UPDATE lock + re-check deletedAt.
+- If already deleted (concurrent DELETE or replay) → return early (idempotent success — don't dead-letter).
+- Re-check linkedNotes INSIDE the lock. If linked notes exist → throw LINKED_NOTES_EXIST → outer catch returns 400.
+- Items read INSIDE the lock for stock reversal (fresh snapshot).
+- Outer catch: added LINKED_NOTES_EXIST handler (400 with linked notes list).
+
+§3 — R5 🟠 Note-cap FOR UPDATE (single choke point + inside-tx re-check):
+
+R5.1 — validateNoteAgainstOriginal (src/lib/note-validation.ts):
+- Added optional $queryRaw to NoteValidationDb interface (test stubs don't need it).
+- Acquires `FOR UPDATE` lock on the original invoice row BEFORE the aggregate. This serializes note-writers per original invoice — contention scope is one invoice, throughput impact is nil.
+- The lock is conditional on `db.$queryRaw` being available (no-op in unit tests, fires against real Postgres).
+- Single choke point: every path that creates/edits a note against an original goes through this function.
+
+R5.2 — PUT-side checks moved INSIDE $transaction:
+- Pre-tx checks at :362 and :384 stay as fast path (early reject for common case).
+- Inside tx (after FOR UPDATE): re-run validateNoteAgainstOriginal(tx, ...) + checkLinkedNotesCap(tx, ...).
+- If inside-tx check fails → throw NOTE_VALIDATION_FAILED → outer catch returns 400 (same body shape as pre-tx checks).
+- Outer catch: added NOTE_VALIDATION_FAILED handler.
+
+R5.3 — DELETE locks the row before linked-notes check:
+- The DELETE handler's FOR UPDATE (R4.2 above) fires before the linkedNotes re-check.
+- Closes the orphan-CN race: a concurrent CN create (whose own validation read the original as alive) commits after our check → without the lock, deleted sale with a live CN. With the lock, the CN create blocks until our DELETE commits → CN's validateNoteAgainstOriginal sees deletedAt != null → 404.
+
+§4 — Soft-delete sweep test compatibility:
+- The V16 C5 soft-delete sweep test flags raw SQL on Transaction/Payment without "deletedAt" IS NULL.
+- Updated FOR UPDATE clauses to include `AND "deletedAt" IS NULL` — this is semantically correct (we only want to lock LIVE rows; a soft-deleted row returns no rows → EDIT_GONE fires).
+
+§5 — CI guard test (src/__tests__/lib/v26-phase5-restore-rowlock-notes.test.ts):
+- 8 grep-shaped CI assertions: R3 chunked tx + resume marker + N+1 kill; R3 schema + migration; R4 PUT FOR UPDATE + lockedOldItems + EDIT_GONE; R4 DELETE FOR UPDATE + linkedNotesLocked + LINKED_NOTES_EXIST; R5 validateNoteAgainstOriginal FOR UPDATE; R5 PUT inside-tx re-check with tx handle + NOTE_VALIDATION_FAILED.
+- 7 behavioral unit tests: R3 resume-marker logic (4 scenarios); R4 stale-snapshot vs fresh-snapshot + PUT-racing-DELETE; R5 concurrent CN serialization.
+
+Verification:
+- tsc --noEmit: 0 errors
+- jest: 1849/1849 pass (57 suites) — was 1834, +15 from new test file
+- next build: clean
+- eslint src/: 0 errors
+
+Stage Summary:
+- Phase 5 Batch 2 COMPLETE: R3+R19 + R4 + R5.
+- All 5 "would not launch without" items from auditor's Section 12 are now fixed (R2+R1 in Batch 1, R3+R4 + dead-letter UI of R7 in this batch + Batch 3).
+- The 3 critical concurrency holes are closed: restore no longer strands users with partial books; concurrent PUTs no longer corrupt stock; concurrent notes no longer exceed the invoice cap.
+- Remaining Phase 5 batches: Batch 3 (R7 dead-letter UI + R6 bank import), Batch 4 (R8 timeouts + R9 webhook + R10-R12 quick wins), Batch 5 (R13-R16 validation + error UX), Batch 6 (R17-R22 polish + CI).

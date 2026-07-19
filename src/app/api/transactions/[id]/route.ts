@@ -352,6 +352,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     // 🔒 AUDIT V24 §2: Same note-vs-original validation as POST, excluding this
     // note itself from the cumulative cap (we're replacing its old value).
+    // 🔒 V26 R5 (Phase 5): These checks were previously OUTSIDE the $transaction
+    // → READ COMMITTED meant two concurrent note-edits both passed the cap.
+    // Now: they run INSIDE the $transaction (after the FOR UPDATE lock on the
+    // original row that validateNoteAgainstOriginal now acquires). The pre-tx
+    // fetches below are kept as a fast-path early reject for the common case;
+    // the authoritative check is inside the tx. If the inside-tx check fails,
+    // it throws NOTE_VALIDATION_FAILED → outer catch returns the 400 body.
     if (isNoteType(type) && originalTransactionId) {
       const noteCheck = await validateNoteAgainstOriginal(db, {
         userId,
@@ -371,6 +378,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     // and on original DELETE, but was missing on original PUT — so editing a
     // ₹1,000 invoice (with a ₹800 CN against it) down to ₹300 produced a
     // phantom −₹500 party balance and over-reversed GST liability.
+    // 🔒 V26 R5: This check also runs INSIDE the $transaction below (after the
+    // FOR UPDATE lock) to close the concurrent note-create race. The pre-tx
+    // call here is the fast path.
     const linkedNotesCheck = await checkLinkedNotesCap(db, id, totalAmount, type)
     if (!linkedNotesCheck.ok) {
       return NextResponse.json(
@@ -386,12 +396,68 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     // Step 3: Update transaction + create new items
     // Step 4: Apply new items' stock impact (decrement sales, increment purchases)
     const transaction = await db.$transaction(async (tx) => {
-      // Step 1: Reverse old items' stock impact
+      // 🔒 V26 R4 (Phase 5): Lock the transaction row + re-check inside the tx.
+      // Was: oldItems snapshot taken before the $transaction; comment at the
+      // old :391-393 admitted "no concurrent writes to the same transaction ID,
+      // so the snapshot is still valid" — but nothing enforced it.
+      // Interleaving that broke it: A and B both PUT, both snapshot oldItems=
+      // [10×X]. A's tx reverses +10, deletes A's items, writes 8×X, commits.
+      // B's tx reverses the SAME original +10 again (stale snapshot), deletes
+      // A's just-created items, writes 12×X, commits. Stock now wrong by +2.
+      // Also: PUT could update a concurrently soft-deleted row (the
+      // tx.transaction.update where:{id} didn't re-check deletedAt).
+      //
+      // Fix: SELECT...FOR UPDATE serializes edits to one transaction row.
+      // Re-check deletedAt (a concurrent DELETE may have soft-deleted it).
+      // Re-read oldItems INSIDE the lock — this is the authoritative snapshot
+      // for reversal (the pre-tx fetch stays for the stock-policy warning
+      // computation, which is best-effort and doesn't need to be exact).
+      await tx.$queryRaw`SELECT id FROM "Transaction" WHERE id = ${id} AND "deletedAt" IS NULL FOR UPDATE`
+      const fresh = await tx.transaction.findFirst({ where: { id, userId, deletedAt: null } })
+      if (!fresh) {
+        const err: any = new Error('EDIT_GONE')
+        err.code = 'EDIT_GONE'
+        throw err
+      }
+      const lockedOldItems = await tx.transactionItem.findMany({ where: { transactionId: id } })
+
+      // 🔒 V26 R5 (Phase 5): Re-run note-cap checks INSIDE the tx (after the
+      // FOR UPDATE lock). The pre-tx checks at :362 and :384 are the fast path
+      // for the common case; these are the authoritative checks that close the
+      // concurrent note-create race. If either fails, throw NOTE_VALIDATION_FAILED
+      // → outer catch returns the 400 body (same shape as the pre-tx checks).
+      if (isNoteType(type) && originalTransactionId) {
+        const noteCheck = await validateNoteAgainstOriginal(tx, {
+          userId,
+          type,
+          partyId: partyId || null,
+          originalTransactionId,
+          noteTotal: totalAmount,
+          excludeNoteId: id,
+        })
+        if (!noteCheck.ok) {
+          const err: any = new Error('NOTE_VALIDATION_FAILED')
+          err.status = noteCheck.status
+          err.error = noteCheck.error
+          err.userMessage = noteCheck.message
+          throw err
+        }
+      }
+      // 🔒 V26 R5: Re-run the linked-notes cap inside the tx (the original
+      // invoice is being edited; a concurrent note-create would have to wait
+      // for our FOR UPDATE to release).
+      const linkedNotesLockedCheck = await checkLinkedNotesCap(tx, id, totalAmount, type)
+      if (!linkedNotesLockedCheck.ok) {
+        const err: any = new Error('NOTE_VALIDATION_FAILED')
+        err.status = linkedNotesLockedCheck.status
+        err.error = linkedNotesLockedCheck.error
+        err.userMessage = linkedNotesLockedCheck.message
+        throw err
+      }
+
+      // Step 1: Reverse old items' stock impact (using the LOCKED snapshot)
       // 🔒 V9 2.1 FIX: Scope by userId (same as POST)
-      // 🔒 V11: oldItems was fetched earlier (before the $transaction) for the
-      // stock policy check. Reuse it here — no concurrent writes to the same
-      // transaction ID, so the snapshot is still valid.
-      for (const oldItem of oldItems) {
+      for (const oldItem of lockedOldItems) {
         if (oldItem.productId) {
           if (existingShouldDecrement) {
             // Reverse a decrement (sale or debit-note with affectsStock): add stock back
@@ -535,6 +601,25 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         hint: 'To allow overselling, go to Settings and turn on "Allow overselling (kirana mode)".',
       }, { status: 400 })
     }
+    // 🔒 V26 R4 (Phase 5): Catch EDIT_GONE — the transaction was deleted by a
+    // concurrent request while this PUT was in flight. The pre-tx fetch saw it
+    // alive, but the FOR UPDATE inside the tx found deletedAt != null. Return
+    // 409 (not 404) so the client knows it was a race, not a wrong URL.
+    if (error?.code === 'EDIT_GONE') {
+      return NextResponse.json({
+        error: 'Transaction was deleted',
+        message: 'This transaction was deleted by another request while you were editing it. Please reload and try again.',
+      }, { status: 409 })
+    }
+    // 🔒 V26 R5 (Phase 5): Catch NOTE_VALIDATION_FAILED — the inside-tx note-cap
+    // check failed (a concurrent note-create committed between our pre-tx check
+    // and the FOR UPDATE lock). Return the same 400 body shape as the pre-tx checks.
+    if (error?.message === 'NOTE_VALIDATION_FAILED') {
+      return NextResponse.json(
+        { error: error.error, message: error.userMessage },
+        { status: error.status || 400 },
+      )
+    }
     return apiError(error, 'Failed to update transaction', 500)
   }
 }
@@ -600,13 +685,38 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
     // 🔒 N5: Wrap soft-delete + stock reversal in $transaction
     await db.$transaction(async (tx) => {
+      // 🔒 V26 R4 (Phase 5): Lock the row + re-check deletedAt + re-check
+      // linkedNotes INSIDE the tx. Was: linkedNotes check ran outside the tx
+      // (line 616), so a concurrent CN create (whose own validation read the
+      // original as alive) could commit after the check → orphaned CN.
+      // Now: FOR UPDATE serializes note-writers + deleters per original invoice.
+      await tx.$queryRaw`SELECT id FROM "Transaction" WHERE id = ${id} AND "deletedAt" IS NULL FOR UPDATE`
+      const fresh = await tx.transaction.findFirst({ where: { id, userId, deletedAt: null } })
+      if (!fresh) {
+        // Already deleted by a concurrent request — treat as idempotent success.
+        // (The offline queue may replay a DELETE after a lost response; the row
+        // is already soft-deleted → return success, don't dead-letter.)
+        return
+      }
+      // Re-check linked notes inside the lock.
+      const linkedNotesLocked = await tx.transaction.findMany({
+        where: { originalTransactionId: id, deletedAt: null },
+        select: { id: true, invoiceNo: true, type: true, totalAmount: true },
+      })
+      if (linkedNotesLocked.length > 0) {
+        const err: any = new Error('LINKED_NOTES_EXIST')
+        err.code = 'LINKED_NOTES_EXIST'
+        err.linkedNotes = linkedNotesLocked
+        throw err
+      }
+
       // Step 1: Soft delete
       await tx.transaction.update({
         where: { id },
         data: { deletedAt: new Date() },
       })
 
-      // Step 2: Reverse stock impact
+      // Step 2: Reverse stock impact (items read INSIDE the lock — fresh snapshot)
       // V17-Ext Tier 3: Handles credit-note (reverse increment) and debit-note (reverse decrement)
       if (delAffectsStock) {
         const items = await tx.transactionItem.findMany({ where: { transactionId: id } })
@@ -638,7 +748,17 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     })
 
     return NextResponse.json({ success: true, message: 'Transaction deleted (soft delete — can be restored)' })
-  } catch (error) {
+  } catch (error: any) {
+    // 🔒 V26 R4 (Phase 5): Catch LINKED_NOTES_EXIST — a linked note was created
+    // by a concurrent request between the pre-tx check and the FOR UPDATE lock.
+    // Return the same 400 body as the pre-tx check would have.
+    if (error?.code === 'LINKED_NOTES_EXIST') {
+      return NextResponse.json({
+        error: 'Cannot delete — linked credit/debit notes exist',
+        message: `This transaction has ${error.linkedNotes.length} linked credit/debit note(s). Please delete them first.`,
+        linkedNotes: error.linkedNotes.map((n: any) => ({ id: n.id, invoiceNo: n.invoiceNo, type: n.type })),
+      }, { status: 400 })
+    }
     return apiError(error, 'Failed to delete transaction', 500)
   }
 }

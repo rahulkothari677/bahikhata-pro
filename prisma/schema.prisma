@@ -428,6 +428,16 @@ model Setting {
   // on or before this date. Protects filed GST returns from silent alteration.
   // null = no lock (the default — every shop starts unlocked).
   lockedUntil      DateTime?
+  // 🔒 V26 R3 (Phase 5): Resume marker for interrupted restores.
+  // When a restore starts, this is set to the incoming restoreSessionId (uuid
+  // from the client). On completion (success or fail), it is cleared.
+  // If a restore is interrupted (timeout, network drop, function kill), the
+  // next retry sees a non-empty shop BUT a matching restoreSessionId → resume
+  // (skip rows whose invoiceNo+date+totalAmount already exist) instead of the
+  // old behavior (assertShopIsEmpty fails → user stuck with partial books and
+  // no way forward except destructive account-reset).
+  // null = no restore in progress (the default).
+  lastRestoreSessionId String?
 }
 
 // ==================== ANNOUNCEMENTS (broadcast messages) ====================
