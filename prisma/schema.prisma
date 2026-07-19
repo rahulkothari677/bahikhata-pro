@@ -872,6 +872,12 @@ model AdminUser {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
+  // 🔒 V26 A1/N1 FIX: Dedicated password-reset fields. The main app OWNS
+  // these columns (it migrates the shared DB on deploy). The admin app's
+  // schema mirrors them for Prisma client types but must NOT db push.
+  passwordResetTokenHash String?
+  passwordResetExpiresAt DateTime?
+
   adminActions AdminAction[]
 
   @@index([email])
