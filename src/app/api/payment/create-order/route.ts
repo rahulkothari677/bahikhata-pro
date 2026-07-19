@@ -36,11 +36,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: validation.error }, { status: 400 })
     }
     const { planId, billingCycle } = validation.data
-    const cycle = billingCycle || 'monthly'
+    // 🔒 V26 C1 FIX: Was: `if (!['pro','elite'].includes(planId))` — always true
+    // because planId is 'pro_monthly' etc., never bare 'pro'/'elite'. Every
+    // subscription attempt returned 400. Now: extract plan name from planId.
+    const plan = planId.split('_')[0]  // 'pro_monthly' → 'pro'
+    const cycle = billingCycle || planId.split('_')[1] || 'monthly'  // 'pro_monthly' → 'monthly'
 
-    // Validate planId
-    if (!['pro', 'elite'].includes(planId)) {
-      return NextResponse.json({ error: `Invalid plan: ${planId}. Must be 'pro' or 'elite'.` }, { status: 400 })
+    // Validate plan
+    if (!['pro', 'elite'].includes(plan)) {
+      return NextResponse.json({ error: `Invalid plan: ${plan}. Must be 'pro' or 'elite'.` }, { status: 400 })
     }
 
     // Validate cycle
@@ -62,9 +66,9 @@ export async function POST(req: NextRequest) {
     // Was: hardcoded prices that could drift from subscription.ts. Now: reads from
     // the same config that the UI and usage-limits.ts use.
     const { PRICING_CONFIG } = await import('@/lib/subscription')
-    const planConfig = PRICING_CONFIG[planId as 'pro' | 'elite']
+    const planConfig = PRICING_CONFIG[plan as 'pro' | 'elite']
     if (!planConfig) {
-      return NextResponse.json({ error: `Invalid plan: ${planId}` }, { status: 400 })
+      return NextResponse.json({ error: `Invalid plan: ${plan}` }, { status: 400 })
     }
 
     const amount = cycle === 'yearly'
@@ -84,7 +88,7 @@ export async function POST(req: NextRequest) {
       receipt: `bizp_${planId}_${cycle}_${userId.slice(-8)}_${Date.now()}`,
       notes: {
         userId,
-        planId,
+        plan,    // 🔒 V26 C1 FIX: store 'pro'/'elite' (was: planId = 'pro_monthly')
         cycle,
         appName: 'EkBook',
       },

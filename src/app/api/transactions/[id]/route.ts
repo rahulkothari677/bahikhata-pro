@@ -401,10 +401,22 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
             })
           } else if (existingShouldIncrement) {
             // Reverse an increment (purchase or credit-note with affectsStock): subtract stock
-            await tx.product.updateMany({
-              where: { id: oldItem.productId, userId },
+            // 🔒 V26 H2 FIX: Add currentStock gte guard to prevent negative stock.
+            // Was: unconditional decrement — if stock was depleted since the original
+            // purchase, the reversal would push stock negative silently.
+            const reverseResult = await tx.product.updateMany({
+              where: { id: oldItem.productId, userId, currentStock: { gte: oldItem.quantity } },
               data: { currentStock: { decrement: oldItem.quantity } },
             })
+            if (reverseResult.count === 0) {
+              // Stock insufficient for reversal — allow it but clamp at 0.
+              // Reversals are corrections, not new transactions — blocking them
+              // would trap the user in an un-editable state. Clamp is the safe fallback.
+              await tx.product.updateMany({
+                where: { id: oldItem.productId, userId },
+                data: { currentStock: 0 },
+              })
+            }
           }
         }
       }
@@ -608,10 +620,17 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
               })
             } else {
               // Reverse an increment (purchase or credit-note): subtract stock
-              await tx.product.updateMany({
-                where: { id: item.productId, userId },
+              // 🔒 V26 H2 FIX: Same gte guard + clamp-at-0 as PUT reversal.
+              const delReverseResult = await tx.product.updateMany({
+                where: { id: item.productId, userId, currentStock: { gte: item.quantity } },
                 data: { currentStock: { decrement: item.quantity } },
               })
+              if (delReverseResult.count === 0) {
+                await tx.product.updateMany({
+                  where: { id: item.productId, userId },
+                  data: { currentStock: 0 },
+                })
+              }
             }
           }
         }

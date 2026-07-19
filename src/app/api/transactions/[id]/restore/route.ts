@@ -89,10 +89,20 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
           if (item.productId) {
             if (restoreShouldDecrement) {
               // Re-apply a decrement (sale or debit-note): decrement stock
-              await tx.product.updateMany({
-                where: { id: item.productId, userId },
+              // 🔒 V26 H3 FIX: Add currentStock gte guard. Was: unconditional
+              // decrement — restoring a sale for a product whose stock was
+              // depleted would push stock negative silently. Now: if stock
+              // insufficient, clamp at 0 (same approach as PUT/DELETE reversal).
+              const restoreResult = await tx.product.updateMany({
+                where: { id: item.productId, userId, currentStock: { gte: item.quantity } },
                 data: { currentStock: { decrement: item.quantity } },
               })
+              if (restoreResult.count === 0) {
+                await tx.product.updateMany({
+                  where: { id: item.productId, userId },
+                  data: { currentStock: 0 },
+                })
+              }
             } else {
               // Re-apply an increment (purchase or credit-note): increment stock
               await tx.product.updateMany({

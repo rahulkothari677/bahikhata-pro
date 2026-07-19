@@ -31,7 +31,7 @@ import { apiError } from '@/lib/api-error'
  */
 export const maxDuration = 60
 
-export async function GET(req: NextRequest) {
+export async function POST(req: NextRequest) {
   try {
     const founderCheck = await requireFounder()
     if ('error' in founderCheck) return founderCheck.error

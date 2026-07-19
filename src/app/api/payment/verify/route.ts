@@ -101,8 +101,13 @@ export async function POST(req: NextRequest) {
     }
 
     // Derive everything from the server-trusted order
-    const planId = order.notes?.planId
-    const billingCycle = order.notes?.billingCycle
+    // 🔒 V26 C2 FIX: Was reading order.notes?.billingCycle but create-order
+    // stores the key as 'cycle' (not 'billingCycle'). Was also reading
+    // order.notes?.planId but create-order now stores 'plan' (was 'planId'
+    // with value 'pro_monthly' which failed the ['pro','elite'] check).
+    // Now: read 'plan' and 'cycle' to match what create-order writes.
+    const plan = order.notes?.plan || order.notes?.planId?.split('_')[0]  // backward-compat with old orders
+    const billingCycle = order.notes?.cycle || order.notes?.billingCycle  // backward-compat
     const orderUserId = order.notes?.userId
     const amount = order.amount  // in paise, set at order creation
 
@@ -115,8 +120,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Validate plan and cycle are present and valid
-    if (!['pro', 'elite'].includes(planId)) {
-      console.error('Invalid plan in order notes:', planId)
+    if (!['pro', 'elite'].includes(plan)) {
+      console.error('Invalid plan in order notes:', plan)
       return NextResponse.json({
         error: 'Payment verification failed — invalid plan in order.',
       }, { status: 400 })
@@ -183,7 +188,7 @@ export async function POST(req: NextRequest) {
         db.user.update({
           where: { id: userId },
           data: {
-            plan: planId,
+            plan: plan,
             renewsAt: endDate,
             cancelledAt: null,
           },
@@ -192,7 +197,7 @@ export async function POST(req: NextRequest) {
           data: {
             id: `sub_${razorpay_payment_id}`,
             userId,
-            plan: planId,
+            plan: plan,
             status: 'active',
             amount: amountInr,
             paymentMode: 'razorpay',
@@ -209,7 +214,7 @@ export async function POST(req: NextRequest) {
             entityType: 'user',
             entityId: userId,
             metadata: {
-              plan: planId,
+              plan: plan,
               billingCycle,
               amount: amountInr,
               paymentId: razorpay_payment_id,
@@ -230,7 +235,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({
           success: true,
           message: 'Payment already verified — subscription is active.',
-          plan: existing?.plan || planId,
+          plan: existing?.plan || plan,
           renewsAt: existing?.endDate?.toISOString() || endDate.toISOString(),
           idempotent: true,
         })
@@ -240,8 +245,8 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: `Welcome to ${planId === 'pro' ? 'Pro' : 'Elite'}! Your subscription is active until ${endDate.toLocaleDateString('en-IN')}.`,
-      plan: planId,
+      message: `Welcome to ${plan === 'pro' ? 'Pro' : 'Elite'}! Your subscription is active until ${endDate.toLocaleDateString('en-IN')}.`,
+      plan: plan,
       renewsAt: endDate.toISOString(),
     })
   } catch (error: any) {
