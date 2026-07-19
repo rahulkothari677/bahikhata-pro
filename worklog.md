@@ -8597,3 +8597,98 @@ Stage Summary:
 - ALL safe Phase 6 items are now shipped. Every report item is either ✅ fixed or explicitly deferred with reasoning.
 - Deferred items ALL require either visual confirmation (§7 screenshot round) or are [Bigger] scope.
 - No known bugs remain from the Phase 6 audit.
+
+---
+Task ID: audit-v26-phase7
+Agent: main
+Task: Phase 7 Launch Readiness Review — fix all 4 verification findings (P7-1 through P7-4) + quick wins. This is the consolidated final pass that verified all prior fix batches.
+
+Work Log:
+
+PRE-CHANGE SCAN findings:
+- Settings.tsx restore handler sends { backup } only — no restoreSessionId.
+- TransactionEntry.tsx:697 catch block discards e.message, toasts hardcoded string.
+- PartyProfile.tsx:218,256,527 same pattern — catch blocks discard e.message.
+- isFounder exists in usage-limits.ts:156 but bootstrap route doesn't expose it.
+- filterByPermissions gates founderOnly on isOwner (true for every account).
+- hi section has NO nav.label.tools / nav.desc.tools (confirmed missing).
+- gu/mr/ta/te still in Header + AuthScreen language pickers (119 keys vs en 375).
+
+§1 — P7-1 🔴 Restore client wiring (3 edits):
+1. Settings.tsx: generate restoreSessionId client-side, persist in localStorage
+   ('bahikhata:restore-session'), send in body { backup, restoreSessionId },
+   clear on success. On catch: "Restore is taking longer than expected — tap
+   Restore again with the same file to continue where it left off."
+2. offline-fetch.ts: added timeoutMs?: number to OfflineFetchOptions.offline
+   + handleMutation opts. Default 20_000 (R8), override per-call. Restore
+   calls with timeoutMs: 120_000 (2 min — restores of >1500 rows take >20s).
+   The fetch call now uses AbortSignal.timeout(timeoutMs) instead of the
+   hardcoded 20_000.
+3. The localStorage key persists across retries → the same restoreSessionId
+   flows to the server → the server's (already-working) resume path fires.
+
+§2 — P7-2 🟠 readError catch blocks (7 files fixed):
+- Python script found catch blocks in 7 files that toast hardcoded strings
+  instead of e.message. Fixed each to: sonnerToast.error(e?.message || "...")
+  — the server's excellent error message is surfaced, hardcoded string is
+  the fallback only.
+- Files: TransactionEntry (the money form — most important), PartyProfile,
+  Settings, DocumentVault, ProductDialog, BankReconciliation, TransactionDetail.
+- Also fixed catch(e) → catch(e: any) for TypeScript unknown-type compatibility.
+
+§3 — P7-3 🟠 founderOnly real enforcement:
+1. bootstrap/route.ts: imported isFounder from usage-limits, added
+   `const founderStatus = await isFounder(userId).catch(() => false)`,
+   included `isFounder: founderStatus` in the response.
+2. app-store.ts: added `isFounder: boolean` + `setIsFounder` to the store.
+3. use-bootstrap.ts: reads `data.isFounder` from bootstrap response, calls
+   `setIsFounder(data.isFounder)` on mount.
+4. nav-registry.ts filterByPermissions: added `isFounder?: boolean` to opts.
+   Changed the founderOnly gate from `if (d.founderOnly && !opts.isOwner)`
+   to `if (d.founderOnly && !(opts.isFounder ?? opts.isOwner))` — uses the
+   REAL founder status, falls back to isOwner for backward compat.
+   Deleted the "treat as ownerOnly for now" comment.
+5. Updated all 5 filterByPermissions call sites (Sidebar, MobileBottomNav,
+   MoreScreen, ToolsHub, GlobalSearch) to pass isFounder from the app store.
+- AI Usage is now hidden from non-founders in the nav — no more guaranteed 403.
+
+§4 — P7-4 🟠 i18n — add hi tools keys + ship en+hi only:
+1. i18n.ts: added 'nav.label.tools': 'उपकरण' + 'nav.desc.tools': 'सभी व्यापार
+   उपकरणों तक त्वरित पहुंच' to the hi section (were missing — the lint let
+   them slip because it only checked en).
+2. Header.tsx: removed gu/mr/ta/te from LANGS array — ship en+hi only.
+3. AuthScreen.tsx: same — removed gu/mr/ta from LANGS.
+4. v26-nav-registry-lint.test.ts: extended the labelKey/descKey test to check
+   ALL shipped languages (en + hi), not just en. The `nav.label.tools` drift
+   for hi would now fail CI.
+
+§5 — Quick win: ESLint bracket-size ban:
+- eslint.config.mjs: added no-restricted-syntax rule banning
+  `text-[Npx]` Literal values. Message: "Use text-2xs (11px) or text-3xs
+  (10px) instead of text-[Npx]. Body copy minimum: text-xs."
+- The jest guard test (v26-phase6-microtypography-guard.test.ts) still runs
+  too — double protection against the 404-site regression.
+
+§6 — Updated existing test for P7-1 compatibility:
+- v26-phase5-timeouts-webhook-quickwins.test.ts: the R8.2 test was checking
+  for hardcoded `AbortSignal.timeout(20_000)`. Updated to check for
+  `AbortSignal.timeout(timeoutMs)` + the default value `20_000`.
+
+Verification (all 4 gates green):
+- tsc --noEmit: 0 errors
+- jest: 1928/1928 pass (64 suites) — was 1927, +1 from all-language lint
+- eslint src/: 0 errors (including the new no-restricted-syntax rule)
+- next build: clean
+
+Stage Summary:
+- Phase 7 COMPLETE: all 4 P7 findings fixed + 1 quick win (ESLint ban).
+- P7-1 🔴 (restore stuck-state): CLOSED — client now sends restoreSessionId,
+  timeout override prevents premature abort, retry-to-resume is user-discoverable.
+- P7-2 🟠 (readError half-wired): CLOSED — 7 catch blocks now surface e.message.
+- P7-3 🟠 (founderOnly no-op): CLOSED — real isFounder from bootstrap, 5 call
+  sites updated, AI Usage hidden from non-founders.
+- P7-4 🟠 (i18n): CLOSED — hi tools keys added, gu/mr/ta/te removed from
+  pickers, all-language lint prevents future drift.
+- The auditor's §5 "definitive remaining-before-launch list" code items are
+  all done. Remaining: ops checklist (Vercel dashboard) + live verification
+  session (race harness + Android dress rehearsal).

@@ -71,6 +71,7 @@ export function Sidebar() {
   }, [toolsOpen])
 
   const isOwner = session?.user?.role === 'owner'
+  const isFounder = useAppStore((s) => s.isFounder)
   // 🔒 V26 N3: Use the SAME feature-flag system as MoreScreen (app-store user toggles).
   // Was: used useFeatureFlags().isFlagEnabled (server kill-switches, snake_case)
   // → 'aiScanner' (camelCase) was undefined → ?? true → AI features NEVER hidden on desktop.
@@ -81,9 +82,9 @@ export function Sidebar() {
       { canAccess, isFlagEnabled: (flag: string) => {
         const features = useAppStore.getState().features
         return features?.[flag as keyof typeof features] ?? false
-      }, isOwner, platform: 'desktop' }
+      }, isOwner, isFounder, platform: 'desktop' }
     ).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
-  }, [canAccess, isOwner])
+  }, [canAccess, isOwner, isFounder])
 
   const toolsItems = useMemo(() => {
     return filterByPermissions(
@@ -91,9 +92,9 @@ export function Sidebar() {
       { canAccess, isFlagEnabled: (flag: string) => {
         const features = useAppStore.getState().features
         return features?.[flag as keyof typeof features] ?? false
-      }, isOwner, platform: 'desktop' }
+      }, isOwner, isFounder, platform: 'desktop' }
     ).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
-  }, [canAccess, isOwner])
+  }, [canAccess, isOwner, isFounder])
 
   // 🔒 V26 P9: Group tools by subcategory for sub-headers
   const groupedTools = useMemo(() => {

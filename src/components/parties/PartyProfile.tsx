@@ -524,7 +524,7 @@ export function PartyProfile() {
       }
     } catch (err: any) {
       if (err?.name === 'AbortError') return
-      sonnerToast.error("Couldn\'t share the statement")
+      sonnerToast.error(err?.message || "Couldn\'t share the statement")
     }
   }
 

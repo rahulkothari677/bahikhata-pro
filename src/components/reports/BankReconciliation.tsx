@@ -71,7 +71,7 @@ export function BankReconciliation() {
       if (fileInputRef.current) fileInputRef.current.value = ''
     } catch (e: any) {
       haptic.error()
-      sonnerToast.error("Couldn\'t import the bank statement", {
+      sonnerToast.error(e?.message || "Couldn\'t import the bank statement", {
         description: e.message,
         duration: 10000,
       })

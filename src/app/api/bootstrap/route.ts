@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { getAuthUserIdOwnerOnly } from '@/lib/get-auth'
-import { getUserPlan, PLAN_LIMITS } from '@/lib/usage-limits'
+import { getUserPlan, PLAN_LIMITS, isFounder } from '@/lib/usage-limits'
 import { db, withConnectionRetry } from '@/lib/db'
 import { apiError } from '@/lib/api-error'
 import { istDayStart } from '@/lib/timezone'
@@ -99,6 +99,12 @@ export async function GET() {
       period: 'daily' as const,
     }
 
+    // 🔒 V26 P7-3 (Phase 7): Expose isFounder so the client can gate
+    // founderOnly nav entries (AI Usage, etc.). Was: founderOnly gated on
+    // isOwner (true for every account) → AI Usage showed for everyone but
+    // 403'd for non-founders. Now: the client gets the real founder status.
+    const founderStatus = await isFounder(userId).catch(() => false)
+
     return NextResponse.json({
       settings: settings
         ? { setting: settings }
@@ -117,6 +123,7 @@ export async function GET() {
         },
         degraded,
       },
+      isFounder: founderStatus,  // 🔒 V26 P7-3: real founder check
     })
   } catch (error) {
     return apiError(error, 'Failed to fetch bootstrap data', 500)

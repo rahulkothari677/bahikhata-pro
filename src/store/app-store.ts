@@ -210,6 +210,12 @@ interface AppState {
   // fire immediately on mount and fetch separately (defeating the consolidation).
   bootstrapDone: boolean
   setBootstrapDone: (done: boolean) => void
+  // 🔒 V26 P7-3 (Phase 7): Real founder status from bootstrap. Used by
+  // filterByPermissions to gate founderOnly nav entries (AI Usage, etc.).
+  // Was: founderOnly gated on isOwner (true for every account) → AI Usage
+  // showed for everyone but 403'd for non-founders.
+  isFounder: boolean
+  setIsFounder: (founder: boolean) => void
   searchOpen: boolean
   setSearchOpen: (open: boolean) => void
   // Global paywall state — shared across all components via Zustand.
@@ -371,6 +377,8 @@ export const useAppStore = create<AppState>()(
       // 🔒 V21-008: Bootstrap flag
       bootstrapDone: false,
       setBootstrapDone: (done) => set({ bootstrapDone: done }),
+      isFounder: false,
+      setIsFounder: (founder) => set({ isFounder: founder }),
       searchOpen: false,
       setSearchOpen: (open) => set({ searchOpen: open }),
       paywallOpen: false,

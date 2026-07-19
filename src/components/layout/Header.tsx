@@ -295,10 +295,10 @@ function LanguageToggle() {
   const LANGS = [
     { code: 'en', label: 'EN', name: 'English' },
     { code: 'hi', label: 'हिं', name: 'हिंदी' },
-    { code: 'gu', label: 'ગુ', name: 'ગુજરાતી' },
-    { code: 'mr', label: 'मरा', name: 'मराठी' },
-    { code: 'ta', label: 'தமி', name: 'தமிழ்' },
-    { code: 'te', label: 'తెలు', name: 'తెలుగు' },
+    // 🔒 V26 P7-4 (Phase 7): gu/mr/ta/te removed from the picker — they're
+    // ~⅓ translated (119 keys vs en's 375). A picker that delivers what it
+    // promises beats four half-English languages. Re-add per language as
+    // each translation table completes.
   ]
 
   const currentLang = LANGS.find(l => l.code === language) || LANGS[0]

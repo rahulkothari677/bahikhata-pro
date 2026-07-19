@@ -18,12 +18,10 @@ import { Globe } from 'lucide-react'
 //   Previously the toggle set the store value but the AuthScreen used hardcoded
 //   English strings — selecting Hindi did nothing visible. Now all visible
 //   text uses t('auth.*') keys from i18n.ts (which has all 5 languages).
+// 🔒 V26 P7-4 (Phase 7): gu/mr/ta/te removed — ~⅓ translated, shipping en+hi only.
 const LANGS = [
   { code: 'en', label: 'EN' },
   { code: 'hi', label: 'हिं' },
-  { code: 'gu', label: 'ગુ' },
-  { code: 'mr', label: 'मरा' },
-  { code: 'ta', label: 'தமி' },
 ] as const
 
 export function AuthScreen() {

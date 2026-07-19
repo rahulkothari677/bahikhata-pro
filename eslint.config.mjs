@@ -43,6 +43,12 @@ const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
     "no-undef": "off",
     "no-unreachable": "off",
     "no-useless-escape": "off",
+    // 🔒 V26 Phase 6 §1.2: Ban off-scale text-[Npx] arbitrary values.
+    // Use text-2xs (11px) or text-3xs (10px) instead. Body copy: text-xs min.
+    "no-restricted-syntax": ["error", {
+      "selector": "Literal[value=/text-\\[\\d+px\\]/]",
+      "message": "Use text-2xs (11px) or text-3xs (10px) instead of text-[Npx]. Body copy minimum: text-xs."
+    }],
   },
 }, {
   ignores: ["node_modules/**", ".next/**", "out/**", "build/**", "next-env.d.ts", "examples/**", "skills", "bahikhata-admin/**"]

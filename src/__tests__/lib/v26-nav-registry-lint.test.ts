@@ -81,6 +81,22 @@ describe('V26 nav-registry lint (parity guardrail)', () => {
     expect(missing).toEqual([])
   })
 
+  test('🔒 V26 P7-4: labelKey/descKey resolve in ALL shipped languages (en + hi)', () => {
+    // 🔒 V26 P7-4 (Phase 7): Was en-only — let `nav.label.tools` slip for hi.
+    // Now checks every language that's offered in the picker (en + hi).
+    // gu/mr/ta/te are excluded (not shipped — ~⅓ translated).
+    const shippedLangs = ['en', 'hi']
+    const missing: string[] = []
+    for (const lang of shippedLangs) {
+      const table = translations[lang] as Record<string, string>
+      for (const d of NAV_REGISTRY) {
+        if (d.labelKey && !(d.labelKey in table)) missing.push(`${lang}: ${d.id}: ${d.labelKey}`)
+        if (d.descKey && !(d.descKey in table)) missing.push(`${lang}: ${d.id}: ${d.descKey}`)
+      }
+    }
+    expect(missing).toEqual([])
+  })
+
   test('🔒 V26 N12: every entry with "more" in surfaces has a subcategory', () => {
     // MoreScreen groups destinations by subcategory (SECTION_ORDER + SECTION_META).
     // An entry that declares 'more' but lacks a subcategory is silently dropped

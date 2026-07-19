@@ -28,6 +28,7 @@ import { useAppStore } from '@/store/app-store'
 export function useBootstrap(enabled: boolean) {
   const queryClient = useQueryClient()
   const setBootstrapDone = useAppStore((s) => s.setBootstrapDone)
+  const setIsFounder = useAppStore((s) => s.setIsFounder)
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['bootstrap'],
@@ -63,7 +64,13 @@ export function useBootstrap(enabled: boolean) {
     // 🔒 V21-008: Signal that bootstrap is done — the individual hooks can
     // now read from the primed cache instead of fetching separately.
     setBootstrapDone(true)
-  }, [data, queryClient, setBootstrapDone])
+
+    // 🔒 V26 P7-3 (Phase 7): Store the real founder status so filterByPermissions
+    // can gate founderOnly nav entries correctly.
+    if (typeof data.isFounder === 'boolean') {
+      setIsFounder(data.isFounder)
+    }
+  }, [data, queryClient, setBootstrapDone, setIsFounder])
 
   // 🔒 AUDIT V23 FIX §5: Also set bootstrapDone=true on error.
   // If bootstrap fails (403 for staff/CA, or network error), the gated hooks

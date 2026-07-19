@@ -95,16 +95,17 @@ export function MoreScreen() {
   }, [])
 
   const isOwner = session?.user?.role === 'owner'
+  const isFounder = useAppStore((s) => s.isFounder)
   const moreItems = useMemo(() => {
     const filtered = filterByPermissions(
       NAV_REGISTRY.filter(d => d.surfaces?.includes('more')),
       { canAccess, isFlagEnabled: (flag: string) => {
         const features = useAppStore.getState().features
         return features?.[flag as keyof typeof features] ?? false
-      }, isOwner, platform: 'mobile' }
+      }, isOwner, isFounder, platform: 'mobile' }
     )
     return filtered.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
-  }, [canAccess, isOwner])
+  }, [canAccess, isOwner, isFounder])
 
   // 🔒 V26 P9: Build sections in SECTION_ORDER (user priority), not Map insertion order
   const sections = useMemo(() => {

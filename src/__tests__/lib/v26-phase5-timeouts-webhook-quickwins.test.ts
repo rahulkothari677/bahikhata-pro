@@ -56,13 +56,17 @@ describe('V26 Phase 5 Batch 4 — Timeouts + webhook + DELETE-replay + concurren
     expect(src).toMatch(/Razorpay order fetch timed out/)
   })
 
-  test('R8.2: Client handleMutation online fetch has AbortSignal.timeout(20_000)', () => {
+  test('R8.2: Client handleMutation online fetch has AbortSignal.timeout (default 20s, per-call override)', () => {
     const src = readFile('lib/offline-fetch.ts')
-    expect(src).toMatch(/AbortSignal\.timeout\(20_000\)/)
+    // 🔒 V26 P7-1: timeoutMs is now a variable (default 20s, override per-call).
+    // Was: hardcoded AbortSignal.timeout(20_000).
+    expect(src).toMatch(/AbortSignal\.timeout\(timeoutMs\)/)
     // The signal must be on the online fetch path (inside `if (isOnline())`).
     const onlineMatch = src.match(/if \(isOnline\(\)\) \{[\s\S]*?return res[\s\S]*?\}/)
     expect(onlineMatch).toBeTruthy()
-    expect(onlineMatch![0]).toMatch(/AbortSignal\.timeout\(20_000\)/)
+    expect(onlineMatch![0]).toMatch(/AbortSignal\.timeout\(timeoutMs\)/)
+    // Default timeoutMs must be 20_000.
+    expect(src).toMatch(/timeoutMs.*=.*offlineOpts\?\.timeoutMs.*20_000/)
   })
 
   // ─── R9: Razorpay webhook ─────────────────────────────────────────────────

@@ -485,7 +485,7 @@ export function TransactionDetail() {
                 // Refresh the detail view
                 window.location.reload()
               } catch (err: any) {
-                sonnerToast.error('Conversion failed', {
+                sonnerToast.error(err?.message || 'Conversion failed', {
                   description: err.message,
                   duration: 10000,
                 })
@@ -1042,9 +1042,9 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
       haptic.success()
       onSuccess?.()
       onOpenChange(false)
-    } catch (e) {
+    } catch (e: any) {
       haptic.error()
-      sonnerToast.error("Couldn\'t update")
+      sonnerToast.error(e?.message || "Couldn\'t update")
     } finally {
       setSaving(false)
     }
@@ -1418,7 +1418,7 @@ function EInvoiceCard({ txn }: { txn: any }) {
       })
       setShowStoreForm(true)
     } catch (e: any) {
-      sonnerToast.error("Couldn\'t generate the e-invoice request", {
+      sonnerToast.error(e?.message || "Couldn\'t generate the e-invoice request", {
         description: e.message,
       })
     } finally {

@@ -1389,6 +1389,7 @@ export function filterByPermissions(
     isFlagEnabled: (flag: string) => boolean
     isOwner: boolean
     platform?: 'mobile' | 'desktop'
+    isFounder?: boolean  // 🔒 V26 P7-3: real founder check (from bootstrap)
   }
 ): NavDestination[] {
   return destinations.filter(d => {
@@ -1397,13 +1398,13 @@ export function filterByPermissions(
     if (opts.platform && d.platforms && !d.platforms.includes(opts.platform)) return false
     // Owner-only items
     if (d.ownerOnly && !opts.isOwner) return false
-    // 🔒 V26 N7: founderOnly gates behind the founder email allowlist.
-    // Uses isFounder from usage-limits (same as debug-auth.ts).
-    // For now, we check opts.isOwner + a founderEmails list passed in opts.
-    // The caller (Sidebar/MoreScreen/GlobalSearch) passes isOwner=true for owners,
-    // and we treat founderOnly as ownerOnly for now (every account is its own owner).
-    // When a real founder-email check is needed, add isFounder to the opts.
-    if (d.founderOnly && !opts.isOwner) return false
+    // 🔒 V26 P7-3 (Phase 7): founderOnly now gates on the REAL founder status
+    // from bootstrap (isFounder from usage-limits.ts via /api/bootstrap).
+    // Was: gated on isOwner (true for every account) → AI Usage showed for
+    // everyone but 403'd for non-founders. Now: only founders see founderOnly
+    // entries. Falls back to isOwner if isFounder not provided (backward compat
+    // for call sites that haven't been updated yet).
+    if (d.founderOnly && !(opts.isFounder ?? opts.isOwner)) return false
     // Feature flag gating
     if (d.featureFlag && !opts.isFlagEnabled(d.featureFlag as string)) return false
     // Module permission gating

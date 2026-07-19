@@ -129,15 +129,16 @@ export function GlobalSearch() {
   // 🔒 V26 N9: Apply filterByPermissions (was: raw filter — staff saw commands
   // for modules they can't access). Now: same filtering as every other surface.
   const isOwner = session?.user?.role === 'owner'
+  const isFounder = useAppStore((s) => s.isFounder)
   const allCommands = useMemo(() => {
     return filterByPermissions(
       NAV_REGISTRY.filter(d => d.surfaces?.includes('global-search')),
       { canAccess, isFlagEnabled: (flag: string) => {
         const features = useAppStore.getState().features
         return features?.[flag as keyof typeof features] ?? false
-      }, isOwner }
+      }, isOwner, isFounder }
     ).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
-  }, [canAccess, isOwner])
+  }, [canAccess, isOwner, isFounder])
 
   // Filter commands by query — match label, description, or keywords.
   // 🔒 V26 N22: Also match the TRANSLATED label/description (via t(labelKey) /

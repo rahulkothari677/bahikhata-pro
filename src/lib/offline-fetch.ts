@@ -58,6 +58,13 @@ export interface OfflineFetchOptions extends RequestInit {
      * Default: true for mutating methods.
      */
     queueable?: boolean
+    /**
+     * 🔒 V26 P7-1 (Phase 7): Per-call timeout override (milliseconds).
+     * Default: 20_000 (20s). Use a higher value for long operations like
+     * restore (120_000 = 2 min). The timeout lands in the existing catch
+     * → queued with the same mutation ID (safe after R2).
+     */
+    timeoutMs?: number
   }
 }
 
@@ -318,9 +325,13 @@ async function handleMutation(
   url: string,
   method: 'POST' | 'PUT' | 'DELETE' | 'PATCH',
   fetchOpts: RequestInit,
-  offlineOpts?: { invalidate?: string[]; queueable?: boolean },
+  // 🔒 V26 P7-1 (Phase 7): Added timeoutMs override. Default 20s (R8), but
+  // restore needs 120s — a >1500-row restore takes >20s and the blanket
+  // timeout would abort it client-side while the server keeps working.
+  offlineOpts?: { invalidate?: string[]; queueable?: boolean; timeoutMs?: number },
 ): Promise<Response> {
   const queueable = offlineOpts?.queueable !== false // default true
+  const timeoutMs = offlineOpts?.timeoutMs ?? 20_000  // default 20s, override per-call
 
   // 🔒 V26 R2 (Phase 5): Ensure x-client-mutation-id header is set BEFORE the
   // first online attempt. Was: ID generated only in queueForSync AFTER fetch
@@ -334,15 +345,17 @@ async function handleMutation(
   // Online: just send it, then invalidate caches
   if (isOnline()) {
     try {
-      // 🔒 V26 R8 (Phase 5): 20s client-side timeout. Was: raw `fetch` with no
+      // 🔒 V26 R8 (Phase 5): Client-side timeout. Was: raw `fetch` with no
       // signal → on a stalled-but-not-dead connection (EDGE/2G with packet
       // loss — the normal case in target geographies), the save button spun
       // indefinitely. Now: timeout lands in the existing catch → queued with
       // the same mutation ID (safe after R2) → user gets the honest "saved
       // offline, will sync" instead of an infinite spinner.
+      // 🔒 V26 P7-1 (Phase 7): Use per-call timeoutMs (default 20s, override
+      // for long operations like restore at 120s).
       const res = await fetch(url, {
         ...enhancedOpts,
-        signal: AbortSignal.timeout(20_000),
+        signal: AbortSignal.timeout(timeoutMs),
       })
       if (res.ok && offlineOpts?.invalidate?.length) {
         await Promise.all(offlineOpts.invalidate.map((p) => clearCacheByUrlPrefix(p)))

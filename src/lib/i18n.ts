@@ -817,6 +817,9 @@ export const translations = {
     'nav.label.trial-balance': 'खाता सारांश',
     'nav.label.voice-entry': 'वॉइस एंट्री',
     'nav.label.whatsapp-reminders': 'व्हाट्सएप रिमाइंडर',
+    // 🔒 V26 P7-4 (Phase 7): Missing hi keys for Tools nav entry.
+    'nav.label.tools': 'उपकरण',
+    'nav.desc.tools': 'सभी व्यापार उपकरणों तक त्वरित पहुंच',
 
   },
   gu: {

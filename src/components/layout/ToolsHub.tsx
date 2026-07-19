@@ -51,13 +51,14 @@ export function ToolsHub() {
   const { isFlagEnabled } = useFeatureFlags()
   const { data: session } = useSession()
   const isOwner = session?.user?.role === 'owner'
+  const isFounder = useAppStore((s) => s.isFounder)
 
   const toolsItems = useMemo(() => {
     return filterByPermissions(
       NAV_REGISTRY.filter(d => d.surfaces?.includes('sidebar-tools')),
-      { canAccess, isFlagEnabled: isFlagEnabled as any, isOwner, platform: 'desktop' }
+      { canAccess, isFlagEnabled: isFlagEnabled as any, isOwner, isFounder, platform: 'desktop' }
     ).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
-  }, [canAccess, isFlagEnabled, isOwner])
+  }, [canAccess, isFlagEnabled, isOwner, isFounder])
 
   const categories = useMemo(() => {
     const grouped = groupBySubcategory(toolsItems)

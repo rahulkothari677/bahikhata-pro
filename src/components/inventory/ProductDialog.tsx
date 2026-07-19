@@ -126,9 +126,9 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
       haptic.success()
       onSuccess?.()
       onOpenChange(false)
-    } catch (e) {
+    } catch (e: any) {
       haptic.error()
-      sonnerToast.error("Couldn\'t save the product")
+      sonnerToast.error(e?.message || "Couldn\'t save the product")
     } finally {
       setSaving(false)
     }

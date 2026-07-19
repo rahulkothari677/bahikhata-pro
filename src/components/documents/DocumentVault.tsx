@@ -168,7 +168,7 @@ export function DocumentVault() {
       if (fileInputRef.current) fileInputRef.current.value = ''
       queryClient.invalidateQueries({ queryKey: ['documents'] })
     } catch (err: any) {
-      sonnerToast.error('Upload failed', { description: String(err?.message || err).slice(0, 200) })
+      sonnerToast.error(err?.message || 'Upload failed', { description: String(err?.message || err).slice(0, 200) })
     } finally {
       setUploading(false)
     }

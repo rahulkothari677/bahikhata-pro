@@ -469,7 +469,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
       }
       sonnerToast.success('Backup downloaded successfully')
     } catch (err: any) {
-      sonnerToast.error('Backup failed', { description: String(err?.message || err).slice(0, 200) })
+      sonnerToast.error(err?.message || 'Backup failed', { description: String(err?.message || err).slice(0, 200) })
     } finally {
       setBackingUp(false)
     }
@@ -949,14 +949,23 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
                     try {
                       const text = await file.text()
                       const backup = JSON.parse(text)
+                      // 🔒 V26 P7-1 (Phase 7): Generate restoreSessionId client-side,
+                      // persist in localStorage so a retry after timeout carries the
+                      // SAME id → the server's resume path fires. Clear on success.
+                      const restoreSessionId = localStorage.getItem('bahikhata:restore-session') || crypto.randomUUID()
+                      localStorage.setItem('bahikhata:restore-session', restoreSessionId)
+                      // 🔒 V26 P7-1: Use timeoutMs override — restores of >1500 rows
+                      // take >20s, and the blanket R8 timeout would abort them.
                       const r = await offlineFetch('/api/import/restore', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ backup }),
-                        offline: { queueable: false },
+                        body: JSON.stringify({ backup, restoreSessionId }),
+                        offline: { queueable: false, timeoutMs: 120_000 },
                       })
                       const result = await r.json()
                       if (!r.ok) throw new Error(result.error || result.message || 'Restore failed')
+                      // Success — clear the session marker so a future restore starts fresh.
+                      localStorage.removeItem('bahikhata:restore-session')
                       // 🔒 AUDIT V24 §5: If any rows were quarantined (header money
                       // didn't tie to its own items), say so LOUDLY — a partial
                       // restore that looks complete is how wrong books are born.
@@ -981,9 +990,12 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
                         })
                       }
                     } catch (err: any) {
-                      sonnerToast.error('Restore failed', {
-                        description: err.message,
-                        duration: 10000,
+                      // 🔒 V26 P7-1: On timeout/failure, the session marker persists
+                      // in localStorage → a retry with the same file carries the same
+                      // restoreSessionId → the server resumes where it left off.
+                      sonnerToast.error('Restore is taking longer than expected', {
+                        description: 'It may still be running on the server. Tap Restore again with the same file to continue where it left off.',
+                        duration: 15000,
                       })
                     }
                     // Reset the input so the same file can be selected again

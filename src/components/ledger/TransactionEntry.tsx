@@ -444,7 +444,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       })))
       sonnerToast.success(`Loaded ${originalItems.length} item${originalItems.length !== 1 ? 's' : ''} from the original sale`)
     } catch (e: any) {
-      sonnerToast.error("Couldn\'t load items from the original sale")
+      sonnerToast.error(e?.message || "Couldn\'t load items from the original sale")
     } finally {
       setLoadingOriginal(false)
     }
@@ -694,9 +694,9 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       triggerRefresh()
       setView(estimateMode ? 'sales' : (isSale ? 'sales' : 'purchases'))
-    } catch (e) {
+    } catch (e: any) {
       haptic.error()
-      sonnerToast.error("Couldn\'t save transaction")
+      sonnerToast.error(e?.message || "Couldn\'t save transaction")
     } finally {
       setSaving(false)
     }
