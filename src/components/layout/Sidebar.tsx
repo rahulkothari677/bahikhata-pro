@@ -71,19 +71,29 @@ export function Sidebar() {
   }, [toolsOpen])
 
   const isOwner = session?.user?.role === 'owner'
+  // 🔒 V26 N3: Use the SAME feature-flag system as MoreScreen (app-store user toggles).
+  // Was: used useFeatureFlags().isFlagEnabled (server kill-switches, snake_case)
+  // → 'aiScanner' (camelCase) was undefined → ?? true → AI features NEVER hidden on desktop.
+  // Now: uses useAppStore.getState().features (same as MoreScreen) — consistent across platforms.
   const mainNavItems = useMemo(() => {
     return filterByPermissions(
       NAV_REGISTRY.filter(d => d.surfaces?.includes('sidebar-main') && (d.platforms || ['mobile', 'desktop']).includes('desktop')),
-      { canAccess, isFlagEnabled: isFlagEnabled as any, isOwner }
+      { canAccess, isFlagEnabled: (flag: string) => {
+        const features = useAppStore.getState().features
+        return features?.[flag as keyof typeof features] ?? false
+      }, isOwner }
     ).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
-  }, [canAccess, isFlagEnabled, isOwner])
+  }, [canAccess, isOwner])
 
   const toolsItems = useMemo(() => {
     return filterByPermissions(
       NAV_REGISTRY.filter(d => d.surfaces?.includes('sidebar-tools') && (d.platforms || ['mobile', 'desktop']).includes('desktop')),
-      { canAccess, isFlagEnabled: isFlagEnabled as any, isOwner }
+      { canAccess, isFlagEnabled: (flag: string) => {
+        const features = useAppStore.getState().features
+        return features?.[flag as keyof typeof features] ?? false
+      }, isOwner }
     ).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
-  }, [canAccess, isFlagEnabled, isOwner])
+  }, [canAccess, isOwner])
 
   // 🔒 V26 P9: Group tools by subcategory for sub-headers
   const groupedTools = useMemo(() => {

@@ -306,9 +306,47 @@ export const useAppStore = create<AppState>()(
       // 🔒 V21-014 fix
       accountOriginView: null,
       setAccountOriginView: (view) => set({ accountOriginView: view }),
-      features: DEFAULT_FEATURES,
-      setFeature: (key, enabled) => set((s) => ({ features: { ...s.features, [key]: enabled } })),
-      resetFeatures: () => set({ features: DEFAULT_FEATURES }),
+      // 🔒 V26 N4: Hydrate features from localStorage. Was: always DEFAULT_FEATURES
+      // → all toggles reset on reload. Now: read each key from localStorage,
+      // falling back to DEFAULT_FEATURES for any missing/invalid values.
+      features: (() => {
+        if (typeof window === 'undefined') return DEFAULT_FEATURES
+        try {
+          const hydrated = { ...DEFAULT_FEATURES }
+          for (const key of Object.keys(DEFAULT_FEATURES) as FeatureKey[]) {
+            const saved = localStorage.getItem(`bahikhata:feature:${key}`)
+            if (saved !== null) {
+              hydrated[key] = saved === 'true'
+            }
+          }
+          return hydrated
+        } catch {
+          return DEFAULT_FEATURES
+        }
+      })(),
+      // 🔒 V26 N4: Persist feature toggles to localStorage so they survive reload.
+      // Was: only in-memory set() — all 21 toggles reset on reload while the UI
+      // toasted "enabled/disabled". Now: save to localStorage on every setFeature.
+      setFeature: (key, enabled) => {
+        set((s) => ({ features: { ...s.features, [key]: enabled } }))
+        // Persist to localStorage
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem(`bahikhata:feature:${key}`, enabled ? 'true' : 'false')
+          } catch {}
+        }
+      },
+      resetFeatures: () => {
+        set({ features: DEFAULT_FEATURES })
+        // Clear all feature keys from localStorage
+        if (typeof window !== 'undefined') {
+          try {
+            Object.keys(DEFAULT_FEATURES).forEach(key => {
+              localStorage.removeItem(`bahikhata:feature:${key}`)
+            })
+          } catch {}
+        }
+      },
       themeColor: 'saffron',
       setThemeColor: (c) => set({ themeColor: c }),
       language: 'en',

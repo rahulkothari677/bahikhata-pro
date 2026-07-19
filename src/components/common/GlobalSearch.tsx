@@ -10,9 +10,11 @@ import { cn, formatINR, formatDate } from '@/lib/utils'
 import { offlineFetch } from '@/lib/offline-fetch'
 // 🔒 AUDIT V25 §6.1 (Batch 8 Phase 6): GlobalSearch now renders commands from
 // the NavRegistry, filtered by surfaces: ['global-search'].
-import { NAV_REGISTRY, type NavDestination } from '@/lib/nav-registry'
+import { NAV_REGISTRY, filterByPermissions, type NavDestination } from '@/lib/nav-registry'
 import { handleNavAction } from '@/lib/handle-nav-action'
 import { useTranslation } from '@/hooks/use-translation'
+import { useSession } from 'next-auth/react'
+import { useStaffPermissions } from '@/hooks/use-staff-permissions'
 
 type SearchResult = {
   type: 'product' | 'party' | 'transaction'
@@ -27,6 +29,8 @@ type SearchResult = {
 export function GlobalSearch() {
   const { t } = useTranslation()
   const { searchOpen, setSearchOpen, setView, setSelectedTransactionId, setSelectedPartyId, setPreviousView } = useAppStore()
+  const { data: session } = useSession()
+  const { canAccess } = useStaffPermissions()
   const [query, setQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -122,11 +126,18 @@ export function GlobalSearch() {
   // 🔒 AUDIT V25 §6.1 (Batch 8 Phase 6): Commands from NavRegistry, filtered by
   // surfaces: ['global-search']. Was: hardcoded allCommands array (13 items with
   // inline action functions). Now: registry-driven, with handleNavAction() for clicks.
+  // 🔒 V26 N9: Apply filterByPermissions (was: raw filter — staff saw commands
+  // for modules they can't access). Now: same filtering as every other surface.
+  const isOwner = session?.user?.role === 'owner'
   const allCommands = useMemo(() => {
-    return NAV_REGISTRY
-      .filter(d => d.surfaces?.includes('global-search'))
-      .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
-  }, [])
+    return filterByPermissions(
+      NAV_REGISTRY.filter(d => d.surfaces?.includes('global-search')),
+      { canAccess, isFlagEnabled: (flag: string) => {
+        const features = useAppStore.getState().features
+        return features?.[flag as keyof typeof features] ?? false
+      }, isOwner }
+    ).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
+  }, [canAccess, isOwner])
 
   // Filter commands by query — match label, description, or keywords
   const filteredCommands = q
