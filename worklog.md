@@ -7709,3 +7709,48 @@ Stage Summary:
 - Self-audit batch 2 shipped: 4 HIGH + 2 MEDIUM fixed.
 - Remaining: 2 HIGH (H7, H9) + 13 MEDIUM + 14 LOW queued.
 - Total self-audit fixes shipped: 2 CRITICAL + 7 HIGH + 2 MEDIUM across 2 batches.
+
+---
+Task ID: audit-v26-self-audit-batch-3
+Agent: main
+Task: Fix remaining HIGH (H7, H9) + MEDIUM (M1, M4-M7, M10, M11, M14) + LOW (L7) findings from comprehensive self-audit.
+
+Work Log:
+§1 — H7: E-invoice IRN POST input validation:
+- Added type checks (must be string) + length limits (transactionId ≤100, irn ≤100, signedQR ≤10000).
+
+§2 — H9: Scan-bill GST preview mismatch:
+- Rewrote the GST computation to distribute discount proportionally across items BEFORE computing GST, matching computeLineItems. Last item absorbs rounding residual.
+
+§3 — M1: Account-delete audit log timing:
+- Moved logAudit AFTER the $transaction succeeds. Wrapped in try/catch (non-critical).
+
+§4 — M4+M5: Raw money math:
+- Products route: wrapped stockValue in roundMoney().
+- Dashboard route: wrapped totalStockValue in roundMoney().
+
+§5 — M7: fromPaise in Razorpay verify:
+- Changed `amount / 100` to `fromPaise(amount)`. Added import.
+
+§6 — M10: Shops GET race condition:
+- Added P2002 catch + re-fetch for concurrent first-load race.
+
+§7 — M11: Reconciliation check missing notes:
+- Added 'credit-note' and 'debit-note' to the type filter in both queries.
+
+§8 — M14: Scan-bill validation:
+- Added enum validation for billType + scanLang. Removed duplicate scanLang declaration.
+
+§9 — L7: Register zod min(6) → min(8):
+- Fixed zod schema to match the code's enforcement.
+
+Verification:
+- jest: 1818/1818 pass (54 suites)
+- next build: compiled successfully
+- tsc: 0 errors on changed files
+
+Stage Summary:
+- Self-audit batch 3 shipped: 2 HIGH + 8 MEDIUM + 1 LOW fixed.
+- Total self-audit fixes across 3 batches: 2 CRITICAL + 9 HIGH + 10 MEDIUM + 1 LOW = 22 fixes.
+- Remaining: 5 MEDIUM (M2 seed atomicity, M8 linkedNotesGuard, M9 payments overpayment, M13 GSTR-3B nil, M15 documents validation) + 13 LOW.
+- All remaining items are low-risk (either defense-in-depth, theoretical, or cosmetic).
