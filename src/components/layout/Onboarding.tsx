@@ -5,7 +5,7 @@ import { useAppStore } from '@/store/app-store'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { toast as sonnerToast } from 'sonner'
-import { BookOpenText, ScanLine, ShoppingCart, Package, Wallet, FileBarChart, Sparkles, Loader2, ArrowRight } from 'lucide-react'
+import { BookOpenText, ScanLine, ShoppingCart, Package, Wallet, FileBarChart, Sparkles, Loader2, ArrowRight, Plus } from 'lucide-react'
 import { offlineFetch } from '@/lib/offline-fetch'
 
 export function Onboarding({ open, onDone }: { open: boolean; onDone: () => void }) {
@@ -47,6 +47,25 @@ export function Onboarding({ open, onDone }: { open: boolean; onDone: () => void
     setSkipping(false)
   }
 
+  // 🔒 V26 Phase 6 §4.2: Onboarding activation — the primary CTA now drives
+  // the user to record their first sale (activation = first transaction).
+  // Was: only "Start Fresh" + "Load Demo Data". Now: "Record your first sale"
+  // is the primary, with demo data as secondary + empty as tertiary.
+  const handleFirstSale = async () => {
+    setSkipping(true)
+    try {
+      await offlineFetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ shopName: 'My Shop' }),
+        offline: { invalidate: ['/api/settings', '/api/dashboard'] },
+      })
+    } catch {}
+    onDone()
+    setView('new-sale')
+    setSkipping(false)
+  }
+
   return (
     <Dialog open={open} onOpenChange={(o) => !o && handleSkip()}>
       <DialogContent className="max-w-2xl">
@@ -84,33 +103,55 @@ export function Onboarding({ open, onDone }: { open: boolean; onDone: () => void
             </div>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex flex-col gap-3">
+            {/* 🔒 V26 Phase 6 §4.2: Primary CTA is now "Record your first sale" —
+                activation = first transaction. Demo data is secondary, empty is tertiary. */}
             <Button
-              variant="outline"
-              className="flex-1"
-              onClick={handleSkip}
+              className="w-full bg-gradient-saffron gap-2 shadow-md"
+              onClick={handleFirstSale}
               disabled={seeding || skipping}
             >
-              {skipping ? 'Starting...' : 'Start Fresh (Empty)'}
-            </Button>
-            <Button
-              className="flex-1 bg-gradient-saffron gap-2 shadow-md"
-              onClick={handleSeed}
-              disabled={seeding || skipping}
-            >
-              {seeding ? (
+              {skipping ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Setting up demo data...
+                  Starting...
                 </>
               ) : (
                 <>
-                  <Sparkles className="w-4 h-4" />
-                  Load Demo Data
+                  <Plus className="w-4 h-4" />
+                  Record your first sale
                   <ArrowRight className="w-4 h-4" />
                 </>
               )}
             </Button>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <Button
+                variant="outline"
+                className="flex-1 gap-2"
+                onClick={handleSeed}
+                disabled={seeding || skipping}
+              >
+                {seeding ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Setting up demo data...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4" />
+                    Load Demo Data
+                  </>
+                )}
+              </Button>
+              <Button
+                variant="ghost"
+                className="flex-1"
+                onClick={handleSkip}
+                disabled={seeding || skipping}
+              >
+                {skipping ? 'Starting...' : 'Explore first'}
+              </Button>
+            </div>
           </div>
         </div>
       </DialogContent>

@@ -498,17 +498,28 @@ export function Dashboard() {
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
             <p className="text-white/80 text-sm font-medium">{t('dash.greeting')}, {setting?.ownerName || 'Shop Owner'}</p>
-            <h2 className="text-2xl lg:text-3xl font-bold mt-1">{setting?.shopName || 'My Shop'}</h2>
-            <p className="text-white/80 text-sm mt-1">
-              {t('dash.today_made')} <span className="font-bold text-white">{formatINR(kpis.todayRevenue)}</span> {t('dash.from')} <span className="font-bold text-white">{kpis.todayTxnCount}</span> {t('dash.sales_word')}
-              {/* 🔒 V17 Audit Phase 1 P0.3: Show "net of returns" badge if credit notes exist today */}
-              {kpis.todayCreditNoteCount > 0 && (
-                <span className="ml-2 inline-flex items-center gap-1 text-2xs bg-white/20 px-2 py-0.5 rounded-full">
-                  <FileText className="w-3 h-3" />
-                  {kpis.todayCreditNoteCount} return{kpis.todayCreditNoteCount !== 1 ? 's' : ''} netted
-                </span>
-              )}
-            </p>
+            {/* 🔒 V26 Phase 6 §2.3: Invert the hero hierarchy. Was: shop name
+                at text-2xl/3xl font-bold (the largest text), today's revenue
+                inline in a sentence at text-sm. The user's daily question is
+                "aaj kitna hua?" — the answer is now the dominant element.
+                Shop name demoted to text-sm font-medium. */}
+            <p className="text-sm font-medium text-white/90 mt-0.5">{setting?.shopName || 'My Shop'}</p>
+            <div className="mt-2">
+              <p className="text-2xs text-white/70 uppercase tracking-wide font-medium">Today's sales</p>
+              <p className="text-3xl lg:text-4xl font-bold tabular-nums text-white mt-0.5">
+                {formatINR(kpis.todayRevenue)}
+              </p>
+              <p className="text-white/80 text-sm mt-1">
+                {t('dash.from')} <span className="font-bold text-white">{kpis.todayTxnCount}</span> {t('dash.sales_word')}
+                {/* 🔒 V17 Audit Phase 1 P0.3: Show "net of returns" badge if credit notes exist today */}
+                {kpis.todayCreditNoteCount > 0 && (
+                  <span className="ml-2 inline-flex items-center gap-1 text-2xs bg-white/20 px-2 py-0.5 rounded-full">
+                    <FileText className="w-3 h-3" />
+                    {kpis.todayCreditNoteCount} return{kpis.todayCreditNoteCount !== 1 ? 's' : ''} netted
+                  </span>
+                )}
+              </p>
+            </div>
           </div>
           <div className="flex gap-2 flex-wrap">
             <Button

@@ -277,6 +277,17 @@ export function Parties() {
                         )}>
                           {p.balance > 0 ? `+${formatINR(p.balance)}` : p.balance < 0 ? `-${formatINR(Math.abs(p.balance))}` : 'Settled'}
                         </p>
+                        {/* 🔒 V26 Phase 6 §6.2: Hindi-first gloss under the amount.
+                            "lene hain" (will receive) / "dene hain" (will give).
+                            Trust-language matters more than color alone (Khatabook pattern). */}
+                        {p.balance !== 0 && (
+                          <p className={cn(
+                            'text-2xs font-medium mt-0.5',
+                            p.balance > 0 ? 'text-emerald-600/80 dark:text-emerald-400/80' : 'text-rose-600/80'
+                          )}>
+                            {p.balance > 0 ? t('stat.lene_hain') : t('stat.dene_hain')}
+                          </p>
+                        )}
                       </div>
                       <div className="text-right">
                         <p className="text-3xs text-muted-foreground uppercase">Txns</p>

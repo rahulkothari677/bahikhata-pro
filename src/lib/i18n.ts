@@ -80,6 +80,11 @@ export const translations = {
     'stat.settled': 'Settled',
     'stat.they_owe': 'They owe you',
     'stat.you_owe': 'You owe them',
+    // 🔒 V26 Phase 6 §6.2: Hindi-first gloss for party balance — "lene hain"
+    // (will receive) / "dene hain" (will give). Trust-language matters more
+    // than color alone for this audience (Khatabook's core pattern).
+    'stat.lene_hain': 'lene hain',
+    'stat.dene_hain': 'dene hain',
 
     // Common
     'common.save': 'Save',
@@ -483,6 +488,9 @@ export const translations = {
     'stat.settled': 'सेटल',
     'stat.they_owe': 'उनके पैसे बाकी',
     'stat.you_owe': 'आपके पैसे बाकी',
+    // 🔒 V26 Phase 6 §6.2: Hindi gloss for party balance.
+    'stat.lene_hain': 'लेने हैं',
+    'stat.dene_hain': 'देने हैं',
 
     // Common
     'common.save': 'सेव करें',

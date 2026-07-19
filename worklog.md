@@ -8439,3 +8439,77 @@ Stage Summary:
 - The REAL BUG (§5.2 — labels not associated with inputs) is closed: 106 htmlFor associations, CI guard prevents regression.
 - 3 hand-rolled menus remain (MobileBottomNav, PartySelect, ProductPicker) — deferred to Batch 3 / follow-up.
 - STOPPING here per framework — awaiting user "verified" before proceeding to Batch 3 (Experience Investments).
+
+---
+Task ID: audit-v26-phase6-batch-3
+Agent: main
+Task: Phase 6 UI/UX Design Review — Batch 3 (Experience Investments, PR-3): the "feel" tier per auditor's §9.2 sequencing recommendation.
+
+Work Log:
+
+PRE-CHANGE SCAN findings:
+- SuccessAnimation is a simple checkmark overlay — zero consumers (confirmed).
+- ui/drawer.tsx (vaul-based Drawer) exists but has zero consumers (confirmed).
+- Dashboard hero (line 501): shop name at text-2xl lg:text-3xl font-bold — the largest text. Today's revenue inline in a sentence at text-sm.
+- Parties row already has balance + "They owe you"/"You owe them" — auditor wants Hindi gloss added.
+- Onboarding has two CTAs: "Start Fresh (Empty)" + "Load Demo Data". No "Record your first sale" activation CTA.
+- TransactionEntry success toast (line 636): "Sale recorded successfully!" — no amount or party.
+
+§1 — §2.2 Money-success toast differentiation (Quick-win interim):
+- TransactionEntry.tsx line 636: enriched the success toast with amount + party.
+  - Was: "Sale recorded successfully!"
+  - Now: "Sale recorded" + description: "₹12,450 · Sharma General Store"
+- Uses selectedParty?.name || data.partyName for the party name.
+- The money moment now carries more weight than a settings-change toast.
+
+§2 — §2.3 Dashboard hierarchy inversion:
+- Dashboard.tsx hero section (lines 499-523): inverted the hierarchy.
+  - Was: shop name at text-2xl lg:text-3xl font-bold (the largest text); today's revenue inline in a sentence at text-sm.
+  - Now: 
+    - Greeting + owner name at text-sm (unchanged).
+    - Shop name demoted to text-sm font-medium text-white/90.
+    - "Today's sales" label at text-2xs uppercase tracking-wide.
+    - Today's revenue at text-3xl lg:text-4xl font-bold tabular-nums — the dominant element.
+    - "from N sales" subline at text-sm.
+- The user's daily question "aaj kitna hua?" is now the 1st-most-prominent element (was 4th).
+
+§3 — §6.2 Balance-first party rows with Hindi gloss:
+- i18n.ts: added stat.lene_hain + stat.dene_hain keys in en ("lene hain"/"dene hain") + hi ("लेने हैं"/"देने हैं").
+- Parties.tsx: added Hindi-first gloss under the balance amount.
+  - Balance > 0 (receivable): green "lene hain" (will receive) under the +amount.
+  - Balance < 0 (payable): red "dene hain" (will give) under the -amount.
+  - The existing "They owe you"/"You owe them" badge stays as a secondary indicator.
+- Trust-language matters more than color alone for this audience (Khatabook's core pattern).
+
+§4 — §4.2 Onboarding activation:
+- Onboarding.tsx: added handleFirstSale() — creates empty settings, closes modal, navigates to new-sale.
+- New primary CTA: "Record your first sale" (full-width, gradient-saffron, Plus icon) → setView('new-sale').
+- "Load Demo Data" demoted to secondary (outline button).
+- "Start Fresh (Empty)" renamed to "Explore first" (ghost button, tertiary).
+- Activation = first transaction — the modal now drives the user to do the one thing that matters.
+
+§5 — Items deferred:
+- §2.2 full money-success sheet (using ui/drawer.tsx): deferred — the enriched toast (§1 above) is the quick-win interim the auditor recommended; the full bottom-sheet spec needs visual confirmation per §7 screenshot round.
+- §6.4 Daily-close ritual: deferred — composition of existing pieces (day-end dialog, share machinery, setting) but needs the dashboard hero conditional swap which is best done after the §7 screenshot round confirms the hero inversion landed well.
+- §6.3 Amount-entry keypad: [Bigger] per auditor, needs visual spec. Deferred.
+- §6.6 Number transitions (useCountUp on balance): deferred — low priority, the count-up is already on the dashboard KPIs.
+
+§6 — CI guard test (src/__tests__/lib/v26-phase6-experience-investments.test.ts):
+- 5 grep-shaped CI assertions:
+  - §2.2: TransactionEntry success toast includes amount + party.
+  - §2.3: Dashboard hero has text-3xl/4xl revenue + text-sm shop name + "Today's sales" label.
+  - §6.2: Parties.tsx references stat.lene_hain + stat.dene_hain; i18n has the keys in en + hi.
+  - §4.2: Onboarding has handleFirstSale + setView('new-sale') + "Record your first sale" text.
+
+Verification (all 4 gates green):
+- tsc --noEmit: 0 errors
+- jest: 1927/1927 pass (64 suites) — was 1922, +5 from experience-investments guard
+- eslint src/: 0 errors
+- next build: clean
+
+Stage Summary:
+- Phase 6 Batch 3 COMPLETE: 4 experience investments shipped (§2.2 toast, §2.3 hero, §6.2 party gloss, §4.2 onboarding).
+- The full money-success sheet (§6.1) is deferred to the post-screenshot-round follow-up — the enriched toast is the interim the auditor recommended.
+- Daily-close ritual (§6.4) deferred — needs visual confirmation of the hero inversion first.
+- STOPPING here per framework — awaiting user "verified" before any follow-up.
+- PHASE 6 COMPLETE: all 3 batches shipped (Batch 1 Quick Wins, Batch 2 Component Consolidation, Batch 3 Experience Investments). The auditor's §9.3 recommendation: "one combined pre-launch dress rehearsal — live click-through of the 10 core flows on a real Android device with the §7 eyes — as the true final gate."

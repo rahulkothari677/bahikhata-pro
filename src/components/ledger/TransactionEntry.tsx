@@ -633,7 +633,15 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
         })
       } else {
         const data = await r.json()
-        sonnerToast.success(`${isNote ? (isCreditNote ? 'Credit Note' : 'Debit Note') : estimateMode ? 'Estimate' : (isSale ? 'Sale' : 'Purchase')} recorded successfully!`)
+        // 🔒 V26 Phase 6 §2.2: Differentiate money-success toasts — include
+        // amount + party. Was: "Sale recorded successfully!" (identical weight
+        // to "language changed"). Now: "Sale recorded — ₹12,450 · Sharma
+        // General Store" — the money moment carries more weight.
+        const txLabel = isNote ? (isCreditNote ? 'Credit Note' : 'Debit Note') : estimateMode ? 'Estimate' : (isSale ? 'Sale' : 'Purchase')
+        const amount = roundMoney(data.totalAmount || totalAmount || 0)
+        const partyName = selectedParty?.name || (data as any)?.partyName || ''
+        const toastDesc = partyName ? `₹${amount.toLocaleString('en-IN')} · ${partyName}` : `₹${amount.toLocaleString('en-IN')}`
+        sonnerToast.success(`${txLabel} recorded`, { description: toastDesc })
 
         // 🔒 V20-025: Track transaction creation event
         const txType = isNote ? (isCreditNote ? 'credit-note' : 'debit-note') : (isSale ? 'sale' : 'purchase')
