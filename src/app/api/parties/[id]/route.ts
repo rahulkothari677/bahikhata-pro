@@ -362,11 +362,29 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       updateData.openingBalance = parseMoney(validatedBody.openingBalance)
     }
 
+    // 🔒 V26 R11 (Phase 5): Concurrent-edit warning.
+    // Was: silent whole-object last-write-wins — Device A fixes the phone
+    // number while Device B fixes the address → whichever syncs last silently
+    // reverts the other's field. The losing device is never told.
+    // Now: client sends `updatedAt` as loaded. Server compares; on mismatch,
+    // still applies the write (proportionate — not a 409-and-merge engine,
+    // which is overkill for this product's stage) but returns a
+    // `conflictWarning` so the client can surface it. Queued replays surface
+    // it via the sync toast.
+    const clientUpdatedAt = body.updatedAt ? new Date(body.updatedAt) : null
+    let conflictWarning: string | null = null
+    if (clientUpdatedAt && existing.updatedAt && clientUpdatedAt.getTime() !== existing.updatedAt.getTime()) {
+      const serverTime = new Date(existing.updatedAt).toLocaleString('en-IN')
+      conflictWarning = `This party was also edited on another device at ${serverTime} — please verify the details.`
+    }
+
     const party = await db.party.update({
       where: { id },
       data: updateData,
     })
-    return NextResponse.json({ party })
+    const response: any = { party }
+    if (conflictWarning) response.conflictWarning = conflictWarning
+    return NextResponse.json(response)
   } catch (error) {
     return apiError(error, 'Failed to update party', 500)
   }

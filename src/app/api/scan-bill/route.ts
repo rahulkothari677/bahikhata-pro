@@ -593,6 +593,9 @@ async function callSingleProvider(
 }> {
   const start = Date.now()
   try {
+    // 🔒 V26 R8 (Phase 5): Per-provider timeout. Was: no AbortSignal → a hung
+    // primary provider consumed the whole 60s budget before the fallback chain
+    // ran. Now: 15s per provider — if it doesn't respond, the fallback fires.
     const response = await fetch(`${provider.baseUrl}chat/completions`, {
       method: 'POST',
       headers: {
@@ -625,6 +628,9 @@ async function callSingleProvider(
         // Slight accuracy tradeoff, but much better UX
         ...(provider.name === 'gemini' ? { thinking: { type: 'disabled' } } : {}),
       }),
+      // 🔒 V26 R8 (Phase 5): 15s per-provider timeout. If the primary provider
+      // hangs, the fallback chain runs instead of consuming the whole 60s budget.
+      signal: AbortSignal.timeout(15_000),
     })
 
     const durationMs = Date.now() - start

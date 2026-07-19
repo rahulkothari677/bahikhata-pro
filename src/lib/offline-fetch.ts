@@ -334,7 +334,16 @@ async function handleMutation(
   // Online: just send it, then invalidate caches
   if (isOnline()) {
     try {
-      const res = await fetch(url, enhancedOpts)
+      // 🔒 V26 R8 (Phase 5): 20s client-side timeout. Was: raw `fetch` with no
+      // signal → on a stalled-but-not-dead connection (EDGE/2G with packet
+      // loss — the normal case in target geographies), the save button spun
+      // indefinitely. Now: timeout lands in the existing catch → queued with
+      // the same mutation ID (safe after R2) → user gets the honest "saved
+      // offline, will sync" instead of an infinite spinner.
+      const res = await fetch(url, {
+        ...enhancedOpts,
+        signal: AbortSignal.timeout(20_000),
+      })
       if (res.ok && offlineOpts?.invalidate?.length) {
         await Promise.all(offlineOpts.invalidate.map((p) => clearCacheByUrlPrefix(p)))
       }
@@ -495,6 +504,35 @@ export async function syncPendingWrites(): Promise<{ synced: number; failed: num
   if (syncing) return { synced: 0, failed: 0, rejected: 0 }
   if (!isOnline()) return { synced: 0, failed: 0, rejected: 0 }
 
+  // 🔒 V26 R12 (Phase 5): Cross-tab mutex via Web Locks API.
+  // Was: `syncing` is module-level per tab → two open tabs both fire
+  // syncPendingWrites on the 'online' event, both read the same pending set,
+  // both POST each item. Queued sale/purchase replays are saved by the
+  // mutation-ID dedup (R2), but income/expense and payments currently aren't
+  // (R2 covers them now too), and each item also gets double-deleted
+  // harmlessly but double-*attempted* expensively.
+  // Now: navigator.locks.request with { ifAvailable: true } — if another tab
+  // already holds the lock, this tab's call is a no-op (returns {0,0,0}).
+  // Falls back to running unguarded where Web Locks is unavailable (older
+  // browsers — the per-tab `syncing` flag still prevents within-tab re-entry).
+  if (typeof navigator !== 'undefined' && navigator.locks && navigator.locks.request) {
+    return navigator.locks.request(
+      'bahikhata-sync',
+      { ifAvailable: true },
+      async (lock) => {
+        if (!lock) {
+          // Another tab holds the lock — it will drain the queue.
+          return { synced: 0, failed: 0, rejected: 0 }
+        }
+        return runSync()
+      },
+    )
+  }
+  // Fallback: no Web Locks API (older browser) — run with per-tab guard only.
+  return runSync()
+}
+
+async function runSync(): Promise<{ synced: number; failed: number; rejected: number }> {
   syncing = true
   let synced = 0
   let failed = 0
@@ -523,6 +561,18 @@ export async function syncPendingWrites(): Promise<{ synced: number; failed: num
           if (w.invalidates?.length) {
             await Promise.all(w.invalidates.map((p) => clearCacheByUrlPrefix(p)))
           }
+          synced++
+        } else if (res.status === 404 && w.method === 'DELETE') {
+          // 🔒 V26 R10 (Phase 5): 404 on a replayed DELETE = the row is already
+          // gone (soft-deleted by the first attempt whose response was lost).
+          // Treat as SUCCESS — drop from queue, count as synced. Was: treated
+          // as failure → 5 retries → dead-letter → "1 entry could not be
+          // synced… please re-enter" toast for a delete that WORKED.
+          //
+          // The DELETE handler returns 404 for soft-deleted rows (findFirst
+          // with deletedAt:null fails). This is correct server behavior —
+          // the queue just needs to interpret it correctly.
+          await deletePendingWrite(w.id)
           synced++
         } else if (res.status === 409 || res.status === 422) {
           // 🔒 V26 R7 (Phase 5): 409/422 = server rejected (e.g. duplicate,

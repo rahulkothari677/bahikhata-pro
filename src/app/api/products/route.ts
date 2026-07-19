@@ -167,11 +167,23 @@ export async function PUT(req: NextRequest) {
     if (v.priceIncludesGst !== undefined) updateData.priceIncludesGst = v.priceIncludesGst
     if (v.gstTreatment !== undefined) updateData.gstTreatment = v.gstTreatment
 
+    // 🔒 V26 R11 (Phase 5): Concurrent-edit warning (same pattern as parties PUT).
+    // Client sends `updatedAt` as loaded. Server compares; on mismatch, still
+    // applies the write but returns a `conflictWarning`.
+    const clientUpdatedAt = body.updatedAt ? new Date(body.updatedAt) : null
+    let conflictWarning: string | null = null
+    if (clientUpdatedAt && existing.updatedAt && clientUpdatedAt.getTime() !== existing.updatedAt.getTime()) {
+      const serverTime = new Date(existing.updatedAt).toLocaleString('en-IN')
+      conflictWarning = `This product was also edited on another device at ${serverTime} — please verify the details.`
+    }
+
     const product = await db.product.update({
       where: { id },
       data: updateData,
     })
-    return NextResponse.json({ product })
+    const response: any = { product }
+    if (conflictWarning) response.conflictWarning = conflictWarning
+    return NextResponse.json(response)
   } catch (error) {
     return apiError(error, 'Failed to update product', 500)
   }

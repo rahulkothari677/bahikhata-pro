@@ -53,6 +53,9 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
   }
 
   try {
+    // 🔒 V26 R8 (Phase 5): 10s timeout. Was: no timeout → a hung Resend call
+    // rode the whole function timeout. On the reset-request path, that's an
+    // opaque 504 during "I forgot my password" — the worst moment for opacity.
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
@@ -66,6 +69,7 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
         html: params.html,
         text: params.text,
       }),
+      signal: AbortSignal.timeout(10_000),
     })
 
     if (!response.ok) {

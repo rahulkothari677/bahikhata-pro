@@ -45,7 +45,9 @@ describe('V26 Phase 5 — Idempotency guardrail', () => {
     // The header must be set on `enhancedOpts` and `enhancedOpts` must be
     // passed to BOTH fetch() AND queueForSync().
     expect(src).toMatch(/const enhancedOpts = ensureMutationIdHeader\(fetchOpts\)/)
-    expect(src).toMatch(/fetch\(url, enhancedOpts\)/)
+    // 🔒 V26 R8 (Phase 5): The fetch call now spreads enhancedOpts + adds a
+    // 20s AbortSignal timeout (was: `fetch(url, enhancedOpts)` directly).
+    expect(src).toMatch(/fetch\(url,\s*\{\s*\.\.\.enhancedOpts,/)
     expect(src).toMatch(/queueForSync\(url, method, enhancedOpts/)
   })
 
@@ -96,11 +98,16 @@ describe('V26 Phase 5 — Idempotency guardrail', () => {
     expect(src).toMatch(/status:\s*409/)
   })
 
-  test('payment verify route: P2002 catch is still present (house pattern)', () => {
-    // The verify route was the house pattern we copied for payments/transactions.
-    // This test ensures it stays as the reference implementation.
+  test('payment verify route: uses shared upgradeSubscription helper (P2002 catch moved to helper)', () => {
+    // 🔒 V26 R9 (Phase 5): The verify route's inline idempotency block was
+    // extracted into lib/subscription-upgrade.ts so the new webhook route can
+    // share it. The P2002 catch + idempotent:true return now live in the helper.
+    // The verify route just calls upgradeSubscription() and forwards the result.
     const src = readFile('app/api/payment/verify/route.ts')
-    expect(src).toMatch(/P2002/)
-    expect(src).toMatch(/idempotent:\s*true/)
+    expect(src).toMatch(/upgradeSubscription/)
+    // The helper itself has the P2002 catch + idempotent flag.
+    const helperSrc = readFile('lib/subscription-upgrade.ts')
+    expect(helperSrc).toMatch(/P2002/)
+    expect(helperSrc).toMatch(/idempotent:\s*true/)
   })
 })

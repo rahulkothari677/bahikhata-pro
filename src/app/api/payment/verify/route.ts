@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { rateLimit, rateLimitedResponse } from '@/lib/rate-limit'
 import { getAuthUserIdOwnerOnly } from '@/lib/get-auth'
-import { db } from '@/lib/db'
-import { fromPaise } from '@/lib/money'
-import crypto from 'crypto'
 import { apiError } from '@/lib/api-error'
 import Razorpay from 'razorpay'
+import { upgradeSubscription } from '@/lib/subscription-upgrade'
+import crypto from 'crypto'
 
 /**
  * POST /api/payment/verify
@@ -93,7 +92,15 @@ export async function POST(req: NextRequest) {
 
     let order
     try {
-      order = await razorpay.orders.fetch(razorpay_order_id)
+      // 🔒 V26 R8 (Phase 5): 10s timeout via Promise.race. The Razorpay SDK
+      // doesn't expose an AbortSignal, so we race the fetch against a timeout.
+      // Was: no timeout → a hung Razorpay call rode the function timeout at
+      // the moment the user just paid (worst moment for opacity).
+      const fetchPromise = razorpay.orders.fetch(razorpay_order_id)
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Razorpay order fetch timed out after 10s')), 10_000),
+      )
+      order = await Promise.race([fetchPromise, timeoutPromise])
     } catch (fetchErr) {
       console.error('Failed to fetch order from Razorpay:', fetchErr)
       return NextResponse.json({
@@ -143,112 +150,26 @@ export async function POST(req: NextRequest) {
     }
 
     // Signature is valid — upgrade the user's plan.
-    //
-    // 🔒 IDEMPOTENCY (Audit fix Phase 1.4): This endpoint can be called twice
-    // with the same Razorpay payload (double-tap on the "Pay" button, network
-    // retry, mobile network flakiness). Without idempotency, a replay would
-    // re-extend `renewsAt` and create a second audit-log entry.
-    //
-    // Fix: wrap all three writes (user.update + subscription.create + auditLog)
-    // in a single $transaction. The `@@unique([paymentId])` constraint on
-    // Subscription means a duplicate payment ID throws Prisma error P2002 —
-    // we catch that and return the existing (already-processed) result
-    // instead of creating a duplicate.
-    const now = new Date()
-    const durationDays = billingCycle === 'yearly' ? 365 : 30
-    const endDate = new Date(now.getTime() + durationDays * 24 * 60 * 60 * 1000)
-
-    // Calculate the actual amount in rupees (from paise)
-    const amountInr = fromPaise(amount)
-
-    // Check if this payment was already processed (idempotency fast-path).
-    // If a Subscription row with this paymentId exists, the payment was
-    // already verified — return the existing result without re-extending.
-    const existing = await db.subscription.findUnique({
-      where: { paymentId: razorpay_payment_id },
-      select: { id: true, plan: true, endDate: true, userId: true },
+    // 🔒 V26 R9 (Phase 5): The idempotency block (user.update + subscription.create
+    // + auditLog, wrapped in $transaction with P2002 catch) has been extracted
+    // into lib/subscription-upgrade.ts so both this route and the new webhook
+    // route can call it. The `@@unique([paymentId])` constraint on Subscription
+    // makes verify+webhook double-processing safe.
+    const result = await upgradeSubscription({
+      userId,
+      plan,
+      billingCycle,
+      amountPaise: amount,
+      razorpay_payment_id,
+      razorpay_order_id,
     })
-
-    if (existing) {
-      // Payment already processed — return the same result as the first call.
-      // This makes the endpoint idempotent: calling it N times has the same
-      // effect as calling it once.
-      return NextResponse.json({
-        success: true,
-        message: 'Payment already verified — subscription is active.',
-        plan: existing.plan,
-        renewsAt: existing.endDate.toISOString(),
-        idempotent: true,  // flag so the client knows this was a replay
-      })
-    }
-
-    // Atomically: update user plan + create subscription + write audit log.
-    // If any one fails, all three roll back — no half-committed state.
-    try {
-      await db.$transaction([
-        db.user.update({
-          where: { id: userId },
-          data: {
-            plan: plan,
-            renewsAt: endDate,
-            cancelledAt: null,
-          },
-        }),
-        db.subscription.create({
-          data: {
-            id: `sub_${razorpay_payment_id}`,
-            userId,
-            plan: plan,
-            status: 'active',
-            amount: amountInr,
-            paymentMode: 'razorpay',
-            paymentId: razorpay_payment_id,
-            subscriptionId: razorpay_order_id,
-            startDate: now,
-            endDate,
-          },
-        }),
-        db.auditLog.create({
-          data: {
-            userId,
-            action: 'subscription_activated',
-            entityType: 'user',
-            entityId: userId,
-            metadata: {
-              plan: plan,
-              billingCycle,
-              amount: amountInr,
-              paymentId: razorpay_payment_id,
-              orderId: razorpay_order_id,
-            },
-          },
-        }),
-      ])
-    } catch (txError: any) {
-      // P2002 = unique constraint violation. This means another request
-      // raced us and created the subscription first. Treat as idempotent
-      // success — the payment is already processed.
-      if (txError?.code === 'P2002') {
-        const existing = await db.subscription.findUnique({
-          where: { paymentId: razorpay_payment_id },
-          select: { plan: true, endDate: true },
-        })
-        return NextResponse.json({
-          success: true,
-          message: 'Payment already verified — subscription is active.',
-          plan: existing?.plan || plan,
-          renewsAt: existing?.endDate?.toISOString() || endDate.toISOString(),
-          idempotent: true,
-        })
-      }
-      throw txError  // re-throw any other error
-    }
 
     return NextResponse.json({
       success: true,
-      message: `Welcome to ${plan === 'pro' ? 'Pro' : 'Elite'}! Your subscription is active until ${endDate.toLocaleDateString('en-IN')}.`,
-      plan: plan,
-      renewsAt: endDate.toISOString(),
+      message: result.message,
+      plan: result.plan,
+      renewsAt: result.endDate.toISOString(),
+      idempotent: result.idempotent,
     })
   } catch (error: any) {
     // 🔒 V10 §3.3: Was `detail: error?.message || String(error)` — leaked

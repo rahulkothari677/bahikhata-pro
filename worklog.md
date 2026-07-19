@@ -8046,3 +8046,74 @@ Stage Summary:
   - ✅ R3+R4+R5 (Batch 2): partial-restore deadlock + concurrent-PUT stock corruption + concurrent-note cap violation
   - ✅ R7 dead-letter UI (this batch): offline entries no longer evaporate behind a success toast
 - Remaining Phase 5 batches: Batch 4 (R8 timeouts + R9 webhook + R10-R12 quick wins), Batch 5 (R13-R16 validation + error UX), Batch 6 (R17-R22 polish + CI).
+
+---
+Task ID: audit-v26-phase5-batch-4
+Agent: main
+Task: Phase 5 Engineering Resilience audit — Batch 4: R8 (timeouts) + R9 (Razorpay webhook) + R10 (DELETE replay success) + R11 (concurrent edit warning) + R12 (Web Locks mutex). All 🟠/🟡 severity, smaller independent diffs.
+
+Work Log:
+
+§1 — R8 🟠 Zero request timeouts anywhere (no AbortSignal in repo):
+
+R8.1 — Server-side timeouts:
+- scan-bill/route.ts callSingleProvider: added `signal: AbortSignal.timeout(15_000)` to the AI provider fetch. A hung primary provider now triggers the fallback chain after 15s instead of consuming the whole 60s budget.
+- email.ts sendEmail: added `signal: AbortSignal.timeout(10_000)` to the Resend fetch. A hung Resend call no longer rides the function timeout (was especially bad on the reset-request path — opaque 504 during "I forgot my password").
+- payment/verify/route.ts: wrapped razorpay.orders.fetch in `Promise.race` with a 10s timeout. The Razorpay SDK doesn't expose an AbortSignal, so Promise.race is the only option. On timeout, the existing catch returns the "could not verify order" 400.
+
+R8.2 — Client-side timeout:
+- offline-fetch.ts handleMutation: online fetch now uses `signal: AbortSignal.timeout(20_000)`. On a stalled-but-not-dead connection (EDGE/2G with packet loss — the normal case in target geographies), the save button no longer spins indefinitely. Timeout lands in the existing catch → queued with the same mutation ID (safe after R2) → user gets the honest "saved offline, will sync" toast.
+
+§2 — R9 🟠 No Razorpay webhook fallback (paid but not upgraded):
+
+- New shared helper: src/lib/subscription-upgrade.ts.
+  - Extracted the verify route's idempotent upgrade block (user.update + subscription.create + auditLog in $transaction, with P2002 catch → idempotent:true return).
+  - The `@@unique([paymentId])` constraint on Subscription makes webhook+verify double-processing safe — whichever runs first creates the row; the second one P2002s and returns the existing result.
+- verify route: refactored to call `upgradeSubscription()` (was: inline idempotency block). Removed now-unused db + fromPaise imports.
+- New webhook route: src/app/api/payment/webhook/route.ts.
+  - Reads raw body (Razorpay signs the raw body, not parsed JSON).
+  - HMAC-SHA256 of raw body with RAZORPAY_WEBHOOK_SECRET, constant-time compare via crypto.timingSafeEqual against x-razorpay-signature.
+  - Fail-closed: if RAZORPAY_WEBHOOK_SECRET is unset, returns 500 (rejects all webhooks — better to miss upgrades than accept forged payloads that upgrade arbitrary users).
+  - Handles payment.captured + order.paid events. Other events get 200 (stop retrying).
+  - For payment.captured, fetches the order to get notes (userId, plan, cycle) — the payment entity doesn't include order notes.
+  - Calls upgradeSubscription() — idempotent, safe for webhook retries + verify race.
+  - Always returns 200 on success so Razorpay stops retrying.
+- SETUP documented in route JSDoc: register webhook URL in Razorpay dashboard, set RAZORPAY_WEBHOOK_SECRET env, subscribe to payment.captured + order.paid events.
+
+§3 — R10 🟡 Successful-but-replayed DELETEs report failure:
+
+- offline-fetch.ts syncPendingWrites: added `else if (res.status === 404 && w.method === 'DELETE')` branch. 404 on a replayed DELETE = the row is already gone (soft-deleted by the first attempt whose response was lost). Treat as SUCCESS — drop from queue, count as synced. Was: treated as failure → 5 retries → dead-letter → "1 entry could not be synced… please re-enter" toast for a delete that WORKED.
+
+§4 — R11 🟡 Concurrent edits = silent last-write-wins:
+
+- parties/[id]/route.ts PUT: client sends `updatedAt` as loaded. Server compares; on mismatch, still applies the write (proportionate — not a 409-and-merge engine, overkill for this stage) but returns `conflictWarning` so the client can surface it. Queued replays surface it via the sync toast.
+- products/route.ts PUT: same pattern.
+- Warning text: "This party/product was also edited on another device at {serverTimestamp} — please verify the details."
+- Backward compatible: if client doesn't send updatedAt, no warning (existing clients keep working).
+
+§5 — R12 🟡 Multi-tab sync no cross-tab mutex:
+
+- offline-fetch.ts syncPendingWrites: wrapped the body in `navigator.locks.request('bahikhata-sync', { ifAvailable: true }, ...)`. If another tab holds the lock, this tab's call is a no-op (returns {0,0,0}). Falls back to running unguarded where Web Locks API is unavailable (older browsers — the per-tab `syncing` flag still prevents within-tab re-entry).
+- Extracted the sync body into a `runSync()` helper so the Web Locks wrapper + fallback path can both call it.
+
+§6 — CI guard test (src/__tests__/lib/v26-phase5-timeouts-webhook-quickwins.test.ts):
+- 14 grep-shaped CI assertions covering all 5 findings:
+  - R8.1: AI provider AbortSignal.timeout(15_000); Resend 10_000; Razorpay Promise.race 10_000.
+  - R8.2: client handleMutation AbortSignal.timeout(20_000) on the online fetch path.
+  - R9: webhook route exists with createHmac + RAZORPAY_WEBHOOK_SECRET + timingSafeEqual + req.text() + payment.captured + order.paid + upgradeSubscription + fail-closed; helper has P2002 + @@unique([paymentId]) + idempotent:true + $transaction; verify route imports + calls helper.
+  - R10: 404-DELETE branch increments synced.
+  - R11: parties + products PUT have conflictWarning + clientUpdatedAt + "edited on another device".
+  - R12: navigator.locks.request + 'bahikhata-sync' + ifAvailable:true + runSync fallback.
+- 6 behavioral unit tests: R11 concurrent-edit warning logic (4 scenarios); R9 HMAC-SHA256 signature verification (match + mismatch + different-bodies); R12 Web Locks ifAvailable semantics (lock unavailable → no-op; lock acquired → run).
+- Updated v26-phase5-idempotency-guard.test.ts: the verify route test now checks for upgradeSubscription import + helper has P2002/idempotent (was: checking inline P2002 in verify, which moved to helper).
+
+Verification:
+- tsc --noEmit: 0 errors
+- jest: 1885/1885 pass (59 suites) — was 1865, +20 from new test file
+- next build: clean
+- eslint src/: 0 errors
+
+Stage Summary:
+- Phase 5 Batch 4 COMPLETE: R8 + R9 + R10 + R11 + R12 (5 findings, all 🟠/🟡).
+- All 5 "would not launch without" items were closed in Batches 1-3. This batch closes the auditor's "fix in the first post-launch sprint" tier (R5-R9).
+- Remaining Phase 5 batches: Batch 5 (R13-R16 — validation + error UX + cold-start retry + error boundaries), Batch 6 (R17-R22 — polish + CI).
