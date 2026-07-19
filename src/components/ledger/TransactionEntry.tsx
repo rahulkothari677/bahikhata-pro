@@ -72,7 +72,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   const [noteReason, setNoteReason] = useState<string>('')
   const [affectsStock, setAffectsStock] = useState(false)
   const [originalTransactionId, setOriginalTransactionId] = useState<string | null>(null)
-  const { setView, triggerRefresh, setScannerBillType, previousView, setPreviousView, features } = useAppStore()
+  const { setView, triggerRefresh, setScannerBillType, previousView, setPreviousView, features, triggerVoiceOpen, triggerBarcodeOpen } = useAppStore()
   const queryClient = useQueryClient()
 
   const [partyId, setPartyId] = useState('')
@@ -103,6 +103,27 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   const [showVoiceEntry, setShowVoiceEntry] = useState(false)
   const [draftModalOpen, setDraftModalOpen] = useState(false)
   const [barcodeOpen, setBarcodeOpen] = useState(false)
+
+  // 🔒 V26 N23: Auto-open voice dialog / barcode scanner when the user picks
+  // the Voice Entry / Barcode Scanner nav entry. The nav entry fires the
+  // counter via handle-nav-action; here we subscribe and toggle the dialog
+  // open. Was: nav entry just opened new-sale, user had to find the mic /
+  // scan button themselves.
+  const lastVoiceTriggerRef = useRef(0)
+  useEffect(() => {
+    if (triggerVoiceOpen > lastVoiceTriggerRef.current) {
+      lastVoiceTriggerRef.current = triggerVoiceOpen
+      setShowVoiceEntry(true)
+    }
+  }, [triggerVoiceOpen])
+
+  const lastBarcodeTriggerRef = useRef(0)
+  useEffect(() => {
+    if (triggerBarcodeOpen > lastBarcodeTriggerRef.current) {
+      lastBarcodeTriggerRef.current = triggerBarcodeOpen
+      setBarcodeOpen(true)
+    }
+  }, [triggerBarcodeOpen])
   // Prevents autosave until preset check is complete (avoids creating
   // empty drafts when "Repeat Last Sale" or scanner pre-fills the form)
   const [presetChecked, setPresetChecked] = useState(false)

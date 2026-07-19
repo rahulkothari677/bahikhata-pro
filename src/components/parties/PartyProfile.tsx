@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAppStore } from '@/store/app-store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -42,6 +42,19 @@ export function PartyProfile() {
   const [paymentMode, setPaymentMode] = useState('cash')
   const [paymentNotes, setPaymentNotes] = useState('')
   const [savingPayment, setSavingPayment] = useState(false)
+
+  // 🔒 V26 N1b: Skeleton-dead-end guard (mirrors TransactionDetail.tsx).
+  // The browser-back hook clears selectedPartyId on popstate
+  // (use-browser-back-button.ts:232-234). Popping INTO party-profile with a
+  // nulled id disables the query → isLoading stays false, data stays
+  // undefined → skeleton forever. Redirect to the parties list instead.
+  // Targeted patch for the most user-facing N1 symptom; full systemic fix
+  // (store navStack as single model, restore params on pop) is queued.
+  useEffect(() => {
+    if (!selectedPartyId) {
+      setView(previousView || 'parties')
+    }
+  }, [selectedPartyId, previousView, setView])
 
   const { data, isLoading } = useQuery({
     queryKey: ['party-profile', selectedPartyId],

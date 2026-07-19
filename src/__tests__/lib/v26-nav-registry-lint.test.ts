@@ -18,6 +18,10 @@
  *   4. Navigate-style entries actually point at a view.
  *   5. Every labelKey/descKey exists in the English translation table (a
  *      missing key renders the raw key string to users).
+ *   6. 🔒 V26 N12: Every entry with 'more' in surfaces MUST have a subcategory.
+ *      MoreScreen renders by subcategory groups (SECTION_ORDER); an entry
+ *      without a subcategory is silently dropped — the exact mechanism that
+ *      hid the Reports Hub from mobile nav for two releases.
  *
  * If this test fails on your new feature: add the missing surface (usually
  * 'global-search' at minimum) or declare `platforms: ['mobile']` deliberately.
@@ -75,5 +79,15 @@ describe('V26 nav-registry lint (parity guardrail)', () => {
       if (d.descKey && !(d.descKey in en)) missing.push(`${d.id}: ${d.descKey}`)
     }
     expect(missing).toEqual([])
+  })
+
+  test('🔒 V26 N12: every entry with "more" in surfaces has a subcategory', () => {
+    // MoreScreen groups destinations by subcategory (SECTION_ORDER + SECTION_META).
+    // An entry that declares 'more' but lacks a subcategory is silently dropped
+    // at render time — the exact mechanism that hid the Reports Hub from mobile.
+    const dropped = NAV_REGISTRY
+      .filter(d => (d.surfaces || []).includes('more') && !d.subcategory)
+      .map(d => d.id)
+    expect(dropped).toEqual([])
   })
 })

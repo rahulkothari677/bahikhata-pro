@@ -62,7 +62,7 @@ export function MobileBottomNav() {
   const visibleTabs = useMemo(() => {
     return filterByPermissions(
       NAV_REGISTRY.filter(d => d.surfaces?.includes('bottom-nav')),
-      { canAccess, isFlagEnabled: () => true, isOwner: true }
+      { canAccess, isFlagEnabled: () => true, isOwner: true, platform: 'mobile' }
     ).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
   }, [canAccess])
 

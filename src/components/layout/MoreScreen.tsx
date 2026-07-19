@@ -12,17 +12,16 @@
  * Google Pay (categorized cards), CRED (colorful sections).
  */
 
-import { useQuery } from '@tanstack/react-query'
-import { useSession, signOut } from 'next-auth/react'
+import { useSession } from 'next-auth/react'
 import { useEffect, useMemo, useState } from 'react'
 import { useAppStore } from '@/store/app-store'
-import { offlineFetch } from '@/lib/offline-fetch'
-import { clearAllOfflineData } from '@/lib/offline-db'
+// 🔒 V26 N20: Removed unused imports — useQuery, offlineFetch, sonnerToast,
+// signOut, clearAllOfflineData. They were left behind when logout moved
+// to AccountScreen and the AI Usage toast was removed.
 import { useStaffPermissions } from '@/hooks/use-staff-permissions'
 import { haptic } from '@/lib/haptic'
 import { prefetchView } from '@/lib/prefetch'
 import { cn } from '@/lib/utils'
-import { toast as sonnerToast } from 'sonner'
 import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
 import { NAV_REGISTRY, filterByPermissions, groupBySubcategory, type NavDestination, type NavSubcategoryId } from '@/lib/nav-registry'
 import { handleNavAction } from '@/lib/handle-nav-action'
@@ -83,7 +82,9 @@ export function MoreScreen() {
   const { t } = useTranslation()
   const { setView, previousView, setPreviousView } = useAppStore()
   const { data: session } = useSession()
-  const { canAccess, isCA } = useStaffPermissions()
+  const { canAccess } = useStaffPermissions()
+  // 🔒 V26 N20: Removed `isCA` from destructure — was unused after the
+  // V26 P9 accordion rewrite. Confirm dialog also moved to AccountScreen.
   const { confirmDialog, dialog: confirmDialogEl } = useConfirmDialog()
 
   // 🔒 V26 P10: All sections collapsed by default. User taps to expand.
@@ -100,7 +101,7 @@ export function MoreScreen() {
       { canAccess, isFlagEnabled: (flag: string) => {
         const features = useAppStore.getState().features
         return features?.[flag as keyof typeof features] ?? false
-      }, isOwner }
+      }, isOwner, platform: 'mobile' }
     )
     return filtered.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
   }, [canAccess, isOwner])
@@ -148,21 +149,9 @@ export function MoreScreen() {
     setPreviousView(null)
   }
 
-  const handleLogout = async () => {
-    if (!await confirmDialog('Are you sure you want to logout?', { title: 'Logout', confirmLabel: 'Logout', destructive: false })) return
-    haptic.warning()
-    try {
-      await clearAllOfflineData()
-    } catch (e) {
-      console.warn('[logout] clearAllOfflineData failed (non-fatal):', e)
-    }
-    try {
-      signOut({ callbackUrl: '/' })
-    } catch (e) {
-      console.error('[logout] signOut failed:', e)
-      if (typeof window !== 'undefined') window.location.href = '/'
-    }
-  }
+  // 🔒 V26 N20: handleLogout REMOVED — was dead code. Logout moved to
+  // AccountScreen in V26 N8; this function was defined but never called
+  // from JSX (only referenced in its own definition).
 
   return (
     <div className="min-h-screen bg-muted/30 w-full flex-1">

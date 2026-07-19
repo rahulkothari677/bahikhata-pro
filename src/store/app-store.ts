@@ -145,6 +145,15 @@ interface AppState {
   triggerNewEntry: number
   triggerNewEntryView: ViewType | null
   fireTriggerNewEntry: () => void
+  // 🔒 V26 N23: Deep-link triggers for Voice Entry + Barcode Scanner.
+  // Same counter pattern as triggerNewEntry. TransactionEntry subscribes
+  // to these and auto-opens the voice dialog / barcode scanner when the
+  // counter increments. Was: voice-entry/barcode-scanner nav entries just
+  // opened new-sale, leaving the user to find the mic/scan button.
+  triggerVoiceOpen: number
+  fireTriggerVoiceOpen: () => void
+  triggerBarcodeOpen: number
+  fireTriggerBarcodeOpen: () => void
   // 🔒 AUDIT V25 FIX BUG-032 (Batch 6): Deep-link triggers for MoreScreen items.
   // These use the same counter pattern as triggerNewEntry — components subscribe
   // to the counter and fire their action when it increments.
@@ -280,6 +289,11 @@ export const useAppStore = create<AppState>()(
       triggerNewEntry: 0,
       triggerNewEntryView: null,
       fireTriggerNewEntry: () => set((s) => ({ triggerNewEntry: s.triggerNewEntry + 1, triggerNewEntryView: s.currentView })),
+      // 🔒 V26 N23: Voice + Barcode deep-link triggers.
+      triggerVoiceOpen: 0,
+      fireTriggerVoiceOpen: () => set((s) => ({ triggerVoiceOpen: s.triggerVoiceOpen + 1 })),
+      triggerBarcodeOpen: 0,
+      fireTriggerBarcodeOpen: () => set((s) => ({ triggerBarcodeOpen: s.triggerBarcodeOpen + 1 })),
       // 🔒 AUDIT V25 FIX BUG-032 (Batch 6): Deep-link trigger implementations.
       triggerDayEnd: 0,
       fireTriggerDayEnd: () => set((s) => ({ triggerDayEnd: s.triggerDayEnd + 1 })),

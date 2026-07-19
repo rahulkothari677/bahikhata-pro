@@ -42,6 +42,16 @@ export function handleNavAction(
   switch (kind) {
     case 'navigate':
       if (dest.view) store.setView(dest.view)
+      // 🔒 V26 N21: For Ctrl+K "Add Product"/"Add Customer" commands, fire
+      // the trigger-new-entry counter after navigating so the target view
+      // (Inventory/Parties) opens its add dialog. Was: just navigated to the
+      // list view, leaving the user to find the + button themselves.
+      if (params.fireTriggerNewEntry) store.fireTriggerNewEntry()
+      // 🔒 V26 N23: Voice Entry / Barcode Scanner deep-link triggers.
+      // Same pattern — after navigating to new-sale, fire the voice/barcode
+      // trigger so TransactionEntry auto-opens the mic/scanner.
+      if (params.fireTriggerVoiceOpen) store.fireTriggerVoiceOpen()
+      if (params.fireTriggerBarcodeOpen) store.fireTriggerBarcodeOpen()
       break
 
     case 'navigate-report':

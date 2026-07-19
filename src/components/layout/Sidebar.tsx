@@ -77,21 +77,21 @@ export function Sidebar() {
   // Now: uses useAppStore.getState().features (same as MoreScreen) — consistent across platforms.
   const mainNavItems = useMemo(() => {
     return filterByPermissions(
-      NAV_REGISTRY.filter(d => d.surfaces?.includes('sidebar-main') && (d.platforms || ['mobile', 'desktop']).includes('desktop')),
+      NAV_REGISTRY.filter(d => d.surfaces?.includes('sidebar-main')),
       { canAccess, isFlagEnabled: (flag: string) => {
         const features = useAppStore.getState().features
         return features?.[flag as keyof typeof features] ?? false
-      }, isOwner }
+      }, isOwner, platform: 'desktop' }
     ).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
   }, [canAccess, isOwner])
 
   const toolsItems = useMemo(() => {
     return filterByPermissions(
-      NAV_REGISTRY.filter(d => d.surfaces?.includes('sidebar-tools') && (d.platforms || ['mobile', 'desktop']).includes('desktop')),
+      NAV_REGISTRY.filter(d => d.surfaces?.includes('sidebar-tools')),
       { canAccess, isFlagEnabled: (flag: string) => {
         const features = useAppStore.getState().features
         return features?.[flag as keyof typeof features] ?? false
-      }, isOwner }
+      }, isOwner, platform: 'desktop' }
     ).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
   }, [canAccess, isOwner])
 

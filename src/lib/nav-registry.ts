@@ -136,6 +136,12 @@ export interface NavDestination {
     trigger?: 'dayEnd' | 'bulkReminders'  // for 'navigate-day-end' / 'navigate-bulk'
     toastTitle?: string         // for 'toast-navigate' / 'coming-soon'
     toastDescription?: string   // for 'toast-navigate' / 'coming-soon'
+    // 🔒 V26 N21/N23: Trigger flags for 'navigate' kind — fire the
+    // corresponding app-store counter after navigating, so the target
+    // view auto-opens its dialog/scanner/voice-input.
+    fireTriggerNewEntry?: boolean     // opens Inventory/Parties add dialog
+    fireTriggerVoiceOpen?: boolean    // opens TransactionEntry voice dialog
+    fireTriggerBarcodeOpen?: boolean  // opens TransactionEntry barcode scanner
   }
 
   // ─── Categorization ──────────────────────────────────
@@ -327,8 +333,12 @@ export const NAV_REGISTRY: NavDestination[] = [
   },
   {
     id: 'estimates',
-    label: 'Estimates / Quotations',
-    description: 'Create quotes for customers',
+    // 🔒 V26 N15: Label clarified — the entry opens the CREATE form, not a list.
+    // Existing estimates are discoverable as badges inside the Sales ledger
+    // (Ledger.tsx filter type=estimate). Was labeled "Estimates / Quotations"
+    // which read as a list destination.
+    label: 'New Estimate / Quotation',
+    description: 'Create a quote for a customer',
     icon: FilePlus2,
     iconColor: INDIGO,
     iconBg: INDIGO_BG,
@@ -446,9 +456,12 @@ export const NAV_REGISTRY: NavDestination[] = [
   // ═══ reports ═════════════════════════════════════════════════════════
   {
     id: 'reports',
-    // 🔒 V26 P8: Removed subcategory — 'reports' should NOT appear in MoreScreen
-    // (all individual reports are already categorized in their own sections below).
-    // The Reports Hub is accessible via desktop sidebar + global search.
+    // 🔒 V26 N12: 'more' removed from surfaces — the reports entry had no
+    // subcategory, so MoreScreen silently dropped it (the only consumer that
+    // filters by subcategory). Now the data is honest: the Reports Hub lives
+    // on desktop sidebar + global search; individual reports (16) live in
+    // their own MoreScreen sections (financial / gst / banking / inventory-reports).
+    // The new lint test (subcategory-required-for-more) prevents this silent drop.
     label: 'Reports',
     description: 'All reports — P&L, GST, stock, party, aging',
     icon: FileBarChart,
@@ -458,7 +471,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     actionKind: 'navigate',
     category: 'reports',
     frequency: 'primary',
-    surfaces: ['sidebar-main', 'more', 'global-search'],
+    surfaces: ['sidebar-main', 'global-search'],
     sortOrder: 8,
     keywords: 'reports gst pl profit loss stock analysis',
     labelKey: 'nav.label.reports',
@@ -899,6 +912,9 @@ export const NAV_REGISTRY: NavDestination[] = [
   },
   {
     id: 'voice-entry',
+    // 🔒 V26 N23: actionParams.fireTriggerVoiceOpen — after navigating to new-sale,
+    // handle-nav-action fires the trigger and TransactionEntry auto-opens the
+    // voice dialog. Was: just opened new-sale, user had to find the mic button.
     label: 'Voice Entry',
     description: 'Speak to create sales',
     icon: Mic,
@@ -908,6 +924,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     badgeColor: 'bg-violet-500 text-white',
     view: 'new-sale',
     actionKind: 'navigate',
+    actionParams: { fireTriggerVoiceOpen: true },
     category: 'tools',
     subcategory: 'smart-tools',
     frequency: 'secondary',
@@ -920,6 +937,9 @@ export const NAV_REGISTRY: NavDestination[] = [
   },
   {
     id: 'barcode-scanner',
+    // 🔒 V26 N23: actionParams.fireTriggerBarcodeOpen — after navigating to new-sale,
+    // handle-nav-action fires the trigger and TransactionEntry auto-opens the
+    // barcode scanner. Was: just opened new-sale, user had to find the scan button.
     label: 'Barcode Scanner',
     description: 'Scan barcodes for fast billing',
     icon: ScanBarcode,
@@ -927,6 +947,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     iconBg: VIOLET_BG,
     view: 'new-sale',
     actionKind: 'navigate',
+    actionParams: { fireTriggerBarcodeOpen: true },
     category: 'tools',
     subcategory: 'smart-tools',
     frequency: 'secondary',
@@ -1266,6 +1287,10 @@ export const NAV_REGISTRY: NavDestination[] = [
   // They do NOT appear in Sidebar, MoreScreen, ReportsHub, or AccountScreen.
   {
     id: 'add-product',
+    // 🔒 V26 N21: actionParams.fireTriggerNewEntry — handle-nav-action will
+    // call store.fireTriggerNewEntry() after navigating to inventory, so the
+    // Inventory view opens its Add Product dialog automatically. Was: just
+    // navigated to the list, user had to find the + button themselves.
     label: 'Add Product',
     description: 'Add a new product to inventory',
     icon: Plus,
@@ -1273,6 +1298,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     iconBg: 'bg-violet-100 dark:bg-violet-950',
     view: 'inventory',
     actionKind: 'navigate',
+    actionParams: { fireTriggerNewEntry: true },
     category: 'inventory',
     frequency: 'primary',
     surfaces: ['global-search'],
@@ -1282,6 +1308,8 @@ export const NAV_REGISTRY: NavDestination[] = [
   },
   {
     id: 'add-party',
+    // 🔒 V26 N21: actionParams.fireTriggerNewEntry — same pattern as add-product.
+    // After navigating to parties, fireTriggerNewEntry opens the Add Party dialog.
     label: 'Add Customer/Supplier',
     description: 'Add a new party',
     icon: UserPlus,
@@ -1289,6 +1317,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     iconBg: 'bg-blue-100 dark:bg-blue-950',
     view: 'parties',
     actionKind: 'navigate',
+    actionParams: { fireTriggerNewEntry: true },
     category: 'parties',
     frequency: 'primary',
     surfaces: ['global-search'],
@@ -1327,9 +1356,10 @@ export function getByFrequency(frequency: NavFrequency): NavDestination[] {
 }
 
 /** Get all destinations visible on a platform. */
-export function getByPlatform(platform: 'mobile' | 'desktop'): NavDestination[] {
-  return NAV_REGISTRY.filter(d => (d.platforms || ['mobile', 'desktop']).includes(platform))
-}
+// 🔒 V26 N20: getByPlatform REMOVED — was unused (not even in tests).
+// platform filtering is now done inside filterByPermissions via the
+// `platform` opt (see V26 N19). Keeping this helper invited consumers
+// to bypass the canonical filter pipeline.
 
 /** Get a destination by id. */
 export function getById(id: string): NavDestination | undefined {
@@ -1337,14 +1367,20 @@ export function getById(id: string): NavDestination | undefined {
 }
 
 /** Get all destinations in a subcategory. */
-export function getBySubcategory(subcategory: NavSubcategoryId): NavDestination[] {
-  return NAV_REGISTRY.filter(d => d.subcategory === subcategory)
-}
+// 🔒 V26 N20: getBySubcategory REMOVED — was unused (not even in tests).
+// `groupBySubcategory` is what consumers actually use (returns a Map of
+// all subcategories at once). One canonical grouping helper is enough.
 
 /**
- * Filter destinations by staff permissions + feature flags + ownership.
+ * Filter destinations by staff permissions + feature flags + ownership + platform.
  * Pass the canAccess function from useStaffPermissions, isFlagEnabled from
- * useFeatureFlags, and isOwner boolean.
+ * useFeatureFlags, isOwner boolean, and the current platform ('mobile' | 'desktop').
+ *
+ * 🔒 V26 N19: Added platform filtering. Previously, only Sidebar honored the
+ * `platforms` field — MoreScreen/BottomNav/ReportsHub/AccountScreen/GlobalSearch
+ * ignored it, so an entry marked `platforms:['desktop']` would still render
+ * in MoreScreen on mobile. Now filterByPermissions is the single enforcement
+ * point for all five surfaces.
  */
 export function filterByPermissions(
   destinations: NavDestination[],
@@ -1352,9 +1388,13 @@ export function filterByPermissions(
     canAccess: (module: ModuleKey) => boolean
     isFlagEnabled: (flag: string) => boolean
     isOwner: boolean
+    platform?: 'mobile' | 'desktop'
   }
 ): NavDestination[] {
   return destinations.filter(d => {
+    // 🔒 V26 N19: Platform gating — if a destination declares `platforms`,
+    // honor it. Defaults to ['mobile','desktop'] (both) when omitted.
+    if (opts.platform && d.platforms && !d.platforms.includes(opts.platform)) return false
     // Owner-only items
     if (d.ownerOnly && !opts.isOwner) return false
     // 🔒 V26 N7: founderOnly gates behind the founder email allowlist.

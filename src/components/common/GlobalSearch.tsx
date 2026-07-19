@@ -139,13 +139,24 @@ export function GlobalSearch() {
     ).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
   }, [canAccess, isOwner])
 
-  // Filter commands by query — match label, description, or keywords
+  // Filter commands by query — match label, description, or keywords.
+  // 🔒 V26 N22: Also match the TRANSLATED label/description (via t(labelKey) /
+  // t(descKey)) so a Hindi user typing the Hindi label they see gets a match.
+  // Was: matched English `label`/`description`/`keywords` only — a Hindi user
+  // typing "बिक्री" (the visible label) got no match.
   const filteredCommands = q
-    ? allCommands.filter(c =>
-        c.label.toLowerCase().includes(q) ||
-        (c.description?.toLowerCase().includes(q)) ||
-        (c.keywords?.toLowerCase().includes(q))
-      )
+    ? allCommands.filter(c => {
+        const ql = q.toLowerCase()
+        const tLabel = c.labelKey ? t(c.labelKey) : c.label
+        const tDesc = c.descKey ? t(c.descKey) : c.description
+        return (
+          c.label.toLowerCase().includes(ql) ||
+          (c.description?.toLowerCase().includes(ql)) ||
+          (c.keywords?.toLowerCase().includes(ql)) ||
+          (tLabel && tLabel.toLowerCase().includes(ql)) ||
+          (tDesc && tDesc.toLowerCase().includes(ql))
+        )
+      })
     : allCommands
 
   const handleSelect = (result: any) => {

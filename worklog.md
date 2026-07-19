@@ -7754,3 +7754,73 @@ Stage Summary:
 - Total self-audit fixes across 3 batches: 2 CRITICAL + 9 HIGH + 10 MEDIUM + 1 LOW = 22 fixes.
 - Remaining: 5 MEDIUM (M2 seed atomicity, M8 linkedNotesGuard, M9 payments overpayment, M13 GSTR-3B nil, M15 documents validation) + 13 LOW.
 - All remaining items are low-risk (either defense-in-depth, theoretical, or cosmetic).
+
+---
+Task ID: audit-v26-phase4-verification-batch
+Agent: main
+Task: Read Phase 4 verification report (EkBook-Audit-Phase4-Navigation.md, 40KB version in upload/) and fix remaining N-findings. Phase 4 had 23 findings (N1-N23); prior commits already fixed N2,N3,N4,N5,N6,N7,N9,N10,N11,N14,N16,N17,N18. This batch handles the remaining items: N1b skeleton dead-end, N12, N13, N15, N19, N20, N21, N22, N23. N8 (i18n translations) deferred to a separate batch.
+
+Work Log:
+- Read full Phase 4 verification report (40KB, 279 lines) from upload/EkBook-Audit-Phase4-Navigation.md.
+- Confirmed prior fixes via git log: N2+N6 (1b20d3b), N7+N16+N17 (49bc390), N4+N3+N9 (3a53533), N5+N10+N11+N14+N18 (0277427).
+- Remaining items in this batch: N1 (partial — N1b skeleton dead-end), N12, N13, N15, N19, N20, N21, N22, N23.
+
+§1 — N1b 🔴 (skeleton dead-end, targeted fix for the most user-facing N1 symptom):
+- TransactionDetail.tsx + PartyProfile.tsx: Added useEffect that redirects to the inferred parent ledger when rendered with a nulled selectedTransactionId/selectedPartyId.
+- Root cause: use-browser-back-button.ts:232-234 clears selection IDs on popstate. Popping INTO a detail view (e.g., Sales → sale → party-profile → HW back → pops to transaction-detail) leaves the view with no ID → query disabled → isLoading stays false → skeleton forever.
+- Fix: redirect to the parent ledger (sales/purchases/parties) immediately on render with no ID. Header ← remains as the secondary escape.
+- Full systemic fix (store navStack as single model, restore params on pop) is queued for a follow-up batch — touches use-browser-back-button.ts + every screen with sub-state, ~1 focused day.
+
+§2 — N12 🟡 (reports entry silently dropped from MoreScreen):
+- Root cause: nav-registry.ts:448 reports entry declared surfaces:['sidebar-main','more','global-search'] but had no subcategory. MoreScreen groups by subcategory → entry silently dropped. Comment claimed this was intentional but the surfaces array said otherwise — the data was dishonest.
+- Fix: removed 'more' from surfaces (now ['sidebar-main','global-search']). Reports Hub is desktop sidebar + Ctrl+K only on mobile; the 16 individual reports remain in their own MoreScreen sections.
+- Added lint assertion in v26-nav-registry-lint.test.ts: every entry with 'more' in surfaces MUST have a subcategory. Prevents the silent-drop class from recurring.
+
+§3 — N13 🟡 (pendingSettingsTab reactive):
+- Settings.tsx:493-501 read pendingTab only on mount via useAppStore.getState().pendingSettingsTab — if Settings was already open and user hit Ctrl+K → "Staff & Access", setView('settings') was a no-op and the effect didn't re-fire.
+- Fix: use the already-subscribed pendingTab variable (line 361) and add it to the deps array. Mirrors the Reports.tsx:69-79 pattern.
+
+§4 — N15 🟡 (Estimates opens blank create form):
+- nav-registry.ts:329 estimates entry was labeled "Estimates / Quotations" (reads as a list) but view was 'new-estimate' (opens create form). Existing estimates are only discoverable as badges inside the Sales ledger.
+- Fix: relabeled to "New Estimate / Quotation" + updated description to "Create a quote for a customer". Updated i18n keys (en + hi): nav.label.estimates + nav.desc.estimates.
+- Decided against adding a separate Estimates list destination — the existing Sales-ledger-badge flow is sufficient and adding a third entry would clutter the Sale & Purchase section.
+
+§5 — N19 🟡 (platforms field honored by only Sidebar):
+- Root cause: NavDestination.platforms was declared but only Sidebar.tsx filtered on it. MoreScreen/BottomNav/ToolsHub/GlobalSearch ignored it. An entry marked platforms:['desktop'] would still render in MoreScreen on mobile. 0 of 59 entries currently set the field, but it's a trap-in-waiting.
+- Fix: added `platform?: 'mobile' | 'desktop'` opt to filterByPermissions. Updated all 4 callers (Sidebar, MoreScreen, MobileBottomNav, ToolsHub) to pass platform explicitly. GlobalSearch intentionally omits it (Ctrl+K + mobile search both run on both platforms — should show all reachable commands).
+- Removed the inline `(d.platforms || ['mobile', 'desktop']).includes('desktop')` filter from Sidebar — now handled centrally in filterByPermissions.
+
+§6 — N20 🔵 (dead code cleanup):
+- AppShell.tsx: deleted getShellPropsForView (exported but never imported — repo-wide grep confirmed 0 callers).
+- nav-registry.ts: deleted getByPlatform + getBySubcategory (both unused — getById/getByFrequency/getByCategory still used in tests, kept).
+- MoreScreen.tsx: deleted handleLogout (defined but never called from JSX — logout moved to AccountScreen in V26 N8). Removed unused imports: useQuery, offlineFetch, sonnerToast, signOut, clearAllOfflineData. Removed `isCA` from useStaffPermissions destructure.
+- Header.tsx: removed `setFeature` from useAppStore destructure (unused).
+- Settings.tsx: removed `switchShop` from useShops destructure (unused after V26 N4 Switch button removal).
+- navStack/pushView/popView/canGoBack in app-store.ts: KEPT — these are the foundation for the future N1 systemic fix (auditor's §5.1 plan).
+
+§7 — N21 🔵 (Ctrl+K add-product/add-party trigger dialog):
+- Added fireTriggerNewEntry?: boolean to NavActionParams.
+- handle-nav-action.ts: navigate case now calls store.fireTriggerNewEntry() when params.fireTriggerNewEntry is set.
+- nav-registry.ts: add-product + add-party entries now have actionParams: { fireTriggerNewEntry: true }. After navigating to inventory/parties, the Add dialog auto-opens instead of leaving the user to find the + button.
+
+§8 — N22 🔵 (GlobalSearch matches translated label):
+- GlobalSearch.tsx:143-149: filter now matches t(labelKey) / t(descKey) in addition to the English label/description/keywords.
+- A Hindi user typing "बिक्री" (the visible label) now matches the Sales entry. Previously only English matched.
+
+§9 — N23 🔵 (Voice Entry / Barcode Scanner auto-open):
+- Added triggerVoiceOpen + triggerBarcodeOpen counters to app-store (same pattern as triggerNewEntry).
+- handle-nav-action.ts: navigate case fires the corresponding trigger when params.fireTriggerVoiceOpen / fireTriggerBarcodeOpen is set.
+- nav-registry.ts: voice-entry + barcode-scanner entries now have actionParams with the trigger flags.
+- TransactionEntry.tsx: added two useEffects that watch the counters and toggle showVoiceEntry / barcodeOpen. After navigating to new-sale from the Voice/Barcode nav entry, the dialog/scanner auto-opens.
+
+Verification:
+- tsc --noEmit: 0 errors
+- jest: 1819/1819 pass (54 suites) — was 1818, +1 from new N12 lint assertion
+- next build: clean
+- eslint src/: 0 errors
+
+Stage Summary:
+- Phase 4 verification batch shipped: 8 fixes (N1b partial + N12 + N13 + N15 + N19 + N20 + N21 + N22 + N23).
+- The N1 systemic fix (store navStack as single back-nav model) is queued for a follow-up batch — it touches use-browser-back-button.ts + AccountScreen + Reports + every screen with sub-state, ~1 focused day per auditor's estimate.
+- The N8 i18n translation task (135 missing keys × 4 languages = 540 translations) is queued for a separate batch — mechanical but voluminous.
+- All Phase 4 P-items (P1-P11) and N-items N1-N23 are now either fixed or explicitly deferred with reasoning.

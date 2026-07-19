@@ -55,7 +55,7 @@ export function ToolsHub() {
   const toolsItems = useMemo(() => {
     return filterByPermissions(
       NAV_REGISTRY.filter(d => d.surfaces?.includes('sidebar-tools')),
-      { canAccess, isFlagEnabled: isFlagEnabled as any, isOwner }
+      { canAccess, isFlagEnabled: isFlagEnabled as any, isOwner, platform: 'desktop' }
     ).sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
   }, [canAccess, isFlagEnabled, isOwner])
 

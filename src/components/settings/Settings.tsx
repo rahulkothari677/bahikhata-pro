@@ -105,7 +105,10 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
 
   // useSetting hook — provides hideProfit + updateHideProfit (persists instantly)
   const { hideProfit, updateHideProfit } = useSetting()
-  const { shops, activeShop, switchShop, createShop } = useShops()
+  const { shops, activeShop, createShop } = useShops()
+  // 🔒 V26 N20: Removed `switchShop` from destructure — was unused after
+  // the V26 N4 removal of the Switch button (copy still references switching
+  // but the actual UI no longer offers it; see V26 N14 copy fix).
   const { revenueTarget, expenseBudget, setRevenueTarget, setExpenseBudget } = useBusinessGoals()
   const [newShopOpen, setNewShopOpen] = useState(false)
   const [newShopName, setNewShopName] = useState('')
@@ -491,14 +494,20 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
   }, [featureSearch])
 
   // 🔒 V21-012 fix: Read from store on mount for pending tab
+  // 🔒 V26 N13: ALSO react to pendingTab changes while Settings is open.
+  // Was: only ran on mount, so hitting Ctrl+K → "Staff & Access" while
+  // Settings was already open did nothing (setView('settings') was a no-op,
+  // the effect didn't re-fire). Now: pendingTab is in the dep array, so
+  // a later setPendingSettingsTab() switches the tab reactively. Mirrors
+  // the Reports.tsx pattern (Reports.tsx:69-79).
   useEffect(() => {
     if (singleTab) return // Don't override singleTab mode
-    const tab = useAppStore.getState().pendingSettingsTab
+    const tab = pendingTab
     if (tab) {
       setSettingsTab(tab)
       setPendingSettingsTab(null)
     }
-  }, [setPendingSettingsTab, singleTab])
+  }, [pendingTab, setPendingSettingsTab, singleTab])
 
   const tabs = [
     { id: 'profile', label: 'Profile', icon: Store },

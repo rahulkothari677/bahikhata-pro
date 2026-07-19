@@ -46,6 +46,24 @@ export function TransactionDetail() {
   const { confirmDialog, dialog: confirmDialogEl } = useConfirmDialog()
   const { data: session } = useSession()
 
+  // 🔒 V26 N1b: Skeleton-dead-end guard.
+  // The browser-back hook clears selectedTransactionId/Type on popstate
+  // (use-browser-back-button.ts:232-234). When the user pops INTO this view
+  // — e.g. Sales → sale detail → tap party name (→ party-profile, child push)
+  // → hardware back → pops to transaction-detail WITH A NULLED ID — the query
+  // is disabled (enabled: !!selectedTransactionId), so isLoading stays false
+  // but txn stays undefined → skeleton forever (only escape was Header ←).
+  // Fix: if we're rendering transaction-detail with no id, redirect to the
+  // inferred parent ledger. This is a targeted patch for the most user-facing
+  // symptom of N1; the full systemic fix (store navStack as single model,
+  // restore params on pop) is queued for a follow-up batch.
+  useEffect(() => {
+    if (!selectedTransactionId) {
+      const targetView = previousView || (selectedTransactionType === 'sale' ? 'sales' : selectedTransactionType === 'purchase' ? 'purchases' : 'sales')
+      setView(targetView)
+    }
+  }, [selectedTransactionId, previousView, selectedTransactionType, setView])
+
   const { data, isLoading, error } = useQuery({
     queryKey: ['transaction', selectedTransactionId],
     queryFn: async () => {

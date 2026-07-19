@@ -175,27 +175,8 @@ export function AppShell({
   )
 }
 
-/**
- * Helper: get the ViewType → AppShell props mapping.
- *
- * 🔒 AUDIT V25 FIX §2.3 (Batch 2): Account and More now render INSIDE the
- * shell on desktop (sidebar='desktop-only'). On mobile they stay full-screen
- * (sidebar='never' effectively, via the desktop-only class). They have their
- * own top bar with back button, so header='never' for both platforms.
- */
-export function getShellPropsForView(view: ViewType): {
-  sidebar: ChromeVisibility
-  header: ChromeVisibility
-  mobileBottomNav: boolean
-} {
-  if (view === 'more' || view === 'account') {
-    // 🔒 §2.3: Sidebar stays visible on desktop (desktop-only), hidden on mobile.
-    // Header is 'never' — these screens have their own top bar with back button.
-    return { sidebar: 'desktop-only', header: 'never', mobileBottomNav: true }
-  }
-  // New-entry / detail views: full chrome, no bottom nav (they have own back btn)
-  if (['new-sale', 'new-purchase', 'transaction-detail', 'party-profile'].includes(view)) {
-    return { sidebar: 'always', header: 'always', mobileBottomNav: false }
-  }
-  return { sidebar: 'always', header: 'always', mobileBottomNav: true }
-}
+// 🔒 V26 N20: getShellPropsForView REMOVED — was dead code.
+// Was exported but never imported or invoked (verified by repo-wide grep).
+// The actual chrome decisions are made inline in src/app/page.tsx via
+// literal sidebar=/header=/mobileBottomNav= props. Two sources of truth
+// for the same rule = drift risk; deleted to keep one canonical source.
