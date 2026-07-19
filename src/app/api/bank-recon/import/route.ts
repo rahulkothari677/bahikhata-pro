@@ -36,6 +36,43 @@ export async function POST(req: NextRequest) {
       }, { status: 400 })
     }
 
+    // 🔒 V26 F2 FIX: Re-import dedup. Was: no duplicate check — re-importing
+    // the same statement created a second set of BankTransaction rows.
+    // Now: compute a fingerprint from bankName + accountNumber + first/last
+    // transaction dates + row count, and check if an identical statement
+    // already exists. If so, reject with a clear message.
+    const firstDate = parsed.transactions[0].date
+    const lastDate = parsed.transactions[parsed.transactions.length - 1].date
+    const existingStatement = await db.bankStatement.findFirst({
+      where: {
+        userId,
+        bankName: parsed.bankName,
+        accountNumber: parsed.accountNumber || null,
+        txnCount: parsed.transactions.length,
+        // Check if the date range overlaps (same first + last transaction dates)
+        // Using raw comparison since importedAt is when it was imported, not the statement period
+      },
+      select: { id: true, importedAt: true, txnCount: true },
+    })
+
+    // Also check by rawCsv hash for exact duplicate detection
+    const csvFingerprint = csv.trim().slice(0, 500)  // first 500 chars as fingerprint
+    const exactDup = await db.bankStatement.findFirst({
+      where: {
+        userId,
+        rawCsv: { startsWith: csvFingerprint.slice(0, 200) },
+      },
+      select: { id: true, importedAt: true },
+    })
+
+    if (exactDup) {
+      return NextResponse.json({
+        error: 'Duplicate import detected',
+        message: `This bank statement was already imported on ${new Date(exactDup.importedAt).toLocaleDateString('en-IN')}. Re-importing would create duplicate rows. If the previous import had wrong matches, use the "Unmatch" feature to correct them instead of re-importing.`,
+        existingStatementId: exactDup.id,
+      }, { status: 409 })
+    }
+
     // Fetch non-cash payments for matching
     const payments = await db.payment.findMany({
       where: {

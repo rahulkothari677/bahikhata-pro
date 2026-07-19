@@ -209,7 +209,13 @@ export async function PATCH(req: NextRequest) {
     const { invalidateTokenVersionCache } = await import('@/lib/auth')
     await invalidateTokenVersionCache(id)
 
-    return NextResponse.json({ staff: { ...updated, permissions: parsePermissions(updated.permissions) } })
+    return NextResponse.json({
+      staff: { ...updated, permissions: parsePermissions(updated.permissions) },
+      // 🔒 V26 F5: Tell the UI that the staff member needs to re-login.
+      // The tokenVersion bump revokes their current session (~5s). The UI
+      // should show a note: "X will need to sign in again for these changes to take effect."
+      notice: `${updated.name} will need to sign in again for these changes to take effect. Their current session has been revoked for security.`,
+    })
   } catch (error) {
     console.error('Staff PATCH error:', error)
     return NextResponse.json({ error: 'Failed to update staff permissions' }, { status: 500 })

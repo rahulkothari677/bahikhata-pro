@@ -572,9 +572,18 @@ export function VoiceEntry({ onTransactionParsed, products = [] }: VoiceEntryPro
                       </div>
                       <div className="flex-shrink-0 flex items-center gap-1 w-16">
                         <span className="text-[10px] text-muted-foreground w-6">Unit</span>
-                        <span className="block flex-1 bg-muted/50 border border-border rounded text-center text-sm px-1 py-1 text-muted-foreground">
-                          {item.unit || 'pcs'}
-                        </span>
+                        {/* 🔒 V26 F6: Make unit editable (was: static span). */}
+                        <input
+                          type="text"
+                          value={item.unit || 'pcs'}
+                          onChange={(e) => {
+                            const newItems = [...parsed.items]
+                            newItems[i] = { ...newItems[i], unit: e.target.value }
+                            setParsed({ ...parsed, items: newItems })
+                          }}
+                          className="w-full bg-background border border-border rounded text-center text-sm px-1 py-1 text-muted-foreground focus:ring-1 focus:ring-primary"
+                          placeholder="pcs"
+                        />
                       </div>
                       <span className="text-muted-foreground flex-shrink-0 text-xs">×</span>
                       <div className="flex-1 min-w-0 flex items-center gap-1">
