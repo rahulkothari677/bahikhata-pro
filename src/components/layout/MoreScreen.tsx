@@ -64,17 +64,19 @@ const SECTION_ORDER: NavSubcategoryId[] = [
 ]
 
 const SECTION_META: Partial<Record<NavSubcategoryId, { title: string; titleIcon: LucideIcon; accentColor: string; bgGradient: string }>> = {
+  // 🔒 V26 P10: Each section has a UNIQUE color — no adjacent repeats.
+  // Color palette chosen for visual distinction and semantic meaning:
   'sale-purchase':       { title: 'Sale & Purchase',         titleIcon: ShoppingCart, accentColor: 'text-indigo-600 dark:text-indigo-400', bgGradient: 'from-indigo-500/10 to-indigo-600/5' },
-  'parties':             { title: 'Customers & Suppliers',   titleIcon: Users, accentColor: 'text-indigo-600 dark:text-indigo-400', bgGradient: 'from-indigo-500/10 to-indigo-600/5' },
+  'parties':             { title: 'Customers & Suppliers',   titleIcon: Users, accentColor: 'text-cyan-600 dark:text-cyan-400', bgGradient: 'from-cyan-500/10 to-cyan-600/5' },
   'items-stock':         { title: 'Items & Stock',           titleIcon: Package, accentColor: 'text-amber-600 dark:text-amber-400', bgGradient: 'from-amber-500/10 to-amber-600/5' },
   'money-banking':       { title: 'Money & Banking',         titleIcon: Banknote, accentColor: 'text-emerald-600 dark:text-emerald-400', bgGradient: 'from-emerald-500/10 to-emerald-600/5' },
-  'gst-tax':             { title: 'Accounting Controls',     titleIcon: FileText, accentColor: 'text-blue-600 dark:text-blue-400', bgGradient: 'from-blue-500/10 to-blue-600/5' },
+  'gst-tax':             { title: 'Accounting Controls',     titleIcon: FileText, accentColor: 'text-orange-600 dark:text-orange-400', bgGradient: 'from-orange-500/10 to-orange-600/5' },
   'financial':           { title: 'Financial Reports',       titleIcon: BarChart3, accentColor: 'text-rose-600 dark:text-rose-400', bgGradient: 'from-rose-500/10 to-rose-600/5' },
   'gst':                 { title: 'GST Reports',             titleIcon: FileText, accentColor: 'text-blue-600 dark:text-blue-400', bgGradient: 'from-blue-500/10 to-blue-600/5' },
-  'banking':             { title: 'Banking Reports',         titleIcon: Banknote, accentColor: 'text-emerald-600 dark:text-emerald-400', bgGradient: 'from-emerald-500/10 to-emerald-600/5' },
-  'inventory-reports':   { title: 'Inventory Reports',       titleIcon: Package, accentColor: 'text-amber-600 dark:text-amber-400', bgGradient: 'from-amber-500/10 to-amber-600/5' },
+  'banking':             { title: 'Banking Reports',         titleIcon: Banknote, accentColor: 'text-teal-600 dark:text-teal-400', bgGradient: 'from-teal-500/10 to-teal-600/5' },
+  'inventory-reports':   { title: 'Inventory Reports',       titleIcon: Package, accentColor: 'text-lime-600 dark:text-lime-400', bgGradient: 'from-lime-500/10 to-lime-600/5' },
   'smart-tools':         { title: 'Smart Tools',             titleIcon: Sparkles, accentColor: 'text-violet-600 dark:text-violet-400', bgGradient: 'from-violet-500/10 to-violet-600/5' },
-  'business':            { title: 'Business',                titleIcon: Store, accentColor: 'text-amber-600 dark:text-amber-400', bgGradient: 'from-amber-500/10 to-amber-600/5' },
+  'business':            { title: 'Business',                titleIcon: Store, accentColor: 'text-fuchsia-600 dark:text-fuchsia-400', bgGradient: 'from-fuchsia-500/10 to-fuchsia-600/5' },
 }
 
 export function MoreScreen() {
@@ -84,9 +86,8 @@ export function MoreScreen() {
   const { canAccess, isCA } = useStaffPermissions()
   const { confirmDialog, dialog: confirmDialogEl } = useConfirmDialog()
 
-  // 🔒 V26 P9: Track which sections are expanded. First section (sale-purchase)
-  // is expanded by default; all others collapsed. User taps to toggle.
-  const [expandedSection, setExpandedSection] = useState<NavSubcategoryId | null>('sale-purchase')
+  // 🔒 V26 P10: All sections collapsed by default. User taps to expand.
+  const [expandedSection, setExpandedSection] = useState<NavSubcategoryId | null>(null)
 
   useEffect(() => {
     prefetchView('reports')

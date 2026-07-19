@@ -57,6 +57,7 @@ const TransactionEntry = dynamic(() => import('@/components/ledger/TransactionEn
 const PartyProfile = dynamic(() => import('@/components/parties/PartyProfile').then(m => ({ default: m.PartyProfile })), { ssr: false })
 const BillScanner = dynamic(() => import('@/components/scanner/BillScanner').then(m => ({ default: m.BillScanner })), { ssr: false })
 const Reports = dynamic(() => import('@/components/reports/Reports').then(m => ({ default: m.Reports })), { ssr: false })
+const ToolsHub = dynamic(() => import('@/components/layout/ToolsHub').then(m => ({ default: m.ToolsHub })), { ssr: false })
 const Settings = dynamic(() => import('@/components/settings/Settings').then(m => ({ default: m.Settings })), { ssr: false })
 const PricingPlans = dynamic(() => import('@/components/subscription/PricingPlans').then(m => ({ default: m.PricingPlans })), { ssr: false })
 const AIComparison = dynamic(() => import('@/components/settings/AIComparison').then(m => ({ default: m.AIComparison })), { ssr: false })
@@ -311,7 +312,7 @@ export default function Home() {
         ? localStorage.getItem('bahikhata:default-landing')
         : null
       if (savedLanding) {
-        const validViews = ['dashboard', 'sales', 'purchases', 'inventory', 'parties', 'reports', 'scanner']
+        const validViews = ['dashboard', 'sales', 'purchases', 'inventory', 'parties', 'reports', 'scanner', 'tools']
         if (validViews.includes(savedLanding)) {
           // Only apply if the user can access this view (staff permission check)
           const moduleMap: Record<string, string> = {
@@ -440,7 +441,7 @@ export default function Home() {
                 new Promise((r) => setTimeout(r, 3000)),
               ])
             }}
-            enabled={!['new-sale', 'new-purchase', 'new-estimate', 'transaction-detail', 'party-profile', 'scanner', 'pricing', 'reports', 'settings', 'ai-comparison', 'ai-usage', 'document-vault'].includes(currentView)}
+            enabled={!['new-sale', 'new-purchase', 'new-estimate', 'transaction-detail', 'party-profile', 'scanner', 'pricing', 'reports', 'settings', 'ai-comparison', 'ai-usage', 'document-vault', 'tools'].includes(currentView)}
           >
             {currentView === 'dashboard' && <Dashboard />}
             {currentView === 'inventory' && <Inventory />}
@@ -450,6 +451,7 @@ export default function Home() {
             {currentView === 'parties' && <Parties />}
             {currentView === 'scanner' && <BillScanner />}
             {currentView === 'reports' && <Reports />}
+            {currentView === 'tools' && <ToolsHub />}
             {currentView === 'settings' && <Settings />}
             {currentView === 'pricing' && (
               <div className="space-y-4">

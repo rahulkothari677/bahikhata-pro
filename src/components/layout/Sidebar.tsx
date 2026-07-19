@@ -221,87 +221,10 @@ export function Sidebar() {
           })}
         </nav>
 
-        {/* 🔒 V26 P9: Redesigned Tools section — grouped by subcategory with colorful sub-headers */}
-        {!sidebarCollapsed && (
-          <div className="border-t border-sidebar-border">
-            <button
-              onClick={() => setToolsOpen(!toolsOpen)}
-              className="w-full flex items-center gap-2 px-5 py-2.5 text-sidebar-foreground/60 hover:text-sidebar-foreground/80 transition text-left"
-              aria-expanded={toolsOpen}
-              aria-label="Toggle Tools section"
-            >
-              <ChevronRight className={cn('w-3 h-3 transition-transform', toolsOpen && 'rotate-90')} />
-              <span className="text-[10px] font-bold uppercase tracking-wider">Tools</span>
-              <span className="text-[9px] text-sidebar-foreground/40 ml-auto">{toolsItems.length} items</span>
-            </button>
-            {toolsOpen && (
-              <nav className="px-3 pb-3 space-y-3 max-h-[40vh] overflow-y-auto">
-                {/* 🔒 V26 P9: Group tools by subcategory with colorful sub-headers */}
-                {groupedTools.map((group) => (
-                  <div key={group.subcategory}>
-                    {/* Sub-header */}
-                    <div className={cn('flex items-center gap-1.5 px-3 py-1')}>
-                      <span className={cn('text-[9px] font-bold uppercase tracking-wider', group.accentColor)}>
-                        {group.title}
-                      </span>
-                      <div className="flex-1 h-px bg-sidebar-border/50" />
-                    </div>
-                    {/* Items in this group */}
-                    {group.items.map((item: NavDestination) => {
-                      const Icon = item.icon
-                      const active = item.actionKind === 'navigate-account'
-                        ? currentView === 'account' && useAppStore.getState().accountSection === item.actionParams?.accountSection
-                        : ['toast-navigate', 'navigate-day-end', 'navigate-bulk', 'navigate-scroll'].includes(item.actionKind || '')
-                          ? false
-                          : currentView === (item.view || item.id)
-                      return (
-                        <button
-                          key={item.id}
-                          onClick={() => handleNavAction(item)}
-                          onMouseEnter={() => item.view && prefetchView(item.view)}
-                          onTouchStart={() => item.view && prefetchView(item.view)}
-                          className={cn(
-                            'w-full flex items-center gap-3 px-3 py-2 rounded-lg transition-all group relative',
-                            active
-                              ? 'bg-sidebar-primary/10 text-sidebar-primary'
-                              : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
-                          )}
-                          title={item.labelKey ? t(item.labelKey) : item.label}
-                        >
-                          <Icon className={cn('w-4 h-4 flex-shrink-0', active && 'text-sidebar-primary')} />
-                          <div className="flex-1 text-left min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="text-[13px] font-medium truncate">{item.labelKey ? t(item.labelKey) : item.label}</span>
-                              {item.badge && (
-                                <span className="text-[9px] px-1.5 py-0.5 rounded-full font-bold bg-gradient-saffron text-white">
-                                  {item.badge}
-                                </span>
-                              )}
-                            </div>
-                            {/* 🔒 V26 P9: Increased from /40 to /60 for readability */}
-                            <p className="text-[10px] truncate text-sidebar-foreground/60">{item.descKey ? t(item.descKey) : item.description}</p>
-                          </div>
-                        </button>
-                      )
-                    })}
-                  </div>
-                ))}
-              </nav>
-            )}
-          </div>
-        )}
-        {sidebarCollapsed && (
-          <div className="border-t border-sidebar-border py-2 flex justify-center">
-            <button
-              onClick={toggleSidebarCollapsed}
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-sidebar-foreground/60 hover:text-sidebar-foreground hover:bg-sidebar-accent transition"
-              title="Expand sidebar to see Tools"
-              aria-label="Expand sidebar to see Tools"
-            >
-              <FolderOpen className="w-4 h-4" />
-            </button>
-          </div>
-        )}
+        {/* 🔒 V26 P10: Old collapsible Tools section REMOVED.
+            Tools is now a main-nav entry (like Reports) that opens a
+            beautiful card-based ToolsHub page. The sidebar is cleaner
+            and the tools get the same visual treatment as reports. */}
 
         {/* CA Mode indicator */}
         {isCA && !sidebarCollapsed && (

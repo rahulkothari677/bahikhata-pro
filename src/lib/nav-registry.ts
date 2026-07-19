@@ -461,6 +461,28 @@ export const NAV_REGISTRY: NavDestination[] = [
     descKey: 'nav.desc.reports',
     moduleKey: 'reports',
   },
+
+  // ═══ tools (main nav — opens ToolsHub) ════════════════════════════════
+  // 🔒 V26 P10: "Tools" is now a main-nav entry (like Reports) that opens
+  // a beautiful card-based ToolsHub page. Was: a collapsible list at the
+  // bottom of the sidebar. Now: same visual quality as the Reports Hub.
+  {
+    id: 'tools',
+    label: 'Tools',
+    description: 'Quick access to all business tools',
+    icon: Sparkles,
+    iconColor: VIOLET,
+    iconBg: VIOLET_BG,
+    view: 'tools',
+    actionKind: 'navigate',
+    category: 'tools',
+    frequency: 'primary',
+    surfaces: ['sidebar-main', 'global-search'],
+    sortOrder: 9,
+    keywords: 'tools voice scanner barcode ai insights day-end cash reminders returns',
+    labelKey: 'nav.label.tools',
+    descKey: 'nav.desc.tools',
+  },
   // GST & Tax section (MoreScreen pointers + ReportsHub leaves)
   {
     id: 'reconciliation',

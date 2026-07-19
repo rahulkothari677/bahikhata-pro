@@ -21,6 +21,7 @@ export type ViewType =
   | 'ai-comparison'
   | 'ai-usage'
   | 'document-vault'
+  | 'tools'
 
 export type ViewMode = 'grid' | 'list'
 
