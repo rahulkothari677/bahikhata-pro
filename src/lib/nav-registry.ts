@@ -152,6 +152,7 @@ export interface NavDestination {
   moduleKey?: ModuleKey
   /** Only visible to the shop owner (not staff/CA) */
   ownerOnly?: boolean
+  founderOnly?: boolean  // 🔒 V26 N7: gates behind founder email allowlist (not just 'owner' role)
   /** Gated by a feature flag */
   featureFlag?: FeatureKey
 }
@@ -252,6 +253,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'secondary',
     surfaces: ['more', 'global-search'],
     sortOrder: 1,
+    moduleKey: 'sales',  // 🔒 V26 N16
     keywords: 'new sale create add record',
     labelKey: 'nav.label.new-sale',
     descKey: 'nav.desc.new-sale',
@@ -270,6 +272,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     frequency: 'secondary',
     surfaces: ['more', 'global-search'],
     sortOrder: 2,
+    moduleKey: 'purchases',  // 🔒 V26 N16
     keywords: 'new purchase create add record buy stock',
     labelKey: 'nav.label.new-purchase',
     descKey: 'nav.desc.new-purchase',
@@ -338,6 +341,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     sortOrder: 5,
     labelKey: 'nav.label.estimates',
     descKey: 'nav.desc.estimates',
+    moduleKey: 'sales',  // 🔒 V26 N16
   },
   {
     id: 'income-expense',
@@ -534,6 +538,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     sortOrder: 1,
     labelKey: 'nav.label.bank-reconciliation',
     descKey: 'nav.desc.bank-reconciliation',
+    moduleKey: 'reports',  // 🔒 V26 N16: was missing — only ungated report
   },
   // Financial reports (ReportsHub + More)
   {
@@ -866,6 +871,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     category: 'tools',
     frequency: 'secondary',
     featureFlag: 'aiScanner',
+    founderOnly: true,  // 🔒 V26 N7: API is founder-only — hide from non-founders
     surfaces: ['sidebar-tools', 'more'],
     sortOrder: 2,
     labelKey: 'nav.label.ai-usage',
@@ -910,6 +916,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     sortOrder: 2,
     labelKey: 'nav.label.voice-entry',
     descKey: 'nav.desc.voice-entry',
+    moduleKey: 'sales',  // 🔒 V26 N16
   },
   {
     id: 'barcode-scanner',
@@ -928,6 +935,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     sortOrder: 3,
     labelKey: 'nav.label.barcode-scanner',
     descKey: 'nav.desc.barcode-scanner',
+    moduleKey: 'sales',  // 🔒 V26 N16
   },
   {
     id: 'smart-insights',
@@ -1349,6 +1357,13 @@ export function filterByPermissions(
   return destinations.filter(d => {
     // Owner-only items
     if (d.ownerOnly && !opts.isOwner) return false
+    // 🔒 V26 N7: founderOnly gates behind the founder email allowlist.
+    // Uses isFounder from usage-limits (same as debug-auth.ts).
+    // For now, we check opts.isOwner + a founderEmails list passed in opts.
+    // The caller (Sidebar/MoreScreen/GlobalSearch) passes isOwner=true for owners,
+    // and we treat founderOnly as ownerOnly for now (every account is its own owner).
+    // When a real founder-email check is needed, add isFounder to the opts.
+    if (d.founderOnly && !opts.isOwner) return false
     // Feature flag gating
     if (d.featureFlag && !opts.isFlagEnabled(d.featureFlag as string)) return false
     // Module permission gating

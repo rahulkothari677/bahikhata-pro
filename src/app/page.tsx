@@ -147,7 +147,9 @@ export default function Home() {
     const moduleKey = moduleMap[currentView]
     if (moduleKey && !canAccess(moduleKey as ModuleKey)) {
       // Redirect to first allowed view
-      const firstAllowed = ['sales', 'purchases', 'inventory', 'scanner', 'dashboard'].find(
+      // 🔒 V26 N17: Extended fallback list — was only ['sales','purchases','inventory','scanner','dashboard']
+      // → staff with only reports/parties/income-expense landed on blocked Sales view.
+      const firstAllowed = ['dashboard', 'sales', 'purchases', 'parties', 'inventory', 'reports', 'income-expense', 'scanner', 'settings'].find(
         (v) => canAccess(v as ModuleKey)
       )
       setView((firstAllowed || 'sales') as ViewType)
