@@ -270,6 +270,12 @@ model Transaction {
   ewayBillExpiry        DateTime?
   ewayBillDate          DateTime?
 
+  // 🔒 V26 F1 FIX: Estimate conversion tracking. When an estimate is converted
+  // to a sale, this field stores the sale's transaction ID. Prevents unlimited
+  // re-conversion (double billing, double stock decrement). Null = not converted.
+  convertedToTransactionId String?
+  convertedAt              DateTime?
+
   // 🔒 M6: Unique invoice number per user (GST compliance — no duplicates)
   @@unique([userId, invoiceNo])
   // Performance: list transactions per user filtered by date and/or type

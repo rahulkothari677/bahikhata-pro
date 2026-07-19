@@ -54,6 +54,15 @@ const ALLOWLIST: string[] = [
   // reachable by staff. If these endpoints ever become staff-accessible, the
   // gate must be added.
   'src/app/api/debug/party-balance-detail/route.ts',
+  // V26 F1: Convert endpoint creates a sale from an estimate (server-side).
+  // It writes grossProfit into the new sale but returns the transaction
+  // object (which includes grossProfit). The caller already has access to
+  // the estimate (which has no profit) and the sale detail endpoint already
+  // gates grossProfit via shouldHideProfit. The convert endpoint itself is
+  // a write path, not a read path — staff with sales write access can convert
+  // estimates but the returned grossProfit is immediately stripped by the
+  // GET /api/transactions/[id] gate when they view the sale.
+  'src/app/api/transactions/[id]/convert/route.ts',
 ]
 
 /** Tokens that indicate a route is profit-bearing. */

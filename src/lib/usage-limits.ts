@@ -121,8 +121,31 @@ export async function getUserPlan(userId: string): Promise<Plan> {
     return 'elite'
   }
 
+  // 🔒 V26 F3 FIX: Was: returned user.plan directly, ignoring Subscription.endDate.
+  // A user who paid for one month of Pro kept Pro forever because nothing
+  // ever checked the expiry or downgraded the plan.
+  // Now: check the latest active Subscription. If it's expired (endDate < now),
+  // return 'free' — even if user.plan still says 'pro' (the cron will clean up
+  // user.plan separately, but this is the authoritative check).
   const plan = user?.plan as Plan
-  if (plan === 'pro' || plan === 'elite') return plan
+  if (plan === 'pro' || plan === 'elite') {
+    // Verify there's an active, non-expired subscription
+    const activeSub = await db.subscription.findFirst({
+      where: {
+        userId,
+        status: 'active',
+        endDate: { gte: new Date() },
+      },
+      orderBy: { endDate: 'desc' },
+    })
+
+    // If no active subscription found, the plan has expired
+    if (!activeSub) {
+      return 'free'
+    }
+
+    return plan
+  }
   return 'free'
 }
 

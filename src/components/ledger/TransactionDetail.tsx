@@ -20,7 +20,7 @@ import { roundMoney } from '@/lib/money'
 import {
   Edit2, Trash2, Printer, Download, User, Calendar, Receipt,
   ShoppingCart, Truck, ArrowDownRight, ArrowUpRight, ArrowRight, X, Plus,
-  IndianRupee, FileText, Phone, Building2, MapPin, TrendingUp,
+  IndianRupee, FileText, FileCheck, Phone, Building2, MapPin, TrendingUp,
   MessageCircle, AlertCircle, ArrowLeft, History, Loader2,
 } from 'lucide-react'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
@@ -422,42 +422,55 @@ export function TransactionDetail() {
             <FileText className="w-4 h-4" /> Debit Note
           </Button>
         )}
-        {/* 🔒 Feature Phase 3: Convert Estimate to Sale — creates a new sale
-            from the estimate's items. The estimate stays in the DB (not deleted)
-            so the user can see it was converted. */}
-        {txn.type === 'estimate' && (
+        {/* 🔒 V26 F1 FIX: Server-side atomic estimate→sale conversion.
+            Was: client-side prefill → estimate stayed open → unlimited
+            re-conversion → duplicate sales, double stock, double billing.
+            Now: calls POST /api/transactions/[id]/convert which creates the
+            sale AND marks the estimate as converted in one $transaction.
+            If already converted, shows a "Converted → INV-XXXX" badge instead. */}
+        {txn.type === 'estimate' && txn.convertedToTransactionId ? (
+          <Badge className="bg-emerald-600 text-white gap-1">
+            <FileCheck className="w-3 h-3" /> Converted to Sale
+          </Badge>
+        ) : txn.type === 'estimate' && (
           <Button
             variant="default"
             size="touch"
             className="gap-2 bg-gradient-saffron text-white"
-            onClick={() => {
-              // Pre-fill the New Sale form with the estimate's items
-              // 🔒 V26 N6: carry over the order-level discountAmount — was
-              // dropped, so the converted sale's total was higher than the
-              // quoted estimate by the discount amount.
-              ;(window as any).__ledgerPreset = {
-                type: 'sale',
-                data: {
-                  partyId: txn.partyId,
-                  partyName: txn.party?.name,
-                  date: new Date().toISOString().slice(0, 10),
-                  discountAmount: txn.discountAmount || 0,
-                  items: txn.items?.map((item: any) => ({
-                    productId: item.productId || '',
-                    name: item.productName,
-                    quantity: item.quantity,
-                    unitPrice: item.unitPrice,
-                    gstRate: item.gstRate,
-                    unit: item.unit || 'pcs',
-                  })),
-                },
+            onClick={async () => {
+              try {
+                const r = await offlineFetch(`/api/transactions/${txn.id}/convert`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  offline: { queueable: false },
+                })
+                const result = await r.json()
+                if (!r.ok) {
+                  if (r.status === 409) {
+                    sonnerToast.warning('Already converted', {
+                      description: result.message || 'This estimate was already converted to a sale.',
+                      duration: 8000,
+                    })
+                  } else {
+                    throw new Error(result.error || result.message || 'Conversion failed')
+                  }
+                  return
+                }
+                sonnerToast.success('Estimate converted to sale!', {
+                  description: `Sale ${result.transaction.invoiceNo} created successfully.`,
+                  duration: 5000,
+                })
+                // Navigate to the new sale
+                useAppStore.getState().setPreviousView('transaction-detail')
+                useAppStore.getState().setView('sales')
+                // Refresh the detail view
+                window.location.reload()
+              } catch (err: any) {
+                sonnerToast.error('Conversion failed', {
+                  description: err.message,
+                  duration: 10000,
+                })
               }
-              useAppStore.getState().setPreviousView('transaction-detail')
-              useAppStore.getState().setView('new-sale')
-              sonnerToast.success('Estimate loaded as new sale', {
-                description: 'Review the details and tap Save to convert this estimate into a sale.',
-                duration: 5000,
-              })
             }}
           >
             <ShoppingCart className="w-4 h-4" /> Convert to Sale

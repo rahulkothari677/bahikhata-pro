@@ -72,16 +72,18 @@ describe('V26 N6 — Estimate→Sale preset carries order-level discount', () =>
     expect(preset.data.discountAmount).toBe(0)
   })
 
-  test('component source includes discountAmount in the preset literal', () => {
-    // Structural guardrail: if a future refactor removes discountAmount from
-    // the preset, this test fails. Read the source file directly.
+  test('component source uses server-side convert endpoint (V26 F1)', () => {
+    // 🔒 V26 F1: The old client-side preset was replaced with a server-side
+    // POST /api/transactions/[id]/convert. This test asserts the convert
+    // endpoint is called, not the old __ledgerPreset pattern.
     const src = fs.readFileSync(
       path.join(process.cwd(), 'src/components/ledger/TransactionDetail.tsx'),
       'utf8',
     )
-    // The preset literal must contain 'discountAmount: txn.discountAmount'
-    // (or equivalent). Be flexible on whitespace.
-    expect(src).toMatch(/discountAmount:\s*txn\.discountAmount/)
+    // Must call the convert endpoint
+    expect(src).toMatch(/\/api\/transactions\/.*\/convert/)
+    // Must NOT use the old client-side preset pattern for estimates
+    expect(src).not.toMatch(/__ledgerPreset.*type:\s*'sale'/)
   })
 })
 
