@@ -23,7 +23,7 @@ export function ListItemSkeleton({ count = 5 }: { count?: number }) {
       {[...Array(count)].map((_, i) => (
         <div
           key={i}
-          className="flex items-center gap-3 p-3 rounded-xl border border-border/40 bg-card"
+          className="flex items-center gap-3 p-3 rounded-2xl border border-border/40 bg-card"
         >
           {/* Avatar circle */}
           <Skeleton className="w-10 h-10 rounded-full flex-shrink-0" />

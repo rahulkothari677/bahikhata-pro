@@ -336,7 +336,7 @@ export function BillScanner() {
             resolve(compressed)
           }
           img.onerror = () => {
-            reject(new Error('Failed to load image'))
+            reject(new Error("Couldn't load the image"))
           }
           img.src = e.target?.result as string
         }
@@ -489,7 +489,7 @@ export function BillScanner() {
         setScanning(false)
       }
     } catch (compressError: any) {
-      sonnerToast.error('Failed to process image', {
+      sonnerToast.error("Couldn\'t process the image", {
         description: `${compressError?.name || 'Error'}: ${compressError?.message || 'Could not read the image file'}. Try a different image (PNG/JPG under 10MB).`,
         duration: 10000,
       })

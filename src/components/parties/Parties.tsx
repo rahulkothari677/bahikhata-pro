@@ -423,7 +423,7 @@ function PartyDialog({ open, onOpenChange, onSuccess }: {
       onOpenChange(false)
     } catch {
       haptic.error()
-      sonnerToast.error('Failed to save party')
+      sonnerToast.error("Couldn\'t save the party")
     } finally {
       setSaving(false)
     }

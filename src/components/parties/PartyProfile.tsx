@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { formatINR, formatDate, formatDateTime, cn, getInitials } from '@/lib/utils'
+import { useCountUp } from '@/hooks/use-count-up'
 import { roundMoney } from '@/lib/money'
 import {
   Phone, Building2, MapPin, User, Plus, ShoppingCart, Truck,
@@ -94,6 +95,11 @@ export function PartyProfile() {
   const topProducts = data?.topProducts || []
   const monthlyData = data?.monthlyData || []
   const transactions = data?.transactions || []
+  // 🔒 V26 Phase 6 §6.6: Animate the balance value with useCountUp — makes
+  // state changes *visible* after a payment (GPay-style). The animation runs
+  // from 0→balance on mount + when balance changes (e.g. after recording a
+  // payment, the balance ticks down animatedly).
+  const animatedBalance = useCountUp(stats?.balance ?? 0, 800)
   // 🔒 V15 M-2: Statement-grade data — complete (capped at 500), newest-first.
   // Used ONLY for the account statement. The paginated `transactions` array
   // above is still used for the recent-transactions list.
@@ -209,7 +215,7 @@ export function PartyProfile() {
       triggerRefresh()
     } catch {
       haptic.error()
-      sonnerToast.error('Failed to record payment')
+      sonnerToast.error("Couldn\'t record the payment")
     } finally {
       setSavingPayment(false)
     }
@@ -244,10 +250,10 @@ export function PartyProfile() {
         window.open(data.whatsappUrl, '_blank')
         sonnerToast.success('Opening WhatsApp with reminder message...')
       } else {
-        sonnerToast.error(data.error || 'Failed to generate reminder')
+        sonnerToast.error(data.error || "Couldn't generate reminder")
       }
     } catch {
-      sonnerToast.error('Failed to send reminder')
+      sonnerToast.error("Couldn\'t send the reminder")
     } finally {
       setSendingReminder(false)
     }
@@ -518,7 +524,7 @@ export function PartyProfile() {
       }
     } catch (err: any) {
       if (err?.name === 'AbortError') return
-      sonnerToast.error('Failed to share statement')
+      sonnerToast.error("Couldn\'t share the statement")
     }
   }
 
@@ -576,7 +582,7 @@ export function PartyProfile() {
             <div className="text-right">
               <p className="text-white/70 text-xs uppercase">Outstanding</p>
               <p className={cn('text-2xl font-bold tabular-nums', stats.balance >= 0 ? 'text-white' : 'text-red-200')}>
-                {stats.balance >= 0 ? '+' : ''}{formatINR(stats.balance)}
+                {stats.balance >= 0 ? '+' : ''}{formatINR(animatedBalance)}
               </p>
               <p className="text-white/70 text-xs mt-0.5">
                 {stats.balance > 0 ? 'They owe you' : stats.balance < 0 ? 'You owe them' : 'Settled'}

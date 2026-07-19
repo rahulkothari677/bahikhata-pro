@@ -26,7 +26,7 @@ export function WakingUpState({ rows = 5 }: { rows?: number }) {
         {[...Array(rows)].map((_, i) => (
           <div
             key={i}
-            className="flex items-center gap-3 p-3 rounded-xl border border-border/40 bg-card"
+            className="flex items-center gap-3 p-3 rounded-2xl border border-border/40 bg-card"
           >
             <Skeleton className="w-10 h-10 rounded-lg flex-shrink-0" />
             <div className="flex-1 space-y-2">

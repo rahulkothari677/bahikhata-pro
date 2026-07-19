@@ -85,7 +85,7 @@ export function Gstr3bReport() {
       })
       if (!r.ok) {
         const json = await r.json().catch(() => ({}))
-        sonnerToast.error(json.error || json.message || 'Failed to save')
+        sonnerToast.error(json.error || json.message || "Couldn\'t save")
         return
       }
       const result = await r.json()

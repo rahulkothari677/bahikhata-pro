@@ -118,7 +118,7 @@ export function AIComparison() {
         }),
       })
       const data = await r.json()
-      if (!r.ok) throw new Error(data.error || 'Failed to save')
+      if (!r.ok) throw new Error(data.error || "Couldn\'t save")
       return data
     },
     onSuccess: (data) => {
@@ -148,7 +148,7 @@ export function AIComparison() {
       setCurrentResults(null)
       setCurrentComparisonId(null)
     }
-    reader.onerror = () => sonnerToast.error('Failed to read image file')
+    reader.onerror = () => sonnerToast.error("Couldn\'t read the image file")
     reader.readAsDataURL(file)
   }
 

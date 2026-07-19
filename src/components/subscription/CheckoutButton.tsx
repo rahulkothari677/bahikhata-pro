@@ -28,7 +28,7 @@ export function CheckoutButton({ planId, planName, price, billingCycle, currentP
       })
       if (!orderRes.ok) {
         const err = await orderRes.json()
-        sonnerToast.error(err.error || 'Failed to start payment. Is Razorpay configured?')
+        sonnerToast.error(err.error || "Couldn't start payment. Is Razorpay configured?")
         setLoading(false)
         return
       }
@@ -85,7 +85,7 @@ function loadRazorpaySDK(): Promise<void> {
     const script = document.createElement('script')
     script.src = 'https://checkout.razorpay.com/v1/checkout.js'
     script.onload = () => resolve()
-    script.onerror = () => reject(new Error('Failed to load Razorpay SDK'))
+    script.onerror = () => reject(new Error("Couldn't load the Razorpay SDK"))
     document.body.appendChild(script)
   })
 }

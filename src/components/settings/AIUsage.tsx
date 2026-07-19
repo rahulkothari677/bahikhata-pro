@@ -84,7 +84,7 @@ export function AIUsage() {
         <div className="rounded-lg bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 p-4">
           <div className="flex items-center gap-2 text-red-700 dark:text-red-400">
             <AlertCircle className="w-5 h-5" />
-            <span className="font-medium">Failed to load AI usage</span>
+            <span className="font-medium">Couldn't load AI usage data</span>
           </div>
           <p className="text-sm text-red-600 dark:text-red-500 mt-1">{String(error)}</p>
           <p className="text-xs text-red-500 dark:text-red-400 mt-2">

@@ -188,7 +188,7 @@ export function DocumentVault() {
       sonnerToast.success('Document deleted')
       queryClient.invalidateQueries({ queryKey: ['documents'] })
     } catch {
-      sonnerToast.error('Failed to delete document')
+      sonnerToast.error("Couldn\'t delete the document")
     }
   }
 

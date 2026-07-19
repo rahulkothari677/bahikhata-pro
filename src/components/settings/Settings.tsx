@@ -311,7 +311,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
       queryClient.invalidateQueries({ queryKey: ['setting'] })
     } catch {
       haptic.error()
-      sonnerToast.error('Failed to save settings')
+      sonnerToast.error("Couldn\'t save settings")
     } finally {
       setSaving(false)
     }
@@ -330,7 +330,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
       }
     } catch {
       haptic.error()
-      sonnerToast.error('Failed to reset data')
+      sonnerToast.error("Couldn\'t reset data")
     }
   }
 
@@ -357,7 +357,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
       sonnerToast.success('Cache cleared. Reloading…')
       setTimeout(() => window.location.reload(), 1000)
     } catch {
-      sonnerToast.error('Failed to clear cache')
+      sonnerToast.error("Couldn\'t clear cache")
     }
   }
 
@@ -1410,7 +1410,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
                   }).then(() => {
                     sonnerToast.success('Scanner language updated')
                   }).catch(() => {
-                    sonnerToast.error('Failed to update language')
+                    sonnerToast.error("Couldn\'t update language")
                   })
                 }}
                 className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"
@@ -1461,7 +1461,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
                   }).then(() => {
                     sonnerToast.success('Voice entry language updated')
                   }).catch(() => {
-                    sonnerToast.error('Failed to update language')
+                    sonnerToast.error("Couldn\'t update language")
                   })
                 }}
                 className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary"

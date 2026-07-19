@@ -261,7 +261,7 @@ function AddPartyDialog({ open, onOpenChange, defaultType, onSuccess }: {
       const data = await r.json()
       onSuccess(data.party)
     } catch {
-      sonnerToast.error('Failed to add party')
+      sonnerToast.error("Couldn\'t add the party")
     } finally {
       setSaving(false)
     }

@@ -150,7 +150,7 @@ export function Gstr1Report() {
       queryClient.invalidateQueries({ queryKey: ['gstr-1', month] })
     } catch (e: any) {
       haptic.error()
-      sonnerToast.error(e.message || 'Failed to save GSTR-1')
+      sonnerToast.error(e.message || "Couldn\'t save GSTR-1")
     } finally {
       setSaving(false)
     }
@@ -176,7 +176,7 @@ export function Gstr1Report() {
             <AlertCircle className="w-5 h-5 text-rose-600 flex-shrink-0 mt-0.5" />
             <div className="flex-1">
               <p className="text-sm font-semibold text-rose-800 dark:text-rose-200">
-                Failed to load GSTR-1
+                Couldn't load GSTR-1
               </p>
               <p className="text-xs text-rose-700 dark:text-rose-300 mt-1">
                 {error instanceof Error ? error.message : 'Unknown error'}

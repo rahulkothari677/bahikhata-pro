@@ -444,7 +444,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       })))
       sonnerToast.success(`Loaded ${originalItems.length} item${originalItems.length !== 1 ? 's' : ''} from the original sale`)
     } catch (e: any) {
-      sonnerToast.error('Failed to load items from original sale')
+      sonnerToast.error("Couldn\'t load items from the original sale")
     } finally {
       setLoadingOriginal(false)
     }
@@ -696,7 +696,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       setView(estimateMode ? 'sales' : (isSale ? 'sales' : 'purchases'))
     } catch (e) {
       haptic.error()
-      sonnerToast.error('Failed to save transaction')
+      sonnerToast.error("Couldn\'t save transaction")
     } finally {
       setSaving(false)
     }

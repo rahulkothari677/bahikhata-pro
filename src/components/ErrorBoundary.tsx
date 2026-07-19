@@ -69,7 +69,7 @@ export class ErrorBoundary extends React.Component<
         await Promise.all(keys.map((k) => caches.delete(k)))
       }
     } catch (e) {
-      console.error('Failed to clear cache:', e)
+      console.error("Couldn't clear cache:", e)
     }
     window.location.reload()
   }

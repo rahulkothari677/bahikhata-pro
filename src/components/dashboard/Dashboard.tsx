@@ -347,7 +347,7 @@ export function Dashboard() {
       if (err instanceof OfflineError) {
         sonnerToast.error('You are offline and no recent sale is cached.')
       } else {
-        sonnerToast.error('Failed to load last sale')
+        sonnerToast.error("Couldn\'t load the last sale")
       }
     } finally {
       setRepeating(false)
@@ -596,7 +596,7 @@ export function Dashboard() {
                 setPreviousView('dashboard')
                 setView(action.view)
               }}
-              className="card-hover flex flex-col items-center gap-1.5 p-2.5 rounded-xl bg-card border border-border/60 shadow-card hover:border-primary/30 flex-shrink-0 min-w-[72px] active:scale-95"
+              className="card-hover flex flex-col items-center gap-1.5 p-2.5 rounded-2xl bg-card border border-border/60 shadow-card hover:border-primary/30 flex-shrink-0 min-w-[72px] active:scale-95"
             >
               <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center', action.color)}>
                 <ActionIcon className="w-4 h-4" />

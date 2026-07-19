@@ -82,7 +82,7 @@ export function AuthScreen() {
         })
         const data = await r.json()
         if (!r.ok) {
-          sonnerToast.error(data.error || 'Failed to sign up')
+          sonnerToast.error(data.error || "Couldn't sign up")
           setLoading(false)
           return
         }

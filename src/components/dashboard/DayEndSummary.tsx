@@ -229,7 +229,7 @@ export function DayEndSummary({ open, onOpenChange }: { open: boolean; onOpenCha
             )}
           </div>
         ) : (
-          <p className="text-center py-8 text-sm text-muted-foreground">Failed to load summary</p>
+          <p className="text-center py-8 text-sm text-muted-foreground">Couldn't load the summary</p>
         )}
 
         <DialogFooter className="gap-2">

@@ -81,7 +81,7 @@ export function PasswordReset({ onBack }: PasswordResetProps) {
           })
         }
       } else {
-        sonnerToast.error(data.error || 'Failed to send reset link')
+        sonnerToast.error(data.error || "Couldn't send the reset link")
       }
     } catch {
       sonnerToast.error('Something went wrong')

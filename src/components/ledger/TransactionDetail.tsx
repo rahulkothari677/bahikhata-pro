@@ -226,7 +226,7 @@ export function TransactionDetail() {
         sonnerToast.success('Invoice PDF downloaded', { id: toastId })
       }
     }).catch((err) => {
-      sonnerToast.error('Failed to generate PDF', {
+      sonnerToast.error("Couldn\'t generate the PDF", {
         description: String(err?.message || err).slice(0, 200),
         id: toastId,
         duration: 8000,
@@ -316,7 +316,7 @@ export function TransactionDetail() {
         sonnerToast.dismiss(toastId)
         return
       }
-      sonnerToast.error('Failed to share invoice', {
+      sonnerToast.error("Couldn\'t share the invoice", {
         description: String(err?.message || err).slice(0, 200),
         id: toastId,
         duration: 8000,
@@ -1044,7 +1044,7 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
       onOpenChange(false)
     } catch (e) {
       haptic.error()
-      sonnerToast.error('Failed to update')
+      sonnerToast.error("Couldn\'t update")
     } finally {
       setSaving(false)
     }
@@ -1418,7 +1418,7 @@ function EInvoiceCard({ txn }: { txn: any }) {
       })
       setShowStoreForm(true)
     } catch (e: any) {
-      sonnerToast.error('Failed to generate IRN request', {
+      sonnerToast.error("Couldn\'t generate the e-invoice request", {
         description: e.message,
       })
     } finally {
@@ -1450,7 +1450,7 @@ function EInvoiceCard({ txn }: { txn: any }) {
       setQrInput('')
       window.location.reload()
     } catch (e: any) {
-      sonnerToast.error('Failed to store IRN', { description: e.message })
+      sonnerToast.error("Couldn\'t save the e-invoice number", { description: e.message })
     } finally {
       setLoading(false)
     }

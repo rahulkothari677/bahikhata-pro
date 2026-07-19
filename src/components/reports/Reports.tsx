@@ -141,7 +141,7 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
       URL.revokeObjectURL(url)
       sonnerToast.success('GSTR-1 exported! Upload this to GST portal.')
     } catch (e: any) {
-      sonnerToast.error('Failed to export GSTR-1', {
+      sonnerToast.error("Couldn\'t export GSTR-1", {
         description: e?.message || 'Unknown error. Check the date range — GSTR-1 requires a single-month period.',
         duration: 10000,
       })
@@ -247,7 +247,7 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
         sonnerToast.success('Tally XML ready — save or share from the popup', { id: toastId })
       }
     } catch (err: any) {
-      sonnerToast.error('Failed to export Tally XML', {
+      sonnerToast.error("Couldn\'t export Tally XML", {
         description: String(err?.message || err).slice(0, 200),
         duration: 10000,
       })

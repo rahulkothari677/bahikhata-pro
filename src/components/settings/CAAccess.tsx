@@ -97,7 +97,7 @@ export function CAAccess() {
       setDialogOpen(false)
       setForm({ name: '', email: '', password: '' })
     } catch (e: any) {
-      sonnerToast.error('Failed to create CA account', { description: e.message || 'Unknown error' })
+      sonnerToast.error("Couldn\'t create the CA account", { description: e.message || 'Unknown error' })
     } finally {
       setSaving(false)
     }

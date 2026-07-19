@@ -87,7 +87,7 @@ export function StaffManagement() {
       setDialogOpen(false)
       setForm({ name: '', email: '', password: '' })
     } catch (e: any) {
-      sonnerToast.error('Failed to add staff', { description: e.message || 'Unknown error' })
+      sonnerToast.error("Couldn\'t add the staff member", { description: e.message || 'Unknown error' })
     } finally {
       setSaving(false)
     }
@@ -133,7 +133,7 @@ export function StaffManagement() {
       if (!r.ok) throw new Error(await readError(r))
       sonnerToast.success(`${MODULE_LABELS[module].label} ${enabled ? 'enabled' : 'disabled'}`)
     } catch {
-      sonnerToast.error('Failed to update permissions')
+      sonnerToast.error("Couldn\'t update permissions")
       // Revert by refetching
       refetch()
     } finally {

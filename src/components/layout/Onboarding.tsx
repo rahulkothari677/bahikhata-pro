@@ -26,7 +26,7 @@ export function Onboarding({ open, onDone }: { open: boolean; onDone: () => void
       triggerRefresh()
       onDone()
     } catch {
-      sonnerToast.error('Failed to seed demo data')
+      sonnerToast.error("Couldn\'t set up demo data")
     } finally {
       setSeeding(false)
     }

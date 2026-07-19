@@ -92,7 +92,7 @@ export function Ledger({ type }: { type: LedgerType }) {
         triggerRefresh()
       }
     } catch {
-      sonnerToast.error('Failed to delete')
+      sonnerToast.error("Couldn\'t delete")
     }
   }
 
