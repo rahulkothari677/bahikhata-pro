@@ -61,18 +61,18 @@ import { useTranslation } from '@/hooks/use-translation'
 // the 15 reports newly surfaced in More (via surfaces: ['more', 'reports-hub'])
 // actually render under titled sections. Without these mappings the items
 // pass the filter but get dropped by `if (subcat && SECTION_META[subcat])`.
-const SECTION_META: Partial<Record<NavSubcategoryId, { title: string; titleIcon: LucideIcon }>> = {
-  'sale-purchase':       { title: 'Sale & Purchase',   titleIcon: ShoppingCart },
-  'gst-tax':             { title: 'Accounting Controls', titleIcon: FileText }, // 🔒 V26 P3: renamed from "GST & Tax" — the section only has Reconciliation + Period Lock, not GST reports
-  'gst':                 { title: 'GST Reports',       titleIcon: FileText },
-  'money-banking':       { title: 'Money & Banking',   titleIcon: Banknote },
-  'banking':             { title: 'Banking Reports',   titleIcon: Banknote },
-  'items-stock':         { title: 'Items & Stock',     titleIcon: Package },
-  'inventory-reports':   { title: 'Inventory Reports', titleIcon: Package },
-  'reports-analytics':   { title: 'Reports & Analytics', titleIcon: BarChart3 },
-  'financial':           { title: 'Financial Reports', titleIcon: BarChart3 },
-  'smart-tools':         { title: 'Smart Tools',       titleIcon: Sparkles },
-  'business':            { title: 'Business',          titleIcon: Store }, // 🔒 V26 P1: added so multi-shop-management + staff-access render
+const SECTION_META: Partial<Record<NavSubcategoryId, { title: string; titleIcon: LucideIcon; accentColor: string }>> = {
+  'sale-purchase':       { title: 'Sale & Purchase',     titleIcon: ShoppingCart, accentColor: 'text-indigo-600 dark:text-indigo-400' },
+  'parties':             { title: 'Customers & Suppliers', titleIcon: Users, accentColor: 'text-indigo-600 dark:text-indigo-400' }, // 🔒 V26 P8: new section for Parties
+  'items-stock':         { title: 'Items & Stock',       titleIcon: Package, accentColor: 'text-amber-600 dark:text-amber-400' },
+  'money-banking':       { title: 'Money & Banking',     titleIcon: Banknote, accentColor: 'text-emerald-600 dark:text-emerald-400' },
+  'gst-tax':             { title: 'Accounting Controls', titleIcon: FileText, accentColor: 'text-blue-600 dark:text-blue-400' },
+  'gst':                 { title: 'GST Reports',         titleIcon: FileText, accentColor: 'text-blue-600 dark:text-blue-400' },
+  'financial':           { title: 'Financial Reports',   titleIcon: BarChart3, accentColor: 'text-rose-600 dark:text-rose-400' },
+  'banking':             { title: 'Banking Reports',     titleIcon: Banknote, accentColor: 'text-emerald-600 dark:text-emerald-400' },
+  'inventory-reports':   { title: 'Inventory Reports',   titleIcon: Package, accentColor: 'text-amber-600 dark:text-amber-400' },
+  'smart-tools':         { title: 'Smart Tools',         titleIcon: Sparkles, accentColor: 'text-violet-600 dark:text-violet-400' },
+  'business':            { title: 'Business',            titleIcon: Store, accentColor: 'text-amber-600 dark:text-amber-400' },
 }
 
 export function MoreScreen() {
@@ -121,7 +121,7 @@ export function MoreScreen() {
   const sections = useMemo(() => {
     const grouped = groupBySubcategory(moreItems)
     // Build ordered section list based on SECTION_META keys
-    const orderedSections: { subcategory: NavSubcategoryId; title: string; titleIcon: LucideIcon; items: NavDestination[] }[] = []
+    const orderedSections: { subcategory: NavSubcategoryId; title: string; titleIcon: LucideIcon; accentColor?: string; items: NavDestination[] }[] = []
     for (const [subcat, items] of grouped) {
       if (subcat && SECTION_META[subcat]) {
         orderedSections.push({
@@ -196,12 +196,13 @@ export function MoreScreen() {
         {sections.map((section, idx) => {
           if (section.items.length === 0) return null
           const SectionIcon = section.titleIcon
+          const accentColor = (section as any).accentColor || 'text-muted-foreground'
           return (
           <div key={section.subcategory}>
             {section.title && (
               <div className="flex items-center gap-2 px-2 mb-2">
-                {SectionIcon && <SectionIcon className="w-3.5 h-3.5 text-muted-foreground" />}
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                {SectionIcon && <SectionIcon className={cn('w-3.5 h-3.5', accentColor)} />}
+                <p className={cn('text-xs font-semibold uppercase tracking-wider', accentColor)}>
                   {section.title}
                 </p>
               </div>

@@ -65,10 +65,10 @@ export type NavCategoryId =
 /** Sub-category for grouping within a surface (e.g. MoreScreen sections, ReportsHub categories). */
 export type NavSubcategoryId =
   | 'sale-purchase'     // transactions: Sale & Purchase section in More
-  | 'gst-tax'           // reports: GST & Tax section
-  | 'money-banking'     // reports: Money & Banking section
+  | 'gst-tax'           // reports: Accounting Controls section in More
+  | 'money-banking'     // reports: Money & Banking section in More
   | 'items-stock'       // inventory: Items & Stock section in More
-  | 'reports-analytics' // reports: Reports & Analytics section in More
+  | 'parties'           // 🔒 V26 P8: Customers & Suppliers section in More
   | 'smart-tools'       // tools: Smart Tools section in More
   | 'financial'         // reports: Financial Reports sub-category in ReportsHub
   | 'gst'               // reports: GST & Tax sub-category in ReportsHub
@@ -402,7 +402,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   // ═══ parties ═════════════════════════════════════════════════════════
   {
     id: 'parties',
-    subcategory: 'money-banking',
+    subcategory: 'parties', // 🔒 V26 P8: moved from 'money-banking' to its own section
     label: 'Parties',
     description: 'Customers & suppliers — track dues & balances',
     icon: Users,
@@ -442,7 +442,9 @@ export const NAV_REGISTRY: NavDestination[] = [
   // ═══ reports ═════════════════════════════════════════════════════════
   {
     id: 'reports',
-    subcategory: 'reports-analytics',
+    // 🔒 V26 P8: Removed subcategory — 'reports' should NOT appear in MoreScreen
+    // (all individual reports are already categorized in their own sections below).
+    // The Reports Hub is accessible via desktop sidebar + global search.
     label: 'Reports',
     description: 'All reports — P&L, GST, stock, party, aging',
     icon: FileBarChart,
@@ -504,7 +506,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     actionKind: 'navigate-report',
     actionParams: { reportType: 'bank-recon' },
     category: 'reports',
-    subcategory: 'money-banking',
+    subcategory: 'banking', // 🔒 V26 P8: moved from 'money-banking' to group with Cashflow + Consolidated
     frequency: 'secondary',
     surfaces: ['more', 'reports-hub'],
     sortOrder: 1,

@@ -36,8 +36,7 @@ const CATEGORY_META: Partial<Record<NavSubcategoryId, { title: string; titleIcon
   'financial':         { title: 'Financial Reports', titleIcon: BarChart3, accentColor: 'text-rose-600 dark:text-rose-400' },
   'gst':               { title: 'GST & Tax', titleIcon: FileText, accentColor: 'text-blue-600 dark:text-blue-400' },
   'inventory-reports': { title: 'Inventory & Stock', titleIcon: Package, accentColor: 'text-amber-600 dark:text-amber-400' },
-  'banking':           { title: 'Banking Reports', titleIcon: Banknote, accentColor: 'text-emerald-600 dark:text-emerald-400' },
-  'money-banking':     { title: 'Bank Reconciliation', titleIcon: Banknote, accentColor: 'text-emerald-600 dark:text-emerald-400' }, // 🔒 V26 P2: added so bank-reconciliation renders in ReportsHub
+  'banking':           { title: 'Banking & Reconciliation', titleIcon: Banknote, accentColor: 'text-emerald-600 dark:text-emerald-400' }, // 🔒 V26 P8: now includes bank-reconciliation + cashflow + consolidated
 }
 
 export function ReportsHub() {

@@ -196,7 +196,7 @@ export function Sidebar() {
                     </div>
                     <p className={cn(
                       'text-[11px] truncate',
-                      active ? 'text-white/70' : 'text-sidebar-foreground/50'
+                      active ? 'text-white/80' : 'text-sidebar-foreground/65'
                     )}>
                       {item.descKey ? t(item.descKey) : (item.description || (item.labelKey ? t(item.labelKey) : item.label))}
                     </p>
@@ -264,7 +264,7 @@ export function Sidebar() {
                             </span>
                           )}
                         </div>
-                        <p className="text-[10px] truncate text-sidebar-foreground/40">{item.descKey ? t(item.descKey) : item.description}</p>
+                        <p className="text-[10px] truncate text-sidebar-foreground/60">{item.descKey ? t(item.descKey) : item.description}</p>
                       </div>
                     </button>
                   )
