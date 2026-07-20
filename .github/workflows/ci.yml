@@ -21,17 +21,25 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Generate Prisma client
+        # 🔒 V26 Phase 7: Prisma generate MUST run before tsc/build — without it,
+      # the Prisma client is stale and tsc shows phantom errors.
+        run: npx prisma generate
+
       - name: Run ESLint
         run: npx next lint
         continue-on-error: true # Lint warnings are non-blocking (style only)
 
       - name: Run TypeScript type check
         run: npx tsc --noEmit
+        env:
+          DATABASE_URL: 'postgresql://dummy:dummy@localhost:5432/dummy'
         # BLOCKING — type errors indicate real bugs and must not reach production.
-        # Previously had continue-on-error: true, removed per Phase 1 audit.
 
       - name: Run Jest tests
         run: npx jest
+        env:
+          DATABASE_URL: 'postgresql://dummy:dummy@localhost:5432/dummy'
         # BLOCKING — unit tests must pass before merge.
 
       - name: Build Next.js project
