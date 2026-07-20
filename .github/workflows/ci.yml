@@ -45,9 +45,12 @@ jobs:
       - name: Build Next.js project
         run: npx next build
         env:
-          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          NEXTAUTH_URL: ${{ secrets.NEXTAUTH_URL }}
+          # 🔒 V26 Phase 7: Use dummy values for CI build — Next.js build doesn't
+          # connect to the DB, it just compiles. Real secrets are only needed
+          # at runtime (Vercel handles that).
+          NEXTAUTH_SECRET: 'ci-build-dummy-secret'
+          DATABASE_URL: 'postgresql://dummy:dummy@localhost:5432/dummy'
+          NEXTAUTH_URL: 'http://localhost:3000'
 
   e2e-tests:
     runs-on: ubuntu-latest
