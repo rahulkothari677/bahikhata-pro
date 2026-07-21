@@ -1057,7 +1057,17 @@ export function Dashboard() {
           if (prefs.dailyDigest === false) return null  // Opt-out
         } catch { /* default to showing */ }
 
-        const digestText = `📊 EkBook Daily Digest\n\nSales today: ${kpis.todayTxnCount}\nRevenue: ${formatINR(kpis.todayRevenue)}\nProfit: ${formatINR(kpis.todayProfit)}\nReceivable: ${formatINR(kpis.totalReceivable)}\n\n— Sent from EkBook`
+        // 🔒 R12-1 (Round 12): Respect hideProfit in both the on-screen subtitle
+        // AND the WhatsApp share text. Was: profit shown unconditionally —
+        // inconsistent with the KPI cards (which hide it) and the handleShareSummary
+        // function (which also hides it). Same class as R11-1 (PrintInvoice leak).
+        const profitLine = !hideProfit && kpis.todayProfit !== undefined
+          ? `Profit: ${formatINR(kpis.todayProfit)}\n`
+          : ''
+        const profitSubtitle = !hideProfit && kpis.todayProfit !== undefined
+          ? ` · ${formatINR(kpis.todayProfit)} profit`
+          : ''
+        const digestText = `📊 EkBook Daily Digest\n\nSales today: ${kpis.todayTxnCount}\nRevenue: ${formatINR(kpis.todayRevenue)}\n${profitLine}Receivable: ${formatINR(kpis.totalReceivable)}\n\n— Sent from EkBook`
 
         return (
           <div className="rounded-2xl bg-gradient-to-r from-indigo-500 to-blue-600 p-4 text-white shadow-card relative overflow-hidden">
@@ -1070,7 +1080,7 @@ export function Dashboard() {
                 <div>
                   <p className="text-sm font-bold">Today's Digest</p>
                   <p className="text-2xs text-white/80">
-                    {kpis.todayTxnCount} sales · {formatINR(kpis.todayRevenue)} revenue · {formatINR(kpis.todayProfit)} profit
+                    {kpis.todayTxnCount} sales · {formatINR(kpis.todayRevenue)} revenue{profitSubtitle}
                   </p>
                 </div>
               </div>

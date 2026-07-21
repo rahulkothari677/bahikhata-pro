@@ -33,10 +33,20 @@ export async function shouldHideProfit(
 
 /**
  * Strip profit fields from a dashboard response.
- * Removes: todayProfit, rangeProfit, prevRangeProfit (growth %),
- * grossProfit from recentTransactions, profit from topProducts.
+ * Removes: todayProfit, rangeProfit, prevRangeProfit, netProfit, profitGrowth
+ * (all derivable profit figures), grossProfit from recentTransactions,
+ * profit from topProducts + salesTrend.
+ *
+ * 🔒 R12-2 (Round 12): Added netProfit + profitGrowth to the strip list.
+ * netProfit was computed BEFORE stripping (netProfit = rangeProfit + rangeIncome
+ * - rangeExpenses) so it was still in the response even after rangeProfit was
+ * stripped → a staff member with devtools could read it directly from the
+ * network tab. profitGrowth is ((rangeProfit - prevRangeProfit) / prevRangeProfit)
+ * * 100 — combined with knowledge of the previous period, it leaks current
+ * profit. Both are now stripped.
  */
 export function stripDashboardProfit(data: any): any {
+  if (!data) return data
   return {
     ...data,
     kpis: data.kpis ? {
@@ -44,11 +54,14 @@ export function stripDashboardProfit(data: any): any {
       todayProfit: undefined,
       rangeProfit: undefined,
       prevRangeProfit: undefined,
+      netProfit: undefined,
+      profitGrowth: undefined,
     } : data.kpis,
     salesTrend: data.salesTrend?.map((p: any) => ({ ...p, profit: undefined })),
     recentTransactions: data.recentTransactions?.map((t: any) => ({
       ...t,
       grossProfit: undefined,
+      profit: undefined,
     })),
     topProducts: data.topProducts?.map((p: any) => ({
       ...p,
