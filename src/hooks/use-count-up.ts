@@ -45,14 +45,24 @@ export function useCountUp(end: number, duration = 800, startDelay = 0): number 
   const hasAnimatedRef = useRef(false)
 
   useEffect(() => {
-    if (hasAnimatedRef.current) return
-    hasAnimatedRef.current = true
-
-    // If end is 0 or negative, skip animation
+    // 🔒 V26 Phase 8 PB-1/NEW-2 (CRITICAL FIX): The original code consumed the
+    // one-shot animation on the loading placeholder (end=0), then froze forever
+    // when real data arrived. Fix: check end<=0 BEFORE the hasAnimatedRef guard,
+    // and jump to the new value (not freeze) when hasAnimatedRef is already true.
+    
+    // Never consume the one-shot animation on a loading/placeholder value.
     if (end <= 0) {
       setValue(end)
       return
     }
+    // Already animated once — honor the documented contract: jump, don't re-animate.
+    // This was the missing line — the old code returned WITHOUT setValue(end),
+    // freezing the displayed value at 0 (or whatever the first animation ended at).
+    if (hasAnimatedRef.current) {
+      setValue(end)
+      return
+    }
+    hasAnimatedRef.current = true
 
     // 🔒 AUDIT V25 FIX BUG-028: If the tab is hidden, skip animation.
     if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {

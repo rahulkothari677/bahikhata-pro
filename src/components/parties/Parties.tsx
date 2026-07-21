@@ -455,12 +455,21 @@ function PartyDialog({ open, onOpenChange, onSuccess }: {
             </Select>
           </div>
           <div>
-            <Label htmlFor="field-opening-balance">Opening Balance (₹)</Label>
+            <Label htmlFor="field-opening-balance">
+              {/* 🔒 V26 Phase 8 PB-6: Type-aware label for opening balance.
+                  Was: one generic label with a placeholder hint → suppliers with
+                  positive opening balance became receivables (wrong sign). */}
+              {form.type === 'supplier'
+                ? 'Opening Balance — how much do you owe them? (₹)'
+                : form.type === 'both'
+                  ? 'Opening Balance (₹)'
+                  : 'Opening Balance — how much do they owe you? (₹)'}
+            </Label>
             <Input id="field-opening-balance"
               inputMode="decimal" type="number"
               value={form.openingBalance}
               onChange={(e) => setForm({ ...form, openingBalance: e.target.value })}
-              placeholder="0 (positive = they owe you)"
+              placeholder={form.type === 'supplier' ? '0 (amount you owe them)' : '0 (amount they owe you)'}
             />
           </div>
           <div>

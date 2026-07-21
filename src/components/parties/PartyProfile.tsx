@@ -165,7 +165,11 @@ export function PartyProfile() {
     }
     useAppStore.getState().setScannerBillType(type)
     setPreviousView('party-profile')
-    setView(type === 'sale' ? 'sales' : 'purchases')
+    // 🔒 V26 Phase 8 NAV-1: Navigate DIRECTLY to the form, not via the ledger
+    // relay. Was: setView('sales'/'purchases') → Ledger relayed to new-sale →
+    // but Ledger nulled __ledgerPreset before TransactionEntry could read it
+    // (100ms delay) → form opened empty. Now: direct navigation, preset survives.
+    setView(type === 'sale' ? 'new-sale' : 'new-purchase')
   }
 
   const handleViewTransaction = (txnId: string) => {
@@ -212,10 +216,17 @@ export function PartyProfile() {
       // Refresh party profile data to show updated balance + new payment in
       // the unified statement (statementPayments is now part of this response).
       queryClient.invalidateQueries({ queryKey: ['party-profile', selectedPartyId] })
+      // 🔒 V26 Phase 8 PB-4: Also invalidate the parties LIST + dashboard so
+      // the balance updates everywhere. Was: only party-profile was invalidated
+      // → the Parties list still showed the old balance after settling.
+      queryClient.invalidateQueries({ queryKey: ['parties'] })
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       triggerRefresh()
-    } catch {
+    } catch (e: any) {
+      // 🔒 V26 Phase 8 PB-5: Surface the server's error message (was: discarded).
+      // Period-lock, future-date, and validation messages now reach the user.
       haptic.error()
-      sonnerToast.error("Couldn\'t record the payment")
+      sonnerToast.error(e?.message || "Couldn't record the payment")
     } finally {
       setSavingPayment(false)
     }
@@ -252,8 +263,8 @@ export function PartyProfile() {
       } else {
         sonnerToast.error(data.error || "Couldn't generate reminder")
       }
-    } catch {
-      sonnerToast.error("Couldn\'t send the reminder")
+    } catch (e: any) {
+      sonnerToast.error(e?.message || "Couldn't send the reminder")
     } finally {
       setSendingReminder(false)
     }
@@ -585,7 +596,18 @@ export function PartyProfile() {
                 {stats.balance >= 0 ? '+' : ''}{formatINR(animatedBalance)}
               </p>
               <p className="text-white/70 text-xs mt-0.5">
-                {stats.balance > 0 ? 'They owe you' : stats.balance < 0 ? 'You owe them' : 'Settled'}
+                {/* 🔒 V26 Phase 8 PB-6: Better label for supplier balances.
+                    Was: "They owe you" even for suppliers → confusing when you
+                    paid them and it shows as a receivable. Now: context-aware. */}
+                {stats.balance > 0
+                  ? party?.type === 'supplier'
+                    ? 'Advance paid (they owe you)'
+                    : 'They owe you'
+                  : stats.balance < 0
+                    ? party?.type === 'supplier'
+                      ? 'You owe them'
+                      : 'You owe them'
+                    : 'Settled'}
               </p>
             </div>
           </div>
@@ -605,7 +627,14 @@ export function PartyProfile() {
             </Button>
           )}
           {/* 🔒 FIX H3: Receive Payment / Make Payment button */}
-          <Button size="sm" variant="outline" onClick={() => setPaymentDialogOpen(true)} className="gap-2">
+          <Button size="sm" variant="outline" onClick={() => {
+            // 🔒 V26 Phase 8 PB-3: Default payment direction based on party type.
+            // Was: always 'received' — opening Settle on a supplier pre-selected
+            // "received" → one careless tap recorded the payment in the wrong direction.
+            const defaultType = party?.type === 'supplier' ? 'paid' : (stats?.balance ?? 0) < 0 ? 'paid' : 'received'
+            setPaymentType(defaultType)
+            setPaymentDialogOpen(true)
+          }} className="gap-2">
             <HandCoins className="w-4 h-4" /> Settle
           </Button>
           {isCustomer && stats.balance > 0 && features?.paymentReminders && (
@@ -682,8 +711,13 @@ export function PartyProfile() {
           </Button>
       </div>
 
-      {/* Stats grid */}
+      {/* Stats grid — 🔒 V26 Phase 8 PB-7: Hide irrelevant cards by party type.
+          Was: all 4 cards always rendered → a customer showing "Total Purchases ₹0 / Paid ₹0"
+          reads as broken. Now: show sales-side cards for customers, purchase-side for
+          suppliers, all for 'both'. Also show if there's actual data regardless of type. */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {/* Sales-side cards: show for customers, 'both', or if sales data exists */}
+        {(party.type !== 'supplier' || stats.salesCount > 0) && (
         <StatCard
           label="Total Sales"
           value={formatINR(stats.totalSales)}
@@ -692,6 +726,9 @@ export function PartyProfile() {
           bg="bg-emerald-100"
           sub={`${stats.salesCount} sales`}
         />
+        )}
+        {/* Purchase-side cards: show for suppliers, 'both', or if purchase data exists */}
+        {(party.type !== 'customer' || stats.purchasesCount > 0) && (
         <StatCard
           label="Total Purchases"
           value={formatINR(stats.totalPurchases)}
@@ -700,20 +737,32 @@ export function PartyProfile() {
           bg="bg-amber-100"
           sub={`${stats.purchasesCount} purchases`}
         />
+        )}
+        {/* Received card: show when there are sales or received payments */}
+        {(party.type !== 'supplier' || stats.salesCount > 0 || stats.paymentsReceived > 0) && (
         <StatCard
           label="Received"
-          value={formatINR(stats.totalReceived)}
+          // 🔒 V26 Phase 8 PB-2: Include standalone settle payments (was: only invoice paidAmount).
+          // The "Received" card was understating real money by omitting all settle payments.
+          value={formatINR(stats.totalReceived + stats.paymentsReceived)}
           icon={ArrowDownRight}
           color="text-violet-600"
           bg="bg-violet-100"
+          sub={stats.paymentsReceived > 0 ? `₹${formatINR(stats.paymentsReceived)} via Settle` : undefined}
         />
+        )}
+        {/* Paid card: show when there are purchases or paid payments */}
+        {(party.type !== 'customer' || stats.purchasesCount > 0 || stats.paymentsPaid > 0) && (
         <StatCard
           label="Paid"
-          value={formatINR(stats.totalPaid)}
+          // 🔒 V26 Phase 8 PB-2: Same fix — include standalone settle payments.
+          value={formatINR(stats.totalPaid + stats.paymentsPaid)}
           icon={ArrowUpRight}
           color="text-rose-600"
           bg="bg-rose-100"
+          sub={stats.paymentsPaid > 0 ? `₹${formatINR(stats.paymentsPaid)} via Settle` : undefined}
         />
+        )}
       </div>
 
       {/* Contact details */}

@@ -602,10 +602,13 @@ export function BillScanner() {
 
   const handleProceedToSave = () => {
     if (!scanned) return
-    // Pass data to ledger via window object (since both live in same SPA)
+    // 🔒 V26 Phase 8 NEW-1: Navigate DIRECTLY to the form, not via the ledger
+    // relay. Was: setView('sales'/'purchases') → Ledger relay nulled preset
+    // before form could read it → "Review the auto-filled form" toast showed
+    // but form was empty. Now: direct to form, preset survives.
     ;(window as any).__ledgerPreset = { type: billType, data: scanned }
     setScannerBillType(billType)
-    setView(billType === 'sale' ? 'sales' : 'purchases')
+    setView(billType === 'sale' ? 'new-sale' : 'new-purchase')
     sonnerToast.info('Review the auto-filled form and save')
   }
 

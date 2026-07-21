@@ -692,8 +692,17 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       incrementRateCount()
       queryClient.invalidateQueries({ queryKey: ['transactions'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      // 🔒 V26 Phase 8 PB-4: Also invalidate parties list (balance changes after save).
+      queryClient.invalidateQueries({ queryKey: ['parties'] })
+      // 🔒 V26 Phase 8 NAV-3: Honor the origin — if we came from a party profile,
+      // return there instead of landing on the ledger (a root view with no back).
+      // Was: always setView('sales'/'purchases') → dead end after purchase from party.
       triggerRefresh()
-      setView(estimateMode ? 'sales' : (isSale ? 'sales' : 'purchases'))
+      if (previousView && previousView !== 'new-sale' && previousView !== 'new-purchase') {
+        setView(previousView)
+      } else {
+        setView(estimateMode ? 'sales' : (isSale ? 'sales' : 'purchases'))
+      }
     } catch (e: any) {
       haptic.error()
       sonnerToast.error(e?.message || "Couldn\'t save transaction")

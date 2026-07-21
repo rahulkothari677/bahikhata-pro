@@ -330,20 +330,12 @@ export function Ledger({ type }: { type: LedgerType }) {
     }
   }, [triggerNewEntry, triggerNewEntryView, targetView, isSale, setView, setPreviousView])
 
-  // Listen for preset data (from scanner or party profile)
-  useEffect(() => {
-    const checkPreset = () => {
-      const stored = (window as any).__ledgerPreset
-      if (stored && stored.type === type) {
-        setPreviousView(targetView)
-        setView(isSale ? 'new-sale' : 'new-purchase')
-        ;(window as any).__ledgerPreset = null
-      }
-    }
-    checkPreset()
-    const interval = setInterval(checkPreset, 300)
-    return () => clearInterval(interval)
-  }, [type, isSale, targetView, setView, setPreviousView])
+  // 🔒 V26 Phase 8 NAV-1/NAV-4: Ledger preset relay DELETED.
+  // Was: polled window.__ledgerPreset every 300ms → nulled it before
+  // TransactionEntry could read it (100ms delay) → form opened empty.
+  // Also overwrote previousView with 'sales'/'purchases' (NAV-2).
+  // Now: callers (PartyProfile, BillScanner, Dashboard) navigate directly
+  // to new-sale/new-purchase — no relay needed, preset survives.
 
   // 🔒 AUDIT V24 follow-up: split-view access check for the free-desktop
   // row-click fallback (see handleViewTransaction).
