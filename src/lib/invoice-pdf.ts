@@ -1,22 +1,19 @@
 /**
  * generateInvoicePDF — creates a professional, branded PDF invoice using jsPDF.
  *
- * V26 Phase 8 PDF Redesign: Complete rewrite with:
- * - Brand band (shop's theme color, white text)
- * - Status pill (PAID / PARTIAL / DUE)
- * - Bill To card with GSTIN
- * - Zebra-striped item table with HSN column
- * - Totals box with grand total in brand color
- * - Amount in words (Indian convention)
- * - UPI QR code "Scan to pay" block
- * - Signature block + branded footer
- * - Unicode font (DejaVu Sans) for rupee symbol support
- *
- * Returns a Blob that can be shared via WhatsApp or downloaded.
+ * V26 Phase 8 PDF Redesign v2: Inspired by Razorpay, Stripe, and ClearTax
+ * invoice designs. Key improvements over v1:
+ * - Compact header (no wasted vertical space)
+ * - Two-column layout: Bill To (left) + Invoice meta (right) in one row
+ * - Tighter item table with better column proportions
+ * - Totals on the right, aligned with the table edge
+ * - Amount in words as a subtle strip, not a big box
+ * - UPI QR + signature side by side at the bottom
+ * - No floating elements — everything is aligned to a grid
  */
 
 import { registerUnicodeFont, THEME, formatPDFMoney } from './pdf/theme'
-import { drawBrandBand, drawStatusPill, drawFooter, drawUPIQRBlock, newPageIfNeeded } from './pdf/primitives'
+import { drawFooter, drawUPIQRBlock, newPageIfNeeded } from './pdf/primitives'
 import { amountToWords } from './amount-to-words'
 
 interface InvoiceItem {
@@ -73,259 +70,310 @@ export async function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting)
   const jsPDFMod: any = await import('jspdf')
   const doc = new jsPDFMod.jsPDF({ unit: 'mm', format: 'a4' })
 
-  // Register Unicode font (DejaVu Sans — supports rupee sign)
-  // MUST be called before any text is drawn.
   await registerUnicodeFont(doc)
 
-  const { margin, pageWidth, pageHeight, brand, brandLight, text, textMuted, border, zebra, cardBg, white } = THEME
+  const { margin, pageWidth, pageHeight, brand, brandLight, text, textMuted, border, zebra, cardBg, white, paid, partial, due } = THEME
   const dateStr = formatDate(txn.date)
+  const dueAmount = txn.totalAmount - txn.paidAmount
+  const status: 'paid' | 'partial' | 'due' = dueAmount <= 0 ? 'paid' : txn.paidAmount > 0 ? 'partial' : 'due'
+  const statusLabels = { paid: 'PAID', partial: 'PARTIAL', due: 'DUE' }
+  const statusColors = { paid, partial, due }
 
-  // === 1. BRAND BAND ===
-  let y = drawBrandBand(doc, {
-    shopName: setting.shopName || 'My Shop',
-    address: setting.address,
-    phone: setting.phone,
-    gstin: setting.gstin,
-    title: 'INVOICE',
-    subtitle: `${txn.invoiceNo || ''}  |  ${dateStr}`,
-  })
+  // ═══════════════════════════════════════════════════════════════════
+  // 1. HEADER — compact brand band (full width, 28mm)
+  // ═══════════════════════════════════════════════════════════════════
+  const bandHeight = 28
+  doc.setFillColor(brand.r, brand.g, brand.b)
+  doc.rect(0, 0, pageWidth, bandHeight, 'F')
 
-  // === 2. STATUS PILL (top-right, below band) ===
-  const due = txn.totalAmount - txn.paidAmount
-  const status: 'paid' | 'partial' | 'due' = due <= 0 ? 'paid' : txn.paidAmount > 0 ? 'partial' : 'due'
-  drawStatusPill(doc, pageWidth - margin - 25, y, status)
+  // Shop name (white, bold, 18pt)
+  doc.setFont(THEME.font, 'bold')
+  doc.setFontSize(18)
+  doc.setTextColor(white.r, white.g, white.b)
+  doc.text(setting.shopName || 'My Shop', margin, 12)
 
-  // === 3. BILL TO CARD ===
-  const cardX = margin
-  const cardWidth = pageWidth - 2 * margin
-  const cardHeight = 25
+  // Shop details (white, 8pt)
+  doc.setFont(THEME.font, 'normal')
+  doc.setFontSize(8)
+  let detailY = 17
+  const shopDetails: string[] = []
+  if (setting.phone) shopDetails.push(setting.phone)
+  if (setting.gstin) shopDetails.push('GSTIN: ' + setting.gstin)
+  if (setting.address) {
+    const truncated = setting.address.length > 60 ? setting.address.slice(0, 57) + '...' : setting.address
+    shopDetails.push(truncated)
+  }
+  if (shopDetails.length > 0) {
+    doc.text(shopDetails.join('  |  '), margin, detailY)
+  }
 
-  doc.setFillColor(cardBg.r, cardBg.g, cardBg.b)
-  doc.roundedRect(cardX, y + 2, cardWidth, cardHeight, 2, 2, 'F')
-  doc.setDrawColor(border.r, border.g, border.b)
-  doc.setLineWidth(0.3)
-  doc.roundedRect(cardX, y + 2, cardWidth, cardHeight, 2, 2, 'S')
+  // Right side: INVOICE + invoice no + date
+  doc.setFont(THEME.font, 'bold')
+  doc.setFontSize(16)
+  doc.text('INVOICE', pageWidth - margin, 11, { align: 'right' })
+  doc.setFont(THEME.font, 'normal')
+  doc.setFontSize(9)
+  doc.text(`${txn.invoiceNo || ''}  |  ${dateStr}`, pageWidth - margin, 17, { align: 'right' })
 
+  // Status badge (right, below invoice meta)
+  const statusColor = statusColors[status]
+  const statusLabel = statusLabels[status]
+  const badgeW = 22
+  const badgeH = 6
+  const badgeX = pageWidth - margin - badgeW
+  const badgeY = 20
+  doc.setFillColor(statusColor.r, statusColor.g, statusColor.b)
+  doc.roundedRect(badgeX, badgeY, badgeW, badgeH, 1.5, 1.5, 'F')
+  doc.setFont(THEME.font, 'bold')
+  doc.setFontSize(8)
+  doc.setTextColor(white.r, white.g, white.b)
+  doc.text(statusLabel, badgeX + badgeW / 2, badgeY + 4, { align: 'center' })
+
+  doc.setTextColor(text.r, text.g, text.b)
+  let y = bandHeight + 8
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 2. BILL TO + INVOICE DETAILS — two columns, one row
+  // ═══════════════════════════════════════════════════════════════════
+  const leftColWidth = 90
+  const rightColX = margin + leftColWidth + 10
+
+  // Left: Bill To
   doc.setFont(THEME.font, 'bold')
   doc.setFontSize(7)
   doc.setTextColor(textMuted.r, textMuted.g, textMuted.b)
-  doc.text('BILL TO', cardX + 4, y + 8)
+  doc.text('BILL TO', margin, y)
 
   doc.setFont(THEME.font, 'bold')
   doc.setFontSize(11)
   doc.setTextColor(text.r, text.g, text.b)
-  doc.text(txn.party?.name || 'Walk-in Customer', cardX + 4, y + 14)
+  doc.text(txn.party?.name || 'Walk-in Customer', margin, y + 6)
 
   doc.setFont(THEME.font, 'normal')
   doc.setFontSize(8)
   doc.setTextColor(textMuted.r, textMuted.g, textMuted.b)
-  const billDetails: string[] = []
-  if (txn.party?.phone) billDetails.push('Phone: ' + txn.party.phone)
-  if (txn.party?.gstin) billDetails.push('GSTIN: ' + txn.party.gstin)
-  if (billDetails.length > 0) {
-    doc.text(billDetails.join('  |  '), cardX + 4, y + 18)
+  let billY = y + 11
+  if (txn.party?.phone) {
+    doc.text(txn.party.phone, margin, billY)
+    billY += 4
+  }
+  if (txn.party?.gstin) {
+    doc.text('GSTIN: ' + txn.party.gstin, margin, billY)
+    billY += 4
+  }
+  if (txn.party?.address) {
+    const addrLines = doc.splitTextToSize(txn.party.address, leftColWidth)
+    doc.text(addrLines.slice(0, 2), margin, billY)
   }
 
-  y += cardHeight + 8
+  // Right: Invoice details (only if there's useful info)
+  doc.setFont(THEME.font, 'bold')
+  doc.setFontSize(7)
+  doc.setTextColor(textMuted.r, textMuted.g, textMuted.b)
+  doc.text('INVOICE DETAILS', rightColX, y)
 
-  // === 4. ITEM TABLE ===
-  const colWidths = {
-    idx: 8,
-    item: 55,
-    hsn: 22,
-    qty: 20,
-    rate: 25,
-    gst: 18,
-    amount: 0,
-  }
-  const colX = {
-    idx: margin,
-    item: margin + colWidths.idx,
-    hsn: margin + colWidths.idx + colWidths.item,
-    qty: margin + colWidths.idx + colWidths.item + colWidths.hsn,
-    rate: margin + colWidths.idx + colWidths.item + colWidths.hsn + colWidths.qty,
-    gst: margin + colWidths.idx + colWidths.item + colWidths.hsn + colWidths.qty + colWidths.rate,
-    amount: pageWidth - margin,
-  }
+  doc.setFont(THEME.font, 'normal')
+  doc.setFontSize(8)
+  doc.setTextColor(text.r, text.g, text.b)
+  let detailRightY = y + 6
+  doc.text('Invoice No: ' + (txn.invoiceNo || '-'), rightColX, detailRightY)
+  detailRightY += 4
+  doc.text('Date: ' + dateStr, rightColX, detailRightY)
+  detailRightY += 4
+  doc.text('Payment: ' + txn.paymentMode.toUpperCase(), rightColX, detailRightY)
 
-  const drawTableHeader = () => {
-    doc.setFillColor(brandLight.r, brandLight.g, brandLight.b)
-    doc.rect(margin, y - 4, pageWidth - 2 * margin, 8, 'F')
-    doc.setFont(THEME.font, 'bold')
-    doc.setFontSize(8)
-    doc.setTextColor(brand.r, brand.g, brand.b)
-    doc.text('#', colX.idx + 1, y + 1)
-    doc.text('ITEM', colX.item, y + 1)
-    doc.text('HSN', colX.hsn, y + 1)
-    doc.text('QTY', colX.qty + colWidths.qty - 1, y + 1, { align: 'right' })
-    doc.text('RATE', colX.rate + colWidths.rate - 1, y + 1, { align: 'right' })
-    doc.text('GST%', colX.gst + colWidths.gst - 1, y + 1, { align: 'right' })
-    doc.text('AMOUNT', colX.amount - 1, y + 1, { align: 'right' })
-    doc.setTextColor(text.r, text.g, text.b)
-    return y + 8
-  }
+  // Use the taller of the two columns
+  y = Math.max(billY, detailRightY + 4) + 6
 
-  y = drawTableHeader()
+  // ═══════════════════════════════════════════════════════════════════
+  // 3. ITEM TABLE — tight, professional
+  // ═══════════════════════════════════════════════════════════════════
+  const tableWidth = pageWidth - 2 * margin
+  const colStart = margin
+  // Column proportions (must sum to tableWidth = 180)
+  // # | Item | HSN | Qty | Rate | GST% | Amount
+  // 8 | 58  | 20  | 18  | 24   | 18   | 34
+  const cols = [
+    { name: '#', x: colStart + 1, w: 8, align: 'left' },
+    { name: 'ITEM', x: colStart + 10, w: 58, align: 'left' },
+    { name: 'HSN', x: colStart + 68, w: 20, align: 'left' },
+    { name: 'QTY', x: colStart + 88, w: 18, align: 'right' },
+    { name: 'RATE', x: colStart + 106, w: 24, align: 'right' },
+    { name: 'GST%', x: colStart + 130, w: 18, align: 'right' },
+    { name: 'AMOUNT', x: colStart + 168, w: 0, align: 'right' },
+  ]
+  const colEnd = pageWidth - margin - 1
 
-  // Table rows with zebra striping
+  // Header row
+  const headerHeight = 8
+  doc.setFillColor(brand.r, brand.g, brand.b)
+  doc.rect(colStart, y, tableWidth, headerHeight, 'F')
+  doc.setFont(THEME.font, 'bold')
+  doc.setFontSize(8)
+  doc.setTextColor(white.r, white.g, white.b)
+  cols.forEach(c => {
+    if (c.align === 'right') {
+      doc.text(c.name, c.x + c.w - 1, y + 5.5, { align: 'right' })
+    } else {
+      doc.text(c.name, c.x, y + 5.5)
+    }
+  })
+  doc.setTextColor(text.r, text.g, text.b)
+  y += headerHeight
+
+  // Item rows
   doc.setFont(THEME.font, 'normal')
   doc.setFontSize(9)
+  const rowHeight = 7
 
   txn.items.forEach((item, i) => {
-    y = newPageIfNeeded(doc, y, 8, () => {
-      y = drawTableHeader()
+    y = newPageIfNeeded(doc, y, rowHeight + 2, () => {
+      // Redraw header on new page
+      doc.setFillColor(brand.r, brand.g, brand.b)
+      doc.rect(colStart, y, tableWidth, headerHeight, 'F')
+      doc.setFont(THEME.font, 'bold')
+      doc.setFontSize(8)
+      doc.setTextColor(white.r, white.g, white.b)
+      cols.forEach(c => {
+        if (c.align === 'right') {
+          doc.text(c.name, c.x + c.w - 1, y + 5.5, { align: 'right' })
+        } else {
+          doc.text(c.name, c.x, y + 5.5)
+        }
+      })
+      doc.setTextColor(text.r, text.g, text.b)
+      doc.setFont(THEME.font, 'normal')
+      doc.setFontSize(9)
+      y += headerHeight
     })
 
-    // Zebra stripe (even rows)
+    // Zebra stripe
     if (i % 2 === 1) {
       doc.setFillColor(zebra.r, zebra.g, zebra.b)
-      doc.rect(margin, y - 4, pageWidth - 2 * margin, 7, 'F')
+      doc.rect(colStart, y, tableWidth, rowHeight, 'F')
     }
 
-    const name = item.productName.length > 30 ? item.productName.slice(0, 27) + '...' : item.productName
-    const qty = `${item.quantity} ${item.unit || 'pcs'}`
-    const hsn = item.hsn || '-'
-
+    const name = item.productName.length > 32 ? item.productName.slice(0, 29) + '...' : item.productName
     doc.setTextColor(text.r, text.g, text.b)
-    doc.text(String(i + 1), colX.idx + 1, y)
-    doc.text(name, colX.item, y)
+    doc.text(String(i + 1), cols[0].x, y + 5)
+    doc.text(name, cols[1].x, y + 5)
     doc.setFontSize(7)
-    doc.text(hsn, colX.hsn, y)
+    doc.text(item.hsn || '-', cols[2].x, y + 5)
     doc.setFontSize(9)
-    doc.text(qty, colX.qty + colWidths.qty - 1, y, { align: 'right' })
-    doc.text(item.unitPrice.toFixed(2), colX.rate + colWidths.rate - 1, y, { align: 'right' })
-    doc.text(item.gstRate + '%', colX.gst + colWidths.gst - 1, y, { align: 'right' })
-    doc.text(item.total.toFixed(2), colX.amount - 1, y, { align: 'right' })
-    y += 7
+    doc.text(`${item.quantity} ${item.unit || 'pcs'}`, cols[3].x + cols[3].w - 1, y + 5, { align: 'right' })
+    doc.text(item.unitPrice.toFixed(2), cols[4].x + cols[4].w - 1, y + 5, { align: 'right' })
+    doc.text(item.gstRate + '%', cols[5].x + cols[5].w - 1, y + 5, { align: 'right' })
+    doc.text(formatPDFMoney(item.total), colEnd, y + 5, { align: 'right' })
+    y += rowHeight
   })
 
-  // === 5. TOTALS BLOCK (right side) ===
-  y += 4
-  // Make totals block wider to prevent text overflow
-  const totalsBlockWidth = 65
-  const labelX = pageWidth - margin - totalsBlockWidth
-  const valueX = pageWidth - margin - 2
+  // Table bottom border
+  doc.setDrawColor(border.r, border.g, border.b)
+  doc.setLineWidth(0.3)
+  doc.line(colStart, y, colStart + tableWidth, y)
+  y += 6
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 4. TOTALS — right-aligned, clean
+  // ═══════════════════════════════════════════════════════════════════
+  const totalsWidth = 70
+  const totalsX = pageWidth - margin - totalsWidth
+  const totalsValueX = pageWidth - margin - 1
 
   doc.setFontSize(9)
   doc.setFont(THEME.font, 'normal')
   doc.setTextColor(text.r, text.g, text.b)
 
-  doc.text('Subtotal:', labelX, y)
-  doc.text(formatPDFMoney(txn.subtotal), valueX, y, { align: 'right' })
-  y += 5
+  const totalsLine = (label: string, value: string, bold?: boolean) => {
+    if (bold) doc.setFont(THEME.font, 'bold')
+    doc.text(label, totalsX, y)
+    doc.text(value, totalsValueX, y, { align: 'right' })
+    if (bold) doc.setFont(THEME.font, 'normal')
+    y += 5
+  }
 
+  totalsLine('Subtotal', formatPDFMoney(txn.subtotal))
   if (txn.discountAmount > 0) {
-    doc.text('Discount:', labelX, y)
-    doc.text('- ' + formatPDFMoney(txn.discountAmount), valueX, y, { align: 'right' })
-    y += 5
+    totalsLine('Discount', '- ' + formatPDFMoney(txn.discountAmount))
   }
-
-  const taxableValue = txn.subtotal - txn.discountAmount
-  doc.setFont(THEME.font, 'bold')
-  doc.text('Taxable Value:', labelX, y)
-  doc.text(formatPDFMoney(taxableValue), valueX, y, { align: 'right' })
-  y += 5
-  doc.setFont(THEME.font, 'normal')
-
-  if (txn.cgst > 0) {
-    doc.text('CGST:', labelX, y)
-    doc.text(formatPDFMoney(txn.cgst), valueX, y, { align: 'right' })
-    y += 5
-  }
-  if (txn.sgst > 0) {
-    doc.text('SGST:', labelX, y)
-    doc.text(formatPDFMoney(txn.sgst), valueX, y, { align: 'right' })
-    y += 5
-  }
-  if (txn.igst > 0) {
-    doc.text('IGST:', labelX, y)
-    doc.text(formatPDFMoney(txn.igst), valueX, y, { align: 'right' })
-    y += 5
-  }
+  totalsLine('Taxable Value', formatPDFMoney(txn.subtotal - txn.discountAmount), true)
+  if (txn.cgst > 0) totalsLine('CGST', formatPDFMoney(txn.cgst))
+  if (txn.sgst > 0) totalsLine('SGST', formatPDFMoney(txn.sgst))
+  if (txn.igst > 0) totalsLine('IGST', formatPDFMoney(txn.igst))
   if (txn.roundOff && Math.abs(txn.roundOff) >= 0.005) {
-    doc.text('Round Off:', labelX, y)
-    doc.text((txn.roundOff > 0 ? '+ ' : '- ') + formatPDFMoney(Math.abs(txn.roundOff)), valueX, y, { align: 'right' })
-    y += 5
+    totalsLine('Round Off', (txn.roundOff > 0 ? '+ ' : '- ') + formatPDFMoney(Math.abs(txn.roundOff)))
   }
 
-  // Grand total in brand-colored box — wider + taller to prevent overflow
-  y += 2
-  const grandTotalBoxHeight = 12
+  // Grand total — filled brand box
+  y += 1
+  const gtHeight = 11
   doc.setFillColor(brand.r, brand.g, brand.b)
-  doc.rect(labelX - 2, y - 4, pageWidth - margin - labelX, grandTotalBoxHeight, 'F')
+  doc.rect(totalsX - 2, y - 4, totalsWidth + 2, gtHeight, 'F')
   doc.setFont(THEME.font, 'bold')
   doc.setFontSize(12)
   doc.setTextColor(white.r, white.g, white.b)
-  doc.text('GRAND TOTAL', labelX + 2, y + 3)
-  doc.text(formatPDFMoney(txn.totalAmount), valueX - 2, y + 3, { align: 'right' })
-  y += grandTotalBoxHeight + 2
+  doc.text('GRAND TOTAL', totalsX, y + 3)
+  doc.text(formatPDFMoney(txn.totalAmount), totalsValueX, y + 3, { align: 'right' })
+  y += gtHeight + 2
 
   // Paid + Balance Due
   doc.setFont(THEME.font, 'normal')
   doc.setFontSize(9)
   doc.setTextColor(text.r, text.g, text.b)
-  doc.text('Paid: ' + formatPDFMoney(txn.paidAmount) + ' (' + txn.paymentMode.toUpperCase() + ')', labelX, y)
+  doc.text('Paid: ' + formatPDFMoney(txn.paidAmount) + ' (' + txn.paymentMode.toUpperCase() + ')', totalsX, y)
   y += 5
-  if (due > 0) {
+  if (dueAmount > 0) {
     doc.setFont(THEME.font, 'bold')
     doc.setTextColor(THEME.due.r, THEME.due.g, THEME.due.b)
-    doc.text('Balance Due: ' + formatPDFMoney(due), labelX, y)
+    doc.text('Balance Due: ' + formatPDFMoney(dueAmount), totalsX, y)
     doc.setTextColor(text.r, text.g, text.b)
     y += 5
   }
 
-  // === 6. AMOUNT IN WORDS ===
+  // ═══════════════════════════════════════════════════════════════════
+  // 5. AMOUNT IN WORDS — subtle strip
+  // ═══════════════════════════════════════════════════════════════════
   y += 4
   doc.setFillColor(brandLight.r, brandLight.g, brandLight.b)
-  doc.rect(margin, y - 4, pageWidth - 2 * margin, 8, 'F')
+  doc.rect(margin, y - 3, tableWidth, 7, 'F')
   doc.setFont(THEME.font, 'italic')
-  doc.setFontSize(9)
-  doc.setTextColor(text.r, text.g, text.b)
+  doc.setFontSize(8)
+  doc.setTextColor(textMuted.r, textMuted.g, textMuted.b)
   const wordsStr = amountToWords(txn.totalAmount)
-  // Truncate if too long (amountToWords can produce very long strings for large amounts)
   const wordsLabel = 'Amount in words: ' + wordsStr
-  const displayWords = wordsLabel.length > 95 ? wordsLabel.slice(0, 92) + '...' : wordsLabel
+  const displayWords = wordsLabel.length > 100 ? wordsLabel.slice(0, 97) + '...' : wordsLabel
   doc.text(displayWords, margin + 2, y + 1)
-  y += 10
+  y += 8
 
-  // === 7. UPI QR BLOCK (left side, only when upiId exists and balance > 0) ===
-  if (setting.upiId && due > 0) {
-    y = await drawUPIQRBlock(doc, margin, y, {
+  // ═══════════════════════════════════════════════════════════════════
+  // 6. BOTTOM SECTION — UPI QR (left) + Signature (right)
+  // ═══════════════════════════════════════════════════════════════════
+  const bottomY = Math.max(y + 5, pageHeight - 70)
+
+  // UPI QR (left side, only when upiId exists and balance > 0)
+  if (setting.upiId && dueAmount > 0) {
+    await drawUPIQRBlock(doc, margin, bottomY, {
       upiId: setting.upiId,
       shopName: setting.shopName || 'My Shop',
-      amount: due,
+      amount: dueAmount,
       note: txn.invoiceNo || 'Invoice Payment',
     })
   }
 
-  // === 8. SIGNATURE BLOCK (right side) ===
+  // Signature (right side)
   const sigX = pageWidth - margin - 50
-  const sigY = Math.max(y, pageHeight - 50)
   doc.setFont(THEME.font, 'normal')
   doc.setFontSize(9)
   doc.setTextColor(textMuted.r, textMuted.g, textMuted.b)
-  doc.text('For ' + (setting.shopName || 'My Shop'), sigX, sigY)
+  doc.text('For ' + (setting.shopName || 'My Shop'), sigX, bottomY)
   doc.setDrawColor(border.r, border.g, border.b)
-  doc.line(sigX, sigY + 12, sigX + 40, sigY + 12)
-  doc.text('Authorised Signatory', sigX, sigY + 16)
+  doc.line(sigX, bottomY + 12, sigX + 40, bottomY + 12)
+  doc.text('Authorised Signatory', sigX, bottomY + 16)
 
-  // === 9. FOOTER — improved visibility (no terms, larger text) ===
-  const footerY = pageHeight - 15
-  doc.setDrawColor(brand.r, brand.g, brand.b)
-  doc.setLineWidth(0.5)
-  doc.line(margin, footerY, pageWidth - margin, footerY)
-
-  doc.setFont(THEME.font, 'normal')
-  doc.setFontSize(9) // Was 7 — too small to read
-  doc.setTextColor(textMuted.r, textMuted.g, textMuted.b)
-  doc.text('Page 1 of 1', pageWidth / 2, footerY + 6, { align: 'center' })
-
-  doc.setFont(THEME.font, 'bold')
-  doc.setFontSize(9)
-  doc.setTextColor(brand.r, brand.g, brand.b)
-  doc.text('Made with EkBook', pageWidth - margin, footerY + 6, { align: 'right' })
-
-  doc.setTextColor(text.r, text.g, text.b)
+  // ═══════════════════════════════════════════════════════════════════
+  // 7. FOOTER — clean, readable
+  // ═══════════════════════════════════════════════════════════════════
+  drawFooter(doc, 1, 1)
 
   return doc.output('blob')
 }

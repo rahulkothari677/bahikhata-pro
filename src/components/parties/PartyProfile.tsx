@@ -477,115 +477,140 @@ export function PartyProfile() {
     if (!party || !transactions) return
     haptic.click()
     try {
-      // Generate PDF using jsPDF (same logic as handleDownloadStatement but output as blob)
+      // Generate PDF using jsPDF
       const jsPDFMod: any = await import("jspdf")
-      const doc = new jsPDFMod.jsPDF()({ unit: 'mm', format: 'a4' })
+      const { registerUnicodeFont, THEME, formatPDFMoney } = await import('@/lib/pdf/theme')
+      const { drawBrandBand, drawFooter, drawUPIQRBlock } = await import('@/lib/pdf/primitives')
+      const doc = new jsPDFMod.jsPDF({ unit: 'mm', format: 'a4' })
+      await registerUnicodeFont(doc)
+
       const pageWidth = 210, pageHeight = 297, margin = 15
-      let y = 20
+      const shopName = setting?.shopName || 'My Shop'
 
-      doc.setFont('helvetica', 'bold')
-      doc.setFontSize(18)
-      doc.text(setting?.shopName || 'My Shop', margin, y)
-      y += 6
-      doc.setFont('helvetica', 'normal')
-      doc.setFontSize(9)
-      if (setting?.address) { doc.text(setting.address, margin, y); y += 4 }
-      let contactLine = ''
-      if (setting?.phone) contactLine += `Phone: ${setting.phone}  `
-      if (setting?.gstin) contactLine += `GSTIN: ${setting.gstin}`
-      if (contactLine) { doc.text(contactLine, margin, y); y += 4 }
-      y += 2; doc.setDrawColor(200); doc.line(margin, y, pageWidth - margin, y); y += 8
+      // Brand band
+      let y = drawBrandBand(doc, {
+        shopName,
+        address: setting?.address,
+        phone: setting?.phone,
+        gstin: setting?.gstin,
+        title: 'ACCOUNT STATEMENT',
+        subtitle: `Generated: ${formatDate(new Date())}`,
+      })
 
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(14)
-      doc.text('ACCOUNT STATEMENT', margin, y)
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(9)
-      doc.text(`Generated: ${formatDate(new Date())}`, pageWidth - margin, y, { align: 'right' })
-      y += 8
+      // Party info + balance hero
+      doc.setFont(THEME.font, 'bold')
+      doc.setFontSize(7)
+      doc.setTextColor(THEME.textMuted.r, THEME.textMuted.g, THEME.textMuted.b)
+      doc.text('PARTY', margin, y)
+      doc.setFont(THEME.font, 'bold')
+      doc.setFontSize(11)
+      doc.setTextColor(THEME.text.r, THEME.text.g, THEME.text.b)
+      doc.text(party.name, margin, y + 6)
+      doc.setFont(THEME.font, 'normal')
+      doc.setFontSize(8)
+      doc.setTextColor(THEME.textMuted.r, THEME.textMuted.g, THEME.textMuted.b)
+      let partyY = y + 11
+      if (party.phone) { doc.text(party.phone, margin, partyY); partyY += 4 }
+      if (party.gstin) { doc.text('GSTIN: ' + party.gstin, margin, partyY); partyY += 4 }
 
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(10)
-      doc.text('Party:', margin, y)
-      doc.setFont('helvetica', 'normal')
-      doc.text(`${party.name}  (${party.type})`, margin + 15, y)
-      y += 5
-      let partyLine = ''
-      if (party.phone) partyLine += `Phone: ${party.phone}  `
-      if (party.gstin) partyLine += `GSTIN: ${party.gstin}`
-      if (partyLine) { doc.text(partyLine, margin, y); y += 5 }
-      // 🔒 R9-1 FIX (2026-07-21): this exporter — the one that WhatsApps a
-      // statement to the CUSTOMER — was still iterating `transactions`, the
-      // PAGINATED 50-row page. It therefore (a) silently truncated at 50
-      // entries while printing that count as the total, (b) omitted every
-      // Settle payment, and (c) ADDED credit notes to the amount owed. Its
-      // "Balance Due" was a re-derived figure that contradicted the balance
-      // shown on screen — overstating what the customer owed, on a document
-      // carrying the shop's name and GSTIN.
-      //
-      // Now: same rows and same closing figure as every other statement view.
-      const rows = buildStatementRows()
+      // Balance hero (right side)
       const closing = statementClosing()
-      doc.text(`Total Transactions: ${closing.trueCount}`, margin, y); y += 6
+      doc.setFont(THEME.font, 'bold')
+      doc.setFontSize(7)
+      doc.setTextColor(THEME.textMuted.r, THEME.textMuted.g, THEME.textMuted.b)
+      doc.text('OUTSTANDING BALANCE', pageWidth - margin, y, { align: 'right' })
+      doc.setFont(THEME.font, 'bold')
+      doc.setFontSize(20)
+      const balColor = closing.closing >= 0 ? THEME.paid : THEME.due
+      doc.setTextColor(balColor.r, balColor.g, balColor.b)
+      doc.text(formatPDFMoney(Math.abs(closing.closing)), pageWidth - margin, y + 8, { align: 'right' })
+      doc.setFont(THEME.font, 'normal')
+      doc.setFontSize(8)
+      doc.setTextColor(THEME.textMuted.r, THEME.textMuted.g, THEME.textMuted.b)
+      doc.text(closing.label, pageWidth - margin, y + 13, { align: 'right' })
 
-      doc.setFillColor(240, 240, 240)
-      doc.rect(margin, y - 4, pageWidth - 2 * margin, 8, 'F')
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(9)
-      doc.text('#', margin + 2, y); doc.text('Date', margin + 10, y)
-      doc.text('Particulars', margin + 40, y)
-      doc.text('Debit', margin + 118, y, { align: 'right' })
-      doc.text('Credit', margin + 148, y, { align: 'right' })
-      doc.text('Balance', pageWidth - margin - 2, y, { align: 'right' })
-      y += 6
+      y = Math.max(partyY, y + 16) + 6
 
-      const drawHeaderRow = () => {
-        doc.setFillColor(240, 240, 240)
-        doc.rect(margin, y - 4, pageWidth - 2 * margin, 8, 'F')
-        doc.setFont('helvetica', 'bold'); doc.setFontSize(9)
-        doc.text('#', margin + 2, y); doc.text('Date', margin + 10, y)
-        doc.text('Particulars', margin + 40, y)
-        doc.text('Debit', margin + 118, y, { align: 'right' })
-        doc.text('Credit', margin + 148, y, { align: 'right' })
-        doc.text('Balance', pageWidth - margin - 2, y, { align: 'right' })
-        y += 6
-        doc.setFont('helvetica', 'normal')
+      // Truncation note
+      if (closing.truncated) {
+        doc.setFontSize(7)
+        doc.setTextColor(THEME.textMuted.r, THEME.textMuted.g, THEME.textMuted.b)
+        doc.text(`Showing the most recent entries. The closing balance reflects all entries.`, margin, y)
+        y += 5
       }
 
-      doc.setFont('helvetica', 'normal')
+      // Table header
+      const drawHeaderRow = () => {
+        doc.setFillColor(THEME.brand.r, THEME.brand.g, THEME.brand.b)
+        doc.rect(margin, y - 4, pageWidth - 2 * margin, 8, 'F')
+        doc.setFont(THEME.font, 'bold')
+        doc.setFontSize(8)
+        doc.setTextColor(THEME.white.r, THEME.white.g, THEME.white.b)
+        doc.text('#', margin + 2, y + 1)
+        doc.text('Date', margin + 10, y + 1)
+        doc.text('Particulars', margin + 40, y + 1)
+        doc.text('Debit', margin + 118, y + 1, { align: 'right' })
+        doc.text('Credit', margin + 148, y + 1, { align: 'right' })
+        doc.text('Balance', pageWidth - margin - 2, y + 1, { align: 'right' })
+        doc.setTextColor(THEME.text.r, THEME.text.g, THEME.text.b)
+        y += 8
+        doc.setFont(THEME.font, 'normal')
+        doc.setFontSize(9)
+      }
+
+      y += 2
+      drawHeaderRow()
+
+      const rows = buildStatementRows()
       rows.forEach((r) => {
-        // Repeat the column header on each new page (previously page 2+ had
-        // rows with no headings).
         if (y > pageHeight - 40) { doc.addPage(); y = 20; drawHeaderRow() }
+        if (r.index % 2 === 0) {
+          doc.setFillColor(THEME.zebra.r, THEME.zebra.g, THEME.zebra.b)
+          doc.rect(margin, y - 4, pageWidth - 2 * margin, 6, 'F')
+        }
         doc.text(String(r.index), margin + 2, y)
         doc.text(r.date, margin + 10, y)
         doc.text(String(r.particulars).slice(0, 38), margin + 40, y)
-        if (r.debit) doc.text(`Rs. ${r.debit.toFixed(2)}`, margin + 118, y, { align: 'right' })
+        if (r.debit) doc.text(formatPDFMoney(r.debit), margin + 118, y, { align: 'right' })
         if (r.credit) {
-          doc.setTextColor(0, 128, 0)
-          doc.text(`Rs. ${r.credit.toFixed(2)}`, margin + 148, y, { align: 'right' })
-          doc.setTextColor(0)
+          doc.setTextColor(THEME.paid.r, THEME.paid.g, THEME.paid.b)
+          doc.text(formatPDFMoney(r.credit), margin + 148, y, { align: 'right' })
+          doc.setTextColor(THEME.text.r, THEME.text.g, THEME.text.b)
         }
-        doc.text(`Rs. ${r.balance.toFixed(2)}`, pageWidth - margin - 2, y, { align: 'right' })
-        y += 5
+        doc.setFont(THEME.font, 'bold')
+        doc.text(formatPDFMoney(r.balance), pageWidth - margin - 2, y, { align: 'right' })
+        doc.setFont(THEME.font, 'normal')
+        y += 6
       })
 
-      y += 4; doc.setDrawColor(200); doc.line(margin, y, pageWidth - margin, y); y += 6
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(10)
-      doc.text('Closing Balance:', pageWidth - margin - 60, y)
-      if (closing.closing > 0) doc.setTextColor(200, 0, 0); else doc.setTextColor(0, 128, 0)
-      doc.text(`Rs. ${Math.abs(closing.closing).toFixed(2)}`, pageWidth - margin - 2, y, { align: 'right' })
-      doc.setTextColor(0); y += 5
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(9)
-      doc.text(closing.label, pageWidth - margin - 2, y, { align: 'right' }); y += 5
-      if (closing.truncated) {
-        doc.setFontSize(8); doc.setTextColor(120)
-        doc.text(
-          `Showing the most recent ${rows.length} of ${closing.trueCount} entries. The closing balance reflects all entries.`,
-          margin, y,
-        )
-        doc.setTextColor(0); doc.setFontSize(9); y += 5
+      // Closing balance box
+      y += 4
+      doc.setFillColor(THEME.brand.r, THEME.brand.g, THEME.brand.b)
+      doc.rect(pageWidth - margin - 65, y - 4, 65, 11, 'F')
+      doc.setFont(THEME.font, 'bold')
+      doc.setFontSize(11)
+      doc.setTextColor(THEME.white.r, THEME.white.g, THEME.white.b)
+      doc.text('CLOSING BALANCE', pageWidth - margin - 63, y + 3)
+      doc.text(formatPDFMoney(Math.abs(closing.closing)), pageWidth - margin - 2, y + 3, { align: 'right' })
+      y += 15
+      doc.setFont(THEME.font, 'normal')
+      doc.setFontSize(8)
+      doc.setTextColor(THEME.textMuted.r, THEME.textMuted.g, THEME.textMuted.b)
+      doc.text(closing.label, pageWidth - margin - 2, y, { align: 'right' })
+
+      // UPI QR (if balance > 0 and upiId set)
+      if (setting?.upiId && Math.abs(closing.closing) > 0) {
+        y += 5
+        await drawUPIQRBlock(doc, margin, y, {
+          upiId: setting.upiId,
+          shopName,
+          amount: Math.abs(closing.closing),
+          note: 'Statement Settlement',
+        })
       }
 
-      y = pageHeight - 25; doc.setDrawColor(200); doc.line(margin, y, pageWidth - margin, y); y += 6
-      doc.setFont('helvetica', 'italic'); doc.setFontSize(8); doc.setTextColor(120)
-      doc.text("Generated by EkBook", pageWidth / 2, y, { align: 'center' })
+      // Footer
+      drawFooter(doc, 1, 1)
 
       const pdfBlob = doc.output('blob')
       const fileName = `Statement_${party.name.replace(/\s+/g, '_')}.pdf`
