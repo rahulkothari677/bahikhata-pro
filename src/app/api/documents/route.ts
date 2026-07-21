@@ -165,6 +165,26 @@ export async function DELETE(req: NextRequest) {
     if (authCtx.error || !authCtx.userId) return authCtx.error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     const userId = authCtx.userId
 
+    // 🔒 R17-12 COMPLETION (2026-07-21): enforce owner-only DELETE on the
+    // SERVER. Round 17 identified this correctly — "any staff could delete any
+    // document" — but fixed it by hiding the button in DocumentVault.tsx. The
+    // endpoint kept accepting the request, so a staff member could still
+    // DELETE /api/documents?id=... directly and destroy the owner's GST
+    // certificates, ID proofs and bank statements.
+    //
+    // Staff share the owner's `userId` (authCtx.userId is the ownerId), so the
+    // existing ownership lookup below does NOT distinguish them — the role
+    // check has to be explicit.
+    //
+    // Upload/view stay open to staff; only deletion is owner-only, matching
+    // the intent stated in the UI.
+    if (authCtx.role !== 'owner') {
+      return NextResponse.json({
+        error: 'Forbidden',
+        message: 'Only the shop owner can delete documents. Ask the owner if this document should be removed.',
+      }, { status: 403 })
+    }
+
     const { searchParams } = new URL(req.url)
     const docId = searchParams.get('id')
 
