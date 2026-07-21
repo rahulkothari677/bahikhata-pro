@@ -102,6 +102,12 @@ export async function POST(req: NextRequest) {
     }
     const { partyId, amount, type, mode, date, notes } = validation.data
     const amt = amount
+    // 🔒 V26 Phase 8: Defensive log — if amt > 100000 (₹1 lakh for a single
+    // payment is very rare), log it. This helps diagnose any 100× inflation
+    // issue (₹100 → ₹10,000 → stored as 1000000 paise instead of 10000).
+    if (amt > 100000) {
+      console.warn('[payments] Large payment amount:', { amt, partyId, type })
+    }
     // 🔒 V26 R2 (Phase 5): Read x-client-mutation-id from HEADER (where the
     // offline queue puts it) instead of body (where no client sends it).
     // Was: `body.clientMutationId` — always undefined → the entire V19-007

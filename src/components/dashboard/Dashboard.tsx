@@ -491,25 +491,25 @@ export function Dashboard() {
         id="cash-in-hand"
         initial={{ opacity: 0, y: -10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="rounded-2xl bg-gradient-saffron p-4 lg:p-6 text-white shadow-lg relative overflow-hidden"
+        className="rounded-2xl bg-gradient-saffron p-3 lg:p-5 text-white shadow-lg relative overflow-hidden"
       >
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32" />
-        <div className="absolute bottom-0 right-20 w-40 h-40 bg-white/5 rounded-full -mb-20" />
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+        <div className="absolute top-0 right-0 w-48 h-48 bg-white/10 rounded-full -mr-24 -mt-24" />
+        <div className="absolute bottom-0 right-20 w-32 h-32 bg-white/5 rounded-full -mb-16" />
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
           <div>
-            <p className="text-white/80 text-sm font-medium">{t('dash.greeting')}, {setting?.ownerName || 'Shop Owner'}</p>
-            {/* 🔒 V26 Phase 6 §2.3: Invert the hero hierarchy. Was: shop name
-                at text-2xl/3xl font-bold (the largest text), today's revenue
-                inline in a sentence at text-sm. The user's daily question is
-                "aaj kitna hua?" — the answer is now the dominant element.
-                Shop name demoted to text-sm font-medium. */}
-            <p className="text-sm font-medium text-white/90 mt-0.5">{setting?.shopName || 'My Shop'}</p>
-            <div className="mt-2">
+            <p className="text-white/80 text-xs font-medium">{t('dash.greeting')}, {setting?.ownerName || 'Shop Owner'}</p>
+            {/* 🔒 V26 Phase 8: Scale back the hero — was too big on mobile.
+                Phase 6 §2.3 inverted the hierarchy (revenue dominant, shop name
+                demoted) but made the revenue text-3xl/4xl which is too large on
+                a 360px mobile screen. Now: text-2xl on mobile, text-3xl on
+                desktop — still the dominant element, but proportional. */}
+            <p className="text-xs font-medium text-white/90 mt-0.5">{setting?.shopName || 'My Shop'}</p>
+            <div className="mt-1.5">
               <p className="text-2xs text-white/70 uppercase tracking-wide font-medium">Today's sales</p>
-              <p className="text-3xl lg:text-4xl font-bold tabular-nums text-white mt-0.5">
+              <p className="text-2xl lg:text-3xl font-bold tabular-nums text-white mt-0.5">
                 {formatINR(kpis.todayRevenue)}
               </p>
-              <p className="text-white/80 text-sm mt-1">
+              <p className="text-white/80 text-xs mt-0.5">
                 {t('dash.from')} <span className="font-bold text-white">{kpis.todayTxnCount}</span> {t('dash.sales_word')}
                 {/* 🔒 V17 Audit Phase 1 P0.3: Show "net of returns" badge if credit notes exist today */}
                 {kpis.todayCreditNoteCount > 0 && (

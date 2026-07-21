@@ -248,7 +248,7 @@ export function Parties() {
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
                         <h3 className="font-semibold text-sm truncate group-hover:text-primary transition">{p.name}</h3>
-                        <Badge variant="secondary" className="text-3xs py-0 capitalize mt-0.5">{p.type}</Badge>
+                        <Badge variant="secondary" className="text-xs py-0 capitalize mt-0.5">{p.type}</Badge>
                       </div>
                       <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary flex-shrink-0" />
                     </div>
@@ -270,7 +270,9 @@ export function Parties() {
 
                     <div className="mt-3 pt-3 border-t border-border flex items-center justify-between">
                       <div>
-                        <p className="text-3xs text-muted-foreground uppercase">Balance</p>
+                        {/* 🔒 V26 Phase 8: Bumped from text-xs to text-xs — user reported
+                            these labels were too small and hardly visible. */}
+                        <p className="text-xs text-muted-foreground uppercase">Balance</p>
                         <p className={cn(
                           'text-sm font-bold',
                           p.balance > 0 ? 'text-emerald-600 dark:text-emerald-400' : p.balance < 0 ? 'text-rose-600' : 'text-muted-foreground'
@@ -282,7 +284,7 @@ export function Parties() {
                             Trust-language matters more than color alone (Khatabook pattern). */}
                         {p.balance !== 0 && (
                           <p className={cn(
-                            'text-2xs font-medium mt-0.5',
+                            'text-xs font-medium mt-0.5',
                             p.balance > 0 ? 'text-emerald-600/80 dark:text-emerald-400/80' : 'text-rose-600/80'
                           )}>
                             {p.balance > 0 ? t('stat.lene_hain') : t('stat.dene_hain')}
@@ -290,14 +292,14 @@ export function Parties() {
                         )}
                       </div>
                       <div className="text-right">
-                        <p className="text-3xs text-muted-foreground uppercase">Txns</p>
+                        <p className="text-xs text-muted-foreground uppercase">Txns</p>
                         <p className="text-sm font-medium">{p.transactionCount}</p>
                       </div>
                     </div>
 
                     {p.balance !== 0 && (
                       <div className={cn(
-                        'mt-2 text-2xs px-2 py-1 rounded-md',
+                        'mt-2 text-xs px-2 py-1 rounded-md',
                         p.balance > 0 ? 'bg-emerald-50 text-emerald-700 dark:text-emerald-300' : 'bg-rose-50 text-rose-700'
                       )}>
                         {p.balance > 0 ? 'They owe you' : 'You owe them'}
@@ -345,16 +347,16 @@ export function Parties() {
                         </Avatar>
                         <div>
                           <p className="font-medium group-hover:text-primary transition">{p.name}</p>
-                          {p.gstin && <p className="text-3xs font-mono text-muted-foreground">{p.gstin}</p>}
+                          {p.gstin && <p className="text-xs font-mono text-muted-foreground">{p.gstin}</p>}
                         </div>
                       </div>
                     </td>
                     <td className="py-3 px-2">
-                      <Badge variant="secondary" className="text-3xs capitalize">{p.type}</Badge>
+                      <Badge variant="secondary" className="text-xs capitalize">{p.type}</Badge>
                     </td>
                     <td className="py-3 px-2 text-muted-foreground">
                       {p.phone || '—'}
-                      {p.state && <span className="block text-3xs">{p.state}</span>}
+                      {p.state && <span className="block text-xs">{p.state}</span>}
                     </td>
                     <td className="py-3 px-2 text-right">{p.transactionCount}</td>
                     <td className={cn('py-3 px-2 text-right font-semibold',

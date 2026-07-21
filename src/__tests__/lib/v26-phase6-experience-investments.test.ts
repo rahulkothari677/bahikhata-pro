@@ -42,11 +42,11 @@ describe('V26 Phase 6 Batch 3 — Experience investments', () => {
 
   test('§2.3: Dashboard hero — today\'s revenue is the dominant element, shop name demoted', () => {
     const src = readFile('components/dashboard/Dashboard.tsx')
-    // Today's revenue must be at text-3xl or text-4xl (the dominant element).
-    expect(src).toMatch(/text-3xl.*lg:text-4xl.*font-bold.*tabular-nums/)
-    // Shop name must NOT be at text-2xl/text-3xl font-bold (was the old hierarchy).
-    // Look for the hero section — the shop name should be text-sm font-medium.
-    expect(src).toMatch(/text-sm font-medium.*shopName|shopName.*text-sm font-medium/)
+    // 🔒 V26 Phase 8: Updated from text-3xl/4xl to text-2xl/3xl — the Phase 6
+    // sizes were too big on mobile. Revenue is still the dominant element.
+    expect(src).toMatch(/text-2xl.*lg:text-3xl.*font-bold.*tabular-nums/)
+    // Shop name must be demoted (not the largest text).
+    expect(src).toMatch(/text-xs font-medium.*shopName|shopName.*text-xs font-medium/)
     // "Today's sales" label must exist above the revenue number.
     expect(src).toMatch(/Today's sales/)
   })
