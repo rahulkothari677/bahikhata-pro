@@ -67,6 +67,14 @@ function setupCommonMocks(overrides: {
   })
   dbAny.$queryRaw = queryRawMock
 
+  // 🔒 M11 (2026-07-21): getReceivablePayable now sums payments via
+  // db.payment.findMany (the money-extension path the party screen and the
+  // statement use) rather than the raw-SQL subquery, because in production the
+  // two disagreed by 100× on a fresh ₹100 payment. These reconciliation
+  // fixtures drive balances through queryRawResult and have no payment rows,
+  // so an empty payment list preserves their existing expectations.
+  jest.spyOn(dbAny.payment, 'findMany').mockResolvedValue([])
+
   // transactionItem.aggregate — used by checkGstReconciliation (per-item GST)
   jest.spyOn(dbAny.transactionItem, 'aggregate').mockResolvedValue({
     _sum: {

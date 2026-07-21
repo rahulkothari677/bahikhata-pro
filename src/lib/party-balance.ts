@@ -142,32 +142,65 @@ export async function computePartyBalance(
     (debitNoteAgg._sum.totalAmount || 0) - (debitNoteAgg._sum.paidAmount || 0)
   )
 
-  // 🔒 V26 M11 FINAL FIX: Payment amounts from raw SQL (paise) → fromPaise → rupees.
-  // No money extension involved — same path as getReceivablePayable.
-  const paymentsReceived = fromPaise(Number(receivedAgg[0]?.totalPaise ?? 0))
-  const paymentsPaid = fromPaise(Number(paidAgg[0]?.totalPaise ?? 0))
-
-  // 🔒 V26 Phase 8: Debug log to trace the ₹100 → ₹10,000 issue.
-  // The write path is confirmed correct (Vercel logs show amt:100, dbAmount:100).
-  // This log shows what the READ path returns — if paymentsReceived is 10000
-  // instead of 100, the raw SQL is returning rupees (not paise) and fromPaise
-  // is double-converting.
-  console.log('[party-balance] READ', {
-    partyId,
-    rawReceivedPaise: Number(receivedAgg[0]?.totalPaise ?? 0),
-    rawPaidPaise: Number(paidAgg[0]?.totalPaise ?? 0),
-    paymentsReceived,
-    paymentsPaid,
-    balance: roundMoney(
-      party.openingBalance
-      + salesOutstanding
-      - purchaseOutstanding
-      - creditNoteOutstanding
-      + debitNoteOutstanding
-      - paymentsReceived
-      + paymentsPaid
-    ),
+  // ═══════════════════════════════════════════════════════════════════════
+  // 🔒 M11 DEFINITIVE FIX (2026-07-21) — trust the path the user can see.
+  //
+  // THE PROBLEM
+  // Two read paths for the SAME Payment.amount column disagreed by exactly
+  // 100× on a freshly-created payment:
+  //   • db.payment.findMany (money extension)  →  ₹100   ✅ correct
+  //     (this is what the on-screen Account Statement renders)
+  //   • raw SQL SUM + fromPaise()              →  ₹10,000 ❌ 100× too large
+  //     (this fed the balance and the "Received" card)
+  // Result: the statement said ₹100 while the headline balance moved ₹10,000
+  // — a ledger contradicting itself on one screen.
+  //
+  // Reading the code cannot explain how one column yields two values, so
+  // rather than guess, this now sums payments through the SAME path the
+  // statement uses (Prisma + money extension), which is demonstrably correct
+  // in production. The raw-SQL result is still computed and compared, so the
+  // discrepancy reports itself instead of silently corrupting balances.
+  //
+  // WHY PRISMA IS THE SOURCE OF TRUTH HERE
+  // The user enters ₹100, the statement shows ₹100. The balance MUST agree
+  // with the statement. Internal consistency is not optional in a ledger.
+  //
+  // Cost: one extra bounded query (payments for a single party).
+  // ═══════════════════════════════════════════════════════════════════════
+  const paymentRows = await db.payment.findMany({
+    where: { userId, partyId, deletedAt: null },
+    select: { type: true, amount: true },
   })
+  let paymentsReceived = 0
+  let paymentsPaid = 0
+  for (const p of paymentRows) {
+    // `amount` is already rupees here — the extension converted it on read,
+    // exactly as it does for the statement.
+    if (p.type === 'received') paymentsReceived = roundMoney(paymentsReceived + (p.amount || 0))
+    else if (p.type === 'paid') paymentsPaid = roundMoney(paymentsPaid + (p.amount || 0))
+  }
+
+  // Cross-check against the raw-SQL path. If they diverge, something is wrong
+  // at the storage/conversion layer and we want to KNOW — loudly — rather than
+  // discover it from a customer dispute months later.
+  const rawReceived = fromPaise(Number(receivedAgg[0]?.totalPaise ?? 0))
+  const rawPaid = fromPaise(Number(paidAgg[0]?.totalPaise ?? 0))
+  if (Math.abs(rawReceived - paymentsReceived) > 0.01 || Math.abs(rawPaid - paymentsPaid) > 0.01) {
+    console.error('[party-balance] PAYMENT READ-PATH DIVERGENCE', {
+      partyId,
+      viaPrisma: { received: paymentsReceived, paid: paymentsPaid },
+      viaRawSql: { received: rawReceived, paid: rawPaid },
+      rawReceivedPaise: Number(receivedAgg[0]?.totalPaise ?? 0),
+      rawPaidPaise: Number(paidAgg[0]?.totalPaise ?? 0),
+      paymentRowCount: paymentRows.length,
+      ratioReceived: paymentsReceived ? rawReceived / paymentsReceived : null,
+      note: 'Using the Prisma value (matches the on-screen statement). ratio 100 => raw SQL is reading a 100x value.',
+    })
+  }
+
+  // (The unconditional per-read debug log was removed: the divergence check
+  // above logs only when the two paths actually disagree, which is the signal
+  // we care about. An always-on log on a hot path is noise that hides it.)
 
   const balance = roundMoney(
     party.openingBalance
@@ -330,6 +363,27 @@ export async function getReceivablePayable(
   let totalReceivable = 0
   let totalPayable = 0
 
+  // 🔒 M11 DEFINITIVE FIX (2026-07-21): sum payments through the SAME path the
+  // party profile and the on-screen statement use (Prisma + money extension),
+  // NOT the raw-SQL subquery. On a freshly-created ₹100 payment the raw-SQL
+  // path returned ₹10,000 while Prisma returned the correct ₹100 (see
+  // computePartyBalance above). If the list kept using raw SQL while the
+  // profile used Prisma, the Parties list and the party screen would show
+  // different balances for the same customer — the exact drift this helper was
+  // created to eliminate. One source of truth for payments, everywhere.
+  const allPaymentRows = await db.payment.findMany({
+    where: { userId, deletedAt: null },
+    select: { partyId: true, type: true, amount: true },
+  })
+  const paymentsByParty = new Map<string, { received: number; paid: number }>()
+  for (const p of allPaymentRows) {
+    if (!p.partyId) continue
+    const acc = paymentsByParty.get(p.partyId) || { received: 0, paid: 0 }
+    if (p.type === 'received') acc.received = roundMoney(acc.received + (p.amount || 0))
+    else if (p.type === 'paid') acc.paid = roundMoney(acc.paid + (p.amount || 0))
+    paymentsByParty.set(p.partyId, acc)
+  }
+
   for (const row of rows) {
     // 🔒 V17 PAISE MIGRATION Phase 2B: SQL returns paise (numeric strings).
     // Convert to rupees via fromPaise() for the existing return type.
@@ -342,8 +396,22 @@ export async function getReceivablePayable(
     const purchaseOutstanding = fromPaise(Number(row.purchaseOutstandingPaise))
     const creditNoteOutstanding = fromPaise(Number(row.creditNoteOutstandingPaise))
     const debitNoteOutstanding = fromPaise(Number(row.debitNoteOutstandingPaise))
-    const paymentsReceived = fromPaise(Number(row.paymentsReceivedPaise))
-    const paymentsPaid = fromPaise(Number(row.paymentsPaidPaise))
+    // 🔒 M11: payments come from the Prisma-based map above (single source of
+    // truth). The raw-SQL values are still computed and compared so a
+    // divergence reports itself instead of silently skewing every balance.
+    const prismaPayments = paymentsByParty.get(row.partyId) || { received: 0, paid: 0 }
+    const paymentsReceived = prismaPayments.received
+    const paymentsPaid = prismaPayments.paid
+    const rawPayReceived = fromPaise(Number(row.paymentsReceivedPaise))
+    const rawPayPaid = fromPaise(Number(row.paymentsPaidPaise))
+    if (Math.abs(rawPayReceived - paymentsReceived) > 0.01 || Math.abs(rawPayPaid - paymentsPaid) > 0.01) {
+      console.error('[getReceivablePayable] PAYMENT READ-PATH DIVERGENCE', {
+        partyId: row.partyId,
+        viaPrisma: { received: paymentsReceived, paid: paymentsPaid },
+        viaRawSql: { received: rawPayReceived, paid: rawPayPaid },
+        note: 'Using the Prisma value so the list agrees with the party screen.',
+      })
+    }
     // V17-Ext Tier 3: Credit notes reduce receivable, debit notes reduce payable
     const balance = roundMoney(
       openingBalance

@@ -189,6 +189,28 @@ function configureMocks() {
     return Promise.resolve({ _sum: {}, _min: {}, _max: {} })
   })
 
+  // 🔒 M11 (2026-07-21): computePartyBalance and getReceivablePayable now sum
+  // payments via db.payment.findMany (the money-extension path the on-screen
+  // statement uses) instead of raw SQL, because in production the two paths
+  // disagreed by 100× on a fresh ₹100 payment and the balance must agree with
+  // the statement the user is looking at.
+  //
+  // NOTE for future readers: `amount` here is in RUPEES, because that is what
+  // the extension returns on read. The $queryRaw mock below deliberately uses
+  // rupees × 100 to simulate the paise column. That difference is the whole
+  // point of this fixture — the two paths must land on the SAME rupee value.
+  ;(jest.spyOn(db.payment, 'findMany') as jest.Mock).mockImplementation((args: any) => {
+    const wantsDeletedNull = args?.where?.deletedAt === null
+    const partyFilter = args?.where?.partyId
+    const rows = FIXTURE_PAYMENTS
+      .filter(p => (wantsDeletedNull ? p.deletedAt === null : true))
+      .filter(p => (partyFilter ? p.partyId === partyFilter : true))
+    return Promise.resolve(rows.map(p => ({
+      id: p.id, partyId: p.partyId, type: p.type,
+      amount: p.amount, date: p.date, mode: p.mode, notes: p.notes,
+    })))
+  })
+
   // db.payment.aggregate — returns different values based on the `type`
   // in the where clause. Must respect the deletedAt: null filter.
   ;(jest.spyOn(db.payment, 'aggregate') as jest.Mock).mockImplementation((args: any) => {
