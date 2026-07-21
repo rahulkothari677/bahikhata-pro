@@ -199,6 +199,19 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
     }
     try {
       const toastId = sonnerToast.loading('Exporting CSV...')
+      // 🔒 R14-3 (Round 14): Block P&L CSV export when profit is hidden.
+      // exportPLReportCSV calls summary.profitMargin.toFixed(2) → TypeError
+      // when the server strips profitMargin for staff+hideProfit. The catch
+      // below would show "CSV export failed", but better to detect upfront
+      // and explain why.
+      if (reportType === 'pl' && data?.summary?.grossProfit === undefined) {
+        sonnerToast.info('P&L profit is hidden — CSV export unavailable', {
+          description: 'The shop owner has hidden profit figures. Ask them to export if needed.',
+          id: toastId,
+          duration: 8000,
+        })
+        return
+      }
       if (reportType === 'pl') await exportPLReportCSV(data, periodLabel)
       else if (reportType === 'gst') await exportGSTReportCSV(data, periodLabel)
       else if (reportType === 'stock') await exportStockReportCSV(data)
@@ -470,14 +483,25 @@ function PLReport({ data }: { data: any }) {
   const summary = data?.summary || { totalRevenue: 0, grossProfit: 0, totalExpenses: 0, otherIncome: 0, netProfit: 0, profitMargin: 0 }
   const expensesByCategory = data?.expensesByCategory || []
   const incomeByCategory = data?.incomeByCategory || []
+  // 🔒 R14-1/R14-2 (Round 14): Detect hideProfit via stripped server fields
+  // (same pattern as StockReport's hideCost at L815). When the server strips
+  // grossProfit/netProfit/profitMargin for staff+hideProfit, those fields are
+  // undefined. The old code called `summary.profitMargin.toFixed(1)` on
+  // undefined → TypeError crash + white screen. Also rendered "₹NaN" for
+  // Gross Profit + Net Profit cards. Now: detect + hide all profit rows.
+  const hideProfit = summary.grossProfit === undefined
   return (
     <div className="space-y-4">
       {/* Top metrics */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <ReportStatCard label="Revenue (excl. GST)" value={formatINR(summary.totalRevenue)} icon={IndianRupee} color="text-amber-600 dark:text-amber-400" bg="bg-amber-100" />
-        <ReportStatCard label="Gross Profit" value={formatINR(summary.grossProfit)} icon={TrendingUp} color="text-emerald-600 dark:text-emerald-400" bg="bg-emerald-100" />
+        {!hideProfit && (
+          <ReportStatCard label="Gross Profit" value={formatINR(summary.grossProfit)} icon={TrendingUp} color="text-emerald-600 dark:text-emerald-400" bg="bg-emerald-100" />
+        )}
         <ReportStatCard label="Total Expenses" value={formatINR(summary.totalExpenses)} icon={ArrowUpRight} color="text-rose-600" bg="bg-rose-100" />
-        <ReportStatCard label="Net Profit" value={formatINR(summary.netProfit)} icon={Percent} color={summary.netProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'} bg={summary.netProfit >= 0 ? 'bg-emerald-100' : 'bg-rose-100'} />
+        {!hideProfit && (
+          <ReportStatCard label="Net Profit" value={formatINR(summary.netProfit)} icon={Percent} color={summary.netProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'} bg={summary.netProfit >= 0 ? 'bg-emerald-100' : 'bg-rose-100'} />
+        )}
       </div>
 
       {/* {t('reports.pl')} breakdown */}
@@ -563,14 +587,19 @@ function PLReport({ data }: { data: any }) {
               <span className="text-muted-foreground">Revenue (Sales, excl. GST)</span>
               <span className="font-medium">{formatINR(summary.totalRevenue)}</span>
             </div>
-            <div className="flex justify-between py-1.5 border-b border-border">
-              <span className="text-muted-foreground">Less: Cost of Goods Sold</span>
-              <span className="font-medium text-rose-600">-{formatINR(summary.totalRevenue - summary.grossProfit)}</span>
-            </div>
-            <div className="flex justify-between py-1.5 border-b border-border">
-              <span className="font-semibold">Gross Profit</span>
-              <span className="font-bold text-emerald-600 dark:text-emerald-400">{formatINR(summary.grossProfit)}</span>
-            </div>
+            {/* 🔒 R14-1/R14-2: Hide all profit-derived lines when hideProfit. */}
+            {!hideProfit && (
+              <div className="flex justify-between py-1.5 border-b border-border">
+                <span className="text-muted-foreground">Less: Cost of Goods Sold</span>
+                <span className="font-medium text-rose-600">-{formatINR(summary.totalRevenue - summary.grossProfit)}</span>
+              </div>
+            )}
+            {!hideProfit && (
+              <div className="flex justify-between py-1.5 border-b border-border">
+                <span className="font-semibold">Gross Profit</span>
+                <span className="font-bold text-emerald-600 dark:text-emerald-400">{formatINR(summary.grossProfit)}</span>
+              </div>
+            )}
             <div className="flex justify-between py-1.5 border-b border-border">
               <span className="text-muted-foreground">Add: Other Income</span>
               <span className="font-medium text-emerald-600 dark:text-emerald-400">+{formatINR(summary.otherIncome)}</span>
@@ -579,16 +608,20 @@ function PLReport({ data }: { data: any }) {
               <span className="text-muted-foreground">Less: Operating Expenses</span>
               <span className="font-medium text-rose-600">-{formatINR(summary.totalExpenses)}</span>
             </div>
-            <div className="flex justify-between py-2 text-base">
-              <span className="font-bold">Net Profit</span>
-              <span className={cn('font-bold', summary.netProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600')}>
-                {formatINR(summary.netProfit)}
-              </span>
-            </div>
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>Profit Margin</span>
-              <span>{summary.profitMargin.toFixed(1)}%</span>
-            </div>
+            {!hideProfit && (
+              <>
+                <div className="flex justify-between py-2 text-base">
+                  <span className="font-bold">Net Profit</span>
+                  <span className={cn('font-bold', summary.netProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600')}>
+                    {formatINR(summary.netProfit)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Profit Margin</span>
+                  <span>{typeof summary.profitMargin === 'number' ? summary.profitMargin.toFixed(1) : '—'}%</span>
+                </div>
+              </>
+            )}
           </div>
         </CardContent>
       </Card>

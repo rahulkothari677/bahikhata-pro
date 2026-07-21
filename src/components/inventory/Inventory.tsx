@@ -3,6 +3,7 @@
 import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from '@/hooks/use-translation'
+import { useSetting } from '@/hooks/use-setting'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -33,6 +34,12 @@ export function Inventory() {
     features,
   } = useAppStore()
   const { t } = useTranslation()
+  // 🔒 R15-1/2/3 (Round 15): Inventory screen must respect hideProfit.
+  // The /api/products endpoint returns purchasePrice + salePrice (staff need
+  // them for billing), so the client must hide computed profit. Was: profit
+  // displayed unconditionally → staff-with-hideProfit saw every product's
+  // margin + the shop's total potential profit.
+  const { hideProfit } = useSetting()
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'all' | 'low' | 'out'>('all')
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -108,7 +115,11 @@ export function Inventory() {
   const lowStockCount = products.filter(p => p.isLowStock).length
   const outOfStockCount = products.filter(p => p.currentStock <= 0).length
   const totalStockValue = products.reduce((s, p) => s + (p.stockValue || 0), 0)
-  const totalPotentialProfit = products.reduce((s, p) => s + ((p.currentStock || 0) * ((p.salePrice || 0) - (p.purchasePrice || 0))), 0)
+  // 🔒 R15-4 (Round 15): Clamp negative stock at 0 for profit calculation.
+  // Was: `(p.currentStock || 0) * margin` — an oversold product (stock -50,
+  // margin ₹10) contributed -₹500, dragging the total down. The dashboard
+  // already clamps at 0 for stock value; Inventory should match.
+  const totalPotentialProfit = products.reduce((s, p) => s + (Math.max(0, p.currentStock || 0) * ((p.salePrice || 0) - (p.purchasePrice || 0))), 0)
 
   return (
     <div className="space-y-4">
@@ -136,15 +147,19 @@ export function Inventory() {
             <p className="text-xl font-bold">{formatINR(totalStockValue)}</p>
           </CardContent>
         </Card>
-        <Card className="shadow-card border-border/60 border-t-4 border-t-violet-500">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-1">
-              <TrendingUp className="w-4 h-4 text-violet-600" />
-              <p className="text-2xs text-muted-foreground uppercase tracking-wide font-medium">{t('stat.potential_profit')}</p>
-            </div>
-            <p className="text-xl font-bold">{formatINR(totalPotentialProfit)}</p>
-          </CardContent>
-        </Card>
+        {/* 🔒 R15-1 (Round 15): Gate the Potential Profit card behind !hideProfit.
+            Staff with hideProfit enabled must not see the shop's total margin. */}
+        {!hideProfit && (
+          <Card className="shadow-card border-border/60 border-t-4 border-t-violet-500">
+            <CardContent className="p-4">
+              <div className="flex items-center gap-2 mb-1">
+                <TrendingUp className="w-4 h-4 text-violet-600" />
+                <p className="text-2xs text-muted-foreground uppercase tracking-wide font-medium">{t('stat.potential_profit')}</p>
+              </div>
+              <p className="text-xl font-bold">{formatINR(totalPotentialProfit)}</p>
+            </CardContent>
+          </Card>
+        )}
         <Card className="shadow-card border-border/60 border-t-4 border-t-rose-500">
           <CardContent className="p-4">
             <div className="flex items-center gap-2 mb-1">
@@ -324,7 +339,8 @@ export function Inventory() {
                   <th className="py-3 px-2 font-medium text-right">{t('inv.sale_price')}</th>
                   <th className="py-3 px-2 font-medium text-right">Stock</th>
                   <th className="py-3 px-2 font-medium text-right">Value</th>
-                  <th className="py-3 px-2 font-medium text-right">Profit/unit</th>
+                  {/* 🔒 R15-2 (Round 15): Hide Profit/unit column for hideProfit. */}
+                  {!hideProfit && <th className="py-3 px-2 font-medium text-right">Profit/unit</th>}
                   <th className="py-3 px-2 font-medium text-center">Status</th>
                   <th className="py-3 px-2"></th>
                 </tr>
@@ -352,10 +368,13 @@ export function Inventory() {
                         {p.currentStock} <span className="text-3xs text-muted-foreground">{p.unit}</span>
                       </td>
                       <td className="py-3 px-2 text-right">{formatINR(p.stockValue)}</td>
-                      <td className="py-3 px-2 text-right text-emerald-600 dark:text-emerald-400 font-medium">
-                        {formatINR(profit)}
-                        <span className="text-3xs text-muted-foreground ml-1">({margin.toFixed(0)}%)</span>
-                      </td>
+                      {/* 🔒 R15-2 (Round 15): Hide profit cell for hideProfit. */}
+                      {!hideProfit && (
+                        <td className="py-3 px-2 text-right text-emerald-600 dark:text-emerald-400 font-medium">
+                          {formatINR(profit)}
+                          <span className="text-3xs text-muted-foreground ml-1">({margin.toFixed(0)}%)</span>
+                        </td>
+                      )}
                       <td className="py-3 px-2 text-center">
                         {p.isLowStock ? (
                           <Badge variant="destructive" className="text-3xs">
@@ -418,6 +437,10 @@ export function Inventory() {
 
 function ProductGridCard({ product: p, onEdit }: { product: any; onEdit: () => void }) {
   const { setView, setPreviousView } = useAppStore()
+  // 🔒 R15-3 (Round 15): Read hideProfit inside the grid card (it's a separate
+  // component, not a child of Inventory's render scope). Was: profit shown
+  // unconditionally on every product card → staff-with-hideProfit saw margins.
+  const { hideProfit } = useSetting()
   const profit = (p.salePrice || 0) - (p.purchasePrice || 0)
   const margin = p.salePrice > 0 ? (profit / p.salePrice) * 100 : 0
   const stockPct = p.lowStockThreshold > 0
@@ -480,19 +503,22 @@ function ProductGridCard({ product: p, onEdit }: { product: any; onEdit: () => v
           </Button>
         </div>
 
-        {/* Price row — sale price prominent, buy price secondary */}
+        {/* Price row — sale price prominent, buy price secondary.
+            🔒 R15-3 (Round 15): Profit block hidden for hideProfit. */}
         <div className="flex items-baseline justify-between mb-2">
           <div>
             <p className="text-3xs text-muted-foreground uppercase">Sale Price</p>
             <p className="text-lg font-bold tabular-nums">{formatINR(p.salePrice)}</p>
           </div>
-          <div className="text-right">
-            <p className="text-3xs text-muted-foreground uppercase">Profit</p>
-            <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">
-              +{formatINR(profit)}
-              <span className="text-3xs text-muted-foreground ml-0.5">({margin.toFixed(0)}%)</span>
-            </p>
-          </div>
+          {!hideProfit && (
+            <div className="text-right">
+              <p className="text-3xs text-muted-foreground uppercase">Profit</p>
+              <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                +{formatINR(profit)}
+                <span className="text-3xs text-muted-foreground ml-0.5">({margin.toFixed(0)}%)</span>
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Stock indicator — visual bar */}

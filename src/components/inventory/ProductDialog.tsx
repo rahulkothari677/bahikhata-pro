@@ -13,6 +13,7 @@ import { track, EVENTS } from '@/lib/analytics'
 import { TrendingUp } from 'lucide-react'
 import { formatINR } from '@/lib/utils'
 import { readError } from '@/lib/read-error'
+import { useSetting } from '@/hooks/use-setting'
 
 const GST_RATES = [0, 5, 12, 18, 28]
 const UNITS = ['pcs', 'kg', 'gm', 'ltr', 'ml', 'm', 'box', 'dozen', 'packet']
@@ -40,6 +41,9 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
 }) {
   const [form, setForm] = useState(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
+  // 🔒 R15-5 (Round 15): Read hideProfit so the margin preview box is hidden
+  // for staff-with-hideProfit. Was: shown unconditionally when both prices > 0.
+  const { hideProfit } = useSetting()
 
   // Sync form when dialog opens or product changes
   useEffect(() => {
@@ -79,6 +83,20 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
     if ((form.gstTreatment === 'exempt' || form.gstTreatment === 'nonGst') && gstRateNum > 0) {
       sonnerToast.error('Contradictory GST settings', {
         description: `${form.gstTreatment === 'exempt' ? 'Exempt' : 'Non-GST'} products must have GST rate 0%. Change the GST rate to 0% or set GST Treatment to Taxable/Nil-rated.`,
+      })
+      return
+    }
+    // 🔒 R15-6 (Round 15): Client-side validation for negative values.
+    // parseFloat("-50") || 0 = -50 (truthy) — the old code would send -50 to
+    // the server, which rejects via zod with a 400. The user got a generic
+    // error instead of inline guidance. Now: catch negatives before the API call.
+    const purchasePriceNum = parseFloat(form.purchasePrice) || 0
+    const salePriceNum = parseFloat(form.salePrice) || 0
+    const openingStockNum = parseFloat(form.openingStock) || 0
+    const lowStockThresholdNum = parseFloat(form.lowStockThreshold) || 0
+    if (purchasePriceNum < 0 || salePriceNum < 0 || openingStockNum < 0 || lowStockThresholdNum < 0) {
+      sonnerToast.error('Prices, stock, and thresholds cannot be negative', {
+        description: 'Please enter zero or positive values only.',
       })
       return
     }
@@ -237,7 +255,9 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
           </div>
         </div>
 
-        {purchasePrice > 0 && salePrice > 0 && (
+        {/* 🔒 R15-5 (Round 15): Hide profit preview for hideProfit.
+            Staff with hideProfit must not see the margin calculation. */}
+        {!hideProfit && purchasePrice > 0 && salePrice > 0 && (
           <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg bg-emerald-100 flex items-center justify-center">
               <TrendingUp className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />

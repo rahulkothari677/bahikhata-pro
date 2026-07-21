@@ -94,8 +94,11 @@ export function Ledger({ type }: { type: LedgerType }) {
         invalidateMoneyCaches(queryClient)
         triggerRefresh()
       }
-    } catch {
-      sonnerToast.error("Couldn\'t delete")
+    } catch (e: any) {
+      // 🔒 R13-10 (Round 13): Surface the server's error message (period-lock
+      // refusal, permission denied, already-deleted 404, etc.). Was: generic
+      // "Couldn't delete" with no context.
+      sonnerToast.error(e?.message || "Couldn't delete")
     }
   }
 
@@ -233,7 +236,10 @@ export function Ledger({ type }: { type: LedgerType }) {
 
   const handleBulkDelete = async () => {
     if (selectedIds.size === 0) return
-    if (!await confirmDialog(`Delete ${selectedIds.size} transactions? This cannot be undone.`, { title: 'Delete Transactions', confirmLabel: 'Delete' })) return
+    // 🔒 R13-7 (Round 13): These are soft-deletes (voided) — individually
+    // restorable via /api/transactions/[id]/restore + the voided trail.
+    // Was: "This cannot be undone" — misleading. Now: accurate wording.
+    if (!await confirmDialog(`Void ${selectedIds.size} transactions? They'll be moved to the voided trail and can be restored individually.`, { title: 'Void Transactions', confirmLabel: 'Void' })) return
     let success = 0
     for (const id of selectedIds) {
       // 🔒 FIX C4: Was `/api/transactions?id=${id}` which returns 410 Gone
@@ -246,8 +252,15 @@ export function Ledger({ type }: { type: LedgerType }) {
       })
       if (r.ok) success++
     }
-    sonnerToast.success(`${success} transactions deleted`)
+    sonnerToast.success(`${success} transactions voided`)
     clearSelection()
+    // 🔒 R13-1 (Round 13): Bulk delete must invalidate every money cache —
+    // party balances + product stock change when transactions are voided.
+    // Was: only triggerRefresh() (refreshKey-keyed queries). Now: also
+    // invalidateMoneyCaches(queryClient) so ['parties'], ['party-profile'],
+    // ['products'], ['dashboard'], ['insights'] all refresh. Matches the
+    // single-delete path at L94.
+    invalidateMoneyCaches(queryClient)
     triggerRefresh()
   }
 
@@ -265,7 +278,11 @@ export function Ledger({ type }: { type: LedgerType }) {
       roundMoney(t.totalAmount - t.paidAmount),
       t.paymentMode,
     ])
-    const csv = [headers.join(','), ...rows.map(r => r.map(c => `"${c}"`).join(','))].join('\n')
+    // 🔒 R13-8 (Round 13): Escape internal double-quotes per RFC 4180.
+    // Was: `"${c}"` — a party named John "Big" Doe produces `"John "Big" Doe"`
+    // which breaks CSV parsing. Now: `"` → `""` inside the quoted field.
+    const csvEscape = (c: any) => `"${String(c ?? '').replace(/"/g, '""')}"`
+    const csv = [headers.join(','), ...rows.map(r => r.map(csvEscape).join(','))].join('\n')
     const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -479,7 +496,13 @@ export function Ledger({ type }: { type: LedgerType }) {
             </div>
             <ViewModeToggle mode={transactionsViewMode} onChange={setTransactionsViewMode} />
 
-            {/* Date range picker - shows "All Time" when no filter, or the preset label */}
+            {/* Date range picker.
+                🔒 R13-2 (Round 13): When dateRange is null (all-time query), show
+                an "All Time" button instead of a This Month picker. Was: the
+                picker rendered getPresetRange('thisMonth') → user saw "This Month"
+                but the ledger loaded ALL transactions (truth-vs-display mismatch).
+                Now: clicking "All Time" opens the picker at This Month (the most
+                common filter), making the transition explicit. */}
             {dateRange ? (
               <div className="flex items-center gap-1">
                 <DateRangePicker
@@ -496,21 +519,26 @@ export function Ledger({ type }: { type: LedgerType }) {
                   size="sm"
                   className="h-9 w-9 p-0"
                   onClick={() => { setDateRange(null); setDatePreset('thisMonth') }}
-                  title="Clear date filter"
+                  title="Clear date filter (show all)"
                 >
                   <X className="w-4 h-4" />
                 </Button>
               </div>
             ) : (
-              <DateRangePicker
-                value={getPresetRange('thisMonth')}
-                onChange={(range, preset) => { setDateRange(range); setDatePreset(preset) }}
-                preset={'thisMonth'}
-                onPresetChange={(p) => {
-                  setDatePreset(p)
-                  if (p !== 'custom') setDateRange(getPresetRange(p))
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => {
+                  // Start filtering from This Month (the most common preset).
+                  setDateRange(getPresetRange('thisMonth'))
+                  setDatePreset('thisMonth')
                 }}
-              />
+                title="Filter by date range"
+              >
+                <Calendar className="w-4 h-4" />
+                All Time
+              </Button>
             )}
 
             {/* 🔒 V8 U1: Voided trail toggle — show/hide soft-deleted transactions */}
