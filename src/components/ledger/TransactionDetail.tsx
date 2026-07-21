@@ -184,6 +184,7 @@ export function TransactionDetail() {
       gstin: setting?.gstin,
       address: setting?.address,
       state: setting?.state,
+      upiId: setting?.upiId, // V26 Phase 8: pass UPI ID for QR code
     }).then(async (pdfBlob) => {
       // On mobile (Capacitor), use Share plugin to save/share the PDF
       const { Capacitor } = await import('@capacitor/core')
@@ -248,10 +249,11 @@ export function TransactionDetail() {
         gstin: setting?.gstin,
         address: setting?.address,
         state: setting?.state,
+        upiId: setting?.upiId, // V26 Phase 8: pass UPI ID for QR code
       })
 
       const fileName = `invoice-${txn.invoiceNo || txn.id.slice(-6)}.pdf`
-      const shareText = `Invoice from ${setting?.shopName || 'My Shop'} — Total: Rs. ${txn.totalAmount.toFixed(2)}`
+      const shareText = `Invoice from ${setting?.shopName || 'My Shop'} \u2014 Total: \u20B9${txn.totalAmount.toFixed(2)}`
 
       // Check if running on Capacitor (native app)
       const { Capacitor } = await import('@capacitor/core')
