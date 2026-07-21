@@ -280,3 +280,157 @@ export async function runReconciliationChecks(userId: string): Promise<Reconcili
     runAt: new Date().toISOString(),
   }
 }
+
+/**
+ * Check 4: Paise sanity — flag any money column with values that look like the
+ * 100× corruption artifact from the non-idempotent paise migration
+ * (20260712000001_paise_migration / M11 / CRITICAL Payment 100× bug).
+ *
+ * 🔒 Critical #3 from the EkBook-CRITICAL-Payment-100x-RootCause.md report:
+ * "Add a paise sanity check to the nightly reconciliation cron: flag any
+ * Payment.amount > 10_000_000 (₹100,000) or any product price > ₹1,000,000 as
+ * a probable 100× artifact, and alert."
+ *
+ * The root cause: that migration's USING ROUND(x * 100) clauses re-execute on
+ * every replay, multiplying money by 100 each time. The migrate-with-retry.sh
+ * self-heal used to auto-replay failed migrations on the (false) assumption
+ * that all were idempotent — so a connection drop on Neon could silently
+ * 100×-corrupt every Payment/Transaction/Product row.
+ *
+ * That bug is now closed at the source (migrate-with-retry.sh refuses to
+ * auto-replay data-transforming migrations + migration-idempotency-guard.test.ts
+ * CI-checks every new migration). But rows written BEFORE the fix can still be
+ * corrupt. This nightly check is the early-warning system: if a NEW 100×
+ * corruption ever happens (a future non-idempotent migration slips through,
+ * a backup-restore from a bad snapshot, etc.), this fires a Sentry alert
+ * the next morning instead of waiting for a user to notice "₹100 settled as
+ * ₹10,000".
+ *
+ * Thresholds (in PAISE):
+ *   - SUSPICIOUS_PAISE = 100,000,000 = ₹10,00,000 (₹1M) — review manually
+ *   - ALMOST_CERTAIN_PAISE = 1,000,000,000 = ₹1,00,00,000 (₹10M) — almost
+ *     certainly a 100× artifact
+ *
+ * Why per-user (not global): the cron already iterates users, so this slots
+ * into the existing loop. A global check would be faster but harder to alert
+ * on (no userId context for Sentry).
+ *
+ * Why raw SQL: the money extension's read converter divides paise by 100, so
+ * a corrupted row still round-trips as the "correct" rupee value through
+ * Prisma. The corruption is ONLY visible by reading the raw column. This is
+ * the exact mistake the original debug log made (per CRITICAL report §2).
+ *
+ * Performance: 1 SQL query per table (Payment, Transaction, Party,
+ * TransactionItem-via-join, Product), all in parallel. O(1) memory.
+ */
+const SUSPICIOUS_PAISE = 100_000_000      // ₹10,00,000
+const ALMOST_CERTAIN_PAISE = 1_000_000_000 // ₹1,00,00,000
+
+export async function checkPaiseAnomalies(userId: string): Promise<ReconciliationCheck> {
+  // Payment + Transaction + Party + Product: scoped by userId, single query each.
+  // TransactionItem: scoped via parent Transaction (no userId on the item).
+  const [paymentRow, txnRow, partyRow, productRow, itemRow] = await Promise.all([
+    db.$queryRawUnsafe<Array<{ max: bigint | null; susp: bigint; certain: bigint }>>(
+      `SELECT MAX(amount)::bigint AS max,
+              COUNT(*) FILTER (WHERE amount > $2)::bigint AS susp,
+              COUNT(*) FILTER (WHERE amount > $3)::bigint AS certain
+       FROM "Payment"
+       WHERE "userId" = $1 AND "deletedAt" IS NULL`,
+      userId, SUSPICIOUS_PAISE, ALMOST_CERTAIN_PAISE,
+    ),
+    db.$queryRawUnsafe<Array<{ max: bigint | null; susp: bigint; certain: bigint }>>(
+      `SELECT MAX("totalAmount")::bigint AS max,
+              COUNT(*) FILTER (WHERE "totalAmount" > $2)::bigint AS susp,
+              COUNT(*) FILTER (WHERE "totalAmount" > $3)::bigint AS certain
+       FROM "Transaction"
+       WHERE "userId" = $1 AND "deletedAt" IS NULL`,
+      userId, SUSPICIOUS_PAISE, ALMOST_CERTAIN_PAISE,
+    ),
+    db.$queryRawUnsafe<Array<{ max: bigint | null; susp: bigint; certain: bigint }>>(
+      `SELECT MAX("openingBalance")::bigint AS max,
+              COUNT(*) FILTER (WHERE "openingBalance" > $2)::bigint AS susp,
+              COUNT(*) FILTER (WHERE "openingBalance" > $3)::bigint AS certain
+       FROM "Party"
+       WHERE "userId" = $1 AND "deletedAt" IS NULL`,
+      userId, SUSPICIOUS_PAISE, ALMOST_CERTAIN_PAISE,
+    ),
+    db.$queryRawUnsafe<Array<{ max: bigint | null; susp: bigint; certain: bigint }>>(
+      `SELECT MAX("salePrice")::bigint AS max,
+              COUNT(*) FILTER (WHERE "salePrice" > $2)::bigint AS susp,
+              COUNT(*) FILTER (WHERE "salePrice" > $3)::bigint AS certain
+       FROM "Product"
+       WHERE "userId" = $1 AND "deletedAt" IS NULL`,
+      userId, SUSPICIOUS_PAISE, ALMOST_CERTAIN_PAISE,
+    ),
+    db.$queryRawUnsafe<Array<{ max: bigint | null; susp: bigint; certain: bigint }>>(
+      `SELECT MAX(ti."total")::bigint AS max,
+              COUNT(*) FILTER (WHERE ti."total" > $2)::bigint AS susp,
+              COUNT(*) FILTER (WHERE ti."total" > $3)::bigint AS certain
+       FROM "TransactionItem" ti
+       JOIN "Transaction" t ON t."id" = ti."transactionId"
+       WHERE t."userId" = $1 AND t."deletedAt" IS NULL`,
+      userId, SUSPICIOUS_PAISE, ALMOST_CERTAIN_PAISE,
+    ),
+  ])
+
+  const sumUp = (r: { max: bigint | null; susp: bigint; certain: bigint } | undefined) => ({
+    maxPaise: r?.max != null ? Number(r.max) : 0,
+    suspicious: Number(r?.susp ?? 0),
+    almostCertain: Number(r?.certain ?? 0),
+  })
+
+  const payment = sumUp(paymentRow?.[0])
+  const txn = sumUp(txnRow?.[0])
+  const party = sumUp(partyRow?.[0])
+  const product = sumUp(productRow?.[0])
+  const item = sumUp(itemRow?.[0])
+
+  const totalSuspicious = payment.suspicious + txn.suspicious + party.suspicious + product.suspicious + item.suspicious
+  const totalAlmostCertain = payment.almostCertain + txn.almostCertain + party.almostCertain + product.almostCertain + item.almostCertain
+
+  // Fail if ANY column has an "almost certain" corruption (above ₹10M paise).
+  // Suspicious-only rows don't fail — a single legitimate ₹15L B2B sale is
+  // plausible for some shops. The cron will still log them for review.
+  const passed = totalAlmostCertain === 0
+
+  const fmtPaise = (p: number) => `₹${(p / 100).toLocaleString('en-IN')}`
+
+  return {
+    name: 'Paise Sanity',
+    description: 'No money column shows the 100× corruption signature',
+    passed,
+    details: passed
+      ? totalSuspicious === 0
+        ? 'All money columns within plausible bounds. No 100× corruption signature detected.'
+        : `${totalSuspicious} row(s) above the suspicious threshold (₹10L) but below the almost-certain threshold (₹1Cr). Review via /api/debug/paise-audit. Max: Payment ${fmtPaise(payment.maxPaise)}, Transaction ${fmtPaise(txn.maxPaise)}, Party ${fmtPaise(party.maxPaise)}, Product ${fmtPaise(product.maxPaise)}, Item ${fmtPaise(item.maxPaise)}.`
+      : `${totalAlmostCertain} row(s) almost certainly 100×-corrupted (above ₹1Cr paise). Payment: ${payment.almostCertain}, Transaction: ${txn.almostCertain}, Party: ${party.almostCertain}, Product: ${product.almostCertain}, Item: ${item.almostCertain}. Investigate via /api/debug/paise-audit + /api/debug/repair-payment-amount (with explicit IDs only).`,
+    expected: 0,
+    actual: totalAlmostCertain,
+  }
+}
+
+/**
+ * Run all reconciliation checks INCLUDING the paise sanity check (Critical #3).
+ *
+ * The nightly cron uses this extended function. The on-demand /api/reconcile
+ * endpoint (user-triggered) uses the basic runReconciliationChecks above so
+ * the paise check (which uses raw SQL across 5 tables) doesn't slow down the
+ * one-tap UI check.
+ */
+export async function runReconciliationChecksNightly(userId: string): Promise<ReconciliationResult> {
+  const [partyCheck, gstCheck, orphanCheck, paiseCheck] = await Promise.all([
+    checkPartyBalances(userId),
+    checkGstReconciliation(userId),
+    checkOrphanedData(userId),
+    checkPaiseAnomalies(userId),
+  ])
+
+  const checks = [partyCheck, gstCheck, orphanCheck, paiseCheck]
+  const allPassed = checks.every(c => c.passed)
+
+  return {
+    checks,
+    allPassed,
+    runAt: new Date().toISOString(),
+  }
+}

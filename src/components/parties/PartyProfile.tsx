@@ -599,6 +599,84 @@ export function PartyProfile() {
       doc.setTextColor(THEME.textMuted.r, THEME.textMuted.g, THEME.textMuted.b)
       doc.text(closing.label, pageWidth - margin - 2, y, { align: 'right' })
 
+      // 🔒 PDF Redesign Spec Part 4 §5: Ageing mini-table — only when money is
+      // owed. Turns the statement into a collections tool: the customer can
+      // see at a glance how long the outstanding balance has been ageing.
+      // The ageing data is computed from the same `statement` array used for
+      // the ledger rows above, so the numbers always tie to the closing balance.
+      if (Math.abs(closing.closing) > 0.005 && closing.closing > 0) {
+        // Compute ageing buckets from the statement rows. Each row's
+        // runningBalance is the canonical balance after that row. We age by
+        // the row's date — a sale that pushed the balance up 45 days ago
+        // contributes to the 31-60 bucket. This is intentionally approximate
+        // (true per-invoice aging needs payment-to-invoice allocation, which
+        // this app's single Payment stream doesn't record — same caveat as
+        // DebtAgingReport).
+        const now = Date.now()
+        const buckets = { current: 0, overdue: 0, serious: 0, critical: 0 }
+        // Walk the statement BACKWARD: each sale/credit-note row contributes
+        // its delta (if positive — i.e. increased what they owe) to the bucket
+        // determined by its age. Stop when the running balance hits 0.
+        let remaining = Math.abs(closing.closing)
+        for (let i = statement.length - 1; i >= 0 && remaining > 0.005; i--) {
+          const entry: any = statement[i]
+          if (entry.isPayment) continue  // payments reduce the balance, don't age
+          if (!entry.delta || entry.delta <= 0) continue  // only positive deltas (sales, debit notes)
+          const entryDate = new Date(entry.date)
+          if (isNaN(entryDate.getTime())) continue
+          const days = Math.max(0, Math.floor((now - entryDate.getTime()) / (1000 * 60 * 60 * 24)))
+          // The contribution is the smaller of: this entry's delta, or what's
+          // still unexplained. (Earlier entries only contribute if the later
+          // entries don't fully account for the closing balance.)
+          const contribution = Math.min(Math.abs(entry.delta), remaining)
+          if (days <= 30) buckets.current += contribution
+          else if (days <= 60) buckets.overdue += contribution
+          else if (days <= 90) buckets.serious += contribution
+          else buckets.critical += contribution
+          remaining -= contribution
+        }
+        // If there's still unaccounted balance (e.g. opening balance), age it
+        // as "current" — conservative, matches DebtAgingReport's treatment.
+        if (remaining > 0.005) buckets.current += remaining
+
+        // Draw the ageing mini-table (right-aligned, 4 columns).
+        y += 8
+        if (y > pageHeight - 40) { doc.addPage(); y = 20 }
+        doc.setFont(THEME.font, 'bold')
+        doc.setFontSize(8)
+        doc.setTextColor(THEME.textMuted.r, THEME.textMuted.g, THEME.textMuted.b)
+        doc.text('AGEING BREAKDOWN', margin, y)
+        y += 5
+
+        const ageingCols = [
+          { label: '0-30 days', value: buckets.current, color: THEME.paid },
+          { label: '31-60 days', value: buckets.overdue, color: THEME.partial },
+          { label: '61-90 days', value: buckets.serious, color: { r: 234, g: 88, b: 12 } /* orange-600 */ },
+          { label: '90+ days', value: buckets.critical, color: THEME.due },
+        ]
+        const colWidth = (pageWidth - 2 * margin) / 4
+        ageingCols.forEach((col, i) => {
+          const x = margin + i * colWidth
+          // Card background
+          doc.setFillColor(THEME.cardBg.r, THEME.cardBg.g, THEME.cardBg.b)
+          doc.setDrawColor(THEME.border.r, THEME.border.g, THEME.border.b)
+          doc.setLineWidth(0.2)
+          doc.roundedRect(x + 1, y, colWidth - 2, 14, 1.5, 1.5, 'FD')
+          // Label
+          doc.setFont(THEME.font, 'normal')
+          doc.setFontSize(7)
+          doc.setTextColor(THEME.textMuted.r, THEME.textMuted.g, THEME.textMuted.b)
+          doc.text(col.label, x + colWidth / 2, y + 5, { align: 'center' })
+          // Value
+          doc.setFont(THEME.font, 'bold')
+          doc.setFontSize(9)
+          doc.setTextColor(col.color.r, col.color.g, col.color.b)
+          doc.text(formatPDFMoney(col.value), x + colWidth / 2, y + 11, { align: 'center' })
+        })
+        y += 18
+        doc.setTextColor(THEME.text.r, THEME.text.g, THEME.text.b)
+      }
+
       // UPI QR (if balance > 0 and upiId set)
       if (setting?.upiId && Math.abs(closing.closing) > 0) {
         y += 5

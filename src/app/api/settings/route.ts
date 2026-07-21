@@ -117,6 +117,20 @@ export async function PUT(req: NextRequest) {
       }
       sanitized.upiId = body.upiId
     }
+    // 🔒 PDF Redesign Spec Part 3 §2: logoUrl is set via /api/settings/logo
+    // (Cloudinary upload), but we allow it to be passed through PUT too so a
+    // normal Settings save doesn't accidentally clobber it. If body.logoUrl
+    // is undefined, it's omitted from the update (Prisma treats undefined as
+    // "don't touch"). If null, the logo is cleared.
+    if (body.logoUrl !== undefined) {
+      if (body.logoUrl !== null && typeof body.logoUrl !== 'string') {
+        return NextResponse.json({ error: 'logoUrl must be a URL string or null' }, { status: 400 })
+      }
+      if (body.logoUrl !== null && !/^https?:\/\//.test(body.logoUrl)) {
+        return NextResponse.json({ error: 'logoUrl must be an http(s) URL' }, { status: 400 })
+      }
+      sanitized.logoUrl = body.logoUrl
+    }
 
     const updateData: any = sanitized
 

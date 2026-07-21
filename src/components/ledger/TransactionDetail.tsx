@@ -191,6 +191,7 @@ export function TransactionDetail() {
       address: setting?.address,
       state: setting?.state,
       upiId: setting?.upiId, // V26 Phase 8: pass UPI ID for QR code
+      logoUrl: setting?.logoUrl, // 🔒 PDF Redesign Spec Part 3 §2: shop logo
     }).then(async (pdfBlob) => {
       // On mobile (Capacitor), use Share plugin to save/share the PDF
       const { Capacitor } = await import('@capacitor/core')
@@ -256,6 +257,7 @@ export function TransactionDetail() {
         address: setting?.address,
         state: setting?.state,
         upiId: setting?.upiId, // V26 Phase 8: pass UPI ID for QR code
+        logoUrl: setting?.logoUrl, // 🔒 PDF Redesign Spec Part 3 §2: shop logo
       })
 
       const fileName = `invoice-${txn.invoiceNo || txn.id.slice(-6)}.pdf`

@@ -438,6 +438,12 @@ model Setting {
   // no way forward except destructive account-reset).
   // null = no restore in progress (the default).
   lastRestoreSessionId String?
+  // 🔒 PDF Redesign Spec Part 3 §2: Shop logo URL (Cloudinary secure_url).
+  // Rendered at 18×18 mm in the brand band of every invoice PDF. null = no
+  // logo uploaded (the brand band shows just the shop name + details). The
+  // logo is uploaded via /api/settings/logo (which uses uploadBillImage) and
+  // stored here so it appears on every invoice without re-uploading.
+  logoUrl          String?
 }
 
 // ==================== ANNOUNCEMENTS (broadcast messages) ====================

@@ -417,11 +417,37 @@ export function Inventory() {
 }
 
 function ProductGridCard({ product: p, onEdit }: { product: any; onEdit: () => void }) {
+  const { setView, setPreviousView } = useAppStore()
   const profit = (p.salePrice || 0) - (p.purchasePrice || 0)
   const margin = p.salePrice > 0 ? (profit / p.salePrice) * 100 : 0
   const stockPct = p.lowStockThreshold > 0
     ? Math.min(100, Math.max(0, (p.currentStock / (p.lowStockThreshold * 2)) * 100))
     : p.currentStock > 0 ? 100 : 0
+
+  // 🔒 DI-2 (auditor spec): tap the OVERSOLD badge → opens New Purchase
+  // pre-filled with this product + the shortfall quantity. Reduces the
+  // friction of fixing negative stock (was: just a label, user had to
+  // navigate manually).
+  const handleOversoldTap = (e: React.MouseEvent) => {
+    e.stopPropagation()
+    const shortfall = Math.abs(p.currentStock)
+    ;(window as any).__ledgerPreset = {
+      type: 'purchase',
+      data: {
+        items: [{
+          productId: p.id,
+          name: p.name,
+          quantity: shortfall,
+          unitPrice: p.purchasePrice || 0,
+          gstRate: p.gstRate || 0,
+          unit: p.unit || 'pcs',
+        }],
+      },
+    }
+    setPreviousView('inventory')
+    setView('new-purchase')
+  }
+
   return (
     <Card className="shadow-card border-border/60 hover:shadow-md transition group cursor-pointer" onClick={onEdit}>
       <CardContent className="p-3">
@@ -497,10 +523,18 @@ function ProductGridCard({ product: p, onEdit }: { product: any; onEdit: () => v
         {/* Low stock alert / Oversold alert */}
         {p.currentStock < 0 ? (
           // 🔒 V11: Distinct OVERSOLD badge for negative stock (separate from "Out").
-          <div className="mt-2 flex items-center gap-1.5 text-xs text-white bg-gradient-to-r from-rose-600 to-red-700 rounded-md px-2 py-1 font-semibold">
+          // 🔒 DI-2 (auditor spec): badge is now a BUTTON — tap to open New
+          // Purchase pre-filled with this product + the shortfall quantity.
+          // Was: a non-interactive <div> that just displayed the warning.
+          <button
+            type="button"
+            onClick={handleOversoldTap}
+            className="mt-2 w-full flex items-center justify-center gap-1.5 text-xs text-white bg-gradient-to-r from-rose-600 to-red-700 hover:from-rose-700 hover:to-red-800 active:scale-[0.98] transition rounded-md px-2 py-1.5 font-semibold min-h-[32px]"
+            aria-label={`Record a purchase to fix oversold ${p.name}`}
+          >
             <AlertTriangle className="w-3 h-3 flex-shrink-0" />
-            <span className="truncate">OVERSOLD — record a purchase to fix</span>
-          </div>
+            <span className="truncate">OVERSOLD — tap to record purchase (+{Math.abs(p.currentStock)} {p.unit || 'pcs'})</span>
+          </button>
         ) : p.isLowStock ? (
           <div className="mt-2 flex items-center gap-1.5 text-xs text-rose-600 bg-rose-50 dark:bg-rose-950/30 rounded-md px-2 py-1">
             <AlertTriangle className="w-3 h-3 flex-shrink-0" />

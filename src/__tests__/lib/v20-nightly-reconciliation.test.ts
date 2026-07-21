@@ -42,13 +42,16 @@ jest.mock('@/lib/db', () => ({
 }))
 
 jest.mock('@/lib/reconciliation', () => ({
+  // 🔒 Critical #3: The nightly cron now uses runReconciliationChecksNightly
+  // (the extended function that ALSO runs checkPaiseAnomalies). Mock that.
   runReconciliationChecks: jest.fn(),
+  runReconciliationChecksNightly: jest.fn(),
 }))
 
 import { describe, test, expect, beforeEach } from '@jest/globals'
 import { GET } from '@/app/api/cron/nightly-reconciliation/route'
 import { db } from '@/lib/db'
-import { runReconciliationChecks } from '@/lib/reconciliation'
+import { runReconciliationChecksNightly as runReconciliationChecks } from '@/lib/reconciliation'
 
 // Helper: create a mock NextRequest with the given auth header
 function makeRequest(authHeader?: string) {

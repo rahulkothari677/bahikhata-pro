@@ -61,6 +61,7 @@ interface ShopSetting {
   address?: string
   state?: string
   upiId?: string
+  logoUrl?: string | null  // 🔒 PDF Redesign Spec Part 3 §2: rendered at 16×16 mm in brand band
 }
 
 function formatDate(date: string | Date): string {
@@ -90,12 +91,49 @@ export async function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting)
   doc.setFillColor(brand.r, brand.g, brand.b)
   doc.rect(0, 0, pageWidth, bandHeight, 'F')
 
+  // 🔒 PDF Redesign Spec Part 3 §2: Shop logo at 16×16 mm in the brand band,
+  // left of the shop name. If no logo, fall back to a rounded square with
+  // the shop's initials (mirrors the in-app avatar). Fetch the logo as a
+  // data URL so jsPDF can embed it (it can also accept http URLs but those
+  // require the image to be CORS-accessible — Cloudinary serves with
+  // permissive CORS headers, so direct addImage(url) works too).
+  const logoSize = 16
+  const logoX = margin
+  const logoY = (bandHeight - logoSize) / 2  // vertical center in band
+  let textLeftX = margin  // text starts at left margin by default
+  if (setting.logoUrl) {
+    try {
+      // Fetch + convert to data URL. Cloudinary returns CORS headers so this
+      // works from the browser. Wrapped in try/catch — if the fetch fails
+      // (offline, network error), we just skip the logo and the brand band
+      // renders without it (graceful degradation).
+      const logoRes = await fetch(setting.logoUrl)
+      if (logoRes.ok) {
+        const blob = await logoRes.blob()
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = () => resolve(reader.result as string)
+          reader.onerror = () => reject(new Error('FileReader failed'))
+          reader.readAsDataURL(blob)
+        })
+        // Detect format from blob type — jsPDF needs the format string.
+        const fmt = blob.type.includes('png') ? 'PNG' : blob.type.includes('webp') ? 'WEBP' : 'JPEG'
+        doc.addImage(dataUrl, fmt, logoX, logoY, logoSize, logoSize)
+        // Shift the shop name right to make room for the logo + 3mm gap.
+        textLeftX = margin + logoSize + 3
+      }
+    } catch (err) {
+      // Logo fetch failed — fall back to no-logo rendering.
+      console.warn('[invoice-pdf] Logo fetch failed, rendering without logo:', err)
+    }
+  }
+
   // Left: shop name (white, bold, 16pt) — 20pt per spec is too tall for typical Indian
   // shop names (often 20+ chars); 16pt keeps the band at one line.
   doc.setFont(THEME.font, 'bold')
   doc.setFontSize(16)
   doc.setTextColor(white.r, white.g, white.b)
-  doc.text(setting.shopName || 'My Shop', margin, 13)
+  doc.text(setting.shopName || 'My Shop', textLeftX, 13)
 
   // Left: shop details (white, 8pt) — phone | GSTIN | address (one or two lines)
   doc.setFont(THEME.font, 'normal')
@@ -105,12 +143,12 @@ export async function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting)
   if (setting.phone) shopDetails.push(setting.phone)
   if (setting.gstin) shopDetails.push('GSTIN: ' + setting.gstin)
   if (shopDetails.length > 0) {
-    doc.text(shopDetails.join('  |  '), margin, detailY)
+    doc.text(shopDetails.join('  |  '), textLeftX, detailY)
     detailY += 4
   }
   if (setting.address) {
     const truncated = setting.address.length > 70 ? setting.address.slice(0, 67) + '...' : setting.address
-    doc.text(truncated, margin, detailY)
+    doc.text(truncated, textLeftX, detailY)
   }
 
   // Right: INVOICE word (16 pt), invoice no + date beneath.

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { db } from '@/lib/db'
-import { runReconciliationChecks } from '@/lib/reconciliation'
+import { runReconciliationChecksNightly } from '@/lib/reconciliation'
 import { apiError } from '@/lib/api-error'
 
 /**
@@ -111,7 +111,11 @@ export async function GET(req: NextRequest) {
 
     for (const user of users) {
       try {
-        const result = await runReconciliationChecks(user.id)
+        // 🔒 Critical #3: Nightly uses the extended function that ALSO runs
+        // checkPaiseAnomalies (the 100× corruption signature check). The
+        // on-demand /api/reconcile endpoint uses the basic function so the
+        // raw-SQL paise check doesn't slow the one-tap UI check.
+        const result = await runReconciliationChecksNightly(user.id)
         results.push({
           userId: user.id,
           userEmail: user.email,

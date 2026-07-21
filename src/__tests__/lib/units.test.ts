@@ -99,3 +99,95 @@ describe('line-items — the reported bug + GST + discount', () => {
     expect(r.sgst).toBe(0)
   })
 })
+
+describe('🔒 DI-2 — normalizeToUnit rounds discrete units to integers', () => {
+  // Suppress console.warn during these tests (the rounding warning is expected).
+  let warnSpy: jest.SpyInstance
+  beforeAll(() => {
+    warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {})
+  })
+  afterAll(() => warnSpy.mockRestore())
+
+  test('rounds fractional pcs to integer when same-unit', () => {
+    // The "Amul Taaza Milk 19.02 pcs" bug scenario.
+    const r = normalizeToUnit(19.02, 'pcs', 'pcs')
+    expect(r.quantity).toBe(19)
+    expect(r.unit).toBe('pcs')
+    expect(r.converted).toBe(false)
+  })
+
+  test('rounds fractional dozen to integer when same-unit', () => {
+    const r = normalizeToUnit(1.7, 'dozen', 'dozen')
+    expect(r.quantity).toBe(2)
+    expect(r.unit).toBe('dozen')
+  })
+
+  test('rounds when converting across count units (dozen → pcs)', () => {
+    // 1.5 dozen = 18 pcs exactly — no rounding needed.
+    const r = normalizeToUnit(1.5, 'dozen', 'pcs')
+    expect(r.quantity).toBe(18)
+    expect(r.converted).toBe(true)
+  })
+
+  test('rounds when the cross-unit conversion produces a fraction', () => {
+    // 2 dozen = 24 pcs exactly. But 1.9 dozen = 22.8 pcs → rounded to 23.
+    const r = normalizeToUnit(1.9, 'dozen', 'pcs')
+    expect(r.quantity).toBe(23)
+    expect(r.converted).toBe(true)
+  })
+
+  test('does NOT round weight/volume/length units', () => {
+    // 0.5 kg should stay 0.5 kg, not get rounded to 1 kg.
+    const r = normalizeToUnit(0.5, 'kg', 'kg')
+    expect(r.quantity).toBe(0.5)
+    expect(r.unit).toBe('kg')
+  })
+
+  test('does NOT round when converting gm → kg', () => {
+    // 500 gm = 0.5 kg exactly.
+    const r = normalizeToUnit(500, 'gm', 'kg')
+    expect(r.quantity).toBeCloseTo(0.5, 6)
+    expect(r.unit).toBe('kg')
+    expect(r.converted).toBe(true)
+  })
+
+  test('does NOT round when converting kg → gm', () => {
+    // 1.5 kg = 1500 gm exactly.
+    const r = normalizeToUnit(1.5, 'kg', 'gm')
+    expect(r.quantity).toBeCloseTo(1500, 6)
+    expect(r.unit).toBe('gm')
+  })
+
+  test('rounds when target is a discrete unit (box)', () => {
+    const r = normalizeToUnit(2.3, 'box', 'box')
+    expect(r.quantity).toBe(2)
+    expect(r.unit).toBe('box')
+  })
+
+  test('rounds when target is a discrete unit (packet)', () => {
+    const r = normalizeToUnit(2.7, 'packet', 'packet')
+    expect(r.quantity).toBe(3)
+    expect(r.unit).toBe('packet')
+  })
+
+  test('whole-number discrete quantities pass through unchanged', () => {
+    const r = normalizeToUnit(5, 'pcs', 'pcs')
+    expect(r.quantity).toBe(5)
+    expect(r.converted).toBe(false)
+  })
+
+  test('logs a warning when a non-trivial fractional part is discarded', () => {
+    warnSpy.mockClear()
+    normalizeToUnit(19.02, 'pcs', 'pcs')
+    expect(warnSpy).toHaveBeenCalledTimes(1)
+    expect(warnSpy.mock.calls[0][0]).toMatch(/Discrete-unit rounding discarded fractional part/)
+  })
+
+  test('does NOT log a warning for tiny float drift (< 0.001)', () => {
+    warnSpy.mockClear()
+    // 5.0000001 should round to 5 silently — IEEE 754 drift, not a real fraction.
+    const r = normalizeToUnit(5.0000001, 'pcs', 'pcs')
+    expect(r.quantity).toBe(5)
+    expect(warnSpy).not.toHaveBeenCalled()
+  })
+})

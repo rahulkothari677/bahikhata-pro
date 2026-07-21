@@ -14,6 +14,7 @@ import { StaffManagement } from '@/components/settings/StaffManagement'
 import { CAAccess } from '@/components/settings/CAAccess'
 import { UnsyncedEntries } from '@/components/settings/UnsyncedEntries'
 import { SupplierOpeningBalanceReview } from '@/components/settings/SupplierOpeningBalanceReview'
+import { ShopLogoUploader } from '@/components/settings/ShopLogoUploader'
 import { useShops } from '@/hooks/use-shops'
 import { exportBackup } from '@/lib/data-backup'
 import { useBusinessGoals } from '@/hooks/use-business-goals'
@@ -170,8 +171,17 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
         setLockDateInput('')
       }
       // hideProfit is now managed by useSetting() hook — no need to sync here
+      // 🔒 PDF Redesign Spec Part 3 §2: Sync logoUrl. Stored separately from
+      // `form` because it's uploaded via /api/settings/logo (Cloudinary upload)
+      // rather than the regular PUT /api/settings flow.
+      setLogoUrl(data.setting.logoUrl || null)
     }
   }, [data])
+
+  // 🔒 PDF Redesign Spec Part 3 §2: Shop logo URL (Cloudinary secure_url).
+  // Managed separately from `form` because the upload is a 2-step process
+  // (POST /api/settings/logo → Cloudinary upload → URL stored on Setting).
+  const [logoUrl, setLogoUrl] = useState<string | null>(null)
 
   // 🔒 V12: Persist the round-off toggle instantly (like the hide-profit toggle).
   const persistRoundOff = async (next: boolean) => {
@@ -564,6 +574,10 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
           <p className="text-xs text-muted-foreground">This information appears on invoices and reports</p>
         </CardHeader>
         <CardContent className="space-y-4">
+          {/* 🔒 PDF Redesign Spec Part 3 §2: Shop logo uploader. Appears at
+              the top of the Shop Profile card so users see it before the
+              text fields — it's the single highest-impact branding change. */}
+          <ShopLogoUploader logoUrl={logoUrl} onLogoChange={setLogoUrl} />
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <Label htmlFor="field-shop-name">Shop Name *</Label>

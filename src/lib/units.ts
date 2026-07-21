@@ -113,6 +113,15 @@ export function convertQuantity(qty: number, from: string, to: string): number |
  *
  * This is THE fix for the "500 gm × ₹20/kg = ₹10,000" bug: called server-side
  * for every product-linked item so money AND stock use the product's own unit.
+ *
+ * 🔒 DI-2 (auditor spec): when the target unit is a DISCRETE unit (pcs, dozen,
+ * box, packet, bag), the result is rounded to the nearest integer and a warning
+ * is logged if a non-trivial fractional part was discarded. This catches the
+ * "Amul Taaza Milk 19.02 pcs" class of bug — a count-unit value with a
+ * fractional tail almost always means a unit-normalization drift (e.g. a gm→pcs
+ * cross-family conversion that should never have been applied). The Zod
+ * validation in validation.ts already rejects decimals at the API for count
+ * units; this is the client-side + same-unit-defense-in-depth.
  */
 export function normalizeToUnit(
   quantity: number,
@@ -121,11 +130,33 @@ export function normalizeToUnit(
 ): { quantity: number; unit: string; converted: boolean } {
   const from = normalizeUnitName(fromUnit)
   const to = normalizeUnitName(toUnit)
-  if (from === to) return { quantity, unit: to, converted: false }
+  if (from === to) {
+    // Same unit — still apply discrete-unit rounding (DI-2).
+    if (isCountUnit(to)) {
+      const rounded = Math.round(quantity)
+      if (rounded !== quantity && Math.abs(rounded - quantity) > 0.001) {
+        console.warn(
+          `[units] Discrete-unit rounding discarded fractional part: ${quantity} ${to} → ${rounded} ${to}`,
+        )
+      }
+      return { quantity: rounded, unit: to, converted: false }
+    }
+    return { quantity, unit: to, converted: false }
+  }
   const converted = convertQuantity(quantity, from, to)
   if (converted === null) {
     // Not convertible — leave as entered (guardrail will flag if implausible)
     return { quantity, unit: from, converted: false }
+  }
+  // 🔒 DI-2: round to integer when the target unit is discrete.
+  if (isCountUnit(to)) {
+    const rounded = Math.round(converted)
+    if (rounded !== converted && Math.abs(rounded - converted) > 0.001) {
+      console.warn(
+        `[units] Discrete-unit rounding discarded fractional part: ${quantity} ${from} → ${converted} ${to} → ${rounded} ${to}`,
+      )
+    }
+    return { quantity: rounded, unit: to, converted: true }
   }
   return { quantity: converted, unit: to, converted: true }
 }
