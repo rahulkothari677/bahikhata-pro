@@ -42,13 +42,19 @@ export async function GET(req: NextRequest) {
     const toStr = searchParams.get('to')
 
     // Parse + validate dates. Defaults: from = start of month, to = today.
-    const today = new Date()
-    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1)
+    // 🔒 R9-3 v2 (Verification Ledger): Was using `new Date()` which is UTC on
+    // Vercel → "today" starts at 5:30 AM IST, and the date can be a day early
+    // between midnight IST and 5:30 AM IST. Now: use the existing IST helpers
+    // (istDayStart, istMonthStart) so the range aligns with the user's local day.
+    const { istDayStart, istMonthStart } = await import('@/lib/timezone')
+    const now = new Date()
+    const startOfToday = istDayStart(now)
+    const startOfMonth = istMonthStart(now)
     let from: Date
     let to: Date
     try {
-      from = fromStr ? new Date(fromStr + 'T00:00:00.000') : startOfMonth
-      to = toStr ? new Date(toStr + 'T23:59:59.999') : new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59, 999)
+      from = fromStr ? new Date(fromStr + 'T00:00:00.000+05:30') : startOfMonth
+      to = toStr ? new Date(toStr + 'T23:59:59.999+05:30') : new Date(startOfToday.getTime() + 24 * 60 * 60 * 1000 - 1)
       if (isNaN(from.getTime()) || isNaN(to.getTime())) throw new Error('invalid date')
     } catch {
       return NextResponse.json({ error: 'Invalid date format. Use YYYY-MM-DD.' }, { status: 400 })

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withConnectionRetry } from '@/lib/db'
-import { getAuthUserIdWithModule, getAuthContext } from '@/lib/get-auth'
+import { getAuthContext, getAuthUserIdWithModule } from '@/lib/get-auth'
 import { canAccessModule } from '@/lib/staff-permissions'
-import { shouldHideProfit, stripProductsProfit } from '@/lib/profit-visibility'
+import { shouldHideProfit } from '@/lib/profit-visibility'
 import { withCache, noStore } from '@/lib/cache'
 import { checkEntityLimit } from '@/lib/usage-limits'
 import { roundMoney } from '@/lib/money'
@@ -11,18 +11,17 @@ import { apiError } from '@/lib/api-error'
 
 export async function GET() {
   try {
-    // 🔒 R15 COMPLETION (2026-07-21): use getAuthContext so the ROLE is
-    // available for the hideProfit check below. getAuthUserIdWithModule returns
-    // only { userId }, which is part of why the cost-price leak survived here:
-    // the route had no way to know it was serving a staff member.
+    // 🔒 R15 v2 (Verification Ledger): Switch from getAuthUserIdWithModule to
+    // getAuthContext so we can check hideProfit + role. The earlier fix only
+    // hid profit in the UI (Inventory.tsx); this endpoint still returned
+    // purchasePrice (cost price) to staff, letting them compute margins.
     const authCtx = await getAuthContext()
-    if (authCtx.error || !authCtx.userId) {
-      return authCtx.error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-    const userId = authCtx.userId
+    if (authCtx.error || !authCtx.userId) return authCtx.error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     if (!canAccessModule(authCtx.role, authCtx.permissions, 'inventory')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
+    const userId = authCtx.userId
+    const hideProfit = await shouldHideProfit(userId, authCtx.role)
 
     // 🔒 AUDIT FIX N2 (v3): Read currentStock directly from the Product column
     // instead of re-deriving it from ALL transaction items on every page load.
@@ -36,33 +35,28 @@ export async function GET() {
       take: 5000,  // 🔒 V26 R20 (Phase 5): fuse — not pagination. Kirana scale ≤2k products.
     }))
 
-    const productsWithStock = products.map(p => ({
-      ...p,
-      currentStock: p.currentStock,  // 🔒 N2: read directly from column
-      // 🔒 V11: Clamp stockValue at 0 — was `p.currentStock * p.purchasePrice`
-      // which went negative when stock was oversold, making inventory totals
-      // misleading. The actual currentStock is still shown (truth); only the
-      // VALUE is clamped for display so totals don't go negative.
-      stockValue: roundMoney(Math.max(0, p.currentStock) * p.purchasePrice),
-      isLowStock: p.currentStock <= p.lowStockThreshold,
-      isOversold: p.currentStock < 0,  // 🔒 V11: distinct flag for OVERSOLD badge
-    }))
-
-    // 🔒 R15 COMPLETION (2026-07-21): strip cost/profit fields for staff when
-    // the owner has hideProfit enabled. Round 15 hid these figures in the
-    // Inventory COMPONENT, but this endpoint still returned `purchasePrice`
-    // (the cost price) and `stockValue` to every caller — readable from the
-    // Network tab or the offline IndexedDB cache. Hiding a number in the UI is
-    // not access control. salePrice/mrp/currentStock are deliberately kept:
-    // staff need them to sell and to reorder.
-    const hideProfit = await shouldHideProfit(userId, authCtx.role)
+    const productsWithStock = products.map(p => {
+      const base: any = {
+        ...p,
+        currentStock: p.currentStock,
+        stockValue: roundMoney(Math.max(0, p.currentStock) * p.purchasePrice),
+        isLowStock: p.currentStock <= p.lowStockThreshold,
+        isOversold: p.currentStock < 0,
+      }
+      // 🔒 R15 v2 (Verification Ledger): Strip purchasePrice + stockValue for
+      // staff+hideProfit. purchasePrice is the cost price — combined with
+      // salePrice (which staff need for billing), it reveals the margin.
+      if (hideProfit) {
+        base.purchasePrice = undefined
+        base.stockValue = undefined
+      }
+      return base
+    })
 
     // 🔒 AUDIT V25 FIX BUG-031 (Batch 5): Was withCache({ maxAge: 60, swr: 300 }).
     // Money-bearing endpoint — stock counts + sale prices must always be fresh.
     // A shopkeeper who just made a sale would see stale stock for up to 60s.
-    return noStore({
-      products: hideProfit ? stripProductsProfit(productsWithStock) : productsWithStock,
-    })
+    return noStore({ products: productsWithStock })
   } catch (error) {
     // 🔒 V11 §4.2: Use apiError() for consistent errorId logging.
     // Was: console.error + generic 503 with no errorId.

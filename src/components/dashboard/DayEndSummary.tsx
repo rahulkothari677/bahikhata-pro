@@ -52,7 +52,10 @@ export function DayEndSummary({ open, onOpenChange }: { open: boolean; onOpenCha
   const handleShare = async () => {
     if (!data) return
     const lines: string[] = []
-    lines.push(`📋 Day Summary — ${new Date().toLocaleDateString('en-IN')}`)
+    // 🔒 R9-3 v2 (Verification Ledger): Was `new Date().toLocaleDateString('en-IN')`
+    // which uses the server's UTC timezone on Vercel → shows yesterday's date
+    // between midnight IST and 5:30 AM IST. Now: force IST timezone.
+    lines.push(`📋 Day Summary — ${new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata' })}`)
     lines.push('')
     lines.push(`💰 Cash Sales: ${formatINR(data.cashSales)}`)
     if (data.upiSales > 0) lines.push(`📱 UPI Sales: ${formatINR(data.upiSales)}`)
@@ -98,7 +101,8 @@ export function DayEndSummary({ open, onOpenChange }: { open: boolean; onOpenCha
           <div className="space-y-4">
             {/* Date + transaction count */}
             <div className="flex items-center justify-between text-xs text-muted-foreground">
-              <span>{new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</span>
+              {/* 🔒 R9-3 v2: Force IST so the date matches the user's local day. */}
+              <span>{new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })}</span>
               <Badge variant="secondary">{data.transactionCount} transactions</Badge>
             </div>
 

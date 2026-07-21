@@ -207,30 +207,22 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     ])
     const stockPolicy = setting?.stockPolicy || 'block'
 
-    // 🔒 R11-4 COMPLETION (2026-07-21): resolve affectsStock BEFORE the stock
-    // direction is computed.
-    //
-    // The R11-4 fix applied this same fallback ONLY in the update payload
-    // (`data: { affectsStock: ... }`), so the STORED flag came out right while
-    // the STOCK MOVEMENT below still read the raw, un-defaulted value. That
-    // left the exact corruption the fix set out to prevent:
-    //
-    //   Edit a credit note that had affectsStock = true
-    //     existingShouldIncrement = true   (from existing.affectsStock)
-    //       -> reversal SUBTRACTS the stock
-    //     shouldIncrementStock    = false  (client omits the field -> zod false)
-    //       -> new impact is never applied
-    //     net: stock silently DROPS by the note quantity, every edit.
-    //
-    // The edit dialog does not expose these note fields, so `undefined` here
-    // means "unchanged", never "set to false".
-    const resolvedAffectsStock = affectsStock !== undefined
-      ? affectsStock
-      : (existing.affectsStock ?? false)
-
     // V17-Ext Tier 3: Stock direction (same logic as POST)
-    const shouldDecrementStock = type === 'sale' || (type === 'debit-note' && resolvedAffectsStock)
-    const shouldIncrementStock = type === 'purchase' || (type === 'credit-note' && resolvedAffectsStock)
+    // 🔒 R11-4 v2 (Verification Ledger): The earlier fix only changed the
+    // STORED affectsStock value (in the Prisma update data). But the stock-
+    // movement logic HERE used the raw `affectsStock` from the destructured
+    // validation data — which is `undefined` when the edit dialog doesn't send
+    // it. `undefined && ...` is falsy → shouldIncrementStock = false → stock
+    // still corrupts on every credit-note edit. Now: compute the EFFECTIVE
+    // affectsStock (with fallback to existing) BEFORE the stock-movement logic,
+    // and use it everywhere.
+    const effectiveAffectsStock = affectsStock !== undefined ? affectsStock : (existing.affectsStock ?? false)
+    const effectiveNoteType = noteType !== undefined ? noteType : existing.noteType
+    const effectiveNoteReason = noteReason !== undefined ? noteReason : existing.noteReason
+    const effectiveOriginalTransactionId = originalTransactionId !== undefined ? (originalTransactionId || null) : existing.originalTransactionId
+
+    const shouldDecrementStock = type === 'sale' || (type === 'debit-note' && effectiveAffectsStock)
+    const shouldIncrementStock = type === 'purchase' || (type === 'credit-note' && effectiveAffectsStock)
     const shouldAffectStock = shouldDecrementStock || shouldIncrementStock
     // For reversal: check the EXISTING transaction's affectsStock flag
     const existingShouldDecrement = existing.type === 'sale' || (existing.type === 'debit-note' && existing.affectsStock)
@@ -543,14 +535,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           notes: notes || null,
           invoiceNo: invoiceNo || null,
           grossProfit: roundMoney(grossProfit),
-          // V17-Ext Tier 3: Credit/Debit Notes fields — preserve existing
-          // values when the client doesn't send them (edit dialog omits them).
-          originalTransactionId: originalTransactionId !== undefined ? (originalTransactionId || null) : existing.originalTransactionId,
-          noteType: noteType !== undefined ? noteType : existing.noteType,
-          noteReason: noteReason !== undefined ? (noteReason || null) : existing.noteReason,
-          // Uses the SAME resolved value the stock logic above used, so the
-          // stored flag and the stock movement can never disagree.
-          affectsStock: resolvedAffectsStock,
+          // V17-Ext Tier 3: Credit/Debit Notes fields — use the EFFECTIVE
+          // values (with fallback to existing) computed above for the stock-
+          // movement logic. This ensures the stored value matches what the
+          // stock logic actually used.
+          originalTransactionId: effectiveOriginalTransactionId,
+          noteType: effectiveNoteType,
+          noteReason: effectiveNoteReason ?? null,
+          affectsStock: effectiveAffectsStock,
           items: { create: txItems },
         },
         include: { items: true, party: true },
