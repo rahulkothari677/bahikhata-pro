@@ -216,13 +216,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     // still corrupts on every credit-note edit. Now: compute the EFFECTIVE
     // affectsStock (with fallback to existing) BEFORE the stock-movement logic,
     // and use it everywhere.
-    const effectiveAffectsStock = affectsStock !== undefined ? affectsStock : (existing.affectsStock ?? false)
-    const effectiveNoteType = noteType !== undefined ? noteType : existing.noteType
-    const effectiveNoteReason = noteReason !== undefined ? noteReason : existing.noteReason
-    const effectiveOriginalTransactionId = originalTransactionId !== undefined ? (originalTransactionId || null) : existing.originalTransactionId
+    const resolvedAffectsStock = affectsStock !== undefined ? affectsStock : (existing.affectsStock ?? false)
+    const resolvedNoteType = noteType !== undefined ? noteType : existing.noteType
+    const resolvedNoteReason = noteReason !== undefined ? noteReason : existing.noteReason
+    const resolvedOriginalTransactionId = originalTransactionId !== undefined ? (originalTransactionId || null) : existing.originalTransactionId
 
-    const shouldDecrementStock = type === 'sale' || (type === 'debit-note' && effectiveAffectsStock)
-    const shouldIncrementStock = type === 'purchase' || (type === 'credit-note' && effectiveAffectsStock)
+    const shouldDecrementStock = type === 'sale' || (type === 'debit-note' && resolvedAffectsStock)
+    const shouldIncrementStock = type === 'purchase' || (type === 'credit-note' && resolvedAffectsStock)
     const shouldAffectStock = shouldDecrementStock || shouldIncrementStock
     // For reversal: check the EXISTING transaction's affectsStock flag
     const existingShouldDecrement = existing.type === 'sale' || (existing.type === 'debit-note' && existing.affectsStock)
@@ -539,10 +539,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           // values (with fallback to existing) computed above for the stock-
           // movement logic. This ensures the stored value matches what the
           // stock logic actually used.
-          originalTransactionId: effectiveOriginalTransactionId,
-          noteType: effectiveNoteType,
-          noteReason: effectiveNoteReason ?? null,
-          affectsStock: effectiveAffectsStock,
+          originalTransactionId: resolvedOriginalTransactionId,
+          noteType: resolvedNoteType,
+          noteReason: resolvedNoteReason ?? null,
+          affectsStock: resolvedAffectsStock,
           items: { create: txItems },
         },
         include: { items: true, party: true },

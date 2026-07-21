@@ -84,9 +84,12 @@ describe('computeIncomeExpenseSummary [R9-3]', () => {
     expect(expenseCatSum).toBe(EXPENSE_TOTAL)
   })
 
-  test('range echoes the input dates as YYYY-MM-DD', async () => {
-    const from = new Date('2026-01-15T00:00:00')
-    const to = new Date('2026-01-31T23:59:59')
+  test('range echoes the input dates as YYYY-MM-DD (IST)', async () => {
+    // 🔒 TZ FIX: Use explicit +05:30 offsets so the test is timezone-independent.
+    // Was: new Date('2026-01-15T00:00:00') parsed as local time → in UTC it's
+    // fine, but istDateString() converts to IST → can shift the date.
+    const from = new Date('2026-01-15T00:00:00+05:30')
+    const to = new Date('2026-01-31T23:59:59+05:30')
     const result = await computeIncomeExpenseSummary('user1', from, to, false)
     expect(result.range.from).toBe('2026-01-15')
     expect(result.range.to).toBe('2026-01-31')
