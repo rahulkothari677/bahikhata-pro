@@ -132,8 +132,8 @@ export function StaffManagement() {
       })
       if (!r.ok) throw new Error(await readError(r))
       sonnerToast.success(`${MODULE_LABELS[module].label} ${enabled ? 'enabled' : 'disabled'}`)
-    } catch {
-      sonnerToast.error("Couldn\'t update permissions")
+    } catch (e: any) {
+      sonnerToast.error(e?.message || "Couldn\'t update permissions")
       // Revert by refetching
       refetch()
     } finally {

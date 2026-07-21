@@ -182,8 +182,8 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
         offline: { invalidate: ['/api/settings'] },
       })
       sonnerToast.success(`Invoice round-off ${next ? 'on' : 'off'}`)
-    } catch {
-      sonnerToast.error('Could not save round-off setting')
+    } catch (e: any) {
+      sonnerToast.error(e?.message || 'Could not save round-off setting')
     }
   }
 
@@ -200,8 +200,8 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
         offline: { invalidate: ['/api/settings'] },
       })
       sonnerToast.success(next === 'allow' ? 'Overselling allowed (kirana mode)' : 'Overselling blocked')
-    } catch {
-      sonnerToast.error('Could not save stock policy setting')
+    } catch (e: any) {
+      sonnerToast.error(e?.message || 'Could not save stock policy setting')
     }
   }
 
@@ -228,9 +228,9 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
       sonnerToast.success(`Period locked until ${new Date(dateStr).toLocaleDateString('en-IN')}. Transactions dated on or before this date can no longer be edited.`)
       haptic.success()
       queryClient.invalidateQueries({ queryKey: ['setting'] })
-    } catch {
+    } catch (e: any) {
       haptic.error()
-      sonnerToast.error('Could not set period lock')
+      sonnerToast.error(e?.message || 'Could not set period lock')
     } finally {
       setSavingLock(false)
     }
@@ -255,9 +255,9 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
       sonnerToast.success('Period unlocked. You can now edit all transactions.')
       haptic.success()
       queryClient.invalidateQueries({ queryKey: ['setting'] })
-    } catch {
+    } catch (e: any) {
       haptic.error()
-      sonnerToast.error('Could not unlock period')
+      sonnerToast.error(e?.message || 'Could not unlock period')
     } finally {
       setSavingLock(false)
     }
@@ -284,9 +284,9 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
         })
       }
       haptic.success()
-    } catch {
+    } catch (e: any) {
       haptic.error()
-      sonnerToast.error('Could not run health check')
+      sonnerToast.error(e?.message || 'Could not run health check')
     } finally {
       setRunningHealthCheck(false)
     }
@@ -309,9 +309,9 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
       sonnerToast.success(isQueuedResponse(r) ? 'Saved offline — will sync when online' : 'Settings saved')
       haptic.success()
       queryClient.invalidateQueries({ queryKey: ['setting'] })
-    } catch {
+    } catch (e: any) {
       haptic.error()
-      sonnerToast.error("Couldn\'t save settings")
+      sonnerToast.error(e?.message || "Couldn\'t save settings")
     } finally {
       setSaving(false)
     }
@@ -328,9 +328,9 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
         sonnerToast.success('All data deleted. Refreshing...')
         setTimeout(() => window.location.reload(), 1500)
       }
-    } catch {
+    } catch (e: any) {
       haptic.error()
-      sonnerToast.error("Couldn\'t reset data")
+      sonnerToast.error(e?.message || "Couldn\'t reset data")
     }
   }
 
@@ -344,8 +344,8 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
       }
       sonnerToast.success(`Cleared ${writes.length} pending write(s)`)
       window.location.reload()
-    } catch {
-      sonnerToast.error("Couldn't clear the offline queue — try again.")
+    } catch (e: any) {
+      sonnerToast.error(e?.message || "Couldn't clear the offline queue — try again.")
     }
   }
 
@@ -356,8 +356,8 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
       await clearAllOfflineData()
       sonnerToast.success('Cache cleared. Reloading…')
       setTimeout(() => window.location.reload(), 1000)
-    } catch {
-      sonnerToast.error("Couldn\'t clear cache")
+    } catch (e: any) {
+      sonnerToast.error(e?.message || "Couldn\'t clear cache")
     }
   }
 

@@ -713,8 +713,8 @@ function IncomeExpenseDialog({ open, onOpenChange, type, onSuccess }: {
       }
       onSuccess?.()
       onOpenChange(false)
-    } catch {
-      sonnerToast.error("Couldn\'t save")
+    } catch (e: any) {
+      sonnerToast.error(e?.message || "Couldn\'t save")
     } finally {
       setSaving(false)
     }

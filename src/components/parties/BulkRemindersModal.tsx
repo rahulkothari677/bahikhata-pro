@@ -114,7 +114,7 @@ export function BulkRemindersModal({ open, onClose }: BulkRemindersModalProps) {
         if (result.whatsappUrl) {
           links.push({ partyId: party.id, url: result.whatsappUrl, name: party.name })
         }
-      } catch {
+      } catch (e: any) {
         sonnerToast.error(`Couldn't generate reminder for ${party.name}`)
       }
     }

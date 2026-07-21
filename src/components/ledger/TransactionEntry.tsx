@@ -1704,8 +1704,8 @@ function AddPartyInline({ open, onOpenChange, defaultType, onAdded }: {
       track(EVENTS.PARTY_ADDED, { type: defaultType })
       onAdded(data.party)
       onOpenChange(false)
-    } catch {
-      sonnerToast.error('Failed to add')
+    } catch (e: any) {
+      sonnerToast.error(e?.message || 'Failed to add')
     } finally {
       setSaving(false)
     }
