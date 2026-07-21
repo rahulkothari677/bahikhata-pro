@@ -102,6 +102,9 @@ export async function POST(req: NextRequest) {
     }
     const { partyId, amount, type, mode, date, notes } = validation.data
     const amt = amount
+    // 🔒 V26 Phase 8: Debug log to diagnose the ₹100 → ₹10,000 issue.
+    // Logs the EXACT value received from the client, after zod validation.
+    console.log('[payments] CREATE', { amt, partyId, type, rawAmount: amount })
     // 🔒 V26 Phase 8: Defensive log — if amt > 100000 (₹1 lakh for a single
     // payment is very rare), log it. This helps diagnose any 100× inflation
     // issue (₹100 → ₹10,000 → stored as 1000000 paise instead of 10000).
@@ -220,6 +223,8 @@ export async function POST(req: NextRequest) {
           clientMutationId: clientMutationId || null,  // 🔒 V19-007: idempotency
         },
       })
+      // 🔒 V26 Phase 8: Debug log — what the extension returned (should be rupees).
+      console.log('[payments] STORED', { dbAmount: payment?.amount, expectedPaise: Math.round(amt * 100) })
     } catch (createError: any) {
       if (createError?.code === 'P2002' && clientMutationId) {
         // Concurrent replay raced us — re-fetch and return idempotent.
