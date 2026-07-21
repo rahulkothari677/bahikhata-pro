@@ -3,7 +3,7 @@ import { db } from '@/lib/db'
 import { getAuthContext } from '@/lib/get-auth'
 import { canAccessModule } from '@/lib/staff-permissions'
 import { roundMoney } from '@/lib/money'
-import { istDayStart } from '@/lib/timezone'
+import { istDayStart, istDateString } from '@/lib/timezone'
 import { apiError } from '@/lib/api-error'
 
 /**
@@ -170,7 +170,13 @@ export async function GET() {
     )
 
     return NextResponse.json({
-      date: startOfToday.toISOString().slice(0, 10), // YYYY-MM-DD (IST)
+      // 🔒 TZ FIX (2026-07-21): the comment claimed "(IST)" but toISOString()
+      // returns the UTC date. `startOfToday` is istDayStart(now) — the UTC
+      // INSTANT of IST midnight (18:30 the previous day in UTC) — so this
+      // stamped the Day-End Summary with YESTERDAY's date, every single day.
+      // The shopkeeper closes the drawer at night and the summary is dated a
+      // day earlier. istDateString() converts the instant to IST parts.
+      date: istDateString(startOfToday), // YYYY-MM-DD in IST
       cashSales,
       upiSales,
       cardSales,

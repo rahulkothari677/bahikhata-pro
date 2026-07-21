@@ -207,9 +207,30 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     ])
     const stockPolicy = setting?.stockPolicy || 'block'
 
+    // 🔒 R11-4 COMPLETION (2026-07-21): resolve affectsStock BEFORE the stock
+    // direction is computed.
+    //
+    // The R11-4 fix applied this same fallback ONLY in the update payload
+    // (`data: { affectsStock: ... }`), so the STORED flag came out right while
+    // the STOCK MOVEMENT below still read the raw, un-defaulted value. That
+    // left the exact corruption the fix set out to prevent:
+    //
+    //   Edit a credit note that had affectsStock = true
+    //     existingShouldIncrement = true   (from existing.affectsStock)
+    //       -> reversal SUBTRACTS the stock
+    //     shouldIncrementStock    = false  (client omits the field -> zod false)
+    //       -> new impact is never applied
+    //     net: stock silently DROPS by the note quantity, every edit.
+    //
+    // The edit dialog does not expose these note fields, so `undefined` here
+    // means "unchanged", never "set to false".
+    const resolvedAffectsStock = affectsStock !== undefined
+      ? affectsStock
+      : (existing.affectsStock ?? false)
+
     // V17-Ext Tier 3: Stock direction (same logic as POST)
-    const shouldDecrementStock = type === 'sale' || (type === 'debit-note' && affectsStock)
-    const shouldIncrementStock = type === 'purchase' || (type === 'credit-note' && affectsStock)
+    const shouldDecrementStock = type === 'sale' || (type === 'debit-note' && resolvedAffectsStock)
+    const shouldIncrementStock = type === 'purchase' || (type === 'credit-note' && resolvedAffectsStock)
     const shouldAffectStock = shouldDecrementStock || shouldIncrementStock
     // For reversal: check the EXISTING transaction's affectsStock flag
     const existingShouldDecrement = existing.type === 'sale' || (existing.type === 'debit-note' && existing.affectsStock)
@@ -527,7 +548,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           originalTransactionId: originalTransactionId !== undefined ? (originalTransactionId || null) : existing.originalTransactionId,
           noteType: noteType !== undefined ? noteType : existing.noteType,
           noteReason: noteReason !== undefined ? (noteReason || null) : existing.noteReason,
-          affectsStock: affectsStock !== undefined ? affectsStock : (existing.affectsStock ?? false),
+          // Uses the SAME resolved value the stock logic above used, so the
+          // stored flag and the stock movement can never disagree.
+          affectsStock: resolvedAffectsStock,
           items: { create: txItems },
         },
         include: { items: true, party: true },

@@ -15,6 +15,7 @@
  * rupees on read via Prisma's aggregate / groupBy).
  */
 import { db, withConnectionRetry } from '@/lib/db'
+import { istDateString } from '@/lib/timezone'
 
 export interface IncomeExpenseSummary {
   totalIncome: number
@@ -117,9 +118,19 @@ export async function computeIncomeExpenseSummary(
     totalExpense,
     netCashflow: totalIncome - totalExpense,
     byCategory: { income: incomeCats, expense: expenseCats },
+    // 🔒 TZ FIX (2026-07-21): was `toISOString().slice(0, 10)`, which returns
+    // the UTC date. The shop runs in IST (UTC+5:30), so any local time before
+    // 05:30 formats as the PREVIOUS day: a range starting 15 Jan 00:00 IST was
+    // reported as "2026-01-14". The user then sees a financial summary labelled
+    // with a date range that is off by one day — and the label is what they'd
+    // quote to their accountant.
+    //
+    // This is the same defect class as the historical "GSTR month label shows
+    // the previous month" bug. istDateString() exists precisely for it, and its
+    // own doc-comment warns against this exact mistake.
     range: {
-      from: from.toISOString().slice(0, 10),
-      to: to.toISOString().slice(0, 10),
+      from: istDateString(from),
+      to: istDateString(to),
     },
     count: totalCount,
   }
