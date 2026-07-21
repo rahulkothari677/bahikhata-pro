@@ -58,17 +58,21 @@ export function PricingPlans() {
                 <div className="space-y-2 text-sm">
                   {plan.limits.transactions === 0 ? <FeatureItem text="Unlimited transactions" included /> : <FeatureItem text={`${plan.limits.transactions} transactions/month`} included />}
                   {plan.limits.products === 0 ? <FeatureItem text="Unlimited products" included /> : <FeatureItem text={`Up to ${plan.limits.products} products`} included />}
-                  {/* AI scans: Free = 20/day (honest), Pro = "Unlimited" (50/day FUP), Elite = "Truly Unlimited" (100/day FUP) */}
+                  {/* 🔒 R17-21 (Round 17): Was: "Unlimited AI scans" for Pro +
+                     "Truly Unlimited" for Elite — but usage-limits.ts enforces
+                     50/day (Pro) and 100/day (Elite) FUP. Misleading advertising
+                     (ASCI/Consumer Protection Act risk). Now: honest daily
+                     limits that match the server enforcement. */}
                   {plan.id === 'free'
                     ? <FeatureItem text="20 AI scans per day" included />
                     : plan.id === 'pro'
-                    ? <FeatureItem text="Unlimited AI scans" included />
-                    : <FeatureItem text="Truly Unlimited AI scans" included />}
+                    ? <FeatureItem text="50 AI scans per day" included />
+                    : <FeatureItem text="100 AI scans per day" included />}
                   {plan.id === 'free'
                     ? <FeatureItem text="20 voice entries per day" included />
                     : plan.id === 'pro'
-                    ? <FeatureItem text="Unlimited voice entries" included />
-                    : <FeatureItem text="Truly Unlimited voice entries" included />}
+                    ? <FeatureItem text="50 voice entries per day" included />
+                    : <FeatureItem text="100 voice entries per day" included />}
                 </div>
                 <div className="border-t border-border my-3" />
                 <div className="space-y-2 text-sm">

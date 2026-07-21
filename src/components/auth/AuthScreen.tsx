@@ -78,7 +78,9 @@ export function AuthScreen() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, password, name }),
         })
-        const data = await r.json()
+        // 🔒 R18-2 (Round 18): .catch(() => ({})) — non-JSON 500 was throwing
+        // → generic "Something went wrong" from the outer catch. Now: safe parse.
+        const data = await r.json().catch(() => ({}))
         if (!r.ok) {
           sonnerToast.error(data.error || "Couldn't sign up")
           setLoading(false)
@@ -95,7 +97,17 @@ export function AuthScreen() {
       })
 
       if (result?.error) {
-        sonnerToast.error('Invalid email or password')
+        // 🔒 R18-3 (Round 18): Was: "Invalid email or password" for ALL errors
+        // including 429 rate-limit. The user doesn't know they're throttled
+        // → keeps retrying → longer lockout. Now: detect rate-limit + show
+        // the correct message. NextAuth returns error='CredentialsSignin'
+        // for wrong password and a 429-derived message for rate-limit.
+        const isRateLimited = result.status === 429 || /too many|rate.?limit|throttl/i.test(result.error)
+        sonnerToast.error(isRateLimited
+          ? 'Too many login attempts. Please wait a minute and try again.'
+          : 'Invalid email or password',
+          isRateLimited ? { description: 'This is a security measure to protect your account.', duration: 10000 } : undefined
+        )
         setLoading(false)
       } else if (result?.ok) {
         sonnerToast.success(mode === 'signup' ? 'Account created! Welcome to EkBook.' : 'Welcome back!')
@@ -266,6 +278,21 @@ export function AuthScreen() {
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
+              {/* 🔒 R18-5 (Round 18): "Forgot password?" link — was missing
+                  entirely. PasswordReset.tsx + /api/auth/reset-request exist
+                  but were unreachable from the login screen. Users who forgot
+                  their password were permanently locked out. Now: link to the
+                  reset-password page (only shown on login mode, not signup). */}
+              {mode === 'login' && (
+                <div className="text-right mt-1">
+                  <a
+                    href="/reset-password"
+                    className="text-xs text-primary hover:underline"
+                  >
+                    Forgot password?
+                  </a>
+                </div>
+              )}
             </div>
 
             <Button

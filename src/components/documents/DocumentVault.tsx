@@ -30,6 +30,7 @@ import { haptic } from '@/lib/haptic'
 import { toast as sonnerToast } from 'sonner'
 import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
 import { readError } from '@/lib/read-error'
+import { useSession } from 'next-auth/react'
 import {
   Upload, FileText, FileImage, FileCheck, Banknote, IdCard,
   File, Trash2, Search, Loader2, X, Download, FolderOpen,
@@ -48,6 +49,12 @@ const CATEGORIES = [
 export function DocumentVault() {
   const queryClient = useQueryClient()
   const { confirmDialog, dialog: confirmDialogEl } = useConfirmDialog()
+  // 🔒 R17-12 (Round 17): Documents include PII (GST certificates, ID proofs,
+  // bank statements). Only owners can delete — staff can view + upload but
+  // must not be able to delete the owner's sensitive documents. Was: no role
+  // check at all; any staff could delete any document.
+  const { data: session } = useSession()
+  const isOwner = session?.user?.role === 'owner'
   const [filter, setFilter] = useState<string>('all')
   const [search, setSearch] = useState('')
   const [uploading, setUploading] = useState(false)
@@ -313,14 +320,19 @@ export function DocumentVault() {
                     ) : (
                       <Icon className={cn('w-12 h-12', catMeta.color)} />
                     )}
-                    {/* Delete button (appears on hover) */}
-                    <button
-                      onClick={() => handleDelete(doc.id, doc.name)}
-                      className="absolute top-1.5 right-1.5 w-7 h-7 rounded-lg bg-rose-500/90 text-white opacity-0 group-hover:opacity-100 transition flex items-center justify-center hover:bg-rose-600"
-                      title="Delete"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    {/* Delete button (appears on hover).
+                        🔒 R17-12 (Round 17): Owner-only. Staff can view +
+                        upload but cannot delete PII documents (GST certs,
+                        ID proofs, bank statements). */}
+                    {isOwner && (
+                      <button
+                        onClick={() => handleDelete(doc.id, doc.name)}
+                        className="absolute top-1.5 right-1.5 w-7 h-7 rounded-lg bg-rose-500/90 text-white opacity-0 group-hover:opacity-100 transition flex items-center justify-center hover:bg-rose-600"
+                        title="Delete"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                   {/* Name + category */}
                   <p className="text-sm font-medium truncate" title={doc.name}>{doc.name}</p>

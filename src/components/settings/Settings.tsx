@@ -184,7 +184,11 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
   const [logoUrl, setLogoUrl] = useState<string | null>(null)
 
   // 🔒 V12: Persist the round-off toggle instantly (like the hide-profit toggle).
+  // 🔒 R16-1 (Round 16): Revert optimistic update on failure. Was: toggle
+  // showed ON while server had OFF — fixed on next page load. Now: reverts
+  // to the previous value in catch, matching use-setting.ts:76-83 pattern.
   const persistRoundOff = async (next: boolean) => {
+    const prev = roundOffEnabled
     setRoundOffEnabled(next)
     try {
       await offlineFetch('/api/settings', {
@@ -193,21 +197,18 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
         body: JSON.stringify({ roundOffEnabled: next }),
         offline: { invalidate: ['/api/settings'] },
       })
-      // 🔒 R10-2: Invalidate the React Query ['setting'] cache so the Sale form's
-      // round-off preview agrees with the saved total. Was: only the URL cache
-      // was cleared via offline.invalidate → the Sale form could round while the
-      // server does not (or vice-versa) for up to 2 minutes (the staleTime).
       queryClient.invalidateQueries({ queryKey: ['setting'] })
       sonnerToast.success(`Invoice round-off ${next ? 'on' : 'off'}`)
     } catch (e: any) {
+      setRoundOffEnabled(prev)
       sonnerToast.error(e?.message || 'Could not save round-off setting')
     }
   }
 
   // 🔒 V11: Persist the stock policy toggle instantly.
-  // 'block' = sales that would push stock negative are REJECTED (default).
-  // 'allow' = sales go through with a warning (kirana mode).
+  // 🔒 R16-2 (Round 16): Revert optimistic update on failure (same as R16-1).
   const persistStockPolicy = async (next: 'block' | 'allow') => {
+    const prev = stockPolicy
     setStockPolicy(next)
     try {
       await offlineFetch('/api/settings', {
@@ -216,11 +217,10 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
         body: JSON.stringify({ stockPolicy: next }),
         offline: { invalidate: ['/api/settings'] },
       })
-      // 🔒 R10-2 (same class): Invalidate ['setting'] so the Sale form picks up
-      // the new policy immediately (affects the stock-block warning preview).
       queryClient.invalidateQueries({ queryKey: ['setting'] })
       sonnerToast.success(next === 'allow' ? 'Overselling allowed (kirana mode)' : 'Overselling blocked')
     } catch (e: any) {
+      setStockPolicy(prev)
       sonnerToast.error(e?.message || 'Could not save stock policy setting')
     }
   }
@@ -347,6 +347,12 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
         haptic.error()
         sonnerToast.success('All data deleted. Refreshing...')
         setTimeout(() => window.location.reload(), 1500)
+      } else {
+        // 🔒 R16-5 (Round 16): Was: silent failure — user clicks "Reset All
+        // Data", nothing happens, no toast. Now: surface the server's error
+        // (period-lock refusal, permission denied, etc.).
+        haptic.error()
+        sonnerToast.error(await readError(r), { duration: 8000 })
       }
     } catch (e: any) {
       haptic.error()
