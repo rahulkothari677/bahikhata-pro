@@ -286,28 +286,20 @@ export function PartyProfile() {
     const shopPhone = setting?.phone || ''
     const shopGstin = setting?.gstin || ''
 
-    // Build rows from the unified statement (transactions + payments merged,
-    // newest-first, with running balance).
-    const rows = statement.map((entry: any, i: number) => {
-      const isInflow = entry.type === 'sale' || entry.type === 'income' || entry.type === 'payment-received'
-      const isPayment = entry.isPayment
-      const amount = entry.amount
-      const balance = entry.runningBalance
-      const particulars = isPayment
-        ? (entry.type === 'payment-received' ? 'Payment received' : 'Payment made')
-        : (entry.invoiceNo || entry.type)
-      const delta = entry.delta
-      return `
+    // 🔒 R9-1: rows come from the SHARED builder used by all three exporters.
+    // The previous inline version also had a rendering bug: it printed
+    // Math.abs(delta) in BOTH the Debit and Credit columns, so every row
+    // showed its amount twice. Now a row fills exactly one column.
+    const rows = buildStatementRows().map(r => `
         <tr>
-          <td style="text-align:center">${i + 1}</td>
-          <td>${formatDate(entry.date)}</td>
-          <td>${particulars}</td>
-          <td style="text-align:right; color:${delta > 0 ? '#1a1a1a' : '#059669'}">${delta > 0 ? '+' : ''}${Math.abs(delta).toFixed(2)}</td>
-          <td style="text-align:right; color:${delta < 0 ? '#1a1a1a' : '#059669'}">${delta < 0 ? '+' : ''}${Math.abs(delta).toFixed(2)}</td>
-          <td style="text-align:right; font-weight:600">${balance.toFixed(2)}</td>
+          <td style="text-align:center">${r.index}</td>
+          <td>${r.date}</td>
+          <td>${r.particulars}</td>
+          <td style="text-align:right">${r.debit ? r.debit.toFixed(2) : ''}</td>
+          <td style="text-align:right; color:#059669">${r.credit ? r.credit.toFixed(2) : ''}</td>
+          <td style="text-align:right; font-weight:600">${r.balance.toFixed(2)}</td>
         </tr>
-      `
-    }).join('')
+      `).join('')
 
     // Closing balance is stats.balance — the single source of truth.
     const closingBalance = stats?.balance ?? 0
@@ -415,19 +407,63 @@ export function PartyProfile() {
   }
 
   // Print statement directly
+  // 🔒 R9-1 STRUCTURAL FIX (2026-07-21): ONE source of statement rows.
+  //
+  // There are THREE statement exporters (Download HTML, Print, Send PDF).
+  // Each had grown its own row-building logic, and the R9-1 money fix was
+  // applied to only ONE of them — twice (V19-017 fixed Print only; the later
+  // fix corrected Download only). Meanwhile "Send PDF" — the one that
+  // WhatsApps a statement to the CUSTOMER — still iterated the paginated
+  // 50-row `transactions` array, omitted every Settle payment, and ADDED
+  // credit notes to the amount owed.
+  //
+  // This helper is now the single definition. All three exporters call it, so
+  // the class cannot fork a fourth time. Rows come from `statement`
+  // (transactions + payments merged, running balance anchored to
+  // stats.balance), so an exported statement can never disagree with the
+  // statement on screen.
+  const buildStatementRows = () => statement.map((entry: any, i: number) => {
+    const isPayment = entry.isPayment
+    const particulars = isPayment
+      ? (entry.type === 'payment-received' ? 'Payment received' : 'Payment made')
+      : (entry.invoiceNo || entry.type)
+    const delta = entry.delta
+    return {
+      index: i + 1,
+      date: formatDate(entry.date),
+      particulars,
+      // Khata convention: debit increases what they owe, credit reduces it.
+      debit: delta > 0 ? Math.abs(delta) : 0,
+      credit: delta < 0 ? Math.abs(delta) : 0,
+      balance: entry.runningBalance,
+    }
+  })
+
+  /** Closing figure + wording, always the canonical balance (never re-derived). */
+  const statementClosing = () => {
+    const closing = stats?.balance ?? 0
+    return {
+      closing,
+      label: closing > 0
+        ? (party?.type === 'supplier' ? 'Advance paid (they owe you)' : 'They owe you')
+        : closing < 0 ? 'You owe them' : 'Settled',
+      trueCount: statementTotals?.transactionTotal ?? statement.length,
+      truncated: (statementTotals?.transactionTotal ?? 0) > statement.length,
+    }
+  }
+
   // 🔒 V19-016 FIX: Was calling handleDownloadStatement() then window.print()
   // which printed the CURRENT PAGE (the PartyProfile UI), not the statement.
   // Now: open the generated HTML in a new window and print that.
   const handlePrintStatement = () => {
     if (!party) return
-    const allTxns = statementTransactions || transactions || []
     const shopName = setting?.shopName || 'My Shop'
-    const rows = allTxns.map((t: any, i: number) => {
-      const paid = t.paidAmount || 0
-      const due = roundMoney(t.totalAmount - paid)
-      return `<tr><td style="text-align:center">${i + 1}</td><td>${formatDate(t.date)}</td><td>${t.invoiceNo || '—'}</td><td style="text-transform:capitalize">${t.type}</td><td style="text-align:right">${t.totalAmount.toFixed(2)}</td><td style="text-align:right">${paid.toFixed(2)}</td><td style="text-align:right">${due.toFixed(2)}</td></tr>`
-    }).join('')
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Statement - ${party.name}</title><style>body{font-family:Arial,sans-serif;max-width:800px;margin:0 auto;padding:40px}h1{font-size:22px}table{width:100%;border-collapse:collapse}th{background:#fef3e6;padding:10px;font-size:12px;text-align:left}td{padding:8px;font-size:13px;border-bottom:1px solid #e5e7eb}</style></head><body><h1>${shopName}</h1><h2>Statement: ${party.name}</h2><table><thead><tr><th>#</th><th>Date</th><th>Invoice</th><th>Type</th><th style="text-align:right">Total</th><th style="text-align:right">Paid</th><th style="text-align:right">Due</th></tr></thead><tbody>${rows}</tbody></table></body></html>`
+    const closing = statementClosing()
+    const rows = buildStatementRows().map(r => `<tr><td style="text-align:center">${r.index}</td><td>${r.date}</td><td>${r.particulars}</td><td style="text-align:right">${r.debit ? r.debit.toFixed(2) : ''}</td><td style="text-align:right;color:#059669">${r.credit ? r.credit.toFixed(2) : ''}</td><td style="text-align:right;font-weight:600">${r.balance.toFixed(2)}</td></tr>`).join('')
+    const truncNote = closing.truncated
+      ? `<p style="font-size:11px;color:#888">Showing the most recent ${statement.length} of ${closing.trueCount} entries. The closing balance reflects all entries.</p>`
+      : ''
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Statement - ${party.name}</title><style>body{font-family:Arial,sans-serif;max-width:800px;margin:0 auto;padding:40px}h1{font-size:22px}table{width:100%;border-collapse:collapse}th{background:#fef3e6;padding:10px;font-size:12px;text-align:left}td{padding:8px;font-size:13px;border-bottom:1px solid #e5e7eb}</style></head><body><h1>${shopName}</h1><h2>Statement: ${party.name}</h2><table><thead><tr><th>#</th><th>Date</th><th>Particulars</th><th style="text-align:right">Debit</th><th style="text-align:right">Credit</th><th style="text-align:right">Balance</th></tr></thead><tbody>${rows}</tbody></table><h3 style="text-align:right">Closing Balance: ${formatINR(closing.closing)} — ${closing.label}</h3>${truncNote}</body></html>`
     const win = window.open('', '_blank')
     if (!win) return
     win.document.write(html)
@@ -475,48 +511,77 @@ export function PartyProfile() {
       if (party.phone) partyLine += `Phone: ${party.phone}  `
       if (party.gstin) partyLine += `GSTIN: ${party.gstin}`
       if (partyLine) { doc.text(partyLine, margin, y); y += 5 }
-      doc.text(`Total Transactions: ${transactions.length}`, margin, y); y += 6
+      // 🔒 R9-1 FIX (2026-07-21): this exporter — the one that WhatsApps a
+      // statement to the CUSTOMER — was still iterating `transactions`, the
+      // PAGINATED 50-row page. It therefore (a) silently truncated at 50
+      // entries while printing that count as the total, (b) omitted every
+      // Settle payment, and (c) ADDED credit notes to the amount owed. Its
+      // "Balance Due" was a re-derived figure that contradicted the balance
+      // shown on screen — overstating what the customer owed, on a document
+      // carrying the shop's name and GSTIN.
+      //
+      // Now: same rows and same closing figure as every other statement view.
+      const rows = buildStatementRows()
+      const closing = statementClosing()
+      doc.text(`Total Transactions: ${closing.trueCount}`, margin, y); y += 6
 
       doc.setFillColor(240, 240, 240)
       doc.rect(margin, y - 4, pageWidth - 2 * margin, 8, 'F')
       doc.setFont('helvetica', 'bold'); doc.setFontSize(9)
       doc.text('#', margin + 2, y); doc.text('Date', margin + 10, y)
-      doc.text('Invoice', margin + 40, y); doc.text('Type', margin + 75, y)
-      doc.text('Amount', margin + 110, y, { align: 'right' })
-      doc.text('Paid', margin + 140, y, { align: 'right' })
-      doc.text('Due', pageWidth - margin - 2, y, { align: 'right' })
+      doc.text('Particulars', margin + 40, y)
+      doc.text('Debit', margin + 118, y, { align: 'right' })
+      doc.text('Credit', margin + 148, y, { align: 'right' })
+      doc.text('Balance', pageWidth - margin - 2, y, { align: 'right' })
       y += 6
 
+      const drawHeaderRow = () => {
+        doc.setFillColor(240, 240, 240)
+        doc.rect(margin, y - 4, pageWidth - 2 * margin, 8, 'F')
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(9)
+        doc.text('#', margin + 2, y); doc.text('Date', margin + 10, y)
+        doc.text('Particulars', margin + 40, y)
+        doc.text('Debit', margin + 118, y, { align: 'right' })
+        doc.text('Credit', margin + 148, y, { align: 'right' })
+        doc.text('Balance', pageWidth - margin - 2, y, { align: 'right' })
+        y += 6
+        doc.setFont('helvetica', 'normal')
+      }
+
       doc.setFont('helvetica', 'normal')
-      let totalAmount = 0, totalPaid = 0
-      transactions.forEach((t: any, i: number) => {
-        if (y > pageHeight - 40) { doc.addPage(); y = 20 }
-        const due = roundMoney(t.totalAmount - (t.paidAmount || 0))
-        totalAmount += t.totalAmount; totalPaid += (t.paidAmount || 0)
-        doc.text(String(i + 1), margin + 2, y)
-        doc.text(formatDate(t.date), margin + 10, y)
-        doc.text(t.invoiceNo || '—', margin + 40, y)
-        doc.text(t.type, margin + 75, y)
-        doc.text(`Rs. ${t.totalAmount.toFixed(2)}`, margin + 110, y, { align: 'right' })
-        doc.text(`Rs. ${(t.paidAmount || 0).toFixed(2)}`, margin + 140, y, { align: 'right' })
-        if (due > 0) doc.setTextColor(200, 0, 0)
-        doc.text(`Rs. ${due.toFixed(2)}`, pageWidth - margin - 2, y, { align: 'right' })
-        doc.setTextColor(0); y += 5
+      rows.forEach((r) => {
+        // Repeat the column header on each new page (previously page 2+ had
+        // rows with no headings).
+        if (y > pageHeight - 40) { doc.addPage(); y = 20; drawHeaderRow() }
+        doc.text(String(r.index), margin + 2, y)
+        doc.text(r.date, margin + 10, y)
+        doc.text(String(r.particulars).slice(0, 38), margin + 40, y)
+        if (r.debit) doc.text(`Rs. ${r.debit.toFixed(2)}`, margin + 118, y, { align: 'right' })
+        if (r.credit) {
+          doc.setTextColor(0, 128, 0)
+          doc.text(`Rs. ${r.credit.toFixed(2)}`, margin + 148, y, { align: 'right' })
+          doc.setTextColor(0)
+        }
+        doc.text(`Rs. ${r.balance.toFixed(2)}`, pageWidth - margin - 2, y, { align: 'right' })
+        y += 5
       })
 
       y += 4; doc.setDrawColor(200); doc.line(margin, y, pageWidth - margin, y); y += 6
-      const totalDue = totalAmount - totalPaid
       doc.setFont('helvetica', 'bold'); doc.setFontSize(10)
-      doc.text('Total Amount:', pageWidth - margin - 50, y)
-      doc.text(`Rs. ${totalAmount.toFixed(2)}`, pageWidth - margin - 2, y, { align: 'right' }); y += 5
-      doc.text('Total Paid:', pageWidth - margin - 50, y)
-      doc.setTextColor(0, 128, 0)
-      doc.text(`Rs. ${totalPaid.toFixed(2)}`, pageWidth - margin - 2, y, { align: 'right' }); y += 5
-      doc.setTextColor(0)
-      doc.text('Balance Due:', pageWidth - margin - 50, y)
-      if (totalDue > 0) doc.setTextColor(200, 0, 0); else doc.setTextColor(0, 128, 0)
-      doc.text(`Rs. ${totalDue.toFixed(2)}`, pageWidth - margin - 2, y, { align: 'right' })
-      doc.setTextColor(0)
+      doc.text('Closing Balance:', pageWidth - margin - 60, y)
+      if (closing.closing > 0) doc.setTextColor(200, 0, 0); else doc.setTextColor(0, 128, 0)
+      doc.text(`Rs. ${Math.abs(closing.closing).toFixed(2)}`, pageWidth - margin - 2, y, { align: 'right' })
+      doc.setTextColor(0); y += 5
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9)
+      doc.text(closing.label, pageWidth - margin - 2, y, { align: 'right' }); y += 5
+      if (closing.truncated) {
+        doc.setFontSize(8); doc.setTextColor(120)
+        doc.text(
+          `Showing the most recent ${rows.length} of ${closing.trueCount} entries. The closing balance reflects all entries.`,
+          margin, y,
+        )
+        doc.setTextColor(0); doc.setFontSize(9); y += 5
+      }
 
       y = pageHeight - 25; doc.setDrawColor(200); doc.line(margin, y, pageWidth - margin, y); y += 6
       doc.setFont('helvetica', 'italic'); doc.setFontSize(8); doc.setTextColor(120)
