@@ -8763,3 +8763,106 @@ Stage Summary:
 - The "partial work" (Bill To card had no actual card background; no Place of Supply card) is COMPLETE.
 - Statement PDF (Part 4 spec, R9-1/R9-2 correctness fix) was already shipped in an earlier batch and lives in PartyProfile.tsx; not touched here.
 - Stale test artifacts cleaned up: scripts/_pdf-build/ and scripts/_jspdf-stub.js (the stub file was never created since the simpler tsconfig approach worked).
+
+---
+Task ID: money-critical-batch-r9-v2
+Agent: main
+Task: Implement the 3 money-critical fixes from the audit-status report: (1) invalidateMoneyCaches helper to close R9-6/R9-7/R9-8/R9-10 + R10-2 toggle-path, (2) server-side Income/Expense summary endpoint + date-range selector (R9-3), (3) supplier opening-balance review endpoint + UI (V-2 data-repair).
+
+Work Log:
+
+PRE-CHANGE AUDIT — verified the current state of each finding:
+- TransactionEntry.tsx:697-700 invalidated ['transactions'] + ['dashboard'] + ['parties'] but NOT ['party-profile'] or ['products'] → R9-6/R9-7 open.
+- TransactionDetail.tsx:898-902 onSuccess invalidated only ['transaction', id] + ['transactions'] → R9-10 open.
+- Ledger.tsx:90-91 invalidated ['transactions'] + ['dashboard'] but not ['party-profile'] or ['products'] → R9-6 open on delete path.
+- IncomeExpense.tsx:64-78 fetched ?type=all&limit=200 + client-reduced → R9-3 open. No server-side summary endpoint existed.
+- use-recurring-entries.ts:99 had offline.invalidate URL list only, no queryClient.invalidateQueries, toast missing ₹X → R9-8 open.
+- PartyProfile.tsx:218-223 had 3 separate invalidateQueries calls but missed ['products'] + ['insights'] — partial.
+- Settings.tsx:175-188 persistRoundOff + persistStockPolicy only did offline.invalidate URL cache clear, not queryClient.invalidateQueries(['setting']) → R10-2 toggle-path open.
+- No SupplierOpeningBalanceReview UI existed; no /api/debug/supplier-opening-balance-review endpoint existed → V-2 data-repair open.
+
+§1 — invalidateMoneyCaches helper (NEW: src/lib/invalidate-money-caches.ts):
+- Single async function that takes a QueryClient and Promise.all's invalidations for: ['transactions'], ['dashboard'], ['parties'] (prefix), ['party-profile'] (prefix — covers ['party-profile', selectedPartyId]), ['products'] (prefix — covers for-entry/for-picker/for-edit/search), ['insights'], ['analytics'], ['setting'].
+- Used prefix matching (no id) for parties/party-profile/products so all variants refresh in one call.
+- Documentation explains the R9-6/R9-7/R9-8/R9-10 user impact (party balance stale for 2 min, picker shows old stock, recurring posts land silently).
+
+Wired into 7 call sites (each with a 🔒 R9-x comment explaining the gap it closes):
+1. TransactionEntry.tsx:697 — sale/purchase save. Replaced 3 invalidateQueries calls with `await invalidateMoneyCaches(queryClient)`.
+2. TransactionDetail.tsx:899 — EditTransactionDialog onSuccess. Replaced 2 invalidateQueries calls with helper.
+3. TransactionDetail.tsx:154 — restore-after-undo. Added helper call.
+4. TransactionDetail.tsx:168 — delete. Added helper call after the existing 2 invalidateQueries.
+5. Ledger.tsx:94 — delete. Added helper call after the existing 2 invalidateQueries + triggerRefresh.
+6. IncomeExpense.tsx:96 — delete. Added helper call.
+7. IncomeExpense.tsx:441 — IncomeExpenseDialog onSuccess. Replaced bare triggerRefresh() with helper + triggerRefresh().
+8. PartyProfile.tsx:222 — settle payment. Replaced 3 invalidateQueries with `await invalidateMoneyCaches(queryClient)`.
+9. PartyProfile.tsx:245 — delete party. Replaced 1 invalidateQueries with helper.
+10. use-recurring-entries.ts:73 — checkAndCreate. Hook now calls useQueryClient; after posting, calls `await invalidateMoneyCaches(queryClient)`. Also extended URL cache list with /api/parties. Toast now reads "N recurring entries posted — ₹X" with description listing categories.
+
+§2 — R10-2 toggle-path:
+- Settings.tsx:188 persistRoundOff: added `queryClient.invalidateQueries({ queryKey: ['setting'] })` after the offlineFetch.
+- Settings.tsx:209 persistStockPolicy: same fix (same class — affects Sale form's stock-block warning preview).
+- The full Settings form save (handleSave) already invalidated ['setting'] at L311 — no change needed there.
+
+§3 — CI guard (NEW: src/__tests__/lib/v26-r9-invalidate-money-caches-guard.test.ts):
+- 13 assertions across 7 files.
+- Verifies the helper file exists + exports invalidateMoneyCaches.
+- Verifies the helper invalidates the 5 key caches (transactions, dashboard, parties, party-profile, products).
+- Verifies each mutation file imports the helper from @/lib/invalidate-money-caches.
+- Verifies each mutation file calls invalidateMoneyCaches(queryClient) at least once.
+- If anyone adds a new mutation site without wiring the helper, they must update MUTATION_FILES in the test — forcing conscious opt-out.
+
+§4 — Income/Expense server-side summary (R9-3):
+- NEW: src/lib/income-expense-summary.ts — exports computeIncomeExpenseSummary(userId, from, to, hideProfit). Runs 5 Prisma queries in parallel inside withConnectionRetry (Neon cold-start safe): 2 aggregates (income total + count, expense total + count), 2 groupBy (income by category, expense by category), 1 count (total rows). Returns { totalIncome, totalExpense, netCashflow, byCategory, range, count } in RUPEES (money extension converts on read). When hideProfit is true, zeroes totals + byCategory but still returns count.
+- NEW: src/app/api/income-expense/summary/route.ts — thin auth + validation wrapper. Parses from/to query params (defaults: start of month → today). Validates from <= to. Honors getAuthContext + canAccessModule('incomeExpense') + shouldHideProfit. Returns noStore(...) (money-bearing — never cached).
+- Logic extracted to a separate lib file so the test can import it WITHOUT loading next-auth (which is ESM-only and breaks jest's CJS resolver). The route file is a thin wrapper tested separately.
+- MODIFIED: src/components/income/IncomeExpense.tsx:
+  - Added rangePreset state ('this-month' | 'last-month' | 'this-year' | 'all', default 'this-month').
+  - Added useQuery for ['income-expense-summary', fromStr, toStr, refreshKey] calling the new endpoint. staleTime 60s.
+  - Headline totals now come from summary?.totalIncome / totalExpense / netCashflow (was: client-side reduce).
+  - topExpenses now prefers summary.byCategory.expense (covers full range) when summary is loaded; falls back to client-side reduce from paginated list.
+  - Added date-range selector UI above the summary cards (Period label + Select dropdown + range display + entry count).
+  - The paginated /api/transactions?type=all&limit=200 query is KEPT for the transaction LIST display (not totals).
+
+§5 — Income/Expense summary tests (NEW: src/__tests__/lib/v26-r9-income-expense-summary.test.ts):
+- 7 behavioral assertions.
+- Fixture: 250 income rows + 250 expense rows (income ₹25,000, expense ₹12,500).
+- Asserts: totals = 25,000 / 12,500 / net 12,500 / count 500. The OLD code with limit=200 would have returned 20,000 / 10,000 — a ₹5,000 / ₹2,500 understatement. This test locks the fix.
+- Asserts byCategory breakdown sums to headline totals.
+- Asserts range echoes input dates as YYYY-MM-DD.
+- Asserts hideProfit zeroes totals + byCategory but preserves count.
+- Asserts null category becomes "Other".
+- Asserts empty range returns zeros (not errors).
+- Asserts all 5 queries receive the same date + userId filter (no cross-user leak).
+
+§6 — Supplier opening-balance review (V-2 data-repair):
+- NEW: src/app/api/debug/supplier-opening-balance-review/route.ts:
+  - GET (founder-only via requireFounder): lists every supplier/both party with openingBalance > 0. For each, fetches purchase aggregate (total + paid + count) so the shopkeeper can tell a sign error (no purchases, positive opening) from a genuine advance (has purchases, positive opening = prepaid). Returns { suspectCount, rows, instructions }. Each row includes: id, name, phone, type, openingBalanceRupees, purchaseTotalRupees, purchasePaidRupees, purchaseCount, currentBalanceRupees, recommendation ('review' | 'genuine-advance'), reason, createdAt.
+  - POST (founder-only): flips one party's openingBalance sign (positive → negative). Refuses to flip non-supplier parties or non-positive openings (defensive). Returns previous + new value + human-readable message.
+  - Does NOT auto-flip — auditor's explicit instruction: "do not auto-flip — genuine advances exist".
+- NEW: src/components/settings/SupplierOpeningBalanceReview.tsx:
+  - Founder-only card on Settings → Data tab (between UnsyncedEntries and Danger Zone).
+  - Collapsed by default ("Check for sign errors" button) to avoid noise for the majority of users with no suspects.
+  - When expanded, fetches the GET endpoint. Each suspect row shows: name, phone, created date, recommendation badge (amber "Review" or emerald "Likely advance"), opening balance, purchase total, current balance, reason, and a "Flip sign" button with explicit JS confirm dialog.
+  - After flip: invalidates all money caches via the helper + refetches the review list.
+  - Auto-hides for non-founders (returns null).
+- MODIFIED: src/components/settings/Settings.tsx:
+  - Added `const isFounder = useAppStore((s) => s.isFounder)` (already had isOwner).
+  - Imported SupplierOpeningBalanceReview component.
+  - Rendered it between UnsyncedEntries and the Danger Zone.
+
+Verification (all 4 gates green):
+- tsc --noEmit: 0 errors
+- jest: 1997/1997 pass (72 suites) — was 1928, +69 from new tests + accumulated
+- next build: clean. Both new endpoints (/api/income-expense/summary, /api/debug/supplier-opening-balance-review) appear in the build output as ƒ (Dynamic, server-rendered on demand).
+- eslint: not run separately but no warnings in build output.
+
+Stage Summary:
+- 5 auditor findings CLOSED in this batch: R9-3 (Income/Expense partial window), R9-6 (party-profile invalidation), R9-7 (sale-form product cache), R9-8 (recurring entries refresh), R9-10 (edit doesn't refresh party/product). Plus the R10-2 toggle-path partial.
+- V-2 data-repair (the second half of V-2 — the code half was already done in Parties.tsx:416) is now COMPLETE: founders have a UI to review existing supplier rows with wrong-sign opening balances and flip them one at a time with explicit confirmation.
+- CI guards prevent regression: v26-r9-invalidate-money-caches-guard.test.ts enforces that every money-mutation file imports + calls the helper. v26-r9-income-expense-summary.test.ts locks the server-side aggregate (250-row fixture proves the limit=200 bug is gone).
+- Remaining items from the audit-status report:
+  * Critical #3: Paise sanity check in nightly cron — still NOT-DONE (next batch).
+  * DI-2: tappable OUT badge + normalizeToUnit rounding — still PARTIAL (next batch).
+  * Statement PDF ageing mini-table — still PARTIAL (next batch).
+  * PDF logo upload — still NOT-DONE (next batch).
+  * Rounds 11–18 (per-screen vertical audits) — still NOT STARTED (separate engagement).
