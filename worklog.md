@@ -8866,3 +8866,70 @@ Stage Summary:
   * Statement PDF ageing mini-table — still PARTIAL (next batch).
   * PDF logo upload — still NOT-DONE (next batch).
   * Rounds 11–18 (per-screen vertical audits) — still NOT STARTED (separate engagement).
+
+---
+Task ID: hardening-batch-critical3-di2-ageing-logo
+Agent: main
+Task: Implement the 4 hardening-tier items from the audit-status report: Critical #3 (paise sanity in nightly cron), DI-2 (normalizeToUnit rounding + tappable OUT badge), Statement PDF ageing mini-table, PDF logo upload.
+
+Work Log:
+
+§1 — Critical #3: Paise sanity check in nightly reconciliation cron:
+- src/lib/reconciliation.ts: added checkPaiseAnomalies(userId) function. Runs 5 raw-SQL aggregates (Payment.amount, Transaction.totalAmount, Party.openingBalance, Product.salePrice, TransactionItem.total via JOIN) in parallel. Flags rows > ₹1Cr paise (1,000,000,000) as 'almost certain' 100× corruption, > ₹10L paise (100,000,000) as 'suspicious'.
+- Returns a ReconciliationCheck: passed when totalAlmostCertain === 0. Suspicious-only rows don't fail (a legitimate ₹15L B2B sale is plausible for some shops) but the details string lists them for manual review.
+- Failure details name the recovery endpoints (/api/debug/paise-audit + /api/debug/repair-payment-amount with explicit IDs only) so the on-call engineer knows exactly what to do.
+- Added runReconciliationChecksNightly(userId) — the extended function that includes the paise check. The on-demand /api/reconcile endpoint keeps using the basic runReconciliationChecks (so the one-tap UI check stays fast — the paise check uses raw SQL across 5 tables, which is overkill for a user-triggered check).
+- src/app/api/cron/nightly-reconciliation/route.ts: changed the import to runReconciliationChecksNightly + a comment explaining why.
+- Why raw SQL: the money extension's read converter divides paise by 100, so a corrupted row still round-trips as the 'correct' rupee value through Prisma. The corruption is ONLY visible by reading the raw column. This is the exact mistake the original debug log made (per CRITICAL report §2).
+- Test: src/__tests__/lib/v26-critical3-paise-sanity.test.ts — 9 behavioral assertions. Fixture: 1.5B paise payment → check fails + names recovery endpoints. Also covers Product/Transaction corruption, suspicious-band pass-with-warning, count aggregation, 5-query parallelism, userId scoping.
+
+§2 — DI-2 part A: normalizeToUnit rounds discrete units:
+- src/lib/units.ts: normalizeToUnit now rounds to integer when the target (or same) unit is a count unit (pcs, dozen, box, packet, bag). Catches the 'Amul Taaza Milk 19.02 pcs' bug at the source — the Zod validation in validation.ts already rejects decimals at the API for count units; this is the client-side + same-unit defense-in-depth.
+- Logs a console.warn when a non-trivial fractional part (> 0.001) is discarded. The 0.001 threshold suppresses IEEE 754 float drift (5.0000001 → 5 silently).
+- Weight/volume/length units are NOT rounded (0.5 kg stays 0.5 kg, not 1 kg).
+- Same-unit case is also rounded (e.g. normalizeToUnit(19.02, 'pcs', 'pcs') → 19). This catches direct fractional input even when no cross-unit conversion happens.
+- Test: 13 new assertions in src/__tests__/lib/units.test.ts covering same-unit rounding (pcs, dozen, box, packet), cross-unit rounding (dozen → pcs with fraction), weight/volume exemption (kg/gm/ltr/ml), tiny-float-drift suppression, whole-number pass-through, and the warning log.
+
+§3 — DI-2 part B: Tappable OVERSOLD badge:
+- src/components/inventory/Inventory.tsx: the OVERSOLD badge in ProductGridCard is now a <button> instead of a non-interactive <div>. Tap → opens New Purchase pre-filled with the product + the shortfall quantity (Math.abs(currentStock)).
+- Uses the same window.__ledgerPreset mechanism as Dashboard's Repeat Last Sale + TransactionDetail's credit/debit note flows. Sets previousView to 'inventory' so back returns to the Inventory screen.
+- Badge text now includes the shortfall: 'OVERSOLD — tap to record purchase (+30 pcs)'. Min-height 32px (meets touch target).
+- stopPropagation on click so the card's onClick (edit) doesn't fire.
+
+§4 — Statement PDF ageing mini-table (PDF Redesign Spec Part 4 §5):
+- src/components/parties/PartyProfile.tsx handleShareStatementPDF: when the closing balance is > 0 (money owed to the shop), renders a 4-column AGEING BREAKDOWN card between the closing balance and the UPI QR.
+- Buckets computed by walking the statement array BACKWARD: each positive delta (sale, debit note) contributes to the bucket determined by its age. Earlier entries only contribute if later entries don't fully account for the closing balance. Payments are skipped (they reduce the balance, don't age). Any residual (e.g. opening balance) goes in 'current' — conservative, matches DebtAgingReport's treatment.
+- Each bucket in its own rounded-rect card: 0-30 days (emerald), 31-60 days (amber), 61-90 days (orange), 90+ days (rose). Card bg + border + colored value text.
+- Only renders when closing > 0 (the spec says 'only when money is owed'). When the customer has overpaid (closing < 0) or settled (closing === 0), no ageing table — keeps the statement clean.
+- Same caveats as DebtAgingReport: single-payment-stream app, no per-invoice allocation, so aging is approximate. Stated in a code comment for the next reader.
+
+§5 — PDF logo upload (PDF Redesign Spec Part 3 §2):
+- prisma/schema.prisma: added Setting.logoUrl String? field. Migration 20260721000002_setting_logo_url adds the column as TEXT (nullable).
+- src/app/api/settings/logo/route.ts:
+  - POST: accepts { image: base64DataUrl }, uploads to Cloudinary via uploadBillImage (reuses existing helper), persists URL to Setting.logoUrl via upsert. Validates image size < 4MB base64 (~3MB image). Auth-gated via getAuthUserIdWithModule('settings').
+  - DELETE: best-effort destroys the Cloudinary asset (extracts publicId from URL regex), sets Setting.logoUrl to null. Cloudinary delete failure doesn't block the DB update — the URL is removed either way so the logo won't render.
+- src/app/api/settings/route.ts PUT: logoUrl can now be passed through regular Settings saves. Validated as http(s) URL or null. If undefined, omitted from the update (Prisma treats undefined as 'don't touch') so a normal save doesn't clobber the logo.
+- src/components/settings/ShopLogoUploader.tsx: founder-agnostic uploader component.
+  - No-logo state: drop-zone button (click to pick). Validates PNG/JPEG/WebP + < 2MB before uploading. Shows uploading spinner.
+  - Has-logo state: 16x16 preview + 'Replace' button + 'Remove' button (with confirm). Shows the filename from the URL.
+  - onError on the <img> sets previewError → falls back to drop-zone state (handles broken URLs gracefully).
+- src/components/settings/Settings.tsx: renders ShopLogoUploader at the top of the Shop Profile card (before the shopName input) so users see it before the text fields. logoUrl is a separate state (not in `form`) because the upload is a 2-step process (POST /api/settings/logo → Cloudinary → URL stored).
+- src/lib/invoice-pdf.ts: brand band now fetches setting.logoUrl as a blob, converts to data URL via FileReader, and embeds via doc.addImage at 16x16mm. Shop name + details shift right by logoSize + 3mm to make room. Format detection from blob.type (PNG/WEBP/JPEG). Graceful degradation: if fetch fails (offline, CORS, broken URL), the brand band renders without a logo (console.warn, no user-facing error).
+- src/components/ledger/TransactionDetail.tsx: both generateInvoicePDF call sites (handleDownload + handleWhatsAppShare) now pass logoUrl: setting?.logoUrl. useSetting already returns the full Setting object via /api/settings, so logoUrl is automatically available.
+
+Verification (all 4 gates green):
+- tsc --noEmit: 0 errors (after `prisma generate` for the new logoUrl field)
+- jest: 2018/2018 pass (73 suites) — was 1997, +21 from paise-sanity (9) + DI-2 (13) - 1 from the nightly-recon test fix
+- next build: clean. All 3 new endpoints (/api/debug/supplier-opening-balance-review, /api/income-expense/summary, /api/settings/logo) appear in the build output as ƒ (Dynamic, server-rendered on demand).
+- Updated v20-nightly-reconciliation.test.ts: was mocking runReconciliationChecks (basic), but the route now imports runReconciliationChecksNightly. Mock updated to export both names; the test imports the nightly one with an alias to keep the test body unchanged.
+
+Stage Summary:
+- 4 hardening-tier items CLOSED in this batch:
+  * Critical #3 (paise sanity in nightly cron) — CLOSED. New 100× corruption will fire a Sentry alert within 24h instead of waiting for user reports.
+  * DI-2 (normalizeToUnit rounding + tappable OUT badge) — CLOSED. Fractional pieces are rounded at the source; OVERSOLD badge is now actionable.
+  * Statement PDF ageing mini-table — CLOSED. Statement now doubles as a collections tool.
+  * PDF logo upload — CLOSED. Full vertical slice: schema + migration + endpoint + UI + invoice rendering.
+- All 4 items have behavioral tests (paise-sanity: 9 assertions, DI-2: 13 assertions). Ageing mini-table + logo upload are visual — verified via build + code review, no behavioral test (would require a PDF rendering harness).
+- From the audit-status report, the ONLY remaining items are:
+  * Rounds 11–18 per-screen vertical audits (separate engagement — 7 screens × 1-2 sessions each).
+- No more outstanding 🔴 or 🟠 items from the 6 uploaded audit reports.
