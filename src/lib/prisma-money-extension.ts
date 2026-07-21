@@ -153,10 +153,51 @@ function convertRowOnRead(model: string, row: any, depth: number = 0): any {
   return converted
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// 🔒 M11 ROOT CAUSE FIX (2026-07-21) — make write conversion IDEMPOTENT.
+//
+// THE BUG
+// Every write handler below mutates its input in place:
+//
+//     async create({ args, query }) {
+//       args.data = convertNestedData('Payment', args.data)   // <-- mutates args
+//       return convertRowOnRead('Payment', await query(args))
+//     }
+//
+// A Prisma extension handler is NOT guaranteed to run exactly once per call.
+// When the underlying request is retried — a prepared-statement collision on a
+// pooled connection (`prepared statement "s0" already exists`, routinely seen
+// on Neon/pgbouncer and reproduced locally), a connection reset, a cold-start
+// timeout — the handler re-enters with the SAME args object, whose `data` has
+// ALREADY been converted. toPaise then runs a second time and the value is
+// multiplied by 100 twice:
+//
+//     ₹100 -> 10,000 (correct paise) -> 1,000,000 (stored)
+//
+// Reading it back through Prisma divides twice as well, so the UI looked fine
+// while the raw column — and therefore every raw-SQL balance query — was 100x
+// too large. That is the ₹100 settle that moved the balance by ₹10,000.
+//
+// THE FIX
+// Mark objects this module has already converted and return them untouched on
+// re-entry. A WeakSet holds no strong references, so it cannot leak.
+//
+// This is deliberately fixed HERE, in one place, rather than by rewriting all
+// ~24 handlers: any handler that forgets the pattern in future is still safe.
+// (Removing the in-place mutation is still the cleaner long-term shape and is
+// worth doing separately — but this makes the class impossible either way.)
+// ═══════════════════════════════════════════════════════════════════════════
+const ALREADY_CONVERTED_ON_WRITE = new WeakSet<object>()
+
 // ─── Helper: convert money columns in data (rupees → paise) ────────────────
 function convertDataOnWrite(model: string, data: Record<string, any>): Record<string, any> {
   const cols = MONEY_COLUMNS[model]
   if (!cols || !data) return data
+
+  // Idempotency guard: if this exact object was produced by a previous
+  // conversion (i.e. the handler is re-running after a retry), return it
+  // unchanged instead of multiplying by 100 again.
+  if (typeof data === 'object' && ALREADY_CONVERTED_ON_WRITE.has(data)) return data
 
   const converted = { ...data }
   for (const col of cols) {
@@ -164,6 +205,7 @@ function convertDataOnWrite(model: string, data: Record<string, any>): Record<st
       converted[col] = toPaise(converted[col])
     }
   }
+  ALREADY_CONVERTED_ON_WRITE.add(converted)
   return converted
 }
 
@@ -175,6 +217,10 @@ function convertDataOnWrite(model: string, data: Record<string, any>): Record<st
 // Fix: look up the actual model name from MODEL_RELATIONS.
 function convertNestedData(model: string, data: any): any {
   if (!data || typeof data !== 'object') return data
+
+  // 🔒 M11: same idempotency guard as convertDataOnWrite — a retried handler
+  // must not convert an already-converted nested payload a second time.
+  if (ALREADY_CONVERTED_ON_WRITE.has(data)) return data
 
   const converted = convertDataOnWrite(model, data)
 
@@ -208,6 +254,9 @@ function convertNestedData(model: string, data: any): any {
     }
   }
 
+  // 🔒 M11: mark the fully-processed payload (including its nested relations)
+  // so a retried handler returns it untouched instead of re-converting.
+  ALREADY_CONVERTED_ON_WRITE.add(converted)
   return converted
 }
 
@@ -588,7 +637,37 @@ export function withMoneyConversion(client: PrismaClient) {
 // Returns an object with findMany/findFirst/findUnique/create/createMany/
 // update/updateMany/aggregate/groupBy — all with money conversion.
 function generateModelHandlers(modelName: string, prismaModel: string): Record<string, any> {
-  return {
+  // ═════════════════════════════════════════════════════════════════════════
+  // 🔒 M11 ROOT CAUSE FIX (2026-07-21) — key these handlers BY MODEL.
+  //
+  // THE BUG: this helper returned the handlers UNKEYED:
+  //     return { findMany, create, update, ... }
+  // and the call sites spread them straight into `query`:
+  //     ...generateModelHandlers('Subscription',     'subscription'),
+  //     ...generateModelHandlers('RevenueSchedule',  'revenueSchedule'),
+  //
+  // All ten spreads therefore collided on the SAME keys (`create`,
+  // `findMany`, ...). The last spread won, so `query.create` /
+  // `query.findMany` ended up as TOP-LEVEL catch-all operation handlers
+  // permanently bound to modelName='RevenueSchedule' — and Prisma ran them
+  // for EVERY model, in addition to that model's own handler.
+  //
+  // Result: any model whose money columns overlap RevenueSchedule's
+  // (['amount']) was converted TWICE:
+  //     payment.create(₹100) -> Payment handler  -> 10,000 paise (correct)
+  //                          -> stray RevenueSchedule handler -> 1,000,000
+  // and read back through Prisma it was divided twice, so the UI looked
+  // right while the raw column — and every raw-SQL balance query — was 100×
+  // too large. That is the ₹100 settle that moved a balance by ₹10,000.
+  //
+  // Affected models are exactly those with an `amount` column: Payment,
+  // Subscription, BankTransaction. Transaction was untouched because its
+  // money columns are `totalAmount`/`subtotal`/... — which is precisely why
+  // sales were always correct while payments were 100× wrong.
+  //
+  // The `prismaModel` parameter existed for this purpose and was never used.
+  // ═════════════════════════════════════════════════════════════════════════
+  return { [prismaModel]: {
     async findMany({ args, query }: any) {
       const result = await query(args)
       return result.map((row: any) => convertRowOnRead(modelName, row))
@@ -670,7 +749,7 @@ function generateModelHandlers(modelName: string, prismaModel: string): Record<s
         return row
       })
     },
-  }
+  } }
 }
 
 // ─── Testing exports (V20-014) ─────────────────────────────────────────────
