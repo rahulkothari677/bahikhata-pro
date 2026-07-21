@@ -86,7 +86,29 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     })
 
     // 6. Compute line items (same as POST /api/transactions)
-    const { isInterState } = await deriveInterStateStatus(userId, estimate.partyId)
+    //
+    // 🔒 R10-1 SIBLING (2026-07-21): honor the estimate's stored inter-state
+    // flag when the derivation is indeterminate.
+    //
+    // R10-1 was fixed in POST and PUT but not here. deriveInterStateStatus
+    // returns intra-state whenever the party's state is blank (an optional
+    // field), so converting an estimate for an out-of-state customer whose
+    // state was never recorded silently flipped the tax split:
+    //
+    //   estimate saved with IGST (user ticked "Inter-state")
+    //     -> convert -> sale saved with CGST + SGST
+    //
+    // The resulting invoice, GSTR-1 and GSTR-3B would all report an
+    // intra-state supply — the wrong tax head on a filed return. The estimate
+    // already carries the user's answer, so it is the best evidence available
+    // when the server cannot derive one.
+    const {
+      isInterState: derivedIsInterState,
+      indeterminate,
+    } = await deriveInterStateStatus(userId, estimate.partyId)
+    const isInterState = indeterminate
+      ? !!estimate.isInterState
+      : derivedIsInterState
 
     const items = estimate.items.map(item => {
       const product = item.productId ? productMap.get(item.productId) : undefined
