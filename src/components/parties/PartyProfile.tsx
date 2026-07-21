@@ -31,6 +31,7 @@ import { haptic } from '@/lib/haptic'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { computeStatementRunningBalance } from '@/lib/statement-balance'
 import { readError } from '@/lib/read-error'
+import { invalidateMoneyCaches } from '@/lib/invalidate-money-caches'
 
 export function PartyProfile() {
   const { selectedPartyId, setView, setPreviousView, triggerRefresh, previousView, features } = useAppStore()
@@ -215,12 +216,10 @@ export function PartyProfile() {
       haptic.success()
       // Refresh party profile data to show updated balance + new payment in
       // the unified statement (statementPayments is now part of this response).
-      queryClient.invalidateQueries({ queryKey: ['party-profile', selectedPartyId] })
-      // 🔒 V26 Phase 8 PB-4: Also invalidate the parties LIST + dashboard so
-      // the balance updates everywhere. Was: only party-profile was invalidated
-      // → the Parties list still showed the old balance after settling.
-      queryClient.invalidateQueries({ queryKey: ['parties'] })
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      // 🔒 R9-6/R9-7/R9-10: Route through the shared helper so every money
+      // cache (party-profile prefix + parties + dashboard + products + insights)
+      // refreshes. Was: 3 separate invalidateQueries calls missing insights/products.
+      await invalidateMoneyCaches(queryClient)
       triggerRefresh()
     } catch (e: any) {
       // 🔒 V26 Phase 8 PB-5: Surface the server's error message (was: discarded).
@@ -241,7 +240,9 @@ export function PartyProfile() {
     const r = await offlineFetch(`/api/parties/${party.id}`, { method: 'DELETE', offline: { invalidate: ['/api/parties', '/api/dashboard'] } })
     if (r.ok) {
       sonnerToast.success(isQueuedResponse(r) ? 'Will delete when online' : 'Party deleted')
-      queryClient.invalidateQueries({ queryKey: ['parties'] })
+      // 🔒 R9-6/R9-7/R9-10: Deleting a party changes parties list + dashboard
+      // receivable/payable totals. Route through the shared helper for completeness.
+      invalidateMoneyCaches(queryClient)
       setView(previousView || 'parties')
       triggerRefresh()
     }

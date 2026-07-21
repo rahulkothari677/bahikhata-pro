@@ -16,8 +16,10 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { toast as sonnerToast } from 'sonner'
+import { invalidateMoneyCaches } from '@/lib/invalidate-money-caches'
 
 const KEY = 'bahikhata:recurring-entries:v1'
 
@@ -68,6 +70,7 @@ function isDue(entry: RecurringEntry): boolean {
 
 export function useRecurringEntries() {
   const [entries, setEntries] = useState<RecurringEntry[]>([])
+  const queryClient = useQueryClient()
 
   useEffect(() => {
     setEntries(read())
@@ -81,6 +84,7 @@ export function useRecurringEntries() {
 
     const currentMonth = getCurrentMonth()
     let created = 0
+    let totalAmount = 0
 
     for (const entry of due) {
       try {
@@ -96,10 +100,11 @@ export function useRecurringEntries() {
             notes: entry.notes || `Recurring: ${entry.category}`,
             date: new Date().toISOString().slice(0, 10),
           }),
-          offline: { invalidate: ['/api/transactions', '/api/dashboard'] },
+          offline: { invalidate: ['/api/transactions', '/api/dashboard', '/api/parties'] },
         })
         if (r.ok) {
           created++
+          totalAmount += entry.amount
           // Update lastRunMonth
           const updated = read().map(e =>
             e.id === entry.id ? { ...e, lastRunMonth: currentMonth } : e
@@ -113,9 +118,25 @@ export function useRecurringEntries() {
     }
 
     if (created > 0) {
-      sonnerToast.success(`${created} recurring ${created === 1 ? 'entry' : 'entries'} created automatically`)
+      // 🔒 R9-8: Recurring entries post real money (rent, salary) — refresh
+      // every money cache so the dashboard, parties list, and party profiles
+      // update immediately. Was: only /api/transactions + /api/dashboard were
+      // in the URL cache invalidation list, and NO queryClient.invalidateQueries
+      // was called → money appeared in the ledger with no signal for 2 minutes.
+      await invalidateMoneyCaches(queryClient)
+      // 🔒 R9-8 spec: Toast should include the ₹X total so the user knows what
+      // was posted. Was: "N recurring entries created automatically" (no amount).
+      const formattedTotal = new Intl.NumberFormat('en-IN', {
+        style: 'currency',
+        currency: 'INR',
+        maximumFractionDigits: 0,
+      }).format(totalAmount)
+      sonnerToast.success(
+        `${created} recurring ${created === 1 ? 'entry' : 'entries'} posted — ${formattedTotal}`,
+        { description: due.map(e => `${e.category}: ${e.type}`).slice(0, 3).join(' · ') }
+      )
     }
-  }, [])
+  }, [queryClient])
 
   const addEntry = useCallback((entry: Omit<RecurringEntry, 'id' | 'createdAt'>) => {
     const newEntry: RecurringEntry = {

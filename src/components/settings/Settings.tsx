@@ -13,6 +13,7 @@ import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@
 import { StaffManagement } from '@/components/settings/StaffManagement'
 import { CAAccess } from '@/components/settings/CAAccess'
 import { UnsyncedEntries } from '@/components/settings/UnsyncedEntries'
+import { SupplierOpeningBalanceReview } from '@/components/settings/SupplierOpeningBalanceReview'
 import { useShops } from '@/hooks/use-shops'
 import { exportBackup } from '@/lib/data-backup'
 import { useBusinessGoals } from '@/hooks/use-business-goals'
@@ -95,6 +96,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
   const { data: session } = useSession()
   const { features, setFeature, resetFeatures, themeColor, setThemeColor, language, setLanguage, setView } = useAppStore()
   const isOwner = session?.user?.role === 'owner'
+  const isFounder = useAppStore((s) => s.isFounder)
   const [form, setForm] = useState({
     shopName: '', ownerName: '', phone: '', email: '',
     gstin: '', state: '', address: '', upiId: '',
@@ -181,6 +183,11 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
         body: JSON.stringify({ roundOffEnabled: next }),
         offline: { invalidate: ['/api/settings'] },
       })
+      // 🔒 R10-2: Invalidate the React Query ['setting'] cache so the Sale form's
+      // round-off preview agrees with the saved total. Was: only the URL cache
+      // was cleared via offline.invalidate → the Sale form could round while the
+      // server does not (or vice-versa) for up to 2 minutes (the staleTime).
+      queryClient.invalidateQueries({ queryKey: ['setting'] })
       sonnerToast.success(`Invoice round-off ${next ? 'on' : 'off'}`)
     } catch (e: any) {
       sonnerToast.error(e?.message || 'Could not save round-off setting')
@@ -199,6 +206,9 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
         body: JSON.stringify({ stockPolicy: next }),
         offline: { invalidate: ['/api/settings'] },
       })
+      // 🔒 R10-2 (same class): Invalidate ['setting'] so the Sale form picks up
+      // the new policy immediately (affects the stock-block warning preview).
+      queryClient.invalidateQueries({ queryKey: ['setting'] })
       sonnerToast.success(next === 'allow' ? 'Overselling allowed (kirana mode)' : 'Overselling blocked')
     } catch (e: any) {
       sonnerToast.error(e?.message || 'Could not save stock policy setting')
@@ -1022,6 +1032,11 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
               existed). Hidden when the store is empty (no noise on the Data
               tab for the vast majority of users who never hit a dead-letter). */}
           <UnsyncedEntries />
+
+          {/* 🔒 V-2 data-repair (auditor spec Part B): Founder-only review of
+              supplier opening balances with the wrong sign. Auto-hides when
+              no suspects or non-founder. */}
+          <SupplierOpeningBalanceReview />
 
           {/* Danger zone — destructive actions only (no safe actions mixed in) */}
           <div className="rounded-lg border border-rose-200 dark:border-rose-900/40 bg-rose-50 dark:bg-rose-950/20 p-4">

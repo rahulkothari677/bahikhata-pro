@@ -29,6 +29,7 @@ import { generateInvoicePDF } from '@/lib/invoice-pdf'
 import { haptic } from '@/lib/haptic'
 import { useSetting } from '@/hooks/use-setting'
 import { readError } from '@/lib/read-error'
+import { invalidateMoneyCaches } from '@/lib/invalidate-money-caches'
 
 const PAYMENT_MODES = [
   { value: 'cash', label: 'Cash' },
@@ -148,8 +149,9 @@ export function TransactionDetail() {
                 })
                 if (restoreR.ok) {
                   sonnerToast.success('Transaction restored')
-                  queryClient.invalidateQueries({ queryKey: ['transactions'] })
-                  queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+                  // 🔒 R9-6/R9-7/R9-10: Restore reverses the delete's effect on
+                  // party balance + product stock — invalidate every money cache.
+                  invalidateMoneyCaches(queryClient)
                 } else {
                   sonnerToast.error('Could not restore — transaction may have been permanently removed.')
                 }
@@ -162,6 +164,8 @@ export function TransactionDetail() {
       }
       queryClient.invalidateQueries({ queryKey: ['transactions'] })
       queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+      // 🔒 R9-6/R9-7/R9-10: Delete affects party balance + product stock too.
+      invalidateMoneyCaches(queryClient)
       // Go back to ledger
       goBack()
     }
@@ -897,8 +901,11 @@ export function TransactionDetail() {
         transaction={txn}
         onSuccess={() => {
           triggerRefresh()
-          queryClient.invalidateQueries({ queryKey: ['transaction', selectedTransactionId] })
-          queryClient.invalidateQueries({ queryKey: ['transactions'] })
+          // 🔒 R9-6/R9-7/R9-10: Editing a transaction changes party balance,
+          // parties list, and product stock (if items changed). Was: only
+          // ['transaction', id] + ['transactions'] invalidated → party profile
+          // and product caches stayed stale for up to 2 minutes.
+          invalidateMoneyCaches(queryClient)
         }}
       />
 

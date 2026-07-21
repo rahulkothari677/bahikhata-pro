@@ -24,6 +24,7 @@ import {
   Edit2, Trash2, Eye, Printer, AlertCircle, RefreshCw, Undo2,
 } from 'lucide-react'
 import { offlineFetch, isQueuedResponse, isOnline, OfflineError } from '@/lib/offline-fetch'
+import { invalidateMoneyCaches } from '@/lib/invalidate-money-caches'
 import { OfflineNoData } from '@/components/common/OfflineNoData'
 import { useSetting } from '@/hooks/use-setting'
 import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
@@ -89,6 +90,8 @@ export function Ledger({ type }: { type: LedgerType }) {
         }
         queryClient.invalidateQueries({ queryKey: ['transactions'] })
         queryClient.invalidateQueries({ queryKey: ['dashboard'] })
+        // 🔒 R9-6/R9-7/R9-10: Delete affects party balance + product stock too.
+        invalidateMoneyCaches(queryClient)
         triggerRefresh()
       }
     } catch {

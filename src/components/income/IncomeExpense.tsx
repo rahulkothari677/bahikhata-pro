@@ -1,6 +1,6 @@
 'use client'
 
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, useEffect, useRef } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -19,6 +19,7 @@ import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { useExpenseBudgets } from '@/hooks/use-expense-budgets'
 import { useRecurringEntries, type RecurringEntry } from '@/hooks/use-recurring-entries'
 import { readError } from '@/lib/read-error'
+import { invalidateMoneyCaches } from '@/lib/invalidate-money-caches'
 import {
   Plus, Wallet, Trash2, ArrowDownRight, ArrowUpRight, Receipt,
   Target, Edit2, X, Repeat, Calendar,
@@ -30,6 +31,7 @@ const PAYMENT_MODES = ['cash', 'upi', 'card', 'bank']
 
 export function IncomeExpense() {
   const { refreshKey, triggerRefresh, triggerNewEntry, triggerNewEntryView, setSelectedTransactionId, setView, setPreviousView } = useAppStore()
+  const queryClient = useQueryClient()
   const { t } = useTranslation()
   const { features } = useAppStore()
   const { getProgress, setBudget, removeBudget } = useExpenseBudgets()
@@ -61,6 +63,51 @@ export function IncomeExpense() {
     }
   }, [triggerNewEntry, triggerNewEntryView])
 
+  // 🔒 R9-3 fix: Date-range selector for the headline totals. Defaults to
+  // This Month. The paginated list below still fetches the recent 200 rows
+  // for display, but the headline numbers come from the server-side SQL
+  // aggregate over the FULL date range — so a shop with 500 expenses no
+  // longer shows understated totals when the 201st row pushes last month's
+  // rent out of the page window.
+  const [rangePreset, setRangePreset] = useState<'this-month' | 'last-month' | 'this-year' | 'all'>('this-month')
+  const rangeFromTo = (() => {
+    const t = new Date()
+    switch (rangePreset) {
+      case 'this-month':
+        return { from: new Date(t.getFullYear(), t.getMonth(), 1), to: t }
+      case 'last-month':
+        return { from: new Date(t.getFullYear(), t.getMonth() - 1, 1), to: new Date(t.getFullYear(), t.getMonth(), 0, 23, 59, 59, 999) }
+      case 'this-year':
+        return { from: new Date(t.getFullYear(), 0, 1), to: t }
+      case 'all':
+      default:
+        return { from: new Date(2000, 0, 1), to: t }
+    }
+  })()
+  const fromStr = rangeFromTo.from.toISOString().slice(0, 10)
+  const toStr = rangeFromTo.to.toISOString().slice(0, 10)
+
+  // 🔒 R9-3 fix: Server-side summary — SQL aggregate over the full date range.
+  // Was: client-side reduce over `?type=all&limit=200` — a busy shop fills the
+  // 200-row window in ~10 days, dropping last month's rent from the total.
+  const { data: summary, isLoading: summaryLoading } = useQuery({
+    queryKey: ['income-expense-summary', fromStr, toStr, refreshKey],
+    queryFn: async () => {
+      const r = await offlineFetch(`/api/income-expense/summary?from=${fromStr}&to=${toStr}`)
+      if (!r.ok) throw new Error('Failed to load summary')
+      return r.json() as Promise<{
+        totalIncome: number
+        totalExpense: number
+        netCashflow: number
+        byCategory: { income: Array<{ category: string; total: number; count: number }>; expense: Array<{ category: string; total: number; count: number }> }
+        range: { from: string; to: string }
+        count: number
+      }>
+    },
+    staleTime: 60_000, // 1 min — money totals should be fresh, but not refetched on every tab switch
+  })
+
+  // Paginated transaction list for display (NOT used for totals).
   const { data, isLoading } = useQuery({
     queryKey: ['transactions', 'income-expense', refreshKey],
     queryFn: async () => {
@@ -73,22 +120,34 @@ export function IncomeExpense() {
   const txns = allTxns.filter(t => t.type === 'income' || t.type === 'expense')
   const filtered = filter === 'all' ? txns : txns.filter(t => t.type === filter)
 
-  const totalIncome = txns.filter(t => t.type === 'income').reduce((s, t) => s + t.totalAmount, 0)
-  const totalExpense = txns.filter(t => t.type === 'expense').reduce((s, t) => s + t.totalAmount, 0)
-  const netCashflow = totalIncome - totalExpense
+  // 🔒 R9-3 fix: Headline totals now come from the server-side summary, not
+  // the client-side reduce. Falls back to 0 while loading.
+  const totalIncome = summary?.totalIncome ?? 0
+  const totalExpense = summary?.totalExpense ?? 0
+  const netCashflow = summary?.netCashflow ?? 0
 
-  const expensesByCategory = new Map<string, number>()
-  txns.filter(t => t.type === 'expense').forEach(t => {
-    const cat = t.category || 'Other'
-    expensesByCategory.set(cat, (expensesByCategory.get(cat) || 0) + t.totalAmount)
-  })
-  const topExpenses = Array.from(expensesByCategory.entries()).sort((a, b) => b[1] - a[1]).slice(0, 4)
+  // Top expenses still derived client-side from the paginated list (for the
+  // budget widget, which only needs the most recent few). If summary is
+  // available, prefer its byCategory list (covers the full date range).
+  const topExpenses = summary
+    ? summary.byCategory.expense.slice(0, 4).map((c) => [c.category, c.total] as [string, number])
+    : (() => {
+        const expensesByCategory = new Map<string, number>()
+        txns.filter(t => t.type === 'expense').forEach(t => {
+          const cat = t.category || 'Other'
+          expensesByCategory.set(cat, (expensesByCategory.get(cat) || 0) + t.totalAmount)
+        })
+        return Array.from(expensesByCategory.entries()).sort((a, b) => b[1] - a[1]).slice(0, 4)
+      })()
 
   const handleDelete = async (id: string) => {
     if (!await confirmDialog('Delete this entry?', { title: 'Delete Entry', confirmLabel: 'Delete', destructive: true })) return
     const r = await offlineFetch(`/api/transactions?id=${id}`, { method: 'DELETE', offline: { invalidate: ['/api/transactions', '/api/dashboard'] } })
     if (r.ok) {
       sonnerToast.success(isQueuedResponse(r) ? 'Will delete when online' : 'Entry deleted')
+      // 🔒 R9-6/R9-7/R9-10: Delete affects party balance (income/expense can be
+      // party-linked) + product stock (none here, but consistency matters).
+      invalidateMoneyCaches(queryClient)
       triggerRefresh()
     }
   }
@@ -96,6 +155,31 @@ export function IncomeExpense() {
   return (
     <>
     <div className="space-y-4">
+      {/* 🔒 R9-3 fix: Date-range selector for the headline totals. */}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2">
+          <Calendar className="w-4 h-4 text-muted-foreground" />
+          <span className="text-sm font-medium">Period</span>
+          <Select value={rangePreset} onValueChange={(v) => setRangePreset(v as typeof rangePreset)}>
+            <SelectTrigger className="h-8 w-[140px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="this-month">This Month</SelectItem>
+              <SelectItem value="last-month">Last Month</SelectItem>
+              <SelectItem value="this-year">This Year</SelectItem>
+              <SelectItem value="all">All Time</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <p className="text-2xs text-muted-foreground tabular-nums">
+          {fromStr} → {toStr}
+          {summary?.count !== undefined && (
+            <span className="ml-2">· {summary.count} {summary.count === 1 ? 'entry' : 'entries'}</span>
+          )}
+        </p>
+      </div>
+
       {/* Summary cards — white with colored accents */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         {/* Income card — emerald accent */}
@@ -429,7 +513,13 @@ export function IncomeExpense() {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         type={dialogType}
-        onSuccess={() => triggerRefresh()}
+        onSuccess={() => {
+          // 🔒 R9-6/R9-10: Saving an income/expense entry changes party balance
+          // (if party-linked) + dashboard totals. Route through the helper so
+          // every money cache refreshes, not just the refreshKey-keyed ones.
+          invalidateMoneyCaches(queryClient)
+          triggerRefresh()
+        }}
       />
 
       {/* Choice dialog when triggered from Header */}

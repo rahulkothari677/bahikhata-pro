@@ -39,6 +39,7 @@ import { roundMoney, splitGst } from '@/lib/money'
 import { computeLineItems } from '@/lib/line-items'
 import { baseUnitOf, subUnitsFor, normalizeUnitName, resolveEnteredQuantity, normalizeToUnit, isCountUnit, stepForUnit } from '@/lib/units'
 import { readError } from '@/lib/read-error'
+import { invalidateMoneyCaches } from '@/lib/invalidate-money-caches'
 
 const PAYMENT_MODES = [
   { value: 'cash', label: 'Cash' },
@@ -694,10 +695,12 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       })
       // Increment rate-prompt counter (shows rating modal at milestones)
       incrementRateCount()
-      queryClient.invalidateQueries({ queryKey: ['transactions'] })
-      queryClient.invalidateQueries({ queryKey: ['dashboard'] })
-      // 🔒 V26 Phase 8 PB-4: Also invalidate parties list (balance changes after save).
-      queryClient.invalidateQueries({ queryKey: ['parties'] })
+      // 🔒 R9-6/R9-7/R9-10: Invalidate every cache a money mutation can touch —
+      // transactions, dashboard, parties (list + profile), products (all variants:
+      // for-entry/for-picker/for-edit/search), insights, analytics, setting.
+      // Was: only ['transactions'] + ['dashboard'] + ['parties'] were invalidated,
+      // leaving party-profile and product caches stale for up to 2 minutes.
+      await invalidateMoneyCaches(queryClient)
       // 🔒 V26 Phase 8 NAV-3: Honor the origin — if we came from a party profile,
       // return there instead of landing on the ledger (a root view with no back).
       // Was: always setView('sales'/'purchases') → dead end after purchase from party.
