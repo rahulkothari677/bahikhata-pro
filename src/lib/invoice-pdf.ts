@@ -63,15 +63,22 @@ interface ShopSetting {
   upiId?: string
 }
 
+function formatDate(date: string | Date): string {
+  const d = typeof date === 'string' ? new Date(date) : date
+  if (isNaN(d.getTime())) return String(date)
+  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
 export async function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting): Promise<Blob> {
   const jsPDFMod: any = await import('jspdf')
   const doc = new jsPDFMod.jsPDF({ unit: 'mm', format: 'a4' })
 
   // Register Unicode font (DejaVu Sans — supports rupee sign)
+  // MUST be called before any text is drawn.
   await registerUnicodeFont(doc)
 
   const { margin, pageWidth, pageHeight, brand, brandLight, text, textMuted, border, zebra, cardBg, white } = THEME
-  const dateStr = typeof txn.date === 'string' ? txn.date : txn.date.toLocaleDateString('en-IN')
+  const dateStr = formatDate(txn.date)
 
   // === 1. BRAND BAND ===
   let y = drawBrandBand(doc, {
@@ -112,18 +119,16 @@ export async function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting)
   doc.setFont(THEME.font, 'normal')
   doc.setFontSize(8)
   doc.setTextColor(textMuted.r, textMuted.g, textMuted.b)
-  let billDetailY = y + 18
   const billDetails: string[] = []
   if (txn.party?.phone) billDetails.push('Phone: ' + txn.party.phone)
   if (txn.party?.gstin) billDetails.push('GSTIN: ' + txn.party.gstin)
   if (billDetails.length > 0) {
-    doc.text(billDetails.join('  |  '), cardX + 4, billDetailY)
+    doc.text(billDetails.join('  |  '), cardX + 4, y + 18)
   }
 
   y += cardHeight + 8
 
   // === 4. ITEM TABLE ===
-  // Column positions (x from left margin)
   const colWidths = {
     idx: 8,
     item: 55,
@@ -131,7 +136,7 @@ export async function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting)
     qty: 20,
     rate: 25,
     gst: 18,
-    amount: 0, // remaining
+    amount: 0,
   }
   const colX = {
     idx: margin,
@@ -143,7 +148,6 @@ export async function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting)
     amount: pageWidth - margin,
   }
 
-  // Header row (brand color at 12% opacity)
   const drawTableHeader = () => {
     doc.setFillColor(brandLight.r, brandLight.g, brandLight.b)
     doc.rect(margin, y - 4, pageWidth - 2 * margin, 8, 'F')
@@ -195,9 +199,11 @@ export async function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting)
     y += 7
   })
 
-  // === 5. TOTALS BLOCK (right 80mm) ===
+  // === 5. TOTALS BLOCK (right side) ===
   y += 4
-  const labelX = pageWidth - margin - 55
+  // Make totals block wider to prevent text overflow
+  const totalsBlockWidth = 65
+  const labelX = pageWidth - margin - totalsBlockWidth
   const valueX = pageWidth - margin - 2
 
   doc.setFontSize(9)
@@ -205,65 +211,65 @@ export async function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting)
   doc.setTextColor(text.r, text.g, text.b)
 
   doc.text('Subtotal:', labelX, y)
-  doc.text(txn.subtotal.toFixed(2), valueX, y, { align: 'right' })
+  doc.text(formatPDFMoney(txn.subtotal), valueX, y, { align: 'right' })
   y += 5
 
   if (txn.discountAmount > 0) {
     doc.text('Discount:', labelX, y)
-    doc.text('- ' + txn.discountAmount.toFixed(2), valueX, y, { align: 'right' })
+    doc.text('- ' + formatPDFMoney(txn.discountAmount), valueX, y, { align: 'right' })
     y += 5
   }
 
-  // Taxable value = subtotal - discount
   const taxableValue = txn.subtotal - txn.discountAmount
   doc.setFont(THEME.font, 'bold')
   doc.text('Taxable Value:', labelX, y)
-  doc.text(taxableValue.toFixed(2), valueX, y, { align: 'right' })
+  doc.text(formatPDFMoney(taxableValue), valueX, y, { align: 'right' })
   y += 5
   doc.setFont(THEME.font, 'normal')
 
   if (txn.cgst > 0) {
     doc.text('CGST:', labelX, y)
-    doc.text(txn.cgst.toFixed(2), valueX, y, { align: 'right' })
+    doc.text(formatPDFMoney(txn.cgst), valueX, y, { align: 'right' })
     y += 5
   }
   if (txn.sgst > 0) {
     doc.text('SGST:', labelX, y)
-    doc.text(txn.sgst.toFixed(2), valueX, y, { align: 'right' })
+    doc.text(formatPDFMoney(txn.sgst), valueX, y, { align: 'right' })
     y += 5
   }
   if (txn.igst > 0) {
     doc.text('IGST:', labelX, y)
-    doc.text(txn.igst.toFixed(2), valueX, y, { align: 'right' })
+    doc.text(formatPDFMoney(txn.igst), valueX, y, { align: 'right' })
     y += 5
   }
   if (txn.roundOff && Math.abs(txn.roundOff) >= 0.005) {
     doc.text('Round Off:', labelX, y)
-    doc.text((txn.roundOff > 0 ? '+ ' : '- ') + Math.abs(txn.roundOff).toFixed(2), valueX, y, { align: 'right' })
+    doc.text((txn.roundOff > 0 ? '+ ' : '- ') + formatPDFMoney(Math.abs(txn.roundOff)), valueX, y, { align: 'right' })
     y += 5
   }
 
-  // Grand total in brand-colored box
+  // Grand total in brand-colored box — wider + taller to prevent overflow
   y += 2
+  const grandTotalBoxHeight = 12
   doc.setFillColor(brand.r, brand.g, brand.b)
-  doc.rect(labelX - 2, y - 4, pageWidth - margin - labelX, 10, 'F')
+  doc.rect(labelX - 2, y - 4, pageWidth - margin - labelX, grandTotalBoxHeight, 'F')
   doc.setFont(THEME.font, 'bold')
-  doc.setFontSize(13)
+  doc.setFontSize(12)
   doc.setTextColor(white.r, white.g, white.b)
-  doc.text('GRAND TOTAL', labelX + 2, y + 2)
-  doc.text(formatPDFMoney(txn.totalAmount), valueX - 2, y + 2, { align: 'right' })
-  y += 12
+  doc.text('GRAND TOTAL', labelX + 2, y + 3)
+  doc.text(formatPDFMoney(txn.totalAmount), valueX - 2, y + 3, { align: 'right' })
+  y += grandTotalBoxHeight + 2
 
   // Paid + Balance Due
   doc.setFont(THEME.font, 'normal')
   doc.setFontSize(9)
   doc.setTextColor(text.r, text.g, text.b)
-  doc.text(`Paid: ${formatPDFMoney(txn.paidAmount)} (${txn.paymentMode.toUpperCase()})`, labelX, y)
+  doc.text('Paid: ' + formatPDFMoney(txn.paidAmount) + ' (' + txn.paymentMode.toUpperCase() + ')', labelX, y)
   y += 5
   if (due > 0) {
     doc.setFont(THEME.font, 'bold')
     doc.setTextColor(THEME.due.r, THEME.due.g, THEME.due.b)
-    doc.text(`Balance Due: ${formatPDFMoney(due)}`, labelX, y)
+    doc.text('Balance Due: ' + formatPDFMoney(due), labelX, y)
     doc.setTextColor(text.r, text.g, text.b)
     y += 5
   }
@@ -276,7 +282,10 @@ export async function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting)
   doc.setFontSize(9)
   doc.setTextColor(text.r, text.g, text.b)
   const wordsStr = amountToWords(txn.totalAmount)
-  doc.text('Amount in words: ' + wordsStr, margin + 2, y + 1)
+  // Truncate if too long (amountToWords can produce very long strings for large amounts)
+  const wordsLabel = 'Amount in words: ' + wordsStr
+  const displayWords = wordsLabel.length > 95 ? wordsLabel.slice(0, 92) + '...' : wordsLabel
+  doc.text(displayWords, margin + 2, y + 1)
   y += 10
 
   // === 7. UPI QR BLOCK (left side, only when upiId exists and balance > 0) ===
@@ -300,8 +309,23 @@ export async function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting)
   doc.line(sigX, sigY + 12, sigX + 40, sigY + 12)
   doc.text('Authorised Signatory', sigX, sigY + 16)
 
-  // === 9. FOOTER ===
-  drawFooter(doc, 1, 1)
+  // === 9. FOOTER — improved visibility (no terms, larger text) ===
+  const footerY = pageHeight - 15
+  doc.setDrawColor(brand.r, brand.g, brand.b)
+  doc.setLineWidth(0.5)
+  doc.line(margin, footerY, pageWidth - margin, footerY)
+
+  doc.setFont(THEME.font, 'normal')
+  doc.setFontSize(9) // Was 7 — too small to read
+  doc.setTextColor(textMuted.r, textMuted.g, textMuted.b)
+  doc.text('Page 1 of 1', pageWidth / 2, footerY + 6, { align: 'center' })
+
+  doc.setFont(THEME.font, 'bold')
+  doc.setFontSize(9)
+  doc.setTextColor(brand.r, brand.g, brand.b)
+  doc.text('Made with EkBook', pageWidth - margin, footerY + 6, { align: 'right' })
+
+  doc.setTextColor(text.r, text.g, text.b)
 
   return doc.output('blob')
 }

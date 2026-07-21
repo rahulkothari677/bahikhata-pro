@@ -97,6 +97,8 @@ export function drawStatusPill(
 
 /**
  * Draw the footer on every page.
+ * V26 Phase 8: Removed "Terms" line (user requested removal). Increased font
+ * size from 7pt to 9pt for visibility. Made "Made with EkBook" bold + brand color.
  */
 export function drawFooter(doc: any, pageNum?: number, totalPages?: number): void {
   const { margin, pageWidth, pageHeight, brand, textMuted } = THEME
@@ -107,18 +109,18 @@ export function drawFooter(doc: any, pageNum?: number, totalPages?: number): voi
   doc.setLineWidth(0.5)
   doc.line(margin, y, pageWidth - margin, y)
 
-  // Footer text
+  // Footer text — larger for visibility
   doc.setFont(THEME.font, 'normal')
-  doc.setFontSize(7)
+  doc.setFontSize(9)
   doc.setTextColor(textMuted.r, textMuted.g, textMuted.b)
 
-  doc.text('Terms: Goods once sold will not be taken back.', margin, y + 5)
-
   if (pageNum && totalPages) {
-    doc.text(`Page ${pageNum} of ${totalPages}`, pageWidth / 2, y + 5, { align: 'center' })
+    doc.text(`Page ${pageNum} of ${totalPages}`, pageWidth / 2, y + 6, { align: 'center' })
   }
 
-  doc.text('Made with EkBook', pageWidth - margin, y + 5, { align: 'right' })
+  doc.setFont(THEME.font, 'bold')
+  doc.setTextColor(brand.r, brand.g, brand.b)
+  doc.text('Made with EkBook', pageWidth - margin, y + 6, { align: 'right' })
 
   doc.setTextColor(THEME.text.r, THEME.text.g, THEME.text.b)
 }
