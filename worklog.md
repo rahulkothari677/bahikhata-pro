@@ -9032,3 +9032,73 @@ Stage Summary:
 - CI guard: v26-r12-profit-stripping.test.ts (13 assertions) locks the stripper. If anyone adds a new profit-derivable field to the kpis without stripping it, the test pattern shows what to do.
 - Items verified clean: KPI data lineage (SQL aggregate, IST-correct, credit-note-aware), count-up animation (PB-1 fix), hideProfit on KPI cards, handleShareSummary, day-end summary card, all state matrices, freshness map, navigation, mutation safety, role/plan variants, data edge cases.
 - Next: Round 13 (Ledger lists + SplitView) or whichever round the user picks.
+
+---
+Task ID: rounds-13-15-batch-ledger-reports-inventory
+Agent: main
+Task: Batch Rounds 13-15 of the auditor's per-screen vertical audit plan (Ledger lists, Reports, Inventory). User requested 2-3 rounds at once when non-critical. These 3 screens are independent (no shared mutable state), so batching is safe.
+
+Work Log:
+
+Used a research agent to read all 4 files (Ledger.tsx 898 lines, Reports.tsx 993 lines, Inventory.tsx 547 lines, ProductDialog.tsx 265 lines) and apply the 8-point checklist. 26 findings total across the 3 rounds.
+
+ROUND 13 — Ledger lists (10 findings, 4 fixed, 6 deferred):
+
+FIXED:
+- R13-1 🟠: Bulk delete only called triggerRefresh() — missed party balances + product stock. Single delete (L94) already used invalidateMoneyCaches. Now bulk delete matches. (Ledger.tsx:260)
+- R13-2 🟠: Date range truth-vs-display. dateRange=null (all-time) but picker showed 'This Month'. Fixed: 'All Time' button when no filter. (Ledger.tsx:496-539)
+- R13-8 🔵: CSV export didn't escape internal double-quotes. Fixed: RFC 4180 escaping. (Ledger.tsx:281)
+- R13-10 🔵: Delete error catch showed generic message. Now surfaces e?.message. (Ledger.tsx:97)
+- R13-7 🔵: Bulk delete wording corrected from 'cannot be undone' to 'can be restored individually' (they're soft-deletes).
+
+DEFERRED (lower priority, no money/security impact):
+- R13-3 🟡: Search is client-side only on loaded pages. Server-side search would be a bigger change (new API param + endpoint). The client filter covers invoiceNo + party name + notes; product name search is missing. Affects shops with 500+ transactions.
+- R13-4 🟡: Voided stats label doesn't say '(incl. voided)'. Cosmetic.
+- R13-5 🟡: 'Select All' only selects loaded rows. Wording change.
+- R13-6 🟡: Later-page fetch error shows full-screen error instead of non-blocking banner. UX polish.
+- R13-9 🔵: Load More hidden when showVoided=true. Affects shops with >50 voided transactions.
+- R13-7 🔵: (wording — already fixed above)
+
+ROUND 14 — Reports (6 findings, 3 fixed, 3 deferred):
+
+FIXED:
+- R14-1 🔴: PLReport CRASHES for staff+hideProfit. summary.profitMargin.toFixed(1) on undefined → TypeError → white screen. Fixed: detect hideProfit via `summary.grossProfit === undefined` (same pattern as StockReport's hideCost) + gate all profit rows. (Reports.tsx:479)
+- R14-2 🔴: PLReport showed '₹NaN' for Gross Profit + Net Profit cards. Same root cause + fix.
+- R14-3 🟠: CSV export crashed for PL+hideProfit. Fixed: detect upfront + show info toast. (Reports.tsx:207)
+- Test: v26-r14-plreport-hideprofit.test.ts — 8 assertions.
+
+DEFERRED:
+- R14-4 🟡: Stock report table only shows top 20 products. Pagination would be a bigger change. The CSV export already exports all products.
+- R14-5 🔵: Tally button shown on all reports, not just transaction-based. Scope fix.
+- R14-6 🔵: GSTR button shown on all reports. Scope fix.
+
+ROUND 15 — Inventory + ProductDialog (10 findings, 6 fixed, 4 deferred):
+
+FIXED:
+- R15-1 🔴: Inventory 'Potential Profit' stat card shown unconditionally. useSetting not imported. Fixed: import + gate behind !hideProfit. (Inventory.tsx:150)
+- R15-2 🔴: List view 'Profit/unit' column shown unconditionally. Fixed: gate header + cell. (Inventory.tsx:342,371)
+- R15-3 🔴: Grid card 'Profit' block shown unconditionally. ProductGridCard now reads useSetting() directly. (Inventory.tsx:513)
+- R15-4 🟠: totalPotentialProfit used raw p.currentStock (can be negative). Fixed: Math.max(0, p.currentStock). (Inventory.tsx:122)
+- R15-5 🟡: ProductDialog profit preview shown unconditionally. Fixed: gate behind !hideProfit. (ProductDialog.tsx:260)
+- R15-6 🟡: No client-side negative-value validation. Fixed: catch negatives before API call. (ProductDialog.tsx:89)
+
+DEFERRED:
+- R15-7 🔵: lowStockThreshold empty → defaults to 0 (makes isLowStock true for 0-stock). Minor edge case.
+- R15-8 🔵: Barcode scan sets search (shows contains-match, not exact). UX polish.
+- R15-9 🔵: No duplicate SKU check. Server rejects via unique constraint; client could pre-check.
+- R15-10 🔵: Dead categoryTree code (Set values never populated). Cleanup.
+
+Cross-cutting pattern fixed: the codebase has an established hideProfit mechanism (server strips fields, client checks useSetting().hideProfit or detects undefined fields). Ledger + Dashboard implement it correctly. But Reports (PLReport) + Inventory (3 sites) + ProductDialog all lacked the client-side guard, leading to 1 crash + 5 profit leaks. All now fixed using the established patterns.
+
+Verification (all 4 gates green):
+- tsc --noEmit: 0 errors
+- jest: 2049/2049 pass (76 suites) — was 2041, +8 from R14 tests
+- next build: clean
+
+Stage Summary:
+- 3 rounds COMPLETE in one batch: 13 findings fixed, 13 deferred (all 🟡/🔵, no 🔴/🟠 deferred).
+- 4 🔴 issues fixed: PLReport crash (R14-1), PLReport NaN (R14-2), Inventory profit leak ×3 (R15-1/2/3).
+- 4 🟠 issues fixed: Ledger bulk-delete invalidation (R13-1), Ledger date-range display (R13-2), Reports CSV export crash (R14-3), Inventory negative-stock profit (R15-4).
+- 5 🟡/🔵 issues fixed: CSV escaping, error surfacing, delete wording, ProductDialog profit preview, negative-value validation.
+- CI guard: v26-r14-plreport-hideprofit.test.ts locks the stripReportProfit → undefined → hideProfit detection chain.
+- Next: Rounds 16-18 (Settings/Account, Scanner/Voice/Documents/Subscription, Auth/Onboarding + final live device pass).
