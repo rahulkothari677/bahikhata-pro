@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ES2019",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "strict": false,
+    "noEmit": false,
+    "outDir": "/home/z/my-project/scripts/_pdf-build",
+    "lib": ["ES2019", "DOM"]
+  },
+  "include": [
+    "../src/lib/invoice-pdf.ts",
+    "../src/lib/pdf/theme.ts",
+    "../src/lib/pdf/primitives.ts",
+    "../src/lib/amount-to-words.ts"
+  ]
+}

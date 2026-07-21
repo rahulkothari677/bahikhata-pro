@@ -1,15 +1,18 @@
 /**
  * generateInvoicePDF — creates a professional, branded PDF invoice using jsPDF.
  *
- * V26 Phase 8 PDF Redesign v2: Inspired by Razorpay, Stripe, and ClearTax
- * invoice designs. Key improvements over v1:
- * - Compact header (no wasted vertical space)
- * - Two-column layout: Bill To (left) + Invoice meta (right) in one row
- * - Tighter item table with better column proportions
- * - Totals on the right, aligned with the table edge
- * - Amount in words as a subtle strip, not a big box
- * - UPI QR + signature side by side at the bottom
- * - No floating elements — everything is aligned to a grid
+ * V26 Phase 8 PDF Redesign v3 — aligned to EkBook-PDF-Redesign-Spec.md:
+ * - Brand band (32 mm) with shop info left + INVOICE / invoice no / date / status pill right.
+ * - Bill To as a real card (light bg, rounded rect, 1 px border) on the left.
+ * - Right twin card for Place of Supply + Payment Mode — ONLY when party has GSTIN
+ *   (per spec). The previous "INVOICE DETAILS" right column was redundant with the
+ *   brand band header and is removed.
+ * - Item table with HSN, zebra striping, brand-colour header.
+ * - Totals on the right with GRAND TOTAL in a filled brand box.
+ * - Amount-in-words strip, UPI QR (when upiId + balance due), signature block, footer.
+ *
+ * Layout targets Part 3 of the auditor spec. The two correctness items from Part 4
+ * (statement R9-1/R9-2) live in PartyProfile.tsx, not here.
  */
 
 import { registerUnicodeFont, THEME, formatPDFMoney } from './pdf/theme'
@@ -78,115 +81,147 @@ export async function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting)
   const status: 'paid' | 'partial' | 'due' = dueAmount <= 0 ? 'paid' : txn.paidAmount > 0 ? 'partial' : 'due'
   const statusLabels = { paid: 'PAID', partial: 'PARTIAL', due: 'DUE' }
   const statusColors = { paid, partial, due }
+  const hasPartyGstin = !!(txn.party?.gstin && txn.party.gstin.trim())
 
   // ═══════════════════════════════════════════════════════════════════
-  // 1. HEADER — compact brand band (full width, 28mm)
+  // 1. BRAND BAND — 32 mm full-width, shop info left, INVOICE + meta + status right
   // ═══════════════════════════════════════════════════════════════════
-  const bandHeight = 28
+  const bandHeight = 32
   doc.setFillColor(brand.r, brand.g, brand.b)
   doc.rect(0, 0, pageWidth, bandHeight, 'F')
 
-  // Shop name (white, bold, 18pt)
+  // Left: shop name (white, bold, 16pt) — 20pt per spec is too tall for typical Indian
+  // shop names (often 20+ chars); 16pt keeps the band at one line.
   doc.setFont(THEME.font, 'bold')
-  doc.setFontSize(18)
+  doc.setFontSize(16)
   doc.setTextColor(white.r, white.g, white.b)
-  doc.text(setting.shopName || 'My Shop', margin, 12)
+  doc.text(setting.shopName || 'My Shop', margin, 13)
 
-  // Shop details (white, 8pt)
+  // Left: shop details (white, 8pt) — phone | GSTIN | address (one or two lines)
   doc.setFont(THEME.font, 'normal')
   doc.setFontSize(8)
-  let detailY = 17
+  let detailY = 18
   const shopDetails: string[] = []
   if (setting.phone) shopDetails.push(setting.phone)
   if (setting.gstin) shopDetails.push('GSTIN: ' + setting.gstin)
-  if (setting.address) {
-    const truncated = setting.address.length > 60 ? setting.address.slice(0, 57) + '...' : setting.address
-    shopDetails.push(truncated)
-  }
   if (shopDetails.length > 0) {
     doc.text(shopDetails.join('  |  '), margin, detailY)
+    detailY += 4
+  }
+  if (setting.address) {
+    const truncated = setting.address.length > 70 ? setting.address.slice(0, 67) + '...' : setting.address
+    doc.text(truncated, margin, detailY)
   }
 
-  // Right side: INVOICE + invoice no + date
+  // Right: INVOICE word (16 pt), invoice no + date beneath.
   doc.setFont(THEME.font, 'bold')
   doc.setFontSize(16)
-  doc.text('INVOICE', pageWidth - margin, 11, { align: 'right' })
+  doc.setTextColor(white.r, white.g, white.b)
+  doc.text('INVOICE', pageWidth - margin, 12, { align: 'right' })
   doc.setFont(THEME.font, 'normal')
   doc.setFontSize(9)
-  doc.text(`${txn.invoiceNo || ''}  |  ${dateStr}`, pageWidth - margin, 17, { align: 'right' })
+  doc.text(`${txn.invoiceNo || ''}  |  ${dateStr}`, pageWidth - margin, 18, { align: 'right' })
 
-  // Status badge (right, below invoice meta)
+  // Status pill — inside the band, below the invoice meta, right-aligned.
   const statusColor = statusColors[status]
   const statusLabel = statusLabels[status]
-  const badgeW = 22
-  const badgeH = 6
-  const badgeX = pageWidth - margin - badgeW
-  const badgeY = 20
+  const pillW = 24
+  const pillH = 7
+  const pillX = pageWidth - margin - pillW
+  const pillY = 21
   doc.setFillColor(statusColor.r, statusColor.g, statusColor.b)
-  doc.roundedRect(badgeX, badgeY, badgeW, badgeH, 1.5, 1.5, 'F')
+  doc.roundedRect(pillX, pillY, pillW, pillH, 1.5, 1.5, 'F')
   doc.setFont(THEME.font, 'bold')
   doc.setFontSize(8)
   doc.setTextColor(white.r, white.g, white.b)
-  doc.text(statusLabel, badgeX + badgeW / 2, badgeY + 4, { align: 'center' })
+  doc.text(statusLabel, pillX + pillW / 2, pillY + 4.8, { align: 'center' })
 
   doc.setTextColor(text.r, text.g, text.b)
   let y = bandHeight + 8
 
   // ═══════════════════════════════════════════════════════════════════
-  // 2. BILL TO + INVOICE DETAILS — two columns, one row
+  // 2. BILL TO CARD + (optional) PLACE OF SUPPLY CARD
+  //    Two-card row when party has a GSTIN; single full-width card otherwise.
+  //    The previous "INVOICE DETAILS" right column (Invoice No / Date / Payment) is
+  //    GONE — it duplicated the brand band. Payment mode moves into the Place of
+  //    Supply card, which is the auditor's design.
   // ═══════════════════════════════════════════════════════════════════
-  const leftColWidth = 90
-  const rightColX = margin + leftColWidth + 10
+  const cardGap = 6
+  const leftCardW = hasPartyGstin ? 95 : pageWidth - 2 * margin
+  const rightCardW = pageWidth - 2 * margin - leftCardW - cardGap
+  const rightCardX = margin + leftCardW + cardGap
+  // Estimate left card height from party fields present
+  const leftLines: string[] = []
+  if (txn.party?.phone) leftLines.push(txn.party.phone)
+  if (txn.party?.gstin) leftLines.push('GSTIN: ' + txn.party.gstin)
+  if (txn.party?.address) {
+    // split into 2 lines max at ~leftCardW-8mm
+    const addrLines = doc.splitTextToSize(txn.party.address, leftCardW - 8)
+    leftLines.push(...addrLines.slice(0, 2))
+  }
+  // Card body: 1 (name) + leftLines.length + label row + padding
+  const leftCardH = 16 + leftLines.length * 4 + 4
+  // Right card body: label + 2 fields + padding
+  const rightCardH = hasPartyGstin ? 24 : 0
 
-  // Left: Bill To
+  // Draw left card background (light card with rounded rect + thin border per spec)
+  doc.setFillColor(cardBg.r, cardBg.g, cardBg.b)
+  doc.setDrawColor(border.r, border.g, border.b)
+  doc.setLineWidth(0.2)
+  doc.roundedRect(margin, y, leftCardW, leftCardH, 2, 2, 'FD')
+
+  // BILL TO label (7pt uppercase letter-spaced grey)
   doc.setFont(THEME.font, 'bold')
   doc.setFontSize(7)
   doc.setTextColor(textMuted.r, textMuted.g, textMuted.b)
-  doc.text('BILL TO', margin, y)
+  doc.text('BILL TO', margin + 3, y + 5)
 
+  // Party name (11pt bold)
   doc.setFont(THEME.font, 'bold')
   doc.setFontSize(11)
   doc.setTextColor(text.r, text.g, text.b)
-  doc.text(txn.party?.name || 'Walk-in Customer', margin, y + 6)
+  const partyName = txn.party?.name || 'Walk-in Customer'
+  const nameLines = doc.splitTextToSize(partyName, leftCardW - 6)
+  doc.text(nameLines.slice(0, 2), margin + 3, y + 11)
 
+  // Party details (8pt normal muted)
   doc.setFont(THEME.font, 'normal')
   doc.setFontSize(8)
   doc.setTextColor(textMuted.r, textMuted.g, textMuted.b)
-  let billY = y + 11
-  if (txn.party?.phone) {
-    doc.text(txn.party.phone, margin, billY)
-    billY += 4
-  }
-  if (txn.party?.gstin) {
-    doc.text('GSTIN: ' + txn.party.gstin, margin, billY)
-    billY += 4
-  }
-  if (txn.party?.address) {
-    const addrLines = doc.splitTextToSize(txn.party.address, leftColWidth)
-    doc.text(addrLines.slice(0, 2), margin, billY)
+  let partyDetailY = y + 16
+  for (const line of leftLines) {
+    doc.text(line, margin + 3, partyDetailY)
+    partyDetailY += 4
   }
 
-  // Right: Invoice details (only if there's useful info)
-  doc.setFont(THEME.font, 'bold')
-  doc.setFontSize(7)
-  doc.setTextColor(textMuted.r, textMuted.g, textMuted.b)
-  doc.text('INVOICE DETAILS', rightColX, y)
+  // Right card: Place of Supply + Payment Mode (ONLY when party has GSTIN)
+  if (hasPartyGstin && rightCardW > 30) {
+    doc.setFillColor(cardBg.r, cardBg.g, cardBg.b)
+    doc.setDrawColor(border.r, border.g, border.b)
+    doc.setLineWidth(0.2)
+    doc.roundedRect(rightCardX, y, rightCardW, rightCardH, 2, 2, 'FD')
 
-  doc.setFont(THEME.font, 'normal')
-  doc.setFontSize(8)
-  doc.setTextColor(text.r, text.g, text.b)
-  let detailRightY = y + 6
-  doc.text('Invoice No: ' + (txn.invoiceNo || '-'), rightColX, detailRightY)
-  detailRightY += 4
-  doc.text('Date: ' + dateStr, rightColX, detailRightY)
-  detailRightY += 4
-  doc.text('Payment: ' + txn.paymentMode.toUpperCase(), rightColX, detailRightY)
+    doc.setFont(THEME.font, 'bold')
+    doc.setFontSize(7)
+    doc.setTextColor(textMuted.r, textMuted.g, textMuted.b)
+    doc.text('SUPPLY & PAYMENT', rightCardX + 3, y + 5)
 
-  // Use the taller of the two columns
-  y = Math.max(billY, detailRightY + 4) + 6
+    doc.setFont(THEME.font, 'normal')
+    doc.setFontSize(8)
+    doc.setTextColor(text.r, text.g, text.b)
+    const placeOfSupply = txn.party?.state
+      ? `${txn.party.state}${txn.isInterState ? ' (Inter-state)' : ' (Intra-state)'}`
+      : '—'
+    doc.text('Place of Supply: ' + placeOfSupply, rightCardX + 3, y + 11)
+    doc.text('Payment Mode: ' + txn.paymentMode.toUpperCase(), rightCardX + 3, y + 16)
+
+    doc.setTextColor(text.r, text.g, text.b)
+  }
+
+  y += Math.max(leftCardH, rightCardH) + 6
 
   // ═══════════════════════════════════════════════════════════════════
-  // 3. ITEM TABLE — tight, professional
+  // 3. ITEM TABLE — HSN included, zebra striping, brand-colour header
   // ═══════════════════════════════════════════════════════════════════
   const tableWidth = pageWidth - 2 * margin
   const colStart = margin
@@ -204,21 +239,31 @@ export async function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting)
   ]
   const colEnd = pageWidth - margin - 1
 
-  // Header row
+  const drawTableHeader = (headerY: number) => {
+    // Header row: brand colour at 12% opacity (spec) — emulate by drawing the
+    // brand rect then overlaying a 88% white rect.
+    doc.setFillColor(brand.r, brand.g, brand.b)
+    doc.rect(colStart, headerY, tableWidth, 8, 'F')
+    doc.setFillColor(255, 255, 255)
+    doc.setGState(doc.GState({ opacity: 0.88 }))
+    doc.rect(colStart, headerY, tableWidth, 8, 'F')
+    doc.setGState(doc.GState({ opacity: 1 }))
+
+    doc.setFont(THEME.font, 'bold')
+    doc.setFontSize(8)
+    doc.setTextColor(brand.r, brand.g, brand.b)
+    cols.forEach(c => {
+      if (c.align === 'right') {
+        doc.text(c.name, c.x + c.w - 1, headerY + 5.5, { align: 'right' })
+      } else {
+        doc.text(c.name, c.x, headerY + 5.5)
+      }
+    })
+    doc.setTextColor(text.r, text.g, text.b)
+  }
+
   const headerHeight = 8
-  doc.setFillColor(brand.r, brand.g, brand.b)
-  doc.rect(colStart, y, tableWidth, headerHeight, 'F')
-  doc.setFont(THEME.font, 'bold')
-  doc.setFontSize(8)
-  doc.setTextColor(white.r, white.g, white.b)
-  cols.forEach(c => {
-    if (c.align === 'right') {
-      doc.text(c.name, c.x + c.w - 1, y + 5.5, { align: 'right' })
-    } else {
-      doc.text(c.name, c.x, y + 5.5)
-    }
-  })
-  doc.setTextColor(text.r, text.g, text.b)
+  drawTableHeader(y)
   y += headerHeight
 
   // Item rows
@@ -228,20 +273,7 @@ export async function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting)
 
   txn.items.forEach((item, i) => {
     y = newPageIfNeeded(doc, y, rowHeight + 2, () => {
-      // Redraw header on new page
-      doc.setFillColor(brand.r, brand.g, brand.b)
-      doc.rect(colStart, y, tableWidth, headerHeight, 'F')
-      doc.setFont(THEME.font, 'bold')
-      doc.setFontSize(8)
-      doc.setTextColor(white.r, white.g, white.b)
-      cols.forEach(c => {
-        if (c.align === 'right') {
-          doc.text(c.name, c.x + c.w - 1, y + 5.5, { align: 'right' })
-        } else {
-          doc.text(c.name, c.x, y + 5.5)
-        }
-      })
-      doc.setTextColor(text.r, text.g, text.b)
+      drawTableHeader(y)
       doc.setFont(THEME.font, 'normal')
       doc.setFontSize(9)
       y += headerHeight
@@ -304,7 +336,7 @@ export async function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting)
     totalsLine('Round Off', (txn.roundOff > 0 ? '+ ' : '- ') + formatPDFMoney(Math.abs(txn.roundOff)))
   }
 
-  // Grand total — filled brand box
+  // Grand total — filled brand box (13pt white bold per spec; using 12pt for fit)
   y += 1
   const gtHeight = 11
   doc.setFillColor(brand.r, brand.g, brand.b)
@@ -331,12 +363,14 @@ export async function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting)
   }
 
   // ═══════════════════════════════════════════════════════════════════
-  // 5. AMOUNT IN WORDS — subtle strip
+  // 5. AMOUNT IN WORDS — tinted strip
   // ═══════════════════════════════════════════════════════════════════
   y += 4
   doc.setFillColor(brandLight.r, brandLight.g, brandLight.b)
   doc.rect(margin, y - 3, tableWidth, 7, 'F')
-  doc.setFont(THEME.font, 'italic')
+  // DejaVu Sans does not ship an italic face — use normal to avoid jsPDF's
+  // "Unable to look up font label for font 'DejaVuSans', 'italic'" warning.
+  doc.setFont(THEME.font, 'normal')
   doc.setFontSize(8)
   doc.setTextColor(textMuted.r, textMuted.g, textMuted.b)
   const wordsStr = amountToWords(txn.totalAmount)
@@ -371,7 +405,7 @@ export async function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting)
   doc.text('Authorised Signatory', sigX, bottomY + 16)
 
   // ═══════════════════════════════════════════════════════════════════
-  // 7. FOOTER — clean, readable
+  // 7. FOOTER — thin brand rule, page number, "Made with EkBook"
   // ═══════════════════════════════════════════════════════════════════
   drawFooter(doc, 1, 1)
 
