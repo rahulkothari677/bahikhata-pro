@@ -8933,3 +8933,57 @@ Stage Summary:
 - From the audit-status report, the ONLY remaining items are:
   * Rounds 11–18 per-screen vertical audits (separate engagement — 7 screens × 1-2 sessions each).
 - No more outstanding 🔴 or 🟠 items from the 6 uploaded audit reports.
+
+---
+Task ID: round-11-transaction-detail-audit
+Agent: main
+Task: Round 11 of the auditor's per-screen vertical audit plan — Transaction Detail screen. Apply the 8-point checklist (data lineage, truth-vs-display, freshness map, state matrix, navigation contract, mutation safety, role/plan variants, data edge cases) to TransactionDetail.tsx (1587 lines) + its API route + EditTransactionDialog + PrintInvoice + EInvoiceCard.
+
+Work Log:
+
+SCREEN INVENTORY (what TransactionDetail.tsx contains):
+- Main TransactionDetail component (lines 42-919): fetches txn via ['transaction', id] query; renders header card, party+meta cards, items table, totals, linked credit/debit notes, original-transaction link, e-invoice card, audit trail; action bar with Edit/Print/PDF/Send PDF/Credit Note/Debit Note/Convert to Sale/Delete.
+- EditTransactionDialog (lines 921-1224): edits any transaction type. Income/expense get a simple form; sale/purchase/credit-note/debit-note get the full items editor. isInterState Switch is disabled (V19-021). Doesn't show noteReason/affectsStock/noteType/originalTransactionId fields.
+- PrintInvoice + PrintInvoiceContent (lines 1227-1363): browser-print version. Letterhead, Bill To, items table, totals, terms, signature.
+- formatAuditValue (lines 1368-1386): formats audit-trail values for display.
+- EInvoiceCard (lines 1403-1601): IRN/QR status, generate IRN request JSON, store returned IRN+QR.
+
+8-POINT CHECKLIST FINDINGS:
+
+§1 Data lineage — VERIFIED CLEAN for most fields. txn.totalAmount, paidAmount, cgst/sgst/igst, items[].total all come from the server's computeLineItems (the same function the POST route uses). Profit (txn.grossProfit) is computed server-side and stripped by shouldHideProfit for staff. Due = roundMoney(totalAmount - paidAmount) — correct.
+
+§2 Truth vs display — R11-1 🟡 FOUND: PrintInvoice (browser-print version) showed grossProfit even when hideProfit=true. The on-screen version (line 664) had the !hideProfit guard; the print version (line 1287) only checked isSale && txn.grossProfit !== undefined. For owners with hideProfit=true, the printed invoice would show profit while the on-screen version hid it. FIXED: threaded hideProfit through PrintInvoice → PrintInvoiceContent. Now both honor the setting.
+
+§3 Freshness map — VERIFIED CLEAN after the earlier R9-6/R9-7/R9-10 batch. EditTransactionDialog onSuccess now calls invalidateMoneyCaches(queryClient). Delete + restore-undo both call it. The two reload() calls were R11-2/R11-3 (below).
+
+§4 State matrix — VERIFIED CLEAN. Error state (line 338-353) shows AlertCircle + goBack button. Loading state (line 355-362) shows Skeleton. Empty/no-id state (line 62-67, the N1b guard) redirects to the inferred parent ledger. Income/expense get a simpler view (line 515-546). Notes show conditionally. Round-off shows conditionally. linked credit/debit notes show conditionally.
+
+§5 Navigation contract — R11-2 🟡 + R11-3 🟡 FOUND: two window.location.reload() calls.
+- R11-2: Estimate→Sale conversion (line 496) reloaded the whole page after conversion. Heavy-handed: loses sidebar state, scroll position, unrelated query caches. FIXED: replaced with await invalidateMoneyCaches(queryClient) + setView('sales') + triggerRefresh(). The conversion creates a real sale (affects party balance, stock, dashboard), so the helper is the right tool.
+- R11-3: EInvoiceCard 'Store IRN' (line 1464) reloaded after storing the IRN. Same problem. FIXED: EInvoiceCard now has its own useQueryClient and invalidates only ['transaction'] (the detail cache) so the IRN/QR fields re-fetch.
+
+§6 Mutation safety — R11-4 🔴 FOUND (money-critical): Editing a credit/debit note silently reset affectsStock to false.
+- Root cause: the UPDATE zod schema had .default(false) on affectsStock. The EditTransactionDialog doesn't send affectsStock (it's set at creation time), so the parsed value was false (from the default), not undefined.
+- The server's stock-reversal logic uses `shouldIncrementStock = type === 'credit-note' && affectsStock`. With the new affectsStock=false, the new transaction doesn't increment stock. But the EXISTING transaction had affectsStock=true, so `existingShouldIncrement=true` → the reversal step increments stock back. Net: stock decreases by the credit-note amount. Corrupted stock.
+- Same class as R9-1 — a partial update silently corrupting data.
+- FIXED (two parts):
+  1. src/lib/validation.ts: removed .default(false) from affectsStock on the UPDATE schema only. The CREATE schema keeps it (new transactions need a concrete value). Also removed the implicit defaults from noteReason, noteType, originalTransactionId (same class — they'd be wiped to null on edit).
+  2. src/app/api/transactions/[id]/route.ts: the update handler now falls back to the EXISTING values when these fields are undefined. `affectsStock !== undefined ? affectsStock : (existing.affectsStock ?? false)`. So editing a credit note without sending affectsStock preserves the existing value.
+- Test: v26-r11-edit-preserves-note-fields.test.ts — 10 assertions. Locks both the zod schema (undefined stays undefined) and the server-side merge logic (preserves existing affectsStock=true when client omits).
+
+§7 Role/plan variants — VERIFIED CLEAN. Staff permission check (canAccessModule) on the API route gates by transaction type. CAs are read-only (assertCanWrite). hideProfit strips grossProfit for staff. Audit trail only fetched for owners (isOwner guard at line 94). Edit button isn't explicitly gated but the PUT route returns 403 for staff without write permission.
+
+§8 Data edge cases — VERIFIED CLEAN for most. Zero-amount sale renders fine. Walk-in customer (no party) shows 'Walk-in customer' text. Credit/debit notes show the original-transaction link. Estimate shows Convert-to-Sale or Converted badge. Items table handles 0 items (though the dialog requires at least 1). The R11-4 fix above handles the credit-note-edit edge case.
+
+Verification (all 4 gates green):
+- tsc --noEmit: 0 errors
+- jest: 2028/2028 pass (74 suites) — was 2018, +10 from R11-4 tests
+- next build: clean
+- Also fixed a pre-existing TS type error in v26-critical3-paise-sanity.test.ts (jest.SpyInstance → ReturnType<typeof jest.spyOn>).
+
+Stage Summary:
+- Round 11 COMPLETE: 4 findings, all fixed. 1 🔴 (R11-4, money-critical stock corruption on credit-note edit), 3 🟡 (R11-1 PrintInvoice profit leak, R11-2 + R11-3 reload→invalidate).
+- The R11-4 fix is the highest-impact: it closes a silent stock-corruption path that would have hit every shop editing a credit note. Same class as R9-1.
+- CI guard: v26-r11-edit-preserves-note-fields.test.ts locks the zod schema + merge logic. If anyone re-adds .default(false) to the UPDATE schema, the test fails.
+- Items verified clean: isInterState handling (R10-1 server-side derivation), stock validation on PUT, type-change guard (N6 v3), period-lock check, delete+undo flow, cache invalidation (post R9-x batch).
+- Next: Round 12 (Dashboard) or whichever round the user picks next.
