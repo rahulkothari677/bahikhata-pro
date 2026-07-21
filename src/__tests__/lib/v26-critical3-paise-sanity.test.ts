@@ -27,12 +27,12 @@ function row(max: number | null, susp: number, certain: number) {
 }
 
 describe('checkPaiseAnomalies [Critical #3]', () => {
-  let spy: jest.SpyInstance
+  let spy: ReturnType<typeof jest.spyOn>
 
   beforeEach(() => {
     jest.restoreAllMocks()
     // Default: all tables healthy (max < suspicious threshold).
-    spy = jest.spyOn(db, '$queryRawUnsafe') as unknown as jest.SpyInstance
+    spy = jest.spyOn(db, '$queryRawUnsafe') as unknown as ReturnType<typeof jest.spyOn>
     spy.mockResolvedValue(row(100_000, 0, 0)) // ₹1,000 max — healthy
   })
 

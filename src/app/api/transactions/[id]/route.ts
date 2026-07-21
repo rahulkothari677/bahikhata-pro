@@ -494,6 +494,15 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       await tx.transactionItem.deleteMany({ where: { transactionId: id } })
 
       // Step 3: Update transaction + create new items
+      // 🔒 R11-4 (Round 11): For credit/debit note fields (originalTransactionId,
+      // noteType, noteReason, affectsStock), fall back to the EXISTING values
+      // when the client doesn't send them. The EditTransactionDialog doesn't
+      // show these fields (they're set at creation time), so they arrive as
+      // undefined → zod default (false/null). Without this fallback, editing a
+      // credit note that had affectsStock=true would silently set affectsStock=false,
+      // and the stock-reversal logic above would compute the wrong net change
+      // (existing increments stock, new doesn't → stock decreases by the note
+      // amount → corrupted stock).
       const txn = await tx.transaction.update({
         where: { id },
         data: {
@@ -513,11 +522,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           notes: notes || null,
           invoiceNo: invoiceNo || null,
           grossProfit: roundMoney(grossProfit),
-          // V17-Ext Tier 3: Credit/Debit Notes fields
-          originalTransactionId: originalTransactionId || null,
-          noteType: noteType || null,
-          noteReason: noteReason || null,
-          affectsStock: affectsStock || false,
+          // V17-Ext Tier 3: Credit/Debit Notes fields — preserve existing
+          // values when the client doesn't send them (edit dialog omits them).
+          originalTransactionId: originalTransactionId !== undefined ? (originalTransactionId || null) : existing.originalTransactionId,
+          noteType: noteType !== undefined ? noteType : existing.noteType,
+          noteReason: noteReason !== undefined ? (noteReason || null) : existing.noteReason,
+          affectsStock: affectsStock !== undefined ? affectsStock : (existing.affectsStock ?? false),
           items: { create: txItems },
         },
         include: { items: true, party: true },

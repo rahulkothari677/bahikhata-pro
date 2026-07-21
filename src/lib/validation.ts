@@ -89,10 +89,19 @@ export const updateTransactionSchema = z.object({
   payeePhone: z.string().max(20).nullable().optional(),
   totalAmount: z.coerce.number().min(0, 'Amount cannot be negative').max(100000000, 'Amount too large').optional(), // for income/expense — 🔒 FIX M5
   // V17-Ext Tier 3: Credit/Debit Notes fields
+  // 🔒 R11-4 (Round 11): NO default on affectsStock/noteReason/noteType/
+  // originalTransactionId for the UPDATE schema. The edit dialog omits these
+  // fields (they're set at creation time), so they arrive as undefined.
+  // The server falls back to the EXISTING values when undefined — this is the
+  // fix for the silent-stock-corruption bug where editing a credit note with
+  // affectsStock=true would reset it to false (zod default) → stock reversal
+  // logic computes the wrong net change → corrupted stock.
+  // The CREATE schema above KEEPS the .default(false) because new
+  // transactions need a concrete value.
   originalTransactionId: z.string().nullable().optional(),
   noteType: z.enum(['C', 'D']).optional(),
   noteReason: z.enum(['post-sale-discount', 'deficiency', 'return', 'price-revision', 'other']).optional(),
-  affectsStock: z.coerce.boolean().optional().default(false),
+  affectsStock: z.coerce.boolean().optional(),
 })
 
 // Product create schema (🔒 V7 M4: enhanced with clearer error messages)

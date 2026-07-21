@@ -489,11 +489,16 @@ export function TransactionDetail() {
                   description: `Sale ${result.transaction.invoiceNo} created successfully.`,
                   duration: 5000,
                 })
-                // Navigate to the new sale
+                // 🔒 R11-2 (Round 11): Was `window.location.reload()` — heavy-handed,
+                // loses the user's place (sidebar state, scroll position, query
+                // cache for unrelated screens). Now: invalidate every money cache
+                // (the conversion creates a real sale → affects party balance,
+                // stock, dashboard KPIs) + navigate to the sales ledger so the
+                // user sees the new sale.
+                await invalidateMoneyCaches(queryClient)
                 useAppStore.getState().setPreviousView('transaction-detail')
                 useAppStore.getState().setView('sales')
-                // Refresh the detail view
-                window.location.reload()
+                triggerRefresh()
               } catch (err: any) {
                 sonnerToast.error(err?.message || 'Conversion failed', {
                   description: err.message,
@@ -912,7 +917,7 @@ export function TransactionDetail() {
       />
 
       {/* Print-only invoice */}
-      {printing && <PrintInvoice txn={txn} setting={setting} />}
+      {printing && <PrintInvoice txn={txn} setting={setting} hideProfit={hideProfit} />}
       {confirmDialogEl}
     </div>
   )
@@ -1219,15 +1224,15 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
   )
 }
 
-function PrintInvoice({ txn, setting }: { txn: any; setting: any }) {
+function PrintInvoice({ txn, setting, hideProfit }: { txn: any; setting: any; hideProfit?: boolean }) {
   return (
     <div className="hidden print:block fixed inset-0 bg-white p-6 lg:p-10 z-50 overflow-y-auto">
-      <PrintInvoiceContent txn={txn} setting={setting} />
+      <PrintInvoiceContent txn={txn} setting={setting} hideProfit={hideProfit} />
     </div>
   )
 }
 
-function PrintInvoiceContent({ txn, setting }: { txn: any; setting: any }) {
+function PrintInvoiceContent({ txn, setting, hideProfit }: { txn: any; setting: any; hideProfit?: boolean }) {
   const isSale = txn.type === 'sale'
   const due = roundMoney(txn.totalAmount - txn.paidAmount)
   const shopName = setting?.shopName || 'My Shop'
@@ -1279,7 +1284,7 @@ function PrintInvoiceContent({ txn, setting }: { txn: any; setting: any }) {
           <div className="text-xs space-y-1">
             <div className="flex justify-between"><span className="text-gray-500">GST Type:</span><span className="font-medium">{txn.isInterState ? 'IGST (Inter-state)' : 'CGST + SGST'}</span></div>
             <div className="flex justify-between"><span className="text-gray-500">Items:</span><span className="font-medium">{txn.items.length}</span></div>
-            {isSale && txn.grossProfit !== undefined && (
+            {isSale && !hideProfit && txn.grossProfit !== undefined && (
               <div className="flex justify-between"><span className="text-gray-500">Profit:</span><span className="font-medium text-emerald-700 dark:text-emerald-300">₹{txn.grossProfit.toFixed(2)}</span></div>
             )}
           </div>
@@ -1400,6 +1405,9 @@ function EInvoiceCard({ txn }: { txn: any }) {
   const [irnInput, setIrnInput] = useState('')
   const [qrInput, setQrInput] = useState('')
   const [showStoreForm, setShowStoreForm] = useState(false)
+  // 🔒 R11-3 (Round 11): queryClient for invalidating ['transaction', id]
+  // after storing the IRN. Was: window.location.reload() (heavy-handed).
+  const queryClient = useQueryClient()
 
   const handleGenerate = async () => {
     setLoading(true)
@@ -1461,7 +1469,11 @@ function EInvoiceCard({ txn }: { txn: any }) {
       setShowStoreForm(false)
       setIrnInput('')
       setQrInput('')
-      window.location.reload()
+      // 🔒 R11-3 (Round 11): Was `window.location.reload()` — heavy-handed,
+      // loses sidebar state + scroll position + unrelated query caches.
+      // Now: invalidate just the transaction-detail cache so the IRN/QR
+      // fields re-fetch with the new values.
+      queryClient.invalidateQueries({ queryKey: ['transaction'] })
     } catch (e: any) {
       sonnerToast.error("Couldn\'t save the e-invoice number", { description: e.message })
     } finally {
