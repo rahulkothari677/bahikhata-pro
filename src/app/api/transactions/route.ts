@@ -491,14 +491,19 @@ export async function POST(req: NextRequest) {
       let invoiceSequence: number | null = seqOverride || null
 
       if (!finalInvoiceNo && (type === 'sale' || type === 'purchase')) {
-        if (seqOverride) {
-          invoiceSequence = seqOverride
+        if (type === 'purchase') {
+          // 🔒 V26 Phase 8 DI-1: Purchases get their own PUR-XXXX series
+          // (was: shared INV-XXXX counter with sales → gaps in GST sales series).
+          const counter = await tx.invoiceCounter.upsert({
+            where: { userId },
+            update: { purchaseSeq: { increment: 1 } },
+            create: { userId, purchaseSeq: 1 },
+            select: { purchaseSeq: true },
+          })
+          invoiceSequence = counter.purchaseSeq
+          finalInvoiceNo = `PUR-${String(invoiceSequence).padStart(4, '0')}`
         } else {
-          // 🔒 V9 2.7 FIX: Was findFirst(orderBy desc) + 1 — a read-modify-write
-          // race under READ COMMITTED. Two concurrent sales can read the same
-          // max and both compute the same next number → P2002 collision → retry.
-          // Now: use an atomic upsert on a per-user counter row. UPDATE SET
-          // seq = seq + 1 RETURNING seq is atomic — no race, no gaps, no retry.
+          // Sales keep the existing INV-XXXX series
           const counter = await tx.invoiceCounter.upsert({
             where: { userId },
             update: { seq: { increment: 1 } },
@@ -506,8 +511,8 @@ export async function POST(req: NextRequest) {
             select: { seq: true },
           })
           invoiceSequence = counter.seq
+          finalInvoiceNo = `INV-${String(invoiceSequence).padStart(4, '0')}`
         }
-        finalInvoiceNo = `INV-${String(invoiceSequence).padStart(4, '0')}`
       }
 
       // V17-Ext Tier 3: Credit note numbering (CN-XXXX from creditNoteSeq)

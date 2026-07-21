@@ -1502,6 +1502,9 @@ model InvoiceCounter {
   // V17-Ext Tier 3: Separate counters for credit/debit notes
   creditNoteSeq Int    @default(0)
   debitNoteSeq  Int    @default(0)
+  // 🔒 V26 Phase 8 DI-1: Separate counter for purchases (was: shared with
+  // sales seq → purchases numbered INV-XXXX, eating gaps in the sales series).
+  purchaseSeq   Int    @default(0)
 }
 
 // ==================== DOCUMENT VAULT (V22-14 Batch D, Phase 7g) ====================

@@ -273,37 +273,52 @@ export function PartyProfile() {
   // Generate a printable statement HTML for this party
   const handleDownloadStatement = () => {
     if (!party) return
-    // 🔒 V19-017 FIX: Use statementTransactions (all, up to 500) instead of
-    // `transactions` (paginated, 50 per page). The downloaded statement should
-    // include ALL transactions, not just the first page.
-    const allTxns = statementTransactions || transactions || []
-
+    // 🔒 V26 Phase 8 R9-1/R9-2 (CRITICAL FIX): Drive the statement from the
+    // `statement` array (which correctly merges transactions + payments +
+    // running balance, ties to the headline balance) — NOT from raw
+    // `statementTransactions` (which omits standalone payments and re-derives
+    // totals incorrectly). Was: allTxns.reduce() for totals → missed all
+    // settle payments → closing balance didn't match the headline. Now: the
+    // statement array IS the source of truth, and the closing figure is
+    // stats.balance verbatim.
     const shopName = setting?.shopName || 'My Shop'
     const shopAddress = setting?.address || ''
     const shopPhone = setting?.phone || ''
     const shopGstin = setting?.gstin || ''
 
-    const rows = allTxns.map((t: any, i: number) => {
-      const isInflow = t.type === 'sale' || t.type === 'income'
-      const amount = isInflow ? t.totalAmount : -t.totalAmount
-      const paid = t.paidAmount || 0
-      const due = roundMoney(t.totalAmount - paid)
+    // Build rows from the unified statement (transactions + payments merged,
+    // newest-first, with running balance).
+    const rows = statement.map((entry: any, i: number) => {
+      const isInflow = entry.type === 'sale' || entry.type === 'income' || entry.type === 'payment-received'
+      const isPayment = entry.isPayment
+      const amount = entry.amount
+      const balance = entry.runningBalance
+      const particulars = isPayment
+        ? (entry.type === 'payment-received' ? 'Payment received' : 'Payment made')
+        : (entry.invoiceNo || entry.type)
+      const delta = entry.delta
       return `
         <tr>
           <td style="text-align:center">${i + 1}</td>
-          <td>${formatDate(t.date)}</td>
-          <td>${t.invoiceNo || '—'}</td>
-          <td style="text-transform:capitalize">${t.type}</td>
-          <td style="text-align:right">${t.totalAmount.toFixed(2)}</td>
-          <td style="text-align:right">${paid.toFixed(2)}</td>
-          <td style="text-align:right; color:${due > 0 ? '#dc2626' : '#059669'}">${due.toFixed(2)}</td>
+          <td>${formatDate(entry.date)}</td>
+          <td>${particulars}</td>
+          <td style="text-align:right; color:${delta > 0 ? '#1a1a1a' : '#059669'}">${delta > 0 ? '+' : ''}${Math.abs(delta).toFixed(2)}</td>
+          <td style="text-align:right; color:${delta < 0 ? '#1a1a1a' : '#059669'}">${delta < 0 ? '+' : ''}${Math.abs(delta).toFixed(2)}</td>
+          <td style="text-align:right; font-weight:600">${balance.toFixed(2)}</td>
         </tr>
       `
     }).join('')
 
-    const totalAmount = allTxns.reduce((s: number, t: any) => s + t.totalAmount, 0)
-    const totalPaid = allTxns.reduce((s: number, t: any) => s + (t.paidAmount || 0), 0)
-    const totalDue = roundMoney(totalAmount - totalPaid)
+    // Closing balance is stats.balance — the single source of truth.
+    const closingBalance = stats?.balance ?? 0
+    const balanceLabel = closingBalance > 0
+      ? (party?.type === 'supplier' ? 'Advance paid (they owe you)' : 'They owe you')
+      : closingBalance < 0
+        ? 'You owe them'
+        : 'Settled'
+
+    // Show count from statementTotals (true count, not capped).
+    const totalCount = statementTotals?.transactionTotal || statement.length
 
     const html = `<!DOCTYPE html>
 <html>
@@ -322,12 +337,14 @@ export function PartyProfile() {
     .party-box { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 15px; margin-bottom: 25px; display: flex; justify-content: space-between; }
     .party-box .label { font-size: 10px; text-transform: uppercase; color: #888; font-weight: 600; }
     .party-box .value { font-size: 14px; font-weight: 600; margin-top: 2px; }
+    .balance-hero { text-align: right; }
+    .balance-hero .amount { font-size: 24px; font-weight: bold; color: ${closingBalance >= 0 ? '#059669' : '#dc2626'}; }
+    .balance-hero .label { font-size: 12px; color: #555; margin-top: 4px; }
     table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
     th { background: #fef3e6; padding: 10px; font-size: 12px; font-weight: 600; color: #444; text-align: left; border-bottom: 2px solid #d97706; }
     td { padding: 8px 10px; font-size: 13px; border-bottom: 1px solid #e5e7eb; }
-    .totals { margin-left: auto; width: 300px; }
-    .totals .row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 13px; }
-    .totals .grand { font-size: 16px; font-weight: bold; border-top: 2px solid #1a1a1a; padding-top: 10px; margin-top: 5px; }
+    .closing-box { background: #d97706; color: white; padding: 15px 20px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; margin-top: 20px; }
+    .closing-box .amount { font-size: 20px; font-weight: bold; }
     .footer { margin-top: 40px; padding-top: 15px; border-top: 1px solid #e5e7eb; text-align: center; font-size: 11px; color: #888; }
     @media print { body { padding: 20px; } }
   </style>
@@ -352,32 +369,32 @@ export function PartyProfile() {
       ${party.phone ? `<p style="font-size:12px;color:#555;margin-top:4px;">${party.phone}</p>` : ''}
       ${party.gstin ? `<p style="font-size:12px;color:#555;font-family:monospace;">GSTIN: ${party.gstin}</p>` : ''}
     </div>
-    <div style="text-align:right">
-      <p class="label">Party Type</p>
-      <p class="value" style="text-transform:capitalize">${party.type}</p>
-      <p style="font-size:12px;color:#555;margin-top:4px;">${transactions.length} transactions</p>
+    <div class="balance-hero">
+      <p class="label">Outstanding Balance</p>
+      <p class="amount">${closingBalance >= 0 ? '+' : ''}${closingBalance.toFixed(2)}</p>
+      <p class="label">${balanceLabel}</p>
     </div>
   </div>
+
+  ${totalCount > 500 ? `<p style="font-size:12px;color:#888;margin-bottom:15px;">Showing the 500 most recent entries of ${totalCount}. The closing balance reflects all entries.</p>` : ''}
 
   <table>
     <thead>
       <tr>
         <th style="width:40px">#</th>
         <th>Date</th>
-        <th>Invoice</th>
-        <th>Type</th>
-        <th style="text-align:right">Amount</th>
-        <th style="text-align:right">Paid</th>
-        <th style="text-align:right">Due</th>
+        <th>Particulars</th>
+        <th style="text-align:right">Debit (+)</th>
+        <th style="text-align:right">Credit (-)</th>
+        <th style="text-align:right">Balance</th>
       </tr>
     </thead>
     <tbody>${rows}</tbody>
   </table>
 
-  <div class="totals">
-    <div class="row"><span>Total Amount:</span><span>₹${totalAmount.toFixed(2)}</span></div>
-    <div class="row"><span>Total Paid:</span><span style="color:#059669">₹${totalPaid.toFixed(2)}</span></div>
-    <div class="row grand"><span>Balance Due:</span><span style="color:${totalDue > 0 ? '#dc2626' : '#059669'}">₹${totalDue.toFixed(2)}</span></div>
+  <div class="closing-box">
+    <span>Closing Balance</span>
+    <span class="amount">${closingBalance >= 0 ? '+' : ''}${closingBalance.toFixed(2)} — ${balanceLabel}</span>
   </div>
 
   <div class="footer">

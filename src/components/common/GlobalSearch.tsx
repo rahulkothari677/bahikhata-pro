@@ -45,7 +45,7 @@ export function GlobalSearch() {
   })
 
   const { data: partiesData } = useQuery({
-    queryKey: ['parties', 'search'],
+    queryKey: ['parties'],
     queryFn: async () => {
       const r = await offlineFetch('/api/parties')
       return r.json()

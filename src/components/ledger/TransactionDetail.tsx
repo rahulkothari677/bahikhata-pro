@@ -946,7 +946,7 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
   const products: any[] = productsData?.products || []
 
   const { data: partiesData } = useQuery({
-    queryKey: ['parties', 'for-edit'],
+    queryKey: ['parties'],
     queryFn: async () => {
       const r = await offlineFetch('/api/parties')
       return r.json()

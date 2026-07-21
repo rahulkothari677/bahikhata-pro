@@ -43,7 +43,7 @@ export function Parties() {
   const [bulkRemindersOpen, setBulkRemindersOpen] = useState(false)
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['parties', refreshKey],
+    queryKey: ['parties'],
     queryFn: async () => {
       const r = await offlineFetch('/api/parties')
       if (!r.ok) throw new Error(`HTTP ${r.status}`)

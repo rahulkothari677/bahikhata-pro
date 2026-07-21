@@ -243,7 +243,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
 
   // Fetch parties
   const { data: partiesData, refetch: refetchParties } = useQuery({
-    queryKey: ['parties', 'for-entry'],
+    queryKey: ['parties'],
     queryFn: async () => {
       const r = await offlineFetch('/api/parties')
       return r.json()

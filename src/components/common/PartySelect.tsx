@@ -33,7 +33,7 @@ export function PartySelect({
   const ref = useRef<HTMLDivElement>(null)
 
   const { data: partiesData, refetch } = useQuery({
-    queryKey: ['parties', 'for-select'],
+    queryKey: ['parties'],
     queryFn: async () => {
       const r = await offlineFetch('/api/parties')
       return r.json()

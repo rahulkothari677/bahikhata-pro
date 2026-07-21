@@ -38,12 +38,18 @@ export function middleware(req: NextRequest) {
     'Content-Security-Policy',
     [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' https://vercel.live",
+      // 🔒 V26 Phase 8 INF-1: Added PostHog hosts to script-src (was: only
+      // 'self' 'unsafe-inline' vercel.live — PostHog SDK was blocked by CSP,
+      // making ALL analytics 100% dead in production). unsafe-inline permits
+      // inline code but NOT external hosts — the missing PostHog hosts were
+      // the issue. Also added worker-src for PostHog session recording blob worker.
+      "script-src 'self' 'unsafe-inline' https://vercel.live https://*.posthog.com https://us-assets.i.posthog.com",
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' https://fonts.gstatic.com data:",
       "img-src 'self' data: blob: https: https://*.cloudinary.com https://res.cloudinary.com",
       "media-src 'self' blob:",
       "connect-src 'self' https://*.sentry.io https://*.posthog.com https://vitals.vercel-insights.com https://api.groq.com https://generativelanguage.googleapis.com https://api.openai.com",
+      "worker-src 'self' blob:",
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",
