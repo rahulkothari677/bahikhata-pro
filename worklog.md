@@ -8987,3 +8987,48 @@ Stage Summary:
 - CI guard: v26-r11-edit-preserves-note-fields.test.ts locks the zod schema + merge logic. If anyone re-adds .default(false) to the UPDATE schema, the test fails.
 - Items verified clean: isInterState handling (R10-1 server-side derivation), stock validation on PUT, type-change guard (N6 v3), period-lock check, delete+undo flow, cache invalidation (post R9-x batch).
 - Next: Round 12 (Dashboard) or whichever round the user picks next.
+
+---
+Task ID: round-12-dashboard-audit
+Agent: main
+Task: Round 12 of the auditor's per-screen vertical audit plan — Dashboard. Apply the 8-point checklist to Dashboard.tsx (1319 lines) + the dashboard API route (617 lines) + BusinessHealthScore + SmartInsights.
+
+Work Log:
+
+SCREEN INVENTORY:
+- Dashboard.tsx (1319 lines): hero card (greeting + today's sales + quick actions), quick action shortcuts row, date range picker, 4 KPI cards (today revenue, today profit, range revenue, net profit), 4 mini stat cards (receivable, payable, collections today, stock value, GST payable), DashboardCharts (lazy), category breakdown + low stock, recent transactions + GST summary, day-end summary card (after 6 PM), business goals (revenue target + expense budget), daily digest card (after 9 PM IST), backup reminder, BusinessHealthScore, SmartInsights, AnalyticsInsights, DayEndSummary dialog.
+- dashboard/route.ts (617 lines): 2-batch SQL aggregate strategy. Batch 1: 4 small queries (wakes DB). Batch 2: 8 queries in parallel (KPI CTE, receivable/payable, payment mode, sales trend, top products, category breakdown, today's payments). All money in paise, converted to rupees via fromPaise. IST-correct day boundaries. noStore (money-bearing). hideProfit strips for staff.
+- BusinessHealthScore.tsx (224 lines): 0-100 score from 5 weighted components (revenue trend, profit margin, cash flow, stock health, activity). Low-data friendly state for <5 transactions.
+- SmartInsights.tsx (380 lines): client-side computed insights (reorder suggestions, margin alerts, sales patterns, credit risk). Dismissal keyed by title (stable across refreshes).
+
+8-POINT CHECKLIST FINDINGS:
+
+§1 Data lineage — VERIFIED CLEAN. All KPIs come from the dashboard API's single CTE with conditional SUM (sale - credit-note for revenue, sale + credit-note for profit since credit-note grossProfit is negative). GST is net of credit/debit notes. IST-correct day boundaries (istDayStart + AT TIME ZONE 'Asia/Kolkata'). Paise → rupees via fromPaise. The dashboard API is the most money-bearing endpoint in the app and it's done right.
+
+§2 Truth vs display — R12-1 🟡 + R12-2 🟠 FOUND (both profit leaks).
+- R12-2: stripDashboardProfit only stripped todayProfit/rangeProfit/prevRangeProfit, but the API computes netProfit + profitGrowth BEFORE stripping. Both were in the response → staff-with-hideProfit could read them from devtools. FIXED: stripper now also strips netProfit + profitGrowth + profit (from recentTransactions, which the API maps from grossProfit).
+- R12-1: Daily Digest card showed profit unconditionally in on-screen subtitle + WhatsApp share text. The KPI cards and handleShareSummary both had !hideProfit guards; the Daily Digest didn't. FIXED: Daily Digest now respects hideProfit in both the subtitle and the share text.
+
+§3 Freshness map — VERIFIED CLEAN. useDashboard hook uses day-granular cache keys (no millisecond timestamps → no cache misses). noStore on the API. invalidateMoneyCaches called from every mutation site (R9-x batch). triggerRefresh bumps refreshKey for the 5 refreshKey-keyed queries. Recurring entries check on mount (R9-8 fix: invalidates all money caches + ₹X toast).
+
+§4 State matrix — VERIFIED CLEAN. Error state (line 167): CloudOff + Go to Login. Loading state (line 239): Skeleton with WakingUpState after 3s. Offline-no-data state (line 197): shows View Sales + New Sale CTAs. New-user state (line 364): 2-step onboarding guide (add product → record sale). Empty recentTransactions: EmptyState component. All states handled with appropriate CTAs.
+
+§5 Navigation contract — VERIFIED CLEAN. All KPI cards clickable with navigateToSalesWithDate (passes date range to sales ledger). Quick actions row has 6 shortcuts. Deep-link targets (cash-in-hand, smart-insights) work via scrollTarget from MoreScreen. Repeat Last Sale: fetches latest sale, navigates direct to new-sale (NAV-1 fix). All party/product navigation uses direct setView (no ledger relay).
+
+§6 Mutation safety — VERIFIED CLEAN. handleRepeatLastSale uses offlineFetch (works offline), handles OfflineError specifically. handleShareSummary: window.open with encoded text. Recurring entries: try/catch per entry, continues on failure. No double-submit risk (buttons disabled during loading).
+
+§7 Role/plan variants — VERIFIED CLEAN. canAccessModule('dashboard') guards the API. hideProfit strips profit for staff (R12-2 fix closes the netProfit/profitGrowth leak). BusinessHealthScore shows "Getting Started" state for low-data accounts (<5 transactions). AnalyticsInsights gated by features.businessAnalytics (Pro feature). Quick actions row visible to all (each action's target screen has its own permission check).
+
+§8 Data edge cases — VERIFIED CLEAN. Zero-amount sales render fine. Walk-in customers show "Walk-in Customer" text. Negative stock clamped at 0 for stock value KPI (V11 fix). Missing grossProfit handled via undefined check. Empty recentTransactions → EmptyState. lowStockProducts with 0 stock show "Out of stock" badge. Date range picker handles all presets + custom range. New-user detection (line 362) checks productCount + partyCount + rangeTxnCount + recentTransactions (not stock value, which is 0 for new users with 0-stock products).
+
+Verification (all 4 gates green):
+- tsc --noEmit: 0 errors
+- jest: 2041/2041 pass (75 suites) — was 2028, +13 from R12-2 tests
+- next build: clean
+
+Stage Summary:
+- Round 12 COMPLETE: 2 findings, both fixed. 1 🟠 (R12-2, profit leak via netProfit + profitGrowth to staff), 1 🟡 (R12-1, Daily Digest profit leak).
+- The R12-2 fix closes a real security gap: staff-with-hideProfit could read the shop's net profit from the network tab even though the owner had explicitly hidden it. Now all derivable profit figures are stripped server-side.
+- CI guard: v26-r12-profit-stripping.test.ts (13 assertions) locks the stripper. If anyone adds a new profit-derivable field to the kpis without stripping it, the test pattern shows what to do.
+- Items verified clean: KPI data lineage (SQL aggregate, IST-correct, credit-note-aware), count-up animation (PB-1 fix), hideProfit on KPI cards, handleShareSummary, day-end summary card, all state matrices, freshness map, navigation, mutation safety, role/plan variants, data edge cases.
+- Next: Round 13 (Ledger lists + SplitView) or whichever round the user picks.
