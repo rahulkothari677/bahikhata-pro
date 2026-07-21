@@ -147,6 +147,28 @@ export async function computePartyBalance(
   const paymentsReceived = fromPaise(Number(receivedAgg[0]?.totalPaise ?? 0))
   const paymentsPaid = fromPaise(Number(paidAgg[0]?.totalPaise ?? 0))
 
+  // 🔒 V26 Phase 8: Debug log to trace the ₹100 → ₹10,000 issue.
+  // The write path is confirmed correct (Vercel logs show amt:100, dbAmount:100).
+  // This log shows what the READ path returns — if paymentsReceived is 10000
+  // instead of 100, the raw SQL is returning rupees (not paise) and fromPaise
+  // is double-converting.
+  console.log('[party-balance] READ', {
+    partyId,
+    rawReceivedPaise: Number(receivedAgg[0]?.totalPaise ?? 0),
+    rawPaidPaise: Number(paidAgg[0]?.totalPaise ?? 0),
+    paymentsReceived,
+    paymentsPaid,
+    balance: roundMoney(
+      party.openingBalance
+      + salesOutstanding
+      - purchaseOutstanding
+      - creditNoteOutstanding
+      + debitNoteOutstanding
+      - paymentsReceived
+      + paymentsPaid
+    ),
+  })
+
   const balance = roundMoney(
     party.openingBalance
     + salesOutstanding

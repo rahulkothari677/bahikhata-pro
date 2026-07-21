@@ -227,6 +227,14 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     ])
 
     // === Process results (all in JS — no more DB queries) ===
+    // 🔒 V26 Phase 8: Debug log — trace statement payment amounts after extension read.
+    if (statementPayments.length > 0) {
+      console.log('[parties/[id]] statementPayments read', {
+        count: statementPayments.length,
+        firstAmount: statementPayments[0]?.amount,
+        paymentTotalCount: paymentTotal,
+      })
+    }
 
     // Extract per-type counts from the groupBy result.
     // Result shape: [{ type: 'sale', _count: { _all: 5 } }, { type: 'purchase', _count: { _all: 3 } }, ...]

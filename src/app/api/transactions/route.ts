@@ -213,7 +213,13 @@ export async function POST(req: NextRequest) {
     // using the shared helper (same logic for both POST and PUT).
     // Was: POST derived it server-side, PUT trusted the client flag.
     // Now: both use deriveInterStateStatus() from lib/gst.ts.
-    const { isInterState, party } = await deriveInterStateStatus(userId, partyId)
+    // 🔒 V26 Phase 8 R10-1: When the server can't determine the state
+    // (shop or party state is missing), honor the client's isInterState
+    // value — it's the only information available. When both states are
+    // known, the server's derivation is authoritative (prevents tampering).
+    const { isInterState: derivedIsInterState, party, indeterminate } = await deriveInterStateStatus(userId, partyId)
+    const clientIsInterState = typeof body.isInterState === 'boolean' ? body.isInterState : undefined
+    const isInterState = indeterminate && clientIsInterState !== undefined ? clientIsInterState : derivedIsInterState
     if (partyId && !party) {
       return NextResponse.json({ error: 'Party not found' }, { status: 404 })
     }

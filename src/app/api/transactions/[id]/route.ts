@@ -147,7 +147,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     // using the shared helper — same logic as POST. Was: trusted the client
     // isInterState flag (user could flip CGST/SGST ↔ IGST → wrong GST return).
     // Now: client flag is IGNORED, server derives from shop state vs party state.
-    const { isInterState, party } = await deriveInterStateStatus(userId, partyId)
+    // 🔒 V26 Phase 8 R10-1: When indeterminate (state missing), honor client override.
+    const { isInterState: derivedIsInterState, party, indeterminate } = await deriveInterStateStatus(userId, partyId)
+    const clientIsInterState = typeof body.isInterState === 'boolean' ? body.isInterState : undefined
+    const isInterState = indeterminate && clientIsInterState !== undefined ? clientIsInterState : derivedIsInterState
     if (partyId && !party) {
       return NextResponse.json({ error: 'Party not found' }, { status: 404 })
     }

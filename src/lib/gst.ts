@@ -43,7 +43,7 @@ export function invalidateShopStateCache(_userId: string): void {
 export async function deriveInterStateStatus(
   userId: string,
   partyId?: string | null,
-): Promise<{ isInterState: boolean; party: any | null }> {
+): Promise<{ isInterState: boolean; party: any | null; indeterminate: boolean }> {
   let party: any = null
 
   if (partyId) {
@@ -64,7 +64,14 @@ export async function deriveInterStateStatus(
   // Inter-state ONLY if both states are known and differ
   const isInterState = !!(shopState && partyState && shopState.toLowerCase() !== partyState.toLowerCase())
 
-  return { isInterState, party }
+  // 🔒 V26 Phase 8 R10-1: Return whether the derivation is indeterminate
+  // (either state is missing). When indeterminate, the caller should honor
+  // the client-supplied isInterState value — it's the only information available.
+  // When determinate (both states known), the server's derivation is authoritative
+  // and the client's value is ignored (prevents tax-head tampering).
+  const indeterminate = !shopState || !partyState
+
+  return { isInterState, party, indeterminate }
 }
 
 // ─── State name ↔ code mapping (for GSTR-1 POS field) ─────────────────────

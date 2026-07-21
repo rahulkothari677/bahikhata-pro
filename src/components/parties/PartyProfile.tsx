@@ -748,7 +748,7 @@ export function PartyProfile() {
           icon={ArrowDownRight}
           color="text-violet-600"
           bg="bg-violet-100"
-          sub={stats.paymentsReceived > 0 ? `₹${formatINR(stats.paymentsReceived)} via Settle` : undefined}
+          sub={stats.paymentsReceived > 0 ? `${formatINR(stats.paymentsReceived)} via Settle` : undefined}
         />
         )}
         {/* Paid card: show when there are purchases or paid payments */}
@@ -760,7 +760,7 @@ export function PartyProfile() {
           icon={ArrowUpRight}
           color="text-rose-600"
           bg="bg-rose-100"
-          sub={stats.paymentsPaid > 0 ? `₹${formatINR(stats.paymentsPaid)} via Settle` : undefined}
+          sub={stats.paymentsPaid > 0 ? `${formatINR(stats.paymentsPaid)} via Settle` : undefined}
         />
         )}
       </div>

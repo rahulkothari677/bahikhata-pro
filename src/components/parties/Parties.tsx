@@ -406,12 +406,21 @@ function PartyDialog({ open, onOpenChange, onSuccess }: {
       sonnerToast.error('Name is required')
       return
     }
+    // 🔒 V26 Phase 8 V-2 (CRITICAL): Negate opening balance for suppliers.
+    // The label says "how much do you owe them?" — but the balance engine
+    // uses positive = they owe us. So a supplier you owe ₹7,410 must be
+    // stored as -7410. Was: stored as +7410 → app showed "they owe you ₹7,410"
+    // — the exact opposite of what the label promised. This made the bug
+    // WORSE than before the fix.
+    const rawOpening = parseFloat(form.openingBalance) || 0
+    const normalizedOpening = form.type === 'supplier' ? -Math.abs(rawOpening) : rawOpening
+    const payload = { ...form, openingBalance: normalizedOpening }
     setSaving(true)
     try {
       const r = await offlineFetch('/api/parties', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
         offline: { invalidate: ['/api/parties', '/api/dashboard'] },
       })
       if (!r.ok) throw new Error(await readError(r))
