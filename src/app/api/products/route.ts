@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withConnectionRetry } from '@/lib/db'
-import { getAuthUserIdWithModule } from '@/lib/get-auth'
+import { getAuthUserIdWithModule, getAuthContext } from '@/lib/get-auth'
+import { canAccessModule } from '@/lib/staff-permissions'
+import { shouldHideProfit, stripProductsProfit } from '@/lib/profit-visibility'
 import { withCache, noStore } from '@/lib/cache'
 import { checkEntityLimit } from '@/lib/usage-limits'
 import { roundMoney } from '@/lib/money'
@@ -9,8 +11,18 @@ import { apiError } from '@/lib/api-error'
 
 export async function GET() {
   try {
-    const { userId, error } = await getAuthUserIdWithModule('inventory')
-    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // 🔒 R15 COMPLETION (2026-07-21): use getAuthContext so the ROLE is
+    // available for the hideProfit check below. getAuthUserIdWithModule returns
+    // only { userId }, which is part of why the cost-price leak survived here:
+    // the route had no way to know it was serving a staff member.
+    const authCtx = await getAuthContext()
+    if (authCtx.error || !authCtx.userId) {
+      return authCtx.error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    const userId = authCtx.userId
+    if (!canAccessModule(authCtx.role, authCtx.permissions, 'inventory')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
 
     // 🔒 AUDIT FIX N2 (v3): Read currentStock directly from the Product column
     // instead of re-deriving it from ALL transaction items on every page load.
@@ -36,10 +48,21 @@ export async function GET() {
       isOversold: p.currentStock < 0,  // 🔒 V11: distinct flag for OVERSOLD badge
     }))
 
+    // 🔒 R15 COMPLETION (2026-07-21): strip cost/profit fields for staff when
+    // the owner has hideProfit enabled. Round 15 hid these figures in the
+    // Inventory COMPONENT, but this endpoint still returned `purchasePrice`
+    // (the cost price) and `stockValue` to every caller — readable from the
+    // Network tab or the offline IndexedDB cache. Hiding a number in the UI is
+    // not access control. salePrice/mrp/currentStock are deliberately kept:
+    // staff need them to sell and to reorder.
+    const hideProfit = await shouldHideProfit(userId, authCtx.role)
+
     // 🔒 AUDIT V25 FIX BUG-031 (Batch 5): Was withCache({ maxAge: 60, swr: 300 }).
     // Money-bearing endpoint — stock counts + sale prices must always be fresh.
     // A shopkeeper who just made a sale would see stale stock for up to 60s.
-    return noStore({ products: productsWithStock })
+    return noStore({
+      products: hideProfit ? stripProductsProfit(productsWithStock) : productsWithStock,
+    })
   } catch (error) {
     // 🔒 V11 §4.2: Use apiError() for consistent errorId logging.
     // Was: console.error + generic 503 with no errorId.

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthContext, assertCanWrite } from '@/lib/get-auth'
 import { canAccessModule } from '@/lib/staff-permissions'
+import { shouldHideProfit, stripTransactionProfit } from '@/lib/profit-visibility'
 import { computeLineItems } from '@/lib/line-items'
 import { normalizeToUnit } from '@/lib/units'
 import { roundMoney, toMoney } from '@/lib/money'
@@ -214,7 +215,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     })
 
     return NextResponse.json({
-      transaction: sale,
+      // 🔒 R15 SIBLING (2026-07-21): strip grossProfit for staff when the owner
+      // has hideProfit on. Every other transaction endpoint gates this, but the
+      // convert route returned the freshly-created sale raw — so a staff member
+      // converting an estimate received the profit figure in the response body,
+      // readable from the Network tab. Found by sweeping all routes that expose
+      // profit fields, not by looking at this file.
+      transaction: (await shouldHideProfit(userId, authCtx.role))
+        ? stripTransactionProfit(sale)
+        : sale,
       estimateId: estimate.id,
       message: 'Estimate converted to sale successfully.',
     })

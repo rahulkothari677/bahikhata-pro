@@ -90,6 +90,42 @@ export function stripReportProfit(data: any): any {
 }
 
 /**
+ * Strip cost/profit fields from product rows.
+ *
+ * 🔒 R15 COMPLETION (2026-07-21): Round 15 hid the Inventory profit figures in
+ * the COMPONENT (stat card, list column, grid card, ProductDialog preview) —
+ * but /api/products still returned `purchasePrice` and `stockValue` to every
+ * caller. A staff member with hideProfit enabled could read the cost price of
+ * every product straight from the Network tab, or out of the offline IndexedDB
+ * cache. Hiding a number in the UI is not access control; the server must not
+ * send it.
+ *
+ * `purchasePrice` is the cost price — combined with the visible `salePrice` it
+ * reveals the exact margin, which is the whole point of hideProfit.
+ * `stockValue` is derived from it (stock × purchasePrice), so it leaks the same
+ * information in aggregate and must go too.
+ *
+ * `salePrice`, `mrp`, `currentStock` and the low-stock flags are intentionally
+ * KEPT: staff need them to sell and to reorder.
+ */
+export function stripProductProfit(product: any): any {
+  if (!product) return product
+  return {
+    ...product,
+    purchasePrice: undefined,
+    stockValue: undefined,
+    potentialProfit: undefined,
+    profitMargin: undefined,
+  }
+}
+
+/** Strip cost/profit fields from a list of product rows. */
+export function stripProductsProfit(products: any[]): any[] {
+  if (!Array.isArray(products)) return products
+  return products.map(stripProductProfit)
+}
+
+/**
  * Strip grossProfit from a single transaction object.
  */
 export function stripTransactionProfit(txn: any): any {
