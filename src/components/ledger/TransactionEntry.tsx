@@ -232,12 +232,16 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   // check in the cart (block input or show warning) BEFORE the user hits Save.
   // Without this, the user fills the whole form, hits Save, then gets a 400 —
   // frustrating UX. Now they see the warning as they type.
+  // 🔒 V26 Phase 8 R10-2: Added staleTime matching useSetting hook (5 min).
+  // Without this, the TransactionEntry's own useQuery for ['setting'] could
+  // serve stale data after the user changed roundOffEnabled in another tab.
   const { data: settingData } = useQuery({
     queryKey: ['setting'],
     queryFn: async () => {
       const r = await offlineFetch('/api/settings')
       return r.json()
     },
+    staleTime: 5 * 60 * 1000, // 5 minutes — matches useSetting hook
   })
   const stockPolicy: 'block' | 'allow' = settingData?.setting?.stockPolicy || 'block'
 

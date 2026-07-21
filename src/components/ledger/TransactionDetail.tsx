@@ -94,12 +94,14 @@ export function TransactionDetail() {
   })
 
   // Fetch shop settings for invoice letterhead (GSTIN, shop name, address, owner)
+  // 🔒 V26 Phase 8 R10-2: Added staleTime matching useSetting hook (5 min).
   const { data: settingData } = useQuery({
     queryKey: ['setting'],
     queryFn: async () => {
       const r = await offlineFetch('/api/settings')
       return r.json()
     },
+    staleTime: 5 * 60 * 1000,
   })
   const setting = settingData?.setting || {}
 
