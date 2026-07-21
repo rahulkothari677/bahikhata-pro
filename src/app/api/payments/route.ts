@@ -223,8 +223,36 @@ export async function POST(req: NextRequest) {
           clientMutationId: clientMutationId || null,  // 🔒 V19-007: idempotency
         },
       })
-      // 🔒 V26 Phase 8: Debug log — what the extension returned (should be rupees).
-      console.log('[payments] STORED', { dbAmount: payment?.amount, expectedPaise: Math.round(amt * 100) })
+      // 🔒 M11 GUARD (2026-07-21): verify what actually landed in the COLUMN.
+      //
+      // The previous version of this log read `payment.amount` — the value
+      // returned by create(), which has already passed through the money
+      // extension's read converter. A row corrupted by a double-applied
+      // migration still round-trips as the "correct" rupee value there, so the
+      // log always looked healthy and could never reveal the 100x bug. It sent
+      // the investigation down the wrong path for days.
+      //
+      // Reading the raw column with $queryRaw bypasses the extension and shows
+      // the truth: a ₹100 payment MUST store 10000 paise. 1000000 means the row
+      // was multiplied by 100 twice.
+      try {
+        const [raw] = await db.$queryRaw<Array<{ amountPaise: bigint }>>`
+          SELECT "amount"::bigint AS "amountPaise" FROM "Payment"
+          WHERE "id" = ${payment.id} AND "deletedAt" IS NULL
+        `
+        const rawPaise = raw ? Number(raw.amountPaise) : null
+        const expectedPaise = Math.round(amt * 100)
+        if (rawPaise !== null && rawPaise !== expectedPaise) {
+          // Loud, and captured by Sentry via the console.error transport.
+          console.error('[payments] PAISE MISMATCH — stored value is not rupees×100', {
+            paymentId: payment.id, rawPaise, expectedPaise,
+            ratio: expectedPaise ? rawPaise / expectedPaise : null,
+            hint: 'ratio 100 = row multiplied by 100 twice (see /api/debug/paise-audit)',
+          })
+        }
+      } catch {
+        // Diagnostic only — never fail a payment because the check failed.
+      }
     } catch (createError: any) {
       if (createError?.code === 'P2002' && clientMutationId) {
         // Concurrent replay raced us — re-fetch and return idempotent.

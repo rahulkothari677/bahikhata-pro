@@ -114,6 +114,53 @@ for i in $(seq 1 "$MAX_RETRIES"); do
     fi
     ERROR_CODE=$(echo "$OUTPUT" | grep -oE "P3009|P3018" | head -1)
     echo "[migrate] ⚠️  FAILED-MIGRATION STATE ($ERROR_CODE). Failed migration: ${FAILED_MIGRATION:-unknown}"
+    # 🔒 M11 ROOT-CAUSE GUARD (2026-07-21): NEVER auto-replay a migration that
+    # TRANSFORMS DATA. The self-heal below marks a failed migration as
+    # rolled-back and RE-RUNS it, on the assumption (stated in the V12.2 comment
+    # above) that "all our migrations are idempotent". That assumption is FALSE
+    # for data transforms.
+    #
+    # This is not hypothetical — it is the confirmed root cause of the
+    # ₹100 → ₹10,000 payment bug. 20260712000001_paise_migration contains 73
+    # statements of the form:
+    #     ALTER TABLE X ALTER COLUMN c TYPE INTEGER USING ROUND(c * 100);
+    # Postgres re-executes the USING expression even when the column is already
+    # INTEGER, so a second application multiplies every money value by 100 a
+    # second time. A migration can commit in Postgres and still be recorded as
+    # failed (connection drop on a Neon cold start), which is exactly when this
+    # self-heal fires.
+    #
+    # Structural DDL (CREATE INDEX IF NOT EXISTS / ADD COLUMN IF NOT EXISTS) is
+    # safe to replay. Data transforms are not. When we detect one, we fail the
+    # build and require a human — losing a deploy is recoverable, silently
+    # multiplying every price and payment by 100 is not.
+    MIGRATION_SQL="prisma/migrations/${FAILED_MIGRATION}/migration.sql"
+    if [ -n "$FAILED_MIGRATION" ] && [ -f "$MIGRATION_SQL" ]; then
+      if grep -qiE "USING ROUND\(|USING \(|ALTER COLUMN .* TYPE |^[[:space:]]*UPDATE |^[[:space:]]*INSERT INTO |^[[:space:]]*DELETE FROM " "$MIGRATION_SQL"; then
+        echo "[migrate] ========================================================================"
+        echo "[migrate] ❌ REFUSING TO AUTO-RETRY — '$FAILED_MIGRATION' TRANSFORMS DATA."
+        echo "[migrate] ------------------------------------------------------------------------"
+        echo "[migrate] This migration contains a data transform (column retype / UPDATE /"
+        echo "[migrate] INSERT / DELETE). Re-running it could apply the transform TWICE."
+        echo "[migrate] Precedent: re-applying the paise migration multiplied every money"
+        echo "[migrate] value by 100 a second time (the M11 100x payment bug)."
+        echo "[migrate]"
+        echo "[migrate] A HUMAN must now determine whether the migration actually committed:"
+        echo "[migrate]   1. npx prisma migrate status"
+        echo "[migrate]   2. Inspect the target tables. Did the transform apply?"
+        echo "[migrate]      e.g.  SELECT MIN(amount), MAX(amount) FROM \"Payment\";"
+        echo "[migrate]            (values are PAISE — a Rs 100 payment must read 10000)"
+        echo "[migrate]   3a. If it DID apply  -> npx prisma migrate resolve --applied    $FAILED_MIGRATION"
+        echo "[migrate]   3b. If it did NOT    -> npx prisma migrate resolve --rolled-back $FAILED_MIGRATION"
+        echo "[migrate]   4. Re-deploy."
+        echo "[migrate]"
+        echo "[migrate] Production keeps its last good deployment until then."
+        echo "[migrate] ========================================================================"
+        exit 1
+      fi
+      echo "[migrate] Guard: '$FAILED_MIGRATION' contains no data transform — safe to replay."
+    fi
+
     if [ -n "$FAILED_MIGRATION" ] && [ "${P3009_HEALED:-0}" = "0" ]; then
       P3009_HEALED=1
       echo "[migrate] Self-heal: marking '$FAILED_MIGRATION' as rolled back and retrying deploy once..."
