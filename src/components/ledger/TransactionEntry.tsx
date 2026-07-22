@@ -25,6 +25,7 @@ import { VoiceEntry } from '@/components/common/VoiceEntry'
 import { DraftManagerModal } from '@/components/common/DraftManagerModal'
 import { BarcodeScanner } from '@/components/common/BarcodeScanner'
 import { deriveInterStateFromStates } from '@/lib/gst-states'
+import { useSetting } from '@/hooks/use-setting'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { track, EVENTS } from '@/lib/analytics'
 import { useDrafts } from '@/hooks/use-drafts'
@@ -78,6 +79,18 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   const [originalTransactionId, setOriginalTransactionId] = useState<string | null>(null)
   const { setView, triggerRefresh, setScannerBillType, previousView, setPreviousView, features, triggerVoiceOpen, triggerBarcodeOpen } = useAppStore()
   const queryClient = useQueryClient()
+  // 🔒 ROUND 10b (2026-07-22): the New Sale screen printed "Gross Profit
+  // ₹X (Y%)" in the summary with NO staff gate — so a shop assistant with
+  // "hide profit" turned on read the exact margin on every bill they rang up.
+  // Rounds 12-15 closed this on the dashboard, inventory and reports, and
+  // missed the one screen staff use most.
+  //
+  // Gating the display also avoids a second problem: the figure is computed in
+  // the browser from the product's purchase price, and that price is now
+  // stripped from /api/products for hide-profit staff — so the number shown
+  // was not merely private, it was wrong (cost read as zero, so the whole sale
+  // looked like profit).
+  const { hideProfit } = useSetting()
 
   const [partyId, setPartyId] = useState('')
   const [partySearch, setPartySearch] = useState('')
@@ -150,6 +163,13 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
     discountAmount: string
     notes: string
     items: ItemRow[]
+    // 🔒 ROUND 10b (2026-07-22): the four fields that decide WHAT the
+    // form is saving. Without them a half-finished credit note restored as a
+    // plain sale — see the note on the autosave effect below.
+    actualType?: string
+    noteReason?: string
+    affectsStock?: boolean
+    originalTransactionId?: string | null
   }>(draftFormType)
 
   // Rate prompt — increments counter after each successful transaction
@@ -192,9 +212,23 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
         unit: item.unit || 'pcs',
       })))
     }
+    // 🔒 ROUND 10b: restore WHAT the form is, not just what is on it.
+    // Older drafts predate these fields; `undefined` leaves the current mode
+    // alone rather than silently downgrading a note to a sale.
+    if (draft.actualType) setActualType(draft.actualType)
+    if (draft.noteReason !== undefined) setNoteReason(draft.noteReason)
+    if (typeof draft.affectsStock === 'boolean') setAffectsStock(draft.affectsStock)
+    if (draft.originalTransactionId !== undefined) setOriginalTransactionId(draft.originalTransactionId)
+
     try { haptic.success() } catch {}
-    sonnerToast.success(`Draft restored — ${draft.items?.length || 0} item${(draft.items?.length || 0) === 1 ? '' : 's'}`)
-  }, [restoreDraft])
+    const restoredAs = draft.actualType && draft.actualType !== type
+      ? ({ 'credit-note': 'credit note', 'debit-note': 'debit note', estimate: 'estimate' } as Record<string, string>)[draft.actualType] || draft.actualType
+      : null
+    sonnerToast.success(
+      `Draft restored — ${draft.items?.length || 0} item${(draft.items?.length || 0) === 1 ? '' : 's'}`
+      + (restoredAs ? ` (${restoredAs})` : ''),
+    )
+  }, [restoreDraft, type])
 
   // Autosave on form changes (debounced inside the hook).
   // Skip autosave when:
@@ -215,9 +249,21 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       discountAmount,
       notes,
       items,
+      // 🔒 ROUND 10b (2026-07-22): a credit/debit note or an estimate
+      // autosaves into the SAME bucket as a plain sale (`txn-sale`), and the
+      // saved payload carried none of the fields that make it a note. So a
+      // shopkeeper who started a return worth 500, got interrupted, then
+      // restored the draft and saved it recorded a 500 SALE instead: the
+      // customer's dues went UP 500 rather than DOWN 500 — a 1,000 swing the
+      // wrong way — and GST reported an outward supply instead of a credit
+      // note. Persisting the mode makes a restored draft what it was.
+      actualType,
+      noteReason,
+      affectsStock,
+      originalTransactionId,
     })
 
-  }, [partyId, date, invoiceNo, isInterState, paymentMode, paidAmount, discountAmount, notes, items, presetChecked, presetLoaded])
+  }, [partyId, date, invoiceNo, isInterState, paymentMode, paidAmount, discountAmount, notes, items, presetChecked, presetLoaded, actualType, noteReason, affectsStock, originalTransactionId])
 
   // Fetch products
   const { data: productsData } = useQuery({
@@ -1640,7 +1686,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                     <span className="font-bold text-rose-600 dark:text-rose-400">{formatINR(due)}</span>
                   </div>
                 )}
-                {isSale && !isNote && totalProfit > 0 && (
+                {!hideProfit && isSale && !isNote && totalProfit > 0 && (
                   <div className="flex items-center justify-between text-sm bg-emerald-50 -mx-4 px-4 py-2 rounded-lg">
                     <span className="text-emerald-700 dark:text-emerald-300 font-medium flex items-center gap-1">
                       <TrendingUp className="w-3.5 h-3.5" /> Gross Profit
@@ -1656,7 +1702,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                     the absolute value + negative sign so the user understands
                     the direction. Server stores negative; UI shows the magnitude
                     with a clear "reversed" label + down-arrow icon. */}
-                {isNote && totalProfit < 0 && (
+                {!hideProfit && isNote && totalProfit < 0 && (
                   <div className="flex items-center justify-between text-sm bg-rose-50 dark:bg-rose-950/20 -mx-4 px-4 py-2 rounded-lg">
                     <span className="text-rose-700 dark:text-rose-300 font-medium flex items-center gap-1">
                       <TrendingDown className="w-3.5 h-3.5" /> Profit Reversed
