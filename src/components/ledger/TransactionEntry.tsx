@@ -7,6 +7,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { NumberField } from '@/components/ui/number-field'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -1187,19 +1188,27 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                         </div>
                         {/* Row 2: Qty + Unit selector + Price + GST — fills FULL width */}
                         <div className="flex items-center gap-1 pl-5 mt-1">
-                          <Input
-                            inputMode="decimal" type="number"
+                          <NumberField
+                            compact
+                            aria-label="Quantity"
                             value={item.quantity}
-                            onChange={(e) => {
-                              const val = parseFloat(e.target.value) || 0
+                            onValueChange={(v) => {
+                              const val = parseFloat(v) || 0
                               // 🔒 V17 Audit Phase 10: Round to integer for count units
                               // Prevents 22.02 pcs (milk packs must be whole numbers)
                               const finalVal = isCountUnit(item.unit) ? Math.round(val) : val
                               handleUpdateItem(i, 'quantity', finalVal)
                             }}
-                            className="flex-1 min-w-0 h-8 text-center text-sm tabular-nums"
-                            min="0"
-                            step={stepForUnit(item.unit)}
+                            className="flex-1 min-w-0"
+                            inputClassName="tabular-nums"
+                            min={0}
+                            // stepForUnit() is the INPUT precision (0.001 for
+                            // kg) — using it as the tap increment made "+" go
+                            // 1 → 1.001, which is useless at a counter. Taps
+                            // move by a unit a shopkeeper actually sells in;
+                            // any precise value can still be typed.
+                            step={isCountUnit(item.unit) ? 1 : 0.5}
+                            decimals={isCountUnit(item.unit) ? 0 : 3}
                             placeholder="Qty"
                           />
                           {/* 🔒 V12: Unit is now an editable selector (kg/gm, ltr/ml, ...) */}
@@ -1216,13 +1225,16 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                           </Select>
                           <span className="text-3xs text-muted-foreground flex-shrink-0">×</span>
                           <span className="text-3xs text-muted-foreground flex-shrink-0">₹</span>
-                          <Input
-                            inputMode="decimal" type="number"
+                          <NumberField
+                            compact
+                            aria-label="Price"
                             value={item.unitPrice}
-                            onChange={(e) => handleUpdateItem(i, 'unitPrice', parseFloat(e.target.value) || 0)}
-                            className="flex-1 min-w-0 h-8 text-center text-sm tabular-nums"
-                            min="0"
-                            step="0.01"
+                            onValueChange={(v) => handleUpdateItem(i, 'unitPrice', parseFloat(v) || 0)}
+                            className="flex-1 min-w-0"
+                            inputClassName="tabular-nums"
+                            min={0}
+                            step={1}
+                            decimals={2}
                             placeholder="Price"
                           />
                           <Select
@@ -1454,7 +1466,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
 
               <div>
                 <Label htmlFor="field-discount">Discount (₹)</Label>
-                <Input id="field-discount" type="number" inputMode="decimal" value={discountAmount} onChange={(e) => setDiscountAmount(e.target.value)} placeholder="0" className="mt-1" onKeyDown={(e) => { if (e.key === 'Enter') handleSave() }} />
+                <NumberField id="field-discount" value={discountAmount} onValueChange={setDiscountAmount} placeholder="0" className="mt-1" min={0} step={1} decimals={2} />
               </div>
 
               <div>
@@ -1491,13 +1503,14 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                   {cashRefund && (
                     <div>
                       <Label htmlFor="field-refund-amount">Refund Amount (₹)</Label>
-                      <Input id="field-refund-amount"
-                        inputMode="decimal" type="number"
+                      <NumberField id="field-refund-amount"
                         value={paidAmount}
-                        onChange={(e) => setPaidAmount(e.target.value)}
+                        onValueChange={setPaidAmount}
                         placeholder={`Full refund: ${totalAmount.toFixed(0)}`}
                         className="mt-1"
-                        onKeyDown={(e) => { if (e.key === 'Enter') handleSave() }}
+                        min={0}
+                        step={10}
+                        decimals={2}
                       />
                       <p className="text-3xs text-muted-foreground mt-1">
                         Leave empty for a full cash refund. Any un-refunded portion adjusts the khata.
@@ -1508,13 +1521,14 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
               ) : (
                 <div>
                   <Label htmlFor="field-paid-amount">Paid Amount (₹)</Label>
-                  <Input id="field-paid-amount"
-                    inputMode="decimal" type="number"
+                  <NumberField id="field-paid-amount"
                     value={paidAmount}
-                    onChange={(e) => setPaidAmount(e.target.value)}
+                    onValueChange={setPaidAmount}
                     placeholder={`Full: ${totalAmount.toFixed(0)}`}
                     className="mt-1"
-                    onKeyDown={(e) => { if (e.key === 'Enter') handleSave() }}
+                    min={0}
+                    step={10}
+                    decimals={2}
                   />
                   <p className="text-3xs text-muted-foreground mt-1">Leave empty for full payment</p>
                 </div>

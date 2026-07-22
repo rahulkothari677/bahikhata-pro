@@ -30,6 +30,16 @@ import { haptic } from '@/lib/haptic'
 import { useSetting } from '@/hooks/use-setting'
 import { readError } from '@/lib/read-error'
 import { invalidateMoneyCaches } from '@/lib/invalidate-money-caches'
+import { NumberField } from '@/components/ui/number-field'
+
+/**
+ * Sentinel values for the party <Select> in the edit dialog.
+ * Radix cannot hold '' as an item value, so "no party" needs its own token —
+ * without one there was no way to move a sale back to a walk-in customer, and
+ * no way to create a customer without abandoning the edit.
+ */
+const PARTY_WALK_IN = '__walkin__'
+const PARTY_ADD_NEW = '__add_new__'
 
 const PAYMENT_MODES = [
   { value: 'cash', label: 'Cash' },
@@ -953,6 +963,13 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
     totalAmount: '',
   })
   const [items, setItems] = useState<any[]>([])
+  const queryClient = useQueryClient()
+  // Inline party creation — the edit dialog previously listed existing parties
+  // only, so a sale entered for a walk-in could never be assigned to a new
+  // customer without cancelling the edit and going to Parties first.
+  const [addingParty, setAddingParty] = useState(false)
+  const [creatingParty, setCreatingParty] = useState(false)
+  const [newParty, setNewParty] = useState({ name: '', phone: '' })
 
   const { data: productsData } = useQuery({
     queryKey: ['products', 'for-edit'],
@@ -1025,6 +1042,42 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
     setItems(items.filter((_, i) => i !== index))
   }
 
+  const handleCreateParty = async () => {
+    const name = newParty.name.trim()
+    if (!name) return
+    setCreatingParty(true)
+    try {
+      const r = await offlineFetch('/api/parties', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          phone: newParty.phone.trim() || null,
+          type: isSale ? 'customer' : 'supplier',
+        }),
+        offline: { invalidate: ['/api/parties'] },
+      })
+      if (!r.ok) throw new Error(await readError(r))
+      const created = (await r.json())?.party
+      // An offline-queued create has no id yet — keep the dialog honest rather
+      // than selecting a party that does not exist on the server.
+      if (!created?.id) {
+        sonnerToast.success('Party queued — reopen this edit once it syncs')
+        setAddingParty(false)
+        return
+      }
+      await queryClient.invalidateQueries({ queryKey: ['parties'] })
+      setForm(f => ({ ...f, partyId: created.id }))
+      setAddingParty(false)
+      setNewParty({ name: '', phone: '' })
+      sonnerToast.success(`${created.name} added`)
+    } catch (e: any) {
+      sonnerToast.error(e?.message || 'Could not add party')
+    } finally {
+      setCreatingParty(false)
+    }
+  }
+
   const handleSave = async () => {
     setSaving(true)
     try {
@@ -1083,7 +1136,7 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
             <div className="space-y-3">
               <div>
                 <Label htmlFor="field-amount">Amount (₹)</Label>
-                <Input id="field-amount" type="number" inputMode="decimal" value={form.totalAmount} onChange={(e) => setForm({ ...form, totalAmount: e.target.value })} />
+                <NumberField id="field-amount" value={form.totalAmount} onValueChange={(v) => setForm({ ...form, totalAmount: v })} step={10} min={0} decimals={2} />
               </div>
               <div>
                 <Label htmlFor="field-category">Category</Label>
@@ -1114,14 +1167,50 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <Label htmlFor="field-issale-customer-supplier">{isSale ? 'Customer' : 'Supplier'}</Label>
-                  <Select value={form.partyId} onValueChange={(v) => setForm({ ...form, partyId: v })}>
+                  <Select
+                    value={form.partyId || PARTY_WALK_IN}
+                    onValueChange={(v) => {
+                      if (v === PARTY_ADD_NEW) { setAddingParty(true); return }
+                      setForm({ ...form, partyId: v === PARTY_WALK_IN ? '' : v })
+                    }}
+                  >
                     <SelectTrigger><SelectValue placeholder="Select party" /></SelectTrigger>
                     <SelectContent>
+                      <SelectItem value={PARTY_WALK_IN}>
+                        {isSale ? 'Walk-in customer (no party)' : 'No supplier'}
+                      </SelectItem>
                       {parties.map(p => (
                         <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                       ))}
+                      <SelectItem value={PARTY_ADD_NEW}>
+                        + Add new {isSale ? 'customer' : 'supplier'}
+                      </SelectItem>
                     </SelectContent>
                   </Select>
+                  {addingParty && (
+                    <div className="mt-2 space-y-2 rounded-lg border border-dashed p-2">
+                      <Input
+                        autoFocus
+                        placeholder={isSale ? 'Customer name' : 'Supplier name'}
+                        value={newParty.name}
+                        onChange={(e) => setNewParty({ ...newParty, name: e.target.value })}
+                      />
+                      <Input
+                        placeholder="Phone (optional)"
+                        inputMode="tel"
+                        value={newParty.phone}
+                        onChange={(e) => setNewParty({ ...newParty, phone: e.target.value })}
+                      />
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={handleCreateParty} disabled={creatingParty || !newParty.name.trim()}>
+                          {creatingParty ? 'Adding…' : 'Add'}
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => { setAddingParty(false); setNewParty({ name: '', phone: '' }) }}>
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <Label htmlFor="field-date-2">Date</Label>
@@ -1151,6 +1240,7 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
                   {items.map((item, i) => (
                     <div key={i} className="grid grid-cols-12 gap-2 items-end p-2 rounded-lg bg-muted/30">
                       <div className="col-span-12 sm:col-span-4">
+                        <Label className="text-3xs text-muted-foreground">Product</Label>
                         <Select value={item.productId} onValueChange={(v) => updateItem(i, 'productId', v)}>
                           <SelectTrigger className="h-9"><SelectValue placeholder="Product" /></SelectTrigger>
                           <SelectContent>
@@ -1158,16 +1248,37 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
                           </SelectContent>
                         </Select>
                       </div>
-                      <div className="col-span-5 sm:col-span-3">
+                      <div className="col-span-6 sm:col-span-2">
+                        <Label className="text-3xs text-muted-foreground">Name</Label>
                         <Input value={item.productName} onChange={(e) => updateItem(i, 'productName', e.target.value)} className="h-9" placeholder="Name" />
                       </div>
-                      <div className="col-span-3 sm:col-span-1">
-                        <Input type="number" inputMode="decimal" value={item.quantity} onChange={(e) => updateItem(i, 'quantity', parseFloat(e.target.value) || 0)} className="h-9" />
+                      {/* Qty was col-span-1 of 12 — a 29px box that clipped any
+                          two-digit quantity, so the field read as empty. */}
+                      <div className="col-span-6 sm:col-span-2">
+                        <Label className="text-3xs text-muted-foreground">Qty</Label>
+                        <NumberField
+                          aria-label="Quantity"
+                          value={item.quantity}
+                          onValueChange={(v) => updateItem(i, 'quantity', v === '' ? 0 : parseFloat(v) || 0)}
+                          step={1}
+                          min={0}
+                          decimals={3}
+                          compact
+                        />
                       </div>
-                      <div className="col-span-4 sm:col-span-2">
-                        <Input type="number" inputMode="decimal" value={item.unitPrice} onChange={(e) => updateItem(i, 'unitPrice', parseFloat(e.target.value) || 0)} className="h-9" />
+                      <div className="col-span-6 sm:col-span-2">
+                        <Label className="text-3xs text-muted-foreground">Rate</Label>
+                        <NumberField
+                          aria-label="Rate"
+                          value={item.unitPrice}
+                          onValueChange={(v) => updateItem(i, 'unitPrice', v === '' ? 0 : parseFloat(v) || 0)}
+                          step={1}
+                          min={0}
+                          decimals={2}
+                        />
                       </div>
-                      <div className="col-span-3 sm:col-span-1">
+                      <div className="col-span-5 sm:col-span-1">
+                        <Label className="text-3xs text-muted-foreground">GST</Label>
                         <Select value={String(item.gstRate)} onValueChange={(v) => updateItem(i, 'gstRate', parseFloat(v))}>
                           <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
                           <SelectContent>
@@ -1188,7 +1299,7 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                   <Label htmlFor="field-discount">Discount (₹)</Label>
-                  <Input id="field-discount" type="number" inputMode="decimal" value={form.discountAmount} onChange={(e) => setForm({ ...form, discountAmount: e.target.value })} />
+                  <NumberField id="field-discount" value={form.discountAmount} onValueChange={(v) => setForm({ ...form, discountAmount: v })} step={1} min={0} decimals={2} />
                 </div>
                 <div>
                   <Label htmlFor="field-payment-mode-2">Payment Mode</Label>
@@ -1201,7 +1312,7 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
                 </div>
                 <div>
                   <Label htmlFor="field-paid-amount">Paid Amount (₹)</Label>
-                  <Input id="field-paid-amount" type="number" inputMode="decimal" value={form.paidAmount} onChange={(e) => setForm({ ...form, paidAmount: e.target.value })} />
+                  <NumberField id="field-paid-amount" value={form.paidAmount} onValueChange={(v) => setForm({ ...form, paidAmount: v })} step={10} min={0} decimals={2} />
                 </div>
               </div>
 

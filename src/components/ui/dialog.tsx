@@ -54,13 +54,25 @@ function DialogContent({
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
 }) {
+  // 🔒 WIDTH FIX (2026-07-22): the base ended in `sm:max-w-lg` (512px). A
+  // caller's plain `max-w-4xl` is a DIFFERENT tailwind-merge group than a
+  // `sm:`-prefixed one, so both survived the merge and the responsive one won
+  // at ≥640px — every dialog that asked to be wide was silently clamped to
+  // 512px. That is why the Edit Sale item rows were crushed (the qty column
+  // rendered 26px wide and read as empty).
+  //
+  // Only the explicitly-wide dialogs opt out of the default; anything asking
+  // for lg or smaller keeps today's exact width, so this cannot reflow the
+  // ~15 small dialogs.
+  const wantsWide = /(^|\s)max-w-(xl|[2-7]xl|full|screen-)/.test(className ?? '')
   return (
     <DialogPortal data-slot="dialog-portal">
       <DialogOverlay />
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 sm:max-w-lg",
+          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200",
+          !wantsWide && "sm:max-w-lg",
           className
         )}
         {...props}

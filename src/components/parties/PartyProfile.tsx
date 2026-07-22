@@ -423,7 +423,20 @@ export function PartyProfile() {
   // (transactions + payments merged, running balance anchored to
   // stats.balance), so an exported statement can never disagree with the
   // statement on screen.
-  const buildStatementRows = () => statement.map((entry: any, i: number) => {
+  /**
+   * Rows for the three exporters, in READING order: oldest first.
+   *
+   * `statement` is newest-first because the on-screen feed shows the latest
+   * activity at the top. A printed khata is read the other way: a shopkeeper
+   * (or a CA) starts at the top and follows the running balance down to the
+   * closing figure. Exporting the feed order put a ₹100 payment on row 1 next
+   * to a balance of ₹139.07 and the oldest entry last, so the balance column
+   * appeared to run backwards and the final row did not match "CLOSING
+   * BALANCE". Reversing here fixes all three exporters at once and makes the
+   * last row's balance tie to the closing figure — the check a CA actually
+   * performs. The numbers themselves are untouched.
+   */
+  const buildStatementRows = () => [...statement].reverse().map((entry: any, i: number) => {
     const isPayment = entry.isPayment
     const particulars = isPayment
       ? (entry.type === 'payment-received' ? 'Payment received' : 'Payment made')

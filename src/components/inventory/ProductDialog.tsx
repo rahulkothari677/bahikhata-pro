@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { NumberField } from '@/components/ui/number-field'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast as sonnerToast } from 'sonner'
@@ -191,15 +192,15 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
           </div>
           <div>
             <Label htmlFor="field-purchase-price">Purchase Price (₹) *</Label>
-            <Input id="field-purchase-price" type="number" inputMode="decimal" value={form.purchasePrice} onChange={(e) => setForm({ ...form, purchasePrice: e.target.value })} placeholder="0" />
+            <NumberField id="field-purchase-price" value={form.purchasePrice} onValueChange={(v) => setForm({ ...form, purchasePrice: v })} placeholder="0" min={0} step={1} decimals={2} />
           </div>
           <div>
             <Label htmlFor="field-sale-price">Sale Price (₹) *</Label>
-            <Input id="field-sale-price" type="number" inputMode="decimal" value={form.salePrice} onChange={(e) => setForm({ ...form, salePrice: e.target.value })} placeholder="0" />
+            <NumberField id="field-sale-price" value={form.salePrice} onValueChange={(v) => setForm({ ...form, salePrice: v })} placeholder="0" min={0} step={1} decimals={2} />
           </div>
           <div>
             <Label htmlFor="field-mrp">MRP (₹)</Label>
-            <Input id="field-mrp" type="number" inputMode="decimal" value={form.mrp} onChange={(e) => setForm({ ...form, mrp: e.target.value })} placeholder="optional" />
+            <NumberField id="field-mrp" value={form.mrp} onValueChange={(v) => setForm({ ...form, mrp: v })} placeholder="optional" min={0} step={1} decimals={2} />
           </div>
           <div>
             <Label htmlFor="field-gst-rate">GST Rate (%)</Label>
@@ -247,11 +248,11 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
           </div>
           <div>
             <Label htmlFor="field-opening-stock">Opening Stock</Label>
-            <Input id="field-opening-stock" type="number" inputMode="decimal" value={form.openingStock} onChange={(e) => setForm({ ...form, openingStock: e.target.value })} placeholder="0" />
+            <NumberField id="field-opening-stock" value={form.openingStock} onValueChange={(v) => setForm({ ...form, openingStock: v })} placeholder="0" min={0} step={1} decimals={3} />
           </div>
           <div>
             <Label htmlFor="field-low-stock-alert-at">Low Stock Alert At</Label>
-            <Input id="field-low-stock-alert-at" type="number" inputMode="decimal" value={form.lowStockThreshold} onChange={(e) => setForm({ ...form, lowStockThreshold: e.target.value })} placeholder="5" />
+            <NumberField id="field-low-stock-alert-at" value={form.lowStockThreshold} onValueChange={(v) => setForm({ ...form, lowStockThreshold: v })} placeholder="5" min={0} step={1} decimals={3} />
           </div>
         </div>
 

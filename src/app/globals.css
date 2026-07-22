@@ -886,3 +886,19 @@ html {
 [data-state="closed"][data-slot="sheet-content"] {
   animation: dialog-closed-fallback 0s ease 0.5s forwards;
 }
+
+/**
+ * NumberField (2026-07-22): hide the browser's native up/down spinner on
+ * number inputs that ship their own − / + buttons. Applied via the
+ * `.no-native-spinner` class, not globally, so plain <Input type="number">
+ * elsewhere keeps whatever affordance the browser gives it.
+ */
+.no-native-spinner::-webkit-outer-spin-button,
+.no-native-spinner::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.no-native-spinner {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}

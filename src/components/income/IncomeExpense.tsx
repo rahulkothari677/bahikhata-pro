@@ -5,6 +5,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { NumberField } from '@/components/ui/number-field'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -576,12 +577,14 @@ export function IncomeExpense() {
             </div>
             <div>
               <Label htmlFor="field-monthly-budget-amount">Monthly Budget Amount (₹)</Label>
-              <Input id="field-monthly-budget-amount"
-                inputMode="decimal" type="number"
+              <NumberField id="field-monthly-budget-amount"
                 value={budgetAmount}
-                onChange={(e) => setBudgetAmount(e.target.value)}
+                onValueChange={setBudgetAmount}
                 placeholder="e.g. 15000"
                 className="mt-1"
+                min={0}
+                step={100}
+                decimals={2}
               />
               <p className="text-2xs text-muted-foreground mt-1">
                 You'll see a progress bar on this page showing how much you've spent vs budget.
@@ -652,12 +655,14 @@ export function IncomeExpense() {
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label htmlFor="field-amount">Amount (₹)</Label>
-                <Input id="field-amount"
-                  inputMode="decimal" type="number"
+                <NumberField id="field-amount"
                   value={recurAmount}
-                  onChange={(e) => setRecurAmount(e.target.value)}
+                  onValueChange={setRecurAmount}
                   placeholder="e.g. 15000"
                   className="mt-1"
+                  min={0}
+                  step={100}
+                  decimals={2}
                 />
               </div>
               <div>
@@ -824,15 +829,14 @@ function IncomeExpenseDialog({ open, onOpenChange, type, onSuccess }: {
         <div className="space-y-3 py-2">
           <div>
             <Label htmlFor="field-amount-2">Amount (₹) *</Label>
-            <Input id="field-amount-2"
-              inputMode="decimal" type="number"
+            <NumberField id="field-amount-2"
               value={amount}
-              onChange={(e) => setAmount(e.target.value)}
+              onValueChange={setAmount}
               placeholder="0"
-              className="text-lg font-semibold"
-              autoFocus
-              min="0"
-              step="0.01"
+              inputClassName="text-lg font-semibold"
+              min={0}
+              step={10}
+              decimals={2}
             />
           </div>
 
