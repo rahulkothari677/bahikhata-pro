@@ -22,6 +22,14 @@ export type ViewType =
   | 'ai-usage'
   | 'document-vault'
   | 'tools'
+  | 'gst-tax'
+  | 'money-banking'
+  | 'staff-management'
+  | 'ca-access'
+  | 'business-goals'
+  | 'day-end-summary'
+  | 'unsynced-entries'
+  | 'supplier-opening-balance-review'
 
 export type ViewMode = 'grid' | 'list'
 
