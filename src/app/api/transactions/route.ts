@@ -8,6 +8,8 @@ import { roundMoney, calculateGst, splitGst, distributeDiscountProportionally, t
 import { deriveInterStateStatus } from '@/lib/gst'
 import { validateBody, createTransactionSchema } from '@/lib/validation'
 import { apiError } from '@/lib/api-error'
+import { prismaErrorResponse } from '@/lib/prisma-error-response'
+import { friendlyValidationMessage } from '@/lib/friendly-validation'
 import { computeLineItems, buildPriceWarnings } from '@/lib/line-items'
 import { normalizeToUnit } from '@/lib/units'
 import { encodeKeysetCursor, buildKeysetWhere } from '@/lib/pagination'
@@ -163,7 +165,11 @@ export async function POST(req: NextRequest) {
     // 🔒 AUDIT FIX H7: Validate request body with zod before processing.
     const validation = validateBody(createTransactionSchema, body)
     if (!validation.success) {
-      return NextResponse.json({ error: 'Validation failed', detail: validation.error }, { status: 400 })
+      return NextResponse.json({
+        error: 'Validation failed',
+        message: friendlyValidationMessage(validation.error),
+        detail: validation.error,
+      }, { status: 400 })
     }
 
     const { type, partyId, date, items, discountAmount, paymentMode, notes, invoiceNo, category, paidAmount, payeeName, payeePhone, originalTransactionId, noteType, noteReason, affectsStock } = validation.data as any
@@ -717,6 +723,8 @@ export async function POST(req: NextRequest) {
       priceWarnings,
     })
   } catch (error) {
+    const mapped = prismaErrorResponse(error, 'transactions POST')
+    if (mapped) return mapped
     return apiError(error, 'Failed to create transaction', 500)
   }
 }

@@ -9,6 +9,8 @@ import { validateBody, updateTransactionSchema } from '@/lib/validation'
 import { computeLineItems } from '@/lib/line-items'
 import { normalizeToUnit } from '@/lib/units'
 import { apiError } from '@/lib/api-error'
+import { prismaErrorResponse } from '@/lib/prisma-error-response'
+import { friendlyValidationMessage } from '@/lib/friendly-validation'
 import { assertPeriodNotLocked, PeriodLockedError } from '@/lib/period-lock'
 import { logFieldChanges, TRACKED_TRANSACTION_FIELDS } from '@/lib/field-audit'
 import { resolveFinalPaid, isNoteType } from '@/lib/paid-amount'
@@ -109,7 +111,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     // 🔒 AUDIT FIX H7: Validate request body with zod
     const validation = validateBody(updateTransactionSchema, body)
     if (!validation.success) {
-      return NextResponse.json({ error: 'Validation failed', detail: validation.error }, { status: 400 })
+      return NextResponse.json({
+        error: 'Validation failed',
+        message: friendlyValidationMessage(validation.error),
+        detail: validation.error,
+      }, { status: 400 })
     }
 
     const { type, partyId, date, items, discountAmount, paymentMode, notes, invoiceNo, category, paidAmount, originalTransactionId, noteType, noteReason, affectsStock } = validation.data as any
@@ -648,6 +654,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         { status: error.status || 400 },
       )
     }
+    // 🔒 2026-07-22: map ordinary, user-resolvable DB failures (duplicate
+    // invoice number, pool/transaction timeout, DB unreachable) to a real
+    // message + code. These were previously flattened into an unactionable
+    // "Failed to update transaction" 500 whose cause lived only in the Vercel
+    // log — the exact symptom Rahul hit on every edit attempt.
+    const mapped = prismaErrorResponse(error, 'transactions PUT')
+    if (mapped) return mapped
     return apiError(error, 'Failed to update transaction', 500)
   }
 }
@@ -787,6 +800,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
         linkedNotes: error.linkedNotes.map((n: any) => ({ id: n.id, invoiceNo: n.invoiceNo, type: n.type })),
       }, { status: 400 })
     }
+    const mapped = prismaErrorResponse(error, 'transactions DELETE')
+    if (mapped) return mapped
     return apiError(error, 'Failed to delete transaction', 500)
   }
 }
