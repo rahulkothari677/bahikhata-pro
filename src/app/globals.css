@@ -902,3 +902,15 @@ html {
   -moz-appearance: textfield;
   appearance: textfield;
 }
+
+/**
+ * NumberField controls (2026-07-22 v2).
+ *
+ * Only the resting transition lives here; whether a control is VISIBLE is
+ * decided in the component from hover/focus state and applied inline. Tailwind
+ * `group-focus-within:` is not emitted by this build, and a purely CSS
+ * approach left the buttons invisible while the field had focus.
+ */
+.number-field-btn {
+  transition: opacity 120ms ease;
+}

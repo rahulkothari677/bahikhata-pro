@@ -70,6 +70,35 @@ describe('NumberField', () => {
   test('emits strings so a cleared money field stays empty rather than becoming 0', () => {
     expect(nf).toMatch(/onValueChange: \(value: string\) => void/)
   })
+
+  test('the controls are not rendered at all on mobile', () => {
+    // v1 flanked the input with buttons, which on a 375px screen left ~26-61px
+    // for the digits — the value became unreadable, which is worse than the
+    // wheel bug it was solving. Phones now get the plain full-width field.
+    expect(nf).toMatch(/isDesktop/)
+    expect(nf).toMatch(/matchMedia\('\(min-width: 640px\)'\)/)
+    // Both buttons must be behind the desktop gate.
+    const gates = nf.match(/\{isDesktop && \(/g) || []
+    expect(gates).toHaveLength(2)
+  })
+
+  test('on desktop the controls sit inside the box and stay hidden until hover or focus', () => {
+    expect(nf).toMatch(/absolute/)
+    expect(nf).toMatch(/left-1/)
+    expect(nf).toMatch(/right-1/)
+    expect(nf).toMatch(/revealed/)
+    expect(nf).toMatch(/onPointerEnter/)
+    expect(nf).toMatch(/opacity: revealed/)
+  })
+
+  test('padding for the in-box controls is reserved, not animated', () => {
+    // Animating padding on hover would make the digits jump under the cursor.
+    expect(nf).toMatch(/isDesktop && \(compact \? 'px-6' : 'px-7'\)/)
+  })
+
+  test('focus moving between the input and its own buttons does not hide them', () => {
+    expect(nf).toMatch(/currentTarget\.contains\(e\.relatedTarget/)
+  })
 })
 
 describe('money entry surfaces use the stepper', () => {

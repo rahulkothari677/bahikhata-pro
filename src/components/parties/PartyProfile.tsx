@@ -879,16 +879,34 @@ export function PartyProfile() {
               Payment Link
             </Button>
           )}
-          {/* Download Statement PDF */}
+          {/* Print Statement.
+              handlePrintStatement() has existed since V19-016 but was never
+              wired to anything, while two places in this screen tell the user
+              to "use the Print Statement button below for the complete
+              history" — instructions pointing at a control that did not
+              exist. */}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handlePrintStatement}
+            className="gap-2"
+            title="Print the full account statement"
+          >
+            <Printer className="w-4 h-4" />
+            Print
+          </Button>
+          {/* Download Statement (HTML file, opens in any browser and prints).
+              Labelled "Download" rather than "PDF": it saves a .html file, and
+              the button next to it is the one that produces a real PDF. */}
           <Button
             size="sm"
             variant="outline"
             onClick={handleDownloadStatement}
             className="gap-2"
-            title="Download account statement as PDF"
+            title="Download the account statement as a file you can open in any browser"
           >
             <FileDown className="w-4 h-4" />
-            PDF
+            Download
           </Button>
           {/* Share Statement PDF via WhatsApp */}
           <Button

@@ -17,6 +17,34 @@ import { resolveFinalPaid, isNoteType } from '@/lib/paid-amount'
 import { validateNoteAgainstOriginal } from '@/lib/note-validation'
 import { checkLinkedNotesCap } from '@/lib/linked-notes-guard'
 
+/**
+ * Budget for the interactive transactions on the write paths.
+ *
+ * WHY (2026-07-22): Prisma's defaults are maxWait 2s / timeout 5s. Editing a
+ * six-line bill runs well over a dozen statements inside the transaction, and
+ * on Neon under connection-pool contention this app routinely sees 200-500ms
+ * per statement (Rahul's network panel showed plain GETs taking 2-5s). The
+ * 5s budget was exhausted mid-transaction, Prisma rolled the edit back and
+ * returned P2028 - which surfaced to the user as "Failed to update
+ * transaction" on EVERY attempt for that bill.
+ *
+ * The statement count is also reduced (stock updates are now grouped per
+ * product and issued concurrently), but the budget has to cover a cold Neon
+ * start too, so both are raised. These are CEILINGS, not delays: a fast
+ * transaction still commits immediately.
+ */
+const TX_OPTIONS = {
+  maxWait: 15_000,   // waiting for a connection from the pool
+  timeout: 30_000,   // total time the interactive transaction may run
+} as const
+
+/**
+ * Vercel's default function budget is shorter than the transaction ceiling
+ * above, which would kill the request before Prisma could return a clean
+ * error. Give the write paths room to finish or fail deliberately.
+ */
+export const maxDuration = 60
+
 // GET /api/transactions/[id] - get single transaction with all details
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -479,34 +507,54 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
       // Step 1: Reverse old items' stock impact (using the LOCKED snapshot)
       // 🔒 V9 2.1 FIX: Scope by userId (same as POST)
+      //
+      // 🔒 P2028 FIX (2026-07-22): this ran one sequential round trip PER OLD
+      // ITEM, and Step 4 below ran another per new item. A 6-line bill spent
+      // ~18 sequential queries inside the interactive transaction; at the
+      // 200-500ms/query this app sees on Neon under pool contention that blows
+      // the 5s default transaction timeout and Prisma rolls the whole edit back
+      // with P2028. Rahul hit this on every attempt to edit a 6-item bill.
+      //
+      // Now: quantities are summed PER PRODUCT first (a bill listing the same
+      // product on two lines was already doing two separate updates), and the
+      // independent per-product updates are issued concurrently. Same
+      // arithmetic, a fraction of the round trips.
+      const reversalByProduct = new Map<string, number>()
       for (const oldItem of lockedOldItems) {
-        if (oldItem.productId) {
-          if (existingShouldDecrement) {
-            // Reverse a decrement (sale or debit-note with affectsStock): add stock back
+        if (!oldItem.productId) continue
+        reversalByProduct.set(
+          oldItem.productId,
+          (reversalByProduct.get(oldItem.productId) || 0) + (oldItem.quantity || 0),
+        )
+      }
+      if (existingShouldDecrement) {
+        // Reverse a decrement (sale or debit-note with affectsStock): add stock back
+        await Promise.all([...reversalByProduct.entries()].map(([productId, qty]) =>
+          tx.product.updateMany({
+            where: { id: productId, userId },
+            data: { currentStock: { increment: qty } },
+          })
+        ))
+      } else if (existingShouldIncrement) {
+        await Promise.all([...reversalByProduct.entries()].map(async ([productId, qty]) => {
+          // Reverse an increment (purchase or credit-note with affectsStock): subtract stock
+          // 🔒 V26 H2 FIX: Add currentStock gte guard to prevent negative stock.
+          // Was: unconditional decrement - if stock was depleted since the original
+          // purchase, the reversal would push stock negative silently.
+          const reverseResult = await tx.product.updateMany({
+            where: { id: productId, userId, currentStock: { gte: qty } },
+            data: { currentStock: { decrement: qty } },
+          })
+          if (reverseResult.count === 0) {
+            // Stock insufficient for reversal - allow it but clamp at 0.
+            // Reversals are corrections, not new transactions - blocking them
+            // would trap the user in an un-editable state. Clamp is the safe fallback.
             await tx.product.updateMany({
-              where: { id: oldItem.productId, userId },
-              data: { currentStock: { increment: oldItem.quantity } },
+              where: { id: productId, userId },
+              data: { currentStock: 0 },
             })
-          } else if (existingShouldIncrement) {
-            // Reverse an increment (purchase or credit-note with affectsStock): subtract stock
-            // 🔒 V26 H2 FIX: Add currentStock gte guard to prevent negative stock.
-            // Was: unconditional decrement — if stock was depleted since the original
-            // purchase, the reversal would push stock negative silently.
-            const reverseResult = await tx.product.updateMany({
-              where: { id: oldItem.productId, userId, currentStock: { gte: oldItem.quantity } },
-              data: { currentStock: { decrement: oldItem.quantity } },
-            })
-            if (reverseResult.count === 0) {
-              // Stock insufficient for reversal — allow it but clamp at 0.
-              // Reversals are corrections, not new transactions — blocking them
-              // would trap the user in an un-editable state. Clamp is the safe fallback.
-              await tx.product.updateMany({
-                where: { id: oldItem.productId, userId },
-                data: { currentStock: 0 },
-              })
-            }
           }
-        }
+        }))
       }
 
       // Step 2: Delete old items
@@ -556,41 +604,53 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
       // Step 4: Apply new items' stock impact
       // V17-Ext Tier 3: Uses direction variables (same pattern as POST)
+      // 🔒 P2028 FIX: same per-product grouping as Step 1 (see the note there).
+      const applyByProduct = new Map<string, { qty: number; name: string }>()
+      for (const item of txItems) {
+        if (!item.productId) continue
+        const prev = applyByProduct.get(item.productId)
+        applyByProduct.set(item.productId, {
+          qty: (prev?.qty || 0) + (item.quantity || 0),
+          name: prev?.name || item.productName,
+        })
+      }
       if (shouldDecrementStock && stockPolicy === 'block') {
-        for (const item of txItems) {
-          if (!item.productId) continue
-          const qty = item.quantity || 0
-          const result = await tx.product.updateMany({
-            where: { id: item.productId, userId, currentStock: { gte: qty } },
-            data: { currentStock: { decrement: qty } },
-          })
-          if (result.count === 0) {
-            const err: any = new Error('STOCK_BLOCK')
-            err.code = 'STOCK_BLOCK'
-            err.productName = item.productName
-            err.requestedQty = qty
-            throw err
-          }
+        // Each update is conditional (gte) and its result decides whether to
+        // block, so results are still checked individually - but the rows are
+        // independent, so the updates are issued concurrently. Grouping first
+        // also means a bill listing one product on two lines is checked against
+        // the TOTAL, which is more correct than the old per-line check.
+        const results = await Promise.all(
+          [...applyByProduct.entries()].map(async ([productId, entry]) => ({
+            name: entry.name,
+            qty: entry.qty,
+            count: (await tx.product.updateMany({
+              where: { id: productId, userId, currentStock: { gte: entry.qty } },
+              data: { currentStock: { decrement: entry.qty } },
+            })).count,
+          })),
+        )
+        const blocked = results.find(r => r.count === 0)
+        if (blocked) {
+          const err: any = new Error('STOCK_BLOCK')
+          err.code = 'STOCK_BLOCK'
+          err.productName = blocked.name
+          err.requestedQty = blocked.qty
+          throw err
         }
       } else if (shouldAffectStock) {
-        await Promise.all(txItems.filter(i => i.productId).map(item => {
-          const qty = item.quantity || 0
-          if (shouldDecrementStock) {
-            return tx.product.updateMany({
-              where: { id: item.productId!, userId },
-              data: { currentStock: { decrement: qty } },
-            })
-          } else {
-            return tx.product.updateMany({
-              where: { id: item.productId!, userId },
-              data: { currentStock: { increment: qty } },
-            })
-          }
-        }))
+        await Promise.all([...applyByProduct.entries()].map(([productId, entry]) =>
+          tx.product.updateMany({
+            where: { id: productId, userId },
+            data: shouldDecrementStock
+              ? { currentStock: { decrement: entry.qty } }
+              : { currentStock: { increment: entry.qty } },
+          })
+        ))
       }
 
       return txn
-    })
+    }, TX_OPTIONS)
 
     // 🔒 FIX M-NEW-1: Check for potential double-counting. If the party has
     // standalone Payments AND the invoice's paidAmount > 0, warn the user.
@@ -786,7 +846,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
           }
         }
       }
-    })
+    }, TX_OPTIONS)
 
     return NextResponse.json({ success: true, message: 'Transaction deleted (soft delete — can be restored)' })
   } catch (error: any) {

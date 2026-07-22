@@ -105,25 +105,80 @@ export function NumberField({
     }, REPEAT_DELAY_MS)
   }
 
+  // Reveal state for the in-box controls.
+  //
+  // This is deliberately React state and an inline opacity rather than
+  // `group-hover:` / `group-focus-within:` utilities: this Tailwind build does
+  // not emit a `group-focus-within` rule at all, so the controls stayed
+  // invisible while the field had focus. Driving it from events is immune to
+  // which variants the JIT decides to generate.
+  const [revealed, setRevealed] = React.useState(false)
+
+  // Desktop only. On a phone the buttons are not rendered at all: the field
+  // needs its full width to show the amount (v1 flanked the input with
+  // buttons and left ~26px for the digits), and a numeric keypad already
+  // makes entry easy. The wheel bug this component exists for is mouse-only.
+  const [isDesktop, setIsDesktop] = React.useState(false)
+  React.useEffect(() => {
+    const mq = window.matchMedia('(min-width: 640px)')
+    const sync = () => setIsDesktop(mq.matches)
+    sync()
+    mq.addEventListener('change', sync)
+    return () => mq.removeEventListener('change', sync)
+  }, [])
+
   const atMin = min !== undefined && Number(value || 0) <= min
   const atMax = max !== undefined && Number(value || 0) >= max
 
+  /**
+   * 🔒 LAYOUT v2 (2026-07-22, after Rahul saw v1 on a phone).
+   *
+   * v1 put the buttons OUTSIDE the input, flanking it. On a 375px screen that
+   * ate the field: the number itself had ~26–61px left and the value was
+   * unreadable — worse than the problem it solved.
+   *
+   * v2:
+   *   - MOBILE: no buttons at all. Phones have a numeric keypad and the field
+   *     gets its full width back. The wheel bug this component exists for is a
+   *     mouse problem, so nothing is lost.
+   *   - DESKTOP (sm+): the buttons sit INSIDE the box, one at each end, and are
+   *     invisible until the field is hovered or focused. The resting state is a
+   *     plain input at full width; the controls appear where the cursor is.
+   *
+   * The input carries symmetric padding at sm+ so text never slides under a
+   * revealed button (padding is unconditional — animating it on hover would
+   * make the digits jump).
+   */
+  // Visibility (hidden on mobile, fade-in on hover/focus at sm+) lives in
+  // globals.css under `.number-field` / `.number-field-btn`. Tailwind's
+  // `group-focus-within:` variant is not emitted by this build, so relying on
+  // it left the controls invisible even while the field had focus.
   const buttonClass = cn(
-    'flex shrink-0 items-center justify-center rounded-md border border-input',
-    'bg-transparent text-foreground transition-colors hover:bg-accent active:bg-accent/80',
-    'disabled:pointer-events-none disabled:opacity-40 focus-visible:outline-none',
-    'focus-visible:ring-[3px] focus-visible:ring-ring/50',
-    compact ? 'h-8 w-7' : 'h-9 w-9',
+    'number-field-btn absolute top-1/2 -translate-y-1/2 flex items-center justify-center rounded',
+    'text-muted-foreground hover:text-foreground hover:bg-accent transition-opacity',
+    compact ? 'h-6 w-5' : 'h-7 w-6',
   )
-  const iconClass = compact ? 'h-3.5 w-3.5' : 'h-4 w-4'
+  const iconClass = compact ? 'h-3 w-3' : 'h-3.5 w-3.5'
 
   return (
-    <div className={cn('flex items-center gap-1', className)}>
+    <div
+      className={cn('number-field relative', className)}
+      onPointerEnter={() => setRevealed(true)}
+      onPointerLeave={() => { setRevealed(false); clearTimers() }}
+      onFocus={() => setRevealed(true)}
+      onBlur={(e) => {
+        // Keep the controls up while focus moves between the input and its own
+        // buttons; hide only when focus leaves the field entirely.
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setRevealed(false)
+      }}
+    >
+      {isDesktop && (
       <button
         type="button"
         tabIndex={-1}
         aria-label="Decrease"
-        className={buttonClass}
+        className={cn(buttonClass, 'left-1')}
+        style={{ opacity: revealed && !(disabled || atMin) ? 1 : 0 }}
         disabled={disabled || atMin}
         onPointerDown={() => startHold(-1)}
         onPointerUp={clearTimers}
@@ -132,6 +187,7 @@ export function NumberField({
       >
         <Minus className={iconClass} />
       </button>
+      )}
       <Input
         id={id}
         type="number"
@@ -147,13 +203,22 @@ export function NumberField({
         min={min}
         max={max}
         onChange={(e) => onValueChange(e.target.value)}
-        className={cn('no-native-spinner text-center', compact && 'h-8 text-sm', inputClassName)}
+        className={cn(
+          'no-native-spinner text-center',
+          // Room for the in-box controls, reserved unconditionally on desktop
+          // so the digits do not jump when the buttons fade in.
+          isDesktop && (compact ? 'px-6' : 'px-7'),
+          compact && 'h-8 text-sm',
+          inputClassName,
+        )}
       />
+      {isDesktop && (
       <button
         type="button"
         tabIndex={-1}
         aria-label="Increase"
-        className={buttonClass}
+        className={cn(buttonClass, 'right-1')}
+        style={{ opacity: revealed && !(disabled || atMax) ? 1 : 0 }}
         disabled={disabled || atMax}
         onPointerDown={() => startHold(1)}
         onPointerUp={clearTimers}
@@ -162,6 +227,7 @@ export function NumberField({
       >
         <Plus className={iconClass} />
       </button>
+      )}
     </div>
   )
 }

@@ -17,6 +17,34 @@ import { assertPeriodNotLocked, PeriodLockedError } from '@/lib/period-lock'
 import { resolveFinalPaid, isNoteType } from '@/lib/paid-amount'
 import { validateNoteAgainstOriginal } from '@/lib/note-validation'
 
+/**
+ * Budget for the interactive transactions on the write paths.
+ *
+ * WHY (2026-07-22): Prisma's defaults are maxWait 2s / timeout 5s. Editing a
+ * six-line bill runs well over a dozen statements inside the transaction, and
+ * on Neon under connection-pool contention this app routinely sees 200-500ms
+ * per statement (Rahul's network panel showed plain GETs taking 2-5s). The
+ * 5s budget was exhausted mid-transaction, Prisma rolled the edit back and
+ * returned P2028 - which surfaced to the user as "Failed to update
+ * transaction" on EVERY attempt for that bill.
+ *
+ * The statement count is also reduced (stock updates are now grouped per
+ * product and issued concurrently), but the budget has to cover a cold Neon
+ * start too, so both are raised. These are CEILINGS, not delays: a fast
+ * transaction still commits immediately.
+ */
+const TX_OPTIONS = {
+  maxWait: 15_000,   // waiting for a connection from the pool
+  timeout: 30_000,   // total time the interactive transaction may run
+} as const
+
+/**
+ * Vercel's default function budget is shorter than the transaction ceiling
+ * above, which would kill the request before Prisma could return a clean
+ * error. Give the write paths room to finish or fail deliberately.
+ */
+export const maxDuration = 60
+
 // GET /api/transactions - list with filters (type, from, to, limit)
 export async function GET(req: NextRequest) {
   try {
@@ -659,7 +687,7 @@ export async function POST(req: NextRequest) {
         try {
           transaction = await db.$transaction(async (tx) => {
             return createTransactionWithStock(tx)
-          })
+          }, TX_OPTIONS)
           break
         } catch (err: any) {
           // 🔒 V26 R2 (Phase 5): Distinguish P2002 on clientMutationId (race
