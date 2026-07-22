@@ -7,9 +7,10 @@
  * the three pooling requirements are missing:
  *
  *   1. `DATABASE_URL` host contains `-pooler` (uses Neon's pooled endpoint)
- *   2. `DATABASE_URL` query string contains `connection_limit=1` (and ideally
- *      `pgbouncer=true`) — on serverless each function must hold exactly 1
- *      connection.
+ *   2. `DATABASE_URL` query string sets a `connection_limit` (and ideally
+ *      `pgbouncer=true`). A limit must exist so a function cannot open
+ *      unbounded connections, but a limit of 1 serialises every query in a
+ *      request and is warned about separately.
  *   3. `DIRECT_URL` is set and uses the NON-pooler host (for migrations only).
  *
  * The Neon "Scale to zero / Suspend" setting is in the Neon console, not
@@ -53,17 +54,34 @@ export function verifyDatabaseConfig(): void {
     ok.push(`DATABASE_URL uses pooled host: ${dbHost}`)
   }
 
-  // Check 2: connection_limit=1 (and ideally pgbouncer=true)
+  // Check 2: a connection_limit is set, and is not so low it serialises requests
   if (dbHost && dbHost.includes('-pooler')) {
-    if (!dbQuery.includes('connection_limit=1')) {
+    // 🔒 2026-07-22: this used to REQUIRE connection_limit=1 and warn
+    // otherwise — which is backwards, and actively harmful. With a limit of 1,
+    // every query in a request serialises behind a single connection: the
+    // dashboard's ~11 parallel calls take 11x one query's latency, which is
+    // why plain page loads were taking 2-5s each and why a multi-statement
+    // edit blew the transaction timeout (P2028). Neon's PgBouncer pooler
+    // handles far more. The requirement is that a limit is SET; 1 is the
+    // value to warn about.
+    const limitMatch = dbQuery.match(/connection_limit=(\d+)/)
+    const connectionLimit = limitMatch ? Number(limitMatch[1]) : null
+    if (connectionLimit === null) {
       warnings.push(
-        `DATABASE_URL is missing "connection_limit=1" in the query string. ` +
-        `On Vercel serverless, each function must hold exactly 1 connection. ` +
-        `Fix: append &connection_limit=1 to your DATABASE_URL. ` +
+        `DATABASE_URL has no "connection_limit" in the query string. ` +
+        `Set one so a serverless function cannot open unbounded connections. ` +
+        `Suggested: &connection_limit=10&pool_timeout=60. ` +
         `Current query: ${dbQuery || '(none)'}`
       )
+    } else if (connectionLimit < 5) {
+      warnings.push(
+        `DATABASE_URL has connection_limit=${connectionLimit}, which serialises ` +
+        `every query in a request behind one connection. A page that makes 11 ` +
+        `calls waits for them one at a time. Raise it to 10 or more against the ` +
+        `pooled (-pooler) host.`
+      )
     } else {
-      ok.push('DATABASE_URL has connection_limit=1')
+      ok.push(`DATABASE_URL has connection_limit=${connectionLimit}`)
     }
     if (!dbQuery.includes('pgbouncer=true')) {
       warnings.push(
@@ -124,7 +142,7 @@ export function verifyDatabaseConfig(): void {
  */
 export function getDatabaseConfigStatus(): {
   databaseUrlHasPooler: boolean
-  databaseUrlHasConnectionLimit: boolean
+  databaseUrlConnectionLimit: number | null
   databaseUrlHasPgbouncer: boolean
   directUrlSet: boolean
   directUrlHasPooler: boolean  // should be FALSE
@@ -144,7 +162,12 @@ export function getDatabaseConfigStatus(): {
 
   return {
     databaseUrlHasPooler: dbHost.includes('-pooler'),
-    databaseUrlHasConnectionLimit: dbQuery.includes('connection_limit=1'),
+    // Report the actual number, not a boolean against the wrong value — the
+    // point of hitting /api/warmup is to SEE what production is running with.
+    databaseUrlConnectionLimit: (() => {
+      const m = dbQuery.match(/connection_limit=(\d+)/)
+      return m ? Number(m[1]) : null
+    })(),
     databaseUrlHasPgbouncer: dbQuery.includes('pgbouncer=true'),
     directUrlSet: !!directUrl,
     directUrlHasPooler: directHost.includes('-pooler'),

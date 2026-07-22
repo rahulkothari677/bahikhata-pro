@@ -48,7 +48,17 @@ export async function GET() {
       // 🔒 FIX L2: Was exposing dbConfig (DB hostnames) to anyone who hits
       // /api/warmup. Now: only include a boolean "dbConfigOk" instead of the
       // full config with hostnames. Hostnames are internal infrastructure.
-      dbConfigOk: configStatus.databaseUrlHasPooler && configStatus.databaseUrlHasConnectionLimit && configStatus.directUrlSet,
+      dbConfigOk: configStatus.databaseUrlHasPooler
+        && configStatus.databaseUrlConnectionLimit !== null
+        && configStatus.directUrlSet,
+      // 🔒 2026-07-22: expose the pooling TUNING values (not hostnames).
+      // Diagnosing "every page takes 2-5 seconds" needs the actual numbers, and
+      // this endpoint returning only a boolean is why the connection_limit
+      // question stayed open from V21 to now. A connection limit and a
+      // pgbouncer flag are not secrets; the hostnames stay redacted.
+      connectionLimit: configStatus.databaseUrlConnectionLimit,
+      pgbouncer: configStatus.databaseUrlHasPgbouncer,
+      pooledHost: configStatus.databaseUrlHasPooler,
     })
   } catch (error) {
     console.error('[warmup] DB connection failed:', error)
