@@ -43,9 +43,33 @@ describe('R9-1 — statement exporters', () => {
 
     test('exporters build rows through the shared helper', () => {
       expect(src).toMatch(/const buildStatementRows = \(\)/)
-      // Used by all three exporters (download, print, share-PDF).
+      // ὑ2 2026-07-22: there were THREE exporters and one of them saved a
+      // .html file while labelled "PDF". They are now TWO — print (which needs
+      // HTML) and the PDF, used for both Download and Send. Every exporter
+      // that exists must still go through the shared builder; that is the rule
+      // this guard protects, not the number.
       const uses = src.match(/buildStatementRows\(\)/g) || []
-      expect(uses.length).toBeGreaterThanOrEqual(3)
+      expect(uses.length).toBeGreaterThanOrEqual(2)
+      // The dead HTML-download exporter must not come back.
+      expect(src).not.toMatch(/const handleDownloadStatement/)
+      expect(src).not.toMatch(/a\.download = `Statement_.*\.html`/)
+    })
+
+    test('Download and Send PDF produce the SAME document', () => {
+      // One generator, two delivery modes. Two buttons that made different
+      // files is what sent a CA an .html named like a PDF.
+      expect(src).toMatch(/handleShareStatementPDF = async \(mode: 'share' \| 'download'/)
+      expect(src).toMatch(/handleShareStatementPDF\('download'\)/)
+      expect(src).toMatch(/handleShareStatementPDF\('share'\)/)
+      // Sharing is native-only; a download must never open the share sheet.
+      expect(src).toMatch(/mode === 'share' && Capacitor\.isNativePlatform\(\)/)
+    })
+
+    test('every exporter opens with an opening balance', () => {
+      expect(src).toMatch(/const statementOpeningBalance = \(\): number/)
+      // Derived from the oldest row, not a second source of truth.
+      expect(src).toMatch(/oldest\.runningBalance \?\? 0\) - \(oldest\.delta/)
+      expect(src).toMatch(/Opening balance/)
     })
 
     test('the closing figure comes from the canonical balance, never re-derived', () => {

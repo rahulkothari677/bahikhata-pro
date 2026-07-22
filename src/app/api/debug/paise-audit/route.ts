@@ -108,6 +108,7 @@ export async function GET(req: NextRequest) {
         n: bigint
         minv: bigint | null
         maxv: bigint | null
+        medv: bigint | null
         suspicious: bigint
         almost_certain: bigint
       }>>(
@@ -118,10 +119,11 @@ export async function GET(req: NextRequest) {
         `SELECT COUNT(*)::bigint AS n,
                 MIN("${column}")::bigint AS minv,
                 MAX(ABS("${column}"))::bigint AS maxv,
+                PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY ABS("${column}"))::bigint AS medv,
                 COUNT(*) FILTER (WHERE ABS("${column}") > $2)::bigint AS suspicious,
                 COUNT(*) FILTER (WHERE ABS("${column}") > $3)::bigint AS almost_certain
          FROM "${table}"
-         WHERE "userId" = $1`,
+         WHERE "userId" = $1 AND "${column}" IS NOT NULL`,
         userId, SUSPICIOUS_PAISE, ALMOST_CERTAIN_PAISE,
       ).catch(async () => {
         // TransactionItem has no userId column — scope it via its parent.
@@ -129,6 +131,7 @@ export async function GET(req: NextRequest) {
           `SELECT COUNT(*)::bigint AS n,
                   MIN(ti."${column}")::bigint AS minv,
                   MAX(ABS(ti."${column}"))::bigint AS maxv,
+                  PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY ABS(ti."${column}"))::bigint AS medv,
                   COUNT(*) FILTER (WHERE ABS(ti."${column}") > $2)::bigint AS suspicious,
                   COUNT(*) FILTER (WHERE ABS(ti."${column}") > $3)::bigint AS almost_certain
            FROM "TransactionItem" ti
@@ -140,8 +143,22 @@ export async function GET(req: NextRequest) {
 
       const r = rows?.[0]
       const maxPaise = r?.maxv != null ? Number(r.maxv) : 0
+      const medianPaise = r?.medv != null ? Number(r.medv) : 0
       const suspicious = Number(r?.suspicious ?? 0)
       const almostCertain = Number(r?.almost_certain ?? 0)
+
+      // 🔒 2026-07-22: the absolute ceilings alone were too generous. Rahul's
+      // eight genuinely 100x-corrupt payments read 1,000,000 paise (₹10,000) —
+      // far below the ₹10,00,000 "suspicious" line — so the summary said
+      // LOOKS_HEALTHY while the raw rows beneath it were plainly wrong.
+      //
+      // A 100x corruption of SOME rows leaves a bimodal distribution: a normal
+      // median with a max two orders of magnitude above it. That ratio is the
+      // signal a fixed ceiling cannot see, and it scales to any shop — a
+      // wholesaler's ₹5,00,000 invoice is not suspicious next to a ₹4,00,000
+      // median, while a ₹10,000 payment IS next to a ₹150 one.
+      const spreadRatio = medianPaise > 0 ? maxPaise / medianPaise : 0
+      const bimodal = medianPaise > 0 && spreadRatio >= 50
 
       columns.push({
         table,
@@ -154,12 +171,17 @@ export async function GET(req: NextRequest) {
         // Human-readable interpretation of the raw value under BOTH hypotheses
         maxAsRupees_ifHealthy: maxPaise / 100,
         maxAsRupees_ifDoubleConverted: maxPaise / 10000,
+        medianPaise,
+        maxToMedianRatio: Number(spreadRatio.toFixed(1)),
         suspiciousRows: suspicious,
         almostCertainlyCorruptRows: almostCertain,
         verdict:
           almostCertain > 0 ? 'LIKELY_CORRUPT_100X'
-            : suspicious > 0 ? 'REVIEW_MANUALLY'
+            : suspicious > 0 || bimodal ? 'REVIEW_MANUALLY'
               : 'LOOKS_HEALTHY',
+        reviewReason: bimodal && suspicious === 0
+          ? `Largest value is ${spreadRatio.toFixed(0)}x the median — the shape a partial 100x corruption leaves. Check the raw rows below.`
+          : undefined,
       })
     }
 
@@ -227,9 +249,12 @@ export async function GET(req: NextRequest) {
         columnsChecked: columns.length,
         columnsLikelyCorrupt: corruptColumns.length,
         corruptColumns: corruptColumns.map(c => `${c.table}.${c.column}`),
+        columnsNeedingReview: columns.filter(c => c.verdict === 'REVIEW_MANUALLY').map(c => `${c.table}.${c.column}`),
         verdict: corruptColumns.length > 0
           ? 'CORRUPTION DETECTED — see columns[] and repairGuidance'
-          : 'No 100× signature found in the sampled bounds. Confirm against recentPayments[] by hand.',
+          : columns.some(c => c.verdict === 'REVIEW_MANUALLY')
+            ? 'REVIEW NEEDED — one or more columns have a suspicious spread; see reviewReason and check the raw rows.'
+            : 'No 100× signature found. NOTE: this is a heuristic — it compares magnitudes and spread, and cannot prove a value is correct. Always eyeball recentPayments[] against amounts you remember entering.',
       },
       columns,
       paymentsByDay: paymentsByDay.map(d => ({

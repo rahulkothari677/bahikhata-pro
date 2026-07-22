@@ -285,171 +285,22 @@ export function PartyProfile() {
     }
   }
 
-  // Generate a printable statement HTML for this party
-  const handleDownloadStatement = () => {
-    if (!party) return
-    // 🔒 V26 Phase 8 R9-1/R9-2 (CRITICAL FIX): Drive the statement from the
-    // `statement` array (which correctly merges transactions + payments +
-    // running balance, ties to the headline balance) — NOT from raw
-    // `statementTransactions` (which omits standalone payments and re-derives
-    // totals incorrectly). Was: allTxns.reduce() for totals → missed all
-    // settle payments → closing balance didn't match the headline. Now: the
-    // statement array IS the source of truth, and the closing figure is
-    // stats.balance verbatim.
-    const shopName = setting?.shopName || 'My Shop'
-    const shopAddress = setting?.address || ''
-    const shopPhone = setting?.phone || ''
-    const shopGstin = setting?.gstin || ''
-
-    // 🔒 R9-1: rows come from the SHARED builder used by all three exporters.
-    // The previous inline version also had a rendering bug: it printed
-    // Math.abs(delta) in BOTH the Debit and Credit columns, so every row
-    // showed its amount twice. Now a row fills exactly one column.
-    const rows = buildStatementRows().map(r => `
-        <tr>
-          <td style="text-align:center">${r.index}</td>
-          <td>${r.date}</td>
-          <td>${r.particulars}</td>
-          <td style="text-align:right">${r.debit ? r.debit.toFixed(2) : ''}</td>
-          <td style="text-align:right; color:#059669">${r.credit ? r.credit.toFixed(2) : ''}</td>
-          <td style="text-align:right; font-weight:600">${r.balance.toFixed(2)}</td>
-        </tr>
-      `).join('')
-
-    // Closing balance is stats.balance — the single source of truth.
-    const closingBalance = stats?.balance ?? 0
-    const balanceLabel = closingBalance > 0
-      ? (party?.type === 'supplier' ? 'Advance paid (they owe you)' : 'They owe you')
-      : closingBalance < 0
-        ? 'You owe them'
-        : 'Settled'
-
-    // Show count from statementTotals (true count, not capped).
-    const totalCount = statementTotals?.transactionTotal || statement.length
-
-    const html = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>Statement - ${party.name}</title>
-  <style>
-    * { box-sizing: border-box; }
-    body { font-family: 'Segoe UI', Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 40px; color: #1a1a1a; }
-    .header { display: flex; justify-content: space-between; align-items: start; border-bottom: 3px solid #d97706; padding-bottom: 20px; margin-bottom: 30px; }
-    .shop-info h1 { margin: 0; font-size: 22px; color: #1a1a1a; }
-    .shop-info p { margin: 3px 0; font-size: 12px; color: #555; }
-    .statement-title { text-align: right; }
-    .statement-title h2 { margin: 0; font-size: 18px; text-transform: uppercase; letter-spacing: 1px; }
-    .statement-title p { margin: 3px 0; font-size: 12px; color: #555; }
-    .party-box { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 15px; margin-bottom: 25px; display: flex; justify-content: space-between; }
-    .party-box .label { font-size: 10px; text-transform: uppercase; color: #888; font-weight: 600; }
-    .party-box .value { font-size: 14px; font-weight: 600; margin-top: 2px; }
-    .balance-hero { text-align: right; }
-    .balance-hero .amount { font-size: 24px; font-weight: bold; color: ${closingBalance >= 0 ? '#059669' : '#dc2626'}; }
-    .balance-hero .label { font-size: 12px; color: #555; margin-top: 4px; }
-    table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-    th { background: #fef3e6; padding: 10px; font-size: 12px; font-weight: 600; color: #444; text-align: left; border-bottom: 2px solid #d97706; }
-    td { padding: 8px 10px; font-size: 13px; border-bottom: 1px solid #e5e7eb; }
-    .closing-box { background: #d97706; color: white; padding: 15px 20px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center; margin-top: 20px; }
-    .closing-box .amount { font-size: 20px; font-weight: bold; }
-    .footer { margin-top: 40px; padding-top: 15px; border-top: 1px solid #e5e7eb; text-align: center; font-size: 11px; color: #888; }
-    @media print { body { padding: 20px; } }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <div class="shop-info">
-      <h1>${shopName}</h1>
-      ${shopAddress ? `<p>${shopAddress}</p>` : ''}
-      <p>${shopPhone ? 'Phone: ' + shopPhone : ''} ${shopGstin ? ' | GSTIN: ' + shopGstin : ''}</p>
-    </div>
-    <div class="statement-title">
-      <h2>Account Statement</h2>
-      <p>Generated on ${formatDate(new Date())}</p>
-    </div>
-  </div>
-
-  <div class="party-box">
-    <div>
-      <p class="label">Party Name</p>
-      <p class="value">${party.name}</p>
-      ${party.phone ? `<p style="font-size:12px;color:#555;margin-top:4px;">${party.phone}</p>` : ''}
-      ${party.gstin ? `<p style="font-size:12px;color:#555;font-family:monospace;">GSTIN: ${party.gstin}</p>` : ''}
-    </div>
-    <div class="balance-hero">
-      <p class="label">Outstanding Balance</p>
-      <p class="amount">${closingBalance >= 0 ? '+' : ''}${closingBalance.toFixed(2)}</p>
-      <p class="label">${balanceLabel}</p>
-    </div>
-  </div>
-
-  ${totalCount > 500 ? `<p style="font-size:12px;color:#888;margin-bottom:15px;">Showing the 500 most recent entries of ${totalCount}. The closing balance reflects all entries.</p>` : ''}
-
-  <table>
-    <thead>
-      <tr>
-        <th style="width:40px">#</th>
-        <th>Date</th>
-        <th>Particulars</th>
-        <th style="text-align:right">Debit (+)</th>
-        <th style="text-align:right">Credit (-)</th>
-        <th style="text-align:right">Balance</th>
-      </tr>
-    </thead>
-    <tbody>${rows}</tbody>
-  </table>
-
-  <div class="closing-box">
-    <span>Closing Balance</span>
-    <span class="amount">${closingBalance >= 0 ? '+' : ''}${closingBalance.toFixed(2)} — ${balanceLabel}</span>
-  </div>
-
-  <div class="footer">
-    <p>This is a computer-generated statement from EkBook.</p>
-    <p>For any discrepancies, please contact ${shopPhone || 'the shop'} within 7 days.</p>
-  </div>
-</body>
-</html>`
-
-    const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `Statement_${party.name.replace(/\s+/g, '_')}_${formatDate(new Date()).replace(/\//g, '-')}.html`
-    a.click()
-    URL.revokeObjectURL(url)
-    sonnerToast.success('Statement downloaded')
+  /**
+   * The balance this party carried BEFORE the first line on the statement.
+   *
+   * Derived, not a new source of truth: the oldest row's running balance minus
+   * its own movement is by definition what was owed before it. Without this
+   * row a statement starts mid-story — and when the list is capped at 500
+   * entries, the first visible row's balance looks unexplained. A CA reading
+   * one expects it; so does a shopkeeper asking "where did this figure come
+   * from".
+   */
+  const statementOpeningBalance = (): number => {
+    if (statement.length === 0) return stats?.balance ?? 0
+    const oldest: any = statement[statement.length - 1]
+    return roundMoney((oldest.runningBalance ?? 0) - (oldest.delta ?? 0))
   }
 
-  // Print statement directly
-  // 🔒 R9-1 STRUCTURAL FIX (2026-07-21): ONE source of statement rows.
-  //
-  // There are THREE statement exporters (Download HTML, Print, Send PDF).
-  // Each had grown its own row-building logic, and the R9-1 money fix was
-  // applied to only ONE of them — twice (V19-017 fixed Print only; the later
-  // fix corrected Download only). Meanwhile "Send PDF" — the one that
-  // WhatsApps a statement to the CUSTOMER — still iterated the paginated
-  // 50-row `transactions` array, omitted every Settle payment, and ADDED
-  // credit notes to the amount owed.
-  //
-  // This helper is now the single definition. All three exporters call it, so
-  // the class cannot fork a fourth time. Rows come from `statement`
-  // (transactions + payments merged, running balance anchored to
-  // stats.balance), so an exported statement can never disagree with the
-  // statement on screen.
-  /**
-   * Rows for the three exporters, in READING order: oldest first.
-   *
-   * `statement` is newest-first because the on-screen feed shows the latest
-   * activity at the top. A printed khata is read the other way: a shopkeeper
-   * (or a CA) starts at the top and follows the running balance down to the
-   * closing figure. Exporting the feed order put a ₹100 payment on row 1 next
-   * to a balance of ₹139.07 and the oldest entry last, so the balance column
-   * appeared to run backwards and the final row did not match "CLOSING
-   * BALANCE". Reversing here fixes all three exporters at once and makes the
-   * last row's balance tie to the closing figure — the check a CA actually
-   * performs. The numbers themselves are untouched.
-   */
   const buildStatementRows = () => [...statement].reverse().map((entry: any, i: number) => {
     const isPayment = entry.isPayment
     const particulars = isPayment
@@ -502,7 +353,9 @@ export function PartyProfile() {
     if (!party) return
     const shopName = setting?.shopName || 'My Shop'
     const closing = statementClosing()
-    const rows = buildStatementRows().map(r => `<tr><td style="text-align:center">${r.index}</td><td>${r.date}</td><td>${r.particulars}</td><td style="text-align:right">${r.debit ? r.debit.toFixed(2) : ''}</td><td style="text-align:right;color:#059669">${r.credit ? r.credit.toFixed(2) : ''}</td><td style="text-align:right;font-weight:600">${r.balance.toFixed(2)}</td></tr>`).join('')
+    const opening = statementOpeningBalance()
+    const openingRow = `<tr style="background:#faf7f2"><td style="text-align:center">—</td><td>—</td><td><em>Opening balance</em></td><td></td><td></td><td style="text-align:right;font-weight:600">${opening.toFixed(2)}</td></tr>`
+    const rows = openingRow + buildStatementRows().map(r => `<tr><td style="text-align:center">${r.index}</td><td>${r.date}</td><td>${r.particulars}</td><td style="text-align:right">${r.debit ? r.debit.toFixed(2) : ''}</td><td style="text-align:right;color:#059669">${r.credit ? r.credit.toFixed(2) : ''}</td><td style="text-align:right;font-weight:600">${r.balance.toFixed(2)}</td></tr>`).join('')
     const truncNote = closing.truncated
       ? `<p style="font-size:11px;color:#888">Showing the most recent ${statement.length} of ${closing.trueCount} entries. The closing balance reflects all entries.</p>`
       : ''
@@ -515,8 +368,16 @@ export function PartyProfile() {
     setTimeout(() => { win.print(); win.close() }, 250)
   }
 
-  // Share statement as PDF via WhatsApp (uses Capacitor Share on native)
-  const handleShareStatementPDF = async () => {
+  /**
+   * Build the statement PDF, then either share it or save it.
+   *
+   * 🔒 2026-07-22: the party screen had TWO "download" buttons producing
+   * DIFFERENT documents — one saved a .html file while being labelled "PDF",
+   * the other made a real PDF. A shopkeeper who sent the .html to their CA got
+   * a file that opens in a browser but is not a document anyone files. Both
+   * buttons now produce the same PDF; only the delivery differs.
+   */
+  const handleShareStatementPDF = async (mode: 'share' | 'download' = 'share') => {
     if (!party || !transactions) return
     haptic.click()
     try {
@@ -603,6 +464,19 @@ export function PartyProfile() {
 
       y += 2
       drawHeaderRow()
+
+      // Opening balance — the figure the party carried into this statement.
+      // Without it the first row's running balance looks unexplained, which is
+      // the first thing a CA asks about.
+      const openingBalance = statementOpeningBalance()
+      doc.setFont(THEME.font, 'italic')
+      doc.setTextColor(THEME.textMuted.r, THEME.textMuted.g, THEME.textMuted.b)
+      doc.text('Opening balance', margin + 40, y)
+      doc.setFont(THEME.font, 'bold')
+      doc.setTextColor(THEME.text.r, THEME.text.g, THEME.text.b)
+      doc.text(formatPDFMoney(openingBalance), pageWidth - margin - 2, y, { align: 'right' })
+      doc.setFont(THEME.font, 'normal')
+      y += 6
 
       const rows = buildStatementRows()
       rows.forEach((r) => {
@@ -737,7 +611,7 @@ export function PartyProfile() {
       const fileName = `Statement_${party.name.replace(/\s+/g, '_')}.pdf`
 
       const { Capacitor } = await import('@capacitor/core')
-      if (Capacitor.isNativePlatform()) {
+      if (mode === 'share' && Capacitor.isNativePlatform()) {
         const { Share } = await import('@capacitor/share')
         const { Filesystem, Directory } = await import('@capacitor/filesystem')
         const reader = new FileReader()
@@ -930,9 +804,9 @@ export function PartyProfile() {
           <Button
             size="sm"
             variant="outline"
-            onClick={handleDownloadStatement}
+            onClick={() => handleShareStatementPDF('download')}
             className="gap-2"
-            title="Download the account statement as a file you can open in any browser"
+            title="Save the account statement as a PDF"
           >
             <FileDown className="w-4 h-4" />
             Download
@@ -941,7 +815,7 @@ export function PartyProfile() {
           <Button
             size="sm"
             variant="outline"
-            onClick={handleShareStatementPDF}
+            onClick={() => handleShareStatementPDF('share')}
             className="gap-2 border-emerald-300 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50"
             title="Share account statement as PDF via WhatsApp"
           >
