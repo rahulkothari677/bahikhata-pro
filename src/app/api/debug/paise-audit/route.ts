@@ -10,21 +10,24 @@ import { apiError } from '@/lib/api-error'
  *
  * WHY THIS EXISTS
  * ---------------
- * The ₹100 → ₹10,000 payment bug is NOT a code defect. Every step of the
- * write path is correct (client → zod → route → money extension → toPaise).
- * The defect is in STORED DATA: the paise migration
- * (20260712000001_paise_migration) contains 73 statements of the form
+ * CORRECTED 2026-07-22. This endpoint was written to test a hypothesis that
+ * turned out to be WRONG (that the paise migration had been applied twice by
+ * the P3009/P3018 auto-retry in scripts/migrate-with-retry.sh, so that
+ * `ALTER COLUMN c TYPE INTEGER USING ROUND(c * 100)` ran twice = rupees ×
+ * 10,000). Rahul disproved it empirically: a brand-new payment created after
+ * that deploy was still 100×, so historical data could not be the cause.
  *
- *     ALTER TABLE X ALTER COLUMN c TYPE INTEGER USING ROUND(c * 100);
+ * The ACTUAL root cause (fixed in dd85acd) was in the money extension:
+ * generateModelHandlers() returned its handlers UNKEYED, so all 10 call sites
+ * collided and one model's handlers became a catch-all that Prisma ran on TOP
+ * of every other model's — double-converting on write. The models affected
+ * were exactly those sharing an `amount` column with RevenueSchedule:
+ * Payment, Subscription, BankTransaction.
  *
- * Postgres re-executes the USING expression every time the statement runs,
- * even when the column is already INTEGER. Applied twice, a value becomes
- * rupees × 10,000 instead of rupees × 100 — and every read (fromPaise)
- * divides by 100 once, displaying exactly 100× the true amount.
- *
- * scripts/migrate-with-retry.sh auto-retries failed migrations on P3009/P3018
- * on the (false) assumption that all migrations are idempotent, which is how
- * a second application can occur.
+ * The endpoint is still the right tool for the remaining question — WHICH
+ * ROWS were written while the bug was live and are therefore still 100× at
+ * rest. Storage is only fixed going forward; old rows stay corrupt until
+ * repaired by explicit id.
  *
  * WHY A DEBUG LOG COULDN'T FIND IT
  * --------------------------------
@@ -65,6 +68,17 @@ const MONEY_COLUMNS: Array<{ table: string; column: string; migrationLine: numbe
   { table: 'TransactionItem', column: 'unitPrice', migrationLine: 32 },
   { table: 'TransactionItem', column: 'total', migrationLine: 39 },
   { table: 'Payment', column: 'amount', migrationLine: 42 },
+  // 🔒 M11 follow-up: the models that SHARE the `amount` column name with
+  // RevenueSchedule are exactly the ones the unkeyed-handler bug could
+  // double-convert (Payment, Subscription, BankTransaction). Payment was the
+  // one the user noticed; these two were never checked. BankStatement totals
+  // are included because they are derived from BankTransaction amounts, so a
+  // corrupt row shows up here too.
+  { table: 'Subscription', column: 'amount', migrationLine: 45 },
+  { table: 'BankStatement', column: 'totalCredits', migrationLine: 81 },
+  { table: 'BankStatement', column: 'totalDebits', migrationLine: 82 },
+  { table: 'BankTransaction', column: 'amount', migrationLine: 85 },
+  { table: 'BankTransaction', column: 'balance', migrationLine: 86 },
 ]
 
 /**
@@ -97,11 +111,15 @@ export async function GET(req: NextRequest) {
         suspicious: bigint
         almost_certain: bigint
       }>>(
+        // ABS(), not a bare `>`: BankTransaction.amount is negative for debits
+        // and Party.openingBalance is stored negative for suppliers, so a
+        // one-sided comparison would report every corrupt negative row as
+        // healthy. Magnitude is what proves a 100× artifact, not sign.
         `SELECT COUNT(*)::bigint AS n,
                 MIN("${column}")::bigint AS minv,
-                MAX("${column}")::bigint AS maxv,
-                COUNT(*) FILTER (WHERE "${column}" > $2)::bigint AS suspicious,
-                COUNT(*) FILTER (WHERE "${column}" > $3)::bigint AS almost_certain
+                MAX(ABS("${column}"))::bigint AS maxv,
+                COUNT(*) FILTER (WHERE ABS("${column}") > $2)::bigint AS suspicious,
+                COUNT(*) FILTER (WHERE ABS("${column}") > $3)::bigint AS almost_certain
          FROM "${table}"
          WHERE "userId" = $1`,
         userId, SUSPICIOUS_PAISE, ALMOST_CERTAIN_PAISE,
@@ -110,9 +128,9 @@ export async function GET(req: NextRequest) {
         return db.$queryRawUnsafe<any[]>(
           `SELECT COUNT(*)::bigint AS n,
                   MIN(ti."${column}")::bigint AS minv,
-                  MAX(ti."${column}")::bigint AS maxv,
-                  COUNT(*) FILTER (WHERE ti."${column}" > $2)::bigint AS suspicious,
-                  COUNT(*) FILTER (WHERE ti."${column}" > $3)::bigint AS almost_certain
+                  MAX(ABS(ti."${column}"))::bigint AS maxv,
+                  COUNT(*) FILTER (WHERE ABS(ti."${column}") > $2)::bigint AS suspicious,
+                  COUNT(*) FILTER (WHERE ABS(ti."${column}") > $3)::bigint AS almost_certain
            FROM "TransactionItem" ti
            JOIN "Transaction" t ON t."id" = ti."transactionId"
            WHERE t."userId" = $1`,
@@ -131,7 +149,8 @@ export async function GET(req: NextRequest) {
         migrationLine,
         rowCount: Number(r?.n ?? 0),
         rawMinPaise: r?.minv != null ? Number(r.minv) : null,
-        rawMaxPaise: maxPaise,
+        // Largest MAGNITUDE, not largest signed value (see ABS() note above).
+        rawMaxAbsPaise: maxPaise,
         // Human-readable interpretation of the raw value under BOTH hypotheses
         maxAsRupees_ifHealthy: maxPaise / 100,
         maxAsRupees_ifDoubleConverted: maxPaise / 10000,
