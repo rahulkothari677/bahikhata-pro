@@ -57,6 +57,14 @@ export async function GET() {
       // question stayed open from V21 to now. A connection limit and a
       // pgbouncer flag are not secrets; the hostnames stay redacted.
       connectionLimit: configStatus.databaseUrlConnectionLimit,
+      // ὑ2 2026-07-22 PERF: `durationMs` above is a bare `SELECT 1`. On a
+      // co-located function+database that is single-digit milliseconds. It was
+      // measuring 223-447ms in production because the function ran in iad1
+      // (Washington DC) while the database sits in ap-south-1 — every query in
+      // every request paid an ocean crossing, and an endpoint making 13 of them
+      // paid it 13 times. `region` makes the pairing visible so this can never
+      // again be diagnosed by guesswork.
+      region: process.env.VERCEL_REGION || 'unknown',
       pgbouncer: configStatus.databaseUrlHasPgbouncer,
       pooledHost: configStatus.databaseUrlHasPooler,
     })
