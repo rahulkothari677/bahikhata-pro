@@ -351,6 +351,14 @@ export function withMoneyConversion(client: PrismaClient) {
 
       // Party
       party: {
+        // 🔒 PHASE 1-3 REGRESSION (2026-07-22): `delete` returns the deleted
+        // row. Without a handler that row comes back in raw PAISE while every
+        // other read path returns rupees. No caller uses the return value
+        // today — which is precisely how M11 began, as a latent gap nobody
+        // had a reason to look at. Registered so it cannot become live.
+        async delete({ args, query }) {
+          return convertRowOnRead('Party', await query(args))
+        },
         async findMany({ args, query }) {
           const result = await query(args)
           return result.map((row: any) => convertRowOnRead('Party', row))
@@ -392,6 +400,14 @@ export function withMoneyConversion(client: PrismaClient) {
 
       // Transaction
       transaction: {
+        // 🔒 PHASE 1-3 REGRESSION (2026-07-22): `delete` returns the deleted
+        // row. Without a handler that row comes back in raw PAISE while every
+        // other read path returns rupees. No caller uses the return value
+        // today — which is precisely how M11 began, as a latent gap nobody
+        // had a reason to look at. Registered so it cannot become live.
+        async delete({ args, query }) {
+          return convertRowOnRead('Transaction', await query(args))
+        },
         async findMany({ args, query }) {
           const result = await query(args)
           return result.map((row: any) => convertRowOnRead('Transaction', row))

@@ -707,10 +707,53 @@ export async function POST(req: NextRequest) {
                 return NextResponse.json({ transaction: existing, idempotent: true })
               }
             }
-            // invoiceNo conflict (extremely unlikely with the atomic counter)
+            // 🔒 PHASE 1-3 REGRESSION FIX (2026-07-22). This branch used to
+            // say an invoiceNo conflict was "extremely unlikely with the atomic
+            // counter" and simply retried, relying on the counter having moved
+            // on by one. That is only true if collisions are isolated.
+            //
+            // They are not. A shopkeeper migrating from a paper book types the
+            // real numbers on their first bills — INV-0045, INV-0046, INV-0047
+            // and so on. The auto-counter starts at 1, and months later walks
+            // into that block. Three retries crawl one number at a time, all
+            // three collide, and from then on EVERY new sale fails with
+            // "Duplicate invoice number". The shop cannot bill anyone until
+            // someone types a free number by hand for every single sale.
+            //
+            // Found by exactly this shape during the regression pass: one
+            // manually-numbered bill sat ahead of the counter and new sales
+            // started failing with a 409.
+            //
+            // Now: on an invoiceNo collision, jump the counter PAST every
+            // number already in use in that series instead of crawling.
+            const isInvoiceConflict = target?.includes('invoiceNo')
+            if (isInvoiceConflict && attempt < 2) {
+              const prefix = type === 'purchase' ? 'PUR-' : 'INV-'
+              // Highest numeric suffix already used by this shop in this
+              // series, whoever created it and however it was numbered.
+              // REPLACE, not SUBSTRING: passing the prefix length as a bound
+              // parameter makes Postgres see substring(text, bigint), which has
+              // no matching function. The WHERE already restricts rows to
+              // exactly PREFIX + digits, so stripping the prefix is safe.
+              const maxRows = await db.$queryRaw<Array<{ maxseq: number | null }>>`
+                SELECT MAX(CAST(REPLACE("invoiceNo", ${prefix}, '') AS INTEGER)) AS maxseq
+                FROM "Transaction"
+                WHERE "userId" = ${userId}
+                  AND "invoiceNo" ~ ${'^' + prefix + '[0-9]+$'}
+              `
+              const nextSeq = (Number(maxRows?.[0]?.maxseq ?? 0) || 0) + 1
+              await db.invoiceCounter.upsert({
+                where: { userId },
+                update: type === 'purchase' ? { purchaseSeq: nextSeq } : { seq: nextSeq },
+                create: type === 'purchase'
+                  ? { userId, purchaseSeq: nextSeq }
+                  : { userId, seq: nextSeq },
+              })
+              continue
+            }
             if (attempt < 2) {
-              // The counter already incremented, so the next attempt will get a
-              // new sequence number automatically. Just retry.
+              // Any other unique conflict — the counter already incremented, so
+              // the next attempt gets a fresh number.
               continue
             }
           }
