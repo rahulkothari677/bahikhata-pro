@@ -17,6 +17,11 @@ export function Onboarding({ open, onDone }: { open: boolean; onDone: () => void
     setSeeding(true)
     try {
       const r = await offlineFetch('/api/seed', { method: 'POST', offline: { queueable: false, invalidate: ['/api/products', '/api/parties', '/api/transactions', '/api/dashboard'] } })
+      // 🔒 2026-07-22: offlineFetch resolves with the Response on a 4xx/5xx,
+      // so a rejected seed fell through to the success toast and rendered
+      // "Added undefined products, undefined parties" — the user is told the
+      // demo data loaded when nothing was created.
+      if (!r.ok) throw new Error('seed failed')
       const data = await r.json()
       if (data.skipped) {
         sonnerToast.info('Demo data already exists')

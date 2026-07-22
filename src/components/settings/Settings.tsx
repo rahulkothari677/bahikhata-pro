@@ -191,12 +191,17 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
     const prev = roundOffEnabled
     setRoundOffEnabled(next)
     try {
-      await offlineFetch('/api/settings', {
+      const r = await offlineFetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ roundOffEnabled: next }),
         offline: { invalidate: ['/api/settings'] },
       })
+      // 🔒 2026-07-22: the R16-1 revert never fired. offlineFetch RESOLVES
+      // with the Response on a 4xx/5xx — it only throws on a network failure —
+      // so a server rejection skipped the catch entirely: the toggle stayed on,
+      // a success toast appeared, and nothing had been saved.
+      if (!r.ok) throw new Error(await readError(r))
       queryClient.invalidateQueries({ queryKey: ['setting'] })
       sonnerToast.success(`Invoice round-off ${next ? 'on' : 'off'}`)
     } catch (e: any) {
@@ -211,12 +216,14 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
     const prev = stockPolicy
     setStockPolicy(next)
     try {
-      await offlineFetch('/api/settings', {
+      const r = await offlineFetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ stockPolicy: next }),
         offline: { invalidate: ['/api/settings'] },
       })
+      // 🔒 2026-07-22: same defect as persistRoundOff — see the note there.
+      if (!r.ok) throw new Error(await readError(r))
       queryClient.invalidateQueries({ queryKey: ['setting'] })
       sonnerToast.success(next === 'allow' ? 'Overselling allowed (kirana mode)' : 'Overselling blocked')
     } catch (e: any) {

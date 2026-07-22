@@ -65,12 +65,19 @@ export function useSetting() {
     // Persist to server in background
     try {
       const currentSetting = setting || {}
-      await offlineFetch('/api/settings', {
+      const r = await offlineFetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...currentSetting, hideProfit: newValue }),
         offline: { invalidate: ['/api/settings', '/api/dashboard'] },
       })
+      // 🔒 2026-07-22: this is the pattern Settings.tsx cited as its model,
+      // and it had the same hole. offlineFetch RESOLVES with the Response on a
+      // 4xx/5xx, so a rejected save skipped the catch and the revert never ran.
+      // Worst case for a shop: the owner turns ON "hide profit" for staff, sees
+      // it switch on, and the server never stored it — staff keep seeing the
+      // margin on every product. A privacy setting that silently fails open.
+      if (!r.ok) throw new Error(`Failed to save (${r.status})`)
       // Invalidate so all components get the fresh data from server
       queryClient.invalidateQueries({ queryKey: ['setting'] })
     } catch (err) {
