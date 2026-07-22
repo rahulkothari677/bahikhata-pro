@@ -82,7 +82,7 @@ I verified all 20 specific technical claims from the three audit reports against
 |---|---|---|---|
 | 2.1 | Switch build from `db push` to `migrate deploy` | ½ day | Neon snapshot (your task) |
 | 2.2 | Move rate limits to Redis (Upstash) | 1 day | Upstash account (your task) |
-| 2.3 | Configure Neon pooled endpoint + `connection_limit=1` | 1-2 hr | Pooled URL (your task) |
+| 2.3 | Configure Neon pooled endpoint + `connection_limit=10` (was 1 — see the corrected step below) | 1-2 hr | Pooled URL (your task) |
 
 #### Phase 3 — Medium fixes (I can do after Phase 2)
 
@@ -224,11 +224,17 @@ These three tasks unlock Phase 2. Do them in any order — all three are needed 
 1. Go to Vercel: **Settings → Environment Variables**
 2. **Update `DATABASE_URL`:**
    - Set to the **POOLED** connection string
-   - Add `&pgbouncer=true&connection_limit=1` to the end
+   - Add `&pgbouncer=true&connection_limit=10&pool_timeout=60` to the end
    - Final value looks like:
      ```
-     postgresql://...@ep-xxx-pooler.region.aws.neon.tech/neondb?sslmode=require&pgbouncer=true&connection_limit=1
+     postgresql://...@ep-xxx-pooler.region.aws.neon.tech/neondb?sslmode=require&pgbouncer=true&connection_limit=10&pool_timeout=60
      ```
+   - **CORRECTED 2026-07-22.** This step used to say `connection_limit=1`.
+     That serialises every query in a request behind a single connection: a
+     page making 11 calls waits for them one at a time, which is what made
+     plain page loads take 2-5 seconds and turned a multi-statement edit into
+     a P2028 transaction timeout. Neon's PgBouncer pooler handles far more
+     than one. See `docs/v21-performance-fixes.md` Task 1.
    - Environments: Production + Preview
 3. **Add a NEW variable `DIRECT_URL`:**
    - Set to the **DIRECT** connection string (no `-pooler`)
@@ -477,7 +483,7 @@ The auditor reviewed the agent's "we are NOT doing these" list and agreed with m
 | **BUG-2** | Fallback defaults don't match real data shape → ₹NaN on partial/error loads | `Dashboard.tsx` kpis default now includes `netProfit`, `totalStockValue`, `productCount`, `rangeTxnCount`, `totalExpenses`. `gstSummary` default now uses `outputTax / inputTax / cgst / sgst / netPayable` (matches server response exactly). |
 | **BUG-3** | "Repeat Last Sale" bypasses offline layer (raw fetch, no cache fallback) | `Dashboard.tsx` now routes through `offlineFetch`. Online: same fetch + caches response. Offline: falls back to cached `/api/transactions` list. Catches `OfflineError` for a clearer toast. |
 | **AI-4** | Image preprocessing deferred citing "heavy dependency" — factually wrong, `sharp` already installed | New `preprocessImageForAI()` in `image-compress.ts`: grayscale → normalize (auto-contrast) → resize longest edge to 1600px → JPEG q80. Wired into `/api/scan-bill` route. `compressImageForAI` (compare route) now delegates to the same pipeline. |
-| **P5** | "Already configured" was an assumption conflicting with the 20s cold-start complaint — needed actual verification | New `verify-db-config.ts` module checks at startup: (1) DATABASE_URL host has `-pooler`, (2) query has `connection_limit=1` + `pgbouncer=true`, (3) DIRECT_URL is set + non-pooler. Wired into `instrumentation.ts`. `/api/warmup` now returns the config status as JSON so the user can verify in a browser. |
+| **P5** | "Already configured" was an assumption conflicting with the 20s cold-start complaint — needed actual verification | New `verify-db-config.ts` module checks at startup: (1) DATABASE_URL host has `-pooler`, (2) query has `connection_limit` + `pgbouncer=true` (the check originally demanded exactly `=1`; corrected 2026-07-22 to warn when the limit is absent or below 5), (3) DIRECT_URL is set + non-pooler. Wired into `instrumentation.ts`. `/api/warmup` now returns the config status as JSON so the user can verify in a browser. |
 | **P3** | List cap is fine, but reports/GSTR use unbounded `findMany` → OOM at scale | `/api/reports` capped at 5,000 transactions + `truncated` flag in response. Stock report refactored to read `currentStock` column directly (eliminates the secondary unbounded `findMany` entirely). `/api/gstr-export` capped at 10,000 invoices + `truncated` flag in JSON + `# WARNING:` prefix in CSV. |
 
 ### V4 — What the USER still needs to do (cannot be done from code)
