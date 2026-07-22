@@ -24,6 +24,7 @@ import {
 import { VoiceEntry } from '@/components/common/VoiceEntry'
 import { DraftManagerModal } from '@/components/common/DraftManagerModal'
 import { BarcodeScanner } from '@/components/common/BarcodeScanner'
+import { deriveInterStateFromStates } from '@/lib/gst-states'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { track, EVENTS } from '@/lib/analytics'
 import { useDrafts } from '@/hooks/use-drafts'
@@ -379,6 +380,29 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   }, [])
 
   const selectedParty = allParties.find(p => p.id === partyId)
+
+  // 🔒 R10-1 (2026-07-22): mirror the SERVER's inter-state rule on screen.
+  //
+  // The bug this fixes: the screen showed a freely editable "Inter-state
+  // (IGST)" switch. The server correctly ignores a client-supplied tax flag
+  // (otherwise anyone could move tax between heads), so a shopkeeper who
+  // flipped the switch saw IGST in the on-screen total and got CGST+SGST in
+  // the saved bill. The printed invoice, the GSTR-1 return and the customer's
+  // GSTR-2B then disagree, and the return is filed under the wrong heading.
+  //
+  // Same pure function the server calls, so the two cannot drift.
+  const shopState: string | undefined = settingData?.setting?.state
+  const derivedInterState = deriveInterStateFromStates(shopState, selectedParty?.state)
+
+  // The preview is what the shopkeeper checks before saving, so it has to
+  // agree with what the server will store. Whenever the answer is knowable,
+  // force the flag to the derived value — including over a restored draft or
+  // a value the user set earlier while the party still had no state.
+  useEffect(() => {
+    if (!derivedInterState.indeterminate) {
+      setIsInterState(prev => prev === derivedInterState.isInterState ? prev : derivedInterState.isInterState)
+    }
+  }, [derivedInterState.indeterminate, derivedInterState.isInterState])
 
   const handleAddProduct = (product: any) => {
     // User manually added a product — clear presetLoaded so autosave resumes
@@ -1456,12 +1480,37 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                 </div>
               </div>
 
-              <div className="flex items-center justify-between rounded-lg bg-muted/50 p-3">
-                <div>
-                  <Label className="cursor-pointer text-sm" htmlFor="field-inter-state-igst">Inter-state (IGST)</Label>
-                  <p className="text-2xs text-muted-foreground mt-0.5">ON if other state</p>
+              {/* 🔒 R10-1: the tax head is DERIVED, not chosen.
+                  Editable only while the app genuinely cannot tell. */}
+              <div className="rounded-lg bg-muted/50 p-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-sm" htmlFor="field-inter-state-igst">GST type</Label>
+                    <p className="text-2xs text-muted-foreground mt-0.5">
+                      {derivedInterState.indeterminate
+                        ? 'Set the state to decide this automatically'
+                        : derivedInterState.isInterState
+                          ? `${shopState} \u2192 ${selectedParty?.state} \u2014 different states`
+                          : `Both in ${shopState}`}
+                    </p>
+                  </div>
+                  {derivedInterState.indeterminate ? (
+                    <Switch checked={isInterState} onCheckedChange={setIsInterState} />
+                  ) : (
+                    <Badge variant="outline" className="text-xs font-semibold">
+                      {derivedInterState.isInterState ? 'IGST' : 'CGST + SGST'}
+                    </Badge>
+                  )}
                 </div>
-                <Switch checked={isInterState} onCheckedChange={setIsInterState} />
+                {derivedInterState.indeterminate && (
+                  <p className="text-2xs text-amber-700 dark:text-amber-400 mt-2">
+                    {!shopState
+                      ? 'Your shop\u2019s state is not set \u2014 add it in Settings so GST is worked out for you.'
+                      : selectedParty
+                        ? `${selectedParty.name} has no state saved \u2014 add it on their profile so GST is worked out for you.`
+                        : 'No customer selected, so this is treated as a local sale.'}
+                  </p>
+                )}
               </div>
 
               <div>

@@ -1,4 +1,5 @@
 import { db } from '@/lib/db'
+import { deriveInterStateFromStates } from './gst-states'
 
 /**
  * 🔒 AUDIT FIX H3 (v2 audit): Shared GST inter-state derivation helper.
@@ -58,18 +59,14 @@ export async function deriveInterStateStatus(
     where: { userId },
     select: { state: true },
   })
-  const shopState = shopSetting?.state?.trim() || null
-  const partyState = party?.state?.trim() || null
-
-  // Inter-state ONLY if both states are known and differ
-  const isInterState = !!(shopState && partyState && shopState.toLowerCase() !== partyState.toLowerCase())
-
-  // 🔒 V26 Phase 8 R10-1: Return whether the derivation is indeterminate
-  // (either state is missing). When indeterminate, the caller should honor
-  // the client-supplied isInterState value — it's the only information available.
-  // When determinate (both states known), the server's derivation is authoritative
-  // and the client's value is ignored (prevents tax-head tampering).
-  const indeterminate = !shopState || !partyState
+  // 🔒 R10-1 (2026-07-22): the comparison itself now lives in the pure
+  // gst-states module so the sale-entry screen can show the SAME answer this
+  // function will compute. Duplicating the rule client-side is what let the
+  // screen and the server disagree about the tax head.
+  const { isInterState, indeterminate } = deriveInterStateFromStates(
+    shopSetting?.state,
+    party?.state,
+  )
 
   return { isInterState, party, indeterminate }
 }
@@ -89,4 +86,4 @@ export async function deriveInterStateStatus(
 // module gst-states.ts (no db import) so gstr1-builder.ts stays pure and its
 // tests run without DATABASE_URL. Re-exported here so all existing call sites
 // (`import { deriveStateCode } from '@/lib/gst'`) keep working unchanged.
-export { stateNameToCode, deriveStateCode } from './gst-states'
+export { stateNameToCode, deriveStateCode, deriveInterStateFromStates } from './gst-states'

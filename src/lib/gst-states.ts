@@ -96,3 +96,33 @@ export function deriveStateCode(
   // 5. Nothing worked
   return null
 }
+
+/**
+ * The single definition of "is this supply inter-state?".
+ *
+ * WHY IT LIVES HERE (2026-07-22, R10-1): the rule existed only inside
+ * `deriveInterStateStatus()` in gst.ts, which needs the database. The sale
+ * entry screen therefore had no way to know the answer and showed a freely
+ * editable "Inter-state (IGST)" switch instead. A shopkeeper could turn it on,
+ * watch the on-screen preview move the tax into IGST, save — and the server,
+ * correctly refusing to trust a client tax flag, would store CGST+SGST. The
+ * bill, the GST return and the customer's GSTR-2B then disagree.
+ *
+ * Putting the rule in a pure module lets the screen show the SAME answer the
+ * server will compute, so the two can never drift apart.
+ *
+ * `indeterminate` means the app genuinely cannot tell (a state is missing).
+ * That is the only case where the user's choice is used.
+ */
+export function deriveInterStateFromStates(
+  shopState?: string | null,
+  partyState?: string | null,
+): { isInterState: boolean; indeterminate: boolean } {
+  const shop = shopState?.trim() || null
+  const party = partyState?.trim() || null
+  const indeterminate = !shop || !party
+  return {
+    isInterState: !!(shop && party && shop.toLowerCase() !== party.toLowerCase()),
+    indeterminate,
+  }
+}

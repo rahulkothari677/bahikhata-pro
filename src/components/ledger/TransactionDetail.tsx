@@ -31,6 +31,7 @@ import { useSetting } from '@/hooks/use-setting'
 import { readError } from '@/lib/read-error'
 import { invalidateMoneyCaches } from '@/lib/invalidate-money-caches'
 import { NumberField } from '@/components/ui/number-field'
+import { deriveInterStateFromStates } from '@/lib/gst-states'
 
 /**
  * Sentinel values for the party <Select> in the edit dialog.
@@ -991,6 +992,23 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
     isSale ? p.type === 'customer' || p.type === 'both' : transaction?.type === 'purchase' ? p.type === 'supplier' || p.type === 'both' : true
   )
 
+  const { data: editSettingData } = useQuery({
+    queryKey: ['setting'],
+    queryFn: async () => {
+      const r = await offlineFetch('/api/settings')
+      return r.json()
+    },
+    staleTime: 5 * 60 * 1000,
+  })
+
+  // Same derivation the server will run on save (see gst-states.ts), so the
+  // GST type shown here cannot disagree with what gets stored.
+  const editSelectedParty = parties.find((p: any) => p.id === form.partyId)
+  const editInterState = deriveInterStateFromStates(
+    editSettingData?.setting?.state,
+    editSelectedParty?.state,
+  )
+
   useEffect(() => {
     if (open && transaction) {
       setForm({
@@ -1222,11 +1240,28 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
                 </div>
               </div>
 
-              <div className="flex items-center justify-between rounded-lg bg-muted/50 p-3">
-                <Label className="cursor-pointer" htmlFor="field-inter-state-igst">Inter-state (IGST)</Label>
-                {/* 🔒 V19-021: isInterState is server-derived from party state, not user-settable.
-                    Display as read-only to avoid confusion. */}
-                <Switch checked={form.isInterState} disabled />
+              {/* 🔒 V19-021 + R10-1: the tax head is server-derived, never chosen.
+                  The disabled switch showed the STORED value, which goes stale the
+                  moment the customer is changed in this dialog — so it now shows
+                  the value the server will actually compute on save. */}
+              <div className="rounded-lg bg-muted/50 p-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label htmlFor="field-inter-state-igst">GST type</Label>
+                    <p className="text-3xs text-muted-foreground mt-0.5">
+                      {editInterState.indeterminate
+                        ? 'Worked out on save from the shop and customer states'
+                        : editInterState.isInterState
+                          ? 'Different states'
+                          : 'Same state'}
+                    </p>
+                  </div>
+                  <Badge variant="outline" className="text-xs font-semibold">
+                    {editInterState.indeterminate
+                      ? (form.isInterState ? 'IGST' : 'CGST + SGST')
+                      : (editInterState.isInterState ? 'IGST' : 'CGST + SGST')}
+                  </Badge>
+                </div>
               </div>
 
               <div>
