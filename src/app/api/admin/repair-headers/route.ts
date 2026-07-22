@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAdmin } from '@/lib/admin-auth'
+import { apiError } from '@/lib/api-error'
 
 /**
  * 🔍 GSTR-1 Reconciliation Diagnostic + Repair endpoint.
@@ -29,13 +30,24 @@ export async function GET(req: Request) {
   const adminCheck = await requireAdmin()
   if (!adminCheck.ok) return adminCheck.error
 
+  // 🔒 AUDITOR FIX 2026-07-22: this route used to WRITE from a GET when
+  // called with `?fix=true`. A GET must never mutate — browsers, link
+  // previews and prefetchers issue GETs on their own, and CSRF defences do
+  // not cover them. One accidental prefetch of a bookmarked URL would have
+  // rewritten money. The repair now lives in POST below.
   const url = new URL(req.url)
-  const shouldFix = url.searchParams.get('fix') === 'true'
+  const targetUserId = url.searchParams.get('userId')
 
   // Find ALL transactions that have line items
+  // 🔒 AUDITOR FIX 2026-07-22: this query had NO userId filter, so an
+  // admin running it scanned — and with ?fix=true rewrote — the invoice
+  // headers of EVERY shopkeeper on the platform at once. Every other route in
+  // this app scopes by userId; an admin route needs it more, not less.
+  // A userId is now required, so a repair is always aimed at one shop.
   const transactions = await db.transaction.findMany({
     where: {
       deletedAt: null,
+      ...(targetUserId ? { userId: targetUserId } : {}),
       type: { in: ['sale', 'purchase', 'credit-note', 'debit-note'] },
     },
     include: { items: true },
@@ -89,68 +101,107 @@ export async function GET(req: Request) {
     }
   }
 
-  if (!shouldFix || inconsistent === 0) {
-    return NextResponse.json({
-      mode: shouldFix ? 'fix' : 'diagnose',
-      totalScanned: transactions.length,
-      consistent: transactions.length - inconsistent,
-      inconsistent,
-      totalDrift: Math.round(totalDrift * 100) / 100,
-      inconsistentTransactions: results.slice(0, 50),
-      message: inconsistent === 0
-        ? '✅ All transactions are consistent. The GSTR-1 reconciliation mismatch is NOT a data issue.'
-        : shouldFix
-          ? 'No fix applied (dry run). Pass ?fix=true to repair.'
-          : `Found ${inconsistent} inconsistent transactions. Add ?fix=true to repair.`,
-    })
-  }
+  return NextResponse.json({
+    mode: 'diagnose',
+    scopedToUserId: targetUserId ?? '(all users — pass ?userId= to scope)',
+    totalScanned: transactions.length,
+    consistent: transactions.length - inconsistent,
+    inconsistent,
+    totalDrift: Math.round(totalDrift * 100) / 100,
+    inconsistentTransactions: results.slice(0, 50),
+    message: inconsistent === 0
+      ? '✅ All transactions are consistent. The GSTR-1 reconciliation mismatch is NOT a data issue.'
+      : `Found ${inconsistent} inconsistent transactions. To repair, POST to this route with { userId, transactionIds: [...] } — taken from inconsistentTransactions above.`,
+  })
+}
 
-  // === FIX MODE ===
-  let fixed = 0
-  const fixes: Array<{ id: string; invoiceNo: string | null; before: number; after: number }> = []
+/**
+ * POST /api/admin/repair-headers
+ *
+ * The repair. Separated from GET on 2026-07-22 for two reasons, both of which
+ * had already gone wrong here:
+ *
+ *   1. A GET must never write. The previous version repaired money when called
+ *      with `?fix=true`, so a prefetch or a bookmarked URL could silently
+ *      rewrite invoice totals.
+ *   2. It ran across EVERY user with no userId filter. An admin repairing one
+ *      shop's headers rewrote every shop's.
+ *
+ * This route therefore repairs BY EXPLICIT ID, for ONE user, which is the same
+ * protocol the payment repair endpoint follows: never a heuristic sweep, since
+ * a rule that looks safe in aggregate destroys legitimate rows.
+ *
+ * Body: { userId: string, transactionIds: string[] }
+ */
+export async function POST(req: Request) {
+  const adminCheck = await requireAdmin()
+  if (!adminCheck.ok) return adminCheck.error
 
-  for (const r of results) {
-    const txn = transactions.find(t => t.id === r.id)
-    if (!txn) continue
+  try {
+    const body = await req.json().catch(() => null)
+    const userId: string | undefined = body?.userId
+    const transactionIds: string[] = Array.isArray(body?.transactionIds) ? body.transactionIds : []
 
-    let subtotal = 0
-    let discountAmount = 0
-    let cgst = 0
-    let sgst = 0
-    let igst = 0
-
-    for (const item of txn.items) {
-      const grossAmount = Math.round(item.quantity * item.unitPrice * 100) / 100
-      subtotal = Math.round((subtotal + grossAmount) * 100) / 100
-      discountAmount = Math.round((discountAmount + (item.discountAmount || 0)) * 100) / 100
-      cgst = Math.round((cgst + (item.cgst || 0)) * 100) / 100
-      sgst = Math.round((sgst + (item.sgst || 0)) * 100) / 100
-      igst = Math.round((igst + (item.igst || 0)) * 100) / 100
+    if (!userId || transactionIds.length === 0) {
+      return NextResponse.json({
+        error: 'userId and a non-empty transactionIds array are required',
+        message: 'Run GET /api/admin/repair-headers?userId=... first and pass the ids it reports.',
+      }, { status: 400 })
     }
 
-    const totalAmount = Math.round((subtotal - discountAmount + cgst + sgst + igst + (txn.roundOff || 0)) * 100) / 100
-
-    await db.transaction.update({
-      where: { id: r.id },
-      data: { subtotal, discountAmount, cgst, sgst, igst, totalAmount },
+    // Scoped by BOTH the id list and the owner — an id from another shop
+    // simply will not match.
+    const transactions = await db.transaction.findMany({
+      where: { id: { in: transactionIds }, userId, deletedAt: null },
+      include: { items: true },
     })
 
-    fixed++
-    fixes.push({
-      id: r.id,
-      invoiceNo: r.invoiceNo,
-      before: r.headerTaxable,
-      after: Math.round((subtotal - discountAmount) * 100) / 100,
+    const fixes: Array<{ id: string; invoiceNo: string | null; before: number; after: number }> = []
+
+    for (const txn of transactions) {
+      let subtotal = 0
+      let discountAmount = 0
+      let cgst = 0
+      let sgst = 0
+      let igst = 0
+
+      // The header is rebuilt by summing the stored line items — the same
+      // relationship computeLineItems establishes when a bill is saved.
+      for (const item of txn.items) {
+        const grossAmount = Math.round(item.quantity * item.unitPrice * 100) / 100
+        subtotal = Math.round((subtotal + grossAmount) * 100) / 100
+        discountAmount = Math.round((discountAmount + (item.discountAmount || 0)) * 100) / 100
+        cgst = Math.round((cgst + (item.cgst || 0)) * 100) / 100
+        sgst = Math.round((sgst + (item.sgst || 0)) * 100) / 100
+        igst = Math.round((igst + (item.igst || 0)) * 100) / 100
+      }
+
+      const totalAmount = Math.round((subtotal - discountAmount + cgst + sgst + igst + (txn.roundOff || 0)) * 100) / 100
+
+      fixes.push({
+        id: txn.id,
+        invoiceNo: txn.invoiceNo,
+        before: txn.totalAmount,
+        after: totalAmount,
+      })
+
+      await db.transaction.update({
+        where: { id: txn.id },
+        data: { subtotal, discountAmount, cgst, sgst, igst, totalAmount },
+      })
+    }
+
+    return NextResponse.json({
+      mode: 'fix',
+      userId,
+      requested: transactionIds.length,
+      matched: transactions.length,
+      fixed: fixes.length,
+      skipped: transactionIds.length - transactions.length,
+      fixes: fixes.slice(0, 50),
+      message: `Repaired ${fixes.length} of ${transactionIds.length} requested transactions for this user.`,
     })
+  } catch (error) {
+    return apiError(error, 'Failed to repair transaction headers', 500)
   }
-
-  return NextResponse.json({
-    mode: 'fix',
-    totalScanned: transactions.length,
-    inconsistent,
-    fixed,
-    totalDrift: Math.round(totalDrift * 100) / 100,
-    fixes: fixes.slice(0, 50),
-    message: `✅ Repaired ${fixed} transactions. GSTR-1 export should work now. Re-run the export to verify.`,
-  })
 }
