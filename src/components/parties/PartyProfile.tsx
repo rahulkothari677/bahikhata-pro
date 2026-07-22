@@ -186,6 +186,20 @@ export function PartyProfile() {
       sonnerToast.error('Enter a valid amount')
       return
     }
+    // 🔒 DOUBLE-COUNT GUARD: paying more than is outstanding is the
+    // signature of re-entering money that a bill already records. Make it a
+    // deliberate act rather than something that happens by accident.
+    const outstanding = Math.abs(stats?.balance ?? 0)
+    if (amt > outstanding + 0.005) {
+      const extra = roundMoney(amt - outstanding)
+      const confirmed = await confirmDialog(
+        alreadyPaidOnBills > 0
+          ? `${party?.name} owes ${formatINR(outstanding)}, but you are recording ${formatINR(amt)} — ${formatINR(extra)} extra. ${formatINR(alreadyPaidOnBills)} is already recorded as paid on their bills. If this money was typed into a bill's "Paid Amount", recording it again here will make the dues show ${formatINR(extra)} less than reality.`
+          : `${party?.name} owes ${formatINR(outstanding)}, but you are recording ${formatINR(amt)}. The extra ${formatINR(extra)} will be treated as an advance.`,
+        { title: 'More than they owe', confirmLabel: 'Yes, record it', destructive: true },
+      )
+      if (!confirmed) return
+    }
     setSavingPayment(true)
     try {
       const r = await offlineFetch('/api/payments', {
@@ -452,6 +466,21 @@ export function PartyProfile() {
       balance: entry.runningBalance,
     }
   })
+
+  /**
+   * How much of this party's balance was already settled INSIDE the bills
+   * (the invoice "Paid Amount" field), as opposed to via Settle. Both reduce
+   * the balance, so entering the same money in both places double-counts it.
+   */
+  const alreadyPaidOnBills = paymentType === 'received'
+    ? (stats?.totalReceived ?? 0)
+    : (stats?.totalPaid ?? 0)
+
+  /** How far the typed amount exceeds what is actually outstanding. */
+  const overpayAmount = Math.max(
+    0,
+    (parseFloat(paymentAmount) || 0) - Math.abs(stats?.balance ?? 0),
+  )
 
   /** Closing figure + wording, always the canonical balance (never re-derived). */
   const statementClosing = () => {
@@ -1270,6 +1299,28 @@ export function PartyProfile() {
                 </SelectContent>
               </Select>
             </div>
+            {/* 🔒 DOUBLE-COUNT GUARD (2026-07-22, Rahul hit this for real).
+                Money typed into a bill's "Paid Amount" and money recorded here
+                BOTH reduce what the customer owes. Entering the same ₹100 in
+                both places makes the dues read ₹100 lower than reality, and the
+                statement he sends the customer understates the debt.
+                The old warning fired in a toast AFTER saving, which is too late
+                and easy to miss. Now the numbers are on screen BEFORE saving. */}
+            {alreadyPaidOnBills > 0 && (
+              <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-3 text-2xs space-y-1">
+                <p className="font-semibold text-amber-900 dark:text-amber-200">
+                  Already recorded on this party&rsquo;s bills: {formatINR(alreadyPaidOnBills)}
+                </p>
+                <p className="text-amber-800 dark:text-amber-300">
+                  Enter money received <strong>separately</strong> from the bills.
+                  If that {formatINR(alreadyPaidOnBills)} was already typed into a
+                  bill&rsquo;s &ldquo;Paid Amount&rdquo;, do not enter it again here.
+                </p>
+                <p className="text-amber-800 dark:text-amber-300">
+                  Outstanding right now: <strong>{formatINR(Math.abs(stats.balance))}</strong>
+                </p>
+              </div>
+            )}
             <div>
               <Label htmlFor="field-amount">Amount (₹)</Label>
               <Input id="field-amount"
@@ -1280,6 +1331,12 @@ export function PartyProfile() {
                 className="mt-1"
                 autoFocus
               />
+              {overpayAmount > 0 && (
+                <p className="text-2xs text-rose-600 dark:text-rose-400 mt-1">
+                  This is {formatINR(overpayAmount)} more than the {formatINR(Math.abs(stats.balance))} outstanding.
+                  {alreadyPaidOnBills > 0 ? ' That usually means this amount is already recorded on a bill.' : ''}
+                </p>
+              )}
             </div>
             <div>
               <Label htmlFor="field-payment-mode">Payment Mode</Label>
