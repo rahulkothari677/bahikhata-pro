@@ -494,7 +494,13 @@ async function callWithFallback(prompt: string, imageSource: string): Promise<Fa
       //
       // Kept in an env var: if handwritten Devanagari accuracy drops, raise the
       // tier from the Vercel dashboard without a code deploy.
-      model: process.env.GEMINI_SCAN_MODEL || 'gemini-2.5-flash-lite',
+      // ὑ2 2026-07-23: back to 3.5-flash-lite. 2.5-flash-lite is the
+      // cheaper tier but Google has closed it to new API keys ("no longer
+      // available to new users"), so on Rahul's key it 404s and every scan
+      // falls through to a slower model. A default has to be one that WORKS:
+      // 3.5-flash-lite answers in ~4s, and after the prompt trim a scan costs
+      // ~Rs 0.09 rather than the Rs 0.19 it did before.
+      model: process.env.GEMINI_SCAN_MODEL || 'gemini-3.5-flash-lite',
     },
     ...(process.env.VLM_API_KEY ? [{
       name: 'vlm',
@@ -549,7 +555,12 @@ async function callWithFallback(prompt: string, imageSource: string): Promise<Fa
     // `reasoning_effort` is a tuning knob. If the server rejects the request
     // (4xx), retry once WITHOUT it before walking away to a costlier provider.
     // Losing a little speed beats silently changing which model bills the shop.
-    if (!result.success && /HTTP 4\d\d/.test(result.error || '')) {
+    // Only a 400 means "I disliked a field". A 404 means the model is not
+    // there for this key and no retry can change that — retrying anyway added
+    // a THIRD wasted round trip on every scan (404, 404 again, then fallback)
+    // and pushed a scan to 31s. 401/403 are credential problems, equally
+    // pointless to repeat.
+    if (!result.success && /HTTP 400/.test(result.error || '')) {
       const retried = await callSingleProvider(provider, prompt, imageSource, true)
       if (retried.success) {
         console.warn(

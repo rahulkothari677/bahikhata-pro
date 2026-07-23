@@ -62,23 +62,36 @@ describe('thinking is actually suppressed, in Google\'s parameter shape', () => 
 
 describe('extraction runs on the fast tier', () => {
   test('scan-bill defaults to the cost-effective tier and stays overridable', () => {
-    expect(scan).toMatch(/GEMINI_SCAN_MODEL \|\| 'gemini-2\.5-flash-lite'/)
+    expect(scan).toMatch(/GEMINI_SCAN_MODEL \|\| 'gemini-3\.5-flash-lite'/)
   })
 
   test('voice-parse defaults to the cost-effective tier', () => {
-    expect(voice).toMatch(/GEMINI_VOICE_MODEL = process\.env\.GEMINI_VOICE_MODEL \|\| 'gemini-2\.5-flash-lite'/)
+    expect(voice).toMatch(/GEMINI_VOICE_MODEL = process\.env\.GEMINI_VOICE_MODEL \|\| 'gemini-3\.5-flash-lite'/)
   })
 
-  test('the default is not a tier that costs the same as the old model', () => {
-    // "Lite" is cheap WITHIN a generation, not across them:
-    // gemini-3.5-flash-lite is $0.30/$2.50 — identical to the gemini-2.5-flash
-    // this app started on. The rename hid that, and a scan cost ~Rs 0.19
-    // either way. Whatever the default becomes, it must be cheaper per scan
-    // than that baseline.
-    const perScan = (m: string) => calculateCostInr('gemini', m, 2500, 590)
-    const m = scan.match(/GEMINI_SCAN_MODEL \|\| '([^']+)'/)
-    expect(m).toBeTruthy()
-    expect(perScan(m![1])).toBeLessThan(perScan('gemini-2.5-flash'))
+  test('the default is a model that actually answers on a new API key', () => {
+    // 2.5-flash-lite is cheaper but Google closed it to new users, so it 404s
+    // and every scan falls through to a slower model. A default must WORK.
+    const m = scan.match(/GEMINI_SCAN_MODEL \|\| '([^']+)'/)!
+    expect(m[1]).not.toBe('gemini-2.5-flash-lite')
+    expect(m[1]).not.toMatch(/gemini-2\.0/)
+  })
+
+  test('the default is never the frontier tier', () => {
+    // Honest revision: this test used to demand the default be cheaper than
+    // gemini-2.5-flash. That goal is unreachable — every Gemini tier with
+    // cheap output is either shut down (2.0) or closed to new API keys
+    // (2.5-flash-lite), so the cheapest WORKING option costs the same as
+    // 2.5-flash. Asserting an impossible target would just mean deleting the
+    // test the next time it failed.
+    //
+    // What still matters is the 5x cliff: gemini-3.5-flash is $1.50/$9.00
+    // against the lite tier's $0.30/$2.50. Landing on it by accident — via a
+    // rename, or a "newer is better" edit — is the expensive mistake worth
+    // guarding.
+    const m = scan.match(/GEMINI_SCAN_MODEL \|\| '([^']+)'/)!
+    const perScan = (model: string) => calculateCostInr('gemini', model, 1300, 240)
+    expect(perScan(m[1])).toBeLessThan(perScan('gemini-3.5-flash'))
   })
 
   test('every selectable model has a price, so the cost shown is never zero', () => {
@@ -175,7 +188,11 @@ describe('an optional speed setting cannot cost a request', () => {
     // stable per Google — and every scan still ran on the legacy fallback at
     // 4.6x the price, because the chain treated "provider unusable" and
     // "provider disliked one optional field" as the same thing.
-    expect(scan).toMatch(/HTTP 4/)
+    // ONLY a 400. A 404 (model absent for this key) or 401/403 (credentials)
+    // cannot be fixed by dropping a tuning field, and retrying them added a
+    // third wasted round trip that pushed a scan to 31 seconds.
+    expect(scan).toMatch(/HTTP 400/)
+    expect(scan).not.toMatch(/test\(result\.error \|\| ''\)[\s\S]{0,40}HTTP 4\d/)
     expect(scan).toMatch(/callSingleProvider\(provider, prompt, imageSource, true\)/)
   })
 
