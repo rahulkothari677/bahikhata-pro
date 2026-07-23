@@ -880,9 +880,16 @@ export function BillScanner() {
                   the badge below — which reads perfectly normal unless you
                   happen to know what you configured. */}
               {scanned.fallbackReason && (
-                <div className="mt-1 text-2xs text-amber-700 dark:text-amber-400">
-                  ⚠ Used a backup model — {scanned.fallbackReason}. Check
-                  GEMINI_SCAN_MODEL; scans may cost more than expected.
+                <div className="mt-2 rounded-md bg-white/95 dark:bg-neutral-900/95 border border-amber-500 px-2.5 py-2 text-2xs text-amber-900 dark:text-amber-200">
+                  {/* On its own line, on an opaque background: this sits on the
+                      red scan card, and amber-on-red was unreadable — Rahul
+                      could see a warning existed but not what it said, which is
+                      worse than no warning at all. */}
+                  <span className="font-semibold">⚠ Used a backup model.</span>{' '}
+                  {scanned.fallbackReason}
+                  <div className="mt-0.5 opacity-90">
+                    Scans may cost more than expected — check GEMINI_SCAN_MODEL in Vercel.
+                  </div>
                 </div>
               )}
               {scanned.aiUsage && (

@@ -146,6 +146,30 @@ describe('the response says where the time went', () => {
   })
 })
 
+describe('an optional speed setting cannot cost a request', () => {
+  test('a 4xx triggers one retry without the tuning params', () => {
+    // Rahul set GEMINI_SCAN_MODEL to gemini-2.5-flash-lite — current and
+    // stable per Google — and every scan still ran on the legacy fallback at
+    // 4.6x the price, because the chain treated "provider unusable" and
+    // "provider disliked one optional field" as the same thing.
+    expect(scan).toMatch(/HTTP 4/)
+    expect(scan).toMatch(/callSingleProvider\(provider, prompt, imageSource, true\)/)
+  })
+
+  test('the retry drops only the tuning, not the request', () => {
+    expect(scan).toMatch(/plain = false/)
+    expect(scan).toMatch(/\.\.\.\(plain \? \{\} : thinkingControls\(provider\)\)/)
+  })
+
+  test('the fallback reason names the refused field, not just a status', () => {
+    // "HTTP 400" alone does not say WHICH parameter was rejected, which is the
+    // only thing that lets anyone fix it.
+    expect(scan).toMatch(/was refused/)
+    expect(scan).toMatch(/const detail = result\.error/)
+    expect(scan).toMatch(/\.slice\(0, 160\)/)
+  })
+})
+
 describe('a silent provider fallback cannot hide again', () => {
   test('the response says WHY a backup model answered', () => {
     // Setting GEMINI_SCAN_MODEL to a model Google had shut down rerouted every

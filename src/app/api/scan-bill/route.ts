@@ -571,7 +571,30 @@ async function callWithFallback(prompt: string, imageSource: string): Promise<Fa
     console.warn(`[scan-bill] Skipping providers with no key: ${missing.join(', ')}`)
   }
   for (const provider of chain) {
-    const result = await callSingleProvider(provider, prompt, imageSource)
+    let result = await callSingleProvider(provider, prompt, imageSource)
+
+    // 🔒 2026-07-23: a SPEED SETTING MUST NEVER COST A REQUEST.
+    //
+    // Rahul set GEMINI_SCAN_MODEL to gemini-2.5-flash-lite — a model Google
+    // lists as current and stable — and every scan still ran on the legacy
+    // fallback at 4.6x the price. The model was fine; something in OUR request
+    // was refused, and the chain treated "this provider is unusable" and "this
+    // provider disliked one optional field" as the same thing.
+    //
+    // `reasoning_effort` is a tuning knob. If the server rejects the request
+    // (4xx), retry once WITHOUT it before walking away to a costlier provider.
+    // Losing a little speed beats silently changing which model bills the shop.
+    if (!result.success && /HTTP 4\d\d/.test(result.error || '')) {
+      const retried = await callSingleProvider(provider, prompt, imageSource, true)
+      if (retried.success) {
+        console.warn(
+          `[scan-bill] ${provider.model} rejected the tuning params; ` +
+          `succeeded without them. Original: ${result.error?.slice(0, 120)}`,
+        )
+        result = retried
+      }
+    }
+
     if (result.success) {
       // 🔒 FIX L1: Removed console.log — serverless log noise
       return {
@@ -598,7 +621,16 @@ async function callWithFallback(prompt: string, imageSource: string): Promise<Fa
       // The HTTP status is safe to show; the raw provider error is not (it can
       // carry key fragments), so only the status is surfaced.
       const status = result.error?.match(/HTTP (\d{3})/)?.[1]
-      fallbackReason = `${provider.model} did not respond${status ? ` (HTTP ${status})` : ''}`
+      // A bare status ("HTTP 400") does not say WHICH field was refused, which
+      // is the one thing needed to fix it. Google's error text names the
+      // offending parameter and carries no credentials; the API key lives in a
+      // header, never the body. Truncated hard all the same.
+      const detail = result.error
+        ?.replace(/HTTP \d{3}:\s*/, '')
+        .replace(/\s+/g, ' ')
+        .slice(0, 160)
+      fallbackReason = `${provider.model} was refused${status ? ` (HTTP ${status})` : ''}` +
+        (detail ? `: ${detail}` : '')
     }
   }
 
@@ -652,6 +684,12 @@ async function callSingleProvider(
   provider: FallbackProvider,
   prompt: string,
   imageSource: string,
+  /**
+   * Drop the optional speed tuning (reasoning_effort) and send only the
+   * fields every OpenAI-compatible server accepts. Used for the one retry
+   * below — see the note at the call site.
+   */
+  plain = false,
 ): Promise<{
   success: boolean
   content?: string
@@ -705,7 +743,7 @@ async function callSingleProvider(
         // `extra_body.google.thinking_config` (3.x). They are not
         // interchangeable: reasoning "cannot be turned off for Gemini 2.5 Pro
         // or 3 models", so 3.x gets thinking_level 'minimal' instead of none.
-        ...thinkingControls(provider),
+        ...(plain ? {} : thinkingControls(provider)),
       }),
       // 🔒 V26 R8 (Phase 5): 15s per-provider timeout. If the primary provider
       // hangs, the fallback chain runs instead of consuming the whole 60s budget.
