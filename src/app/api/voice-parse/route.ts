@@ -10,6 +10,16 @@ import { apiError } from '@/lib/api-error'
 // (Audit fix Phase 1.3)
 export const maxDuration = 60
 
+/**
+ * 🔒 SPEED (2026-07-23): was hardcoded to 'gemini-3.5-flash' in five places.
+ * Turning a spoken line like "do kilo aalu sattar rupaye" into JSON is a
+ * fast-tier job; 3.5 Flash is Google's agentic/coding tier at $1.50/$9.00 per
+ * 1M against the lite tier's $0.30/$2.50. One constant so the model reported
+ * in the usage log can never drift from the model actually called — they were
+ * five separate string literals before.
+ */
+const GEMINI_VOICE_MODEL = process.env.GEMINI_VOICE_MODEL || 'gemini-3.5-flash-lite'
+
 // POST /api/voice-parse - parse voice transcript into transaction data
 // Tier limits (FUP):
 //   Free:  20 voice entries/month (DB-backed, resets monthly)
@@ -140,7 +150,7 @@ Return JSON only, no commentary.`
     // This prevents the bug where VLM_BASE_URL points to Gemini but VLM_MODEL
     // defaults to a Groq model (llama-3.3-70b-versatile) → 404 error.
     const defaultModel = baseUrl.includes('generativelanguage')
-      ? 'gemini-3.5-flash'
+      ? GEMINI_VOICE_MODEL
       : baseUrl.includes('api.openai.com')
       ? 'gpt-4o-mini'
       : 'llama-3.3-70b-versatile'
@@ -162,7 +172,7 @@ Return JSON only, no commentary.`
             'Authorization': `Bearer ${geminiKey}`,
           },
           body: JSON.stringify({
-            model: 'gemini-3.5-flash',
+            model: GEMINI_VOICE_MODEL,
             messages: [
               { role: 'system', content: systemPrompt },
               { role: 'user', content: transcript },
@@ -170,6 +180,14 @@ Return JSON only, no commentary.`
             max_tokens: 1000,
             temperature: 0,
             response_format: { type: 'json_object' },
+            // ὑ2 2026-07-23: there was NO thinking control here at all, so
+            // every voice entry waited for the model to deliberate over one
+            // spoken sentence. 3.x cannot disable reasoning outright; 'minimal'
+            // is the floor. (scan-bill had a control, but written in
+            // Anthropic's shape, which Google ignores.)
+            ...(/gemini-3/.test(GEMINI_VOICE_MODEL)
+              ? { extra_body: { google: { thinking_config: { thinking_level: 'minimal' } } } }
+              : { reasoning_effort: 'none' }),
           }),
         })
         const aiDurationMs = Date.now() - aiStart
@@ -209,10 +227,10 @@ Return JSON only, no commentary.`
             // Log usage
             const { calculateCostInr } = await import('@/lib/ai-pricing')
             const { db } = await import('@/lib/db')
-            const costInr = calculateCostInr('gemini', 'gemini-3.5-flash', inputTokens, outputTokens)
+            const costInr = calculateCostInr('gemini', GEMINI_VOICE_MODEL, inputTokens, outputTokens)
             db.aiUsageLog.create({
               data: {
-                userId, feature: 'voice-parse', provider: 'gemini', model: 'gemini-3.5-flash',
+                userId, feature: 'voice-parse', provider: 'gemini', model: GEMINI_VOICE_MODEL,
                 inputTokens, outputTokens, totalTokens, costInr, durationMs: aiDurationMs, success: true,
               },
             }).catch(() => {})
@@ -221,7 +239,7 @@ Return JSON only, no commentary.`
               success: true,
               transaction: parsed,
               _source: 'llm',
-              aiUsage: { provider: 'gemini', model: 'gemini-3.5-flash', inputTokens, outputTokens, totalTokens, costInr: Math.round(costInr * 100) / 100, durationMs: aiDurationMs },
+              aiUsage: { provider: 'gemini', model: GEMINI_VOICE_MODEL, inputTokens, outputTokens, totalTokens, costInr: Math.round(costInr * 100) / 100, durationMs: aiDurationMs },
             })
           }
         } else {

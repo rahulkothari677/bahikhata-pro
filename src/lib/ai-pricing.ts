@@ -27,9 +27,16 @@ export interface ModelPricing {
 
 export const AI_PRICING: Record<string, Record<string, ModelPricing>> = {
   gemini: {
+    // 🔒 2026-07-23: was listed at 0.30/2.50 — the LITE tier's price.
+    // Gemini 3.5 Flash is 1.50/9.00, so every cost shown to the user and every
+    // figure in the AI-usage report was understated five-fold.
     'gemini-3.5-flash': {
-      inputPer1M: 0.30,   // $0.30/1M input
-      outputPer1M: 2.50,  // $2.50/1M output
+      inputPer1M: 1.50,
+      outputPer1M: 9.00,
+    },
+    'gemini-3.5-flash-lite': {
+      inputPer1M: 0.30,
+      outputPer1M: 2.50,
     },
     'gemini-2.5-flash': {
       inputPer1M: 0.30,   // $0.30/1M input

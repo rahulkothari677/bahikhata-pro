@@ -492,7 +492,14 @@ async function callWithFallback(prompt: string, imageSource: string): Promise<Fa
       name: 'gemini',
       apiKey: process.env.GEMINI_API_KEY,
       baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/',
-      model: 'gemini-3.5-flash',
+      // 🔒 SPEED (2026-07-23): was 'gemini-3.5-flash', changed for speed —
+      // but Google describes that model as "most intelligent ... for sustained
+      // frontier performance on agentic and coding tasks". Reading a grocery
+      // bill is neither agentic nor coding; it is OCR plus a little arithmetic.
+      // The -lite variant is documented as "our fastest, most cost-effective
+      // 3.5 model for high-throughput execution", which is exactly this job,
+      // and costs $0.30/$2.50 per 1M against $1.50/$9.00.
+      model: process.env.GEMINI_SCAN_MODEL || 'gemini-3.5-flash-lite',
     },
     ...(process.env.VLM_API_KEY ? [{
       name: 'vlm',
@@ -522,6 +529,15 @@ async function callWithFallback(prompt: string, imageSource: string): Promise<Fa
   }
 
   const errors: string[] = []
+  // ὑ2 2026-07-23: log which providers were skipped for want of a key.
+  // The primary provider silently vanishing from the chain is exactly how the
+  // Gemini "upgrade" appeared to be live while every scan actually ran on the
+  // legacy fallback — the only visible symptom was a model name on screen that
+  // nobody cross-checked against the code.
+  const missing = missingProviderKeys()
+  if (missing.length > 0) {
+    console.warn(`[scan-bill] Skipping providers with no key: ${missing.join(', ')}`)
+  }
   for (const provider of chain) {
     const result = await callSingleProvider(provider, prompt, imageSource)
     if (result.success) {
@@ -545,6 +561,34 @@ async function callWithFallback(prompt: string, imageSource: string): Promise<Fa
     success: false,
     error: `All ${chain.length} providers failed. ${errors.join(' | ')}`,
   }
+}
+
+/**
+ * Which providers were skipped for want of a key. A silent fallback is how a
+ * misconfigured GEMINI_API_KEY hid for weeks: the app kept working on the
+ * legacy VLM provider, so nobody noticed the "upgrade" was never running.
+ */
+function missingProviderKeys(): string[] {
+  const missing: string[] = []
+  if (!process.env.GEMINI_API_KEY) missing.push('GEMINI_API_KEY')
+  return missing
+}
+
+/**
+ * Provider-specific request fields that keep the model from "thinking" before
+ * answering. Reading a bill needs no deliberation, and thinking is billed as
+ * output tokens as well as costing seconds.
+ *
+ * Only Gemini gets these; sending unknown fields to other providers risks a
+ * 400 from stricter OpenAI-compatible servers.
+ */
+function thinkingControls(provider: FallbackProvider): Record<string, unknown> {
+  if (provider.name !== 'gemini') return {}
+  // 3.x cannot disable reasoning outright — 'minimal' is the floor.
+  if (/gemini-3/.test(provider.model)) {
+    return { extra_body: { google: { thinking_config: { thinking_level: 'minimal' } } } }
+  }
+  return { reasoning_effort: 'none' }
 }
 
 /**
@@ -598,9 +642,18 @@ async function callSingleProvider(
         // Was: no temperature set → defaults to 1.0 → run-to-run variance on
         // the same bill. Now: 0 for extraction (no randomness).
         temperature: 0,
-        // Disable Gemini "thinking" mode for faster response (1-3s vs 3-8s)
-        // Slight accuracy tradeoff, but much better UX
-        ...(provider.name === 'gemini' ? { thinking: { type: 'disabled' } } : {}),
+        // 🔒 THIS IS THE LATENCY (2026-07-23). The line here used to be
+        //   ...(provider.name === 'gemini' ? { thinking: { type: 'disabled' } } : {})
+        // which is ANTHROPIC's parameter shape. Google's OpenAI-compatibility
+        // layer documents no top-level `thinking` field at all, so it was
+        // silently ignored and every scan ran with thinking ON — the comment
+        // promised "1-3s vs 3-8s" while delivering neither.
+        //
+        // The documented controls are `reasoning_effort` (2.5 models) and
+        // `extra_body.google.thinking_config` (3.x). They are not
+        // interchangeable: reasoning "cannot be turned off for Gemini 2.5 Pro
+        // or 3 models", so 3.x gets thinking_level 'minimal' instead of none.
+        ...thinkingControls(provider),
       }),
       // 🔒 V26 R8 (Phase 5): 15s per-provider timeout. If the primary provider
       // hangs, the fallback chain runs instead of consuming the whole 60s budget.
