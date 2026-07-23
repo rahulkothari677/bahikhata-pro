@@ -479,7 +479,7 @@ export function BillScanner() {
             })
             sonnerToast.success(`Added ${newItems.length} more items from second bill!`)
           } else {
-            setScanned({ ...data.bill, items: enrichScannedItems(data.bill.items || []), aiUsage: data.aiUsage })
+            setScanned({ ...data.bill, items: enrichScannedItems(data.bill.items || []), aiUsage: data.aiUsage, timings: data.timings })
             sonnerToast.success(`Bill scanned! Found ${data.bill.items?.length || 0} items.`)
             // 🔒 V20-025: Track scan success
             track(EVENTS.AI_SCAN_SUCCESS, {
@@ -879,7 +879,19 @@ export function BillScanner() {
                   {scanned.aiUsage.totalTokens > 0 && (
                     <span>· {scanned.aiUsage.totalTokens} tokens</span>
                   )}
-                  {scanned.aiUsage.durationMs > 0 && (
+                  {/* ὑ2 2026-07-23: show WHERE the seconds go, not just the
+                      total. Choosing a model tier is a speed/cost trade, and
+                      it cannot be made from one aggregate number — "9.6s" does
+                      not say whether the model, the image work or the network
+                      is responsible. */}
+                  {scanned.timings && (
+                    <span title="image preparation · model · server overhead">
+                      · {(scanned.timings.preprocessMs / 1000).toFixed(1)}s img
+                      + {(scanned.timings.aiMs / 1000).toFixed(1)}s ai
+                      + {(scanned.timings.otherMs / 1000).toFixed(1)}s other
+                    </span>
+                  )}
+                  {!scanned.timings && scanned.aiUsage.durationMs > 0 && (
                     <span>· {(scanned.aiUsage.durationMs / 1000).toFixed(1)}s</span>
                   )}
                   {scanned.aiUsage.costInr > 0 && (
