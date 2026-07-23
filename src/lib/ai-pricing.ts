@@ -42,6 +42,10 @@ export const AI_PRICING: Record<string, Record<string, ModelPricing>> = {
       inputPer1M: 0.30,   // $0.30/1M input
       outputPer1M: 2.50,  // $2.50/1M output
     },
+    'gemini-3.1-flash-lite': {
+      inputPer1M: 0.25,
+      outputPer1M: 1.50,
+    },
     'gemini-2.5-flash-lite': {
       inputPer1M: 0.10,
       outputPer1M: 0.40,
@@ -49,6 +53,10 @@ export const AI_PRICING: Record<string, Record<string, ModelPricing>> = {
     'gemini-2.0-flash': {
       inputPer1M: 0.10,
       outputPer1M: 0.40,
+    },
+    'gemini-2.0-flash-lite': {
+      inputPer1M: 0.075,
+      outputPer1M: 0.30,
     },
     'gemini-2.5-pro': {
       inputPer1M: 1.25,

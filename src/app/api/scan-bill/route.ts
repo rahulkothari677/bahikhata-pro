@@ -506,14 +506,26 @@ async function callWithFallback(prompt: string, imageSource: string): Promise<Fa
       name: 'gemini',
       apiKey: process.env.GEMINI_API_KEY,
       baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/',
-      // 🔒 SPEED (2026-07-23): was 'gemini-3.5-flash', changed for speed —
-      // but Google describes that model as "most intelligent ... for sustained
-      // frontier performance on agentic and coding tasks". Reading a grocery
-      // bill is neither agentic nor coding; it is OCR plus a little arithmetic.
-      // The -lite variant is documented as "our fastest, most cost-effective
-      // 3.5 model for high-throughput execution", which is exactly this job,
-      // and costs $0.30/$2.50 per 1M against $1.50/$9.00.
-      model: process.env.GEMINI_SCAN_MODEL || 'gemini-3.5-flash-lite',
+      // 🔒 COST (2026-07-23). "Lite" is cheap WITHIN a generation, not
+      // across them — a trap worth spelling out:
+      //
+      //   gemini-3.5-flash        $1.50 / $9.00   ~Rs 766 per 1000 scans
+      //   gemini-3.5-flash-lite   $0.30 / $2.50   ~Rs 188
+      //   gemini-2.5-flash        $0.30 / $2.50   ~Rs 188
+      //   gemini-2.5-flash-lite   $0.10 / $0.40   ~Rs  41
+      //   gemini-2.0-flash-lite   $0.075 / $0.30  ~Rs  31
+      //
+      // (2500 input + 590 output tokens, the measured shape of a 7-line kirana
+      // bill, at Rs 84.5/$. That arithmetic reproduces the Rs 0.19 the app
+      // showed on a real scan, so the token counts and prices are sound.)
+      //
+      // 3.5-flash-lite costs the SAME as the 2.5-flash this app started on —
+      // the rename hid that. Reading a bill is OCR plus arithmetic, which the
+      // 2.5 lite tier has done well since it shipped, at a fifth the price.
+      //
+      // Kept in an env var: if handwritten Devanagari accuracy drops, raise the
+      // tier from the Vercel dashboard without a code deploy.
+      model: process.env.GEMINI_SCAN_MODEL || 'gemini-2.5-flash-lite',
     },
     ...(process.env.VLM_API_KEY ? [{
       name: 'vlm',

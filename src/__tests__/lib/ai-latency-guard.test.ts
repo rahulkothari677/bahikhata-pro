@@ -61,12 +61,34 @@ describe('thinking is actually suppressed, in Google\'s parameter shape', () => 
 })
 
 describe('extraction runs on the fast tier', () => {
-  test('scan-bill defaults to a -lite model and stays overridable', () => {
-    expect(scan).toMatch(/GEMINI_SCAN_MODEL \|\| 'gemini-3\.5-flash-lite'/)
+  test('scan-bill defaults to the cost-effective tier and stays overridable', () => {
+    expect(scan).toMatch(/GEMINI_SCAN_MODEL \|\| 'gemini-2\.5-flash-lite'/)
   })
 
-  test('voice-parse defaults to a -lite model', () => {
-    expect(voice).toMatch(/GEMINI_VOICE_MODEL = process\.env\.GEMINI_VOICE_MODEL \|\| 'gemini-3\.5-flash-lite'/)
+  test('voice-parse defaults to the cost-effective tier', () => {
+    expect(voice).toMatch(/GEMINI_VOICE_MODEL = process\.env\.GEMINI_VOICE_MODEL \|\| 'gemini-2\.5-flash-lite'/)
+  })
+
+  test('the default is not a tier that costs the same as the old model', () => {
+    // "Lite" is cheap WITHIN a generation, not across them:
+    // gemini-3.5-flash-lite is $0.30/$2.50 — identical to the gemini-2.5-flash
+    // this app started on. The rename hid that, and a scan cost ~Rs 0.19
+    // either way. Whatever the default becomes, it must be cheaper per scan
+    // than that baseline.
+    const perScan = (m: string) => calculateCostInr('gemini', m, 2500, 590)
+    const m = scan.match(/GEMINI_SCAN_MODEL \|\| '([^']+)'/)
+    expect(m).toBeTruthy()
+    expect(perScan(m![1])).toBeLessThan(perScan('gemini-2.5-flash'))
+  })
+
+  test('every selectable model has a price, so the cost shown is never zero', () => {
+    for (const m of [
+      'gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite',
+      'gemini-2.5-flash', 'gemini-2.5-flash-lite',
+      'gemini-2.0-flash', 'gemini-2.0-flash-lite',
+    ]) {
+      expect(calculateCostInr('gemini', m, 1000, 1000)).toBeGreaterThan(0)
+    }
   })
 
   test('voice-parse names its model once, not five times', () => {

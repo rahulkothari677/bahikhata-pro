@@ -18,7 +18,7 @@ export const maxDuration = 60
  * in the usage log can never drift from the model actually called — they were
  * five separate string literals before.
  */
-const GEMINI_VOICE_MODEL = process.env.GEMINI_VOICE_MODEL || 'gemini-3.5-flash-lite'
+const GEMINI_VOICE_MODEL = process.env.GEMINI_VOICE_MODEL || 'gemini-2.5-flash-lite'
 
 // POST /api/voice-parse - parse voice transcript into transaction data
 // Tier limits (FUP):
