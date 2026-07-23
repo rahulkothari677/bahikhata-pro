@@ -386,7 +386,10 @@ export function BillScanner() {
       }
       try {
         // Step 1: Upload to Cloudinary (gets a URL, stores image for future)
-        sonnerToast.info('Uploading image...', { description: 'Step 1 of 2', duration: 2000 })
+        // 🔒 User request: removed the "Uploading image..." and "Image uploaded!
+        // Scanning with AI..." info toasts — they were noisy. The scanning
+        // spinner + progress bar already show the user what's happening.
+        // Error toasts are kept (the user needs to know when something fails).
         const uploadRes = await offlineFetch('/api/upload-bill', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -396,14 +399,13 @@ export function BillScanner() {
         if (!uploadRes.ok) {
           const uploadErr = await uploadRes.json().catch(() => ({}))
           sonnerToast.error('Image upload failed', {
-            description: `HTTP ${uploadRes.status}: ${uploadErr.error || uploadRes.statusText || 'Unknown error'}`,
+            description: `HTTP ${uploadRes.status}: ${uploadErr.error || uploadErr.statusText || 'Unknown error'}`,
             duration: 8000,
           })
           return
         }
 
         const uploadData = await uploadRes.json()
-        sonnerToast.info('Image uploaded! Scanning with AI...', { description: 'Step 2 of 2', duration: 2000 })
 
         // Step 2: Send to AI scanner (use Cloudinary URL if upload succeeded, else base64)
         const imageUrl = uploadData.success ? uploadData.url : null
@@ -468,14 +470,14 @@ export function BillScanner() {
             })
             sonnerToast.success(`Added ${newItems.length} more items from second bill!`)
           } else {
-            setScanned({ ...data.bill, items: enrichScannedItems(data.bill.items || []) })
+            setScanned({ ...data.bill, items: enrichScannedItems(data.bill.items || []), aiUsage: data.aiUsage })
             sonnerToast.success(`Bill scanned! Found ${data.bill.items?.length || 0} items.`)
             // 🔒 V20-025: Track scan success
             track(EVENTS.AI_SCAN_SUCCESS, {
               billType,
               scanLang,
               itemCount: data.bill.items?.length || 0,
-              provider: data.provider || 'unknown',
+              provider: data.aiUsage?.provider || data.provider || 'unknown',
             })
           }
         }
@@ -831,10 +833,25 @@ export function BillScanner() {
                   </div>
                   <div>
                     <p className="text-sm font-bold font-heading">{billType === 'sale' ? 'Sales Bill' : 'Purchase Bill'}</p>
-                    <p className="text-3xs text-white/70">
+                    <p className="text-3xs text-white/70 flex items-center gap-1.5">
                       AI Extracted
+                      {/* 🔒 User request: replace confidence % with a colored dot.
+                          Green = high confidence (≥0.8), orange = medium (≥0.6),
+                          red = low (<0.6). Cleaner UI, same information. */}
                       {scanned.overallConfidence !== undefined && (
-                        <span className="ml-1">· {Math.round(scanned.overallConfidence * 100)}% confidence</span>
+                        <span className="inline-flex items-center gap-1 ml-1">
+                          <span
+                            className={cn(
+                              'inline-block w-2 h-2 rounded-full',
+                              scanned.overallConfidence >= 0.8
+                                ? 'bg-emerald-400'
+                                : scanned.overallConfidence >= 0.6
+                                ? 'bg-amber-400'
+                                : 'bg-rose-400'
+                            )}
+                            title={`Confidence: ${Math.round(scanned.overallConfidence * 100)}%`}
+                          />
+                        </span>
                       )}
                     </p>
                   </div>
@@ -843,6 +860,24 @@ export function BillScanner() {
                   <X className="w-4 h-4" /> Reset
                 </Button>
               </div>
+
+              {/* 🔒 User request: show AI model + token usage so you can verify
+                  which model was used and how many tokens each scan costs.
+                  Small, subtle, below the header. Only shows if aiUsage exists. */}
+              {scanned.aiUsage && (
+                <div className="mt-1 text-3xs text-white/50 flex items-center gap-3 flex-wrap">
+                  <span>🤖 {scanned.aiUsage.model || 'unknown'}</span>
+                  {scanned.aiUsage.totalTokens > 0 && (
+                    <span>· {scanned.aiUsage.totalTokens} tokens</span>
+                  )}
+                  {scanned.aiUsage.durationMs > 0 && (
+                    <span>· {(scanned.aiUsage.durationMs / 1000).toFixed(1)}s</span>
+                  )}
+                  {scanned.aiUsage.costInr > 0 && (
+                    <span>· ₹{scanned.aiUsage.costInr.toFixed(4)}</span>
+                  )}
+                </div>
+              )}
 
               {/* 🔒 AI-5: Needs review banner (AI total ≠ computed total) */}
               {scanned.needsReview && (
@@ -979,13 +1014,16 @@ export function BillScanner() {
                             )}
                             title={`AI confidence: ${Math.round(item.confidence * 100)}%`}
                           >
-                            {/* Tiny confidence dot + percentage — visible badge instead of just a dot */}
+                            {/* 🔒 User request: just a colored dot, no percentage.
+                                Green = high (≥0.8), amber = medium (≥0.5), rose = low (<0.5).
+                                Low-confidence items still show "CHECK" text so the user
+                                knows to verify them. */}
                             <span className={cn(
                               'w-1.5 h-1.5 rounded-full',
                               item.confidence >= 0.8 ? 'bg-emerald-500' :
                               item.confidence >= 0.5 ? 'bg-amber-500' : 'bg-rose-500'
                             )} />
-                            {isLowConfidence ? 'CHECK' : `${Math.round(item.confidence * 100)}%`}
+                            {isLowConfidence ? 'CHECK' : ''}
                           </span>
                         )}
                         <span className="font-bold tabular-nums flex-shrink-0 text-sm text-primary">
