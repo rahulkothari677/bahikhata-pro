@@ -390,41 +390,32 @@ export function BillScanner() {
         // Scanning with AI..." info toasts — they were noisy. The scanning
         // spinner + progress bar already show the user what's happening.
         // Error toasts are kept (the user needs to know when something fails).
-        // 🔒 LATENCY (2026-07-23): these two ran STRICTLY IN SEQUENCE — the
-        // Cloudinary upload finished (2.7s on Rahul's connection) and only then
-        // did the AI scan start (8.1s), so the shopkeeper watched a spinner for
-        // the sum of both while holding a phone over a bill.
-        //
-        // The scan never needed the upload. It accepts base64 directly; the
-        // Cloudinary URL is only for KEEPING the bill image against the saved
-        // transaction, which matters after the scan, not before it. Running
-        // them together takes the upload off the critical path entirely.
-        //
-        // The scan is deliberately given the base64 rather than awaiting a URL,
-        // and an upload failure no longer aborts the scan — a shopkeeper who
-        // cannot store the photo can still capture the bill.
-        track(EVENTS.AI_SCAN_ATTEMPT, { billType, scanLang, hasImageUrl: false })
-
-        const uploadPromise = offlineFetch('/api/upload-bill', {
+        const uploadRes = await offlineFetch('/api/upload-bill', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ imageBase64: base64 }),
         })
-          .then(async (r) => (r.ok ? await r.json().catch(() => null) : null))
-          .catch(() => null)
 
-        const scanPromise = offlineFetch('/api/scan-bill', {
+        if (!uploadRes.ok) {
+          const uploadErr = await uploadRes.json().catch(() => ({}))
+          sonnerToast.error('Image upload failed', {
+            description: `HTTP ${uploadRes.status}: ${uploadErr.error || uploadErr.statusText || 'Unknown error'}`,
+            duration: 8000,
+          })
+          return
+        }
+
+        const uploadData = await uploadRes.json()
+
+        // Step 2: Send to AI scanner (use Cloudinary URL if upload succeeded, else base64)
+        const imageUrl = uploadData.success ? uploadData.url : null
+        // 🔒 V20-025: Track scan attempt
+        track(EVENTS.AI_SCAN_ATTEMPT, { billType, scanLang, hasImageUrl: !!imageUrl })
+        const scanRes = await offlineFetch('/api/scan-bill', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageBase64: base64, billType, scanLang }),
+          body: JSON.stringify(imageUrl ? { imageUrl, billType, scanLang } : { imageBase64: base64, billType, scanLang }),
         })
-
-        const [uploadData, scanRes] = await Promise.all([uploadPromise, scanPromise])
-
-        if (!uploadData?.success) {
-          // Non-fatal: the scan is what the user is waiting for.
-          console.warn('[BillScanner] Bill image upload failed; scan continued without a stored copy')
-        }
 
         // Handle 402 quota exceeded — show upgrade prompt instead of generic error
         if (scanRes.status === 402) {
@@ -479,7 +470,7 @@ export function BillScanner() {
             })
             sonnerToast.success(`Added ${newItems.length} more items from second bill!`)
           } else {
-            setScanned({ ...data.bill, items: enrichScannedItems(data.bill.items || []), aiUsage: data.aiUsage, timings: data.timings, fallbackReason: data.fallbackReason })
+            setScanned({ ...data.bill, items: enrichScannedItems(data.bill.items || []), aiUsage: data.aiUsage })
             sonnerToast.success(`Bill scanned! Found ${data.bill.items?.length || 0} items.`)
             // 🔒 V20-025: Track scan success
             track(EVENTS.AI_SCAN_SUCCESS, {
@@ -873,44 +864,13 @@ export function BillScanner() {
               {/* 🔒 User request: show AI model + token usage so you can verify
                   which model was used and how many tokens each scan costs.
                   Small, subtle, below the header. Only shows if aiUsage exists. */}
-              {/* 🔒 2026-07-23: say it out loud when the configured model was NOT
-                  the one that answered. Setting GEMINI_SCAN_MODEL to a model
-                  Google had shut down silently rerouted every scan to a tier
-                  costing 4.6x more, and the only symptom was a model name on
-                  the badge below — which reads perfectly normal unless you
-                  happen to know what you configured. */}
-              {scanned.fallbackReason && (
-                <div className="mt-2 rounded-md bg-white/95 dark:bg-neutral-900/95 border border-amber-500 px-2.5 py-2 text-2xs text-amber-900 dark:text-amber-200">
-                  {/* On its own line, on an opaque background: this sits on the
-                      red scan card, and amber-on-red was unreadable — Rahul
-                      could see a warning existed but not what it said, which is
-                      worse than no warning at all. */}
-                  <span className="font-semibold">⚠ Used a backup model.</span>{' '}
-                  {scanned.fallbackReason}
-                  <div className="mt-0.5 opacity-90">
-                    Scans may cost more than expected — check GEMINI_SCAN_MODEL in Vercel.
-                  </div>
-                </div>
-              )}
               {scanned.aiUsage && (
                 <div className="mt-1 text-3xs text-white/50 flex items-center gap-3 flex-wrap">
                   <span>🤖 {scanned.aiUsage.model || 'unknown'}</span>
                   {scanned.aiUsage.totalTokens > 0 && (
                     <span>· {scanned.aiUsage.totalTokens} tokens</span>
                   )}
-                  {/* ὑ2 2026-07-23: show WHERE the seconds go, not just the
-                      total. Choosing a model tier is a speed/cost trade, and
-                      it cannot be made from one aggregate number — "9.6s" does
-                      not say whether the model, the image work or the network
-                      is responsible. */}
-                  {scanned.timings && (
-                    <span title="image preparation · model · server overhead">
-                      · {(scanned.timings.preprocessMs / 1000).toFixed(1)}s img
-                      + {(scanned.timings.aiMs / 1000).toFixed(1)}s ai
-                      + {(scanned.timings.otherMs / 1000).toFixed(1)}s other
-                    </span>
-                  )}
-                  {!scanned.timings && scanned.aiUsage.durationMs > 0 && (
+                  {scanned.aiUsage.durationMs > 0 && (
                     <span>· {(scanned.aiUsage.durationMs / 1000).toFixed(1)}s</span>
                   )}
                   {scanned.aiUsage.costInr > 0 && (
