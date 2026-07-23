@@ -154,22 +154,37 @@ export async function POST(req: NextRequest) {
     // The gm/ml pricing rule, the Hindi numeral and Hinglish tables, the
     // never-fabricate-a-price rule and the payment-mode inference are all kept
     // verbatim — those are the ones that decide whether the money is right.
-    const basePrompt = `Read this Indian shop bill, invoice, receipt or handwritten note (any language, any handwriting, any orientation) and return ONLY this JSON, no markdown:
-{"invoiceNo":str|null,"date":"YYYY-MM-DD"|null,"sellerName":str|null,"sellerPhone":str|null,"sellerGSTIN":str|null,
-"items":[{"name":str,"quantity":num,"unit":"pcs|kg|ltr|box|gm|ml|dozen|packet","unitPrice":num,"gstRate":num,"total":num,"confidence":0-1}],
-"subtotal":num,"discountAmount":num,"cgst":num,"sgst":num,"igst":num,"totalAmount":num,
-"paymentMode":"cash|upi|card|bank|credit","overallConfidence":0-1}
+    // 🔒 OUTPUT COST (2026-07-23). Output is priced 6x input on this tier
+    // and was 64% of the bill. Roughly 40 of the ~78 tokens each item cost were
+    // the KEY NAMES — "name", "quantity", "unitPrice", "gstRate", "confidence"
+    // — retyped for every line on the bill.
+    //
+    // Items now come back as positional arrays, which carry the same data with
+    // no repeated keys: ~20 tokens per item instead of ~78. Header fields that
+    // are null or zero are omitted entirely, which matters because a
+    // handwritten kirana note has no invoice number, no date, no GSTIN and no
+    // tax lines — all of which were being echoed back as nulls at our expense.
+    const basePrompt = `Read this Indian shop bill, invoice, receipt or handwritten note (any language, any handwriting, any orientation) and return ONLY JSON, no markdown.
+
+Items MUST be positional arrays in this exact order:
+[name, quantity, unit, unitPrice, gstRate, total, confidence]
+
+{"items":[["Rice",2,"kg",50,0,100,0.9]],
+"totalAmount":num,"paymentMode":"cash|upi|card|bank|credit","overallConfidence":0-1}
+
+OMIT any of these unless the bill actually shows them: invoiceNo, date, sellerName, sellerPhone, sellerGSTIN, subtotal, discountAmount, cgst, sgst, igst. Do not send nulls or zeros for them.
 
 RULES
 1. Top name = customer (sales) or supplier (purchases). Missing quantity = 1, missing unit = "pcs".
 2. UNITS/RATES: Indian bills price per kg/ltr even when quantity is in gm/ml. "500 gm @ 20" = Rs 20 PER KG = total Rs 10, NOT 500x20. Never output a per-gm or per-ml unitPrice. Convert to base units: 500 gm -> quantity 0.5 unit "kg"; 250 ml -> 0.25 "ltr". If a line total is printed, trust it and derive unitPrice = total / quantity.
-3. If a price sits next to a line, it is usually the line TOTAL, not the per-unit rate: set total = that number, unitPrice = total / quantity.
-4. totalAmount: use the written total if present; else sum item totals + cgst + sgst + igst - discount; else 0. NEVER invent prices that are not on the bill.
+3. A price next to a line is usually the line TOTAL, not the per-unit rate: set total = that number, unitPrice = total / quantity.
+4. totalAmount: use the written total if present; else sum item totals + tax - discount; else 0. NEVER invent prices that are not on the bill.
 5. Hindi numerals into Arabic. Hinglish: do=2, paanch=5, sau=100, hazaar=1000, pao/pav=0.25, aadha=0.5, pauna=0.75, sava=1.25, dedh=1.5, dhai=2.5, darjan=dozen.
 6. Abbreviations: atta=flour, tel=oil, chai=tea, namak=salt, chini=sugar.
 7. paymentMode: cash / upi or qr / card / udhaar or baad mein or credit / else cash.
 8. CGST+SGST both set, or igst alone - never all three.
 9. confidence: 0.9-1.0 printed, 0.5-0.7 uncertain handwriting.`
+
 
 
     // Language instruction (appended to prompt)
@@ -314,15 +329,32 @@ RULES
 
     // Sanitize
     if (!parsed.items) parsed.items = []
-    parsed.items = parsed.items.map((item: any) => ({
-      name: String(item.name || 'Unknown Product'),
-      quantity: Number(item.quantity) || 1,
-      unit: String(item.unit || 'pcs'),
-      unitPrice: Number(item.unitPrice) || 0,
-      gstRate: Number(item.gstRate) || 0,
-      total: Number(item.total) || (Number(item.quantity) || 1) * (Number(item.unitPrice) || 0),
-      confidence: typeof item.confidence === 'number' ? Math.min(1, Math.max(0, item.confidence)) : 0.8,
-    }))
+    parsed.items = parsed.items.map((raw: any) => {
+      // \🔒 The prompt asks for positional arrays
+      // [name, quantity, unit, unitPrice, gstRate, total, confidence]
+      // because repeating the key names on every line was ~40 of the ~78
+      // output tokens per item, and output is priced 6x input.
+      //
+      // Keyed objects are still accepted: a model can ignore the format on a
+      // hard bill, older queued scans replay through here, and every fallback
+      // provider has its own habits. Costing less must never mean failing to
+      // read a bill.
+      const item = Array.isArray(raw)
+        ? {
+            name: raw[0], quantity: raw[1], unit: raw[2], unitPrice: raw[3],
+            gstRate: raw[4], total: raw[5], confidence: raw[6],
+          }
+        : raw
+      return {
+        name: String(item.name || 'Unknown Product'),
+        quantity: Number(item.quantity) || 1,
+        unit: String(item.unit || 'pcs'),
+        unitPrice: Number(item.unitPrice) || 0,
+        gstRate: Number(item.gstRate) || 0,
+        total: Number(item.total) || (Number(item.quantity) || 1) * (Number(item.unitPrice) || 0),
+        confidence: typeof item.confidence === 'number' ? Math.min(1, Math.max(0, item.confidence)) : 0.8,
+      }
+    })
     // Ensure overallConfidence exists
     if (typeof parsed.overallConfidence !== 'number') {
       parsed.overallConfidence = parsed.items.length > 0
