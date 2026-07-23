@@ -509,6 +509,15 @@ async function callWithFallback(prompt: string, imageSource: string): Promise<Fa
       model: process.env.VLM_MODEL || 'gpt-4o-mini',
     }] : []),
     {
+      // ὑ2 COST WARNING (verified 2026-07-23). gpt-4o-mini looks five times
+      // cheaper than Gemini per token ($0.15/$0.60) and is NOT, for images.
+      // OpenAI bills vision on gpt-4o-mini at 2,833 base + 5,667 per 512px
+      // tile: a 1000x1400 bill photo costs 25,501 TOKENS against Gemini's ~774
+      // for the same picture — 33x. Real cost per 1000 scans is ~Rs 357
+      // against ~Rs 109 on gemini-3.1-flash-lite.
+      //
+      // Do not "optimise" the chain by promoting this on per-token price. It
+      // is a fallback for when Gemini is down, and it is the expensive one.
       name: 'openai',
       apiKey: process.env.OPENAI_API_KEY,
       baseUrl: 'https://api.openai.com/v1/',
