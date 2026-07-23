@@ -138,7 +138,7 @@ export async function POST(req: NextRequest) {
         name: 'gemini',
         apiKey: process.env.GEMINI_API_KEY,
         baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/',
-        model: 'gemini-2.5-flash',
+        model: 'gemini-3.5-flash',
       },
       {
         name: 'openai',

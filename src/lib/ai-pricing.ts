@@ -27,6 +27,10 @@ export interface ModelPricing {
 
 export const AI_PRICING: Record<string, Record<string, ModelPricing>> = {
   gemini: {
+    'gemini-3.5-flash': {
+      inputPer1M: 0.30,   // $0.30/1M input
+      outputPer1M: 2.50,  // $2.50/1M output
+    },
     'gemini-2.5-flash': {
       inputPer1M: 0.30,   // $0.30/1M input
       outputPer1M: 2.50,  // $2.50/1M output

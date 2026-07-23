@@ -48,7 +48,7 @@ interface HistoryItem {
 }
 
 const PROVIDERS = [
-  { key: 'gemini' as const, name: 'Gemini 2.5 Flash', color: 'bg-blue-500', textColor: 'text-blue-600', badge: 'bg-blue-100 text-blue-700' },
+  { key: 'gemini' as const, name: 'Gemini 3.5 Flash', color: 'bg-blue-500', textColor: 'text-blue-600', badge: 'bg-blue-100 text-blue-700' },
   { key: 'openai' as const, name: 'OpenAI GPT-4o mini', color: 'bg-emerald-500', textColor: 'text-emerald-600 dark:text-emerald-400', badge: 'bg-emerald-100 text-emerald-700' },
   { key: 'groq' as const, name: 'Groq Llama 3.2 90B', color: 'bg-orange-500', textColor: 'text-orange-600', badge: 'bg-orange-100 text-orange-700' },
 ]

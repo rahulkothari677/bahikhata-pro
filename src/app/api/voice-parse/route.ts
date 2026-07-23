@@ -140,7 +140,7 @@ Return JSON only, no commentary.`
     // This prevents the bug where VLM_BASE_URL points to Gemini but VLM_MODEL
     // defaults to a Groq model (llama-3.3-70b-versatile) → 404 error.
     const defaultModel = baseUrl.includes('generativelanguage')
-      ? 'gemini-2.5-flash'
+      ? 'gemini-3.5-flash'
       : baseUrl.includes('api.openai.com')
       ? 'gpt-4o-mini'
       : 'llama-3.3-70b-versatile'
@@ -162,7 +162,7 @@ Return JSON only, no commentary.`
             'Authorization': `Bearer ${geminiKey}`,
           },
           body: JSON.stringify({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-3.5-flash',
             messages: [
               { role: 'system', content: systemPrompt },
               { role: 'user', content: transcript },
@@ -209,10 +209,10 @@ Return JSON only, no commentary.`
             // Log usage
             const { calculateCostInr } = await import('@/lib/ai-pricing')
             const { db } = await import('@/lib/db')
-            const costInr = calculateCostInr('gemini', 'gemini-2.5-flash', inputTokens, outputTokens)
+            const costInr = calculateCostInr('gemini', 'gemini-3.5-flash', inputTokens, outputTokens)
             db.aiUsageLog.create({
               data: {
-                userId, feature: 'voice-parse', provider: 'gemini', model: 'gemini-2.5-flash',
+                userId, feature: 'voice-parse', provider: 'gemini', model: 'gemini-3.5-flash',
                 inputTokens, outputTokens, totalTokens, costInr, durationMs: aiDurationMs, success: true,
               },
             }).catch(() => {})
@@ -221,7 +221,7 @@ Return JSON only, no commentary.`
               success: true,
               transaction: parsed,
               _source: 'llm',
-              aiUsage: { provider: 'gemini', model: 'gemini-2.5-flash', inputTokens, outputTokens, totalTokens, costInr: Math.round(costInr * 100) / 100, durationMs: aiDurationMs },
+              aiUsage: { provider: 'gemini', model: 'gemini-3.5-flash', inputTokens, outputTokens, totalTokens, costInr: Math.round(costInr * 100) / 100, durationMs: aiDurationMs },
             })
           }
         } else {
