@@ -36,21 +36,27 @@ describe('thinking is actually suppressed, in Google\'s parameter shape', () => 
     }
   })
 
-  test('scan-bill uses a documented control', () => {
-    // reasoning_effort for 2.5, extra_body.google.thinking_config for 3.x.
-    expect(scan).toMatch(/reasoning_effort: 'none'/)
-    expect(scan).toMatch(/thinking_config: \{ thinking_level: 'minimal' \}/)
+  test('neither route uses extra_body, which raw fetch cannot deliver', () => {
+    // `extra_body` is an OpenAI SDK convenience — the SDK unwraps it before
+    // sending. These routes call the endpoint with raw fetch, so the field
+    // reaches the server verbatim and is ignored. I shipped this mistake
+    // myself while fixing the Anthropic-shaped one; it is the same trap.
+    for (const src of [scan, voice]) {
+      expect(src).not.toMatch(/extra_body/)
+    }
   })
 
-  test('voice-parse has a control at all', () => {
-    expect(voice).toMatch(/thinking_level: 'minimal'|reasoning_effort: 'none'/)
+  test('both routes set the top-level reasoning_effort', () => {
+    expect(scan).toMatch(/reasoning_effort: \/gemini-3\/\.test\(provider\.model\) \? 'low' : 'none'/)
+    expect(voice).toMatch(/reasoning_effort: \/gemini-3\/\.test\(GEMINI_VOICE_MODEL\) \? 'low' : 'none'/)
   })
 
-  test('3.x models get minimal rather than none', () => {
-    // Google: reasoning "cannot be turned off for Gemini 2.5 Pro or 3 models".
-    // Sending none to a 3.x model is not a valid request.
-    expect(scan).toMatch(/\/gemini-3\/\.test\(provider\.model\)/)
-    expect(voice).toMatch(/\/gemini-3\/\.test\(GEMINI_VOICE_MODEL\)/)
+  test("3.x gets 'low', not 'none'", () => {
+    // Google: reasoning "cannot be turned off for Gemini 2.5 Pro or 3 models",
+    // so 'none' is not a valid request there.
+    for (const src of [scan, voice]) {
+      expect(src).toMatch(/\? 'low' : 'none'/)
+    }
   })
 })
 
@@ -85,6 +91,36 @@ describe('cost reporting matches what Google charges', () => {
   test('the model actually used has a pricing entry', () => {
     // An unpriced model silently reports a cost of zero.
     expect(calculateCostInr('gemini', 'gemini-3.5-flash-lite', 1000, 1000)).toBeGreaterThan(0)
+  })
+})
+
+describe('the upload is off the critical path', () => {
+  const scanner = readStripped('components/scanner/BillScanner.tsx')
+
+  test('upload and scan are issued together, not one after the other', () => {
+    // They ran in sequence: 2.7s upload THEN 8.1s scan, and the shopkeeper
+    // waited for the sum while holding a phone over a bill.
+    expect(scanner).toMatch(/Promise\.all\(\[uploadPromise, scanPromise\]\)/)
+  })
+
+  test('a failed upload no longer aborts the scan', () => {
+    // Storing the photo is a nicety; capturing the bill is the point.
+    expect(scanner).toMatch(/scan continued without a stored copy/)
+  })
+
+  test('the scan is given base64 directly rather than awaiting a URL', () => {
+    expect(scanner).toMatch(/body: JSON\.stringify\(\{ imageBase64: base64, billType, scanLang \}\)/)
+  })
+})
+
+describe('the response says where the time went', () => {
+  test('scan-bill reports a timing breakdown', () => {
+    // Until now the only number was total AI time, so "model, image work or
+    // network?" could not be answered without a debugger.
+    expect(scan).toMatch(/timings: \{/)
+    expect(scan).toMatch(/preprocessMs/)
+    expect(scan).toMatch(/aiMs: aiDurationMs/)
+    expect(scan).toMatch(/otherMs/)
   })
 })
 

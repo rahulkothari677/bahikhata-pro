@@ -185,9 +185,11 @@ Return JSON only, no commentary.`
             // spoken sentence. 3.x cannot disable reasoning outright; 'minimal'
             // is the floor. (scan-bill had a control, but written in
             // Anthropic's shape, which Google ignores.)
-            ...(/gemini-3/.test(GEMINI_VOICE_MODEL)
-              ? { extra_body: { google: { thinking_config: { thinking_level: 'minimal' } } } }
-              : { reasoning_effort: 'none' }),
+            // ὑ2 CORRECTED 2026-07-23: `extra_body` is an OpenAI SDK wrapper,
+            // not a REST field — this is a raw fetch, so it was ignored. The
+            // documented raw-REST control is top-level `reasoning_effort`,
+            // and 3.x cannot go below 'low'.
+            reasoning_effort: /gemini-3/.test(GEMINI_VOICE_MODEL) ? 'low' : 'none',
           }),
         })
         const aiDurationMs = Date.now() - aiStart

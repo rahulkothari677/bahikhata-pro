@@ -112,11 +112,18 @@ export async function POST(req: NextRequest) {
     // are already optimized at upload time, so we send them as-is. (If we
     // wanted to preprocess URLs too, we'd fetch → preprocess → re-upload,
     // which is extra I/O for marginal gain.)
+    // ὑ2 2026-07-23: report WHERE the seconds go. A scan is the slowest
+    // thing a shopkeeper does in this app, and until now the only number
+    // available was total AI time — so "is it the model, the image work, or
+    // the network?" could not be answered without a debugger.
+    let preprocessMs = 0
+    const requestStart = Date.now()
     let processedImageSource = imageSource
     if (imageBase64) {
       try {
         const t0 = Date.now()
         processedImageSource = await preprocessImageForAI(imageBase64)
+        preprocessMs = Date.now() - t0
         // 🔒 FIX L1: Removed console.log — serverless log noise
       } catch (preErr) {
         // preprocessImageForAI already swallows errors + returns the original,
@@ -452,6 +459,13 @@ Return JSON only, no commentary, no markdown formatting.`
         costInr: Math.round(costInr * 100) / 100,
         durationMs: aiDurationMs,
       },
+      timings: {
+        preprocessMs,
+        aiMs: aiDurationMs,
+        // Everything else the route spent: auth, quota checks, usage write.
+        otherMs: Math.max(0, Date.now() - requestStart - preprocessMs - aiDurationMs),
+        totalMs: Date.now() - requestStart,
+      },
     })
   } catch (error) {
     // 🔒 V10 §3.3: was `detail: String(error)` — leaked VLM provider errors
@@ -584,11 +598,18 @@ function missingProviderKeys(): string[] {
  */
 function thinkingControls(provider: FallbackProvider): Record<string, unknown> {
   if (provider.name !== 'gemini') return {}
-  // 3.x cannot disable reasoning outright — 'minimal' is the floor.
-  if (/gemini-3/.test(provider.model)) {
-    return { extra_body: { google: { thinking_config: { thinking_level: 'minimal' } } } }
-  }
-  return { reasoning_effort: 'none' }
+  // ὑ2 CORRECTED 2026-07-23 (same day, my own bug). My first version sent
+  //   extra_body: { google: { thinking_config: { thinking_level: 'minimal' } } }
+  // which is the OpenAI *SDK's* convenience wrapper — the SDK unwraps it before
+  // the request goes out. This route calls the endpoint with raw fetch, so the
+  // field went to the server verbatim and was ignored, exactly like the
+  // Anthropic-shaped `thinking` field it replaced. Scans stayed at ~7.4s of AI
+  // time with the fix "in".
+  //
+  // Over raw REST the documented control is the top-level `reasoning_effort`.
+  // Google's own curl example sets it on a 3.x model, and reasoning cannot be
+  // turned off entirely on 3.x — so 'low' is the floor there, 'none' on 2.5.
+  return { reasoning_effort: /gemini-3/.test(provider.model) ? 'low' : 'none' }
 }
 
 /**
