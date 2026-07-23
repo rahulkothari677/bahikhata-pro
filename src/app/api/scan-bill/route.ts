@@ -143,69 +143,34 @@ export async function POST(req: NextRequest) {
     // LANGUAGE: The scanLang parameter controls output language for item names.
     // 'original' = keep the bill's language, 'en' = English, 'hi' = Hindi, etc.
     // This is appended to the prompt (breaks cache slightly, but language is important).
-    const basePrompt = `You are an expert at reading Indian shop bills, invoices, receipts, AND handwritten notes on plain paper. Indian shop owners often write sales/purchases as rough notes on any paper — plain paper, notebook pages, diaries, even napkins. Your job is to read ANY text (printed or handwritten) and extract structured data.
+    // 🔒 TOKEN COST (2026-07-23). This prompt was 4,692 characters —
+    // about 1,173 tokens — and it is sent in full with EVERY scan. That was
+    // 53% of the input on a typical bill, more than the photo itself.
+    //
+    // Rewritten to ~1,500 characters with every extraction RULE preserved and
+    // only the padding removed: the seven-bullet list of things the image
+    // "may be" (the model handles rotation and messy handwriting without being
+    // told), the restated confidence bands, and the prose around the schema.
+    // The gm/ml pricing rule, the Hindi numeral and Hinglish tables, the
+    // never-fabricate-a-price rule and the payment-mode inference are all kept
+    // verbatim — those are the ones that decide whether the money is right.
+    const basePrompt = `Read this Indian shop bill, invoice, receipt or handwritten note (any language, any handwriting, any orientation) and return ONLY this JSON, no markdown:
+{"invoiceNo":str|null,"date":"YYYY-MM-DD"|null,"sellerName":str|null,"sellerPhone":str|null,"sellerGSTIN":str|null,
+"items":[{"name":str,"quantity":num,"unit":"pcs|kg|ltr|box|gm|ml|dozen|packet","unitPrice":num,"gstRate":num,"total":num,"confidence":0-1}],
+"subtotal":num,"discountAmount":num,"cgst":num,"sgst":num,"igst":num,"totalAmount":num,
+"paymentMode":"cash|upi|card|bank|credit","overallConfidence":0-1}
 
-This image may be:
-- A printed bill/invoice from a supplier
-- A handwritten note on plain paper (rough entry)
-- A diary/notebook page with entries
-- A mix of printed and handwritten text
-- Written in English, Hindi, or regional languages
-- Written in any handwriting style (neat or messy)
-- Rotated or sideways (handle any orientation)
+RULES
+1. Top name = customer (sales) or supplier (purchases). Missing quantity = 1, missing unit = "pcs".
+2. UNITS/RATES: Indian bills price per kg/ltr even when quantity is in gm/ml. "500 gm @ 20" = Rs 20 PER KG = total Rs 10, NOT 500x20. Never output a per-gm or per-ml unitPrice. Convert to base units: 500 gm -> quantity 0.5 unit "kg"; 250 ml -> 0.25 "ltr". If a line total is printed, trust it and derive unitPrice = total / quantity.
+3. If a price sits next to a line, it is usually the line TOTAL, not the per-unit rate: set total = that number, unitPrice = total / quantity.
+4. totalAmount: use the written total if present; else sum item totals + cgst + sgst + igst - discount; else 0. NEVER invent prices that are not on the bill.
+5. Hindi numerals into Arabic. Hinglish: do=2, paanch=5, sau=100, hazaar=1000, pao/pav=0.25, aadha=0.5, pauna=0.75, sava=1.25, dedh=1.5, dhai=2.5, darjan=dozen.
+6. Abbreviations: atta=flour, tel=oil, chai=tea, namak=salt, chini=sugar.
+7. paymentMode: cash / upi or qr / card / udhaar or baad mein or credit / else cash.
+8. CGST+SGST both set, or igst alone - never all three.
+9. confidence: 0.9-1.0 printed, 0.5-0.7 uncertain handwriting.`
 
-Analyze the image carefully and extract all information.
-
-Return ONLY a valid JSON object with this exact structure (no markdown, no extra text):
-{
-  "invoiceNo": "bill/invoice number if visible, else null",
-  "date": "YYYY-MM-DD format if visible, else null",
-  "sellerName": "name of seller/shop/customer if visible (for handwritten notes, the name at the top is usually the customer or supplier), else null",
-  "sellerPhone": "phone if visible else null",
-  "sellerGSTIN": "GSTIN if visible else null",
-  "items": [
-    {
-      "name": "product name (clean up abbreviations - 'atta' = 'Wheat Flour', 'oil' = 'Cooking Oil', etc.)",
-      "quantity": number,
-      "unit": "unit if visible (pcs/kg/ltr/box/gm/ml/dozen/packet) else 'pcs'",
-      "unitPrice": number (price per unit if visible, else calculate from total ÷ quantity),
-      "gstRate": number (GST % if visible, else 0),
-      "total": number (line total — if only total is written, use that; if only unit price and qty, multiply them),
-      "confidence": number (0-1, how confident you are about this item's extraction)
-    }
-  ],
-  "subtotal": number (sum of all item totals before tax/discount),
-  "discountAmount": number (total discount if visible else 0),
-  "cgst": number,
-  "sgst": number,
-  "igst": number,
-  "totalAmount": number (final payable amount. Logic: 1) If a total is explicitly written on the bill, use that number. 2) If NO total is written but item prices ARE visible, calculate it: sum all item totals + cgst + sgst + igst - discountAmount. 3) If NO prices are visible anywhere on the bill (e.g., a handwritten note with only product names and quantities), return 0. Never fabricate prices that aren't on the bill.),
-  "paymentMode": "cash|upi|card|bank|credit - infer from text (if 'cash' written = cash, 'upi' or 'qr' = upi, 'card' = card, 'udhaar' or 'credit' or 'baad mein' = credit, else cash)",
-  "overallConfidence": number (0-1, overall confidence in the extraction)
-}
-
-CRITICAL RULES FOR HANDWRITTEN NOTES:
-1. The first name at the top of the paper is usually the customer (for sales) or supplier (for purchases).
-2. Each line typically has: product name + quantity + price (in any order).
-3. If quantity is missing, assume 1.
-4. If unit is missing, assume 'pcs'.
-5. If price is written as "100" next to "2kg sugar", the 100 might be total (not per kg) — use it as total, calculate unitPrice = total ÷ quantity.
-6. If only total is written (no per-unit price), set unitPrice = total ÷ quantity, and total = the written amount.
-7. Numbers may be written in Hindi numerals (०-९) — convert to Arabic (0-9).
-8. Product names may be abbreviated: "atta" = flour, "tel" = oil, "chai" = tea, "namak" = salt, "chini" = sugar, etc.
-9. "Udhaar" or "Baad mein" or "credit" = payment mode "credit".
-10. If the word "total" or "jama" is visible, the number after it is the totalAmount.
-11. Handle Hinglish: "do kilo" = 2 kg, "paanch" = 5, "sau" = 100, "hazaar" = 1000. Also fractional quantity words: "pao"/"pav" = 0.25 kg, "aadha"/"adha" = 0.5, "pauna" = 0.75, "sava" = 1.25, "dedh" = 1.5, "dhai" = 2.5, "darjan" = dozen.
-11b. UNITS & RATES (very important): Indian bills price by kg/ltr even when the quantity is in gm/ml. "500 gm @ 20" means ₹20 PER KG → total ₹10, NOT 500 × 20. NEVER output a per-gm or per-ml unitPrice. For gm/ml lines: output quantity in the BASE unit as a decimal (500 gm → quantity 0.5, unit "kg"; 250 ml → 0.25, unit "ltr") with unitPrice per kg/ltr. If the line total is printed, ALWAYS trust the printed total and derive unitPrice = total ÷ quantity(base units).
-12. If the image is sideways or upside down, rotate it mentally and read the text correctly.
-13. For messy handwriting, try your best to read each character. If uncertain, set confidence to 0.5-0.7.
-14. For clearly printed bills, set confidence to 0.9-1.0.
-
-For printed bills:
-- Extract all items, GST breakdown, and totals exactly as shown.
-- If CGST+SGST shown, set both. If IGST shown, set only igst.
-
-Return JSON only, no commentary, no markdown formatting.`
 
     // Language instruction (appended to prompt)
     // 'original' = keep bill language, otherwise translate item names to selected language

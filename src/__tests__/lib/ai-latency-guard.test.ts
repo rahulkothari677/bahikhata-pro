@@ -146,6 +146,29 @@ describe('the response says where the time went', () => {
   })
 })
 
+describe('the prompt stays small', () => {
+  test('it is under 2000 characters', () => {
+    // It was 4,692 chars (~1,173 tokens) and is sent in full with EVERY scan —
+    // 53% of the input on a typical bill, more than the photo itself. A prompt
+    // grows one helpful sentence at a time, so the ceiling is asserted.
+    const m = scan.match(/const basePrompt = `([\s\S]*?)`/)
+    expect(m).toBeTruthy()
+    expect(m![1].length).toBeLessThan(2000)
+  })
+
+  test('the rules that decide the money survived the trim', () => {
+    // Padding was cut; these are the rules that make the amounts right.
+    const m = scan.match(/const basePrompt = `([\s\S]*?)`/)!
+    const prompt = m[1]
+    expect(prompt).toMatch(/PER KG/)          // gm/ml priced per kg, not per gm
+    expect(prompt).toMatch(/NEVER invent prices/)
+    expect(prompt).toMatch(/Hindi numerals/)
+    expect(prompt).toMatch(/darjan/)          // Hinglish quantity words
+    expect(prompt).toMatch(/udhaar/)          // credit inference
+    expect(prompt).toMatch(/CGST\+SGST both set/)
+  })
+})
+
 describe('an optional speed setting cannot cost a request', () => {
   test('a 4xx triggers one retry without the tuning params', () => {
     // Rahul set GEMINI_SCAN_MODEL to gemini-2.5-flash-lite — current and
