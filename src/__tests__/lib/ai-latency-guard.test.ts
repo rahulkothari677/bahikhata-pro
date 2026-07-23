@@ -147,6 +147,26 @@ describe('the response says where the time went', () => {
 })
 
 describe('a silent provider fallback cannot hide again', () => {
+  test('the response says WHY a backup model answered', () => {
+    // Setting GEMINI_SCAN_MODEL to a model Google had shut down rerouted every
+    // scan to a tier costing 4.6x more. The only symptom was a model name on
+    // the badge, which reads perfectly normal unless you know what you set.
+    expect(scan).toMatch(/fallbackReason/)
+    expect(scan).toMatch(/provider\.model !== primaryModel/)
+  })
+
+  test('the reason carries no raw provider error', () => {
+    // Provider errors can contain key fragments; only the HTTP status is safe.
+    expect(scan).toMatch(/result\.error\?\.match\(\/HTTP /)
+    expect(scan).not.toMatch(/fallbackReason = `\$\{result\.error\}/)
+  })
+
+  test('the scanner shows the warning to the user', () => {
+    const scanner = readStripped('components/scanner/BillScanner.tsx')
+    expect(scanner).toMatch(/scanned\.fallbackReason/)
+    expect(scanner).toMatch(/Used a backup model/)
+  })
+
   test('missing provider keys are logged', () => {
     // The Gemini "upgrade" appeared live while every scan ran on the legacy
     // fallback; the only symptom was a model name on screen that nobody

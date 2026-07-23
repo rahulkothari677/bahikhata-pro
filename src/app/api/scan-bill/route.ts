@@ -112,7 +112,7 @@ export async function POST(req: NextRequest) {
     // are already optimized at upload time, so we send them as-is. (If we
     // wanted to preprocess URLs too, we'd fetch → preprocess → re-upload,
     // which is extra I/O for marginal gain.)
-    // ὑ2 2026-07-23: report WHERE the seconds go. A scan is the slowest
+    // 🔒 2026-07-23: report WHERE the seconds go. A scan is the slowest
     // thing a shopkeeper does in this app, and until now the only number
     // available was total AI time — so "is it the model, the image work, or
     // the network?" could not be answered without a debugger.
@@ -222,6 +222,7 @@ Return JSON only, no commentary, no markdown formatting.`
     // logged to AiUsageLog after successful parse
     let aiProviderUsed = 'zai-sdk'
     let aiModelUsed = 'zai-sdk'
+    let aiFallbackReason: string | undefined
     let aiInputTokens = 0
     let aiOutputTokens = 0
     let aiTotalTokens = 0
@@ -311,6 +312,7 @@ Return JSON only, no commentary, no markdown formatting.`
       // Save metadata for logging after successful parse
       aiProviderUsed = fallbackResult.providerUsed || 'unknown'
       aiModelUsed = fallbackResult.modelUsed || 'unknown'
+      aiFallbackReason = fallbackResult.fallbackReason
       aiInputTokens = fallbackResult.inputTokens || 0
       aiOutputTokens = fallbackResult.outputTokens || 0
       aiTotalTokens = fallbackResult.totalTokens || 0
@@ -459,6 +461,7 @@ Return JSON only, no commentary, no markdown formatting.`
         costInr: Math.round(costInr * 100) / 100,
         durationMs: aiDurationMs,
       },
+      fallbackReason: aiFallbackReason,
       timings: {
         preprocessMs,
         aiMs: aiDurationMs,
@@ -494,6 +497,7 @@ interface FallbackResult {
   error?: string
   providerUsed?: string
   modelUsed?: string
+  fallbackReason?: string
   inputTokens?: number
   outputTokens?: number
   totalTokens?: number
@@ -555,7 +559,9 @@ async function callWithFallback(prompt: string, imageSource: string): Promise<Fa
   }
 
   const errors: string[] = []
-  // ὑ2 2026-07-23: log which providers were skipped for want of a key.
+  const primaryModel = chain[0]?.model
+  let fallbackReason: string | undefined
+  // 🔒 2026-07-23: log which providers were skipped for want of a key.
   // The primary provider silently vanishing from the chain is exactly how the
   // Gemini "upgrade" appeared to be live while every scan actually ran on the
   // legacy fallback — the only visible symptom was a model name on screen that
@@ -573,6 +579,13 @@ async function callWithFallback(prompt: string, imageSource: string): Promise<Fa
         content: result.content,
         providerUsed: provider.name,
         modelUsed: provider.model,
+        // Set only when something other than the configured primary served.
+        // A silent fallback cost 4.6x per scan with no visible symptom:
+        // GEMINI_SCAN_MODEL pointed at a model Google had shut down, the call
+        // failed, and the legacy provider answered on a tier costing
+        // Rs 188/1000 instead of the Rs 41 intended. The only clue was a model
+        // name on a badge that nobody had reason to distrust.
+        fallbackReason: provider.model !== primaryModel ? fallbackReason : undefined,
         inputTokens: result.inputTokens,
         outputTokens: result.outputTokens,
         totalTokens: result.totalTokens,
@@ -581,6 +594,12 @@ async function callWithFallback(prompt: string, imageSource: string): Promise<Fa
     }
     console.warn(`[scan-bill] Provider ${provider.name} failed: ${result.error?.slice(0, 150)}`)
     errors.push(`${provider.name}: ${result.error?.slice(0, 100)}`)
+    if (!fallbackReason) {
+      // The HTTP status is safe to show; the raw provider error is not (it can
+      // carry key fragments), so only the status is surfaced.
+      const status = result.error?.match(/HTTP (\d{3})/)?.[1]
+      fallbackReason = `${provider.model} did not respond${status ? ` (HTTP ${status})` : ''}`
+    }
   }
 
   return {

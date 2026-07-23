@@ -50,6 +50,10 @@ export const AI_PRICING: Record<string, Record<string, ModelPricing>> = {
       inputPer1M: 0.10,
       outputPer1M: 0.40,
     },
+    // 🔒 SHUT DOWN by Google (confirmed 2026-07-23 on the models page — the
+    // PRICING page still lists them, which is how I recommended one and sent a
+    // scan into a silent fallback). Kept so historical usage rows still cost
+    // out correctly; do NOT set GEMINI_SCAN_MODEL to either.
     'gemini-2.0-flash': {
       inputPer1M: 0.10,
       outputPer1M: 0.40,

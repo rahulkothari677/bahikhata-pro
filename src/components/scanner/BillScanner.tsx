@@ -479,7 +479,7 @@ export function BillScanner() {
             })
             sonnerToast.success(`Added ${newItems.length} more items from second bill!`)
           } else {
-            setScanned({ ...data.bill, items: enrichScannedItems(data.bill.items || []), aiUsage: data.aiUsage, timings: data.timings })
+            setScanned({ ...data.bill, items: enrichScannedItems(data.bill.items || []), aiUsage: data.aiUsage, timings: data.timings, fallbackReason: data.fallbackReason })
             sonnerToast.success(`Bill scanned! Found ${data.bill.items?.length || 0} items.`)
             // 🔒 V20-025: Track scan success
             track(EVENTS.AI_SCAN_SUCCESS, {
@@ -873,6 +873,18 @@ export function BillScanner() {
               {/* 🔒 User request: show AI model + token usage so you can verify
                   which model was used and how many tokens each scan costs.
                   Small, subtle, below the header. Only shows if aiUsage exists. */}
+              {/* 🔒 2026-07-23: say it out loud when the configured model was NOT
+                  the one that answered. Setting GEMINI_SCAN_MODEL to a model
+                  Google had shut down silently rerouted every scan to a tier
+                  costing 4.6x more, and the only symptom was a model name on
+                  the badge below — which reads perfectly normal unless you
+                  happen to know what you configured. */}
+              {scanned.fallbackReason && (
+                <div className="mt-1 text-2xs text-amber-700 dark:text-amber-400">
+                  ⚠ Used a backup model — {scanned.fallbackReason}. Check
+                  GEMINI_SCAN_MODEL; scans may cost more than expected.
+                </div>
+              )}
               {scanned.aiUsage && (
                 <div className="mt-1 text-3xs text-white/50 flex items-center gap-3 flex-wrap">
                   <span>🤖 {scanned.aiUsage.model || 'unknown'}</span>
