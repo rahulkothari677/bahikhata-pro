@@ -487,38 +487,6 @@ interface FallbackResult {
 }
 
 async function callWithFallback(prompt: string, imageSource: string): Promise<FallbackResult> {
-  // Build the fallback chain in priority order.
-  // 1. If VLM_API_KEY is set, try it FIRST. If it fails (e.g., 429 quota),
-  //    fall through to the multi-provider chain.
-  // 2. Try Gemini → OpenAI → Groq in that order.
-  if (process.env.VLM_API_KEY) {
-    const result = await callSingleProvider(
-      {
-        name: 'vlm',
-        apiKey: process.env.VLM_API_KEY,
-        baseUrl: process.env.VLM_BASE_URL || 'https://api.openai.com/v1/',
-        model: process.env.VLM_MODEL || 'gpt-4o-mini',
-      },
-      prompt,
-      imageSource,
-    )
-    if (result.success) {
-      return {
-        success: true,
-        content: result.content,
-        providerUsed: 'vlm',
-        modelUsed: process.env.VLM_MODEL || 'gpt-4o-mini',
-        inputTokens: result.inputTokens,
-        outputTokens: result.outputTokens,
-        totalTokens: result.totalTokens,
-        durationMs: result.durationMs,
-      }
-    }
-    // VLM_API_KEY failed (e.g., 429 quota exceeded) — fall through to
-    // the multi-provider chain below (Gemini → OpenAI → Groq)
-    console.warn(`[scan-bill] VLM provider failed (${result.error?.slice(0, 100)}), trying fallback chain...`)
-  }
-
   const chain: FallbackProvider[] = [
     {
       name: 'gemini',
@@ -526,6 +494,12 @@ async function callWithFallback(prompt: string, imageSource: string): Promise<Fa
       baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/',
       model: 'gemini-3.5-flash',
     },
+    ...(process.env.VLM_API_KEY ? [{
+      name: 'vlm',
+      apiKey: process.env.VLM_API_KEY,
+      baseUrl: process.env.VLM_BASE_URL || 'https://api.openai.com/v1/',
+      model: process.env.VLM_MODEL || 'gpt-4o-mini',
+    }] : []),
     {
       name: 'openai',
       apiKey: process.env.OPENAI_API_KEY,
