@@ -180,8 +180,9 @@ export async function POST(req: NextRequest) {
             },
           })
           results.shops.imported++
-        } catch {
+        } catch (e: any) {
           results.shops.skipped++
+          console.error(`[restore] shop skipped: ${shop?.name || 'unknown'} — ${e?.message || e}`)
         }
       }
     }
@@ -221,8 +222,9 @@ export async function POST(req: NextRequest) {
             },
           })
           results.products.imported++
-        } catch {
+        } catch (e: any) {
           results.products.skipped++
+          console.error(`[restore] product skipped: ${product?.name || 'unknown'} — ${e?.message || e}`)
         }
       }
     }
@@ -255,8 +257,9 @@ export async function POST(req: NextRequest) {
             },
           })
           results.parties.imported++
-        } catch {
+        } catch (e: any) {
           results.parties.skipped++
+          console.error(`[restore] party skipped: ${party?.name || 'unknown'} — ${e?.message || e}`)
         }
       }
     }
@@ -505,7 +508,7 @@ export async function POST(req: NextRequest) {
           where: { userId: ctx.userId, lastRestoreSessionId: ctx.restoreSessionId },
           data: { lastRestoreSessionId: null },
         })
-      } catch {
+      } catch (e: any) {
         // Non-fatal — marker cleanup is best-effort. A stale marker just means
         // the next restore with the same id (extremely unlikely with uuids)
         // would resume instead of starting fresh.

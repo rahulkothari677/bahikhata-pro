@@ -97,9 +97,9 @@ export function Gstr2bReconciliation() {
       sonnerToast.success(result.message)
       haptic.success()
       queryClient.invalidateQueries({ queryKey: ['gstr-2b-reconcile', month] })
-    } catch {
+    } catch (e: any) {
       haptic.error()
-      sonnerToast.error('Could not parse the JSON file. Please download the GSTR-2B JSON from the GST portal.')
+      sonnerToast.error(e?.message || 'Could not upload GSTR-2B. Please try again.')
     } finally {
       setUploading(false)
       if (fileInputRef.current) fileInputRef.current.value = '' // reset for re-upload

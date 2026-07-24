@@ -795,7 +795,10 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
         // stock below zero. Show a visible warning so the shopkeeper knows
         // their stock went negative (and can record the missing purchase).
         if (Array.isArray(data.stockWarnings) && data.stockWarnings.length > 0) {
-          // 🔒 V9 4.4: Show persistent banner + toast (was: toast only)
+          // 🔒 BUG-13 (Phase 6 fix): The persistent banner was dead code — setView
+          // navigated away before it could render. Now: delay navigation by 2.5s
+          // so the banner is visible, and the user can read which products went
+          // negative before being taken to the ledger.
           setStockWarnings(data.stockWarnings)
           const lines = data.stockWarnings.map((w: any) =>
             `• ${w.productName}: had ${w.currentStock}, sold ${w.requestedQuantity}, now ${w.resultingStock}`
@@ -804,6 +807,16 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
             `Stock went negative:\n${lines.join('\n')}\nRecord the missing purchase to fix this.`,
             { duration: 8000 }
           )
+          // Delay navigation so the banner is visible
+          setTimeout(() => {
+            triggerRefresh()
+            if (previousView && previousView !== 'new-sale' && previousView !== 'new-purchase') {
+              setView(previousView)
+            } else {
+              setView(estimateMode ? 'sales' : (isSale ? 'sales' : 'purchases'))
+            }
+          }, 2500)
+          return // skip the immediate setView below
         }
         // 🔒 V12: Surface price/unit anomaly warnings (e.g. ₹20/gm looks wrong).
         if (Array.isArray(data.priceWarnings) && data.priceWarnings.length > 0) {

@@ -67,8 +67,8 @@ function ResetPasswordForm() {
       } else {
         sonnerToast.error(data.error || 'Failed to reset password')
       }
-    } catch {
-      sonnerToast.error('Something went wrong')
+    } catch (e: any) {
+      sonnerToast.error(e?.message || 'Something went wrong')
     } finally {
       setLoading(false)
     }

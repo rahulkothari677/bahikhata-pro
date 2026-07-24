@@ -92,9 +92,9 @@ export function Gstr3bReport() {
       sonnerToast.success(result.message)
       haptic.success()
       queryClient.invalidateQueries({ queryKey: ['gstr-3b', month] })
-    } catch {
+    } catch (e: any) {
       haptic.error()
-      sonnerToast.error('Could not save GSTR-3B')
+      sonnerToast.error(e?.message || 'Could not save GSTR-3B')
     } finally {
       setSaving(false)
     }

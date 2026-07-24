@@ -81,8 +81,8 @@ export function Ledger({ type }: { type: LedgerType }) {
                   } else {
                     sonnerToast.error('Could not restore — transaction may have been permanently removed.')
                   }
-                } catch {
-                  sonnerToast.error('Could not restore — check your connection.')
+                } catch (e: any) {
+                  sonnerToast.error(e?.message || 'Could not restore — check your connection.')
                 }
               },
             },
