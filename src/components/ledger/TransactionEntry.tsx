@@ -366,17 +366,15 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
         if (stored.data.originalTransactionId) setOriginalTransactionId(stored.data.originalTransactionId)
       }
 
-      // If preset has items, clear any existing drafts first — we're starting
-      // a fresh form with pre-filled data, so old drafts are stale.
+      // 🔒 R10b-2 (Phase 2b): Was: `localStorage.removeItem(KEY)` — wiped ALL
+      // saved drafts for this form type when a preset arrived with items. A
+      // shopkeeper with 5 in-progress sale drafts who taps "Repeat Last Sale"
+      // lost all 5 with no warning. The "prevent accumulation" intent is
+      // already handled by MAX_DRAFTS=10 + 24h TTL in use-drafts.ts. Now:
+      // only clear the ACTIVE draft (so the new preset starts fresh), but
+      // leave all other saved drafts intact.
       if (stored.data.items?.length > 0) {
         clearActive()
-        // Also clear all existing drafts for this form type to prevent
-        // accumulation of duplicate drafts from repeated "Repeat Last Sale" clicks
-        try {
-          const KEY = `bahikhata:drafts:txn-${type}:v2`
-          localStorage.removeItem(KEY)
-        } catch {}
-        // Refresh the hook's state so it picks up the cleared localStorage
         refreshDrafts()
       }
 
@@ -592,8 +590,21 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   // Used to:
   //   - Show inline warnings next to the quantity input (red text)
   //   - Disable the Save button in 'block' mode (with a clear message)
+  //
+  // 🔒 R10b-1 (Phase 2b): Was `if (type !== 'sale') return []` — but credit
+  // notes use type='sale' (actualType is 'credit-note'), so the check ran and
+  // computed resultingStock = currentStock - qty. A credit note with
+  // affectsStock=true INCREMENTS stock (customer return), so the warning is
+  // wrong — it blocks legitimate returns. And debit notes (type='purchase')
+  // skipped the check entirely, so a debit note that pushes stock negative
+  // got no warning. Now: gate on actualType + affectsStock direction.
   const liveStockWarnings = useMemo(() => {
-    if (type !== 'sale') return []  // only check sales, not purchases
+    // Only warn for stock-decrementing transactions: regular sales and
+    // debit-notes with affectsStock=true. Credit notes ADD stock (returns),
+    // so they can never push it negative. Purchases ADD stock too.
+    const shouldCheckStock = (actualType === 'sale')
+      || (actualType === 'debit-note' && affectsStock)
+    if (!shouldCheckStock) return []
     const warnings: Array<{
       itemIndex: number
       productName: string
@@ -622,7 +633,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       }
     })
     return warnings
-  }, [items, productMap, type])
+  }, [items, productMap, actualType, affectsStock])
 
   // In 'block' mode, the Save button is disabled if any item would go negative.
   const hasStockBlock = stockPolicy === 'block' && liveStockWarnings.length > 0
@@ -905,9 +916,14 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
           <Button variant="outline" size="sm" onClick={() => setShowVoiceEntry(!showVoiceEntry)} className="gap-1.5">
             <Mic className="w-4 h-4" /> <span className="hidden sm:inline">Voice</span>
           </Button>
-          <Button variant="outline" size="sm" onClick={() => { setScannerBillType(type); setView('scanner') }} className="gap-1.5">
-            <ScanLine className="w-4 h-4" /> <span className="hidden sm:inline">Scan Bill</span>
-          </Button>
+          {/* 🔒 BUG-14 (Phase 2b): Hide Scan Bill button on note/estimate forms.
+              The scanner always sets preset type to 'sale'/'purchase', which would
+              reset actualType and lose the note mode + any non-autosaved fields. */}
+          {!isNote && !estimateMode && (
+            <Button variant="outline" size="sm" onClick={() => { setScannerBillType(type); setView('scanner') }} className="gap-1.5">
+              <ScanLine className="w-4 h-4" /> <span className="hidden sm:inline">Scan Bill</span>
+            </Button>
+          )}
         </div>
       </div>
 
@@ -1266,7 +1282,12 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                               const val = parseFloat(v) || 0
                               // 🔒 V17 Audit Phase 10: Round to integer for count units
                               // Prevents 22.02 pcs (milk packs must be whole numbers)
-                              const finalVal = isCountUnit(item.unit) ? Math.round(val) : val
+                              // 🔒 BUG-12 (Phase 2b): Clamp to ≥ 0. Was: Math.round(-5) = -5
+                              // (passes through), and a negative quantity on a sale would
+                              // INCREMENT stock on the server (decrement with negative = increment)
+                              // — a real stock/money corruption vector.
+                              const rounded = isCountUnit(item.unit) ? Math.round(val) : val
+                              const finalVal = Math.max(0, rounded)
                               handleUpdateItem(i, 'quantity', finalVal)
                             }}
                             className="flex-1 min-w-0"
