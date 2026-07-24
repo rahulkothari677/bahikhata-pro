@@ -134,9 +134,11 @@ describe('checkPaiseAnomalies [Critical #3]', () => {
     expect(result.details).toMatch(/explicit IDs only/)
   })
 
-  test('runs 5 SQL queries in parallel (one per table)', async () => {
+  test('runs 8 SQL queries in parallel (one per table — P5-1 added 3)', async () => {
     await checkPaiseAnomalies('user1')
-    expect(spy).toHaveBeenCalledTimes(5)
+    // 🔒 P5-1 (Phase 5): was 5 (Payment, Transaction, Party, Product, TransactionItem)
+    // now 8 (+ Subscription, BankStatement, BankTransaction)
+    expect(spy).toHaveBeenCalledTimes(8)
   })
 
   test('scopes every query by userId (no cross-user leak)', async () => {

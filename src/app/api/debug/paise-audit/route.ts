@@ -79,6 +79,11 @@ const MONEY_COLUMNS: Array<{ table: string; column: string; migrationLine: numbe
   { table: 'BankStatement', column: 'totalDebits', migrationLine: 82 },
   { table: 'BankTransaction', column: 'amount', migrationLine: 85 },
   { table: 'BankTransaction', column: 'balance', migrationLine: 86 },
+  // 🔒 P5-6 (Phase 5): RevenueSchedule.amount — the fourth model sharing the
+  // 'amount' column name (the M11 bug-class signature). Admin-only (MRR/ARR
+  // recognition), so user balances are unaffected, but a corruption here
+  // would inflate admin dashboards 100× silently.
+  { table: 'RevenueSchedule', column: 'amount', migrationLine: 113 },
 ]
 
 /**

@@ -105,7 +105,9 @@ export async function POST(req: NextRequest) {
       }
       razorpay_payment_id = payment.id
       razorpay_order_id = payment.order_id
-      amountPaise = payment.amount
+      // 🔒 P5-2 (Phase 5): Removed dead `amountPaise = payment.amount` — immediately
+      // overwritten by `amountPaise = Number(order.amount)` on line 117. The order
+      // amount (set at creation from PRICING_CONFIG) is the authoritative source.
       // For payment.captured, we need to fetch the order to get notes (userId, plan, cycle).
       // The payment entity doesn't include order notes.
       const Razorpay = (await import('razorpay')).default

@@ -329,7 +329,10 @@ const ALMOST_CERTAIN_PAISE = 1_000_000_000 // ₹1,00,00,000
 export async function checkPaiseAnomalies(userId: string): Promise<ReconciliationCheck> {
   // Payment + Transaction + Party + Product: scoped by userId, single query each.
   // TransactionItem: scoped via parent Transaction (no userId on the item).
-  const [paymentRow, txnRow, partyRow, productRow, itemRow] = await Promise.all([
+  // 🔒 P5-1 (Phase 5): Added Subscription, BankStatement, BankTransaction —
+  // was: only 5 tables checked. A future 100× regression on Subscription.amount
+  // or BankTransaction.amount would NOT have fired the nightly Sentry alert.
+  const [paymentRow, txnRow, partyRow, productRow, itemRow, subRow, bankStmtRow, bankTxnRow] = await Promise.all([
     db.$queryRawUnsafe<Array<{ max: bigint | null; susp: bigint; certain: bigint }>>(
       `SELECT MAX(amount)::bigint AS max,
               COUNT(*) FILTER (WHERE amount > $2)::bigint AS susp,
@@ -371,6 +374,33 @@ export async function checkPaiseAnomalies(userId: string): Promise<Reconciliatio
        WHERE t."userId" = $1 AND t."deletedAt" IS NULL`,
       userId, SUSPICIOUS_PAISE, ALMOST_CERTAIN_PAISE,
     ),
+    // 🔒 P5-1: Subscription.amount (Razorpay payment amounts)
+    db.$queryRawUnsafe<Array<{ max: bigint | null; susp: bigint; certain: bigint }>>(
+      `SELECT MAX(amount)::bigint AS max,
+              COUNT(*) FILTER (WHERE amount > $2)::bigint AS susp,
+              COUNT(*) FILTER (WHERE amount > $3)::bigint AS certain
+       FROM "Subscription"
+       WHERE "userId" = $1`,
+      userId, SUSPICIOUS_PAISE, ALMOST_CERTAIN_PAISE,
+    ),
+    // 🔒 P5-1: BankStatement.totalCredits + totalDebits (use GREATEST of both)
+    db.$queryRawUnsafe<Array<{ max: bigint | null; susp: bigint; certain: bigint }>>(
+      `SELECT GREATEST(MAX("totalCredits"), MAX("totalDebits"))::bigint AS max,
+              COUNT(*) FILTER (WHERE "totalCredits" > $2 OR "totalDebits" > $2)::bigint AS susp,
+              COUNT(*) FILTER (WHERE "totalCredits" > $3 OR "totalDebits" > $3)::bigint AS certain
+       FROM "BankStatement"
+       WHERE "userId" = $1`,
+      userId, SUSPICIOUS_PAISE, ALMOST_CERTAIN_PAISE,
+    ),
+    // 🔒 P5-1: BankTransaction.amount + balance (use GREATEST of both)
+    db.$queryRawUnsafe<Array<{ max: bigint | null; susp: bigint; certain: bigint }>>(
+      `SELECT GREATEST(MAX(amount), MAX(balance))::bigint AS max,
+              COUNT(*) FILTER (WHERE amount > $2 OR balance > $2)::bigint AS susp,
+              COUNT(*) FILTER (WHERE amount > $3 OR balance > $3)::bigint AS certain
+       FROM "BankTransaction"
+       WHERE "userId" = $1`,
+      userId, SUSPICIOUS_PAISE, ALMOST_CERTAIN_PAISE,
+    ),
   ])
 
   const sumUp = (r: { max: bigint | null; susp: bigint; certain: bigint } | undefined) => ({
@@ -384,9 +414,14 @@ export async function checkPaiseAnomalies(userId: string): Promise<Reconciliatio
   const party = sumUp(partyRow?.[0])
   const product = sumUp(productRow?.[0])
   const item = sumUp(itemRow?.[0])
+  const subscription = sumUp(subRow?.[0])
+  const bankStmt = sumUp(bankStmtRow?.[0])
+  const bankTxn = sumUp(bankTxnRow?.[0])
 
   const totalSuspicious = payment.suspicious + txn.suspicious + party.suspicious + product.suspicious + item.suspicious
+    + subscription.suspicious + bankStmt.suspicious + bankTxn.suspicious
   const totalAlmostCertain = payment.almostCertain + txn.almostCertain + party.almostCertain + product.almostCertain + item.almostCertain
+    + subscription.almostCertain + bankStmt.almostCertain + bankTxn.almostCertain
 
   // Fail if ANY column has an "almost certain" corruption (above ₹10M paise).
   // Suspicious-only rows don't fail — a single legitimate ₹15L B2B sale is
@@ -402,8 +437,8 @@ export async function checkPaiseAnomalies(userId: string): Promise<Reconciliatio
     details: passed
       ? totalSuspicious === 0
         ? 'All money columns within plausible bounds. No 100× corruption signature detected.'
-        : `${totalSuspicious} row(s) above the suspicious threshold (₹10L) but below the almost-certain threshold (₹1Cr). Review via /api/debug/paise-audit. Max: Payment ${fmtPaise(payment.maxPaise)}, Transaction ${fmtPaise(txn.maxPaise)}, Party ${fmtPaise(party.maxPaise)}, Product ${fmtPaise(product.maxPaise)}, Item ${fmtPaise(item.maxPaise)}.`
-      : `${totalAlmostCertain} row(s) almost certainly 100×-corrupted (above ₹1Cr paise). Payment: ${payment.almostCertain}, Transaction: ${txn.almostCertain}, Party: ${party.almostCertain}, Product: ${product.almostCertain}, Item: ${item.almostCertain}. Investigate via /api/debug/paise-audit + /api/debug/repair-payment-amount (with explicit IDs only).`,
+        : `${totalSuspicious} row(s) above the suspicious threshold (₹10L) but below the almost-certain threshold (₹1Cr). Review via /api/debug/paise-audit. Max: Payment ${fmtPaise(payment.maxPaise)}, Transaction ${fmtPaise(txn.maxPaise)}, Party ${fmtPaise(party.maxPaise)}, Product ${fmtPaise(product.maxPaise)}, Item ${fmtPaise(item.maxPaise)}, Subscription ${fmtPaise(subscription.maxPaise)}, BankStmt ${fmtPaise(bankStmt.maxPaise)}, BankTxn ${fmtPaise(bankTxn.maxPaise)}.`
+      : `${totalAlmostCertain} row(s) almost certainly 100×-corrupted (above ₹1Cr paise). Payment: ${payment.almostCertain}, Transaction: ${txn.almostCertain}, Party: ${party.almostCertain}, Product: ${product.almostCertain}, Item: ${item.almostCertain}, Subscription: ${subscription.almostCertain}, BankStmt: ${bankStmt.almostCertain}, BankTxn: ${bankTxn.almostCertain}. Investigate via /api/debug/paise-audit + /api/debug/repair-payment-amount (with explicit IDs only).`,
     expected: 0,
     actual: totalAlmostCertain,
   }
