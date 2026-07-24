@@ -170,6 +170,8 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
     noteReason?: string
     affectsStock?: boolean
     originalTransactionId?: string | null
+    // 🔒 R10b-4 (Phase 3): cashRefund toggle must persist in drafts.
+    cashRefund?: boolean
   }>(draftFormType)
 
   // Rate prompt — increments counter after each successful transaction
@@ -219,6 +221,9 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
     if (draft.noteReason !== undefined) setNoteReason(draft.noteReason)
     if (typeof draft.affectsStock === 'boolean') setAffectsStock(draft.affectsStock)
     if (draft.originalTransactionId !== undefined) setOriginalTransactionId(draft.originalTransactionId)
+    // 🔒 R10b-4 (Phase 3): Restore cashRefund toggle. Was: not restored →
+    // a credit note that had cash refund ON came back with it OFF.
+    if (typeof draft.cashRefund === 'boolean') setCashRefund(draft.cashRefund)
 
     try { haptic.success() } catch {}
     const restoredAs = draft.actualType && draft.actualType !== type
@@ -261,9 +266,12 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       noteReason,
       affectsStock,
       originalTransactionId,
+      // 🔒 R10b-4 (Phase 3): Persist cashRefund in autosave. Was: not saved →
+      // restoring a draft silently flipped a cash refund to a khata adjustment.
+      cashRefund,
     })
 
-  }, [partyId, date, invoiceNo, isInterState, paymentMode, paidAmount, discountAmount, notes, items, presetChecked, presetLoaded, actualType, noteReason, affectsStock, originalTransactionId])
+  }, [partyId, date, invoiceNo, isInterState, paymentMode, paidAmount, discountAmount, notes, items, presetChecked, presetLoaded, actualType, noteReason, affectsStock, originalTransactionId, cashRefund])
 
   // Fetch products
   const { data: productsData } = useQuery({
@@ -401,6 +409,14 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
         setPresetLoaded(true)
       }
       if (stored.data.totalAmount) setPaidAmount(String(stored.data.totalAmount))
+      // 🔒 R10b-5 (Phase 3): Set presetLoaded=true for ANY non-empty preset,
+      // not just ones with items. Party-only presets (from PartyProfile,
+      // credit/debit note flows) carry partyId/originalTransactionId but no
+      // items. Without this, the autosave effect fires immediately and creates
+      // a spurious draft before the user types anything.
+      if (stored.data.partyId || stored.data.originalTransactionId || (stored.data.items?.length ?? 0) > 0) {
+        setPresetLoaded(true)
+      }
       ;(window as any).__ledgerPreset = null
     }
 
@@ -447,6 +463,16 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       setIsInterState(prev => prev === derivedInterState.isInterState ? prev : derivedInterState.isInterState)
     }
   }, [derivedInterState.indeterminate, derivedInterState.isInterState])
+
+  // 🔒 R10b-3 (Phase 3): markDirty — clears presetLoaded so autosave resumes.
+  // Was: only handleAddProduct/handleUpdateItem/handleRemoveItem/handleLoadOriginalItems
+  // called setPresetLoaded(false). After a preset loaded (Repeat Last Sale /
+  // Scanner / Inventory), every OTHER edit — date, party, payment mode, paid
+  // amount, discount, notes, note reason, affectsStock, cashRefund, invoiceNo
+  // — left presetLoaded=true, so the autosave effect never ran. If the user
+  // refreshed or closed the tab, all of those changes were lost silently.
+  // Now: every input onChange calls markDirty() first.
+  const markDirty = useCallback(() => { setPresetLoaded(false) }, [])
 
   const handleAddProduct = (product: any) => {
     // User manually added a product — clear presetLoaded so autosave resumes
@@ -1217,10 +1243,11 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                 </Card>
               )}
 
-              {/* V17 Audit §1: "Load items from original sale" button for credit notes.
-                  The form starts BLANK (partial returns are common). This button lets
-                  the user pull in ALL items from the original sale for full returns. */}
-              {isCreditNote && originalTransactionId && (
+              {/* V17 Audit §1: "Load items from original" button for credit/debit notes.
+                  🔒 R10b-6 (Phase 3): Was gated on isCreditNote only — debit notes
+                  (purchase returns) also have originalTransactionId and benefit from
+                  loading all items for a full return. Now: gate on isNote. */}
+              {isNote && originalTransactionId && (
                 <button
                   type="button"
                   onClick={handleLoadOriginalItems}
@@ -1234,8 +1261,8 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                   {loadingOriginal
                     ? 'Loading...'
                     : items.length > 0
-                      ? 'Reload all items from original sale'
-                      : 'Load all items from original sale'
+                      ? `Reload all items from original ${isCreditNote ? 'sale' : 'purchase'}`
+                      : `Load all items from original ${isCreditNote ? 'sale' : 'purchase'}`
                   }
                 </button>
               )}
@@ -1378,7 +1405,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
               <Label htmlFor="field-notes-optional">Notes (optional)</Label>
               <Input id="field-notes-optional"
                 value={notes}
-                onChange={(e) => setNotes(e.target.value)}
+                onChange={(e) => { markDirty(); setNotes(e.target.value) }}
                 placeholder="Any additional notes about this transaction..."
                 className="mt-1"
               />
@@ -1539,11 +1566,11 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label htmlFor="field-date">Date</Label>
-                  <Input id="field-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className="mt-1" />
+                  <Input id="field-date" type="date" value={date} onChange={(e) => { markDirty(); setDate(e.target.value) }} className="mt-1" />
                 </div>
                 <div>
                   <Label htmlFor="field-invoice-no">Invoice No.</Label>
-                  <Input id="field-invoice-no" value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} placeholder="Optional" className="mt-1" />
+                  <Input id="field-invoice-no" value={invoiceNo} onChange={(e) => { markDirty(); setInvoiceNo(e.target.value) }} placeholder="Optional" className="mt-1" />
                 </div>
               </div>
 
@@ -1582,18 +1609,25 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
 
               <div>
                 <Label htmlFor="field-discount">Discount (₹)</Label>
-                <NumberField id="field-discount" value={discountAmount} onValueChange={setDiscountAmount} placeholder="0" className="mt-1" min={0} step={1} decimals={2} />
+                <NumberField id="field-discount" value={discountAmount} onValueChange={(v) => { markDirty(); setDiscountAmount(v) }} placeholder="0" className="mt-1" min={0} step={1} decimals={2} />
               </div>
 
-              <div>
-                <Label htmlFor="field-payment-mode">Payment Mode</Label>
-                <Select value={paymentMode} onValueChange={setPaymentMode}>
-                  <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {PAYMENT_MODES.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
+              {/* 🔒 R10b-7 (Phase 3): Hide payment mode + paid amount on estimate
+                  forms. Estimates are quotes — no payment is collected. Was: the
+                  payment card showed, the user could pick "Card" and enter 500,
+                  then on save paymentMode was silently forced to 'cash' while
+                  paidAmount was sent through unchanged. */}
+              {!estimateMode && (
+                <div>
+                  <Label htmlFor="field-payment-mode">Payment Mode</Label>
+                  <Select value={paymentMode} onValueChange={(v) => { markDirty(); setPaymentMode(v) }}>
+                    <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {PAYMENT_MODES.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
 
               {/* 🔒 AUDIT V24 §1: For credit/debit notes, "Paid Amount" means CASH
                   REFUNDED — and the common case is a pure khata adjustment (no cash).
@@ -1614,14 +1648,14 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                           : `OFF: adjusts the party's khata by ${formatINR(totalAmount)}`}
                       </p>
                     </div>
-                    <Switch checked={cashRefund} onCheckedChange={setCashRefund} />
+                    <Switch checked={cashRefund} onCheckedChange={(v) => { markDirty(); setCashRefund(v) }} />
                   </div>
                   {cashRefund && (
                     <div>
                       <Label htmlFor="field-refund-amount">Refund Amount (₹)</Label>
                       <NumberField id="field-refund-amount"
                         value={paidAmount}
-                        onValueChange={setPaidAmount}
+                        onValueChange={(v) => { markDirty(); setPaidAmount(v) }}
                         placeholder={`Full refund: ${totalAmount.toFixed(0)}`}
                         className="mt-1"
                         min={0}
@@ -1634,12 +1668,12 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                     </div>
                   )}
                 </>
-              ) : (
+              ) : !estimateMode ? (
                 <div>
                   <Label htmlFor="field-paid-amount">Paid Amount (₹)</Label>
                   <NumberField id="field-paid-amount"
                     value={paidAmount}
-                    onValueChange={setPaidAmount}
+                    onValueChange={(v) => { markDirty(); setPaidAmount(v) }}
                     placeholder={`Full: ${totalAmount.toFixed(0)}`}
                     className="mt-1"
                     min={0}
@@ -1648,7 +1682,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                   />
                   <p className="text-3xs text-muted-foreground mt-1">Leave empty for full payment</p>
                 </div>
-              )}
+              ) : null}
             </div>
           </Card>
 
