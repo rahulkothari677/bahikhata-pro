@@ -415,8 +415,11 @@ export async function POST(req: NextRequest) {
             },
           })
           results.payments.imported++
-        } catch {
+        } catch (e: any) {
+          // 🔒 P6-6 (Phase 6): Was: silent skip. Money silently lost on restore.
+          // Now: log the reason so the user can see what failed.
           results.payments.skipped++
+          console.error(`[restore] payment skipped: ${payment.type} ₹${payment.amount} for ${payment.partyName || 'unknown party'} — ${e?.message || e}`)
         }
       }
     }

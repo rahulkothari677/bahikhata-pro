@@ -386,7 +386,26 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
         refreshDrafts()
       }
 
-      if (stored.data.partyId) setPartyId(stored.data.partyId)
+      // 🔒 BUG-15 (Phase 6): Was: only read partyId — sellerName/partyName from
+      // the scanner was silently dropped. Now: if no partyId but a name exists,
+      // try to match against existing parties (same pattern as VoiceEntry).
+      if (stored.data.partyId) {
+        setPartyId(stored.data.partyId)
+      } else {
+        const sellerName = stored.data.sellerName || stored.data.partyName
+        if (sellerName && allParties.length > 0) {
+          const matched = allParties.find(p =>
+            p.name?.toLowerCase().includes(sellerName.toLowerCase()) ||
+            sellerName.toLowerCase().includes(p.name?.toLowerCase() || '')
+          )
+          if (matched) {
+            setPartyId(matched.id)
+          } else {
+            // Pre-fill the party search so the user sees the extracted name
+            setPartySearch(sellerName)
+          }
+        }
+      }
       if (stored.data.invoiceNo) setInvoiceNo(stored.data.invoiceNo)
       if (stored.data.date) {
         try {
@@ -420,12 +439,11 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       ;(window as any).__ledgerPreset = null
     }
 
-    // Small delay to ensure component is fully mounted after lazy-load
-    const timer = setTimeout(() => {
-      checkPreset()
-      setPresetChecked(true)
-    }, 100)
-    return () => clearTimeout(timer)
+    // 🔒 R10b-8 (Phase 6): Was: setTimeout(100ms) — served no purpose (useEffect
+    // already runs after mount) and was fragile (if deps changed within 100ms,
+    // the timer was cleared and the preset never loaded). Now: synchronous.
+    checkPreset()
+    setPresetChecked(true)
   }, [type, clearActive, refreshDrafts])
 
   const partyDropdownRef = useRef<HTMLDivElement>(null)
@@ -585,7 +603,11 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   })
   const subtotal = preview.subtotal
   const totalGst = roundMoney(preview.cgst + preview.sgst + preview.igst)
-  const totalProfit = preview.grossProfit
+  // 🔒 BUG-11 (Phase 6): Was: computed unconditionally even when hideProfit.
+  // For staff with hideProfit, purchasePrice is stripped from /api/products,
+  // so cost=0 → whole sale = profit (wrong value in memory). Now: skip the
+  // calc entirely when hideProfit is true.
+  const totalProfit = hideProfit ? 0 : preview.grossProfit
   // 🔒 FIX C5: Apply round-off on the client too, so the preview matches the
   // server exactly. Was: `totalAmount = preview.totalBeforeRoundOff` — the
   // client used the pre-round-off total, but the server applied round-off.
@@ -1325,7 +1347,15 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                             // 1 → 1.001, which is useless at a counter. Taps
                             // move by a unit a shopkeeper actually sells in;
                             // any precise value can still be typed.
-                            step={isCountUnit(item.unit) ? 1 : 0.5}
+                            // 🔒 BUG-18 (Phase 6): Was: hardcoded 0.5 for all non-count
+                            // units. 0.5gm is useless at a counter. Now: sensible per-unit
+                            // tap increments (10 for gm/ml, 0.5 for kg/ltr/m, 5 for cm).
+                            step={
+                              isCountUnit(item.unit) ? 1
+                              : (item.unit === 'gm' || item.unit === 'ml') ? 10
+                              : (item.unit === 'cm') ? 5
+                              : 0.5
+                            }
                             decimals={isCountUnit(item.unit) ? 0 : 3}
                             placeholder="Qty"
                           />
@@ -1724,13 +1754,31 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                 </div>
                 {/* 🔒 AUDIT V24 §1: For notes, the "unpaid" portion is the khata
                     ADJUSTMENT (it reduces/increases the party balance) — show it
-                    as such, not as scary red "Outstanding". */}
+                    as such, not as scary red "Outstanding".
+                    🔒 BUG-17 (Phase 6): Different label + color for credit notes
+                    (customer khata) vs debit notes (supplier khata). */}
                 {isNote && due > 0 && (
-                  <div className="flex items-center justify-between text-sm bg-emerald-50 dark:bg-emerald-950/30 -mx-4 px-4 py-2 rounded-lg">
-                    <span className="text-emerald-700 dark:text-emerald-300 font-medium flex items-center gap-1">
-                      <AlertCircle className="w-3.5 h-3.5" /> Adjusted in khata
+                  <div className={cn(
+                    'flex items-center justify-between text-sm -mx-4 px-4 py-2 rounded-lg',
+                    isCreditNote
+                      ? 'bg-emerald-50 dark:bg-emerald-950/30'
+                      : 'bg-amber-50 dark:bg-amber-950/30'
+                  )}>
+                    <span className={cn(
+                      'font-medium flex items-center gap-1',
+                      isCreditNote
+                        ? 'text-emerald-700 dark:text-emerald-300'
+                        : 'text-amber-700 dark:text-amber-300'
+                    )}>
+                      <AlertCircle className="w-3.5 h-3.5" />
+                      {isCreditNote ? 'Adjusted in customer khata' : 'Adjusted in supplier khata'}
                     </span>
-                    <span className="font-bold text-emerald-700 dark:text-emerald-300">{formatINR(due)}</span>
+                    <span className={cn(
+                      'font-bold',
+                      isCreditNote
+                        ? 'text-emerald-700 dark:text-emerald-300'
+                        : 'text-amber-700 dark:text-amber-300'
+                    )}>{formatINR(due)}</span>
                   </div>
                 )}
                 {!isNote && due > 0 && (

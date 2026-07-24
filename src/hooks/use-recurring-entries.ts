@@ -85,6 +85,8 @@ export function useRecurringEntries() {
     const currentMonth = getCurrentMonth()
     let created = 0
     let totalAmount = 0
+    // 🔒 P6-7 (Phase 6): Track failed entries so the user knows money didn't post.
+    const failed: Array<{ category: string; amount: number }> = []
 
     for (const entry of due) {
       try {
@@ -112,8 +114,12 @@ export function useRecurringEntries() {
           write(updated)
           setEntries(updated)
         }
-      } catch {
-        // Failed — will retry next load
+      } catch (e: any) {
+        // 🔒 P6-7 (Phase 6): Was: silent skip ("Failed — will retry next load").
+        // Money silently lost if the user doesn't reopen the app. Now: track
+        // failures and show a toast so the user knows something didn't post.
+        failed.push({ category: entry.category, amount: entry.amount })
+        console.error(`[recurring] failed to post: ${entry.category} ₹${entry.amount} — ${e?.message || e}`)
       }
     }
 
@@ -134,6 +140,16 @@ export function useRecurringEntries() {
       sonnerToast.success(
         `${created} recurring ${created === 1 ? 'entry' : 'entries'} posted — ${formattedTotal}`,
         { description: due.map(e => `${e.category}: ${e.type}`).slice(0, 3).join(' · ') }
+      )
+    }
+    // 🔒 P6-7 (Phase 6): Show failure toast if any recurring entries didn't post.
+    if (failed.length > 0) {
+      const failedTotal = new Intl.NumberFormat('en-IN', {
+        style: 'currency', currency: 'INR', maximumFractionDigits: 0,
+      }).format(failed.reduce((s, f) => s + f.amount, 0))
+      sonnerToast.error(
+        `${failed.length} recurring ${failed.length === 1 ? 'entry' : 'entries'} failed to post — ${failedTotal}`,
+        { description: failed.map(f => `${f.category}: ₹${f.amount}`).slice(0, 3).join(' · ') + (failed.length > 3 ? ` +${failed.length - 3} more` : ''), duration: 10000 }
       )
     }
   }, [queryClient])
