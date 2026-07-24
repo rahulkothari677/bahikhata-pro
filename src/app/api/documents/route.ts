@@ -152,12 +152,13 @@ export async function POST(req: NextRequest) {
   }
 }
 
-// DELETE /api/documents — hard-delete a document (removes from DB + Cloudinary).
-// 🔒 AUDIT V23 FIX §6c: The previous comment said "soft-delete" but the code
-// immediately destroyed the Cloudinary asset. Now the comment matches the
-// behavior: this is a HARD delete. The DB row is removed (not soft-deleted)
-// and the Cloudinary asset is destroyed. The UI says "This cannot be undone"
-// which is accurate.
+// DELETE /api/documents — soft-delete the DB row + hard-delete the Cloudinary asset.
+// 🔒 VERIFICATION FIX (Phase 3): The docstring previously claimed "hard delete"
+// and "DB row is removed (not soft-deleted)" — but the actual code at line 197
+// does `db.document.update({ data: { deletedAt: new Date() } })` which is a
+// SOFT delete. The DB row stays for audit trail; only the Cloudinary asset is
+// destroyed. The UI says "This cannot be undone" which is accurate for the
+// Cloudinary asset (it's gone) but the DB row remains queryable for audit.
 // Body: { id }
 export async function DELETE(req: NextRequest) {
   try {

@@ -48,7 +48,7 @@ export function middleware(req: NextRequest) {
       "font-src 'self' https://fonts.gstatic.com data:",
       "img-src 'self' data: blob: https: https://*.cloudinary.com https://res.cloudinary.com",
       "media-src 'self' blob:",
-      "connect-src 'self' https://*.sentry.io https://*.posthog.com https://vitals.vercel-insights.com https://api.groq.com https://generativelanguage.googleapis.com https://api.openai.com",
+      "connect-src 'self' https://*.sentry.io https://*.posthog.com https://vitals.vercel-insights.com https://api.groq.com https://generativelanguage.googleapis.com https://api.openai.com https://*.cloudinary.com https://res.cloudinary.com",
       "worker-src 'self' blob:",
       "frame-ancestors 'none'",
       "base-uri 'self'",
