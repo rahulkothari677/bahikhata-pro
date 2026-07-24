@@ -1419,7 +1419,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                     <Label className="text-xs" htmlFor="field-reason">Reason</Label>
                     <select
                       value={noteReason}
-                      onChange={(e) => setNoteReason(e.target.value)}
+                      onChange={(e) => { markDirty(); setNoteReason(e.target.value) }}
                       className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                     >
                       <option value="">Select a reason...</option>
@@ -1435,7 +1435,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                       type="checkbox"
                       id="affectsStock"
                       checked={affectsStock}
-                      onChange={(e) => setAffectsStock(e.target.checked)}
+                      onChange={(e) => { markDirty(); setAffectsStock(e.target.checked) }}
                       className="w-4 h-4 rounded"
                     />
                     <Label htmlFor="affectsStock" className="text-xs cursor-pointer">
@@ -1480,7 +1480,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                       )}
                     </div>
                   </div>
-                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => setPartyId('')}>
+                  <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={() => { markDirty(); setPartyId('') }}>
                     <X className="w-3.5 h-3.5" />
                   </Button>
                 </div>
@@ -1516,7 +1516,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                           {filteredParties.slice(0, 20).map(p => (
                             <button
                               key={p.id}
-                              onClick={() => { setPartyId(p.id); setPartyDropdownOpen(false); setPartySearch('') }}
+                              onClick={() => { markDirty(); setPartyId(p.id); setPartyDropdownOpen(false); setPartySearch('') }}
                               className="w-full flex items-center gap-2 p-2 hover:bg-muted transition text-left"
                             >
                               <Avatar className="w-8 h-8 flex-shrink-0">
