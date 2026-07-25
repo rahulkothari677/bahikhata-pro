@@ -208,11 +208,21 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   // On mount: load saved theme from localStorage into store
   useEffect(() => {
     try {
+      // 🔒 Phase 8a: "Follow system" dark mode. If the user hasn't explicitly
+      // set a preference, follow the OS preference (prefers-color-scheme).
+      // This matches WhatsApp/Telegram behavior — most users expect the app
+      // to respect their system setting without manual toggling.
       const savedDark = localStorage.getItem('bahikhata-darkMode')
       if (savedDark !== null) {
         const parsed = JSON.parse(savedDark)
         if (parsed !== darkMode) {
           setFeature('darkMode', parsed)
+        }
+      } else {
+        // No saved preference → follow system
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches
+        if (prefersDark && !darkMode) {
+          setFeature('darkMode', true)
         }
       }
       const savedColor = localStorage.getItem('bahikhata-themeColor')

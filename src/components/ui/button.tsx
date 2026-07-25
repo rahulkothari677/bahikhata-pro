@@ -22,16 +22,14 @@ const buttonVariants = cva(
         link: "text-primary underline-offset-4 hover:underline",
       },
       size: {
-        default: "h-9 px-4 py-2 has-[>svg]:px-3",
-        // 🔒 V26 Phase 6 §5.1: sm buttons get min-h-11 (44px) on mobile for
-        // touch-target compliance, min-h-9 (36px) on desktop. Was: h-8 (32px)
-        // everywhere — sub-44 on mobile. The min-h doesn't override h-9
-        // desktop; it just lifts the mobile floor.
+        // 🔒 Phase 8a: All default + sm buttons now get min-h-11 (44px) on
+        // mobile for touch-target compliance (Apple HIG / Material Design).
+        // Desktop keeps the compact 36px (h-9). The min-h doesn't override
+        // the desktop height; it just lifts the mobile floor.
+        default: "h-9 min-h-11 lg:min-h-9 px-4 py-2 has-[>svg]:px-3",
         sm: "h-8 min-h-11 lg:min-h-8 rounded-md gap-1.5 px-3 has-[>svg]:px-2.5",
-        lg: "h-10 rounded-md px-6 has-[>svg]:px-4",
-        icon: "size-9",
-        // Mobile-friendly touch targets (44px = Apple HIG minimum).
-        // Use for any button that's tappable on mobile.
+        lg: "h-10 min-h-11 lg:min-h-10 rounded-md px-6 has-[>svg]:px-4",
+        icon: "size-9 min-h-11 min-w-11 lg:min-h-9 lg:min-w-9",
         touch: "h-11 min-w-11 px-4 rounded-md gap-1.5 has-[>svg]:px-3",
         iconTouch: "size-11 rounded-md",
       },

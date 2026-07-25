@@ -4,9 +4,11 @@ import * as React from "react"
 import * as SwitchPrimitive from "@radix-ui/react-switch"
 
 import { cn } from "@/lib/utils"
+import { haptic } from "@/lib/haptic"
 
 function Switch({
   className,
+  onCheckedChange,
   ...props
 }: React.ComponentProps<typeof SwitchPrimitive.Root>) {
   return (
@@ -16,6 +18,13 @@ function Switch({
         "peer data-[state=checked]:bg-primary data-[state=unchecked]:bg-input focus-visible:border-ring focus-visible:ring-ring/50 dark:data-[state=unchecked]:bg-input/80 inline-flex h-[1.15rem] w-8 shrink-0 items-center rounded-full border border-transparent shadow-xs transition-all outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50",
         className
       )}
+      onCheckedChange={(checked) => {
+        // 🔒 Phase 8a: Subtle haptic on every toggle — matches iOS behavior
+        // where every switch produces a tiny tick. Was: haptics only on money
+        // mutations (success/error). Now: every toggle gets a selection haptic.
+        try { haptic.click() } catch {}
+        onCheckedChange?.(checked)
+      }}
       {...props}
     >
       <SwitchPrimitive.Thumb

@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { Providers } from "@/components/providers";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { OfflineBanner } from "@/components/common/OfflineBanner";
 // 🔒 V20-007: Lazy-load analytics SDKs to reduce initial JS bundle.
 // These SDKs only report metrics AFTER the page loads, so they don't
 // need to be in the critical path. Using dynamic without ssr:false
@@ -61,12 +62,24 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning className={inter.variable}>
       <body className="antialiased bg-background text-foreground font-sans">
         <ErrorBoundary>
+          <OfflineBanner />
           <Providers>
             {children}
           </Providers>
         </ErrorBoundary>
         <Toaster />
-        <SonnerToaster position="top-right" richColors closeButton />
+        {/* 🔒 Phase 8a: Toasts positioned top-center on mobile (so keyboard
+            doesn't cover them), top-right on desktop (standard position).
+            Was: top-right everywhere → on mobile, toasts were hidden behind
+            the keyboard when filling amount fields. */}
+        <SonnerToaster
+          position="top-center"
+          richColors
+          closeButton
+          toastOptions={{
+            className: 'lg:!left-auto lg:!right-4 lg:!transform-none',
+          }}
+        />
         {/* Vercel Analytics — privacy-friendly, no cookies, GDPR compliant */}
         <Analytics />
         {/* Vercel Speed Insights — measures Core Web Vitals, helps us optimize */}
