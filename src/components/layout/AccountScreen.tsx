@@ -812,7 +812,8 @@ function AccountSectionContent({
 
     return (
       <div className="space-y-4">
-        {/* QR Code Card */}
+        {/* QR Code Card — 🔒 Phase 8d: Hide if no contact info filled */}
+        {vcardParts.length > 0 && (
         <div className="bg-card rounded-2xl shadow-card border border-border/60 overflow-hidden">
           <div className="p-4 border-b border-border/40">
             <div className="flex items-center gap-3">
@@ -874,6 +875,7 @@ function AccountSectionContent({
             </div>
           </div>
         </div>
+        )}
 
         {/* Settings form (profile tab) */}
         <Suspense fallback={<div className="bg-card rounded-2xl shadow-card border border-border/60 p-8 text-center"><p className="text-muted-foreground text-sm">Loading...</p></div>}>
