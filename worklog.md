@@ -9332,3 +9332,34 @@ Stage Summary:
 - The plan proposes a 3-channel integration contract (DB read / DB write / HTTP API) and a 6-phase implementation roadmap.
 - 6 open questions require user input before any code changes. The plan explicitly states what I will NOT do without approval (6 guardrails).
 - Awaiting user review of the plan + answers to the open questions before proceeding to any implementation phase.
+
+---
+Task ID: integration-phase-d1
+Agent: main
+Task: Execute Phase D.1 (stop-the-bleeding) of the integration plan. Fix 3 issues: B.1 (FeatureFlagRule schema drift), B.2 (dead GHA cron), B.11 (leftover /api/route.ts).
+
+Work Log:
+- B.1 verification: Grep confirmed FeatureFlagRule is NEVER queried in either app's src/ tree. Confirmed model is NOT in main app schema and NO migration exists for it. Verdict: dead code, safe to remove from admin schema.
+- B.1 fix: Removed FeatureFlagRule model from bahikhata-admin/prisma/schema.prisma. Added explanatory comment block documenting why (schema drift risk, dead code, future re-introduction guidance).
+- B.2 fix: Removed 3 references to dead credit-scores cron from bahikhata-admin/.github/workflows/admin-cron.yml: (1) the '30 22 * * *' schedule entry, (2) the 'credit-scores' workflow_dispatch option, (3) the entire run-credit-scores job definition. All 3 replaced with explanatory comments.
+- B.11 fix: Deleted src/app/api/route.ts from bahikhata-pro (leftover "Hello, world!" scaffold that was supposedly deleted in V26 S7 but came back).
+- Admin app verification: npx prisma generate OK, npx tsc --noEmit 5 pre-existing errors 0 new, npm run build ✓ Compiled successfully in 21.4s.
+- Main app verification: npx tsc --noEmit 0 errors.
+- Shipped as 2 PRs:
+  - Admin: PR #4 (branch integration-phase-d1-stop-the-bleeding) → squash-merged to main (commit 346965b). Vercel deployed successfully.
+  - Main: PR #1 (branch integration-phase-d1-delete-leftover-api-route) → squash-merged to main (commit 6f500ad). Vercel production deploy (bahikhata-pro project) succeeded.
+- Production verification:
+  - https://bahikhata-pro.vercel.app/ → HTTP 200 ✓
+  - https://bahikhata-admin.vercel.app/login → HTTP 200 ✓
+  - Admin login probe with correct creds → {"reason":"2FA_REQUIRED"} ✓ (auth flow still works after schema change)
+  - GHA workflow file on main branch no longer references dead endpoint (only explanatory comments mention it) ✓
+- Note: Main app CI (quality-check job) failed on a PRE-EXISTING test failure (ai-latency-guard.test.ts — checks for Promise.all pattern in a scanner component). Verified this was failing BEFORE my PR (commit d8f6549 also failed). My change (deleting /api/route.ts) is unrelated to this test. The actual Vercel production deploy succeeded.
+
+Stage Summary:
+- Phase D.1 complete. 3 issues fixed:
+  - B.1 CRITICAL: FeatureFlagRule schema drift resolved (dead model removed from admin schema).
+  - B.2 CRITICAL: Dead GHA cron job removed (was wasting resources daily at 10:30 PM UTC).
+  - B.11 LOW: Leftover scaffold /api/route.ts deleted from main app.
+- Both apps deployed successfully. No regressions in auth flow, login, or any verified endpoint.
+- Pre-existing CI failure (ai-latency-guard.test.ts) noted but NOT caused by this phase — separate issue to address in a future phase if desired.
+- Ready for Phase D.2 (security cleanup — delete 5 stale main-app admin routes) upon user confirmation.
