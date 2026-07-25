@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Calendar, ChevronDown, X } from 'lucide-react'
@@ -126,48 +126,6 @@ export function DateRangePicker({
   const [customFrom, setCustomFrom] = useState('')
   const [customTo, setCustomTo] = useState('')
   const ref = useRef<HTMLDivElement>(null)
-  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({})
-
-  // 🔒 Phase 8d fix: Calculate dropdown position from button's bounding rect.
-  // This prevents the dropdown from being clipped by parent containers with
-  // overflow:hidden/scroll (like the sticky header on the dashboard).
-  useEffect(() => {
-    if (open && ref.current) {
-      const rect = ref.current.getBoundingClientRect()
-      const dropdownWidth = 288 // w-72 = 18rem = 288px
-      const dropdownHeight = 400 // estimated max height
-      const viewportHeight = window.innerHeight
-      const spaceBelow = viewportHeight - rect.bottom
-      const spaceAbove = rect.top
-
-      // If there's not enough space below, open ABOVE the button
-      const showAbove = spaceBelow < dropdownHeight && spaceAbove > spaceBelow
-
-      const top = showAbove
-        ? Math.max(8, rect.top - dropdownHeight - 8)
-        : rect.bottom + 8
-
-      // Horizontal: align right edge of dropdown with right edge of button
-      // (or left edge, depending on 'align' prop and available space)
-      let left = align === 'right'
-        ? rect.right - dropdownWidth
-        : rect.left
-
-      // Clamp to viewport
-      left = Math.max(8, Math.min(left, window.innerWidth - dropdownWidth - 8))
-
-      setDropdownStyle({
-        position: 'fixed',
-        top: `${top}px`,
-        left: `${left}px`,
-        zIndex: 50,
-        maxHeight: showAbove
-          ? `${Math.min(spaceAbove - 16, 400)}px`
-          : `${Math.min(spaceBelow - 16, 400)}px`,
-        overflowY: 'auto',
-      })
-    }
-  }, [open, align])
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -209,17 +167,13 @@ export function DateRangePicker({
 
   return (
     <div className={cn('relative', className)} ref={ref}>
-      {/* 🔒 Phase 8c: Reverted to the original button + dropdown design
-          (chips didn't look good on the dashboard). Improved the button
-          styling: slightly larger touch target, better visual hierarchy
-          with the calendar icon + preset label + chevron. */}
       <Button
         variant="outline"
         size="touch"
         onClick={() => setOpen(!open)}
         className="gap-2 font-medium lg:h-9"
       >
-        <Calendar className="w-4 h-4 lg:w-3.5 lg:h-3.5 text-primary" />
+        <Calendar className="w-4 h-4 lg:w-3.5 lg:h-3.5" />
         <span className="hidden sm:inline">{currentPresetLabel}</span>
         <span className="sm:hidden">Date</span>
         <ChevronDown className="w-3.5 h-3.5 lg:w-3 lg:h-3" />
@@ -234,18 +188,11 @@ export function DateRangePicker({
           className="fixed inset-0 bg-black/40 z-40 sm:hidden"
           onClick={() => setOpen(false)}
         />
-        {/* 🔒 Phase 8d fix: Fixed positioning with JS-calculated position.
-            Prevents clipping by parent containers (sticky header, overflow).
-            Opens below the button, or above if not enough space below.
-            Mobile gets a centered modal with backdrop. */}
-        <div
-          className="fixed inset-0 bg-black/40 z-40"
-          onClick={() => setOpen(false)}
-        />
-        <div
-          className="bg-popover border border-border rounded-xl shadow-lg p-3 w-[calc(100vw-2rem)] sm:w-72"
-          style={dropdownStyle}
-        >
+        <div className={cn(
+          'fixed sm:absolute z-50 bg-popover border border-border rounded-xl shadow-lg p-3 w-[calc(100vw-2rem)] sm:w-72 max-h-[80vh] overflow-y-auto',
+          'top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 sm:translate-x-0 sm:translate-y-0 sm:top-full sm:left-auto sm:mt-2',
+          align === 'right' ? 'sm:right-0' : 'sm:left-0'
+        )}>
           <div className="space-y-1">
             {PRESETS.map(p => (
               <button
