@@ -9305,3 +9305,30 @@ Stage Summary:
   (c) PR #3 (commit 1751afe): Neon cold-start — raw Prisma error surfaced. Fixed by wiring withNeonRetry into all auth-flow DB calls + DB_UNAVAILABLE friendly error.
 - FRAMEWORK GAP CLOSED: the resilience layer now covers the auth flow, not just dashboard queries. Future DB connection issues during login will be retried once transparently; if still failing, user sees a friendly "database is waking up" message instead of a raw stack trace.
 - The user should now be able to log in end-to-end: email + password → 2FA input appears → enter TOTP from Google Authenticator → reach admin dashboard.
+
+---
+Task ID: integration-research-phase-5
+Agent: main
+Task: Deep research into both apps (bahikhata-pro main + bahikhata-admin) to draft a no-conflict integration plan. Present to user BEFORE any code changes.
+
+Work Log:
+- Launched 2 parallel Explore agents (very thorough mode) — one per app. Both returned comprehensive architectural maps.
+- Main app findings: 40 Prisma models, NextAuth v4 with 7-day JWT, 5 stale /api/admin/* routes with hardcoded email allowlist (security liability), hardcoded pricing in PRICING_CONFIG const, no ADMIN_API_SECRET (documented but unused), no impersonation consumer endpoint, Capacitor mobile wrapper, 31 migrations owned by main app.
+- Admin app findings: 47 Prisma models (1 drift — FeatureFlagRule exists ONLY in admin schema), AdminUser+TOTP 1-hour sessions, 45 admin API routes, direct DB writes to User.plan (bypasses main-app business logic), dead impersonation URL generator (no consumer), ADMIN_API_SECRET documented but never read in code, dead GHA cron referencing deleted /api/admin/data-monetization/compute endpoint.
+- Identified 11 conflict/risk items across 4 severity levels: 2 CRITICAL (FeatureFlagRule schema drift → data-loss risk if main app runs db push; dead GHA cron wasting resources), 3 HIGH (stale main-app admin routes with hardcoded allowlist; dead impersonation flow; undocumented direct-DB-write pattern for plan changes), 4 MEDIUM (admin User missing tokenVersion; admin schema missing 10 main-app models; duplicate requireAdmin helpers; NEXTAUTH_SECRET isolation not enforced), 2 LOW (broken docs link; leftover /api/route.ts).
+- Synthesized findings into a 6-part integration plan document:
+  - Part A: Current state assessment (what the two apps share, how admin controls main app today, what's documented as "needs main app changes")
+  - Part B: Conflict & risk register (11 items with severity, impact, fix options)
+  - Part C: Integration architecture proposal (3-channel contract: DB read, DB write, HTTP API; schema ownership rules; auth isolation rules)
+  - Part D: 6-phase implementation plan (D.1 stop-the-bleeding ~30min; D.2 security cleanup ~2hr; D.3 impersonation flow ~4hr; D.4 plan-change via API ~3hr; D.5 schema alignment ~1hr; D.6 documentation ~1hr)
+  - Part E: 6 open questions for user (impersonation keep/kill; plan-change API vs direct DB; stale routes delete/keep; FeatureFlagRule used/dead; future features priority; anything missed)
+  - Part F: Explicit "will NOT do without approval" list (6 hard guardrails)
+- Saved plan to /home/z/my-project/download/Integration-Plan-BahiKhata-Pro-Admin.md (~600 lines, comprehensive).
+- Updated todos to mark Phase 5 complete; Phase 6 (present plan to user) is now in progress.
+
+Stage Summary:
+- Research complete. Integration plan document saved at /home/z/my-project/download/Integration-Plan-BahiKhata-Pro-Admin.md.
+- The plan identifies 11 concrete issues (2 CRITICAL, 3 HIGH, 4 MEDIUM, 2 LOW) with specific fix options for each.
+- The plan proposes a 3-channel integration contract (DB read / DB write / HTTP API) and a 6-phase implementation roadmap.
+- 6 open questions require user input before any code changes. The plan explicitly states what I will NOT do without approval (6 guardrails).
+- Awaiting user review of the plan + answers to the open questions before proceeding to any implementation phase.
