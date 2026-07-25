@@ -3,7 +3,7 @@ import { db } from '@/lib/db'
 import { logAudit } from '@/lib/audit'
 
 /**
- * GET /api/auth/impersonate?token=<raw-token>
+ * GET /api/impersonate?token=<raw-token>
  *
  * 🐛 INTEGRATION PHASE D.3 (2026-07-25): Impersonation consumer endpoint.
  *
@@ -21,6 +21,12 @@ import { logAudit } from '@/lib/audit'
  *   5. Looks up the target user (targetUserId)
  *   6. Creates a NextAuth session for the target user with isImpersonated=true
  *   7. Redirects to / (dashboard) with the impersonated session active
+ *
+ * 🐛 ROUTING NOTE: This route is at /api/impersonate (NOT /api/auth/impersonate)
+ * because the /api/auth/[...nextauth] catch-all in the main app captures ALL
+ * /api/auth/* paths and would intercept a route at /api/auth/impersonate.
+ * Moving to /api/impersonate avoids the catch-all while keeping the token-in-URL
+ * security properties (single-use, 5-min expiry, 256-bit, HTTPS-only).
  *
  * SECURITY:
  *   - Token is 32 random bytes (256 bits) — unguessable
