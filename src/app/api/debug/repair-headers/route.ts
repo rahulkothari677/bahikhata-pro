@@ -1,53 +1,69 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAdmin } from '@/lib/admin-auth'
+import { requireFounder, isRepairAllowed } from '@/lib/debug-auth'
 import { apiError } from '@/lib/api-error'
 
 /**
  * 🔍 GSTR-1 Reconciliation Diagnostic + Repair endpoint.
  *
- * GET /api/admin/repair-headers          → diagnose only (no changes)
- * GET /api/admin/repair-headers?fix=true → diagnose + repair inconsistent transactions
+ * GET /api/debug/repair-headers?userId=<id>
+ *   → diagnose only (no changes). Reports transactions where header totals
+ *     don't match line-item sums.
  *
- * Finds transactions where the header (subtotal - discountAmount) doesn't match
- * the sum of line items (qty*price - discountAmount). This is the exact
- * discrepancy that causes the "Cannot export GSTR-1 — data inconsistency
- * detected" error.
+ * POST /api/debug/repair-headers
+ *   Body: { userId: string, transactionIds: string[] }
+ *   → repairs the specified transactions by recomputing header columns
+ *     (subtotal, discountAmount, cgst, sgst, igst, totalAmount) from line
+ *     items. Does NOT touch line items or any other fields.
  *
- * The repair recomputes header columns (subtotal, discountAmount, cgst, sgst,
- * igst, totalAmount) from the stored line items. It does NOT touch line items
- * or any other fields — only the header aggregate columns.
+ * 🔒 INTEGRATION PHASE D.2 (2026-07-25): This route was MOVED from
+ * /api/admin/repair-headers. The old location used `requireAdmin()` from
+ * `src/lib/admin-auth.ts` (a hardcoded 2-email allowlist with no 2FA, no
+ * audit trail). The new location uses `requireFounder()` from
+ * `src/lib/debug-auth.ts` which:
+ *   1. Checks the FOUNDER_EMAILS env var (flexible, not hardcoded)
+ *   2. Uses the main app's auth context (getAuthContext)
+ *   3. For repair endpoints, additionally requires ALLOW_REPAIR_ENDPOINTS=true
+ *      in production (defense-in-depth — repairs are inert unless explicitly
+ *      enabled)
+ * This is a SECURITY UPGRADE, not just a lateral move. The old /api/admin/
+ * namespace has been deleted entirely; all admin functionality lives in the
+ * separate bahikhata-admin app.
  *
- * 🔒 V17 PAISE MIGRATION Phase 2D: This issue is NOT caused by the paise
- * migration. The paise migration changes how the SQL query returns data
- * (paise integer vs rupee Float) but does NOT change the values themselves.
- * The discrepancy exists because some transactions in the database have header
- * columns that don't match their line items — likely from transactions created
- * before the V12 computeLineItems centralization, or from a bug in the edit
- * (PUT) path that updated line items without recomputing the header.
+ * 🔒 AUDITOR FIX 2026-07-22 (preserved from the original route): This route
+ * used to WRITE from a GET when called with `?fix=true`. A GET must never
+ * mutate — browsers, link previews and prefetchers issue GETs on their own,
+ * and CSRF defences do not cover them. The repair now lives in POST below.
+ *
+ * 🔒 AUDITOR FIX 2026-07-22 (preserved): The GET query had NO userId filter,
+ * so an admin running it scanned every shopkeeper's transactions. A userId
+ * is now required.
+ *
+ * See: download/Integration-Plan-BahiKhata-Pro-Admin.md (Phase D.2, B.3)
  */
-export async function GET(req: Request) {
-  const adminCheck = await requireAdmin()
-  if (!adminCheck.ok) return adminCheck.error
+export const maxDuration = 60
 
-  // 🔒 AUDITOR FIX 2026-07-22: this route used to WRITE from a GET when
-  // called with `?fix=true`. A GET must never mutate — browsers, link
-  // previews and prefetchers issue GETs on their own, and CSRF defences do
-  // not cover them. One accidental prefetch of a bookmarked URL would have
-  // rewritten money. The repair now lives in POST below.
+export async function GET(req: NextRequest) {
+  const founderCheck = await requireFounder()
+  if ('error' in founderCheck) return founderCheck.error
+  // Note: userId from founderCheck is the admin's own userId, not the target.
+  // The target userId comes from the query string.
+
   const url = new URL(req.url)
   const targetUserId = url.searchParams.get('userId')
 
-  // Find ALL transactions that have line items
-  // 🔒 AUDITOR FIX 2026-07-22: this query had NO userId filter, so an
-  // admin running it scanned — and with ?fix=true rewrote — the invoice
-  // headers of EVERY shopkeeper on the platform at once. Every other route in
-  // this app scopes by userId; an admin route needs it more, not less.
-  // A userId is now required, so a repair is always aimed at one shop.
+  if (!targetUserId) {
+    return NextResponse.json({
+      error: 'userId query parameter is required',
+      message: 'Pass ?userId=<id> to scope the diagnostic to one shop. Cross-user scans are not allowed.',
+    }, { status: 400 })
+  }
+
+  // Find ALL transactions that have line items, scoped to the target user.
   const transactions = await db.transaction.findMany({
     where: {
       deletedAt: null,
-      ...(targetUserId ? { userId: targetUserId } : {}),
+      userId: targetUserId,
       type: { in: ['sale', 'purchase', 'credit-note', 'debit-note'] },
     },
     include: { items: true },
@@ -103,7 +119,7 @@ export async function GET(req: Request) {
 
   return NextResponse.json({
     mode: 'diagnose',
-    scopedToUserId: targetUserId ?? '(all users — pass ?userId= to scope)',
+    scopedToUserId: targetUserId,
     totalScanned: transactions.length,
     consistent: transactions.length - inconsistent,
     inconsistent,
@@ -116,7 +132,7 @@ export async function GET(req: Request) {
 }
 
 /**
- * POST /api/admin/repair-headers
+ * POST /api/debug/repair-headers
  *
  * The repair. Separated from GET on 2026-07-22 for two reasons, both of which
  * had already gone wrong here:
@@ -132,12 +148,23 @@ export async function GET(req: Request) {
  * a rule that looks safe in aggregate destroys legitimate rows.
  *
  * Body: { userId: string, transactionIds: string[] }
+ *
+ * 🔒 INTEGRATION PHASE D.2: Added isRepairAllowed() check — in production,
+ * repairs are inert unless ALLOW_REPAIR_ENDPOINTS=true env var is set.
  */
-export async function POST(req: Request) {
-  const adminCheck = await requireAdmin()
-  if (!adminCheck.ok) return adminCheck.error
-
+export async function POST(req: NextRequest) {
   try {
+    const founderCheck = await requireFounder()
+    if ('error' in founderCheck) return founderCheck.error
+
+    // 🔒 V26 S2: In production, repair endpoints must be explicitly enabled.
+    if (!isRepairAllowed()) {
+      return NextResponse.json({
+        error: 'Repair endpoints are disabled',
+        message: 'Set ALLOW_REPAIR_ENDPOINTS=true in production to enable transaction header repairs.',
+      }, { status: 403 })
+    }
+
     const body = await req.json().catch(() => null)
     const userId: string | undefined = body?.userId
     const transactionIds: string[] = Array.isArray(body?.transactionIds) ? body.transactionIds : []
@@ -145,7 +172,7 @@ export async function POST(req: Request) {
     if (!userId || transactionIds.length === 0) {
       return NextResponse.json({
         error: 'userId and a non-empty transactionIds array are required',
-        message: 'Run GET /api/admin/repair-headers?userId=... first and pass the ids it reports.',
+        message: 'Run GET /api/debug/repair-headers?userId=... first and pass the ids it reports.',
       }, { status: 400 })
     }
 

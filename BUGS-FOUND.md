@@ -76,7 +76,7 @@ and include enough context to reproduce.
 - **Description**: The GSTR-1 export reconciliation check correctly catches that some transactions have header columns (subtotal, discountAmount) that don't match their line items (qty×price, per-item discount). Per-invoice taxable (₹52,524) ≠ summary taxable (₹52,150) — ₹374 drift.
 - **Root cause**: Pre-existing data integrity issue in demo data — NOT caused by paise migration. Some transactions were saved with header values inconsistent with their line items (likely from before the V12 computeLineItems centralization).
 - **NOT a code bug**: The reconciliation check is working as designed — it caught a real data drift before an incorrect GSTR-1 would be filed. The code is correct.
-- **Fix available**: `/api/admin/repair-headers?fix=true` endpoint (deployed in commit e533c35) recomputes header columns from line items. User can run this to repair demo data.
+- **Fix available**: `/api/debug/repair-headers` endpoint (moved from `/api/admin/repair-headers` in Integration Phase D.2, 2026-07-25). GET `?userId=<id>` diagnoses; POST with `{ userId, transactionIds: [...] }` recomputes header columns from line items. Auth upgraded from hardcoded email allowlist to `requireFounder()` + `isRepairAllowed()` (env-gated in prod).
 - **User decision**: Leave for now (app is in testing phase, no real data). Will re-seed demo data or run the repair endpoint when needed.
 - **Status**: OPEN (data issue, not a code bug) — defer until real data exists or user requests repair
 
