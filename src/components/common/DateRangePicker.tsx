@@ -193,7 +193,7 @@ export function DateRangePicker({
           onClick={() => setOpen(false)}
         />
         <div className={cn(
-          'fixed sm:absolute z-50 bg-popover border border-border rounded-xl shadow-lg p-3 w-[calc(100vw-2rem)] sm:w-72 max-h-[80vh] overflow-y-auto',
+          'fixed sm:absolute z-50 bg-popover border border-border rounded-xl shadow-lg p-3 w-[calc(100vw-2rem)] sm:w-72 max-h-[80vh] sm:max-h-[50vh] overflow-y-auto',
           'top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 sm:translate-x-0 sm:translate-y-0 sm:top-full sm:left-auto sm:mt-2',
           align === 'right' ? 'sm:right-0' : 'sm:left-0'
         )}>
