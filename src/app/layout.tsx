@@ -6,6 +6,7 @@ import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { Providers } from "@/components/providers";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { OfflineBanner } from "@/components/common/OfflineBanner";
+import { ImpersonationBanner } from "@/components/common/ImpersonationBanner";
 // 🔒 V20-007: Lazy-load analytics SDKs to reduce initial JS bundle.
 // These SDKs only report metrics AFTER the page loads, so they don't
 // need to be in the critical path. Using dynamic without ssr:false
@@ -64,6 +65,11 @@ export default function RootLayout({
         <ErrorBoundary>
           <OfflineBanner />
           <Providers>
+            {/* 🐛 INTEGRATION PHASE D.3: Impersonation banner — shown when
+                the current session was created via /api/auth/impersonate.
+                Rendered INSIDE Providers so useSession() works. Placed
+                above children so it's the topmost element on every screen. */}
+            <ImpersonationBanner />
             {children}
           </Providers>
         </ErrorBoundary>

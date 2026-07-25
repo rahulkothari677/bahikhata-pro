@@ -1541,3 +1541,59 @@ model Document {
   @@index([userId, category])
   @@index([userId, uploadedAt])
 }
+
+// ==================== IMPERSONATION TOKENS ====================
+// 🐛 INTEGRATION PHASE D.3 (2026-07-25): Impersonation flow.
+//
+// The separate bahikhata-admin app's /api/admin/impersonate endpoint generates
+// a one-time token and returns a URL to ${MAIN_APP_URL}/api/auth/impersonate.
+// This table stores the token hash so the main app's consumer endpoint can:
+//   1. Validate the token (via crypto.timingSafeEqual against tokenHash)
+//   2. Check expiry (expiresAt > now)
+//   3. Enforce single-use (usedAt IS NULL → set usedAt = now() on redemption)
+//   4. Bind the session to the exact targetUserId (no token replay for a
+//      different user)
+//
+// Flow:
+//   Admin app (creates token)  →  INSERT row with tokenHash + adminId + targetUserId + expiresAt
+//   Admin's browser (navigates)  →  GET /api/auth/impersonate?token=<raw-token>
+//   Main app (validates)       →  SELECT WHERE tokenHash = sha256(token) AND usedAt IS NULL
+//   Main app (redeems)         →  UPDATE SET usedAt = now(), create session for targetUserId
+//
+// Security:
+//   - Token is 32 random bytes (256 bits) — unguessable
+//   - Only the SHA-256 hash is stored (not the raw token) — DB compromise
+//     doesn't reveal usable tokens
+//   - 5-minute expiry (expiresAt)
+//   - Single-use (usedAt) — a redeemed token can't be replayed
+//   - Admin + target are both logged for full audit trail
+//   - The admin app's AdminAction log ALSO records the impersonation (with
+//     the same tokenHash) — so both apps have independent audit trails
+model ImpersonationToken {
+  id            String    @id @default(cuid())
+  // SHA-256 hash of the raw 32-byte token. The raw token is NEVER stored —
+  // only the hash. Lookup is by tokenHash (unique).
+  tokenHash     String    @unique
+  // The admin who created this token (AdminUser.id from the admin app).
+  // Stored as a plain string (no FK) because AdminUser lives in the admin
+  // app's auth domain — the main app doesn't query AdminUser directly.
+  adminId       String
+  // Denormalized admin email for audit display (so the main app can show
+  // "Impersonating as {adminEmail}" without a cross-DB join).
+  adminEmail    String
+  // The shopkeeper being impersonated (User.id). The main app's consumer
+  // endpoint creates a NextAuth session bound to this userId.
+  targetUserId  String
+  // 5-minute expiry. The admin app sets this when creating the token; the
+  // main app checks expiresAt > now() on redemption.
+  expiresAt     DateTime
+  // Single-use enforcement. NULL = unused (valid for redemption).
+  // Non-NULL = already redeemed (token can't be replayed).
+  usedAt        DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([targetUserId])
+  @@index([adminId])
+  @@index([expiresAt])
+}
+
