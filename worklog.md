@@ -9274,3 +9274,34 @@ Stage Summary:
   (b) Phase 1 followup (PR #2): post-setup lockout — user couldn't log in after setting up 2FA because NextAuth wrapped 2FA_REQUIRED into CredentialsSignin. Fixed via secure /api/admin/login-probe.
 - The user can now complete the full flow: login → /setup-2fa (scan QR, enter code) → sign out → /login → enter email+password → 2FA input appears → enter TOTP code → reach admin dashboard.
 - All work follows the framework: smallest possible change, security-preserving, fully commented with 🐛 FIX tags, 0 new TypeScript errors, no test regressions.
+
+---
+Task ID: admin-login-fix-phase-1-followup-2
+Agent: main
+Task: Fix third login lockout — raw Prisma error "Can't reach database server at neon.tech:5432" surfaced to user during Neon cold-start.
+
+Work Log:
+- Diagnosed via pasted_image_1784991679086.png (VLM-analyzed): login page showed raw Prisma error: "Invalid prisma.adminUser.findUnique() invocation: Can't reach database server at ep-shiny-thunder-aoqd1d3j-pooler.c-2.ap-southeast-1.aws.neon.tech:5432". This was NOT a code bug in my changes — it was a Neon free-tier cold-start: Neon auto-suspends the DB after ~5 min of inactivity, and the first query after suspension fails because the connection is stale. Neon takes 5-10s to wake up.
+- Confirmed DB was reachable from my test environment (TCP connect + DNS resolution both succeeded) — the issue was Vercel serverless functions hitting the cold-start window.
+- Discovered FRAMEWORK GAP: src/lib/resilience.ts already had a withNeonRetry() helper that detects connection errors ("reach database server", "Connection terminated", "kind: Close", "Connection refused", "Query timeout", "Timed out fetching") and retries once after 500ms — giving Neon time to wake up. BUT this helper was NEVER wired into the auth flow. The admin dashboard queries used it; auth/login/2fa/setup did NOT. So a Neon cold-start would surface as a raw Prisma error directly to the user.
+- Implemented fix: wrapped ALL DB calls in the 4 auth-flow files with withNeonRetry:
+  - src/lib/auth.ts: 2 sites (findUnique for login lookup, update for last-login info)
+  - src/app/api/admin/login-probe/route.ts: 1 site (findUnique for credential probe) + added DB_UNAVAILABLE reason (HTTP 503) when withNeonRetry exhausts retries, so login page can show friendly "database is waking up" message instead of misleading "Invalid credentials"
+  - src/app/api/admin/2fa/route.ts: 6 sites (findUnique + update in GET, findUnique + update in POST, findUnique + update in DELETE)
+  - src/app/api/admin/setup/route.ts: 3 sites (count in GET, count + create in POST)
+- Updated src/app/login/page.tsx: added handling for probeRes.status === 503 + reason === 'DB_UNAVAILABLE' → shows the friendly "Our database is waking up. Please wait 10 seconds and try again." message from the probe.
+- Verified: tsc --noEmit 5 pre-existing errors, 0 new. next build ✓ in 22.0s.
+- Shipped: branch fix/admin-login-neon-cold-start-resilience → PR #3 → squash-merged to main (commit 1751afe). Vercel deployed successfully (~60s).
+- Production verification:
+  - Probe endpoint with correct creds → 200 {"reason":"2FA_REQUIRED"} ✓ (withNeonRetry handles cold-start transparently)
+  - Browser login flow: filled email+password, clicked "Access Dashboard", after ~8s the 2FA input field appeared ✓
+  - Wrong TOTP test: entered "000000", clicked "Verify & Sign In" → "Invalid 2FA code. Please try again." shown ✓
+  - Screenshot saved to /home/z/my-project/download/admin-login-final-working.png
+
+Stage Summary:
+- THREE login lockouts now fixed across PR #1, #2, #3:
+  (a) PR #1 (commit 2f560b0): chicken-and-egg — couldn't log in to set up 2FA. Fixed via grace session + /setup-2fa.
+  (b) PR #2 (commit 62b47a5): post-setup lockout — NextAuth wrapped 2FA_REQUIRED into CredentialsSignin. Fixed via /api/admin/login-probe.
+  (c) PR #3 (commit 1751afe): Neon cold-start — raw Prisma error surfaced. Fixed by wiring withNeonRetry into all auth-flow DB calls + DB_UNAVAILABLE friendly error.
+- FRAMEWORK GAP CLOSED: the resilience layer now covers the auth flow, not just dashboard queries. Future DB connection issues during login will be retried once transparently; if still failing, user sees a friendly "database is waking up" message instead of a raw stack trace.
+- The user should now be able to log in end-to-end: email + password → 2FA input appears → enter TOTP from Google Authenticator → reach admin dashboard.
