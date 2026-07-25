@@ -167,40 +167,21 @@ export function DateRangePicker({
 
   return (
     <div className={cn('relative', className)} ref={ref}>
-      {/* 🔒 Phase 8b: Quick-preset chips — horizontal scrollable row of the
-          4 most-used presets, inspired by PhonePe. Tapping a chip applies
-          the preset instantly without opening the dropdown. The full list
-          (Yesterday, Last Month, Quarter, Custom) is still in the dropdown. */}
-      <div className="flex items-center gap-1.5 flex-wrap">
-        {(['today', 'last7', 'thisMonth', 'thisYear'] as DatePreset[]).map(p => {
-          const presetObj = PRESETS.find(pr => pr.id === p)!
-          return (
-            <button
-              key={p}
-              onClick={() => handlePreset(p)}
-              className={cn(
-                'px-3 py-1 rounded-full text-2xs font-medium transition whitespace-nowrap',
-                preset === p
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
-              )}
-            >
-              {presetObj.label}
-            </button>
-          )
-        })}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setOpen(!open)}
-          className="gap-1.5 font-medium h-7 px-2.5"
-        >
-          <Calendar className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">{currentPresetLabel}</span>
-          <span className="sm:hidden">More</span>
-          <ChevronDown className="w-3 h-3" />
-        </Button>
-      </div>
+      {/* 🔒 Phase 8c: Reverted to the original button + dropdown design
+          (chips didn't look good on the dashboard). Improved the button
+          styling: slightly larger touch target, better visual hierarchy
+          with the calendar icon + preset label + chevron. */}
+      <Button
+        variant="outline"
+        size="touch"
+        onClick={() => setOpen(!open)}
+        className="gap-2 font-medium lg:h-9"
+      >
+        <Calendar className="w-4 h-4 lg:w-3.5 lg:h-3.5 text-primary" />
+        <span className="hidden sm:inline">{currentPresetLabel}</span>
+        <span className="sm:hidden">Date</span>
+        <ChevronDown className="w-3.5 h-3.5 lg:w-3 lg:h-3" />
+      </Button>
 
       {open && (
         <>

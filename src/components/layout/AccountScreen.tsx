@@ -57,7 +57,7 @@ import {
   ChevronRight, User, CreditCard, Shield, ShieldCheck, Settings as SettingsIcon,
   Database, Users, Gift, HelpCircle, Info, Star, LogOut,
   BookOpenText, FileSpreadsheet, Check, Sparkles, Share2, Send,
-  Package, TrendingUp, Wallet, AlertCircle,
+  Package, TrendingUp, Wallet, AlertCircle, CheckCircle2,
   type LucideIcon,
 } from 'lucide-react'
 import type { ViewType } from '@/store/app-store'
@@ -579,9 +579,20 @@ export function AccountScreen() {
 
         {/* 🔒 V22-6 (Phase 4): Profile Completion Progress Bar.
             LinkedIn-style: shows % complete + missing field hint.
-            - 100% → green + "Profile complete!"
+            - 100% → green + "Profile complete!" badge
             - <100% → blue + "Add X, Y to complete" */}
-        {profileCompletion.pct < 100 && (
+        {profileCompletion.pct === 100 ? (
+          // 🔒 Phase 8c: Show a positive confirmation badge at 100%
+          <div className="w-full bg-emerald-50 dark:bg-emerald-950/30 rounded-2xl border border-emerald-200 dark:border-emerald-800 p-3.5 flex items-center gap-2">
+            <div className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-900 flex items-center justify-center">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">Profile complete!</p>
+              <p className="text-3xs text-emerald-600 dark:text-emerald-400">All business details are filled in</p>
+            </div>
+          </div>
+        ) : (
           <button
             onClick={handleEditProfile}
             disabled={isCA}
