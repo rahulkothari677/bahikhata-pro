@@ -42,6 +42,8 @@ export interface NumberFieldProps {
   inputClassName?: string
   /** Smaller buttons for dense rows (the item lines in the entry form). */
   compact?: boolean
+  /** 🔒 Phase 8b: Optional prefix (e.g. ₹) shown inside the input. */
+  prefix?: string
   'aria-label'?: string
 }
 
@@ -62,6 +64,7 @@ export function NumberField({
   className,
   inputClassName,
   compact,
+  prefix,
   'aria-label': ariaLabel,
 }: NumberFieldProps) {
   // Timers for hold-to-repeat. Refs (not state) so a re-render can't orphan one.
@@ -204,7 +207,10 @@ export function NumberField({
         max={max}
         onChange={(e) => onValueChange(e.target.value)}
         className={cn(
-          'no-native-spinner text-center',
+          'no-native-spinner',
+          // 🔒 Phase 8b: If prefix is set, left-align with padding for the ₹
+          // symbol. Otherwise center (original behavior).
+          prefix ? 'text-left pl-7' : 'text-center',
           // Room for the in-box controls, reserved unconditionally on desktop
           // so the digits do not jump when the buttons fade in.
           isDesktop && (compact ? 'px-6' : 'px-7'),
@@ -212,6 +218,12 @@ export function NumberField({
           inputClassName,
         )}
       />
+      {/* 🔒 Phase 8b: ₹ prefix shown inside the input, left-aligned. */}
+      {prefix && (
+        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground text-sm pointer-events-none select-none">
+          {prefix}
+        </span>
+      )}
       {isDesktop && (
       <button
         type="button"

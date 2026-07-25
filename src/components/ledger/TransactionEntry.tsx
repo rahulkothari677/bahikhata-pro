@@ -1652,7 +1652,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
 
               <div>
                 <Label htmlFor="field-discount">Discount (₹)</Label>
-                <NumberField id="field-discount" value={discountAmount} onValueChange={(v) => { markDirty(); setDiscountAmount(v) }} placeholder="0" className="mt-1" min={0} step={1} decimals={2} />
+                <NumberField id="field-discount" value={discountAmount} onValueChange={(v) => { markDirty(); setDiscountAmount(v) }} placeholder="0" className="mt-1" min={0} step={1} decimals={2} prefix="₹" />
               </div>
 
               {/* 🔒 R10b-7 (Phase 3): Hide payment mode + paid amount on estimate
@@ -1704,6 +1704,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                         min={0}
                         step={10}
                         decimals={2}
+                        prefix="₹"
                       />
                       <p className="text-3xs text-muted-foreground mt-1">
                         Leave empty for a full cash refund. Any un-refunded portion adjusts the khata.
@@ -1722,6 +1723,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                     min={0}
                     step={10}
                     decimals={2}
+                    prefix="₹"
                   />
                   <p className="text-3xs text-muted-foreground mt-1">Leave empty for full payment</p>
                 </div>
