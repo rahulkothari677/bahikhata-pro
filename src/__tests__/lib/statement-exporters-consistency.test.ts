@@ -66,10 +66,23 @@ describe('R9-1 — statement exporters', () => {
     })
 
     test('every exporter opens with an opening balance', () => {
+      // ὑ2 2026-07-26: the formula moved into src/lib/statement-rows.ts so
+      // the app and its tests share ONE definition (the inline copy and the lib
+      // copy had already drifted — the lib read the newest entry as "oldest").
+      // This guard follows it: the component must still expose an opening
+      // balance and print it, and the derivation must still be
+      // oldest.runningBalance - oldest.delta wherever it now lives.
       expect(src).toMatch(/const statementOpeningBalance = \(\): number/)
-      // Derived from the oldest row, not a second source of truth.
-      expect(src).toMatch(/oldest\.runningBalance \?\? 0\) - \(oldest\.delta/)
+      expect(src).toMatch(/computeStatementOpening\(/)
       expect(src).toMatch(/Opening balance/)
+
+      const lib = fs.readFileSync(
+        path.join(process.cwd(), 'src/lib/statement-rows.ts'),
+        'utf8',
+      )
+      expect(lib).toMatch(/oldest\.runningBalance \?\? 0\) - \(oldest\.delta/)
+      // Oldest is the LAST element of a newest-first array, never the first.
+      expect(lib).toMatch(/statement\[statement\.length - 1\]/)
     })
 
     test('the closing figure comes from the canonical balance, never re-derived', () => {

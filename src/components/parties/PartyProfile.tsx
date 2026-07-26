@@ -30,6 +30,11 @@ import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
 import { haptic } from '@/lib/haptic'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { computeStatementRunningBalance } from '@/lib/statement-balance'
+import {
+  buildStatementRows as buildStatementRowsShared,
+  computeStatementOpening,
+  computeAgeingBuckets,
+} from '@/lib/statement-rows'
 import { readError } from '@/lib/read-error'
 import { invalidateMoneyCaches } from '@/lib/invalidate-money-caches'
 
@@ -295,28 +300,18 @@ export function PartyProfile() {
    * one expects it; so does a shopkeeper asking "where did this figure come
    * from".
    */
-  const statementOpeningBalance = (): number => {
-    if (statement.length === 0) return stats?.balance ?? 0
-    const oldest: any = statement[statement.length - 1]
-    return roundMoney((oldest.runningBalance ?? 0) - (oldest.delta ?? 0))
-  }
+  // 🔒 2026-07-26: delegates to the shared helper. This logic existed TWICE —
+  // here and in src/lib/statement-rows.ts — and the copies had already drifted
+  // (the lib read the NEWEST entry as "oldest"). Nothing imported the lib, so
+  // its 31 "behavioral tests" were passing against code that never shipped.
+  // One definition now, exercised by both the app and those tests.
+  const statementOpeningBalance = (): number =>
+    computeStatementOpening(statement as any, stats?.balance ?? 0)
 
-  const buildStatementRows = () => [...statement].reverse().map((entry: any, i: number) => {
-    const isPayment = entry.isPayment
-    const particulars = isPayment
-      ? (entry.type === 'payment-received' ? 'Payment received' : 'Payment made')
-      : (entry.invoiceNo || entry.type)
-    const delta = entry.delta
-    return {
-      index: i + 1,
-      date: formatDate(entry.date),
-      particulars,
-      // Khata convention: debit increases what they owe, credit reduces it.
-      debit: delta > 0 ? Math.abs(delta) : 0,
-      credit: delta < 0 ? Math.abs(delta) : 0,
-      balance: entry.runningBalance,
-    }
-  })
+  // 🔒 2026-07-26: single definition (see the note on statementOpeningBalance).
+  // The shared helper reverses newest-first → oldest-first, which is the
+  // reading order of a printed khata.
+  const buildStatementRows = () => buildStatementRowsShared(statement as any)
 
   /**
    * How much of this party's balance was already settled INSIDE the bills
@@ -528,32 +523,12 @@ export function PartyProfile() {
         // (true per-invoice aging needs payment-to-invoice allocation, which
         // this app's single Payment stream doesn't record — same caveat as
         // DebtAgingReport).
-        const now = Date.now()
-        const buckets = { current: 0, overdue: 0, serious: 0, critical: 0 }
-        // Walk the statement BACKWARD: each sale/credit-note row contributes
-        // its delta (if positive — i.e. increased what they owe) to the bucket
-        // determined by its age. Stop when the running balance hits 0.
-        let remaining = Math.abs(closing.closing)
-        for (let i = statement.length - 1; i >= 0 && remaining > 0.005; i--) {
-          const entry: any = statement[i]
-          if (entry.isPayment) continue  // payments reduce the balance, don't age
-          if (!entry.delta || entry.delta <= 0) continue  // only positive deltas (sales, debit notes)
-          const entryDate = new Date(entry.date)
-          if (isNaN(entryDate.getTime())) continue
-          const days = Math.max(0, Math.floor((now - entryDate.getTime()) / (1000 * 60 * 60 * 24)))
-          // The contribution is the smaller of: this entry's delta, or what's
-          // still unexplained. (Earlier entries only contribute if the later
-          // entries don't fully account for the closing balance.)
-          const contribution = Math.min(Math.abs(entry.delta), remaining)
-          if (days <= 30) buckets.current += contribution
-          else if (days <= 60) buckets.overdue += contribution
-          else if (days <= 90) buckets.serious += contribution
-          else buckets.critical += contribution
-          remaining -= contribution
-        }
-        // If there's still unaccounted balance (e.g. opening balance), age it
-        // as "current" — conservative, matches DebtAgingReport's treatment.
-        if (remaining > 0.005) buckets.current += remaining
+        // 🔒 2026-07-26: single definition — see the note on
+        // statementOpeningBalance. The shared helper walks the newest-first
+        // statement backward, which allocates OLDEST-FIRST (the FIFO rule
+        // ageing requires: outstanding money is owed against the oldest
+        // unpaid bills).
+        const buckets = computeAgeingBuckets(statement as any, closing.closing)
 
         // Draw the ageing mini-table (right-aligned, 4 columns).
         y += 8

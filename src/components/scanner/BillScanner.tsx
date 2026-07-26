@@ -15,6 +15,7 @@ import {
   ScanLine, Upload, Camera, Sparkles, X, Check, Loader2,
   ImageIcon, FileText, ArrowRight, Trash2, ShoppingCart, Truck, Plus, AlertTriangle,
 } from 'lucide-react'
+import { enrichScannedItems as enrichScannedItemsShared } from '@/lib/scanner-enrich'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { track, EVENTS } from '@/lib/analytics'
 import { useSubscription } from '@/hooks/use-subscription'
@@ -218,48 +219,14 @@ export function BillScanner() {
   //      the rate from it (per the normalized unit). This self-corrects any
   //      per-gm misreading by the AI.
   //   4. Fill gstRate/price from the catalog when the bill doesn't show them.
-  const enrichScannedItems = (rawItems: any[]): any[] => {
-    return (rawItems || []).map((item: any) => {
-      const nameLower = (item.name || item.productName || '').toLowerCase().trim()
-      const matched = nameLower
-        ? catalogProducts.find((p: any) => p.name?.toLowerCase() === nameLower) ||
-          catalogProducts.find((p: any) =>
-            p.name?.toLowerCase().includes(nameLower) || nameLower.includes(p.name?.toLowerCase()),
-          )
-        : null
-
-      const resolved = resolveEnteredQuantity(
-        Number(item.quantity) || 0,
-        item.unit || matched?.unit || 'pcs',
-        matched?.unit,
-      )
-      const qty = roundMoney(resolved.quantity)
-      const gstRate = Number(item.gstRate) || matched?.gstRate || 0
-      let unitPrice = Number(item.unitPrice) || 0
-      const printedTotal = Number(item.total) || 0
-
-      if (printedTotal > 0 && qty > 0) {
-        const expected = qty * unitPrice * (1 + gstRate / 100)
-        const mismatch = Math.abs(expected - printedTotal) > Math.max(1, printedTotal * 0.2)
-        if (unitPrice <= 0 || mismatch) {
-          // Trust the printed line total; derive the per-unit rate from it.
-          unitPrice = roundMoney(printedTotal / (1 + gstRate / 100) / qty)
-        }
-      } else if (unitPrice <= 0 && matched) {
-        unitPrice = billType === 'sale' ? (matched.salePrice || 0) : (matched.purchasePrice || 0)
-      }
-
-      return {
-        ...item,
-        productId: matched?.id || item.productId || undefined,
-        quantity: qty,
-        unit: resolved.unit,
-        unitPrice,
-        gstRate,
-        total: roundMoney(qty * unitPrice * (1 + gstRate / 100)),
-      }
-    })
-  }
+  // ὑ2 2026-07-26: delegates to the shared helper in lib/scanner-enrich.ts.
+  // This function existed TWICE — inline here and in the lib — with identical
+  // logic. Nothing imported the lib, so its behavioural tests were validating a
+  // copy that never shipped, and any fix to one copy would have silently missed
+  // the other. This is the money-sensitive path (unit normalisation and the
+  // "trust the printed line total" rule), so one definition matters.
+  const enrichScannedItems = (rawItems: any[]): any[] =>
+    enrichScannedItemsShared(rawItems, catalogProducts, billType as 'sale' | 'purchase')
 
   const handleFile = async (file: File) => {
     // Subscription gating — re-enabled. Free users get 5 scans/month,
