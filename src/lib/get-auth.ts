@@ -81,6 +81,7 @@ export async function getAuthContext(): Promise<{
   actingUserId: string | null  // 🔒 V13 L4: the actual logged-in user (for createdByUserId)
   role: string
   permissions: any
+  isImpersonated: boolean  // 🔒 2026-07-26: true when an admin is logged in AS this user
   error?: NextResponse
 }> {
   const session = await getServerSession(authOptions)
@@ -91,6 +92,7 @@ export async function getAuthContext(): Promise<{
       actingUserId: null,
       role: 'owner',
       permissions: null,
+      isImpersonated: false,
       error: NextResponse.json({ error: 'Unauthorized — please sign in' }, { status: 401 }),
     }
   }
@@ -99,8 +101,9 @@ export async function getAuthContext(): Promise<{
   const actingUserId = session.user.id  // 🔒 V13 L4: the actual user (owner or staff)
   const role = session.user.role || 'owner'
   const permissions = session.user.permissions
+  const isImpersonated = (session.user as any).isImpersonated === true
 
-  return { userId, actingUserId, role, permissions }
+  return { userId, actingUserId, role, permissions, isImpersonated }
 }
 
 /**
@@ -108,12 +111,13 @@ export async function getAuthContext(): Promise<{
  * Staff AND CA members get 403 regardless of permissions.
  * V17-Ext Tier 3: CA is also blocked from owner-only routes.
  */
-export async function getAuthUserIdOwnerOnly(): Promise<{ userId: string | null; error?: NextResponse }> {
+export async function getAuthUserIdOwnerOnly(): Promise<{ userId: string | null; isImpersonated: boolean; error?: NextResponse }> {
   const session = await getServerSession(authOptions)
 
   if (!session?.user?.id) {
     return {
       userId: null,
+      isImpersonated: false,
       error: NextResponse.json({ error: 'Unauthorized — please sign in' }, { status: 401 }),
     }
   }
@@ -122,6 +126,7 @@ export async function getAuthUserIdOwnerOnly(): Promise<{ userId: string | null;
   if (role === 'staff' || role === 'ca') {
     return {
       userId: null,
+      isImpersonated: false,
       error: NextResponse.json({
         error: 'Forbidden',
         message: 'Only the shop owner can perform this action.',
@@ -130,7 +135,14 @@ export async function getAuthUserIdOwnerOnly(): Promise<{ userId: string | null;
   }
 
   const userId = session.user.ownerId || session.user.id
-  return { userId }
+  // 🔒 2026-07-26: exposed so sensitive owner-only routes can additionally
+  // block an impersonating admin (assertNotImpersonated). NOT blocked here
+  // wholesale — some owner-only routes are READS support legitimately needs
+  // (bootstrap, subscription/status, ai-usage); blocking bootstrap would break
+  // impersonation entirely. The block is applied per-route on the mutating /
+  // exporting ones.
+  const isImpersonated = (session.user as any).isImpersonated === true
+  return { userId, isImpersonated }
 }
 
 /**
@@ -157,6 +169,42 @@ export function assertCanWrite(authCtx: {
     return NextResponse.json({
       error: 'Read-only access',
       message: 'Your CA account has read-only access. Ask the shop owner to make changes.',
+    }, { status: 403 })
+  }
+  return null
+}
+
+/**
+ * 🔒 IMPERSONATION GUARDRAIL (2026-07-26, option A).
+ *
+ * When an admin is logged in AS a shopkeeper (via /api/impersonate), the
+ * session is a full session for that user — deliberately, so support can see
+ * and fix ordinary ledger data. But some actions are irreversible or affect
+ * the user's ACCESS to their own account, and an admin must never take them on
+ * a user's behalf:
+ *
+ *   - deleting the account or wiping all data
+ *   - changing the login credentials (password / email / phone)
+ *   - exporting the user's entire dataset
+ *   - altering standing configuration that redirects data (backup targets,
+ *     forwarding, integrations)
+ *
+ * These stay the real owner's decision. Ordinary ledger writes are allowed so
+ * impersonation remains useful for support. Every impersonated action is still
+ * audit-logged (see /api/impersonate).
+ *
+ * Usage on a sensitive route, AFTER the auth + write checks:
+ *   const imp = assertNotImpersonated(authCtx)
+ *   if (imp) return imp
+ */
+export function assertNotImpersonated(authCtx: {
+  isImpersonated?: boolean
+}): NextResponse | null {
+  if (authCtx.isImpersonated) {
+    return NextResponse.json({
+      error: 'Not allowed while impersonating',
+      message:
+        'This action changes account access or is irreversible, so it can only be done by the account owner — not by support acting on their behalf.',
     }, { status: 403 })
   }
   return null

@@ -1,13 +1,18 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getAuthUserIdOwnerOnly } from '@/lib/get-auth'
+import { getAuthUserIdOwnerOnly, assertNotImpersonated } from '@/lib/get-auth'
 import { apiError } from '@/lib/api-error'
 
 // POST /api/seed - seed demo data
 export async function POST() {
   try {
-    const { userId, error } = await getAuthUserIdOwnerOnly()
+    const { userId, error, isImpersonated } = await getAuthUserIdOwnerOnly()
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // 🔒 IMPERSONATION GUARD (2026-07-26): this route wipes or seeds all data,
+    // so it stays the real owner's decision — an admin acting as them is
+    // refused. Ordinary ledger writes remain allowed while impersonating.
+    const impErr = assertNotImpersonated({ isImpersonated })
+    if (impErr) return impErr
 
     // Use dynamic import to avoid path issues
     const { seedDemoData } = await import('@/lib/seed')
@@ -41,8 +46,12 @@ export async function GET() {
 // DELETE /api/seed - wipe all data for this user
 export async function DELETE() {
   try {
-    const { userId, error } = await getAuthUserIdOwnerOnly()
+    const { userId, error, isImpersonated } = await getAuthUserIdOwnerOnly()
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // 🔒 IMPERSONATION GUARD (2026-07-26): this wipes all demo/seed data,
+    // an irreversible action that stays the real owner's decision.
+    const impErr = assertNotImpersonated({ isImpersonated })
+    if (impErr) return impErr
 
     // 🔒 V26 M2 FIX: Wrap all deletes in a $transaction (was: sequential,
     // non-atomic — a failure midway left a half-wiped shop). Also added
