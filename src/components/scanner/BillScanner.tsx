@@ -385,37 +385,43 @@ export function BillScanner() {
         setScanned(null)
       }
       try {
-        // Step 1: Upload to Cloudinary (gets a URL, stores image for future)
-        // 🔒 User request: removed the "Uploading image..." and "Image uploaded!
-        // Scanning with AI..." info toasts — they were noisy. The scanning
-        // spinner + progress bar already show the user what's happening.
-        // Error toasts are kept (the user needs to know when something fails).
-        const uploadRes = await offlineFetch('/api/upload-bill', {
+        // 🔒 LATENCY (restored 2026-07-26). The Cloudinary upload and the AI
+        // scan used to run STRICTLY IN SEQUENCE — upload finished (~2.7s) and
+        // only then did the scan start (~3-4s), so the shopkeeper waited for
+        // the SUM while holding a phone over a bill. An integration merge
+        // silently reverted this to sequential; it is put back here.
+        //
+        // The scan never needs the upload: it accepts base64 directly, and the
+        // Cloudinary URL only serves to KEEP the bill image against the saved
+        // transaction — which matters after the scan, not before. `uploadData`
+        // is not read anywhere downstream, so nothing is lost by not awaiting
+        // it on the critical path. A failed upload no longer aborts the scan.
+        //
+        // Feeding base64 (not the URL) also routes the image through the
+        // server's grayscale + deskew preprocessing, which the URL path skips.
+        track(EVENTS.AI_SCAN_ATTEMPT, { billType, scanLang, hasImageUrl: false })
+
+        const uploadPromise = offlineFetch('/api/upload-bill', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ imageBase64: base64 }),
         })
+          .then(async (r) => (r.ok ? await r.json().catch(() => null) : null))
+          .catch(() => null)
 
-        if (!uploadRes.ok) {
-          const uploadErr = await uploadRes.json().catch(() => ({}))
-          sonnerToast.error('Image upload failed', {
-            description: `HTTP ${uploadRes.status}: ${uploadErr.error || uploadErr.statusText || 'Unknown error'}`,
-            duration: 8000,
-          })
-          return
-        }
-
-        const uploadData = await uploadRes.json()
-
-        // Step 2: Send to AI scanner (use Cloudinary URL if upload succeeded, else base64)
-        const imageUrl = uploadData.success ? uploadData.url : null
-        // 🔒 V20-025: Track scan attempt
-        track(EVENTS.AI_SCAN_ATTEMPT, { billType, scanLang, hasImageUrl: !!imageUrl })
-        const scanRes = await offlineFetch('/api/scan-bill', {
+        const scanPromise = offlineFetch('/api/scan-bill', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(imageUrl ? { imageUrl, billType, scanLang } : { imageBase64: base64, billType, scanLang }),
+          body: JSON.stringify({ imageBase64: base64, billType, scanLang }),
         })
+
+        const [uploadData, scanRes] = await Promise.all([uploadPromise, scanPromise])
+
+        if (!uploadData?.success) {
+          // Non-fatal: the scan is what the user is waiting for. The bill image
+          // simply is not kept against the transaction this time.
+          console.warn('[BillScanner] Bill image upload failed; scan continued without a stored copy')
+        }
 
         // Handle 402 quota exceeded — show upgrade prompt instead of generic error
         if (scanRes.status === 402) {
@@ -861,23 +867,12 @@ export function BillScanner() {
                 </Button>
               </div>
 
-              {/* 🔒 User request: show AI model + token usage so you can verify
-                  which model was used and how many tokens each scan costs.
-                  Small, subtle, below the header. Only shows if aiUsage exists. */}
-              {scanned.aiUsage && (
-                <div className="mt-1 text-3xs text-white/50 flex items-center gap-3 flex-wrap">
-                  <span>🤖 {scanned.aiUsage.model || 'unknown'}</span>
-                  {scanned.aiUsage.totalTokens > 0 && (
-                    <span>· {scanned.aiUsage.totalTokens} tokens</span>
-                  )}
-                  {scanned.aiUsage.durationMs > 0 && (
-                    <span>· {(scanned.aiUsage.durationMs / 1000).toFixed(1)}s</span>
-                  )}
-                  {scanned.aiUsage.costInr > 0 && (
-                    <span>· ₹{scanned.aiUsage.costInr.toFixed(4)}</span>
-                  )}
-                </div>
-              )}
+              {/* 🔒 2026-07-26 (Rahul): the AI model, token count, scan time and
+                  cost are NOT shown to shopkeepers. Which model runs and what it
+                  costs is the operator's concern, not the user's — the card
+                  should read like the app did the work, not a third-party AI.
+                  The data still arrives in the response (aiUsage) and is logged
+                  server-side for cost monitoring; it is simply not rendered. */}
 
               {/* 🔒 AI-5: Needs review banner (AI total ≠ computed total) */}
               {scanned.needsReview && (
