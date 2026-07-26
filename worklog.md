@@ -9481,3 +9481,39 @@ Stage Summary:
 - The 7-day window where a user could keep their old plan's features after being downgraded/banned is now closed. Revocation happens within ~5 seconds (Redis TTL) or instantly (if cache invalidation succeeds).
 - SECURITY: tokenVersion bump is the primary mechanism; Redis cache invalidation is a defense-in-depth speedup. Even if Redis is down, the 5s TTL ensures revocation within 5 seconds.
 - This is the PRAGMATIC fix (Phase D.4). The full API-based approach (Phase D.4-future: admin calls main app's POST /api/admin/upgrade-plan endpoint with ADMIN_API_SECRET, main app creates Subscription row + sends email + logs to AuditLog) is deferred — it's a larger change and the pragmatic fix already closes the security gap.
+
+---
+Task ID: integration-phase-d5
+Agent: main
+Task: Execute Phase D.5 (schema alignment) — mirror missing main-app models in admin schema so both schemas are identical for shared tables.
+
+Work Log:
+- Re-cloned the admin app (local checkout had been cleaned up between sessions).
+- Diffed the two schemas: found 10 MISSING models + 17 models with field differences (54 of 55 models total needed updating). The admin schema was a stale copy from many migrations ago — missing paise migration (Float vs Int), soft deletes, e-invoicing fields, bank reconciliation, document vault, GST filing, field change log, password reset tokens, invoice counter, etc.
+- First attempt: replaced ALL models with main app's versions. This caused 17 NEW TypeScript errors because admin-intelligence models (WebhookEndpoint, Competitor, Experiment, etc.) in the main app's schema are MISSING the relations (deliveries, updates, assignments) that the admin app's code expects. The main app never queries these tables, so its schema doesn't define the relations.
+- Second attempt (smart merge): domain models come from MAIN app (latest fields + migrations); admin-intelligence models keep ADMIN app's version (preserves admin-specific relations).
+  - DOMAIN MODELS (29, from main): User, Shop, Product, Party, Transaction, TransactionItem, Payment, Setting, Subscription, UsageTracking, AuditLog, ScanComparison, AiUsageLog, Referral, Announcement, FeatureFlag, SupportTicket, NpsFeedback, InvoiceCounter, Document, PasswordResetToken, FieldChangeLog, GstReturn, Gstr1Snapshot, Gstr2bImport, Gstr2bInvoice, BankStatement, BankTransaction, ImpersonationToken
+  - ADMIN-INTEL MODELS (26, from admin): AdminUser, AdminAction, DailyStats, Anomaly, FraudRule, FraudAlert, BulkJob, ChurnPrediction, RevenueSchedule, Experiment, ExperimentAssignment, Competitor, CompetitorUpdate, Campaign, CampaignStep, NotificationTemplate, NotificationLog, Incident, IncidentUpdate, ApiKey, WebhookEndpoint, WebhookDelivery, UserSegmentCache, NpsSurveyConfig, DataExportRequest, SupplierReport
+- Added alignment comment at top of admin schema explaining the merge strategy + the admin-intelligence asymmetry.
+- Preserved the D.1 FeatureFlagRule removal comment.
+- Verification:
+  - npx prisma generate: OK (55 models, all types correct)
+  - npx tsc --noEmit: 5 pre-existing errors, 0 NEW (verified via git stash + compare — exact same 5 errors before and after D.5). The 5 errors are about a 'partner' relation removed when Partner model was deleted (lending pipeline) — pre-existing bugs in admin code, not schema.
+  - npm run build: ✓ Compiled successfully in 22.4s
+  - Domain model field-diff check: 0 differences (all 29 aligned) ✅
+  - Missing model check: 0 missing (admin has all 55 from main) ✅
+  - FeatureFlagRule check: correctly absent (D.1 preserved) ✅
+- Shipped: PR #8 (branch integration-phase-d5-schema-alignment) → squash-merged to main (commit 0dc2f31). Vercel deployed successfully.
+- Production verification:
+  - Admin app health → 200 ✓
+  - Login probe (correct creds) → {"reason":"2FA_REQUIRED"} ✓ (DB + auth + schema all work)
+  - /api/admin/users (no session) → 401 ✓
+
+Stage Summary:
+- Phase D.5 complete. PR #8 merged. Admin schema now has correct types for ALL shared tables.
+- 29 domain models aligned with main app (were drifted across 54 of 55 models).
+- 10 previously-missing models now present (BankStatement, BankTransaction, Document, FieldChangeLog, GstReturn, Gstr1Snapshot, Gstr2bImport, Gstr2bInvoice, InvoiceCounter, PasswordResetToken).
+- 0 new TypeScript errors. 5 pre-existing errors remain (unrelated to schema — they're about a deleted 'partner' relation in admin code).
+- NO MIGRATION needed — this is a type-level change only. The main app owns all migrations; the admin app's prisma generate picks up the types from this schema.
+- The admin app's Prisma client now has correct types for all shared tables, including: paise-based money fields (Int instead of Float), soft-delete columns (deletedAt), e-invoicing fields (IRN, e-way bill), bank reconciliation tables, document vault, GST filing tables, field change log, password reset tokens, invoice counter, tokenVersion, ImpersonationToken.
+- This unblocks future admin features that need to query these tables (e.g., "show me a user's GST returns" or "show me a user's document vault").
