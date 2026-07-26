@@ -87,6 +87,8 @@ export function useRecurringEntries() {
     let totalAmount = 0
     // 🔒 P6-7 (Phase 6): Track failed entries so the user knows money didn't post.
     const failed: Array<{ category: string; amount: number }> = []
+    // What actually posted, so the success toast lists only real entries.
+    const posted: Array<{ category: string; type: string }> = []
 
     for (const entry of due) {
       try {
@@ -107,12 +109,28 @@ export function useRecurringEntries() {
         if (r.ok) {
           created++
           totalAmount += entry.amount
+          posted.push({ category: entry.category, type: entry.type })
           // Update lastRunMonth
           const updated = read().map(e =>
             e.id === entry.id ? { ...e, lastRunMonth: currentMonth } : e
           )
           write(updated)
           setEntries(updated)
+        } else {
+          // AUDIT 2026-07-26: the P6-7 fix below only caught NETWORK failures.
+          // offlineFetch RESOLVES with the Response on a 4xx/5xx and throws
+          // only when the request never completes, so a SERVER rejection —
+          // period locked, validation, quota — skipped the success block AND
+          // never reached the catch. The entry vanished in total silence: no
+          // success toast (created stayed 0), no failure toast (failed stayed
+          // empty). That is precisely the "money silently lost" case P6-7 set
+          // out to fix, and it is the likelier failure of the two: a locked
+          // period rejects every rent and salary entry for the month.
+          const detail = await r.text().catch(() => '')
+          failed.push({ category: entry.category, amount: entry.amount })
+          console.error(
+            `[recurring] server rejected: ${entry.category} ₹${entry.amount} — HTTP ${r.status} ${detail.slice(0, 120)}`,
+          )
         }
       } catch (e: any) {
         // 🔒 P6-7 (Phase 6): Was: silent skip ("Failed — will retry next load").
@@ -139,7 +157,10 @@ export function useRecurringEntries() {
       }).format(totalAmount)
       sonnerToast.success(
         `${created} recurring ${created === 1 ? 'entry' : 'entries'} posted — ${formattedTotal}`,
-        { description: due.map(e => `${e.category}: ${e.type}`).slice(0, 3).join(' · ') }
+        // AUDIT 2026-07-26: was `due.map(...)` — every entry that was DUE,
+        // including ones that failed. "1 entry posted" listing three
+        // categories is the kind of small lie that erodes trust in a ledger.
+        { description: posted.map(e => `${e.category}: ${e.type}`).slice(0, 3).join(' · ') }
       )
     }
     // 🔒 P6-7 (Phase 6): Show failure toast if any recurring entries didn't post.
