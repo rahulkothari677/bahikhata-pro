@@ -9442,3 +9442,42 @@ Stage Summary:
   8. Founder clicks Exit → signOut() → back to login
 - Security: 256-bit token, only hash stored, 5-min expiry, atomic single-use, 1-hour session TTL, tokenVersion revocation still works, full audit trail in both apps (AdminAction + AuditLog) with tokenHash correlation.
 - Two bugs found + fixed during integration: (1) NextAuth catch-all routing conflict, (2) squash-merge file-move loss. Both resolved.
+
+---
+Task ID: integration-phase-d4
+Agent: main
+Task: Execute Phase D.4 (pragmatic plan-change fix) — bump tokenVersion on admin plan-change + ban + delete operations so the user's existing JWT is invalidated immediately.
+
+Work Log:
+- Re-cloned the admin app (the local checkout had been cleaned up between sessions).
+- Read the 2 admin routes that write to the shared User table:
+  - PATCH /api/admin/users/[id] (single-user plan change)
+  - POST /api/admin/bulk (3 write actions: change_plan, ban, delete)
+- Confirmed the admin app's User model was MISSING the tokenVersion field (Phase 5 research finding). Added it to the admin schema with explanatory comment.
+- Created src/lib/token-version-cache.ts helper:
+  - invalidateTokenVersionCache(userId) — deletes tv:{userId} from shared Redis
+  - invalidateTokenVersionCacheBulk(userIds) — pipeline delete (one round-trip)
+  - Both are no-ops if Redis is not configured (5s TTL handles it naturally)
+  - Uses the SAME Upstash Redis instance as the main app (shared cache)
+- Updated PATCH /api/admin/users/[id]: added tokenVersion: { increment: 1 } to db.user.update + calls invalidateTokenVersionCache(id) after. Audit log now records the new tokenVersion value.
+- Updated POST /api/admin/bulk change_plan action: added tokenVersion increment to updateMany + calls invalidateTokenVersionCacheBulk(userIds). Response + audit log include tokenVersionBumped: true.
+- Updated POST /api/admin/bulk ban action: same as change_plan (tokenVersion increment + cache invalidation). Banned users now lose access instantly instead of keeping their old plan's features for up to 7 days.
+- Updated POST /api/admin/bulk delete action: no tokenVersion bump needed (user is gone — main app returns null for non-existent users = revoke), but still invalidates the Redis cache to ensure the next request sees the deletion immediately (vs waiting up to 5s for the TTL).
+- Wrapped all DB writes with withNeonRetry (Neon cold-start resilience — consistent with the auth-flow fix from Phase D.3).
+- Verification: npx prisma generate OK (tokenVersion type now available), npx tsc --noEmit 5 pre-existing errors 0 new, npm run build ✓ in 20.6s.
+- Shipped: PR #7 (branch integration-phase-d4-tokenversion-bump) → squash-merged to main (commit 4f5830e). Vercel deployed successfully.
+- Production verification:
+  - Admin app health → 200 ✓
+  - Login probe (correct creds) → {"reason":"2FA_REQUIRED"} ✓ (DB + auth still work after schema change)
+  - /api/admin/users (no session) → 401 ✓
+  - /api/admin/bulk (no session) → 401 ✓
+
+Stage Summary:
+- Phase D.4 complete. PR #7 merged. 3 admin write operations now properly revoke the user's session:
+  - Single plan change (PATCH /api/admin/users/[id]) — tokenVersion bump + cache invalidation
+  - Bulk plan change (POST /api/admin/bulk change_plan) — same
+  - Bulk ban (POST /api/admin/bulk ban) — same
+  - Bulk delete (POST /api/admin/bulk delete) — cache invalidation only (user is gone)
+- The 7-day window where a user could keep their old plan's features after being downgraded/banned is now closed. Revocation happens within ~5 seconds (Redis TTL) or instantly (if cache invalidation succeeds).
+- SECURITY: tokenVersion bump is the primary mechanism; Redis cache invalidation is a defense-in-depth speedup. Even if Redis is down, the 5s TTL ensures revocation within 5 seconds.
+- This is the PRAGMATIC fix (Phase D.4). The full API-based approach (Phase D.4-future: admin calls main app's POST /api/admin/upgrade-plan endpoint with ADMIN_API_SECRET, main app creates Subscription row + sends email + logs to AuditLog) is deferred — it's a larger change and the pragmatic fix already closes the security gap.
