@@ -1010,7 +1010,28 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
                       const relinked = result.results.relinked || 0
                       const unmatched = result.results.unmatched || 0
                       const stockRebuilt = result.results.stockRebuilt || 0
-                      if (quarantined > 0) {
+                      // AUDIT 2026-07-26: skipped rows were counted by the server and
+                      // logged to the console, but NEVER shown here. A restore that
+                      // silently drops payments reports "Restore complete!" while every
+                      // affected party now appears to owe MORE than they do — the
+                      // shopkeeper chases customers for money already paid. Payments and
+                      // parties are called out by name because they move balances.
+                      const skippedPayments = result.results.payments?.skipped || 0
+                      const skippedParties = result.results.parties?.skipped || 0
+                      const skippedProducts = result.results.products?.skipped || 0
+                      const skippedTotal = skippedPayments + skippedParties + skippedProducts
+                      if (skippedPayments > 0) {
+                        sonnerToast.warning(
+                          `Restore finished — ${skippedPayments} payment(s) NOT imported`,
+                          {
+                            description:
+                              `Those payments are missing, so the affected parties will show a HIGHER balance than they really owe. ` +
+                              `Check those parties before chasing anyone for money. ` +
+                              `Imported — products: ${result.results.products.imported}, transactions: ${result.results.transactions.imported}, payments: ${result.results.payments?.imported ?? 0}.`,
+                            duration: 20000,
+                          },
+                        )
+                      } else if (quarantined > 0) {
                         sonnerToast.warning(`Restore finished — ${quarantined} transaction(s) NOT imported`, {
                           description: `They failed integrity checks (invoice totals don't match their items — possibly an edited or corrupted backup). Imported: ${result.results.transactions.imported}. First issues: ${(result.results.transactions.quarantineReasons || []).slice(0, 3).join('; ')}`,
                           duration: 20000,
@@ -1021,10 +1042,18 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
                           duration: 15000,
                         })
                       } else {
-                        sonnerToast.success('Restore complete!', {
-                          description: `Products: ${result.results.products.imported}. Transactions: ${result.results.transactions.imported}. Stock rebuilt for ${stockRebuilt} products. ${relinked} items re-linked to catalog.`,
-                          duration: 10000,
-                        })
+                        sonnerToast.success(
+                          skippedTotal > 0 ? `Restore complete — ${skippedTotal} row(s) skipped` : 'Restore complete!',
+                          {
+                            description:
+                              `Products: ${result.results.products.imported}. Transactions: ${result.results.transactions.imported}. ` +
+                              `Stock rebuilt for ${stockRebuilt} products. ${relinked} items re-linked to catalog.` +
+                              (skippedTotal > 0
+                                ? ` Skipped — parties: ${skippedParties}, products: ${skippedProducts}.`
+                                : ''),
+                            duration: skippedTotal > 0 ? 15000 : 10000,
+                          },
+                        )
                       }
                     } catch (err: any) {
                       // 🔒 V26 P7-1: On timeout/failure, the session marker persists

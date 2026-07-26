@@ -103,6 +103,9 @@ export function BulkRemindersModal({ open, onClose }: BulkRemindersModalProps) {
     // Pre-generate all links in one batch (before any window.open)
     const selectedParties = partiesWithDues.filter((p: any) => selected.has(p.id))
     const links: { partyId: string; url: string; name: string }[] = []
+    // Parties the server refused a reminder for — reported below rather than
+    // silently missing from the run.
+    const skippedNames: string[] = []
     for (const party of selectedParties) {
       try {
         const r = await offlineFetch('/api/whatsapp-reminder', {
@@ -110,11 +113,20 @@ export function BulkRemindersModal({ open, onClose }: BulkRemindersModalProps) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ partyId: party.id }),
         })
-        const result = await r.json()
-        if (result.whatsappUrl) {
+        // AUDIT 2026-07-26: offlineFetch resolves on a 4xx/5xx, so a refused
+        // party produced a body with no whatsappUrl and was dropped from the
+        // list without a word. The shopkeeper is told "N reminders ready",
+        // works through them, and believes every selected customer was chased
+        // — while some were never contacted at all. In a collections flow that
+        // is money not recovered.
+        const result = await r.json().catch(() => ({} as any))
+        if (r.ok && result.whatsappUrl) {
           links.push({ partyId: party.id, url: result.whatsappUrl, name: party.name })
+        } else {
+          skippedNames.push(party.name)
         }
       } catch (e: any) {
+        skippedNames.push(party.name)
         sonnerToast.error(`Couldn't generate reminder for ${party.name}`)
       }
     }
@@ -123,6 +135,21 @@ export function BulkRemindersModal({ open, onClose }: BulkRemindersModalProps) {
       sonnerToast.error('No reminders could be generated')
       setSending(false)
       return
+    }
+
+    // AUDIT 2026-07-26: name the parties that got no reminder. Without this the
+    // run just quietly covers fewer customers than the shopkeeper selected.
+    if (skippedNames.length > 0) {
+      sonnerToast.warning(
+        `${skippedNames.length} of ${selectedParties.length} could not be messaged`,
+        {
+          description:
+            `No reminder was generated for: ${skippedNames.slice(0, 5).join(', ')}` +
+            (skippedNames.length > 5 ? ` +${skippedNames.length - 5} more` : '') +
+            `. Contact them separately.`,
+          duration: 12000,
+        },
+      )
     }
 
     setReminderLinks(links)

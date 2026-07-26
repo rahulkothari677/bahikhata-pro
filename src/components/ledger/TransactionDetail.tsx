@@ -327,9 +327,19 @@ export function TransactionDetail() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ transactionId: txn.id }),
         })
-        const data = await r.json()
-        if (data.whatsappUrl) {
+        // AUDIT 2026-07-26: offlineFetch resolves on a 4xx/5xx, so a server
+        // rejection previously produced an error body with no whatsappUrl and
+        // this simply did nothing. The PDF had already downloaded and said so,
+        // leaving the user believing the invoice was sent when WhatsApp never
+        // opened. Say it plainly instead of failing quietly.
+        const data = await r.json().catch(() => ({} as any))
+        if (r.ok && data.whatsappUrl) {
           window.open(data.whatsappUrl, '_blank')
+        } else {
+          sonnerToast.warning('Invoice saved, but WhatsApp could not be opened', {
+            description: data?.message || data?.error || 'Share the downloaded PDF manually.',
+            duration: 8000,
+          })
         }
       }
     } catch (err: any) {
