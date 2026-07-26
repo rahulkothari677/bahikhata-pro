@@ -17,6 +17,8 @@
 process.env.DATABASE_URL = 'postgresql://dummy:dummy@localhost:5432/dummy'
 process.env.DIRECT_URL = 'postgresql://dummy:dummy@localhost:5432/dummy'
 
+import fs from 'fs'
+import path from 'path'
 import { jest } from '@jest/globals'
 import { db } from '@/lib/db'
 import { checkPaiseAnomalies } from '@/lib/reconciliation'
@@ -118,6 +120,29 @@ describe('checkPaiseAnomalies [Critical #3]', () => {
     expect(result.passed).toBe(false)
     expect(result.actual).toBe(3)
     expect(result.details).toMatch(/Payment: 1, Transaction: 1, Party: 0, Product: 1, Item: 0/)
+  })
+
+  test('every money comparison uses ABS(), so NEGATIVE corruption is caught', async () => {
+    // 🔒 2026-07-26 audit. Every comparison here was a bare `>`, which is blind
+    // to negative money — and two columns are legitimately negative:
+    //   - BankTransaction.amount is negative for debits (schema: "positive =
+    //     credit, negative = debit"), and `balance` can be overdrawn.
+    //   - Party.openingBalance is stored negative for suppliers
+    //     (Parties.tsx normalises supplier openings to -Math.abs).
+    // A supplier opening 100×-corrupted to -₹74,10,000, or a 100× bank debit,
+    // would sail past `> threshold` and never raise the nightly Sentry alert.
+    // Magnitude proves a 100× artifact, not sign.
+    const src = fs.readFileSync(path.join(process.cwd(), 'src/lib/reconciliation.ts'), 'utf8')
+    const fn = src.slice(src.indexOf('export async function checkPaiseAnomalies'))
+    const body = fn.slice(0, fn.indexOf('\n}'))
+
+    // No bare column comparison against the thresholds may remain.
+    expect(body).not.toMatch(/WHERE (?!ABS)["a-z][\w".]*\s*>\s*\$[23]/)
+    expect(body).not.toMatch(/OR (?!ABS)["a-z][\w".]*\s*>\s*\$[23]/)
+    // And every MAX() must be over a magnitude.
+    const maxes = body.match(/MAX\(([^)]*)\)/g) || []
+    expect(maxes.length).toBeGreaterThan(0)
+    for (const m of maxes) expect(m).toMatch(/MAX\(ABS\(/)
   })
 
   test('names the recovery endpoints in the failure details', async () => {

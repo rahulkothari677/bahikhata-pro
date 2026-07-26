@@ -326,6 +326,19 @@ export async function runReconciliationChecks(userId: string): Promise<Reconcili
 const SUSPICIOUS_PAISE = 100_000_000      // ₹10,00,000
 const ALMOST_CERTAIN_PAISE = 1_000_000_000 // ₹1,00,00,000
 
+/**
+ * 🔒 ABS() FIX (2026-07-26 audit). Every comparison here was a bare `>`, so the
+ * nightly 100× alarm was blind to NEGATIVE money:
+ *
+ *   - BankTransaction.amount is negative for debits (schema: "positive =
+ *     credit, negative = debit"), and `balance` can be overdrawn.
+ *   - Party.openingBalance is stored negative for suppliers (Parties.tsx:416
+ *     normalises supplier openings to -Math.abs).
+ *
+ * A supplier opening of -₹74,10,000 or a 100× bank debit would sail past
+ * `> threshold` and never raise the Sentry alert. Magnitude proves a 100×
+ * artifact, not sign — the same fix already applied to /api/debug/paise-audit.
+ */
 export async function checkPaiseAnomalies(userId: string): Promise<ReconciliationCheck> {
   // Payment + Transaction + Party + Product: scoped by userId, single query each.
   // TransactionItem: scoped via parent Transaction (no userId on the item).
@@ -334,41 +347,41 @@ export async function checkPaiseAnomalies(userId: string): Promise<Reconciliatio
   // or BankTransaction.amount would NOT have fired the nightly Sentry alert.
   const [paymentRow, txnRow, partyRow, productRow, itemRow, subRow, bankStmtRow, bankTxnRow] = await Promise.all([
     db.$queryRawUnsafe<Array<{ max: bigint | null; susp: bigint; certain: bigint }>>(
-      `SELECT MAX(amount)::bigint AS max,
-              COUNT(*) FILTER (WHERE amount > $2)::bigint AS susp,
-              COUNT(*) FILTER (WHERE amount > $3)::bigint AS certain
+      `SELECT MAX(ABS(amount))::bigint AS max,
+              COUNT(*) FILTER (WHERE ABS(amount) > $2)::bigint AS susp,
+              COUNT(*) FILTER (WHERE ABS(amount) > $3)::bigint AS certain
        FROM "Payment"
        WHERE "userId" = $1 AND "deletedAt" IS NULL`,
       userId, SUSPICIOUS_PAISE, ALMOST_CERTAIN_PAISE,
     ),
     db.$queryRawUnsafe<Array<{ max: bigint | null; susp: bigint; certain: bigint }>>(
-      `SELECT MAX("totalAmount")::bigint AS max,
-              COUNT(*) FILTER (WHERE "totalAmount" > $2)::bigint AS susp,
-              COUNT(*) FILTER (WHERE "totalAmount" > $3)::bigint AS certain
+      `SELECT MAX(ABS("totalAmount"))::bigint AS max,
+              COUNT(*) FILTER (WHERE ABS("totalAmount") > $2)::bigint AS susp,
+              COUNT(*) FILTER (WHERE ABS("totalAmount") > $3)::bigint AS certain
        FROM "Transaction"
        WHERE "userId" = $1 AND "deletedAt" IS NULL`,
       userId, SUSPICIOUS_PAISE, ALMOST_CERTAIN_PAISE,
     ),
     db.$queryRawUnsafe<Array<{ max: bigint | null; susp: bigint; certain: bigint }>>(
-      `SELECT MAX("openingBalance")::bigint AS max,
-              COUNT(*) FILTER (WHERE "openingBalance" > $2)::bigint AS susp,
-              COUNT(*) FILTER (WHERE "openingBalance" > $3)::bigint AS certain
+      `SELECT MAX(ABS("openingBalance"))::bigint AS max,
+              COUNT(*) FILTER (WHERE ABS("openingBalance") > $2)::bigint AS susp,
+              COUNT(*) FILTER (WHERE ABS("openingBalance") > $3)::bigint AS certain
        FROM "Party"
        WHERE "userId" = $1 AND "deletedAt" IS NULL`,
       userId, SUSPICIOUS_PAISE, ALMOST_CERTAIN_PAISE,
     ),
     db.$queryRawUnsafe<Array<{ max: bigint | null; susp: bigint; certain: bigint }>>(
-      `SELECT MAX("salePrice")::bigint AS max,
-              COUNT(*) FILTER (WHERE "salePrice" > $2)::bigint AS susp,
-              COUNT(*) FILTER (WHERE "salePrice" > $3)::bigint AS certain
+      `SELECT MAX(ABS("salePrice"))::bigint AS max,
+              COUNT(*) FILTER (WHERE ABS("salePrice") > $2)::bigint AS susp,
+              COUNT(*) FILTER (WHERE ABS("salePrice") > $3)::bigint AS certain
        FROM "Product"
        WHERE "userId" = $1 AND "deletedAt" IS NULL`,
       userId, SUSPICIOUS_PAISE, ALMOST_CERTAIN_PAISE,
     ),
     db.$queryRawUnsafe<Array<{ max: bigint | null; susp: bigint; certain: bigint }>>(
-      `SELECT MAX(ti."total")::bigint AS max,
-              COUNT(*) FILTER (WHERE ti."total" > $2)::bigint AS susp,
-              COUNT(*) FILTER (WHERE ti."total" > $3)::bigint AS certain
+      `SELECT MAX(ABS(ti."total"))::bigint AS max,
+              COUNT(*) FILTER (WHERE ABS(ti."total") > $2)::bigint AS susp,
+              COUNT(*) FILTER (WHERE ABS(ti."total") > $3)::bigint AS certain
        FROM "TransactionItem" ti
        JOIN "Transaction" t ON t."id" = ti."transactionId"
        WHERE t."userId" = $1 AND t."deletedAt" IS NULL`,
@@ -376,27 +389,27 @@ export async function checkPaiseAnomalies(userId: string): Promise<Reconciliatio
     ),
     // 🔒 P5-1: Subscription.amount (Razorpay payment amounts)
     db.$queryRawUnsafe<Array<{ max: bigint | null; susp: bigint; certain: bigint }>>(
-      `SELECT MAX(amount)::bigint AS max,
-              COUNT(*) FILTER (WHERE amount > $2)::bigint AS susp,
-              COUNT(*) FILTER (WHERE amount > $3)::bigint AS certain
+      `SELECT MAX(ABS(amount))::bigint AS max,
+              COUNT(*) FILTER (WHERE ABS(amount) > $2)::bigint AS susp,
+              COUNT(*) FILTER (WHERE ABS(amount) > $3)::bigint AS certain
        FROM "Subscription"
        WHERE "userId" = $1`,
       userId, SUSPICIOUS_PAISE, ALMOST_CERTAIN_PAISE,
     ),
     // 🔒 P5-1: BankStatement.totalCredits + totalDebits (use GREATEST of both)
     db.$queryRawUnsafe<Array<{ max: bigint | null; susp: bigint; certain: bigint }>>(
-      `SELECT GREATEST(MAX("totalCredits"), MAX("totalDebits"))::bigint AS max,
-              COUNT(*) FILTER (WHERE "totalCredits" > $2 OR "totalDebits" > $2)::bigint AS susp,
-              COUNT(*) FILTER (WHERE "totalCredits" > $3 OR "totalDebits" > $3)::bigint AS certain
+      `SELECT GREATEST(MAX(ABS("totalCredits")), MAX(ABS("totalDebits")))::bigint AS max,
+              COUNT(*) FILTER (WHERE ABS("totalCredits") > $2 OR ABS("totalDebits") > $2)::bigint AS susp,
+              COUNT(*) FILTER (WHERE ABS("totalCredits") > $3 OR ABS("totalDebits") > $3)::bigint AS certain
        FROM "BankStatement"
        WHERE "userId" = $1`,
       userId, SUSPICIOUS_PAISE, ALMOST_CERTAIN_PAISE,
     ),
     // 🔒 P5-1: BankTransaction.amount + balance (use GREATEST of both)
     db.$queryRawUnsafe<Array<{ max: bigint | null; susp: bigint; certain: bigint }>>(
-      `SELECT GREATEST(MAX(amount), MAX(balance))::bigint AS max,
-              COUNT(*) FILTER (WHERE amount > $2 OR balance > $2)::bigint AS susp,
-              COUNT(*) FILTER (WHERE amount > $3 OR balance > $3)::bigint AS certain
+      `SELECT GREATEST(MAX(ABS(amount)), MAX(ABS(balance)))::bigint AS max,
+              COUNT(*) FILTER (WHERE ABS(amount) > $2 OR ABS(balance) > $2)::bigint AS susp,
+              COUNT(*) FILTER (WHERE ABS(amount) > $3 OR ABS(balance) > $3)::bigint AS certain
        FROM "BankTransaction"
        WHERE "userId" = $1`,
       userId, SUSPICIOUS_PAISE, ALMOST_CERTAIN_PAISE,
