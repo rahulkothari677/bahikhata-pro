@@ -9552,3 +9552,42 @@ Stage Summary:
 - ALL 6 INTEGRATION PHASES (D.1-D.6) ARE NOW COMPLETE.
 - Integration plan fully executed. Both apps are aligned, secure, and documented.
 - User indicated they will next ask me to improve the main app — awaiting their specific instructions.
+
+---
+Task ID: ui-ux-audit-phase-1-3
+Agent: main
+Task: Deep UI/UX audit of the main app to find all issues preventing it from feeling like a "billion-dollar company app". User complained about: redundant New Sale buttons, boring business card, incomplete account section, no onboarding, can't make sale with no products.
+
+Work Log:
+- Analyzed 5 user screenshots via VLM (dashboard, business card, business profile x3). Confirmed all 5 user complaints are real.
+- Launched 3 parallel research agents (very thorough mode):
+  1. Dashboard + navigation audit — found 4 CRITICAL + 9 HIGH + 12 MEDIUM + 8 LOW issues
+  2. Business card + profile audit — found 6 CRITICAL + 8 HIGH + 8 MEDIUM + 7 LOW issues
+  3. Account + settings + onboarding audit — found 14 CRITICAL + 18 HIGH + 20 MEDIUM issues
+- Browser-tested the live app (login failed — password is for admin app, not main app — but research agents already covered everything).
+- Synthesized all findings into a comprehensive UI/UX Improvement Report (saved to /home/z/my-project/download/UI-UX-Improvement-Report.md).
+- Report covers: 5 headline issues (user's complaints, all confirmed), full issue list (33 CRITICAL+HIGH), 6-phase implementation plan, what's already good (keep these), 6 open questions for user, 6 guardrails (will NOT do without approval), file reference by phase.
+
+Key findings beyond user's complaints:
+- 2 SILENT BUGS: Business Health Score's "Stock Health" always 100/100 (lowStockCount never returned by API); Sales Trend chart has no empty state (renders blank with "0 points" badge)
+- DPDP Act compliance risk: No Delete Account button in UI (API exists but no UI)
+- Identity crisis: 3 different app names (EkBook / BahiKhata Pro / 3 package IDs) — Play Store submission blocked
+- 3.8s forced splash on EVERY load (even warm reloads) — power users lose 76+ seconds/day
+- Onboarding re-shows on every page reload until data added (skip only sets component state, not persistent)
+- Outside-click on onboarding silently creates shopName='My Shop' without consent
+- Logo uploaded for invoices does NOT appear on business card
+- "Download as image" promised in code comment but never implemented
+- "Share" button shares authenticated URL (recipients see login page)
+- Subscription section is a dead-end (no plan, no renewal, no cancel)
+- Security section is 100% "Coming Soon"
+- Logout silently destroys pending offline data
+- Multi-shop is a one-way trap (can create shops but can't switch)
+- Pricing FAQ wrong in 3 places (₹99 vs actual ₹299, wrong limits)
+- Mobile app can't work offline (loads live URL, not bundled)
+
+Stage Summary:
+- Research complete. UI/UX Improvement Report saved to /home/z/my-project/download/UI-UX-Improvement-Report.md (~600 lines).
+- Report identifies 33 CRITICAL+HIGH issues + 30+ MEDIUM/LOW issues across the app.
+- 6-phase implementation plan proposed: (1) Fix broken journey ~1 day, (2) Business card redesign ~1 week, (3) Dashboard+nav cleanup ~3 days, (4) Account+subscription ~3 days, (5) Profile+multishop ~2 days, (6) Mobile identity ~1 day.
+- 6 open questions require user input before any code changes.
+- Awaiting user review of the report + answers to open questions + direction on which phase to start with.
