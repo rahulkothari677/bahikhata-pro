@@ -34,10 +34,32 @@ describe('V26 Phase 8 NEW-3 — No swallowed errors in readError files', () => {
             // Skip intentional ignores
             if (lines[i].includes('/* ignore') || lines[i].includes('/* default') || lines[i].includes('/* skip')) continue
 
-            // Look ahead 5 lines for e?.message or e.message
+            // 🐛 FIX (audit 2026-07-27): skip an EMPTY catch body, `catch {}`.
+            // It contains no statements, so it cannot be swallowing an error
+            // that a toast should have surfaced. This is the correct idiom for
+            // localStorage.clear(), which genuinely throws in private browsing
+            // and has nothing to report to the user.
+            if (/catch\s*\{\s*\}/.test(lines[i])) continue
+
+            // Look ahead for e?.message — but STOP at the end of this block.
+            //
+            // 🐛 FIX (audit 2026-07-27): the look-ahead was a flat 5 lines,
+            // which walked straight out of the catch and into the sibling
+            // `} else {` branch. It found that branch's sonnerToast.error and
+            // blamed it on this catch. That produced 2 false positives in
+            // Settings.tsx against code that was entirely correct.
+            //
+            // A toast only counts if it is INSIDE the catch we are judging.
             let foundMessage = false
             let hasToast = false
             for (let j = i; j < Math.min(i + 6, lines.length); j++) {
+              // Leaving the block: a closing brace or an else at the same or
+              // lower indentation than the catch itself.
+              if (j > i && /^\s*\}\s*(else\b|catch\b|finally\b)?/.test(lines[j])) {
+                const catchIndent = lines[i].search(/\S/)
+                const lineIndent = lines[j].search(/\S/)
+                if (lineIndent <= catchIndent) break
+              }
               if (lines[j].includes('e?.message') || lines[j].includes('e.message') || lines[j].includes('err?.message') || lines[j].includes('err.message')) {
                 foundMessage = true
                 break

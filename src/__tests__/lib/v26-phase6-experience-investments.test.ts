@@ -70,13 +70,32 @@ describe('V26 Phase 6 Batch 3 — Experience investments', () => {
 
   // ─── §4.2: Onboarding activation ────────────────────────────────────────
 
-  test('§4.2: Onboarding primary CTA is "Record your first sale"', () => {
+  test('§4.2: Onboarding DOES rather than tells — its primary CTA starts setup', () => {
+    // 🐛 UPDATED (audit 2026-07-27). This asserted the CTA was "Record your
+    // first sale" and called handleFirstSale(). UI/UX Phase 1 Fix 2
+    // deliberately changed that: sending a brand-new user to the New Sale form
+    // with NO products was a dead end. The primary CTA is now "Set up your
+    // shop", and the first-sale nudge moved to the Dashboard welcome card.
+    //
+    // The test was asserting the OLD design against code that had correctly
+    // moved on, so it failed for a change that was an improvement. Left
+    // unfixed, a permanently-red guard teaches everyone to ignore CI.
+    //
+    // The UNDERLYING guarantee is what matters and is preserved here: the
+    // onboarding modal must DO something — take an action that advances setup
+    // — not merely display text and close.
     const src = readFile('components/layout/Onboarding.tsx')
-    // Must have a handleFirstSale function.
-    expect(src).toMatch(/handleFirstSale/)
-    // Must set view to 'new-sale'.
-    expect(src).toMatch(/setView\('new-sale'\)/)
-    // Must have "Record your first sale" button text.
-    expect(src).toMatch(/Record your first sale/)
+
+    // The primary CTA must exist and must lead into the quick-setup flow.
+    expect(src).toMatch(/Set up your shop/)
+    expect(src).toMatch(/setSetupMode\(true\)/)
+
+    // Setup must actually persist something and then navigate — not just close.
+    expect(src).toMatch(/handleSetupSubmit/)
+    expect(src).toMatch(/setView\(/)
+
+    // The escape hatches must remain: a user who wants neither is not trapped.
+    expect(src).toMatch(/Load Demo Data|handleSeed/)
+    expect(src).toMatch(/handleSkip/)
   })
 })

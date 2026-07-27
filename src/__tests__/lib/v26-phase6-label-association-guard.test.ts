@@ -45,15 +45,36 @@ describe('V26 Phase 6 §5.2 — Label/Input association', () => {
 
             const htmlFor = htmlForMatch[1]
 
-            // Find the next <Input within 3 lines
-            for (let j = i; j < Math.min(i + 4, lines.length); j++) {
+            // Find the next <Input within 4 lines. A wrapper div and an icon
+            // commonly sit between the Label and the Input.
+            for (let j = i; j < Math.min(i + 5, lines.length); j++) {
               if (/<Input\b/.test(lines[j])) {
-                const idMatch = lines[j].match(/id="([^"]+)"/)
+                // 🐛 FIX (audit 2026-07-27): this used to read `id="..."` from
+                // lines[j] ALONE — the line containing `<Input`. Props on a
+                // multi-line JSX element live on the FOLLOWING lines:
+                //
+                //     <Input
+                //       id="shopName"      <- never seen by the old check
+                //
+                // so every correctly-associated multi-line Input was reported
+                // as a violation. It flagged 3 in Onboarding.tsx that were all
+                // properly associated and accessible.
+                //
+                // A guard that cries wolf gets switched off, which is worse
+                // than not having it. Read the whole element instead: from
+                // `<Input` to the `>` that closes the opening tag.
+                const elementLines: string[] = []
+                for (let k = j; k < Math.min(j + 15, lines.length); k++) {
+                  elementLines.push(lines[k])
+                  if (/\/?>\s*$/.test(lines[k].trim())) break
+                }
+                const element = elementLines.join(' ')
+
+                const idMatch = element.match(/\bid="([^"]+)"/)
+                const relPath = path.relative(SRC_ROOT, fullPath)
                 if (!idMatch) {
-                  const relPath = path.relative(SRC_ROOT, fullPath)
                   violations.push(`${relPath}:${i + 1}: Label has htmlFor="${htmlFor}" but Input has no id`)
                 } else if (idMatch[1] !== htmlFor) {
-                  const relPath = path.relative(SRC_ROOT, fullPath)
                   violations.push(`${relPath}:${i + 1}: Label htmlFor="${htmlFor}" ≠ Input id="${idMatch[1]}"`)
                 }
                 break
