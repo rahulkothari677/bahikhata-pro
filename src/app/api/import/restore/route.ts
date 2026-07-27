@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getAuthUserIdOwnerOnly } from '@/lib/get-auth'
+import { getAuthUserIdOwnerOnly, assertNotImpersonated } from '@/lib/get-auth'
 import { apiError } from '@/lib/api-error'
 import { logAudit } from '@/lib/audit'
 import {
@@ -73,6 +73,13 @@ export async function POST(req: NextRequest) {
     ctx.userId = authResult.userId || ''
     if (authResult.error || !ctx.userId) return authResult.error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     const userId: string = ctx.userId  // const reference for TS narrowing
+
+    // 🔒 IMPERSONATION GUARD (2026-07-26): restore OVERWRITES the books
+    // wholesale. That stays the real owner's decision — an admin acting on
+    // their behalf is refused. Ordinary ledger writes remain allowed while
+    // impersonating so support can still fix individual entries.
+    const impErr = assertNotImpersonated(authResult)
+    if (impErr) return impErr
 
     const body = await req.json()
     const backup = body.backup || body  // accept { backup: {...} } or {...} directly

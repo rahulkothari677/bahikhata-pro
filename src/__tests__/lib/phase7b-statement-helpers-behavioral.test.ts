@@ -18,12 +18,24 @@ import {
 
 const now = new Date('2026-07-24T12:00:00Z').getTime()
 
+// ὑ2 NEWEST-FIRST, because that is what production passes.
+// computeStatementRunningBalance() returns newest-first (the on-screen feed
+// shows latest activity at the top) and PartyProfile hands that array straight
+// to these helpers.
+//
+// This fixture was OLDEST-FIRST until 2026-07-26, which made every assertion
+// below describe behaviour the app never exercises. The helpers had been
+// extracted from PartyProfile WITHOUT the `.reverse()` the original had, and
+// nothing imported them — so 31 green tests were validating a copy that did
+// not ship, against an ordering production does not use. Feeding real
+// newest-first data to that copy printed statements backwards and invented a
+// Rs 1,500 opening balance. Both are fixed; the fixture now matches reality.
 const fixture: StatementEntry[] = [
-  { date: '2026-07-01', delta: 1000, runningBalance: 1000, invoiceNo: 'INV-001' },
-  { date: '2026-07-05', delta: -500, runningBalance: 500, isPayment: true, type: 'payment-received' },
-  { date: '2026-07-10', delta: 2000, runningBalance: 2500, invoiceNo: 'INV-002' },
-  { date: '2026-07-15', delta: -1000, runningBalance: 1500, isPayment: true, type: 'payment-received' },
   { date: '2026-07-20', delta: 500, runningBalance: 2000, invoiceNo: 'INV-003' },
+  { date: '2026-07-15', delta: -1000, runningBalance: 1500, isPayment: true, type: 'payment-received' },
+  { date: '2026-07-10', delta: 2000, runningBalance: 2500, invoiceNo: 'INV-002' },
+  { date: '2026-07-05', delta: -500, runningBalance: 500, isPayment: true, type: 'payment-received' },
+  { date: '2026-07-01', delta: 1000, runningBalance: 1000, invoiceNo: 'INV-001' },
 ]
 
 describe('🔒 Phase 7b — buildStatementRows', () => {

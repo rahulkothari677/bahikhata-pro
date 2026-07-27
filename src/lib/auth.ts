@@ -256,7 +256,7 @@ export const authOptions: NextAuthOptions = {
         session.user.permissions = token.permissions ?? null
         // 🐛 INTEGRATION PHASE D.3: Propagate impersonation flag to the
         // session so the UI can show the yellow "Impersonating user X" banner.
-        // The flag is set on the JWT by /api/auth/impersonate when it creates
+        // The flag is set on the JWT by /api/impersonate when it creates
         // an impersonated session (see that route for details).
         session.user.isImpersonated = (token.isImpersonated as boolean) ?? false
         session.user.impersonatedBy = token.impersonatedBy as string | undefined

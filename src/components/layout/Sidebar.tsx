@@ -184,6 +184,13 @@ export function Sidebar() {
               (currentView === 'new-sale' && itemId === 'sales') ||
               (currentView === 'new-purchase' && itemId === 'purchases') ||
               (currentView === 'party-profile' && itemId === 'parties')
+            // A11Y (2026-07-26): when the rail is collapsed this button is an
+            // icon with no visible text. `title` alone is only a last-resort
+            // fallback in the accessible-name algorithm and is announced
+            // inconsistently by mobile screen readers, so an explicit
+            // aria-label is set unconditionally — harmless when the label is
+            // visible, essential when it is not. MobileBottomNav already
+            // labels its tabs this way; the desktop rail did not.
             return (
               <button
                 key={item.id}
@@ -198,6 +205,7 @@ export function Sidebar() {
                     : 'text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
                 )}
                 title={sidebarCollapsed ? item.labelKey ? t(item.labelKey) : item.label : undefined}
+                aria-label={item.labelKey ? t(item.labelKey) : item.label}
               >
                 <Icon className={cn('w-[18px] h-[18px] flex-shrink-0', active && 'text-white')} />
                 {!sidebarCollapsed && (

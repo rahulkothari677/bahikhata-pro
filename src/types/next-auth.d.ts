@@ -13,7 +13,7 @@ declare module 'next-auth' {
       permissions: string | null
       tokenVersion: number
       // 🐛 INTEGRATION PHASE D.3: Impersonation flag.
-      // true when this session was created via /api/auth/impersonate (admin
+      // true when this session was created via /api/impersonate (admin
       // impersonating a shopkeeper). The UI shows a yellow banner when this
       // is true. signOut() revokes the session.
       isImpersonated?: boolean

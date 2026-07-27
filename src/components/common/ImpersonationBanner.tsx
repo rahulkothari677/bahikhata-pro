@@ -6,7 +6,7 @@ import { useState } from 'react'
 
 /**
  * ImpersonationBanner — shown when the current session was created via
- * /api/auth/impersonate (admin impersonating a shopkeeper).
+ * /api/impersonate (admin impersonating a shopkeeper).
  *
  * 🐛 INTEGRATION PHASE D.3 (2026-07-25):
  *   - Reads session.user.isImpersonated (set by the jwt callback when the

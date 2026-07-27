@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getAuthUserIdOwnerOnly } from '@/lib/get-auth'
+import { getAuthUserIdOwnerOnly, assertNotImpersonated } from '@/lib/get-auth'
 import { logAudit, AUDIT_ACTIONS } from '@/lib/audit'
 import { clearAllOfflineData } from '@/lib/offline-db'
 import { cloudinary } from '@/lib/cloudinary'
@@ -25,8 +25,13 @@ import { apiError } from '@/lib/api-error'
  */
 export async function DELETE() {
   try {
-    const { userId, error } = await getAuthUserIdOwnerOnly()
+    const { userId, error, isImpersonated } = await getAuthUserIdOwnerOnly()
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // 🔒 IMPERSONATION GUARD (2026-07-26): this route deletes the entire account and all its data,
+    // so it stays the real owner's decision — an admin acting as them is
+    // refused. Ordinary ledger writes remain allowed while impersonating.
+    const impErr = assertNotImpersonated({ isImpersonated })
+    if (impErr) return impErr
 
     // 🔒 V26 M1 FIX: Log the deletion AFTER the $transaction succeeds.
     // Was: logAudit ran BEFORE the transaction → if the transaction rolled back,

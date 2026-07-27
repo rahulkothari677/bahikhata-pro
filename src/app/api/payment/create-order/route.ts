@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { validateBody, createOrderSchema } from '@/lib/validation'
-import { getAuthUserIdOwnerOnly } from '@/lib/get-auth'
+import { getAuthUserIdOwnerOnly, assertNotImpersonated } from '@/lib/get-auth'
 import { db } from '@/lib/db'
 import Razorpay from 'razorpay'
 import { apiError } from '@/lib/api-error'
@@ -24,8 +24,13 @@ import { rateLimit, rateLimitedResponse } from '@/lib/rate-limit'
  */
 export async function POST(req: NextRequest) {
   try {
-    const { userId, error } = await getAuthUserIdOwnerOnly()
+    const { userId, error, isImpersonated } = await getAuthUserIdOwnerOnly()
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    // 🔒 IMPERSONATION GUARD (2026-07-26): this route starts a payment against the owner's money,
+    // so it stays the real owner's decision — an admin acting as them is
+    // refused. Ordinary ledger writes remain allowed while impersonating.
+    const impErr = assertNotImpersonated({ isImpersonated })
+    if (impErr) return impErr
     // 🔒 V18: Rate limit payment creation (10/min per user)
     const rl = await rateLimit(`payment-create:${userId}`, { limit: 10, windowSec: 60 })
     if (!rl.success) return rateLimitedResponse(rl)

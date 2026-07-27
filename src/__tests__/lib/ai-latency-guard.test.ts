@@ -225,10 +225,16 @@ describe('a silent provider fallback cannot hide again', () => {
     expect(scan).not.toMatch(/fallbackReason = `\$\{result\.error\}/)
   })
 
-  test('the scanner shows the warning to the user', () => {
+  test('the scanner does NOT surface AI internals to the shopkeeper', () => {
+    // 2026-07-26 (Rahul): which model ran, how long it took, and what it cost
+    // are the operator's concern, not the user's. Fallback DETECTION stays
+    // server-side (the response carries fallbackReason and the route logs it,
+    // asserted above) but nothing about the AI is rendered on the scan card.
     const scanner = readStripped('components/scanner/BillScanner.tsx')
-    expect(scanner).toMatch(/scanned\.fallbackReason/)
-    expect(scanner).toMatch(/Used a backup model/)
+    expect(scanner).not.toMatch(/Used a backup model/)
+    expect(scanner).not.toMatch(/scanned\.aiUsage\.model/)
+    expect(scanner).not.toMatch(/scanned\.aiUsage\.costInr/)
+    expect(scanner).not.toMatch(/scanned\.aiUsage\.totalTokens/)
   })
 
   test('missing provider keys are logged', () => {

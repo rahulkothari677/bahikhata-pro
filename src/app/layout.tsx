@@ -66,7 +66,7 @@ export default function RootLayout({
           <OfflineBanner />
           <Providers>
             {/* 🐛 INTEGRATION PHASE D.3: Impersonation banner — shown when
-                the current session was created via /api/auth/impersonate.
+                the current session was created via /api/impersonate.
                 Rendered INSIDE Providers so useSession() works. Placed
                 above children so it's the topmost element on every screen. */}
             <ImpersonationBanner />
