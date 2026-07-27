@@ -9650,3 +9650,42 @@ Stage Summary:
 - Dashboard is cleaner (no redundant buttons), more accurate (real lowStockCount, real timestamps, no misleading trend arrows), and more robust (chart empty states, formatINR validation).
 - MoreScreen consolidation (11 → 4 sections) deferred — it's a larger refactor that needs careful design. The 6 fixes above are all safe, targeted improvements.
 - Ready for Phase 2 (Business card redesign with 10 top-notch designs) upon user confirmation.
+
+---
+Task ID: ui-ux-phase-2
+Agent: main
+Task: Execute Phase 2 of the UI/UX Improvement Plan — business card redesign with 10 top-notch designs.
+
+Work Log:
+- Phase 2a: Added cardDesign + cardSlug fields to Setting model + migration (20260727000001_business_card_design).
+- Phase 2b: Created src/lib/business-card-designs.ts — 10 top-notch designs:
+  1. Saffron Classic (default), 2. Emerald Elegant, 3. Midnight Pro, 4. Royal Violet, 5. Clean White,
+  6. Ocean Blue (centered layout), 7. Rose Gold, 8. Charcoal Minimal (split layout), 9. Festive Saffron (centered),
+  10. Teal Fresh. Each design: background gradient, text/QR colors, layout variant, decoration pattern.
+- Phase 2c: Created src/components/common/BusinessCardDisplay.tsx (410 lines) — renders the card using the
+  design registry + shows shop logo (was: completely absent) + design picker UI (horizontal scroll) +
+  3 share buttons (Share / WhatsApp / Download as Image) + vCard 3.0 (was: MECARD) + QR level Q (was: M).
+- Updated AccountScreen.tsx to use BusinessCardDisplay (removed 119 lines of hard-coded JSX, added 8 lines).
+- Updated /api/settings/route.ts to accept cardDesign + cardSlug fields.
+- SQUASH-MERGE BUG: PR #11's merge commit only included worklog.md (recurring GitHub issue with this repo).
+  Fixed by rebasing local main (which had the actual code) onto remote main + pushing directly.
+  Verified via GitHub API: business-card-designs.ts (8502 bytes, 10 designs confirmed), BusinessCardDisplay.tsx (18648 bytes).
+- Vercel deploy: succeeded.
+- Browser verification (fresh test account + demo data):
+  1. ✅ Business Card page shows "Choose Design" button
+  2. ✅ Clicking "Choose Design" opens picker with ALL 10 designs listed by name
+  3. ✅ Selected "Emerald Elegant" → design saved to DB → page reloaded → card now shows "Emerald Elegant" as selected
+  4. ✅ 3 share buttons visible: Share / WhatsApp / Image (download)
+  5. ✅ Card renders with shop name ("Test User's Shop")
+  6. ✅ Design persists across page reload (saved to Setting.cardDesign)
+
+Stage Summary:
+- Phase 2 complete. PR #11 merged + direct push for actual code.
+- All 5 audit-report issues fixed:
+  1. ✅ 10 designs (was: 1 boring design)
+  2. ✅ Logo shown on card (was: completely absent)
+  3. ✅ "Download as image" implemented (was: promised in comment, never built)
+  4. ✅ vCard 3.0 (was: MECARD legacy format)
+  5. ✅ UPI ID in share text (was: collected but never shared)
+- Design picker works end-to-end: user can browse 10 designs, select one, and it saves + persists.
+- Ready for Phase 4 (Account + subscription + guided onboarding) upon user confirmation.
