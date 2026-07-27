@@ -675,7 +675,10 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
       </Card>
       )}
 
-      {/* Manage Shops — shows all shops, add new, switch between them */}
+      {/* 🐛 UI/UX Phase 5 Fix 3: Multi-shop — disabled creation until switching
+          is built. Was: users could CREATE shops but NOT switch between them
+          (one-way trap). Now: shows existing shops but hides the "Add New Shop"
+          button with an honest "Coming Soon" message. */}
       {settingsTab === 'profile' && (
         <Card className="shadow-card border-border/60">
           <CardHeader>
@@ -707,47 +710,17 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
               ))}
             </div>
 
-            {/* Add new shop */}
-            {newShopOpen ? (
-              <div className="mt-3 p-3 rounded-lg border border-primary/30 bg-primary/5 space-y-2">
-                <Label htmlFor="field-new-shop-name">New Shop Name</Label>
-                <Input id="field-new-shop-name"
-                  value={newShopName}
-                  onChange={(e) => setNewShopName(e.target.value)}
-                  placeholder="e.g. Sharma Kirana Store - Branch 2"
-                  autoFocus
-                />
-                <div className="flex gap-2">
-                  <Button size="sm" variant="outline" className="flex-1" onClick={() => { setNewShopOpen(false); setNewShopName('') }}>Cancel</Button>
-                  <Button
-                    size="sm"
-                    className="flex-1 bg-gradient-saffron gap-2"
-                    onClick={async () => {
-                      if (!newShopName.trim()) {
-                        sonnerToast.error('Enter a shop name')
-                        return
-                      }
-                      const shop = await createShop({ name: newShopName.trim() })
-                      if (shop) {
-                        setNewShopOpen(false)
-                        setNewShopName('')
-                      }
-                    }}
-                  >
-                    <Plus className="w-4 h-4" /> Create Shop
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <Button
-                size="sm"
-                variant="outline"
-                className="mt-3 w-full gap-2 border-dashed"
-                onClick={() => setNewShopOpen(true)}
-              >
-                <Plus className="w-4 h-4" /> Add New Shop
-              </Button>
-            )}
+            {/* 🐛 Phase 5 Fix 3: "Add New Shop" button removed — was a one-way
+                trap (users could create shops but couldn't switch between them).
+                Now: honest "Coming Soon" message. Switching will be added in a
+                future update. */}
+            <div className="mt-3 p-3 rounded-lg border border-dashed border-border bg-muted/30 text-center">
+              <Store className="w-5 h-5 text-muted-foreground/50 mx-auto mb-1" />
+              <p className="text-xs font-medium text-muted-foreground">Multi-shop switching coming soon</p>
+              <p className="text-2xs text-muted-foreground/70 mt-0.5">
+                You&apos;ll be able to add multiple shops and switch between them. For now, all data goes to your default shop.
+              </p>
+            </div>
           </CardContent>
         </Card>
       )}
