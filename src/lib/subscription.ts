@@ -4,10 +4,10 @@ import { db } from '@/lib/db'
  * 🔒 AUDIT FIX V5 (Critical): Unified pricing across ALL systems.
  *
  * Was: 3 different pricing configs that contradicted each other:
- *   - subscription.ts: 4 tiers (Free/Pro ₹99/Business ₹299/Enterprise)
+ *   - subscription.ts: 3 tiers (Free/Pro ₹299/Elite ₹599)
  *   - usage-limits.ts: 3 tiers (free/pro ₹299/elite ₹599)
  *   - create-order/route.ts: accepts 'pro'/'elite' at ₹299/₹599
- *   - Landing page: Pro ₹99, Business ₹299
+ *   - Landing page: Pro ₹299, Elite ₹599 (Phase 6 fix — was Pro ₹99, Business ₹299)
  *
  * Now: SINGLE source of truth. This file defines the pricing, and both
  * usage-limits.ts and create-order/route.ts import from it.

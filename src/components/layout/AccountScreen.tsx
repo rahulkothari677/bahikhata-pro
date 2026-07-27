@@ -325,7 +325,7 @@ export function AccountScreen() {
       if (dest.actionKind === 'custom') {
         // Custom actions handled inline
         if (dest.id === 'rate-ekbook') {
-          window.open('https://play.google.com/store/apps/details?id=com.ekbook.app', '_blank')
+          window.open('https://play.google.com/store/apps/details?id=pro.ekbook.app', '_blank')
         } else if (dest.id === 'logout') {
           handleLogout()
         }
@@ -1192,7 +1192,7 @@ function AccountSectionContent({
             { q: 'Does it work offline?', a: 'Yes! Create sales, add products, check inventory — everything works offline. Syncs automatically when online.' },
             { q: 'Can I use it on mobile and desktop?', a: 'Yes. EkBook works on any device with a browser. Install as an app on your phone for the best experience.' },
             { q: 'How do I file GST returns?', a: 'Go to Reports → GSTR-1 or GSTR-3B. GSTR-1 exports a portal-ready JSON (upload directly to gst.gov.in); GSTR-3B exports a CSV summary you can copy into the portal. One-click export.' },
-            { q: 'How much does it cost?', a: 'Free forever for basic use. Pro plan starts at ₹99/month with unlimited AI scans, GST export, and more.' },
+            { q: 'How much does it cost?', a: 'Free forever for basic use. Pro plan starts at ₹299/month with unlimited AI scans, GST export, and more.' },
           ].map((faq, i) => (
             <details key={i} className={i > 0 ? 'border-t border-border/40' : ''}>
               <summary className="p-4 cursor-pointer text-sm font-medium flex items-center justify-between">
@@ -1296,7 +1296,7 @@ function AccountSectionContent({
             <ChevronRight className="w-4 h-4 text-muted-foreground" />
           </a>
           <button
-            onClick={() => window.open('https://play.google.com/store/apps/details?id=com.ekbook.app', '_blank')}
+            onClick={() => window.open('https://play.google.com/store/apps/details?id=pro.ekbook.app', '_blank')}
             className="w-full flex items-center gap-3 p-4 hover:bg-muted/50 transition"
           >
             <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center">

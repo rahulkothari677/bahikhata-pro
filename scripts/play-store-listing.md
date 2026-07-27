@@ -1,4 +1,4 @@
-# Play Store Listing — BahiKhata Pro
+# Play Store Listing — EkBook
 
 Everything you need to submit the app to Google Play Store.
 
@@ -6,8 +6,8 @@ Everything you need to submit the app to Google Play Store.
 
 | Field | Value |
 |-------|-------|
-| **App name** | BahiKhata Pro — AI Ledger & Billing |
-| **Package name** | pro.bahikhata.app |
+| **App name** | EkBook — AI Ledger & Billing |
+| **Package name** | pro.ekbook.app |
 | **Category** | Business |
 | **Content rating** | Everyone |
 | **Target audience** | Business owners, shopkeepers |
@@ -98,7 +98,7 @@ You need at least 2 screenshots, recommended 5-8:
 
 Create a banner image showing:
 - App logo (orange shield)
-- "BahiKhata Pro" text
+- "EkBook" text
 - Tagline: "AI Ledger for Indian Shops"
 - Background: saffron gradient (#d97706 → #f59e0b)
 
@@ -114,7 +114,7 @@ Use your existing app icon (the orange shield). Export at 512x512 PNG with trans
 
 You need a privacy policy page. Create one at:
 ```
-https://bahikhata-pro.vercel.app/privacy
+https://ekbook.app/privacy
 ```
 
 Key points to include:

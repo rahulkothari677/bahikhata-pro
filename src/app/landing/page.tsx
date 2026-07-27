@@ -154,11 +154,11 @@ export default function LandingPage() {
               <p className="text-xs text-muted-foreground mb-4">Free forever</p>
               <a href="/" className="block w-full py-2.5 rounded-lg border border-border text-center text-sm font-medium hover:bg-muted transition">Get Started</a>
               <div className="mt-4 space-y-2 text-sm">
-                <PricingItem text="50 transactions/month" />
+                <PricingItem text="Unlimited transactions" />
                 <PricingItem text="50 products" />
-                <PricingItem text="3 AI bill scans (total)" />
+                <PricingItem text="20 AI scans/day" />
+                <PricingItem text="20 voice entries/day" />
                 <PricingItem text="1 shop" />
-                <PricingItem text="Basic dashboard" />
               </div>
             </div>
 
@@ -166,31 +166,33 @@ export default function LandingPage() {
             <div className="bg-card rounded-2xl border-2 border-primary shadow-lg p-6 relative md:scale-105">
               <div className="absolute top-0 right-0 bg-gradient-saffron text-white text-xs font-bold px-3 py-1 rounded-bl-lg rounded-tr-2xl">POPULAR</div>
               <h3 className="text-lg font-bold text-primary mb-2">Pro</h3>
-              <p className="text-3xl font-bold mb-1">₹99<span className="text-sm font-normal text-muted-foreground">/month</span></p>
-              <p className="text-xs text-muted-foreground mb-4">or ₹999/year (save 16%)</p>
+              <p className="text-3xl font-bold mb-1">₹299<span className="text-sm font-normal text-muted-foreground">/month</span></p>
+              <p className="text-xs text-muted-foreground mb-4">or ₹2,999/year (save 16%)</p>
               <a href="/" className="block w-full py-2.5 rounded-lg bg-gradient-saffron text-white text-center text-sm font-medium hover:opacity-90 transition">Upgrade to Pro</a>
               <div className="mt-4 space-y-2 text-sm">
                 <PricingItem text="Unlimited transactions" />
                 <PricingItem text="Unlimited products" />
-                <PricingItem text="100 AI scans/month" />
-                <PricingItem text="Voice entry" />
+                <PricingItem text="50 AI scans/day" />
+                <PricingItem text="50 voice entries/day" />
                 <PricingItem text="GSTR-1 export" />
                 <PricingItem text="WhatsApp sharing" />
-                <PricingItem text="Smart insights" />
+                <PricingItem text="3 shops" />
               </div>
             </div>
 
             {/* Business */}
             <div className="bg-card rounded-2xl border border-border p-6">
-              <h3 className="text-lg font-bold text-violet-600 mb-2">Business</h3>
-              <p className="text-3xl font-bold mb-1">₹299<span className="text-sm font-normal text-muted-foreground">/month</span></p>
-              <p className="text-xs text-muted-foreground mb-4">or ₹2,999/year (save 16%)</p>
-              <a href="/" className="block w-full py-2.5 rounded-lg border border-border text-center text-sm font-medium hover:bg-muted transition">Upgrade to Business</a>
+              <h3 className="text-lg font-bold text-violet-600 mb-2">Elite</h3>
+              <p className="text-3xl font-bold mb-1">₹599<span className="text-sm font-normal text-muted-foreground">/month</span></p>
+              <p className="text-xs text-muted-foreground mb-4">or ₹5,999/year (save 16%)</p>
+              <a href="/" className="block w-full py-2.5 rounded-lg border border-border text-center text-sm font-medium hover:bg-muted transition">Upgrade to Elite</a>
               <div className="mt-4 space-y-2 text-sm">
                 <PricingItem text="Everything in Pro" />
-                <PricingItem text="Unlimited AI scans" />
-                <PricingItem text="3 shops" />
+                <PricingItem text="100 AI scans/day" />
+                <PricingItem text="100 voice entries/day" />
+                <PricingItem text="Unlimited shops" />
                 <PricingItem text="5 staff accounts" />
+                <PricingItem text="Smart insights" />
                 <PricingItem text="Advanced reports" />
                 <PricingItem text="Priority support" />
               </div>
@@ -204,12 +206,12 @@ export default function LandingPage() {
         <div className="max-w-3xl mx-auto">
           <h2 className="text-3xl font-bold text-center mb-12">Frequently Asked Questions</h2>
           <div className="space-y-6">
-            <FAQItem q="Is EkBook really free?" a="Yes! The Free plan is free forever — 50 transactions/month, 50 products, 3 AI scans. No credit card needed. Upgrade to Pro only when you need more." />
+            <FAQItem q="Is EkBook really free?" a="Yes! The Free plan is free forever — unlimited transactions, 50 products, 20 AI scans/day. No credit card needed. Upgrade to Pro only when you need more." />
             <FAQItem q="Does it work without internet?" a="Yes! EkBook works completely offline. You can create sales, add products, check inventory — everything works without internet. Data syncs automatically when you reconnect." />
             <FAQItem q="Is my data safe?" a="Absolutely. Your data is encrypted, stored securely on cloud servers, and never sold. We comply with India's DPDP Act 2023. You can delete all your data anytime from Settings." />
             <FAQItem q="Can I use it on my phone and computer?" a="Yes! EkBook works on any device — mobile, tablet, desktop. It's a Progressive Web App (PWA), so you can install it on your phone like a native app." />
             <FAQItem q="Do I need to know accounting?" a="No! EkBook is designed for shop owners, not accountants. Just record your sales and purchases — we handle the math, GST, profit calculation, and reports automatically." />
-            <FAQItem q="What if I need help?" a="We're here for you. Email us at support@ekbook.app, and we'll respond within 24 hours. Pro and Business plan users get priority support." />
+            <FAQItem q="What if I need help?" a="We're here for you. Email us at support@ekbook.app, and we'll respond within 24 hours. Pro and Elite plan users get priority support." />
           </div>
         </div>
       </section>
