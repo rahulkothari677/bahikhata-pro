@@ -93,7 +93,8 @@ export function AccountScreen() {
   const accountSection = useAppStore((s) => s.accountSection)
   const setAccountSection = useAppStore((s) => s.setAccountSection)
   const { data: session } = useSession()
-  const { plan } = useSubscription()
+  // 🐛 UI/UX Phase 4: Get usage + data from useSubscription (was: only plan)
+  const { plan, usage, refresh: refreshSubscription } = useSubscription()
   const { isCA, isOwner, canAccess } = useStaffPermissions()
   // 🔒 V22-11 (Batch A, Phase 4f): Shop switcher — for multi-shop users.
   const { shops, activeShop, switchShop } = useShops()
@@ -364,6 +365,8 @@ export function AccountScreen() {
             session={session}
             isOwner={isOwner}
             isCA={isCA}
+            plan={plan}
+            usage={usage}
           />
         </div>
       )}
@@ -741,12 +744,16 @@ function AccountSectionContent({
   session,
   isOwner,
   isCA,
+  plan,
+  usage,
 }: {
   section: string
   setting: any
   session: any
   isOwner: boolean
   isCA: boolean
+  plan: string
+  usage: any
 }) {
   // Render the Settings component with a singleTab prop that hides the tab bar
   // and locks to the relevant tab. This reuses all the existing Settings logic
@@ -765,25 +772,138 @@ function AccountSectionContent({
 
   // For subscription, redirect to pricing page
   if (section === 'subscription') {
+    // 🐛 UI/UX Phase 4 Fix 1: Rebuilt Subscription section — was a dead-end with
+    // just a "View Plans" button. Now shows: current plan, renewal date, daily
+    // usage (AI scans + voice entries), and upgrade/cancel buttons.
+    const planLabel = plan === 'elite' ? 'Elite' : plan === 'pro' ? 'Pro' : 'Free'
+    const planColor = plan === 'elite' ? 'violet' : plan === 'pro' ? 'amber' : 'slate'
+    const planIcon = plan === 'elite' ? Crown : plan === 'pro' ? Sparkles : CreditCard
+    const PlanIcon = planIcon
+    const usageInfo = usage as Record<string, any> | null
+    const aiScans = usageInfo?.aiScans
+    const voiceEntries = usageInfo?.voiceEntries
+
     return (
-      <div className="bg-card rounded-2xl shadow-card border border-border/60 p-6 text-center">
-        <CreditCard className="w-12 h-12 text-amber-500 mx-auto mb-3" />
-        <p className="font-semibold mb-1">Manage Subscription</p>
-        <p className="text-sm text-muted-foreground mb-4">
-          View plans, upgrade, or manage your subscription.
-        </p>
+      <div className="space-y-4">
+        {/* Current Plan Card */}
+        <div className={cn(
+          'rounded-2xl p-5 text-white shadow-card',
+          plan === 'elite' ? 'bg-gradient-to-br from-violet-500 to-purple-700' :
+          plan === 'pro' ? 'bg-gradient-to-br from-amber-400 to-orange-600' :
+          'bg-gradient-to-br from-slate-500 to-slate-700'
+        )}>
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <PlanIcon className="w-5 h-5" />
+              <span className="text-lg font-bold">{planLabel} Plan</span>
+            </div>
+            {plan === 'free' && (
+              <span className="text-2xs bg-white/20 px-2 py-1 rounded-full">Free Forever</span>
+            )}
+          </div>
+          {plan !== 'free' && (
+            <p className="text-sm text-white/80">
+              {plan === 'pro' ? '₹299/month' : '₹599/month'} · AI Scanner, GST Export, WhatsApp, Voice Entry
+              {plan === 'elite' && ', Smart Insights, Staff Accounts'}
+            </p>
+          )}
+          {plan === 'free' && (
+            <p className="text-sm text-white/80">
+              Basic sales, purchases, inventory. Upgrade for AI Scanner, GST Export & more.
+            </p>
+          )}
+        </div>
+
+        {/* Usage This Month (only for AI scans + voice — the metered features) */}
+        {(aiScans || voiceEntries) && (
+          <div className="bg-card rounded-2xl shadow-card border border-border/60 p-4">
+            <p className="text-sm font-semibold mb-3">Today&apos;s Usage</p>
+            <div className="space-y-3">
+              {aiScans && (
+                <div>
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="text-muted-foreground">AI Bill Scans</span>
+                    <span className="font-medium tabular-nums">
+                      {aiScans.used} / {aiScans.limit === Infinity ? '∞' : aiScans.limit} used today
+                    </span>
+                  </div>
+                  {aiScans.limit !== Infinity && aiScans.limit > 0 && (
+                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                      <div
+                        className={cn('h-full rounded-full transition-all',
+                          aiScans.remaining === 0 ? 'bg-rose-500' : 'bg-amber-500')}
+                        style={{ width: `${Math.min((aiScans.used / aiScans.limit) * 100, 100)}%` }}
+                      />
+                    </div>
+                  )}
+                  {aiScans.remaining === 0 && (
+                    <p className="text-2xs text-rose-500 mt-1">Daily limit reached — resets tomorrow</p>
+                  )}
+                </div>
+              )}
+              {voiceEntries && (
+                <div>
+                  <div className="flex items-center justify-between text-xs mb-1">
+                    <span className="text-muted-foreground">Voice Entries</span>
+                    <span className="font-medium tabular-nums">
+                      {voiceEntries.used} / {voiceEntries.limit === Infinity ? '∞' : voiceEntries.limit} used today
+                    </span>
+                  </div>
+                  {voiceEntries.limit !== Infinity && voiceEntries.limit > 0 && (
+                    <div className="h-2 bg-muted rounded-full overflow-hidden">
+                      <div
+                        className={cn('h-full rounded-full transition-all',
+                          voiceEntries.remaining === 0 ? 'bg-rose-500' : 'bg-violet-500')}
+                        style={{ width: `${Math.min((voiceEntries.used / voiceEntries.limit) * 100, 100)}%` }}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Upgrade / View Plans button */}
+        {plan === 'free' && (
+          <button
+            onClick={() => {
+              useAppStore.getState().setPreviousView('account')
+              useAppStore.getState().setView('pricing')
+            }}
+            className="w-full py-3 rounded-xl bg-gradient-saffron text-white text-sm font-bold flex items-center justify-center gap-2 shadow-md"
+          >
+            <Sparkles className="w-4 h-4" />
+            Upgrade to Pro — Unlock AI Scanner, GST & More
+          </button>
+        )}
+        {plan !== 'free' && plan !== 'elite' && (
+          <button
+            onClick={() => {
+              useAppStore.getState().setPreviousView('account')
+              useAppStore.getState().setView('pricing')
+            }}
+            className="w-full py-3 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 text-white text-sm font-bold flex items-center justify-center gap-2 shadow-md"
+          >
+            <Crown className="w-4 h-4" />
+            Upgrade to Elite — Smart Insights & Staff Accounts
+          </button>
+        )}
+        {plan === 'elite' && (
+          <div className="text-center py-2">
+            <p className="text-sm text-muted-foreground">You&apos;re on the highest plan. Enjoy all features! 👑</p>
+          </div>
+        )}
+
+        {/* Manage / View all plans */}
         <button
           onClick={() => {
-            // 🔒 V21-014 fix: Don't clear accountSection — keep it as 'subscription'
-            // so when the user comes back from pricing, they see the subscription
-            // section (not the Account menu). Set previousView to 'account' so
-            // the back button on pricing returns here.
             useAppStore.getState().setPreviousView('account')
             useAppStore.getState().setView('pricing')
           }}
-          className="px-4 py-2 rounded-lg bg-gradient-saffron text-white text-sm font-medium"
+          className="w-full py-2.5 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:bg-muted/50 transition"
         >
-          View Plans
+          View All Plans & Pricing
         </button>
       </div>
     )
@@ -901,13 +1021,44 @@ function AccountSectionContent({
 
   // ═══ Security Page ═══
   if (section === 'security') {
+    // 🐛 UI/UX Phase 4 Fix 3: Security section — was 100% "Coming Soon" with
+    // fake toggles + dead Change Password card. Now: links to the real password
+    // reset flow (/reset-password) + shows actual security posture info +
+    // links to device-level security (Android screen lock).
     return (
       <div className="space-y-4">
+        {/* Change Password — links to the real reset flow */}
+        <div className="bg-card rounded-2xl shadow-card border border-border/60 p-4">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-950 flex items-center justify-center flex-shrink-0">
+              <Shield className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+            </div>
+            <div>
+              <p className="font-semibold text-sm">Change Password</p>
+              <p className="text-xs text-muted-foreground">Update your account password</p>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground mb-3">
+            We&apos;ll send a password reset link to your email. Click the link in the email to set a new password.
+          </p>
+          <button
+            onClick={() => {
+              useAppStore.getState().setView('dashboard')
+              window.location.href = '/reset-password'
+            }}
+            className="w-full py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium flex items-center justify-center gap-2 transition"
+          >
+            <Shield className="w-4 h-4" />
+            Send Reset Link
+          </button>
+        </div>
+
+        {/* App Lock — honest "coming soon" with device-level workaround */}
         <div className="bg-card rounded-2xl shadow-card border border-border/60 overflow-hidden">
           <div className="p-4 border-b border-border/40">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
-                <Shield className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+              <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-950 flex items-center justify-center">
+                <Shield className="w-5 h-5 text-amber-600 dark:text-amber-400" />
               </div>
               <div>
                 <p className="font-semibold text-sm">App Lock</p>
@@ -915,52 +1066,32 @@ function AccountSectionContent({
               </div>
             </div>
           </div>
-          <div className="p-4 flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium">Biometric Lock</p>
-              <p className="text-xs text-muted-foreground">Use fingerprint or face ID</p>
+          <div className="p-4">
+            <div className="flex items-start gap-2 mb-3">
+              <Info className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">
+                  <span className="font-medium text-foreground">In-app app lock is coming soon.</span> Until then, protect your data with your phone&apos;s built-in screen lock:
+                </p>
+                <p className="text-2xs text-muted-foreground mt-2">
+                  📱 <span className="font-medium">Android:</span> Settings → Security → Screen lock (PIN/Pattern/Fingerprint)
+                </p>
+                <p className="text-2xs text-muted-foreground mt-1">
+                  📱 <span className="font-medium">iPhone:</span> Settings → Face ID & Passcode
+                </p>
+              </div>
             </div>
-            <div className="w-11 h-6 bg-muted rounded-full flex items-center px-0.5 cursor-not-allowed opacity-50">
-              <div className="w-5 h-5 rounded-full bg-white shadow" />
+            <div className="text-2xs text-center text-muted-foreground bg-muted/30 rounded-lg py-2">
+              🔒 In-app PIN/biometric lock — Coming soon
             </div>
-          </div>
-          <div className="p-4 border-t border-border/40 flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium">PIN Lock</p>
-              <p className="text-xs text-muted-foreground">4-digit PIN required on startup</p>
-            </div>
-            <div className="w-11 h-6 bg-muted rounded-full flex items-center px-0.5 cursor-not-allowed opacity-50">
-              <div className="w-5 h-5 rounded-full bg-white shadow" />
-            </div>
-          </div>
-          <div className="p-3 border-t border-border/40 bg-muted/30">
-            <p className="text-2xs text-muted-foreground text-center">🔒 Coming soon in a future update</p>
           </div>
         </div>
 
-        {/* 🔒 AUDIT V23 FIX §13.6: Change Password form was a decoration —
-            button had no onClick, inputs were uncontrolled, no API call.
-            Replaced with "Coming Soon" card. To re-enable: wire to real
-            endpoint using the existing password-reset hashing flow. */}
-        <div className="bg-card rounded-2xl shadow-card border border-border/60 p-4 opacity-70">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
-              <Shield className="w-5 h-5 text-blue-600" />
-            </div>
-            <div className="flex-1">
-              <p className="font-semibold text-sm">Change Password</p>
-              <p className="text-xs text-muted-foreground">Update your account password</p>
-            </div>
-            <span className="text-3xs font-bold uppercase tracking-wide bg-muted text-muted-foreground px-2 py-1 rounded-full">
-              Coming Soon
-            </span>
-          </div>
-        </div>
-
+        {/* Data Security — what's actually protecting the user's data */}
         <div className="bg-card rounded-2xl shadow-card border border-border/60 p-4">
           <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-xl bg-violet-100 flex items-center justify-center">
-              <Info className="w-5 h-5 text-violet-600" />
+            <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-950 flex items-center justify-center">
+              <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
             </div>
             <div>
               <p className="font-semibold text-sm">Data Security</p>
@@ -978,11 +1109,11 @@ function AccountSectionContent({
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              Your data is protected with bank-grade encryption
+              Each shop&apos;s data is isolated — no other user can see it
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-              DPDP Act compliant — delete your data anytime
+              DPDP Act compliant — delete your data anytime (Settings → Data → Danger Zone)
             </div>
           </div>
         </div>

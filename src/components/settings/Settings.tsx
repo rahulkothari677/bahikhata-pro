@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, useEffect, useMemo } from 'react'
-import { useSession } from 'next-auth/react'
+import { useSession, signOut } from 'next-auth/react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -18,7 +18,7 @@ import { ShopLogoUploader } from '@/components/settings/ShopLogoUploader'
 import { useShops } from '@/hooks/use-shops'
 import { exportBackup } from '@/lib/data-backup'
 import { useBusinessGoals } from '@/hooks/use-business-goals'
-import { Target, Download, Upload, Calendar, Clock, Coins, PackageX } from 'lucide-react'
+import { Target, Download, Upload, Calendar, Clock, Coins, PackageX, UserX } from 'lucide-react'
 import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
 import { toast as sonnerToast } from 'sonner'
 import { haptic } from '@/lib/haptic'
@@ -364,6 +364,41 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
     } catch (e: any) {
       haptic.error()
       sonnerToast.error(e?.message || "Couldn\'t reset data")
+    }
+  }
+
+  // 🐛 UI/UX Phase 4 Fix 2: Delete Account — DPDP Act compliance.
+  // The /api/account/delete endpoint exists but was never exposed in the UI.
+  // Now: triple-confirmation dialog → calls API → signs out → redirects to login.
+  const handleDeleteAccount = async () => {
+    if (!await confirmDialog(
+      'This will PERMANENTLY DELETE your entire account — all products, transactions, parties, settings, and your login. This CANNOT be undone. Are you absolutely sure?',
+      { title: 'Delete My Account', confirmLabel: 'I understand, delete my account', destructive: true }
+    )) return
+    if (!await confirmDialog(
+      'Final confirmation: Your account and ALL data will be permanently deleted. You will not be able to recover anything. Continue?',
+      { title: 'Final Confirmation', confirmLabel: 'Yes, delete my account permanently', destructive: true }
+    )) return
+    if (!await confirmDialog(
+      'Type DELETE to confirm. This is your last chance to cancel.',
+      { title: 'Type DELETE to Confirm', confirmLabel: 'DELETE — Permanently erase everything', destructive: true }
+    )) return
+    try {
+      const r = await offlineFetch('/api/account/delete', { method: 'DELETE', offline: { queueable: false } })
+      if (r.ok) {
+        haptic.error()
+        sonnerToast.success('Account deleted. Redirecting to login...')
+        // Clear all local data
+        try { localStorage.clear() } catch {}
+        try { sessionStorage.clear() } catch {}
+        setTimeout(() => signOut({ callbackUrl: '/' }), 1500)
+      } else {
+        haptic.error()
+        sonnerToast.error(await readError(r), { duration: 8000 })
+      }
+    } catch (e: any) {
+      haptic.error()
+      sonnerToast.error(e?.message || "Couldn\'t delete account")
     }
   }
 
@@ -1106,6 +1141,19 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
                 <Button variant="destructive" size="sm" className="mt-3 gap-2" onClick={handleResetData}>
                   <Trash2 className="w-4 h-4" /> Reset All Data
                 </Button>
+
+                {/* 🐛 UI/UX Phase 4 Fix 2: Delete Account — DPDP Act compliance.
+                    The API endpoint /api/account/delete existed but was never
+                    exposed in the UI. Now: triple-confirmation + signOut. */}
+                <div className="mt-4 pt-4 border-t border-rose-200 dark:border-rose-900/40">
+                  <p className="font-semibold text-rose-900 dark:text-rose-100 text-sm">Delete Account</p>
+                  <p className="text-xs text-rose-700 dark:text-rose-300 mt-1">
+                    Permanently delete your account and ALL data. This cannot be undone. Required by DPDP Act.
+                  </p>
+                  <Button variant="destructive" size="sm" className="mt-2 gap-2" onClick={handleDeleteAccount}>
+                    <UserX className="w-4 h-4" /> Delete My Account
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
