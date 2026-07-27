@@ -17,7 +17,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { Badge } from '@/components/ui/badge'
-import { formatINR, formatINRCompact, cn } from '@/lib/utils'
+import { formatINR, formatINRCompact, relativeTime, cn } from '@/lib/utils'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { useAppStore } from '@/store/app-store'
 import { useState } from 'react'
@@ -39,7 +39,7 @@ export function AnalyticsInsights() {
   const [expanded, setExpanded] = useState(true)
 
   // 🔒 Hooks first — Rules of Hooks
-  const { data, isLoading } = useQuery<AnalyticsData>({
+  const { data, isLoading, dataUpdatedAt } = useQuery<AnalyticsData>({
     queryKey: ['analytics'],
     queryFn: async () => {
       const r = await offlineFetch('/api/analytics')
@@ -76,7 +76,7 @@ export function AnalyticsInsights() {
               <h3 className="text-sm font-bold font-heading tracking-tight">Business Analytics</h3>
               <p className="text-3xs text-white/80">
                 {criticalCount > 0 && `${criticalCount} action items · `}
-                {activeSections} insights · Updated 5 min ago
+                {activeSections} insights · Updated {relativeTime(new Date(dataUpdatedAt || Date.now()))}
               </p>
             </div>
           </div>

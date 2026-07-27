@@ -604,11 +604,15 @@ export function Dashboard() {
       </motion.div>
 
       {/* 🔒 V22-8 (Phase 6): Quick Action Shortcuts — horizontal scrollable row
-          of 6 one-tap actions. Inspired by PhonePe's quick actions row.
-          Visible on all screen sizes; horizontally scrollable on mobile. */}
+          of one-tap actions. Inspired by PhonePe's quick actions row.
+          Visible on all screen sizes; horizontally scrollable on mobile.
+          🐛 UI/UX Phase 3 Fix 1: Removed 'New Sale' from this row — it was
+          redundant with the hero card's 'New Sale' button (directly above)
+          AND the mobile FAB / desktop Header button. Three 'New Sale' buttons
+          on one screen was cognitive overload. Now: hero card is the primary
+          CTA, FAB/Header is the secondary, this row shows OTHER quick actions. */}
       <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
         {[
-          { label: 'New Sale', icon: Plus, view: 'new-sale' as const, color: 'bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400' },
           { label: 'Add Product', icon: Package, view: 'inventory' as const, color: 'bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400' },
           { label: 'Scan Bill', icon: ScanLine, view: 'scanner' as const, color: 'bg-violet-100 dark:bg-violet-950 text-violet-600 dark:text-violet-400' },
           { label: 'Add Party', icon: Wallet, view: 'parties' as const, color: 'bg-amber-100 dark:bg-amber-950 text-amber-600 dark:text-amber-400' },
@@ -675,8 +679,11 @@ export function Dashboard() {
           animateValue={kpis.rangeRevenue}
           icon={Wallet}
           gradient="from-rose-500 to-pink-600"
-          subtitle={`${kpis.rangeTxnCount} ${t('dash.sales_word')} (${t('dash.incl_gst')}) • ${kpis.revenueGrowth >= 0 ? '↑' : '↓'} ${Math.abs(kpis.revenueGrowth).toFixed(1)}% vs prev`}
-          trend={kpis.revenueGrowth >= 0 ? 'up' : 'down'}
+          // 🐛 UI/UX Phase 3 Fix 5: Suppress trend arrow when growth is 0 (no prior
+          // period to compare against). Was: always showed "↑ 0% vs prev" with an
+          // up-arrow — misleading for new users + early-morning existing users.
+          subtitle={`${kpis.rangeTxnCount} ${t('dash.sales_word')} (${t('dash.incl_gst')})${kpis.revenueGrowth !== 0 ? ` • ${kpis.revenueGrowth >= 0 ? '↑' : '↓'} ${Math.abs(kpis.revenueGrowth).toFixed(1)}% vs prev` : ''}`}
+          trend={kpis.revenueGrowth !== 0 ? (kpis.revenueGrowth >= 0 ? 'up' : 'down') : undefined}
           onClick={() => navigateToSalesWithDate(dateRange.from, dateRange.to, rangeLabel)}
         />
         {!hideProfit && (
@@ -686,8 +693,8 @@ export function Dashboard() {
             animateValue={kpis.netProfit}
             icon={PiggyBank}
             gradient="from-violet-500 to-purple-600"
-            subtitle={`${kpis.profitGrowth >= 0 ? '↑' : '↓'} ${Math.abs(kpis.profitGrowth).toFixed(1)}% profit trend`}
-            trend={kpis.profitGrowth >= 0 ? 'up' : 'down'}
+            subtitle={`${kpis.profitGrowth !== 0 ? `${kpis.profitGrowth >= 0 ? '↑' : '↓'} ${Math.abs(kpis.profitGrowth).toFixed(1)}% profit trend` : 'No prior period to compare'}`}
+            trend={kpis.profitGrowth !== 0 ? (kpis.profitGrowth >= 0 ? 'up' : 'down') : undefined}
             onClick={() => navigateToSalesWithDate(dateRange.from, dateRange.to, rangeLabel)}
           />
         )}

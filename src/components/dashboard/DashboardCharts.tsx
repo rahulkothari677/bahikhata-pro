@@ -74,25 +74,32 @@ export function DashboardCharts({
               )}
             </div>
             {/* Sparkline — no axes, just the line with gradient fill */}
-            <ResponsiveContainer width="100%" height={56}>
-              <AreaChart data={salesTrend.slice(-14)} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
-                <defs>
-                  <linearGradient id="sparklineGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="oklch(0.62 0.18 42)" stopOpacity={0.4} />
-                    <stop offset="100%" stopColor="oklch(0.62 0.18 42)" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <Area
-                  type="monotone"
-                  dataKey="revenue"
-                  stroke="oklch(0.62 0.18 42)"
-                  strokeWidth={2}
-                  fill="url(#sparklineGrad)"
-                  isAnimationActive={true}
-                  animationDuration={600}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+            {/* 🐛 UI/UX Phase 3 Fix 3a: Show empty state when no data (was: blank AreaChart) */}
+            {salesTrend.length === 0 ? (
+              <div className="h-14 flex items-center justify-center text-2xs text-muted-foreground/60">
+                No sales data yet
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={56}>
+                <AreaChart data={salesTrend.slice(-14)} margin={{ top: 2, right: 2, left: 2, bottom: 2 }}>
+                  <defs>
+                    <linearGradient id="sparklineGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="oklch(0.62 0.18 42)" stopOpacity={0.4} />
+                      <stop offset="100%" stopColor="oklch(0.62 0.18 42)" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <Area
+                    type="monotone"
+                    dataKey="revenue"
+                    stroke="oklch(0.62 0.18 42)"
+                    strokeWidth={2}
+                    fill="url(#sparklineGrad)"
+                    isAnimationActive={true}
+                    animationDuration={600}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
           </CardContent>
         </Card>
 
@@ -100,25 +107,32 @@ export function DashboardCharts({
         <Card className="shadow-card border-border/60 overflow-hidden">
           <CardContent className="p-4">
             <div className="flex items-center justify-between gap-3">
-              {/* Donut chart */}
-              <ResponsiveContainer width={80} height={80}>
-                <PieChart>
-                  <Pie
-                    data={[
-                      { name: 'Sales', value: kpis.rangeRevenue || 0, fill: 'oklch(0.62 0.15 155)' },
-                      { name: 'Purchases', value: kpis.rangePurchases || 0, fill: 'oklch(0.62 0.18 42)' },
-                    ]}
-                    dataKey="value"
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={26}
-                    outerRadius={38}
-                    paddingAngle={2}
-                    isAnimationActive={true}
-                    animationDuration={600}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
+              {/* 🐛 UI/UX Phase 3 Fix 3b: Show empty state when no data (was: blank PieChart) */}
+              {(kpis.rangeRevenue || 0) === 0 && (kpis.rangePurchases || 0) === 0 ? (
+                <div className="w-20 h-20 flex items-center justify-center text-center text-2xs text-muted-foreground/60 leading-tight">
+                  No data<br />for range
+                </div>
+              ) : (
+                /* Donut chart */
+                <ResponsiveContainer width={80} height={80}>
+                  <PieChart>
+                    <Pie
+                      data={[
+                        { name: 'Sales', value: kpis.rangeRevenue || 0, fill: 'oklch(0.62 0.15 155)' },
+                        { name: 'Purchases', value: kpis.rangePurchases || 0, fill: 'oklch(0.62 0.18 42)' },
+                      ]}
+                      dataKey="value"
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={26}
+                      outerRadius={38}
+                      paddingAngle={2}
+                      isAnimationActive={true}
+                      animationDuration={600}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
               {/* Legend + values */}
               <div className="flex-1 space-y-2">
                 <div className="flex items-center gap-2">
@@ -156,12 +170,24 @@ export function DashboardCharts({
             </div>
             <Badge variant="secondary" className="gap-1">
               <TrendingUp className="w-3 h-3" />
-              {salesTrend.length} points
+              {salesTrend.length} {salesTrend.length === 1 ? 'point' : 'points'}
             </Badge>
           </div>
         </CardHeader>
         <CardContent>
-          <ResponsiveContainer width="100%" height={280}>
+          {/* 🐛 UI/UX Phase 3 Fix 3c: Show empty state when no data (was: blank chart with axes + "0 points" badge) */}
+          {salesTrend.length === 0 ? (
+            <div className="h-[280px] flex items-center justify-center">
+              <EmptyState
+                icon={TrendingUp}
+                title="No sales in this range"
+                description="Record a sale or select a different date range to see your sales trend."
+                color="amber"
+                compact
+              />
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={280}>
             <AreaChart data={salesTrend} margin={{ top: 5, right: 5, left: -10, bottom: 0 }}>
               <defs>
                 <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
@@ -187,6 +213,7 @@ export function DashboardCharts({
               )}
             </AreaChart>
           </ResponsiveContainer>
+          )}
         </CardContent>
       </Card>
 
