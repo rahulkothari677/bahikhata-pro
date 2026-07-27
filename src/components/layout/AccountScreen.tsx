@@ -133,23 +133,25 @@ export function AccountScreen() {
   const email = session?.user?.email || ''
   const phone = setting.phone
 
-  // 🔒 V22-6 (Phase 4): Profile completion calculation.
-  // 6 fields checked: ownerName, shopName, phone, gstin, address, email.
-  // Each filled = 1/6 = ~16.67%. Returns { pct, missing: string[] }.
+  // 🐛 UI/UX Phase 5 Fix 1: Profile completion calculation.
+  // Was: 6 fields, shopName defaulted to "My Shop" in DB → new users started
+  // at 17% with no real data entered. Now: 7 fields (added logoUrl), and
+  // shopName only counts as "filled" if it's NOT the placeholder "My Shop".
   const profileCompletion = useMemo(() => {
     const fields = [
+      { label: 'Shop Name', filled: !!(setting.shopName && setting.shopName.trim() && setting.shopName.trim() !== 'My Shop') },
       { label: 'Owner Name', filled: !!(setting.ownerName && setting.ownerName.trim()) },
-      { label: 'Shop Name', filled: !!(setting.shopName && setting.shopName.trim()) },
       { label: 'Phone', filled: !!(setting.phone && setting.phone.trim()) },
       { label: 'GSTIN', filled: !!(setting.gstin && setting.gstin.trim()) },
       { label: 'Address', filled: !!(setting.address && setting.address.trim()) },
       { label: 'Email', filled: !!email },
+      { label: 'Shop Logo', filled: !!setting.logoUrl },
     ]
     const filledCount = fields.filter(f => f.filled).length
     const pct = Math.round((filledCount / fields.length) * 100)
     const missing = fields.filter(f => !f.filled).map(f => f.label)
-    return { pct, filledCount, total: fields.length, missing }
-  }, [setting.ownerName, setting.shopName, setting.phone, setting.gstin, setting.address, email])
+    return { pct, filledCount, total: fields.length, missing, fields }
+  }, [setting.ownerName, setting.shopName, setting.phone, setting.gstin, setting.address, setting.logoUrl, email])
 
   // 🔒 V22-6 (Phase 4): Business stats from dashboard data.
   // Defensive defaults — if dashboard hasn't loaded yet, show 0/—.
@@ -581,12 +583,13 @@ export function AccountScreen() {
           </div>
         )}
 
-        {/* 🔒 V22-6 (Phase 4): Profile Completion Progress Bar.
-            LinkedIn-style: shows % complete + missing field hint.
-            - 100% → green + "Profile complete!" badge
-            - <100% → blue + "Add X, Y to complete" */}
+        {/* 🐛 UI/UX Phase 5 Fix 2: Profile Completion — tappable checklist.
+            Was: a simple progress bar with "Add: X, Y, Z" text. User had to
+            tap the whole card → go to Settings → Profile → find the field.
+            Now: each missing field is a tappable row that deep-links directly
+            to the profile editor. Shows checkmarks for completed fields. */}
         {profileCompletion.pct === 100 ? (
-          // 🔒 Phase 8c: Show a positive confirmation badge at 100%
+          // 100% — green confirmation badge
           <div className="w-full bg-emerald-50 dark:bg-emerald-950/30 rounded-2xl border border-emerald-200 dark:border-emerald-800 p-3.5 flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-900 flex items-center justify-center">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
@@ -597,52 +600,72 @@ export function AccountScreen() {
             </div>
           </div>
         ) : (
-          <button
-            onClick={handleEditProfile}
-            disabled={isCA}
-            className={cn(
-              "w-full bg-card rounded-2xl border border-border/60 shadow-card p-3.5 text-left transition",
-              isCA ? "cursor-default opacity-70" : "hover:shadow-md active:scale-[0.99]",
-            )}
-          >
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <div className="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-950 flex items-center justify-center">
-                  <AlertCircle className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                </div>
-                <div>
-                  <p className="text-xs font-semibold">Profile {profileCompletion.pct}% complete</p>
-                  <p className="text-3xs text-muted-foreground">
-                    {profileCompletion.missing.length > 0
-                      ? `Add: ${profileCompletion.missing.slice(0, 3).join(', ')}${profileCompletion.missing.length > 3 ? '…' : ''}`
-                      : 'All fields filled'}
-                  </p>
-                </div>
-              </div>
-              {!isCA && (
-                <span className="text-3xs font-medium text-primary">Complete →</span>
+          <div className="w-full bg-card rounded-2xl border border-border/60 shadow-card p-3.5">
+            {/* Header with progress */}
+            <button
+              onClick={handleEditProfile}
+              disabled={isCA}
+              className={cn(
+                "w-full text-left mb-3",
+                isCA ? "cursor-default" : "cursor-pointer",
               )}
-            </div>
-            {/* Progress bar */}
-            <div className="h-2 bg-muted rounded-full overflow-hidden">
-              <div
-                className={cn(
-                  'h-full rounded-full transition-all duration-500',
-                  profileCompletion.pct === 100
-                    ? 'bg-emerald-500'
-                    : profileCompletion.pct >= 67
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-950 flex items-center justify-center">
+                    <AlertCircle className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold">Profile {profileCompletion.pct}% complete</p>
+                    <p className="text-3xs text-muted-foreground">{profileCompletion.filledCount} of {profileCompletion.total} fields filled</p>
+                  </div>
+                </div>
+                {!isCA && (
+                  <span className="text-3xs font-medium text-primary">Complete →</span>
+                )}
+              </div>
+              {/* Progress bar */}
+              <div className="h-2 bg-muted rounded-full overflow-hidden">
+                <div
+                  className={cn(
+                    'h-full rounded-full transition-all duration-500',
+                    profileCompletion.pct >= 67
                       ? 'bg-emerald-400'
                       : profileCompletion.pct >= 34
                         ? 'bg-amber-400'
                         : 'bg-rose-400',
-                )}
-                style={{ width: `${profileCompletion.pct}%` }}
-              />
-            </div>
-            <p className="text-3xs text-muted-foreground mt-1.5">
-              {profileCompletion.filledCount} of {profileCompletion.total} fields filled
-            </p>
-          </button>
+                  )}
+                  style={{ width: `${profileCompletion.pct}%` }}
+                />
+              </div>
+            </button>
+            {/* 🐛 Phase 5 Fix 2: Tappable checklist — each missing field is a row */}
+            {!isCA && (
+              <div className="space-y-1 pt-2 border-t border-border/40">
+                {profileCompletion.fields.map((field) => (
+                  <button
+                    key={field.label}
+                    onClick={handleEditProfile}
+                    className="w-full flex items-center gap-2 py-1.5 px-2 rounded-lg hover:bg-muted/50 transition text-left"
+                  >
+                    {field.filled ? (
+                      <div className="w-4 h-4 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0">
+                        <Check className="w-2.5 h-2.5 text-white" />
+                      </div>
+                    ) : (
+                      <div className="w-4 h-4 rounded-full border-2 border-muted-foreground/30 flex-shrink-0" />
+                    )}
+                    <span className={cn('text-xs', field.filled ? 'text-muted-foreground line-through' : 'font-medium')}>
+                      {field.label}
+                    </span>
+                    {!field.filled && (
+                      <span className="text-3xs text-primary ml-auto">+{Math.round(100 / profileCompletion.total)}%</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         )}
 
         {/* ═══ Menu Sections — rendered from NavRegistry (V25 §6.1 Phase 7) ═══ */}
