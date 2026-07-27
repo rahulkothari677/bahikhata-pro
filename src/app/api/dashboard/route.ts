@@ -575,6 +575,7 @@ export async function GET(req: NextRequest) {
       categoryBreakdown,
       paymentModeSplit,
       lowStockProducts,
+      lowStockCount: lowStockProducts.length,  // 🐛 UI/UX Phase 3 Fix 2: Was missing — BusinessHealthScore used kpis.lowStockCount (always undefined → Stock Health always 100/100)
       gstSummary: {
         cgst: rangeCGST,
         sgst: rangeSGST,

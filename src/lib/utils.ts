@@ -9,11 +9,18 @@ export function cn(...inputs: ClassValue[]) {
 // Indian Rupee formatting — full amount with proper grouping
 // e.g. ₹1,23,456.78 (Indian numbering: lakhs, not millions)
 export function formatINR(amount: number, withSymbol = true): string {
+  // 🐛 UI/UX Phase 3 Fix 6: Input validation — return '₹0' for undefined/NaN/null
+  // instead of '₹NaN'. Was: no validation → formatINR(undefined) → '₹NaN'.
+  // This is a latent footgun whenever a backend field is missing.
+  if (amount === undefined || amount === null || isNaN(Number(amount))) {
+    return withSymbol ? '₹0' : '0'
+  }
+  const num = Number(amount)
   // 🔒 V26 Phase 6 §1.5: Fintech convention — integers show whole (₹500),
   // non-integers always show 2 decimals (₹499.99, not ₹499.9 or ₹500).
   // Was: minimumFractionDigits:0 + maximumFractionDigits:2 → could produce
   // ₹1,234.5 (one decimal), and lists could mix ₹500 / ₹499.99 / ₹1,234.5.
-  const isWhole = Math.round(amount * 100) % 100 === 0
+  const isWhole = Math.round(num * 100) % 100 === 0
   const fractionDigits = isWhole ? 0 : 2
   const formatter = new Intl.NumberFormat('en-IN', {
     style: withSymbol ? 'currency' : 'decimal',
@@ -21,15 +28,20 @@ export function formatINR(amount: number, withSymbol = true): string {
     minimumFractionDigits: fractionDigits,
     maximumFractionDigits: fractionDigits,
   })
-  return formatter.format(amount)
+  return formatter.format(num)
 }
 
 // Compact Indian format for charts/tooltips/badges
 // e.g. ₹84, ₹1.2K, ₹12.5L, ₹1.5Cr
 // Removes trailing zeros for cleaner display (₹1.2K not ₹1.20K)
 export function formatINRCompact(amount: number): string {
-  const abs = Math.abs(amount)
-  const sign = amount < 0 ? '-' : ''
+  // 🐛 UI/UX Phase 3 Fix 6: Input validation — return '₹0' for undefined/NaN/null
+  if (amount === undefined || amount === null || isNaN(Number(amount))) {
+    return '₹0'
+  }
+  const num = Number(amount)
+  const abs = Math.abs(num)
+  const sign = num < 0 ? '-' : ''
   if (abs === 0) return '₹0'
   if (abs >= 10000000) {
     const val = abs / 10000000
