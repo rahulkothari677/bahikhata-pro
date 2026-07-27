@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getAuthUserIdWithModule } from '@/lib/get-auth'
+import { getAuthUserIdWithModule, assertNotImpersonated } from '@/lib/get-auth'
 import { roundMoney, fromPaise } from '@/lib/money'
 import { activeTransactionWhere } from '@/lib/query-helpers'
 import { istMonthStart, getISTDateParts, isSameISTMonth, istDateString, istYearMonth, IST_OFFSET_MS } from '@/lib/timezone'
@@ -40,8 +40,22 @@ export const maxDuration = 60
 // GET /api/gstr-export?from=&to= - generates GSTR-1 format data (JSON + CSV)
 export async function GET(req: NextRequest) {
   try {
-    const { userId, error } = await getAuthUserIdWithModule('reports')
+    const { userId, error, isImpersonated } = await getAuthUserIdWithModule('reports')
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    // 🔒 IMPERSONATION (audit 2026-07-27). This dumps the full invoice
+    // register — invoice numbers, party names, GSTINs, amounts — as JSON or
+    // CSV. That is bulk exfiltration of the shopkeeper's financial records AND
+    // of their customers' details, who are third parties to EkBook entirely.
+    //
+    // /api/account/export and /api/export/full were already blocked during
+    // impersonation. This one was not, purely because getAuthUserIdWithModule
+    // did not return isImpersonated — so the check could not be written. A
+    // guard covering two of three export routes has a hole in it.
+    //
+    // Support can still READ the reports on screen; they just cannot pull a file.
+    const impersonationBlock = assertNotImpersonated({ isImpersonated })
+    if (impersonationBlock) return impersonationBlock
 
     const { searchParams } = new URL(req.url)
     const fromStr = searchParams.get('from')

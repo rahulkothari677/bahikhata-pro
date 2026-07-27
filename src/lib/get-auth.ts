@@ -37,12 +37,13 @@ export async function getAuthUserId(): Promise<{ userId: string | null; error?: 
  */
 export async function getAuthUserIdWithModule(
   module: ModuleKey
-): Promise<{ userId: string | null; error?: NextResponse }> {
+): Promise<{ userId: string | null; isImpersonated: boolean; error?: NextResponse }> {
   const session = await getServerSession(authOptions)
 
   if (!session?.user?.id) {
     return {
       userId: null,
+      isImpersonated: false,
       error: NextResponse.json({ error: 'Unauthorized — please sign in' }, { status: 401 }),
     }
   }
@@ -57,6 +58,7 @@ export async function getAuthUserIdWithModule(
   if (!canAccessModule(role, permissions, module)) {
     return {
       userId: null,
+      isImpersonated: false,
       error: NextResponse.json({
         error: 'Forbidden',
         message: `You don't have permission to access ${module}. Contact the shop owner.`,
@@ -64,7 +66,13 @@ export async function getAuthUserIdWithModule(
     }
   }
 
-  return { userId }
+  // 🔒 (audit 2026-07-27) This helper did not expose isImpersonated at all, so
+  // every route using it was structurally UNABLE to check — including
+  // /api/gstr-export, which dumps the full invoice register with party names
+  // and GSTINs. A guard that cannot be called from the majority of routes is
+  // not a guard.
+  const isImpersonated = (session.user as any).isImpersonated === true
+  return { userId, isImpersonated }
 }
 
 /**

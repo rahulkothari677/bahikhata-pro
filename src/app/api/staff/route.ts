@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { rateLimit, rateLimitedResponse } from '@/lib/rate-limit'
 import bcrypt from 'bcryptjs'
 import { db } from '@/lib/db'
-import { getAuthUserIdOwnerOnly } from '@/lib/get-auth'
+import { getAuthUserIdOwnerOnly, assertNotImpersonated } from '@/lib/get-auth'
 import {
   DEFAULT_STAFF_PERMISSIONS,
   parsePermissions,
@@ -18,6 +18,10 @@ export async function GET() {
   try {
     const { userId, error } = await getAuthUserIdOwnerOnly()
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    // NOTE: GET is deliberately NOT blocked during impersonation. Listing
+    // sub-accounts changes nothing and support genuinely needs to see the
+    // account structure to help. Only the MUTATING handlers below are blocked.
     // V17-Ext Tier 3 Step 2: List BOTH staff and CA accounts. Was: role:'staff' only.
     // CAs are sub-accounts managed in the same UI, so they must appear here.
     const staff = await db.user.findMany({
@@ -51,8 +55,17 @@ export async function GET() {
 // POST /api/staff - create a new sub-account (staff or CA) linked to the owner
 export async function POST(req: NextRequest) {
   try {
-    const { userId, error } = await getAuthUserIdOwnerOnly()
+    const { userId, error, isImpersonated } = await getAuthUserIdOwnerOnly()
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    // 🔒 IMPERSONATION (audit 2026-07-27). Sub-accounts carry their own email
+    // and password and share the owner's data scope. Creating or editing one
+    // while impersonating would convert a time-boxed, audited 5-minute support
+    // session into PERMANENT access under a credential the admin chose — and it
+    // would look like a staff account the shopkeeper created themselves.
+    // assertNotImpersonated exists for exactly this; these handlers never called it.
+    const impersonationBlock = assertNotImpersonated({ isImpersonated })
+    if (impersonationBlock) return impersonationBlock
 
     // 🔒 V19-008 FIX: Rate limit moved from GET to POST (was blocking list, not creation)
     const rl = await rateLimit(`staff-create:${userId}`, { limit: 5, windowSec: 3600 })
@@ -146,8 +159,17 @@ export async function POST(req: NextRequest) {
 // PATCH /api/staff?id=xxx - update staff permissions (staff only, NOT CA)
 export async function PATCH(req: NextRequest) {
   try {
-    const { userId, error } = await getAuthUserIdOwnerOnly()
+    const { userId, error, isImpersonated } = await getAuthUserIdOwnerOnly()
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    // 🔒 IMPERSONATION (audit 2026-07-27). Sub-accounts carry their own email
+    // and password and share the owner's data scope. Creating or editing one
+    // while impersonating would convert a time-boxed, audited 5-minute support
+    // session into PERMANENT access under a credential the admin chose — and it
+    // would look like a staff account the shopkeeper created themselves.
+    // assertNotImpersonated exists for exactly this; these handlers never called it.
+    const impersonationBlock = assertNotImpersonated({ isImpersonated })
+    if (impersonationBlock) return impersonationBlock
 
     const { searchParams } = new URL(req.url)
     const id = searchParams.get('id')
@@ -225,8 +247,17 @@ export async function PATCH(req: NextRequest) {
 // DELETE /api/staff?id=xxx - remove a sub-account (staff or CA)
 export async function DELETE(req: NextRequest) {
   try {
-    const { userId, error } = await getAuthUserIdOwnerOnly()
+    const { userId, error, isImpersonated } = await getAuthUserIdOwnerOnly()
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    // 🔒 IMPERSONATION (audit 2026-07-27). Sub-accounts carry their own email
+    // and password and share the owner's data scope. Creating or editing one
+    // while impersonating would convert a time-boxed, audited 5-minute support
+    // session into PERMANENT access under a credential the admin chose — and it
+    // would look like a staff account the shopkeeper created themselves.
+    // assertNotImpersonated exists for exactly this; these handlers never called it.
+    const impersonationBlock = assertNotImpersonated({ isImpersonated })
+    if (impersonationBlock) return impersonationBlock
 
     const { searchParams } = new URL(req.url)
     const id = searchParams.get('id')
