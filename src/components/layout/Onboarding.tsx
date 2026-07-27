@@ -4,23 +4,42 @@ import { useState } from 'react'
 import { useAppStore } from '@/store/app-store'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { toast as sonnerToast } from 'sonner'
-import { BookOpenText, ScanLine, ShoppingCart, Package, Wallet, FileBarChart, Sparkles, Loader2, ArrowRight, Plus } from 'lucide-react'
+import { BookOpenText, ScanLine, ShoppingCart, Package, Wallet, FileBarChart, Sparkles, Loader2, ArrowRight, Plus, Store, User, Phone } from 'lucide-react'
 import { offlineFetch } from '@/lib/offline-fetch'
 
+/**
+ * Onboarding — first-run welcome dialog.
+ *
+ * 🐛 UI/UX Phase 1 Fix 2: The previous primary CTA was "Record your first sale"
+ * which sent users to the New Sale form with NO products — a dead-end. Now the
+ * primary CTA is "Set up your shop" which collects 3 quick fields (shop name,
+ * owner name, phone) and then navigates to Inventory to add the first product.
+ *
+ * Three CTAs (in priority order):
+ *   1. "Set up your shop" (primary) — 3-field quick setup → Inventory
+ *   2. "Load Demo Data" (secondary) — seeds 15 products + 7 parties + 60 days
+ *   3. "Explore first" (tertiary) — just dismisses, no data written
+ *
+ * The progressive disclosure part (guiding the user through first product →
+ * first sale) is handled by the Dashboard's welcome card (see Fix 6).
+ */
 export function Onboarding({ open, onDone }: { open: boolean; onDone: () => void }) {
   const { triggerRefresh, setView } = useAppStore()
   const [seeding, setSeeding] = useState(false)
   const [skipping, setSkipping] = useState(false)
 
+  // 🐛 Fix 2: Setup mode state
+  const [setupMode, setSetupMode] = useState(false)
+  const [setupForm, setSetupForm] = useState({ shopName: '', ownerName: '', phone: '' })
+  const [setupLoading, setSetupLoading] = useState(false)
+
   const handleSeed = async () => {
     setSeeding(true)
     try {
       const r = await offlineFetch('/api/seed', { method: 'POST', offline: { queueable: false, invalidate: ['/api/products', '/api/parties', '/api/transactions', '/api/dashboard'] } })
-      // 🔒 2026-07-22: offlineFetch resolves with the Response on a 4xx/5xx,
-      // so a rejected seed fell through to the success toast and rendered
-      // "Added undefined products, undefined parties" — the user is told the
-      // demo data loaded when nothing was created.
       if (!r.ok) throw new Error('seed failed')
       const data = await r.json()
       if (data.skipped) {
@@ -31,44 +50,51 @@ export function Onboarding({ open, onDone }: { open: boolean; onDone: () => void
       triggerRefresh()
       onDone()
     } catch {
-      sonnerToast.error("Couldn\'t set up demo data")
+      sonnerToast.error("Couldn't set up demo data")
     } finally {
       setSeeding(false)
     }
   }
 
-  const handleSkip = async () => {
-    setSkipping(true)
-    // Create empty setting so the app doesn't keep showing onboarding
-    try {
-      await offlineFetch('/api/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ shopName: 'My Shop' }),
-        offline: { invalidate: ['/api/settings', '/api/dashboard'] },
-      })
-    } catch {}
+  // 🐛 Fix 4: Outside-click / X button should NOT write 'My Shop' to the DB.
+  // Just dismiss. The onboarding will re-show on next load (Fix 3 makes this
+  // persistent via localStorage), which is the correct behavior — the user
+  // hasn't set up their shop yet.
+  const handleSkip = () => {
     onDone()
-    setSkipping(false)
   }
 
-  // 🔒 V26 Phase 6 §4.2: Onboarding activation — the primary CTA now drives
-  // the user to record their first sale (activation = first transaction).
-  // Was: only "Start Fresh" + "Load Demo Data". Now: "Record your first sale"
-  // is the primary, with demo data as secondary + empty as tertiary.
-  const handleFirstSale = async () => {
-    setSkipping(true)
+  // 🐛 Fix 2: The primary CTA — set up shop with 3 quick fields.
+  // After saving, navigate to Inventory so the user can add their first product.
+  // This avoids the dead-end of sending them to New Sale with no products.
+  const handleSetupSubmit = async () => {
+    if (!setupForm.shopName.trim()) {
+      sonnerToast.error('Please enter your shop name')
+      return
+    }
+    setSetupLoading(true)
     try {
       await offlineFetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ shopName: 'My Shop' }),
+        body: JSON.stringify({
+          shopName: setupForm.shopName.trim(),
+          ownerName: setupForm.ownerName.trim() || undefined,
+          phone: setupForm.phone.trim() || undefined,
+        }),
         offline: { invalidate: ['/api/settings', '/api/dashboard'] },
       })
-    } catch {}
-    onDone()
-    setView('new-sale')
-    setSkipping(false)
+      triggerRefresh()
+      onDone()
+      // Navigate to Inventory so the user can add their first product.
+      // The Dashboard's welcome card will then guide them to record their first sale.
+      setView('inventory')
+      sonnerToast.success('Shop details saved! Now add your first product.')
+    } catch {
+      sonnerToast.error('Could not save shop details. Please try again.')
+    } finally {
+      setSetupLoading(false)
+    }
   }
 
   return (
@@ -84,81 +110,161 @@ export function Onboarding({ open, onDone }: { open: boolean; onDone: () => void
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-2">
-          <p className="text-center text-sm text-muted-foreground">
-            Let&apos;s get you started! Here&apos;s what you can do:
-          </p>
+        {!setupMode ? (
+          /* Welcome screen — feature overview + 3 CTAs */
+          <div className="space-y-4 py-2">
+            <p className="text-center text-sm text-muted-foreground">
+              Let&apos;s get you started! Here&apos;s what you can do:
+            </p>
 
-          <div className="grid grid-cols-2 gap-3">
-            <FeatureBox icon={ScanLine} title="AI Bill Scanner" desc="Snap a bill, we auto-fill everything" color="text-amber-600 dark:text-amber-400 bg-amber-100" />
-            <FeatureBox icon={Package} title="Smart Inventory" desc="Track stock, prices, low-stock alerts" color="text-violet-600 bg-violet-100" />
-            <FeatureBox icon={ShoppingCart} title="Sales & Purchase" desc="Record transactions with auto profit calc" color="text-emerald-600 dark:text-emerald-400 bg-emerald-100" />
-            <FeatureBox icon={FileBarChart} title="Reports & GST" desc="P&L, GST returns, stock valuation" color="text-rose-600 bg-rose-100" />
-          </div>
+            <div className="grid grid-cols-2 gap-3">
+              <FeatureBox icon={ScanLine} title="AI Bill Scanner" desc="Snap a bill, we auto-fill everything" color="text-amber-600 dark:text-amber-400 bg-amber-100" />
+              <FeatureBox icon={Package} title="Smart Inventory" desc="Track stock, prices, low-stock alerts" color="text-violet-600 bg-violet-100" />
+              <FeatureBox icon={ShoppingCart} title="Sales & Purchase" desc="Record transactions with auto profit calc" color="text-emerald-600 dark:text-emerald-400 bg-emerald-100" />
+              <FeatureBox icon={FileBarChart} title="Reports & GST" desc="P&L, GST returns, stock valuation" color="text-rose-600 bg-rose-100" />
+            </div>
 
-          <div className="rounded-xl bg-gradient-saffron/10 border border-primary/30 p-4">
-            <div className="flex items-start gap-3">
-              <Sparkles className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="font-semibold text-sm">Try with demo data</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  We&apos;ll add a sample kirana store with 15 products, 7 customers/suppliers, and 60 days of transactions. You can reset anytime.
-                </p>
+            <div className="rounded-xl bg-gradient-saffron/10 border border-primary/30 p-4">
+              <div className="flex items-start gap-3">
+                <Sparkles className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-sm">Try with demo data</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    We&apos;ll add a sample kirana store with 15 products, 7 customers/suppliers, and 60 days of transactions. You can reset anytime.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-3">
+              {/* 🐛 UI/UX Phase 1 Fix 2: Primary CTA is now "Set up your shop"
+                  — collects 3 quick fields, then navigates to Inventory.
+                  Was: "Record your first sale" which dead-ended users with no products. */}
+              <Button
+                className="w-full bg-gradient-saffron gap-2 shadow-md"
+                onClick={() => setSetupMode(true)}
+                disabled={seeding || skipping}
+              >
+                <Store className="w-4 h-4" />
+                Set up your shop
+                <ArrowRight className="w-4 h-4" />
+              </Button>
+              <div className="flex flex-col sm:flex-row gap-3">
+                <Button
+                  variant="outline"
+                  className="flex-1 gap-2"
+                  onClick={handleSeed}
+                  disabled={seeding || skipping}
+                >
+                  {seeding ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Setting up demo data...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      Load Demo Data
+                    </>
+                  )}
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="flex-1"
+                  onClick={handleSkip}
+                  disabled={seeding || skipping}
+                >
+                  Explore first
+                </Button>
               </div>
             </div>
           </div>
+        ) : (
+          /* Setup screen — 3 quick fields */
+          <div className="space-y-4 py-2">
+            <p className="text-center text-sm text-muted-foreground">
+              Let&apos;s set up your shop. This takes 30 seconds — you can change everything later.
+            </p>
 
-          <div className="flex flex-col gap-3">
-            {/* 🔒 V26 Phase 6 §4.2: Primary CTA is now "Record your first sale" —
-                activation = first transaction. Demo data is secondary, empty is tertiary. */}
-            <Button
-              className="w-full bg-gradient-saffron gap-2 shadow-md"
-              onClick={handleFirstSale}
-              disabled={seeding || skipping}
-            >
-              {skipping ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Starting...
-                </>
-              ) : (
-                <>
-                  <Plus className="w-4 h-4" />
-                  Record your first sale
-                  <ArrowRight className="w-4 h-4" />
-                </>
-              )}
-            </Button>
-            <div className="flex flex-col sm:flex-row gap-3">
+            <div className="space-y-3">
+              <div>
+                <Label htmlFor="shopName" className="text-sm font-medium">Shop Name *</Label>
+                <div className="relative mt-1">
+                  <Store className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    id="shopName"
+                    value={setupForm.shopName}
+                    onChange={(e) => setSetupForm({ ...setupForm, shopName: e.target.value })}
+                    placeholder="e.g. Sharma Kirana Store"
+                    className="pl-9"
+                    autoFocus
+                    onKeyDown={(e) => e.key === 'Enter' && handleSetupSubmit()}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="ownerName" className="text-sm font-medium">Your Name (optional)</Label>
+                <div className="relative mt-1">
+                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    id="ownerName"
+                    value={setupForm.ownerName}
+                    onChange={(e) => setSetupForm({ ...setupForm, ownerName: e.target.value })}
+                    placeholder="e.g. Rajesh Sharma"
+                    className="pl-9"
+                    onKeyDown={(e) => e.key === 'Enter' && handleSetupSubmit()}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="phone" className="text-sm font-medium">Phone (optional)</Label>
+                <div className="relative mt-1">
+                  <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    id="phone"
+                    type="tel"
+                    value={setupForm.phone}
+                    onChange={(e) => setSetupForm({ ...setupForm, phone: e.target.value })}
+                    placeholder="e.g. 9876543210"
+                    className="pl-9"
+                    onKeyDown={(e) => e.key === 'Enter' && handleSetupSubmit()}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3 pt-2">
               <Button
-                variant="outline"
-                className="flex-1 gap-2"
-                onClick={handleSeed}
-                disabled={seeding || skipping}
+                variant="ghost"
+                onClick={() => setSetupMode(false)}
+                disabled={setupLoading}
+                className="sm:flex-1"
               >
-                {seeding ? (
+                Back
+              </Button>
+              <Button
+                className="sm:flex-1 bg-gradient-saffron gap-2"
+                onClick={handleSetupSubmit}
+                disabled={setupLoading || !setupForm.shopName.trim()}
+              >
+                {setupLoading ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Setting up demo data...
+                    Saving...
                   </>
                 ) : (
                   <>
-                    <Sparkles className="w-4 h-4" />
-                    Load Demo Data
+                    <Plus className="w-4 h-4" />
+                    Save & Add Products
+                    <ArrowRight className="w-4 h-4" />
                   </>
                 )}
               </Button>
-              <Button
-                variant="ghost"
-                className="flex-1"
-                onClick={handleSkip}
-                disabled={seeding || skipping}
-              >
-                {skipping ? 'Starting...' : 'Explore first'}
-              </Button>
             </div>
           </div>
-        </div>
+        )}
       </DialogContent>
     </Dialog>
   )

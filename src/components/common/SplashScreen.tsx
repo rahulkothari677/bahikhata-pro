@@ -36,9 +36,11 @@ import { useEffect, useState, useRef } from 'react'
  * - Rotating accent ring (subtle, slow)
  */
 
-const MIN_DISPLAY_MS = 3800  // 3.8s — full premium experience
+const MIN_DISPLAY_MS = 3800  // 3.8s — full premium experience (cold load)
+const WARM_RELOAD_MIN_MS = 800  // 🐛 UI/UX Fix 5: 0.8s for warm reloads (was 3.8s)
 const MAX_DISPLAY_MS = 5000  // 5.0s — hard fallback
 const EXIT_ANIMATION_MS = 500
+const WARM_RELOAD_KEY = 'bahikhata-splash-shown-this-session'
 
 export function SplashScreen({
   onFinish,
@@ -50,6 +52,23 @@ export function SplashScreen({
   const [exiting, setExiting] = useState(false)
   const startTimeRef = useRef(Date.now())
   const finishedRef = useRef(false)
+
+  // 🐛 UI/UX Phase 1 Fix 5: Detect warm reload (same browser session).
+  // Cold load = first visit in this tab/session → full 3.8s premium splash.
+  // Warm reload = subsequent navigation/refresh → 0.8s quick splash (still
+  // shows the brand, but doesn't waste the user's time). Uses sessionStorage
+  // so it resets when the tab closes (true cold load next time).
+  // NOTE: The previous attempt (V23 §13.9h) used sessionStorage to SKIP the
+  // splash entirely, which the user reported as "splash screen isn't coming."
+  // This fix KEEPS the splash visible (just shorter) — the user still sees
+  // the brand animation, just not for 3.8s on every reload.
+  const isWarmReload = typeof window !== 'undefined' && sessionStorage.getItem(WARM_RELOAD_KEY) === 'true'
+  const minDisplayMs = isWarmReload ? WARM_RELOAD_MIN_MS : MIN_DISPLAY_MS
+
+  // Mark this session as "splash shown" so the next reload is treated as warm
+  useEffect(() => {
+    try { sessionStorage.setItem(WARM_RELOAD_KEY, 'true') } catch {}
+  }, [])
 
   function triggerExit() {
     if (finishedRef.current) return
@@ -67,7 +86,7 @@ export function SplashScreen({
       if (ready && !finishedRef.current) {
         triggerExit()
       }
-    }, MIN_DISPLAY_MS)
+    }, minDisplayMs)
 
     const maxTimer = setTimeout(() => {
       if (!finishedRef.current) {
@@ -79,16 +98,16 @@ export function SplashScreen({
       clearTimeout(minTimer)
       clearTimeout(maxTimer)
     }
-  }, [])
+  }, [])  // eslint-disable-line react-hooks/exhaustive-deps -- minDisplayMs is stable per mount
 
   useEffect(() => {
     if (ready && !exiting && !finishedRef.current) {
       const elapsed = Date.now() - startTimeRef.current
-      if (elapsed >= MIN_DISPLAY_MS) {
+      if (elapsed >= minDisplayMs) {
         triggerExit()
       }
     }
-  }, [ready])
+  }, [ready])  // eslint-disable-line react-hooks/exhaustive-deps -- minDisplayMs is stable per mount
 
   const brandLetters = 'EkBook'.split('')
 

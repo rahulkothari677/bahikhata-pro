@@ -24,6 +24,7 @@ import {
 import { VoiceEntry } from '@/components/common/VoiceEntry'
 import { DraftManagerModal } from '@/components/common/DraftManagerModal'
 import { BarcodeScanner } from '@/components/common/BarcodeScanner'
+import { EmptyState } from '@/components/common/EmptyState'
 import { deriveInterStateFromStates } from '@/lib/gst-states'
 import { useSetting } from '@/hooks/use-setting'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
@@ -1202,9 +1203,27 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
               )}
 
               {filteredProducts.length === 0 && (
-                <div className="mt-3 text-center py-6 text-sm text-muted-foreground border border-dashed border-border rounded-lg">
-                  <Package className="w-8 h-8 mx-auto mb-1 text-muted-foreground/50" />
-                  {productSearch ? `No products match "${productSearch}"` : 'No products found. Add products in Inventory first.'}
+                <div className="mt-3">
+                  {productSearch ? (
+                    // User is searching — show a simple "no matches" message
+                    <div className="text-center py-6 text-sm text-muted-foreground border border-dashed border-border rounded-lg">
+                      <Package className="w-8 h-8 mx-auto mb-1 text-muted-foreground/50" />
+                      No products match &quot;{productSearch}&quot;
+                    </div>
+                  ) : (
+                    // 🐛 UI/UX Phase 1 Fix 1: No products at all — show actionable empty state
+                    // with a button to go to Inventory + a button to scan a bill (which can
+                    // create products automatically). Was: a dead-end div with no escape.
+                    <EmptyState
+                      icon={Package}
+                      title="No products yet"
+                      description="You need at least one product to record a sale. Add your first product — it takes 30 seconds. Or scan a bill and we'll create the products for you."
+                      action={{ label: 'Add Product', onClick: () => setView('inventory') }}
+                      secondaryAction={{ label: 'Scan a Bill', onClick: () => { setScannerBillType(isSale ? 'sale' : 'purchase'); setView('scanner') } }}
+                      color="blue"
+                      compact
+                    />
+                  )}
                 </div>
               )}
             </div>

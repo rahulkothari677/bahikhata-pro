@@ -73,7 +73,14 @@ export default function Home() {
   const { canAccess } = useStaffPermissions()
   const { paywallOpen, paywallFeature, closePaywall } = useAppStore()
   const queryClient = useQueryClient()
-  const [onboardingDismissed, setOnboardingDismissed] = useState(false)
+  // 🐛 UI/UX Phase 1 Fix 3: Persist onboardingDismissed in localStorage so the
+  // onboarding dialog doesn't re-show on every page reload. Was: component state
+  // only (lost on reload), causing the dialog to reappear every time the user
+  // opened the app until they added a product or party.
+  const [onboardingDismissed, setOnboardingDismissed] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem('bahikhata-onboarding-dismissed') === 'true'
+  })
   const [tourDone, setTourDone] = useState(false)
   const [themePickerDone, setThemePickerDone] = useState(false)
   const [mounted, setMounted] = useState(false)
@@ -400,7 +407,11 @@ export default function Home() {
     tourDone,
     firstRunComplete,
     onThemePickerDone: () => setThemePickerDone(true),
-    onOnboardingDone: () => setOnboardingDismissed(true),
+    onOnboardingDone: () => {
+      setOnboardingDismissed(true)
+      // 🐛 UI/UX Phase 1 Fix 3: Persist dismissal so it doesn't re-show on reload
+      try { localStorage.setItem('bahikhata-onboarding-dismissed', 'true') } catch {}
+    },
     onTourDone: () => setTourDone(true),
     shouldShowRatePrompt,
     onRated,
