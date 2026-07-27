@@ -9517,3 +9517,38 @@ Stage Summary:
 - NO MIGRATION needed — this is a type-level change only. The main app owns all migrations; the admin app's prisma generate picks up the types from this schema.
 - The admin app's Prisma client now has correct types for all shared tables, including: paise-based money fields (Int instead of Float), soft-delete columns (deletedAt), e-invoicing fields (IRN, e-way bill), bank reconciliation tables, document vault, GST filing tables, field change log, password reset tokens, invoice counter, tokenVersion, ImpersonationToken.
 - This unblocks future admin features that need to query these tables (e.g., "show me a user's GST returns" or "show me a user's document vault").
+
+---
+Task ID: integration-phase-d6
+Agent: main
+Task: Execute Phase D.6 (documentation) — write INTEGRATION-CONTRACT.md reflecting the auditor's work (V1-V26) + integration phases (D.1-D.5). Ship to BOTH repos.
+
+Work Log:
+- User asked me to analyze the auditor's work before writing the contract, so my documentation accurately reflects what they built (not just my D.1-D.5 changes).
+- Launched a thorough research agent to analyze: git history (V1-V26 + D.1-D.5), audit docs (Auditor-Response-V6.5-Admin, V9, V10), README, security architecture, feature inventory (33 features across Phases 1-3), integration points, known issues, test infra, design philosophy.
+- Research agent returned a comprehensive 9-area report covering: full git history reconstructed from worklog (155 task IDs), audit document analysis, README analysis, complete security architecture (13 subsections), feature inventory (33 features), integration points (5 patterns), known issues (15+ items), test infrastructure (admin has no automated tests — all manual), design philosophy (10 principles).
+- Wrote INTEGRATION-CONTRACT.md (541 lines, 32KB) covering 9 parts + 2 appendices:
+  - Part A: Architecture overview (2 apps at a glance, what they share, 3-channel contract diagram)
+  - Part B: Schema ownership rules (who owns what, the hard rule, migration policy, admin-intel asymmetry, D.5 alignment status)
+  - Part C: Auth isolation rules (2 separate auth domains, 4 hard rules, impersonation flow)
+  - Part D: Security architecture (13 subsections — auth, role hierarchy, rate limiting, CSRF, CSP, IP allowlist, audit trail, read-only DB, SQL console, cron auth, SSRF, password reset, resilience layer)
+  - Part E: Feature inventory (Phase 1-3 + D.1-D.5)
+  - Part F: Environment variables (shared, main-only, admin-only)
+  - Part G: Known issues & technical debt (5 pre-existing TS errors, 15 deferred items, 6 founder infra tasks, MAIN_APP_URL typo)
+  - Part H: Auditor's 10 design principles
+  - Part I: Change protocol
+  - Appendix A: Migration history (12 key phases)
+  - Appendix B: File cross-reference (synced files, admin-only, main-only)
+- Copied the identical file to both repos.
+- Shipped as 2 PRs:
+  - Main app: PR #6 (branch integration-phase-d6-integration-contract) → squash-merged to main (commit eea9e77)
+  - Admin app: PR #9 (branch integration-phase-d6-integration-contract) → squash-merged to main (commit 9fc53b2)
+- Verification: both repos now have INTEGRATION-CONTRACT.md at root, both 32,285 bytes (identical content confirmed via GitHub API).
+
+Stage Summary:
+- Phase D.6 complete. PR #6 (main) + PR #9 (admin) merged.
+- INTEGRATION-CONTRACT.md is now the single source of truth for the integration, present in BOTH repos.
+- The contract accurately reflects the auditor's work (V1-V26: 33 features, 13 security controls, 10 design principles) + my integration phases (D.1-D.5: stop-the-bleeding, security cleanup, impersonation, tokenVersion, schema alignment).
+- ALL 6 INTEGRATION PHASES (D.1-D.6) ARE NOW COMPLETE.
+- Integration plan fully executed. Both apps are aligned, secure, and documented.
+- User indicated they will next ask me to improve the main app — awaiting their specific instructions.
