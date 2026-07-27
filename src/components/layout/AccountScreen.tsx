@@ -63,6 +63,7 @@ import {
 import type { ViewType } from '@/store/app-store'
 // 🔒 AUDIT V23 FIX §13.7: Use real ReferralCard instead of fake email-prefix code
 import { ReferralCard } from '@/components/referral/ReferralCard'
+import { BusinessCardDisplay } from '@/components/common/BusinessCardDisplay'
 import { useTranslation } from '@/hooks/use-translation'
 
 // 🔒 V22-6 (Phase 4) FIX: Move lazy() to module scope.
@@ -886,127 +887,15 @@ function AccountSectionContent({
   }
 
   // ═══ Business Card Page — shareable digital visiting card ═══
-  // 🔒 V22-13 (Batch C, Phase 7h): A beautiful digital visiting card with
-  // shop branding, contact info, and QR code. Can be shared via WhatsApp
-  // or downloaded as an image.
+  // 🐛 UI/UX Phase 2: Now uses BusinessCardDisplay component with 10 designs,
+  // logo support, image download, and vCard 3.0 (was: single hard-coded design,
+  // no logo, no download, MECARD format).
   if (section === 'business-card') {
-    // Build vCard for QR code (MECARD format)
-    // 🔒 AUDIT V23 FIX §8.12: Escape ; and , in values
-    const escapeMecard = (val: string) => val.replace(/([;,:\\])/g, '\\$1')
-    const vcardParts: string[] = []
-    if (setting.ownerName) vcardParts.push(`N:${escapeMecard(setting.ownerName)}`)
-    if (setting.shopName) vcardParts.push(`ORG:${escapeMecard(setting.shopName)}`)
-    if (setting.phone) vcardParts.push(`TEL:${escapeMecard(setting.phone)}`)
-    if (session?.user?.email) vcardParts.push(`EMAIL:${escapeMecard(session.user.email)}`)
-    if (setting.address) vcardParts.push(`ADR:${escapeMecard(setting.address)}`)
-    if (setting.gstin) vcardParts.push(`NOTE:GSTIN ${escapeMecard(setting.gstin)}`)
-    const vcard = `MECARD:${vcardParts.join(';')};;`
-
     return (
-      <div className="space-y-4">
-        {/* Digital Business Card */}
-        <div className="relative rounded-2xl overflow-hidden shadow-card">
-          {/* Card front — gradient background */}
-          <div className="bg-gradient-saffron p-6 text-white relative">
-            {/* Decorative circles */}
-            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16" />
-            <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full -ml-12 -mb-12" />
-
-            <div className="relative flex items-start justify-between gap-4">
-              <div className="flex-1 min-w-0">
-                {/* Shop name */}
-                <p className="text-3xs uppercase tracking-wider text-white/70 font-semibold">Business Name</p>
-                <h3 className="text-xl font-bold mt-0.5 truncate">{setting.shopName || 'My Shop'}</h3>
-
-                {/* Owner name */}
-                {setting.ownerName && (
-                  <p className="text-sm text-white/85 mt-2">
-                    <span className="text-white/60">Proprietor:</span> {setting.ownerName}
-                  </p>
-                )}
-
-                {/* Contact details */}
-                <div className="mt-3 space-y-1">
-                  {setting.phone && (
-                    <p className="text-xs text-white/85 flex items-center gap-1.5">
-                      <Phone className="w-3 h-3 flex-shrink-0" />
-                      {setting.phone}
-                    </p>
-                  )}
-                  {session?.user?.email && (
-                    <p className="text-xs text-white/75 flex items-center gap-1.5">
-                      <Mail className="w-3 h-3 flex-shrink-0" />
-                      {session.user.email}
-                    </p>
-                  )}
-                  {setting.gstin && (
-                    <p className="text-xs text-white/75 flex items-center gap-1.5 font-mono">
-                      <FileSpreadsheet className="w-3 h-3 flex-shrink-0" />
-                      GSTIN: {setting.gstin}
-                    </p>
-                  )}
-                </div>
-
-                {/* Address */}
-                {setting.address && (
-                  <p className="text-2xs text-white/65 mt-2 leading-relaxed">
-                    {setting.address}
-                  </p>
-                )}
-              </div>
-
-              {/* QR Code */}
-              <div className="flex-shrink-0">
-                <div className="p-2 bg-white rounded-xl shadow-lg">
-                  <QRCodeSVG
-                    value={vcard}
-                    size={96}
-                    level="M"
-                    includeMargin={false}
-                  />
-                </div>
-                <p className="text-3xs text-white/60 text-center mt-1">Scan to save</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Share buttons */}
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            onClick={() => {
-              const shareText = `${setting.shopName || 'My Shop'}\n${setting.ownerName ? 'Proprietor: ' + setting.ownerName + '\n' : ''}${setting.phone ? 'Phone: ' + setting.phone + '\n' : ''}${setting.gstin ? 'GSTIN: ' + setting.gstin + '\n' : ''}${setting.address ? 'Address: ' + setting.address : ''}`
-              if (navigator.share) {
-                navigator.share({ title: setting.shopName || 'My Shop', text: shareText }).catch(() => {})
-              } else if (navigator.clipboard) {
-                navigator.clipboard.writeText(shareText).then(() => {
-                  sonnerToast.success('Business card copied to clipboard')
-                }).catch(() => {})
-              }
-            }}
-            className="py-2.5 rounded-lg bg-gradient-saffron text-white text-sm font-medium flex items-center justify-center gap-2"
-          >
-            <Share2 className="w-4 h-4" />
-            Share Card
-          </button>
-          <button
-            onClick={() => {
-              const waText = encodeURIComponent(`${setting.shopName || 'My Shop'}\n${setting.ownerName ? 'Proprietor: ' + setting.ownerName + '\n' : ''}${setting.phone ? 'Phone: ' + setting.phone + '\n' : ''}${setting.gstin ? 'GSTIN: ' + setting.gstin + '\n' : ''}${setting.address ? 'Address: ' + setting.address : ''}`)
-              window.open(`https://wa.me/?text=${waText}`, '_blank')
-            }}
-            className="py-2.5 rounded-lg border border-emerald-300 text-emerald-700 dark:text-emerald-400 dark:border-emerald-800 text-sm font-medium flex items-center justify-center gap-2 hover:bg-emerald-50 dark:hover:bg-emerald-950 transition"
-          >
-            <Send className="w-4 h-4" />
-            Send on WhatsApp
-          </button>
-        </div>
-
-        {/* Tip */}
-        <div className="rounded-lg bg-muted/50 border border-border/60 p-3 text-xs text-muted-foreground">
-          <p className="font-medium text-foreground mb-1">💡 How to use:</p>
-          <p>Share this card with customers via WhatsApp. They can scan the QR code to instantly save your shop's contact in their phone.</p>
-        </div>
-      </div>
+      <BusinessCardDisplay
+        setting={setting}
+        email={session?.user?.email}
+      />
     )
   }
 

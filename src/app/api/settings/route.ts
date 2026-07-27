@@ -132,6 +132,20 @@ export async function PUT(req: NextRequest) {
       sanitized.logoUrl = body.logoUrl
     }
 
+    // 🐛 UI/UX Phase 2: Business card design + slug
+    if (body.cardDesign !== undefined) {
+      if (body.cardDesign !== null && typeof body.cardDesign !== 'string') {
+        return NextResponse.json({ error: 'cardDesign must be a string or null' }, { status: 400 })
+      }
+      sanitized.cardDesign = body.cardDesign
+    }
+    if (body.cardSlug !== undefined) {
+      if (body.cardSlug !== null && typeof body.cardSlug !== 'string') {
+        return NextResponse.json({ error: 'cardSlug must be a string or null' }, { status: 400 })
+      }
+      sanitized.cardSlug = body.cardSlug
+    }
+
     const updateData: any = sanitized
 
     if (body.lockedUntil !== undefined) {

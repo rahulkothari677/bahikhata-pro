@@ -444,6 +444,15 @@ model Setting {
   // logo is uploaded via /api/settings/logo (which uses uploadBillImage) and
   // stored here so it appears on every invoice without re-uploading.
   logoUrl          String?
+
+  // 🐛 UI/UX Phase 2: Business card redesign fields
+  // cardDesign stores the user's chosen design ID from the design registry
+  // (src/lib/business-card-designs.ts). null = default design ("saffron-classic").
+  // cardSlug is a unique URL-safe slug for the public business card page
+  // (/card/[slug]). null = no public card. Auto-generated from shopName on first
+  // card view if not set.
+  cardDesign       String?
+  cardSlug         String? @unique
 }
 
 // ==================== ANNOUNCEMENTS (broadcast messages) ====================
