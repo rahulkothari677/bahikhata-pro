@@ -18,7 +18,7 @@ import {
   ArrowUpRight, ArrowDownRight, AlertTriangle, IndianRupee,
   Receipt, Boxes, PiggyBank, ScanLine, ArrowRight, Plus, CloudOff, Repeat, Loader2,
   BookOpenText, Share2, Calendar, Target, HandCoins, FileText,
-  AlertCircle, Send,
+  AlertCircle, Send, ShoppingCart, Check,
 } from 'lucide-react'
 import { formatINR, formatINRCompact, relativeTime, cn } from '@/lib/utils'
 import { motion } from 'framer-motion'
@@ -457,27 +457,54 @@ export function Dashboard() {
           </div>
         </div>
 
-        {/* Quick stats (all zeros but shows the layout) */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {[
-            { label: "Today's Revenue", value: '₹0', icon: IndianRupee, color: 'text-amber-600 dark:text-amber-400 bg-amber-100' },
-            { label: "Today's Profit", value: '₹0', icon: TrendingUp, color: 'text-emerald-600 dark:text-emerald-400 bg-emerald-100' },
-            { label: 'Products', value: '0', icon: Package, color: 'text-blue-600 bg-blue-100' },
-            { label: 'Customers', value: '0', icon: Wallet, color: 'text-violet-600 bg-violet-100' },
-          ].map((stat, i) => {
-            const Icon = stat.icon
-            return (
-              <Card key={i} className="shadow-card border-border/60 border-t-2 border-t-primary/10">
-                <CardContent className="p-4">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-2 ${stat.color}`}>
-                    <Icon className="w-5 h-5" />
-                  </div>
-                  <p className="text-2xl font-bold">{stat.value}</p>
-                  <p className="text-xs text-muted-foreground mt-1">{stat.label}</p>
-                </CardContent>
-              </Card>
-            )
-          })}
+        {/* 🐛 UI/UX Phase 1 Fix 6: Replace the 4 ₹0 stat cards with progress
+            indicators that show the user what they've accomplished and what's
+            next. Was: 4 cards all showing ₹0/0 — visually ended in zeros.
+            Now: 3 progress cards that track the onboarding steps.
+            - Products added: shows count + checkmark when >0
+            - Customers added: shows count + checkmark when >0
+            - Sales recorded: shows count + checkmark when >0
+            Tapping an incomplete card navigates to the relevant screen. */}
+        <div className="grid grid-cols-3 gap-3">
+          <ProgressCard
+            icon={Package}
+            label="Products"
+            count={kpis.productCount}
+            done={kpis.productCount > 0}
+            onClick={() => {
+              if (kpis.productCount === 0) {
+                setPreviousView('dashboard')
+                setView('inventory')
+              }
+            }}
+            color="text-blue-600 bg-blue-100 dark:text-blue-400 dark:bg-blue-950"
+          />
+          <ProgressCard
+            icon={Wallet}
+            label="Customers"
+            count={kpis.partyCount}
+            done={kpis.partyCount > 0}
+            onClick={() => {
+              if (kpis.partyCount === 0) {
+                setPreviousView('dashboard')
+                setView('parties')
+              }
+            }}
+            color="text-violet-600 bg-violet-100 dark:text-violet-400 dark:bg-violet-950"
+          />
+          <ProgressCard
+            icon={ShoppingCart}
+            label="Sales"
+            count={kpis.rangeTxnCount}
+            done={kpis.rangeTxnCount > 0}
+            onClick={() => {
+              if (kpis.rangeTxnCount === 0) {
+                setPreviousView('dashboard')
+                setView('new-sale')
+              }
+            }}
+            color="text-emerald-600 bg-emerald-100 dark:text-emerald-400 dark:bg-emerald-950"
+          />
         </div>
       </div>
     )
@@ -1324,5 +1351,60 @@ function DateRangeHeader({ dateRange, datePreset, onChange, onPresetChange }: {
         onPresetChange={onPresetChange}
       />
     </div>
+  )
+}
+
+/**
+ * ProgressCard — a small card showing onboarding progress for new users.
+ * Shows an icon, a count, a label, and a checkmark when the step is complete.
+ * Tapping an incomplete card navigates to the relevant screen (via onClick).
+ *
+ * 🐛 UI/UX Phase 1 Fix 6: Replaces the 4 ₹0 stat cards that new users saw.
+ */
+function ProgressCard({
+  icon: Icon,
+  label,
+  count,
+  done,
+  onClick,
+  color,
+}: {
+  icon: any
+  label: string
+  count: number
+  done: boolean
+  onClick: () => void
+  color: string
+}) {
+  const isClickable = !done
+  return (
+    <button
+      onClick={onClick}
+      disabled={!isClickable}
+      className={cn(
+        'text-left transition active:scale-[0.98] border-t-2',
+        isClickable ? 'cursor-pointer hover:shadow-md border-t-primary/30' : 'cursor-default border-t-emerald-500/40',
+      )}
+      style={{ minHeight: '90px' }}
+    >
+      <Card className={cn('shadow-card border-border/60 h-full', isClickable && 'hover:border-primary/30')}>
+        <CardContent className="p-3 sm:p-4 flex flex-col h-full">
+          <div className="flex items-center justify-between mb-2">
+            <div className={cn('w-9 h-9 rounded-xl flex items-center justify-center', color)}>
+              <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
+            </div>
+            {done ? (
+              <div className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0">
+                <Check className="w-3 h-3 text-white" />
+              </div>
+            ) : (
+              <div className="w-5 h-5 rounded-full border-2 border-muted-foreground/30 flex-shrink-0" />
+            )}
+          </div>
+          <p className="text-xl sm:text-2xl font-bold">{count}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{label}</p>
+        </CardContent>
+      </Card>
+    </button>
   )
 }
