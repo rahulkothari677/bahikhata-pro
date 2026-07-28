@@ -6,7 +6,13 @@ import * as Sentry from '@sentry/nextjs'
  * Captures browser errors, React render errors, and client-side exceptions.
  * Automatically attaches to the global error handler and unhandled rejections.
  *
- * To enable: set SSENTRY_DSN in Vercel env vars.
+ * To enable: set NEXT_PUBLIC_SENTRY_DSN in Vercel env vars. It must be the
+ * NEXT_PUBLIC_ name — this file runs in the browser, and Next only exposes
+ * NEXT_PUBLIC_* there. A bare SENTRY_DSN reads as undefined here and Sentry
+ * silently becomes a no-op.
+ *
+ * ⚠️ This file is NOT auto-loaded. instrumentation-client.ts imports it; delete
+ * that and browser error reporting stops with no warning (see its comment).
  * Get the DSN from: https://sentry.io/settings/projects/bahikhata-pro/keys/
  *
  * If SENTRY_DSN is not set, Sentry is a no-op (safe for local dev).

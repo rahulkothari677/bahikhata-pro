@@ -59,6 +59,36 @@ describe('V26 Phase 5 Batch 6 — Polish + CI guards', () => {
 
   // ─── R18: Sentry polish ──────────────────────────────────────────────────
 
+  /**
+   * ⚠️ READ BEFORE ADDING TO THIS BLOCK.
+   *
+   * Every R18 test below reads sentry.client.config.ts AS TEXT. For months they
+   * all passed while the file NEVER EXECUTED: Next 15.3+ (we are on 16.1.1)
+   * stopped auto-loading sentry.client.config.ts, and instrumentation-client.ts
+   * did not exist. Not one browser error ever reached Sentry. Server errors did
+   * (instrumentation.ts imports the server config), so Sentry had data in it and
+   * nothing looked wrong.
+   *
+   * A test that reads source as a string cannot tell whether anything imports
+   * it. The assertion below is the one that would have caught it, so it must
+   * stay ahead of the text-matching ones.
+   */
+  test('R18.0: the client config is actually LOADED, not merely present', () => {
+    // Next only runs browser-side instrumentation from this exact filename.
+    const hook = path.join(PROJECT_ROOT, 'instrumentation-client.ts')
+    // Jest's expect() takes no message argument, so the explanation goes in the
+    // compared value — otherwise a future failure reads as a bare `false`, and
+    // whoever hits it deletes the test instead of restoring the file.
+    const PRESENT = 'instrumentation-client.ts present'
+    expect(
+      fs.existsSync(hook)
+        ? PRESENT
+        : 'MISSING instrumentation-client.ts — Next 16 does NOT auto-load ' +
+          'sentry.client.config.ts. Without this file no browser error is ever captured.',
+    ).toBe(PRESENT)
+    expect(fs.readFileSync(hook, 'utf8')).toMatch(/sentry\.client\.config/)
+  })
+
   test('R18.1: Sentry client config pins replay masking', () => {
     const src = fs.readFileSync(path.join(PROJECT_ROOT, 'sentry.client.config.ts'), 'utf8')
     expect(src).toMatch(/replayIntegration/)
