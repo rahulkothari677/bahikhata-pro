@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUserIdWithModule } from '@/lib/get-auth'
+import { isFeatureEnabled } from '@/lib/feature-flags'
 import { rateLimit, getClientIP, rateLimitedResponse } from '@/lib/rate-limit'
 import { checkUsage, incrementUsage } from '@/lib/usage-limits'
 import { calculateCostInr } from '@/lib/ai-pricing'
@@ -28,6 +29,25 @@ export async function POST(req: NextRequest) {
   try {
     const { userId, error } = await getAuthUserIdWithModule('scanner')
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    // 🐛 FIX (audit 2026-07-28): the `ai_scanner` kill switch was not enforced on
+    // the server. Flags only ever reached the browser (public
+    // /api/feature-flags) and hid UI, so switching this off in the admin panel
+    // removed the button while this endpoint kept accepting requests.
+    //
+    // That matters more here than for a cosmetic feature: every call to this
+    // route spends real money with an AI provider. The switch exists so it can
+    // be pulled when a provider misbehaves or costs spike, and until now
+    // pulling it did nothing.
+    if (!(await isFeatureEnabled('ai_scanner'))) {
+      return NextResponse.json(
+        {
+          error: 'Bill scanning is temporarily unavailable',
+          message: 'This feature is switched off right now. Please enter the details manually.',
+        },
+        { status: 503 },
+      )
+    }
 
     // Rate limit by IP (anti-abuse — prevents one user from logging in from many IPs)
     // 🔒 FIX M1: Added { failClosed: true } — during Redis outage, the IP limiter

@@ -3,11 +3,31 @@ import { validateBody, registerSchema } from '@/lib/validation'
 import bcrypt from 'bcryptjs'
 import { db } from '@/lib/db'
 import { rateLimit, getClientIP, rateLimitedResponse } from '@/lib/rate-limit'
+import { isFeatureEnabled } from '@/lib/feature-flags'
 
 // POST /api/auth/register - create new user account
 // Rate limited: 5 signups per IP per hour (prevents abuse)
 export async function POST(req: NextRequest) {
   try {
+    // 🐛 FIX (audit 2026-07-28): the `new_signups` kill switch was not enforced
+    // ANYWHERE on the server. Flags were fetched by the browser from the public
+    // /api/feature-flags endpoint and used only to show or hide UI, so turning
+    // "New Signups" off in the admin panel hid the button while this endpoint
+    // kept creating accounts for anyone who posted to it directly.
+    //
+    // That is the failure mode a kill switch exists to prevent: the founder
+    // flips it during an abuse wave or a capacity problem, sees the button
+    // disappear, and believes signups have stopped.
+    if (!(await isFeatureEnabled('new_signups'))) {
+      return NextResponse.json(
+        {
+          error: 'Signups are temporarily paused',
+          message: 'New account creation is paused right now. Please try again later.',
+        },
+        { status: 503 },
+      )
+    }
+
     // Rate limit check
     const ip = getClientIP(req)
     const rl = await rateLimit(`signup:${ip}`, { limit: 5, windowSec: 3600 })

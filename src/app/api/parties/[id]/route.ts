@@ -417,8 +417,20 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     // Transaction count on the next line already filtered deletedAt: null;
     // the Payment count didn't, which was an oversight when V15 M-3 added
     // Payment.deletedAt.
+    // 🐛 FIX (audit 2026-07-28): the payment count had `.catch(() => 0)`.
+    //
+    // This is a DELETE GUARD. Falling back to 0 means "this party has no
+    // payments", so a transient database error did not fail the request — it
+    // silently satisfied the check and let the party be deleted with live
+    // payment records still pointing at it. The guard was strongest exactly
+    // when the database was healthy and absent exactly when it was not.
+    //
+    // The transaction count on the next line never had a fallback, so the two
+    // halves of the same guard behaved differently. Now neither does: an error
+    // propagates to the outer catch and the delete is refused. Refusing to
+    // delete on an error is always the safe direction.
     const [paymentCount, transactionCount] = await Promise.all([
-      db.payment.count({ where: { partyId: id, deletedAt: null } }).catch(() => 0),
+      db.payment.count({ where: { partyId: id, deletedAt: null } }),
       db.transaction.count({ where: { partyId: id, deletedAt: null } }),
     ])
 

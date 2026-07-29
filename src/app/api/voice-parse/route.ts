@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUserIdWithModule } from '@/lib/get-auth'
+import { isFeatureEnabled } from '@/lib/feature-flags'
 import { checkUsage, incrementUsage } from '@/lib/usage-limits'
 import { tryParseLocally } from '@/lib/voice-regex-parser'
 import { apiError } from '@/lib/api-error'
@@ -29,6 +30,25 @@ export async function POST(req: NextRequest) {
   try {
     const { userId, error } = await getAuthUserIdWithModule('scanner')
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    // 🐛 FIX (audit 2026-07-28): the `voice_entry` kill switch was not enforced on
+    // the server. Flags only ever reached the browser (public
+    // /api/feature-flags) and hid UI, so switching this off in the admin panel
+    // removed the button while this endpoint kept accepting requests.
+    //
+    // That matters more here than for a cosmetic feature: every call to this
+    // route spends real money with an AI provider. The switch exists so it can
+    // be pulled when a provider misbehaves or costs spike, and until now
+    // pulling it did nothing.
+    if (!(await isFeatureEnabled('voice_entry'))) {
+      return NextResponse.json(
+        {
+          error: 'Voice entry is temporarily unavailable',
+          message: 'This feature is switched off right now. Please enter the details manually.',
+        },
+        { status: 503 },
+      )
+    }
 
     // Tier-based quota check. For Free: monthly DB counter. For Pro/Elite:
     // daily in-memory limiter. Returns 402 with upgrade message if exceeded.
