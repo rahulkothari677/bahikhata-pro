@@ -35,37 +35,49 @@ export function GlobalSearch() {
   const [selectedIndex, setSelectedIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  const { data: productsData } = useQuery({
-    queryKey: ['products', 'search'],
+  // 🐛 FIX (audit 2026-07-28): search runs on the SERVER now.
+  //
+  // Was: three fetches on open — every product, every party, and the newest 200
+  // transactions — then `.includes()` in the browser. Past 200 transactions
+  // (about two weeks for a shop doing 20 bills a day) searching an older
+  // invoice showed "No results", which reads as "that bill does not exist"
+  // rather than "I only looked at the recent ones". It also shipped the shop's
+  // whole catalogue to a phone on mobile data every time the box opened.
+  //
+  // Now: /api/search queries the database, which sees every row, and returns
+  // at most five matches per type. See that route for the scale reasoning.
+  const [debouncedQuery, setDebouncedQuery] = useState('')
+
+  // Wait for a pause in typing before hitting the database. Without this, every
+  // keystroke is a query — "sharma" would fire six.
+  useEffect(() => {
+    const id = setTimeout(() => setDebouncedQuery(query.trim()), 200)
+    return () => clearTimeout(id)
+  }, [query])
+
+  const { data: searchData, isFetching: searchLoading, isError: searchFailed } = useQuery({
+    queryKey: ['global-search', debouncedQuery],
     queryFn: async () => {
-      const r = await offlineFetch('/api/products')
+      const r = await offlineFetch(`/api/search?q=${encodeURIComponent(debouncedQuery)}`)
+      if (!r.ok) throw new Error('Search request failed')
       return r.json()
     },
-    enabled: searchOpen,
+    // Two characters is the server's floor as well; asking below it is wasted.
+    enabled: searchOpen && debouncedQuery.length >= 2,
+    // Results are cheap to re-fetch and stale ones are misleading after a sale.
+    staleTime: 15_000,
+    retry: 1,
   })
 
-  const { data: partiesData } = useQuery({
-    queryKey: ['parties'],
-    queryFn: async () => {
-      const r = await offlineFetch('/api/parties')
-      return r.json()
-    },
-    enabled: searchOpen,
-  })
-
-  const { data: txnData } = useQuery({
-    queryKey: ['transactions', 'search'],
-    queryFn: async () => {
-      const r = await offlineFetch('/api/transactions?type=all&limit=200')
-      return r.json()
-    },
-    enabled: searchOpen,
-  })
+  const productsData = searchData
+  const partiesData = searchData
+  const txnData = searchData
 
   useEffect(() => {
     if (searchOpen) {
       Promise.resolve().then(() => {
         setQuery('')
+        setDebouncedQuery('')
         setSelectedIndex(0)
         setTimeout(() => inputRef.current?.focus(), 100)
       })
@@ -76,11 +88,12 @@ export function GlobalSearch() {
   const results: SearchResult[] = []
   const q = query.toLowerCase().trim()
 
+  // No client-side filtering any more — the server already matched and capped
+  // these. Re-filtering here would silently drop rows the database matched (the
+  // two use different case rules), which is how a "search" starts lying again.
   if (q) {
     // Products
-    ;(productsData?.products || []).filter((p: any) =>
-      p.name?.toLowerCase().includes(q) || p.sku?.toLowerCase().includes(q) || p.hsn?.includes(q)
-    ).slice(0, 5).forEach((p: any) => {
+    ;(productsData?.products || []).forEach((p: any) => {
       results.push({
         type: 'product',
         id: p.id,
@@ -93,29 +106,28 @@ export function GlobalSearch() {
     })
 
     // Parties
-    ;(partiesData?.parties || []).filter((p: any) =>
-      p.name?.toLowerCase().includes(q) || p.phone?.includes(q) || p.gstin?.toLowerCase().includes(q)
-    ).slice(0, 5).forEach((p: any) => {
+    ;(partiesData?.parties || []).forEach((p: any) => {
       results.push({
         type: 'party',
         id: p.id,
         title: p.name,
         subtitle: `${p.phone || 'No phone'} • ${p.type}`,
-        meta: p.balance !== 0 ? formatINR(p.balance) : undefined,
+        // No balance badge: the search endpoint deliberately does not compute
+        // party balances (it would mean aggregating every transaction on each
+        // keystroke). Tapping through shows the real figure.
+        meta: undefined,
         icon: Truck,
         color: p.type === 'customer' ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400',
       })
     })
 
     // Transactions
-    ;(txnData?.transactions || []).filter((t: any) =>
-      t.invoiceNo?.toLowerCase().includes(q) || t.party?.name?.toLowerCase().includes(q) || t.notes?.toLowerCase().includes(q)
-    ).slice(0, 5).forEach((t: any) => {
+    ;(txnData?.transactions || []).forEach((t: any) => {
       results.push({
         type: 'transaction',
         id: t.id,
         title: t.invoiceNo || `${t.type} - ${t.party?.name || 'Walk-in'}`,
-        subtitle: `${t.party?.name || 'Walk-in'} • ${formatDate(t.date)} • ${t.items?.length || 0} items`,
+        subtitle: `${t.party?.name || 'Walk-in'} • ${formatDate(t.date)} • ${t.itemCount ?? 0} items`,
         meta: formatINR(t.totalAmount),
         icon: t.type === 'sale' ? ShoppingCart : t.type === 'purchase' ? Truck : Receipt,
         color: t.type === 'sale' ? 'text-emerald-600 dark:text-emerald-400' : t.type === 'purchase' ? 'text-amber-600 dark:text-amber-400' : 'text-violet-600',
@@ -228,7 +240,25 @@ export function GlobalSearch() {
 
         {/* Results — unified list of commands + search results */}
         <div className="max-h-96 overflow-y-auto">
-          {allResults.length === 0 && q ? (
+          {/* 🐛 FIX (audit 2026-07-28): "No results" must mean NO RESULTS.
+              Previously this branch also covered "still loading" and "the
+              request failed", so a slow connection or a database blip told the
+              shopkeeper their bill did not exist. Each state now says what is
+              actually happening. */}
+          {searchFailed && q ? (
+            <div className="p-8 text-center">
+              <Search className="w-8 h-8 mx-auto text-destructive/50 mb-2" />
+              <p className="text-sm font-medium">Search isn&apos;t working right now</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                This is a connection problem, not a missing record. Please try again.
+              </p>
+            </div>
+          ) : searchLoading && q ? (
+            <div className="p-8 text-center">
+              <Search className="w-8 h-8 mx-auto text-muted-foreground/50 mb-2 animate-pulse" />
+              <p className="text-sm font-medium">Searching…</p>
+            </div>
+          ) : allResults.length === 0 && q ? (
             <div className="p-8 text-center">
               <Search className="w-8 h-8 mx-auto text-muted-foreground/50 mb-2" />
               <p className="text-sm font-medium">No results for &quot;{query}&quot;</p>
