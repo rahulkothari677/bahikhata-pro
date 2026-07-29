@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EkBook — Business Card Design Preview</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f0f0f3; padding: 40px 20px; }
+  .header { text-align: center; margin-bottom: 40px; }
+  .header h1 { font-size: 28px; color: #1a1a2e; }
+  .header p { color: #666; margin-top: 8px; font-size: 14px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 40px; max-width: 1200px; margin: 0 auto; }
+  .card-wrapper { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .card-label { font-size: 16px; font-weight: 700; color: #1a1a2e; }
+  .card-desc { font-size: 12px; color: #888; text-align: center; max-width: 360px; }
+
+  /* Base card dimensions — standard business card ratio (3.5" x 2") scaled up */
+  .card {
+    width: 360px; height: 206px; border-radius: 12px; overflow: hidden;
+    position: relative; box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+    font-family: 'Segoe UI', sans-serif;
+  }
+
+  /* ── Common elements ── */
+  .logo-placeholder {
+    width: 36px; height: 36px; border-radius: 8px; background: rgba(255,255,255,0.2);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; font-weight: 900; color: white;
+  }
+  .qr-box {
+    background: white; border-radius: 8px; padding: 6px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .qr-fake {
+    width: 56px; height: 56px; background: #1a1a2e; border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 8px; color: white; text-align: center; line-height: 1.2;
+  }
+  .footer-bar {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    padding: 6px 16px; font-size: 8px; color: rgba(255,255,255,0.8);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .contact-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; font-size: 10px; }
+  .contact-icon { width: 12px; height: 12px; flex-shrink: 0; opacity: 0.8; }
+
+  /* ═══════════════════════════════════════════════════════ */
+  /* DESIGN 1: ROYAL GOLD — matte black + gold curve + gold border */
+  /* ═══════════════════════════════════════════════════════ */
+  .card-royal-gold {
+    background: #0D0D0D;
+    border: 2px solid #D4AF37;
+  }
+  .card-royal-gold .content { padding: 16px; display: flex; gap: 12px; height: 100%; }
+  .card-royal-gold .left { flex: 1; z-index: 2; }
+  .card-royal-gold .gold-curve {
+    position: absolute; right: -20px; top: -10px; width: 160px; height: 240px;
+    background: linear-gradient(135deg, #D4AF37 0%, #FFD700 30%, #B8860B 60%, #8B6914 100%);
+    border-radius: 40% 60% 70% 30% / 50% 40% 60% 50%;
+    opacity: 0.85;
+  }
+  .card-royal-gold .gold-lines {
+    position: absolute; right: 10px; top: 20px; width: 120px; height: 160px;
+    opacity: 0.15; z-index: 1;
+  }
+  .card-royal-gold .shop-name { font-size: 16px; font-weight: 800; color: #D4AF37; margin-top: 8px; }
+  .card-royal-gold .owner { font-size: 10px; color: #888; margin-top: 2px; }
+  .card-royal-gold .contact { margin-top: 12px; }
+  .card-royal-gold .contact div { font-size: 9px; color: #ccc; margin-bottom: 3px; }
+  .card-royal-gold .qr-area { position: absolute; bottom: 16px; right: 16px; z-index: 3; }
+  .card-royal-gold .qr-box { background: white; }
+
+  /* ═══════════════════════════════════════════════════════ */
+  /* DESIGN 2: TIRANGA PRIDE — cream + watercolor tricolor + architecture */
+  /* ═══════════════════════════════════════════════════════ */
+  .card-tiranga {
+    background: #FAF8F0;
+  }
+  .card-tiranga .content { padding: 16px; height: 100%; position: relative; }
+  .card-tiranga .brushstroke {
+    position: absolute; right: 0; bottom: 0; width: 200px; height: 140px;
+    overflow: hidden;
+  }
+  .card-tiranga .stroke-saffron {
+    position: absolute; right: -40px; bottom: 60px; width: 200px; height: 40px;
+    background: linear-gradient(90deg, transparent, #FF9933 40%, #FF9933 70%, transparent);
+    border-radius: 50%; transform: rotate(-15deg); filter: blur(2px); opacity: 0.7;
+  }
+  .card-tiranga .stroke-white {
+    position: absolute; right: -30px; bottom: 35px; width: 180px; height: 30px;
+    background: linear-gradient(90deg, transparent, #ffffff 40%, #ffffff 70%, transparent);
+    border-radius: 50%; transform: rotate(-15deg); filter: blur(2px); opacity: 0.5;
+    border-top: 1px solid #ddd; border-bottom: 1px solid #ddd;
+  }
+  .card-tiranga .stroke-green {
+    position: absolute; right: -50px; bottom: 10px; width: 220px; height: 35px;
+    background: linear-gradient(90deg, transparent, #138808 40%, #138808 70%, transparent);
+    border-radius: 50%; transform: rotate(-15deg); filter: blur(2px); opacity: 0.7;
+  }
+  .card-tiranga .arch-silhouette {
+    position: absolute; right: 10px; bottom: 30px; width: 80px; height: 60px;
+    opacity: 0.08;
+  }
+  .card-tiranga .shop-name { font-size: 16px; font-weight: 800; color: #1a1a2e; }
+  .card-tiranga .owner { font-size: 10px; color: #555; margin-top: 2px; }
+  .card-tiranga .contact { margin-top: 10px; }
+  .card-tiranga .contact div { font-size: 9px; color: #444; margin-bottom: 3px; }
+  .card-tiranga .qr-area { position: absolute; top: 16px; right: 16px; }
+  .card-tiranga .footer-bar { background: #138808; }
+
+  /* ═══════════════════════════════════════════════════════ */
+  /* DESIGN 3: FESTIVE DIWALI — purple + cream split + golden curve + mandala */
+  /* ═══════════════════════════════════════════════════════ */
+  .card-diwali {
+    background: #2D1B4E;
+    display: flex;
+  }
+  .card-diwali .left-panel {
+    width: 45%; padding: 16px; position: relative; z-index: 2;
+  }
+  .card-diwali .right-panel {
+    flex: 1; background: #FAF5E6; position: relative; overflow: hidden;
+  }
+  .card-diwali .gold-s-curve {
+    position: absolute; left: -30px; top: -20px; width: 80px; height: 260px;
+    background: linear-gradient(180deg, #D4AF37, #FFD700, #D4AF37);
+    border-radius: 50%; transform: rotate(10deg); z-index: 1;
+  }
+  .card-diwali .mandala {
+    position: absolute; bottom: -20px; left: -20px; width: 100px; height: 100px;
+    opacity: 0.08;
+  }
+  .card-diwali .rangoli-border {
+    position: absolute; top: 8px; right: 8px; width: 60px; height: 60px;
+    opacity: 0.15;
+  }
+  .card-diwali .left-panel .shop-name { font-size: 14px; font-weight: 800; color: #FFD700; }
+  .card-diwali .left-panel .owner { font-size: 9px; color: #ccc; margin-top: 2px; }
+  .card-diwali .left-panel .contact { margin-top: 10px; }
+  .card-diwali .left-panel .contact div { font-size: 8px; color: #ddd; margin-bottom: 3px; }
+  .card-diwali .right-panel .logo-center {
+    position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    text-align: center;
+  }
+  .card-diwali .right-panel .logo-center .initials {
+    font-size: 28px; font-weight: 900; color: #D4AF37;
+  }
+  .card-diwali .right-panel .qr-area {
+    position: absolute; bottom: 12px; right: 12px;
+  }
+
+  /* ═══════════════════════════════════════════════════════ */
+  /* DESIGN 4: MONOGRAM BLACK — charcoal + centered monogram + topo lines */
+  /* ═══════════════════════════════════════════════════════ */
+  .card-monogram {
+    background: #1A1A1A;
+  }
+  .card-monogram .topo-lines {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0; opacity: 0.06;
+  }
+  .card-monogram .content {
+    height: 100%; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; padding: 16px; position: relative; z-index: 2;
+  }
+  .card-monogram .monogram-circle {
+    width: 56px; height: 56px; border-radius: 50%; border: 2px solid #D4AF37;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; font-weight: 900; color: #D4AF37; margin-bottom: 8px;
+  }
+  .card-monogram .shop-name { font-size: 14px; font-weight: 700; color: #fff; text-align: center; }
+  .card-monogram .owner { font-size: 9px; color: #888; text-align: center; margin-top: 2px; }
+  .card-monogram .contact { margin-top: 8px; text-align: center; }
+  .card-monogram .contact div { font-size: 8px; color: #aaa; margin-bottom: 2px; }
+  .card-monogram .qr-area { position: absolute; bottom: 12px; right: 12px; }
+  .card-monogram .gold-line {
+    position: absolute; bottom: 40px; left: 20%; right: 20%; height: 1px;
+    background: linear-gradient(90deg, transparent, #D4AF37, transparent);
+  }
+
+  /* ═══════════════════════════════════════════════════════ */
+  /* DESIGN 5: FRESH MARKET — cream + green curved split + veggie watermark */
+  /* ═══════════════════════════════════════════════════════ */
+  .card-fresh-market {
+    background: #FAF8F0;
+  }
+  .card-fresh-market .green-panel {
+    position: absolute; right: 0; top: 0; width: 45%; height: 100%;
+    background: linear-gradient(135deg, #228B22 0%, #006400 100%);
+    border-radius: 20% 0 0 0 / 30% 0 0 0;
+  }
+  .card-fresh-market .veggie-watermark {
+    position: absolute; left: 10px; top: 10px; width: 100px; height: 100px;
+    opacity: 0.03;
+  }
+  .card-fresh-market .content { padding: 16px; height: 100%; position: relative; z-index: 2; display: flex; }
+  .card-fresh-market .left { width: 55%; }
+  .card-fresh-market .shop-name { font-size: 15px; font-weight: 800; color: #1a1a2e; }
+  .card-fresh-market .owner { font-size: 9px; color: #555; margin-top: 2px; }
+  .card-fresh-market .contact { margin-top: 8px; }
+  .card-fresh-market .contact div { font-size: 8px; color: #444; margin-bottom: 3px; }
+  .card-fresh-market .right {
+    width: 45%; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  }
+  .card-fresh-market .right .qr-area { margin-bottom: 4px; }
+  .card-fresh-market .right .scan-text { font-size: 7px; color: rgba(255,255,255,0.7); text-align: center; }
+  .card-fresh-market .footer-bar { background: #006400; }
+
+  /* ═══════════════════════════════════════════════════════ */
+  /* DESIGN 6: PHARMA CARE — white + navy curve + hexagonal pattern */
+  /* ═══════════════════════════════════════════════════════ */
+  .card-pharma {
+    background: #ffffff;
+  }
+  .card-pharma .hex-pattern {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0; opacity: 0.04;
+    background-image: url("data:image/svg+xml,%3Csvg width='28' height='32' viewBox='0 0 28 32' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M14 0L28 8v16L14 32L0 24V8z' fill='none' stroke='%23000' stroke-width='1'/%3E%3C/svg%3E");
+  }
+  .card-pharma .navy-curve {
+    position: absolute; right: -30px; top: -20px; width: 180px; height: 260px;
+    background: linear-gradient(135deg, #1B2838 0%, #0D1B2A 100%);
+    border-radius: 40% 60% 70% 30% / 50% 40% 60% 50%;
+  }
+  .card-pharma .content { padding: 16px; height: 100%; position: relative; z-index: 2; }
+  .card-pharma .shop-name { font-size: 15px; font-weight: 800; color: #1B2838; }
+  .card-pharma .owner { font-size: 9px; color: #666; margin-top: 2px; }
+  .card-pharma .contact { margin-top: 8px; }
+  .card-pharma .contact div { font-size: 8px; color: #444; margin-bottom: 3px; }
+  .card-pharma .qr-area { position: absolute; bottom: 16px; right: 16px; z-index: 3; }
+  .card-pharma .footer-bar { background: #1B2838; }
+
+  /* ═══════════════════════════════════════════════════════ */
+  /* DESIGN 7: GIFT GALLERY — cream + pink S-curve + bokeh dots */
+  /* ═══════════════════════════════════════════════════════ */
+  .card-gift-gallery {
+    background: #FFF5F5;
+  }
+  .card-gift-gallery .pink-curve {
+    position: absolute; right: 0; top: 0; width: 50%; height: 100%;
+    background: linear-gradient(135deg, #FF6B9D 0%, #C71585 100%);
+    border-radius: 30% 0 0 50% / 50% 0 0 30%;
+  }
+  .card-gift-gallery .bokeh-dots {
+    position: absolute; right: 10px; top: 20px; width: 150px; height: 150px;
+    opacity: 0.15;
+  }
+  .card-gift-gallery .content { padding: 16px; height: 100%; position: relative; z-index: 2; display: flex; }
+  .card-gift-gallery .left { width: 50%; }
+  .card-gift-gallery .shop-name { font-size: 14px; font-weight: 800; color: #C71585; }
+  .card-gift-gallery .owner { font-size: 9px; color: #666; margin-top: 2px; }
+  .card-gift-gallery .contact { margin-top: 8px; }
+  .card-gift-gallery .contact div { font-size: 8px; color: #555; margin-bottom: 3px; }
+  .card-gift-gallery .right {
+    width: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  }
+  .card-gift-gallery .footer-bar { background: #8B004B; }
+
+  /* ═══════════════════════════════════════════════════════ */
+  /* DESIGN 8: HERITAGE ARCH — warm cream + Indian arch silhouette + paisley */
+  /* ═══════════════════════════════════════════════════════ */
+  .card-heritage {
+    background: linear-gradient(135deg, #F5E6D3 0%, #E8D5B7 100%);
+    border: 1px solid #C4A06A;
+  }
+  .card-heritage .arch-shape {
+    position: absolute; right: 20px; top: 10px; width: 80px; height: 120px;
+    opacity: 0.08;
+  }
+  .card-heritage .paisley-border {
+    position: absolute; left: 0; right: 0; bottom: 0; height: 30px; opacity: 0.06;
+  }
+  .card-heritage .content { padding: 16px; height: 100%; position: relative; z-index: 2; }
+  .card-heritage .shop-name { font-size: 15px; font-weight: 800; color: #5D4037; }
+  .card-heritage .owner { font-size: 9px; color: #7B5E3B; margin-top: 2px; }
+  .card-heritage .contact { margin-top: 8px; }
+  .card-heritage .contact div { font-size: 8px; color: #6D4C41; margin-bottom: 3px; }
+  .card-heritage .qr-area { position: absolute; bottom: 16px; right: 16px; }
+  .card-heritage .footer-bar { background: #5D4037; }
+
+  /* ═══════════════════════════════════════════════════════ */
+  /* DESIGN 9: MINIMAL GOLD — white + thin gold border + gold accent line */
+  /* ═══════════════════════════════════════════════════════ */
+  .card-minimal-gold {
+    background: #FFFFFF;
+    border: 1px solid #D4AF37;
+  }
+  .card-minimal-gold .gold-accent {
+    position: absolute; top: 0; left: 0; width: 4px; height: 100%;
+    background: linear-gradient(180deg, #D4AF37, #FFD700, #D4AF37);
+  }
+  .card-minimal-gold .content { padding: 16px 16px 16px 24px; height: 100%; display: flex; justify-content: space-between; align-items: flex-start; }
+  .card-minimal-gold .shop-name { font-size: 15px; font-weight: 800; color: #1a1a2e; }
+  .card-minimal-gold .owner { font-size: 9px; color: #888; margin-top: 2px; }
+  .card-minimal-gold .contact { margin-top: 8px; }
+  .card-minimal-gold .contact div { font-size: 8px; color: #555; margin-bottom: 3px; }
+  .card-minimal-gold .gold-divider {
+    width: 40px; height: 1px; background: #D4AF37; margin: 6px 0;
+  }
+  .card-minimal-gold .qr-area { margin-top: 0; }
+
+  /* ═══════════════════════════════════════════════════════ */
+  /* DESIGN 10: SAFFRON WAVE — saffron gradient + wave SVG + dot pattern + footer */
+  /* ═══════════════════════════════════════════════════════ */
+  .card-saffron-wave {
+    background: linear-gradient(135deg, #FF9933 0%, #D97706 50%, #B45309 100%);
+  }
+  .card-saffron-wave .wave-svg {
+    position: absolute; bottom: 20px; left: 0; right: 0; height: 60px; opacity: 0.1;
+  }
+  .card-saffron-wave .dot-pattern {
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0; opacity: 0.05;
+    background-image: radial-gradient(circle, white 1px, transparent 1px);
+    background-size: 16px 16px;
+  }
+  .card-saffron-wave .content { padding: 16px; height: 100%; position: relative; z-index: 2; display: flex; justify-content: space-between; }
+  .card-saffron-wave .left { flex: 1; }
+  .card-saffron-wave .shop-name { font-size: 15px; font-weight: 800; color: white; }
+  .card-saffron-wave .owner { font-size: 9px; color: rgba(255,255,255,0.8); margin-top: 2px; }
+  .card-saffron-wave .contact { margin-top: 8px; }
+  .card-saffron-wave .contact div { font-size: 8px; color: rgba(255,255,255,0.85); margin-bottom: 3px; }
+  .card-saffron-wave .qr-area { flex-shrink: 0; }
+  .card-saffron-wave .footer-bar { background: rgba(0,0,0,0.2); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>EkBook — Business Card Design Preview</h1>
+  <p>10 premium designs with real layout differences, patterns, and decorative elements. Below is exactly what each design would look like in the app.</p>
+</div>
+
+<div class="grid">
+
+  <!-- DESIGN 1: ROYAL GOLD -->
+  <div class="card-wrapper">
+    <div class="card-label">1. Royal Gold</div>
+    <div class="card card-royal-gold">
+      <div class="gold-curve"></div>
+      <svg class="gold-lines" viewBox="0 0 120 160"><path d="M60 0 Q100 40 60 80 Q20 120 60 160" fill="none" stroke="#D4AF37" stroke-width="0.5"/><path d="M50 0 Q90 40 50 80 Q10 120 50 160" fill="none" stroke="#D4AF37" stroke-width="0.5"/><path d="M70 0 Q110 40 70 80 Q30 120 70 160" fill="none" stroke="#D4AF37" stroke-width="0.5"/></svg>
+      <div class="content">
+        <div class="left">
+          <div class="logo-placeholder" style="background:rgba(212,175,55,0.2);color:#D4AF37">L</div>
+          <div class="shop-name">Sharma Kirana</div>
+          <div class="owner">Proprietor: Rajesh Sharma</div>
+          <div class="contact">
+            <div>📞 +91 98765 43210</div>
+            <div>✉ rajesh@example.com</div>
+            <div>📋 GSTIN: 27ABCDE1234F1Z5</div>
+          </div>
+        </div>
+      </div>
+      <div class="qr-area"><div class="qr-box"><div class="qr-fake">QR</div></div></div>
+    </div>
+    <div class="card-desc">Matte black with gold curved panel, concentric gold lines, and gold border. Luxury feel.</div>
+  </div>
+
+  <!-- DESIGN 2: TIRANGA PRIDE -->
+  <div class="card-wrapper">
+    <div class="card-label">2. Tiranga Pride</div>
+    <div class="card card-tiranga">
+      <div class="content">
+        <div class="logo-placeholder" style="background:#FF9933;color:white">L</div>
+        <div class="shop-name">Sharma Kirana</div>
+        <div class="owner">Proprietor: Rajesh Sharma</div>
+        <div class="contact">
+          <div>📞 +91 98765 43210</div>
+          <div>✉ rajesh@example.com</div>
+        </div>
+        <div class="qr-area"><div class="qr-box"><div class="qr-fake" style="background:#138808">QR</div></div></div>
+        <svg class="arch-silhouette" viewBox="0 0 80 60"><path d="M40 0 L40 60 M20 20 Q20 0 40 0 Q60 0 60 20 L60 60 M10 30 L10 60 M70 30 L70 60" fill="none" stroke="#000" stroke-width="2"/></svg>
+        <div class="brushstroke">
+          <div class="stroke-saffron"></div>
+          <div class="stroke-white"></div>
+          <div class="stroke-green"></div>
+        </div>
+      </div>
+      <div class="footer-bar"><span>GSTIN: 27ABCDE1234F1Z5</span><span>Scan QR to save contact</span></div>
+    </div>
+    <div class="card-desc">Cream background with watercolor tricolor brushstrokes + Indian architecture silhouette + green footer bar.</div>
+  </div>
+
+  <!-- DESIGN 3: FESTIVE DIWALI -->
+  <div class="card-wrapper">
+    <div class="card-label">3. Festive Diwali</div>
+    <div class="card card-diwali">
+      <div class="left-panel">
+        <div class="logo-placeholder" style="background:rgba(255,215,0,0.2);color:#FFD700">L</div>
+        <div class="shop-name">Sharma Kirana</div>
+        <div class="owner">Rajesh Sharma</div>
+        <div class="contact">
+          <div>📞 98765 43210</div>
+          <div>✉ rajesh@example.com</div>
+          <div>📋 GSTIN: 27ABCDE...</div>
+        </div>
+        <svg class="mandala" viewBox="0 0 100 100"><circle cx="50" cy="50" r="40" fill="none" stroke="#FFD700" stroke-width="0.5"/><circle cx="50" cy="50" r="30" fill="none" stroke="#FFD700" stroke-width="0.5"/><circle cx="50" cy="50" r="20" fill="none" stroke="#FFD700" stroke-width="0.5"/><line x1="50" y1="10" x2="50" y2="90" stroke="#FFD700" stroke-width="0.3"/><line x1="10" y1="50" x2="90" y2="50" stroke="#FFD700" stroke-width="0.3"/><line x1="22" y1="22" x2="78" y2="78" stroke="#FFD700" stroke-width="0.3"/><line x1="78" y1="22" x2="22" y2="78" stroke="#FFD700" stroke-width="0.3"/></svg>
+      </div>
+      <div class="right-panel">
+        <div class="gold-s-curve"></div>
+        <div class="logo-center">
+          <div class="initials">SK</div>
+        </div>
+        <svg class="rangoli-border" viewBox="0 0 60 60"><circle cx="30" cy="30" r="25" fill="none" stroke="#D4AF37" stroke-width="0.5"/><path d="M30 5 L35 25 L55 30 L35 35 L30 55 L25 35 L5 30 L25 25 Z" fill="none" stroke="#D4AF37" stroke-width="0.5"/></svg>
+        <div class="qr-area"><div class="qr-box"><div class="qr-fake" style="background:#2D1B4E">QR</div></div></div>
+      </div>
+    </div>
+    <div class="card-desc">Purple + cream split with golden S-curve divider, mandala pattern, rangoli corner, centered monogram.</div>
+  </div>
+
+  <!-- DESIGN 4: MONOGRAM BLACK -->
+  <div class="card-wrapper">
+    <div class="card-label">4. Monogram Black</div>
+    <div class="card card-monogram">
+      <svg class="topo-lines" viewBox="0 0 360 206"><path d="M0 100 Q90 60 180 100 Q270 140 360 100" fill="none" stroke="#fff" stroke-width="0.5"/><path d="M0 120 Q90 80 180 120 Q270 160 360 120" fill="none" stroke="#fff" stroke-width="0.5"/><path d="M0 80 Q90 40 180 80 Q270 120 360 80" fill="none" stroke="#fff" stroke-width="0.5"/><path d="M0 140 Q90 100 180 140 Q270 180 360 140" fill="none" stroke="#fff" stroke-width="0.5"/><path d="M0 60 Q90 20 180 60 Q270 100 360 60" fill="none" stroke="#fff" stroke-width="0.5"/></svg>
+      <div class="content">
+        <div class="monogram-circle">SK</div>
+        <div class="shop-name">Sharma Kirana</div>
+        <div class="owner">Rajesh Sharma</div>
+        <div class="gold-line"></div>
+        <div class="contact">
+          <div>📞 98765 43210 · ✉ rajesh@example.com</div>
+          <div>📋 GSTIN: 27ABCDE1234F1Z5</div>
+        </div>
+      </div>
+      <div class="qr-area"><div class="qr-box"><div class="qr-fake">QR</div></div></div>
+    </div>
+    <div class="card-desc">Deep charcoal with centered gold monogram, topographic line texture, gold accent line. Ultra-premium minimal.</div>
+  </div>
+
+  <!-- DESIGN 5: FRESH MARKET -->
+  <div class="card-wrapper">
+    <div class="card-label">5. Fresh Market</div>
+    <div class="card card-fresh-market">
+      <div class="green-panel"></div>
+      <svg class="veggie-watermark" viewBox="0 0 100 100"><circle cx="30" cy="30" r="15" fill="none" stroke="#000" stroke-width="1"/><path d="M30 15 Q35 25 30 35 Q25 25 30 15" fill="#000"/><circle cx="60" cy="50" r="12" fill="none" stroke="#000" stroke-width="1"/><path d="M60 38 L60 62 M48 50 L72 50" stroke="#000" stroke-width="1"/><path d="M20 70 Q30 60 40 70 Q50 80 60 70 Q70 60 80 70" fill="none" stroke="#000" stroke-width="1"/></svg>
+      <div class="content">
+        <div class="left">
+          <div class="logo-placeholder" style="background:#228B22;color:white">L</div>
+          <div class="shop-name">Sharma Kirana</div>
+          <div class="owner">Proprietor: Rajesh Sharma</div>
+          <div class="contact">
+            <div>📞 +91 98765 43210</div>
+            <div>✉ rajesh@example.com</div>
+          </div>
+        </div>
+        <div class="right">
+          <div class="qr-area"><div class="qr-box"><div class="qr-fake" style="background:#228B22">QR</div></div></div>
+          <div class="scan-text">Scan to save</div>
+        </div>
+      </div>
+      <div class="footer-bar"><span>GSTIN: 27ABCDE1234F1Z5</span><span>Fresh · Quality · Trust</span></div>
+    </div>
+    <div class="card-desc">Cream + green curved split panel, vegetable line-art watermark, dark green footer bar with tagline.</div>
+  </div>
+
+  <!-- DESIGN 6: PHARMA CARE -->
+  <div class="card-wrapper">
+    <div class="card-label">6. Pharma Care</div>
+    <div class="card card-pharma">
+      <div class="hex-pattern"></div>
+      <div class="navy-curve"></div>
+      <div class="content">
+        <div class="logo-placeholder" style="background:#1B2838;color:white">L</div>
+        <div class="shop-name">Sharma Kirana</div>
+        <div class="owner">Proprietor: Rajesh Sharma</div>
+        <div class="contact">
+          <div>📞 +91 98765 43210</div>
+          <div>✉ rajesh@example.com</div>
+        </div>
+      </div>
+      <div class="qr-area"><div class="qr-box"><div class="qr-fake" style="background:#1B2838">QR</div></div></div>
+      <div class="footer-bar"><span>GSTIN: 27ABCDE1234F1Z5</span><span>Care · Trust · Health</span></div>
+    </div>
+    <div class="card-desc">White background with hexagonal molecular pattern, navy blue curved panel, dark navy footer bar.</div>
+  </div>
+
+  <!-- DESIGN 7: GIFT GALLERY -->
+  <div class="card-wrapper">
+    <div class="card-label">7. Gift Gallery</div>
+    <div class="card card-gift-gallery">
+      <div class="pink-curve"></div>
+      <svg class="bokeh-dots" viewBox="0 0 150 150"><circle cx="30" cy="30" r="15" fill="white" opacity="0.3"/><circle cx="80" cy="50" r="10" fill="white" opacity="0.2"/><circle cx="50" cy="80" r="20" fill="white" opacity="0.15"/><circle cx="110" cy="30" r="8" fill="white" opacity="0.25"/><circle cx="100" cy="100" r="12" fill="white" opacity="0.2"/><circle cx="20" cy="100" r="6" fill="white" opacity="0.3"/></svg>
+      <div class="content">
+        <div class="left">
+          <div class="logo-placeholder" style="background:#C71585;color:white">L</div>
+          <div class="shop-name">Sharma Kirana</div>
+          <div class="owner">Proprietor: Rajesh Sharma</div>
+          <div class="contact">
+            <div>📞 +91 98765 43210</div>
+            <div>✉ rajesh@example.com</div>
+          </div>
+        </div>
+        <div class="right">
+          <div class="qr-area"><div class="qr-box"><div class="qr-fake" style="background:#C71585">QR</div></div></div>
+        </div>
+      </div>
+      <div class="footer-bar"><span>GSTIN: 27ABCDE1234F1Z5</span><span>Gifts · Cards · Decor</span></div>
+    </div>
+    <div class="card-desc">Cream + pink curved split with bokeh dot decorations, deep mauve footer bar with services.</div>
+  </div>
+
+  <!-- DESIGN 8: HERITAGE ARCH -->
+  <div class="card-wrapper">
+    <div class="card-label">8. Heritage Arch</div>
+    <div class="card card-heritage">
+      <svg class="arch-shape" viewBox="0 0 80 120"><path d="M40 0 L40 120 M20 40 Q20 0 40 0 Q60 0 60 40 L60 120 M10 60 L10 120 M70 60 L70 120 M0 80 L0 120 M80 80 L80 120" fill="none" stroke="#5D4037" stroke-width="2"/></svg>
+      <svg class="paisley-border" viewBox="0 0 360 30"><path d="M0 15 Q20 5 40 15 Q60 25 80 15 Q100 5 120 15 Q140 25 160 15 Q180 5 200 15 Q220 25 240 15 Q260 5 280 15 Q300 25 320 15 Q340 5 360 15" fill="none" stroke="#5D4037" stroke-width="1"/><circle cx="20" cy="10" r="3" fill="none" stroke="#5D4037" stroke-width="0.5"/><circle cx="60" cy="20" r="3" fill="none" stroke="#5D4037" stroke-width="0.5"/><circle cx="100" cy="10" r="3" fill="none" stroke="#5D4037" stroke-width="0.5"/><circle cx="140" cy="20" r="3" fill="none" stroke="#5D4037" stroke-width="0.5"/></svg>
+      <div class="content">
+        <div class="logo-placeholder" style="background:#5D4037;color:#F5E6D3">L</div>
+        <div class="shop-name">Sharma Kirana</div>
+        <div class="owner">Proprietor: Rajesh Sharma</div>
+        <div class="contact">
+          <div>📞 +91 98765 43210</div>
+          <div>✉ rajesh@example.com</div>
+        </div>
+      </div>
+      <div class="qr-area"><div class="qr-box"><div class="qr-fake" style="background:#5D4037">QR</div></div></div>
+      <div class="footer-bar"><span>GSTIN: 27ABCDE1234F1Z5</span><span>Tradition · Trust · Quality</span></div>
+    </div>
+    <div class="card-desc">Warm cream/parchment background with Indian arch silhouette, paisley wave border, brown footer bar.</div>
+  </div>
+
+  <!-- DESIGN 9: MINIMAL GOLD -->
+  <div class="card-wrapper">
+    <div class="card-label">9. Minimal Gold</div>
+    <div class="card card-minimal-gold">
+      <div class="gold-accent"></div>
+      <div class="content">
+        <div>
+          <div class="logo-placeholder" style="background:#D4AF37;color:white">L</div>
+          <div class="shop-name">Sharma Kirana</div>
+          <div class="owner">Rajesh Sharma</div>
+          <div class="gold-divider"></div>
+          <div class="contact">
+            <div>📞 +91 98765 43210</div>
+            <div>✉ rajesh@example.com</div>
+            <div>📋 GSTIN: 27ABCDE1234F1Z5</div>
+          </div>
+        </div>
+        <div class="qr-area"><div class="qr-box"><div class="qr-fake" style="background:#D4AF37">QR</div></div></div>
+      </div>
+    </div>
+    <div class="card-desc">Clean white with thin gold border, gold accent stripe on left, gold divider line. Elegant minimalism.</div>
+  </div>
+
+  <!-- DESIGN 10: SAFFRON WAVE -->
+  <div class="card-wrapper">
+    <div class="card-label">10. Saffron Wave</div>
+    <div class="card card-saffron-wave">
+      <div class="dot-pattern"></div>
+      <svg class="wave-svg" viewBox="0 0 360 60" preserveAspectRatio="none"><path d="M0 30 Q90 0 180 30 Q270 60 360 30 L360 60 L0 60 Z" fill="white"/><path d="M0 40 Q90 10 180 40 Q270 70 360 40 L360 60 L0 60 Z" fill="white" opacity="0.5"/></svg>
+      <div class="content">
+        <div class="left">
+          <div class="logo-placeholder">L</div>
+          <div class="shop-name">Sharma Kirana</div>
+          <div class="owner">Proprietor: Rajesh Sharma</div>
+          <div class="contact">
+            <div>📞 +91 98765 43210</div>
+            <div>✉ rajesh@example.com</div>
+          </div>
+        </div>
+        <div class="qr-area"><div class="qr-box"><div class="qr-fake" style="background:#B45309">QR</div></div></div>
+      </div>
+      <div class="footer-bar"><span>GSTIN: 27ABCDE1234F1Z5</span><span>Scan to save contact</span></div>
+    </div>
+    <div class="card-desc">Saffron gradient with dot pattern texture, wave SVG at bottom, dark footer bar with GSTIN.</div>
+  </div>
+
+</div>
+
+</body>
+</html>
