@@ -20,6 +20,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { toast as sonnerToast } from 'sonner'
 import { getCardDesign, BUSINESS_CARD_DESIGNS, generateCardSlug, type BusinessCardDesign } from '@/lib/business-card-designs'
+import { BusinessCardSurface, type CardData } from '@/components/common/BusinessCardSurface'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { cn } from '@/lib/utils'
 
@@ -37,10 +38,32 @@ interface BusinessCardDisplayProps {
   }
   email?: string | null
   onDesignChange?: (designId: string) => void
+  /**
+   * Opens the shop-logo uploader. Passed in rather than owned here so the card
+   * stays presentational — and so the SAME uploader is reachable from the card,
+   * from Settings, and from the Account screen without three copies of it.
+   *
+   * Until 2026-07-29 the only way in was Settings > Profile, at line 628 of a
+   * long form. Several designs here are built around the logo, so it has to be
+   * reachable from the thing it appears on.
+   */
+  onLogoClick?: () => void
 }
 
-export function BusinessCardDisplay({ setting, email, onDesignChange }: BusinessCardDisplayProps) {
+export function BusinessCardDisplay({ setting, email, onDesignChange, onLogoClick }: BusinessCardDisplayProps) {
   const design = getCardDesign(setting.cardDesign)
+
+  // One shape, used by the hero card AND every picker thumbnail, so a preview
+  // can never disagree with the card it is previewing.
+  const cardData: CardData = {
+    shopName: setting.shopName,
+    ownerName: setting.ownerName,
+    phone: setting.phone,
+    email,
+    gstin: setting.gstin,
+    address: setting.address,
+    logoUrl: setting.logoUrl,
+  }
   const [showPicker, setShowPicker] = useState(false)
   const cardRef = useRef<HTMLDivElement>(null)
 
@@ -148,27 +171,29 @@ export function BusinessCardDisplay({ setting, email, onDesignChange }: Business
         </Button>
       </div>
 
-      {/* ═══ Design Picker (horizontal scroll) ═══ */}
+      {/* ═══ Design Picker — real mini-renders, not colour swatches ═══
+          The old picker showed a gradient rectangle with the name on it, so
+          every design looked like a colour choice. Rendering the ACTUAL layout
+          at thumbnail size is what makes the gallery worth scrolling. */}
       {showPicker && (
-        <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-hide">
+        <div className="grid grid-cols-3 gap-2">
           {BUSINESS_CARD_DESIGNS.map((d) => (
             <button
               key={d.id}
               onClick={() => handleDesignSelect(d.id)}
               className={cn(
-                'flex-shrink-0 w-24 h-32 rounded-xl border-2 transition relative overflow-hidden',
-                d.id === design.id ? 'border-primary shadow-md scale-105' : 'border-border hover:border-primary/50',
+                'relative rounded-xl transition text-left',
+                d.id === design.id
+                  ? 'ring-2 ring-primary ring-offset-2 ring-offset-background'
+                  : 'opacity-90 hover:opacity-100 hover:scale-[1.03]',
               )}
-              style={{ background: d.previewGradient }}
               title={d.name}
+              aria-pressed={d.id === design.id}
             >
-              <div className="absolute inset-0 flex flex-col items-center justify-end p-2">
-                <p className={cn('text-2xs font-medium text-center leading-tight', d.isDark ? 'text-white' : 'text-gray-900')}>
-                  {d.name}
-                </p>
-              </div>
+              <BusinessCardSurface design={d} data={cardData} qrValue={vcard} thumbnail />
+              <p className="text-3xs mt-1 text-center truncate text-muted-foreground">{d.name}</p>
               {d.id === design.id && (
-                <div className="absolute top-1 right-1 w-4 h-4 rounded-full bg-primary flex items-center justify-center">
+                <div className="absolute top-1 right-1 w-4 h-4 rounded-full bg-primary flex items-center justify-center shadow">
                   <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                   </svg>
@@ -179,200 +204,16 @@ export function BusinessCardDisplay({ setting, email, onDesignChange }: Business
         </div>
       )}
 
-      {/* ═══ Digital Business Card ═══ */}
-      <div className="relative rounded-2xl overflow-hidden shadow-card" ref={cardRef}>
-        {/* Card front — design-specific background */}
-        <div
-          className="p-6 relative"
-          style={{ background: design.background }}
-        >
-          {/* Decorations */}
-          {design.decoration === 'circles' && (
-            <>
-              <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16" />
-              <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full -ml-12 -mb-12" />
-            </>
-          )}
-          {design.decoration === 'waves' && (
-            <svg className="absolute bottom-0 left-0 w-full h-20 opacity-10" viewBox="0 0 1440 120" preserveAspectRatio="none">
-              <path d="M0,60 C240,100 480,20 720,60 C960,100 1200,20 1440,60 L1440,120 L0,120 Z" fill="white" />
-            </svg>
-          )}
-          {design.decoration === 'mandala' && (
-            <div className="absolute top-1/2 right-0 w-48 h-48 -mr-24 -translate-y-1/2 opacity-8" style={{ opacity: 0.08 }}>
-              <svg viewBox="0 0 200 200" fill="none" className="w-full h-full">
-                <circle cx="100" cy="100" r="80" stroke="white" strokeWidth="1" />
-                <circle cx="100" cy="100" r="60" stroke="white" strokeWidth="1" />
-                <circle cx="100" cy="100" r="40" stroke="white" strokeWidth="1" />
-                {[...Array(8)].map((_, i) => (
-                  <line key={i} x1="100" y1="20" x2="100" y2="180" stroke="white" strokeWidth="0.5" transform={`rotate(${i * 45} 100 100)`} />
-                ))}
-              </svg>
-            </div>
-          )}
-          {design.decoration === 'particles' && (
-            <>
-              <div className="absolute top-4 left-8 w-1.5 h-1.5 bg-white/30 rounded-full" />
-              <div className="absolute top-12 right-12 w-1 h-1 bg-white/20 rounded-full" />
-              <div className="absolute bottom-8 left-16 w-2 h-2 bg-white/15 rounded-full" />
-              <div className="absolute bottom-16 right-8 w-1 h-1 bg-white/25 rounded-full" />
-              <div className="absolute top-20 left-4 w-1 h-1 bg-white/20 rounded-full" />
-            </>
-          )}
-
-          {/* 🐛 Phase 2 Fix: Show logo on business card (was: completely absent) */}
-          {setting.logoUrl && (
-            <div className="relative mb-3">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={setting.logoUrl}
-                alt={`${setting.shopName || 'Shop'} logo`}
-                className="w-12 h-12 rounded-lg object-cover bg-white/90 p-1 shadow-md"
-              />
-            </div>
-          )}
-
-          {/* Card content — layout variant */}
-          {design.layout === 'centered' ? (
-            <div className="relative text-center">
-              <p className="text-3xs uppercase tracking-wider font-semibold" style={{ color: design.labelTextColor }}>
-                Business Name
-              </p>
-              <h3 className="text-xl font-bold mt-0.5 truncate" style={{ color: design.primaryTextColor }}>
-                {setting.shopName || 'My Shop'}
-              </h3>
-              {setting.ownerName && (
-                <p className="text-sm mt-1" style={{ color: design.secondaryTextColor }}>
-                  {setting.ownerName}
-                </p>
-              )}
-              <div className="mt-3 space-y-1">
-                {setting.phone && (
-                  <p className="text-xs flex items-center justify-center gap-1.5" style={{ color: design.secondaryTextColor }}>
-                    <Phone className="w-3 h-3 flex-shrink-0" /> {setting.phone}
-                  </p>
-                )}
-                {email && (
-                  <p className="text-xs flex items-center justify-center gap-1.5" style={{ color: design.secondaryTextColor }}>
-                    <Mail className="w-3 h-3 flex-shrink-0" /> {email}
-                  </p>
-                )}
-              </div>
-              <div className="mt-3 flex justify-center">
-                <div className="p-2 rounded-xl shadow-lg" style={{ background: design.qrBgColor }}>
-                  <QRCodeSVG value={vcard} size={80} level="Q" fgColor={design.qrFgColor} bgColor={design.qrBgColor} includeMargin={false} />
-                </div>
-              </div>
-              <p className="text-3xs text-center mt-1" style={{ color: design.labelTextColor }}>Scan to save contact</p>
-            </div>
-          ) : design.layout === 'split' ? (
-            <div className="relative">
-              {/* Top half: text */}
-              <div className="mb-4">
-                <p className="text-3xs uppercase tracking-wider font-semibold" style={{ color: design.labelTextColor }}>
-                  Business Name
-                </p>
-                <h3 className="text-xl font-bold mt-0.5 truncate" style={{ color: design.primaryTextColor }}>
-                  {setting.shopName || 'My Shop'}
-                </h3>
-                {setting.ownerName && (
-                  <p className="text-sm mt-1" style={{ color: design.secondaryTextColor }}>
-                    {setting.ownerName}
-                  </p>
-                )}
-                <div className="mt-2 space-y-1">
-                  {setting.phone && (
-                    <p className="text-xs flex items-center gap-1.5" style={{ color: design.secondaryTextColor }}>
-                      <Phone className="w-3 h-3 flex-shrink-0" /> {setting.phone}
-                    </p>
-                  )}
-                  {email && (
-                    <p className="text-xs flex items-center gap-1.5" style={{ color: design.secondaryTextColor }}>
-                      <Mail className="w-3 h-3 flex-shrink-0" /> {email}
-                    </p>
-                  )}
-                </div>
-              </div>
-              {/* Bottom half: QR + GSTIN */}
-              <div className="flex items-center justify-between gap-4 pt-3 border-t" style={{ borderColor: design.isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.1)' }}>
-                <div className="flex-1 min-w-0">
-                  {setting.gstin && (
-                    <p className="text-2xs font-mono" style={{ color: design.secondaryTextColor }}>
-                      GSTIN: {setting.gstin}
-                    </p>
-                  )}
-                  {setting.address && (
-                    <p className="text-2xs mt-1 leading-relaxed" style={{ color: design.labelTextColor }}>
-                      {setting.address}
-                    </p>
-                  )}
-                </div>
-                <div className="flex-shrink-0">
-                  <div className="p-1.5 rounded-lg shadow-md" style={{ background: design.qrBgColor }}>
-                    <QRCodeSVG value={vcard} size={72} level="Q" fgColor={design.qrFgColor} bgColor={design.qrBgColor} includeMargin={false} />
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : (
-            /* Classic layout: text left, QR right */
-            <div className="relative flex items-start justify-between gap-4">
-              <div className="flex-1 min-w-0">
-                <p className="text-3xs uppercase tracking-wider font-semibold" style={{ color: design.labelTextColor }}>
-                  Business Name
-                </p>
-                <h3 className="text-xl font-bold mt-0.5 truncate" style={{ color: design.primaryTextColor }}>
-                  {setting.shopName || 'My Shop'}
-                </h3>
-                {setting.ownerName && (
-                  <p className="text-sm mt-2" style={{ color: design.secondaryTextColor }}>
-                    <span style={{ color: design.labelTextColor }}>Proprietor:</span> {setting.ownerName}
-                  </p>
-                )}
-                <div className="mt-3 space-y-1">
-                  {setting.phone && (
-                    <p className="text-xs flex items-center gap-1.5" style={{ color: design.secondaryTextColor }}>
-                      <Phone className="w-3 h-3 flex-shrink-0" />
-                      {setting.phone}
-                    </p>
-                  )}
-                  {email && (
-                    <p className="text-xs flex items-center gap-1.5" style={{ color: design.secondaryTextColor }}>
-                      <Mail className="w-3 h-3 flex-shrink-0" />
-                      {email}
-                    </p>
-                  )}
-                  {setting.gstin && (
-                    <p className="text-xs flex items-center gap-1.5 font-mono" style={{ color: design.secondaryTextColor }}>
-                      <FileSpreadsheet className="w-3 h-3 flex-shrink-0" />
-                      GSTIN: {setting.gstin}
-                    </p>
-                  )}
-                </div>
-                {setting.address && (
-                  <p className="text-2xs mt-2 leading-relaxed" style={{ color: design.labelTextColor }}>
-                    {setting.address}
-                  </p>
-                )}
-              </div>
-              {/* QR Code */}
-              <div className="flex-shrink-0">
-                <div className="p-2 rounded-xl shadow-lg" style={{ background: design.qrBgColor }}>
-                  <QRCodeSVG
-                    value={vcard}
-                    size={96}
-                    level="Q"
-                    fgColor={design.qrFgColor}
-                    bgColor={design.qrBgColor}
-                    includeMargin={false}
-                  />
-                </div>
-                <p className="text-3xs text-center mt-1" style={{ color: design.labelTextColor }}>Scan to save</p>
-              </div>
-            </div>
-          )}
-        </div>
+      {/* ═══ The card ═══ */}
+      <div className="shadow-card rounded-2xl overflow-hidden" ref={cardRef}>
+        <BusinessCardSurface
+          design={design}
+          data={cardData}
+          qrValue={vcard}
+          onLogoClick={onLogoClick}
+        />
       </div>
+
 
       {/* ═══ Share buttons ═══ */}
       <div className="grid grid-cols-3 gap-2">

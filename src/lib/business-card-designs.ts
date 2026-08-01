@@ -1,214 +1,362 @@
 /**
- * 🐛 UI/UX Phase 2: Business Card Design Registry
+ * Business Card Design Registry — 10 distinct, premium layouts.
  *
- * 10 top-notch business card designs for the user to choose from.
- * Each design defines: background, text colors, layout variant, decoration,
- * and font pairing. The designs range from minimal to festive, light to dark,
- * to match different business types and personal preferences.
+ * 🎨 REBUILT 2026-07-29. The previous registry claimed ten designs but varied
+ * only COLOUR: seven of the ten used `layout: 'classic'`, so the gallery read as
+ * one card in ten colourways. Rahul spotted that immediately. STRUCTURE is what
+ * makes a card look designed; colour alone reads as a theme picker.
  *
- * Inspired by: CRED cards, JioBusiness, Vyapar, KhataBook, Canva templates.
+ * WHAT MAKES THESE READ AS PREMIUM — the rules every design here follows:
  *
- * Design IDs are stable — never change them (stored in Setting.cardDesign).
- * To add a new design: append to the array with a new unique id.
+ *  1. MUTED PALETTES. Real letterpress and metal cards are bone, ink, oxblood,
+ *     graphite, brass. Saturated orange-to-red gradients read as a free
+ *     template — the fastest way to look cheap is maximum chroma.
+ *  2. TYPOGRAPHIC HIERARCHY. The shop name is large with TIGHT tracking; labels
+ *     are tiny, uppercase, WIDE tracking, low contrast. The distance between
+ *     those two extremes is most of the effect, and it costs nothing.
+ *  3. RESTRAINT. A good card is mostly empty. At most one decorative gesture.
+ *  4. HAIRLINES, not borders. 1px at 20–40% opacity reads as engraving; a 2px
+ *     solid border reads as a <div>.
+ *  5. MATERIAL. A whisper of grain or weave stops a flat fill looking like CSS.
+ *
+ * Every design declares a LOGO SLOT, and some are built around it — `emblem` is
+ * meaningless without a logo. That is why the uploader belongs ON the card
+ * rather than buried in a settings form (where it lived until today, at line
+ * 628 of Settings.tsx, which is why Rahul could not find it).
+ *
+ * Design IDs are stable and stored in Setting.cardDesign. NEVER change or reuse
+ * one — append instead. An id that stops resolving silently returns every user
+ * who chose it to the default.
  */
+
+/** Structural arrangement. This is what actually differentiates the designs. */
+export type CardLayout =
+  | 'classic'      // name left, QR right — the traditional arrangement
+  | 'left-bar'     // solid spine down the left third, content to its right
+  | 'diagonal'     // two tones split on a diagonal
+  | 'emblem'       // logo large and centred, name beneath — logo is the hero
+  | 'framed'       // inset hairline frame, wide margin, formal
+  | 'top-band'     // colour band across the top, details on the body below
+  | 'minimal'      // type only, one hairline rule, maximum whitespace
+  | 'portrait'     // vertical orientation, centred stack
+  | 'corner'       // one bold corner wedge, the rest left quiet
+  | 'full-bleed'   // pattern fills the card, text sits on a scrim
+
+/** Where the shop logo sits. Each layout has one natural home for it. */
+export type LogoSlot =
+  | 'top-left'
+  | 'top-center'
+  | 'center-hero'      // 2x size — the design is built around it
+  | 'in-band'
+  | 'in-spine'
+  | 'inline'           // beside the name, wordmark-style
+  | 'bottom-right'
+  | 'corner-opposite'
+
+export type SurfaceTexture = 'none' | 'grain' | 'linen' | 'sheen'
 
 export interface BusinessCardDesign {
   /** Stable unique ID (stored in Setting.cardDesign). Never change. */
   id: string
-  /** Display name shown in the picker UI */
   name: string
-  /** Short description shown in the picker UI */
+  /** One line, shown under the name in the picker. Says who it suits. */
   description: string
-  /** Preview colors for the picker thumbnail (gradient CSS) */
+  /** Small gradient/solid for the picker thumbnail. */
   previewGradient: string
-  /** Card background CSS (gradient or solid) */
+
+  layout: CardLayout
+  /** Main card surface — solid or gradient CSS. */
   background: string
-  /** Text color for primary text (shop name) */
+  /** Secondary surface: the spine, band, wedge or diagonal half, per layout. */
+  accentSurface?: string
+  texture: SurfaceTexture
+
+  /** Ink. `ruleColor` is for hairlines; `accentColor` for the single highlight. */
   primaryTextColor: string
-  /** Text color for secondary text (owner, phone, etc.) */
   secondaryTextColor: string
-  /** Text color for labels (Proprietor:, GSTIN:, etc.) */
   labelTextColor: string
-  /** QR code background color (must contrast with foreground) */
+  ruleColor: string
+  accentColor: string
+
+  fontFamily: 'sans' | 'serif' | 'mono'
+  nameSize: 'lg' | 'xl' | '2xl'
+  nameTracking: 'tight' | 'normal' | 'wide'
+  /** Uppercase micro-labels ("PROPRIETOR"). The main premium tell. */
+  showLabels: boolean
+
+  logoSlot: LogoSlot
   qrBgColor: string
-  /** QR code foreground color */
   qrFgColor: string
-  /** Layout variant: 'classic' (text left, QR right) | 'centered' (text centered, QR below) | 'split' (top half text, bottom half QR) */
-  layout: 'classic' | 'centered' | 'split'
-  /** Decoration: 'none' | 'circles' | 'waves' | 'mandala' | 'particles' */
-  decoration: 'none' | 'circles' | 'waves' | 'mandala' | 'particles'
-  /** Whether the card has a dark background (affects QR code rendering) */
+  /** `framed` draws a hairline box around the QR; `tinted` sits it on accent. */
+  qrStyle: 'plain' | 'framed' | 'tinted'
+
   isDark: boolean
 }
 
 export const BUSINESS_CARD_DESIGNS: BusinessCardDesign[] = [
   {
-    id: 'saffron-classic',
-    name: 'Saffron Classic',
-    description: 'Warm Indian saffron gradient with decorative circles. The default.',
-    previewGradient: 'linear-gradient(135deg, #FF9933 0%, #D97706 50%, #92400E 100%)',
-    background: 'linear-gradient(135deg, #FF9933 0%, #D97706 50%, #92400E 100%)',
-    primaryTextColor: '#FFFFFF',
-    secondaryTextColor: 'rgba(255, 255, 255, 0.85)',
-    labelTextColor: 'rgba(255, 255, 255, 0.7)',
+    id: 'ivory-letterpress',
+    name: 'Ivory Letterpress',
+    description: 'Bone stock, charcoal ink, engraved hairline frame. The printed classic.',
+    previewGradient: 'linear-gradient(160deg, #FBF9F4 0%, #F1EDE3 100%)',
+    layout: 'framed',
+    background: 'linear-gradient(160deg, #FBF9F4 0%, #F1EDE3 100%)',
+    texture: 'linen',
+    primaryTextColor: '#1C1917',
+    secondaryTextColor: '#57534E',
+    labelTextColor: '#A8A29E',
+    ruleColor: 'rgba(28, 25, 23, 0.18)',
+    accentColor: '#8A6A3B',
+    fontFamily: 'serif',
+    nameSize: 'xl',
+    nameTracking: 'tight',
+    showLabels: true,
+    logoSlot: 'top-center',
     qrBgColor: '#FFFFFF',
-    qrFgColor: '#92400E',
-    layout: 'classic',
-    decoration: 'circles',
-    isDark: true,
-  },
-  {
-    id: 'emerald-elegant',
-    name: 'Emerald Elegant',
-    description: 'Rich emerald green with subtle wave patterns. Premium feel.',
-    previewGradient: 'linear-gradient(135deg, #059669 0%, #047857 50%, #064E3B 100%)',
-    background: 'linear-gradient(135deg, #059669 0%, #047857 50%, #064E3B 100%)',
-    primaryTextColor: '#FFFFFF',
-    secondaryTextColor: 'rgba(255, 255, 255, 0.85)',
-    labelTextColor: 'rgba(255, 255, 255, 0.65)',
-    qrBgColor: '#FFFFFF',
-    qrFgColor: '#064E3B',
-    layout: 'classic',
-    decoration: 'waves',
-    isDark: true,
-  },
-  {
-    id: 'midnight-pro',
-    name: 'Midnight Pro',
-    description: 'Sleek dark navy with minimal decoration. Modern and professional.',
-    previewGradient: 'linear-gradient(135deg, #1E3A8A 0%, #1E293B 50%, #0F172A 100%)',
-    background: 'linear-gradient(135deg, #1E3A8A 0%, #1E293B 50%, #0F172A 100%)',
-    primaryTextColor: '#FFFFFF',
-    secondaryTextColor: 'rgba(255, 255, 255, 0.8)',
-    labelTextColor: 'rgba(255, 255, 255, 0.55)',
-    qrBgColor: '#FFFFFF',
-    qrFgColor: '#0F172A',
-    layout: 'classic',
-    decoration: 'none',
-    isDark: true,
-  },
-  {
-    id: 'royal-violet',
-    name: 'Royal Violet',
-    description: 'Deep violet with mandala-inspired patterns. Luxurious.',
-    previewGradient: 'linear-gradient(135deg, #7C3AED 0%, #6D28D9 50%, #4C1D95 100%)',
-    background: 'linear-gradient(135deg, #7C3AED 0%, #6D28D9 50%, #4C1D95 100%)',
-    primaryTextColor: '#FFFFFF',
-    secondaryTextColor: 'rgba(255, 255, 255, 0.85)',
-    labelTextColor: 'rgba(255, 255, 255, 0.6)',
-    qrBgColor: '#FFFFFF',
-    qrFgColor: '#4C1D95',
-    layout: 'classic',
-    decoration: 'mandala',
-    isDark: true,
-  },
-  {
-    id: 'clean-white',
-    name: 'Clean White',
-    description: 'Minimal white card with saffron accents. Crisp and modern.',
-    previewGradient: 'linear-gradient(135deg, #FFFFFF 0%, #FEF3C7 50%, #FDE68A 100%)',
-    background: 'linear-gradient(135deg, #FFFFFF 0%, #FEF3C7 50%, #FDE68A 100%)',
-    primaryTextColor: '#1F2937',
-    secondaryTextColor: '#4B5563',
-    labelTextColor: '#9CA3AF',
-    qrBgColor: '#FFFFFF',
-    qrFgColor: '#D97706',
-    layout: 'classic',
-    decoration: 'none',
+    qrFgColor: '#1C1917',
+    qrStyle: 'framed',
     isDark: false,
   },
   {
-    id: 'ocean-blue',
-    name: 'Ocean Blue',
-    description: 'Calming blue gradient with particle decorations. Trustworthy.',
-    previewGradient: 'linear-gradient(135deg, #0EA5E9 0%, #0284C7 50%, #0369A1 100%)',
-    background: 'linear-gradient(135deg, #0EA5E9 0%, #0284C7 50%, #0369A1 100%)',
-    primaryTextColor: '#FFFFFF',
-    secondaryTextColor: 'rgba(255, 255, 255, 0.85)',
-    labelTextColor: 'rgba(255, 255, 255, 0.6)',
-    qrBgColor: '#FFFFFF',
-    qrFgColor: '#0369A1',
-    layout: 'centered',
-    decoration: 'particles',
-    isDark: true,
-  },
-  {
-    id: 'rose-gold',
-    name: 'Rose Gold',
-    description: 'Elegant rose-gold gradient. Perfect for boutiques and salons.',
-    previewGradient: 'linear-gradient(135deg, #F472B6 0%, #EC4899 50%, #BE185D 100%)',
-    background: 'linear-gradient(135deg, #F472B6 0%, #EC4899 50%, #BE185D 100%)',
-    primaryTextColor: '#FFFFFF',
-    secondaryTextColor: 'rgba(255, 255, 255, 0.85)',
-    labelTextColor: 'rgba(255, 255, 255, 0.65)',
-    qrBgColor: '#FFFFFF',
-    qrFgColor: '#BE185D',
+    id: 'obsidian',
+    name: 'Obsidian',
+    description: 'Matte black, fine grain, a single brass rule. Understated luxury.',
+    previewGradient: 'linear-gradient(150deg, #17171A 0%, #0B0B0D 100%)',
     layout: 'classic',
-    decoration: 'circles',
+    background: 'linear-gradient(150deg, #17171A 0%, #0B0B0D 100%)',
+    texture: 'grain',
+    primaryTextColor: '#F5F3EF',
+    secondaryTextColor: 'rgba(245, 243, 239, 0.72)',
+    labelTextColor: 'rgba(197, 165, 114, 0.85)',
+    ruleColor: 'rgba(197, 165, 114, 0.45)',
+    accentColor: '#C5A572',
+    fontFamily: 'sans',
+    nameSize: '2xl',
+    nameTracking: 'tight',
+    showLabels: true,
+    logoSlot: 'top-left',
+    qrBgColor: '#F5F3EF',
+    qrFgColor: '#0B0B0D',
+    qrStyle: 'plain',
     isDark: true,
   },
   {
-    id: 'charcoal-minimal',
-    name: 'Charcoal Minimal',
-    description: 'Dark charcoal with no decoration. Ultra-minimal, premium.',
-    previewGradient: 'linear-gradient(135deg, #374151 0%, #1F2937 50%, #111827 100%)',
-    background: 'linear-gradient(135deg, #374151 0%, #1F2937 50%, #111827 100%)',
-    primaryTextColor: '#FFFFFF',
-    secondaryTextColor: 'rgba(255, 255, 255, 0.75)',
-    labelTextColor: 'rgba(255, 255, 255, 0.5)',
+    id: 'indigo-brass',
+    name: 'Indigo & Brass',
+    description: 'Deep ink navy band with brass rules and small caps. Formal, warm.',
+    previewGradient: 'linear-gradient(180deg, #1E2A44 0%, #1E2A44 38%, #FAF9F6 38%, #FAF9F6 100%)',
+    layout: 'top-band',
+    background: '#FAF9F6',
+    accentSurface: 'linear-gradient(150deg, #23304D 0%, #141D31 100%)',
+    texture: 'none',
+    primaryTextColor: '#141D31',
+    secondaryTextColor: '#4A5568',
+    labelTextColor: '#9AA1AE',
+    ruleColor: 'rgba(176, 141, 87, 0.5)',
+    accentColor: '#B08D57',
+    fontFamily: 'serif',
+    nameSize: 'xl',
+    nameTracking: 'normal',
+    showLabels: true,
+    logoSlot: 'in-band',
     qrBgColor: '#FFFFFF',
-    qrFgColor: '#111827',
-    layout: 'split',
-    decoration: 'none',
+    qrFgColor: '#141D31',
+    qrStyle: 'framed',
+    isDark: false,
+  },
+  {
+    id: 'bone-minimal',
+    name: 'Bone Minimal',
+    description: 'Type and one rule. Nothing else. For those who need no decoration.',
+    previewGradient: 'linear-gradient(180deg, #FFFFFF 0%, #F7F7F5 100%)',
+    layout: 'minimal',
+    background: 'linear-gradient(180deg, #FFFFFF 0%, #F7F7F5 100%)',
+    texture: 'none',
+    primaryTextColor: '#111111',
+    secondaryTextColor: '#6B6B6B',
+    labelTextColor: '#B4B4B4',
+    ruleColor: 'rgba(17, 17, 17, 0.14)',
+    accentColor: '#111111',
+    fontFamily: 'sans',
+    nameSize: '2xl',
+    nameTracking: 'tight',
+    showLabels: false,
+    logoSlot: 'inline',
+    qrBgColor: '#FFFFFF',
+    qrFgColor: '#111111',
+    qrStyle: 'plain',
+    isDark: false,
+  },
+  {
+    id: 'oxblood-spine',
+    name: 'Oxblood Spine',
+    description: 'A deep burgundy spine against cream. Strong without shouting.',
+    previewGradient: 'linear-gradient(90deg, #5B1A22 0%, #5B1A22 34%, #FBF8F3 34%, #FBF8F3 100%)',
+    layout: 'left-bar',
+    background: '#FBF8F3',
+    accentSurface: 'linear-gradient(180deg, #6B2028 0%, #4A141B 100%)',
+    texture: 'none',
+    primaryTextColor: '#2A1518',
+    secondaryTextColor: '#6B5B5D',
+    labelTextColor: '#A89496',
+    ruleColor: 'rgba(107, 32, 40, 0.22)',
+    accentColor: '#6B2028',
+    fontFamily: 'serif',
+    nameSize: 'xl',
+    nameTracking: 'normal',
+    showLabels: true,
+    logoSlot: 'in-spine',
+    qrBgColor: '#FFFFFF',
+    qrFgColor: '#4A141B',
+    qrStyle: 'framed',
+    isDark: false,
+  },
+  {
+    id: 'forest-emblem',
+    name: 'Forest Emblem',
+    description: 'Your logo, large and centred, ringed in gold. Built for a strong mark.',
+    previewGradient: 'linear-gradient(160deg, #17352B 0%, #0E2019 100%)',
+    layout: 'emblem',
+    background: 'linear-gradient(160deg, #17352B 0%, #0E2019 100%)',
+    texture: 'sheen',
+    primaryTextColor: '#F2F5F1',
+    secondaryTextColor: 'rgba(242, 245, 241, 0.7)',
+    labelTextColor: 'rgba(200, 169, 106, 0.85)',
+    ruleColor: 'rgba(200, 169, 106, 0.4)',
+    accentColor: '#C8A96A',
+    fontFamily: 'serif',
+    nameSize: 'xl',
+    nameTracking: 'wide',
+    showLabels: true,
+    logoSlot: 'center-hero',
+    qrBgColor: '#F2F5F1',
+    qrFgColor: '#0E2019',
+    qrStyle: 'plain',
     isDark: true,
   },
   {
-    id: 'festive-saffron',
-    name: 'Festive Saffron',
-    description: 'Vibrant saffron with mandala patterns. Perfect for festivals.',
-    previewGradient: 'linear-gradient(135deg, #F59E0B 0%, #D97706 50%, #B45309 100%)',
-    background: 'linear-gradient(135deg, #F59E0B 0%, #D97706 50%, #B45309 100%)',
-    primaryTextColor: '#FFFFFF',
-    secondaryTextColor: 'rgba(255, 255, 255, 0.9)',
-    labelTextColor: 'rgba(255, 255, 255, 0.7)',
-    qrBgColor: '#FFFFFF',
-    qrFgColor: '#B45309',
-    layout: 'centered',
-    decoration: 'mandala',
+    id: 'graphite-diagonal',
+    name: 'Graphite Diagonal',
+    description: 'Two greys cut on a diagonal. Architectural and modern.',
+    previewGradient: 'linear-gradient(115deg, #2E3238 0%, #2E3238 48%, #4A5058 48%, #4A5058 100%)',
+    layout: 'diagonal',
+    background: '#24272C',
+    accentSurface: 'linear-gradient(135deg, #454B54 0%, #363B42 100%)',
+    texture: 'grain',
+    primaryTextColor: '#F4F5F6',
+    secondaryTextColor: 'rgba(244, 245, 246, 0.7)',
+    labelTextColor: 'rgba(244, 245, 246, 0.45)',
+    ruleColor: 'rgba(244, 245, 246, 0.2)',
+    accentColor: '#8FB8C9',
+    fontFamily: 'sans',
+    nameSize: '2xl',
+    nameTracking: 'tight',
+    showLabels: false,
+    logoSlot: 'top-left',
+    qrBgColor: '#F4F5F6',
+    qrFgColor: '#24272C',
+    qrStyle: 'plain',
     isDark: true,
   },
   {
-    id: 'teal-fresh',
-    name: 'Teal Fresh',
-    description: 'Fresh teal with wave decorations. Clean and energetic.',
-    previewGradient: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 50%, #0F766E 100%)',
-    background: 'linear-gradient(135deg, #14B8A6 0%, #0D9488 50%, #0F766E 100%)',
-    primaryTextColor: '#FFFFFF',
-    secondaryTextColor: 'rgba(255, 255, 255, 0.85)',
-    labelTextColor: 'rgba(255, 255, 255, 0.6)',
+    id: 'terracotta-band',
+    name: 'Terracotta',
+    description: 'A warm clay band on bone. Indian warmth, kept sophisticated.',
+    previewGradient: 'linear-gradient(180deg, #B4532A 0%, #B4532A 38%, #FDF9F4 38%, #FDF9F4 100%)',
+    layout: 'top-band',
+    background: '#FDF9F4',
+    accentSurface: 'linear-gradient(135deg, #C25E33 0%, #9E4423 100%)',
+    texture: 'none',
+    primaryTextColor: '#2B1A12',
+    secondaryTextColor: '#6D584C',
+    labelTextColor: '#A9948A',
+    ruleColor: 'rgba(158, 68, 35, 0.25)',
+    accentColor: '#9E4423',
+    fontFamily: 'sans',
+    nameSize: 'xl',
+    nameTracking: 'normal',
+    showLabels: true,
+    logoSlot: 'in-band',
     qrBgColor: '#FFFFFF',
-    qrFgColor: '#0F766E',
-    layout: 'classic',
-    decoration: 'waves',
+    qrFgColor: '#9E4423',
+    qrStyle: 'framed',
+    isDark: false,
+  },
+  {
+    id: 'midnight-portrait',
+    name: 'Midnight Portrait',
+    description: 'A vertical card with a centred stack. Stands out in a stack of horizontals.',
+    previewGradient: 'linear-gradient(170deg, #191B33 0%, #0D0E1C 100%)',
+    layout: 'portrait',
+    background: 'linear-gradient(170deg, #191B33 0%, #0D0E1C 100%)',
+    texture: 'sheen',
+    primaryTextColor: '#EDEEF5',
+    secondaryTextColor: 'rgba(237, 238, 245, 0.68)',
+    labelTextColor: 'rgba(140, 150, 210, 0.8)',
+    ruleColor: 'rgba(140, 150, 210, 0.3)',
+    accentColor: '#8C96D2',
+    fontFamily: 'sans',
+    nameSize: 'xl',
+    nameTracking: 'wide',
+    showLabels: true,
+    logoSlot: 'top-center',
+    qrBgColor: '#EDEEF5',
+    qrFgColor: '#0D0E1C',
+    qrStyle: 'plain',
     isDark: true,
+  },
+  {
+    id: 'teal-corner',
+    name: 'Teal Corner',
+    description: 'One deep-teal wedge, the rest left quiet. Confident restraint.',
+    previewGradient: 'linear-gradient(135deg, #0E4F52 0%, #0E4F52 30%, #FFFFFF 30%, #FFFFFF 100%)',
+    layout: 'corner',
+    background: '#FFFFFF',
+    accentSurface: 'linear-gradient(135deg, #125C60 0%, #0A3E41 100%)',
+    texture: 'none',
+    primaryTextColor: '#0A2325',
+    secondaryTextColor: '#5A6B6C',
+    labelTextColor: '#9DACAD',
+    ruleColor: 'rgba(18, 92, 96, 0.22)',
+    accentColor: '#125C60',
+    fontFamily: 'sans',
+    nameSize: 'xl',
+    nameTracking: 'tight',
+    showLabels: true,
+    logoSlot: 'corner-opposite',
+    qrBgColor: '#FFFFFF',
+    qrFgColor: '#0A3E41',
+    qrStyle: 'framed',
+    isDark: false,
   },
 ]
 
+/** Shown when a user has never chosen a design. */
+export const DEFAULT_CARD_DESIGN_ID = 'ivory-letterpress'
+
 /**
- * Get a design by ID. Falls back to the default design if not found.
+ * Resolve a stored design id, falling back to the default.
+ *
+ * Never throws. Stored ids outlive registry edits, and a card that fails to
+ * render is worse than a card in an unexpected style.
  */
 export function getCardDesign(designId: string | null | undefined): BusinessCardDesign {
   if (designId) {
     const design = BUSINESS_CARD_DESIGNS.find(d => d.id === designId)
     if (design) return design
   }
-  return BUSINESS_CARD_DESIGNS[0] // default: saffron-classic
+  return (
+    BUSINESS_CARD_DESIGNS.find(d => d.id === DEFAULT_CARD_DESIGN_ID) ??
+    BUSINESS_CARD_DESIGNS[0]
+  )
 }
 
 /**
  * Generate a URL-safe slug from a shop name.
- * e.g. "Sharma Kirana Store" → "sharma-kirana-store"
- * If the slug is taken, appends a random suffix.
+ * e.g. "Sharma Kirana Store" → "sharma-kirana-store-a1b2c3"
+ *
+ * The random suffix is deliberate: two shops with the same name must not
+ * collide on the public card URL.
  */
 export function generateCardSlug(shopName: string): string {
   const base = shopName
@@ -220,7 +368,43 @@ export function generateCardSlug(shopName: string): string {
     .replace(/^-|-$/g, '') // trim leading/trailing hyphens
     || 'my-shop' // fallback if empty
 
-  // Add a short random suffix to avoid collisions (6 chars)
   const suffix = Math.random().toString(36).substring(2, 8)
   return `${base}-${suffix}`
+}
+
+/**
+ * CSS for the material texture overlay, kept here so designs stay declarative.
+ *
+ * Applied as an absolutely-positioned layer above the background and below the
+ * content — never on the content itself, or the text inherits the blend mode
+ * and turns muddy.
+ */
+export function textureStyle(texture: SurfaceTexture, isDark: boolean): React.CSSProperties {
+  switch (texture) {
+    case 'grain':
+      // Fine noise wash. Stops a flat fill looking like a coloured div.
+      return {
+        backgroundImage:
+          "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E\")",
+        opacity: isDark ? 0.16 : 0.07,
+        mixBlendMode: isDark ? 'overlay' : 'multiply',
+      }
+    case 'linen':
+      // Crosshatch weave, like uncoated paper stock.
+      return {
+        backgroundImage:
+          'repeating-linear-gradient(0deg, rgba(0,0,0,0.035) 0 1px, transparent 1px 3px), repeating-linear-gradient(90deg, rgba(0,0,0,0.035) 0 1px, transparent 1px 3px)',
+        opacity: 1,
+      }
+    case 'sheen':
+      // One soft highlight sweeping from the top-left, as light falls on a
+      // coated card held at an angle.
+      return {
+        backgroundImage:
+          'radial-gradient(120% 80% at 15% 0%, rgba(255,255,255,0.16) 0%, rgba(255,255,255,0) 55%)',
+        opacity: 1,
+      }
+    default:
+      return { display: 'none' }
+  }
 }
