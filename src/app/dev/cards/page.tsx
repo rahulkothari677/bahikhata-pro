@@ -13,6 +13,7 @@
 
 import { useState } from 'react'
 import { TemplateCard } from '@/components/common/TemplateCard'
+import { BusinessCardDisplay } from '@/components/common/BusinessCardDisplay'
 import { BusinessCardSurface } from '@/components/common/BusinessCardSurface'
 import { CARD_TEMPLATES } from '@/lib/card-templates'
 import { BUSINESS_CARD_DESIGNS } from '@/lib/business-card-designs'
@@ -63,6 +64,30 @@ export default function CardGalleryPage() {
             </div>
           </div>
         </header>
+
+        {/* The REAL screen component, with a template selected. This is the
+            path a shopkeeper actually hits — verifying TemplateCard alone would
+            not prove that BusinessCardDisplay picks the template over the
+            vector design. */}
+        <section className="mb-10">
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+            Live screen component (cardDesign = &quot;gold-fold&quot;)
+          </h2>
+          <div className="max-w-md" data-testid="live-card-screen">
+            <BusinessCardDisplay
+              setting={{
+                shopName: data.shopName,
+                ownerName: data.ownerName,
+                phone: data.phone,
+                address: data.address,
+                gstin: data.gstin,
+                cardDesign: 'gold-fold',
+              }}
+              email={data.email}
+              onLogoClick={() => {}}
+            />
+          </div>
+        </section>
 
         {CARD_TEMPLATES.length > 0 && (
           <section className="mb-10">

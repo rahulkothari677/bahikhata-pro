@@ -20,9 +20,11 @@
 
 import { useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
-import { Phone, Mail, MapPin, Globe } from 'lucide-react'
+import { Phone, Mail, MapPin, User } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { deriveMonogram } from '@/lib/brand-monogram'
+import { getMonogramFont, monogramStyle } from '@/lib/monogram-fonts'
+import { fitTextCqw, willTruncate, SHOP_NAME_GLYPH_RATIO } from '@/lib/fit-text'
 import type { CardTemplate, Zone } from '@/lib/card-templates'
 
 export interface TemplateCardData {
@@ -39,6 +41,8 @@ export interface TemplateCardData {
   gstin?: string | null
   /** Uploaded logo. When absent the monogram is drawn instead — never empty. */
   logoUrl?: string | null
+  /** Which typeface the monogram uses. See lib/monogram-fonts. */
+  monogramFontId?: string | null
 }
 
 interface Props {
@@ -66,15 +70,93 @@ export function TemplateCard({ template: t, data, qrValue, onLogoClick, classNam
 
   const monogram = deriveMonogram(data.shopName, data.ownerName)
 
-  // Paired with icons so a reader can find the phone number without reading.
+  const monoFont = getMonogramFont(data.monogramFontId)
+
+  // The icon, its divider and two gaps consume roughly 9cqw before any text.
+  // Sizing against the full zone is what let the email overflow its slot.
+  const CONTACT_CHROME_CQW = 9
+
+  // Fitted sizes. A shop is called "RK" or "Shree Siddhivinayak General Stores"
+  // and both land in the same slot, so a fixed size truncates one of them.
+  const shopFit = {
+    zoneWidthPercent: z.shopName.w,
+    maxCqw: 6.4,
+    // Below this the name is illegible at card size, so shrinking further is
+    // not a fix. Names that still do not fit WRAP instead — see below.
+    minCqw: 3.2,
+    glyphRatio: SHOP_NAME_GLYPH_RATIO,
+  }
+  const shopNameCqw = fitTextCqw(data.shopName || 'My Shop', shopFit)
+
+  // "Shree Siddhivinayak General Stores" is 34 characters and cannot fit one
+  // line at a legible size. Two lines beat an ellipsis: a wrapped name is still
+  // the shop's name, whereas "Shree Siddhivinayak Gen…" is not.
+  const shopNameWraps = willTruncate(data.shopName, shopFit)
+  const contactTextWidth = Math.max(8, (z.contact?.w ?? 40) - CONTACT_CHROME_CQW)
+
+  const ownerCqw = fitTextCqw(data.ownerName, {
+    zoneWidthPercent: contactTextWidth,
+    // Heads the contact panel, but must stay BELOW the shop name optically —
+    // at 4.6 it rendered 28px against the name's 27px and stole the hierarchy.
+    // The shop is the brand; the owner is who you ask for.
+    maxCqw: 3.9,
+    minCqw: 2.5,
+  })
+  const designationCqw = fitTextCqw(data.designation, {
+    zoneWidthPercent: contactTextWidth,
+    maxCqw: 2.6,
+    minCqw: 1.9,
+    // Uppercase with wide tracking eats far more width per character.
+    glyphRatio: 0.78,
+  })
+
+  // (CONTACT_CHROME_CQW is declared above so the owner fit can use it too.)
+  // Contact rows are fitted to the LONGEST line and all share that size.
+  // Sizing each row independently would step the type up and down the block,
+  // which reads as a rendering fault rather than a design.
+  //
+  // The icon, its divider and two gaps eat roughly 9cqw before any text, so the
+  // usable width is the zone minus that — sizing against the full zone is what
+  // let "rjrahuljain980@gmail.com" render 216px into a 189px slot.
+
   const contactRows = (
     [
+      // The OWNER is row one, with its own icon.
+      //
+      // It used to sit above the list as a bare heading, which put it on a
+      // different left edge from everything under it — the misalignment Rahul
+      // spotted. As a row it shares the icon column, the divider and the text
+      // column with the phone and address, so the whole panel reads as one
+      // block instead of a title floating over a list.
+      // Owner only. `designation` is deliberately NOT rendered: Rahul removed
+      // "PROPRIETOR" from his reference, and on a card where the shop name is
+      // already the headline it is a third label competing for the same eye.
+      // The field is kept on the data type so a template can opt back in.
+      { icon: User, value: data.ownerName },
       { icon: Phone, value: data.phone },
       { icon: Mail, value: data.email },
       { icon: MapPin, value: data.address },
-      { icon: Globe, value: data.website },
     ] as const
-  ).filter(r => Boolean(r.value)) as Array<{ icon: typeof Phone; value: string }>
+  ).filter(r => Boolean(r.value)) as Array<{
+    icon: typeof Phone
+    value: string
+    sub?: string | null
+  }>
+
+  // Only the PLAIN rows drive the shared size — the owner row has its own,
+  // larger size, so including it would shrink the phone and address needlessly.
+  const longestContact = contactRows
+    .filter(r => !r.sub)
+    .reduce((a, r) => (r.value.length > a.length ? r.value : a), '')
+  const contactCqw = fitTextCqw(longestContact, {
+    zoneWidthPercent: contactTextWidth,
+    // 3.2cqw on a 1050px card is ~8pt — the upper end of business-card body copy.
+    maxCqw: 3.2,
+    // ~6pt. Below this it stops being readable at arm's length, which is the
+    // only distance a business card is ever read at.
+    minCqw: 2.1,
+    glyphRatio: 0.52,
+  })
 
   return (
     <div
@@ -95,8 +177,13 @@ export function TemplateCard({ template: t, data, qrValue, onLogoClick, classNam
       )}
 
       {/* ── logo / monogram ─────────────────────────────────────────────── */}
+      {/* Width comes from the ZONE (`w`), not from `size` — `size` drives the
+          font size only. Overriding width with it made the monogram box 25%
+          wide inside a 28% zone, so its centre sat at 22.5% while the ornament
+          below centred at 24%: a 1.5% drift, visible as the mark not quite
+          sitting over the rule. */}
       {z.logo && (
-        <div style={{ ...zoneStyle(z.logo), width: `${z.logo.size}%` }}>
+        <div style={zoneStyle(z.logo)}>
           {data.logoUrl ? (
                 <img
               src={data.logoUrl}
@@ -120,19 +207,14 @@ export function TemplateCard({ template: t, data, qrValue, onLogoClick, classNam
                 'w-full grid place-items-center leading-none',
                 onLogoClick && 'transition hover:opacity-80 cursor-pointer',
               )}
-              style={{
-                color: z.logo.color ?? t.ink.primary,
-                fontFamily:
-                  z.logo.font === 'script'
-                    ? 'ui-serif, Georgia, "Brush Script MT", cursive'
-                    : z.logo.font === 'sans'
-                      ? 'inherit'
-                      : 'ui-serif, Georgia, serif',
-                fontStyle: z.logo.font === 'script' ? 'italic' : 'normal',
-                fontWeight: 700,
-                fontSize: `${z.logo.size * 0.9}cqw`,
-                letterSpacing: z.logo.font === 'script' ? '0' : '.01em',
-              }}
+              style={monogramStyle(
+                monoFont,
+                z.logo.color ?? t.ink.primary,
+                // 0.55 was too small to read the typeface; 0.86 overpowered the
+                // shop name. 0.69 is 0.86 less the 20% Rahul asked for, and
+                // lands close to his reference proportion.
+                z.logo.size * 0.69,
+              )}
             >
               {monogram}
             </button>
@@ -164,8 +246,8 @@ export function TemplateCard({ template: t, data, qrValue, onLogoClick, classNam
       {/* ── shop name ───────────────────────────────────────────────────── */}
       <div style={zoneStyle(z.shopName)}>
         <p
-          className="font-bold leading-[1.08] truncate"
-          style={{ color: t.ink.primary, fontSize: '7cqw', letterSpacing: '-.02em' }}
+          className={cn('font-bold leading-[1.08]', shopNameWraps ? 'line-clamp-2' : 'truncate')}
+          style={{ color: t.ink.primary, fontSize: `${shopNameCqw}cqw`, letterSpacing: '-.02em' }}
         >
           {data.shopName || 'My Shop'}
         </p>
@@ -182,26 +264,28 @@ export function TemplateCard({ template: t, data, qrValue, onLogoClick, classNam
         </div>
       )}
 
-      {/* ── owner ───────────────────────────────────────────────────────── */}
-      {z.ownerName && data.ownerName && (
-        <div style={zoneStyle(z.ownerName)}>
-          <p className="font-semibold truncate" style={{ color: t.ink.primary, fontSize: '3.9cqw' }}>
-            {data.ownerName}
-          </p>
-          {data.designation && (
-            <p
-              className="uppercase truncate"
-              style={{ color: t.ink.secondary, fontSize: '2.7cqw', letterSpacing: '.12em' }}
-            >
-              {data.designation}
-            </p>
-          )}
+      {/* The owner is no longer a standalone block — it is row one of the
+          contact list below, so it shares that column's alignment. */}
+
+      {/* ── ornamental rule: line · diamond · line ──────────────────────── */}
+      {z.divider && (
+        <div style={zoneStyle(z.divider)} className="flex items-center gap-[1.2cqw]">
+          <span className="flex-1" style={{ height: '0.16cqw', background: t.ink.accent, opacity: 0.62 }} />
+          {/* A rotated square, not a bullet: a • renders at a different optical
+              size in every typeface, so the ornament would drift. */}
+          <span
+            className="flex-none rotate-45"
+            style={{ width: '0.9cqw', height: '0.9cqw', background: t.ink.accent, opacity: 0.85 }}
+          />
+          <span className="flex-1" style={{ height: '0.16cqw', background: t.ink.accent, opacity: 0.62 }} />
         </div>
       )}
 
-      {/* ── divider hairline ────────────────────────────────────────────── */}
-      {z.divider && (
-        <div style={{ ...zoneStyle(z.divider), height: '0.2cqw', background: t.ink.accent, opacity: 0.55 }} />
+      {/* ── closing rule beneath the name ───────────────────────────────── */}
+      {z.dividerBottom && (
+        <div
+          style={{ ...zoneStyle(z.dividerBottom), height: '0.16cqw', background: t.ink.accent, opacity: 0.62 }}
+        />
       )}
 
       {/* ── contact rows ────────────────────────────────────────────────── */}
@@ -216,13 +300,13 @@ export function TemplateCard({ template: t, data, qrValue, onLogoClick, classNam
                   <span
                     className={cn('grid place-items-center flex-none', ic.style === 'circle' && 'rounded-full')}
                     style={{
-                      width: '5.2cqw',
-                      height: '5.2cqw',
+                      width: '4.4cqw',
+                      height: '4.4cqw',
                       background: ic.style === 'circle' ? ic.background : 'transparent',
                       color: ic.color,
                     }}
                   >
-                    <Icon style={{ width: '3.2cqw', height: '3.2cqw' }} strokeWidth={2} />
+                    <Icon style={{ width: '2.7cqw', height: '2.7cqw' }} strokeWidth={2} />
                   </span>
                 )}
                 {/* The hairline between icon and text, as in both references.
@@ -230,14 +314,38 @@ export function TemplateCard({ template: t, data, qrValue, onLogoClick, classNam
                 {t.contactIcons?.divider && (
                   <span
                     className="flex-none"
-                    style={{ width: '0.2cqw', height: '4.4cqw', background: t.ink.secondary, opacity: 0.35 }}
+                    style={{ width: '0.2cqw', height: '4.4cqw', background: t.ink.contact ?? t.ink.secondary, opacity: 0.35 }}
                   />
                 )}
-                <span
-                  className="truncate"
-                  style={{ color: t.ink.secondary, fontSize: '3cqw', lineHeight: 1.5 }}
-                >
-                  {row.value}
+                <span className="min-w-0">
+                  <span
+                    className="block truncate"
+                    style={{
+                      color: t.ink.contact ?? t.ink.secondary,
+                      // The owner's name is the one line that earns extra
+                      // weight — it is who the card is FOR.
+                      // The owner (row one) carries more weight than the
+                      // contact lines — it is who the card is for.
+                      fontSize: `${i === 0 ? ownerCqw : contactCqw}cqw`,
+                      fontWeight: i === 0 ? 600 : 400,
+                      lineHeight: 1.35,
+                    }}
+                  >
+                    {row.value}
+                  </span>
+                  {row.sub && (
+                    <span
+                      className="block uppercase truncate"
+                      style={{
+                        color: t.ink.label,
+                        fontSize: `${designationCqw}cqw`,
+                        letterSpacing: '.16em',
+                        lineHeight: 1.4,
+                      }}
+                    >
+                      {row.sub}
+                    </span>
+                  )}
                 </span>
               </div>
             )
