@@ -177,23 +177,39 @@ export function validateAllocations(
 ): string | null {
   let sum = 0
 
+  // 🔒 Amounts are aggregated PER BILL before being compared to that bill's due.
+  //
+  // Checking each entry in isolation is not enough: two entries of ₹600 against
+  // a bill owing ₹1,000 each pass on their own, while together they over-settle
+  // it by ₹200. The unique(paymentId, transactionId) constraint would reject
+  // the second row at the database — but as a P2002 crash producing a 500, not
+  // a clean refusal, and validation is supposed to BE the boundary rather than
+  // leaning on a constraint to catch what it missed.
+  //
+  // This mattered little while the server built the plan itself. It matters now
+  // that a client can submit one.
+  const perBill = new Map<string, number>()
   for (const a of allocations) {
     if (!(a.amount > 0)) {
       return `Allocation amounts must be greater than zero.`
     }
-    const bill = billsById.get(a.transactionId)
+    perBill.set(a.transactionId, roundMoney((perBill.get(a.transactionId) || 0) + a.amount))
+    sum = roundMoney(sum + a.amount)
+  }
+
+  for (const [transactionId, allocated] of perBill) {
+    const bill = billsById.get(transactionId)
     if (!bill) {
       // Also covers a bill belonging to another party or another user: the
       // caller builds this map from bills it has already scoped.
       return `Cannot settle against a bill that does not belong to this party.`
     }
     const due = computeInvoiceDue(bill)
-    if (a.amount > due) {
+    if (allocated > due) {
       return due === 0
         ? `This bill is already fully paid.`
-        : `Cannot settle ₹${a.amount.toFixed(2)} against a bill with only ₹${due.toFixed(2)} still due.`
+        : `Cannot settle ₹${allocated.toFixed(2)} against a bill with only ₹${due.toFixed(2)} still due.`
     }
-    sum = roundMoney(sum + a.amount)
   }
 
   if (sum > roundMoney(paymentAmount)) {

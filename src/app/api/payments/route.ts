@@ -279,13 +279,45 @@ export async function POST(req: NextRequest) {
         ),
       }))
 
-      allocationPlan = planAllocationOldestFirst(allocatable, roundMoney(amt))
+      const billsById = new Map(allocatable.map(b => [b.id, b]))
 
-      // The planner should never produce something its own guard rejects, but
-      // this is money: assert it rather than assume it.
+      // 🔒 AUDIT C5 phase 4: honour an explicit allocation when the shopkeeper
+      // chose the bills; otherwise fall back to oldest-first.
+      //
+      // The manual path exists for a request oldest-first cannot express:
+      // "clear the current bill, leave the old one pending" — common when an
+      // older bill is disputed, or the newest one needs closing for a warranty.
+      // Before this, the app would silently apply that money to the oldest
+      // bill instead, which is not what the customer asked for and not what
+      // the shopkeeper agreed to.
+      const clientAllocations = (validation.data as any).allocations as
+        | Array<{ transactionId: string; amount: number }>
+        | undefined
+
+      if (clientAllocations && clientAllocations.length > 0) {
+        const requested = clientAllocations.map(a => ({
+          transactionId: a.transactionId,
+          amount: roundMoney(a.amount),
+        }))
+        const allocatedTotal = roundMoney(requested.reduce((s, a) => s + a.amount, 0))
+        allocationPlan = {
+          allocations: requested,
+          // Anything not assigned to a bill stays on account as an advance.
+          unallocated: Math.max(0, roundMoney(roundMoney(amt) - allocatedTotal)),
+        }
+      } else {
+        allocationPlan = planAllocationOldestFirst(allocatable, roundMoney(amt))
+      }
+
+      // Validated either way. For the auto plan this is belt-and-braces — the
+      // planner should never emit something its own guard rejects, but this is
+      // money. For a CLIENT-supplied plan it is the actual security boundary:
+      // it is the check that stops a hand-crafted request over-settling a bill,
+      // settling an already-paid one, or reaching a bill that belongs to a
+      // different party (billsById holds only this party's bills).
       const invalid = validateAllocations(
         allocationPlan.allocations,
-        new Map(allocatable.map(b => [b.id, b])),
+        billsById,
         roundMoney(amt),
       )
       if (invalid) {

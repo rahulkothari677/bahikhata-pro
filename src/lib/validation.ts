@@ -217,6 +217,22 @@ export const createPaymentSchema = z.object({
   date: z.string().optional(),
   mode: z.enum(['cash', 'upi', 'card', 'bank']).optional().default('cash'),
   notes: z.string().max(5000).nullable().optional(),
+  // 🔒 AUDIT C5 phase 4: explicit bill allocation.
+  //
+  // OMITTED (the normal case) → the server allocates oldest-first. That keeps
+  // the common flow one field long: the shopkeeper types an amount and saves.
+  //
+  // SUPPLIED → the shopkeeper chose the bills, and the server honours it. This
+  // is what makes "clear the current bill, leave the old one pending" possible
+  // — a real request (disputed old bill, warranty on the newest one) that
+  // oldest-first cannot express.
+  //
+  // Every entry is still validated against that bill's remaining due, so
+  // choosing manually can never over-settle a bill or reach another party's.
+  allocations: z.array(z.object({
+    transactionId: z.string().min(1),
+    amount: z.coerce.number().min(0.01, 'Allocation must be greater than 0'),
+  })).max(200).optional(),
 })
 
 // Payment update schema (for editing/deleting)
