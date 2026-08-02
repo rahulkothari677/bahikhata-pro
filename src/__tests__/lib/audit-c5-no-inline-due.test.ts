@@ -32,6 +32,19 @@ const SRC = path.join(process.cwd(), 'src')
 const PARTY_BALANCE_FILES = new Set([
   'lib/party-balance.ts',
   'lib/balance-as-of.ts',
+  // 🔒 statement-balance.ts is listed for its `delta` only.
+  //
+  // A file-level allowlist was TOO COARSE and let a real bug through: this file
+  // emits BOTH a running-balance `delta` (which must not subtract allocations,
+  // because payments are separate statement rows) AND a per-bill `due` (which
+  // must). The `due` stayed stale, and the statement printed "Due ₹2,992.50"
+  // directly beneath a Bills card correctly showing ₹1,492.50 — two dues for
+  // one invoice, on one screen.
+  //
+  // Found by looking at the running app, not by this test. The lesson is about
+  // the allowlist, not the file: an exemption granted per FILE hides anything
+  // else in that file. `due` here now calls computeInvoiceDue, so only `delta`
+  // relies on this entry.
   'lib/statement-balance.ts',
   'lib/invoice-due.ts',              // the implementation itself
   'app/api/reports/route.ts',        // periodActivity: payments counted separately

@@ -28,6 +28,7 @@
  */
 
 import { roundMoney } from '@/lib/money'
+import { computeInvoiceDue } from '@/lib/invoice-due'
 
 export interface StatementTransaction {
   id: string
@@ -35,6 +36,13 @@ export interface StatementTransaction {
   type: 'sale' | 'purchase' | 'income' | 'expense' | 'credit-note' | 'debit-note'
   totalAmount: number
   paidAmount: number
+  /**
+   * 🔒 AUDIT C5: Σ of payments allocated to this bill. Optional so existing
+   * callers and fixtures keep compiling; absent behaves as 0, i.e. exactly the
+   * pre-C5 result. Declared here rather than reached via `as any` so the next
+   * caller can see it exists and is expected to supply it.
+   */
+  allocatedAmount?: number | null
   invoiceNo?: string | null
   _count?: { items: number }
 }
@@ -93,10 +101,31 @@ export function computeStatementRunningBalance(
     // credit-note → -(total - paid) [reduces what they owe — same as received payment]
     // debit-note → +(total - paid)  [reduces what we owe — same direction as sale]
     // V17-Ext Tier 3: debit-note has the SAME delta direction as sale
+    // 🔒 AUDIT C5 — `delta` and `due` need DIFFERENT treatment, and this file
+    // is the one place both appear side by side.
+    //
+    // delta  = this row's contribution to the running balance. It must NOT
+    //          subtract allocations. A payment already appears as its OWN row
+    //          in the statement with its own delta; netting it here too would
+    //          count the same money twice and walk the running balance wrong.
+    //
+    // due    = how much is still owed ON THIS BILL. It MUST subtract
+    //          allocations, or the statement shows "Due ₹2,992.50" for a bill
+    //          the customer has part-paid — which is exactly the stale figure
+    //          this audit set out to remove, and it appeared on the SAME screen
+    //          as the corrected Bills card.
+    //
+    // Found by looking at the live app, not by the guard: the inline-due test
+    // allowlists this file wholesale as "party balance code", which is true of
+    // `delta` and false of `due`. A file-level allowlist was too coarse.
     delta: t.type === 'sale' || t.type === 'debit-note'
       ? (t.totalAmount - (t.paidAmount || 0))
       : -(t.totalAmount - (t.paidAmount || 0)),
-    due: t.totalAmount - t.paidAmount,
+    due: computeInvoiceDue({
+      totalAmount: t.totalAmount,
+      paidAmount: t.paidAmount,
+      allocatedAmount: t.allocatedAmount || 0,
+    }),
     invoiceNo: t.invoiceNo ?? null,
     itemCount: t._count?.items ?? 0,
     isPayment: false,

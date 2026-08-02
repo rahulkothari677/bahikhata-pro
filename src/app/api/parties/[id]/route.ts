@@ -207,6 +207,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
           paidAmount: true,
           invoiceNo: true,
           _count: { select: { items: true } },
+          // 🔒 AUDIT C5: the statement prints a per-bill "Due" alongside the
+          // running balance. Without allocations that Due is stale, and it
+          // rendered right beneath the corrected Bills card — two different
+          // dues for the same invoice, on one screen.
+          paymentAllocations: { select: { amount: true } },
         },
         orderBy: { date: 'desc' },
         take: 500,
@@ -329,7 +334,17 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         pageSize: PAGE_SIZE,
       },
       // 🔒 V15 M-2 + V17 §2.2: Statement-grade data (newest 500, desc order).
-      statementTransactions,
+      // 🔒 AUDIT C5: flatten allocations to `allocatedAmount`, the shape
+      // computeStatementRunningBalance() expects for its per-bill `due`.
+      statementTransactions: (statementTransactions as any[]).map((t: any) => {
+        const { paymentAllocations, ...rest } = t
+        return {
+          ...rest,
+          allocatedAmount: roundMoney(
+            (paymentAllocations || []).reduce((s: number, a: any) => s + (a.amount || 0), 0),
+          ),
+        }
+      }),
       statementPayments,
       statementTotals: {
         transactionTotal: countAgg,
