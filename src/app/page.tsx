@@ -58,6 +58,9 @@ const PartyProfile = dynamic(() => import('@/components/parties/PartyProfile').t
 // 🔒 AUDIT C5: the party's bills on their own page — moved out of PartyProfile
 // so a customer with many bills does not bury the statement and charts below.
 const PartyBills = dynamic(() => import('@/components/parties/PartyBills').then(m => ({ default: m.PartyBills })), { ssr: false })
+// 🔒 AUDIT C5: Settle is a PAGE, not a dialog — with many open bills the dialog
+// pushed its own save button off-screen.
+const PartySettle = dynamic(() => import('@/components/parties/PartySettle').then(m => ({ default: m.PartySettle })), { ssr: false })
 const BillScanner = dynamic(() => import('@/components/scanner/BillScanner').then(m => ({ default: m.BillScanner })), { ssr: false })
 const Reports = dynamic(() => import('@/components/reports/Reports').then(m => ({ default: m.Reports })), { ssr: false })
 const ToolsHub = dynamic(() => import('@/components/layout/ToolsHub').then(m => ({ default: m.ToolsHub })), { ssr: false })
@@ -508,6 +511,7 @@ export default function Home() {
             {currentView === 'transaction-detail' && <TransactionDetail />}
             {currentView === 'party-profile' && <PartyProfile />}
             {currentView === 'party-bills' && <PartyBills />}
+            {currentView === 'party-settle' && <PartySettle />}
             {currentView === 'new-sale' && <TransactionEntry type="sale" />}
             {currentView === 'new-purchase' && <TransactionEntry type="purchase" />}
             {/* 🔒 Feature Phase 3: Estimates/Quotations — reuses TransactionEntry

@@ -20,9 +20,15 @@ function readStripped(rel: string): string {
   return raw.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1')
 }
 
-const src = readStripped('components/parties/PartyProfile.tsx')
+// 🔒 AUDIT C5: the Settle DIALOG became a PAGE (PartySettle.tsx) — with nine
+// open bills the dialog pushed its own save button off-screen. These guards
+// were repointed, NOT relaxed: moving a screen must not quietly drop its safety
+// rails, and this suite caught that the first version of the page had done
+// exactly that (no double-count panel, no inline overpay warning, no
+// confirm-before-save).
+const src = readStripped('components/parties/PartySettle.tsx')
 
-describe('Settle dialog shows the risk before saving, not after', () => {
+describe('Settle screen shows the risk before saving, not after', () => {
   test('it computes how much is already recorded on the bills', () => {
     expect(src).toMatch(/const alreadyPaidOnBills =/)
     // Received money compares against invoice `totalReceived`, money paid out
@@ -33,7 +39,7 @@ describe('Settle dialog shows the risk before saving, not after', () => {
     expect(src).toMatch(/stats\?\.totalPaid/)
   })
 
-  test('the panel is rendered inside the dialog, gated on there being a risk', () => {
+  test('the panel is rendered on the settle screen, gated on there being a risk', () => {
     expect(src).toMatch(/\{alreadyPaidOnBills > 0 && \(/)
     expect(src).toMatch(/Already recorded on this party/)
     // It must state the outstanding figure too — the number the shopkeeper
@@ -48,7 +54,7 @@ describe('Settle dialog shows the risk before saving, not after', () => {
 })
 
 describe('over-payment requires a deliberate act', () => {
-  const handler = src.slice(src.indexOf('const handleSavePayment'), src.indexOf('const handleSendReminder'))
+  const handler = src.slice(src.indexOf('const handleSave ='), src.indexOf('if (isLoading'))
 
   test('the confirmation happens BEFORE the network call', () => {
     const confirmIdx = handler.indexOf('confirmDialog(')

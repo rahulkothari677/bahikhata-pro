@@ -35,7 +35,10 @@ type BillFilter = 'open' | 'all'
 
 export function PartyBills() {
   const { selectedPartyId, setView, setSelectedTransactionId, setPreviousView, setPendingSettle } = useAppStore()
-  const [filter, setFilter] = useState<BillFilter>('open')
+  // 🔒 AUDIT C5: defaults to ALL bills. The Settle page now shows open bills
+  // prominently, so this screen's job is the full history — a shopkeeper coming
+  // here is usually looking for a specific past bill, not the open ones.
+  const [filter, setFilter] = useState<BillFilter>('all')
   const [search, setSearch] = useState('')
 
   const { data, isLoading } = useQuery({
@@ -232,7 +235,7 @@ export function PartyBills() {
                           amount: b.due,
                         })
                         setPreviousView('party-bills')
-                        setView('party-profile')
+                        setView('party-settle')
                       }}
                     >
                       <IndianRupee className="w-3 h-3" /> Settle

@@ -160,16 +160,11 @@ export function PartyProfile() {
    * The intent is cleared immediately so returning to this screen later does
    * not re-open the dialog.
    */
-  useEffect(() => {
-    if (!pendingSettle) return
-    setSettleForBill({ id: pendingSettle.transactionId, invoiceNo: pendingSettle.invoiceNo })
-    setPaymentType(party?.type === 'supplier' ? 'paid' : 'received')
-    setPaymentAmount(String(pendingSettle.amount))
-    setManualAllocation(true)
-    setManualAmounts({ [pendingSettle.transactionId]: String(pendingSettle.amount) })
-    setPaymentDialogOpen(true)
-    setPendingSettle(null)
-  }, [pendingSettle, party?.type, setPendingSettle])
+  // 🔒 AUDIT C5: the "settle THIS bill" intent is consumed by PartySettle, NOT
+  // here. Consuming it on this screen would be a race — the Bills page sets the
+  // intent and then switches view, and React can run this component's effect
+  // before the switch, clearing the intent so the Settle page opens blank.
+  // One consumer, on the page that actually uses it.
 
   const parsedPaymentAmount = roundMoney(parseFloat(paymentAmount) || 0)
   const autoPlan = planAllocationOldestFirst(unpaidBillRows, parsedPaymentAmount)
@@ -820,9 +815,13 @@ export function PartyProfile() {
             // 🔒 V26 Phase 8 PB-3: Default payment direction based on party type.
             // Was: always 'received' — opening Settle on a supplier pre-selected
             // "received" → one careless tap recorded the payment in the wrong direction.
-            const defaultType = party?.type === 'supplier' ? 'paid' : (stats?.balance ?? 0) < 0 ? 'paid' : 'received'
-            setPaymentType(defaultType)
-            setPaymentDialogOpen(true)
+            // 🔒 AUDIT C5: Settle is a full PAGE now. As a dialog, nine open
+            // bills pushed Payment Mode, Notes and the Record button off-screen
+            // — the shopkeeper could see the bills or the save button, never
+            // both. The page also sets its own payment direction from the
+            // party type, so that logic lives in one place.
+            setPreviousView('party-profile')
+            setView('party-settle')
           }} className="gap-2">
             <HandCoins className="w-4 h-4" /> Settle
           </Button>
@@ -1270,271 +1269,6 @@ export function PartyProfile() {
         </CardContent>
       </Card>
       {/* 🔒 FIX H3: Payment dialog */}
-      <Dialog open={paymentDialogOpen} onOpenChange={setPaymentDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <HandCoins className="w-5 h-5 text-primary" />
-              Settle Payment
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <Label htmlFor="field-payment-type">Payment Type</Label>
-              <Select value={paymentType} onValueChange={(v) => setPaymentType(v as 'received' | 'paid')}>
-                <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="received">Received from customer</SelectItem>
-                  <SelectItem value="paid">Paid to supplier</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {/* 🔒 DOUBLE-COUNT GUARD (2026-07-22, Rahul hit this for real).
-                Money typed into a bill's "Paid Amount" and money recorded here
-                BOTH reduce what the customer owes. Entering the same ₹100 in
-                both places makes the dues read ₹100 lower than reality, and the
-                statement he sends the customer understates the debt.
-                The old warning fired in a toast AFTER saving, which is too late
-                and easy to miss. Now the numbers are on screen BEFORE saving. */}
-            {alreadyPaidOnBills > 0 && (
-              <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-3 text-2xs space-y-1">
-                <p className="font-semibold text-amber-900 dark:text-amber-200">
-                  Already recorded on this party&rsquo;s bills: {formatINR(alreadyPaidOnBills)}
-                </p>
-                <p className="text-amber-800 dark:text-amber-300">
-                  Enter money received <strong>separately</strong> from the bills.
-                  {/* 🔒 The {' '} is required, not cosmetic. JSX trims the
-                      leading whitespace of each line in a multi-line text node,
-                      so `{formatINR(...)} was already…` rendered as
-                      "₹2,992.50was already…" — the space vanished because
-                      "was already typed into a" starts a wrapped text block.
-                      Found by reading the rendered dialog, not the source: the
-                      source looks correct. */}
-                  If that {formatINR(alreadyPaidOnBills)}{' '}
-                  was already typed into a
-                  bill&rsquo;s &ldquo;Paid Amount&rdquo;, do not enter it again here.
-                </p>
-                <p className="text-amber-800 dark:text-amber-300">
-                  Outstanding right now: <strong>{formatINR(Math.abs(stats.balance))}</strong>
-                </p>
-              </div>
-            )}
-            <div>
-              <Label htmlFor="field-amount">Amount (₹)</Label>
-              <Input id="field-amount"
-                inputMode="decimal" type="number"
-                value={paymentAmount}
-                onChange={(e) => setPaymentAmount(e.target.value)}
-                placeholder="0"
-                className="mt-1"
-                autoFocus
-              />
-              {overpayAmount > 0 && (
-                <p className="text-2xs text-rose-600 dark:text-rose-400 mt-1">
-                  This is {formatINR(overpayAmount)} more than the {formatINR(Math.abs(stats.balance))} outstanding.
-                  {alreadyPaidOnBills > 0 ? ' That usually means this amount is already recorded on a bill.' : ''}
-                </p>
-              )}
-            </div>
-
-            {/*
-              🔒 AUDIT C5 phase 4 — show WHICH bills this money will clear,
-              before saving.
-
-              The shopkeeper types one amount, as always; the app says what it
-              is about to do. Requiring a bill to be chosen on every payment
-              would add friction to the most frequent action in the app, and
-              oldest-first is how a khata is settled anyway — so it stays the
-              default and the preview simply makes it visible.
-
-              "Choose bills myself" exists for the request oldest-first cannot
-              express: "clear the current bill, leave the old one pending".
-              Common when an older bill is disputed, or the newest needs closing
-              for a warranty. Without it the money silently lands on the oldest
-              bill — not what the customer asked for.
-            */}
-            {/*
-              Shown whenever the party has open bills — NOT only once an amount
-              is typed. Hiding it until then made "Choose bills myself"
-              effectively invisible: a shopkeeper opening the dialog saw no sign
-              the option existed, which is the same as it not being there.
-            */}
-            {paymentType === 'received' && unpaidBillRows.length > 0 && (
-              <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-2xs font-semibold">
-                    {settleForBill
-                      ? `Settling ${settleForBill.invoiceNo || 'this bill'}`
-                      : manualAllocation ? 'Choose bills' : 'This will clear'}
-                  </p>
-                  {/* When the dialog was opened from one bill, offer a way back
-                      to normal allocation rather than trapping the shopkeeper
-                      in single-bill mode. */}
-                  {settleForBill ? (
-                    <button
-                      type="button"
-                      className="text-2xs text-primary underline underline-offset-2"
-                      onClick={() => {
-                        setSettleForBill(null)
-                        setManualAllocation(false)
-                        setManualAmounts({})
-                      }}
-                    >
-                      Settle any bill
-                    </button>
-                  ) : (
-                  <button
-                    type="button"
-                    className="text-2xs text-primary underline underline-offset-2"
-                    onClick={() => {
-                      // Seed the manual editor from the automatic plan, so the
-                      // shopkeeper adjusts a sensible starting point rather than
-                      // facing a grid of empty boxes.
-                      if (!manualAllocation) {
-                        const seed: Record<string, string> = {}
-                        for (const a of autoPlan.allocations) seed[a.transactionId] = String(a.amount)
-                        setManualAmounts(seed)
-                      }
-                      setManualAllocation(v => !v)
-                    }}
-                  >
-                    {manualAllocation ? 'Use oldest first' : 'Choose bills myself'}
-                  </button>
-                  )}
-                </div>
-
-                {parsedPaymentAmount <= 0 ? (
-                  <p className="text-2xs text-muted-foreground">
-                    Enter an amount to see which of the {unpaidBillRows.length} open{' '}
-                    {unpaidBillRows.length === 1 ? 'bill' : 'bills'} it will clear.
-                  </p>
-                ) : !manualAllocation ? (
-                  <div className="space-y-1">
-                    {autoPlan.allocations.length === 0 ? (
-                      <p className="text-2xs text-muted-foreground">
-                        No open bills — the whole amount will be kept as an advance.
-                      </p>
-                    ) : (
-                      autoPlan.allocations.map(a => {
-                        const bill = unpaidBillRows.find((b: any) => b.id === a.transactionId)
-                        const clears = bill && a.amount >= bill.due
-                        return (
-                          <div key={a.transactionId} className="flex items-center justify-between gap-2 text-2xs">
-                            <span className="truncate">
-                              {bill?.invoiceNo || a.transactionId.slice(-6)}
-                              {clears && <span className="text-emerald-600"> · clears it</span>}
-                            </span>
-                            <span className="font-medium tabular-nums">{formatINR(a.amount)}</span>
-                          </div>
-                        )
-                      })
-                    )}
-                    {autoPlan.unallocated > 0 && (
-                      <p className="text-2xs text-muted-foreground pt-1 border-t border-border/50">
-                        {formatINR(autoPlan.unallocated)} kept as advance for future bills.
-                      </p>
-                    )}
-                  </div>
-                ) : (
-                  <div className="space-y-1.5">
-                    {/* When opened from one bill, show ONLY that bill. A list of
-                        nine invoices when the shopkeeper tapped "Settle" on one
-                        of them is noise, and invites putting the money on the
-                        wrong row. */}
-                    {(settleForBill
-                      ? unpaidBillRows.filter((b: any) => b.id === settleForBill.id)
-                      : unpaidBillRows
-                    ).map((b: any) => (
-                      <div key={b.id} className="flex items-center justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          <p className="text-2xs truncate">{b.invoiceNo || b.id.slice(-6)}</p>
-                          <p className="text-3xs text-muted-foreground">due {formatINR(b.due)}</p>
-                        </div>
-                        <Input
-                          inputMode="decimal"
-                          type="number"
-                          value={manualAmounts[b.id] ?? ''}
-                          onChange={(e) => setManualAmounts(m => ({ ...m, [b.id]: e.target.value }))}
-                          placeholder="0"
-                          className="h-7 w-24 text-2xs"
-                        />
-                      </div>
-                    ))}
-                    <div
-                      className={cn(
-                        'flex items-center justify-between text-2xs pt-1 border-t border-border/50',
-                        manualTotal > parsedPaymentAmount ? 'text-rose-600' : 'text-muted-foreground',
-                      )}
-                    >
-                      <span>Allocated</span>
-                      <span className="font-medium tabular-nums">
-                        {formatINR(manualTotal)} of {formatINR(parsedPaymentAmount)}
-                      </span>
-                    </div>
-                    {manualTotal > parsedPaymentAmount && (
-                      <p className="text-2xs text-rose-600">
-                        You have allocated more than the amount received.
-                      </p>
-                    )}
-                    {manualOverBill && (
-                      <p className="text-2xs text-rose-600">
-                        {manualOverBill} is more than that bill still owes.
-                      </p>
-                    )}
-                    {manualTotal < parsedPaymentAmount && !manualOverBill && (
-                      <p className="text-2xs text-muted-foreground">
-                        {formatINR(parsedPaymentAmount - manualTotal)} will be kept as an advance.
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-            <div>
-              <Label htmlFor="field-payment-mode">Payment Mode</Label>
-              <Select value={paymentMode} onValueChange={setPaymentMode}>
-                <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="cash">Cash</SelectItem>
-                  <SelectItem value="upi">UPI / QR</SelectItem>
-                  <SelectItem value="card">Card</SelectItem>
-                  <SelectItem value="bank">Bank Transfer</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor="field-notes-optional">Notes (optional)</Label>
-              <Input id="field-notes-optional"
-                value={paymentNotes}
-                onChange={(e) => setPaymentNotes(e.target.value)}
-                placeholder="e.g. Part payment for July"
-                className="mt-1"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPaymentDialogOpen(false)}>Cancel</Button>
-            {/*
-              🔒 AUDIT C5 phase 4: block saving an invalid manual split at the
-              button, not after a round-trip. The server rejects it either way —
-              that is the real boundary — but making the button unclickable
-              while the numbers are wrong is clearer than an error toast that
-              arrives once the shopkeeper thinks the payment is recorded.
-            */}
-            <Button
-              onClick={handleSavePayment}
-              disabled={
-                savingPayment ||
-                (manualAllocation && (manualTotal > parsedPaymentAmount || !!manualOverBill))
-              }
-              className="bg-gradient-saffron gap-2"
-            >
-              {savingPayment ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-              {savingPayment ? 'Saving...' : 'Record Payment'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* 🔒 UI/UX 2: Payment History card removed — payments now appear in the
           unified Account Statement above (merged with transactions in a
