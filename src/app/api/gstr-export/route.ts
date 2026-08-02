@@ -7,6 +7,9 @@ import { istMonthStart, getISTDateParts, isSameISTMonth, istDateString, istYearM
 import { apiError } from '@/lib/api-error'
 import { captureGstFilingError } from '@/lib/sentry-gst'
 import { deriveStateCode } from '@/lib/gst'
+// 🔒 AUDIT G4: the B2CL threshold must come from the SAME constant
+// gstr1-builder uses, not a literal repeated here. See the note at its use.
+import { B2CL_INVOICE_VALUE_THRESHOLD } from '@/lib/gstr1-builder'
 import { getPriorFYBounds } from '@/lib/fiscal-year'
 
 // ⏱️ Vercel serverless timeout — GSTR export aggregates all transactions
@@ -488,8 +491,25 @@ export async function GET(req: NextRequest) {
       // 🔒 V8 M3: Verified the ₹1,00,000 threshold matches the current GST
       // rule for B2CL (was ₹2,50,000 historically, reduced to ₹1,00,000).
       // Correct for current filing periods.
-      b2cl: b2cInvoices.filter(i => i.isInterState === true && i.total >= 100000), // B2C Large (inter-state only, ₹1L threshold)
-      b2cs: b2cInvoices.filter(i => !(i.isInterState === true && i.total >= 100000)), // B2C Small (everything else)
+      // 🔒 AUDIT G4: uses the SHARED constant and the SAME comparison as
+      // gstr1-builder.ts. This file previously hardcoded `>= 100000` while
+      // buildB2CL/buildB2CS used `> B2CL_INVOICE_VALUE_THRESHOLD` and
+      // `<= B2CL_INVOICE_VALUE_THRESHOLD`.
+      //
+      // An inter-state B2C invoice of EXACTLY ₹1,00,000 therefore landed in
+      // B2CL here and in B2CS via /api/gstr-1 — the same month exported two
+      // ways produced two different returns, and nothing compared them.
+      //
+      // `>` is the correct rule: B2CL covers invoice value EXCEEDING ₹1 lakh,
+      // so exactly ₹1,00,000 belongs in B2CS.
+      //
+      // The constant's own docblock calls itself "deliberately the single
+      // source for both sections" — this file just never imported it, which is
+      // exactly how the two drifted apart. Importing it means a future change
+      // to the threshold (it moved from ₹2.5L to ₹1L in Aug 2024) updates both
+      // paths at once instead of one of them.
+      b2cl: b2cInvoices.filter(i => i.isInterState === true && i.total > B2CL_INVOICE_VALUE_THRESHOLD),
+      b2cs: b2cInvoices.filter(i => !(i.isInterState === true && i.total > B2CL_INVOICE_VALUE_THRESHOLD)),
       // V17-Ext Tier 3: CDN section — credit/debit notes
       cdn: cdnSection,
       // 🔒 V19-010: CDNUR section — credit/debit notes to unregistered parties
