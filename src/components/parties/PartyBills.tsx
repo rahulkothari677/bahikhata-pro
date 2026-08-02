@@ -34,7 +34,7 @@ import { ArrowLeft, Receipt, Search, IndianRupee } from 'lucide-react'
 type BillFilter = 'open' | 'all'
 
 export function PartyBills() {
-  const { selectedPartyId, setView, setSelectedTransactionId, setPreviousView } = useAppStore()
+  const { selectedPartyId, setView, setSelectedTransactionId, setPreviousView, setPendingSettle } = useAppStore()
   const [filter, setFilter] = useState<BillFilter>('open')
   const [search, setSearch] = useState('')
 
@@ -214,12 +214,23 @@ export function PartyBills() {
                       variant="ghost"
                       className="h-6 px-2 text-2xs text-primary gap-1"
                       onClick={() => {
-                        // Hands the amount back to the profile's Settle dialog.
-                        // The server still allocates oldest-first, so on a party
-                        // with older open bills the money may land elsewhere —
-                        // choosing the bill explicitly is the next phase, and
-                        // this is a shortcut for the AMOUNT, not a promise about
-                        // the destination.
+                        // 🔒 AUDIT C5: carry WHICH bill, not just the amount.
+                        //
+                        // This button previously only navigated — it opened the
+                        // profile and did nothing else, so "Settle" on a
+                        // specific bill silently did not settle that bill. The
+                        // intent now travels with it and the dialog opens
+                        // locked to this invoice.
+                        //
+                        // The amount is a SUGGESTION and stays editable. A
+                        // customer paying ₹200 against a ₹553 bill is the
+                        // normal case; forcing full settlement would make
+                        // repeated part-payments impossible to record honestly.
+                        setPendingSettle({
+                          transactionId: b.id,
+                          invoiceNo: b.invoiceNo || null,
+                          amount: b.due,
+                        })
                         setPreviousView('party-bills')
                         setView('party-profile')
                       }}

@@ -40,7 +40,7 @@ import { readError } from '@/lib/read-error'
 import { invalidateMoneyCaches } from '@/lib/invalidate-money-caches'
 
 export function PartyProfile() {
-  const { selectedPartyId, setView, setPreviousView, triggerRefresh, previousView, features, setSelectedTransactionId } = useAppStore()
+  const { selectedPartyId, setView, setPreviousView, triggerRefresh, previousView, features, setSelectedTransactionId, pendingSettle, setPendingSettle } = useAppStore()
   const queryClient = useQueryClient()
   const [sendingReminder, setSendingReminder] = useState(false)
   const { confirmDialog, dialog: confirmDialogEl } = useConfirmDialog()
@@ -59,6 +59,9 @@ export function PartyProfile() {
   // every time would slow down the app's most frequent action.
   const [manualAllocation, setManualAllocation] = useState(false)
   const [manualAmounts, setManualAmounts] = useState<Record<string, string>>({})
+  // 🔒 AUDIT C5: when the Settle dialog was opened from a SPECIFIC bill, the
+  // allocation is locked to that invoice. Null = ordinary settle.
+  const [settleForBill, setSettleForBill] = useState<{ id: string; invoiceNo: string | null } | null>(null)
 
   // 🔒 V26 N1b: Skeleton-dead-end guard (mirrors TransactionDetail.tsx).
   // The browser-back hook clears selectedPartyId on popstate
@@ -140,6 +143,34 @@ export function PartyProfile() {
   // preview were re-implemented here it would eventually disagree with what
   // actually happens on save — showing a shopkeeper one thing and doing
   // another is worse than showing nothing.
+  /**
+   * 🔒 AUDIT C5: consume a "settle THIS bill" intent handed over from the Bills
+   * page, and open the dialog already pointed at that invoice.
+   *
+   * Before this, the Bills page's Settle button only navigated here — it opened
+   * the profile and did nothing else, so tapping Settle on a specific bill
+   * silently did not settle that bill.
+   *
+   * The amount is PRE-FILLED with the bill's due but stays editable. Someone
+   * paying ₹200 against a ₹553 bill is the ordinary case; forcing full
+   * settlement would make repeated part-payments impossible to record honestly,
+   * and each one must land on the same bill so its due walks down 553 → 353 →
+   * 153 rather than jumping to zero.
+   *
+   * The intent is cleared immediately so returning to this screen later does
+   * not re-open the dialog.
+   */
+  useEffect(() => {
+    if (!pendingSettle) return
+    setSettleForBill({ id: pendingSettle.transactionId, invoiceNo: pendingSettle.invoiceNo })
+    setPaymentType(party?.type === 'supplier' ? 'paid' : 'received')
+    setPaymentAmount(String(pendingSettle.amount))
+    setManualAllocation(true)
+    setManualAmounts({ [pendingSettle.transactionId]: String(pendingSettle.amount) })
+    setPaymentDialogOpen(true)
+    setPendingSettle(null)
+  }, [pendingSettle, party?.type, setPendingSettle])
+
   const parsedPaymentAmount = roundMoney(parseFloat(paymentAmount) || 0)
   const autoPlan = planAllocationOldestFirst(unpaidBillRows, parsedPaymentAmount)
 
@@ -312,6 +343,7 @@ export function PartyProfile() {
       // pointed at bills that may now be settled.
       setManualAllocation(false)
       setManualAmounts({})
+      setSettleForBill(null)
       haptic.success()
       // Refresh party profile data to show updated balance + new payment in
       // the unified statement (statementPayments is now part of this response).
@@ -1321,12 +1353,36 @@ export function PartyProfile() {
               for a warranty. Without it the money silently lands on the oldest
               bill — not what the customer asked for.
             */}
-            {paymentType === 'received' && unpaidBillRows.length > 0 && parsedPaymentAmount > 0 && (
+            {/*
+              Shown whenever the party has open bills — NOT only once an amount
+              is typed. Hiding it until then made "Choose bills myself"
+              effectively invisible: a shopkeeper opening the dialog saw no sign
+              the option existed, which is the same as it not being there.
+            */}
+            {paymentType === 'received' && unpaidBillRows.length > 0 && (
               <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-2xs font-semibold">
-                    {manualAllocation ? 'Choose bills' : 'This will clear'}
+                    {settleForBill
+                      ? `Settling ${settleForBill.invoiceNo || 'this bill'}`
+                      : manualAllocation ? 'Choose bills' : 'This will clear'}
                   </p>
+                  {/* When the dialog was opened from one bill, offer a way back
+                      to normal allocation rather than trapping the shopkeeper
+                      in single-bill mode. */}
+                  {settleForBill ? (
+                    <button
+                      type="button"
+                      className="text-2xs text-primary underline underline-offset-2"
+                      onClick={() => {
+                        setSettleForBill(null)
+                        setManualAllocation(false)
+                        setManualAmounts({})
+                      }}
+                    >
+                      Settle any bill
+                    </button>
+                  ) : (
                   <button
                     type="button"
                     className="text-2xs text-primary underline underline-offset-2"
@@ -1344,9 +1400,15 @@ export function PartyProfile() {
                   >
                     {manualAllocation ? 'Use oldest first' : 'Choose bills myself'}
                   </button>
+                  )}
                 </div>
 
-                {!manualAllocation ? (
+                {parsedPaymentAmount <= 0 ? (
+                  <p className="text-2xs text-muted-foreground">
+                    Enter an amount to see which of the {unpaidBillRows.length} open{' '}
+                    {unpaidBillRows.length === 1 ? 'bill' : 'bills'} it will clear.
+                  </p>
+                ) : !manualAllocation ? (
                   <div className="space-y-1">
                     {autoPlan.allocations.length === 0 ? (
                       <p className="text-2xs text-muted-foreground">
@@ -1375,7 +1437,14 @@ export function PartyProfile() {
                   </div>
                 ) : (
                   <div className="space-y-1.5">
-                    {unpaidBillRows.map((b: any) => (
+                    {/* When opened from one bill, show ONLY that bill. A list of
+                        nine invoices when the shopkeeper tapped "Settle" on one
+                        of them is noise, and invites putting the money on the
+                        wrong row. */}
+                    {(settleForBill
+                      ? unpaidBillRows.filter((b: any) => b.id === settleForBill.id)
+                      : unpaidBillRows
+                    ).map((b: any) => (
                       <div key={b.id} className="flex items-center justify-between gap-2">
                         <div className="min-w-0 flex-1">
                           <p className="text-2xs truncate">{b.invoiceNo || b.id.slice(-6)}</p>

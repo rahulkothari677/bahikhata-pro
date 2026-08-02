@@ -137,6 +137,20 @@ interface AppState {
   setScannerResult: (r: any) => void
   scannerBillType: 'sale' | 'purchase'
   setScannerBillType: (t: 'sale' | 'purchase') => void
+  /**
+   * 🔒 AUDIT C5: "settle THIS bill" intent, carried from the Bills page to the
+   * Settle dialog on the party profile.
+   *
+   * The dialog lives on the profile, and the Settle buttons live on the Bills
+   * page. Without this the button could only navigate — which is exactly what
+   * it did, doing nothing useful once it arrived.
+   *
+   * `amount` is a SUGGESTION (the bill's current due) and stays editable: a
+   * customer paying ₹200 against a ₹553 bill is the normal case, not an edge
+   * one, so this must not force full settlement.
+   */
+  pendingSettle: { transactionId: string; invoiceNo: string | null; amount: number } | null
+  setPendingSettle: (s: { transactionId: string; invoiceNo: string | null; amount: number } | null) => void
   selectedTransactionId: string | null
   selectedTransactionType: string | null
   setSelectedTransactionId: (id: string | null) => void
@@ -287,6 +301,9 @@ export const useAppStore = create<AppState>()(
       setScannerResult: (r) => set({ scannerResult: r }),
       scannerBillType: 'purchase',
       setScannerBillType: (t) => set({ scannerBillType: t }),
+      // 🔒 AUDIT C5: see the type declaration above.
+      pendingSettle: null,
+      setPendingSettle: (s) => set({ pendingSettle: s }),
       selectedTransactionId: null,
   selectedTransactionType: null,
       setSelectedTransactionId: (id) => set({ selectedTransactionId: id }),
