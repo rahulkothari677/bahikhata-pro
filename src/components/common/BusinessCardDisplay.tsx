@@ -21,6 +21,8 @@ import { Button } from '@/components/ui/button'
 import { toast as sonnerToast } from 'sonner'
 import { getCardDesign, BUSINESS_CARD_DESIGNS, generateCardSlug, type BusinessCardDesign } from '@/lib/business-card-designs'
 import { BusinessCardSurface, type CardData } from '@/components/common/BusinessCardSurface'
+import { TemplateCard, type TemplateCardData } from '@/components/common/TemplateCard'
+import { CARD_TEMPLATES, getTemplate } from '@/lib/card-templates'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { cn } from '@/lib/utils'
 
@@ -51,10 +53,25 @@ interface BusinessCardDisplayProps {
 }
 
 export function BusinessCardDisplay({ setting, email, onDesignChange, onLogoClick }: BusinessCardDisplayProps) {
+  // Setting.cardDesign holds EITHER an artwork-template id or a vector-design
+  // id — one field, two galleries. Resolving the template first means a
+  // template always wins, and an unknown id still falls back to a real design
+  // rather than rendering nothing.
+  const template = getTemplate(setting.cardDesign)
   const design = getCardDesign(setting.cardDesign)
 
   // One shape, used by the hero card AND every picker thumbnail, so a preview
   // can never disagree with the card it is previewing.
+  const templateData: TemplateCardData = {
+    shopName: setting.shopName,
+    ownerName: setting.ownerName,
+    phone: setting.phone,
+    email,
+    address: setting.address,
+    gstin: setting.gstin,
+    logoUrl: setting.logoUrl,
+  }
+
   const cardData: CardData = {
     shopName: setting.shopName,
     ownerName: setting.ownerName,
@@ -157,8 +174,8 @@ export function BusinessCardDisplay({ setting, email, onDesignChange, onLogoClic
       {/* ═══ Design Picker Toggle ═══ */}
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-sm font-semibold">{design.name}</p>
-          <p className="text-2xs text-muted-foreground">{design.description}</p>
+          <p className="text-sm font-semibold">{template?.name ?? design.name}</p>
+          <p className="text-2xs text-muted-foreground">{template?.description ?? design.description}</p>
         </div>
         <Button
           variant="outline"
@@ -175,6 +192,31 @@ export function BusinessCardDisplay({ setting, email, onDesignChange, onLogoClic
           The old picker showed a gradient rectangle with the name on it, so
           every design looked like a colour choice. Rendering the ACTUAL layout
           at thumbnail size is what makes the gallery worth scrolling. */}
+      {showPicker && CARD_TEMPLATES.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-3xs uppercase tracking-wider text-muted-foreground">Designer templates</p>
+          <div className="grid grid-cols-2 gap-2">
+            {CARD_TEMPLATES.map((tpl) => (
+              <button
+                key={tpl.id}
+                onClick={() => handleDesignSelect(tpl.id)}
+                className={cn(
+                  'relative rounded-xl transition text-left',
+                  tpl.id === template?.id
+                    ? 'ring-2 ring-primary ring-offset-2 ring-offset-background'
+                    : 'opacity-90 hover:opacity-100 hover:scale-[1.02]',
+                )}
+                title={tpl.name}
+                aria-pressed={tpl.id === template?.id}
+              >
+                <TemplateCard template={tpl} data={templateData} />
+                <p className="text-3xs mt-1 text-center truncate text-muted-foreground">{tpl.name}</p>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {showPicker && (
         <div className="grid grid-cols-3 gap-2">
           {BUSINESS_CARD_DESIGNS.map((d) => (
@@ -206,12 +248,16 @@ export function BusinessCardDisplay({ setting, email, onDesignChange, onLogoClic
 
       {/* ═══ The card ═══ */}
       <div className="shadow-card rounded-2xl overflow-hidden" ref={cardRef}>
-        <BusinessCardSurface
-          design={design}
-          data={cardData}
-          qrValue={vcard}
-          onLogoClick={onLogoClick}
-        />
+        {template ? (
+          <TemplateCard template={template} data={templateData} onLogoClick={onLogoClick} />
+        ) : (
+          <BusinessCardSurface
+            design={design}
+            data={cardData}
+            qrValue={vcard}
+            onLogoClick={onLogoClick}
+          />
+        )}
       </div>
 
 

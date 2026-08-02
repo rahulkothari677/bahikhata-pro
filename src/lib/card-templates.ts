@@ -55,10 +55,25 @@ export interface CardTemplate {
   /** Card aspect. Nearly all business cards are 1.75; portrait is 0.7. */
   aspect: number
 
-  /** Ink chosen to read against THIS artwork — not a generic palette. */
+  /**
+   * Ink chosen to read against THIS artwork — not a generic palette.
+   *
+   * ⚠️ `contact` EXISTS BECAUSE ONE PALETTE CANNOT SERVE TWO GROUNDS. In Gold
+   * Fold the name sits on cream while the contact rows sit on a charcoal panel.
+   * Before this field existed, the designation inherited the near-white contact
+   * colour and rendered cream-on-cream — invisible. Caught by measuring the
+   * rendered colours against their positions, not by reading the code.
+   *
+   * When the whole card has one ground, leave `contact` unset and it falls back
+   * to `secondary`.
+   */
   ink: {
+    /** Shop name, monogram. */
     primary: string
+    /** Owner and designation — whatever ground the IDENTITY block sits on. */
     secondary: string
+    /** Contact rows. Defaults to `secondary` when the card has one ground. */
+    contact?: string
     label: string
     accent: string
   }
@@ -81,16 +96,34 @@ export interface CardTemplate {
       size: number
       shape: 'square' | 'circle' | 'rounded'
       style?: 'badge' | 'typographic'
-      /** Typographic only. Serif suits formal artwork; script suits floral. */
-      font?: 'serif' | 'sans' | 'script'
+      /**
+       * Suggested monogram typeface for this artwork. The USER's choice wins;
+       * this is only the starting point. See lib/monogram-fonts for the ten.
+       */
+      suggestedFontId?: string
       /** Typographic only — overrides ink.primary for the letters. */
       color?: string
     }
     shopName: Zone
     tagline?: Zone
+    /**
+     * Owner name, with the designation stacked beneath it.
+     *
+     * An earlier version put both on ONE line ("Rahul Kothari · Proprietor") to
+     * save vertical space. That made the line long enough to truncate — and the
+     * thing it cut was the person's own name, which is the last thing that
+     * should go. Two short lines fit where one long one does not; the room came
+     * from shrinking the monogram instead.
+     */
     ownerName?: Zone
-    /** A hairline above the designation, as in both reference cards. */
+    /**
+     * Ornamental rule above the shop name: a line, a small diamond, a line.
+     * Rahul's reference uses exactly this — it is what stops the left half
+     * reading as two unrelated things stacked up.
+     */
     divider?: Zone
+    /** Plain closing rule beneath the shop name, as in the reference. */
+    dividerBottom?: Zone
     contact?: Zone
     gstin?: Zone
     qr?: Zone & { size: number }
@@ -146,19 +179,30 @@ export const CARD_TEMPLATES: CardTemplate[] = [
     aspect: 1.5,
     ink: {
       primary: '#23252B',
-      // Contact text sits on the DARK panel, so it must be near-white — not a
-      // mid grey derived from the primary ink.
-      secondary: '#F2EDE3',
+      // The identity block sits on CREAM, so this stays dark. It rendered
+      // cream-on-cream until `contact` was split out.
+      secondary: '#4A4740',
+      // Contact rows sit on the DARK charcoal panel.
+      contact: '#F2EDE3',
       label: '#C6A05C',
       accent: '#C6A05C',
     },
     zones: {
       // Bare serif letters on the paper, no badge — as in the render.
-      logo: { x: 12, y: 12, w: 26, size: 26, shape: 'square', style: 'typographic', font: 'serif' },
-      divider: { x: 10, y: 47, w: 30 },
-      shopName: { x: 6, y: 51, w: 40, align: 'center' },
-      ownerName: { x: 6, y: 60, w: 40, align: 'center' },
-      contact: { x: 53, y: 38, w: 44 },
+      // LEFT half carries ONLY the mark and the shop name, so the monogram can
+      // be large enough to actually read as a logo. Cramming the owner and
+      // designation in here too is what forced it down to a size where the
+      // chosen typeface was indistinguishable.
+      // y=19, not 16. At 16 the mark floated 6% above the ornamental rule;
+      // Rahul's reference leaves ~3%, which reads as one composed block rather
+      // than a logo and a name that happen to share a side.
+      logo: { x: 10, y: 19, w: 28, size: 25, shape: 'square', style: 'typographic' },
+      divider: { x: 12, y: 48, w: 24 },
+      shopName: { x: 3, y: 54, w: 42, align: 'center' },
+
+      // RIGHT panel: person first, then how to reach them.
+      dividerBottom: { x: 18, y: 66, w: 12 },
+      contact: { x: 53, y: 30, w: 44 },
     },
     contactIcons: { style: 'plain', color: '#C6A05C', divider: true },
     darkText: false,
@@ -179,17 +223,20 @@ export const CARD_TEMPLATES: CardTemplate[] = [
     aspect: 1.5,
     ink: {
       primary: '#2A2A2C',
-      // Contacts sit on the pale watercolour here, so this stays a dark ink.
+      // One ground across the whole card, so `contact` is deliberately unset
+      // and falls back to this.
       secondary: '#4A4145',
       label: '#B08290',
       accent: '#B0616F',
     },
     zones: {
-      logo: { x: 13, y: 25, w: 24, size: 24, shape: 'square', style: 'typographic', font: 'script', color: '#A85A63' },
-      shopName: { x: 6, y: 55, w: 42, align: 'center' },
-      divider: { x: 12, y: 65, w: 30 },
-      ownerName: { x: 6, y: 67, w: 42, align: 'center' },
-      contact: { x: 56, y: 46, w: 40 },
+      logo: { x: 11, y: 25, w: 26, size: 24, shape: 'square', style: 'typographic', color: '#A85A63' },
+      divider: { x: 13, y: 53, w: 22 },
+      shopName: { x: 3, y: 59, w: 42, align: 'center' },
+
+      // The floral branch fills the top-right, so the identity starts below it.
+      dividerBottom: { x: 18, y: 71, w: 12 },
+      contact: { x: 55, y: 38, w: 42 },
     },
     contactIcons: { style: 'circle', color: '#FFFFFF', background: '#C98894', divider: true },
     darkText: false,
