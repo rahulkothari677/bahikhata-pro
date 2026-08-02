@@ -165,8 +165,26 @@ export async function GET(req: NextRequest) {
     //
     // We use the same NEXTAUTH_SECRET to sign the JWT, so it's valid for
     // NextAuth's session callback.
+    // 🔒 AUDIT PASS-1 C4: `maxAge` MUST be passed here.
+    //
+    // THE BUG: this call omitted maxAge, so next-auth applied its own default
+    // (30 days) to the SIGNED TOKEN. The 1-hour limit below is set only on the
+    // *cookie*, and a cookie's maxAge is a client-side hint — it controls when
+    // the browser stops sending the cookie, NOT how long the server accepts the
+    // token. Anyone who captured the token value (shared machine, proxy/CDN log,
+    // a support screen-share) held a valid shopkeeper session for a month.
+    //
+    // The tokenVersion revocation check does not cover this either: the token
+    // carries the TARGET user's current tokenVersion, and nothing bumps it when
+    // impersonation ends.
+    //
+    // Now the signed token expires at the same time as the cookie. Both are
+    // derived from one constant so they cannot drift apart again.
+    const IMPERSONATION_MAX_AGE_SECONDS = 60 * 60 // 1 hour
+
     const { encode } = await import('next-auth/jwt')
     const jwtToken = await encode({
+      maxAge: IMPERSONATION_MAX_AGE_SECONDS,
       token: {
         id: targetUser.id,
         email: targetUser.email,
@@ -231,7 +249,9 @@ export async function GET(req: NextRequest) {
       // Impersonated sessions expire in 1 hour (vs 7 days for normal
       // sessions). This limits the blast radius if an admin forgets to
       // exit. The admin can always start a new impersonation if needed.
-      maxAge: 60 * 60, // 1 hour
+      // 🔒 AUDIT PASS-1 C4: same constant the signed JWT above uses, so the
+      // cookie and the token can never expire at different times again.
+      maxAge: IMPERSONATION_MAX_AGE_SECONDS,
     })
 
     return response
