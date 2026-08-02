@@ -414,16 +414,6 @@ export function PartySettle() {
                 )}
               </div>
 
-              {/* Column headers, so nine rows of money read as a table rather
-                  than as a caption floating a long way from its box. Hidden on
-                  a phone, where the due sits under the invoice number instead
-                  and a header would only cost a line. */}
-              <div className={cn(GRID_COLS, 'hidden sm:grid gap-x-3 pb-1 border-b border-border text-xs text-muted-foreground')}>
-                <span>Bill</span>
-                <span className="text-right">Due</span>
-                <span className="text-right">Apply</span>
-              </div>
-
               {/*
                 Capped ONLY once the list is long enough to push the running
                 total out of sight. Below that there is no cap, so a party with
@@ -436,6 +426,25 @@ export function PartySettle() {
                   openBills.length > 6 && 'max-h-[42vh] overflow-y-auto',
                 )}
               >
+                {/*
+                  Column headers, so nine rows of money read as a table rather
+                  than as a caption floating a long way from its box.
+
+                  INSIDE the scroll container, deliberately. Sitting outside it,
+                  the header was 6px wider than the rows, because once the list
+                  is capped it carries a scrollbar gutter and the header does
+                  not — a misalignment measured in the browser, not guessed at.
+                  In here it shares the rows' exact width, and `sticky` keeps
+                  the labels visible while the list scrolls.
+
+                  Hidden on a phone, where the due sits under the invoice number
+                  and a header would only cost a line.
+                */}
+                <div className={cn(GRID_COLS, 'hidden sm:grid gap-x-3 sticky top-0 z-10 bg-card pb-1 text-xs text-muted-foreground')}>
+                  <span>Bill</span>
+                  <span className="text-right">Due</span>
+                  <span className="text-right">Apply</span>
+                </div>
                 {openBills.map((b: any) => {
                   const v = roundMoney(parseFloat(alloc[b.id] || '0') || 0)
                   const isOver = v > b.due
