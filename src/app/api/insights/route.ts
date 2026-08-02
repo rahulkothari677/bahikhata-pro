@@ -87,24 +87,30 @@ export async function GET() {
       // 🔒 V17 PAISE MIGRATION Phase 2A: SQL now returns paise (integer) instead
       // of rupees (Float). The transformation is:
       //   Old: SUM(ROUND(qty*price, 2)) AS "totalRevenue"          → Float rupees
-      //   New: SUM(ROUND(qty*price, 2) * 100)::int AS "totalRevenuePaise"  → Int paise
+      //   New: SUM(ROUND(qty*price, 2) * 100)::bigint AS "totalRevenuePaise"  → Int paise
+      //
+      // 🔒 AUDIT PASS-1 H3: the cast is ::bigint, NOT ::int. Postgres int4 caps
+      // at 2,147,483,647 paise = ₹21,47,483.65. A single product crossing that
+      // in a 30-day window made this whole endpoint throw "integer out of range"
+      // → 500 on /api/insights. That is an ordinary month for a wholesaler.
+      // The consumer at the bottom of this file already wraps in Number().
       //
       // Why this preserves behavior:
       //   - Per-item rounding is unchanged: ROUND(qty*price, 2) still happens per item.
-      //   - The * 100 and ::int happen AFTER the per-item round, so the integer
+      //   - The * 100 and ::bigint happen AFTER the per-item round, so the integer
       //     paise value is exactly round(rupee_value * 100) — no float drift.
       //   - At the display boundary, fromPaise(paise) = paise / 100 gives back
       //     the same rupee Float the UI used to receive.
       //
       // Why bother: when Phase 4 changes the column type from Float to Int
-      // (paise), this SQL simplifies to just `SUM("unitPricePaise" * "quantity")::int`
+      // (paise), this SQL simplifies to just `SUM("unitPricePaise" * "quantity")::bigint`
       // — no calling-code changes needed because the contract (returns paise)
       // is already established here.
-      db.$queryRaw<Array<{ productName: string; productId: string | null; totalRevenuePaise: number; totalQty: number }>>`
+      db.$queryRaw<Array<{ productName: string; productId: string | null; totalRevenuePaise: bigint; totalQty: number }>>`
         SELECT
           ti."productName",
           ti."productId",
-          SUM(ROUND(ti."quantity"::numeric * ti."unitPrice"::numeric, 0))::int AS "totalRevenuePaise",
+          SUM(ROUND(ti."quantity"::numeric * ti."unitPrice"::numeric, 0))::bigint AS "totalRevenuePaise",
           SUM(ti."quantity") AS "totalQty"
         FROM "TransactionItem" ti
         JOIN "Transaction" t ON ti."transactionId" = t.id

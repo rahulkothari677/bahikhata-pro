@@ -218,6 +218,15 @@ export async function POST(req: NextRequest) {
     // a UUID per logical mutation and sends it as a header. If we've already
     // processed this mutation, return the existing transaction instead of
     // creating a duplicate.
+    //
+    // 🔒 AUDIT PASS-1 H2: the ownership check below is NOT optional.
+    // clientMutationId is globally unique across ALL tenants, so a bare
+    // findUnique returns whatever row holds that ID — including another shop's
+    // invoice, with its line items and party details attached. That is safe
+    // only while every client generates cryptographically random IDs, forever.
+    // The moment any client (a future native build, a bulk importer, a partner
+    // integration) uses a timestamp, a counter, or deviceId+seq, one shop reads
+    // another shop's books. We return 409 rather than silently leaking.
     const clientMutationId = req.headers.get('x-client-mutation-id')
     if (clientMutationId) {
       const existing = await db.transaction.findUnique({
@@ -225,6 +234,12 @@ export async function POST(req: NextRequest) {
         include: { items: true, party: true },
       })
       if (existing) {
+        if (existing.userId !== userId) {
+          return NextResponse.json({
+            error: 'Conflict',
+            message: 'This mutation ID is already in use. Please retry with a new one.',
+          }, { status: 409 })
+        }
         // Already processed — return the existing transaction (idempotent)
         return NextResponse.json({ transaction: existing, idempotent: true })
       }
@@ -298,11 +313,12 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ transaction })
       } catch (createError: any) {
         if (createError?.code === 'P2002' && clientMutationId) {
+          // 🔒 AUDIT PASS-1 H2: same cross-tenant guard as the pre-check above.
           const existing = await db.transaction.findUnique({
             where: { clientMutationId },
-            select: { id: true, type: true, totalAmount: true, date: true, partyId: true },
+            select: { id: true, type: true, totalAmount: true, date: true, partyId: true, userId: true },
           })
-          if (existing) {
+          if (existing && existing.userId === userId) {
             return NextResponse.json({ transaction: existing, idempotent: true })
           }
         }
@@ -699,11 +715,12 @@ export async function POST(req: NextRequest) {
             const isMutationIdConflict = target?.includes('clientMutationId')
             if (isMutationIdConflict && clientMutationId) {
               // Concurrent replay raced us — re-fetch and return idempotent.
+              // 🔒 AUDIT PASS-1 H2: cross-tenant guard (see the pre-check above).
               const existing = await db.transaction.findUnique({
                 where: { clientMutationId },
-                select: { id: true, type: true, totalAmount: true, date: true, partyId: true, invoiceNo: true },
+                select: { id: true, type: true, totalAmount: true, date: true, partyId: true, invoiceNo: true, userId: true },
               })
-              if (existing) {
+              if (existing && existing.userId === userId) {
                 return NextResponse.json({ transaction: existing, idempotent: true })
               }
             }

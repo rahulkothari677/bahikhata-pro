@@ -23,10 +23,14 @@ export async function GET(req: NextRequest) {
     const authCtx = await getAuthContext()
     if (authCtx.error || !authCtx.userId) return authCtx.error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     const userId = authCtx.userId
-    // 🔒 V18: Rate limit payment creation (20/min per user)
-    const rl = await rateLimit(`payments:${userId}`, { limit: 20, windowSec: 60 })
-    if (!rl.success) return rateLimitedResponse(rl)
 
+    // 🔒 AUDIT PASS-1 H1: the 20/min limiter that used to sit HERE has moved to
+    // POST, where it belongs. Its own comment said "rate limit payment creation"
+    // but it was guarding the read path, so the behaviour was exactly inverted:
+    // a user browsing several party profiles got 429s on reading their own
+    // payment history, while payment CREATION was completely unthrottled.
+    // This GET is auth-scoped, single-party, and capped at take:100 — the same
+    // shape as the other read endpoints in this app, none of which are limited.
 
     // 🔒 FIX H1: Staff need 'parties' permission to view payments
     if (!canAccessModule(authCtx.role, authCtx.permissions, 'parties')) {
@@ -85,6 +89,11 @@ export async function POST(req: NextRequest) {
     if (authCtx.error || !authCtx.userId) return authCtx.error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     const userId = authCtx.userId
 
+    // 🔒 AUDIT PASS-1 H1: rate limit payment CREATION (20/min per user).
+    // Moved here from GET, where it was throttling reads instead of writes.
+    const rl = await rateLimit(`payments:${userId}`, { limit: 20, windowSec: 60 })
+    if (!rl.success) return rateLimitedResponse(rl)
+
     // 🔒 FIX H1: Staff need 'parties' permission to record payments
     if (!canAccessModule(authCtx.role, authCtx.permissions, 'parties')) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
@@ -113,12 +122,24 @@ export async function POST(req: NextRequest) {
 
     // 🔒 V19-007: Idempotency check — prevents duplicate payments from offline
     // sync replays. Same pattern as transactions POST.
+    //
+    // 🔒 AUDIT PASS-1 H2: clientMutationId is globally unique across ALL
+    // tenants, so a bare findUnique returns whatever row holds that ID —
+    // including another shop's payment. Safe only while every client generates
+    // random IDs forever; a timestamp/counter/deviceId scheme in any future
+    // client turns this into a cross-tenant read. Return 409 instead of leaking.
     if (clientMutationId) {
       const existing = await db.payment.findUnique({
         where: { clientMutationId },
-        select: { id: true, amount: true, type: true, partyId: true, date: true, mode: true, notes: true },
+        select: { id: true, amount: true, type: true, partyId: true, date: true, mode: true, notes: true, userId: true },
       })
       if (existing) {
+        if (existing.userId !== userId) {
+          return NextResponse.json({
+            error: 'Conflict',
+            message: 'This mutation ID is already in use. Please retry with a new one.',
+          }, { status: 409 })
+        }
         return NextResponse.json({ payment: existing, idempotent: true })
       }
     }
@@ -247,11 +268,12 @@ export async function POST(req: NextRequest) {
     } catch (createError: any) {
       if (createError?.code === 'P2002' && clientMutationId) {
         // Concurrent replay raced us — re-fetch and return idempotent.
+        // 🔒 AUDIT PASS-1 H2: cross-tenant guard (see the pre-check above).
         const existing = await db.payment.findUnique({
           where: { clientMutationId },
-          select: { id: true, amount: true, type: true, partyId: true, date: true, mode: true, notes: true },
+          select: { id: true, amount: true, type: true, partyId: true, date: true, mode: true, notes: true, userId: true },
         })
-        if (existing) {
+        if (existing && existing.userId === userId) {
           return NextResponse.json({ payment: existing, idempotent: true })
         }
       }

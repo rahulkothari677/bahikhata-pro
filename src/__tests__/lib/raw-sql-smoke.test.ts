@@ -273,8 +273,15 @@ describe('V17 Phase 2A — paise-read-pattern regression guard (insights route)'
     expect(topProductQuery).toContain('"totalRevenuePaise"')
     expect(topProductQuery).not.toMatch(/AS\s+"totalRevenue"\s/)
 
-    // Must cast to int (regression: must not return Float rupees)
-    expect(topProductQuery).toMatch(/::int\s+AS\s+"totalRevenuePaise"/)
+    // Must cast to an INTEGER type (regression: must not return Float rupees).
+    //
+    // 🔒 AUDIT PASS-1 H3: the cast must be ::bigint, NOT ::int. Postgres int4
+    // caps at 2,147,483,647 paise = ₹21,47,483.65, so a single product crossing
+    // that in a 30-day window made the whole /api/insights request throw
+    // "integer out of range" → 500. Asserting ::bigint here stops anyone
+    // "simplifying" it back to ::int and re-introducing the overflow.
+    expect(topProductQuery).toMatch(/::bigint\s+AS\s+"totalRevenuePaise"/)
+    expect(topProductQuery).not.toMatch(/::int\s+AS\s+"totalRevenuePaise"/)
 
     // Must multiply by 100 inside the SUM (regression: must not skip the *100)
     expect(topProductQuery).not.toMatch(/\*\s*100/)
