@@ -207,20 +207,49 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       // 7e. Apply stock adjustments for the new sale
       const stockPolicy = setting?.stockPolicy || 'allow'
       if (stockPolicy === 'block') {
+        // 🔒 AUDIT PASS-1 N1: group per product + issue concurrently, matching
+        // the create and edit paths. This was still one SEQUENTIAL round-trip
+        // per line inside the interactive transaction — converting a long
+        // estimate could exhaust the transaction budget and roll the whole
+        // conversion back with P2028. Grouping also makes the gte check test
+        // the estimate's TOTAL demand per product rather than each line alone.
+        const decrementByProduct = new Map<string, { qty: number; name: string }>()
         for (const item of computed.txItems) {
           if (!item.productId) continue
-          const qty = item.quantity || 0
-          const result = await tx.product.updateMany({
-            where: { id: item.productId, userId, currentStock: { gte: qty } },
-            data: { currentStock: { decrement: qty } },
+          const prev = decrementByProduct.get(item.productId)
+          decrementByProduct.set(item.productId, {
+            qty: (prev?.qty || 0) + (item.quantity || 0),
+            name: prev?.name || item.productName,
           })
-          if (result.count === 0) {
-            const err: any = new Error('STOCK_BLOCK')
-            err.code = 'STOCK_BLOCK'
-            err.productName = item.productName
-            err.requestedQty = qty
-            throw err
-          }
+        }
+
+        const results = await Promise.all(
+          [...decrementByProduct.entries()].map(async ([productId, entry]) => ({
+            id: productId,
+            name: entry.name,
+            qty: entry.qty,
+            count: (await tx.product.updateMany({
+              where: { id: productId, userId, currentStock: { gte: entry.qty } },
+              data: { currentStock: { decrement: entry.qty } },
+            })).count,
+          })),
+        )
+
+        const blocked = results.find(r => r.count === 0)
+        if (blocked) {
+          // 🔒 Capture what's actually LEFT so the error can tell the user what
+          // they can sell, matching the create/edit paths. Read inside the tx:
+          // this row's update matched 0 rows, so its stock is untouched here.
+          const current = await tx.product.findFirst({
+            where: { id: blocked.id, userId },
+            select: { currentStock: true },
+          })
+          const err: any = new Error('STOCK_BLOCK')
+          err.code = 'STOCK_BLOCK'
+          err.productName = blocked.name
+          err.requestedQty = blocked.qty
+          err.availableStock = current?.currentStock ?? null
+          throw err
         }
       } else {
         await Promise.all(
@@ -251,9 +280,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     })
   } catch (err: any) {
     if (err?.code === 'STOCK_BLOCK') {
+      // 🔒 AUDIT PASS-1 M1 (follow-up): say what is LEFT, not only what is
+      // needed. Same reasoning as create/edit — a shopkeeper cannot correct
+      // the quantity from a message that never states the available stock.
+      const available: number | null = err.availableStock ?? null
+      const stockLine = available !== null
+        ? `${err.productName} has only ${available} left, but this estimate needs ${err.requestedQty}.`
+        : `Not enough stock for ${err.productName} (needs ${err.requestedQty}).`
       return NextResponse.json({
         error: 'Not enough stock',
-        message: `Cannot convert — not enough stock for ${err.productName} (need ${err.requestedQty} units). Record a purchase first or enable "Allow overselling" in Settings.`,
+        message: `Cannot convert — ${stockLine} Record the purchase that brought this stock in, or enable "Allow overselling" in Settings.`,
+        productName: err.productName,
+        availableStock: available,
+        requestedQuantity: err.requestedQty,
       }, { status: 400 })
     }
     // 🔒 V26 R1 (Phase 5): Catch CONVERT_RACE — another concurrent convert

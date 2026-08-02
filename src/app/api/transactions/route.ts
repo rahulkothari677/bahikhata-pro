@@ -672,30 +672,67 @@ export async function POST(req: NextRequest) {
       // shouldIncrementStock = purchase or credit-note with affectsStock
       // shouldAffectStock = either of the above (false for notes without affectsStock)
       if (shouldDecrementStock && stockPolicy === 'block') {
-        // Block mode: must check each item individually (needs result.count)
+        // 🔒 AUDIT PASS-1 N1: group per product, then issue the conditional
+        // updates CONCURRENTLY. This is the same fix PUT already carries; the
+        // create path never received it.
+        //
+        // WAS: `for (const item of txItems) { await tx.product.updateMany(...) }`
+        // — one SEQUENTIAL round-trip per line, inside the interactive
+        // transaction. The PUT path documents exactly why that is dangerous:
+        // a 6-line bill spent ~18 sequential queries in-transaction, and at the
+        // 200-500ms/query this app sees on Neon under pool contention that
+        // exhausts the transaction budget and Prisma rolls the whole sale back
+        // with P2028. A 20-line wholesale bill was 20 sequential round-trips.
+        // The user never learns it was a timeout — the sale just fails.
+        //
+        // GROUPING IS ALSO MORE CORRECT: if one product appears on two lines,
+        // the old per-line check tested each line against stock separately, so
+        // the *message* reported the post-partial-decrement figure rather than
+        // the product's true availability. Summing first checks (and reports)
+        // the bill's TOTAL demand for that product — the number the shopkeeper
+        // actually needs.
+        const decrementByProduct = new Map<string, { qty: number; name: string }>()
         for (const item of txItems) {
           if (!item.productId) continue
-          const qty = item.quantity || 0
-          const result = await tx.product.updateMany({
-            where: { id: item.productId, userId, currentStock: { gte: qty } },
-            data: { currentStock: { decrement: qty } },
+          const prev = decrementByProduct.get(item.productId)
+          decrementByProduct.set(item.productId, {
+            qty: (prev?.qty || 0) + (item.quantity || 0),
+            name: prev?.name || item.productName,
           })
-          if (result.count === 0) {
-            // 🔒 Read the remaining stock HERE, inside the transaction, where
-            // it is the value that actually caused the block. Doing it in the
-            // outer catch would read a later, possibly different number — and
-            // would need `userId`, which is not in scope there.
-            const current = await tx.product.findFirst({
-              where: { id: item.productId, userId },
-              select: { currentStock: true },
-            })
-            const err: any = new Error('STOCK_BLOCK')
-            err.code = 'STOCK_BLOCK'
-            err.productName = item.productName
-            err.requestedQty = qty
-            err.availableStock = current?.currentStock ?? null
-            throw err
-          }
+        }
+
+        // Each update is conditional (currentStock >= qty) and its result
+        // decides whether to block, so counts are still checked individually —
+        // but the rows are independent, so the updates go out together.
+        const results = await Promise.all(
+          [...decrementByProduct.entries()].map(async ([productId, entry]) => ({
+            id: productId,
+            name: entry.name,
+            qty: entry.qty,
+            count: (await tx.product.updateMany({
+              where: { id: productId, userId, currentStock: { gte: entry.qty } },
+              data: { currentStock: { decrement: entry.qty } },
+            })).count,
+          })),
+        )
+
+        const blocked = results.find(r => r.count === 0)
+        if (blocked) {
+          // 🔒 Read the remaining stock HERE, inside the transaction, where it
+          // is the value that actually caused the block. Doing it in the outer
+          // catch would read a later, possibly different number — and `userId`
+          // is not in scope there. This row's update matched 0 rows, so its
+          // stock is untouched by this transaction and the figure is exact.
+          const current = await tx.product.findFirst({
+            where: { id: blocked.id, userId },
+            select: { currentStock: true },
+          })
+          const err: any = new Error('STOCK_BLOCK')
+          err.code = 'STOCK_BLOCK'
+          err.productName = blocked.name
+          err.requestedQty = blocked.qty
+          err.availableStock = current?.currentStock ?? null
+          throw err
         }
       } else if (shouldAffectStock) {
         // 🔒 FIX H12: Allow mode + purchases + credit/debit notes — batch

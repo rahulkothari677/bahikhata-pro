@@ -85,32 +85,52 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       // V17-Ext Tier 3: Handles credit-note (increment) and debit-note (decrement)
       if (restoreAffectsStock) {
         const items = await tx.transactionItem.findMany({ where: { transactionId: id } })
+
+        // 🔒 AUDIT PASS-1 N1: group per product + apply CONCURRENTLY, matching
+        // the create, edit, delete and convert paths. This was one SEQUENTIAL
+        // round-trip per line inside the interactive transaction, so restoring
+        // a long bill could exhaust the transaction budget and fail with
+        // P2028 — leaving a voided bill that cannot be un-voided.
+        //
+        // Grouping also fixes the gte guard when one product appears on several
+        // lines: the check now tests the TOTAL quantity being re-applied rather
+        // than each line in isolation, so the clamp-at-0 fallback triggers on
+        // the real shortfall instead of a partial one.
+        const applyByProduct = new Map<string, number>()
         for (const item of items) {
-          if (item.productId) {
-            if (restoreShouldDecrement) {
-              // Re-apply a decrement (sale or debit-note): decrement stock
-              // 🔒 V26 H3 FIX: Add currentStock gte guard. Was: unconditional
-              // decrement — restoring a sale for a product whose stock was
-              // depleted would push stock negative silently. Now: if stock
-              // insufficient, clamp at 0 (same approach as PUT/DELETE reversal).
-              const restoreResult = await tx.product.updateMany({
-                where: { id: item.productId, userId, currentStock: { gte: item.quantity } },
-                data: { currentStock: { decrement: item.quantity } },
-              })
-              if (restoreResult.count === 0) {
-                await tx.product.updateMany({
-                  where: { id: item.productId, userId },
-                  data: { currentStock: 0 },
-                })
-              }
-            } else {
-              // Re-apply an increment (purchase or credit-note): increment stock
+          if (!item.productId) continue
+          applyByProduct.set(
+            item.productId,
+            (applyByProduct.get(item.productId) || 0) + (item.quantity || 0),
+          )
+        }
+
+        if (restoreShouldDecrement) {
+          // Re-apply a decrement (sale or debit-note): decrement stock
+          // 🔒 V26 H3 FIX: Add currentStock gte guard. Was: unconditional
+          // decrement — restoring a sale for a product whose stock was
+          // depleted would push stock negative silently. Now: if stock
+          // insufficient, clamp at 0 (same approach as PUT/DELETE reversal).
+          await Promise.all([...applyByProduct.entries()].map(async ([productId, qty]) => {
+            const restoreResult = await tx.product.updateMany({
+              where: { id: productId, userId, currentStock: { gte: qty } },
+              data: { currentStock: { decrement: qty } },
+            })
+            if (restoreResult.count === 0) {
               await tx.product.updateMany({
-                where: { id: item.productId, userId },
-                data: { currentStock: { increment: item.quantity } },
+                where: { id: productId, userId },
+                data: { currentStock: 0 },
               })
             }
-          }
+          }))
+        } else {
+          // Re-apply an increment (purchase or credit-note): increment stock
+          await Promise.all([...applyByProduct.entries()].map(([productId, qty]) =>
+            tx.product.updateMany({
+              where: { id: productId, userId },
+              data: { currentStock: { increment: qty } },
+            })
+          ))
         }
       }
     })

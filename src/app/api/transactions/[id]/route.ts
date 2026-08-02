@@ -870,29 +870,51 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       // V17-Ext Tier 3: Handles credit-note (reverse increment) and debit-note (reverse decrement)
       if (delAffectsStock) {
         const items = await tx.transactionItem.findMany({ where: { transactionId: id } })
+
+        // 🔒 AUDIT PASS-1 N1: group per product, then reverse CONCURRENTLY —
+        // the same shape PUT's reversal already uses. This loop was still
+        // one SEQUENTIAL round-trip per line, inside the interactive
+        // transaction, so voiding a 20-line wholesale bill spent 20 (up to 40,
+        // counting the clamp fallback) sequential queries against the
+        // transaction budget. On Neon under pool contention that is enough to
+        // hit P2028 and roll the void back — and a void that fails leaves the
+        // shopkeeper with a bill they cannot cancel.
+        //
+        // Grouping also makes the gte guard correct when one product appears on
+        // several lines: the check now tests the product's TOTAL reversal
+        // quantity rather than each line separately.
+        const reversalByProduct = new Map<string, number>()
         for (const item of items) {
-          if (item.productId) {
-            if (delShouldDecrement) {
-              // Reverse a decrement (sale or debit-note): add stock back
+          if (!item.productId) continue
+          reversalByProduct.set(
+            item.productId,
+            (reversalByProduct.get(item.productId) || 0) + (item.quantity || 0),
+          )
+        }
+
+        if (delShouldDecrement) {
+          // Reverse a decrement (sale or debit-note): add stock back
+          await Promise.all([...reversalByProduct.entries()].map(([productId, qty]) =>
+            tx.product.updateMany({
+              where: { id: productId, userId },
+              data: { currentStock: { increment: qty } },
+            })
+          ))
+        } else {
+          // Reverse an increment (purchase or credit-note): subtract stock
+          // 🔒 V26 H2 FIX: Same gte guard + clamp-at-0 as PUT reversal.
+          await Promise.all([...reversalByProduct.entries()].map(async ([productId, qty]) => {
+            const delReverseResult = await tx.product.updateMany({
+              where: { id: productId, userId, currentStock: { gte: qty } },
+              data: { currentStock: { decrement: qty } },
+            })
+            if (delReverseResult.count === 0) {
               await tx.product.updateMany({
-                where: { id: item.productId, userId },
-                data: { currentStock: { increment: item.quantity } },
+                where: { id: productId, userId },
+                data: { currentStock: 0 },
               })
-            } else {
-              // Reverse an increment (purchase or credit-note): subtract stock
-              // 🔒 V26 H2 FIX: Same gte guard + clamp-at-0 as PUT reversal.
-              const delReverseResult = await tx.product.updateMany({
-                where: { id: item.productId, userId, currentStock: { gte: item.quantity } },
-                data: { currentStock: { decrement: item.quantity } },
-              })
-              if (delReverseResult.count === 0) {
-                await tx.product.updateMany({
-                  where: { id: item.productId, userId },
-                  data: { currentStock: 0 },
-                })
-              }
             }
-          }
+          }))
         }
       }
     }, TX_OPTIONS)
