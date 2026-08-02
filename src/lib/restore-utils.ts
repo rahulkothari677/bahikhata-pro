@@ -161,7 +161,23 @@ export async function relinkTransactionItemsToProducts(
 }
 
 export interface RebuildStockResult {
+  /**
+   * Products EXAMINED — i.e. every product whose stock was recomputed from its
+   * transaction history. Unchanged from the original meaning, deliberately:
+   * it feeds the user-facing "stock rebuilt for N products" message, and
+   * switching it to a change-count would report "rebuilt for 0 products" on a
+   * perfectly healthy backup (where the recomputed value matches what was
+   * already there) — reading as though the rebuild never ran.
+   */
   rebuilt: number
+  /**
+   * 🔒 AUDIT R1: products whose stock was actually DIFFERENT and had to be
+   * written. This is the number that says something happened: a non-zero
+   * `corrected` means the backup's stored stock disagreed with its own
+   * transaction history, which is exactly the corruption this rebuild exists
+   * to repair.
+   */
+  corrected: number
 }
 
 /**
@@ -186,9 +202,11 @@ export async function rebuildProductStock(
   db: RestoreDb,
   userId: string,
 ): Promise<RebuildStockResult> {
+  // 🔒 AUDIT R1: currentStock is selected so unchanged products can be skipped
+  // entirely (see the apply loop below).
   const products = await db.product.findMany({
     where: { userId },
-    select: { id: true, openingStock: true },
+    select: { id: true, openingStock: true, currentStock: true },
   })
 
   // One aggregate query per direction — far cheaper than per-product loops.
@@ -238,15 +256,58 @@ export async function rebuildProductStock(
     stockDelta.set(item.productId, current + direction * item.quantity)
   }
 
+  // ═══════════════════════════════════════════════════════════════════════
   // Apply: currentStock = openingStock + delta.
+  //
+  // 🔒 AUDIT R1 — two fixes here.
+  //
+  // (a) TENANT SCOPING. The update was `where: { id: p.id }` with no userId.
+  //     Safe today only because `products` was fetched scoped — i.e. safe
+  //     because of something that happened forty lines earlier. This is a
+  //     WRITE, in the restore path, so it gets the same treatment as every
+  //     other scoped write in the codebase.
+  //
+  // (b) SEQUENTIAL ROUND-TRIPS. This was `for (...) { await update }` — one
+  //     round-trip PER PRODUCT, in series. A 20,000-product catalogue meant
+  //     20,000 sequential queries.
+  //
+  //     That matters more here than almost anywhere else. rebuildProductStock
+  //     runs AFTER the chunked import transactions have already committed, so
+  //     if the function is killed part-way the transactions are in and the
+  //     stock is not — silently wrong stock on a shop that believes its
+  //     restore succeeded. This is the same N1 bug class, in the one place
+  //     where a timeout does the most damage.
+  //
+  //     Now: skip products whose stock is already correct (in a typical
+  //     restore most are), then issue the remainder with bounded concurrency.
+  //     The bound keeps the connection pool safe — unbounded Promise.all over
+  //     20,000 updates would simply move the failure.
+  //
+  // `rebuilt` keeps its original meaning (products examined) because it feeds
+  // the user-facing restore message; `corrected` is the new number that says
+  // whether anything was actually wrong.
+  // ═══════════════════════════════════════════════════════════════════════
+  const REBUILD_CONCURRENCY = 10
+
+  const pending: Array<{ id: string; newStock: number }> = []
   for (const p of products) {
     const delta = stockDelta.get(p.id) || 0
     const newStock = (p.openingStock || 0) + delta
-    await db.product.updateMany({
-      where: { id: p.id },
-      data: { currentStock: newStock },
-    })
+    // Skip no-ops. Restores commonly leave most of the catalogue untouched.
+    if (p.currentStock === newStock) continue
+    pending.push({ id: p.id, newStock })
   }
 
-  return { rebuilt: products.length }
+  for (let i = 0; i < pending.length; i += REBUILD_CONCURRENCY) {
+    await Promise.all(
+      pending.slice(i, i + REBUILD_CONCURRENCY).map(({ id, newStock }) =>
+        db.product.updateMany({
+          where: { id, userId },   // 🔒 R1(a): tenant-scoped
+          data: { currentStock: newStock },
+        }),
+      ),
+    )
+  }
+
+  return { rebuilt: products.length, corrected: pending.length }
 }

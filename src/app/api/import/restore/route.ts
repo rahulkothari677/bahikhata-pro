@@ -476,6 +476,11 @@ export async function POST(req: NextRequest) {
         relinked: relinkResult.relinked,
         unmatched: relinkResult.unmatched,
         stockRebuilt: rebuildResult.rebuilt,
+        // 🔒 AUDIT R1: non-zero means the backup's stored stock DISAGREED with
+        // its own transaction history — the corruption this rebuild repairs.
+        // Worth recording in the audit log and showing the user; a silent
+        // repair of a corrupt backup is still a fact they should know.
+        stockCorrected: rebuildResult.corrected,
       },
     })
 
@@ -489,6 +494,13 @@ export async function POST(req: NextRequest) {
     if (relinkResult.unmatched > 0) {
       message += ` ${relinkResult.unmatched} item(s) could not be matched to a product by name and will not appear in product-linked reports (item-profit, stock-value).`
     }
+    // 🔒 AUDIT R1: tell the user when the backup's own numbers disagreed. The
+    // rebuild silently repairing it is correct, but staying silent about it is
+    // not — a backup whose stock did not match its transactions is a fact
+    // worth knowing about the file they just restored from.
+    if (rebuildResult.corrected > 0) {
+      message += ` Note: ${rebuildResult.corrected} product(s) had a stock figure in the backup that disagreed with its own transaction history; stock was recalculated from the transactions.`
+    }
 
     return NextResponse.json({
       success: true,
@@ -498,6 +510,11 @@ export async function POST(req: NextRequest) {
         relinked: relinkResult.relinked,
         unmatched: relinkResult.unmatched,
         stockRebuilt: rebuildResult.rebuilt,
+        // 🔒 AUDIT R1: non-zero means the backup's stored stock DISAGREED with
+        // its own transaction history — the corruption this rebuild repairs.
+        // Worth recording in the audit log and showing the user; a silent
+        // repair of a corrupt backup is still a fact they should know.
+        stockCorrected: rebuildResult.corrected,
       },
     })
   } catch (err) {
