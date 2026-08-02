@@ -42,6 +42,16 @@ import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
 import { toast as sonnerToast } from 'sonner'
 import { ArrowLeft, HandCoins, Loader2, Wand2 } from 'lucide-react'
 
+/**
+ * The header row and every bill row share ONE column definition, so the due
+ * and the input line up down the whole table. With `auto` columns each row
+ * sized itself independently and a header could never align with them.
+ *
+ * Phone: two columns — details, then the box (the due moves under the invoice
+ * number). Tablet up: three, with the due in its own column beside the box.
+ */
+const GRID_COLS = 'grid-cols-[minmax(0,1fr)_7rem] sm:grid-cols-[minmax(0,1fr)_6.5rem_7rem]'
+
 export function PartySettle() {
   const {
     selectedPartyId, setView, pendingSettle, setPendingSettle, triggerRefresh,
@@ -404,6 +414,16 @@ export function PartySettle() {
                 )}
               </div>
 
+              {/* Column headers, so nine rows of money read as a table rather
+                  than as a caption floating a long way from its box. Hidden on
+                  a phone, where the due sits under the invoice number instead
+                  and a header would only cost a line. */}
+              <div className={cn(GRID_COLS, 'hidden sm:grid gap-x-3 pb-1 border-b border-border text-xs text-muted-foreground')}>
+                <span>Bill</span>
+                <span className="text-right">Due</span>
+                <span className="text-right">Apply</span>
+              </div>
+
               {/*
                 Capped ONLY once the list is long enough to push the running
                 total out of sight. Below that there is no cap, so a party with
@@ -425,7 +445,7 @@ export function PartySettle() {
                        gap on a desktop screen. */
                     <div
                       key={b.id}
-                      className="grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 gap-y-1 py-2"
+                      className={cn('grid', GRID_COLS, 'items-center gap-x-3 gap-y-1 py-2')}
                     >
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
@@ -446,8 +466,8 @@ export function PartySettle() {
                           <span className="sm:hidden"> · due {formatINR(b.due)}</span>
                         </p>
                       </div>
-                      <p className="hidden sm:block text-sm text-muted-foreground tabular-nums whitespace-nowrap">
-                        due {formatINR(b.due)}
+                      <p className="hidden sm:block text-sm text-right text-muted-foreground tabular-nums whitespace-nowrap">
+                        {formatINR(b.due)}
                       </p>
                       <Input
                         inputMode="decimal"
