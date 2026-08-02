@@ -55,9 +55,26 @@ export async function GET(
       return NextResponse.json({ error: 'Party not found' }, { status: 404 })
     }
 
-    // Fetch ALL transactions for this party (the function filters by date)
+    // 🔒 AUDIT PASS-1 N5: the date bound is applied in SQL, not in JS.
+    //
+    // Was: fetch EVERY transaction this party has ever had, then discard the
+    // ones after asOfDate in JavaScript (computeBalanceAsOf and the entry
+    // builder below both re-filter on exactly this condition). Asking "what
+    // was the balance a year ago" on a five-year customer pulled all five
+    // years over the wire to throw most of it away.
+    //
+    // Pushing `date <= asOfDate` into the query is behaviour-identical — the
+    // rows removed here are precisely the rows both consumers already skipped
+    // — and it is strictly less data. The `updatedAt > asOfDate` post-hoc-edit
+    // check further down still works: it only ever examined rows already
+    // inside the date bound.
+    //
+    // HONEST LIMITATION: this reduces the load, it does not bound it. A party
+    // with years of history still returns every row up to asOfDate, because a
+    // running-balance statement genuinely needs them. Turning that into a
+    // windowed/aggregated read is a larger change and is tracked separately.
     const transactions = await db.transaction.findMany({
-      where: { userId, partyId, deletedAt: null },
+      where: { userId, partyId, deletedAt: null, date: { lte: asOfDate } },
       select: {
         id: true,
         type: true,
@@ -71,9 +88,9 @@ export async function GET(
       orderBy: { date: 'asc' },
     })
 
-    // Fetch ALL payments for this party
+    // 🔒 AUDIT PASS-1 N5: same date bound pushed into SQL (see the note above).
     const payments = await db.payment.findMany({
-      where: { userId, partyId, deletedAt: null },
+      where: { userId, partyId, deletedAt: null, date: { lte: asOfDate } },
       select: {
         id: true,
         type: true,

@@ -69,39 +69,69 @@ export async function GET(req: NextRequest) {
   const startedAt = Date.now()
 
   try {
-    // ─── Fetch all users ─────────────────────────────────────────────────────
-    // We only need the id + email (for Sentry context). No passwords, no PII.
-    const users = await db.user.findMany({
-      select: {
-        id: true,
-        email: true,
-        name: true,
-      },
-      orderBy: { createdAt: 'asc' },
-    })
+    // ═══════════════════════════════════════════════════════════════════════
+    // 🔒 AUDIT PASS-1 N2: users are streamed in cursor-paginated batches.
+    //
+    // WAS: `db.user.findMany({ ... })` with no pagination, loading EVERY user
+    // into this function's memory, then reconciling them one at a time in a
+    // single invocation. The original docblock even predicted the wall:
+    // "if we outgrow Hobby, this job needs batching."
+    //
+    // WHY THIS ONE MATTERS MORE THAN AN ORDINARY SLOW JOB: this is the job
+    // that DETECTS LEDGER DRIFT. When it stops completing, you do not merely
+    // lose a background task — you lose the mechanism that tells you the books
+    // have gone wrong, and you lose it silently, because a job that never
+    // reaches its own summary never reports anything. It fails exactly when
+    // scale makes it most necessary.
+    //
+    // THREE CHANGES:
+    //   1. Cursor pagination (keyset on id) — memory stays flat regardless of
+    //      user count. No OFFSET, which degrades on large tables.
+    //   2. Bounded concurrency inside each batch — still gentle on the
+    //      connection pool (the original's stated reason for going sequential),
+    //      but no longer one-at-a-time.
+    //   3. A time budget. The run stops cleanly before the platform kills it,
+    //      reports `completed: false` and a `resumeCursor`, and the next
+    //      invocation continues from there instead of restarting from user #1
+    //      and never reaching the tail of the table.
+    //
+    // The per-user `results` array is also gone: it accumulated one object per
+    // user purely to compute two counters at the end. Counters are now
+    // incremented in place, so memory does not grow with the user count.
+    // ═══════════════════════════════════════════════════════════════════════
+    const BATCH_SIZE = 200          // users fetched per round-trip
+    const CONCURRENCY = 5           // reconciliations in flight at once
+    const MAX_FAILURES_RETURNED = 500 // cap the response body, not the alerting
+    // Leave headroom under maxDuration (300s) so we can finish cleanly, write
+    // the summary, and flush Sentry rather than being killed mid-flight.
+    const TIME_BUDGET_MS = 240_000
 
-    if (users.length === 0) {
-      return NextResponse.json({
-        ok: true,
-        message: 'No users found — nothing to reconcile.',
-        totalUsers: 0,
-        totalFailures: 0,
-        durationMs: Date.now() - startedAt,
-        runAt: new Date().toISOString(),
-      })
+    // Resume support: the caller passes ?cursor=<userId> from the previous
+    // run's `resumeCursor`. Absent = start from the beginning.
+    //
+    // Parsed defensively. `new URL(undefined)` THROWS, and an exception here
+    // would be caught by the outer handler and returned as a 500 — killing the
+    // entire reconciliation sweep because of an optional query parameter. For
+    // the one job whose purpose is to detect ledger drift, failing closed over
+    // a missing cursor is the wrong trade: no cursor simply means "start from
+    // the beginning", which is the correct default.
+    // (Found by v20-nightly-reconciliation.test.ts, whose request mock has no
+    // `url` — a fair model of any caller that does not set one.)
+    let startCursor: string | null = null
+    try {
+      if (req.url) startCursor = new URL(req.url).searchParams.get('cursor')
+    } catch {
+      startCursor = null
     }
 
-    // ─── Run reconciliation for each user ────────────────────────────────────
-    // Sequential (not parallel) to avoid overwhelming the DB connection pool.
-    // At ~100ms per user, 100 users = 10s. Acceptable for a nightly job.
-    const results: Array<{
-      userId: string
-      userEmail: string
-      userName: string | null
-      allPassed: boolean
-      checks: Array<{ name: string; passed: boolean; details: string }>
-    }> = []
+    let cursor: string | null = startCursor
+    let totalUsers = 0
+    let totalPassed = 0
+    let totalFailed = 0
+    let completed = true
+    let batches = 0
 
+    // ─── Run reconciliation for each user ────────────────────────────────────
     const failures: Array<{
       userId: string
       userEmail: string
@@ -109,24 +139,18 @@ export async function GET(req: NextRequest) {
       details: string
     }> = []
 
-    for (const user of users) {
+    // Reconcile ONE user. Returns nothing; updates the counters and failure
+    // list. Never throws — a single user with corrupt data must not abort the
+    // run for everybody else (the original guarantee, preserved).
+    const reconcileUser = async (user: { id: string; email: string; name: string | null }) => {
       try {
         // 🔒 Critical #3: Nightly uses the extended function that ALSO runs
         // checkPaiseAnomalies (the 100× corruption signature check). The
         // on-demand /api/reconcile endpoint uses the basic function so the
         // raw-SQL paise check doesn't slow the one-tap UI check.
         const result = await runReconciliationChecksNightly(user.id)
-        results.push({
-          userId: user.id,
-          userEmail: user.email,
-          userName: user.name,
-          allPassed: result.allPassed,
-          checks: result.checks.map(c => ({
-            name: c.name,
-            passed: c.passed,
-            details: c.details,
-          })),
-        })
+        if (result.allPassed) totalPassed++
+        else totalFailed++
 
         // Collect failures for Sentry alerting
         if (!result.allPassed) {
@@ -146,24 +170,63 @@ export async function GET(req: NextRequest) {
         // don't abort the whole job — record the failure and continue.
         // This is critical: one user with corrupt data shouldn't prevent
         // checking the other users.
+        totalFailed++
         failures.push({
           userId: user.id,
           userEmail: user.email,
           checkName: 'reconciliation-crash',
           details: `Reconciliation threw an error: ${userErr instanceof Error ? userErr.message : String(userErr)}`,
         })
-        results.push({
-          userId: user.id,
-          userEmail: user.email,
-          userName: user.name,
-          allPassed: false,
-          checks: [{
-            name: 'reconciliation-crash',
-            passed: false,
-            details: String(userErr),
-          }],
-        })
       }
+    }
+
+    // ─── Stream users in keyset-paginated batches ────────────────────────────
+    for (;;) {
+      const batch: Array<{ id: string; email: string; name: string | null }> =
+        await db.user.findMany({
+          select: { id: true, email: true, name: true },
+          // Keyset on id, not OFFSET: stays O(1) as the table grows, and is
+          // stable if users are created while the job is running.
+          where: cursor ? { id: { gt: cursor } } : undefined,
+          orderBy: { id: 'asc' },
+          take: BATCH_SIZE,
+        })
+
+      if (batch.length === 0) break
+      batches++
+
+      // Bounded concurrency: CONCURRENCY reconciliations in flight at a time.
+      // The original went strictly sequential to protect the connection pool;
+      // this keeps that intent while removing the one-at-a-time ceiling.
+      for (let i = 0; i < batch.length; i += CONCURRENCY) {
+        await Promise.all(batch.slice(i, i + CONCURRENCY).map(reconcileUser))
+      }
+
+      totalUsers += batch.length
+      cursor = batch[batch.length - 1].id
+
+      // Stop cleanly before the platform kills us, so the summary is written,
+      // Sentry is flushed, and the next run resumes instead of restarting.
+      if (Date.now() - startedAt > TIME_BUDGET_MS) {
+        completed = false
+        break
+      }
+
+      if (batch.length < BATCH_SIZE) break
+    }
+
+    if (totalUsers === 0) {
+      return NextResponse.json({
+        ok: true,
+        message: startCursor
+          ? 'No users after the supplied cursor — nothing left to reconcile.'
+          : 'No users found — nothing to reconcile.',
+        totalUsers: 0,
+        totalFailures: 0,
+        completed: true,
+        durationMs: Date.now() - startedAt,
+        runAt: new Date().toISOString(),
+      })
     }
 
     // ─── Capture failures to Sentry ──────────────────────────────────────────
@@ -199,8 +262,6 @@ export async function GET(req: NextRequest) {
     }
 
     const durationMs = Date.now() - startedAt
-    const totalPassed = results.filter(r => r.allPassed).length
-    const totalFailed = results.length - totalPassed
 
     // ─── Return summary ──────────────────────────────────────────────────────
     // Always return 200 (even if there are failures) — the cron job itself
@@ -211,11 +272,21 @@ export async function GET(req: NextRequest) {
       ok: true,
       runAt: new Date().toISOString(),
       durationMs,
-      totalUsers: results.length,
+      totalUsers,
       totalPassed,
       totalFailed,
       totalFailures: failures.length,
-      failures: failures.map(f => ({
+      // 🔒 N2: when false, the time budget was hit before the table ended.
+      // The caller MUST re-invoke with ?cursor=<resumeCursor> to finish the
+      // sweep. A monitor that only checks `ok` would miss a run that has
+      // silently stopped covering the tail of the user table — which is the
+      // exact failure this fix exists to prevent, so it is surfaced explicitly.
+      completed,
+      resumeCursor: completed ? null : cursor,
+      batches,
+      // The response body is capped; Sentry still receives every failure above.
+      failuresTruncated: failures.length > MAX_FAILURES_RETURNED,
+      failures: failures.slice(0, MAX_FAILURES_RETURNED).map(f => ({
         userId: f.userId,
         userEmail: f.userEmail,
         checkName: f.checkName,
