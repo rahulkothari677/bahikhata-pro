@@ -143,60 +143,62 @@ export async function computePartyBalance(
   )
 
   // ═══════════════════════════════════════════════════════════════════════
-  // 🔒 M11 DEFINITIVE FIX (2026-07-21) — trust the path the user can see.
+  // M11, FOR THE RECORD — the incident this code used to work around.
   //
-  // THE PROBLEM
-  // Two read paths for the SAME Payment.amount column disagreed by exactly
-  // 100× on a freshly-created payment:
-  //   • db.payment.findMany (money extension)  →  ₹100   ✅ correct
-  //     (this is what the on-screen Account Statement renders)
-  //   • raw SQL SUM + fromPaise()              →  ₹10,000 ❌ 100× too large
-  //     (this fed the balance and the "Received" card)
-  // Result: the statement said ₹100 while the headline balance moved ₹10,000
-  // — a ledger contradicting itself on one screen.
+  // SYMPTOM (2026-07-21): two read paths for the SAME Payment.amount column
+  // disagreed by exactly 100× on a freshly-created payment. The Account
+  // Statement rendered ₹100 while the headline balance moved ₹10,000 — a
+  // ledger contradicting itself on a single screen.
   //
-  // Reading the code cannot explain how one column yields two values, so
-  // rather than guess, this now sums payments through the SAME path the
-  // statement uses (Prisma + money extension), which is demonstrably correct
-  // in production. The raw-SQL result is still computed and compared, so the
-  // discrepancy reports itself instead of silently corrupting balances.
+  // At the time the cause was not understood, so this function was pointed at
+  // whichever path matched the statement and the disagreement was logged.
+  // That workaround has now been removed (see the C2 note below).
   //
-  // WHY PRISMA IS THE SOURCE OF TRUTH HERE
-  // The user enters ₹100, the statement shows ₹100. The balance MUST agree
-  // with the statement. Internal consistency is not optional in a ledger.
+  // ROOT CAUSE (found later, fixed in prisma-money-extension.ts):
+  // generateModelHandlers() returned its handlers UNKEYED, so all ten
+  // `...generateModelHandlers(...)` spreads collided on the same keys. The
+  // last spread won and became a TOP-LEVEL catch-all operation handler
+  // permanently bound to modelName='RevenueSchedule', which Prisma then ran
+  // for EVERY model in addition to that model's own handler. Any model whose
+  // money columns overlap RevenueSchedule's (['amount']) was converted twice
+  // on write and divided twice on read:
+  //     ₹100 → 10,000 paise (correct) → 1,000,000 paise (stored)
+  // so the UI looked right while the raw column — and every raw-SQL balance
+  // query — was 100× too large. Sales were never affected because their money
+  // columns are totalAmount/subtotal/..., not `amount`.
   //
-  // Cost: one extra bounded query (payments for a single party).
+  // Both paths are correct now and agree by construction. Keeping this note
+  // because the symptom was deeply confusing and someone will eventually find
+  // the old logs.
   // ═══════════════════════════════════════════════════════════════════════
-  const paymentRows = await db.payment.findMany({
-    where: { userId, partyId, deletedAt: null },
-    select: { type: true, amount: true },
-  })
-  let paymentsReceived = 0
-  let paymentsPaid = 0
-  for (const p of paymentRows) {
-    // `amount` is already rupees here — the extension converted it on read,
-    // exactly as it does for the statement.
-    if (p.type === 'received') paymentsReceived = roundMoney(paymentsReceived + (p.amount || 0))
-    else if (p.type === 'paid') paymentsPaid = roundMoney(paymentsPaid + (p.amount || 0))
-  }
-
-  // Cross-check against the raw-SQL path. If they diverge, something is wrong
-  // at the storage/conversion layer and we want to KNOW — loudly — rather than
-  // discover it from a customer dispute months later.
-  const rawReceived = fromPaise(Number(receivedAgg[0]?.totalPaise ?? 0))
-  const rawPaid = fromPaise(Number(paidAgg[0]?.totalPaise ?? 0))
-  if (Math.abs(rawReceived - paymentsReceived) > 0.01 || Math.abs(rawPaid - paymentsPaid) > 0.01) {
-    console.error('[party-balance] PAYMENT READ-PATH DIVERGENCE', {
-      partyId,
-      viaPrisma: { received: paymentsReceived, paid: paymentsPaid },
-      viaRawSql: { received: rawReceived, paid: rawPaid },
-      rawReceivedPaise: Number(receivedAgg[0]?.totalPaise ?? 0),
-      rawPaidPaise: Number(paidAgg[0]?.totalPaise ?? 0),
-      paymentRowCount: paymentRows.length,
-      ratioReceived: paymentsReceived ? rawReceived / paymentsReceived : null,
-      note: 'Using the Prisma value (matches the on-screen statement). ratio 100 => raw SQL is reading a 100x value.',
-    })
-  }
+  // ═══════════════════════════════════════════════════════════════════════
+  // 🔒 AUDIT PASS-1 C2 (2026-08-02) — M11 emergency workaround REMOVED.
+  //
+  // WHAT WAS HERE: a second `db.payment.findMany` that re-read this party's
+  // payments and summed them in JavaScript, plus a divergence check comparing
+  // that sum against the raw-SQL aggregate already computed above.
+  //
+  // WHY IT WAS HERE: during the M11 incident the two paths disagreed by
+  // exactly 100x on a fresh payment. The cause was not understood at the time,
+  // so the code was pointed at whichever path matched the on-screen statement
+  // and the disagreement was logged rather than resolved.
+  //
+  // WHY IT GOES NOW: the root cause was found and fixed in
+  // prisma-money-extension.ts — generateModelHandlers() returned its handlers
+  // UNKEYED, so all ten spreads collided and the last one became a top-level
+  // catch-all bound to RevenueSchedule, running for every model. Any model
+  // with an `amount` column (Payment, Subscription, BankTransaction) was
+  // therefore converted twice on write and twice on read. With that fixed,
+  // both paths are correct and agree by construction, and the raw SQL above
+  // is strictly cheaper — it is one aggregate instead of shipping every
+  // payment row for this party over the wire to be summed in JS.
+  //
+  // The divergence logger goes too: it now only fires for rows corrupted
+  // during the bug window, which would flood Sentry with an alert that no
+  // longer indicates a live fault.
+  // ═══════════════════════════════════════════════════════════════════════
+  const paymentsReceived = roundMoney(fromPaise(Number(receivedAgg[0]?.totalPaise ?? 0)))
+  const paymentsPaid = roundMoney(fromPaise(Number(paidAgg[0]?.totalPaise ?? 0)))
 
   // (The unconditional per-read debug log was removed: the divergence check
   // above logs only when the two paths actually disagree, which is the signal
@@ -371,18 +373,31 @@ export async function getReceivablePayable(
   // profile used Prisma, the Parties list and the party screen would show
   // different balances for the same customer — the exact drift this helper was
   // created to eliminate. One source of truth for payments, everywhere.
-  const allPaymentRows = await db.payment.findMany({
-    where: { userId, deletedAt: null },
-    select: { partyId: true, type: true, amount: true },
-  })
-  const paymentsByParty = new Map<string, { received: number; paid: number }>()
-  for (const p of allPaymentRows) {
-    if (!p.partyId) continue
-    const acc = paymentsByParty.get(p.partyId) || { received: 0, paid: 0 }
-    if (p.type === 'received') acc.received = roundMoney(acc.received + (p.amount || 0))
-    else if (p.type === 'paid') acc.paid = roundMoney(acc.paid + (p.amount || 0))
-    paymentsByParty.set(p.partyId, acc)
-  }
+  // ═══════════════════════════════════════════════════════════════════════
+  // 🔒 AUDIT PASS-1 C2 (2026-08-02) — the unbounded scan is GONE.
+  //
+  // WHAT WAS HERE:
+  //     db.payment.findMany({ where: { userId, deletedAt: null } })
+  // with no take, no pagination and no date bound — every payment the user has
+  // EVER recorded, pulled into memory and summed in JS, on the hottest read
+  // path in the app (dashboard, parties list, insights all call this).
+  //
+  // A shop with 50,000 payments shipped 50,000 rows per dashboard load. That
+  // is a latency and memory cliff that arrives exactly when the product starts
+  // succeeding, and it would have looked like "the app got slow as we grew"
+  // rather than like a bug.
+  //
+  // It was the M11 emergency workaround: the raw-SQL payment subquery in the
+  // statement above was distrusted, so its result was thrown away and
+  // recomputed in JS. The root cause has since been fixed in
+  // prisma-money-extension.ts (see the note in computePartyBalance), so the
+  // subquery — which is already SELECTed, already grouped by party, and costs
+  // nothing extra — is correct and is now what we use.
+  //
+  // The per-row divergence logger is removed with it: post-fix it can only
+  // fire on rows corrupted during the bug window, so it would spam Sentry with
+  // an alert that no longer means anything is currently wrong.
+  // ═══════════════════════════════════════════════════════════════════════
 
   for (const row of rows) {
     // 🔒 V17 PAISE MIGRATION Phase 2B: SQL returns paise (numeric strings).
@@ -399,19 +414,11 @@ export async function getReceivablePayable(
     // 🔒 M11: payments come from the Prisma-based map above (single source of
     // truth). The raw-SQL values are still computed and compared so a
     // divergence reports itself instead of silently skewing every balance.
-    const prismaPayments = paymentsByParty.get(row.partyId) || { received: 0, paid: 0 }
-    const paymentsReceived = prismaPayments.received
-    const paymentsPaid = prismaPayments.paid
-    const rawPayReceived = fromPaise(Number(row.paymentsReceivedPaise))
-    const rawPayPaid = fromPaise(Number(row.paymentsPaidPaise))
-    if (Math.abs(rawPayReceived - paymentsReceived) > 0.01 || Math.abs(rawPayPaid - paymentsPaid) > 0.01) {
-      console.error('[getReceivablePayable] PAYMENT READ-PATH DIVERGENCE', {
-        partyId: row.partyId,
-        viaPrisma: { received: paymentsReceived, paid: paymentsPaid },
-        viaRawSql: { received: rawPayReceived, paid: rawPayPaid },
-        note: 'Using the Prisma value so the list agrees with the party screen.',
-      })
-    }
+    // 🔒 C2: straight from the pre-aggregated subquery — same source of truth
+    // computePartyBalance now uses, so the list and the party screen cannot
+    // disagree, and neither one loads a single payment row to get there.
+    const paymentsReceived = roundMoney(fromPaise(Number(row.paymentsReceivedPaise)))
+    const paymentsPaid = roundMoney(fromPaise(Number(row.paymentsPaidPaise)))
     // V17-Ext Tier 3: Credit notes reduce receivable, debit notes reduce payable
     const balance = roundMoney(
       openingBalance
