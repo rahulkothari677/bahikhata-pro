@@ -53,6 +53,14 @@ const MONEY_COLUMNS: Record<string, string[]> = {
   Transaction: ['subtotal', 'discountAmount', 'cgst', 'sgst', 'igst', 'totalAmount', 'roundOff', 'paidAmount', 'grossProfit'],
   TransactionItem: ['unitPrice', 'purchasePriceAtSale', 'discountAmount', 'cgst', 'sgst', 'igst', 'csamt', 'total'],
   Payment: ['amount'],
+  // 🔒 AUDIT C5: PaymentAllocation.amount is Int PAISE like every other money
+  // column. Registering it here is NOT optional — an unregistered money column
+  // reads back as raw paise and gets mixed with rupee values, which is exactly
+  // the 100× class of bug this extension exists to prevent (see the M11 note in
+  // generateModelHandlers). The docblock at the top of this file states the
+  // rule: a new model with money columns MUST be added to MONEY_COLUMNS and
+  // registered below.
+  PaymentAllocation: ['amount'],
   Subscription: ['amount'],
   GstReturn: [
     'outwardTaxableValue', 'outwardCgst', 'outwardSgst', 'outwardIgst',
@@ -645,6 +653,10 @@ export function withMoneyConversion(client: PrismaClient) {
       ...generateModelHandlers('AiUsageLog', 'aiUsageLog'),
       ...generateModelHandlers('DailyStats', 'dailyStats'),
       ...generateModelHandlers('RevenueSchedule', 'revenueSchedule'),
+      // 🔒 AUDIT C5 — see the MONEY_COLUMNS entry. Without this line the model
+      // is listed but never intercepted, which is the worst of both worlds:
+      // it LOOKS registered.
+      ...generateModelHandlers('PaymentAllocation', 'paymentAllocation'),
     },
   })
 }

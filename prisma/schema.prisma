@@ -250,6 +250,10 @@ model Transaction {
   reversalTransactions  Transaction[] @relation("TransactionReversal")
   // 🔒 V17 Audit Phase 6: Bank reconciliation — matched bank transactions
   matchedBankTransactions BankTransaction[] @relation("BankReconMatch")
+
+  // 🔒 AUDIT C5: payments settled against this bill. The bill's true due is
+  // totalAmount − paidAmount − Σ(paymentAllocations.amount).
+  paymentAllocations PaymentAllocation[]
   noteType              String?       // 'C' (credit) or 'D' (debit) — only for credit-note/debit-note types
   noteReason            String?       // GST reason: 'post-sale-discount' | 'deficiency' | 'return' | 'price-revision' | 'other'
   affectsStock          Boolean       @default(false) // true only when goods are physically returned
@@ -373,6 +377,10 @@ model Payment {
   // 🔒 V17 Audit Phase 6: Bank reconciliation — matched bank transactions
   bankTransactions BankTransaction[]
 
+  // 🔒 AUDIT C5: which bills this payment settles. Empty = held on account
+  // (an advance), which is legitimate — shopkeepers take money before billing.
+  allocations PaymentAllocation[]
+
   // ⚡ PERFORMANCE (Audit fix Phase 5): Indexes on foreign keys + hot query
   // patterns. Without these, every payment query does a full table scan.
   @@index([userId, date])
@@ -380,6 +388,48 @@ model Payment {
   // 🔒 V15 M-3: Partial index for the common "active payments for this party"
   // query — smaller + faster than a full index because it excludes deleted rows.
   @@index([userId, partyId, deletedAt])
+}
+
+// ==================== PAYMENT ALLOCATION (C5) ====================
+// 🔒 AUDIT C5: links a Payment to the specific bill(s) it settles.
+//
+// THE DEFECT THIS FIXES: a "Settle" payment reduced the PARTY balance but no
+// bill knew about it, so an invoice kept displaying its original amount as due
+// forever. Party outstanding and the sum of bill dues disagreed permanently,
+// from the first partial payment onward. Worse, the stale "Due" invited the
+// shopkeeper to collect that amount again — and nothing would have stopped it,
+// because settling a bill for exactly what it claims to owe looks correct.
+//
+// A bill's true due is now:
+//     totalAmount − paidAmount − Σ(allocations)
+//
+// WHY A SEPARATE TABLE rather than a paidAmount bump on the Transaction:
+// the allocation is a FACT about a specific payment settling a specific bill.
+// Folding it into paidAmount would lose which payment did it, making a payment
+// impossible to reverse cleanly and leaving disputes unanswerable ("you say I
+// paid — against what?").
+model PaymentAllocation {
+  id            String   @id @default(cuid())
+  userId        String // denormalised for tenant-scoped queries + indexes
+  paymentId     String
+  transactionId String
+  amount        Int // paise, like every other money column
+  createdAt     DateTime @default(now())
+
+  // Deleting a payment removes its allocations: the money never arrived, so
+  // the bills it was covering must go back to being due.
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  // Transactions are SOFT-deleted, never hard-deleted, so no cascade here —
+  // the allocation must survive to keep the audit trail answerable.
+  transaction Transaction @relation(fields: [transactionId], references: [id])
+
+  // One row per (payment, bill). Re-allocating updates rather than duplicating,
+  // which also makes an offline replay idempotent.
+  @@unique([paymentId, transactionId])
+  // "What has been settled against this bill?" — the hot read behind every
+  // due calculation.
+  @@index([userId, transactionId])
+  @@index([paymentId])
 }
 
 // ==================== APP SETTINGS (per user) ====================

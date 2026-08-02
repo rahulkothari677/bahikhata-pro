@@ -464,6 +464,10 @@ describe('🔒 V20-014: Money round-trip integration test (auditor §5.2)', () =
         'Subscription', 'GstReturn', 'Gstr1Snapshot', 'BankStatement',
         'BankTransaction', 'Gstr2bImport', 'Gstr2bInvoice', 'AiUsageLog',
         'DailyStats', 'RevenueSchedule',
+        // 🔒 AUDIT C5: PaymentAllocation.amount is Int paise. An unregistered
+        // money column reads back as raw paise and mixes with rupee values —
+        // the 100× class this whole extension exists to prevent.
+        'PaymentAllocation',
       ]
 
       for (const model of requiredModels) {
@@ -471,8 +475,13 @@ describe('🔒 V20-014: Money round-trip integration test (auditor §5.2)', () =
       }
     })
 
-    test('MONEY_COLUMNS has the expected count (15 models)', () => {
-      expect(Object.keys(MONEY_COLUMNS)).toHaveLength(15)
+    // This count is deliberately brittle. Adding a money-bearing model without
+    // registering it in the extension is how the 100× bug class happens, so a
+    // new model must fail this test and force a deliberate update rather than
+    // slipping in unnoticed.
+    // 15 → 16: PaymentAllocation (AUDIT C5).
+    test('MONEY_COLUMNS has the expected count (16 models)', () => {
+      expect(Object.keys(MONEY_COLUMNS)).toHaveLength(16)
     })
   })
 })
