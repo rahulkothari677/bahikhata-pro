@@ -107,7 +107,12 @@ export function Gstr3bReport() {
     rows.push('GSTR-3B Summary,' + (data?.period?.monthLabel || month))
     rows.push('')
     rows.push('Section,Description,Taxable Value,CGST,SGST,IGST,Total Tax')
-    rows.push(`3.1(a),Outward taxable supplies,${data?.outwardTaxableValue || 0},${data?.outwardCgst || 0},${data?.outwardSgst || 0},${data?.outwardIgst || 0},${(data?.outwardCgst || 0) + (data?.outwardSgst || 0) + (data?.outwardIgst || 0)}`)
+    rows.push(`3.1(a),Outward taxable supplies (gross),${data?.outwardTaxableValue || 0},${data?.outwardCgst || 0},${data?.outwardSgst || 0},${data?.outwardIgst || 0},${(data?.outwardCgst || 0) + (data?.outwardSgst || 0) + (data?.outwardIgst || 0)}`)
+    // 🔒 AUDIT G3: portal-ready 3.1(a), net of credit notes. GSTR-3B Table 3.1
+    // has no credit-note row, so outward supplies there must already be net.
+    // The CSV had the same hazard as the screen: a row labelled "3.1(a)" that
+    // was actually the gross figure. See the note in the table below.
+    rows.push(`3.1(a),Outward taxable supplies (NET of credit notes - file this),${(data?.outwardTaxableValue || 0) - (data?.creditNoteTaxableValue || 0)},${(data?.outwardCgst || 0) - (data?.creditNoteCgst || 0)},${(data?.outwardSgst || 0) - (data?.creditNoteSgst || 0)},${(data?.outwardIgst || 0) - (data?.creditNoteIgst || 0)},${((data?.outwardCgst || 0) - (data?.creditNoteCgst || 0)) + ((data?.outwardSgst || 0) - (data?.creditNoteSgst || 0)) + ((data?.outwardIgst || 0) - (data?.creditNoteIgst || 0))}`)
     rows.push(`3.1(b),Zero-rated supplies,${data?.zeroRatedTaxableValue || 0},0,0,${data?.zeroRatedIgst || 0},${data?.zeroRatedIgst || 0}`)
     rows.push(`3.1(c),Nil-rated (0% GST),${data?.nilRatedValue || 0},0,0,0,0`)
     rows.push(`3.1(c),Exempt supplies,${data?.exemptValue || 0},0,0,0,0`)
@@ -282,7 +287,49 @@ export function Gstr3bReport() {
               </tr>
             </thead>
             <tbody>
-              <Gstr3bRow label="(a) Taxable supplies" taxable={data?.outwardTaxableValue} cgst={data?.outwardCgst} sgst={data?.outwardSgst} igst={data?.outwardIgst} />
+              <Gstr3bRow label="(a) Taxable supplies (gross)" taxable={data?.outwardTaxableValue} cgst={data?.outwardCgst} sgst={data?.outwardSgst} igst={data?.outwardIgst} />
+              {/*
+                🔒 AUDIT G3: the portal-ready 3.1(a) figure, net of credit notes.
+
+                GSTR-3B Table 3.1 has NO credit-note row — unlike GSTR-1, which
+                has CDNR/CDNUR. Outward supplies in 3.1(a) are expected NET of
+                credit notes issued in the period.
+
+                Previously this screen showed only the GROSS figure here, with
+                credit notes in a separate card further down. Anyone copying the
+                3.1(a) row straight into the portal — the obvious thing to do
+                when the row is labelled "3.1(a)" — OVERSTATED outward supplies
+                and output tax, and paid GST on sales that had been returned.
+
+                The gross row is kept (it is the working, and removing it would
+                make the credit-note card unreadable). This row is the one to
+                file, and says so.
+
+                Deliberately computed HERE rather than by changing
+                computeGstr3bValues: netTaxPayable ALREADY subtracts credit-note
+                tax, so netting at the source risks a second subtraction
+                somewhere downstream — which would UNDERSTATE liability, the
+                dangerous direction to be wrong in. This is additive and cannot
+                double-count.
+
+                Only credit notes are subtracted. In this app a debit-note is
+                issued to a SUPPLIER (a purchase return), so it reduces ITC — it
+                is not an outward supply and must not move 3.1(a).
+
+                CAVEAT the filer must know: in a month where returns exceed
+                sales this figure can go NEGATIVE. The GST portal does not
+                accept a negative value in 3.1(a) — the excess is carried
+                forward and adjusted against a later month. The negative is
+                shown rather than clamped to zero, because clamping would hide
+                the carry-forward the filer has to act on.
+              */}
+              <Gstr3bRow
+                label="(a) Taxable supplies — NET of credit notes ← file this"
+                taxable={(data?.outwardTaxableValue || 0) - (data?.creditNoteTaxableValue || 0)}
+                cgst={(data?.outwardCgst || 0) - (data?.creditNoteCgst || 0)}
+                sgst={(data?.outwardSgst || 0) - (data?.creditNoteSgst || 0)}
+                igst={(data?.outwardIgst || 0) - (data?.creditNoteIgst || 0)}
+              />
               <Gstr3bRow label="(b) Zero-rated" taxable={data?.zeroRatedTaxableValue} cgst={0} sgst={0} igst={data?.zeroRatedIgst} />
               <Gstr3bRow label="(c) Nil-rated (0% GST)" taxable={data?.nilRatedValue} cgst={0} sgst={0} igst={0} />
               <Gstr3bRow label="(c) Exempt" taxable={data?.exemptValue} cgst={0} sgst={0} igst={0} />
