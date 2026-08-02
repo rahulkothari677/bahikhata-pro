@@ -8,6 +8,9 @@ import { apiError } from '@/lib/api-error'
 import { computePartyBalance } from '@/lib/party-balance'
 import { assertPeriodNotLocked, PeriodLockedError } from '@/lib/period-lock'
 import { validateBody, createPaymentSchema } from '@/lib/validation'
+// 🔒 AUDIT C5: oldest-first allocation + the guard that stops a payment being
+// applied to an already-settled bill.
+import { planAllocationOldestFirst, validateAllocations } from '@/lib/invoice-due'
 
 /**
  * GET /api/payments?partyId=xxx
@@ -221,19 +224,110 @@ export async function POST(req: NextRequest) {
     // insert, second one P2002s on the @unique constraint). Catch P2002 →
     // re-fetch by clientMutationId → return the existing payment with
     // idempotent:true flag. Same pattern as payment/verify route.
-    let payment
-    try {
-      payment = await db.payment.create({
-        data: {
+    // ═══════════════════════════════════════════════════════════════════════
+    // 🔒 AUDIT C5: allocate the payment across open bills, OLDEST FIRST.
+    //
+    // THE DEFECT: a payment reduced the PARTY balance but no bill knew about
+    // it, so an invoice kept displaying its original amount as due forever.
+    // Bill dues and party outstanding disagreed permanently from the first
+    // partial payment — and the stale "Due" invited collecting that amount a
+    // second time, which nothing would have stopped.
+    //
+    // The allocation happens SERVER-SIDE when the client sends none, which is
+    // what makes this fix invisible: the existing Settle button keeps posting
+    // just an amount, and bills start showing correct dues immediately. No UI
+    // change is required for the defect to be fixed.
+    //
+    // ONLY FOR 'received'. A 'paid' payment settles OUR debt to a supplier; the
+    // bills involved are purchases, and reusing the sales-side rule there would
+    // allocate against the wrong documents. Supplier-side allocation is its own
+    // change and is deliberately not attempted here.
+    let allocationPlan: { allocations: Array<{ transactionId: string; amount: number }>; unallocated: number } =
+      { allocations: [], unallocated: roundMoney(amt) }
+
+    if (type === 'received') {
+      // Open sales for this party. Bounded by `take` — a party with years of
+      // history must not drag its whole ledger into memory on every payment.
+      // Oldest first is both the allocation order and the useful bound: if a
+      // party somehow has more than 500 unsettled bills, the oldest are the
+      // ones a payment should reach first anyway.
+      const openBills = await db.transaction.findMany({
+        where: {
           userId,
           partyId,
-          amount: roundMoney(amt),
-          type,
-          mode: mode,
-          date: paymentDate,
-          notes: notes || null,
-          clientMutationId: clientMutationId || null,  // 🔒 V19-007: idempotency
+          type: 'sale',
+          deletedAt: null,
         },
+        select: {
+          id: true,
+          date: true,
+          totalAmount: true,
+          paidAmount: true,
+          paymentAllocations: { select: { amount: true } },
+        },
+        orderBy: [{ date: 'asc' }, { id: 'asc' }],
+        take: 500,
+      })
+
+      const allocatable = openBills.map(b => ({
+        id: b.id,
+        date: b.date,
+        totalAmount: b.totalAmount,
+        paidAmount: b.paidAmount,
+        allocatedAmount: roundMoney(
+          b.paymentAllocations.reduce((s, a) => s + (a.amount || 0), 0),
+        ),
+      }))
+
+      allocationPlan = planAllocationOldestFirst(allocatable, roundMoney(amt))
+
+      // The planner should never produce something its own guard rejects, but
+      // this is money: assert it rather than assume it.
+      const invalid = validateAllocations(
+        allocationPlan.allocations,
+        new Map(allocatable.map(b => [b.id, b])),
+        roundMoney(amt),
+      )
+      if (invalid) {
+        return NextResponse.json({
+          error: 'Could not allocate payment',
+          message: invalid,
+        }, { status: 400 })
+      }
+    }
+
+    let payment
+    try {
+      // 🔒 C5: payment + its allocations are created together. A payment that
+      // recorded without its allocations would reproduce the exact bug this
+      // fixes — party balance moves, bills stay stale — so they must not be
+      // able to land separately.
+      payment = await db.$transaction(async (tx) => {
+        const created = await tx.payment.create({
+          data: {
+            userId,
+            partyId,
+            amount: roundMoney(amt),
+            type,
+            mode: mode,
+            date: paymentDate,
+            notes: notes || null,
+            clientMutationId: clientMutationId || null,  // 🔒 V19-007: idempotency
+          },
+        })
+
+        if (allocationPlan.allocations.length > 0) {
+          await tx.paymentAllocation.createMany({
+            data: allocationPlan.allocations.map(a => ({
+              userId,
+              paymentId: created.id,
+              transactionId: a.transactionId,
+              amount: a.amount,
+            })),
+          })
+        }
+
+        return created
       })
       // 🔒 M11 GUARD (2026-07-21): verify what actually landed in the COLUMN.
       //
@@ -300,7 +394,22 @@ export async function POST(req: NextRequest) {
     }
     // Else: no warning. Most payments land here — no alert fatigue.
 
-    return NextResponse.json({ payment, warning })
+    // 🔒 AUDIT C5: report what the payment actually settled, so the shopkeeper
+    // can see where the money went instead of only watching a total shrink.
+    // `unallocated` is not an error — money often arrives before the invoice
+    // does, and it stays on the party's account until a bill exists.
+    return NextResponse.json({
+      payment,
+      warning,
+      allocation: {
+        settled: allocationPlan.allocations,
+        settledCount: allocationPlan.allocations.length,
+        settledAmount: roundMoney(
+          allocationPlan.allocations.reduce((s, a) => s + a.amount, 0),
+        ),
+        heldAsAdvance: allocationPlan.unallocated,
+      },
+    })
   } catch (error) {
     return apiError(error, 'Failed to record payment', 500)
   }
