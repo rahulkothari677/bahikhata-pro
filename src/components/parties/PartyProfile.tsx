@@ -1271,7 +1271,15 @@ export function PartyProfile() {
                 </p>
                 <p className="text-amber-800 dark:text-amber-300">
                   Enter money received <strong>separately</strong> from the bills.
-                  If that {formatINR(alreadyPaidOnBills)} was already typed into a
+                  {/* 🔒 The {' '} is required, not cosmetic. JSX trims the
+                      leading whitespace of each line in a multi-line text node,
+                      so `{formatINR(...)} was already…` rendered as
+                      "₹2,992.50was already…" — the space vanished because
+                      "was already typed into a" starts a wrapped text block.
+                      Found by reading the rendered dialog, not the source: the
+                      source looks correct. */}
+                  If that {formatINR(alreadyPaidOnBills)}{' '}
+                  was already typed into a
                   bill&rsquo;s &ldquo;Paid Amount&rdquo;, do not enter it again here.
                 </p>
                 <p className="text-amber-800 dark:text-amber-300">
