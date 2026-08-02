@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { formatINR, formatDate, formatDateTime, cn, getInitials } from '@/lib/utils'
 import { useCountUp } from '@/hooks/use-count-up'
 import { roundMoney } from '@/lib/money'
-import { computeInvoiceDue } from '@/lib/invoice-due'
+import { computeInvoiceDue, planAllocationOldestFirst } from '@/lib/invoice-due'
 import {
   Phone, Building2, MapPin, User, Plus, ShoppingCart, Truck,
   ArrowDownRight, ArrowUpRight, IndianRupee, Calendar, TrendingUp,
@@ -54,6 +54,11 @@ export function PartyProfile() {
   // 🔒 AUDIT C5: Bills card defaults to open bills only — when a customer is
   // waiting at the counter, settled history is noise.
   const [showAllBills, setShowAllBills] = useState(false)
+  // 🔒 AUDIT C5 phase 4: manual bill selection in the Settle dialog. Off by
+  // default — oldest-first is right for most payments, and forcing a choice
+  // every time would slow down the app's most frequent action.
+  const [manualAllocation, setManualAllocation] = useState(false)
+  const [manualAmounts, setManualAmounts] = useState<Record<string, string>>({})
 
   // 🔒 V26 N1b: Skeleton-dead-end guard (mirrors TransactionDetail.tsx).
   // The browser-back hook clears selectedPartyId on popstate
@@ -123,7 +128,33 @@ export function PartyProfile() {
       return { ...t, due: computeInvoiceDue(t), settledSoFar }
     })
 
-  const unpaidBillRows = billRows.filter((b: any) => b.due > 0)
+  const unpaidBillRows = billRows
+    .filter((b: any) => b.due > 0)
+    // Oldest first — the order the server allocates in, so the preview below
+    // lists bills in the same order the money will actually reach them.
+    .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
+
+  // 🔒 AUDIT C5 phase 4: the live preview in the Settle dialog.
+  //
+  // Computed with the SAME planAllocationOldestFirst the server uses. If the
+  // preview were re-implemented here it would eventually disagree with what
+  // actually happens on save — showing a shopkeeper one thing and doing
+  // another is worse than showing nothing.
+  const parsedPaymentAmount = roundMoney(parseFloat(paymentAmount) || 0)
+  const autoPlan = planAllocationOldestFirst(unpaidBillRows, parsedPaymentAmount)
+
+  const manualTotal = roundMoney(
+    Object.values(manualAmounts).reduce((s, v) => s + (parseFloat(v) || 0), 0),
+  )
+  // Name the first bill over-allocated, so the error says WHICH one rather
+  // than just refusing.
+  const manualOverBill = (() => {
+    for (const b of unpaidBillRows as any[]) {
+      const v = roundMoney(parseFloat(manualAmounts[b.id] || '0') || 0)
+      if (v > b.due) return b.invoiceNo || b.id.slice(-6)
+    }
+    return null
+  })()
   const totalBillsDue = roundMoney(
     unpaidBillRows.reduce((s: number, b: any) => s + b.due, 0),
   )
@@ -251,6 +282,15 @@ export function PartyProfile() {
           type: paymentType,
           mode: paymentMode,
           notes: paymentNotes || undefined,
+          // 🔒 AUDIT C5 phase 4: send the explicit split ONLY when the
+          // shopkeeper chose it. Omitted, the server allocates oldest-first —
+          // so the ordinary flow is unchanged and there is exactly one place
+          // that decides, rather than the client silently duplicating the rule.
+          allocations: manualAllocation
+            ? Object.entries(manualAmounts)
+                .map(([transactionId, v]) => ({ transactionId, amount: roundMoney(parseFloat(v) || 0) }))
+                .filter(a => a.amount > 0)
+            : undefined,
         }),
         offline: { invalidate: ['/api/parties', '/api/dashboard'] },
       })
@@ -267,6 +307,11 @@ export function PartyProfile() {
       setPaymentDialogOpen(false)
       setPaymentAmount('')
       setPaymentNotes('')
+      // 🔒 AUDIT C5 phase 4: reset the manual split too. Leaving it set would
+      // carry one payment's bill choices into the next one — stale amounts
+      // pointed at bills that may now be settled.
+      setManualAllocation(false)
+      setManualAmounts({})
       haptic.success()
       // Refresh party profile data to show updated balance + new payment in
       // the unified statement (statementPayments is now part of this response).
@@ -1251,6 +1296,123 @@ export function PartyProfile() {
                 </p>
               )}
             </div>
+
+            {/*
+              🔒 AUDIT C5 phase 4 — show WHICH bills this money will clear,
+              before saving.
+
+              The shopkeeper types one amount, as always; the app says what it
+              is about to do. Requiring a bill to be chosen on every payment
+              would add friction to the most frequent action in the app, and
+              oldest-first is how a khata is settled anyway — so it stays the
+              default and the preview simply makes it visible.
+
+              "Choose bills myself" exists for the request oldest-first cannot
+              express: "clear the current bill, leave the old one pending".
+              Common when an older bill is disputed, or the newest needs closing
+              for a warranty. Without it the money silently lands on the oldest
+              bill — not what the customer asked for.
+            */}
+            {paymentType === 'received' && unpaidBillRows.length > 0 && parsedPaymentAmount > 0 && (
+              <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-2xs font-semibold">
+                    {manualAllocation ? 'Choose bills' : 'This will clear'}
+                  </p>
+                  <button
+                    type="button"
+                    className="text-2xs text-primary underline underline-offset-2"
+                    onClick={() => {
+                      // Seed the manual editor from the automatic plan, so the
+                      // shopkeeper adjusts a sensible starting point rather than
+                      // facing a grid of empty boxes.
+                      if (!manualAllocation) {
+                        const seed: Record<string, string> = {}
+                        for (const a of autoPlan.allocations) seed[a.transactionId] = String(a.amount)
+                        setManualAmounts(seed)
+                      }
+                      setManualAllocation(v => !v)
+                    }}
+                  >
+                    {manualAllocation ? 'Use oldest first' : 'Choose bills myself'}
+                  </button>
+                </div>
+
+                {!manualAllocation ? (
+                  <div className="space-y-1">
+                    {autoPlan.allocations.length === 0 ? (
+                      <p className="text-2xs text-muted-foreground">
+                        No open bills — the whole amount will be kept as an advance.
+                      </p>
+                    ) : (
+                      autoPlan.allocations.map(a => {
+                        const bill = unpaidBillRows.find((b: any) => b.id === a.transactionId)
+                        const clears = bill && a.amount >= bill.due
+                        return (
+                          <div key={a.transactionId} className="flex items-center justify-between gap-2 text-2xs">
+                            <span className="truncate">
+                              {bill?.invoiceNo || a.transactionId.slice(-6)}
+                              {clears && <span className="text-emerald-600"> · clears it</span>}
+                            </span>
+                            <span className="font-medium tabular-nums">{formatINR(a.amount)}</span>
+                          </div>
+                        )
+                      })
+                    )}
+                    {autoPlan.unallocated > 0 && (
+                      <p className="text-2xs text-muted-foreground pt-1 border-t border-border/50">
+                        {formatINR(autoPlan.unallocated)} kept as advance for future bills.
+                      </p>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-1.5">
+                    {unpaidBillRows.map((b: any) => (
+                      <div key={b.id} className="flex items-center justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-2xs truncate">{b.invoiceNo || b.id.slice(-6)}</p>
+                          <p className="text-3xs text-muted-foreground">due {formatINR(b.due)}</p>
+                        </div>
+                        <Input
+                          inputMode="decimal"
+                          type="number"
+                          value={manualAmounts[b.id] ?? ''}
+                          onChange={(e) => setManualAmounts(m => ({ ...m, [b.id]: e.target.value }))}
+                          placeholder="0"
+                          className="h-7 w-24 text-2xs"
+                        />
+                      </div>
+                    ))}
+                    <div
+                      className={cn(
+                        'flex items-center justify-between text-2xs pt-1 border-t border-border/50',
+                        manualTotal > parsedPaymentAmount ? 'text-rose-600' : 'text-muted-foreground',
+                      )}
+                    >
+                      <span>Allocated</span>
+                      <span className="font-medium tabular-nums">
+                        {formatINR(manualTotal)} of {formatINR(parsedPaymentAmount)}
+                      </span>
+                    </div>
+                    {manualTotal > parsedPaymentAmount && (
+                      <p className="text-2xs text-rose-600">
+                        You have allocated more than the amount received.
+                      </p>
+                    )}
+                    {manualOverBill && (
+                      <p className="text-2xs text-rose-600">
+                        {manualOverBill} is more than that bill still owes.
+                      </p>
+                    )}
+                    {manualTotal < parsedPaymentAmount && !manualOverBill && (
+                      <p className="text-2xs text-muted-foreground">
+                        {formatINR(parsedPaymentAmount - manualTotal)} will be kept as an advance.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
             <div>
               <Label htmlFor="field-payment-mode">Payment Mode</Label>
               <Select value={paymentMode} onValueChange={setPaymentMode}>
@@ -1275,7 +1437,21 @@ export function PartyProfile() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPaymentDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleSavePayment} disabled={savingPayment} className="bg-gradient-saffron gap-2">
+            {/*
+              🔒 AUDIT C5 phase 4: block saving an invalid manual split at the
+              button, not after a round-trip. The server rejects it either way —
+              that is the real boundary — but making the button unclickable
+              while the numbers are wrong is clearer than an error toast that
+              arrives once the shopkeeper thinks the payment is recorded.
+            */}
+            <Button
+              onClick={handleSavePayment}
+              disabled={
+                savingPayment ||
+                (manualAllocation && (manualTotal > parsedPaymentAmount || !!manualOverBill))
+              }
+              className="bg-gradient-saffron gap-2"
+            >
               {savingPayment ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
               {savingPayment ? 'Saving...' : 'Record Payment'}
             </Button>
