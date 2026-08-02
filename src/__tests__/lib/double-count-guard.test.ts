@@ -39,17 +39,43 @@ describe('Settle screen shows the risk before saving, not after', () => {
     expect(src).toMatch(/stats\?\.totalPaid/)
   })
 
-  test('the panel is rendered on the settle screen, gated on there being a risk', () => {
-    expect(src).toMatch(/\{alreadyPaidOnBills > 0 && \(/)
-    expect(src).toMatch(/Already recorded on this party/)
-    // It must state the outstanding figure too — the number the shopkeeper
-    // is deciding against.
-    expect(src).toMatch(/Outstanding right now/)
+  /*
+   * The standing amber panel was REMOVED on 2026-08-03, deliberately.
+   *
+   * It rendered whenever `alreadyPaidOnBills > 0` — that figure is the lifetime
+   * total received from the party, so for any real customer it is always above
+   * zero and the panel was always on. It was not a risk signal, it was
+   * furniture. Rahul read it as "you have to pay ₹25,456.51", which is not what
+   * it meant at all: a permanent warning is one people stop reading, and a
+   * MISREAD permanent warning is worse than none.
+   *
+   * The protection was not dropped, it was moved to the moments that actually
+   * carry risk, which the tests below pin down:
+   *   - the figure is still computed, and still named in the confirmation; and
+   *   - the inline warning fires when the amount EXCEEDS the outstanding, which
+   *     is the real signature of re-entering money already on a bill.
+   *
+   * If the panel is ever reinstated, gate it on genuine risk, not on history.
+   */
+  test('the double-count figure is still computed and still reaches the shopkeeper', () => {
+    expect(src).toMatch(/const alreadyPaidOnBills =/)
+    // Used at the point of decision rather than displayed unconditionally.
+    expect(src).toMatch(/alreadyPaidOnBills > 0/)
   })
 
   test('typing more than is outstanding warns inline as you type', () => {
     expect(src).toMatch(/const overpayAmount = Math\.max\(/)
     expect(src).toMatch(/\{overpayAmount > 0 && \(/)
+    // The warning must name both numbers being compared, or it is just a colour.
+    expect(src).toMatch(/more than the \{formatINR\(Math\.abs\(balance\)\)\} outstanding/)
+  })
+
+  test('the warning is legible — no micro-type on a money warning', () => {
+    // globals.css reserves text-2xs (11px) for micro labels and text-3xs (10px)
+    // for badges; body copy is text-xs minimum. A warning about money is not a
+    // micro label.
+    const warn = src.slice(src.indexOf('{overpayAmount > 0 && ('))
+    expect(warn.slice(0, 200)).not.toMatch(/text-(2xs|3xs)/)
   })
 })
 

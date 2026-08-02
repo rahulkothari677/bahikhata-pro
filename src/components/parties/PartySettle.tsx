@@ -241,214 +241,268 @@ export function PartySettle() {
 
   if (isLoading || !data) {
     return (
-      <div className="space-y-3">
+      <div className="p-3 lg:p-4 space-y-3 max-w-3xl mx-auto w-full">
         <Skeleton className="h-10 w-48" />
-        <Skeleton className="h-24 w-full" />
+        <Skeleton className="h-16 w-full" />
         <Skeleton className="h-64 w-full" />
       </div>
     )
   }
 
+  const owedLabel = balance > 0 ? 'They owe you' : balance < 0 ? 'You owe them' : 'Settled'
+
   return (
-    <div className="space-y-4 pb-28">
-      <div className="flex items-center gap-2">
-        <Button variant="ghost" size="sm" onClick={() => setView('party-profile')} className="gap-1">
-          <ArrowLeft className="w-4 h-4" /> Back
-        </Button>
-        <div className="min-w-0">
-          <h1 className="text-lg font-bold truncate flex items-center gap-2">
-            <HandCoins className="w-4 h-4 shrink-0 text-primary" /> Settle Payment
-          </h1>
-          <p className="text-xs text-muted-foreground truncate">{party?.name}</p>
+    /*
+      LAYOUT
+      ------
+      A flex column at least one viewport tall, with the action bar STICKY at
+      the bottom rather than `fixed`.
+
+      Sticky solves three things `fixed` did not:
+        - it cannot overlap MobileBottomNav, which is also `fixed bottom-0 z-40`
+          — same edge, same z-index, so on a phone the two fought each other;
+        - it needs no `md:pl-24` guess about the sidebar's width; and
+        - when the content is SHORT the `flex-1` body pushes the bar down to the
+          real bottom, so there is no dead strip under the last card.
+    */
+    <div className="flex flex-col min-h-[100dvh] w-full">
+      {/* This screen carries its own top bar, so page.tsx renders it with
+          header="never" — the same pattern Account and More use. The global
+          "Dashboard" header above a focused settle screen was just noise. */}
+      <div className="sticky top-0 z-20 shrink-0 border-b border-border bg-background/95 backdrop-blur">
+        <div className="max-w-3xl mx-auto w-full px-3 py-2.5 flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setView('party-profile')}
+            className="gap-1 -ml-2 shrink-0"
+          >
+            <ArrowLeft className="w-4 h-4" /> Back
+          </Button>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-base font-bold truncate flex items-center gap-2">
+              <HandCoins className="w-4 h-4 shrink-0 text-primary" /> Settle Payment
+            </h1>
+            <p className="text-xs text-muted-foreground truncate">{party?.name}</p>
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <Card className="shadow-card border-border/60">
-          <CardContent className="p-3">
-            <p className="text-2xs text-muted-foreground uppercase tracking-wide">Outstanding</p>
-            <p className="text-lg font-bold">{formatINR(Math.abs(balance))}</p>
-            <p className="text-2xs text-muted-foreground">
-              {balance > 0 ? 'They owe you' : balance < 0 ? 'You owe them' : 'Settled'}
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="shadow-card border-border/60">
-          <CardContent className="p-3">
-            <p className="text-2xs text-muted-foreground uppercase tracking-wide">Open bills</p>
-            <p className="text-lg font-bold text-rose-600">{formatINR(totalOpen)}</p>
-            <p className="text-2xs text-muted-foreground">
-              {openBills.length} {openBills.length === 1 ? 'bill' : 'bills'}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+      <div className="flex-1 w-full max-w-3xl mx-auto px-3 py-3 space-y-3">
+        {/*
+          ONE summary line, not two cards.
 
-      <Card className="shadow-card border-border/60">
-        <CardContent className="p-3 space-y-3">
-          <div>
-            <Label htmlFor="settle-type">Payment Type</Label>
-            <Select value={paymentType} onValueChange={(v) => setPaymentType(v as 'received' | 'paid')}>
-              <SelectTrigger id="settle-type" className="mt-1"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="received">Received from customer</SelectItem>
-                <SelectItem value="paid">Paid to supplier</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          {/* 🔒 DOUBLE-COUNT GUARD — the numbers on screen BEFORE saving, not a
-              toast afterwards. See the note on alreadyPaidOnBills above. */}
-          {alreadyPaidOnBills > 0 && (
-            <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/30 p-3 text-2xs space-y-1">
-              <p className="font-semibold text-amber-900 dark:text-amber-200">
-                Already recorded on this party&rsquo;s bills: {formatINR(alreadyPaidOnBills)}
-              </p>
-              <p className="text-amber-800 dark:text-amber-300">
-                Enter money received <strong>separately</strong> from the bills.
-                If that {formatINR(alreadyPaidOnBills)}{' '}
-                was already typed into a bill&rsquo;s &ldquo;Paid Amount&rdquo;,
-                do not enter it again here.
-              </p>
-              <p className="text-amber-800 dark:text-amber-300">
-                Outstanding right now: <strong>{formatINR(Math.abs(balance))}</strong>
-              </p>
+          The old screen showed "Outstanding" and "Open bills" side by side,
+          which for almost every party are the SAME number shown twice — they
+          only diverge when an advance or a credit note sits outside the open
+          bills. So lead with the outstanding figure, and mention the bills
+          total only on the occasions it actually differs.
+        */}
+        <Card className="shadow-card border-border/60">
+          <CardContent className="p-3 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <div className="flex items-baseline gap-2">
+              <span className="text-xl font-bold tabular-nums">{formatINR(Math.abs(balance))}</span>
+              <span className="text-sm text-muted-foreground">{owedLabel}</span>
             </div>
-          )}
-          <div>
-            <Label htmlFor="settle-amount">Amount received (₹)</Label>
-            <Input
-              id="settle-amount"
-              inputMode="decimal"
-              type="number"
-              value={amount}
-              onChange={(e) => { setAmount(e.target.value); setTouched(false) }}
-              placeholder="0"
-              className="mt-1 text-lg font-semibold"
-              autoFocus
-            />
-            {overpayAmount > 0 && (
-              <p className="text-2xs text-rose-600 dark:text-rose-400 mt-1">
-                This is {formatINR(overpayAmount)} more than the {formatINR(Math.abs(balance))} outstanding.
-                {alreadyPaidOnBills > 0 ? ' That usually means this amount is already recorded on a bill.' : ''}
-              </p>
-            )}
-            <p className="text-2xs text-muted-foreground mt-1">
-              Bills below fill automatically, oldest first. Change any of them if needed.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/*
-        The bills are ALWAYS listed — not revealed once an amount is typed.
-        A shopkeeper needs to see what is outstanding in order to decide the
-        amount; hiding the list until after that decision is backwards.
-        Each row shows its billing DATE, because with nine invoices numbered
-        alike the date is how a customer refers to one.
-      */}
-      {openBills.length > 0 && (
-        <Card className="shadow-card border-border/60">
-          <CardContent className="p-3 space-y-2">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-xs font-semibold">Apply to bills</p>
-              {touched && parsedAmount > 0 && (
-                <button
-                  type="button"
-                  className="text-2xs text-primary underline underline-offset-2 flex items-center gap-1"
-                  onClick={() => setTouched(false)}
-                >
-                  <Wand2 className="w-3 h-3" /> Auto-fill oldest first
-                </button>
+            <span className="text-sm text-muted-foreground">
+              {openBills.length} open {openBills.length === 1 ? 'bill' : 'bills'}
+              {roundMoney(Math.abs(totalOpen - Math.abs(balance))) > 0.005 && (
+                <> · {formatINR(totalOpen)} on bills</>
               )}
+            </span>
+          </CardContent>
+        </Card>
+
+        <Card className="shadow-card border-border/60">
+          <CardContent className="p-3 space-y-3">
+            {/* Type and Mode together, ABOVE the bills — both describe the money
+                being handed over, so deciding them after allocating it read
+                backwards. */}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <Label htmlFor="settle-type" className="text-sm">Payment Type</Label>
+                <Select value={paymentType} onValueChange={(v) => setPaymentType(v as 'received' | 'paid')}>
+                  <SelectTrigger id="settle-type" className="mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="received">Received from customer</SelectItem>
+                    <SelectItem value="paid">Paid to supplier</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="settle-mode" className="text-sm">Payment Mode</Label>
+                <Select value={mode} onValueChange={setMode}>
+                  <SelectTrigger id="settle-mode" className="mt-1"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="upi">UPI</SelectItem>
+                    <SelectItem value="card">Card</SelectItem>
+                    <SelectItem value="bank">Bank Transfer</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
-            {/* Scrolls independently, so the total and the Record button below
-                stay reachable no matter how many bills there are — the exact
-                failure that made the dialog unusable. */}
-            <div className="max-h-[45vh] overflow-y-auto -mx-1 px-1 space-y-1.5">
-              {openBills.map((b: any) => {
-                const v = roundMoney(parseFloat(alloc[b.id] || '0') || 0)
-                const isOver = v > b.due
-                return (
-                  <div key={b.id} className="flex items-center justify-between gap-2 py-1">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span className="text-xs font-medium truncate">
-                          {b.invoiceNo || b.id.slice(-6)}
-                        </span>
-                        {v > 0 && v >= b.due && (
-                          <Badge variant="outline" className="text-3xs px-1 py-0 text-emerald-600 border-emerald-300">
-                            clears
-                          </Badge>
-                        )}
+            <div>
+              <Label htmlFor="settle-amount" className="text-sm">
+                {paymentType === 'received' ? 'Amount received (₹)' : 'Amount paid (₹)'}
+              </Label>
+              {/* An amount is a short value; a full-width box just made it hard
+                  to see what had been typed. */}
+              <Input
+                id="settle-amount"
+                inputMode="decimal"
+                type="number"
+                value={amount}
+                onChange={(e) => { setAmount(e.target.value); setTouched(false) }}
+                placeholder="0"
+                className="mt-1 max-w-[16rem] text-lg font-semibold tabular-nums"
+                autoFocus
+              />
+              {/* 🔒 DOUBLE-COUNT GUARD, at the moment of risk.
+                  This fires only when the amount EXCEEDS what is outstanding —
+                  the actual signature of re-entering money already typed into a
+                  bill's "Paid Amount". The screen used to carry a standing amber
+                  panel instead, which showed on every visit for every party with
+                  any payment history, i.e. always. A warning that is always on
+                  is furniture, and it was misread as "you have to pay this". */}
+              {overpayAmount > 0 && (
+                <p className="text-sm text-rose-600 dark:text-rose-400 mt-1.5">
+                  This is {formatINR(overpayAmount)} more than the {formatINR(Math.abs(balance))} outstanding.
+                  {alreadyPaidOnBills > 0
+                    ? ' That usually means it is already recorded on a bill.'
+                    : ''}
+                </p>
+              )}
+              <p className="text-xs text-muted-foreground mt-1.5">
+                Bills below fill automatically, oldest first. Change any of them if needed.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/*
+          The bills are ALWAYS listed — not revealed once an amount is typed.
+          A shopkeeper needs to see what is outstanding in order to decide the
+          amount; hiding the list until after that decision is backwards.
+          Each row shows its billing DATE, because with nine invoices numbered
+          alike the date is how a customer refers to one.
+        */}
+        {openBills.length > 0 && (
+          <Card className="shadow-card border-border/60">
+            <CardContent className="p-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-sm font-semibold">Apply to bills</p>
+                {touched && parsedAmount > 0 && (
+                  <button
+                    type="button"
+                    className="text-xs text-primary underline underline-offset-2 flex items-center gap-1"
+                    onClick={() => setTouched(false)}
+                  >
+                    <Wand2 className="w-3.5 h-3.5" /> Auto-fill oldest first
+                  </button>
+                )}
+              </div>
+
+              {/*
+                Capped ONLY once the list is long enough to push the running
+                total out of sight. Below that there is no cap, so a party with
+                two bills does not get a tall empty box — the complaint that the
+                old fixed 45vh window created.
+              */}
+              <div
+                className={cn(
+                  '-mx-1 px-1 divide-y divide-border/70',
+                  openBills.length > 6 && 'max-h-[42vh] overflow-y-auto',
+                )}
+              >
+                {openBills.map((b: any) => {
+                  const v = roundMoney(parseFloat(alloc[b.id] || '0') || 0)
+                  const isOver = v > b.due
+                  return (
+                    /* Three columns, so the due sits NEXT TO the box you type
+                       into instead of being separated from it by a wide empty
+                       gap on a desktop screen. */
+                    <div
+                      key={b.id}
+                      className="grid grid-cols-[minmax(0,1fr)_auto] sm:grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 gap-y-1 py-2"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-sm font-medium truncate">
+                            {b.invoiceNo || b.id.slice(-6)}
+                          </span>
+                          {v > 0 && v >= b.due && (
+                            <Badge
+                              variant="outline"
+                              className="text-2xs px-1.5 py-0 text-emerald-600 border-emerald-300"
+                            >
+                              clears
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                          {formatDate(b.date)}
+                          <span className="sm:hidden"> · due {formatINR(b.due)}</span>
+                        </p>
                       </div>
-                      <p className="text-2xs text-muted-foreground">
-                        {formatDate(b.date)} · due {formatINR(b.due)}
+                      <p className="hidden sm:block text-sm text-muted-foreground tabular-nums whitespace-nowrap">
+                        due {formatINR(b.due)}
                       </p>
+                      <Input
+                        inputMode="decimal"
+                        type="number"
+                        value={alloc[b.id] ?? ''}
+                        onChange={(e) => {
+                          setTouched(true)
+                          setAlloc(m => ({ ...m, [b.id]: e.target.value }))
+                        }}
+                        placeholder="0"
+                        aria-label={`Amount to apply to ${b.invoiceNo || 'this bill'}`}
+                        className={cn(
+                          'h-9 w-28 text-sm text-right tabular-nums shrink-0',
+                          isOver && 'border-rose-500 text-rose-600',
+                        )}
+                      />
                     </div>
-                    <Input
-                      inputMode="decimal"
-                      type="number"
-                      value={alloc[b.id] ?? ''}
-                      onChange={(e) => {
-                        setTouched(true)
-                        setAlloc(m => ({ ...m, [b.id]: e.target.value }))
-                      }}
-                      placeholder="0"
-                      className={cn('h-8 w-28 text-xs shrink-0', isOver && 'border-rose-500 text-rose-600')}
-                    />
-                  </div>
-                )
-              })}
-            </div>
+                  )
+                })}
+              </div>
 
-            <div
-              className={cn(
-                'flex items-center justify-between text-xs pt-2 border-t border-border',
-                overAllocated ? 'text-rose-600' : 'text-muted-foreground',
+              <div
+                className={cn(
+                  'flex items-center justify-between text-sm pt-2 border-t border-border',
+                  overAllocated ? 'text-rose-600' : 'text-muted-foreground',
+                )}
+              >
+                <span>Applied to bills</span>
+                <span className="font-semibold tabular-nums">
+                  {formatINR(allocatedTotal)} of {formatINR(parsedAmount)}
+                </span>
+              </div>
+
+              {overBill && (
+                <p className="text-sm text-rose-600">
+                  {overBill} is more than that bill still owes.
+                </p>
               )}
-            >
-              <span>Applied to bills</span>
-              <span className="font-semibold tabular-nums">
-                {formatINR(allocatedTotal)} of {formatINR(parsedAmount)}
-              </span>
-            </div>
+              {overAllocated && (
+                <p className="text-sm text-rose-600">
+                  You have applied more than the amount received.
+                </p>
+              )}
+              {!overAllocated && !overBill && parsedAmount > allocatedTotal && (
+                <p className="text-xs text-muted-foreground">
+                  {formatINR(parsedAmount - allocatedTotal)} will be kept as an advance.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
-            {overBill && (
-              <p className="text-2xs text-rose-600">
-                {overBill} is more than that bill still owes.
-              </p>
-            )}
-            {overAllocated && (
-              <p className="text-2xs text-rose-600">
-                You have applied more than the amount received.
-              </p>
-            )}
-            {!overAllocated && !overBill && parsedAmount > allocatedTotal && (
-              <p className="text-2xs text-muted-foreground">
-                {formatINR(parsedAmount - allocatedTotal)} will be kept as an advance.
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      <Card className="shadow-card border-border/60">
-        <CardContent className="p-3 space-y-3">
-          <div>
-            <Label htmlFor="settle-mode">Payment Mode</Label>
-            <Select value={mode} onValueChange={setMode}>
-              <SelectTrigger id="settle-mode" className="mt-1"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="cash">Cash</SelectItem>
-                <SelectItem value="upi">UPI</SelectItem>
-                <SelectItem value="card">Card</SelectItem>
-                <SelectItem value="bank">Bank Transfer</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label htmlFor="settle-notes">Notes (optional)</Label>
+        <Card className="shadow-card border-border/60">
+          <CardContent className="p-3">
+            <Label htmlFor="settle-notes" className="text-sm">Notes (optional)</Label>
             <Input
               id="settle-notes"
               value={notes}
@@ -456,12 +510,11 @@ export function PartySettle() {
               placeholder="e.g. Part payment for July"
               className="mt-1"
             />
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
 
-      {/* Pinned so it is reachable regardless of list length. */}
-      <div className="fixed bottom-0 left-0 right-0 border-t border-border bg-background/95 backdrop-blur p-3 z-40 md:pl-24">
+      <div className="sticky bottom-0 z-20 shrink-0 border-t border-border bg-background/95 backdrop-blur p-3">
         <div className="max-w-3xl mx-auto flex items-center gap-2">
           <Button variant="outline" onClick={() => setView('party-profile')} className="flex-1">
             Cancel
@@ -472,7 +525,7 @@ export function PartySettle() {
           </Button>
         </div>
       </div>
-    {confirmDialogEl}
+      {confirmDialogEl}
     </div>
   )
 }

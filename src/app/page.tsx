@@ -447,6 +447,23 @@ export default function Home() {
     )
   }
 
+  // Settle Payment — a focused, one-job screen with its own top bar and its own
+  // Cancel / Record bar, so it follows the Account and More pattern.
+  //
+  // header="never":       the global "Dashboard" bar above a settle screen was
+  //                       noise, and it cost vertical space the bill list needs.
+  // mobileBottomNav=false: MobileBottomNav is `fixed bottom-0 z-40` and this
+  //                       screen's action bar sits at the same edge — on a phone
+  //                       the two overlapped. A shopkeeper mid-payment leaves
+  //                       via Back or Cancel, both of which are on screen.
+  if (currentView === 'party-settle') {
+    return (
+      <AppShell {...shellProps} sidebar="desktop-only" header="never" mobileBottomNav={false}>
+        <PartySettle />
+      </AppShell>
+    )
+  }
+
   return (
     <>
       {showSplash && <SplashScreen
@@ -511,7 +528,7 @@ export default function Home() {
             {currentView === 'transaction-detail' && <TransactionDetail />}
             {currentView === 'party-profile' && <PartyProfile />}
             {currentView === 'party-bills' && <PartyBills />}
-            {currentView === 'party-settle' && <PartySettle />}
+            {/* 'party-settle' returns earlier, full-screen — see above. */}
             {currentView === 'new-sale' && <TransactionEntry type="sale" />}
             {currentView === 'new-purchase' && <TransactionEntry type="purchase" />}
             {/* 🔒 Feature Phase 3: Estimates/Quotations — reuses TransactionEntry
