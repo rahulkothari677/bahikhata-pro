@@ -4,6 +4,7 @@ import { getAuthContextForWrite } from '@/lib/get-auth'
 import { roundMoney } from '@/lib/money'
 import { apiError } from '@/lib/api-error'
 import { computePartyBalance } from '@/lib/party-balance'
+import { computeInvoiceDue } from '@/lib/invoice-due'
 import { generateUpiLink } from '@/lib/upi-link'
 
 // POST /api/whatsapp-reminder - generate WhatsApp reminder link for outstanding dues
@@ -35,6 +36,14 @@ export async function POST(req: NextRequest) {
           // credit note listed → the per-invoice sum > actual balance.
           where: { type: { in: ['sale', 'credit-note'] }, deletedAt: null },
           orderBy: { date: 'desc' },
+          // 🔒 AUDIT C5: payments settled against each bill. Without this the
+          // per-invoice breakdown uses `total − paidAmount`, which ignores
+          // every Settle payment — so the message would demand the ORIGINAL
+          // amount for a bill the customer has already partly paid. The
+          // headline total is correct (computePartyBalance includes payments),
+          // which makes it worse, not better: the listed invoices would not
+          // add up to the total the same message is asking for.
+          include: { paymentAllocations: { select: { amount: true } } },
         },
       },
     })
@@ -60,8 +69,21 @@ export async function POST(req: NextRequest) {
     // credit notes (which reduce the balance). Was: filtered all to
     // `totalAmount - paidAmount > 0` which excluded credit notes entirely.
     // Now: sales with outstanding are "invoices", credit notes are "credits".
+    // 🔒 AUDIT C5: a bill's due counts payments allocated to it, not just what
+    // was paid at billing. Without this a bill settled through "Settle" still
+    // looked unpaid here, and the customer received a reminder for money they
+    // had already handed over.
+    const dueOf = (t: any) =>
+      computeInvoiceDue({
+        totalAmount: t.totalAmount,
+        paidAmount: t.paidAmount,
+        allocatedAmount: (t.paymentAllocations || []).reduce(
+          (s: number, a: any) => s + (a.amount || 0), 0,
+        ),
+      })
+
     const unpaidSales = party.transactions
-      .filter(t => t.type === 'sale' && (t.totalAmount - t.paidAmount) > 0.01)
+      .filter(t => t.type === 'sale' && dueOf(t) > 0.01)
       .sort((a, b) => a.date.getTime() - b.date.getTime())
     const creditNotes = party.transactions
       .filter(t => t.type === 'credit-note')
@@ -109,7 +131,7 @@ export async function POST(req: NextRequest) {
       lines.push('')
       lines.push('Unpaid invoices:')
       unpaidSales.slice(0, 5).forEach((t, i) => {
-        const due = t.totalAmount - t.paidAmount
+        const due = dueOf(t)  // 🔒 AUDIT C5: net of allocated payments
         lines.push(`${i + 1}. ${t.invoiceNo || 'Bill'} - Rs. ${due.toFixed(2)}`)
       })
       if (unpaidSales.length > 5) {

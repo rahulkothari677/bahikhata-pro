@@ -6,6 +6,7 @@ import { shouldHideProfit } from '@/lib/profit-visibility'
 import { roundMoney, fromPaise } from '@/lib/money'
 import { activeTransactionWhere } from '@/lib/query-helpers'
 import { getReceivablePayable } from '@/lib/party-balance'
+import { computeInvoiceDue } from '@/lib/invoice-due'
 import { apiError } from '@/lib/api-error'
 
 // ⏱️ Vercel serverless timeout — insights aggregates dashboard data and
@@ -159,6 +160,8 @@ export async function GET() {
         }),
         orderBy: { date: 'desc' },
         take: 5000,  // 🔒 FIX M16: defensive cap — prevents OOM at scale
+        // 🔒 AUDIT C5: allocations, so a Settle-cleared bill is not reported overdue.
+        include: { paymentAllocations: { select: { amount: true } } },
       }),
       // 🔒 V7 H1+H2: Use shared helper for receivable/payable (correct balances)
       getReceivablePayable(userId),
@@ -239,8 +242,18 @@ export async function GET() {
         // unpaid sale is older than 60 days, daysOverdue will be 0. Acceptable
         // for an insights widget; the party detail page has the exact date.
         const partySales = recentTransactions.filter(t => t.partyId === partyId)
+        // 🔒 AUDIT C5: a bill settled through "Settle" is paid, even though its
+        // paidAmount is still 0. Filtering on `total − paidAmount` would treat
+        // it as unpaid and report an overdue age for a bill the customer has
+        // already cleared — the app chasing money it has been given.
         const unpaidSales = partySales
-          .filter(t => t.totalAmount - t.paidAmount > 0)
+          .filter(t => computeInvoiceDue({
+            totalAmount: t.totalAmount,
+            paidAmount: t.paidAmount,
+            allocatedAmount: (t as any).paymentAllocations?.reduce(
+              (s: number, a: any) => s + (a.amount || 0), 0,
+            ) || 0,
+          }) > 0)
           .sort((a, b) => a.date.getTime() - b.date.getTime())
         const oldest = unpaidSales[0]
         const daysOverdue = oldest ? Math.floor((now.getTime() - oldest.date.getTime()) / 86400000) : 0

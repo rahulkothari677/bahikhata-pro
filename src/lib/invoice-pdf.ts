@@ -18,6 +18,9 @@
 import { registerUnicodeFont, THEME, formatPDFMoney } from './pdf/theme'
 import { drawFooter, drawUPIQRBlock, newPageIfNeeded } from './pdf/primitives'
 import { amountToWords } from './amount-to-words'
+// 🔒 AUDIT C5: shared due rule — the printed invoice must agree with the ledger.
+import { computeInvoiceDue } from './invoice-due'
+import { roundMoney } from './money'
 
 interface InvoiceItem {
   productName: string
@@ -78,8 +81,22 @@ export async function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting)
 
   const { margin, pageWidth, pageHeight, brand, brandLight, text, textMuted, border, zebra, cardBg, white, paid, partial, due } = THEME
   const dateStr = formatDate(txn.date)
-  const dueAmount = txn.totalAmount - txn.paidAmount
-  const status: 'paid' | 'partial' | 'due' = dueAmount <= 0 ? 'paid' : txn.paidAmount > 0 ? 'partial' : 'due'
+  // 🔒 AUDIT C5: the printed invoice must show what is ACTUALLY still owed.
+  // `total − paidAmount` ignores payments settled against this bill afterwards,
+  // so a customer handed a PDF for a bill they had part-paid would see the
+  // original amount — and the PAID/PARTIAL/DUE stamp would contradict the
+  // shop's own ledger.
+  //
+  // `allocatedAmount` is supplied by callers that fetch it; falling back to 0
+  // keeps every existing caller producing byte-identical output.
+  const allocatedAmount = (txn as any).allocatedAmount || 0
+  const dueAmount = computeInvoiceDue({
+    totalAmount: txn.totalAmount,
+    paidAmount: txn.paidAmount,
+    allocatedAmount,
+  })
+  const totalPaidOnBill = roundMoney((txn.paidAmount || 0) + allocatedAmount)
+  const status: 'paid' | 'partial' | 'due' = dueAmount <= 0 ? 'paid' : totalPaidOnBill > 0 ? 'partial' : 'due'
   const statusLabels = { paid: 'PAID', partial: 'PARTIAL', due: 'DUE' }
   const statusColors = { paid, partial, due }
   const hasPartyGstin = !!(txn.party?.gstin && txn.party.gstin.trim())

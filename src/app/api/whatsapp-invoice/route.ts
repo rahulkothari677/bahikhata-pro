@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { getAuthContextForWrite } from '@/lib/get-auth'
 import { roundMoney } from '@/lib/money'
 import { apiError } from '@/lib/api-error'
+import { computeInvoiceDue } from '@/lib/invoice-due'
 
 // POST /api/whatsapp-invoice - generate WhatsApp share link for an invoice
 export async function POST(req: NextRequest) {
@@ -18,7 +19,7 @@ export async function POST(req: NextRequest) {
     // Verify transaction belongs to this user + not soft-deleted (🔒 V7 L2)
     const transaction = await db.transaction.findFirst({
       where: { id: transactionId, userId, deletedAt: null },
-      include: { items: true, party: true },
+      include: { items: true, party: true, paymentAllocations: { select: { amount: true } } },
     })
 
     if (!transaction) {
@@ -58,10 +59,25 @@ export async function POST(req: NextRequest) {
     if (transaction.sgst > 0) lines.push(`SGST: ₹${transaction.sgst.toFixed(2)}`)
     if (transaction.igst > 0) lines.push(`IGST: ₹${transaction.igst.toFixed(2)}`)
     lines.push(`*Total: ₹${transaction.totalAmount.toFixed(2)}*`)
-    lines.push(`Paid: ₹${transaction.paidAmount.toFixed(2)}`)
+    // 🔒 AUDIT C5: report the FULL amount paid against this bill — what was
+    // paid at billing plus anything settled afterwards. Sending a customer a
+    // copy of their invoice showing only the counter payment, and a balance
+    // that ignores what they later handed over, is the same stale figure the
+    // bill screen used to show.
+    const allocatedOnBill = roundMoney(
+      ((transaction as any).paymentAllocations || []).reduce(
+        (s: number, a: any) => s + (a.amount || 0), 0,
+      ),
+    )
+    const paidOnBill = roundMoney((transaction.paidAmount || 0) + allocatedOnBill)
+    lines.push(`Paid: ₹${paidOnBill.toFixed(2)}`)
 
     // 💰 MONEY (Audit fix Phase 8): roundMoney on the due calculation
-    const due = roundMoney(transaction.totalAmount - transaction.paidAmount)
+    const due = computeInvoiceDue({
+      totalAmount: transaction.totalAmount,
+      paidAmount: transaction.paidAmount,
+      allocatedAmount: allocatedOnBill,
+    })
     if (due > 0) {
       lines.push(`*Balance Due: ₹${due.toFixed(2)}*`)
     }
