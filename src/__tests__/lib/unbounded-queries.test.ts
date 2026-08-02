@@ -68,8 +68,9 @@ const ACCEPTED: Record<string, string> = {
   // — Known open findings, tracked in docs/audit/04-scale-sweep.md ————————
   // Listed so the suite is green while the work is scheduled. Each MUST be
   // removed from this list when fixed — that is the point of naming them.
-  'app/api/dashboard/route.ts:product': 'N3 — OPEN. Tracked in docs/audit/04-scale-sweep.md.',
-  'app/api/dashboard/route.ts:party': 'N3 — OPEN. Tracked in docs/audit/04-scale-sweep.md.',
+  // N3 (dashboard) is FIXED — its entries were removed from this list by the
+  // stale-entry check the moment the aggregates landed. That is the intended
+  // lifecycle: an entry here is a debt, and paying it off deletes the line.
   'app/api/insights/route.ts:product': 'N4 — OPEN. Tracked in docs/audit/04-scale-sweep.md.',
   'app/api/analytics/route.ts:product': 'N4 — OPEN. Tracked in docs/audit/04-scale-sweep.md.',
   'app/api/reports/route.ts:product': 'N4 — OPEN. Tracked in docs/audit/04-scale-sweep.md.',

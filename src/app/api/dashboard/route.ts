@@ -111,7 +111,41 @@ export async function GET(req: NextRequest) {
     // 🔒 V8.1: Wrapped in withConnectionRetry — if the DB is cold (Neon
     // scale-to-zero), the first query may timeout. Retrying after 2s gives
     // Neon time to wake up.
-    const [recentTransactions, allProducts, allParties, setting] = await withConnectionRetry(() =>
+    // ═══════════════════════════════════════════════════════════════════════
+    // 🔒 AUDIT PASS-1 N3: the dashboard no longer loads every product and
+    // every party. It asks the database for the four numbers it actually uses.
+    //
+    // WAS:
+    //   db.product.findMany({ where: { userId } })   // ALL products, 8 fields
+    //   db.party.findMany({ where: { userId, ... } }) // ALL parties
+    // on the most-opened screen in the app. A distributor with 20,000 products
+    // shipped 20,000 rows per dashboard load.
+    //
+    // The party scan was the starker one: every party was fetched purely to
+    // call `.length` on it. Nothing else in this handler ever read a row from
+    // it — a COUNT was always the right query. (Its `openingBalance` is
+    // separately aggregated inside getReceivablePayable, which this same
+    // handler already calls.)
+    //
+    // Products were used for exactly four things:
+    //   1. productCount        -> COUNT(*)
+    //   2. totalStockValue     -> SUM in SQL
+    //   3. lowStockCount       -> COUNT(*) FILTER
+    //   4. lowStockProducts    -> a display list, now LIMITed
+    //   (a fifth use, the purchase-price lookup for top products, is a bounded
+    //    id-set fetch further down)
+    //
+    // The low-stock LIST is capped while the low-stock COUNT stays exact, so
+    // the "N products need restocking" headline remains truthful even when the
+    // list below it is truncated. Reporting a count derived from a truncated
+    // list would be worse than the original bug.
+    //
+    // NOTE ON UNITS: $queryRaw bypasses the money extension, so purchasePrice
+    // and salePrice come back as raw PAISE and are converted explicitly below.
+    // ═══════════════════════════════════════════════════════════════════════
+    const LOW_STOCK_LIMIT = 50
+
+    const [recentTransactions, productStatRows, lowStockRows, partyCount, setting] = await withConnectionRetry(() =>
       Promise.all([
         db.transaction.findMany({
           where: activeTransactionWhere(userId),
@@ -119,24 +153,55 @@ export async function GET(req: NextRequest) {
           orderBy: { date: 'desc' },
           take: 8,
         }),
-        db.product.findMany({
-          where: { userId },
-          select: {
-            id: true, name: true, category: true,
-            purchasePrice: true, salePrice: true,
-            currentStock: true, lowStockThreshold: true,
-            // 🔒 V21-001 FIX: Was missing 'unit' — SmartInsights rendered
-            // "Stock: -70 undefined" because p.unit was undefined.
-            unit: true,
-          },
-        }),
-        db.party.findMany({
-          where: { userId, deletedAt: null },
-          select: { id: true, openingBalance: true },
-        }),
+        // One row: product count, low-stock count, and total stock value.
+        // ROUND per product before SUM mirrors the previous JS exactly
+        // (roundMoney per product, then summed). GREATEST(...,0) preserves the
+        // V11 clamp: oversold stock contributes 0, never a negative value.
+        db.$queryRaw<Array<{
+          productCount: bigint
+          lowStockCount: bigint
+          stockValuePaise: string
+        }>>`
+          SELECT
+            COUNT(*)::bigint AS "productCount",
+            COUNT(*) FILTER (WHERE "currentStock" <= "lowStockThreshold")::bigint AS "lowStockCount",
+            COALESCE(
+              SUM(ROUND(GREATEST("currentStock", 0)::numeric * "purchasePrice"::numeric)),
+              0
+            )::numeric AS "stockValuePaise"
+          FROM "Product"
+          WHERE "userId" = ${userId}
+        `,
+        // The display list only — capped. Same ordering as the old JS sort
+        // (most-depleted first).
+        db.$queryRaw<Array<{
+          id: string
+          name: string
+          category: string | null
+          purchasePrice: number
+          salePrice: number
+          currentStock: number
+          lowStockThreshold: number
+          unit: string | null
+        }>>`
+          SELECT
+            "id", "name", "category",
+            "purchasePrice", "salePrice",
+            "currentStock", "lowStockThreshold",
+            "unit"
+          FROM "Product"
+          WHERE "userId" = ${userId}
+            AND "currentStock" <= "lowStockThreshold"
+          ORDER BY "currentStock" ASC
+          LIMIT ${LOW_STOCK_LIMIT}
+        `,
+        db.party.count({ where: { userId, deletedAt: null } }),
         db.setting.findUnique({ where: { userId } }),
       ])
     )
+
+    const productCount = Number(productStatRows[0]?.productCount ?? 0)
+    const lowStockCount = Number(productStatRows[0]?.lowStockCount ?? 0)
 
     // === BATCH 2: ALL remaining queries in ONE Promise.all (DB is warm) ===
     // 🔒 V8.1: Also wrapped in withConnectionRetry for safety.
@@ -483,9 +548,25 @@ export async function GET(req: NextRequest) {
 
     // Top products
     // 🔒 V17 PAISE MIGRATION Phase 2F-a: SQL returns paise; convert to rupees via fromPaise().
+    // 🔒 AUDIT PASS-1 N3: bounded id-set lookup instead of scanning an
+    // in-memory copy of every product. topProductsRows is LIMIT 5, so this
+    // fetches at most 5 rows regardless of catalogue size. Goes through Prisma
+    // (not raw SQL) so purchasePrice arrives in rupees via the money extension,
+    // exactly as the previous `allProducts` lookup did.
+    const topProductIds = topProductsRows
+      .map(r => r.productId)
+      .filter((id): id is string => !!id)
+    const topProductPriceById = new Map<string, number>()
+    if (topProductIds.length > 0) {
+      const rows = await db.product.findMany({
+        where: { id: { in: topProductIds }, userId },
+        select: { id: true, purchasePrice: true },
+      })
+      for (const r of rows) topProductPriceById.set(r.id, r.purchasePrice)
+    }
+
     const topProducts = topProductsRows.map(row => {
-      const product = row.productId ? allProducts.find(p => p.id === row.productId) : null
-      const purchasePrice = product?.purchasePrice || 0
+      const purchasePrice = (row.productId ? topProductPriceById.get(row.productId) : 0) || 0
       const quantity = Number(row.totalQuantity)
       const revenue = fromPaise(Number(row.totalRevenuePaise))
       const avgUnitPrice = quantity > 0 ? revenue / quantity : 0
@@ -506,18 +587,22 @@ export async function GET(req: NextRequest) {
     }))
 
     // === Inventory stats (not range-dependent) — read currentStock column directly (V3 N2) ===
-    const lowStockProducts = allProducts
-      .filter(p => p.currentStock <= p.lowStockThreshold)
-      .sort((a, b) => a.currentStock - b.currentStock)
+    // 🔒 N3: filtered, sorted and capped by Postgres (see BATCH 1). $queryRaw
+    // skips the money extension, so paise -> rupees is done here explicitly.
+    const lowStockProducts = lowStockRows.map(p => ({
+      ...p,
+      purchasePrice: fromPaise(Number(p.purchasePrice)),
+      salePrice: fromPaise(Number(p.salePrice)),
+    }))
 
     // 🔒 V11: Clamp each product's stock value at 0 before summing. Was:
     // `p.currentStock * p.purchasePrice` which went negative when stock was
     // oversold, making the dashboard "Stock Value" KPI go negative. Now:
     // oversold products contribute 0 to the total (their value is already
     // realized through sales, not sitting in inventory).
-    const totalStockValue = roundMoney(
-      allProducts.reduce((s, p) => s + roundMoney(Math.max(0, p.currentStock) * p.purchasePrice), 0)
-    )
+    // 🔒 N3: the clamp now lives in SQL as GREATEST("currentStock", 0), and the
+    // per-product ROUND before SUM reproduces the old per-product roundMoney.
+    const totalStockValue = roundMoney(fromPaise(Number(productStatRows[0]?.stockValuePaise ?? 0)))
 
     // === Recent transactions (not range-dependent, always latest) ===
     const recentTransactionsData = recentTransactions.map(t => ({
@@ -562,8 +647,8 @@ export async function GET(req: NextRequest) {
         totalReceivable,
         totalPayable,
         totalStockValue,
-        productCount: allProducts.length,
-        partyCount: allParties.length,
+        productCount,
+        partyCount,
         rangeTxnCount,
         prevRangeRevenue,
         prevRangeProfit,
@@ -575,7 +660,14 @@ export async function GET(req: NextRequest) {
       categoryBreakdown,
       paymentModeSplit,
       lowStockProducts,
-      lowStockCount: lowStockProducts.length,  // 🐛 UI/UX Phase 3 Fix 2: Was missing — BusinessHealthScore used kpis.lowStockCount (always undefined → Stock Health always 100/100)
+      // 🔒 AUDIT PASS-1 N3: the COUNT comes from SQL, NOT from
+      // lowStockProducts.length. The list is capped at LOW_STOCK_LIMIT for
+      // display; deriving the count from a truncated list would silently
+      // under-report how many products need restocking — and BusinessHealthScore
+      // reads this figure to compute Stock Health, so a truncated count would
+      // quietly inflate the health score exactly when stock is worst.
+      lowStockCount,
+      lowStockListTruncated: lowStockCount > lowStockProducts.length,
       gstSummary: {
         cgst: rangeCGST,
         sgst: rangeSGST,
