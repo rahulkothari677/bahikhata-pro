@@ -645,6 +645,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         // the TOTAL, which is more correct than the old per-line check.
         const results = await Promise.all(
           [...applyByProduct.entries()].map(async ([productId, entry]) => ({
+            id: productId,
             name: entry.name,
             qty: entry.qty,
             count: (await tx.product.updateMany({
@@ -655,10 +656,17 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         )
         const blocked = results.find(r => r.count === 0)
         if (blocked) {
+          // 🔒 Read remaining stock HERE, inside the tx, where it is the value
+          // that actually caused the block (and where userId is in scope).
+          const current = await tx.product.findFirst({
+            where: { id: blocked.id, userId },
+            select: { currentStock: true },
+          })
           const err: any = new Error('STOCK_BLOCK')
           err.code = 'STOCK_BLOCK'
           err.productName = blocked.name
           err.requestedQty = blocked.qty
+          err.availableStock = current?.currentStock ?? null
           throw err
         }
       } else if (shouldAffectStock) {
@@ -712,9 +720,22 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   } catch (error: any) {
     // 🔒 FIX H1: Catch the STOCK_BLOCK error from inside the $transaction.
     if (error?.code === 'STOCK_BLOCK') {
+      // 🔒 AUDIT PASS-1 M1 (follow-up): report what is LEFT, not what was asked
+      // for. Same reasoning as the POST handler — "try again" is not actionable
+      // when the retry fails identically, and the old message quoted
+      // requestedQty as if it were the remaining stock.
+      // Captured at the throw site, inside the transaction — the number that
+      // actually caused the block.
+      const available: number | null = error.availableStock ?? null
+      const stockLine = available !== null
+        ? `${error.productName} has only ${available} left, but this bill needs ${error.requestedQty}.`
+        : `${error.productName} does not have enough stock for the ${error.requestedQty} on this bill.`
       return NextResponse.json({
         error: 'Not enough stock',
-        message: `Another sale just took the last ${error.requestedQty} units of ${error.productName}. Please try again or record a purchase first.`,
+        message: `${stockLine} Someone may have sold it while you were editing. Reduce the quantity, or record the purchase that brought this stock in.`,
+        productName: error.productName,
+        availableStock: available,
+        requestedQuantity: error.requestedQty,
         hint: 'To allow overselling, go to Settings and turn on "Allow overselling (kirana mode)".',
       }, { status: 400 })
     }

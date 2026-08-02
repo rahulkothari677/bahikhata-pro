@@ -681,10 +681,19 @@ export async function POST(req: NextRequest) {
             data: { currentStock: { decrement: qty } },
           })
           if (result.count === 0) {
+            // 🔒 Read the remaining stock HERE, inside the transaction, where
+            // it is the value that actually caused the block. Doing it in the
+            // outer catch would read a later, possibly different number — and
+            // would need `userId`, which is not in scope there.
+            const current = await tx.product.findFirst({
+              where: { id: item.productId, userId },
+              select: { currentStock: true },
+            })
             const err: any = new Error('STOCK_BLOCK')
             err.code = 'STOCK_BLOCK'
             err.productName = item.productName
             err.requestedQty = qty
+            err.availableStock = current?.currentStock ?? null
             throw err
           }
         }
@@ -798,9 +807,28 @@ export async function POST(req: NextRequest) {
       // This happens when a concurrent sale took the stock between our pre-check
       // and the actual decrement. The $transaction has already rolled back.
       if (err?.code === 'STOCK_BLOCK') {
+        // 🔒 AUDIT PASS-1 M1 (follow-up, user-reported): report what is LEFT.
+        //
+        // The old message was: "Another sale just took the last {requestedQty}
+        // units of X." Two problems, and the second is the real one:
+        //   1. {requestedQty} is what THIS bill asked for, not what was taken —
+        //      so even the number in the sentence was the wrong number.
+        //   2. It never said how much remains. A shopkeeper cannot correct the
+        //      quantity if the error does not tell them what they can sell.
+        //      "Try again" is not actionable when trying again fails identically.
+        //
+        // The remaining stock was captured at the throw site, inside the
+        // transaction, so it is the number that actually caused the block.
+        const available: number | null = err.availableStock ?? null
+        const stockLine = available !== null
+          ? `${err.productName} has only ${available} left, but this bill needs ${err.requestedQty}.`
+          : `${err.productName} does not have enough stock for the ${err.requestedQty} on this bill.`
         return NextResponse.json({
           error: 'Not enough stock',
-          message: `Another sale just took the last ${err.requestedQty} units of ${err.productName}. Please try again or record a purchase first.`,
+          message: `${stockLine} Someone may have sold it while you were billing. Reduce the quantity, or record the purchase that brought this stock in.`,
+          productName: err.productName,
+          availableStock: available,
+          requestedQuantity: err.requestedQty,
           hint: 'To allow overselling, go to Settings and turn on "Allow overselling (kirana mode)".',
         }, { status: 400 })
       }
