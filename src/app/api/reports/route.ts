@@ -430,7 +430,68 @@ export async function GET(req: NextRequest) {
     // STOCK REPORT — reads currentStock column (V3 N2), no row cap needed
     // =====================================================================
     if (type === 'stock') {
-      const products = await db.product.findMany({ where: { userId } })
+      // ═══════════════════════════════════════════════════════════════════
+      // 🔒 AUDIT PASS-1 N4: the LIST is capped; the TOTALS are not.
+      //
+      // Was: db.product.findMany({ where: { userId } }) — every product, with
+      // totalStockValue, totalPotentialValue and lowStockCount all reduced
+      // from that same array.
+      //
+      // Capping the list alone would have been worse than leaving it slow: the
+      // totals would silently start describing only the first N products, and
+      // a stock report whose "Total Stock Value" quietly under-reports is a
+      // number someone will make a purchasing decision on. So the totals are
+      // computed by SQL across EVERY product, independently of the list.
+      //
+      // Ordering is by stock value DESC so that if a catalogue does exceed the
+      // cap, what gets dropped is the tail — the least valuable lines — and
+      // `truncated` tells the client to say so rather than implying the report
+      // is complete. Prisma cannot ORDER BY a computed expression, which is why
+      // this is raw SQL; that also means paise → rupees is explicit below.
+      // ═══════════════════════════════════════════════════════════════════
+      const STOCK_REPORT_LIMIT = 5000
+
+      const [stockTotalsRows, productRows] = await Promise.all([
+        db.$queryRaw<Array<{
+          totalStockValuePaise: string
+          totalPotentialPaise: string
+          lowStockCount: bigint
+          productCount: bigint
+        }>>`
+          SELECT
+            COALESCE(SUM(ROUND(GREATEST("currentStock", 0)::numeric * "purchasePrice"::numeric)), 0)::numeric AS "totalStockValuePaise",
+            COALESCE(SUM(ROUND(GREATEST("currentStock", 0)::numeric * "salePrice"::numeric)), 0)::numeric AS "totalPotentialPaise",
+            COUNT(*) FILTER (WHERE "currentStock" <= "lowStockThreshold")::bigint AS "lowStockCount",
+            COUNT(*)::bigint AS "productCount"
+          FROM "Product"
+          WHERE "userId" = ${userId}
+        `,
+        db.$queryRaw<Array<{
+          id: string; name: string; category: string | null; hsn: string | null
+          unit: string | null; currentStock: number; purchasePrice: number
+          salePrice: number; mrp: number; gstRate: number; lowStockThreshold: number
+        }>>`
+          SELECT
+            "id", "name", "category", "hsn", "unit",
+            "currentStock", "purchasePrice", "salePrice", "mrp",
+            "gstRate", "lowStockThreshold"
+          FROM "Product"
+          WHERE "userId" = ${userId}
+          ORDER BY ROUND(GREATEST("currentStock", 0)::numeric * "purchasePrice"::numeric) DESC
+          LIMIT ${STOCK_REPORT_LIMIT}
+        `,
+      ])
+
+      // $queryRaw bypasses the money extension — convert paise → rupees here.
+      const products = productRows.map(p => ({
+        ...p,
+        purchasePrice: fromPaise(Number(p.purchasePrice)),
+        salePrice: fromPaise(Number(p.salePrice)),
+        mrp: fromPaise(Number(p.mrp)),
+      }))
+
+      const stockProductCount = Number(stockTotalsRows[0]?.productCount ?? 0)
+      const stockTruncated = stockProductCount > products.length
 
       const stockReport = products.map(p => ({
         id: p.id,
@@ -450,8 +511,13 @@ export async function GET(req: NextRequest) {
         isOversold: p.currentStock < 0,  // 🔒 V11: distinct flag for OVERSOLD badge
       }))
 
-      const totalStockValue = roundMoney(stockReport.reduce((s, p) => s + p.stockValue, 0))
-      const totalPotentialValue = roundMoney(stockReport.reduce((s, p) => s + p.potentialSaleValue, 0))
+      // 🔒 N4: totals span EVERY product, not just the ones in the capped list.
+      // Reducing over `stockReport` would make them describe the first N rows
+      // only — a "Total Stock Value" that silently under-reports is worse than
+      // a slow report, because it looks authoritative.
+      const totalStockValue = roundMoney(fromPaise(Number(stockTotalsRows[0]?.totalStockValuePaise ?? 0)))
+      const totalPotentialValue = roundMoney(fromPaise(Number(stockTotalsRows[0]?.totalPotentialPaise ?? 0)))
+      const stockLowStockCount = Number(stockTotalsRows[0]?.lowStockCount ?? 0)
 
       // 🔒 V26 FIX N6 (V23 §3 residual): The stock report leaked cost & margin
       // data to staff with "hide profit" enabled — purchasePrice per product,
@@ -466,22 +532,32 @@ export async function GET(req: NextRequest) {
         return NextResponse.json({
           type: 'stock',
           period: { from, to },
-          truncated: false,
+          // 🔒 N4: real truncation state + the true catalogue size, so the UI
+          // can say "showing 5,000 of 21,430" instead of implying completeness.
+          truncated: stockTruncated,
+          totalProductCount: stockProductCount,
           products: strippedProducts,
           totalPotentialValue,
-          lowStockCount: stockReport.filter(p => p.isLowStock).length,
+          // 🔒 N4: counted in SQL across every product, not filtered from the
+          // capped list — otherwise a truncated report would under-report how
+          // many items need restocking.
+          lowStockCount: stockLowStockCount,
         })
       }
 
       return NextResponse.json({
         type: 'stock',
         period: { from, to },
-        truncated: false,
-        products: stockReport.sort((a, b) => b.stockValue - a.stockValue),
+        truncated: stockTruncated,
+        totalProductCount: stockProductCount,
+        // Already ordered by stock value DESC in SQL (which is also what
+        // decides who survives truncation) — re-sorting here would be a second
+        // source of ordering that could disagree with the first.
+        products: stockReport,
         totalStockValue,
         totalPotentialValue,
         potentialProfit: roundMoney(totalPotentialValue - totalStockValue),
-        lowStockCount: stockReport.filter(p => p.isLowStock).length,
+        lowStockCount: stockLowStockCount,
       })
     }
 
