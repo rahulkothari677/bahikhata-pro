@@ -60,6 +60,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         items: true,
         party: true,
         createdBy: { select: { id: true, name: true, role: true } },  // 🔒 V13 L4: staff accountability
+        // 🔒 AUDIT C5: the payments settled against this bill. Returned in full
+        // (not just summed) so the detail screen can show WHICH payments — the
+        // original defect was money moving with no trace on the bill, and a
+        // number that shrinks without explanation only half-fixes that.
+        paymentAllocations: {
+          select: {
+            amount: true,
+            createdAt: true,
+            payment: { select: { id: true, date: true, mode: true, notes: true } },
+          },
+          orderBy: { createdAt: 'asc' },
+        },
         // 🔒 V17 Audit §1: Fetch linked credit/debit notes (reversalTransactions)
         // so the TransactionDetail UI can show "Credit notes issued against this sale".
         // Only fetch non-deleted reversals (voided credit notes shouldn't appear).
@@ -102,9 +114,21 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     }
 
     // 🔒 FIX H2: Strip grossProfit if hideProfit is on and caller is staff
+    // 🔒 AUDIT C5: attach the summed `allocatedAmount` alongside the detail
+    // rows, so the screen can call computeInvoiceDue() without re-deriving the
+    // sum itself. One number, computed once, used everywhere.
+    const withAllocations: any = {
+      ...transaction,
+      allocatedAmount: roundMoney(
+        (transaction as any).paymentAllocations?.reduce(
+          (s: number, a: any) => s + (a.amount || 0), 0,
+        ) || 0,
+      ),
+    }
+
     const hideProfit = await shouldHideProfit(userId, authCtx.role)
     return NextResponse.json({
-      transaction: hideProfit ? stripTransactionProfit(transaction) : transaction,
+      transaction: hideProfit ? stripTransactionProfit(withAllocations) : withAllocations,
     })
   } catch (error) {
     return apiError(error, 'Failed to fetch transaction', 500)

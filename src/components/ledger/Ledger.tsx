@@ -10,6 +10,10 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useAppStore } from '@/store/app-store'
 import { formatINR, formatDate, formatDateTime, formatINRCompact, cn } from '@/lib/utils'
 import { roundMoney } from '@/lib/money'
+// 🔒 AUDIT C5: ONE definition of "still due on this bill". Computing it inline
+// as `total − paidAmount` ignores Settle payments, which is the stale figure
+// that made a bill invite being collected a second time.
+import { computeInvoiceDue } from '@/lib/invoice-due'
 import { useTranslation } from '@/hooks/use-translation'
 import { useSubscription } from '@/hooks/use-subscription'
 import { ViewModeToggle } from '@/components/common/ViewModeToggle'
@@ -199,8 +203,8 @@ export function Ledger({ type }: { type: LedgerType }) {
       cmp = (a.party?.name || '').localeCompare(b.party?.name || '')
     } else if (sortBy === 'status') {
       // Sort by due amount (largest due first)
-      const aDue = roundMoney(a.totalAmount - a.paidAmount)
-      const bDue = roundMoney(b.totalAmount - b.paidAmount)
+      const aDue = computeInvoiceDue(a)
+      const bDue = computeInvoiceDue(b)
       cmp = bDue - aDue
     }
     return sortOrder === 'asc' ? cmp : -cmp
@@ -275,7 +279,7 @@ export function Ledger({ type }: { type: LedgerType }) {
       t.type,
       t.totalAmount,
       t.paidAmount,
-      roundMoney(t.totalAmount - t.paidAmount),
+      computeInvoiceDue(t),
       t.paymentMode,
     ])
     // 🔒 R13-8 (Round 13): Escape internal double-quotes per RFC 4180.
@@ -700,7 +704,7 @@ export function Ledger({ type }: { type: LedgerType }) {
       ) : transactionsViewMode === 'list' ? (
         <div className="space-y-2">
           {sorted.map((t) => {
-            const due = roundMoney(t.totalAmount - t.paidAmount)
+            const due = computeInvoiceDue(t)
             const contextMenuItems: ContextMenuItem[] = [
               { label: 'View Details', icon: Eye, onClick: () => handleViewTransaction(t.id) },
               { label: 'Edit', icon: Edit2, onClick: () => {
@@ -860,7 +864,7 @@ export function Ledger({ type }: { type: LedgerType }) {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
           {sorted.map((t) => {
-            const due = roundMoney(t.totalAmount - t.paidAmount)
+            const due = computeInvoiceDue(t)
             return (
               <Card
                 key={t.id}

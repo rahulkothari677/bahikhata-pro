@@ -141,6 +141,10 @@ export async function GET(req: NextRequest) {
       include: {
         items: { select: { productName: true, quantity: true } },
         party: { select: { name: true, phone: true, gstin: true } },
+        // 🔒 AUDIT C5: payments settled against this bill. Without this the
+        // list shows `total − paidAmount`, which ignores every Settle payment —
+        // the exact stale "Due" that made a bill invite being collected twice.
+        paymentAllocations: { select: { amount: true } },
       },
       // 🔒 FIX M4: Order by date desc, then id desc for stable cursor pagination.
       orderBy: [{ date: 'desc' }, { id: 'desc' }],
@@ -156,9 +160,24 @@ export async function GET(req: NextRequest) {
       ? encodeKeysetCursor(lastRow.date, lastRow.id)
       : null
 
+    // 🔒 AUDIT C5: collapse the allocation rows into a single `allocatedAmount`
+    // the UI can use with computeInvoiceDue(). Summed here rather than in the
+    // client so every consumer gets the same number without each re-deriving it
+    // — the drift that produced three different party balances (V7) and stock
+    // value computed four ways (N6).
+    const withAllocations = trimmed.map((t: any) => {
+      const { paymentAllocations, ...rest } = t
+      return {
+        ...rest,
+        allocatedAmount: roundMoney(
+          (paymentAllocations || []).reduce((s: number, a: any) => s + (a.amount || 0), 0),
+        ),
+      }
+    })
+
     // 🔒 FIX H2: Strip grossProfit from transactions if hideProfit is on and caller is staff
     const hideProfit = await shouldHideProfit(userId, authCtx.role)
-    const finalTransactions = hideProfit ? stripTransactionsProfit(trimmed) : trimmed
+    const finalTransactions = hideProfit ? stripTransactionsProfit(withAllocations) : withAllocations
 
     // 🔒 AUDIT V25 FIX BUG-031 (Batch 5): Was withCache({ maxAge: 30, swr: 300 }).
     // Money-bearing endpoint — transaction totals + profit must always be fresh.

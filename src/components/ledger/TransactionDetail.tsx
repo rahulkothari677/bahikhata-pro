@@ -17,6 +17,9 @@ import { toast as sonnerToast } from 'sonner'
 import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
 import { formatINR, formatDateTime, formatDate, cn } from '@/lib/utils'
 import { roundMoney } from '@/lib/money'
+// 🔒 AUDIT C5: shared due rule + the breakdown that lets a bill explain where
+// its money went, instead of a total that quietly shrinks.
+import { computeInvoiceDue, computeDueBreakdown } from '@/lib/invoice-due'
 import {
   Edit2, Trash2, Printer, Download, User, Calendar, Receipt,
   ShoppingCart, Truck, ArrowDownRight, ArrowUpRight, ArrowRight, X, Plus,
@@ -389,7 +392,7 @@ export function TransactionDetail() {
   const isCreditNote = txn.type === 'credit-note'
   const isDebitNote = txn.type === 'debit-note'
   const isInflow = isSale || isIncome
-  const due = roundMoney(txn.totalAmount - txn.paidAmount)
+  const due = computeInvoiceDue(txn)
 
   // V17-Ext Tier 3: Credit/debit note display helpers
   const isNote = isCreditNote || isDebitNote
@@ -767,10 +770,48 @@ export function TransactionDetail() {
                     <span className="font-bold">Total</span>
                     <span className="font-bold">{formatINR(txn.totalAmount)}</span>
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-emerald-600 dark:text-emerald-400">Paid</span>
-                    <span className="font-medium text-emerald-600 dark:text-emerald-400">{formatINR(txn.paidAmount)}</span>
-                  </div>
+                  {/*
+                    🔒 AUDIT C5: show WHERE the money came from, not just a
+                    smaller number. The original defect was money moving with no
+                    trace on the bill — a due that silently shrinks only half
+                    fixes that, because the shopkeeper still cannot tell whether
+                    a bill was settled at the counter or by a later payment.
+
+                    "Settled later" only appears when there is something to
+                    show, so an ordinary paid-at-billing invoice looks exactly
+                    as it does today.
+                  */}
+                  {(() => {
+                    const breakdown = computeDueBreakdown(txn)
+                    return (
+                      <>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-emerald-600 dark:text-emerald-400">
+                            {breakdown.settledLater > 0 ? 'Paid at billing' : 'Paid'}
+                          </span>
+                          <span className="font-medium text-emerald-600 dark:text-emerald-400">
+                            {formatINR(breakdown.paidAtBilling)}
+                          </span>
+                        </div>
+                        {breakdown.settledLater > 0 && (
+                          <>
+                            <div className="flex justify-between text-sm">
+                              <span className="text-emerald-600 dark:text-emerald-400">Settled later</span>
+                              <span className="font-medium text-emerald-600 dark:text-emerald-400">
+                                {formatINR(breakdown.settledLater)}
+                              </span>
+                            </div>
+                            <div className="flex justify-between text-sm border-t border-border/50 pt-1">
+                              <span className="text-emerald-700 dark:text-emerald-300 font-medium">Total paid</span>
+                              <span className="font-semibold text-emerald-700 dark:text-emerald-300">
+                                {formatINR(breakdown.totalPaid)}
+                              </span>
+                            </div>
+                          </>
+                        )}
+                      </>
+                    )
+                  })()}
                   {due > 0 && (
                     <div className="flex justify-between text-sm">
                       <span className="text-rose-600">Outstanding</span>
@@ -1390,7 +1431,7 @@ function PrintInvoice({ txn, setting, hideProfit }: { txn: any; setting: any; hi
 
 function PrintInvoiceContent({ txn, setting, hideProfit }: { txn: any; setting: any; hideProfit?: boolean }) {
   const isSale = txn.type === 'sale'
-  const due = roundMoney(txn.totalAmount - txn.paidAmount)
+  const due = computeInvoiceDue(txn)
   const shopName = setting?.shopName || 'My Shop'
   const shopAddress = setting?.address
   const shopPhone = setting?.phone
