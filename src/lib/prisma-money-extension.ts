@@ -105,17 +105,55 @@ const MODEL_RELATIONS: Record<string, Record<string, string>> = {
     originalTransaction: 'Transaction',      // V20-008: credit/debit note reversal
     reversalTransactions: 'Transaction',     // V20-008: linked credit/debit notes
     matchedBankTransactions: 'BankTransaction', // V20-008: bank recon back-ref
+    // 🔒 AUDIT C5: nested allocations carry money. WITHOUT this line,
+    // `transaction.findMany({ include: { paymentAllocations: true } })` returns
+    // `amount` in raw PAISE while every sibling field is in rupees — a ₹1,000
+    // settlement rendering as ₹1,00,000 on the bill.
+    //
+    // That is the THIRD time this exact omission has shipped (V20-002:
+    // BankStatement→transactions; V20-008: five more relations). Registering a
+    // model in MONEY_COLUMNS is only half the job — a money-bearing relation
+    // must ALSO be declared here, or the nested rows are never converted.
+    // A schema-derived guard now enforces it: see
+    // __tests__/lib/audit-money-relations-coverage.test.ts.
+    paymentAllocations: 'PaymentAllocation',
   },
   TransactionItem: { transaction: 'Transaction', product: 'Product' },
-  Payment: { party: 'Party' },
+  Payment: {
+    party: 'Party',
+    // 🔒 AUDIT C5: same reasoning as Transaction.paymentAllocations above.
+    allocations: 'PaymentAllocation',
+    // 🔒 FOUND BY THE COVERAGE GUARD (not by review): a pre-existing gap.
+    // `payment.findMany({ include: { bankTransactions: true } })` returned
+    // BankTransaction.amount/.balance in raw paise. Latent only because no
+    // caller uses that include today — which is precisely how V20-002 and
+    // V20-008 began.
+    bankTransactions: 'BankTransaction',
+  },
+  // 🔒 AUDIT C5: allocations can be read with their parents included.
+  PaymentAllocation: { payment: 'Payment', transaction: 'Transaction' },
   Party: { transactions: 'Transaction', payments: 'Payment' },
-  Product: {},
+  // 🔒 FOUND BY THE COVERAGE GUARD: another pre-existing gap. Product was
+  // declared with NO relations at all, so
+  // `product.findMany({ include: { transactionItems: true } })` returned every
+  // item's unitPrice / purchasePriceAtSale / cgst / sgst / igst / total in raw
+  // paise — a product-history screen showing 100× prices.
+  Product: { transactionItems: 'TransactionItem' },
   BankStatement: { transactions: 'BankTransaction' },
   BankTransaction: {
     matchedPayment: 'Payment',         // V20-008: bank recon matched payment
     matchedTransaction: 'Transaction', // V20-008: bank recon matched txn
+    // 🔒 FOUND BY THE COVERAGE GUARD: the REVERSE of BankStatement.transactions.
+    // V20-002 fixed the parent→child direction and stopped there, so
+    // `bankTransaction.findMany({ include: { bankStatement: true } })` still
+    // returned totalCredits/totalDebits in raw paise. Registering one direction
+    // of a relation is not the same as registering the relation.
+    bankStatement: 'BankStatement',
   },
   Gstr2bImport: { invoices: 'Gstr2bInvoice' },
+  // 🔒 FOUND BY THE COVERAGE GUARD: reverse of Gstr2bImport.invoices, missed
+  // for the same reason.
+  Gstr2bInvoice: { gstr2bImport: 'Gstr2bImport' },
 }
 
 // ─── Helper: convert money columns in a single row (paise → rupees) ─────────
