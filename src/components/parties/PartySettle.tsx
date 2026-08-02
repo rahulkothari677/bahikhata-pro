@@ -109,10 +109,29 @@ export function PartySettle() {
   /** How far the typed amount exceeds what is actually outstanding. */
   const overpayAmount = Math.max(0, parsedAmount - Math.abs(balance))
 
-  // Default the direction from the party once loaded.
+  /**
+   * Default the direction once, when the party loads.
+   *
+   * Two things point at "money going out", not one:
+   *  - a supplier, who is normally paid rather than collected from; and
+   *  - ANY party whose balance is negative, which by this app's convention
+   *    (see the "You owe them" label below) means we owe them — a customer who
+   *    overpaid, or whose credit notes exceed their bills. Settling that means
+   *    handing money back.
+   *
+   * Dropping the second branch would let the page read "You owe them" while the
+   * direction box said "Received", and a shopkeeper who didn't catch it would
+   * record the payment backwards — moving the balance the wrong way by twice
+   * the amount.
+   *
+   * Guarded by a ref so a manual change to the dropdown is never overwritten.
+   */
+  const directionDefaulted = useRef(false)
   useEffect(() => {
-    if (party?.type === 'supplier') setPaymentType('paid')
-  }, [party?.type])
+    if (!data || directionDefaulted.current) return
+    directionDefaulted.current = true
+    if (party?.type === 'supplier' || balance < 0) setPaymentType('paid')
+  }, [data, party?.type, balance])
 
   /**
    * "Settle THIS bill", handed over from the Bills page. Pre-fills the amount
