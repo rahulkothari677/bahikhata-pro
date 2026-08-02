@@ -193,9 +193,32 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (type === 'income' || type === 'expense') {
       // 🔒 FIX M5: Was `parseFloat(body.totalAmount)` — use validated value.
       const amount = validation.data.totalAmount || 0
+
+      // 🔒 AUDIT PASS-1 M2: partyId / payeeName / payeePhone were MISSING here.
+      // POST writes all three (partyId since V19-005), PUT wrote none of them —
+      // so once an income/expense was saved, the party attached to it could
+      // never be changed or cleared through the edit screen. The value silently
+      // survived every edit, which reads as "the app ignored me".
+      //
+      // These use the same "only touch what the client actually sent" pattern as
+      // the credit/debit-note fields further down (R11-4). That matters: the
+      // income/expense edit dialog does not necessarily render every one of
+      // these inputs, and a plain `payeeName || null` would WIPE a stored payee
+      // the moment any client omitted the field. Explicit undefined = "not sent"
+      // = keep what is already there; explicit null/'' = "user cleared it".
+      const resolvedPartyId =
+        partyId !== undefined ? (partyId || null) : existing.partyId
+      const resolvedPayeeName =
+        validation.data.payeeName !== undefined ? (validation.data.payeeName || null) : existing.payeeName
+      const resolvedPayeePhone =
+        validation.data.payeePhone !== undefined ? (validation.data.payeePhone || null) : existing.payeePhone
+
       const transaction = await db.transaction.update({
         where: { id },
         data: {
+          partyId: resolvedPartyId,
+          payeeName: resolvedPayeeName,
+          payeePhone: resolvedPayeePhone,
           category: category || null,
           date: new Date(date || new Date()),
           subtotal: amount,
@@ -767,8 +790,12 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     // If a sale has credit notes, deleting the sale would leave the credit
     // notes orphaned — they'd continue to reduce the party balance with no
     // original sale to credit against (double-counted credit).
+    // 🔒 AUDIT PASS-1 L3: userId added. Safe today only because `id` was
+    // ownership-checked above — but this was the one unscoped query left in the
+    // file, and "safe because of something that happened 700 lines earlier" is
+    // exactly the assumption that stops being true after a refactor.
     const linkedNotes = await db.transaction.findMany({
-      where: { originalTransactionId: id, deletedAt: null },
+      where: { originalTransactionId: id, userId, deletedAt: null },
       select: { id: true, invoiceNo: true, type: true, totalAmount: true },
     })
     if (linkedNotes.length > 0) {
@@ -800,8 +827,9 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
         return
       }
       // Re-check linked notes inside the lock.
+      // 🔒 AUDIT PASS-1 L3: userId added (same reason as the pre-check above).
       const linkedNotesLocked = await tx.transaction.findMany({
-        where: { originalTransactionId: id, deletedAt: null },
+        where: { originalTransactionId: id, userId, deletedAt: null },
         select: { id: true, invoiceNo: true, type: true, totalAmount: true },
       })
       if (linkedNotesLocked.length > 0) {

@@ -390,7 +390,15 @@ export async function POST(req: NextRequest) {
       resultingStock: number
     }> = []
 
-    if (shouldDecrementStock && !body.confirmOversell) {
+    // 🔒 AUDIT PASS-1 M1: warnings are now computed whenever a sale would
+    // decrement stock, NOT only when confirmOversell is absent. The block-mode
+    // decision below depends on this list, so skipping the computation for
+    // confirmOversell requests made block mode fall through to the hard guard
+    // inside the transaction — which reports a *race condition* ("another sale
+    // just took the last N units") that never happened. In 'allow' mode the
+    // warnings are still suppressed from the RESPONSE when the user already
+    // confirmed, so they are not nagged twice; see the return at the bottom.
+    if (shouldDecrementStock) {
       // 🔒 FIX M2: Consolidate quantities per product before checking stock.
       // Was: each line item checked individually against the original stock.
       // If the same product appears in two lines (each selling 3 of 5 in stock),
@@ -434,7 +442,15 @@ export async function POST(req: NextRequest) {
     //
     // If policy is 'allow' (kirana mode), proceed with the current behavior —
     // the sale goes through and stockWarnings[] is returned in the response.
-    if (shouldDecrementStock && stockPolicy === 'block' && stockWarnings.length > 0 && !body.confirmOversell) {
+    // 🔒 AUDIT PASS-1 M1: `!body.confirmOversell` REMOVED from this condition.
+    // "Block overselling" is a setting the shop OWNER turned on. A flag in the
+    // request body must not be able to switch it off — otherwise the setting is
+    // advisory, and any client (or anyone hitting the API directly) can ignore
+    // it. Previously confirmOversell skipped this friendly 400 but did NOT skip
+    // the hard guard inside the transaction, so the sale still failed — just
+    // with a misleading message. Now block mode refuses here, honestly, every
+    // time. To oversell, the owner turns on "Allow overselling" in Settings.
+    if (shouldDecrementStock && stockPolicy === 'block' && stockWarnings.length > 0) {
       const lines = stockWarnings.map(w =>
         `• ${w.productName}: have ${w.currentStock}, selling ${w.requestedQuantity}, would go to ${w.resultingStock}`
       ).join('\n')
@@ -806,7 +822,11 @@ export async function POST(req: NextRequest) {
       // Empty array = no warnings. Non-empty = the UI should show a visible
       // banner ("⚠️ Sold 100 units of X but only 2 were in stock. Stock is
       // now -98. Record the missing purchase?").
-      stockWarnings,
+      // 🔒 AUDIT PASS-1 M1: suppression moved here (from the computation) so
+      // block mode can still see the warnings it needs to make its decision,
+      // while a user in 'allow' mode who already clicked "continue anyway"
+      // isn't shown the same warning a second time.
+      stockWarnings: body.confirmOversell ? [] : stockWarnings,
       // 🔒 V12: Non-blocking price/unit anomaly warnings.
       priceWarnings,
     })

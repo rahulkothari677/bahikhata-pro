@@ -68,7 +68,21 @@ export async function POST(req: NextRequest) {
       .update(`${razorpay_order_id}|${razorpay_payment_id}`)
       .digest('hex')
 
-    if (expectedSignature !== razorpay_signature) {
+    // 🔒 AUDIT PASS-1 L2: constant-time comparison, matching payment/webhook.
+    // `!==` on strings short-circuits at the first differing character, so how
+    // long it takes to reject leaks how much of the prefix was right. The
+    // webhook route already used timingSafeEqual; verify did not. Same secret,
+    // same threat, so they should not differ.
+    //
+    // timingSafeEqual throws if the buffers differ in length, so the length is
+    // checked first — a length mismatch is not secret (the digest is fixed-size).
+    const expectedBuf = Buffer.from(expectedSignature, 'utf8')
+    const providedBuf = Buffer.from(String(razorpay_signature), 'utf8')
+    const signatureValid =
+      expectedBuf.length === providedBuf.length &&
+      crypto.timingSafeEqual(expectedBuf, providedBuf)
+
+    if (!signatureValid) {
       // 🔒 FIX L2: Was 'Signature mismatch — ...' which confirms to a probing
       // attacker exactly which check failed. Now: generic message.
       console.error('Payment signature mismatch:', {
