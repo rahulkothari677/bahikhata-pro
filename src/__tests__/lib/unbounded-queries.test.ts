@@ -78,7 +78,6 @@ const ACCEPTED: Record<string, string> = {
   // bounded by `hsn: { in: hsnCodes }` — an id-set the scanner's heuristic does
   // not recognise, hence the entry rather than a code change.
   'app/api/reports/route.ts:product': 'Bounded by an hsn in-set; distinct on hsn.',
-  'app/api/reports/route.ts:party': 'N4 — OPEN. Party report list. Tracked in docs/audit/04-scale-sweep.md.',
   'app/api/reports/consolidated/route.ts:product':
     'N4 — OPEN. Needs computeConsolidatedReport() to accept per-shop aggregates. Tracked in docs/audit/04-scale-sweep.md.',
   // NOTE: parties/[id]/balance-as-of is deliberately ABSENT. It needed an

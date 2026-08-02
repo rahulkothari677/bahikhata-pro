@@ -582,8 +582,7 @@ export async function GET(req: NextRequest) {
       // and we also fetch each party's oldest unpaid sale date so Debt Aging
       // can age real balances (it previously iterated an always-empty
       // transactions array and told every shop "no outstanding dues").
-      const [parties, periodPartyAgg, receivablePayable, oldestUnpaidRows] = await Promise.all([
-        db.party.findMany({ where: { userId, deletedAt: null } }),
+      const [periodPartyAgg, receivablePayable, oldestUnpaidRows] = await Promise.all([
         // 1. Period activity (date-filtered) — for totalSales/totalPurchases columns
         db.transaction.groupBy({
           by: ['partyId', 'type'],
@@ -610,6 +609,50 @@ export async function GET(req: NextRequest) {
           GROUP BY "partyId"
         `,
       ])
+
+      // ═══════════════════════════════════════════════════════════════════
+      // 🔒 AUDIT PASS-1 N4: fetch only the parties this report can actually
+      // display, instead of every party the shop has ever created.
+      //
+      // Was: db.party.findMany({ where: { userId, deletedAt: null } }) — all
+      // parties, full rows — and then, ~45 lines further down, the result was
+      // filtered to those with period activity or a non-zero balance. A
+      // wholesaler with 8,000 customers loaded 8,000 rows to show maybe 300.
+      //
+      // The three inputs above already tell us exactly who qualifies, so the
+      // WHERE is now derived from them. This is a SUPERSET of what the filter
+      // keeps, never a subset — the filter still runs unchanged below, so the
+      // output is identical, only the fetch is smaller. Each OR arm maps 1:1
+      // to a clause of that filter:
+      //   balance !== 0          -> ids from receivablePayable.partyBalances
+      //   totalSales/Purchases>0 -> ids appearing in periodPartyAgg
+      //   openingBalance !== 0   -> expressed directly in SQL
+      //
+      // The openingBalance arm has to stay a SQL condition rather than an id
+      // list: a party can carry an opening balance that later nets to zero
+      // (opening ₹100, paid ₹100 → balance 0, no period activity). It would
+      // fail the other two arms and be silently dropped from the report —
+      // which is precisely the kind of quiet omission this audit exists to
+      // stop. `openingBalance` is an Int paise column, and `not: 0` is
+      // unit-agnostic, so no conversion is involved.
+      const relevantPartyIds = new Set<string>()
+      for (const [partyId, bal] of receivablePayable.partyBalances) {
+        if (bal.balance !== 0) relevantPartyIds.add(partyId)
+      }
+      for (const row of periodPartyAgg) {
+        if (row.partyId) relevantPartyIds.add(row.partyId)
+      }
+
+      const parties = await db.party.findMany({
+        where: {
+          userId,
+          deletedAt: null,
+          OR: [
+            { id: { in: Array.from(relevantPartyIds) } },
+            { openingBalance: { not: 0 } },
+          ],
+        },
+      })
       const oldestUnpaidMap = new Map(oldestUnpaidRows.map(r => [r.partyId, r.oldestUnpaidSaleDate]))
 
       const partyMap = new Map<string, {

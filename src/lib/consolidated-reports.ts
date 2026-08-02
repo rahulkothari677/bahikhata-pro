@@ -205,8 +205,28 @@ function computeShopAggregates(
   const netProfit = roundMoney(profit + income - expenses)
   const netGST = roundMoney(outputTax - inputTax)
 
+  // 🔒 AUDIT PASS-1 N6: clamp oversold stock at 0, and round per product —
+  // matching the dashboard (V11) and the stock report.
+  //
+  // WAS: `(p.currentStock || 0) * (p.purchasePrice || 0)` with no clamp. Every
+  // other screen that shows "stock value" applies Math.max(0, currentStock),
+  // because a product sold below zero has already had its value realised
+  // through the sale; counting it as NEGATIVE inventory understates what is
+  // actually on the shelves.
+  //
+  // The consequence was two different answers to the same question: a shop
+  // with any oversold line saw a LOWER stock value in the consolidated report
+  // than on its own dashboard, with nothing to explain the gap. For a
+  // multi-shop owner comparing outlets, that difference reads as a real
+  // business signal rather than an arithmetic inconsistency.
+  //
+  // roundMoney per product (not only on the total) also matches the others, so
+  // the same set of products now yields a byte-identical figure everywhere.
   const stockValue = roundMoney(
-    products.reduce((s, p) => s + (p.currentStock || 0) * (p.purchasePrice || 0), 0)
+    products.reduce(
+      (s, p) => s + roundMoney(Math.max(0, p.currentStock || 0) * (p.purchasePrice || 0)),
+      0,
+    )
   )
 
   return {
