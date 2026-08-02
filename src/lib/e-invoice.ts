@@ -292,7 +292,34 @@ export function buildIrnRequest(
       SgstVal: roundMoney(txn.sgst),
       IgstVal: roundMoney(txn.igst),
       CesVal: 0,
-      Discount: roundMoney(txn.discountAmount),
+      // 🔒 AUDIT G5: this MUST be 0 — the discount is already inside AssVal.
+      //
+      // WAS: `roundMoney(txn.discountAmount)`, which double-counted it.
+      //
+      // In this app the order-level discount is DISTRIBUTED across line items
+      // (see distributeDiscountProportionally), so each item already carries
+      // its share in `Discount` and has it removed from `AssAmt`. AssVal is the
+      // sum of those AssAmt values, i.e. ALREADY net of the discount.
+      //
+      // NIC validates the invoice total as
+      //     TotInvVal = AssVal + taxes + OthChrg − Discount + RndOffAmt
+      // so repeating the discount here subtracts it a second time:
+      //     NIC expects : subtotal − 2×discount + taxes + roundOff
+      //     we send     : subtotal −   discount + taxes + roundOff   (TotInvVal)
+      // The two disagree by exactly the discount, and the portal rejects the
+      // payload with a total-mismatch error. Every B2B invoice carrying ANY
+      // discount would have failed IRN generation — a hard block on invoicing
+      // that B2B customer, not a silent wrong number.
+      //
+      // ValDtls.Discount is for an invoice-level discount applied ON TOP of
+      // item-level ones. This app has no such concept: the single discount the
+      // UI collects is always pushed down to the items. So 0 is not a
+      // simplification, it is the correct value.
+      //
+      // Verified by the identity: TotInvVal − (AssVal + taxes) === RndOffAmt,
+      // which holds only when Discount is 0. Pinned in
+      // audit-g5-einvoice-valdtls.test.ts.
+      Discount: 0,
       OthChrg: 0,
       RndOffAmt: rndOffAmt,
       TotInvVal: roundMoney(txn.totalAmount),
