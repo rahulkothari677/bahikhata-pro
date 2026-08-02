@@ -39,6 +39,12 @@ export async function GET() {
     // SQL GROUP BY productName, SUM quantity + revenue. Returns top 5.
     // 🔒 V17 PAISE MIGRATION Phase 2E: SQL returns paise (integer). JS converts
     // back to rupees via fromPaise(). Same pattern as Phase 2A/2B/2D.
+    // 🔒 AUDIT PASS-1 M3: net of returns, matching the Dashboard's top-products
+    // query. Was `type = 'sale'` only, while dashboard/route.ts subtracted
+    // credit notes — so the SAME product could rank as a bestseller on one
+    // screen and not the other, and a line that was almost entirely returned
+    // still looked like a strong seller here. Returns are business reality;
+    // a "bestseller" that came back through the door was not sold.
     const bestSellersRaw = await db.$queryRaw<Array<{
       productName: string
       totalQty: bigint
@@ -46,13 +52,15 @@ export async function GET() {
     }>>`
       SELECT
         ti."productName",
-        SUM(ti."quantity") AS "totalQty",
-        SUM(ROUND(ti."quantity"::numeric * ti."unitPrice"::numeric, 0)) AS "totalRevenuePaise"
+        SUM(CASE WHEN t."type" = 'sale' THEN ti."quantity" ELSE -ti."quantity" END) AS "totalQty",
+        SUM(CASE WHEN t."type" = 'sale'
+                 THEN ROUND(ti."quantity"::numeric * ti."unitPrice"::numeric, 0)
+                 ELSE -ROUND(ti."quantity"::numeric * ti."unitPrice"::numeric, 0) END) AS "totalRevenuePaise"
       FROM "TransactionItem" ti
       JOIN "Transaction" t ON ti."transactionId" = t.id
       WHERE t."userId" = ${userId}
         AND t."deletedAt" IS NULL
-        AND t."type" = 'sale'
+        AND t."type" IN ('sale', 'credit-note')
         AND t."date" >= ${thirtyDaysAgo}
       GROUP BY ti."productName"
       ORDER BY "totalRevenuePaise" DESC

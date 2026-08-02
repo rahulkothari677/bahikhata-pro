@@ -164,20 +164,40 @@ export function distributeDiscountProportionally(
     Math.min(g, Math.max(0, roundMoney((g / totalGross) * discount))),
   )
 
-  // Step 2: absorb any rounding residual (positive or negative) into the LAST
-  // item with a non-zero gross. This guarantees Σ(shares) === discount exactly.
-  const sumShares = shares.reduce((s, v) => s + v, 0)
-  const residual = roundMoney(discount - sumShares)
-  if (residual !== 0) {
-    // Find last non-zero-gross item (cannot push discount below 0 or above gross)
-    for (let i = shares.length - 1; i >= 0; i--) {
-      if (grossValues[i] > 0) {
-        const adjusted = roundMoney(shares[i] + residual)
-        // Clamp to [0, grossValues[i]] to be safe
-        shares[i] = Math.min(grossValues[i], Math.max(0, adjusted))
-        break
-      }
-    }
+  // Step 2: absorb any rounding residual (positive or negative) so that
+  // Σ(shares) === discount EXACTLY.
+  //
+  // 🔒 AUDIT PASS-1 M4: the residual is now spread across every item that has
+  // room, instead of being dumped entirely on the last one.
+  //
+  // Was: add the whole residual to the last non-zero-gross item, THEN clamp it
+  // to [0, gross]. When that clamp actually bound, the excess was thrown away
+  // and Σ(shares) !== discount — silently breaking the exact guarantee this
+  // function's own docblock makes. Downstream that means
+  // `subtotal − Σ(item discounts) !== subtotal − orderDiscount`, so the invoice
+  // header stops tying to its own line items, and reconciliation.ts (which
+  // compares header vs per-item totals on a strict tolerance) starts reporting
+  // a drift with no obvious cause.
+  //
+  // Now: walk the items from last to first, giving each only as much of the
+  // residual as it has headroom for, until the residual is exhausted.
+  //   residual > 0  → we must ADD discount    → headroom = gross − share
+  //   residual < 0  → we must REMOVE discount → headroom = share (floor is 0)
+  // Every share stays inside [0, gross], and the residual can only fail to
+  // fully distribute if the caller passed a discount exceeding the total gross
+  // — which Step 1 has already clamped against, and which the routes reject.
+  let residual = roundMoney(discount - shares.reduce((s, v) => s + v, 0))
+  for (let i = shares.length - 1; i >= 0 && residual !== 0; i--) {
+    if (grossValues[i] <= 0) continue
+    const headroom = residual > 0
+      ? roundMoney(grossValues[i] - shares[i])
+      : shares[i]
+    if (headroom <= 0) continue
+    const step = residual > 0
+      ? Math.min(headroom, residual)
+      : Math.max(-headroom, residual)
+    shares[i] = roundMoney(shares[i] + step)
+    residual = roundMoney(residual - step)
   }
 
   return shares
@@ -405,7 +425,25 @@ export function calculateGstPaise(amountPaise: number, gstRate: number): Paise {
  */
 export function splitGstPaise(totalGstPaise: number): { cgst: Paise; sgst: Paise } {
   const gst = toMoney(totalGstPaise)
-  const cgst = Math.ceil(gst / 2) as Paise  // extra paisa goes to CGST
+
+  // 🔒 AUDIT PASS-1 H4: the split is SIGN-AWARE.
+  //
+  // Was: `Math.ceil(gst / 2)`. Math.ceil rounds toward +∞, not away from zero,
+  // so the odd paisa landed on a different tax depending on the sign:
+  //     +18001 → ceil(+9000.5) = +9001 → CGST gets it   (matches the doc)
+  //     −18001 → ceil(−9000.5) = −9000 → SGST gets it   (contradicts the doc)
+  // Not reachable today because taxable amounts are non-negative, but it goes
+  // live the moment a credit note carries negative GST — and a CGST/SGST
+  // asymmetry that appears only on returns is close to untraceable once it is
+  // sitting in a filed GSTR-1.
+  //
+  // Now the rule is applied to the magnitude and the sign restored, so CGST
+  // always takes the extra paisa in absolute terms, either direction. Deriving
+  // sgst by subtraction still guarantees cgst + sgst === gst exactly.
+  // (splitGst, the rupee twin, is already symmetric because roundMoney rounds
+  // half AWAY FROM ZERO rather than toward +∞ — this brings paise in line.)
+  const sign = gst < 0 ? -1 : 1
+  const cgst = (sign * Math.ceil(Math.abs(gst) / 2)) as Paise
   const sgst = (gst - cgst) as Paise  // ensures cgst + sgst === gst exactly
   return { cgst, sgst }
 }
