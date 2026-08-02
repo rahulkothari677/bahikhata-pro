@@ -62,6 +62,43 @@ function setupCommonMocks(overrides: {
     if (sqlStr.includes('pty.id IS NULL')) {
       return Promise.resolve([{ count: BigInt(overrides.orphanedPayments ?? 0) }])
     }
+
+    // 🔒 AUDIT G7: checkPartyBalances now issues two INDEPENDENT flat
+    // aggregates (no GROUP BY, no joins) and compares their net against the
+    // per-party grouped net. Route them by a column alias unique to each.
+    //
+    // The fixture values are DERIVED from `queryRawResult` by summing the same
+    // per-party columns. That keeps the assertion meaningful rather than
+    // rigged: the test still verifies that getReceivablePayable's per-party
+    // arithmetic — the sign split into receivable/payable and the roundMoney
+    // accumulation — nets to the same total as a straight sum. A sign-handling
+    // or accumulation bug in that JS still fails here.
+    //
+    // What a mocked test CANNOT catch is a SQL-level fan-out, which is the
+    // other thing G7 protects against. That needs a real database; the value
+    // there comes from the nightly job running against live data.
+    if (sqlStr.includes('openingPaise')) {
+      const rows = overrides.queryRawResult ?? []
+      const sum = (field: string) =>
+        rows.reduce((s: number, r: any) => s + Number(r[field] ?? 0), 0).toString()
+      return Promise.resolve([{
+        openingPaise: sum('openingBalancePaise'),
+        saleOutPaise: sum('salesOutstandingPaise'),
+        purchaseOutPaise: sum('purchaseOutstandingPaise'),
+        creditNoteOutPaise: sum('creditNoteOutstandingPaise'),
+        debitNoteOutPaise: sum('debitNoteOutstandingPaise'),
+      }])
+    }
+    if (sqlStr.includes('receivedPaise')) {
+      const rows = overrides.queryRawResult ?? []
+      const sum = (field: string) =>
+        rows.reduce((s: number, r: any) => s + Number(r[field] ?? 0), 0).toString()
+      return Promise.resolve([{
+        receivedPaise: sum('paymentsReceivedPaise'),
+        paidPaise: sum('paymentsPaidPaise'),
+      }])
+    }
+
     // Default: return the party balances result (getReceivablePayable SQL)
     return Promise.resolve(overrides.queryRawResult ?? [])
   })

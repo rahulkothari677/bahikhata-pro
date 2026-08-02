@@ -240,6 +240,20 @@ export function buildIrnRequest(
       IgstAmt: roundMoney(item.igst),
       CgstAmt: roundMoney(item.cgst),
       SgstAmt: roundMoney(item.sgst),
+      // 🔒 AUDIT G6: CesRt is 0 because this app has no cess RATE field —
+      // TransactionItem stores `csamt` (the amount) but nothing to divide it by.
+      //
+      // NIC validates CesAmt against CesRt × AssAmt, so a non-zero CesAmt with
+      // CesRt 0 is a guaranteed rejection with an opaque error. That is NOT
+      // reachable today: nothing in the app writes a non-zero csamt (there is
+      // no cess input anywhere in the UI), so both fields are always 0 and the
+      // payload is valid.
+      //
+      // IF CESS IS EVER ADDED: a `cessRate` column must land on TransactionItem
+      // at the same time and be sent here. Shipping the amount without the rate
+      // would break IRN generation for every invoice carrying cess. Flagged
+      // rather than silently left, because "csamt exists so cess must work" is
+      // an easy and expensive assumption to make later.
       CesRt: 0,
       CesAmt: roundMoney(item.csamt || 0),
       TotItemVal: totItemVal,

@@ -26,7 +26,9 @@
 
 import { db } from '@/lib/db'
 import { getReceivablePayable } from '@/lib/party-balance'
-import { roundMoney } from '@/lib/money'
+// 🔒 AUDIT G7: fromPaise is needed because the new independent aggregate uses
+// $queryRaw, which bypasses the money extension and returns raw paise.
+import { roundMoney, fromPaise } from '@/lib/money'
 
 export interface ReconciliationCheck {
   name: string
@@ -60,7 +62,90 @@ export interface ReconciliationResult {
 export async function checkPartyBalances(userId: string): Promise<ReconciliationCheck> {
   const { totalReceivable, totalPayable, partyBalances } = await getReceivablePayable(userId)
 
-  // Independently sum the per-party balances
+  // ═══════════════════════════════════════════════════════════════════════
+  // 🔒 AUDIT G7: this check used to be TAUTOLOGICAL — it could not fail.
+  //
+  // WAS: it looped over `partyBalances` summing positives into `jsReceivable`
+  // and negatives into `jsPayable`, then compared those against
+  // `totalReceivable` / `totalPayable` — and called it "SQL vs JS".
+  //
+  // But all four values come from the SAME call above. getReceivablePayable
+  // builds totalReceivable/totalPayable by looping over the very same
+  // partyBalances map with the very same sign test. Re-running that loop and
+  // comparing the result to itself compares a number to itself. It passed
+  // every night on every account, and would have kept passing through any
+  // amount of corruption.
+  //
+  // A reconciliation check that cannot fail is worse than no check: it reports
+  // "passed" and buys false confidence in the one place the ledger is supposed
+  // to be policing itself.
+  //
+  // NOW: compare against a genuinely INDEPENDENT computation. The identity is
+  //
+  //     Σ(per-party balances) === Σ(opening) + Σ(sales outstanding)
+  //                             − Σ(purchase outstanding) − Σ(credit notes)
+  //                             + Σ(debit notes) − Σ(received) + Σ(paid)
+  //
+  // The left side is grouped PER PARTY and then summed. The right side is a
+  // flat aggregate over the whole account with no GROUP BY and no joins at all.
+  //
+  // That difference is the point. The bug this app actually shipped once
+  // (C-NEW-1) was a JOIN fan-out: a party with T transactions and P payments
+  // produced T×P rows and multiplied its sums. A per-party computation compared
+  // against another per-party computation cannot see that. A flat aggregate
+  // with no joins can — it is arithmetically incapable of fanning out.
+  //
+  // Only the NET is comparable: splitting into receivable vs payable needs each
+  // party's sign, which a flat aggregate does not have. Net is the right
+  // invariant anyway — a fan-out or a double-count moves it.
+  //
+  // Cost: one extra query per user per night, no joins, fully indexed.
+  // ═══════════════════════════════════════════════════════════════════════
+  const [flatRows, flatPayRows] = await Promise.all([
+    db.$queryRaw<Array<{
+      openingPaise: string
+      saleOutPaise: string
+      purchaseOutPaise: string
+      creditNoteOutPaise: string
+      debitNoteOutPaise: string
+    }>>`
+      SELECT
+        (SELECT COALESCE(SUM("openingBalance"), 0)::numeric
+           FROM "Party"
+          WHERE "userId" = ${userId} AND "deletedAt" IS NULL) AS "openingPaise",
+        COALESCE(SUM(CASE WHEN "type" = 'sale'        THEN ("totalAmount" - COALESCE("paidAmount", 0))::numeric ELSE 0 END), 0) AS "saleOutPaise",
+        COALESCE(SUM(CASE WHEN "type" = 'purchase'    THEN ("totalAmount" - COALESCE("paidAmount", 0))::numeric ELSE 0 END), 0) AS "purchaseOutPaise",
+        COALESCE(SUM(CASE WHEN "type" = 'credit-note' THEN ("totalAmount" - COALESCE("paidAmount", 0))::numeric ELSE 0 END), 0) AS "creditNoteOutPaise",
+        COALESCE(SUM(CASE WHEN "type" = 'debit-note'  THEN ("totalAmount" - COALESCE("paidAmount", 0))::numeric ELSE 0 END), 0) AS "debitNoteOutPaise"
+      FROM "Transaction"
+      WHERE "userId" = ${userId}
+        AND "deletedAt" IS NULL
+        AND "partyId" IS NOT NULL
+    `,
+    db.$queryRaw<Array<{ receivedPaise: string; paidPaise: string }>>`
+      SELECT
+        COALESCE(SUM(CASE WHEN "type" = 'received' THEN COALESCE("amount", 0)::numeric ELSE 0 END), 0) AS "receivedPaise",
+        COALESCE(SUM(CASE WHEN "type" = 'paid'     THEN COALESCE("amount", 0)::numeric ELSE 0 END), 0) AS "paidPaise"
+      FROM "Payment"
+      WHERE "userId" = ${userId}
+        AND "deletedAt" IS NULL
+        AND "partyId" IS NOT NULL
+    `,
+  ])
+
+  const f = flatRows[0]
+  const p = flatPayRows[0]
+  const independentNet = roundMoney(
+    fromPaise(Number(f?.openingPaise ?? 0))
+    + fromPaise(Number(f?.saleOutPaise ?? 0))
+    - fromPaise(Number(f?.purchaseOutPaise ?? 0))
+    - fromPaise(Number(f?.creditNoteOutPaise ?? 0))
+    + fromPaise(Number(f?.debitNoteOutPaise ?? 0))
+    - fromPaise(Number(p?.receivedPaise ?? 0))
+    + fromPaise(Number(p?.paidPaise ?? 0)),
+  )
+
+  // Keep the per-party sums for the message, but they are NOT the assertion.
   let jsReceivable = 0
   let jsPayable = 0
   for (const [, info] of partyBalances) {
@@ -88,21 +173,26 @@ export async function checkPartyBalances(userId: string): Promise<Reconciliation
   // The roundMoney() on the difference eliminates any IEEE 754 float drift from
   // the subtraction itself (e.g., 12.35 - 12.35 might = 0.0000000001 in float).
   // roundMoney(0.0000000001) = 0, so === 0 is safe.
-  const receivableDiff = roundMoney(totalReceivable - jsReceivable)
-  const payableDiff = roundMoney(totalPayable - jsPayable)
-  const receivableMatches = receivableDiff === 0
-  const payableMatches = payableDiff === 0
-  const passed = receivableMatches && payableMatches
+  // 🔒 G7: the assertion is per-party-grouped NET vs flat-aggregate NET.
+  const groupedNet = roundMoney(totalReceivable - totalPayable)
+  const netDiff = roundMoney(groupedNet - independentNet)
+  const passed = netDiff === 0
 
   return {
     name: 'Party Balances',
-    description: 'Sum of party balances matches dashboard totals',
+    description: 'Per-party balances reconcile with account-wide aggregates',
     passed,
     details: passed
-      ? `Receivable ₹${totalReceivable.toFixed(2)} and Payable ₹${totalPayable.toFixed(2)} both match across ${partyBalances.size} parties.`
-      : `Mismatch detected. Receivable: SQL=₹${totalReceivable.toFixed(2)} vs JS=₹${jsReceivable.toFixed(2)}. Payable: SQL=₹${totalPayable.toFixed(2)} vs JS=₹${jsPayable.toFixed(2)}.`,
-    expected: roundMoney(totalReceivable + totalPayable),
-    actual: roundMoney(jsReceivable + jsPayable),
+      ? `Net ₹${groupedNet.toFixed(2)} reconciles across ${partyBalances.size} parties `
+        + `(receivable ₹${totalReceivable.toFixed(2)}, payable ₹${totalPayable.toFixed(2)}).`
+      : `Mismatch of ₹${netDiff.toFixed(2)}. Per-party net = ₹${groupedNet.toFixed(2)} `
+        + `(receivable ₹${totalReceivable.toFixed(2)} − payable ₹${totalPayable.toFixed(2)}), `
+        + `but account-wide aggregates give ₹${independentNet.toFixed(2)}. `
+        + `A positive difference usually means a JOIN fan-out is multiplying a party's rows; `
+        + `a negative one usually means rows are being dropped by a filter or a NULL. `
+        + `Party count: ${partyBalances.size}.`,
+    expected: independentNet,
+    actual: groupedNet,
   }
 }
 
