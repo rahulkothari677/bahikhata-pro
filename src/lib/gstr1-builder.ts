@@ -532,9 +532,27 @@ export function buildHSN(txns: Gstr1Transaction[]): { data: Gstr1HsnEntry[] } {
   for (const txn of outward) {
     for (const item of txn.items) {
       const hsn = item.hsn || '9999'  // default HSN for unclassified
-      const key = `${hsn}|${item.gstRate}`
+      // 🔒 AUDIT G2: the UQC is part of the aggregation key.
+      //
+      // WAS: `${hsn}|${item.gstRate}` — so every line sharing an HSN and a rate
+      // collapsed into one row, and `uqc` was taken from whichever item was
+      // seen FIRST. Quantities in different units were then added together
+      // under that arbitrary unit.
+      //
+      // A shop selling rice under one HSN both loose (kg) and in packets would
+      // file a single row reading "15 KGS" for 5 kg + 10 packets. The value and
+      // tax columns stayed correct — only the quantity became meaningless — so
+      // nothing in the app or the return would look wrong, while Table 12 of
+      // GSTR-1 carried a number that does not describe anything real.
+      //
+      // Keying by UQC as well emits one row per (HSN, rate, unit), which is
+      // what Table 12 expects and what makes the quantity column mean
+      // something. Shops that use a single unit per HSN — most of them — see no
+      // change at all.
+      const uqc = mapUnitToUqc(item.unit)
+      const key = `${hsn}|${item.gstRate}|${uqc}`
       const existing = agg.get(key) || {
-        hsn, desc: item.productName, qty: 0, uqc: mapUnitToUqc(item.unit),
+        hsn, desc: item.productName, qty: 0, uqc,
         txval: 0, iamt: 0, camt: 0, samt: 0, csamt: 0, rt: item.gstRate,
       }
       // Credit notes REDUCE the HSN totals (they're returns)
