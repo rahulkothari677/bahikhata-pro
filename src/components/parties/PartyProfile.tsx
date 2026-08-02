@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { formatINR, formatDate, formatDateTime, cn, getInitials } from '@/lib/utils'
 import { useCountUp } from '@/hooks/use-count-up'
 import { roundMoney } from '@/lib/money'
+import { computeInvoiceDue } from '@/lib/invoice-due'
 import {
   Phone, Building2, MapPin, User, Plus, ShoppingCart, Truck,
   ArrowDownRight, ArrowUpRight, IndianRupee, Calendar, TrendingUp,
@@ -39,7 +40,7 @@ import { readError } from '@/lib/read-error'
 import { invalidateMoneyCaches } from '@/lib/invalidate-money-caches'
 
 export function PartyProfile() {
-  const { selectedPartyId, setView, setPreviousView, triggerRefresh, previousView, features } = useAppStore()
+  const { selectedPartyId, setView, setPreviousView, triggerRefresh, previousView, features, setSelectedTransactionId } = useAppStore()
   const queryClient = useQueryClient()
   const [sendingReminder, setSendingReminder] = useState(false)
   const { confirmDialog, dialog: confirmDialogEl } = useConfirmDialog()
@@ -50,6 +51,9 @@ export function PartyProfile() {
   const [paymentMode, setPaymentMode] = useState('cash')
   const [paymentNotes, setPaymentNotes] = useState('')
   const [savingPayment, setSavingPayment] = useState(false)
+  // 🔒 AUDIT C5: Bills card defaults to open bills only — when a customer is
+  // waiting at the counter, settled history is noise.
+  const [showAllBills, setShowAllBills] = useState(false)
 
   // 🔒 V26 N1b: Skeleton-dead-end guard (mirrors TransactionDetail.tsx).
   // The browser-back hook clears selectedPartyId on popstate
@@ -101,6 +105,37 @@ export function PartyProfile() {
   const topProducts = data?.topProducts || []
   const monthlyData = data?.monthlyData || []
   const transactions = data?.transactions || []
+
+  // 🔒 AUDIT C5: bill rows for the Bills card.
+  //
+  // Only sale/purchase documents — a credit note is a return, not something a
+  // payment settles, and listing it here with a "Settle" button would invite
+  // exactly the wrong action.
+  //
+  // `due` comes from the shared computeInvoiceDue() rather than being derived
+  // here. That is the whole point of the helper: this screen showing a
+  // different due from the ledger or the printed bill is the class of bug
+  // being fixed, and re-deriving it locally is how that happens.
+  const billRows = transactions
+    .filter((t: any) => t.type === 'sale' || t.type === 'purchase')
+    .map((t: any) => {
+      const settledSoFar = roundMoney((t.paidAmount || 0) + (t.allocatedAmount || 0))
+      return { ...t, due: computeInvoiceDue(t), settledSoFar }
+    })
+
+  const unpaidBillRows = billRows.filter((b: any) => b.due > 0)
+  const totalBillsDue = roundMoney(
+    unpaidBillRows.reduce((s: number, b: any) => s + b.due, 0),
+  )
+  // Oldest first among open bills — the order a khata is settled in, and the
+  // order the server allocates a payment in, so what the shopkeeper sees
+  // matches what actually happens.
+  const visibleBillRows = (showAllBills ? billRows : unpaidBillRows)
+    .slice()
+    .sort((a: any, b: any) => {
+      if (a.due > 0 !== b.due > 0) return a.due > 0 ? -1 : 1
+      return new Date(a.date).getTime() - new Date(b.date).getTime()
+    })
   // 🔒 V26 Phase 6 §6.6: Animate the balance value with useCountUp — makes
   // state changes *visible* after a payment (GPay-style). The animation runs
   // from 0→balance on mount + when balance changes (e.g. after recording a
@@ -921,6 +956,124 @@ export function PartyProfile() {
           </ResponsiveContainer>
         </CardContent>
       </Card>
+
+      {/*
+        🔒 AUDIT C5 — Bills
+        ────────────────────────────────────────────────────────────────────
+        The bill-level view the shopkeeper needs when a customer is standing
+        at the counter: which bills are open, and how much is left on each.
+
+        Before allocation existed there was nowhere to see this. The party
+        header showed a correct total, the bills showed stale dues, and the
+        two never met on one screen — which is precisely why the ₹1,000
+        discrepancy went unnoticed for so long. Putting them together is the
+        point: if they ever disagree again, it is now visible at a glance.
+
+        Defaults to UNPAID ONLY. When a customer is waiting, the open bills
+        are the only ones that matter; a long paid history in the way is
+        noise at exactly the wrong moment.
+      */}
+      {billRows.length > 0 && (
+        <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Receipt className="w-4 h-4" /> Bills
+                </CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  {unpaidBillRows.length > 0
+                    ? `${unpaidBillRows.length} open · ${formatINR(totalBillsDue)} due`
+                    : 'All bills settled'}
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs h-8"
+                onClick={() => setShowAllBills(v => !v)}
+              >
+                {showAllBills ? 'Unpaid only' : `Show all (${billRows.length})`}
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {visibleBillRows.map((b: any) => (
+                <div
+                  key={b.id}
+                  className="flex items-center justify-between gap-2 p-2 rounded-lg bg-muted/30"
+                >
+                  <button
+                    className="flex-1 min-w-0 text-left"
+                    onClick={() => {
+                      setSelectedTransactionId(b.id)
+                      setPreviousView('party-profile')
+                      setView('transaction-detail')
+                    }}
+                  >
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-medium truncate">
+                        {b.invoiceNo || b.id.slice(-6)}
+                      </span>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          'text-3xs px-1.5 py-0',
+                          b.due === 0
+                            ? 'text-emerald-600 border-emerald-300'
+                            : b.settledSoFar > 0
+                              ? 'text-amber-600 border-amber-300'
+                              : 'text-rose-600 border-rose-300',
+                        )}
+                      >
+                        {b.due === 0 ? 'Paid' : b.settledSoFar > 0 ? 'Partly paid' : 'Unpaid'}
+                      </Badge>
+                    </div>
+                    <p className="text-2xs text-muted-foreground mt-0.5">
+                      {formatDate(b.date)} · {formatINR(b.totalAmount)}
+                      {b.settledSoFar > 0 && b.due > 0 && (
+                        <> · {formatINR(b.settledSoFar)} received</>
+                      )}
+                    </p>
+                  </button>
+                  <div className="text-right shrink-0">
+                    <p className={cn('text-sm font-semibold', b.due > 0 ? 'text-rose-600' : 'text-emerald-600')}>
+                      {b.due > 0 ? formatINR(b.due) : '—'}
+                    </p>
+                    {b.due > 0 && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 px-2 text-2xs text-primary"
+                        onClick={() => {
+                          // 🔒 C5: pre-fill the amount with THIS bill's due. The
+                          // server allocates oldest-first, so on a party with
+                          // older open bills this may settle those first — the
+                          // "choose bills myself" step that fixes that is the
+                          // next phase, and until it lands this button is a
+                          // shortcut for the amount, not a promise about which
+                          // bill receives it.
+                          setPaymentType(party?.type === 'supplier' ? 'paid' : 'received')
+                          setPaymentAmount(String(b.due))
+                          setPaymentDialogOpen(true)
+                        }}
+                      >
+                        Settle
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {!showAllBills && unpaidBillRows.length === 0 && (
+              <p className="text-xs text-muted-foreground text-center py-2">
+                No open bills. Tap “Show all” to see settled ones.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Top products */}
       {topProducts.length > 0 && (

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getAuthUserIdWithModule, getAuthContextForWrite } from '@/lib/get-auth'
-import { fromPaise, parseMoney } from '@/lib/money'
+import { fromPaise, parseMoney, roundMoney } from '@/lib/money'
 import { istMonthStartOffset, getISTDateParts } from '@/lib/timezone'
 import { computePartyBalance } from '@/lib/party-balance'
 import { encodeKeysetCursor, buildKeysetWhere } from '@/lib/pagination'
@@ -149,7 +149,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       // Was: Prisma native cursor on id only, orderBy date desc with no tiebreak.
       db.transaction.findMany({
         where: txListWhere,
-        include: { items: true },
+        // 🔒 AUDIT C5: allocations, so the party's bill list can show each
+        // bill's TRUE remaining due rather than `total − paidAmount`. Without
+        // this the party screen would show the party's correct outstanding at
+        // the top and stale per-bill dues underneath — the same contradiction
+        // that made the original defect invisible, just relocated.
+        include: { items: true, paymentAllocations: { select: { amount: true } } },
         orderBy: [{ date: 'desc' }, { id: 'desc' }],
         take: PAGE_SIZE + 1, // fetch one extra to check if there's a next page
       }),
@@ -306,7 +311,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       },
       topProducts,
       monthlyData,
-      transactions: pagedTransactions,
+      // 🔒 AUDIT C5: collapse allocation rows into a single `allocatedAmount`,
+      // exactly as /api/transactions does, so the client uses one shared shape
+      // and calls computeInvoiceDue() rather than re-deriving the sum itself.
+      transactions: pagedTransactions.map((t: any) => {
+        const { paymentAllocations, ...rest } = t
+        return {
+          ...rest,
+          allocatedAmount: roundMoney(
+            (paymentAllocations || []).reduce((s: number, a: any) => s + (a.amount || 0), 0),
+          ),
+        }
+      }),
       pagination: {
         hasMore,
         nextCursor,
