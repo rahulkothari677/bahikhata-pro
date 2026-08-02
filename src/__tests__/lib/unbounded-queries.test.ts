@@ -78,8 +78,30 @@ const ACCEPTED: Record<string, string> = {
   // bounded by `hsn: { in: hsnCodes }` — an id-set the scanner's heuristic does
   // not recognise, hence the entry rather than a code change.
   'app/api/reports/route.ts:product': 'Bounded by an hsn in-set; distinct on hsn.',
+  // 🔒 N4 — ACCEPTED after analysis, not merely deferred.
+  //
+  // buildConsolidatedReport() takes a products array and aggregates in JS. That
+  // read is unbounded, and the obvious fix is to push the aggregation into SQL
+  // (as the dashboard and stock report now do). It was NOT done, deliberately:
+  //
+  //   1. The JS path is the only place two real rules are unit-tested — the
+  //      GREATEST(stock, 0) clamp (see N6, which was a live bug found here) and
+  //      the rule that `shopId: null` products count toward EVERY shop. Moving
+  //      aggregation into SQL relocates both into a path no unit test can reach
+  //      without a live database. Trading tested correctness for unbounded-read
+  //      safety is the wrong direction on the report where a clamp bug was just
+  //      found.
+  //   2. Unlike the dashboard, this is not a hot path: multi-shop owners only,
+  //      opened occasionally rather than on every app load.
+  //   3. Capping the fetch is not an option here — stockValue and productCount
+  //      are totals, so a truncated list silently understates them. That is the
+  //      failure mode the stock-report fix (N4) exists to prevent.
+  //
+  // Revisit if a shop's catalogue makes this read slow in practice. The correct
+  // shape then is SQL aggregation PLUS integration tests covering the clamp and
+  // the null-shopId sharing rule — not the refactor alone.
   'app/api/reports/consolidated/route.ts:product':
-    'N4 — OPEN. Needs computeConsolidatedReport() to accept per-shop aggregates. Tracked in docs/audit/04-scale-sweep.md.',
+    'ACCEPTED — JS aggregation retains unit-tested clamp + null-shopId sharing; cold path; totals cannot be capped. See note above.',
   // NOTE: parties/[id]/balance-as-of is deliberately ABSENT. It needed an
   // exception until the N5 fix pushed `date <= asOfDate` into SQL; now the
   // scanner sees it as date-bounded and no exception is required. That is the
