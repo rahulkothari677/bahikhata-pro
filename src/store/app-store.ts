@@ -14,6 +14,7 @@ export type ViewType =
   | 'account'
   | 'transaction-detail'
   | 'party-profile'
+  | 'party-bills'
   | 'new-sale'
   | 'new-purchase'
   | 'new-estimate'

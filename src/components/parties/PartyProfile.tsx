@@ -832,6 +832,34 @@ export function PartyProfile() {
             <MessageCircle className="w-4 h-4" />
             Send PDF
           </Button>
+          {/*
+            🔒 AUDIT C5: Bills opens on its OWN page rather than expanding here.
+            As a card inline, a customer with many bills pushed the statement,
+            chart and top-products below the fold and turned this screen into a
+            scroll marathon — a new section that makes the existing screen worse
+            is not an improvement. On its own page it also gets search and
+            filtering, which would not fit in a card.
+          */}
+          {unpaidBillRows.length > 0 || billRows.length > 0 ? (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setPreviousView('party-profile')
+                setView('party-bills')
+              }}
+              className="gap-2"
+              title="View every bill for this party and settle individually"
+            >
+              <Receipt className="w-4 h-4" />
+              Bills
+              {unpaidBillRows.length > 0 && (
+                <Badge variant="secondary" className="text-3xs px-1.5 py-0 ml-0.5">
+                  {unpaidBillRows.length}
+                </Badge>
+              )}
+            </Button>
+          ) : null}
           <Button size="sm" variant="outline" onClick={() => setView('parties')} className="gap-2">
             <User className="w-4 h-4" /> All Parties
           </Button>
@@ -957,123 +985,6 @@ export function PartyProfile() {
         </CardContent>
       </Card>
 
-      {/*
-        🔒 AUDIT C5 — Bills
-        ────────────────────────────────────────────────────────────────────
-        The bill-level view the shopkeeper needs when a customer is standing
-        at the counter: which bills are open, and how much is left on each.
-
-        Before allocation existed there was nowhere to see this. The party
-        header showed a correct total, the bills showed stale dues, and the
-        two never met on one screen — which is precisely why the ₹1,000
-        discrepancy went unnoticed for so long. Putting them together is the
-        point: if they ever disagree again, it is now visible at a glance.
-
-        Defaults to UNPAID ONLY. When a customer is waiting, the open bills
-        are the only ones that matter; a long paid history in the way is
-        noise at exactly the wrong moment.
-      */}
-      {billRows.length > 0 && (
-        <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
-          <CardHeader className="pb-2">
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <CardTitle className="text-base flex items-center gap-2">
-                  <Receipt className="w-4 h-4" /> Bills
-                </CardTitle>
-                <p className="text-xs text-muted-foreground">
-                  {unpaidBillRows.length > 0
-                    ? `${unpaidBillRows.length} open · ${formatINR(totalBillsDue)} due`
-                    : 'All bills settled'}
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="text-xs h-8"
-                onClick={() => setShowAllBills(v => !v)}
-              >
-                {showAllBills ? 'Unpaid only' : `Show all (${billRows.length})`}
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {visibleBillRows.map((b: any) => (
-                <div
-                  key={b.id}
-                  className="flex items-center justify-between gap-2 p-2 rounded-lg bg-muted/30"
-                >
-                  <button
-                    className="flex-1 min-w-0 text-left"
-                    onClick={() => {
-                      setSelectedTransactionId(b.id)
-                      setPreviousView('party-profile')
-                      setView('transaction-detail')
-                    }}
-                  >
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-medium truncate">
-                        {b.invoiceNo || b.id.slice(-6)}
-                      </span>
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          'text-3xs px-1.5 py-0',
-                          b.due === 0
-                            ? 'text-emerald-600 border-emerald-300'
-                            : b.settledSoFar > 0
-                              ? 'text-amber-600 border-amber-300'
-                              : 'text-rose-600 border-rose-300',
-                        )}
-                      >
-                        {b.due === 0 ? 'Paid' : b.settledSoFar > 0 ? 'Partly paid' : 'Unpaid'}
-                      </Badge>
-                    </div>
-                    <p className="text-2xs text-muted-foreground mt-0.5">
-                      {formatDate(b.date)} · {formatINR(b.totalAmount)}
-                      {b.settledSoFar > 0 && b.due > 0 && (
-                        <> · {formatINR(b.settledSoFar)} received</>
-                      )}
-                    </p>
-                  </button>
-                  <div className="text-right shrink-0">
-                    <p className={cn('text-sm font-semibold', b.due > 0 ? 'text-rose-600' : 'text-emerald-600')}>
-                      {b.due > 0 ? formatINR(b.due) : '—'}
-                    </p>
-                    {b.due > 0 && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="h-6 px-2 text-2xs text-primary"
-                        onClick={() => {
-                          // 🔒 C5: pre-fill the amount with THIS bill's due. The
-                          // server allocates oldest-first, so on a party with
-                          // older open bills this may settle those first — the
-                          // "choose bills myself" step that fixes that is the
-                          // next phase, and until it lands this button is a
-                          // shortcut for the amount, not a promise about which
-                          // bill receives it.
-                          setPaymentType(party?.type === 'supplier' ? 'paid' : 'received')
-                          setPaymentAmount(String(b.due))
-                          setPaymentDialogOpen(true)
-                        }}
-                      >
-                        Settle
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-            {!showAllBills && unpaidBillRows.length === 0 && (
-              <p className="text-xs text-muted-foreground text-center py-2">
-                No open bills. Tap “Show all” to see settled ones.
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      )}
 
       {/* Top products */}
       {topProducts.length > 0 && (

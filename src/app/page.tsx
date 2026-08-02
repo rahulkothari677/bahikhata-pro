@@ -55,6 +55,9 @@ const TransactionDetail = dynamic(() => import('@/components/ledger/TransactionD
 })
 const TransactionEntry = dynamic(() => import('@/components/ledger/TransactionEntry').then(m => ({ default: m.TransactionEntry })), { ssr: false })
 const PartyProfile = dynamic(() => import('@/components/parties/PartyProfile').then(m => ({ default: m.PartyProfile })), { ssr: false })
+// 🔒 AUDIT C5: the party's bills on their own page — moved out of PartyProfile
+// so a customer with many bills does not bury the statement and charts below.
+const PartyBills = dynamic(() => import('@/components/parties/PartyBills').then(m => ({ default: m.PartyBills })), { ssr: false })
 const BillScanner = dynamic(() => import('@/components/scanner/BillScanner').then(m => ({ default: m.BillScanner })), { ssr: false })
 const Reports = dynamic(() => import('@/components/reports/Reports').then(m => ({ default: m.Reports })), { ssr: false })
 const ToolsHub = dynamic(() => import('@/components/layout/ToolsHub').then(m => ({ default: m.ToolsHub })), { ssr: false })
@@ -504,6 +507,7 @@ export default function Home() {
             {currentView === 'document-vault' && <DocumentVault />}
             {currentView === 'transaction-detail' && <TransactionDetail />}
             {currentView === 'party-profile' && <PartyProfile />}
+            {currentView === 'party-bills' && <PartyBills />}
             {currentView === 'new-sale' && <TransactionEntry type="sale" />}
             {currentView === 'new-purchase' && <TransactionEntry type="purchase" />}
             {/* 🔒 Feature Phase 3: Estimates/Quotations — reuses TransactionEntry
