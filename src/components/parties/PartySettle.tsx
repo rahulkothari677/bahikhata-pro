@@ -280,7 +280,7 @@ export function PartySettle() {
           header="never" — the same pattern Account and More use. The global
           "Dashboard" header above a focused settle screen was just noise. */}
       <div className="sticky top-0 z-20 shrink-0 border-b border-border bg-background/95 backdrop-blur">
-        <div className="max-w-3xl mx-auto w-full px-3 py-2.5 flex items-center gap-2">
+        <div className="w-full px-3 lg:px-5 py-2.5 flex items-center gap-2">
           <Button
             variant="ghost"
             size="sm"
@@ -298,7 +298,11 @@ export function PartySettle() {
         </div>
       </div>
 
-      <div className="flex-1 w-full max-w-3xl mx-auto px-3 py-3 space-y-3">
+      {/* Full width, matching the Bills page (which has no max-width and fills
+          `main` directly). An earlier version centred this in a 768px column;
+          on a 1920px desktop that left most of the screen blank while the bill
+          table — the part that benefits most from width — stayed cramped. */}
+      <div className="flex-1 w-full px-3 lg:px-5 py-3 space-y-3">
         {/*
           ONE summary line, not two cards.
 
@@ -325,10 +329,15 @@ export function PartySettle() {
 
         <Card className="shadow-card border-border/60">
           <CardContent className="p-3 space-y-3">
-            {/* Type and Mode together, ABOVE the bills — both describe the money
+            {/* Type, Mode, Amount and Notes on ONE row once there is width for
+                it — four short fields stacked down a 1920px screen is what made
+                the page feel empty. They collapse to two columns on a tablet
+                and one on a phone.
+
+                Type and Mode stay ABOVE the bills: both describe the money
                 being handed over, so deciding them after allocating it read
                 backwards. */}
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <div>
                 <Label htmlFor="settle-type" className="text-sm">Payment Type</Label>
                 <Select value={paymentType} onValueChange={(v) => setPaymentType(v as 'received' | 'paid')}>
@@ -351,43 +360,59 @@ export function PartySettle() {
                   </SelectContent>
                 </Select>
               </div>
+
+              <div>
+                <Label htmlFor="settle-amount" className="text-sm">
+                  {paymentType === 'received' ? 'Amount received (₹)' : 'Amount paid (₹)'}
+                </Label>
+                {/* Sized by its grid column now, rather than by a hard cap. The
+                    old full-bleed box made a four-digit number hard to read. */}
+                <Input
+                  id="settle-amount"
+                  inputMode="decimal"
+                  type="number"
+                  value={amount}
+                  onChange={(e) => { setAmount(e.target.value); setTouched(false) }}
+                  placeholder="0"
+                  className="mt-1 w-full text-lg font-semibold tabular-nums"
+                  autoFocus
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="settle-notes" className="text-sm">Notes (optional)</Label>
+                <Input
+                  id="settle-notes"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="e.g. Part payment for July"
+                  className="mt-1"
+                />
+              </div>
             </div>
 
-            <div>
-              <Label htmlFor="settle-amount" className="text-sm">
-                {paymentType === 'received' ? 'Amount received (₹)' : 'Amount paid (₹)'}
-              </Label>
-              {/* An amount is a short value; a full-width box just made it hard
-                  to see what had been typed. */}
-              <Input
-                id="settle-amount"
-                inputMode="decimal"
-                type="number"
-                value={amount}
-                onChange={(e) => { setAmount(e.target.value); setTouched(false) }}
-                placeholder="0"
-                className="mt-1 max-w-[16rem] text-lg font-semibold tabular-nums"
-                autoFocus
-              />
-              {/* 🔒 DOUBLE-COUNT GUARD, at the moment of risk.
-                  This fires only when the amount EXCEEDS what is outstanding —
-                  the actual signature of re-entering money already typed into a
-                  bill's "Paid Amount". The screen used to carry a standing amber
-                  panel instead, which showed on every visit for every party with
-                  any payment history, i.e. always. A warning that is always on
-                  is furniture, and it was misread as "you have to pay this". */}
-              {overpayAmount > 0 && (
-                <p className="text-sm text-rose-600 dark:text-rose-400 mt-1.5">
-                  This is {formatINR(overpayAmount)} more than the {formatINR(Math.abs(balance))} outstanding.
-                  {alreadyPaidOnBills > 0
-                    ? ' That usually means it is already recorded on a bill.'
-                    : ''}
-                </p>
-              )}
-              <p className="text-xs text-muted-foreground mt-1.5">
-                Bills below fill automatically, oldest first. Change any of them if needed.
+            {/* 🔒 DOUBLE-COUNT GUARD, at the moment of risk.
+                This fires only when the amount EXCEEDS what is outstanding —
+                the actual signature of re-entering money already typed into a
+                bill's "Paid Amount". The screen used to carry a standing amber
+                panel instead, which showed on every visit for every party with
+                any payment history, i.e. always. A warning that is always on
+                is furniture, and it was misread as "you have to pay this".
+
+                Full width, below the row: a warning about money must not be
+                squeezed into a quarter-width column and wrapped onto four
+                lines. */}
+            {overpayAmount > 0 && (
+              <p className="text-sm text-rose-600 dark:text-rose-400">
+                This is {formatINR(overpayAmount)} more than the {formatINR(Math.abs(balance))} outstanding.
+                {alreadyPaidOnBills > 0
+                  ? ' That usually means it is already recorded on a bill.'
+                  : ''}
               </p>
-            </div>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Bills below fill automatically, oldest first. Change any of them if needed.
+            </p>
           </CardContent>
         </Card>
 
@@ -529,26 +554,25 @@ export function PartySettle() {
           </Card>
         )}
 
-        <Card className="shadow-card border-border/60">
-          <CardContent className="p-3">
-            <Label htmlFor="settle-notes" className="text-sm">Notes (optional)</Label>
-            <Input
-              id="settle-notes"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="e.g. Part payment for July"
-              className="mt-1"
-            />
-          </CardContent>
-        </Card>
       </div>
 
       <div className="sticky bottom-0 z-20 shrink-0 border-t border-border bg-background/95 backdrop-blur p-3">
-        <div className="max-w-3xl mx-auto flex items-center gap-2">
-          <Button variant="outline" onClick={() => setView('party-profile')} className="flex-1">
+        {/* On a wide screen a full-bleed pair of buttons looks like a banner,
+            so the actions cap out and sit right — where the eye already is
+            after filling the last column. On a phone they still fill the row. */}
+        <div className="w-full flex items-center gap-2 sm:justify-end px-0 lg:px-2">
+          <Button
+            variant="outline"
+            onClick={() => setView('party-profile')}
+            className="flex-1 sm:flex-none sm:w-40"
+          >
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={!canSave} className="flex-[2] bg-gradient-saffron gap-2">
+          <Button
+            onClick={handleSave}
+            disabled={!canSave}
+            className="flex-[2] sm:flex-none sm:w-64 bg-gradient-saffron gap-2"
+          >
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
             {saving ? 'Saving…' : `Record ${formatINR(parsedAmount)}`}
           </Button>
