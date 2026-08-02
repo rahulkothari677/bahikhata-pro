@@ -71,8 +71,8 @@ const ACCEPTED: Record<string, string> = {
   // N3 (dashboard) is FIXED — its entries were removed from this list by the
   // stale-entry check the moment the aggregates landed. That is the intended
   // lifecycle: an entry here is a debt, and paying it off deletes the line.
-  'app/api/insights/route.ts:product': 'N4 — OPEN. Tracked in docs/audit/04-scale-sweep.md.',
-  'app/api/analytics/route.ts:product': 'N4 — OPEN. Tracked in docs/audit/04-scale-sweep.md.',
+  // insights + analytics are FIXED (bounded / rewritten as SQL) — their
+  // entries were deleted here by the stale-entry check.
   'app/api/reports/route.ts:product': 'N4 — OPEN. Tracked in docs/audit/04-scale-sweep.md.',
   'app/api/reports/route.ts:party': 'N4 — OPEN. Tracked in docs/audit/04-scale-sweep.md.',
   'app/api/reports/consolidated/route.ts:product': 'N4 — OPEN. Tracked in docs/audit/04-scale-sweep.md.',

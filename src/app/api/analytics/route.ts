@@ -73,33 +73,66 @@ export async function GET() {
     }))
 
     // === 2. Dead stock — products with stock > 0 but zero sales in 90 days ===
-    // Find product IDs that HAD sales in the last 90 days, then exclude them.
-    const recentlySoldProductIds = await db.$queryRaw<Array<{ productId: string }>>`
-      SELECT DISTINCT ti."productId"
-      FROM "TransactionItem" ti
-      JOIN "Transaction" t ON ti."transactionId" = t.id
-      WHERE t."userId" = ${userId}
-        AND t."deletedAt" IS NULL
-        AND t."type" = 'sale'
-        AND t."date" >= ${ninetyDaysAgo}
-        AND ti."productId" IS NOT NULL
+    //
+    // 🔒 AUDIT PASS-1 N4: one bounded SQL query replaces TWO unbounded reads.
+    //
+    // WAS: (a) SELECT DISTINCT every product id sold in 90 days, into a JS Set,
+    //      and (b) db.product.findMany for EVERY in-stock product — then the
+    //      set difference, sort and .slice(0, 5) all happened in JavaScript.
+    //      A shop with 20,000 products materialised 20,000 rows plus a Set of
+    //      every sold id, to display five lines.
+    //
+    // NOW: NOT EXISTS does the exclusion inside Postgres, the ranking is an
+    // ORDER BY, and LIMIT 5 means at most five rows ever cross the wire. This
+    // is the same result computed where the data already lives.
+    //
+    // Ordering note: the old code sorted by tiedUpValue DESC, which is
+    // GREATEST(currentStock, 0) × purchasePrice. That expression is reproduced
+    // in the ORDER BY so the same five products surface in the same order.
+    // Ranking still uses the real value even when hideProfit blanks it for
+    // display — otherwise staff would see a differently-ordered list from the
+    // owner, which would leak ordering information about cost prices.
+    //
+    // $queryRaw bypasses the money extension, so purchasePrice arrives as raw
+    // PAISE and is converted explicitly below.
+    const deadStockRows = await db.$queryRaw<Array<{
+      name: string
+      currentStock: number
+      unit: string | null
+      purchasePrice: number
+    }>>`
+      SELECT p."name", p."currentStock", p."unit", p."purchasePrice"
+      FROM "Product" p
+      WHERE p."userId" = ${userId}
+        AND p."currentStock" > 0
+        AND NOT EXISTS (
+          SELECT 1
+          FROM "TransactionItem" ti
+          JOIN "Transaction" t ON ti."transactionId" = t.id
+          WHERE ti."productId" = p."id"
+            AND t."userId" = ${userId}
+            AND t."deletedAt" IS NULL
+            AND t."type" = 'sale'
+            AND t."date" >= ${ninetyDaysAgo}
+        )
+      ORDER BY ROUND(GREATEST(p."currentStock", 0)::numeric * p."purchasePrice"::numeric) DESC
+      LIMIT 5
     `
-    const recentlySoldSet = new Set(recentlySoldProductIds.map(r => r.productId))
-
-    const allProducts = await db.product.findMany({
-      where: { userId, currentStock: { gt: 0 } },
-      select: { id: true, name: true, currentStock: true, unit: true, purchasePrice: true },
-    })
-    const deadStock = allProducts
-      .filter(p => !recentlySoldSet.has(p.id))
+    const deadStock = deadStockRows
       .map(p => ({
         name: p.name,
         currentStock: p.currentStock,
         unit: p.unit || 'pcs',
-        tiedUpValue: hideProfit ? 0 : roundMoney(Math.max(0, p.currentStock) * (p.purchasePrice || 0)),  // 🔒 V26 M12: gate by hideProfit + clamp at 0
+        // 🔒 V26 M12: gate by hideProfit + clamp at 0
+        tiedUpValue: hideProfit
+          ? 0
+          : roundMoney(Math.max(0, p.currentStock) * fromPaise(Number(p.purchasePrice || 0))),
       }))
-      .sort((a, b) => b.tiedUpValue - a.tiedUpValue)
-      .slice(0, 5)
+    // 🔒 N4: the trailing `.sort(...).slice(0, 5)` was removed — ORDER BY and
+    // LIMIT 5 in the query above now do both. Keeping the JS sort would have
+    // been actively wrong under hideProfit: every tiedUpValue is blanked to 0
+    // there, so re-sorting on it would discard the SQL ordering and hand staff
+    // a differently-ordered list than the owner sees.
 
     // === 3. Most profitable customers (owner only) ===
     // SQL GROUP BY partyId, SUM grossProfit. Returns top 5.

@@ -56,6 +56,20 @@ export async function GET() {
     // with NO date filter → loaded ALL transactions for the user.
     const [products, salesVelocityRows, topProductRows, productsWithSales30d, recentTransactions, receivablePayable] = await Promise.all([
       // Products — read currentStock column directly (no re-derivation)
+      // 🔒 AUDIT PASS-1 N4: defensive cap, matching this file's own existing
+      // convention (`take: 5000` on the transaction fetch below, added by FIX
+      // M16 for the same reason).
+      //
+      // Unlike the dashboard's product read, this one cannot become a pure
+      // aggregate: the insight generators genuinely iterate products to compute
+      // stock-out velocity predictions and dead-stock candidates. So it is
+      // bounded rather than rewritten.
+      //
+      // ORDERING MATTERS: rows come back most-depleted first. If a catalogue
+      // ever exceeds the cap, the products retained are the ones most likely to
+      // produce an actionable insight ("running out soon"), rather than an
+      // arbitrary 5,000 in primary-key order. Truncation should degrade the
+      // tail of the list, not its usefulness.
       db.product.findMany({
         where: { userId },
         select: {
@@ -66,6 +80,8 @@ export async function GET() {
           currentStock: true,  // 🔒 V7 M1: use the column, not openingStock
           lowStockThreshold: true,
         },
+        orderBy: { currentStock: 'asc' },
+        take: 5000,
       }),
       // 🔒 FIX M16: Was `findMany({ include: { items: true } })` loading 60 days
       // of transactions with all items into memory (30K rows at scale → OOM).
