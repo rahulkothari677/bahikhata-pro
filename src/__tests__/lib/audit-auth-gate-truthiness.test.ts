@@ -132,3 +132,63 @@ describe('the founder diagnostic that leaked is scoped to one shop', () => {
     expect(src).toMatch(/userId is required/)
   })
 })
+
+/**
+ * 🔒 CUSTOMER PII MUST NOT REACH THE SERVER LOG.
+ *
+ * Phase 5, 2026-08-03. The restore route logged a shopkeeper's CUSTOMER name
+ * and the amount they paid:
+ *
+ *     console.error(`[restore] payment skipped: ... for ${payment.partyName} ...`)
+ *
+ * That writes a third party's name into Vercel and Sentry — systems the
+ * shopkeeper never agreed to, retained on someone else's schedule, readable by
+ * anyone with log access.
+ *
+ * The diagnostic value is the TYPE of failure, not whose it was. The name still
+ * reaches the person entitled to it, in the API response shown to the
+ * shopkeeper restoring their own books.
+ */
+describe('customer PII stays out of server logs', () => {
+  // Plain substrings, deliberately — a regex here needs escaping that the
+  // shell mangled once already, and substring matching is enough: we are
+  // looking for these identifiers appearing inside a template hole.
+  const CUSTOMER_FIELDS = ['partyName', 'party.name', 'customerName', 'party.phone']
+
+  test('the scan reaches real source', () => {
+    expect(files.length).toBeGreaterThan(50)
+  })
+
+  test('no console.* call interpolates a customer name or phone', () => {
+    const offenders: string[] = []
+    for (const f of files) {
+      const src = read(f)
+      for (const line of src.split('\n')) {
+        if (!line.includes('console.')) continue
+        if (!/console\.(log|error|warn|info)\s*\(/.test(line)) continue
+        // Only flag when the field sits inside a ${...} interpolation — a
+        // mention in a plain string is not a leak.
+        for (const fld of CUSTOMER_FIELDS) {
+          const i = line.indexOf(fld)
+          if (i === -1) continue
+          const before = line.slice(0, i)
+          const open = before.lastIndexOf('${')
+          const close = before.lastIndexOf('}')
+          if (open > close) {
+            offenders.push(`${f.split('src')[1]}: ${line.trim().slice(0, 100)}`)
+            break
+          }
+        }
+      }
+    }
+    expect(offenders).toEqual([])
+  })
+
+  test('the restore still reports the failure to the shopkeeper', () => {
+    // Removing PII from the log must not make the failure silent again —
+    // that was the whole point of the P6-6 fix this replaces.
+    const src = read(path.join(SRC, 'app/api/import/restore/route.ts'))
+    expect(src).toMatch(/results\.payments\.skipReasons\.push/)
+    expect(src).toMatch(/console\.error\(`\[restore\] payment skipped/)
+  })
+})

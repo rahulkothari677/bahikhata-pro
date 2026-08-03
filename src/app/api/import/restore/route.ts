@@ -471,9 +471,27 @@ export async function POST(req: NextRequest) {
           results.payments.imported++
         } catch (e: any) {
           // 🔒 P6-6 (Phase 6): Was: silent skip. Money silently lost on restore.
-          // Now: log the reason so the user can see what failed.
+          // Now the failure is reported — but see below for where.
           results.payments.skipped++
-          console.error(`[restore] payment skipped: ${payment.type} ₹${payment.amount} for ${payment.partyName || 'unknown party'} — ${e?.message || e}`)
+
+          /*
+           * 🔒 NO CUSTOMER NAME IN THE SERVER LOG (2026-08-03, Phase 5).
+           *
+           * This line used to interpolate `payment.partyName`, writing a
+           * shopkeeper's customer name and the amount they paid into Vercel
+           * and Sentry — third-party systems the shopkeeper never agreed to,
+           * retained on someone else's schedule, and readable by anyone with
+           * log access.
+           *
+           * The diagnostic value is the TYPE of failure, not who it happened
+           * to. The name still reaches the person entitled to it: it is in
+           * `skipReasons` in the response, which is shown to the shopkeeper
+           * restoring their own books.
+           */
+          results.payments.skipReasons.push(
+            `₹${payment.amount} ${payment.type} for "${payment.partyName || 'unknown party'}": ${e?.message || 'could not be saved'}`,
+          )
+          console.error(`[restore] payment skipped (${payment.type}): ${e?.message || e}`)
         }
       }
     }
