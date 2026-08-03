@@ -158,6 +158,20 @@ export function PartySelect({
             </div>
           ) : (
             <>
+              {/* 🔒 Sticky at the TOP (2026-08-03). This sat below every
+                  result inside a max-h-64 scroll box, so with a page of
+                  parties the "add a new one" action was off-screen exactly
+                  when a new walk-in customer was standing there. */}
+              <div className="sticky top-0 z-10 bg-popover p-2 border-b border-border">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full gap-1 border-primary/40 text-primary hover:bg-primary/5"
+                  onClick={() => setAddDialogOpen(true)}
+                >
+                  <Plus className="w-3.5 h-3.5" /> Add New {partyType === 'customer' ? 'Customer' : 'Supplier'}
+                </Button>
+              </div>
               {search && (
                 <div className="px-3 py-1.5 text-3xs text-muted-foreground uppercase font-medium border-b border-border">
                   {filteredParties.length} match{filteredParties.length !== 1 ? 'es' : ''}
@@ -193,16 +207,11 @@ export function PartySelect({
                   )}
                 </button>
               ))}
-              <div className="p-2 border-t border-border">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full gap-1"
-                  onClick={() => setAddDialogOpen(true)}
-                >
-                  <Plus className="w-3.5 h-3.5" /> Add New {partyType === 'customer' ? 'Customer' : 'Supplier'}
-                </Button>
-              </div>
+              {filteredParties.length > 20 && (
+                <div className="px-3 py-2 text-2xs text-muted-foreground border-t border-border">
+                  Showing 20 of {filteredParties.length} — keep typing to narrow it down.
+                </div>
+              )}
             </>
           )}
         </div>

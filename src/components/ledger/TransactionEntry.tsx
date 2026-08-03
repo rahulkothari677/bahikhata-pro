@@ -1515,9 +1515,32 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
           {/* Party selection */}
           <Card className="shadow-card border-border/60">
             <div className="p-4">
-              <h3 className="font-semibold text-sm flex items-center gap-2 mb-3">
-                <User className="w-4 h-4" /> {isSale ? 'Customer' : 'Supplier'}
-              </h3>
+              {/*
+                🔒 "Add New" lives beside the heading (2026-08-03, reported by
+                Rahul). It used to exist only at the BOTTOM of the dropdown's
+                scroll area — under up to 20 parties in a max-h-64 box — so the
+                one action a shopkeeper needs for a brand-new walk-in customer
+                was the hardest thing on the screen to reach.
+
+                Here it is visible before the dropdown is even opened, and it
+                does not move as the list scrolls.
+              */}
+              <div className="flex items-center justify-between gap-2 mb-3">
+                <h3 className="font-semibold text-sm flex items-center gap-2">
+                  <User className="w-4 h-4" /> {isSale ? 'Customer' : 'Supplier'}
+                </h3>
+                {!selectedParty && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 gap-1 text-xs border-primary/40 text-primary hover:bg-primary/5 shrink-0"
+                    onClick={() => { setPartyDropdownOpen(false); setAddPartyOpen(true) }}
+                  >
+                    <Plus className="w-3.5 h-3.5" /> Add New
+                  </Button>
+                )}
+              </div>
 
               {selectedParty ? (
                 <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border">
@@ -1570,6 +1593,19 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                         </div>
                       ) : (
                         <>
+                          {/* Sticky, so it stays put while the list scrolls —
+                              it used to sit below every result. */}
+                          <div className="sticky top-0 z-10 bg-popover p-2 border-b border-border">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="w-full gap-1 border-primary/40 text-primary hover:bg-primary/5"
+                              onClick={() => { setPartyDropdownOpen(false); setAddPartyOpen(true) }}
+                            >
+                              <Plus className="w-3.5 h-3.5" /> Add New {isSale ? 'Customer' : 'Supplier'}
+                            </Button>
+                          </div>
                           {partySearch && (
                             <div className="px-3 py-1.5 text-3xs text-muted-foreground uppercase font-medium border-b border-border">
                               {filteredParties.length} match{filteredParties.length !== 1 ? 'es' : ''}
@@ -1605,11 +1641,11 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                               )}
                             </button>
                           ))}
-                          <div className="p-2 border-t border-border">
-                            <Button variant="outline" size="sm" className="w-full gap-1" onClick={() => { setPartyDropdownOpen(false); setAddPartyOpen(true) }}>
-                              <Plus className="w-3.5 h-3.5" /> Add New {isSale ? 'Customer' : 'Supplier'}
-                            </Button>
-                          </div>
+                          {filteredParties.length > 20 && (
+                            <div className="px-3 py-2 text-2xs text-muted-foreground border-t border-border">
+                              Showing 20 of {filteredParties.length} — keep typing to narrow it down.
+                            </div>
+                          )}
                         </>
                       )}
                     </div>

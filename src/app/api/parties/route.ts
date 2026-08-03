@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { findDuplicateParty, duplicatePartyMessage } from '@/lib/party-duplicate'
 import { db, withConnectionRetry } from '@/lib/db'
 import { getAuthUserIdWithModule, getAuthContextForWrite } from '@/lib/get-auth'
 import { withCache, noStore } from '@/lib/cache'
@@ -115,6 +116,32 @@ export async function POST(req: NextRequest) {
     }
 
     const { name, type, phone, email, gstin, address, state, openingBalance } = validation.data as any
+
+    /*
+     * 🔒 DUPLICATE PARTY BLOCK (2026-08-03, reported by Rahul).
+     *
+     * Two ledgers for one real person split their dues, so the outstanding
+     * shown is only part of what is owed and a payment settles bills on one
+     * while the other keeps chasing. It never appears as an error — it appears
+     * as a customer being asked for money they already paid.
+     *
+     * A hard block is what Tally, QuickBooks, Zoho Books, Xero and Vyapar all
+     * do with contact/ledger names. Two genuine same-name customers are still
+     * recordable by distinguishing them, which is what makes the ledger
+     * readable later. See src/lib/party-duplicate.ts for the full reasoning.
+     */
+    const duplicate = await findDuplicateParty(userId, { name, phone })
+    if (duplicate) {
+      return NextResponse.json(
+        {
+          error: duplicatePartyMessage(duplicate),
+          code: 'DUPLICATE_PARTY',
+          field: duplicate.field,
+          existingParty: duplicate.party,
+        },
+        { status: 409 },
+      )
+    }
 
     const party = await db.party.create({
       data: {

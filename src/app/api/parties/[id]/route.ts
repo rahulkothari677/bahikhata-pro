@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { findDuplicateParty, duplicatePartyMessage } from '@/lib/party-duplicate'
 import { db } from '@/lib/db'
 import { getAuthUserIdWithModule, getAuthContextForWrite } from '@/lib/get-auth'
 import { fromPaise, parseMoney, roundMoney } from '@/lib/money'
@@ -407,6 +408,33 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (clientUpdatedAt && existing.updatedAt && clientUpdatedAt.getTime() !== existing.updatedAt.getTime()) {
       const serverTime = new Date(existing.updatedAt).toLocaleString('en-IN')
       conflictWarning = `This party was also edited on another device at ${serverTime} — please verify the details.`
+    }
+
+    /*
+     * 🔒 A RENAME MUST NOT CREATE A DUPLICATE (2026-08-03).
+     *
+     * Blocking only on create would leave the back door open: add "Ramesh K",
+     * then rename it to "Ramesh Kumar" and you have the two split ledgers the
+     * create-block exists to prevent. `excludeId` lets a party keep its own
+     * name — saving a form without touching the name must not fail.
+     */
+    if (updateData.name !== undefined || updateData.phone !== undefined) {
+      const duplicate = await findDuplicateParty(userId, {
+        name: updateData.name ?? existing.name,
+        phone: updateData.phone ?? existing.phone,
+        excludeId: id,
+      })
+      if (duplicate) {
+        return NextResponse.json(
+          {
+            error: duplicatePartyMessage(duplicate),
+            code: 'DUPLICATE_PARTY',
+            field: duplicate.field,
+            existingParty: duplicate.party,
+          },
+          { status: 409 },
+        )
+      }
     }
 
     const party = await db.party.update({
