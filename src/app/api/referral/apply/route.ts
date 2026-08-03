@@ -74,63 +74,121 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Cannot use your own referral code' }, { status: 400 })
     }
 
-    // Link the new user to this referral
-    await db.referral.update({
-      where: { id: referral.id },
-      data: {
-        referredId: userId,
-        status: 'completed',
-        completedAt: new Date(),
-      },
-    })
+    /*
+     * 🔒 REWRITTEN 2026-08-03 (Phase 3). Three separate defects lived here.
+     *
+     * 1. THE REWARD DID NOTHING. Both grants set `user.plan = 'pro'` and never
+     *    created a Subscription row. Since V26 F3, getUserPlan() treats
+     *    `user.plan` as a claim to be checked: it looks for an active,
+     *    non-expired Subscription and returns 'free' when there is none. So a
+     *    shopkeeper who referred three friends was told "you earned 1 year of
+     *    Pro" — and stayed on the free plan. Same for the "You got 7 days of
+     *    Pro free 🎉" welcome trial. Neither feature has ever worked since that
+     *    expiry fix landed. This is an interaction bug: both changes were
+     *    correct on their own.
+     *
+     * 2. NOT ATOMIC. referral.update → user.update → referral.updateMany ran as
+     *    three separate writes. A crash after granting Pro but before marking
+     *    the referrals `rewardGiven` left them eligible, so the NEXT completed
+     *    referral crossed the threshold again and granted another year.
+     *
+     * 3. RACY. The code was claimed by `findFirst({ status: 'pending' })`
+     *    followed by an unconditional `update` — two requests could both see it
+     *    pending and both redeem it. The threshold `count()` had the same
+     *    read-then-act shape.
+     *
+     * All three are fixed by one interactive transaction: the code is claimed
+     * with a conditional updateMany (whoever's write matches `status:
+     * 'pending'` wins, the loser sees count 0), the threshold is counted inside
+     * the same transaction, and each grant writes BOTH the user row and the
+     * Subscription row that makes it real.
+     */
+    const REWARD_PAYMENT_MODE = 'referral'
+    const TRIAL_PAYMENT_MODE = 'referral_trial'
 
-    // Check if referrer has reached the threshold
-    const completedCount = await db.referral.count({
-      where: { referrerId: referral.referrerId, status: 'completed' },
-    })
+    const outcome = await db.$transaction(async (tx) => {
+      // Claim the code. The WHERE carries the status, so exactly one concurrent
+      // request can win — the read above was only a fast pre-check.
+      const claimed = await tx.referral.updateMany({
+        where: { id: referral.id, status: 'pending' },
+        data: { referredId: userId, status: 'completed', completedAt: new Date() },
+      })
+      if (claimed.count === 0) return { claimed: false, rewardGranted: false }
 
-    let rewardGranted = false
+      let rewardGranted = false
+      const completedCount = await tx.referral.count({
+        where: { referrerId: referral.referrerId, status: 'completed' },
+      })
 
-    if (completedCount >= REWARD_THRESHOLD) {
-      // Grant 1 year Pro to the referrer!
-      const rewardEnd = new Date(Date.now() + REWARD_DURATION_DAYS * 24 * 60 * 60 * 1000)
+      if (completedCount >= REWARD_THRESHOLD) {
+        const rewardEnd = new Date(Date.now() + REWARD_DURATION_DAYS * 24 * 60 * 60 * 1000)
 
-      await db.user.update({
-        where: { id: referral.referrerId },
+        // Mark the referrals FIRST, conditionally. If another request already
+        // rewarded them, count is 0 and we do not grant a second year.
+        const marked = await tx.referral.updateMany({
+          where: { referrerId: referral.referrerId, status: 'completed', rewardGiven: false },
+          data: { rewardGiven: true, status: 'rewarded' },
+        })
+
+        if (marked.count > 0) {
+          await tx.user.update({
+            where: { id: referral.referrerId },
+            data: { plan: 'pro', renewsAt: rewardEnd, cancelledAt: null },
+          })
+          // The row that actually grants the plan. `amount: 0` — earned, not paid.
+          await tx.subscription.create({
+            data: {
+              id: `ref_${referral.id}`,
+              userId: referral.referrerId,
+              plan: 'pro',
+              status: 'active',
+              amount: 0,
+              paymentMode: REWARD_PAYMENT_MODE,
+              startDate: new Date(),
+              endDate: rewardEnd,
+            },
+          })
+          rewardGranted = true
+        }
+      }
+
+      // The new user's 7-day welcome trial — same treatment.
+      const trialEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+      await tx.user.update({
+        where: { id: userId },
+        data: { plan: 'pro', trialEndsAt: trialEnd, renewsAt: trialEnd },
+      })
+      await tx.subscription.create({
         data: {
+          id: `reftrial_${referral.id}`,
+          userId,
           plan: 'pro',
-          renewsAt: rewardEnd,
-          cancelledAt: null,
+          status: 'active',
+          amount: 0,
+          paymentMode: TRIAL_PAYMENT_MODE,
+          startDate: new Date(),
+          endDate: trialEnd,
         },
       })
 
-      // Mark all their referrals as rewarded
-      await db.referral.updateMany({
-        where: { referrerId: referral.referrerId, status: 'completed', rewardGiven: false },
-        data: { rewardGiven: true, status: 'rewarded' },
-      })
+      return { claimed: true, rewardGranted }
+    })
 
-      rewardGranted = true
+    if (!outcome.claimed) {
+      // Another request redeemed this code between our read and our claim.
+      return NextResponse.json({ error: 'Invalid or already used referral code' }, { status: 400 })
+    }
+    const rewardGranted = outcome.rewardGranted
 
+    if (rewardGranted) {
       await logAudit({
         userId: referral.referrerId,
         action: 'referral.reward_earned',
         entityType: 'referral',
-        metadata: { completedCount, reward: '1_year_pro' },
+        metadata: { reward: '1_year_pro' },
         req,
       })
     }
-
-    // Also give the NEW user a 7-day Pro trial as a welcome bonus
-    const trialEnd = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
-    await db.user.update({
-      where: { id: userId },
-      data: {
-        plan: 'pro',
-        trialEndsAt: trialEnd,
-        renewsAt: trialEnd,
-      },
-    })
 
     await logAudit({
       userId,
