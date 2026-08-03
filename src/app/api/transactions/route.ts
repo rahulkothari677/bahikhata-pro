@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { escapeLikeWildcards } from '@/lib/escape-like'
 import { db, withConnectionRetry } from '@/lib/db'
 import { getAuthContext, assertCanWrite } from '@/lib/get-auth'
 import { canAccessModule, type ModuleKey } from '@/lib/staff-permissions'
@@ -133,7 +134,7 @@ export async function GET(req: NextRequest) {
      * Composes with the keyset cursor below: both go into `where.AND`, so
      * paging THROUGH a filtered result set stays correct.
      */
-    const search = (searchParams.get('search') || '').trim()
+    const search = escapeLikeWildcards((searchParams.get('search') || '').trim())
     if (search) {
       if (!where.AND) where.AND = []
       where.AND.push({
