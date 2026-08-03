@@ -40,8 +40,39 @@ export async function GET() {
       })
     }
 
-    // 🔒 AUDIT FIX V5: Use env var instead of hardcoded URL
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXTAUTH_URL || 'https://ekbook-pro.vercel.app'
+    /*
+     * 🔒 AUDIT FIX V5: Use env var instead of hardcoded URL.
+     *
+     * 🔒 2026-08-03: …but only if it IS a URL. Found by reading the live
+     * response rather than the code: this endpoint was returning
+     *
+     *     "shareUrl": "NEXTAUTH_URL/?ref=RAHUL997"
+     *
+     * because NEXT_PUBLIC_APP_URL is set, in the deployment environment, to the
+     * literal string "NEXTAUTH_URL" — someone typed the variable NAME into the
+     * value box. The code was correct; the configuration was not. Every
+     * referral link and WhatsApp share a shopkeeper sent was unopenable, and
+     * nothing anywhere reported a problem.
+     *
+     * `||` only rejects an EMPTY value, so a wrong-but-present one sails
+     * through. Each candidate is now checked for being an absolute http(s) URL
+     * before it is trusted, so a misconfigured variable falls through to the
+     * next option instead of poisoning the link. The env var still needs
+     * fixing — this stops it silently reaching users while it is wrong.
+     */
+    const firstValidUrl = (...candidates: (string | undefined)[]): string => {
+      for (const c of candidates) {
+        if (!c) continue
+        try {
+          const u = new URL(c)
+          if (u.protocol === 'http:' || u.protocol === 'https:') return c.replace(/\/+$/, '')
+        } catch {
+          console.warn(`[referral/code] ignoring non-URL app-url value: ${JSON.stringify(c).slice(0, 60)}`)
+        }
+      }
+      return 'https://ekbook-pro.vercel.app'
+    }
+    const appUrl = firstValidUrl(process.env.NEXT_PUBLIC_APP_URL, process.env.NEXTAUTH_URL)
     const shareUrl = `${appUrl}/?ref=${referral.code}`
     const whatsappText = `🇮🇳 Check out EkBook — India's smartest ledger app! AI bill scanning, GST filing, inventory management. Use my code ${referral.code} to get started! ${shareUrl}`
     const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(whatsappText)}`
