@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { findDuplicateParty, duplicatePartyMessage } from '@/lib/party-duplicate'
+import { findDuplicateParty, duplicatePartyMessage, duplicatePartyFieldError } from '@/lib/party-duplicate'
 import { db } from '@/lib/db'
 import { getAuthUserIdWithModule, getAuthContextForWrite } from '@/lib/get-auth'
 import { fromPaise, parseMoney, roundMoney } from '@/lib/money'
@@ -430,6 +430,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
             error: duplicatePartyMessage(duplicate),
             code: 'DUPLICATE_PARTY',
             field: duplicate.field,
+            // Short text for the line under the field. `error` keeps the full
+            // reason, for surfaces with room (offline sync, API consumers).
+            fieldError: duplicatePartyFieldError(duplicate),
             existingParty: duplicate.party,
           },
           { status: 409 },

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { findDuplicateParty, duplicatePartyMessage } from '@/lib/party-duplicate'
+import { findDuplicateParty, duplicatePartyMessage, duplicatePartyFieldError } from '@/lib/party-duplicate'
 import { db, withConnectionRetry } from '@/lib/db'
 import { getAuthUserIdWithModule, getAuthContextForWrite } from '@/lib/get-auth'
 import { withCache, noStore } from '@/lib/cache'
@@ -137,6 +137,9 @@ export async function POST(req: NextRequest) {
           error: duplicatePartyMessage(duplicate),
           code: 'DUPLICATE_PARTY',
           field: duplicate.field,
+          // Short text for the line under the field. `error` keeps the full
+          // reason, for surfaces with room (offline sync, API consumers).
+          fieldError: duplicatePartyFieldError(duplicate),
           existingParty: duplicate.party,
         },
         { status: 409 },

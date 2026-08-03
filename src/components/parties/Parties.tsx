@@ -394,6 +394,9 @@ function PartyDialog({ open, onOpenChange, onSuccess }: {
     address: '', state: '', openingBalance: '',
   })
   const [saving, setSaving] = useState(false)
+  /** Duplicate name/phone rejected by the server, shown under that field. */
+  const [dupError, setDupError] = useState<{ field: "name" | "phone"; message: string } | null>(null)
+
 
   useEffect(() => {
     if (open) {
@@ -423,6 +426,16 @@ function PartyDialog({ open, onOpenChange, onSuccess }: {
         body: JSON.stringify(payload),
         offline: { invalidate: ['/api/parties', '/api/dashboard'] },
       })
+      // 🔒 A duplicate belongs UNDER the offending field, not in a toast that
+      // appears away from the input and disappears before it is read.
+      if (r.status === 409) {
+        const body = await r.json().catch(() => ({} as any))
+        if (body?.code === 'DUPLICATE_PARTY' && (body.field === 'name' || body.field === 'phone')) {
+          setDupError({ field: body.field, message: body.fieldError || 'This already exists — try a different one.' })
+          haptic.error()
+          return
+        }
+      }
       if (!r.ok) throw new Error(await readError(r))
       if (isQueuedResponse(r)) {
         sonnerToast.success('Saved offline — will sync when online')
@@ -452,7 +465,18 @@ function PartyDialog({ open, onOpenChange, onSuccess }: {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 py-2">
           <div className="sm:col-span-2">
             <Label htmlFor="field-name">Name *</Label>
-            <Input id="field-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Customer or supplier name" autoFocus />
+            <Input
+              id="field-name"
+              value={form.name}
+              onChange={(e) => { setDupError(null); setForm({ ...form, name: e.target.value }) }}
+              placeholder="Customer or supplier name"
+              className={cn(dupError?.field === 'name' && 'border-rose-500 focus-visible:ring-rose-500')}
+              aria-invalid={dupError?.field === 'name'}
+              autoFocus
+            />
+            {dupError?.field === 'name' && (
+              <p className="text-xs text-rose-600 mt-1">{dupError.message}</p>
+            )}
           </div>
           <div>
             <Label htmlFor="field-type">Type</Label>
@@ -485,7 +509,17 @@ function PartyDialog({ open, onOpenChange, onSuccess }: {
           </div>
           <div>
             <Label htmlFor="field-phone">Phone</Label>
-            <Input id="field-phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} placeholder="10-digit mobile" />
+            <Input
+              id="field-phone"
+              value={form.phone}
+              onChange={(e) => { setDupError(null); setForm({ ...form, phone: e.target.value }) }}
+              placeholder="10-digit mobile"
+              className={cn(dupError?.field === 'phone' && 'border-rose-500 focus-visible:ring-rose-500')}
+              aria-invalid={dupError?.field === 'phone'}
+            />
+            {dupError?.field === 'phone' && (
+              <p className="text-xs text-rose-600 mt-1">{dupError.message}</p>
+            )}
           </div>
           <div>
             <Label htmlFor="field-state">State</Label>

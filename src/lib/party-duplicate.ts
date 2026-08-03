@@ -106,6 +106,20 @@ export async function findDuplicateParty(
   return null
 }
 
+/**
+ * Short text for the line UNDER the offending field.
+ *
+ * Kept to one clause on purpose: it sits beside the input the shopkeeper is
+ * about to correct, so it needs to say which field is wrong and what to do —
+ * nothing else. The longer `duplicatePartyMessage` still explains WHY, for
+ * places that have room (offline sync failures, API consumers).
+ */
+export function duplicatePartyFieldError(hit: DuplicatePartyHit): string {
+  return hit.field === 'name'
+    ? `This name already exists — try a different name.`
+    : `This number already exists — try a different number.`
+}
+
 /** The message the shopkeeper sees. Names the existing party so they can act. */
 export function duplicatePartyMessage(hit: DuplicatePartyHit): string {
   const p = hit.party

@@ -18,7 +18,7 @@
  */
 import fs from 'fs'
 import path from 'path'
-import { normalizePartyName, normalizePartyPhone, duplicatePartyMessage } from '@/lib/party-duplicate'
+import { normalizePartyName, normalizePartyPhone, duplicatePartyMessage, duplicatePartyFieldError } from '@/lib/party-duplicate'
 
 const read = (rel: string) =>
   fs.readFileSync(path.join(process.cwd(), rel), 'utf8').replace(/\r\n/g, '\n')
@@ -119,5 +119,74 @@ describe('both write paths are blocked, not just create', () => {
     // another shop's customers through the error message.
     expect(lib).toMatch(/where: \{\s*userId,/)
     expect(lib).toMatch(/deletedAt: null/)
+  })
+})
+
+/**
+ * 🔒 The duplicate message belongs UNDER the field, not in a toast.
+ *
+ * Rahul, 2026-08-03: "the name or number already exits should be written in
+ * below name or number and not with popup."
+ *
+ * He is right, and for a concrete reason: a toast appears away from the input,
+ * covers other content, and disappears on its own — so the shopkeeper is told
+ * which field is wrong somewhere other than where they must fix it, and the
+ * message is gone by the time they look back.
+ */
+describe('duplicate errors render inline, under the offending field', () => {
+  const forms = ['src/components/common/PartySelect.tsx', 'src/components/parties/Parties.tsx']
+
+  test('both add-party forms were found', () => {
+    for (const f of forms) expect(fs.existsSync(path.join(process.cwd(), f))).toBe(true)
+  })
+
+  for (const f of forms) {
+    describe(f, () => {
+      const src = read(f)
+
+      test('a 409 sets field state instead of throwing to the toast', () => {
+        expect(src).toMatch(/if \(r\.status === 409\)/)
+        expect(src).toMatch(/setDupError\(\{ field: body\.field/)
+        // It must RETURN, or execution falls through to the generic throw and
+        // the toast reappears alongside the inline message.
+        //
+        // The end anchor is searched FROM the 409 block, not from the start of
+        // the file: these components have more than one fetch handler, so a
+        // plain indexOf found an earlier `if (!r.ok) throw` and produced an
+        // empty slice that matched nothing and passed vacuously.
+        const start = src.indexOf('if (r.status === 409)')
+        expect(start).toBeGreaterThan(-1)
+        const end = src.indexOf('if (!r.ok) throw', start)
+        expect(end).toBeGreaterThan(start)
+        const block = src.slice(start, end)
+        expect(block.length).toBeGreaterThan(50)
+        expect(block).toMatch(/return/)
+      })
+
+      test('the message renders under the name and phone inputs', () => {
+        expect(src).toMatch(/dupError\?\.field === 'name' && \(\s*<p/)
+        expect(src).toMatch(/dupError\?\.field === 'phone' && \(\s*<p/)
+      })
+
+      test('the offending input is marked invalid, not just annotated', () => {
+        expect(src).toMatch(/aria-invalid=\{dupError\?\.field === 'name'\}/)
+        expect(src).toMatch(/border-rose-500/)
+      })
+
+      test('editing the field clears the message', () => {
+        // The text describes the value that was rejected; leaving it over a
+        // changed value would be wrong.
+        expect(src).toMatch(/setDupError\(null\); setForm\(\{ \.\.\.form, name:/)
+        expect(src).toMatch(/setDupError\(null\); setForm\(\{ \.\.\.form, phone:/)
+      })
+    })
+  }
+
+  test('the inline text is short and says what to do', () => {
+    const nameMsg = duplicatePartyFieldError({
+      field: 'name', party: { id: 'x', name: 'A', phone: null, type: 'customer' },
+    })
+    expect(nameMsg).toBe('This name already exists — try a different name.')
+    expect(nameMsg.length).toBeLessThan(60)
   })
 })
