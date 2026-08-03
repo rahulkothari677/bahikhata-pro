@@ -60,10 +60,43 @@ import { apiError } from '@/lib/api-error'
 
 export const maxDuration = 30
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    if (!(await requireFounder())) {
-      return NextResponse.json({ error: 'Founder access required' }, { status: 403 })
+    /*
+     * 🔒 AUTHENTICATION BYPASS + CROSS-TENANT LEAK (fixed 2026-08-03, Phase 5).
+     *
+     * This was:
+     *
+     *     if (!(await requireFounder())) { return 403 }
+     *
+     * `requireFounder()` returns `{ userId } | { error: NextResponse }` — an
+     * OBJECT either way, and every object is truthy. So `!result` was always
+     * false and the 403 was unreachable. The gate did nothing.
+     *
+     * Combined with a `findMany` carrying no `userId`, ANY authenticated user
+     * could read every party in every shop that had a positive opening
+     * balance — names, PHONE NUMBERS, balances and the owning userId. The POST
+     * below then let them flip any of those balances.
+     *
+     * Every other debug route in this codebase already uses the correct
+     * `if ('error' in x) return x.error`. This file was the only one that did
+     * not, which is exactly why a type-level mistake survived: it looked like
+     * the others at a glance.
+     *
+     * Now: the real gate, PLUS an explicit target shop. That second part
+     * follows the precedent set in debug/repair-headers, whose own comment
+     * reads "Cross-user scans are not allowed." — the same reasoning applies
+     * here and simply had not been carried across.
+     */
+    const gate = await requireFounder()
+    if ('error' in gate) return gate.error
+
+    const targetUserId = new URL(req.url).searchParams.get('userId')
+    if (!targetUserId) {
+      return NextResponse.json({
+        error: 'userId query parameter is required',
+        message: 'Pass ?userId=<id> to scope the review to one shop. Cross-user scans are not allowed.',
+      }, { status: 400 })
     }
 
     // Find every supplier with a positive opening balance. The money extension
@@ -71,6 +104,7 @@ export async function GET() {
     // We include `type: 'both'` parties too — they may also have a sign error.
     const suspectParties = await db.party.findMany({
       where: {
+        userId: targetUserId,
         OR: [
           { type: 'supplier' },
           { type: 'both' },
@@ -163,20 +197,36 @@ export async function GET() {
  */
 export async function POST(req: Request) {
   try {
-    if (!(await requireFounder())) {
-      return NextResponse.json({ error: 'Founder access required' }, { status: 403 })
-    }
+    /*
+     * 🔒 Same bypass as the GET above — `!(await requireFounder())` was always
+     * false, so this endpoint was reachable by ANY authenticated user, and it
+     * WRITES: it flips the sign of a party's opening balance, which directly
+     * changes what a supplier is owed.
+     *
+     * `userId` is now required and the lookup is scoped by it, so a partyId
+     * belonging to another shop 404s instead of being silently edited. Without
+     * that, even a legitimate founder fixing a typo could flip the wrong
+     * shop's supplier and the route could not tell.
+     */
+    const gate = await requireFounder()
+    if ('error' in gate) return gate.error
 
     const body = await req.json()
-    const { partyId } = body
+    const { partyId, userId: targetUserId } = body
     if (!partyId || typeof partyId !== 'string') {
       return NextResponse.json({ error: 'partyId is required' }, { status: 400 })
+    }
+    if (!targetUserId || typeof targetUserId !== 'string') {
+      return NextResponse.json({
+        error: 'userId is required',
+        message: 'Pass the owning shop\'s userId so the party can be verified before it is modified.',
+      }, { status: 400 })
     }
 
     // Lock the operation to supplier/both parties with a POSITIVE opening.
     // Refuses to flip negative or zero openings, or non-supplier parties.
     const party = await db.party.findFirst({
-      where: { id: partyId, deletedAt: null },
+      where: { id: partyId, userId: targetUserId, deletedAt: null },
       select: { id: true, type: true, openingBalance: true, name: true },
     })
     if (!party) {
