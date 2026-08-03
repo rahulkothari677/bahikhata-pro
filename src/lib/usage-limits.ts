@@ -424,6 +424,47 @@ export async function checkAndIncrementUsage(
  * @param entityType - 'products' | 'shops' | 'staff'
  * @returns { allowed, plan, used, limit, remaining, upgradeMessage? }
  */
+/** The effective cap for one entity on one plan, with sentinels resolved. */
+function entityLimitFor(plan: Plan, entityType: 'products' | 'shops' | 'staff'): number {
+  const l = PLAN_LIMITS[plan]
+  const raw = entityType === 'products' ? l.products
+    : entityType === 'shops' ? l.shops
+    : l.staffAccounts
+  // Only products/shops use 0 to mean unlimited; staff: 0 is a real zero.
+  if (raw === 0 && entityType !== 'staff') return Infinity
+  return raw
+}
+
+/**
+ * Names a plan that genuinely offers MORE of this entity, derived from
+ * PLAN_LIMITS rather than assumed.
+ *
+ * 🔒 2026-08-03: was `plan === 'free' ? 'Pro' : 'Elite'`, which told a Free
+ * user to buy Pro for staff seats — Pro grants zero staff too. Once the staff
+ * limit was actually enforced, that message would have sold a ₹299 upgrade
+ * that does not deliver the thing it was shown for. Deriving the target means
+ * it stays honest if pricing changes.
+ */
+function upgradeMessageFor(
+  entityType: 'products' | 'shops' | 'staff',
+  plan: Plan,
+  limit: number,
+): string {
+  const order: Plan[] = ['free', 'pro', 'elite']
+  const higher = order.slice(order.indexOf(plan) + 1)
+  const target = higher.find(p => entityLimitFor(p, entityType) > limit)
+
+  const reached = limit === 0
+    ? `Your ${plan.toUpperCase()} plan doesn't include ${entityType}.`
+    : `You've reached the ${plan.toUpperCase()} plan limit of ${limit} ${entityType}.`
+
+  if (!target) return `${reached} Contact support if you need more.`
+
+  const targetLimit = entityLimitFor(target, entityType)
+  const amount = targetLimit === Infinity ? 'unlimited' : `${targetLimit}`
+  return `${reached} Upgrade to ${target === 'pro' ? 'Pro' : 'Elite'} for ${amount} ${entityType}.`
+}
+
 export async function checkEntityLimit(
   userId: string,
   entityType: 'products' | 'shops' | 'staff',
@@ -436,21 +477,61 @@ export async function checkEntityLimit(
   upgradeMessage?: string
 }> {
   const plan = await getUserPlan(userId)
-  const limits = PLAN_LIMITS[plan]
 
   // FOUNDER BYPASS
   if (await isFounder(userId)) {
     return { allowed: true, plan: 'elite', used: 0, limit: Infinity, remaining: Infinity }
   }
 
-  // Get the limit for this entity type
-  const limit = entityType === 'products' ? limits.products
-    : entityType === 'shops' ? limits.shops
-    : limits.staffAccounts
+  // Sentinels resolved in ONE place — see entityLimitFor. Reading the raw
+  // config here and again in the upgrade message is how the two interpretations
+  // of `0` drifted apart to begin with.
+  const limit = entityLimitFor(plan, entityType)
 
-  // 0 = unlimited (Pro/Elite products, Elite shops)
-  if (limit === 0 || limit === Infinity) {
+  /*
+   * 🔒 2026-08-03: `0` meant two OPPOSITE things and this branch read both the
+   * same way.
+   *
+   *   products: 0        → UNLIMITED (Pro, Elite)
+   *   shops:    Infinity → UNLIMITED (Elite)
+   *   staff:    0        → NONE ALLOWED (Free and Pro — staff is Elite-only)
+   *
+   * Treating every 0 as "unlimited" made checkEntityLimit(_, 'staff') return
+   * allowed:true for Free and Pro — the exact opposite of what those plans
+   * grant. Proven against the live deployment: a Pro account created three
+   * staff accounts with no error, while the fourth SHOP on that same account
+   * was correctly refused. Same function, same route shape — which is what
+   * isolated the sentinel as the cause rather than a missing check.
+   *
+   * Two things follow from it. Staff seats are the Elite tier's headline
+   * feature (₹599 vs ₹299), so every Free and Pro user had it for nothing;
+   * and Elite subscribers, who actually paid, were the only ones a cap
+   * applied to.
+   *
+   * Note the counting code below already handles this correctly — the V17-Ext
+   * fix on line ~478 was written to stop a Pro owner ("limit 0") creating
+   * unlimited CAs. This early return sat above it and made that fix
+   * unreachable for exactly the plans it was written for.
+   *
+   * Now only Infinity means unlimited. products/shops keep the legacy 0
+   * sentinel because their configs still use it; staff does not.
+   */
+  if (limit === Infinity) {
     return { allowed: true, plan, used: 0, limit: Infinity, remaining: Infinity }
+  }
+
+  // A limit of zero needs no count, and must not fail open: the catch below
+  // returns allowed:true on a DB error, which would hand out a paid seat
+  // every time the database hiccuped.
+  if (limit === 0) {
+    return {
+      allowed: false,
+      plan,
+      used: 0,
+      limit: 0,
+      remaining: 0,
+      upgradeMessage: upgradeMessageFor(entityType, plan, 0),
+    }
   }
 
   // Count existing entities
@@ -477,14 +558,13 @@ export async function checkEntityLimit(
   }
 
   if (used >= limit) {
-    const upgradePlan = plan === 'free' ? 'Pro' : 'Elite'
     return {
       allowed: false,
       plan,
       used,
       limit,
       remaining: 0,
-      upgradeMessage: `You've reached the ${plan.toUpperCase()} plan limit of ${limit} ${entityType}. Upgrade to ${upgradePlan} for more.`,
+      upgradeMessage: upgradeMessageFor(entityType, plan, limit),
     }
   }
 
