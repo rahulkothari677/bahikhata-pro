@@ -85,6 +85,8 @@ export function PartySettle() {
   // Once the shopkeeper edits a bill box, auto-fill stops. Their choice wins.
   const [touched, setTouched] = useState(false)
   const consumedIntent = useRef(false)
+  /** An explicit per-bill allocation is in force; auto-fill must not clear it. */
+  const explicitAlloc = useRef(false)
 
   const { data, isLoading } = useQuery({
     queryKey: ['party', selectedPartyId, 'settle'],
@@ -168,6 +170,7 @@ export function PartySettle() {
   useEffect(() => {
     if (!pendingSettle || consumedIntent.current) return
     consumedIntent.current = true
+    explicitAlloc.current = true   // see the note on the auto-fill effect below
     setAmount(String(pendingSettle.amount))
     setAlloc({ [pendingSettle.transactionId]: String(pendingSettle.amount) })
     setTouched(true)   // an explicit bill choice must not be auto-overwritten
@@ -177,9 +180,29 @@ export function PartySettle() {
   /**
    * Auto-fill oldest-first as the total changes — using the SAME planner the
    * server uses, so what is shown is what will happen.
+   *
+   * 🔒 THE `explicitAlloc` REF IS LOAD-BEARING (2026-08-03, found in the
+   * browser, not by a test).
+   *
+   * `touched` alone is not enough. On the mount pass BOTH effects run against
+   * the same render's values: the effect above sets alloc = { thatBill: 553 }
+   * and touched = true, then this one still sees touched === false and
+   * parsedAmount === 0, hits the clause below, and calls setAlloc({}). The two
+   * writes batch and the later one wins, so the allocation was wiped. On the
+   * next render touched is finally true, this effect returns early, and it
+   * never restores what it deleted.
+   *
+   * The visible result was severe: "Settle ₹553" from a bill opened with the
+   * amount filled but every bill box at 0 — "₹553 will be kept as an advance".
+   * The payment would NOT have reduced that invoice. A ref is read at the
+   * moment the effect runs rather than being captured by the render, so it
+   * closes the window that state cannot.
+   *
+   * Cleared by "Auto-fill oldest first" — that button is the shopkeeper saying
+   * they no longer want their explicit choice kept.
    */
   useEffect(() => {
-    if (touched) return
+    if (touched || explicitAlloc.current) return
     if (parsedAmount <= 0) { setAlloc({}); return }
     const plan = planAllocationOldestFirst(openBills, parsedAmount)
     const next: Record<string, string> = {}
@@ -449,7 +472,7 @@ export function PartySettle() {
                   <button
                     type="button"
                     className="text-xs text-primary underline underline-offset-2 flex items-center gap-1"
-                    onClick={() => setTouched(false)}
+                    onClick={() => { explicitAlloc.current = false; setTouched(false) }}
                   >
                     <Wand2 className="w-3.5 h-3.5" /> Auto-fill oldest first
                   </button>
