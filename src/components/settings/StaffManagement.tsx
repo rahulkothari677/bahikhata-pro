@@ -80,8 +80,20 @@ export function StaffManagement() {
         body: JSON.stringify(form),
         offline: { queueable: false },
       })
-      const data = await r.json()
-      if (!r.ok) throw new Error(data.detail || data.error || 'Unknown error')
+      /*
+       * 🔒 2026-08-03: was `data.detail || data.error || 'Unknown error'`.
+       * `error` is the machine CODE and `message` is the sentence written for
+       * the shopkeeper, so this showed the code and dropped the explanation.
+       * It went unnoticed because the staff limit was never enforced — the
+       * only way to reach this branch was a validation slip, where `error`
+       * happens to read like English. With the limit now enforced, a Free or
+       * Pro owner would have been told "plan_limit_reached" instead of
+       * "Your PRO plan doesn't include staff. Upgrade to Elite for 5 staff."
+       *
+       * readError() already gets the precedence right and every other call
+       * site uses it.
+       */
+      if (!r.ok) throw new Error(await readError(r))
       sonnerToast.success('Staff member added!')
       refetch()
       setDialogOpen(false)

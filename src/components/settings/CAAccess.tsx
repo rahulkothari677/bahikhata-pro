@@ -34,6 +34,7 @@ import {
 } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 import { offlineFetch } from '@/lib/offline-fetch'
+import { readError } from '@/lib/read-error'
 
 // Modules CAs can access (for the info box — mirrors canAccessModule's CA_MODULES)
 const CA_ACCESSIBLE_MODULES = [
@@ -89,8 +90,10 @@ export function CAAccess() {
         body: JSON.stringify({ ...form, role: 'ca' }),
         offline: { queueable: false },
       })
-      const data = await r.json()
-      if (!r.ok) throw new Error(data.detail || data.error || data.message || 'Unknown error')
+      // 🔒 2026-08-03: `data.message` was in the chain but AFTER `data.error`,
+      // so the machine code still won. CA accounts share the staff quota, so
+      // this shows a plan refusal too. See StaffManagement for the full note.
+      if (!r.ok) throw new Error(await readError(r))
       sonnerToast.success('CA account created! They can now log in with read-only access.')
       // Invalidate the shared ['staff'] cache so both cards refresh
       queryClient.invalidateQueries({ queryKey: ['staff'] })
