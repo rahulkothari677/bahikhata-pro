@@ -331,12 +331,29 @@ export function Ledger({ type }: { type: LedgerType }) {
   // 🔒 V17 Audit Phase 0 FIX: Same net-of-returns pattern for paidAmount.
   // Credit notes have paidAmount (the refund issued) — SUBTRACT for sales.
   // Debit notes have paidAmount (the refund received) — SUBTRACT for purchases.
+  //
+  // 🔒 SETTLEMENTS COUNT TOO (2026-08-03). Found in the browser: INV-0043 —
+  // ₹600 sale, ₹200 at billing, ₹400 settled later, fully paid — showed
+  // PAID ₹200 / OUTSTANDING ₹400 in these cards, while the bill itself
+  // correctly read ₹0 due.
+  //
+  // The rule is stated at the top of this file and applied per row via
+  // computeInvoiceDue(), but this AGGREGATE still did `total − paidAmount`,
+  // so every Settle payment was invisible to it. That is the stale "Due" the
+  // C5 work existed to kill — an invoice that looks unpaid invites being
+  // collected a second time, and here it was doing so at the top of the
+  // ledger, where the shopkeeper looks first.
+  //
+  // `allocatedAmount` is summed from paymentAllocations by the list API, so
+  // it is already on every row. Notes carry no allocations (Settle only
+  // targets sale/purchase), so adding it is a no-op for them.
   const totalPaid = filtered.reduce((s, t) => {
     if (t.type === 'estimate') return s  // 🔒 V26 N2 follow-up: quotes collect nothing
+    const collected = roundMoney((t.paidAmount || 0) + (t.allocatedAmount || 0))
     if (isSale) {
-      return t.type === 'credit-note' ? s - (t.paidAmount || 0) : s + (t.paidAmount || 0)
+      return t.type === 'credit-note' ? s - collected : s + collected
     } else {
-      return t.type === 'debit-note' ? s - (t.paidAmount || 0) : s + (t.paidAmount || 0)
+      return t.type === 'debit-note' ? s - collected : s + collected
     }
   }, 0)
   const totalDue = totalAmount - totalPaid
