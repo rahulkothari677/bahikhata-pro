@@ -51,13 +51,34 @@ export async function GET() {
         deletedAt: null,
         date: { gte: startOfToday, lte: now },
       },
-      _sum: { totalAmount: true },
+      // 🔒 DRAWER DOUBLE-COUNT FIX (2026-08-03, reported by Rahul).
+      //
+      // `totalAmount` is the INVOICE value. `paidAmount` is what actually
+      // changed hands at billing. Summing totalAmount into the cash drawer
+      // treated every invoice as if it had been paid in full on the spot, so
+      // anything collected later was counted TWICE — once inside the invoice
+      // total and again as the Settle payment.
+      //
+      // Real case: a ₹600 cash sale with ₹200 paid at billing and ₹400
+      // settled later showed ₹600 + ₹400 = ₹1,000 expected in the drawer,
+      // when only ₹600 had physically arrived.
+      //
+      // Both are summed: totalAmount still drives the REVENUE lines (a sale
+      // is revenue when made, not when collected), paidAmount drives the CASH
+      // lines. They answer different questions and must not be conflated.
+      _sum: { totalAmount: true, paidAmount: true },
       _count: { _all: true },
     })
 
-    // Also get today's payments (udhaar collections + payments to suppliers)
-    const paymentsByType = await db.payment.groupBy({
-      by: ['type'],
+    // Today's payments (udhaar collections + payments to suppliers).
+    //
+    // 🔒 Grouped by mode as well as type. The drawer previously added EVERY
+    // received payment to expected cash regardless of how it arrived — the
+    // old comment called finer granularity a "future enhancement", but a
+    // customer settling ₹400 by UPI never touches the cash drawer, so it made
+    // the count come up short by exactly that amount every time.
+    const paymentsByTypeMode = await db.payment.groupBy({
+      by: ['type', 'mode'],
       where: {
         userId,
         deletedAt: null,
@@ -85,10 +106,44 @@ export async function GET() {
     // wasn't subtracted from expected cash, and a cash debit note (refund from supplier)
     // wasn't added. Credit/debit note totalAmount is stored POSITIVE, so we subtract
     // for credit notes (sales reversal) and subtract for debit notes (purchase reversal).
+    // 🔒 CASH accumulators, kept strictly apart from the REVENUE ones above.
+    //   revenue  = invoice value        (totalAmount, every payment mode)
+    //   cash     = money in the drawer  (paidAmount,  cash mode only)
+    // A sale is revenue the moment it is made; it is cash only when collected.
+    let cashInFromSales = 0     // received at billing, cash mode
+    let cashOutForPurchases = 0 // paid at billing, cash mode
+    let cashIncome = 0
+    let cashExpenses = 0
+    let cashRefundsOut = 0      // credit notes actually refunded in cash
+    let cashRefundsIn = 0       // debit notes actually refunded to us in cash
+    // Received at billing across ALL modes. Only used to derive how much
+    // credit was extended today (totalSales − this), so it must be a
+    // paidAmount figure like the term it is subtracted from.
+    let salesReceivedAtBilling = 0
+
     for (const row of txByTypeMode) {
       const amount = roundMoney(row._sum.totalAmount || 0)
+      // What actually changed hands at billing. For income/expense
+      // resolveFinalPaid() defaults this to the total (they settle
+      // immediately); for credit/debit notes it defaults to 0, so an unrefunded
+      // note correctly moves no cash.
+      const received = roundMoney(row._sum.paidAmount || 0)
+      const isCash = row.paymentMode === 'cash'
       const count = row._count._all
       transactionCount += count
+
+      if (row.type === 'sale') {
+        salesReceivedAtBilling = roundMoney(salesReceivedAtBilling + received)
+      }
+
+      if (isCash) {
+        if (row.type === 'sale') cashInFromSales = roundMoney(cashInFromSales + received)
+        else if (row.type === 'purchase') cashOutForPurchases = roundMoney(cashOutForPurchases + received)
+        else if (row.type === 'income') cashIncome = roundMoney(cashIncome + received)
+        else if (row.type === 'expense') cashExpenses = roundMoney(cashExpenses + received)
+        else if (row.type === 'credit-note') cashRefundsOut = roundMoney(cashRefundsOut + received)
+        else if (row.type === 'debit-note') cashRefundsIn = roundMoney(cashRefundsIn + received)
+      }
 
       if (row.type === 'sale') {
         totalSales = roundMoney(totalSales + amount)
@@ -141,32 +196,48 @@ export async function GET() {
       }
     }
 
-    // Payments (udhaar settlements)
+    // Payments (udhaar settlements).
+    // Totals across all modes drive the DISPLAY; the cash-mode subtotals drive
+    // the drawer. A ₹400 settlement by UPI is real money collected, but it is
+    // not in the drawer.
     let udhaarCollected = 0, udhaarPaid = 0
-    for (const row of paymentsByType) {
+    let udhaarCollectedCash = 0, udhaarPaidCash = 0
+    for (const row of paymentsByTypeMode) {
       const amount = roundMoney(row._sum.amount || 0)
-      if (row.type === 'received') udhaarCollected = amount
-      else if (row.type === 'paid') udhaarPaid = amount
+      const isCash = row.mode === 'cash'
+      if (row.type === 'received') {
+        udhaarCollected = roundMoney(udhaarCollected + amount)
+        if (isCash) udhaarCollectedCash = roundMoney(udhaarCollectedCash + amount)
+      } else if (row.type === 'paid') {
+        udhaarPaid = roundMoney(udhaarPaid + amount)
+        if (isCash) udhaarPaidCash = roundMoney(udhaarPaidCash + amount)
+      }
     }
 
-    // Expected cash in drawer:
-    //   + cash sales (money in)
-    //   + other income (money in)
-    //   + udhaar collected (money in — customer paid us in cash/UPI/etc.)
-    //   - cash purchases (money out)
-    //   - expenses (money out)
-    //   - udhaar paid (money out — we paid supplier)
-    //
-    // Note: UPI/card/bank sales are NOT in the cash drawer — they went to
-    // the bank. Only cash mode sales are physical money in the drawer.
-    // Similarly, only cash-mode purchases and expenses are physical money out.
-    // Udhaar payments have a `mode` field (cash/upi/card/bank) but for the
-    // "expected cash" calculation we treat all received payments as cash in
-    // unless the user wants finer granularity (future enhancement).
-    // For simplicity: expected cash = cashSales + income + udhaarCollected
-    //                                - cashPurchases - expenses - udhaarPaid
+    /*
+     * Expected cash in the drawer — PHYSICAL cash only.
+     *
+     * Every term is (a) money that actually changed hands, not invoice value,
+     * and (b) cash mode, not UPI/card/bank.
+     *
+     *   + cash received at billing        (sales, paidAmount)
+     *   + cash income
+     *   + udhaar collected in cash        (Settle payments, mode = cash)
+     *   + refunds received from suppliers in cash   (debit notes)
+     *   − cash paid at billing            (purchases, paidAmount)
+     *   − cash expenses
+     *   − udhaar paid in cash
+     *   − refunds given to customers in cash        (credit notes)
+     *
+     * Worked example — the case that exposed the bug:
+     *   ₹600 cash sale, ₹200 paid at billing, ₹400 settled later in cash
+     *     cashInFromSales     = 200   (was 600: the whole invoice)
+     *     udhaarCollectedCash = 400
+     *     expected            = 600   (was 1,000)
+     */
     const expectedCash = roundMoney(
-      cashSales + income + udhaarCollected - cashPurchases - expenses - udhaarPaid
+      cashInFromSales + cashIncome + udhaarCollectedCash + cashRefundsIn
+      - cashOutForPurchases - cashExpenses - udhaarPaidCash - cashRefundsOut
     )
 
     return NextResponse.json({
@@ -197,6 +268,23 @@ export async function GET() {
       udhaarPaid,
       expectedCash,
       transactionCount,
+
+      // 🔒 The drawer's working, term by term, so the shopkeeper can check the
+      // figure instead of trusting it. Without this the old ₹1,000 looked
+      // exactly as authoritative as the correct ₹600.
+      cashInFromSales,        // received at billing today, cash mode
+      cashOutForPurchases,
+      cashIncome,
+      cashExpenses,
+      udhaarCollectedCash,    // subset of udhaarCollected that was cash
+      udhaarPaidCash,
+      cashRefundsOut,
+      cashRefundsIn,
+      salesReceivedAtBilling,
+      // Credit extended today = invoiced but not yet received. Shown so the
+      // gap between "Total Sales" and what arrived is explained on screen
+      // rather than looking like an error. Both terms are paidAmount-based.
+      salesOnCredit: roundMoney(totalSales - salesReceivedAtBilling),
     })
   } catch (err) {
     return apiError(err, 'Failed to load day summary', 500)

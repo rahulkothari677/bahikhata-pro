@@ -160,21 +160,62 @@ export function DayEndSummary({ open, onOpenChange }: { open: boolean; onOpenCha
               <div className="space-y-2">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Udhaar Collected</p>
                 <SummaryRow icon={<HandCoins className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />} label="Payments Received" value={data.udhaarCollected} highlight />
+                {data.udhaarCollected !== data.udhaarCollectedCash && (
+                  <p className="text-xs text-muted-foreground">
+                    {formatINR(data.udhaarCollectedCash ?? 0)} of this was cash — the rest went to UPI/card/bank,
+                    so it is not in the drawer.
+                  </p>
+                )}
               </div>
             )}
 
-            {/* Expected cash */}
-            <div className="rounded-lg bg-primary/10 border border-primary/20 p-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Wallet className="w-4 h-4 text-primary" />
-                  <span className="text-sm font-semibold">Expected Cash in Drawer</span>
-                </div>
+            {/*
+              🔒 Expected cash, ITEMISED (2026-08-03).
+
+              The figure used to appear alone above a formula written in words.
+              When it read ₹1,000 against ₹600 of real cash there was no way to
+              see where the extra came from — and a drawer number that cannot be
+              checked is worse than none, because a phantom surplus reads as
+              cash MISSING from the till.
+
+              Each term is money that actually moved, in cash. The rows add up
+              to the total on screen, so the shopkeeper can verify it against
+              what they are holding.
+            */}
+            <div className="rounded-lg bg-primary/10 border border-primary/20 p-3 space-y-2">
+              <div className="flex items-center gap-2">
+                <Wallet className="w-4 h-4 text-primary" />
+                <span className="text-sm font-semibold">Expected Cash in Drawer</span>
+              </div>
+
+              <div className="space-y-1 text-sm">
+                {(data.cashInFromSales ?? 0) !== 0 && (
+                  <DrawerTerm label="Received at billing (cash)" value={data.cashInFromSales} />
+                )}
+                {(data.udhaarCollectedCash ?? 0) !== 0 && (
+                  <DrawerTerm label="Udhaar collected (cash)" value={data.udhaarCollectedCash} />
+                )}
+                {(data.cashIncome ?? 0) !== 0 && <DrawerTerm label="Other income (cash)" value={data.cashIncome} />}
+                {(data.cashRefundsIn ?? 0) !== 0 && <DrawerTerm label="Refunds received (cash)" value={data.cashRefundsIn} />}
+                {(data.cashOutForPurchases ?? 0) !== 0 && (
+                  <DrawerTerm label="Purchases paid (cash)" value={-(data.cashOutForPurchases ?? 0)} />
+                )}
+                {(data.cashExpenses ?? 0) !== 0 && <DrawerTerm label="Expenses (cash)" value={-(data.cashExpenses ?? 0)} />}
+                {(data.udhaarPaidCash ?? 0) !== 0 && <DrawerTerm label="Udhaar paid (cash)" value={-(data.udhaarPaidCash ?? 0)} />}
+                {(data.cashRefundsOut ?? 0) !== 0 && <DrawerTerm label="Refunds given (cash)" value={-(data.cashRefundsOut ?? 0)} />}
+              </div>
+
+              <div className="flex items-center justify-between border-t border-primary/20 pt-2">
+                <span className="text-sm font-semibold">Expected total</span>
                 <span className="text-lg font-bold tabular-nums text-primary">{formatINR(expectedCash)}</span>
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                Cash sales + income + udhaar collected − cash purchases − expenses − udhaar paid
-              </p>
+
+              {(data.salesOnCredit ?? 0) > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {formatINR(data.salesOnCredit ?? 0)} of today&rsquo;s {formatINR(data.totalSales)} sales is still
+                  on udhaar — invoiced, not yet received, so it is not in the drawer.
+                </p>
+              )}
             </div>
 
             {/* Cash counting (optional) */}
@@ -247,6 +288,23 @@ export function DayEndSummary({ open, onOpenChange }: { open: boolean; onOpenCha
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/**
+ * One term of the expected-cash working. Deliberately plainer than SummaryRow:
+ * these lines exist to be added up by eye against the total below them, so
+ * they carry no icons and a consistent sign.
+ */
+function DrawerTerm({ label, value }: { label: string; value?: number }) {
+  const v = value ?? 0
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-muted-foreground">{label}</span>
+      <span className={cn('tabular-nums', v >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-600')}>
+        {v >= 0 ? '+' : '−'}{formatINR(Math.abs(v))}
+      </span>
+    </div>
   )
 }
 

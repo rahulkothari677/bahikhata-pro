@@ -55,7 +55,24 @@ const GRID_COLS = 'grid-cols-[minmax(0,1fr)_7rem] sm:grid-cols-[minmax(0,1fr)_6.
 export function PartySettle() {
   const {
     selectedPartyId, setView, pendingSettle, setPendingSettle, triggerRefresh,
+    previousView, setPreviousView,
   } = useAppStore()
+
+  /**
+   * Where Back / Cancel / a successful save return to.
+   *
+   * Settle can now be reached from the party profile, the Bills page, or a
+   * bill itself. Hard-coding 'party-profile' would strand anyone who arrived
+   * from a bill on a screen they did not come from — and after recording a
+   * payment, the bill is exactly what they want to see.
+   */
+  const returnView = previousView === 'transaction-detail' || previousView === 'party-bills'
+    ? previousView
+    : 'party-profile'
+  const goBack = () => {
+    setPreviousView(null)
+    setView(returnView)
+  }
   const queryClient = useQueryClient()
   const { confirmDialog, dialog: confirmDialogEl } = useConfirmDialog()
 
@@ -241,7 +258,7 @@ export function PartySettle() {
       queryClient.invalidateQueries({ queryKey: ['party'] })
       invalidateMoneyCaches(queryClient)
       triggerRefresh()
-      setView('party-profile')
+      goBack()
     } catch (e: any) {
       sonnerToast.error(e?.message || 'Could not record payment')
     } finally {
@@ -284,7 +301,7 @@ export function PartySettle() {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setView('party-profile')}
+            onClick={goBack}
             className="gap-1 -ml-2 shrink-0"
           >
             <ArrowLeft className="w-4 h-4" /> Back
@@ -563,7 +580,7 @@ export function PartySettle() {
         <div className="w-full flex items-center gap-2 sm:justify-end px-0 lg:px-2">
           <Button
             variant="outline"
-            onClick={() => setView('party-profile')}
+            onClick={goBack}
             className="flex-1 sm:flex-none sm:w-40"
           >
             Cancel

@@ -719,7 +719,11 @@ export function Dashboard() {
         {/* 🔒 FIX M-NEW-2: Collections Today — udhaar payments received today */}
         {kpis.todayCollections > 0 && (
           <MiniStatCard
-            label="Collected Today"
+            // "Collected Today" read as ALL money taken in today, but this KPI
+            // counts udhaar settlements only — money paid at billing is not in
+            // it. On a ₹600 sale with ₹200 at the counter and ₹400 settled, it
+            // showed ₹400 and looked like a shortfall.
+            label="Udhaar Collected Today"
             value={formatINR(kpis.todayCollections)}
             icon={HandCoins}
             color="text-blue-600"

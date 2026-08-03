@@ -33,7 +33,18 @@ import type { QueryClient } from '@tanstack/react-query'
 export async function invalidateMoneyCaches(queryClient: QueryClient): Promise<void> {
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: ['transactions'] }),
+    // 🔒 2026-08-03: the SINGULAR key. TransactionDetail reads
+    // ['transaction', id] — a different key from ['transactions'], so prefix
+    // matching never reached it. Settling a bill and returning to that bill
+    // showed the pre-payment figures until the staleTime lapsed, which is
+    // precisely when the shopkeeper looks to confirm the money landed.
+    queryClient.invalidateQueries({ queryKey: ['transaction'] }),
     queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
+    // 🔒 2026-08-03: nothing invalidated this. "Close the Drawer" reads
+    // ['day-summary'], and every sale, payment and expense changes the
+    // expected cash — so the one screen a shopkeeper uses to count money
+    // against could be showing figures from before the last few entries.
+    queryClient.invalidateQueries({ queryKey: ['day-summary'] }),
     // Prefix match — covers ['parties'], ['parties','for-entry'], ['parties','search'], etc.
     queryClient.invalidateQueries({ queryKey: ['parties'] }),
     // Prefix match — covers ['party-profile', selectedPartyId] for every party.

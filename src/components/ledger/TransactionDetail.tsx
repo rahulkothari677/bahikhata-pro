@@ -24,7 +24,7 @@ import {
   Edit2, Trash2, Printer, Download, User, Calendar, Receipt,
   ShoppingCart, Truck, ArrowDownRight, ArrowUpRight, ArrowRight, X, Plus,
   IndianRupee, FileText, FileCheck, Phone, Building2, MapPin, TrendingUp,
-  MessageCircle, AlertCircle, ArrowLeft, History, Loader2,
+  MessageCircle, AlertCircle, ArrowLeft, History, Loader2, HandCoins,
 } from 'lucide-react'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { amountToWords } from '@/lib/amount-to-words'
@@ -54,7 +54,7 @@ const PAYMENT_MODES = [
 ]
 
 export function TransactionDetail() {
-  const { selectedTransactionId, setSelectedTransactionId, setView, triggerRefresh, previousView, setPreviousView, selectedTransactionType, setSelectedTransactionType } = useAppStore()
+  const { selectedTransactionId, setSelectedTransactionId, setView, triggerRefresh, previousView, setPreviousView, selectedTransactionType, setSelectedTransactionType, setSelectedPartyId, setPendingSettle } = useAppStore()
   const { hideProfit } = useSetting()
   const [editOpen, setEditOpen] = useState(false)
   const [printing, setPrinting] = useState(false)
@@ -121,6 +121,13 @@ export function TransactionDetail() {
   const setting = settingData?.setting || {}
 
   const txn = data?.transaction
+
+  /**
+   * Settlements recorded against THIS bill, oldest first — the API already
+   * returns each one with its payment date and mode. Listing them is what lets
+   * a shopkeeper answer "when did he pay, and how much?" from the bill itself.
+   */
+  const allocations = (txn?.paymentAllocations || []) as any[]
 
   const goBack = () => {
     // Clear the selected transaction so it doesn't reopen
@@ -414,6 +421,40 @@ export function TransactionDetail() {
         <Button variant="outline" size="touch" onClick={handleWhatsAppShare} className="gap-2 border-emerald-300 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50">
           <MessageCircle className="w-4 h-4" /> Send PDF
         </Button>
+        {/*
+          🔒 SETTLE, from the bill itself (2026-08-03, requested by Rahul).
+
+          Collecting against a bill previously meant leaving it, finding the
+          party, and picking the bill out of a list — while the customer is
+          standing at the counter holding the money. The bill is where the
+          shopkeeper already is when they get paid.
+
+          Shown only when this bill still owes something, and only for
+          sale/purchase: a credit note is a refund, not something you settle.
+          It carries the bill's id and remaining due through `pendingSettle`,
+          so the Settle page opens pointed at THIS invoice with the amount
+          pre-filled — still editable, because a part-payment is the ordinary
+          case, not the exception.
+        */}
+        {(isSale || isPurchase) && txn.partyId && due > 0 && (
+          <Button
+            variant="outline"
+            size="touch"
+            className="gap-2 border-primary/40 text-primary hover:bg-primary/5"
+            onClick={() => {
+              setSelectedPartyId(txn.partyId)
+              setPendingSettle({
+                transactionId: txn.id,
+                invoiceNo: txn.invoiceNo || null,
+                amount: due,
+              })
+              setPreviousView('transaction-detail')
+              setView('party-settle')
+            }}
+          >
+            <HandCoins className="w-4 h-4" /> Settle {formatINR(due)}
+          </Button>
+        )}
         {/* V17-Ext Tier 3: Create Credit Note button (sales only) */}
         {isSale && (
           <Button
@@ -795,12 +836,50 @@ export function TransactionDetail() {
                         </div>
                         {breakdown.settledLater > 0 && (
                           <>
+                            {/*
+                              🔒 EACH settlement, with its date (2026-08-03).
+
+                              This was a single "Settled later ₹400" line. A
+                              customer who pays ₹200 twice and one who pays ₹400
+                              once produced the identical row, so the shopkeeper
+                              could not answer "when did he pay, and how much?"
+                              without leaving the bill — which is exactly the
+                              question a customer asks while standing there.
+
+                              The allocations come from the API already carrying
+                              payment.date and mode; only the display was
+                              summing them away.
+                            */}
                             <div className="flex justify-between text-sm">
-                              <span className="text-emerald-600 dark:text-emerald-400">Settled later</span>
+                              <span className="text-emerald-600 dark:text-emerald-400">
+                                Settled later
+                                {allocations.length > 1 && (
+                                  <span className="text-muted-foreground"> ({allocations.length} payments)</span>
+                                )}
+                              </span>
                               <span className="font-medium text-emerald-600 dark:text-emerald-400">
                                 {formatINR(breakdown.settledLater)}
                               </span>
                             </div>
+
+                            {allocations.length > 0 && (
+                              <div className="pl-3 border-l-2 border-emerald-200 dark:border-emerald-900 space-y-1 my-1">
+                                {allocations.map((a: any, i: number) => (
+                                  <div key={a.payment?.id || i} className="flex justify-between text-xs">
+                                    <span className="text-muted-foreground">
+                                      {formatDate(a.payment?.date || a.createdAt)}
+                                      {a.payment?.mode && (
+                                        <span className="uppercase"> · {a.payment.mode}</span>
+                                      )}
+                                    </span>
+                                    <span className="tabular-nums text-emerald-700 dark:text-emerald-400">
+                                      {formatINR(a.amount)}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
                             <div className="flex justify-between text-sm border-t border-border/50 pt-1">
                               <span className="text-emerald-700 dark:text-emerald-300 font-medium">Total paid</span>
                               <span className="font-semibold text-emerald-700 dark:text-emerald-300">
