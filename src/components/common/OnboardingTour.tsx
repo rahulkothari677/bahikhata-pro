@@ -52,7 +52,12 @@ const STEPS: TourStep[] = [
   },
 ]
 
-export function OnboardingTour({ onDone }: { onDone?: () => void }) {
+/**
+ * @param isFirstRun  Whether this account has actually just started. The tour
+ *   is FIRST-RUN guidance, so it must not open for a shop that is already
+ *   trading. See the note in the effect below.
+ */
+export function OnboardingTour({ onDone, isFirstRun = true }: { onDone?: () => void; isFirstRun?: boolean }) {
   const [visible, setVisible] = useState(false)
   const [step, setStep] = useState(0)
   const mountedRef = useRef(false)
@@ -69,13 +74,30 @@ export function OnboardingTour({ onDone }: { onDone?: () => void }) {
         return
       }
 
+      /*
+       * 🔒 2026-08-03 (reported by Rahul, and reproduced): the ONLY gate was
+       * the localStorage flag, which is per-browser. Open the app in a new
+       * browser, on a second device, or after clearing site data, and an
+       * established shop was told to "Record Your First Sale" — reproduced on
+       * an account with 20 parties and 42 transactions.
+       *
+       * localStorage answers "has this BROWSER seen the tour". The question
+       * that matters is "has this ACCOUNT started", which only the data can
+       * answer. Mark it seen so we do not re-evaluate every load.
+       */
+      if (!isFirstRun) {
+        localStorage.setItem(STORAGE_KEY, 'true')
+        onDone?.()
+        return
+      }
+
       // Delay slightly so the app finishes loading
       const timer = setTimeout(() => setVisible(true), 800)
       return () => clearTimeout(timer)
     } catch {
       onDone?.()
     }
-  }, [onDone])
+  }, [onDone, isFirstRun])
 
   const handleDismiss = () => {
     setVisible(false)

@@ -25,7 +25,7 @@ import { ContextMenu, type ContextMenuItem } from '@/components/common/ContextMe
 import {
   Search, ShoppingCart, Truck, Receipt, IndianRupee,
   TrendingUp, Calendar, User, ScanLine, ChevronRight, Plus, X,
-  Edit2, Trash2, Eye, Printer, AlertCircle, RefreshCw, Undo2,
+  Edit2, Trash2, Eye, Printer, AlertCircle, RefreshCw, Undo2, Loader2,
 } from 'lucide-react'
 import { offlineFetch, isQueuedResponse, isOnline, OfflineError } from '@/lib/offline-fetch'
 import { invalidateMoneyCaches } from '@/lib/invalidate-money-caches'
@@ -693,6 +693,59 @@ export function Ledger({ type }: { type: LedgerType }) {
             <Button variant="outline" size="sm" onClick={() => triggerRefresh()} className="gap-2">
               <RefreshCw className="w-3.5 h-3.5" /> Retry
             </Button>
+          </CardContent>
+        </Card>
+      ) : filtered.length === 0 && transactions.length > 0 ? (
+        /*
+         * 🔒 "NOTHING MATCHED" IS NOT "NOTHING EXISTS" (2026-08-03, reported
+         * by Rahul; reproduced searching a real invoice number).
+         *
+         * Search filters only the rows already loaded — 50 per page, keyset
+         * paginated. Searching for an invoice that sits behind "Load more"
+         * showed "No sales yet — Record your first sale to start tracking
+         * revenue" to a shop with fifty-plus sales on file. It reads as data
+         * loss, which for a ledger is about the most alarming thing the screen
+         * can say.
+         *
+         * The distinction is exactly `transactions.length`: rows came back,
+         * this filter just excluded them. Offer the two things that actually
+         * help — clear the search, or load more and search again.
+         */
+        <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
+          <CardContent className="py-10 text-center space-y-3">
+            <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mx-auto">
+              <Search className="w-5 h-5 text-muted-foreground" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-medium">
+                No match in the {transactions.length} {isSale ? 'sales' : 'purchases'} loaded
+              </p>
+              <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                {hasNextPage
+                  ? 'Older entries have not been loaded yet — load more and search again.'
+                  : 'Every entry is loaded, so nothing here matches your search or filters.'}
+              </p>
+            </div>
+            <div className="flex items-center justify-center gap-2 flex-wrap">
+              {search && (
+                <Button variant="outline" size="sm" onClick={() => setSearch('')} className="gap-2">
+                  <X className="w-3.5 h-3.5" /> Clear search
+                </Button>
+              )}
+              {hasNextPage && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fetchNextPage()}
+                  disabled={isFetchingNextPage}
+                  className="gap-2"
+                >
+                  {isFetchingNextPage
+                    ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Loading…</>
+                    : <><RefreshCw className="w-3.5 h-3.5" /> Load more</>}
+                </Button>
+              )}
+            </div>
           </CardContent>
         </Card>
       ) : filtered.length === 0 ? (

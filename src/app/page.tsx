@@ -88,7 +88,18 @@ export default function Home() {
     return localStorage.getItem('bahikhata-onboarding-dismissed') === 'true'
   })
   const [tourDone, setTourDone] = useState(false)
-  const [themePickerDone, setThemePickerDone] = useState(false)
+  // 🔒 2026-08-03 (reported by Rahul): the theme picker reappeared for existing
+  // users on every load. This was plain component state — identical in shape to
+  // the onboarding bug fixed directly above, and never given the same
+  // treatment. `showThemePicker = !themePickerDone && !!session`, so with the
+  // flag resetting to false on every mount the picker fired every single time.
+  //
+  // Persisted like its neighbour. The chosen THEME was already saved; it was
+  // only the record of having been asked that was lost.
+  const [themePickerDone, setThemePickerDone] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem('bahikhata-theme-picker-done') === 'true'
+  })
   const [mounted, setMounted] = useState(false)
   // 🔒 V20-019: Splash shows on every full page load — desktop AND mobile.
   // Previously skipped on Capacitor native (which has its own static native
@@ -399,7 +410,27 @@ export default function Home() {
 
   // 🔒 V8 P3: showOnboarding + hasNoData already computed above (V9 4.2 moved
   // them up so the firstRunComplete effect can reference showOnboarding).
+  /*
+   * 🔒 FIRST-RUN ONLY (2026-08-03, reported by Rahul).
+   *
+   * `!themePickerDone && !!session` asked every signed-in user, so an
+   * established shop opening the app in a new browser — or after clearing site
+   * data — was walked through first-run setup again, on top of a ledger with
+   * 42 transactions in it.
+   *
+   * Persisting the flag (above) fixes the reload case; gating on `hasNoData`
+   * fixes the new-device case, which persistence cannot. An account with
+   * products or parties has already started, whatever this browser remembers.
+   *
+   * `dashboardData !== undefined` matters: without it `hasNoData` is false
+   * while the dashboard is still loading, and the picker would flash on for
+   * everyone before disappearing. Same guard `showOnboarding` already uses.
+   *
+   * Existing users who never chose a theme keep the default and can change it
+   * in Settings — better than being asked on every device, forever.
+   */
   const showThemePicker = !themePickerDone && !!session
+    && dashboardData !== undefined && hasNoData
 
   // 🔒 AUDIT V25 FIX §4.3 + §4.4: Replaced 3 triplicated branches (More,
   // Account, main) with a single <AppShell> wrapper. AppShell owns the
@@ -411,8 +442,16 @@ export default function Home() {
     showThemePicker,
     showOnboarding,
     tourDone,
+    // A shop with products or parties has already started, whatever this
+    // browser remembers. Gates the first-run-only guidance (tour) so a second
+    // device does not restart onboarding on a live ledger.
+    isFirstRun: dashboardData !== undefined && hasNoData,
     firstRunComplete,
-    onThemePickerDone: () => setThemePickerDone(true),
+    onThemePickerDone: () => {
+      setThemePickerDone(true)
+      // Persist, or the picker returns on the next load — the reported bug.
+      try { localStorage.setItem('bahikhata-theme-picker-done', 'true') } catch {}
+    },
     onOnboardingDone: () => {
       setOnboardingDismissed(true)
       // 🐛 UI/UX Phase 1 Fix 3: Persist dismissal so it doesn't re-show on reload

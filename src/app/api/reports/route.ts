@@ -582,7 +582,7 @@ export async function GET(req: NextRequest) {
       // and we also fetch each party's oldest unpaid sale date so Debt Aging
       // can age real balances (it previously iterated an always-empty
       // transactions array and told every shop "no outstanding dues").
-      const [periodPartyAgg, receivablePayable, oldestUnpaidRows] = await Promise.all([
+      const [periodPartyAgg, receivablePayable, oldestUnpaidRows, periodPaymentAgg] = await Promise.all([
         // 1. Period activity (date-filtered) — for totalSales/totalPurchases columns
         db.transaction.groupBy({
           by: ['partyId', 'type'],
@@ -608,6 +608,36 @@ export async function GET(req: NextRequest) {
             AND "totalAmount" > "paidAmount"
           GROUP BY "partyId"
         `,
+        /*
+         * 4. 🔒 SETTLEMENTS MADE IN THE PERIOD (2026-08-03).
+         *
+         * `periodActivity` is documented as "net activity in the selected
+         * period" / "net change in the selected period", but it was built only
+         * from invoices: Σ(totalAmount − paidAmount). Money COLLECTED during
+         * the period was never subtracted, because this branch never looked at
+         * the Payment table at all.
+         *
+         * A customer invoiced ₹600 who then settled ₹400 inside the same
+         * window showed periodActivity ₹600 — the full credit extended, as
+         * though nothing had come back. The `balance` column beside it was
+         * always right (it comes from getReceivablePayable, which includes
+         * payments), so the two disagreed on the same row.
+         *
+         * Same defect class as the cash-drawer double-count: a figure built
+         * from invoices alone, presented as if it accounted for collections.
+         */
+        db.payment.groupBy({
+          by: ['partyId', 'type'],
+          // No `partyId: { not: null }` here, unlike the transaction query
+          // above: Payment.partyId is a required column, so every payment
+          // belongs to a party by construction.
+          where: {
+            userId,
+            deletedAt: null,
+            date: { gte: from, lte: to },
+          },
+          _sum: { amount: true },
+        }),
       ])
 
       // ═══════════════════════════════════════════════════════════════════
@@ -641,6 +671,14 @@ export async function GET(req: NextRequest) {
       }
       for (const row of periodPartyAgg) {
         if (row.partyId) relevantPartyIds.add(row.partyId)
+      }
+      // 🔒 A party whose only activity in the period was SETTLING an older
+      // bill has no row in periodPartyAgg. Without this they would be fetched
+      // only if their balance happened to be non-zero — so a customer who
+      // cleared their account exactly to zero inside the window vanished from
+      // the report, which is the quiet omission the comment above warns about.
+      for (const row of periodPaymentAgg) {
+        relevantPartyIds.add(row.partyId)
       }
 
       const parties = await db.party.findMany({
@@ -704,6 +742,31 @@ export async function GET(req: NextRequest) {
         }
       }
 
+      /*
+       * 🔒 Apply settlements made in the period (2026-08-03). Sign follows the
+       * same convention as the invoice loop above and as `balance`: positive
+       * means the customer owes us.
+       *
+       *   received  — a customer paid us, so they owe less  → subtract
+       *   paid      — we paid a supplier, so we owe less     → add
+       *
+       * Also folded into totalReceived / totalPaid, which previously counted
+       * only money taken at billing. A party who paid entirely through Settle
+       * showed "received ₹0" for the period while their balance moved.
+       */
+      for (const row of periodPaymentAgg) {
+        const entry = partyMap.get(row.partyId)
+        if (!entry) continue
+        const amount = row._sum?.amount || 0
+        if (row.type === 'received') {
+          entry.periodActivity = roundMoney(entry.periodActivity - amount)
+          entry.totalReceived = roundMoney(entry.totalReceived + amount)
+        } else if (row.type === 'paid') {
+          entry.periodActivity = roundMoney(entry.periodActivity + amount)
+          entry.totalPaid = roundMoney(entry.totalPaid + amount)
+        }
+      }
+
       return NextResponse.json({
         type: 'party',
         period: { from, to },
@@ -711,7 +774,12 @@ export async function GET(req: NextRequest) {
         // 🔒 V7 M3: balance is now cumulative (matches party detail page).
         // periodActivity is the net change in the selected period.
         parties: Array.from(partyMap.values())
-          .filter(p => p.totalSales > 0 || p.totalPurchases > 0 || p.party.openingBalance !== 0 || p.balance !== 0)
+          // `periodActivity !== 0` keeps a party whose only movement in the
+          // window was settling an older bill: no sales in period, and a
+          // balance that may now be exactly zero. Without it, clearing an
+          // account inside the period made that party disappear from the very
+          // report meant to show what happened in it.
+          .filter(p => p.totalSales > 0 || p.totalPurchases > 0 || p.party.openingBalance !== 0 || p.balance !== 0 || p.periodActivity !== 0)
           .sort((a, b) => Math.abs(b.balance) - Math.abs(a.balance)),
       })
     }

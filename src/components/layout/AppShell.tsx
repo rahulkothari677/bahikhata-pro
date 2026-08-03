@@ -68,6 +68,8 @@ interface AppShellProps {
   showThemePicker: boolean
   showOnboarding: boolean
   tourDone: boolean
+  /** Account has genuinely just started — gates first-run-only guidance. */
+  isFirstRun?: boolean
   firstRunComplete: boolean
   /** Theme picker callbacks. */
   onThemePickerDone: () => void
@@ -101,6 +103,7 @@ export function AppShell({
   showThemePicker,
   showOnboarding,
   tourDone,
+  isFirstRun = true,
   firstRunComplete,
   onThemePickerDone,
   onOnboardingDone,
@@ -166,7 +169,7 @@ export function AppShell({
           Tour shows first, then ConsentModal shows after tour is done.
           This prevents focus-trap conflicts between Radix Dialog (ConsentModal)
           and the tour's plain div overlay (z-[100]). */}
-      {!showOnboarding && <OnboardingTour onDone={onTourDone} />}
+      {!showOnboarding && <OnboardingTour onDone={onTourDone} isFirstRun={isFirstRun} />}
       {!showOnboarding && tourDone && <ConsentModal />}
       {/* 🔒 V9 4.2: RatePrompt waits until first-run is complete */}
       {firstRunComplete && <RatePromptModal open={shouldShowRatePrompt} onRated={onRated} onDismiss={onDismiss} />}
