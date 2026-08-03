@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { appUrlFrom } from '@/lib/app-url'
 import { db } from '@/lib/db'
 import { getAuthUserId } from '@/lib/get-auth'
 import { withCache } from '@/lib/cache'
@@ -12,7 +13,7 @@ import { apiError } from '@/lib/api-error'
  *
  * Also returns the referral share link + WhatsApp share text.
  */
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const { userId, error } = await getAuthUserId()
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -66,19 +67,17 @@ export async function GET() {
      * next option instead of poisoning the link. The env var still needs
      * fixing — this stops it silently reaching users while it is wrong.
      */
-    const firstValidUrl = (...candidates: (string | undefined)[]): string => {
-      for (const c of candidates) {
-        if (!c) continue
-        try {
-          const u = new URL(c)
-          if (u.protocol === 'http:' || u.protocol === 'https:') return c.replace(/\/+$/, '')
-        } catch {
-          console.warn(`[referral/code] ignoring non-URL app-url value: ${JSON.stringify(c).slice(0, 60)}`)
-        }
-      }
-      return 'https://ekbook-pro.vercel.app'
+    // Derived from the request, so it follows whatever host actually served
+    // it — no hardcoded domain to go stale when the product is renamed or a
+    // custom domain is added. See src/lib/app-url.ts.
+    const appUrl = appUrlFrom(req)
+    if (!appUrl) {
+      console.error('[referral/code] cannot determine a trustworthy app URL')
+      return NextResponse.json({
+        error: 'Configuration error',
+        message: 'Sharing is temporarily unavailable. Please try again later.',
+      }, { status: 503 })
     }
-    const appUrl = firstValidUrl(process.env.NEXT_PUBLIC_APP_URL, process.env.NEXTAUTH_URL)
     const shareUrl = `${appUrl}/?ref=${referral.code}`
     const whatsappText = `🇮🇳 Check out EkBook — India's smartest ledger app! AI bill scanning, GST filing, inventory management. Use my code ${referral.code} to get started! ${shareUrl}`
     const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(whatsappText)}`

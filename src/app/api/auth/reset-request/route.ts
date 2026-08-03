@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { appUrlFrom } from '@/lib/app-url'
 import { validateBody, resetRequestSchema } from '@/lib/validation'
 import { db } from '@/lib/db'
 import { rateLimit, getClientIP, rateLimitedResponse } from '@/lib/rate-limit'
@@ -128,7 +129,31 @@ export async function POST(req: NextRequest) {
     // Production path:
     // 🔒 V5 HB: Actually send the email if a provider is configured. If not,
     // surface an honest message instead of pretending the email was sent.
-    const origin = req.headers.get('origin') || process.env.NEXTAUTH_URL || 'https://ekbook-pro.vercel.app'
+    /*
+     * 🔒 2026-08-03: this fell back to a HARDCODED 'https://ekbook-pro.vercel.app'
+     * — a domain that returns 404 and is not the deployment. On Vercel an
+     * unclaimed *.vercel.app name can be registered by anyone, and this link
+     * carries a password-reset TOKEN. Building it on a domain we do not own
+     * would be handing a credential to a stranger's server.
+     *
+     * The env fallback was no safer: NEXTAUTH_URL's value in this environment
+     * is the literal string "NEXTAUTH_URL", and `||` only rejects an empty
+     * value, not a wrong one.
+     *
+     * appUrlFrom() prefers the request's own origin/host — the app is by
+     * definition reachable at the address the request arrived on — and returns
+     * null rather than guessing. If we cannot build a trustworthy link we send
+     * no email at all: a reset that never arrives is recoverable, a token sent
+     * to the wrong host is not.
+     */
+    const origin = appUrlFrom(req)
+    if (!origin) {
+      console.error('[reset-request] cannot determine a trustworthy app URL — refusing to send a reset link')
+      return NextResponse.json({
+        error: 'Configuration error',
+        message: 'Password reset is temporarily unavailable. Please contact support.',
+      }, { status: 503 })
+    }
     const resetLink = `${origin}/reset-password?token=${token}`
 
     if (isEmailConfigured()) {
