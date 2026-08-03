@@ -117,6 +117,35 @@ export async function GET(req: NextRequest) {
       if (to) where.date.lte = new Date(to)
     }
 
+    /*
+     * 🔒 SERVER-SIDE SEARCH (2026-08-03, found in browser testing).
+     *
+     * Search was client-only, over the rows already loaded — 50 per page. So
+     * looking up an invoice from three months ago meant pressing "Load more"
+     * until it happened to arrive. On the test account the invoice was still
+     * not found after 100 rows; on a shop with thousands it is simply not
+     * findable, and looking up an old bill is a daily task, not an edge case.
+     *
+     * Scoped by `userId` on the same `where` (tenant isolation is not weakened
+     * — the search clause is ANDed with it, never ORed at the top level, which
+     * would have exposed other users' rows).
+     *
+     * Composes with the keyset cursor below: both go into `where.AND`, so
+     * paging THROUGH a filtered result set stays correct.
+     */
+    const search = (searchParams.get('search') || '').trim()
+    if (search) {
+      if (!where.AND) where.AND = []
+      where.AND.push({
+        OR: [
+          { invoiceNo: { contains: search, mode: 'insensitive' } },
+          { notes: { contains: search, mode: 'insensitive' } },
+          { party: { name: { contains: search, mode: 'insensitive' } } },
+          { party: { phone: { contains: search } } },
+        ],
+      })
+    }
+
     if (cursor) {
       const cursorCondition = buildKeysetWhere(cursor)
       if (!cursorCondition) {

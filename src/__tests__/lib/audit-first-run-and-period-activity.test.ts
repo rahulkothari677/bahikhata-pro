@@ -68,19 +68,52 @@ describe('#9 — the tour is first-run guidance, and knows it', () => {
 })
 
 describe('#13 — "nothing matched" is not "nothing exists"', () => {
+  const api = read('src/app/api/transactions/route.ts')
+
   test('a no-match state exists that is distinct from the empty ledger', () => {
     expect(ledger).toMatch(/filtered\.length === 0 && transactions\.length > 0/)
-    expect(ledger).toMatch(/No match in the \{transactions\.length\}/)
+    expect(ledger).toMatch(/No \{isSale \? 'sales' : 'purchases'\} match/)
   })
 
   test('the real empty state still exists for a genuinely empty ledger', () => {
     expect(ledger).toMatch(/No \$\{isSale \? 'sales' : 'purchases'\} yet/)
   })
 
-  test('it offers the two things that help: clear search, load more', () => {
-    const block = ledger.slice(ledger.indexOf('No match in the'), ledger.indexOf('No match in the') + 1800)
-    expect(block).toMatch(/setSearch\(''\)/)
-    expect(block).toMatch(/fetchNextPage\(\)/)
+  test('it offers a way out', () => {
+    const i = ledger.indexOf('match &ldquo;')
+    expect(i).toBeGreaterThan(-1)
+    expect(ledger.slice(i, i + 1800)).toMatch(/setSearch\(''\)/)
+  })
+
+  /*
+   * Browser testing showed the empty state alone was not enough: search only
+   * filtered the loaded page, so a three-month-old invoice was still missing
+   * after pressing "Load more" twice (50 → 100 rows). On a real shop it is
+   * unfindable. Search now runs on the server.
+   */
+  test('the API accepts a search param', () => {
+    expect(api).toMatch(/searchParams\.get\('search'\)/)
+  })
+
+  test('search matches invoice, party name, phone and notes', () => {
+    const block = api.slice(api.indexOf("const search = "), api.indexOf("const search = ") + 900)
+    expect(block).toMatch(/invoiceNo: \{ contains: search/)
+    expect(block).toMatch(/notes: \{ contains: search/)
+    expect(block).toMatch(/party: \{ name: \{ contains: search/)
+  })
+
+  test('the search clause is ANDed inside the tenant scope, never ORed at top level', () => {
+    // A top-level OR beside `userId` would leak other shops' transactions.
+    const block = api.slice(api.indexOf("const search = "), api.indexOf("const search = ") + 900)
+    expect(block).toMatch(/where\.AND\.push\(\{\s*OR:/)
+  })
+
+  test('the client debounces and keys the query on the search term', () => {
+    // Un-keyed, paging would continue from a cursor belonging to the previous
+    // result set; un-debounced, every keystroke would hit the database.
+    expect(ledger).toMatch(/setDebouncedSearch\(search\.trim\(\)\), 350\)/)
+    expect(ledger).toMatch(/showVoided \? 'voided' : 'active', debouncedSearch\]/)
+    expect(ledger).toMatch(/qp\.set\('search', debouncedSearch\)/)
   })
 })
 

@@ -135,6 +135,20 @@ export function Ledger({ type }: { type: LedgerType }) {
   const accentBg = isSale ? 'bg-emerald-100' : 'bg-amber-100'
 
   // Build query with optional date filter + voided filter
+  /*
+   * Debounced copy of `search`, used for the SERVER query only.
+   *
+   * `search` still drives the local filter on every keystroke, so typing feels
+   * instant against what is already loaded. This lags 350ms behind and is part
+   * of the query key, so a refetch happens once the shopkeeper stops typing
+   * rather than on every character.
+   */
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search.trim()), 350)
+    return () => clearTimeout(t)
+  }, [search])
+
   const buildQueryParams = (cursor?: string) => {
     // V17-Ext Tier 3: Sales ledger includes credit notes; Purchase ledger
     // includes debit notes. They're related transactions the shopkeeper
@@ -150,6 +164,11 @@ export function Ledger({ type }: { type: LedgerType }) {
       qp.set('to', dateRange.to.toISOString())
     }
     if (cursor) qp.set('cursor', cursor)
+    // 🔒 Search runs on the SERVER (2026-08-03). It used to filter only the
+    // rows already loaded, so finding a three-month-old invoice meant pressing
+    // "Load more" until it appeared — on the test account it was still missing
+    // after 100 rows. Looking up an old bill is a daily task.
+    if (debouncedSearch) qp.set('search', debouncedSearch)
     return qp.toString()
   }
 
@@ -164,7 +183,10 @@ export function Ledger({ type }: { type: LedgerType }) {
     hasNextPage,
     isFetchingNextPage,
   } = useInfiniteQuery({
-    queryKey: ['transactions', type, refreshKey, dateRange?.from.toISOString() || 'all', dateRange?.to.toISOString() || 'all', showVoided ? 'voided' : 'active'],
+    // `debouncedSearch` is part of the key: a different search is a different
+    // result set, and paging must restart from page 1 rather than continue
+    // from a cursor belonging to the previous query.
+    queryKey: ['transactions', type, refreshKey, dateRange?.from.toISOString() || 'all', dateRange?.to.toISOString() || 'all', showVoided ? 'voided' : 'active', debouncedSearch],
     queryFn: async ({ pageParam }) => {
       const r = await offlineFetch(`/api/transactions?${buildQueryParams(pageParam)}`)
       if (!r.ok) throw new Error(`HTTP ${r.status}`)
@@ -718,12 +740,18 @@ export function Ledger({ type }: { type: LedgerType }) {
             </div>
             <div className="space-y-1">
               <p className="text-sm font-medium">
-                No match in the {transactions.length} {isSale ? 'sales' : 'purchases'} loaded
+                {search ? <>No {isSale ? 'sales' : 'purchases'} match &ldquo;{search}&rdquo;</> : 'Nothing matches these filters'}
               </p>
               <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-                {hasNextPage
-                  ? 'Older entries have not been loaded yet — load more and search again.'
-                  : 'Every entry is loaded, so nothing here matches your search or filters.'}
+                {/*
+                  Search now runs on the SERVER across every entry, so "no
+                  match" here means no match anywhere — not "not loaded yet".
+                  The earlier wording ("no match in the N loaded") described
+                  the limitation this replaced, and would now be a lie.
+                */}
+                {search
+                  ? 'Searched every invoice number, party name, phone and note.'
+                  : 'Try a different date range, or clear the filters.'}
               </p>
             </div>
             <div className="flex items-center justify-center gap-2 flex-wrap">
