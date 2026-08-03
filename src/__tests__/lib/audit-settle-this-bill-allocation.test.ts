@@ -1,30 +1,39 @@
 /**
- * 🔒 "SETTLE THIS BILL" MUST ACTUALLY ALLOCATE TO THAT BILL.
+ * 🔒 "SETTLE THIS BILL" — TARGETS THE BILL, AND FOLLOWS THE AMOUNT.
  *
- * Found in the browser on 2026-08-03, on live data. Opening a ₹553 bill and
- * pressing "Settle ₹553" filled the amount correctly but left EVERY bill box
- * at 0 — "Applied to bills ₹0 of ₹553 · ₹553 will be kept as an advance".
+ * Two live findings, both from Rahul, one day apart in the same flow.
  *
- * The payment would have been recorded as an unallocated advance and the
- * invoice would still have read ₹553 due. The shopkeeper collects the money,
- * the bill still says unpaid, and the customer gets asked for it again.
+ * ── 1. The allocation was silently dropped ────────────────────────────────
+ * Opening a ₹553 bill and pressing "Settle ₹553" filled the amount but left
+ * every bill box at 0: "Applied to bills ₹0 of ₹553 · will be kept as an
+ * advance". The payment would have been stored as an unallocated advance and
+ * the invoice would still have read ₹553 due — collect the money, the bill
+ * still says unpaid, ask the customer again.
  *
- * THE MECHANISM — a React effect-ordering race that no unit test caught:
+ * Cause: two effects wrote `alloc`. On the mount pass both ran against the
+ * same render's values — the intent set alloc = { bill: 553 }, then the
+ * auto-fill effect, still seeing touched === false and parsedAmount === 0,
+ * called setAlloc({}). The writes batched and the later one won.
  *
- *   mount pass, both effects run against the SAME render's values
- *     effect 1 (intent):    setAlloc({ bill: '553' }); setTouched(true)
- *     effect 2 (auto-fill): sees touched === false, parsedAmount === 0
- *                           → setAlloc({})            ← wipes it
- *   the two writes batch; the later wins → {}
- *   next render: touched is finally true, effect 2 returns early and never
- *                restores what it deleted
+ * ── 2. Part-payment was impossible without editing two fields ─────────────
+ *   "when i click settle bill from sales ledger for due and enter the amount
+ *    it's not accepting the payment. also it directly taking the full payment
+ *    automatically."
  *
- * `touched` is state, captured by the render. A ref is read at the moment the
- * effect runs, which is what closes the window.
+ * The first fix pinned the pre-filled allocation with a ref and set `touched`,
+ * which means "the shopkeeper chose this". Lowering Amount received to ₹200
+ * then left the bill still claiming ₹400 — "You have applied more than the
+ * amount received" — with Record disabled. A part-payment flow you cannot make
+ * a part-payment in.
  *
- * These are source guards. The race lives in effect ordering, which a pure
- * function test cannot reach — so they assert the specific mechanism that
- * fixes it, and that the release path exists.
+ * ── The rule both findings point at ───────────────────────────────────────
+ * `alloc` has exactly ONE writer: the allocation effect. The intent records
+ * WHICH bill and a starting amount; it never writes `alloc`. `touched` means
+ * only "a bill box was edited by hand". So changing the amount re-derives the
+ * split, which is what makes repeated part-payments against one bill work.
+ *
+ * Single ownership also removes the mount race by construction — there is no
+ * second writer left to be overwritten.
  */
 import fs from 'fs'
 import path from 'path'
@@ -33,43 +42,75 @@ const src = fs.readFileSync(
   path.join(process.cwd(), 'src/components/parties/PartySettle.tsx'), 'utf8',
 )
 
-describe('Settle-this-bill keeps its explicit allocation', () => {
-  test('the scan reaches the component', () => {
-    expect(src.length).toBeGreaterThan(1000)
-    expect(src).toMatch(/pendingSettle/)
+/** The intent effect — the one that consumes `pendingSettle`. */
+const intentEffect = (() => {
+  const i = src.indexOf('if (!pendingSettle')
+  return i === -1 ? '' : src.slice(i, i + 600)
+})()
+
+/** The allocation effect — the one that calls the oldest-first planner. */
+const allocEffect = (() => {
+  const p = src.indexOf('planAllocationOldestFirst(rest')
+  if (p === -1) return ''
+  const start = src.lastIndexOf('useEffect(() => {', p)
+  return src.slice(start, src.indexOf('}, [', p) + 60)
+})()
+
+describe('the intent records a target, it does not write the allocation', () => {
+  test('the scan found both effects', () => {
+    expect(intentEffect.length).toBeGreaterThan(50)
+    expect(allocEffect.length).toBeGreaterThan(100)
   })
 
-  test('a ref guards the explicit allocation, not just state', () => {
-    expect(src).toMatch(/explicitAlloc\s*=\s*useRef\(false\)/)
+  test('the intent remembers WHICH bill', () => {
+    expect(intentEffect).toMatch(/setIntentBillId\(pendingSettle\.transactionId\)/)
   })
 
-  test('consuming the intent raises the ref', () => {
-    const intent = src.slice(src.indexOf('if (!pendingSettle'), src.indexOf('if (!pendingSettle') + 500)
-    expect(intent).toMatch(/explicitAlloc\.current\s*=\s*true/)
-    expect(intent).toMatch(/setAlloc\(\{\s*\[pendingSettle\.transactionId\]/)
+  test('the intent does NOT write alloc — that was the mount-race', () => {
+    expect(intentEffect).not.toMatch(/setAlloc\(/)
   })
 
-  test('auto-fill checks the ref BEFORE it can clear the allocation', () => {
-    const start = src.indexOf('planAllocationOldestFirst(openBills')
-    expect(start).toBeGreaterThan(-1)
-    // Walk back to the effect that contains the planner call.
-    const effect = src.slice(src.lastIndexOf('useEffect(() => {', start), start)
-    // The early return must mention the ref, and must come before setAlloc({}).
-    const guardIdx = effect.indexOf('explicitAlloc.current')
-    const clearIdx = effect.indexOf('setAlloc({})')
-    expect(guardIdx).toBeGreaterThan(-1)
-    expect(clearIdx).toBeGreaterThan(-1)
-    expect(guardIdx).toBeLessThan(clearIdx)
+  test('the intent does NOT claim the shopkeeper touched anything', () => {
+    // Setting touched here is what froze the pre-filled amount and made a
+    // part-payment impossible without editing a second field.
+    expect(intentEffect).not.toMatch(/setTouched\(true\)/)
+  })
+})
+
+describe('the allocation follows the amount', () => {
+  test('only a hand edit stops it re-deriving', () => {
+    expect(allocEffect).toMatch(/if \(touched\) return/)
+    expect(allocEffect).not.toMatch(/explicitAlloc/)
   })
 
-  test('"Auto-fill oldest first" releases the explicit choice', () => {
-    // Without this the ref would latch and auto-fill could never resume.
-    expect(src).toMatch(/explicitAlloc\.current\s*=\s*false[\s\S]{0,40}setTouched\(false\)/)
+  test('it re-runs when the amount or the target changes', () => {
+    expect(allocEffect).toMatch(/\[parsedAmount, openBills, touched, intentBillId\]/)
   })
 
-  test('the amount stays editable after the intent is applied', () => {
-    // A part-payment against a specific bill is the ordinary case; the intent
-    // pre-fills, it must not lock.
+  test('the targeted bill is paid first, capped at its own due', () => {
+    expect(allocEffect).toMatch(/Math\.min\(remaining, intentBill\.due\)/)
+  })
+
+  test('any remainder flows oldest-first across the OTHER bills', () => {
+    // "Clear this bill, then carry on with the older ones."
+    expect(allocEffect).toMatch(/filter\(\(b: any\) => b\.id !== intentBill\.id\)/)
+    expect(allocEffect).toMatch(/planAllocationOldestFirst\(rest/)
+  })
+})
+
+describe('the shopkeeper can always get back to a plain split', () => {
+  test('"Auto-fill oldest first" clears the target and the hand edits', () => {
+    expect(src).toMatch(/setIntentBillId\(null\)[\s\S]{0,40}setTouched\(false\)/)
+  })
+
+  test('that escape hatch is offered when arriving from a bill, not only after an edit', () => {
+    expect(src).toMatch(/\(touched \|\| intentBillId\) && parsedAmount > 0/)
+  })
+})
+
+describe('nothing locks the amount', () => {
+  test('the amount field stays editable', () => {
+    // A part-payment is the ordinary case; the pre-fill is a suggestion.
     expect(src).not.toMatch(/id="settle-amount"[\s\S]{0,300}\breadOnly\b/)
     expect(src).not.toMatch(/id="settle-amount"[\s\S]{0,300}\bdisabled\b/)
   })

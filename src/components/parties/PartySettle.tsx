@@ -85,8 +85,12 @@ export function PartySettle() {
   // Once the shopkeeper edits a bill box, auto-fill stops. Their choice wins.
   const [touched, setTouched] = useState(false)
   const consumedIntent = useRef(false)
-  /** An explicit per-bill allocation is in force; auto-fill must not clear it. */
-  const explicitAlloc = useRef(false)
+  /**
+   * The bill we were sent here to settle, if any. Drives allocation order;
+   * cleared by "Auto-fill oldest first", which is the shopkeeper saying they
+   * want a plain oldest-first split instead.
+   */
+  const [intentBillId, setIntentBillId] = useState<string | null>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['party', selectedPartyId, 'settle'],
@@ -170,45 +174,72 @@ export function PartySettle() {
   useEffect(() => {
     if (!pendingSettle || consumedIntent.current) return
     consumedIntent.current = true
-    explicitAlloc.current = true   // see the note on the auto-fill effect below
+    // Remember WHICH bill we were sent to settle, and pre-fill its due as a
+    // starting amount. Deliberately does NOT write `alloc` or set `touched` —
+    // see the allocation effect below, which is the single owner of `alloc`.
+    setIntentBillId(pendingSettle.transactionId)
     setAmount(String(pendingSettle.amount))
-    setAlloc({ [pendingSettle.transactionId]: String(pendingSettle.amount) })
-    setTouched(true)   // an explicit bill choice must not be auto-overwritten
     setPendingSettle(null)
   }, [pendingSettle, setPendingSettle])
 
   /**
-   * Auto-fill oldest-first as the total changes — using the SAME planner the
-   * server uses, so what is shown is what will happen.
+   * THE SINGLE OWNER OF `alloc`. Nothing else writes it except a shopkeeper
+   * typing in a bill box.
    *
-   * 🔒 THE `explicitAlloc` REF IS LOAD-BEARING (2026-08-03, found in the
-   * browser, not by a test).
+   * 🔒 Rewritten 2026-08-03 after Rahul hit it in the live app:
    *
-   * `touched` alone is not enough. On the mount pass BOTH effects run against
-   * the same render's values: the effect above sets alloc = { thatBill: 553 }
-   * and touched = true, then this one still sees touched === false and
-   * parsedAmount === 0, hits the clause below, and calls setAlloc({}). The two
-   * writes batch and the later one wins, so the allocation was wiped. On the
-   * next render touched is finally true, this effect returns early, and it
-   * never restores what it deleted.
+   *   "when i click settle bill from sales ledger for due and enter the amount
+   *    it's not accepting the payment. also it directly taking the full payment
+   *    automatically."
    *
-   * The visible result was severe: "Settle ₹553" from a bill opened with the
-   * amount filled but every bill box at 0 — "₹553 will be kept as an advance".
-   * The payment would NOT have reduced that invoice. A ref is read at the
-   * moment the effect runs rather than being captured by the render, so it
-   * closes the window that state cannot.
+   * Arriving from a ₹400 bill pre-filled the box with ₹400 AND set `touched`,
+   * which means "the shopkeeper chose this, never overwrite it". Lowering
+   * Amount received to ₹200 then left the bill still claiming ₹400 —
+   * "You have applied more than the amount received" — and Record was
+   * disabled. Paying part of a bill required editing two fields and knowing
+   * which. That is not a part-payment flow, it is a full-payment flow with a
+   * trap in it.
    *
-   * Cleared by "Auto-fill oldest first" — that button is the shopkeeper saying
-   * they no longer want their explicit choice kept.
+   * `touched` now means ONLY "the shopkeeper edited a bill box by hand". The
+   * pre-fill is just a starting amount, so changing the amount re-derives the
+   * split — which is what makes repeated part-payments against one bill work:
+   * open the bill, type what was handed over, record. Again next week.
+   *
+   * Order: the bill we were sent to settle is paid first, capped at its own
+   * due; anything left over flows oldest-first across the others. That is the
+   * "clear this bill, then carry on with the older ones" case.
+   *
+   * Writing `alloc` from exactly one place also removes the mount-pass race
+   * that an earlier fix needed a ref to paper over: the intent no longer
+   * writes `alloc`, so there is no second writer to be overwritten by this
+   * effect's first run.
    */
   useEffect(() => {
-    if (touched || explicitAlloc.current) return
+    if (touched) return
     if (parsedAmount <= 0) { setAlloc({}); return }
-    const plan = planAllocationOldestFirst(openBills, parsedAmount)
+
     const next: Record<string, string> = {}
-    for (const a of plan.allocations) next[a.transactionId] = String(a.amount)
+    let remaining = parsedAmount
+
+    const intentBill = intentBillId ? openBills.find((b: any) => b.id === intentBillId) : null
+    if (intentBill) {
+      const give = roundMoney(Math.min(remaining, intentBill.due))
+      if (give > 0) {
+        next[intentBill.id] = String(give)
+        remaining = roundMoney(remaining - give)
+      }
+    }
+
+    if (remaining > 0) {
+      const rest = intentBill
+        ? openBills.filter((b: any) => b.id !== intentBill.id)
+        : openBills
+      const plan = planAllocationOldestFirst(rest, remaining)
+      for (const a of plan.allocations) next[a.transactionId] = String(a.amount)
+    }
+
     setAlloc(next)
-  }, [parsedAmount, openBills, touched])
+  }, [parsedAmount, openBills, touched, intentBillId])
 
   const allocatedTotal = roundMoney(
     Object.values(alloc).reduce((s, v) => s + (parseFloat(v) || 0), 0),
@@ -468,11 +499,15 @@ export function PartySettle() {
             <CardContent className="p-3 space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-sm font-semibold">Apply to bills</p>
-                {touched && parsedAmount > 0 && (
+                {/* Offered whenever the split is anything other than plain
+                    oldest-first: after a hand edit, OR when we arrived pointed
+                    at one bill. Without the second case a shopkeeper who opened
+                    Settle from a bill had no way back to a normal split. */}
+                {(touched || intentBillId) && parsedAmount > 0 && (
                   <button
                     type="button"
                     className="text-xs text-primary underline underline-offset-2 flex items-center gap-1"
-                    onClick={() => { explicitAlloc.current = false; setTouched(false) }}
+                    onClick={() => { setIntentBillId(null); setTouched(false) }}
                   >
                     <Wand2 className="w-3.5 h-3.5" /> Auto-fill oldest first
                   </button>

@@ -104,3 +104,79 @@ describe('C5 — repeated partial payments against one bill', () => {
     expect(computeInvoiceDue({ totalAmount: 1000, paidAmount: 0, allocatedAmount: 50 })).toBe(950)
   })
 })
+
+/**
+ * 🔒 Settling ONE bill repeatedly, the way it happens at a counter.
+ *
+ * Rahul, 2026-08-03: opening a ₹400 bill and typing ₹200 must record ₹200
+ * against THAT bill — not refuse, and not silently take the full ₹400.
+ *
+ * This mirrors the allocation rule in PartySettle: the targeted bill is paid
+ * first, capped at its own due; any remainder flows oldest-first to the others.
+ */
+describe('C5 — settling a targeted bill, amount-driven', () => {
+  /** Mirrors the allocation effect in PartySettle.tsx. */
+  function planForTargetedBill(
+    bills: Array<{ id: string; date: string; totalAmount: number; paidAmount: number; allocatedAmount?: number }>,
+    targetId: string | null,
+    amount: number,
+  ): Record<string, number> {
+    const withDue = bills.map(b => ({ ...b, due: computeInvoiceDue(b) })).filter(b => b.due > 0)
+    const out: Record<string, number> = {}
+    let remaining = roundMoney(amount)
+    const target = targetId ? withDue.find(b => b.id === targetId) : null
+    if (target) {
+      const give = roundMoney(Math.min(remaining, target.due))
+      if (give > 0) { out[target.id] = give; remaining = roundMoney(remaining - give) }
+    }
+    if (remaining > 0) {
+      const rest = target ? withDue.filter(b => b.id !== target.id) : withDue
+      for (const a of planAllocationOldestFirst(rest, remaining).allocations) {
+        out[a.transactionId] = a.amount
+      }
+    }
+    return out
+  }
+
+  const bills = [
+    { id: 'old', date: '2026-01-01', totalAmount: 1000, paidAmount: 0 },
+    { id: 'target', date: '2026-03-01', totalAmount: 400, paidAmount: 0 },
+  ]
+
+  test('typing less than the due pays only that much, to that bill', () => {
+    expect(planForTargetedBill(bills, 'target', 200)).toEqual({ target: 200 })
+  })
+
+  test('the target is paid before older bills, despite being newer', () => {
+    // Plain oldest-first would have sent all 400 to `old`.
+    expect(planForTargetedBill(bills, 'target', 400)).toEqual({ target: 400 })
+  })
+
+  test('a remainder flows oldest-first across the others', () => {
+    // 400 clears the target, 100 goes to the older bill.
+    expect(planForTargetedBill(bills, 'target', 500)).toEqual({ target: 400, old: 100 })
+  })
+
+  test('with no target it is plain oldest-first', () => {
+    expect(planForTargetedBill(bills, null, 500)).toEqual({ old: 500 })
+  })
+
+  test('repeated part-payments walk the SAME bill down to zero', () => {
+    let allocated = 0
+    const seen: number[] = []
+    for (const pay of [200, 100, 100]) {
+      const b = [{ id: 'target', date: '2026-03-01', totalAmount: 400, paidAmount: 0, allocatedAmount: allocated }]
+      const plan = planForTargetedBill(b, 'target', pay)
+      expect(plan).toEqual({ target: pay })
+      allocated = roundMoney(allocated + pay)
+      seen.push(computeInvoiceDue({ totalAmount: 400, paidAmount: 0, allocatedAmount: allocated }))
+    }
+    expect(seen).toEqual([200, 100, 0])
+  })
+
+  test('paying more than the target owes does not overfill it', () => {
+    const only = [{ id: 'target', date: '2026-03-01', totalAmount: 400, paidAmount: 0 }]
+    // 400 lands on the bill; the extra 100 has nowhere to go and stays an advance.
+    expect(planForTargetedBill(only, 'target', 500)).toEqual({ target: 400 })
+  })
+})
