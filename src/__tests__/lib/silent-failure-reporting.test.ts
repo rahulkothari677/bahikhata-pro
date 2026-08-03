@@ -39,7 +39,13 @@ describe('restore reports dropped rows', () => {
   test('the server still counts skipped payments', () => {
     // The UI assertion below is meaningless if the field disappears.
     expect(route).toMatch(/results\.payments\.skipped\+\+/)
-    expect(route).toMatch(/payments: \{ imported: 0, skipped: 0 \}/)
+    // 🔒 2026-08-03: was pinned to the exact literal
+    // `payments: { imported: 0, skipped: 0 }`. The shape gained `skipReasons`
+    // when restore started naming WHY a payment was dropped — a strengthening
+    // of this test's own intent, not a weakening — so it is matched on the
+    // fields that matter rather than on the whole literal.
+    expect(route).toMatch(/payments: \{ imported: 0, skipped: 0/)
+    expect(route).toMatch(/skipReasons/)
   })
 
   test('the UI reads payments.skipped and warns on it', () => {

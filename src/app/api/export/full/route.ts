@@ -38,12 +38,34 @@ export async function GET() {
     const [products, parties, transactions, payments, settings, shops, auditLogs, fieldChangeLogs] = await Promise.all([
       db.product.findMany({ where: { userId }, take: CAP }),
       db.party.findMany({ where: { userId }, take: CAP }),
+      /*
+       * 🔒 THE PARTY NAME MUST TRAVEL WITH THE ROW (2026-08-03).
+       *
+       * The backup stripped `id` from parties, and carried a raw `partyId` on
+       * transactions and payments that cannot resolve to anything after a
+       * restore (the parties are recreated with new ids). Restore therefore
+       * looks rows up by NAME — `txn.partyName` and `payment.partyName` — and
+       * neither field existed in the export or on the model.
+       *
+       * The result, verified against a real 273-transaction backup: every
+       * payment skipped, every transaction restored with no party. Which means
+       * every customer balance collapses to its opening balance and the whole
+       * udhaar book is gone — destroyed by the one feature whose entire job is
+       * to preserve it.
+       *
+       * Including the relation and projecting `partyName` below is what makes a
+       * backup restorable at all.
+       */
       db.transaction.findMany({
         where: { userId },
-        include: { items: true },
+        include: { items: true, party: { select: { name: true } } },
         take: CAP,
       }),
-      db.payment.findMany({ where: { userId }, take: CAP }),
+      db.payment.findMany({
+        where: { userId },
+        include: { party: { select: { name: true } } },
+        take: CAP,
+      }),
       db.setting.findUnique({ where: { userId } }),
       db.shop.findMany({ where: { userId } }),
       db.auditLog.findMany({ where: { userId }, take: CAP, orderBy: { createdAt: 'desc' } }),
@@ -75,6 +97,12 @@ export async function GET() {
           ...t,
           id: undefined,
           userId: undefined,
+          // The restorable link. `partyId` is dropped rather than shipped:
+          // party ids are stripped from the export above, so the old value can
+          // never resolve and only invites someone to trust it.
+          partyId: undefined,
+          party: undefined,
+          partyName: t.party?.name ?? null,
           items: t.items.map(item => ({
             ...item,
             id: undefined,
@@ -85,6 +113,9 @@ export async function GET() {
           ...p,
           id: undefined,
           userId: undefined,
+          partyId: undefined,
+          party: undefined,
+          partyName: p.party?.name ?? null,
         })),
         settings: settings ? {
           ...settings,

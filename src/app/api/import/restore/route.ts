@@ -132,7 +132,9 @@ export async function POST(req: NextRequest) {
       // They are skipped WITH a reason instead of being imported silently
       // wrong — a ledger must never accept numbers it can't verify.
       transactions: { imported: 0, skipped: 0, quarantined: 0, quarantineReasons: [] as string[] },
-      payments: { imported: 0, skipped: 0 },
+      // skipReasons: money that does not survive a restore must be named,
+      // not just counted. A bare number tells nobody what was lost.
+      payments: { imported: 0, skipped: 0, skipReasons: [] as string[] },
       shops: { imported: 0, skipped: 0 },
       settings: { updated: false },
       resumed: isResume,
@@ -275,13 +277,36 @@ export async function POST(req: NextRequest) {
     // per-row findFirst in the transactions loop below. Was: per-transaction
     // findFirst = ~80-100ms × N rows = the dominant cost for large restores.
     // Now: one findMany at the start, Map lookup is O(1).
+    /*
+     * 🔒 AMBIGUOUS NAMES MUST NOT BE GUESSED (2026-08-03).
+     *
+     * This was `map.set(p.name, p.id)` — so when two parties share a name the
+     * second overwrote the first, and every row belonging to the first was
+     * silently re-attached to the second. One customer ends up credited with
+     * another's payments; both balances are wrong and nothing reports it.
+     *
+     * Duplicate names are now blocked on create (see party-duplicate.ts), but
+     * accounts that already contain them, and backups taken before that block,
+     * still exist. So: build the map, and record which names are ambiguous.
+     * An ambiguous name is SKIPPED and counted rather than attached to whoever
+     * happened to be last — a visible gap in a restore is recoverable, a
+     * silently mis-attributed payment is not.
+     */
     const partyIdByName = new Map<string, string>()
+    const ambiguousPartyNames = new Set<string>()
     const allParties = await db.party.findMany({
       where: { userId, deletedAt: null },
       select: { id: true, name: true },
     })
     for (const p of allParties) {
+      if (partyIdByName.has(p.name)) ambiguousPartyNames.add(p.name)
       partyIdByName.set(p.name, p.id)
+    }
+    /** Resolves a name to exactly one party, or null if it cannot be certain. */
+    const resolvePartyId = (name: string | null | undefined): string | null => {
+      if (!name) return null
+      if (ambiguousPartyNames.has(name)) return null
+      return partyIdByName.get(name) || null
     }
 
     // === Restore transactions (+ items) ===
@@ -338,7 +363,7 @@ export async function POST(req: NextRequest) {
             for (const txn of chunk) {
               // R19: Map lookup instead of findFirst.
               const partyName = txn.partyName || txn.party?.name
-              const partyId = partyName ? (partyIdByName.get(partyName) || null) : null
+              const partyId = resolvePartyId(partyName)
 
               await tx.transaction.create({
                 data: {
@@ -404,13 +429,32 @@ export async function POST(req: NextRequest) {
         select: { id: true, name: true },
       })
       partyIdByName.clear()
-      for (const p of freshParties) partyIdByName.set(p.name, p.id)
+      ambiguousPartyNames.clear()
+      for (const p of freshParties) {
+        if (partyIdByName.has(p.name)) ambiguousPartyNames.add(p.name)
+        partyIdByName.set(p.name, p.id)
+      }
 
       for (const payment of data.payments) {
         try {
-          const partyId = payment.partyName ? (partyIdByName.get(payment.partyName) || null) : null
+          const partyId = resolvePartyId(payment.partyName)
           if (!partyId) {
+            /*
+             * 🔒 SAY WHY (2026-08-03). This was a bare counter increment, and
+             * because the backup never carried `partyName` at all, it fired for
+             * EVERY payment — a restore reported "26 skipped" with no reason
+             * and the shopkeeper's entire collection history was gone.
+             *
+             * Money that does not survive a restore has to be loud.
+             */
             results.payments.skipped++
+            results.payments.skipReasons.push(
+              !payment.partyName
+                ? `₹${payment.amount} ${payment.type}: backup has no party name (exported by an older version — re-export from Settings → Backup)`
+                : ambiguousPartyNames.has(payment.partyName)
+                  ? `₹${payment.amount} ${payment.type} for "${payment.partyName}": more than one party has that exact name, so it cannot be attributed safely`
+                  : `₹${payment.amount} ${payment.type} for "${payment.partyName}": no party with that name exists`,
+            )
             continue
           }
           await db.payment.create({
