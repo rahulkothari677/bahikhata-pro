@@ -48,11 +48,17 @@ export async function GET() {
      *
      *     "shareUrl": "NEXTAUTH_URL/?ref=RAHUL997"
      *
-     * because NEXT_PUBLIC_APP_URL is set, in the deployment environment, to the
-     * literal string "NEXTAUTH_URL" — someone typed the variable NAME into the
-     * value box. The code was correct; the configuration was not. Every
-     * referral link and WhatsApp share a shopkeeper sent was unopenable, and
-     * nothing anywhere reported a problem.
+     * NEXT_PUBLIC_APP_URL is not set at all, so the value came from
+     * NEXTAUTH_URL — whose value in the deployment environment is the literal
+     * string "NEXTAUTH_URL", the variable NAME typed into the value box. The
+     * code was correct; the configuration was not. Every referral link and
+     * WhatsApp share a shopkeeper sent was unopenable, and nothing anywhere
+     * reported a problem.
+     *
+     * NEXTAUTH_URL matters beyond this endpoint — it is what NextAuth uses to
+     * build absolute URLs, and auth/reset-request falls back to it when a
+     * request carries no Origin header, which would put a dead link in a
+     * password-reset email.
      *
      * `||` only rejects an EMPTY value, so a wrong-but-present one sails
      * through. Each candidate is now checked for being an absolute http(s) URL
