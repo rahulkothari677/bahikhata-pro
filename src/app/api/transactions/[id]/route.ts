@@ -263,6 +263,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         newValues: transaction,
         fieldsToTrack: TRACKED_TRANSACTION_FIELDS,
         changedByUserId: authCtx.actingUserId,
+        // 🔒 2026-08-04: attribute a support admin's edit to the admin.
+        impersonatedBy: authCtx.impersonatedBy,
       })
       return NextResponse.json({ transaction })
     }
@@ -726,6 +728,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       newValues: transaction,
       fieldsToTrack: TRACKED_TRANSACTION_FIELDS,
       changedByUserId: authCtx.actingUserId,
+      // 🔒 2026-08-04: attribute a support admin's edit to the admin.
+      impersonatedBy: authCtx.impersonatedBy,
     })
 
     // had any historical (now-deleted) payment. Same alert-fatigue failure

@@ -1,0 +1,26 @@
+-- 🔒 Record the admin behind a support edit in the field-level audit trail.
+--
+-- CONTEXT. FieldChangeLog is described in the schema as "fraud defense +
+-- court-admissible": every edit to a transaction or payment records who changed
+-- which field, from what, to what.
+--
+-- THE PROBLEM. An admin can log in AS a shopkeeper (impersonation) and, on 34 of
+-- the 43 mutating routes, write to that shopkeeper's books. `changedByUserId`
+-- then held the SHOPKEEPER's id. The session did carry `impersonatedBy` — the
+-- admin's email — but it was read in exactly one place, to render a UI banner.
+-- It reached nothing that is stored.
+--
+-- So the record a shopkeeper would rely on in a dispute, and the one the schema
+-- offers as court-admissible, attributed a support agent's edit to the account
+-- holder themselves. There was no way, from the shopkeeper's own audit trail,
+-- to tell the two apart.
+--
+-- THE CHANGE. One nullable column. Null means what it has always meant: the
+-- shopkeeper (or their staff) made the change. It is only populated when the
+-- acting session is an impersonated one, so every existing row stays correct
+-- and no backfill is needed or possible.
+--
+-- Nullable and with no default, so this is a metadata-only change on Postgres —
+-- no table rewrite, no lock held while rows are touched, safe on a live table.
+
+ALTER TABLE "FieldChangeLog" ADD COLUMN "impersonatedBy" TEXT;

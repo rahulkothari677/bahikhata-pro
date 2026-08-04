@@ -635,6 +635,16 @@ model FieldChangeLog {
   oldValue        String? // JSON-serialized old value (null = was empty)
   newValue        String? // JSON-serialized new value (null = set to null)
   changedByUserId String? // who made the change (owner or staff). No FK to avoid modifying User model.
+  // 🔒 2026-08-04 (Phase 7 audit): the admin email when this change was made by
+  // a support admin logged in AS the shopkeeper. Null for the shopkeeper's own
+  // edits, which is every existing row.
+  //
+  // Without it, changedByUserId held the SHOPKEEPER's id for an edit an admin
+  // made, so this table — described above as fraud defence and court-admissible
+  // — attributed a support action to the account holder. `impersonatedBy` was
+  // carried on the session but read only to render a UI banner; it reached
+  // nothing that is stored.
+  impersonatedBy  String?
   createdAt       DateTime @default(now())
 
   @@index([userId, entityType, entityId, createdAt])

@@ -90,6 +90,10 @@ export async function getAuthContext(): Promise<{
   role: string
   permissions: any
   isImpersonated: boolean  // 🔒 2026-07-26: true when an admin is logged in AS this user
+  // 🔒 2026-08-04 (Phase 7 audit): WHICH admin, so an impersonated write can be
+  // attributed to them in the audit trail. The session already carried this;
+  // until now it was read only to render a banner and reached nothing stored.
+  impersonatedBy: string | null
   error?: NextResponse
 }> {
   const session = await getServerSession(authOptions)
@@ -101,6 +105,7 @@ export async function getAuthContext(): Promise<{
       role: 'owner',
       permissions: null,
       isImpersonated: false,
+      impersonatedBy: null,
       error: NextResponse.json({ error: 'Unauthorized — please sign in' }, { status: 401 }),
     }
   }
@@ -110,8 +115,13 @@ export async function getAuthContext(): Promise<{
   const role = session.user.role || 'owner'
   const permissions = session.user.permissions
   const isImpersonated = (session.user as any).isImpersonated === true
+  // Only trust the email when the session is genuinely an impersonated one, so
+  // a stray claim on a normal session cannot mislabel a shopkeeper's own edit.
+  const impersonatedBy = isImpersonated
+    ? ((session.user as any).impersonatedBy as string | undefined) || null
+    : null
 
-  return { userId, actingUserId, role, permissions, isImpersonated }
+  return { userId, actingUserId, role, permissions, isImpersonated, impersonatedBy }
 }
 
 /**

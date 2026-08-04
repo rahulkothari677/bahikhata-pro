@@ -25,6 +25,20 @@ interface AuditLogInput {
   entityId?: string
   req?: Request | any
   metadata?: any
+  /**
+   * 🔒 2026-08-04 (Phase 7 audit): the admin's email when this action is being
+   * performed by a support admin logged in AS the shopkeeper.
+   *
+   * `userId` on this table is the SHOPKEEPER, by design — the entry belongs in
+   * their trail. But with nothing else recorded, an admin's action was
+   * indistinguishable from the account holder's own. The session carried
+   * `impersonatedBy` and it was read in exactly one place, to render a UI
+   * banner; it reached nothing that is stored.
+   *
+   * Recorded into `metadata` rather than a new column: metadata is already Json,
+   * so this needs no migration on a table that holds security events.
+   */
+  impersonatedBy?: string | null
 }
 
 export async function logAudit(input: AuditLogInput): Promise<void> {
@@ -49,7 +63,11 @@ export async function logAudit(input: AuditLogInput): Promise<void> {
         entityId: input.entityId || null,
         ip,
         userAgent,
-        metadata: input.metadata || undefined,
+        // Merge rather than replace, so an impersonated action keeps whatever
+        // context the caller passed AND carries the admin who performed it.
+        metadata: input.impersonatedBy
+          ? { ...(input.metadata || {}), impersonatedBy: input.impersonatedBy }
+          : input.metadata || undefined,
       },
     })
   } catch (error) {

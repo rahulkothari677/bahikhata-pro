@@ -84,6 +84,17 @@ interface LogFieldChangesInput {
   newValues: Record<string, any>
   fieldsToTrack: readonly string[]
   changedByUserId?: string | null
+  /**
+   * 🔒 2026-08-04 (Phase 7 audit): the admin's email when this edit is being
+   * made by a support admin logged in AS the shopkeeper. Null for the
+   * shopkeeper's own edits.
+   *
+   * Without it, changedByUserId held the SHOPKEEPER's id for a change an admin
+   * made, so this trail — offered as fraud defence and court-admissible —
+   * attributed a support action to the account holder, and nothing in the
+   * shopkeeper's own records could tell the two apart.
+   */
+  impersonatedBy?: string | null
 }
 
 /**
@@ -105,6 +116,7 @@ export async function logFieldChanges(input: LogFieldChangesInput): Promise<void
       oldValue: string | null
       newValue: string | null
       changedByUserId: string | null
+      impersonatedBy: string | null
     }> = []
 
     for (const field of input.fieldsToTrack) {
@@ -121,6 +133,7 @@ export async function logFieldChanges(input: LogFieldChangesInput): Promise<void
           oldValue: oldVal,
           newValue: newVal,
           changedByUserId: input.changedByUserId || null,
+          impersonatedBy: input.impersonatedBy || null,
         })
       }
     }
