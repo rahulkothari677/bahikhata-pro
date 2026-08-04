@@ -193,6 +193,35 @@ export async function PUT(req: NextRequest) {
       create: createData,
     })
 
+    /*
+     * 🔒 2026-08-03 (audit): carry the business name across to the default shop.
+     *
+     * The default Shop row is seeded ONCE from Setting.shopName (GET
+     * /api/shops). Nothing kept them together afterwards and no rename existed,
+     * so an owner who changed their business name here still saw the ORIGINAL
+     * name on the Manage Shops card — permanently, with no way to correct it.
+     * The app disagreed with itself about the name of the same shop.
+     *
+     * One direction only, and deliberately. Settings is the canonical business
+     * profile, so the shop label follows it. The reverse does not hold:
+     * renaming a shop must NOT rewrite Setting.shopName, because that name is
+     * printed on invoices, GSTR-1 and e-invoice IRN payloads — changing a GST
+     * document identity is not a side effect a rename box should have.
+     *
+     * Non-critical: a failure here leaves a stale label, which is what the
+     * situation already was. It must never fail the settings save itself.
+     */
+    if (typeof sanitized.shopName === 'string' && sanitized.shopName.trim()) {
+      try {
+        await db.shop.updateMany({
+          where: { userId, isDefault: true },
+          data: { name: sanitized.shopName.trim() },
+        })
+      } catch (syncErr) {
+        console.error('[settings] default shop name sync failed:', syncErr)
+      }
+    }
+
     // 🔒 V8 M1: Invalidate the shop-state cache so the next sale uses the
     // updated state for inter/intra-state GST derivation. Without this, the
     // cached old state would persist for 5 minutes → wrong CGST/SGST vs IGST.

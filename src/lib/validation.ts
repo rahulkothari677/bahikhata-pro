@@ -352,6 +352,19 @@ export const createShopSchema = z.object({
   isDefault: z.boolean().optional(),
 })
 
+/*
+ * Shop rename schema (PATCH /api/shops).
+ *
+ * Name only, deliberately. A shop's GSTIN, address and state feed GST
+ * derivation and appear on filings, so changing them is a different action
+ * with different consequences and belongs behind its own review — not folded
+ * into a rename because the fields happen to sit in the same row.
+ */
+export const renameShopSchema = z.object({
+  id: z.string().min(1, 'id is required').max(100),
+  name: z.string().trim().min(1, 'Shop name cannot be empty').max(200),
+})
+
 // Bank-recon transaction PATCH schema (PATCH /api/bank-recon/transaction/[id])
 // The route takes { action: 'unmatch' | 'match', transactionId?, paymentId? }.
 export const updateBankReconTxnSchema = z.object({

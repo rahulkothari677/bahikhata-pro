@@ -3,7 +3,7 @@ import { db } from '@/lib/db'
 import { getAuthUserIdOwnerOnly } from '@/lib/get-auth'
 import { checkEntityLimit } from '@/lib/usage-limits'
 import { apiError } from '@/lib/api-error'
-import { validateBody, createShopSchema } from '@/lib/validation'
+import { validateBody, createShopSchema, renameShopSchema } from '@/lib/validation'
 
 // GET /api/shops — list all shops for the current user
 export async function GET() {
@@ -102,5 +102,55 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ shop })
   } catch (error) {
     return apiError(error, 'Failed to create shop', 500)
+  }
+}
+
+/*
+ * PATCH /api/shops — rename a shop.
+ *
+ * 🔒 Added 2026-08-03 (audit). A shop could be created and never changed:
+ * this route exported GET and POST only, and the only code in the codebase
+ * that touched a Shop row afterwards was "delete my entire account". A shop
+ * owner could not correct a typo in their own shop's name.
+ *
+ * The visible symptom was staler than that. The default shop is seeded once
+ * from Setting.shopName (see GET above). Change your business name in
+ * Settings afterwards and the Manage Shops card kept showing the ORIGINAL
+ * name indefinitely, with no way to correct it — the app disagreed with
+ * itself about what the shop was called. PUT /api/settings now carries the
+ * new name across to the default shop, and this route covers every other
+ * case.
+ *
+ * Rename only. GSTIN/address/state drive GST derivation and appear on
+ * filings; changing those is a separate action with separate consequences.
+ */
+export async function PATCH(req: NextRequest) {
+  try {
+    const { userId, error } = await getAuthUserIdOwnerOnly()
+    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const body = await req.json()
+    const validation = validateBody(renameShopSchema, body)
+    if (!validation.success) {
+      return NextResponse.json({ error: validation.error }, { status: 400 })
+    }
+    const { id, name } = validation.data
+
+    // Scope the WHERE by userId so one shop owner cannot rename another's
+    // shop by guessing an id. updateMany (not update) because update() matches
+    // on the primary key alone and would ignore the userId guard.
+    const updated = await db.shop.updateMany({
+      where: { id, userId },
+      data: { name: name.trim() },
+    })
+
+    if (updated.count === 0) {
+      return NextResponse.json({ error: 'Shop not found' }, { status: 404 })
+    }
+
+    const shop = await db.shop.findFirst({ where: { id, userId } })
+    return NextResponse.json({ shop })
+  } catch (error) {
+    return apiError(error, 'Failed to rename shop', 500)
   }
 }

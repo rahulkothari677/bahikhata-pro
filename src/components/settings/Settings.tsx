@@ -27,7 +27,7 @@ import { THEME_OPTIONS } from '@/components/providers/ThemeProvider'
 import {
   Store, Save, Database, Trash2, AlertTriangle, Moon, Keyboard,
   Search, MessageCircle, Sparkles, Bell, Repeat, FileSpreadsheet,
-  Users, Package, ScanLine, TrendingUp, Smartphone, RotateCcw, Palette, Check, Globe, Shield, EyeOff, Plus, Mic, Lock, Loader2, BarChart3, Home,
+  Users, Package, ScanLine, TrendingUp, Smartphone, RotateCcw, Palette, Check, Globe, Shield, EyeOff, Plus, Mic, Lock, Loader2, BarChart3, Home, Pencil,
 } from 'lucide-react'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { useSetting } from '@/hooks/use-setting'
@@ -110,13 +110,17 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
 
   // useSetting hook — provides hideProfit + updateHideProfit (persists instantly)
   const { hideProfit, updateHideProfit } = useSetting()
-  const { shops, activeShop, createShop } = useShops()
+  const { shops, activeShop, createShop, renameShop } = useShops()
   // 🔒 V26 N20: Removed `switchShop` from destructure — was unused after
   // the V26 N4 removal of the Switch button (copy still references switching
   // but the actual UI no longer offers it; see V26 N14 copy fix).
   const { revenueTarget, expenseBudget, setRevenueTarget, setExpenseBudget } = useBusinessGoals()
   const [newShopOpen, setNewShopOpen] = useState(false)
   const [newShopName, setNewShopName] = useState('')
+  // Inline shop rename (audit 2026-08-03).
+  const [renameShopId, setRenameShopId] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState('')
+  const [renameSaving, setRenameSaving] = useState(false)
   const [revenueGoal, setRevenueGoal] = useState('')
   const [expenseGoal, setExpenseGoal] = useState('')
   // 🔒 V12: Invoice round-off toggle (nearest rupee on sale totals).
@@ -316,6 +320,26 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
       sonnerToast.error(e?.message || 'Could not run health check')
     } finally {
       setRunningHealthCheck(false)
+    }
+  }
+
+  /**
+   * Save an inline shop rename. Closes the editor only on success, so a
+   * failure leaves the typed name on screen to retry rather than discarding it.
+   */
+  const submitRename = async (shopId: string) => {
+    const trimmed = renameValue.trim()
+    const current = shops.find(s => s.id === shopId)
+    if (!trimmed || trimmed === current?.name) {
+      setRenameShopId(null)
+      return
+    }
+    setRenameSaving(true)
+    try {
+      const result = await renameShop(shopId, trimmed)
+      if (result) setRenameShopId(null)
+    } finally {
+      setRenameSaving(false)
     }
   }
 
@@ -694,17 +718,72 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
                   <div className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
                     <Store className="w-4 h-4 text-primary" />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{shop.name}</p>
-                    <p className="text-2xs text-muted-foreground truncate">
-                      {shop.gstin ? `GSTIN: ${shop.gstin}` : 'No GSTIN'} {shop.isDefault ? ' · Default' : ''}
-                    </p>
-                  </div>
-                  {/* 🔒 V26 FIX N4: Switch button removed — was cosmetic. Multi-shop
-                      data scoping is coming soon. Shops can still be created + their
-                      GSTIN used in the Consolidated Report. */}
-                  {shop.isDefault && (
-                    <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 text-3xs">Default</Badge>
+                  {/* 🔒 2026-08-03 (audit): a shop could be created and never
+                      renamed — an owner was stuck with a typo in their own
+                      shop's name for good. Edited inline rather than in a
+                      dialog: it is one short field, and a popup on a phone
+                      hides the list you are renaming within. */}
+                  {renameShopId === shop.id ? (
+                    <>
+                      <div className="flex-1 min-w-0">
+                        <Input
+                          autoFocus
+                          value={renameValue}
+                          maxLength={200}
+                          aria-label="Shop name"
+                          className="h-9 text-sm"
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') { e.preventDefault(); void submitRename(shop.id) }
+                            if (e.key === 'Escape') { e.preventDefault(); setRenameShopId(null) }
+                          }}
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-9 flex-shrink-0"
+                        disabled={renameSaving || !renameValue.trim() || renameValue.trim() === shop.name}
+                        onClick={() => void submitRename(shop.id)}
+                      >
+                        {renameSaving ? 'Saving…' : 'Save'}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-9 flex-shrink-0"
+                        disabled={renameSaving}
+                        onClick={() => setRenameShopId(null)}
+                      >
+                        Cancel
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{shop.name}</p>
+                        <p className="text-2xs text-muted-foreground truncate">
+                          {shop.gstin ? `GSTIN: ${shop.gstin}` : 'No GSTIN'} {shop.isDefault ? ' · Default' : ''}
+                        </p>
+                      </div>
+                      {/* 🔒 V26 FIX N4: Switch button removed — was cosmetic. Multi-shop
+                          data scoping is coming soon. Shops can still be created + their
+                          GSTIN used in the Consolidated Report. */}
+                      {shop.isDefault && (
+                        <Badge className="bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 text-3xs">Default</Badge>
+                      )}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-9 w-9 p-0 flex-shrink-0"
+                        aria-label={`Rename ${shop.name}`}
+                        onClick={() => { setRenameShopId(shop.id); setRenameValue(shop.name) }}
+                      >
+                        <Pencil className="w-4 h-4 text-muted-foreground" />
+                      </Button>
+                    </>
                   )}
                 </div>
               ))}

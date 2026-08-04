@@ -12,6 +12,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, useEffect, useCallback } from 'react'
 import { offlineFetch } from '@/lib/offline-fetch'
+import { readError } from '@/lib/read-error'
 import { toast as sonnerToast } from 'sonner'
 import { useAppStore } from '@/store/app-store'
 
@@ -71,13 +72,52 @@ export function useShops() {
         body: JSON.stringify(shopData),
         offline: { invalidate: ['/api/shops'] },
       })
-      if (!r.ok) throw new Error('Failed')
+      /*
+       * 🔒 2026-08-03 (audit): was `throw new Error('Failed')` and a bare
+       * "Failed to create shop" toast, which threw away what the server said.
+       * The plan cap is a real, reachable answer here — a Pro account is
+       * refused a 4th shop with "You've reached the PRO plan limit of 3 shops.
+       * Upgrade to Elite for unlimited shops." The owner saw none of it and
+       * had no way to tell a plan limit from an outage.
+       */
+      if (!r.ok) throw new Error(await readError(r))
       const data = await r.json()
       queryClient.invalidateQueries({ queryKey: ['shops'] })
       sonnerToast.success(`Shop "${shopData.name}" created!`)
       return data.shop
-    } catch {
-      sonnerToast.error('Failed to create shop')
+    } catch (e: any) {
+      sonnerToast.error("Couldn't create the shop", { description: e?.message || 'Please try again.' })
+      return null
+    }
+  }, [queryClient])
+
+  /**
+   * Rename a shop. Name only — GSTIN/address/state feed GST derivation and
+   * appear on filings, so they are not editable from a rename box.
+   */
+  const renameShop = useCallback(async (shopId: string, name: string) => {
+    const trimmed = name.trim()
+    if (!trimmed) {
+      sonnerToast.error('Shop name cannot be empty')
+      return null
+    }
+    try {
+      const r = await offlineFetch('/api/shops', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: shopId, name: trimmed }),
+        offline: { invalidate: ['/api/shops'] },
+      })
+      if (!r.ok) throw new Error(await readError(r))
+      const data = await r.json()
+      queryClient.invalidateQueries({ queryKey: ['shops'] })
+      // The default shop's name is mirrored from the business profile, so the
+      // settings card can be showing the old one until it refetches.
+      queryClient.invalidateQueries({ queryKey: ['settings'] })
+      sonnerToast.success(`Renamed to "${trimmed}"`)
+      return data.shop
+    } catch (e: any) {
+      sonnerToast.error("Couldn't rename the shop", { description: e?.message || 'Please try again.' })
       return null
     }
   }, [queryClient])
@@ -90,6 +130,7 @@ export function useShops() {
     activeShopId,
     switchShop,
     createShop,
+    renameShop,
     isLoading,
   }
 }
