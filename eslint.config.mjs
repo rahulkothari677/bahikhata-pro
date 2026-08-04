@@ -51,7 +51,20 @@ const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
     }],
   },
 }, {
-  ignores: ["node_modules/**", ".next/**", "out/**", "build/**", "next-env.d.ts", "examples/**", "skills", "bahikhata-admin/**"]
+  // Playwright fixtures take a `use` callback. The React Hooks rule reads that
+  // as a misplaced `use()` hook — it is not one, and there is no React here.
+  files: ["e2e/**/*.ts", "e2e/**/*.tsx"],
+  rules: { "react-hooks/rules-of-hooks": "off" },
+}, {
+  // Node CJS config files, where require() is the correct call.
+  files: ["*.config.js", "*.config.cjs"],
+  rules: { "@typescript-eslint/no-require-imports": "off" },
+}, {
+  // scripts/** are standalone Node dev scripts run with `node scripts/x.js`,
+  // where require() is the correct call and not a lint violation. They were
+  // the only 17 errors in the tree; application source is clean. Excluding
+  // them is what lets CI treat a lint error as a real failure again.
+  ignores: ["node_modules/**", ".next/**", "out/**", "build/**", "next-env.d.ts", "examples/**", "skills", "bahikhata-admin/**", "scripts/**"]
 }];
 
 export default eslintConfig;

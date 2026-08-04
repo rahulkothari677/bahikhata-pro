@@ -27,8 +27,14 @@ jobs:
         run: npx prisma generate
 
       - name: Run ESLint
-        run: npx next lint
-        continue-on-error: true # Lint warnings are non-blocking (style only)
+        # 🔒 2026-08-03 (audit): was `npx next lint` with continue-on-error.
+        # `next lint` was REMOVED in Next 16 — the command parsed "lint" as a
+        # directory name and exited 1 every single run. continue-on-error meant
+        # nobody ever saw it, so this repo has had a lint step that never once
+        # linted anything. A gate that always passes is not a gate.
+        # `npm run lint` is `eslint .`, which works. Blocking: application
+        # source is clean today, so an error here is a genuine new problem.
+        run: npm run lint
 
       - name: Run TypeScript type check
         run: npx tsc --noEmit
