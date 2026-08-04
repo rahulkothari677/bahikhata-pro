@@ -49,6 +49,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       oldValue: deserializeValue(log.oldValue),
       newValue: deserializeValue(log.newValue),
       changedByUserId: log.changedByUserId,
+      // 🔒 2026-08-04 (Phase 7 audit): surface the support admin, if any.
+      // The column is written on impersonated edits, but recording who made a
+      // change and never showing it to the person whose books they are is half
+      // a fix — "did I change this, or did support?" is the whole question this
+      // trail exists to answer. Null for the shopkeeper's own edits.
+      impersonatedBy: log.impersonatedBy,
       createdAt: log.createdAt,
     }))
 

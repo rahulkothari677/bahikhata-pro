@@ -138,6 +138,11 @@ export async function GET() {
           oldValue: f.oldValue,
           newValue: f.newValue,
           changedByUserId: f.changedByUserId,
+          // 🔒 2026-08-04 (Phase 7 audit): carry the support-admin attribution
+          // into the backup too. A trail that loses who made a change the
+          // moment you restore it is not a trail — the same class of omission
+          // as the missing partyName that made restores unusable (b19d602).
+          impersonatedBy: f.impersonatedBy,
           createdAt: f.createdAt,
         })),
       },
