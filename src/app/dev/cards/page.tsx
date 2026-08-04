@@ -18,6 +18,7 @@ import { BusinessCardSurface } from '@/components/common/BusinessCardSurface'
 import { CARD_TEMPLATES } from '@/lib/card-templates'
 import { BUSINESS_CARD_DESIGNS } from '@/lib/business-card-designs'
 import { deriveMonogram } from '@/lib/brand-monogram'
+import { MONOGRAM_FONTS, DEFAULT_MONOGRAM_FONT_ID } from '@/lib/monogram-fonts'
 
 const SAMPLE = {
   shopName: 'RAHUL KOTHARI',
@@ -37,7 +38,10 @@ const VCARD = 'BEGIN:VCARD\nVERSION:3.0\nFN:Rahul Kothari\nEND:VCARD'
 export default function CardGalleryPage() {
   const [shop, setShop] = useState(SAMPLE.shopName)
   const [owner, setOwner] = useState(SAMPLE.ownerName)
-  const data = { ...SAMPLE, shopName: shop, ownerName: owner }
+  // A typeface for a two-letter mark can only be judged on the card it will be
+  // printed on — at picker size every one of these looks fine.
+  const [fontId, setFontId] = useState(DEFAULT_MONOGRAM_FONT_ID)
+  const data = { ...SAMPLE, shopName: shop, ownerName: owner, monogramFontId: fontId }
 
   return (
     <div className="min-h-screen bg-neutral-100 dark:bg-neutral-900 p-6">
@@ -62,6 +66,19 @@ export default function CardGalleryPage() {
               <span className="text-2xs text-muted-foreground">Monogram → </span>
               <span className="font-semibold">{deriveMonogram(shop, owner)}</span>
             </div>
+            <label className="text-sm">
+              <span className="block text-2xs text-muted-foreground mb-1">Monogram font</span>
+              <select
+                data-testid="dev-font"
+                value={fontId}
+                onChange={e => setFontId(e.target.value)}
+                className="border rounded px-2 py-1 text-sm bg-background"
+              >
+                {MONOGRAM_FONTS.map(f => (
+                  <option key={f.id} value={f.id}>{f.name}</option>
+                ))}
+              </select>
+            </label>
           </div>
         </header>
 
@@ -81,9 +98,15 @@ export default function CardGalleryPage() {
                 phone: data.phone,
                 address: data.address,
                 gstin: data.gstin,
+                // The shop's own address, as stored in Settings → Profile.
+                email: data.email,
                 cardDesign: 'gold-fold',
+                cardFontId: fontId,
               }}
-              email={data.email}
+              // The SIGN-IN address. Deliberately different from the profile
+              // one above: if this ever shows on the card, the bug Rahul
+              // reported on 2026-08-04 is back.
+              email="signin-account@example.com"
               onLogoClick={() => {}}
             />
           </div>

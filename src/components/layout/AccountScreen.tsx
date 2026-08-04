@@ -130,7 +130,11 @@ export function AccountScreen() {
   const setting = settingData?.setting || {}
   const userName = setting.ownerName || session?.user?.name || 'Shop Owner'
   const shopName = setting.shopName || 'My Shop'
-  const email = session?.user?.email || ''
+  // 🐛 2026-08-04: Setting.email FIRST. This screen was showing the address the
+  // shopkeeper SIGNS IN with, ignoring the Email field in Settings → Profile
+  // that they had filled in with their shop's address. Same fault as the one on
+  // the business card; see lib/card-details.
+  const email = setting.email || session?.user?.email || ''
   const phone = setting.phone
 
   // 🐛 UI/UX Phase 5 Fix 1: Profile completion calculation.
@@ -1037,6 +1041,8 @@ function AccountSectionContent({
     return (
       <BusinessCardDisplay
         setting={setting}
+        // The SIGN-IN address, passed as a last resort only. The card prefers
+        // Setting.email and then the card's own override — see lib/card-details.
         email={session?.user?.email}
       />
     )

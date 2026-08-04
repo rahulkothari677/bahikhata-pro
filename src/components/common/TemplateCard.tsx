@@ -18,12 +18,18 @@
  * three sets of numbers that drift apart.
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { Phone, Mail, MapPin, User } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { deriveMonogram } from '@/lib/brand-monogram'
-import { getMonogramFont, monogramStyle } from '@/lib/monogram-fonts'
+import {
+  getMonogramFont,
+  monogramFontFamilyName,
+  monogramStyle,
+  type MonogramFont,
+} from '@/lib/monogram-fonts'
+import { fitMonogram, resetMonogramMetrics } from '@/lib/monogram-fit'
 import { fitTextCqw, willTruncate, SHOP_NAME_GLYPH_RATIO } from '@/lib/fit-text'
 import type { CardTemplate, Zone } from '@/lib/card-templates'
 
@@ -53,6 +59,52 @@ interface Props {
   className?: string
 }
 
+/**
+ * Sizes the monogram from the real letterforms, once they can be measured.
+ *
+ * Two things have to happen before a measurement means anything: the component
+ * has to be on a client (the server has no canvas), and the WOFF2 has to have
+ * arrived (measuring a face that has not loaded measures Times New Roman). So
+ * this starts on the registry's rough estimate — matching what the server
+ * rendered, which keeps hydration quiet — and switches to the measured size
+ * when both are true.
+ */
+function useMonogramFit(
+  text: string,
+  font: MonogramFont,
+  opts: { logoSizeCqw: number; maxInkWidthCqw: number },
+) {
+  const [ready, setReady] = useState(false)
+
+  useEffect(() => {
+    let live = true
+    const family = monogramFontFamilyName(font)
+    const loaded =
+      family && typeof document !== 'undefined' && document.fonts
+        ? document.fonts.load(`${font.fontWeight} 200px "${family}"`)
+        : Promise.resolve()
+
+    loaded
+      .catch(() => {
+        // A face that fails to download still gets measured — as its fallback,
+        // which is exactly what will be drawn.
+      })
+      .then(() => {
+        if (!live) return
+        // The first measurement may have been taken against the fallback face
+        // while the WOFF2 was still in flight, and it was cached.
+        resetMonogramMetrics()
+        setReady(true)
+      })
+
+    return () => {
+      live = false
+    }
+  }, [font])
+
+  return fitMonogram(text, font, { ...opts, measure: ready })
+}
+
 /** Turns a zone into absolute positioning. */
 function zoneStyle(z: Zone): React.CSSProperties {
   return {
@@ -71,6 +123,25 @@ export function TemplateCard({ template: t, data, qrValue, onLogoClick, classNam
   const monogram = deriveMonogram(data.shopName, data.ownerName)
 
   const monoFont = getMonogramFont(data.monogramFontId)
+
+  // The mark is sized from its own letterforms, so every typeface lands on the
+  // same optical weight. `logoSizeCqw` names the composition the artwork was
+  // drawn for; `maxInkWidthCqw` is the slot it must not escape.
+  const monoFit = useMonogramFit(monogram, monoFont, {
+    logoSizeCqw: z.logo?.size ?? 25,
+    maxInkWidthCqw: z.logo?.w ?? 28,
+  })
+
+  /**
+   * The box the mark is centred in.
+   *
+   * Fixed to the REFERENCE size, not the fitted one. If the box tracked the
+   * fitted size, a face that measured small would sit high and one that
+   * measured large would sit low, and the mark would visibly hop up and down
+   * the card as the shopkeeper tried typefaces. Anchoring the box means the ink
+   * centre stays put and only the letters change.
+   */
+  const monoBoxCqw = (z.logo?.size ?? 25) * 0.69
 
   // The icon, its divider and two gaps consume roughly 9cqw before any text.
   // Sizing against the full zone is what let the email overflow its slot.
@@ -204,19 +275,23 @@ export function TemplateCard({ template: t, data, qrValue, onLogoClick, classNam
               disabled={!onLogoClick}
               aria-label={onLogoClick ? 'Add your shop logo' : undefined}
               className={cn(
-                'w-full grid place-items-center leading-none',
+                'w-full grid place-items-center leading-none overflow-visible',
                 onLogoClick && 'transition hover:opacity-80 cursor-pointer',
               )}
-              style={monogramStyle(
-                monoFont,
-                z.logo.color ?? t.ink.primary,
-                // 0.55 was too small to read the typeface; 0.86 overpowered the
-                // shop name. 0.69 is 0.86 less the 20% Rahul asked for, and
-                // lands close to his reference proportion.
-                z.logo.size * 0.69,
-              )}
+              style={{
+                ...monogramStyle(monoFont, z.logo.color ?? t.ink.primary, monoFit.fontSizeCqw),
+                height: `${monoBoxCqw}cqw`,
+              }}
             >
-              {monogram}
+              {/* The nudge centres the INK, which is not where centring the
+                  line box puts it — see lib/monogram-fit. `block` so the
+                  transform applies; an inline span would ignore it. */}
+              <span
+                className="block"
+                style={{ transform: `translate(${monoFit.dxEm}em, ${monoFit.dyEm}em)` }}
+              >
+                {monogram}
+              </span>
             </button>
           ) : (
             /* Filled badge. For artwork too busy to carry bare letters. */
@@ -374,7 +449,12 @@ export function TemplateCard({ template: t, data, qrValue, onLogoClick, classNam
       {z.qr && qrValue && (
         <div style={{ ...zoneStyle(z.qr), width: `${z.qr.size}%` }}>
           <div className="w-full bg-white rounded p-[4%]" style={{ aspectRatio: '1' }}>
+            {/* `data-card-qr` is how the PNG exporter finds this SVG to
+                serialise it. Re-encoding the QR in the exporter would mean a
+                second implementation that can disagree with this one about
+                error-correction level or quiet zone. */}
             <QRCodeSVG
+              data-card-qr=""
               value={qrValue}
               level="M"
               bgColor="#FFFFFF"

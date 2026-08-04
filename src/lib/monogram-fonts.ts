@@ -1,27 +1,34 @@
 /**
- * Monogram typefaces — 10 options for the auto-generated logo letters.
+ * Monogram typefaces — the letterforms of the auto-generated logo.
  *
  * 🎨 2026-07-29. The monogram shipped with one serif and Rahul called it basic,
  * correctly: the letters ARE the logo for any shop that never uploads a file,
  * so a single face means every card in the app shares a logo.
  *
- * NO WEBFONTS. The card renders inside a PDF export and a canvas-to-PNG share,
- * and a webfont that has not finished loading silently falls back — producing a
- * logo that differs between the screen and the downloaded file. Every option
- * below resolves from system stacks that exist on Android, iOS, Windows and
- * macOS, so what is on screen is what gets shared.
+ * 🎨 2026-08-04. Nine system-font variations were built and shown to him; he
+ * kept only Classic Serif and picked eleven Google faces instead. He was right
+ * — system stacks can vary weight and tracking, but they cannot give you a
+ * copperplate script or a chrome-tube display face, and those are what read as
+ * a designed logo rather than a default.
  *
- * Distinctiveness therefore comes from FAMILY + WEIGHT + TRACKING + CASE
- * together, not family alone. Two options sharing a family still read as
- * different marks when one is 900-weight tight and the other 300-weight wide.
+ * SELF-HOSTED, NOT CDN. The card renders into a PNG for sharing and into the
+ * invoice PDF. A CDN font that has not finished loading falls back silently, so
+ * the shared logo would differ from the previewed one. The files live in
+ * public/fonts/card/ (fetched by scripts/fetch-card-fonts.mjs) and are declared
+ * as @font-face in globals.css. Every family is SIL Open Font License or
+ * Apache 2.0, both of which permit self-hosting.
+ *
+ * LOADED ON DEMAND. `font-display: swap` plus no preload means a shopkeeper who
+ * never opens the card screen downloads none of these — 271 KB that would
+ * otherwise sit on the critical path of a Dashboard on a 3G connection.
  */
 
 export interface MonogramFont {
-  /** Stable id, stored per template or per user. Never change. */
+  /** Stable id, stored in Setting.cardFontId. Never change. */
   id: string
   /** Shown in the picker. */
   name: string
-  /** One line on who it suits. */
+  /** One line on who it suits — the picker is for shopkeepers, not designers. */
   description: string
   fontFamily: string
   fontWeight: number
@@ -29,13 +36,25 @@ export interface MonogramFont {
   /** em. Wide tracking suits light weights; tight suits heavy ones. */
   letterSpacing: string
   /**
-   * Multiplies the template's logo size. A script face has a much smaller
-   * x-height than Arial Black at the same px, so without this the "same" size
-   * looks wildly inconsistent across options.
+   * FALLBACK SIZE ONLY — a rough hand estimate, used for the first paint before
+   * the face has downloaded and on the server, where nothing can be measured.
+   *
+   * The real size is derived by measuring the letterforms; see lib/monogram-fit.
+   * These numbers were the whole sizing mechanism until 2026-08-04, when three
+   * of the scripts turned out to overflow the logo zone and collide with the
+   * shop name. Estimating type metrics by reasoning about them does not work.
    */
   sizeScale: number
   /** Outline-only, for marks that should read as engraved rather than solid. */
   outlined?: boolean
+  /**
+   * Filename stem in public/fonts/card/, or null for a system stack.
+   *
+   * The canvas PNG renderer uses this to wait on the exact face before it
+   * draws — `document.fonts.load()` needs a real family name, and a face that
+   * is still loading paints as Times New Roman with no error.
+   */
+  file?: string
 }
 
 export const MONOGRAM_FONTS: MonogramFont[] = [
@@ -43,22 +62,140 @@ export const MONOGRAM_FONTS: MonogramFont[] = [
     id: 'serif-classic',
     name: 'Classic Serif',
     description: 'Traditional and trustworthy. Suits most trades.',
-    fontFamily: 'Georgia, "Times New Roman", ui-serif, serif',
+    fontFamily: "Georgia, 'Times New Roman', ui-serif, serif",
     fontWeight: 700,
     fontStyle: 'normal',
     letterSpacing: '0.01em',
     sizeScale: 1,
   },
-  // 🔜 MORE COMING. Nine system faces were built and shown to Rahul; he kept
-  // only this one and is choosing the rest from Google Fonts, which can do
-  // things no system face can — a true inscriptional Roman, or a monogram
-  // ligature where the K tucks under the R's arm, as in his reference card.
-  //
-  // To add one: download the file to public/fonts/, declare an @font-face in
-  // globals.css, and append an entry here. Self-hosted rather than loaded from
-  // Google's CDN because this card also renders into the PDF invoice and the
-  // PNG share — a CDN font that has not finished loading falls back silently,
-  // so the shared logo would differ from the previewed one.
+  {
+    id: 'libertinus-serif',
+    name: 'Libertinus Serif',
+    description: 'A book serif. Quiet, bookish, very readable.',
+    fontFamily: "'Libertinus Serif', Georgia, serif",
+    fontWeight: 700,
+    fontStyle: 'normal',
+    letterSpacing: '0.02em',
+    sizeScale: 1.02,
+    file: 'libertinus-serif',
+  },
+  {
+    id: 'archivo-black',
+    name: 'Archivo Black',
+    description: 'Heavy block capitals. Bold and modern.',
+    fontFamily: "'Archivo Black', 'Arial Black', sans-serif",
+    fontWeight: 400,
+    fontStyle: 'normal',
+    // Heavy faces need air between the letters or the two initials merge into
+    // one shape at card size.
+    letterSpacing: '0.04em',
+    sizeScale: 0.86,
+    file: 'archivo-black',
+  },
+  {
+    id: 'orbitron',
+    name: 'Orbitron',
+    description: 'Geometric and technical. Suits electronics and mobile shops.',
+    fontFamily: "'Orbitron', 'Trebuchet MS', sans-serif",
+    fontWeight: 700,
+    fontStyle: 'normal',
+    letterSpacing: '0.03em',
+    sizeScale: 0.9,
+    file: 'orbitron',
+  },
+  {
+    id: 'tourney',
+    name: 'Tourney',
+    description: 'Sharp and sporty, with a chrome edge.',
+    fontFamily: "'Tourney', 'Trebuchet MS', sans-serif",
+    fontWeight: 700,
+    fontStyle: 'normal',
+    letterSpacing: '0.02em',
+    sizeScale: 0.95,
+    file: 'tourney',
+  },
+  {
+    id: 'monoton',
+    name: 'Monoton',
+    description: 'Neon-sign lines. Eye-catching for cafés and salons.',
+    fontFamily: "'Monoton', 'Trebuchet MS', sans-serif",
+    fontWeight: 400,
+    fontStyle: 'normal',
+    letterSpacing: '0.03em',
+    sizeScale: 0.94,
+    file: 'monoton',
+  },
+  {
+    id: 'great-vibes',
+    name: 'Great Vibes',
+    description: 'Flowing signature script. Elegant and personal.',
+    fontFamily: "'Great Vibes', cursive",
+    fontWeight: 400,
+    fontStyle: 'normal',
+    // Scripts are drawn to touch. Extra tracking breaks the join between the
+    // two letters and the mark stops reading as handwriting.
+    letterSpacing: '0em',
+    // Scripts have a small x-height and long ascenders, so they need to be set
+    // LARGER than a serif to look the same size on the card.
+    sizeScale: 1.32,
+    file: 'great-vibes',
+  },
+  {
+    id: 'tangerine',
+    name: 'Tangerine',
+    description: 'Fine calligraphy. Delicate and premium.',
+    fontFamily: "'Tangerine', cursive",
+    fontWeight: 700,
+    fontStyle: 'normal',
+    letterSpacing: '0em',
+    // The most extreme case: Tangerine's x-height is roughly a third of its em.
+    sizeScale: 1.6,
+    file: 'tangerine',
+  },
+  {
+    id: 'lavishly-yours',
+    name: 'Lavishly Yours',
+    description: 'Loose modern script. Warm and hand-written.',
+    fontFamily: "'Lavishly Yours', cursive",
+    fontWeight: 400,
+    fontStyle: 'normal',
+    letterSpacing: '0em',
+    sizeScale: 1.34,
+    file: 'lavishly-yours',
+  },
+  {
+    id: 'engagement',
+    name: 'Engagement',
+    description: 'Ornate copperplate. Formal, for jewellers and boutiques.',
+    fontFamily: "'Engagement', cursive",
+    fontWeight: 400,
+    fontStyle: 'normal',
+    letterSpacing: '0em',
+    sizeScale: 1.3,
+    file: 'engagement',
+  },
+  {
+    id: 'chewy',
+    name: 'Chewy',
+    description: 'Round and friendly. Good for sweet shops and bakeries.',
+    fontFamily: "'Chewy', 'Comic Sans MS', cursive",
+    fontWeight: 400,
+    fontStyle: 'normal',
+    letterSpacing: '0.02em',
+    sizeScale: 1.06,
+    file: 'chewy',
+  },
+  {
+    id: 'henny-penny',
+    name: 'Henny Penny',
+    description: 'Playful and quirky. For toy, gift and party shops.',
+    fontFamily: "'Henny Penny', cursive",
+    fontWeight: 400,
+    fontStyle: 'normal',
+    letterSpacing: '0.02em',
+    sizeScale: 1.02,
+    file: 'henny-penny',
+  },
 ]
 
 export const DEFAULT_MONOGRAM_FONT_ID = 'serif-classic'
@@ -74,10 +211,20 @@ export function getMonogramFont(id: string | null | undefined): MonogramFont {
 }
 
 /**
+ * The family name alone, unquoted — what `document.fonts.load()` and the canvas
+ * `font` shorthand need. Returns null for system stacks, which are always ready.
+ */
+export function monogramFontFamilyName(font: MonogramFont): string | null {
+  if (!font.file) return null
+  return font.fontFamily.split(',')[0].replace(/['"]/g, '').trim()
+}
+
+/**
  * CSS for the monogram letters.
  *
- * `sizePx` is the resolved font size; the caller owns the sizing arithmetic so
- * this stays a pure style mapper.
+ * `sizeCqw` is the FINAL size in card-width percent — no scaling is applied
+ * here. The caller owns the sizing arithmetic (see lib/monogram-fit) so this
+ * stays a pure style mapper and the DOM and canvas paths cannot diverge.
  */
 export function monogramStyle(font: MonogramFont, color: string, sizeCqw: number): React.CSSProperties {
   const base: React.CSSProperties = {
@@ -85,7 +232,7 @@ export function monogramStyle(font: MonogramFont, color: string, sizeCqw: number
     fontWeight: font.fontWeight,
     fontStyle: font.fontStyle,
     letterSpacing: font.letterSpacing,
-    fontSize: `${sizeCqw * font.sizeScale}cqw`,
+    fontSize: `${sizeCqw}cqw`,
     lineHeight: 1,
   }
 

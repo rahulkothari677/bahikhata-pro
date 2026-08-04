@@ -1,0 +1,105 @@
+/**
+ * Monogram typefaces for the business card. See src/lib/monogram-fonts.ts.
+ *
+ * Self-hosted, not loaded from Google's CDN: the card renders into a shareable
+ * PNG and into the invoice PDF, and a CDN font that has not finished loading
+ * falls back silently — the shopkeeper would share a logo that differs from the
+ * one they previewed.
+ *
+ * Files are fetched by `node scripts/fetch-card-fonts.mjs`. Latin subset only,
+ * WOFF2, 271 KB for all eleven. Every family is SIL Open Font License or
+ * Apache 2.0; both permit self-hosting.
+ *
+ * `font-display: swap` and NO preload — a shopkeeper who never opens the card
+ * screen downloads none of these. Putting 271 KB of display faces on the
+ * critical path of a Dashboard opened on 3G would be a poor trade for a screen
+ * most users see once.
+ */
+
+@font-face {
+  font-family: 'Libertinus Serif';
+  src: url('/fonts/card/libertinus-serif.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Archivo Black';
+  src: url('/fonts/card/archivo-black.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Orbitron';
+  src: url('/fonts/card/orbitron.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Tourney';
+  src: url('/fonts/card/tourney.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Monoton';
+  src: url('/fonts/card/monoton.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Great Vibes';
+  src: url('/fonts/card/great-vibes.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Tangerine';
+  src: url('/fonts/card/tangerine.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Lavishly Yours';
+  src: url('/fonts/card/lavishly-yours.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Engagement';
+  src: url('/fonts/card/engagement.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Chewy';
+  src: url('/fonts/card/chewy.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Henny Penny';
+  src: url('/fonts/card/henny-penny.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}

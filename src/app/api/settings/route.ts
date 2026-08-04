@@ -146,6 +146,58 @@ export async function PUT(req: NextRequest) {
       sanitized.cardSlug = body.cardSlug
     }
 
+    /*
+     * 🎨 2026-08-04: the business card's own details.
+     *
+     * These are NOT the profile. The profile is the shop's legal identity — the
+     * name and address that go on a GST invoice — and a shopkeeper registered as
+     * "SHREE SIDDHIVINAYAK TRADING CO." who wants "Siddhivinayak Stores" on the
+     * card must not have to falsify the invoice to get it. Rahul asked for the
+     * toggle by name: "pre filled from profile or manual entry".
+     *
+     * Validated separately from their profile twins on purpose. GSTIN is the
+     * clearest case: `gstin` above is rejected unless it matches the 15-character
+     * format, because it is printed on tax invoices. `cardGstin` is decoration on
+     * a visiting card, so it takes any short string — a shop mid-registration can
+     * print "applied for" without being blocked. Reusing the strict check would
+     * have made the card refuse text it never files with anyone.
+     */
+    if (body.cardMode !== undefined) {
+      if (body.cardMode !== 'profile' && body.cardMode !== 'manual') {
+        return NextResponse.json({ error: 'cardMode must be "profile" or "manual"' }, { status: 400 })
+      }
+      sanitized.cardMode = body.cardMode
+    }
+    // Length caps mirror the profile's so a card field can never be the reason a
+    // row grows unbounded; `cardAddress` is shorter than the profile address
+    // because it is printed in one slot on a 3.5-inch card.
+    const CARD_FIELDS: Array<[string, number]> = [
+      ['cardFontId', 60],
+      ['cardShopName', MAX_NAME],
+      ['cardOwnerName', MAX_NAME],
+      ['cardTagline', 120],
+      ['cardPhone', 40],
+      ['cardEmail', 200],
+      ['cardAddress', 300],
+      ['cardGstin', 40],
+    ]
+    for (const [field, max] of CARD_FIELDS) {
+      if (body[field] === undefined) continue
+      if (body[field] !== null && typeof body[field] !== 'string') {
+        return NextResponse.json({ error: `${field} must be text or null` }, { status: 400 })
+      }
+      if (body[field] === null) {
+        sanitized[field] = null
+        continue
+      }
+      // Empty string is stored as NULL, not "". A blank field means "fall back
+      // to the profile" — storing "" instead would print an empty line on the
+      // card and there would be no way back to the profile value except
+      // retyping it.
+      const trimmed = (body[field] as string).trim().slice(0, max)
+      sanitized[field] = trimmed === '' ? null : trimmed
+    }
+
     const updateData: any = sanitized
 
     if (body.lockedUntil !== undefined) {

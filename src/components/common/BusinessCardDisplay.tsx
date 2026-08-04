@@ -1,53 +1,61 @@
 'use client'
 
 /**
- * 🐛 UI/UX Phase 2: Business Card Display Component
+ * The business card screen: the card itself, the design gallery, the details
+ * editor, and the share/download actions.
  *
- * Renders the user's digital visiting card using the design registry.
- * Shows: shop logo, shop name, owner name, phone, email, GSTIN, address, QR code.
- * Supports 10 top-notch designs from src/lib/business-card-designs.ts.
+ * 🐛 2026-08-04 — four faults Rahul reported, and what each turned out to be:
  *
- * Also renders the design picker (horizontal scroll of preview thumbnails)
- * and the share/download buttons.
+ *   "it's being shared as text format" — Share only ever sent `shareText`, a
+ *     plain-text summary. Download called `await import('html2canvas')` against
+ *     a package that was not in package.json, so it threw on every click and
+ *     landed in a toast blaming the browser. Neither had ever made an image.
+ *     Both now render a real PNG; see lib/card-canvas.
+ *
+ *   "it's not taking the correct email from the profile" — the card was given
+ *     `session.user.email`, the address you SIGN IN with, while Settings has
+ *     had its own editable Email field all along. Resolution now lives in
+ *     lib/card-details so no caller can answer that question differently.
+ *
+ *   "whenever i choose a new card ... it restart the app" — `handleDesignSelect`
+ *     ended in `window.location.reload()`. In the Capacitor build a full reload
+ *     IS a restart: splash screen, re-auth, back to the dashboard. It was there
+ *     to make the new design show, which react-query does properly.
+ *
+ *   "i want a proper section ... where the user can fill or edit all the things"
+ *     — CardDetailsEditor, below the card.
  */
 
 import { useState, useRef } from 'react'
-import { QRCodeSVG } from 'qrcode.react'
+import { useQueryClient } from '@tanstack/react-query'
 import {
-  Share2, Send, Download, Phone, Mail, FileSpreadsheet, MapPin,
-  Store, User, Image as ImageIcon, ChevronLeft, ChevronRight,
+  Share2, Send, Download, Image as ImageIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { toast as sonnerToast } from 'sonner'
-import { getCardDesign, BUSINESS_CARD_DESIGNS, generateCardSlug, type BusinessCardDesign } from '@/lib/business-card-designs'
+import { getCardDesign, BUSINESS_CARD_DESIGNS } from '@/lib/business-card-designs'
 import { BusinessCardSurface, type CardData } from '@/components/common/BusinessCardSurface'
-import { TemplateCard, type TemplateCardData } from '@/components/common/TemplateCard'
+import { TemplateCard } from '@/components/common/TemplateCard'
+import { CardDetailsEditor } from '@/components/common/CardDetailsEditor'
 import { CARD_TEMPLATES, getTemplate } from '@/lib/card-templates'
+import { resolveCardData, type CardSettingLike } from '@/lib/card-details'
+import { renderTemplateCardToBlob, renderNodeToBlob, cardFileName } from '@/lib/card-canvas'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { cn } from '@/lib/utils'
 
 interface BusinessCardDisplayProps {
-  setting: {
-    shopName?: string | null
-    ownerName?: string | null
-    phone?: string | null
-    gstin?: string | null
-    address?: string | null
+  setting: CardSettingLike & {
     upiId?: string | null
-    logoUrl?: string | null
     cardDesign?: string | null
     cardSlug?: string | null
   }
+  /** The sign-in address. Last resort only — Setting.email wins. */
   email?: string | null
   onDesignChange?: (designId: string) => void
   /**
    * Opens the shop-logo uploader. Passed in rather than owned here so the card
    * stays presentational — and so the SAME uploader is reachable from the card,
    * from Settings, and from the Account screen without three copies of it.
-   *
-   * Until 2026-07-29 the only way in was Settings > Profile, at line 628 of a
-   * long form. Several designs here are built around the logo, so it has to be
-   * reachable from the thing it appears on.
    */
   onLogoClick?: () => void
 }
@@ -60,112 +68,158 @@ export function BusinessCardDisplay({ setting, email, onDesignChange, onLogoClic
   const template = getTemplate(setting.cardDesign)
   const design = getCardDesign(setting.cardDesign)
 
-  // One shape, used by the hero card AND every picker thumbnail, so a preview
-  // can never disagree with the card it is previewing.
-  const templateData: TemplateCardData = {
-    shopName: setting.shopName,
-    ownerName: setting.ownerName,
-    phone: setting.phone,
-    email,
-    address: setting.address,
-    gstin: setting.gstin,
-    logoUrl: setting.logoUrl,
-  }
-
-  const cardData: CardData = {
-    shopName: setting.shopName,
-    ownerName: setting.ownerName,
-    phone: setting.phone,
-    email,
-    gstin: setting.gstin,
-    address: setting.address,
-    logoUrl: setting.logoUrl,
-  }
+  const queryClient = useQueryClient()
   const [showPicker, setShowPicker] = useState(false)
+  const [busy, setBusy] = useState(false)
   const cardRef = useRef<HTMLDivElement>(null)
 
-  // Build vCard 3.0 for QR code (more universally supported than MECARD)
+  // ONE resolution, used by the hero card, every picker thumbnail and the PNG
+  // export — a preview can never disagree with the card it is previewing, and
+  // the downloaded file can never disagree with either.
+  const templateData = resolveCardData(setting, email)
+
+  const cardData: CardData = {
+    shopName: templateData.shopName,
+    ownerName: templateData.ownerName,
+    phone: templateData.phone,
+    email: templateData.email,
+    gstin: templateData.gstin,
+    address: templateData.address,
+    logoUrl: templateData.logoUrl,
+  }
+
+  // vCard 3.0 for the QR — more universally supported than MECARD.
   const escapeVcard = (val: string) => val.replace(/([;,:\\])/g, '\\$1')
   const vcardLines: string[] = ['BEGIN:VCARD', 'VERSION:3.0']
-  if (setting.ownerName) vcardLines.push(`FN:${escapeVcard(setting.ownerName)}`)
-  if (setting.shopName) vcardLines.push(`ORG:${escapeVcard(setting.shopName)}`)
-  if (setting.phone) vcardLines.push(`TEL;TYPE=CELL:${escapeVcard(setting.phone)}`)
-  if (email) vcardLines.push(`EMAIL:${escapeVcard(email)}`)
-  if (setting.address) vcardLines.push(`ADR;TYPE=WORK:;;${escapeVcard(setting.address)};;;India`)
-  if (setting.gstin) vcardLines.push(`NOTE:GSTIN ${escapeVcard(setting.gstin)}`)
+  if (templateData.ownerName) vcardLines.push(`FN:${escapeVcard(templateData.ownerName)}`)
+  if (templateData.shopName) vcardLines.push(`ORG:${escapeVcard(templateData.shopName)}`)
+  if (templateData.phone) vcardLines.push(`TEL;TYPE=CELL:${escapeVcard(templateData.phone)}`)
+  if (templateData.email) vcardLines.push(`EMAIL:${escapeVcard(templateData.email)}`)
+  if (templateData.address) vcardLines.push(`ADR;TYPE=WORK:;;${escapeVcard(templateData.address)};;;India`)
+  if (templateData.gstin) vcardLines.push(`NOTE:GSTIN ${escapeVcard(templateData.gstin)}`)
   if (setting.upiId) vcardLines.push(`X-UPI:${escapeVcard(setting.upiId)}`)
   vcardLines.push('END:VCARD')
   const vcard = vcardLines.join('\n')
 
-  // Share text (includes UPI ID if available — for payment collection)
+  // Caption for the share sheet. It accompanies the image now rather than
+  // replacing it — WhatsApp shows both, and a recipient on a platform that
+  // strips the file still gets the phone number.
   const shareText = [
-    setting.shopName || 'My Shop',
-    setting.ownerName ? `Proprietor: ${setting.ownerName}` : '',
-    setting.phone ? `Phone: ${setting.phone}` : '',
-    email ? `Email: ${email}` : '',
-    setting.gstin ? `GSTIN: ${setting.gstin}` : '',
+    templateData.shopName || 'My Shop',
+    templateData.ownerName ? `Proprietor: ${templateData.ownerName}` : '',
+    templateData.phone ? `Phone: ${templateData.phone}` : '',
+    templateData.email ? `Email: ${templateData.email}` : '',
+    templateData.gstin ? `GSTIN: ${templateData.gstin}` : '',
     setting.upiId ? `Pay via UPI: ${setting.upiId}` : '',
-    setting.address ? `Address: ${setting.address}` : '',
+    templateData.address ? `Address: ${templateData.address}` : '',
   ].filter(Boolean).join('\n')
 
+  /**
+   * The card as a PNG.
+   *
+   * Artwork templates are DRAWN from their zone spec, at 2100px — print
+   * resolution regardless of the phone's screen. The legacy vector designs have
+   * no such spec (they are CSS all the way down) so they are screenshotted
+   * instead. Both paths return the same thing, so the callers do not care.
+   */
+  const buildImage = async (): Promise<Blob> => {
+    if (template) {
+      const qrSvg = cardRef.current?.querySelector<SVGElement>('svg[data-card-qr]') ?? null
+      return await renderTemplateCardToBlob(template, templateData, { qrSvg })
+    }
+    if (!cardRef.current) throw new Error('The card is not ready yet. Please try again.')
+    return await renderNodeToBlob(cardRef.current)
+  }
+
   const handleShare = async () => {
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: setting.shopName || 'My Shop', text: shareText })
-      } catch {}
-    } else if (navigator.clipboard) {
-      try {
-        await navigator.clipboard.writeText(shareText)
-        sonnerToast.success('Business card copied to clipboard')
-      } catch {}
+    setBusy(true)
+    try {
+      const blob = await buildImage()
+      const file = new File([blob], cardFileName(templateData.shopName), { type: 'image/png' })
+
+      // canShare({ files }) must be checked, not assumed: several Android
+      // browsers expose navigator.share but reject files, and calling share
+      // with an unsupported payload throws instead of degrading.
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: templateData.shopName || 'My Shop', text: shareText })
+        return
+      }
+
+      // No file sharing — save it instead, so the shopkeeper still ends up with
+      // the image and can attach it themselves. Silently sending text would be
+      // the original bug.
+      downloadBlob(blob, cardFileName(templateData.shopName))
+      sonnerToast.success('Card saved to your downloads — attach it to your message')
+    } catch (err) {
+      // AbortError is the user dismissing the share sheet. Not a failure.
+      if (err instanceof Error && err.name === 'AbortError') return
+      sonnerToast.error(err instanceof Error ? err.message : 'Could not create the card image')
+    } finally {
+      setBusy(false)
     }
   }
 
-  const handleWhatsApp = () => {
-    const waText = encodeURIComponent(shareText)
-    window.open(`https://wa.me/?text=${waText}`, '_blank')
+  const handleDownload = async () => {
+    setBusy(true)
+    try {
+      const blob = await buildImage()
+      downloadBlob(blob, cardFileName(templateData.shopName))
+      sonnerToast.success('Card downloaded as an image')
+    } catch (err) {
+      sonnerToast.error(err instanceof Error ? err.message : 'Could not create the card image')
+    } finally {
+      setBusy(false)
+    }
   }
 
-  const handleDownload = async () => {
-    if (!cardRef.current) return
-    sonnerToast.info('Generating image...')
+  /**
+   * WhatsApp's web link (`wa.me/?text=`) can only carry text — there is no URL
+   * form that attaches a file. So this goes through the share sheet when one
+   * exists, which is how a real image reaches WhatsApp, and falls back to the
+   * text link only where no share sheet is available at all.
+   */
+  const handleWhatsApp = async () => {
+    setBusy(true)
     try {
-      // 🐛 Phase 2 Fix: Implement "Download as image" (was promised in comment but never implemented)
-      const html2canvas = (await import('html2canvas')).default
-      const canvas = await html2canvas(cardRef.current, {
-        scale: 2, // 2x for retina quality
-        useCORS: true,
-        backgroundColor: null,
-      })
-      const link = document.createElement('a')
-      link.download = `${(setting.shopName || 'business-card').replace(/\s+/g, '-').toLowerCase()}-card.png`
-      link.href = canvas.toDataURL('image/png')
-      link.click()
-      sonnerToast.success('Card downloaded as image')
+      const blob = await buildImage()
+      const file = new File([blob], cardFileName(templateData.shopName), { type: 'image/png' })
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: templateData.shopName || 'My Shop', text: shareText })
+        return
+      }
+      window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, '_blank')
     } catch (err) {
-      console.error('Download error:', err)
-      sonnerToast.error('Could not generate image. Please try the Share button instead.')
+      if (err instanceof Error && err.name === 'AbortError') return
+      window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, '_blank')
+    } finally {
+      setBusy(false)
     }
   }
 
   const handleDesignSelect = async (designId: string) => {
     if (onDesignChange) {
       onDesignChange(designId)
-    } else {
-      // Save directly via API
-      try {
-        await offlineFetch('/api/settings', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ cardDesign: designId }),
-          offline: { invalidate: ['/api/settings'] },
-        })
-        sonnerToast.success(`Design changed to ${BUSINESS_CARD_DESIGNS.find(d => d.id === designId)?.name}`)
-        // Force re-render by reloading
-        window.location.reload()
-      } catch {
-        sonnerToast.error('Could not save design choice')
-      }
+      return
+    }
+    try {
+      await offlineFetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cardDesign: designId }),
+        offline: { invalidate: ['/api/settings'] },
+      })
+      const name =
+        CARD_TEMPLATES.find(t => t.id === designId)?.name ??
+        BUSINESS_CARD_DESIGNS.find(d => d.id === designId)?.name ??
+        'your new design'
+      sonnerToast.success(`Design changed to ${name}`)
+      // 🐛 Was `window.location.reload()`. In the Capacitor build that is a full
+      // app restart — splash screen, re-auth, back to the dashboard — for what
+      // is a one-field change. Invalidating the query refetches the setting and
+      // re-renders just this card.
+      queryClient.invalidateQueries({ queryKey: ['setting'] })
+    } catch {
+      sonnerToast.error('Could not save design choice')
     }
   }
 
@@ -225,16 +279,16 @@ export function BusinessCardDisplay({ setting, email, onDesignChange, onLogoClic
               onClick={() => handleDesignSelect(d.id)}
               className={cn(
                 'relative rounded-xl transition text-left',
-                d.id === design.id
+                !template && d.id === design.id
                   ? 'ring-2 ring-primary ring-offset-2 ring-offset-background'
                   : 'opacity-90 hover:opacity-100 hover:scale-[1.03]',
               )}
               title={d.name}
-              aria-pressed={d.id === design.id}
+              aria-pressed={!template && d.id === design.id}
             >
               <BusinessCardSurface design={d} data={cardData} qrValue={vcard} thumbnail />
               <p className="text-3xs mt-1 text-center truncate text-muted-foreground">{d.name}</p>
-              {d.id === design.id && (
+              {!template && d.id === design.id && (
                 <div className="absolute top-1 right-1 w-4 h-4 rounded-full bg-primary flex items-center justify-center shadow">
                   <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
@@ -249,7 +303,7 @@ export function BusinessCardDisplay({ setting, email, onDesignChange, onLogoClic
       {/* ═══ The card ═══ */}
       <div className="shadow-card rounded-2xl overflow-hidden" ref={cardRef}>
         {template ? (
-          <TemplateCard template={template} data={templateData} onLogoClick={onLogoClick} />
+          <TemplateCard template={template} data={templateData} qrValue={vcard} onLogoClick={onLogoClick} />
         ) : (
           <BusinessCardSurface
             design={design}
@@ -260,38 +314,61 @@ export function BusinessCardDisplay({ setting, email, onDesignChange, onLogoClic
         )}
       </div>
 
-
       {/* ═══ Share buttons ═══ */}
       <div className="grid grid-cols-3 gap-2">
         <button
           onClick={handleShare}
-          className="py-2.5 rounded-lg bg-gradient-saffron text-white text-sm font-medium flex items-center justify-center gap-1.5"
+          disabled={busy}
+          className="py-2.5 rounded-lg bg-gradient-saffron text-white text-sm font-medium flex items-center justify-center gap-1.5 disabled:opacity-60"
         >
           <Share2 className="w-4 h-4" />
           Share
         </button>
         <button
           onClick={handleWhatsApp}
-          className="py-2.5 rounded-lg border border-emerald-300 text-emerald-700 dark:text-emerald-400 dark:border-emerald-800 text-sm font-medium flex items-center justify-center gap-1.5 hover:bg-emerald-50 dark:hover:bg-emerald-950 transition"
+          disabled={busy}
+          className="py-2.5 rounded-lg border border-emerald-300 text-emerald-700 dark:text-emerald-400 dark:border-emerald-800 text-sm font-medium flex items-center justify-center gap-1.5 hover:bg-emerald-50 dark:hover:bg-emerald-950 transition disabled:opacity-60"
         >
           <Send className="w-4 h-4" />
           WhatsApp
         </button>
-        {/* 🐛 Phase 2 Fix: "Download as image" — was promised in comment but never implemented */}
         <button
           onClick={handleDownload}
-          className="py-2.5 rounded-lg border border-blue-300 text-blue-700 dark:text-blue-400 dark:border-blue-800 text-sm font-medium flex items-center justify-center gap-1.5 hover:bg-blue-50 dark:hover:bg-blue-950 transition"
+          disabled={busy}
+          className="py-2.5 rounded-lg border border-blue-300 text-blue-700 dark:text-blue-400 dark:border-blue-800 text-sm font-medium flex items-center justify-center gap-1.5 hover:bg-blue-50 dark:hover:bg-blue-950 transition disabled:opacity-60"
         >
           <Download className="w-4 h-4" />
-          Image
+          {busy ? 'Working…' : 'Image'}
         </button>
       </div>
+
+      {/* ═══ Details editor ═══ */}
+      <CardDetailsEditor
+        setting={setting}
+        sessionEmail={email}
+        // The saved values must show on the card immediately — Rahul's fifth
+        // point. Refetching the setting re-renders the card above from the
+        // server's copy, so what he sees is what is actually stored.
+        onSaved={() => queryClient.invalidateQueries({ queryKey: ['setting'] })}
+      />
 
       {/* ═══ Tip ═══ */}
       <div className="rounded-lg bg-muted/50 border border-border/60 p-3 text-xs text-muted-foreground">
         <p className="font-medium text-foreground mb-1">💡 How to use:</p>
-        <p>Share this card with customers via WhatsApp. They can scan the QR code to instantly save your shop&apos;s contact in their phone. Download as an image to attach to emails or print.</p>
+        <p>Share this card with customers on WhatsApp — it sends as a picture they can save. They can scan the QR code to store your shop&apos;s contact in their phone.</p>
       </div>
     </div>
   )
+}
+
+/** Saves a blob to the user's downloads and releases the object URL. */
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.download = filename
+  link.href = url
+  link.click()
+  // Revoking immediately can cancel the download in some browsers; a tick is
+  // enough for the click to have been handled.
+  setTimeout(() => URL.revokeObjectURL(url), 10_000)
 }

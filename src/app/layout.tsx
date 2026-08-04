@@ -1,6 +1,15 @@
 import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+/*
+ * Business-card monogram typefaces. Imported HERE, not with an `@import` inside
+ * globals.css: Turbopack's Tailwind pipeline silently dropped that import — the
+ * emitted stylesheet contained none of the eleven @font-face rules, and because
+ * a missing webfont just falls back to serif, every card still rendered. It was
+ * only caught by measuring text widths against the fallback, which came out
+ * identical to the pixel. A JS-side import cannot be dropped that quietly.
+ */
+import "./card-fonts.css";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import { Providers } from "@/components/providers";

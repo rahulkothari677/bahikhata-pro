@@ -503,6 +503,35 @@ model Setting {
   // card view if not set.
   cardDesign       String?
   cardSlug         String? @unique
+
+  // 🎨 2026-08-04: the card carries its own details, separate from the profile.
+  //
+  // WHY THE CARD DOES NOT JUST READ THE PROFILE. The profile is the shop's
+  // legal identity — the name and address that go on a GST invoice. The card is
+  // marketing. A shopkeeper registered as "SHREE SIDDHIVINAYAK TRADING CO." who
+  // wants "Siddhivinayak Stores" on the card must not have to falsify the
+  // invoice to get it, and a shop with a landline on the invoice may want a
+  // mobile on the card. Rahul asked for exactly this: a toggle for "pre-filled
+  // from profile" or "manual entry".
+  //
+  // cardMode = 'profile' (default) — every field below is IGNORED and the card
+  //   tracks the profile live, so fixing a typo in Settings fixes the card too.
+  // cardMode = 'manual' — a non-null field below WINS; a null one still falls
+  //   back to the profile, so switching to manual never blanks the card.
+  //
+  // The values are kept even in 'profile' mode: toggling back and forth must
+  // not destroy what the shopkeeper typed. Nothing here is ever cleared on
+  // mode change — only the shopkeeper editing a field changes a field.
+  cardMode         String  @default("profile")
+  // Monogram typeface id — see src/lib/monogram-fonts.ts. null = the default.
+  cardFontId       String?
+  cardShopName     String?
+  cardOwnerName    String?
+  cardTagline      String?
+  cardPhone        String?
+  cardEmail        String?
+  cardAddress      String?
+  cardGstin        String?
 }
 
 // ==================== ANNOUNCEMENTS (broadcast messages) ====================
