@@ -36,10 +36,17 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
 import { offlineFetch } from '@/lib/offline-fetch'
-import { MONOGRAM_FONTS, DEFAULT_MONOGRAM_FONT_ID, getMonogramFont } from '@/lib/monogram-fonts'
+import {
+  MONOGRAM_FONTS,
+  DEFAULT_MONOGRAM_FONT_ID,
+  CARD_FONT_TARGETS,
+  CARD_FONT_TARGET_LABELS,
+  type CardFontTarget,
+} from '@/lib/monogram-fonts'
 import { deriveMonogram } from '@/lib/brand-monogram'
 import {
   CARD_FIELDS,
+  CARD_FONT_COLUMNS,
   cardColumn,
   profileCardValues,
   type CardField,
@@ -87,6 +94,23 @@ interface Props {
 
 type Draft = Record<CardField, string>
 
+/**
+ * What each font swatch is set in — the shopkeeper's own words for that part of
+ * the card, so the sample shows what they will actually get.
+ */
+function sampleFor(
+  target: CardFontTarget,
+  monogram: string,
+  draft: Draft,
+  profile: Record<CardField, string | null>,
+): string {
+  const pick = (f: CardField) => draft[f]?.trim() || profile[f] || ''
+  if (target === 'logo') return monogram
+  if (target === 'shopName') return pick('shopName') || 'My Shop'
+  if (target === 'tagline') return pick('tagline') || 'Your tagline'
+  return pick('ownerName') || pick('phone') || 'Contact'
+}
+
 function draftFrom(setting: CardSettingLike): Draft {
   return CARD_FIELDS.reduce((acc, f) => {
     const v = setting[cardColumn(f)]
@@ -95,12 +119,31 @@ function draftFrom(setting: CardSettingLike): Draft {
   }, {} as Draft)
 }
 
+type Fonts = Record<CardFontTarget, string | null>
+
+/**
+ * Only the LOGO falls back to a default face. For the shop name, tagline and
+ * contacts, null means "the app's own type", which is a real choice and the
+ * one every existing card is already using.
+ */
+function fontsFrom(setting: CardSettingLike): Fonts {
+  return CARD_FONT_TARGETS.reduce((acc, target) => {
+    const v = setting[CARD_FONT_COLUMNS[target]]
+    acc[target] = typeof v === 'string' && v ? v : target === 'logo' ? DEFAULT_MONOGRAM_FONT_ID : null
+    return acc
+  }, {} as Fonts)
+}
+
 export function CardDetailsEditor({ setting, sessionEmail, onSaved }: Props) {
   const savedMode = setting.cardMode === 'manual' ? 'manual' : 'profile'
-  const savedFontId = setting.cardFontId ?? DEFAULT_MONOGRAM_FONT_ID
+  const savedFonts = fontsFrom(setting)
 
   const [mode, setMode] = useState<'profile' | 'manual'>(savedMode)
-  const [fontId, setFontId] = useState(savedFontId)
+  const [fonts, setFonts] = useState<Fonts>(savedFonts)
+  // Which part of the card the font grid below is changing. Rahul asked for
+  // this by name: pick the element first, then the typeface, so choosing a
+  // script for the monogram does not also set the address in it.
+  const [target, setTarget] = useState<CardFontTarget>('logo')
   const [draft, setDraft] = useState<Draft>(() => draftFrom(setting))
   const [saving, setSaving] = useState(false)
 
@@ -112,10 +155,13 @@ export function CardDetailsEditor({ setting, sessionEmail, onSaved }: Props) {
   useEffect(() => {
     setDraft(draftFrom(setting))
     setMode(savedMode)
-    setFontId(savedFontId)
+    setFonts(fontsFrom(setting))
   }, [
     savedMode,
-    savedFontId,
+    setting.cardFontId,
+    setting.cardShopFontId,
+    setting.cardTaglineFontId,
+    setting.cardContactFontId,
     setting.cardShopName,
     setting.cardOwnerName,
     setting.cardTagline,
@@ -129,7 +175,7 @@ export function CardDetailsEditor({ setting, sessionEmail, onSaved }: Props) {
 
   const dirty =
     mode !== savedMode ||
-    fontId !== savedFontId ||
+    CARD_FONT_TARGETS.some(t => fonts[t] !== savedFonts[t]) ||
     CARD_FIELDS.some(f => (draft[f] || '') !== (setting[cardColumn(f)] || ''))
 
   // The monogram previewed in the font picker must be the one the card will
@@ -143,7 +189,8 @@ export function CardDetailsEditor({ setting, sessionEmail, onSaved }: Props) {
   const save = async () => {
     setSaving(true)
     try {
-      const body: Record<string, string | null> = { cardMode: mode, cardFontId: fontId }
+      const body: Record<string, string | null> = { cardMode: mode }
+      for (const t of CARD_FONT_TARGETS) body[CARD_FONT_COLUMNS[t]] = fonts[t]
       for (const f of CARD_FIELDS) {
         // Empty string is sent as null so the server stores NULL — a blank
         // field means "use the profile", and "" would print an empty line.
@@ -260,47 +307,99 @@ export function CardDetailsEditor({ setting, sessionEmail, onSaved }: Props) {
           the typeface is a property of the shop's mark, and it must survive
           switching between card designs. */}
       <div className="pt-1">
-        <div className="flex items-center gap-1.5 mb-2">
+        <div className="flex items-center gap-1.5 mb-1">
           <Type className="w-3.5 h-3.5 text-muted-foreground" />
-          <p className="text-2xs font-medium">Logo lettering</p>
+          <p className="text-2xs font-medium">Fonts</p>
         </div>
         <p className="text-3xs text-muted-foreground mb-2">
-          Used for the <span className="font-semibold">{previewMonogram}</span> mark when you have not uploaded
-          a logo.
+          Pick the part of the card first, then its font. Each part keeps its own.
         </p>
+
+        {/* ═══ which part of the card ═══ */}
+        <div className="grid grid-cols-2 gap-1.5 mb-3">
+          {CARD_FONT_TARGETS.map(t => {
+            const chosen = fonts[t]
+            const name = MONOGRAM_FONTS.find(f => f.id === chosen)?.name
+            return (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setTarget(t)}
+                aria-pressed={target === t}
+                className={cn(
+                  'rounded-lg border px-2.5 py-2 text-left transition',
+                  target === t
+                    ? 'border-primary bg-primary/5 ring-1 ring-primary/25'
+                    : 'border-border/70 hover:border-border',
+                )}
+              >
+                <span className="block text-2xs font-medium">{CARD_FONT_TARGET_LABELS[t]}</span>
+                {/* Shows what each part is CURRENTLY set to, so the shopkeeper
+                    can see all four choices without clicking through them. */}
+                <span className="block text-3xs text-muted-foreground truncate">
+                  {name ?? 'App default'}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* ═══ the font, for the chosen part ═══ */}
         <div className="grid grid-cols-3 gap-2">
+          {/* Only the logo must have a face — bare letterforms ARE the logo, so
+              "default" is meaningless there. Everything else can go back to the
+              app's own type, and needs a way to say so. */}
+          {target !== 'logo' && (
+            <button
+              type="button"
+              onClick={() => setFonts(f => ({ ...f, [target]: null }))}
+              aria-pressed={fonts[target] === null}
+              className={cn(
+                'rounded-xl border px-2 py-2.5 transition text-center',
+                fonts[target] === null
+                  ? 'border-primary ring-2 ring-primary/25 bg-primary/5'
+                  : 'border-border/70 hover:border-border',
+              )}
+            >
+              <span className="block leading-none font-semibold" style={{ fontSize: 20 }}>
+                {sampleFor(target, previewMonogram, draft, profile)}
+              </span>
+              <span className="block text-3xs text-muted-foreground mt-1.5 truncate">App default</span>
+            </button>
+          )}
           {MONOGRAM_FONTS.map(f => {
-            const active = f.id === fontId
+            const active = f.id === fonts[target]
             return (
               <button
                 key={f.id}
                 type="button"
-                onClick={() => setFontId(f.id)}
+                onClick={() => setFonts(prev => ({ ...prev, [target]: f.id }))}
                 aria-pressed={active}
                 title={f.description}
                 className={cn(
-                  'rounded-xl border px-2 py-2.5 transition text-center',
+                  'rounded-xl border px-2 py-2.5 transition text-center overflow-hidden',
                   active
                     ? 'border-primary ring-2 ring-primary/25 bg-primary/5'
                     : 'border-border/70 hover:border-border',
                 )}
               >
-                {/* The sample is the shopkeeper's OWN initials, not "Aa". A
-                    typeface choice for a two-letter mark can only be judged on
-                    the two letters it will be set in. */}
+                {/* The sample is the shopkeeper's OWN text for that part, not
+                    "Aa". A typeface can only be judged on the words it will
+                    actually be set in — and their own shop name is the one
+                    string they will look at hardest. */}
                 <span
-                  className="block leading-none"
+                  className="block leading-none truncate"
                   style={{
-                    fontFamily: getMonogramFont(f.id).fontFamily,
+                    fontFamily: f.fontFamily,
                     fontWeight: f.fontWeight,
                     fontStyle: f.fontStyle,
                     letterSpacing: f.letterSpacing,
-                    // Normalised by the same scale the card uses, so the picker
-                    // shows the relative sizes the card will actually produce.
-                    fontSize: `${Math.round(22 * f.sizeScale)}px`,
+                    // Scaled the way the card scales it, so the picker shows the
+                    // relative sizes the card will actually produce.
+                    fontSize: target === 'logo' ? `${Math.round(22 * f.sizeScale)}px` : '13px',
                   }}
                 >
-                  {previewMonogram}
+                  {sampleFor(target, previewMonogram, draft, profile)}
                 </span>
                 <span className="block text-3xs text-muted-foreground mt-1.5 truncate">{f.name}</span>
               </button>
@@ -322,7 +421,7 @@ export function CardDetailsEditor({ setting, sessionEmail, onSaved }: Props) {
             onClick={() => {
               setDraft(draftFrom(setting))
               setMode(savedMode)
-              setFontId(savedFontId)
+              setFonts(fontsFrom(setting))
             }}
           >
             <RotateCcw className="w-3.5 h-3.5" />

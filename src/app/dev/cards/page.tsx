@@ -18,7 +18,13 @@ import { BusinessCardSurface } from '@/components/common/BusinessCardSurface'
 import { CARD_TEMPLATES } from '@/lib/card-templates'
 import { BUSINESS_CARD_DESIGNS } from '@/lib/business-card-designs'
 import { deriveMonogram } from '@/lib/brand-monogram'
-import { MONOGRAM_FONTS, DEFAULT_MONOGRAM_FONT_ID } from '@/lib/monogram-fonts'
+import {
+  MONOGRAM_FONTS,
+  DEFAULT_MONOGRAM_FONT_ID,
+  CARD_FONT_TARGETS,
+  CARD_FONT_TARGET_LABELS,
+  type CardFontTarget,
+} from '@/lib/monogram-fonts'
 
 const SAMPLE = {
   shopName: 'RAHUL KOTHARI',
@@ -38,10 +44,25 @@ const VCARD = 'BEGIN:VCARD\nVERSION:3.0\nFN:Rahul Kothari\nEND:VCARD'
 export default function CardGalleryPage() {
   const [shop, setShop] = useState(SAMPLE.shopName)
   const [owner, setOwner] = useState(SAMPLE.ownerName)
-  // A typeface for a two-letter mark can only be judged on the card it will be
-  // printed on — at picker size every one of these looks fine.
-  const [fontId, setFontId] = useState(DEFAULT_MONOGRAM_FONT_ID)
-  const data = { ...SAMPLE, shopName: shop, ownerName: owner, monogramFontId: fontId }
+  // A typeface can only be judged on the card it will be printed on — at picker
+  // size every one of these looks fine. Per ELEMENT, because that is how the
+  // shopkeeper sets them.
+  const [target, setTarget] = useState<CardFontTarget>('logo')
+  const [fonts, setFonts] = useState<Record<CardFontTarget, string | null>>({
+    logo: DEFAULT_MONOGRAM_FONT_ID,
+    shopName: null,
+    tagline: null,
+    contact: null,
+  })
+  const data = {
+    ...SAMPLE,
+    shopName: shop,
+    ownerName: owner,
+    monogramFontId: fonts.logo,
+    shopFontId: fonts.shopName,
+    taglineFontId: fonts.tagline,
+    contactFontId: fonts.contact,
+  }
 
   return (
     <div className="min-h-screen bg-neutral-100 dark:bg-neutral-900 p-6">
@@ -67,13 +88,29 @@ export default function CardGalleryPage() {
               <span className="font-semibold">{deriveMonogram(shop, owner)}</span>
             </div>
             <label className="text-sm">
-              <span className="block text-2xs text-muted-foreground mb-1">Monogram font</span>
+              <span className="block text-2xs text-muted-foreground mb-1">Font applies to</span>
               <select
-                data-testid="dev-font"
-                value={fontId}
-                onChange={e => setFontId(e.target.value)}
+                data-testid="dev-target"
+                value={target}
+                onChange={e => setTarget(e.target.value as CardFontTarget)}
                 className="border rounded px-2 py-1 text-sm bg-background"
               >
+                {CARD_FONT_TARGETS.map(t => (
+                  <option key={t} value={t}>{CARD_FONT_TARGET_LABELS[t]}</option>
+                ))}
+              </select>
+            </label>
+            <label className="text-sm">
+              <span className="block text-2xs text-muted-foreground mb-1">Font</span>
+              <select
+                data-testid="dev-font"
+                value={fonts[target] ?? ''}
+                onChange={e => setFonts(f => ({ ...f, [target]: e.target.value || null }))}
+                className="border rounded px-2 py-1 text-sm bg-background"
+              >
+                {/* Only the logo must have a face; the rest can stay on the
+                    app's own type, which is what every existing card uses. */}
+                {target !== 'logo' && <option value="">App default</option>}
                 {MONOGRAM_FONTS.map(f => (
                   <option key={f.id} value={f.id}>{f.name}</option>
                 ))}
@@ -101,7 +138,15 @@ export default function CardGalleryPage() {
                 // The shop's own address, as stored in Settings → Profile.
                 email: data.email,
                 cardDesign: 'gold-fold',
-                cardFontId: fontId,
+                cardFontId: fonts.logo,
+                cardShopFontId: fonts.shopName,
+                cardTaglineFontId: fonts.tagline,
+                cardContactFontId: fonts.contact,
+                cardMode: 'manual',
+                // Card-only fields, so the tagline and GSTIN zones added on
+                // 2026-08-04 actually have something to render.
+                cardTagline: data.tagline,
+                cardGstin: data.gstin,
               }}
               // The SIGN-IN address. Deliberately different from the profile
               // one above: if this ever shows on the card, the bug Rahul

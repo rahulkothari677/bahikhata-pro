@@ -33,6 +33,9 @@ export interface CardSettingLike {
   logoUrl?: string | null
   cardMode?: string | null
   cardFontId?: string | null
+  cardShopFontId?: string | null
+  cardTaglineFontId?: string | null
+  cardContactFontId?: string | null
   cardShopName?: string | null
   cardOwnerName?: string | null
   cardTagline?: string | null
@@ -128,6 +131,20 @@ export function resolveCardData(
     address: v.address,
     gstin: v.gstin,
     logoUrl: setting.logoUrl ?? null,
+    // One face per element. null means "keep the app's default for this part",
+    // which is why these are not funnelled through a getter that substitutes a
+    // default — for everything but the logo, unset is a real answer.
     monogramFontId: setting.cardFontId ?? null,
+    shopFontId: setting.cardShopFontId ?? null,
+    taglineFontId: setting.cardTaglineFontId ?? null,
+    contactFontId: setting.cardContactFontId ?? null,
   }
 }
+
+/** The four font columns, keyed by the target the editor shows. */
+export const CARD_FONT_COLUMNS = {
+  logo: 'cardFontId',
+  shopName: 'cardShopFontId',
+  tagline: 'cardTaglineFontId',
+  contact: 'cardContactFontId',
+} as const

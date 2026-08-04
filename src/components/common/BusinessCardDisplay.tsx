@@ -28,9 +28,7 @@
 
 import { useState, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import {
-  Share2, Send, Download, Image as ImageIcon,
-} from 'lucide-react'
+import { Share2, Download, Image as ImageIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { toast as sonnerToast } from 'sonner'
 import { getCardDesign, BUSINESS_CARD_DESIGNS } from '@/lib/business-card-designs'
@@ -40,6 +38,7 @@ import { CardDetailsEditor } from '@/components/common/CardDetailsEditor'
 import { CARD_TEMPLATES, getTemplate } from '@/lib/card-templates'
 import { resolveCardData, type CardSettingLike } from '@/lib/card-details'
 import { renderTemplateCardToBlob, renderNodeToBlob, cardFileName } from '@/lib/card-canvas'
+import { shareBlobFile, saveBlobFile, isShareCancelled } from '@/lib/share-file'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { cn } from '@/lib/utils'
 
@@ -131,66 +130,34 @@ export function BusinessCardDisplay({ setting, email, onDesignChange, onLogoClic
     return await renderNodeToBlob(cardRef.current)
   }
 
-  const handleShare = async () => {
-    setBusy(true)
-    try {
-      const blob = await buildImage()
-      const file = new File([blob], cardFileName(templateData.shopName), { type: 'image/png' })
-
-      // canShare({ files }) must be checked, not assumed: several Android
-      // browsers expose navigator.share but reject files, and calling share
-      // with an unsupported payload throws instead of degrading.
-      if (navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], title: templateData.shopName || 'My Shop', text: shareText })
-        return
-      }
-
-      // No file sharing — save it instead, so the shopkeeper still ends up with
-      // the image and can attach it themselves. Silently sending text would be
-      // the original bug.
-      downloadBlob(blob, cardFileName(templateData.shopName))
-      sonnerToast.success('Card saved to your downloads — attach it to your message')
-    } catch (err) {
-      // AbortError is the user dismissing the share sheet. Not a failure.
-      if (err instanceof Error && err.name === 'AbortError') return
-      sonnerToast.error(err instanceof Error ? err.message : 'Could not create the card image')
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const handleDownload = async () => {
-    setBusy(true)
-    try {
-      const blob = await buildImage()
-      downloadBlob(blob, cardFileName(templateData.shopName))
-      sonnerToast.success('Card downloaded as an image')
-    } catch (err) {
-      sonnerToast.error(err instanceof Error ? err.message : 'Could not create the card image')
-    } finally {
-      setBusy(false)
-    }
-  }
-
   /**
-   * WhatsApp's web link (`wa.me/?text=`) can only carry text — there is no URL
-   * form that attaches a file. So this goes through the share sheet when one
-   * exists, which is how a real image reaches WhatsApp, and falls back to the
-   * text link only where no share sheet is available at all.
+   * Share and Save both go through the SYSTEM share sheet on Android — that is
+   * what "all share option of my mobile" means, and it is the only route a
+   * WebView has to WhatsApp, Gmail, Drive or the gallery with a file attached.
+   *
+   * There is deliberately no wa.me fallback any more. `wa.me/?text=` can only
+   * carry text, so falling back to it turned "share my card" into "send a
+   * paragraph" — the original complaint. If the image cannot be produced, the
+   * shopkeeper is told so rather than quietly sent something else.
    */
-  const handleWhatsApp = async () => {
+  const runExport = async (mode: 'share' | 'save') => {
     setBusy(true)
     try {
       const blob = await buildImage()
-      const file = new File([blob], cardFileName(templateData.shopName), { type: 'image/png' })
-      if (navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], title: templateData.shopName || 'My Shop', text: shareText })
-        return
-      }
-      window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, '_blank')
+      const name = cardFileName(templateData.shopName)
+      const where =
+        mode === 'share'
+          ? await shareBlobFile(blob, name, {
+              title: templateData.shopName || 'My Shop',
+              text: shareText,
+              dialogTitle: 'Share your card',
+            })
+          : await saveBlobFile(blob, name, templateData.shopName || 'My Shop')
+
+      if (where === 'downloaded') sonnerToast.success('Card saved as an image')
     } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') return
-      window.open(`https://wa.me/?text=${encodeURIComponent(shareText)}`, '_blank')
+      if (isShareCancelled(err)) return
+      sonnerToast.error(err instanceof Error ? err.message : 'Could not create the card image')
     } finally {
       setBusy(false)
     }
@@ -314,31 +281,26 @@ export function BusinessCardDisplay({ setting, email, onDesignChange, onLogoClic
         )}
       </div>
 
-      {/* ═══ Share buttons ═══ */}
-      <div className="grid grid-cols-3 gap-2">
+      {/* ═══ Share buttons ═══
+          Two, not three. The old WhatsApp button could only ever send a text
+          link, and on the phone that is precisely what it did. WhatsApp is one
+          tap inside the share sheet, with the picture attached. */}
+      <div className="grid grid-cols-2 gap-2">
         <button
-          onClick={handleShare}
+          onClick={() => runExport('share')}
           disabled={busy}
           className="py-2.5 rounded-lg bg-gradient-saffron text-white text-sm font-medium flex items-center justify-center gap-1.5 disabled:opacity-60"
         >
           <Share2 className="w-4 h-4" />
-          Share
+          {busy ? 'Preparing…' : 'Share card'}
         </button>
         <button
-          onClick={handleWhatsApp}
-          disabled={busy}
-          className="py-2.5 rounded-lg border border-emerald-300 text-emerald-700 dark:text-emerald-400 dark:border-emerald-800 text-sm font-medium flex items-center justify-center gap-1.5 hover:bg-emerald-50 dark:hover:bg-emerald-950 transition disabled:opacity-60"
-        >
-          <Send className="w-4 h-4" />
-          WhatsApp
-        </button>
-        <button
-          onClick={handleDownload}
+          onClick={() => runExport('save')}
           disabled={busy}
           className="py-2.5 rounded-lg border border-blue-300 text-blue-700 dark:text-blue-400 dark:border-blue-800 text-sm font-medium flex items-center justify-center gap-1.5 hover:bg-blue-50 dark:hover:bg-blue-950 transition disabled:opacity-60"
         >
           <Download className="w-4 h-4" />
-          {busy ? 'Working…' : 'Image'}
+          {busy ? 'Preparing…' : 'Save image'}
         </button>
       </div>
 
@@ -355,20 +317,8 @@ export function BusinessCardDisplay({ setting, email, onDesignChange, onLogoClic
       {/* ═══ Tip ═══ */}
       <div className="rounded-lg bg-muted/50 border border-border/60 p-3 text-xs text-muted-foreground">
         <p className="font-medium text-foreground mb-1">💡 How to use:</p>
-        <p>Share this card with customers on WhatsApp — it sends as a picture they can save. They can scan the QR code to store your shop&apos;s contact in their phone.</p>
+        <p>Tap <span className="font-medium">Share card</span> and pick WhatsApp — your customer gets the card as a picture they can save. They can scan the QR code to store your shop&apos;s contact in their phone.</p>
       </div>
     </div>
   )
-}
-
-/** Saves a blob to the user's downloads and releases the object URL. */
-function downloadBlob(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.download = filename
-  link.href = url
-  link.click()
-  // Revoking immediately can cancel the download in some browsers; a tick is
-  // enough for the click to have been handled.
-  setTimeout(() => URL.revokeObjectURL(url), 10_000)
 }

@@ -6,11 +6,20 @@
  * "RAHUL KO…". A fixed size cannot work: a shop is called "RK" or "Shree
  * Siddhivinayak General Stores & Provisions", and both must fit the same slot.
  *
- * WHY NOT MEASURE THE DOM: the card also renders server-side, into a PDF, and
- * onto a canvas for the PNG share. A measurement pass would exist in only one
- * of those, so the shared card would differ from the previewed one. Estimating
- * from character count is approximate but IDENTICAL everywhere, which matters
- * more than being exact.
+ * WHY THE DEFAULT IS AN ESTIMATE RATHER THAN A MEASUREMENT: the card also
+ * renders server-side and into a PDF. A measurement pass would exist in only
+ * some of those, so the shared card could differ from the previewed one.
+ * Estimating from character count is approximate but IDENTICAL everywhere,
+ * which matters more than being exact.
+ *
+ * 🎨 2026-08-04. That reasoning holds only while every card uses the same face.
+ * Once a shopkeeper can set the shop name in Tangerine or Archivo Black, one
+ * average glyph width is wrong by a factor of two, and the name either
+ * overflows its zone or shrinks to nothing. `measuredGlyphRatio` supplies the
+ * real number for a chosen face, and callers pass it as `glyphRatio` — the
+ * arithmetic below is unchanged. Text left on the DEFAULT face keeps using the
+ * estimate, deliberately: that sizing is what Rahul approved, and measuring it
+ * would quietly resize every existing card.
  */
 
 /**
@@ -73,6 +82,74 @@ export function fitTextCqw(text: string | null | undefined, opts: FitOptions): n
  * Exposed so a preview or a test can assert "this name WILL be truncated"
  * rather than discovering it visually, which is how the last one shipped.
  */
+// One canvas, reused. Measuring happens on every render of every card and
+// thumbnail in the picker.
+let measureCtx: CanvasRenderingContext2D | null | undefined
+const ratioCache = new Map<string, number>()
+
+/**
+ * The real average glyph width for `text` in `cssFont`, as a fraction of font
+ * size — a drop-in `glyphRatio` for the functions above.
+ *
+ * Returns null when there is nothing to measure with (server render, or a face
+ * still downloading), so the caller falls back to the estimate rather than
+ * laying out against a measurement of Times New Roman.
+ *
+ * `letterSpacing` matters: a face set with wide tracking needs more room per
+ * character than its glyphs alone suggest, and that is exactly the error that
+ * pushes a name into an ellipsis.
+ */
+export function measuredGlyphRatio(
+  text: string | null | undefined,
+  cssFont: string,
+  letterSpacing?: string,
+): number | null {
+  const t = (text ?? '').trim()
+  if (t.length === 0) return null
+  if (typeof document === 'undefined') return null
+
+  const key = `${cssFont}|${letterSpacing ?? ''}|${t}`
+  const hit = ratioCache.get(key)
+  if (hit !== undefined) return hit
+
+  if (measureCtx === undefined) measureCtx = document.createElement('canvas').getContext('2d')
+  if (!measureCtx) return null
+
+  // A large reference size keeps the ratio clear of hinting and rounding; the
+  // result is scale-free.
+  const REF = 200
+  measureCtx.textAlign = 'left'
+  measureCtx.font = cssFont.replace(/\b\d+(\.\d+)?px\b/, `${REF}px`)
+  try {
+    measureCtx.letterSpacing = letterSpacing || 'normal'
+  } catch {
+    // Older engines ignore tracking; the estimate is then a few percent low.
+  }
+
+  const m = measureCtx.measureText(t)
+
+  // The WIDER of the advance and the ink.
+  //
+  // Advance alone is what a layout engine reserves, and for most faces the ink
+  // sits inside it. A script does the opposite: Great Vibes' capitals throw
+  // swashes well past their own advance, so sizing by advance let the shop name
+  // fit "perfectly" on paper and visibly cross the fold into the dark panel of
+  // the artwork. Ink alone would be wrong the other way — it ignores the
+  // trailing space a face reserves — so the fit takes whichever is larger.
+  const ink = m.actualBoundingBoxLeft + m.actualBoundingBoxRight
+  const width = Math.max(m.width, isFinite(ink) ? ink : 0)
+  if (!isFinite(width) || width <= 0) return null
+
+  const ratio = width / (t.length * REF)
+  ratioCache.set(key, ratio)
+  return ratio
+}
+
+/** Clears the measured ratios. Call after a webfont finishes loading. */
+export function resetGlyphRatios() {
+  ratioCache.clear()
+}
+
 export function willTruncate(text: string | null | undefined, opts: FitOptions): boolean {
   const chars = (text ?? '').trim().length
   if (chars === 0) return false

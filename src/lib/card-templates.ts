@@ -105,7 +105,14 @@ export interface CardTemplate {
       color?: string
     }
     shopName: Zone
-    tagline?: Zone
+    /**
+     * A line under the shop name — "Trust · Quality · Since 1998".
+     *
+     * `color` overrides `ink.accent`. It exists because Gold Fold's accent is
+     * the gold used for its rules, and gold on cream at tagline size measures
+     * about 2:1 contrast — fine for a hairline, unreadable as text.
+     */
+    tagline?: Zone & { color?: string }
     /**
      * Owner name, with the designation stacked beneath it.
      *
@@ -125,7 +132,8 @@ export interface CardTemplate {
     /** Plain closing rule beneath the shop name, as in the reference. */
     dividerBottom?: Zone
     contact?: Zone
-    gstin?: Zone
+    /** `color` overrides `ink.label` — see `tagline`. */
+    gstin?: Zone & { color?: string }
     qr?: Zone & { size: number }
   }
 
@@ -200,9 +208,19 @@ export const CARD_TEMPLATES: CardTemplate[] = [
       divider: { x: 12, y: 48, w: 24 },
       shopName: { x: 3, y: 54, w: 42, align: 'center' },
 
-      // RIGHT panel: person first, then how to reach them.
       dividerBottom: { x: 18, y: 66, w: 12 },
+      // Under the closing rule, on the cream. Positions here were MEASURED off
+      // the artwork rather than guessed: this strip reads mean luminance 209
+      // with sd 29, while y71 dips to a minimum of 3 where a fold edge cuts
+      // across — text there would sit half on cream and half on shadow.
+      // Charcoal rather than the gold accent, which is a 2:1 contrast on cream.
+      tagline: { x: 5, y: 68, w: 34, align: 'center', color: '#4A4740' },
+
+      // RIGHT panel: person first, then how to reach them.
       contact: { x: 53, y: 30, w: 44 },
+      // Below the four contact rows, which end near y70. Mean luminance 38 with
+      // sd 5 — the calmest area on the card, and gold on charcoal is legible.
+      gstin: { x: 55, y: 71, w: 40 },
     },
     contactIcons: { style: 'plain', color: '#C6A05C', divider: true },
     darkText: false,
@@ -234,9 +252,17 @@ export const CARD_TEMPLATES: CardTemplate[] = [
       divider: { x: 13, y: 53, w: 22 },
       shopName: { x: 3, y: 59, w: 42, align: 'center' },
 
-      // The floral branch fills the top-right, so the identity starts below it.
       dividerBottom: { x: 18, y: 71, w: 12 },
+      // Measured: mean luminance 230, sd 24. y75 is calmer still but leaves the
+      // line floating away from the rule it belongs to.
+      tagline: { x: 5, y: 73, w: 38, align: 'center' },
+
+      // The floral branch fills the top-right, so the identity starts below it.
       contact: { x: 55, y: 38, w: 42 },
+      // Contacts end near y78. Measured at y81: mean 234, sd 13, minimum 156 —
+      // no dark speck anywhere in the strip. y84 dips to 47 where the lower
+      // watercolour wash begins.
+      gstin: { x: 55, y: 81, w: 40 },
     },
     contactIcons: { style: 'circle', color: '#FFFFFF', background: '#C98894', divider: true },
     darkText: false,

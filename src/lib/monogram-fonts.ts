@@ -200,6 +200,44 @@ export const MONOGRAM_FONTS: MonogramFont[] = [
 
 export const DEFAULT_MONOGRAM_FONT_ID = 'serif-classic'
 
+/**
+ * The parts of a card that can carry their own typeface.
+ *
+ * 🎨 2026-08-04. Rahul asked for the choice to be per-element — "when they
+ * choose for shop name only shop name fonts should be changed. when they
+ * choose for tagline then it should change the tagline." One font for the
+ * whole card cannot do what a real card does: an ornate mark over a plain,
+ * readable address.
+ *
+ * `logo` is stored in `Setting.cardFontId` and predates the rest.
+ */
+export const CARD_FONT_TARGETS = ['logo', 'shopName', 'tagline', 'contact'] as const
+export type CardFontTarget = (typeof CARD_FONT_TARGETS)[number]
+
+export const CARD_FONT_TARGET_LABELS: Record<CardFontTarget, string> = {
+  logo: 'Logo letters',
+  shopName: 'Shop name',
+  tagline: 'Tagline',
+  contact: 'Contact details',
+}
+
+/**
+ * A face by id, or null to keep the app's default.
+ *
+ * Unlike `getMonogramFont` this does NOT substitute a default, because for
+ * everything except the logo "unset" is a real answer: the shop name should
+ * stay in the app's own sans unless the shopkeeper chose otherwise.
+ */
+export function cardTextFont(id: string | null | undefined): MonogramFont | null {
+  if (!id) return null
+  return MONOGRAM_FONTS.find(f => f.id === id) ?? null
+}
+
+/** Font shorthand for a canvas context, for the export renderer. */
+export function canvasFontSpec(font: MonogramFont, sizePx: number): string {
+  return `${font.fontStyle} ${font.fontWeight} ${sizePx}px ${font.fontFamily}`
+}
+
 export function getMonogramFont(id: string | null | undefined): MonogramFont {
   if (id) {
     const f = MONOGRAM_FONTS.find(x => x.id === id)

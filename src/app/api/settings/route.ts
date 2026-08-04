@@ -173,6 +173,9 @@ export async function PUT(req: NextRequest) {
     // because it is printed in one slot on a 3.5-inch card.
     const CARD_FIELDS: Array<[string, number]> = [
       ['cardFontId', 60],
+      ['cardShopFontId', 60],
+      ['cardTaglineFontId', 60],
+      ['cardContactFontId', 60],
       ['cardShopName', MAX_NAME],
       ['cardOwnerName', MAX_NAME],
       ['cardTagline', 120],

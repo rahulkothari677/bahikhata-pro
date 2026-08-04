@@ -523,8 +523,21 @@ model Setting {
   // not destroy what the shopkeeper typed. Nothing here is ever cleared on
   // mode change — only the shopkeeper editing a field changes a field.
   cardMode         String  @default("profile")
-  // Monogram typeface id — see src/lib/monogram-fonts.ts. null = the default.
+  // Typeface per element of the card — see src/lib/monogram-fonts.ts.
+  // null = that element keeps the app's default face.
+  //
+  // Four columns rather than one because Rahul asked for the choice to be
+  // per-element: "when they choose for shop name only shop name fonts should
+  // be changed. when they choose for tagline then it should change the
+  // tagline." A single column cannot express a copperplate monogram over a
+  // plain, readable address.
+  //
+  // cardFontId is the LOGO/monogram face and predates the others; it keeps its
+  // name so existing rows keep their chosen mark.
   cardFontId       String?
+  cardShopFontId   String?
+  cardTaglineFontId String?
+  cardContactFontId String?
   cardShopName     String?
   cardOwnerName    String?
   cardTagline      String?

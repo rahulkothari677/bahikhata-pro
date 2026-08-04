@@ -25,11 +25,14 @@ import { cn } from '@/lib/utils'
 import { deriveMonogram } from '@/lib/brand-monogram'
 import {
   getMonogramFont,
+  cardTextFont,
+  canvasFontSpec,
   monogramFontFamilyName,
   monogramStyle,
   type MonogramFont,
 } from '@/lib/monogram-fonts'
 import { fitMonogram, resetMonogramMetrics } from '@/lib/monogram-fit'
+import { measuredGlyphRatio, resetGlyphRatios } from '@/lib/fit-text'
 import { fitTextCqw, willTruncate, SHOP_NAME_GLYPH_RATIO } from '@/lib/fit-text'
 import type { CardTemplate, Zone } from '@/lib/card-templates'
 
@@ -47,8 +50,15 @@ export interface TemplateCardData {
   gstin?: string | null
   /** Uploaded logo. When absent the monogram is drawn instead — never empty. */
   logoUrl?: string | null
-  /** Which typeface the monogram uses. See lib/monogram-fonts. */
+  /**
+   * A typeface per element. See lib/monogram-fonts. null on any of these means
+   * "keep the app's default face for that part of the card" — only the logo
+   * always resolves to a face, because bare letterforms ARE the logo.
+   */
   monogramFontId?: string | null
+  shopFontId?: string | null
+  taglineFontId?: string | null
+  contactFontId?: string | null
 }
 
 interface Props {
@@ -105,6 +115,73 @@ function useMonogramFit(
   return fitMonogram(text, font, { ...opts, measure: ready })
 }
 
+/**
+ * CSS for a text element that carries a chosen typeface.
+ *
+ * Returns `{}` when nothing is chosen, so the element keeps whatever the card
+ * already gave it — the default appearance is untouched by this feature.
+ */
+function textFontStyle(font: MonogramFont | null): React.CSSProperties {
+  if (!font) return {}
+  return {
+    fontFamily: font.fontFamily,
+    fontWeight: font.fontWeight,
+    fontStyle: font.fontStyle,
+    letterSpacing: font.letterSpacing,
+  }
+}
+
+/**
+ * The glyph ratio to size this text with.
+ *
+ * A chosen face is MEASURED: one average glyph width cannot cover both
+ * Archivo Black and Tangerine, and getting it wrong overflows the zone or
+ * shrinks the text to nothing. Text on the default face keeps the estimate,
+ * which is the sizing already approved.
+ */
+function ratioFor(text: string | null | undefined, font: MonogramFont | null, fallback?: number) {
+  if (!font) return fallback
+  return measuredGlyphRatio(text, canvasFontSpec(font, 100), font.letterSpacing) ?? fallback
+}
+
+/**
+ * Re-renders once the chosen webfonts are usable.
+ *
+ * Without this the first paint measures the FALLBACK face and caches the
+ * result, so a card set in Tangerine would be sized as if it were Times New
+ * Roman — and it would stay that way, because the cache never expires.
+ */
+function useFontsReady(fonts: Array<MonogramFont | null>) {
+  const [, bump] = useState(0)
+  const key = fonts.map(f => f?.id ?? '-').join(',')
+
+  useEffect(() => {
+    let live = true
+    if (typeof document === 'undefined' || !document.fonts) return
+    const loads = fonts
+      .filter((f): f is MonogramFont => Boolean(f?.file))
+      .map(f => document.fonts.load(`${f.fontWeight} 200px "${monogramFontFamilyName(f)}"`))
+
+    Promise.all(loads)
+      .catch(() => {
+        // A face that fails to download is still measured — as its fallback,
+        // which is what will actually be drawn.
+      })
+      .then(() => {
+        if (!live) return
+        resetGlyphRatios()
+        resetMonogramMetrics()
+        bump(n => n + 1)
+      })
+
+    return () => {
+      live = false
+    }
+    // Keyed on the font IDS, not the array: a new array every render would
+    // re-run this on every render.
+  }, [key])
+}
+
 /** Turns a zone into absolute positioning. */
 function zoneStyle(z: Zone): React.CSSProperties {
   return {
@@ -123,6 +200,10 @@ export function TemplateCard({ template: t, data, qrValue, onLogoClick, classNam
   const monogram = deriveMonogram(data.shopName, data.ownerName)
 
   const monoFont = getMonogramFont(data.monogramFontId)
+  const shopFont = cardTextFont(data.shopFontId)
+  const taglineFont = cardTextFont(data.taglineFontId)
+  const contactFont = cardTextFont(data.contactFontId)
+  useFontsReady([monoFont, shopFont, taglineFont, contactFont])
 
   // The mark is sized from its own letterforms, so every typeface lands on the
   // same optical weight. `logoSizeCqw` names the composition the artwork was
@@ -155,7 +236,7 @@ export function TemplateCard({ template: t, data, qrValue, onLogoClick, classNam
     // Below this the name is illegible at card size, so shrinking further is
     // not a fix. Names that still do not fit WRAP instead — see below.
     minCqw: 3.2,
-    glyphRatio: SHOP_NAME_GLYPH_RATIO,
+    glyphRatio: ratioFor(data.shopName || 'My Shop', shopFont, SHOP_NAME_GLYPH_RATIO),
   }
   const shopNameCqw = fitTextCqw(data.shopName || 'My Shop', shopFit)
 
@@ -165,7 +246,9 @@ export function TemplateCard({ template: t, data, qrValue, onLogoClick, classNam
   const shopNameWraps = willTruncate(data.shopName, shopFit)
   const contactTextWidth = Math.max(8, (z.contact?.w ?? 40) - CONTACT_CHROME_CQW)
 
+  const contactRatio = ratioFor(data.email || data.phone, contactFont)
   const ownerCqw = fitTextCqw(data.ownerName, {
+    glyphRatio: ratioFor(data.ownerName, contactFont),
     zoneWidthPercent: contactTextWidth,
     // Heads the contact panel, but must stay BELOW the shop name optically —
     // at 4.6 it rendered 28px against the name's 27px and stole the hierarchy.
@@ -226,7 +309,7 @@ export function TemplateCard({ template: t, data, qrValue, onLogoClick, classNam
     // ~6pt. Below this it stops being readable at arm's length, which is the
     // only distance a business card is ever read at.
     minCqw: 2.1,
-    glyphRatio: 0.52,
+    glyphRatio: contactRatio ?? 0.52,
   })
 
   return (
@@ -321,8 +404,19 @@ export function TemplateCard({ template: t, data, qrValue, onLogoClick, classNam
       {/* ── shop name ───────────────────────────────────────────────────── */}
       <div style={zoneStyle(z.shopName)}>
         <p
-          className={cn('font-bold leading-[1.08]', shopNameWraps ? 'line-clamp-2' : 'truncate')}
-          style={{ color: t.ink.primary, fontSize: `${shopNameCqw}cqw`, letterSpacing: '-.02em' }}
+          className={cn(
+            'leading-[1.08]',
+            // A chosen face brings its own weight and tracking; forcing bold on
+            // a script thickens it into a blur.
+            !shopFont && 'font-bold',
+            shopNameWraps ? 'line-clamp-2' : 'truncate',
+          )}
+          style={{
+            color: t.ink.primary,
+            letterSpacing: '-.02em',
+            ...textFontStyle(shopFont),
+            fontSize: `${shopNameCqw}cqw`,
+          }}
         >
           {data.shopName || 'My Shop'}
         </p>
@@ -331,8 +425,21 @@ export function TemplateCard({ template: t, data, qrValue, onLogoClick, classNam
       {z.tagline && data.tagline && (
         <div style={zoneStyle(z.tagline)}>
           <p
-            className="font-semibold uppercase truncate"
-            style={{ color: t.ink.accent, fontSize: '2.9cqw', letterSpacing: '.1em' }}
+            className={cn('truncate', !taglineFont && 'font-semibold uppercase')}
+            style={{
+              color: z.tagline.color ?? t.ink.accent,
+              letterSpacing: '.1em',
+              ...textFontStyle(taglineFont),
+              // Fitted rather than fixed at 2.9cqw. "Your Daily Grocery Partner
+              // Since 1998" is 40 characters and was silently ellipsised; a
+              // tagline the shopkeeper cannot read back is not a tagline.
+              fontSize: `${fitTextCqw(data.tagline, {
+                zoneWidthPercent: z.tagline.w,
+                maxCqw: 2.9,
+                minCqw: 1.8,
+                glyphRatio: ratioFor(data.tagline, taglineFont, taglineFont ? undefined : 0.72),
+              })}cqw`,
+            }}
           >
             {data.tagline}
           </p>
@@ -397,12 +504,13 @@ export function TemplateCard({ template: t, data, qrValue, onLogoClick, classNam
                     className="block truncate"
                     style={{
                       color: t.ink.contact ?? t.ink.secondary,
-                      // The owner's name is the one line that earns extra
-                      // weight — it is who the card is FOR.
+                      ...textFontStyle(contactFont),
                       // The owner (row one) carries more weight than the
-                      // contact lines — it is who the card is for.
+                      // contact lines — it is who the card is for. A chosen
+                      // face keeps its own weight; a script has no bold, and
+                      // asking for one gets a smeared synthetic version.
                       fontSize: `${i === 0 ? ownerCqw : contactCqw}cqw`,
-                      fontWeight: i === 0 ? 600 : 400,
+                      fontWeight: contactFont ? contactFont.fontWeight : i === 0 ? 600 : 400,
                       lineHeight: 1.35,
                     }}
                   >
@@ -434,9 +542,18 @@ export function TemplateCard({ template: t, data, qrValue, onLogoClick, classNam
           <p
             className="truncate"
             style={{
-              color: t.ink.label,
-              fontSize: '2.7cqw',
+              color: z.gstin.color ?? t.ink.label,
+              // Fitted, not fixed: a 15-character GSTIN plus the label is 21
+              // characters, which did not fit 2.7cqw in every zone.
+              fontSize: `${fitTextCqw(`GSTIN ${data.gstin}`, {
+                zoneWidthPercent: z.gstin.w,
+                maxCqw: 2.7,
+                minCqw: 1.9,
+                glyphRatio: 0.58,
+              })}cqw`,
               letterSpacing: '.06em',
+              // Tabular figures so the digits line up — a GSTIN is read digit
+              // by digit when someone is checking it against a bill.
               fontVariantNumeric: 'tabular-nums',
             }}
           >

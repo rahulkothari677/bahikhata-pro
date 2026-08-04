@@ -29,9 +29,21 @@
 import type { CardTemplate, Zone } from '@/lib/card-templates'
 import type { TemplateCardData } from '@/components/common/TemplateCard'
 import { deriveMonogram } from '@/lib/brand-monogram'
-import { getMonogramFont, monogramFontFamilyName } from '@/lib/monogram-fonts'
+import {
+  getMonogramFont,
+  cardTextFont,
+  canvasFontSpec,
+  monogramFontFamilyName,
+  type MonogramFont,
+} from '@/lib/monogram-fonts'
 import { fitMonogram, resetMonogramMetrics } from '@/lib/monogram-fit'
-import { fitTextCqw, willTruncate, SHOP_NAME_GLYPH_RATIO } from '@/lib/fit-text'
+import {
+  fitTextCqw,
+  willTruncate,
+  measuredGlyphRatio,
+  resetGlyphRatios,
+  SHOP_NAME_GLYPH_RATIO,
+} from '@/lib/fit-text'
 
 /**
  * 2100px wide = 7in at 300dpi, so the card prints at 3.5in with room to crop.
@@ -105,14 +117,30 @@ async function ensureFont(family: string | null, sizePx: number, weight: number)
   }
 }
 
-/** Canvas has no `letter-spacing` in older engines; setting it is best-effort. */
+/**
+ * Sets canvas letter-spacing.
+ *
+ * ⚠️ `'normal'` IS NOT A VALID VALUE HERE. The CSS property accepts it; the
+ * canvas one takes a `<length>` only, and rejects anything else by SILENTLY
+ * KEEPING THE PREVIOUS VALUE. So `setLetterSpacing(ctx, 'normal')` — the
+ * obvious way to write "reset this" — reset nothing, and every element
+ * inherited the tracking of whichever element was drawn before it.
+ *
+ * It surfaced when the tagline was added: its 0.1em carried into the contact
+ * rows below, adding 0.1em per character, and a 28-character address measured
+ * 840px against a 735px slot and came out as "Mumbai, Maharashtra - 4…" in the
+ * exported PNG while the on-screen card showed it in full. Before the tagline
+ * existed the leak was the shop name's -0.02em, which made contacts slightly
+ * TIGHTER than the screen — wrong in the same way, but invisible.
+ *
+ * Normalising to `0px` is the fix; the guard remains for engines with no
+ * letterSpacing at all.
+ */
 function setLetterSpacing(ctx: CanvasRenderingContext2D, value: string) {
   try {
-    // Typed in lib.dom, but absent at RUNTIME in older engines — assigning to a
-    // missing property is harmless, so the guard is for engines that throw.
-    ctx.letterSpacing = value
+    ctx.letterSpacing = value === 'normal' || !value ? '0px' : value
   } catch {
-    // Falls back to normal tracking, which is a cosmetic difference only.
+    // Older engines ignore tracking, which is a cosmetic difference only.
   }
 }
 
@@ -175,6 +203,32 @@ export async function renderTemplateCardToBlob(
   const z = template.zones
   const ink = template.ink
 
+  // Every chosen face must be resolved and LOADED before anything is measured
+  // or drawn. A canvas has no second chance: whatever is available when
+  // fillText runs is what ships in the file, and a face that arrives a moment
+  // later cannot repaint it.
+  const shopFont = cardTextFont(data.shopFontId)
+  const taglineFont = cardTextFont(data.taglineFontId)
+  const contactFont = cardTextFont(data.contactFontId)
+  const monoFont = getMonogramFont(data.monogramFontId)
+  await Promise.all(
+    [monoFont, shopFont, taglineFont, contactFont]
+      .filter((f): f is MonogramFont => Boolean(f?.file))
+      .map(f => ensureFont(monogramFontFamilyName(f), 200, f.fontWeight)),
+  )
+  // Ratios cached while those faces were still downloading were measured
+  // against the fallback and would size this export wrongly.
+  resetGlyphRatios()
+  resetMonogramMetrics()
+
+  /** Font shorthand for a card element, honouring the shopkeeper's choice. */
+  const fontFor = (font: MonogramFont | null, sizePx: number, weight: number, fallbackFamily: string) =>
+    font ? canvasFontSpec(font, sizePx) : `${weight} ${sizePx}px ${fallbackFamily}`
+
+  /** Matches TemplateCard: measure a chosen face, estimate the default one. */
+  const ratioFor = (text: string | null | undefined, font: MonogramFont | null, fallback?: number) =>
+    font ? measuredGlyphRatio(text, canvasFontSpec(font, 100), font.letterSpacing) ?? fallback : fallback
+
   // The app's own body face, so the card's text matches the rest of the UI.
   // Read from the live document rather than hard-coded: the app loads its sans
   // through a CSS variable, and duplicating the stack here would let the two
@@ -231,13 +285,8 @@ export async function renderTemplateCardToBlob(
         // An unreachable logo URL must not cost the shopkeeper their card.
       }
     } else {
-      const font = getMonogramFont(data.monogramFontId)
+      const font = monoFont
       const monogram = deriveMonogram(data.shopName, data.ownerName)
-      const family = monogramFontFamilyName(font)
-
-      // Wait FIRST, then measure. Measuring before the face has arrived sizes
-      // the mark against Times New Roman and bakes that into the file.
-      await ensureFont(family, cqw(z.logo.size), font.fontWeight)
 
       // The same fit the screen used, from the same module — the exported card
       // cannot disagree with the previewed one about how big the mark is.
@@ -284,11 +333,11 @@ export async function renderTemplateCardToBlob(
       zoneWidthPercent: z.shopName.w,
       maxCqw: 6.4,
       minCqw: 3.2,
-      glyphRatio: SHOP_NAME_GLYPH_RATIO,
+      glyphRatio: ratioFor(name, shopFont, SHOP_NAME_GLYPH_RATIO),
     }
     const sizePx = cqw(fitTextCqw(name, fit))
-    ctx.font = `700 ${sizePx}px ${bodyFont}`
-    setLetterSpacing(ctx, '-0.02em')
+    ctx.font = fontFor(shopFont, sizePx, 700, bodyFont)
+    setLetterSpacing(ctx, shopFont ? shopFont.letterSpacing : '-0.02em')
     ctx.fillStyle = ink.primary
     const zoneL = px(z.shopName.x)
     const zoneW = px(z.shopName.w)
@@ -309,16 +358,26 @@ export async function renderTemplateCardToBlob(
 
   // ── tagline ───────────────────────────────────────────────────────────
   if (z.tagline && data.tagline) {
-    const sizePx = cqw(2.9)
-    ctx.font = `600 ${sizePx}px ${bodyFont}`
-    setLetterSpacing(ctx, '0.1em')
-    ctx.fillStyle = ink.accent
+    const sizePx = cqw(
+      fitTextCqw(data.tagline, {
+        zoneWidthPercent: z.tagline.w,
+        maxCqw: 2.9,
+        minCqw: 1.8,
+        glyphRatio: ratioFor(data.tagline, taglineFont, taglineFont ? undefined : 0.72),
+      }),
+    )
+    ctx.font = fontFor(taglineFont, sizePx, 600, bodyFont)
+    setLetterSpacing(ctx, taglineFont ? taglineFont.letterSpacing : '0.1em')
+    ctx.fillStyle = z.tagline.color ?? ink.accent
     ctx.textAlign = z.tagline.align ?? 'left'
     const zoneL = px(z.tagline.x)
     const zoneW = px(z.tagline.w)
     const anchorX =
       ctx.textAlign === 'center' ? zoneL + zoneW / 2 : ctx.textAlign === 'right' ? zoneL + zoneW : zoneL
-    ctx.fillText(clip(ctx, data.tagline.toUpperCase(), zoneW), anchorX, py(z.tagline.y) + sizePx * 0.82)
+    // Uppercased only on the default face — a script has no capitals worth the
+    // name, and forcing them turns a signature into shouting.
+    const shown = taglineFont ? data.tagline : data.tagline.toUpperCase()
+    ctx.fillText(clip(ctx, shown, zoneW), anchorX, py(z.tagline.y) + sizePx * 0.82)
     setLetterSpacing(ctx, 'normal')
   }
 
@@ -375,7 +434,12 @@ export async function renderTemplateCardToBlob(
       const textWidthPx = cqw(textWidthCqw)
 
       const ownerPx = cqw(
-        fitTextCqw(data.ownerName, { zoneWidthPercent: textWidthCqw, maxCqw: 3.9, minCqw: 2.5 }),
+        fitTextCqw(data.ownerName, {
+          zoneWidthPercent: textWidthCqw,
+          maxCqw: 3.9,
+          minCqw: 2.5,
+          glyphRatio: ratioFor(data.ownerName, contactFont),
+        }),
       )
       // Only the plain rows drive the shared size; the owner has its own.
       const longest = rows.slice(1).reduce((a, r) => (r.value.length > a.length ? r.value : a), '')
@@ -384,7 +448,7 @@ export async function renderTemplateCardToBlob(
           zoneWidthPercent: textWidthCqw,
           maxCqw: 3.2,
           minCqw: 2.1,
-          glyphRatio: 0.52,
+          glyphRatio: ratioFor(longest, contactFont, 0.52),
         }),
       )
 
@@ -436,7 +500,8 @@ export async function renderTemplateCardToBlob(
 
         const isOwner = i === 0
         const sizePx = isOwner ? ownerPx : bodyPx
-        ctx.font = `${isOwner ? 600 : 400} ${sizePx}px ${bodyFont}`
+        ctx.font = fontFor(contactFont, sizePx, isOwner ? 600 : 400, bodyFont)
+        setLetterSpacing(ctx, contactFont ? contactFont.letterSpacing : 'normal')
         ctx.fillStyle = contactInk
         ctx.textAlign = 'left'
         // Centred on the row, using the font's own metrics rather than a
@@ -445,6 +510,7 @@ export async function renderTemplateCardToBlob(
         const m = ctx.measureText('Hxg')
         const half = (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2
         ctx.fillText(clip(ctx, row.value, textWidthPx), x, cy + half)
+        setLetterSpacing(ctx, 'normal')
 
         y += rowH + rowGap
       }
@@ -453,12 +519,15 @@ export async function renderTemplateCardToBlob(
 
   // ── GSTIN ─────────────────────────────────────────────────────────────
   if (z.gstin && data.gstin) {
-    const sizePx = cqw(2.7)
+    const label = `GSTIN ${data.gstin}`
+    const sizePx = cqw(
+      fitTextCqw(label, { zoneWidthPercent: z.gstin.w, maxCqw: 2.7, minCqw: 1.9, glyphRatio: 0.58 }),
+    )
     ctx.font = `400 ${sizePx}px ${bodyFont}`
     setLetterSpacing(ctx, '0.06em')
-    ctx.fillStyle = ink.label
+    ctx.fillStyle = z.gstin.color ?? ink.label
     ctx.textAlign = 'left'
-    ctx.fillText(clip(ctx, `GSTIN ${data.gstin}`, px(z.gstin.w)), px(z.gstin.x), py(z.gstin.y) + sizePx * 0.82)
+    ctx.fillText(clip(ctx, label, px(z.gstin.w)), px(z.gstin.x), py(z.gstin.y) + sizePx * 0.82)
     setLetterSpacing(ctx, 'normal')
   }
 

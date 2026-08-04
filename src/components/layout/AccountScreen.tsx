@@ -38,6 +38,7 @@ import { useSession } from 'next-auth/react'
 import { lazy, Suspense, useMemo, useState, useRef, useEffect } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { useAppStore } from '@/store/app-store'
+import { canGoBackInApp } from '@/hooks/use-browser-back-button'
 import { useSubscription } from '@/hooks/use-subscription'
 import { useStaffPermissions } from '@/hooks/use-staff-permissions'
 import { useDashboardThisMonth } from '@/hooks/use-dashboard'
@@ -194,20 +195,30 @@ export function AccountScreen() {
   const handleBack = () => {
     haptic.click()
     if (accountSection) {
-      // 🔒 V22-3 fix: If the user came directly from More (not from Account
-      // menu), back should go directly to More — not Account menu first.
-      // We check if previousView is 'more' OR accountOriginView is 'more'.
+      /*
+       * 🐛 2026-08-04: hand this to the history stack rather than navigating by
+       * hand. Account sections are now real entries in it (see
+       * use-browser-back-button), so one step back lands wherever the section
+       * was opened from — the Account menu or More — with no need to work it
+       * out from `accountOriginView`.
+       *
+       * The old branch called `setView('more')`, and 'more' is a ROOT view:
+       * every such call bumped the history generation and left the earlier
+       * entries stale. Enough of those and a later back press walked out of
+       * the app's own history entirely, which is what restarted the app.
+       */
+      if (canGoBackInApp()) {
+        window.history.back()
+        return
+      }
+      // Deep-linked straight into a section, with nothing behind it.
       const origin = useAppStore.getState().accountOriginView
       const prev = useAppStore.getState().previousView
+      setAccountSection(null)
       if (prev === 'more' || origin === 'more') {
-        // Came from More → go back to More directly
-        setAccountSection(null)
         setView('more')
         setPreviousView(null)
         useAppStore.getState().setAccountOriginView(null)
-      } else {
-        // Came from Account menu → go back to Account menu
-        setAccountSection(null)
       }
     } else {
       // If on the menu, go back to the original view
