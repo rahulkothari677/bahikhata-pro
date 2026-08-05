@@ -1,153 +1,167 @@
-# The invoice PDF: research, and a plan in six phases
+# The invoice: research, and a plan in six phases
 
-**Written 2026-08-05. Status: awaiting Rahul's go-ahead on scope and order.**
+**Written 2026-08-05. Revised the same day after Rahul corrected the premise.**
 
-Rahul asked for an invoice system better than every app already out there, built
-in phases after real research rather than guessed at. This is the research and
-the plan. Nothing here is built yet.
+---
+
+## 0. The correction that reorders everything
+
+My first draft made thermal printing the priority. Rahul:
+
+> "the main idea is not providing them the bill but to share those bill to
+> whatsapp. so you should also consider it."
+
+He is right, and it changes the shape of the whole thing. **The invoice's
+destination is a WhatsApp chat on someone's phone — not a printer.** Everything
+below is re-ordered around that.
+
+Two consequences follow immediately, and they are not small:
+
+**1. We are sending the wrong kind of file.** `handleWhatsAppShare` today
+generates a PDF and shares it. In WhatsApp a PDF arrives as a grey document card
+with a filename on it. The recipient must tap it, wait for a viewer to open, and
+then pinch and zoom around an A4 page on a 6-inch screen. An **image**, by
+contrast, appears inline in the conversation, already readable, and is seen
+without any decision being made. For a shopkeeper who wants their customer to
+actually look at the bill and pay it, that difference is the entire feature.
+
+**2. A4 is the wrong shape.** An A4 page is 1:1.41 portrait designed to be held
+at arm's length. A WhatsApp image preview is roughly square-cropped in the chat
+list and read on a phone. An invoice built for that surface has bigger type,
+fewer columns, and the amount due where the thumb lands — it is a different
+document, not a scaled-down A4.
+
+So: **the shareable image is the primary artefact and the PDF is the fallback**,
+not the other way round. That inverts my first draft.
+
+Thermal printing stays in the plan, but last — Rahul has no thermal printer to
+test with, and printing is the one thing a browser cannot verify. Shipping it
+unverified is how the Capacitor share bug happened: correct in a browser,
+completely dead on the phone. I would rather build it when it can be proven.
 
 ---
 
 ## 1. What we have today
 
-One PDF layout, in `src/lib/invoice-pdf.ts` (468 lines, jsPDF) with
-`src/lib/pdf/theme.ts` and `primitives.ts` beneath it. It is not bad: brand band
-with the logo, a Bill To card, an item table with HSN and zebra striping, a
-totals block, amount in words, a UPI QR for the balance due, signature block and
-footer. It renders on-device, so it works offline.
+One PDF layout, in `src/lib/invoice-pdf.ts` (468 lines, jsPDF) over
+`src/lib/pdf/theme.ts` and `primitives.ts`. It is decent — brand band with logo,
+Bill To card, item table with HSN, totals, amount in words, UPI QR, signature,
+footer — and it renders on-device, so it works offline.
 
-What it is not: **choosable**. Every shop in India using EkBook prints the exact
-same document. There is no paper-size option, no theme, no per-shop
-customisation, and — the important one — **no thermal receipt at all**.
+What it is not: choosable, phone-shaped, or shareable as anything but a PDF.
+There is no theme, no paper size option, no per-shop customisation, and no
+image.
 
-E-invoicing is already handled (`src/lib/e-invoice.ts`, `/api/e-invoice/irn`),
-so IRN and the signed QR exist as data. They are not yet placed on the printed
-invoice in a way the plan below assumes.
+E-invoicing already exists as data (`src/lib/e-invoice.ts`,
+`/api/e-invoice/irn`); it is not yet placed on the printed document.
 
 ---
 
-## 2. What the competition actually ships
+## 2. What the competition ships
 
-| | Themes | Paper | Thermal | Custom fields | Notes |
-|---|---|---|---|---|---|
-| **myBillBook** | 8 | A4, A5 | — | vehicle no, batch, e-way bill | Has an AI "custom theme" prompt editor |
-| **Vyapar** | 12 regular + 2 thermal | A4, A5 | **2in / 3in / 4in** | yes | Text-size controls; Word/Excel/PDF export |
-| **Zoho Books** | Preloaded set | A4/Letter | — | yes | Full **HTML/CSS** custom templates |
-| **EkBook today** | 1 | A4 only | **none** | none | — |
+| | Themes | Paper | Thermal | WhatsApp |
+|---|---|---|---|---|
+| **myBillBook** | 8 | A4, A5 | — | PDF |
+| **Vyapar** | 12 + 2 | A4, A5 | 2/3/4 inch | PDF |
+| **Zoho Books** | preloaded + custom HTML/CSS | A4 | — | PDF/email |
+| **EkBook today** | 1 | A4 | none | PDF |
 
-Rahul is right that myBillBook is the stronger of the two Indian apps on
-document design. But the finding that matters most is Vyapar's:
-
-> **Thermal receipt printing is the real gap.** A kirana counter does not hand a
-> customer an A4 sheet. It hands them a 2- or 3-inch slip off a thermal printer.
-> An app that cannot print one is not usable at the counter, whatever its A4
-> looks like. This is table stakes we do not have, and it outranks every theme.
+Every one of them shares a **PDF** to WhatsApp. Nobody sends an image built for
+the chat window. That is the gap worth taking, and it is worth more than a
+thirteenth theme.
 
 ---
 
-## 3. The legal floor (this is not optional)
+## 3. The legal floor (not optional, whatever the format)
 
-- **Rule 46, CGST Rules** — 16 mandatory fields on a tax invoice: supplier name,
-  address and GSTIN; a serial number of at most 16 characters; date; recipient
-  details; HSN/SAC; description, quantity, taxable value; rate and amount of tax
-  per head; place of supply; whether tax is payable on reverse charge; signature.
+- **Rule 46, CGST Rules** — 16 mandatory fields: supplier name, address, GSTIN;
+  serial number of at most 16 characters; date; recipient details; HSN/SAC;
+  description, quantity, taxable value; rate and amount of tax per head; place
+  of supply; whether tax is payable on reverse charge; signature.
 - **HSN digits scale with turnover** — 2 digits (₹1.5–5 cr), 4 (₹5–10 cr),
-  6 (above ₹10 cr). Printing too few is a defect, not a style choice.
-- **E-invoicing** is mandatory above ₹5 crore AATO from 1 April 2026
-  (Notification 17/2025-CT). Where it applies, the IRP's **signed QR code** must
-  be printed on the invoice.
-- Getting these wrong can deny the BUYER their input tax credit and carries a
-  penalty up to ₹25,000 under s.122 — so a wrong invoice hurts our user's
-  customer, which is how a shop loses customers.
+  6 (above ₹10 cr).
+- **E-invoicing** above ₹5 crore AATO from 1 April 2026 (Notification
+  17/2025-CT); where it applies the IRP's signed QR must be on the invoice.
+- A defective invoice can deny the BUYER their input tax credit, plus a penalty
+  up to ₹25,000 under s.122. A wrong invoice damages our user's customer, which
+  is how a shop loses customers.
+
+**This applies to the image too.** A shared image that omits a Rule 46 field is
+not a tax invoice, and a shopkeeper who sends only the image must still be
+sending something valid. The image carries the same fields; it arranges them for
+a phone.
 
 ---
 
-## 4. Where we can be genuinely better
+## 4. Where EkBook can be genuinely better
 
-Themes are table stakes; matching twelve of them wins nothing. Four things would
-actually put EkBook ahead:
-
-1. **A compliance engine, not just a template.** Check the invoice against
-   Rule 46 *before* it prints and say precisely what is missing — "no HSN on
-   3 items, and your turnover band needs 4 digits", "place of supply missing on
-   an inter-state invoice". No competitor does this; every one of them will
-   happily print a defective invoice. This is the differentiator, and it fits
-   the standing requirement that the data be regulator-defensible.
-2. **Thermal + A4 from ONE definition.** Vyapar maintains two separate theme
-   sets. If the receipt and the invoice are generated from the same document
-   model, they cannot disagree about the total — which is the bug that matters.
-3. **Bilingual invoices.** Hindi/Gujarati/Tamil alongside English. Most kirana
-   customers do not read English invoices; every competitor is English-only.
-   The Unicode font work is already done (`registerUnicodeFont`).
-4. **A preview that cannot lie.** The same lesson as the business card: one
-   renderer, so what is previewed is byte-for-byte what prints. Competitors
-   preview in HTML and print via a different engine, and they drift.
+1. **A WhatsApp-native invoice image.** Phone-shaped, readable without opening
+   anything, amount due prominent, UPI QR and a pay link on the image itself so
+   the customer can settle from the chat. No competitor does this.
+2. **A compliance engine, not just a template.** Check against Rule 46 *before*
+   sending and say exactly what is missing — "3 items have no HSN, and your
+   turnover band needs 4 digits", "place of supply missing on an inter-state
+   invoice". Every competitor will happily print a defective invoice.
+3. **One document model, three surfaces.** Image, PDF and (later) receipt all
+   built from the same `InvoiceDocument`, so they cannot disagree about the
+   total. Vyapar maintains separate theme sets for regular and thermal.
+4. **Bilingual invoices.** Hindi/Gujarati/Tamil beside English. Most kirana
+   customers do not read English. The Unicode font work is already done.
+5. **A preview that cannot lie.** One renderer, so what is previewed is what is
+   sent — the lesson from the business card, where a second renderer drifted
+   from the first and the export truncated an address the screen showed in full.
 
 ---
 
 ## 5. The plan
 
-Six phases. Each is independently shippable and leaves the app working.
+### Phase 1 — The document model
+Split "what is on the invoice" from "how it is drawn", as `card-templates.ts`
+did for the card. One `InvoiceDocument` built from the transaction; every
+surface renders it. *Ships: no visible change; everything else depends on it.*
 
-### Phase 1 — The document model and template registry
-Split "what is on the invoice" from "how it is drawn", exactly as
-`card-templates.ts` did for the card. One `InvoiceDocument` built from the
-transaction; templates are registry entries that draw it. Adding a theme becomes
-one entry rather than a new 468-line file.
-*Ships:* no visible change. This is the foundation the rest depends on.
+### Phase 2 — The WhatsApp invoice image ← **the main event**
+A phone-shaped image built for a chat window: shop header, party, items, a large
+amount-due block, UPI QR, and the Rule 46 fields. Shared as an image so it
+appears inline. Reuses `lib/share-file.ts`, which already handles the Capacitor
+share sheet correctly. *Ships: the thing the app is actually for.*
 
-### Phase 2 — Thermal receipt (58mm / 80mm)
-The biggest gap, so it comes before prettier A4. Renders from the same
-`InvoiceDocument`. Covers 2-inch and 3-inch rolls, with the compressed layout a
-receipt needs (no columns, stacked totals, QR at the foot).
-*Ships:* a shopkeeper can print at the counter. **This is the phase that makes
-EkBook usable in a real shop.**
-
-### Phase 3 — Paper sizes and a theme set
-A4 and A5. Six to eight A4 themes covering the range myBillBook has — classic,
-modern, minimal, bold-header, bordered, GST-detailed — plus a colour choice per
-theme rather than a fixed palette per theme, which is more range for less code.
-*Ships:* the visible "multiple designs" Rahul asked for.
+### Phase 3 — Themes and paper sizes for the PDF
+Six to eight A4 themes plus A5, with a colour choice per theme rather than a
+fixed palette each — more range for less code. The image gets the same themes so
+the two stay recognisably one brand. *Ships: the visible "multiple designs".*
 
 ### Phase 4 — Per-shop customisation
-Logo size and placement, accent colour, terms and conditions, signature image,
-bank details block, and toggles for optional columns (HSN, batch, expiry,
-vehicle no, e-way bill). Stored per shop, previewed live.
-*Ships:* the shop's invoice looks like the shop's.
+Logo placement, accent colour, terms, signature image, bank details, and toggles
+for optional columns (HSN, batch, expiry, vehicle no, e-way bill). Previewed
+live, as the card editor now does. *Ships: the shop's invoice looks like theirs.*
 
 ### Phase 5 — The compliance engine
-Validate the document against Rule 46 before printing. Block nothing — warn
-clearly, name the field, offer the fix. Includes the HSN-digit rule by turnover
-band and correct placement of the e-invoice IRN and signed QR where it applies.
-*Ships:* the differentiator.
+Validate against Rule 46 before sending. Warn clearly, name the field, offer the
+fix; block nothing. Includes the HSN-digit rule and correct placement of the
+e-invoice IRN and signed QR. *Ships: the differentiator.*
 
-### Phase 6 — Bilingual invoices
-Second language beside English, per shop. Field labels first (they are a fixed
-vocabulary), then the amount in words.
-*Ships:* the thing no competitor offers.
+### Phase 6 — Thermal receipt (58/80mm), when it can be tested
+Same document model. Held to last because there is no printer to verify against,
+and unverified printing is a promise we cannot check.
+
+**Order: 1 → 2 → 3 → 5 → 4 → 6.**
 
 ---
 
-## 6. Order, and what I would cut
+## 6. Design of the themes
 
-If the whole thing is too much, the honest priority is:
+Rahul: *"first you try and if i don't like then i will provide it to you."* So I
+design the set and show him rendered output, the same loop that worked for the
+cards — render, look, measure, fix — rather than asking for references first.
 
-- **Phase 2 is not optional.** Without thermal printing the app cannot be used
-  at a shop counter, and no amount of A4 styling fixes that.
-- **Phases 1 and 3 are the visible win** Rahul asked for and should follow.
-- **Phase 5 is where EkBook beats the competition** rather than matching it.
-- **Phases 4 and 6 are genuine but can wait** if time is short.
+---
 
-I would build 1 → 2 → 3 → 5 → 4 → 6, which puts the differentiator earlier than
-the polish.
+## 7. Open question
 
-## 7. What I need from Rahul before starting
-
-1. **Is there a thermal printer to test against**, and what width — 2 inch or
-   3 inch? Bluetooth or USB? I can build to the ESC/POS standard, but printing
-   is the one thing that cannot be verified in a browser, exactly like the
-   Capacitor share bug.
-2. **Reference invoices you like** — the same way you sent card artwork. If you
-   have myBillBook or Vyapar output you rate, send it; otherwise I will design
-   the set and show you.
-3. **Confirm the order above**, or reorder it.
+**Should the WhatsApp message carry a caption?** For the business card the
+answer was no: the caption repeated what the picture said. An invoice is
+different — a one-line "Invoice #143 · ₹4,500 · pay by 12 Aug" is useful in a
+chat list preview, where the image itself is only a thumbnail. My plan is a
+SHORT caption with the amount and a UPI link, and the full detail on the image.
+Easy to remove if Rahul disagrees once he sees it.
