@@ -438,7 +438,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     // 🔒 AUDIT V24 §1: Shared resolution with POST — for credit/debit notes a
     // missing paidAmount defaults to 0 (khata adjustment), not totalAmount.
     // Includes the FIX M3 snap-to-total clamp for explicit values.
-    const finalPaid = resolveFinalPaid(type, paidAmount, totalAmount)
+    const finalPaid = resolveFinalPaid(type, paidAmount, totalAmount, paymentMode)
 
     // 🔒 AUDIT V25 FIX §6.2 (Batch 7): Block credit/debit notes without a party
     // on edit too (same check as POST). A note without a party is a silent no-op.

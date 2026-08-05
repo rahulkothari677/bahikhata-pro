@@ -35,13 +35,53 @@ export function isNoteType(type: string): boolean {
  * @param type        transaction type ('sale' | 'purchase' | 'credit-note' | ...)
  * @param paidRaw     the client-sent paidAmount (may be undefined/null/'' /number)
  * @param totalAmount the computed post-round-off invoice total
+ * @param paymentMode 'cash' | 'upi' | 'card' | 'bank' | 'credit'. Optional so
+ *                    existing callers keep their behaviour; 'credit' changes
+ *                    what an EMPTY paid field means. See the note below.
  */
-export function resolveFinalPaid(type: string, paidRaw: unknown, totalAmount: number): number {
+export function resolveFinalPaid(
+  type: string,
+  paidRaw: unknown,
+  totalAmount: number,
+  paymentMode?: string,
+): number {
   const paid = typeof paidRaw === 'number' ? paidRaw : parseFloat(String(paidRaw))
 
   if (isNaN(paid)) {
     // Missing/empty paid amount — type-dependent default (the V24 §1 fix).
-    return isNoteType(type) ? 0 : roundMoney(totalAmount)
+    if (isNoteType(type)) return 0
+
+    /*
+     * 🔒 2026-08-05 (Phase 10). An empty paid field on a CREDIT (udhaar) sale
+     * means the customer paid NOTHING. It used to mean "paid in full".
+     *
+     * Reproduced through the app, not the API: New Sale → pick a customer →
+     * add an item → Payment Mode "Credit (Udhaar)" → leave Paid Amount empty,
+     * which is exactly what the field's own helper text says to do ("Leave
+     * empty for full payment"). Saved a ₹129.80 udhaar sale. The result:
+     *
+     *     totalAmount 129.80   paidAmount 129.80   outstanding 0
+     *
+     * and the customer's balance stayed ₹0 across ₹1,129.80 of udhaar sales.
+     *
+     * paymentMode and paidAmount were entirely independent — choosing "Credit
+     * (Udhaar)" changed nothing about the paid field, and the server then
+     * applied the sale default of "empty means full". So the one thing a khata
+     * app exists to record could be entered exactly as designed and vanish.
+     *
+     * This is the same shape as the V24 §1 note bug directly above: a default
+     * that is right for one case applied to a case where it means the opposite.
+     * Fixed here, on the server, so the rule holds no matter which client
+     * writes the row — and the UI copy is fixed alongside it so the field stops
+     * telling people the wrong thing.
+     *
+     * An EXPLICIT paidAmount still wins: a part-payment on an udhaar sale
+     * (mode credit, paid 500 of 1000) is a real and common case, and it is
+     * untouched by this branch.
+     */
+    if (paymentMode === 'credit') return 0
+
+    return roundMoney(totalAmount)
   }
 
   let finalPaid = toMoney(paid)

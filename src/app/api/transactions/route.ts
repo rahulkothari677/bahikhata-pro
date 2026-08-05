@@ -562,7 +562,7 @@ export async function POST(req: NextRequest) {
     // adjustment) instead of totalAmount ("fully cash-refunded") — the old
     // default made a sales return reduce the customer's balance by ₹0.
     // Includes the FIX M3 snap-to-total clamp for explicit values.
-    const finalPaid = resolveFinalPaid(type, paidAmount, totalAmount)
+    const finalPaid = resolveFinalPaid(type, paidAmount, totalAmount, paymentMode)
 
     // 🔒 AUDIT V25 FIX §6.2 (Batch 7): Block credit/debit notes without a party.
     // A credit note with no partyId (walk-in) can't reduce any balance — there's

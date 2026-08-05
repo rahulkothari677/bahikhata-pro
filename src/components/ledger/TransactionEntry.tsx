@@ -1773,14 +1773,26 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                   <NumberField id="field-paid-amount"
                     value={paidAmount}
                     onValueChange={(v) => { markDirty(); setPaidAmount(v) }}
-                    placeholder={`Full: ${totalAmount.toFixed(0)}`}
+                    /*
+                     * 🔒 2026-08-05 (Phase 10): the placeholder and hint follow
+                     * the payment mode. They used to say "Full" and "Leave empty
+                     * for full payment" in every mode — including Credit
+                     * (Udhaar), where an empty field means the customer paid
+                     * NOTHING. A shopkeeper recording udhaar did exactly as the
+                     * hint said and the debt was stored as fully paid.
+                     */
+                    placeholder={paymentMode === 'credit' ? 'Unpaid: 0' : `Full: ${totalAmount.toFixed(0)}`}
                     className="mt-1"
                     min={0}
                     step={10}
                     decimals={2}
                     prefix="₹"
                   />
-                  <p className="text-3xs text-muted-foreground mt-1">Leave empty for full payment</p>
+                  <p className="text-3xs text-muted-foreground mt-1">
+                    {paymentMode === 'credit'
+                      ? `Leave empty for full udhaar — ${formatINR(totalAmount)} stays owing. Enter an amount if they paid part of it.`
+                      : 'Leave empty for full payment'}
+                  </p>
                 </div>
               ) : null}
             </div>
