@@ -75,11 +75,36 @@ jobs:
           echo "  Duration: ${DURATION_MS}ms"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-          if [ "$TOTAL_FAILED" != "0" ] && [ "$TOTAL_FAILED" != "parse-error" ]; then
-            echo "⚠️  $TOTAL_FAILED user(s) had reconciliation failures."
-            echo "Failures have been captured to Sentry (module: reconciliation tag)."
-            echo "Check the Sentry dashboard or the #alerts-critical Slack channel."
-            # Don't exit 1 here — the job itself succeeded. Failures are for Sentry.
+          # 🔒 2026-08-05 (Phase 10): a reconciliation failure now FAILS this job.
+          #
+          # It used to print a warning and exit 0, on the reasoning that "the job
+          # itself succeeded — failures are for Sentry". That reasoning holds only
+          # if Sentry is actually receiving them, and Sentry initialises only when
+          # SENTRY_DSN is set in the deployment. Two other env vars in this same
+          # deployment have already been found missing or wrong during this audit
+          # (READONLY_DATABASE_URL absent, NEXTAUTH_URL set to its own name), so
+          # "an alert went somewhere" is not a safe assumption to build on.
+          #
+          # Meanwhile the run history showed a green tick every night while this
+          # account's GST check was failing — items and headers differ by ~₹31.
+          # Nobody would have learned that from the workflow.
+          #
+          # A ledger that does not tie out is a failure. It should look like one.
+          # Sentry stays as the richer, per-user signal; this is the one that
+          # cannot silently stop working.
+          if [ "$TOTAL_FAILED" = "parse-error" ]; then
+            echo "❌ Could not read totalFailed from the response."
+            echo "Treating an unreadable result as a failure: a check whose answer"
+            echo "cannot be read is not a check."
+            exit 1
+          elif [ "$TOTAL_FAILED" != "0" ]; then
+            echo "❌ $TOTAL_FAILED user(s) did NOT reconcile."
+            echo ""
+            echo "The books do not tie out for at least one account. The response"
+            echo "body above names each failing check and user."
+            echo "If Sentry is configured (SENTRY_DSN), per-user events were also"
+            echo "sent with the tag module:reconciliation."
+            exit 1
           else
             echo "✅ All users reconciled successfully."
           fi
