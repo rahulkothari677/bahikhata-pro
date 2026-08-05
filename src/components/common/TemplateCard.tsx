@@ -20,7 +20,7 @@
 
 import { useEffect, useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
-import { Phone, Mail, MapPin, User } from 'lucide-react'
+import { Phone, Mail, MapPin, User, FileText } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { deriveMonogram } from '@/lib/brand-monogram'
 import {
@@ -224,9 +224,11 @@ export function TemplateCard({ template: t, data, qrValue, onLogoClick, classNam
    */
   const monoBoxCqw = (z.logo?.size ?? 25) * 0.69
 
-  // The icon, its divider and two gaps consume roughly 9cqw before any text.
-  // Sizing against the full zone is what let the email overflow its slot.
-  const CONTACT_CHROME_CQW = 9
+  // The icon, its divider and two gaps consume roughly 9cqw before any text —
+  // but only when the CARD draws them. Where the artwork already has its own
+  // printed icons the text starts at the zone's edge, and subtracting chrome
+  // that is not there would shrink every line for no reason.
+  const CONTACT_CHROME_CQW = t.contactIcons ? 9 : 0
 
   // Fitted sizes. A shop is called "RK" or "Shree Siddhivinayak General Stores"
   // and both land in the same slot, so a fixed size truncates one of them.
@@ -290,6 +292,8 @@ export function TemplateCard({ template: t, data, qrValue, onLogoClick, classNam
       { icon: Phone, value: data.phone },
       { icon: Mail, value: data.email },
       { icon: MapPin, value: data.address },
+      // GSTIN joins the list only where the artwork prints a GST icon for it.
+      { icon: FileText, value: z.contact?.withGstin ? data.gstin : null },
     ] as const
   ).filter(r => Boolean(r.value)) as Array<{
     icon: typeof Phone
@@ -306,9 +310,12 @@ export function TemplateCard({ template: t, data, qrValue, onLogoClick, classNam
     zoneWidthPercent: contactTextWidth,
     // 3.2cqw on a 1050px card is ~8pt — the upper end of business-card body copy.
     maxCqw: 3.2,
-    // ~6pt. Below this it stops being readable at arm's length, which is the
-    // only distance a business card is ever read at.
-    minCqw: 2.1,
+    // ~5.5pt at card size. Lowered from 2.1 on 2026-08-05: the eight new
+    // artworks set their own line length with printed rules, and at 2.1 a
+    // perfectly ordinary address — "Mumbai, Maharashtra - 400001" — hit the
+    // floor and truncated on six of them. Small, but a shopkeeper would rather
+    // read their whole address than half of it in a larger size.
+    minCqw: 1.9,
     glyphRatio: contactRatio ?? 0.52,
   })
 
@@ -500,12 +507,35 @@ export function TemplateCard({ template: t, data, qrValue, onLogoClick, classNam
 
       {/* ── contact rows ────────────────────────────────────────────────── */}
       {z.contact && contactRows.length > 0 && (
-        <div style={zoneStyle(z.contact)} className="flex flex-col gap-[2.2cqw]">
+        /* Two layouts. With `rowPitch` the rows are pinned to the artwork's own
+           printed icons — `y` is the first icon's CENTRE and each row is placed
+           on its centre line. Without it, the card owns the spacing and stacks
+           the rows itself. */
+        <div
+          style={z.contact.rowPitch ? { ...zoneStyle(z.contact), top: `${z.contact.y}%` } : zoneStyle(z.contact)}
+          className={cn(!z.contact.rowPitch && 'flex flex-col gap-[2.2cqw]')}
+        >
           {contactRows.map((row, i) => {
             const Icon = row.icon
             const ic = t.contactIcons
+            const pitch = z.contact?.rowPitch
             return (
-              <div key={i} className="flex items-center gap-[2cqw] min-w-0">
+              <div
+                key={i}
+                className="flex items-center gap-[2cqw] min-w-0"
+                style={
+                  pitch
+                    ? {
+                        position: 'absolute',
+                        left: 0,
+                        right: 0,
+                        top: `${i * pitch}cqw`,
+                        // The row's own centre onto the icon's centre line.
+                        transform: 'translateY(-50%)',
+                      }
+                    : undefined
+                }
+              >
                 {ic && (
                   <span
                     className={cn('grid place-items-center flex-none', ic.style === 'circle' && 'rounded-full')}

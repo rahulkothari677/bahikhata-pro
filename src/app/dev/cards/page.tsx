@@ -11,11 +11,12 @@
  * Not linked from anywhere and carries no data of its own.
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { TemplateCard } from '@/components/common/TemplateCard'
 import { BusinessCardDisplay } from '@/components/common/BusinessCardDisplay'
 import { BusinessCardSurface } from '@/components/common/BusinessCardSurface'
 import { CARD_TEMPLATES } from '@/lib/card-templates'
+import { renderTemplateCardImage } from '@/lib/card-canvas'
 import { BUSINESS_CARD_DESIGNS } from '@/lib/business-card-designs'
 import { deriveMonogram } from '@/lib/brand-monogram'
 import {
@@ -83,6 +84,23 @@ export default function CardGalleryPage() {
     contactFontId: fonts.contact,
     logoUrl: useLogo ? SAMPLE_LOGO : null,
   }
+
+  /*
+   * Renders EVERY template through the real export path and returns the data
+   * URLs, so a whole gallery can be reviewed as exported images rather than as
+   * screenshots of the DOM. Reviewing the DOM would check the wrong renderer —
+   * the exported file is what a shopkeeper actually sends.
+   */
+  useEffect(() => {
+    ;(window as unknown as Record<string, unknown>).__renderAllCards = async () =>
+      Promise.all(
+        CARD_TEMPLATES.map(async t => ({
+          id: t.id,
+          name: t.name,
+          url: await renderTemplateCardImage(t, data, { width: 900 }),
+        })),
+      )
+  }, [data])
 
   return (
     <div className="min-h-screen bg-neutral-100 dark:bg-neutral-900 p-6">

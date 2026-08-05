@@ -131,7 +131,36 @@ export interface CardTemplate {
     divider?: Zone
     /** Plain closing rule beneath the shop name, as in the reference. */
     dividerBottom?: Zone
-    contact?: Zone
+    /**
+     * The contact block.
+     *
+     * 🎨 2026-08-05. The first two templates had no icons in the artwork, so the
+     * card DREW them. The eight Rahul sent next have the icons — person, phone,
+     * mail, location, GST — printed into the image itself, with ruled lines
+     * beside them. For those, drawing our own would double every glyph.
+     *
+     * So: leave `contactIcons` unset and the card draws none, and set
+     * `rowPitch` to the spacing the ARTWORK uses so the text lands on the
+     * printed rows rather than near them. Both numbers come from measuring the
+     * image, never from guessing — see docs/CARD-ARTWORK-BRIEF.md.
+     */
+    contact?: Zone & {
+      /**
+       * Distance between row CENTRES, in cqw, taken from the artwork.
+       *
+       * ⚠️ When this is set, `y` is the centre of the FIRST ROW, not the top of
+       * the block. Aligning to a printed icon means matching its centre line,
+       * and a block top would have to be back-computed from the text size —
+       * which changes with the shop's name length.
+       */
+      rowPitch?: number
+      /**
+       * Adds GSTIN as a final contact row. The eight artworks print a GST icon
+       * alongside the other four, so on those cards the number belongs in the
+       * list rather than off in its own corner.
+       */
+      withGstin?: boolean
+    }
     /** `color` overrides `ink.label` — see `tagline`. */
     gstin?: Zone & { color?: string }
     qr?: Zone & { size: number }
@@ -205,16 +234,16 @@ export const CARD_TEMPLATES: CardTemplate[] = [
       // Rahul's reference leaves ~3%, which reads as one composed block rather
       // than a logo and a name that happen to share a side.
       logo: { x: 10, y: 19, w: 28, size: 25, shape: 'square', style: 'typographic' },
-      divider: { x: 12, y: 48, w: 24 },
-      shopName: { x: 3, y: 54, w: 42, align: 'center' },
+      divider: { x: 12, y: 46, w: 24 },
+      shopName: { x: 3, y: 50.5, w: 42, align: 'center' },
 
-      dividerBottom: { x: 18, y: 66, w: 12 },
+      dividerBottom: { x: 18, y: 62.5, w: 12 },
       // Under the closing rule, on the cream. Positions here were MEASURED off
       // the artwork rather than guessed: this strip reads mean luminance 209
       // with sd 29, while y71 dips to a minimum of 3 where a fold edge cuts
       // across — text there would sit half on cream and half on shadow.
       // Charcoal rather than the gold accent, which is a 2:1 contrast on cream.
-      tagline: { x: 5, y: 68, w: 34, align: 'center', color: '#4A4740' },
+      tagline: { x: 5, y: 64.5, w: 34, align: 'center', color: '#4A4740' },
 
       // RIGHT panel: person first, then how to reach them.
       contact: { x: 53, y: 30, w: 44 },
@@ -249,13 +278,13 @@ export const CARD_TEMPLATES: CardTemplate[] = [
     },
     zones: {
       logo: { x: 11, y: 25, w: 26, size: 24, shape: 'square', style: 'typographic', color: '#A85A63' },
-      divider: { x: 13, y: 53, w: 22 },
-      shopName: { x: 3, y: 59, w: 42, align: 'center' },
+      divider: { x: 13, y: 51.5, w: 22 },
+      shopName: { x: 3, y: 55.5, w: 42, align: 'center' },
 
-      dividerBottom: { x: 18, y: 71, w: 12 },
+      dividerBottom: { x: 18, y: 67.5, w: 12 },
       // Measured: mean luminance 230, sd 24. y75 is calmer still but leaves the
       // line floating away from the rule it belongs to.
-      tagline: { x: 5, y: 73, w: 38, align: 'center' },
+      tagline: { x: 5, y: 69.5, w: 38, align: 'center' },
 
       // The floral branch fills the top-right, so the identity starts below it.
       contact: { x: 55, y: 38, w: 42 },
@@ -266,6 +295,229 @@ export const CARD_TEMPLATES: CardTemplate[] = [
     },
     contactIcons: { style: 'circle', color: '#FFFFFF', background: '#C98894', divider: true },
     darkText: false,
+  },
+
+  /*
+   * ── The eight Rahul sent on 2026-08-05 ────────────────────────────────
+   *
+   * These differ from the first two in one structural way: THE CONTACT ICONS
+   * ARE PART OF THE ARTWORK — a person, phone, envelope, pin and a GST sheet,
+   * printed in a column with ruled lines beside them. So `contactIcons` is left
+   * unset (the card draws none of its own) and each `contact` zone carries the
+   * artwork's own `rowPitch`, with `y` on the FIRST icon's centre line.
+   *
+   * Every number below was MEASURED off the image, not chosen: the icon centres
+   * came from a connected-components pass over the gradient map, and the text
+   * widths from scanning rightward along each row until the background stops
+   * matching. Guessing these by eye is what cost three rounds on the first card.
+   */
+  {
+    id: 'noir-marble',
+    name: 'Noir Marble',
+    category: 'general',
+    description: 'Black silk and gold beside white marble. Jewellers, consultants, premium retail.',
+    image: '/card-templates/noir-marble.jpg',
+    fallbackColor: '#F2EFE9',
+    aspect: 1.5,
+    ink: {
+      primary: '#F4ECDC',
+      secondary: '#E4D9C2',
+      // The contact rows sit on the WHITE MARBLE half, so they invert.
+      contact: '#2B2721',
+      label: '#C8A34E',
+      accent: '#C8A34E',
+    },
+    zones: {
+      logo: { x: 6, y: 12, w: 40, size: 22, shape: 'square', style: 'typographic' },
+      // The artwork's own gold ornament sits at y ~45 and does the work a drawn
+      // divider would, so this card has none of its own.
+      // y50, not 46: the ornament sits at y~45 and the name was landing ON it.
+      // y50: this card's gap is set by the ARTWORK's ornament at y~45 rather
+      // than by a drawn divider, and at 48 the name touched it.
+      shopName: { x: 5, y: 50, w: 42, align: 'center' },
+      contact: { x: 63, y: 23.5, w: 30, rowPitch: 9.12, withGstin: true },
+    },
+    darkText: true,
+  },
+  {
+    id: 'onyx-chevron',
+    name: 'Onyx Chevron',
+    category: 'general',
+    description: 'Textured black with a gold chevron. Hardware, automotive, wholesale.',
+    image: '/card-templates/onyx-chevron.jpg',
+    fallbackColor: '#141414',
+    aspect: 1.5,
+    ink: {
+      primary: '#F0E6CE',
+      secondary: '#D8CBA8',
+      contact: '#EFE4C6',
+      label: '#C9A24E',
+      accent: '#C9A24E',
+    },
+    zones: {
+      logo: { x: 5, y: 14, w: 40, size: 22, shape: 'square', style: 'typographic' },
+      divider: { x: 12, y: 41, w: 26 },
+      shopName: { x: 4, y: 45, w: 42, align: 'center' },
+      tagline: { x: 6, y: 57, w: 38, align: 'center' },
+      contact: { x: 61.5, y: 23.3, w: 34, rowPitch: 8.65, withGstin: true },
+    },
+    darkText: false,
+  },
+  {
+    id: 'midnight-minimal',
+    name: 'Midnight',
+    category: 'services',
+    description: 'All black with a silver arc. Architects, designers, luxury services.',
+    image: '/card-templates/midnight-minimal.jpg',
+    fallbackColor: '#101010',
+    aspect: 1.5,
+    ink: {
+      primary: '#EDEDED',
+      secondary: '#C9C9C9',
+      contact: '#DCDCDC',
+      label: '#9C9C9C',
+      accent: '#B4B4B4',
+    },
+    zones: {
+      logo: { x: 5, y: 14, w: 38, size: 21, shape: 'square', style: 'typographic' },
+      divider: { x: 11, y: 41, w: 26 },
+      shopName: { x: 3, y: 45, w: 42, align: 'center' },
+      tagline: { x: 5, y: 57, w: 38, align: 'center' },
+      // Rows 1 and 2 are hemmed in by the artwork's short divider dashes, so
+      // the text starts just past them.
+      contact: { x: 62.5, y: 22.1, w: 33, rowPitch: 9.3, withGstin: true },
+    },
+    darkText: false,
+  },
+  {
+    id: 'rose-marble',
+    name: 'Rose Marble',
+    category: 'gifts',
+    description: 'Blush marble with pressed florals. Boutiques, salons, florists, bakers.',
+    image: '/card-templates/rose-marble.jpg',
+    fallbackColor: '#F7E9E4',
+    aspect: 1.5,
+    ink: {
+      primary: '#8A544D',
+      secondary: '#A0706A',
+      contact: '#7E4F49',
+      label: '#B2837A',
+      accent: '#C08A78',
+    },
+    zones: {
+      logo: { x: 10, y: 14, w: 36, size: 21, shape: 'square', style: 'typographic' },
+      divider: { x: 16, y: 41, w: 24 },
+      shopName: { x: 6, y: 45, w: 42, align: 'center' },
+      tagline: { x: 8, y: 57, w: 38, align: 'center' },
+      contact: { x: 63.5, y: 23.9, w: 33, rowPitch: 8.57, withGstin: true },
+    },
+    darkText: true,
+  },
+  {
+    id: 'navy-copper',
+    name: 'Navy & Copper',
+    category: 'services',
+    description: 'Deep navy, copper edge and marble. Finance, legal, consultants.',
+    image: '/card-templates/navy-copper.jpg',
+    fallbackColor: '#F2EDE7',
+    aspect: 1.5,
+    ink: {
+      primary: '#F4F2EE',
+      secondary: '#DCD6CC',
+      // The rows sit on the marble half.
+      contact: '#1E2A42',
+      label: '#B87A4E',
+      accent: '#C0794A',
+    },
+    zones: {
+      logo: { x: 6, y: 16, w: 36, size: 21, shape: 'square', style: 'typographic' },
+      divider: { x: 12, y: 43, w: 24 },
+      shopName: { x: 4, y: 47, w: 40, align: 'center' },
+      contact: { x: 65.5, y: 29.3, w: 31.5, rowPitch: 8.21, withGstin: true },
+    },
+    darkText: true,
+  },
+  {
+    id: 'gilded-geometry',
+    name: 'Gilded Geometry',
+    category: 'hardware',
+    description: 'Folded cream, black and gold planes. Builders, engineers, traders.',
+    image: '/card-templates/gilded-geometry.jpg',
+    fallbackColor: '#EFE6D4',
+    aspect: 1.5,
+    ink: {
+      primary: '#2B2822',
+      secondary: '#4A453B',
+      contact: '#2B2822',
+      label: '#9A7A33',
+      accent: '#B08D3F',
+    },
+    zones: {
+      // The artwork's icons start low (y 43.5), so the identity block takes the
+      // calm upper left — measured at luminance 220 with sd 3, the flattest
+      // area on any of the eight.
+      logo: { x: 5, y: 8, w: 38, size: 20, shape: 'square', style: 'typographic' },
+      divider: { x: 11, y: 33, w: 26 },
+      shopName: { x: 3, y: 37, w: 42, align: 'center' },
+      tagline: { x: 5, y: 48, w: 38, align: 'center' },
+      contact: { x: 65.8, y: 43.5, w: 30, rowPitch: 7.45, withGstin: true },
+    },
+    darkText: true,
+  },
+  {
+    id: 'ink-blossom',
+    name: 'Ink Blossom',
+    category: 'food',
+    description: 'Sumi-e ink wash with cherry blossom. Tea, spices, crafts, wellness.',
+    image: '/card-templates/ink-blossom.jpg',
+    fallbackColor: '#F4F2EC',
+    aspect: 1.5,
+    ink: {
+      primary: '#1E1C19',
+      secondary: '#403C36',
+      contact: '#23201C',
+      label: '#8A5148',
+      accent: '#A33A2A',
+    },
+    zones: {
+      // Left of the artwork's vertical brush stroke, which sits at x ~36.
+      logo: { x: 3, y: 16, w: 28, size: 19, shape: 'square', style: 'typographic' },
+      shopName: { x: 2, y: 42, w: 30, align: 'center' },
+      // The narrowest of the eight: the blossom branch crowds row 1 and the
+      // enso and mountain crowd the lower rows, leaving ~27% of usable width.
+      // Starts as close to the printed icons as their edge allows and stops
+      // just short of the enso circle at x~78. Even so this is the tightest
+      // line on any of the ten — a long address will still clip here, which is
+      // the artwork's constraint rather than the layout's.
+      contact: { x: 48.5, y: 28.7, w: 29.5, rowPitch: 7.63, withGstin: true },
+    },
+    darkText: true,
+  },
+  {
+    id: 'tiranga',
+    name: 'Tiranga',
+    category: 'patriotic',
+    description: 'Tricolour brushwork with the Ashoka Chakra. Independence Day, civic, general.',
+    image: '/card-templates/tiranga.jpg',
+    fallbackColor: '#F6F1E6',
+    aspect: 1.5,
+    ink: {
+      primary: '#173A6B',
+      secondary: '#3A4A63',
+      contact: '#1B3055',
+      label: '#B8892F',
+      accent: '#D48A2A',
+    },
+    zones: {
+      // The ONLY one of the eight with its icons on the LEFT, so the identity
+      // block takes the calm cream band across the top (measured 234 / sd 8)
+      // rather than the usual opposite half.
+      logo: { x: 30, y: 3, w: 20, size: 15, shape: 'square', style: 'typographic' },
+      shopName: { x: 52, y: 6, w: 44 },
+      tagline: { x: 52, y: 17, w: 44 },
+      contact: { x: 15.5, y: 31.7, w: 29.5, rowPitch: 6.63, withGstin: true },
+    },
+    darkText: true,
   },
 ]
 

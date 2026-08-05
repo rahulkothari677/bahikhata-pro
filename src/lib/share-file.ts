@@ -26,16 +26,7 @@
  */
 
 import { Capacitor } from '@capacitor/core'
-
-/** Blob → base64 without the data: prefix, which is what Filesystem wants. */
-function toBase64(blob: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve((reader.result as string).split(',')[1])
-    reader.onerror = () => reject(new Error('Could not read the generated file.'))
-    reader.readAsDataURL(blob)
-  })
-}
+import { dataUrlToBlob, dataUrlBase64 } from '@/lib/card-canvas'
 
 /** True when the user dismissed the share sheet — not a failure. */
 export function isShareCancelled(err: unknown): boolean {
@@ -50,8 +41,8 @@ export function isShareCancelled(err: unknown): boolean {
  * `text` rides along as the message body. It is a CAPTION, never a substitute:
  * the whole point of this rewrite is that the recipient gets the picture.
  */
-export async function shareBlobFile(
-  blob: Blob,
+export async function shareCardImage(
+  dataUrl: string,
   filename: string,
   opts: { title?: string; text?: string; dialogTitle?: string } = {},
 ): Promise<'shared' | 'downloaded'> {
@@ -61,7 +52,9 @@ export async function shareBlobFile(
 
     const file = await Filesystem.writeFile({
       path: filename,
-      data: await toBase64(blob),
+      // Already base64 — the renderer produced it that way precisely so this
+      // step is a substring rather than a FileReader round trip.
+      data: dataUrlBase64(dataUrl),
       // Cache, not Documents: this is a file the user is about to send, not
       // one the app is keeping. Android clears it when space is needed, and it
       // needs no storage permission.
@@ -82,6 +75,7 @@ export async function shareBlobFile(
   // they are nicer than a download when present. `canShare` must be CHECKED
   // rather than assumed: several browsers expose `share` but reject files, and
   // calling it with an unsupported payload throws instead of degrading.
+  const blob = dataUrlToBlob(dataUrl)
   const shareFile = typeof File !== 'undefined' ? new File([blob], filename, { type: blob.type }) : null
   if (shareFile && navigator.canShare?.({ files: [shareFile] })) {
     await navigator.share({ files: [shareFile], title: opts.title, text: opts.text })
@@ -99,11 +93,11 @@ export async function shareBlobFile(
  * write to the user's Downloads folder directly, and a "saved" file the user
  * cannot find is worse than one they chose the destination for.
  */
-export async function saveBlobFile(blob: Blob, filename: string, title?: string): Promise<'shared' | 'downloaded'> {
+export async function saveCardImage(dataUrl: string, filename: string, title?: string): Promise<'shared' | 'downloaded'> {
   if (Capacitor.isNativePlatform()) {
-    return await shareBlobFile(blob, filename, { title, dialogTitle: 'Save your card' })
+    return await shareCardImage(dataUrl, filename, { title, dialogTitle: 'Save your card' })
   }
-  downloadBlob(blob, filename)
+  downloadBlob(dataUrlToBlob(dataUrl), filename)
   return 'downloaded'
 }
 

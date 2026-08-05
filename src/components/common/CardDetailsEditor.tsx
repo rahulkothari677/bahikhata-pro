@@ -91,6 +91,20 @@ interface Props {
   sessionEmail?: string | null
   /** Called after a successful save so the card re-renders with the new text. */
   onSaved?: () => void
+  /**
+   * Called on EVERY change, with the settings the card should preview.
+   *
+   * 🎨 2026-08-05. Rahul: "when i click anything it should start to visible
+   * directly on cards and not after once i save so the user can preview it
+   * instantly." Before this, choosing a typeface or typing a tagline changed
+   * nothing until Save — so the shopkeeper was picking blind and pressing Save
+   * to find out, which is the wrong way round for a design decision.
+   *
+   * The card renders these OVER the saved settings. Nothing here is stored
+   * until Save; this is a preview, not an autosave, so a shopkeeper can try
+   * six typefaces and walk away without having changed their card.
+   */
+  onPreview?: (draft: Partial<CardSettingLike>) => void
 }
 
 type Draft = Record<CardField, string>
@@ -139,7 +153,7 @@ function fontsFrom(setting: CardSettingLike): Fonts {
   }, {} as Fonts)
 }
 
-export function CardDetailsEditor({ setting, sessionEmail, onSaved }: Props) {
+export function CardDetailsEditor({ setting, sessionEmail, onSaved, onPreview }: Props) {
   const savedMode = setting.cardMode === 'manual' ? 'manual' : 'profile'
   const savedFonts = fontsFrom(setting)
 
@@ -158,7 +172,7 @@ export function CardDetailsEditor({ setting, sessionEmail, onSaved }: Props) {
   // this by name: pick the element first, then the typeface, so choosing a
   // script for the monogram does not also set the address in it.
   const [target, setTarget] = useState<CardFontTarget>('logo')
-  const [draft, setDraft] = useState<Draft>(() => draftFrom(setting))
+  const [draftValues, setDraft] = useState<Draft>(() => draftFrom(setting))
   const [saving, setSaving] = useState(false)
 
   // The settings query refetches after a save, and after a save on ANOTHER
@@ -189,18 +203,39 @@ export function CardDetailsEditor({ setting, sessionEmail, onSaved }: Props) {
 
   const profile = useMemo(() => profileCardValues(setting, sessionEmail), [setting, sessionEmail])
 
+  /**
+   * Push the in-progress state up so the card can show it immediately.
+   *
+   * Built here rather than in the parent because this component is the only
+   * one that knows the shape of an unsaved edit — and it is exactly the payload
+   * `save` sends, so what is previewed is what will be stored.
+   */
+  useEffect(() => {
+    if (!onPreview) return
+    const draft: Partial<CardSettingLike> = { cardMode: mode, cardMark: mark }
+    for (const t of CARD_FONT_TARGETS) {
+      ;(draft as Record<string, unknown>)[CARD_FONT_COLUMNS[t]] = fonts[t]
+    }
+    for (const f of CARD_FIELDS) {
+      ;(draft as Record<string, unknown>)[cardColumn(f)] = draftValues[f].trim() === '' ? null : draftValues[f].trim()
+    }
+    onPreview(draft)
+    // `onPreview` is deliberately not a dependency: a parent that passes an
+    // inline arrow would otherwise re-fire this on every one of its renders.
+  }, [mode, mark, fonts, draftValues])
+
   const dirty =
     mode !== savedMode ||
     mark !== savedMark ||
     CARD_FONT_TARGETS.some(t => fonts[t] !== savedFonts[t]) ||
-    CARD_FIELDS.some(f => (draft[f] || '') !== (setting[cardColumn(f)] || ''))
+    CARD_FIELDS.some(f => (draftValues[f] || '') !== (setting[cardColumn(f)] || ''))
 
   // The monogram previewed in the font picker must be the one the card will
   // actually draw, so it derives from the same values the card resolves —
   // not from the profile, which in manual mode may be a different shop name.
   const previewMonogram = deriveMonogram(
-    mode === 'manual' ? draft.shopName || profile.shopName : profile.shopName,
-    mode === 'manual' ? draft.ownerName || profile.ownerName : profile.ownerName,
+    mode === 'manual' ? draftValues.shopName || profile.shopName : profile.shopName,
+    mode === 'manual' ? draftValues.ownerName || profile.ownerName : profile.ownerName,
   )
 
   const save = async () => {
@@ -211,7 +246,7 @@ export function CardDetailsEditor({ setting, sessionEmail, onSaved }: Props) {
       for (const f of CARD_FIELDS) {
         // Empty string is sent as null so the server stores NULL — a blank
         // field means "use the profile", and "" would print an empty line.
-        body[cardColumn(f) as string] = draft[f].trim() === '' ? null : draft[f].trim()
+        body[cardColumn(f) as string] = draftValues[f].trim() === '' ? null : draftValues[f].trim()
       }
       const res = await offlineFetch('/api/settings', {
         method: 'PUT',
@@ -279,7 +314,7 @@ export function CardDetailsEditor({ setting, sessionEmail, onSaved }: Props) {
           // shopkeeper sees what the card will say. In manual mode it shows
           // what they typed, with the profile value offered as the placeholder
           // — a blank field falls back to it, and the placeholder says so.
-          const shown = readOnly ? profile[field] ?? '' : draft[field]
+          const shown = readOnly ? profile[field] ?? '' : draftValues[field]
           const fallback = profile[field]
           return (
             <div key={field}>
@@ -464,7 +499,7 @@ export function CardDetailsEditor({ setting, sessionEmail, onSaved }: Props) {
               )}
             >
               <span className="block leading-none font-semibold" style={{ fontSize: 20 }}>
-                {sampleFor(target, previewMonogram, draft, profile)}
+                {sampleFor(target, previewMonogram, draftValues, profile)}
               </span>
               <span className="block text-3xs text-muted-foreground mt-1.5 truncate">App default</span>
             </button>
@@ -501,7 +536,7 @@ export function CardDetailsEditor({ setting, sessionEmail, onSaved }: Props) {
                     fontSize: target === 'logo' ? `${Math.round(22 * f.sizeScale)}px` : '13px',
                   }}
                 >
-                  {sampleFor(target, previewMonogram, draft, profile)}
+                  {sampleFor(target, previewMonogram, draftValues, profile)}
                 </span>
                 <span className="block text-3xs text-muted-foreground mt-1.5 truncate">{f.name}</span>
               </button>

@@ -46,12 +46,29 @@ import {
 } from '@/lib/fit-text'
 
 /**
- * 2100px wide = 7in at 300dpi, so the card prints at 3.5in with room to crop.
- * The artwork files are 1050–1536px, so this upscales them roughly 1.5×; the
- * TEXT is drawn at full resolution either way, and text is what a reader's eye
- * catches blur in. Going higher would only enlarge the artwork's own softness.
+ * 1500px wide = 428dpi at 3.5in, comfortably above the 300dpi print standard.
+ *
+ * 🐛 2026-08-05. Rahul: "card sharing takes a lot of time to load". It was
+ * 2100px encoded as PNG — a 4 MB file, and on the native path that file is then
+ * base64-encoded (5.4 MB of string), written to disk and handed to the share
+ * sheet. 1.2 seconds on a desktop, several times that on a phone.
+ *
+ * Two changes, both free. 2100 → 1500 is half the pixels for resolution nobody
+ * can print anyway: the source artwork is 1536px, so 2100 was upscaling it and
+ * spending encode time on invented detail. And PNG → JPEG suits what this
+ * actually is — a photograph of paper. Same card, ~10× smaller file.
  */
-const EXPORT_WIDTH = 2100
+const EXPORT_WIDTH = 1500
+
+/**
+ * JPEG, not PNG. The card is full-bleed photographic artwork with no
+ * transparency, which is the case JPEG was designed for; PNG stores it
+ * losslessly and pays roughly ten times the bytes for detail the eye cannot
+ * find. 0.92 keeps the drawn text crisp — the one thing on the card that JPEG
+ * could plausibly soften.
+ */
+const EXPORT_TYPE = 'image/jpeg'
+const EXPORT_QUALITY = 0.92
 
 /**
  * lucide-react's geometry for the four contact icons, copied from the package
@@ -69,16 +86,36 @@ const ICONS: Record<string, string> = {
   mail: '<path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7"/><rect x="2" y="4" width="20" height="16" rx="2"/>',
   mappin:
     '<path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>',
+  // lucide `file-text`, for the GSTIN row.
+  gst: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
 }
 
+/**
+ * Decoded images, kept between exports.
+ *
+ * The artwork and the four contact icons are identical every time a given card
+ * is exported, but each export was re-fetching and re-DECODING them — and a
+ * 1536px JPEG decode is not free on a phone. Keyed by src, so a shopkeeper who
+ * switches designs simply gets a second entry.
+ */
+const imageCache = new Map<string, Promise<HTMLImageElement>>()
+
 function loadImage(src: string, crossOrigin?: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
+  const hit = imageCache.get(src)
+  if (hit) return hit
+
+  const p = new Promise<HTMLImageElement>((resolve, reject) => {
     const img = new Image()
     if (crossOrigin) img.crossOrigin = crossOrigin
     img.onload = () => resolve(img)
     img.onerror = () => reject(new Error(`Could not load image: ${src.slice(0, 80)}`))
     img.src = src
   })
+  // A FAILED load is not cached — a logo that was briefly unreachable must be
+  // retried on the next export rather than being permanently absent.
+  p.catch(() => imageCache.delete(src))
+  imageCache.set(src, p)
+  return p
 }
 
 /** A lucide icon as a decoded image, stroked in `color`. */
@@ -107,8 +144,10 @@ function iconImage(name: keyof typeof ICONS | string, color: string, px: number)
 async function ensureFont(family: string | null, sizePx: number, weight: number) {
   if (!family || typeof document === 'undefined' || !document.fonts) return
   try {
+    // Only THIS face. `document.fonts.ready` waits for every font the page has
+    // pending, which on the card screen includes the eleven picker swatches —
+    // so the export sat waiting for typefaces it was not going to draw.
     await document.fonts.load(`${weight} ${Math.round(sizePx)}px "${family}"`)
-    await document.fonts.ready
     // Any metrics cached while the face was still downloading were taken
     // against the fallback and would size this export wrongly.
     resetMonogramMetrics()
@@ -181,11 +220,11 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, maxPx: number, maxLin
  * with the same bounds — so the exported file is the card the shopkeeper saw.
  * Where the component says `4.4cqw`, this says `cqw(4.4)`.
  */
-export async function renderTemplateCardToBlob(
+export async function renderTemplateCardImage(
   template: CardTemplate,
   data: TemplateCardData,
   opts: { width?: number; qrSvg?: SVGElement | null } = {},
-): Promise<Blob> {
+): Promise<string> {
   const W = opts.width ?? EXPORT_WIDTH
   const H = Math.round(W / template.aspect)
 
@@ -426,14 +465,16 @@ export async function renderTemplateCardToBlob(
         { icon: 'phone', value: data.phone },
         { icon: 'mail', value: data.email },
         { icon: 'mappin', value: data.address },
+        // GSTIN joins the list only where the artwork prints a GST icon.
+        { icon: 'gst', value: z.contact.withGstin ? data.gstin : null },
       ] as const
     ).filter(r => Boolean(r.value)) as Array<{ icon: string; value: string }>
 
     if (rows.length > 0) {
       // The icon, its hairline and two gaps eat ~9cqw before any text — the
-      // component's CONTACT_CHROME_CQW. Sizing against the full zone is what
-      // let a long email render past its slot.
-      const CHROME = 9
+      // component's CONTACT_CHROME_CQW. Zero where the ARTWORK already prints
+      // its own icons, because then the text starts at the zone's edge.
+      const CHROME = template.contactIcons ? 9 : 0
       const textWidthCqw = Math.max(8, z.contact.w - CHROME)
       const textWidthPx = cqw(textWidthCqw)
 
@@ -451,10 +492,25 @@ export async function renderTemplateCardToBlob(
         fitTextCqw(longest, {
           zoneWidthPercent: textWidthCqw,
           maxCqw: 3.2,
-          minCqw: 2.1,
+          // Matches TemplateCard — see the note there on why 1.9.
+          minCqw: 1.9,
           glyphRatio: ratioFor(longest, contactFont, 0.52),
         }),
       )
+
+      // Decoded UP FRONT and in parallel. These were loaded one at a time
+      // INSIDE the row loop, so each row waited for its own icon to decode
+      // before the next even started — four sequential round trips through the
+      // SVG decoder for four tiny glyphs that never change.
+      const ic0 = template.contactIcons
+      const iconPx = Math.round(cqw(2.7) * 4)
+      const icons = ic0
+        ? await Promise.all(
+            rows.map(r =>
+              iconImage(r.icon, ic0.color, iconPx).catch(() => null),
+            ),
+          )
+        : []
 
       const iconBox = cqw(4.4)
       const iconGlyph = cqw(2.7)
@@ -467,11 +523,15 @@ export async function renderTemplateCardToBlob(
       // the icon box, since it is larger than any of the text.
       const rowH = iconBox
       const zoneL = px(z.contact.x)
+      const pitch = z.contact.rowPitch
       let y = py(z.contact.y)
 
       for (let i = 0; i < rows.length; i++) {
         const row = rows[i]
-        const cy = y + rowH / 2
+        // With a pitch, `y` is the FIRST ROW'S CENTRE and rows step down by the
+        // artwork's own spacing — see card-templates. Without one, the card
+        // owns the spacing and stacks boxes.
+        const cy = pitch ? py(z.contact.y) + i * cqw(pitch) : y + rowH / 2
         let x = zoneL
 
         if (ic) {
@@ -481,13 +541,12 @@ export async function renderTemplateCardToBlob(
             ctx.arc(x + iconBox / 2, cy, iconBox / 2, 0, Math.PI * 2)
             ctx.fill()
           }
-          try {
-            // Rasterised at 4× the drawn size so the strokes stay crisp when
-            // the PNG is zoomed or printed.
-            const img = await iconImage(row.icon, ic.color, Math.round(iconGlyph * 4))
+          // Rasterised at 4× the drawn size so the strokes stay crisp when the
+          // card is zoomed or printed. A missing icon costs the row its glyph,
+          // never its text.
+          const img = icons[i]
+          if (img) {
             ctx.drawImage(img, x + (iconBox - iconGlyph) / 2, cy - iconGlyph / 2, iconGlyph, iconGlyph)
-          } catch {
-            // A missing icon must not cost the row its text.
           }
           x += iconBox + gap
         }
@@ -553,12 +612,30 @@ export async function renderTemplateCardToBlob(
     }
   }
 
-  return await new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob(
-      b => (b ? resolve(b) : reject(new Error('The browser could not turn the card into an image.'))),
-      'image/png',
-    )
-  })
+  // A DATA URL, not a Blob.
+  //
+  // `toBlob` is asynchronous and, on the native path, its output is immediately
+  // converted BACK to base64 with a FileReader so Capacitor's Filesystem can
+  // write it. That is canvas → Blob → FileReader → base64 for a file that was
+  // always going to be base64. `toDataURL` produces the base64 directly and
+  // synchronously — 28ms for this canvas, measured — and the web path converts
+  // to a Blob in one cheap synchronous step (see dataUrlToBlob).
+  return canvas.toDataURL(EXPORT_TYPE, EXPORT_QUALITY)
+}
+
+/** Decodes a data URL into a Blob. Synchronous and cheap; no FileReader. */
+export function dataUrlToBlob(dataUrl: string): Blob {
+  const [head, b64] = dataUrl.split(',')
+  const mime = head.match(/data:([^;]+)/)?.[1] ?? 'application/octet-stream'
+  const bin = atob(b64)
+  const bytes = new Uint8Array(bin.length)
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
+  return new Blob([bytes], { type: mime })
+}
+
+/** The base64 payload of a data URL, without the `data:...;base64,` prefix. */
+export function dataUrlBase64(dataUrl: string): string {
+  return dataUrl.slice(dataUrl.indexOf(',') + 1)
 }
 
 /**
@@ -570,7 +647,7 @@ export async function renderTemplateCardToBlob(
  * the first one it meets. The import is dynamic so the ~400 KB only ever
  * reaches a device that actually exports a vector design.
  */
-export async function renderNodeToBlob(node: HTMLElement, scale = 3): Promise<Blob> {
+export async function renderNodeImage(node: HTMLElement, scale = 2): Promise<string> {
   const html2canvas = (await import('html2canvas-pro')).default
   const canvas = await html2canvas(node, {
     scale,
@@ -578,12 +655,8 @@ export async function renderNodeToBlob(node: HTMLElement, scale = 3): Promise<Bl
     backgroundColor: null,
     logging: false,
   })
-  return await new Promise<Blob>((resolve, reject) => {
-    canvas.toBlob(
-      b => (b ? resolve(b) : reject(new Error('The browser could not turn the card into an image.'))),
-      'image/png',
-    )
-  })
+
+  return canvas.toDataURL(EXPORT_TYPE, EXPORT_QUALITY)
 }
 
 /** Filename for the download and for the shared file. */
@@ -592,5 +665,5 @@ export function cardFileName(shopName?: string | null): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-|-$/g, '')
-  return `${base || 'business-card'}-card.png`
+  return `${base || 'business-card'}-card.jpg`
 }
