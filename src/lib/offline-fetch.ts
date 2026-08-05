@@ -182,7 +182,6 @@ export async function offlineFetch(
     '/api/auth/',
     '/api/scan-bill',
     '/api/voice-parse',
-    '/api/upload-bill',
     '/api/whatsapp-',
   ]
   if (REQUIRES_ONLINE.some((p) => url.includes(p))) {

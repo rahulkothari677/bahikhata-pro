@@ -17,7 +17,7 @@ export default function PrivacyPolicyPage() {
           </div>
           <h1 className="text-3xl font-bold tracking-tight">Privacy Policy</h1>
           <p className="text-sm text-muted-foreground mt-2">
-            Last updated: June 2026 · Effective immediately
+            Last updated: August 2026 · Effective immediately
           </p>
         </div>
 
@@ -52,7 +52,7 @@ export default function PrivacyPolicyPage() {
             <li>Products, inventory, and stock levels</li>
             <li>Customers and suppliers (names, phones, balances)</li>
             <li>Transactions (sales, purchases, income, expenses)</li>
-            <li>Bill images uploaded for AI scanning (stored on Cloudinary)</li>
+            <li>Documents you choose to upload (Documents section, stored on Cloudinary)</li>
           </ul>
           <p className="text-sm mt-2 text-muted-foreground">
             This data is <b>encrypted at rest</b> (Neon PostgreSQL) and <b>in transit</b> (HTTPS/TLS).
@@ -83,7 +83,7 @@ export default function PrivacyPolicyPage() {
           <p className="mb-2"><b>Your business data is used to:</b></p>
           <ul className="list-disc list-inside space-y-1 text-sm">
             <li>Display your dashboard, inventory, and reports</li>
-            <li>Process AI bill scanning (sent to Groq for OCR, result returned)</li>
+            <li>Process AI bill scanning (the photo is sent to Google Gemini, or OpenAI/Groq as backup, to read the text — the photo itself is not kept)</li>
             <li>Generate GST reports and invoices</li>
             <li>Sync across your devices (when you log in elsewhere)</li>
           </ul>
@@ -94,11 +94,23 @@ export default function PrivacyPolicyPage() {
           <ul className="list-disc list-inside space-y-1 text-sm">
             <li><b>Neon (Database):</b> Stores your business data (encrypted)</li>
             <li><b>Vercel (Hosting):</b> Hosts the app and API</li>
-            <li><b>Cloudinary (Images):</b> Stores bill images you upload</li>
-            <li><b>Groq (AI):</b> Processes bill images for OCR (images deleted after processing)</li>
+            <li><b>Cloudinary (Images):</b> Stores documents you choose to upload (Documents section). Scanned bill photos are <b>not</b> stored.</li>
+            <li><b>Google (Gemini AI):</b> Reads scanned bill photos to extract the items and amounts. This is the provider used for most scans.</li>
+            <li><b>OpenAI:</b> Used as a backup when Google is unavailable, for the same purpose.</li>
+            <li><b>Groq (AI):</b> Used as a further backup, for the same purpose.</li>
             <li><b>PostHog (Analytics):</b> Anonymous usage data only (with consent)</li>
             <li><b>Razorpay (Future):</b> Payment processing for subscriptions</li>
           </ul>
+          <p className="text-sm mt-3">
+            <b>About bill scanning:</b> when you scan a bill, the photo is sent to one of the AI
+            providers above to read the text, and the extracted items are returned to your device.
+            The photo is <b>not saved</b> by us — we keep only the numbers you confirm. A supplier
+            bill can carry another business&apos;s name and GSTIN, which is why we do not retain it.
+          </p>
+          <p className="text-sm mt-3">
+            Some of these providers process data <b>outside India</b>. The DPDP Act permits this
+            except to countries the Government restricts.
+          </p>
           <p className="text-sm mt-3 text-muted-foreground">
             We may share data with law enforcement <b>only if legally compelled</b> by a valid court order.
           </p>
@@ -117,6 +129,37 @@ export default function PrivacyPolicyPage() {
           <p className="text-sm mt-3">
             To exercise any right, email: <a href="mailto:privacy@ekbook.app" className="text-primary underline">privacy@ekbook.app</a>
           </p>
+
+          {/*
+            🔒 2026-08-04 (audit): DPDP requires a named grievance mechanism with
+            published contact details. The policy previously gave only a generic
+            address, which is not a grievance officer.
+          */}
+          <div className="mt-4 p-4 rounded-xl bg-muted/50 border border-border">
+            <p className="text-sm font-semibold mb-1">Grievance Officer</p>
+            <p className="text-sm text-muted-foreground">
+              If you are unhappy with how we have handled your data or a request about it,
+              you can escalate to our Grievance Officer, who will respond within 30 days as
+              required by the DPDP Act:
+            </p>
+            {/*
+              The address below is the one already published elsewhere on this
+              page, deliberately: a grievance channel that bounces is worse than
+              none. Confirm this inbox is monitored, and replace the name if the
+              role sits with someone else.
+            */}
+            <ul className="list-none space-y-0.5 text-sm mt-2">
+              <li><b>Designation:</b> Grievance Officer, EkBook</li>
+              <li>
+                <b>Email:</b>{' '}
+                <a href="mailto:privacy@ekbook.app" className="text-primary underline">privacy@ekbook.app</a>
+              </li>
+            </ul>
+            <p className="text-xs text-muted-foreground mt-2">
+              If we do not resolve your complaint, you may raise it with the Data Protection
+              Board of India.
+            </p>
+          </div>
         </Section>
 
         <Section icon={Trash2} title="6. Data Retention" color="text-slate-600 bg-slate-100">
@@ -124,7 +167,8 @@ export default function PrivacyPolicyPage() {
             <li><b>Active accounts:</b> Data kept until you delete it</li>
             <li><b>Deleted accounts:</b> All data permanently erased within 30 days</li>
             <li><b>Inactive accounts (no login for 24 months):</b> Data archived, then deleted</li>
-            <li><b>Bill images:</b> Kept until transaction is deleted</li>
+            <li><b>Scanned bill photos:</b> Never stored. Sent to the AI provider to be read, then discarded — we keep only the extracted numbers.</li>
+            <li><b>Documents you upload:</b> Kept until you delete them, and removed from storage when you do.</li>
             <li><b>Analytics data:</b> Aggregated after 13 months, raw data deleted</li>
             <li><b>Audit logs:</b> Kept for 7 years (tax compliance requirement)</li>
           </ul>

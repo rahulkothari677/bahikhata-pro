@@ -129,22 +129,59 @@ describe('cost reporting matches what Google charges', () => {
   })
 })
 
-describe('the upload is off the critical path', () => {
+describe('the scanned bill is never stored', () => {
+  /*
+   * 🔒 REPLACED 2026-08-04 (audit). These tests used to assert that the
+   * Cloudinary upload ran in PARALLEL with the scan rather than before it — a
+   * latency fix, and a correct one at the time.
+   *
+   * The upload itself turned out to be indefensible. Nothing read it: no column
+   * held the url or publicId, no screen displayed one, and the response was
+   * checked only to log a warning. So every scan wrote a permanent copy of
+   * someone's bill — carrying a third party's name, GSTIN, phone and amounts —
+   * that no feature used, no row referenced, deleting the transaction did not
+   * remove, and deleting the ACCOUNT did not remove either (that cleanup was a
+   * documented no-op, because there was no publicId to delete by).
+   *
+   * Meanwhile the privacy policy told users the images were "deleted after
+   * processing".
+   *
+   * The upload is gone. The latency guarantee these tests protected is now
+   * structural — one request instead of two — so what is worth guarding is that
+   * the upload does not come back without the deletion path being built first.
+   */
   const scanner = readStripped('components/scanner/BillScanner.tsx')
 
-  test('upload and scan are issued together, not one after the other', () => {
-    // They ran in sequence: 2.7s upload THEN 8.1s scan, and the shopkeeper
-    // waited for the sum while holding a phone over a bill.
-    expect(scanner).toMatch(/Promise\.all\(\[uploadPromise, scanPromise\]\)/)
+  test('the scanner does not upload the bill anywhere', () => {
+    expect(scanner).not.toMatch(/upload-bill/)
+    expect(scanner).not.toMatch(/uploadPromise/)
+    expect(scanner).not.toMatch(/cloudinary/i)
   })
 
-  test('a failed upload no longer aborts the scan', () => {
-    // Storing the photo is a nicety; capturing the bill is the point.
-    expect(scanner).toMatch(/scan continued without a stored copy/)
+  test('the upload endpoint no longer exists', () => {
+    // A route with no caller that still accepts and permanently stores a photo
+    // of a customer's bill is a liability on its own.
+    expect(fs.existsSync(path.join(process.cwd(), 'src/app/api/upload-bill/route.ts'))).toBe(false)
   })
 
-  test('the scan is given base64 directly rather than awaiting a URL', () => {
+  test('the scan still sends base64 directly, so nothing was broken by the removal', () => {
     expect(scanner).toMatch(/body: JSON\.stringify\(\{ imageBase64: base64, billType, scanLang \}\)/)
+  })
+
+  test('account deletion no longer claims to remove images it cannot find', () => {
+    // The docblock promised "All bill images from Cloudinary" over an empty
+    // try/catch. A promise the code cannot keep is the defect, not the gap.
+    const del = readStripped('app/api/account/delete/route.ts')
+    expect(del).not.toMatch(/All bill images from Cloudinary/)
+    expect(del).not.toMatch(/Cloudinary cleanup would go here/)
+  })
+
+  test('Documents still delete their images — the pattern to copy', () => {
+    // The correct shape already exists: store cloudinaryPublicId, delete by it.
+    // Any future image feature should look like this BEFORE its first upload.
+    const documents = readStripped('app/api/documents/route.ts')
+    expect(documents).toMatch(/cloudinaryPublicId: uploadResult\.publicId/)
+    expect(documents).toMatch(/deleteDocument\(document\.cloudinaryPublicId/)
   })
 })
 

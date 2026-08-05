@@ -16,8 +16,12 @@ import { apiError } from '@/lib/api-error'
  * - All payments
  * - All settings
  * - All audit logs (except this deletion request, kept for 7 years per tax law)
- * - All bill images from Cloudinary
  * - The user account itself
+ *
+ * 🔒 2026-08-04: "All bill images from Cloudinary" used to be listed here and
+ * was never true — the cleanup was an empty try/catch. Scanned bills are no
+ * longer uploaded at all, so there is nothing left to orphan. User-uploaded
+ * Documents are deleted by the Documents feature, which tracks its publicIds.
  *
  * This is IRREVERSIBLE. Used to comply with DPDP Act "Right to Deletion".
  *
@@ -56,16 +60,22 @@ export async function DELETE() {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
-    // 2. Delete bill images from Cloudinary (best-effort, currently a no-op)
-    // TODO: Track publicIds in the DB for precise deletion. Until then, images
-    // will be orphaned on account deletion — acceptable for a pre-launch app.
-    try {
-      // Cloudinary cleanup would go here once publicId tracking is implemented
-    } catch (e) {
-      console.error('[account/delete] Cloudinary cleanup failed:', e)
-    }
+    /*
+     * 🔒 2026-08-04 (audit): the Cloudinary cleanup that stood here was an empty
+     * try/catch — a documented no-op — while the docblock above promised "All
+     * bill images from Cloudinary". It could not have worked: nothing recorded
+     * a publicId, so there was nothing to delete by.
+     *
+     * The cause is gone rather than patched. BillScanner no longer uploads a
+     * copy of each scanned bill (see the note there), so a deleted account
+     * leaves no orphaned images behind because none are created.
+     *
+     * Documents ARE still deleted where the user removes them, because that
+     * feature stores cloudinaryPublicId and deletes by it — the pattern any
+     * future image feature should copy BEFORE its first upload.
+     */
 
-    // 3. Delete all user data ATOMICALLY (Audit fix H5)
+    // 2. Delete all user data ATOMICALLY (Audit fix H5)
     // Was: 8 sequential deletes with no $transaction — failure midway = half-deleted account.
     // Now: wrapped in $transaction — all succeed or all roll back.
     //

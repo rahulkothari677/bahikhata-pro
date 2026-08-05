@@ -358,37 +358,48 @@ export function BillScanner() {
         // the SUM while holding a phone over a bill. An integration merge
         // silently reverted this to sequential; it is put back here.
         //
-        // The scan never needs the upload: it accepts base64 directly, and the
-        // Cloudinary URL only serves to KEEP the bill image against the saved
-        // transaction — which matters after the scan, not before. `uploadData`
-        // is not read anywhere downstream, so nothing is lost by not awaiting
-        // it on the critical path. A failed upload no longer aborts the scan.
-        //
-        // Feeding base64 (not the URL) also routes the image through the
-        // server's grayscale + deskew preprocessing, which the URL path skips.
+        /*
+         * 🔒 2026-08-04 (audit): the Cloudinary upload that used to run here has
+         * been REMOVED. It stored a permanent copy of every scanned bill and
+         * nothing ever used it.
+         *
+         * The previous comment said the URL "only serves to KEEP the bill image
+         * against the saved transaction — which matters after the scan". That
+         * linkage was never built. The response was awaited, checked for
+         * `success` to log a warning, and discarded: no database column held the
+         * url or the publicId, and no screen ever displayed one.
+         *
+         * So every scan wrote an image to Cloudinary that
+         *   - no feature read,
+         *   - no database row referenced, so it could never be found again,
+         *   - deleting the transaction did not remove,
+         *   - deleting the ACCOUNT did not remove (that cleanup is a documented
+         *     no-op in api/account/delete for exactly this reason: there was no
+         *     publicId to delete by),
+         * and which contains a third party's name, GSTIN, phone and amounts —
+         * people who never signed up for EkBook.
+         *
+         * The privacy policy told users these images were "deleted after
+         * processing". They were not, and could not be.
+         *
+         * Not collecting it is the whole fix. There is nothing to delete, no
+         * retention question, and no gap between the policy and the code. The
+         * scan is unaffected: it takes base64 directly, which also routes the
+         * image through the server's grayscale + deskew preprocessing that the
+         * URL path skipped.
+         *
+         * If "view the original bill" is wanted later, build it deliberately:
+         * persist cloudinaryPublicId on the row (Document already does exactly
+         * this, and deletes by it), and wire deletion into both the transaction
+         * and account delete paths BEFORE the first upload happens.
+         */
         track(EVENTS.AI_SCAN_ATTEMPT, { billType, scanLang, hasImageUrl: false })
 
-        const uploadPromise = offlineFetch('/api/upload-bill', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ imageBase64: base64 }),
-        })
-          .then(async (r) => (r.ok ? await r.json().catch(() => null) : null))
-          .catch(() => null)
-
-        const scanPromise = offlineFetch('/api/scan-bill', {
+        const scanRes = await offlineFetch('/api/scan-bill', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ imageBase64: base64, billType, scanLang }),
         })
-
-        const [uploadData, scanRes] = await Promise.all([uploadPromise, scanPromise])
-
-        if (!uploadData?.success) {
-          // Non-fatal: the scan is what the user is waiting for. The bill image
-          // simply is not kept against the transaction this time.
-          console.warn('[BillScanner] Bill image upload failed; scan continued without a stored copy')
-        }
 
         // Handle 402 quota exceeded — show upgrade prompt instead of generic error
         if (scanRes.status === 402) {
