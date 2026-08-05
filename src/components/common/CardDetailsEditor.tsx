@@ -29,11 +29,12 @@
  */
 
 import { useEffect, useMemo, useState } from 'react'
-import { Check, Loader2, RotateCcw, Type } from 'lucide-react'
+import { Check, Image as ImageIcon, Loader2, RotateCcw, Type } from 'lucide-react'
 import { toast as sonnerToast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { ShopLogoUploader } from '@/components/settings/ShopLogoUploader'
 import { cn } from '@/lib/utils'
 import { offlineFetch } from '@/lib/offline-fetch'
 import {
@@ -119,6 +120,10 @@ function draftFrom(setting: CardSettingLike): Draft {
   }, {} as Draft)
 }
 
+/** Which mark the card prints. See Setting.cardMark. */
+const MARKS = ['auto', 'logo', 'monogram'] as const
+type Mark = (typeof MARKS)[number]
+
 type Fonts = Record<CardFontTarget, string | null>
 
 /**
@@ -138,8 +143,17 @@ export function CardDetailsEditor({ setting, sessionEmail, onSaved }: Props) {
   const savedMode = setting.cardMode === 'manual' ? 'manual' : 'profile'
   const savedFonts = fontsFrom(setting)
 
+  const savedMark = MARKS.includes(setting.cardMark as Mark) ? (setting.cardMark as Mark) : 'auto'
+  const logoUrl = setting.logoUrl ?? null
+
   const [mode, setMode] = useState<'profile' | 'manual'>(savedMode)
+  const [mark, setMark] = useState<Mark>(savedMark)
   const [fonts, setFonts] = useState<Fonts>(savedFonts)
+
+  // What the card will ACTUALLY draw, which is the only thing worth showing as
+  // selected. 'auto' is a rule, not a state a shopkeeper should have to reason
+  // about — it resolves to the logo when one exists and the letters when not.
+  const showsLogo = mark !== 'monogram' && Boolean(logoUrl)
   // Which part of the card the font grid below is changing. Rahul asked for
   // this by name: pick the element first, then the typeface, so choosing a
   // script for the monogram does not also set the address in it.
@@ -155,9 +169,11 @@ export function CardDetailsEditor({ setting, sessionEmail, onSaved }: Props) {
   useEffect(() => {
     setDraft(draftFrom(setting))
     setMode(savedMode)
+    setMark(savedMark)
     setFonts(fontsFrom(setting))
   }, [
     savedMode,
+    savedMark,
     setting.cardFontId,
     setting.cardShopFontId,
     setting.cardTaglineFontId,
@@ -175,6 +191,7 @@ export function CardDetailsEditor({ setting, sessionEmail, onSaved }: Props) {
 
   const dirty =
     mode !== savedMode ||
+    mark !== savedMark ||
     CARD_FONT_TARGETS.some(t => fonts[t] !== savedFonts[t]) ||
     CARD_FIELDS.some(f => (draft[f] || '') !== (setting[cardColumn(f)] || ''))
 
@@ -189,7 +206,7 @@ export function CardDetailsEditor({ setting, sessionEmail, onSaved }: Props) {
   const save = async () => {
     setSaving(true)
     try {
-      const body: Record<string, string | null> = { cardMode: mode }
+      const body: Record<string, string | null> = { cardMode: mode, cardMark: mark }
       for (const t of CARD_FONT_TARGETS) body[CARD_FONT_COLUMNS[t]] = fonts[t]
       for (const f of CARD_FIELDS) {
         // Empty string is sent as null so the server stores NULL — a blank
@@ -301,6 +318,91 @@ export function CardDetailsEditor({ setting, sessionEmail, onSaved }: Props) {
           put something different on the card.
         </p>
       )}
+
+      {/* ═══ the mark: logo or letters ═══
+          One slot, either/or. The artwork leaves room for a single mark with
+          the shop name directly beneath it; two would compete for the same eye. */}
+      <div className="pt-1">
+        <div className="flex items-center gap-1.5 mb-1">
+          <ImageIcon className="w-3.5 h-3.5 text-muted-foreground" />
+          <p className="text-2xs font-medium">Your mark</p>
+        </div>
+        <p className="text-3xs text-muted-foreground mb-2">
+          The badge at the top of the card — your logo, or your initials.
+        </p>
+
+        <div className="grid grid-cols-2 gap-1.5 mb-3">
+          <button
+            type="button"
+            onClick={() => setMark('logo')}
+            aria-pressed={showsLogo}
+            disabled={!logoUrl}
+            className={cn(
+              'rounded-lg border px-2.5 py-2 flex items-center gap-2 transition text-left',
+              showsLogo
+                ? 'border-primary bg-primary/5 ring-1 ring-primary/25'
+                : 'border-border/70 hover:border-border',
+              !logoUrl && 'opacity-50 cursor-not-allowed',
+            )}
+          >
+            {logoUrl ? (
+              <img src={logoUrl} alt="" className="w-7 h-7 object-contain flex-none" />
+            ) : (
+              <ImageIcon className="w-7 h-7 p-1.5 text-muted-foreground flex-none" />
+            )}
+            <span className="min-w-0">
+              <span className="block text-2xs font-medium">Shop logo</span>
+              <span className="block text-3xs text-muted-foreground truncate">
+                {logoUrl ? 'Your uploaded logo' : 'Upload one below'}
+              </span>
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setMark('monogram')}
+            aria-pressed={!showsLogo}
+            className={cn(
+              'rounded-lg border px-2.5 py-2 flex items-center gap-2 transition text-left',
+              !showsLogo
+                ? 'border-primary bg-primary/5 ring-1 ring-primary/25'
+                : 'border-border/70 hover:border-border',
+            )}
+          >
+            {/* text-base, not an arbitrary size — this sample sits beside a
+                28px logo thumbnail and has to hold the same weight, and the
+                type scale is enforced by a guardrail test. */}
+            <span className="w-7 flex-none text-center font-semibold leading-none text-base">
+              {previewMonogram}
+            </span>
+            <span className="min-w-0">
+              <span className="block text-2xs font-medium">Letters</span>
+              <span className="block text-3xs text-muted-foreground truncate">From your shop name</span>
+            </span>
+          </button>
+        </div>
+
+        {/* The uploader lives HERE, on the card screen, because this is where a
+            shopkeeper is looking at their mark and deciding they want a better
+            one. It was reachable only from Settings → Profile before, part-way
+            down a long form. */}
+        <ShopLogoUploader
+          logoUrl={logoUrl}
+          onLogoChange={url => {
+            // The endpoint has already persisted it, so refetch rather than
+            // keep a second copy of the truth in this form.
+            onSaved?.()
+            // A first upload shows on the card immediately — nobody uploads a
+            // logo and then wants their initials.
+            if (url && mark === 'monogram') setMark('logo')
+          }}
+        />
+        <p className="text-3xs text-muted-foreground mt-1.5">
+          Your logo is also used on your invoice PDFs. Choosing{' '}
+          <span className="font-medium">Letters</span> changes only this card — the logo stays on your
+          invoices.
+        </p>
+      </div>
 
       {/* ═══ font picker ═══
           Placed with the details rather than the design gallery on purpose:
@@ -421,6 +523,7 @@ export function CardDetailsEditor({ setting, sessionEmail, onSaved }: Props) {
             onClick={() => {
               setDraft(draftFrom(setting))
               setMode(savedMode)
+              setMark(savedMark)
               setFonts(fontsFrom(setting))
             }}
           >

@@ -32,6 +32,7 @@ export interface CardSettingLike {
   gstin?: string | null
   logoUrl?: string | null
   cardMode?: string | null
+  cardMark?: string | null
   cardFontId?: string | null
   cardShopFontId?: string | null
   cardTaglineFontId?: string | null
@@ -130,7 +131,7 @@ export function resolveCardData(
     email: v.email,
     address: v.address,
     gstin: v.gstin,
-    logoUrl: setting.logoUrl ?? null,
+    logoUrl: resolveCardLogo(setting),
     // One face per element. null means "keep the app's default for this part",
     // which is why these are not funnelled through a getter that substitutes a
     // default — for everything but the logo, unset is a real answer.
@@ -139,6 +140,28 @@ export function resolveCardData(
     taglineFontId: setting.cardTaglineFontId ?? null,
     contactFontId: setting.cardContactFontId ?? null,
   }
+}
+
+/**
+ * The logo to PRINT ON THE CARD — which is not the same question as "does this
+ * shop have a logo".
+ *
+ * `Setting.logoUrl` is shared with the invoice PDF. A shopkeeper who prefers
+ * their initials on a visiting card must not have to delete the file to get
+ * them, so the card's choice is its own setting and returns null here while
+ * leaving the upload untouched.
+ */
+export function resolveCardLogo(setting: CardSettingLike): string | null {
+  const logo = value(setting.logoUrl)
+  if (setting.cardMark === 'monogram') return null
+  // 'logo' with nothing uploaded still falls back to the initials — the card is
+  // never allowed to render an empty mark.
+  return logo
+}
+
+/** True when the card will draw the derived initials rather than a logo. */
+export function cardShowsMonogram(setting: CardSettingLike): boolean {
+  return resolveCardLogo(setting) === null
 }
 
 /** The four font columns, keyed by the target the editor shows. */

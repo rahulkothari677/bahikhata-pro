@@ -168,6 +168,15 @@ export async function PUT(req: NextRequest) {
       }
       sanitized.cardMode = body.cardMode
     }
+    if (body.cardMark !== undefined) {
+      if (!['auto', 'logo', 'monogram'].includes(body.cardMark)) {
+        return NextResponse.json(
+          { error: 'cardMark must be "auto", "logo" or "monogram"' },
+          { status: 400 },
+        )
+      }
+      sanitized.cardMark = body.cardMark
+    }
     // Length caps mirror the profile's so a card field can never be the reason a
     // row grows unbounded; `cardAddress` is shorter than the profile address
     // because it is printed in one slot on a 3.5-inch card.

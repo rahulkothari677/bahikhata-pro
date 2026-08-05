@@ -12,6 +12,8 @@
 import {
   resolveCardValues,
   resolveCardData,
+  resolveCardLogo,
+  cardShowsMonogram,
   profileCardValues,
   cardColumn,
   CARD_FIELDS,
@@ -124,6 +126,56 @@ describe('column naming', () => {
       'cardAddress',
       'cardGstin',
     ])
+  })
+})
+
+describe('the mark on the card: logo or initials', () => {
+  const LOGO = 'https://res.cloudinary.com/x/shop-logo.png'
+
+  it('prints the logo when there is one and nothing was chosen', () => {
+    // Uploading a logo is enough. A shopkeeper should not have to find a second
+    // setting to make the thing they just uploaded appear.
+    expect(resolveCardLogo({ logoUrl: LOGO })).toBe(LOGO)
+    expect(cardShowsMonogram({ logoUrl: LOGO })).toBe(false)
+  })
+
+  it('prints the initials when no logo has been uploaded', () => {
+    expect(resolveCardLogo({ logoUrl: null })).toBeNull()
+    expect(cardShowsMonogram({})).toBe(true)
+  })
+
+  it('prints the initials when the shopkeeper asked for them', () => {
+    expect(resolveCardLogo({ logoUrl: LOGO, cardMark: 'monogram' })).toBeNull()
+    expect(cardShowsMonogram({ logoUrl: LOGO, cardMark: 'monogram' })).toBe(true)
+  })
+
+  it('KEEPS THE UPLOADED LOGO when the card is set to initials', () => {
+    // The whole reason this is a card-only setting. Setting.logoUrl is shared
+    // with the invoice PDF, where the logo prints in the brand band. If
+    // choosing "Letters" on a visiting card silently stripped the logo from
+    // every invoice the shop issues, that would be the app destroying the
+    // user's data to satisfy a cosmetic preference.
+    const setting = { logoUrl: LOGO, cardMark: 'monogram' }
+    expect(resolveCardLogo(setting)).toBeNull()
+    expect(setting.logoUrl).toBe(LOGO)
+  })
+
+  it('falls back to the initials when "logo" is chosen but none exists', () => {
+    // Possible if the logo is removed while the preference stays behind. The
+    // card must never render an empty mark.
+    expect(resolveCardLogo({ logoUrl: null, cardMark: 'logo' })).toBeNull()
+    expect(cardShowsMonogram({ logoUrl: null, cardMark: 'logo' })).toBe(true)
+  })
+
+  it('ignores a mark value it does not recognise', () => {
+    // An older client, or a hand-edited row. Anything unknown behaves as
+    // 'auto' rather than blanking the mark.
+    expect(resolveCardLogo({ logoUrl: LOGO, cardMark: 'something-else' })).toBe(LOGO)
+  })
+
+  it('carries the decision into the data the renderers receive', () => {
+    expect(resolveCardData({ logoUrl: LOGO }).logoUrl).toBe(LOGO)
+    expect(resolveCardData({ logoUrl: LOGO, cardMark: 'monogram' }).logoUrl).toBeNull()
   })
 })
 

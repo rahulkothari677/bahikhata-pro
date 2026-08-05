@@ -41,6 +41,23 @@ const SAMPLE = {
 
 const VCARD = 'BEGIN:VCARD\nVERSION:3.0\nFN:Rahul Kothari\nEND:VCARD'
 
+/**
+ * A stand-in shop logo, inline so the gallery needs no Cloudinary account and
+ * no network. Deliberately NOT square — a real shop logo rarely is, and a
+ * non-square mark is exactly what naive fitting gets wrong.
+ */
+const SAMPLE_LOGO =
+  'data:image/svg+xml;charset=utf-8,' +
+  encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 180">
+       <circle cx="70" cy="90" r="52" fill="#1F6F5C"/>
+       <path d="M46 90 l18 18 l34 -40" stroke="#fff" stroke-width="12" fill="none"
+             stroke-linecap="round" stroke-linejoin="round"/>
+       <text x="140" y="82" font-family="Georgia, serif" font-size="42" fill="#1F6F5C">SHREE</text>
+       <text x="140" y="128" font-family="Georgia, serif" font-size="30" fill="#8A6A34">TRADERS</text>
+     </svg>`,
+  )
+
 export default function CardGalleryPage() {
   const [shop, setShop] = useState(SAMPLE.shopName)
   const [owner, setOwner] = useState(SAMPLE.ownerName)
@@ -48,6 +65,8 @@ export default function CardGalleryPage() {
   // size every one of these looks fine. Per ELEMENT, because that is how the
   // shopkeeper sets them.
   const [target, setTarget] = useState<CardFontTarget>('logo')
+  // The mark is either/or, so the gallery has to be able to show BOTH states.
+  const [useLogo, setUseLogo] = useState(false)
   const [fonts, setFonts] = useState<Record<CardFontTarget, string | null>>({
     logo: DEFAULT_MONOGRAM_FONT_ID,
     shopName: null,
@@ -62,6 +81,7 @@ export default function CardGalleryPage() {
     shopFontId: fonts.shopName,
     taglineFontId: fonts.tagline,
     contactFontId: fonts.contact,
+    logoUrl: useLogo ? SAMPLE_LOGO : null,
   }
 
   return (
@@ -87,6 +107,11 @@ export default function CardGalleryPage() {
               <span className="text-2xs text-muted-foreground">Monogram → </span>
               <span className="font-semibold">{deriveMonogram(shop, owner)}</span>
             </div>
+            <label className="text-sm self-end pb-1 flex items-center gap-1.5">
+              <input type="checkbox" data-testid="dev-logo" checked={useLogo}
+                onChange={e => setUseLogo(e.target.checked)} />
+              <span className="text-2xs text-muted-foreground">Shop logo</span>
+            </label>
             <label className="text-sm">
               <span className="block text-2xs text-muted-foreground mb-1">Font applies to</span>
               <select
@@ -143,6 +168,8 @@ export default function CardGalleryPage() {
                 cardTaglineFontId: fonts.tagline,
                 cardContactFontId: fonts.contact,
                 cardMode: 'manual',
+                logoUrl: useLogo ? SAMPLE_LOGO : null,
+                cardMark: useLogo ? 'logo' : 'monogram',
                 // Card-only fields, so the tagline and GSTIN zones added on
                 // 2026-08-04 actually have something to render.
                 cardTagline: data.tagline,

@@ -71,6 +71,7 @@ export function BusinessCardDisplay({ setting, email, onDesignChange, onLogoClic
   const [showPicker, setShowPicker] = useState(false)
   const [busy, setBusy] = useState(false)
   const cardRef = useRef<HTMLDivElement>(null)
+  const editorRef = useRef<HTMLDivElement>(null)
 
   // ONE resolution, used by the hero card, every picker thumbnail and the PNG
   // export — a preview can never disagree with the card it is previewing, and
@@ -161,6 +162,17 @@ export function BusinessCardDisplay({ setting, email, onDesignChange, onLogoClic
     } finally {
       setBusy(false)
     }
+  }
+
+  /**
+   * Tapping the mark on the card scrolls to where it is changed.
+   *
+   * Before this the mark was inert on the card and the uploader lived in
+   * Settings → Profile — so the one place a shopkeeper is actually looking at
+   * their logo was the one place they could not do anything about it.
+   */
+  const scrollToMark = () => {
+    editorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
   }
 
   const handleDesignSelect = async (designId: string) => {
@@ -270,13 +282,13 @@ export function BusinessCardDisplay({ setting, email, onDesignChange, onLogoClic
       {/* ═══ The card ═══ */}
       <div className="shadow-card rounded-2xl overflow-hidden" ref={cardRef}>
         {template ? (
-          <TemplateCard template={template} data={templateData} qrValue={vcard} onLogoClick={onLogoClick} />
+          <TemplateCard template={template} data={templateData} qrValue={vcard} onLogoClick={onLogoClick ?? scrollToMark} />
         ) : (
           <BusinessCardSurface
             design={design}
             data={cardData}
             qrValue={vcard}
-            onLogoClick={onLogoClick}
+            onLogoClick={onLogoClick ?? scrollToMark}
           />
         )}
       </div>
@@ -305,6 +317,7 @@ export function BusinessCardDisplay({ setting, email, onDesignChange, onLogoClic
       </div>
 
       {/* ═══ Details editor ═══ */}
+      <div ref={editorRef}>
       <CardDetailsEditor
         setting={setting}
         sessionEmail={email}
@@ -313,6 +326,7 @@ export function BusinessCardDisplay({ setting, email, onDesignChange, onLogoClic
         // server's copy, so what he sees is what is actually stored.
         onSaved={() => queryClient.invalidateQueries({ queryKey: ['setting'] })}
       />
+      </div>
 
       {/* ═══ Tip ═══ */}
       <div className="rounded-lg bg-muted/50 border border-border/60 p-3 text-xs text-muted-foreground">

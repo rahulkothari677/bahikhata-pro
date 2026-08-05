@@ -523,6 +523,22 @@ model Setting {
   // not destroy what the shopkeeper typed. Nothing here is ever cleared on
   // mode change — only the shopkeeper editing a field changes a field.
   cardMode         String  @default("profile")
+
+  // Which mark the card prints: 'auto' | 'logo' | 'monogram'.
+  //
+  // The artwork has ONE slot for a mark, so this is either/or — the uploaded
+  // logo or the derived initials, never both.
+  //
+  // ⚠️ IT MUST NOT BE `logoUrl` THAT DECIDES. `Setting.logoUrl` is shared with
+  // the invoice PDF, where the logo prints in the brand band. A shopkeeper who
+  // wants letters on their visiting card but their logo on their invoices would
+  // otherwise have to delete the logo, which silently strips it from every
+  // invoice they issue. This is a card-only preference; the file stays put.
+  //
+  // 'auto' (default) — logo when one is uploaded, initials when not. That is
+  // what a shop expects without touching anything, and it means uploading a
+  // logo is enough to see it on the card.
+  cardMark         String  @default("auto")
   // Typeface per element of the card — see src/lib/monogram-fonts.ts.
   // null = that element keeps the app's default face.
   //

@@ -339,15 +339,43 @@ export function TemplateCard({ template: t, data, qrValue, onLogoClick, classNam
       {z.logo && (
         <div style={zoneStyle(z.logo)}>
           {data.logoUrl ? (
-                <img
-              src={data.logoUrl}
-              alt={`${data.shopName || 'Shop'} logo`}
-              className={cn(
-                'w-full object-contain bg-white/95 shadow-sm',
-                z.logo.shape === 'circle' ? 'rounded-full' : z.logo.shape === 'rounded' ? 'rounded-lg' : '',
-              )}
-              style={{ aspectRatio: '1' }}
-            />
+            /* An uploaded logo takes the MONOGRAM'S box, not the whole zone.
+               The zone is 28% of the card wide, and a square that wide is 42%
+               of the card TALL — it would have run straight down through the
+               ornamental rule and into the shop name. The monogram's box is the
+               space the artwork actually leaves for a mark, so the logo gets
+               exactly that, centred in the zone the same way the letters are.
+
+               No white plate behind it. The logo slot sits on the calm, light
+               part of the artwork by design, and a white square there reads as
+               a sticker on the paper. */
+            <button
+              type="button"
+              onClick={onLogoClick}
+              disabled={!onLogoClick}
+              aria-label={onLogoClick ? 'Change your shop logo' : undefined}
+              className={cn('w-full block', onLogoClick && 'transition hover:opacity-80 cursor-pointer')}
+              // As WIDE as the zone, but no taller than the monogram's box.
+              //
+              // Not a square. A square the width of the zone would be 42% of
+              // the card tall and would run through the ornamental rule into
+              // the shop name; a square the HEIGHT of the monogram box wastes
+              // the zone's width, and most shop logos are wider than they are
+              // tall — a wordmark boxed into a square renders at half the
+              // weight of the initials it replaced. This rectangle lets a wide
+              // logo use the full width and caps a tall one at the height the
+              // artwork actually leaves free.
+              style={{ height: `${monoBoxCqw}cqw` }}
+            >
+              <img
+                src={data.logoUrl}
+                alt={`${data.shopName || 'Shop'} logo`}
+                className={cn(
+                  'w-full h-full object-contain',
+                  z.logo.shape === 'circle' ? 'rounded-full' : z.logo.shape === 'rounded' ? 'rounded-lg' : '',
+                )}
+              />
+            </button>
           ) : z.logo.style === 'typographic' ? (
             /* Bare letterforms on the artwork — no badge, no fill.
                This is what makes the reference cards look printed rather than

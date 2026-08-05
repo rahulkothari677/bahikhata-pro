@@ -268,21 +268,25 @@ export async function renderTemplateCardToBlob(
     if (data.logoUrl) {
       try {
         const logo = await loadImage(data.logoUrl, 'anonymous')
-        // The component draws an uploaded logo square (aspectRatio: 1) with
-        // object-contain on a near-white plate.
-        const box = zoneW
-        const s = Math.min(box / logo.width, box / logo.height)
-        ctx.fillStyle = 'rgba(255,255,255,0.95)'
-        ctx.fillRect(zoneL, zoneT, box, box)
+        // As wide as the zone, capped at the monogram's box height — matching
+        // the component. See TemplateCard for why it is a rectangle and not a
+        // square: a square the zone's width would run through the ornamental
+        // rule, and a square the box's height wastes the width that most shop
+        // logos, being wordmarks, actually need.
+        const boxW = zoneW
+        const boxH = cqw(z.logo.size * 0.69)
+        // object-contain: fit inside, never crop, never distort.
+        const s = Math.min(boxW / logo.width, boxH / logo.height)
         ctx.drawImage(
           logo,
-          zoneL + (box - logo.width * s) / 2,
-          zoneT + (box - logo.height * s) / 2,
+          zoneL + (boxW - logo.width * s) / 2,
+          zoneT + (boxH - logo.height * s) / 2,
           logo.width * s,
           logo.height * s,
         )
       } catch {
         // An unreachable logo URL must not cost the shopkeeper their card.
+        // Cloudinary being slow is not a reason to hand back no card at all.
       }
     } else {
       const font = monoFont
