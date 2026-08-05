@@ -14,10 +14,8 @@
 import { useEffect, useState } from 'react'
 import { TemplateCard } from '@/components/common/TemplateCard'
 import { BusinessCardDisplay } from '@/components/common/BusinessCardDisplay'
-import { BusinessCardSurface } from '@/components/common/BusinessCardSurface'
 import { CARD_TEMPLATES } from '@/lib/card-templates'
 import { renderTemplateCardImage } from '@/lib/card-canvas'
-import { BUSINESS_CARD_DESIGNS } from '@/lib/business-card-designs'
 import { deriveMonogram } from '@/lib/brand-monogram'
 import {
   MONOGRAM_FONTS,
@@ -108,7 +106,7 @@ export default function CardGalleryPage() {
         <header className="mb-6">
           <h1 className="text-2xl font-semibold tracking-tight">Card gallery</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            {CARD_TEMPLATES.length} artwork templates · {BUSINESS_CARD_DESIGNS.length} built-in designs · dev preview
+            {CARD_TEMPLATES.length} artwork templates · dev preview
           </p>
           <div className="flex flex-wrap gap-3 mt-4">
             <label className="text-sm">
@@ -220,20 +218,6 @@ export default function CardGalleryPage() {
           </section>
         )}
 
-        <section>
-          <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-            Built-in designs (no artwork needed)
-          </h2>
-          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {BUSINESS_CARD_DESIGNS.map(d => (
-              <div key={d.id}>
-                <BusinessCardSurface design={d} data={data} qrValue={VCARD} onLogoClick={() => {}} />
-                <p className="text-sm font-medium mt-2">{d.name}</p>
-                <p className="text-2xs text-muted-foreground">{d.description}</p>
-              </div>
-            ))}
-          </div>
-        </section>
       </div>
     </div>
   )

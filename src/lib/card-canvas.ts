@@ -20,10 +20,6 @@
  *
  * It also renders at 2100px regardless of the phone's screen — a screenshot is
  * capped by the on-screen size, and a 380px-wide card is unusable in print.
- *
- * The legacy vector designs (business-card-designs.ts) have no such spec; they
- * are CSS all the way down, and are exported with html2canvas-pro instead.
- * See `renderCardBlob` for how the two paths are chosen.
  */
 
 import type { CardTemplate, Zone } from '@/lib/card-templates'
@@ -636,27 +632,6 @@ export function dataUrlToBlob(dataUrl: string): Blob {
 /** The base64 payload of a data URL, without the `data:...;base64,` prefix. */
 export function dataUrlBase64(dataUrl: string): string {
   return dataUrl.slice(dataUrl.indexOf(',') + 1)
-}
-
-/**
- * Screenshots a DOM node. Used only for the legacy vector designs, which are
- * described entirely in CSS and so have no zone spec to draw from.
- *
- * html2canvas-pro rather than html2canvas: the app's stylesheet has 150
- * `oklch()` colours (Tailwind 4's default palette) and the original throws on
- * the first one it meets. The import is dynamic so the ~400 KB only ever
- * reaches a device that actually exports a vector design.
- */
-export async function renderNodeImage(node: HTMLElement, scale = 2): Promise<string> {
-  const html2canvas = (await import('html2canvas-pro')).default
-  const canvas = await html2canvas(node, {
-    scale,
-    useCORS: true,
-    backgroundColor: null,
-    logging: false,
-  })
-
-  return canvas.toDataURL(EXPORT_TYPE, EXPORT_QUALITY)
 }
 
 /** Filename for the download and for the shared file. */

@@ -31,13 +31,11 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Share2, Download, Image as ImageIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { toast as sonnerToast } from 'sonner'
-import { getCardDesign, BUSINESS_CARD_DESIGNS } from '@/lib/business-card-designs'
-import { BusinessCardSurface, type CardData } from '@/components/common/BusinessCardSurface'
 import { TemplateCard } from '@/components/common/TemplateCard'
 import { CardDetailsEditor } from '@/components/common/CardDetailsEditor'
 import { CARD_TEMPLATES, getTemplate } from '@/lib/card-templates'
 import { resolveCardData, type CardSettingLike } from '@/lib/card-details'
-import { renderTemplateCardImage, renderNodeImage, cardFileName } from '@/lib/card-canvas'
+import { renderTemplateCardImage, cardFileName } from '@/lib/card-canvas'
 import { shareCardImage, saveCardImage, isShareCancelled } from '@/lib/share-file'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { cn } from '@/lib/utils'
@@ -74,12 +72,21 @@ interface BusinessCardDisplayProps {
 }
 
 export function BusinessCardDisplay({ setting, email, onDesignChange, onLogoClick }: BusinessCardDisplayProps) {
-  // Setting.cardDesign holds EITHER an artwork-template id or a vector-design
-  // id — one field, two galleries. Resolving the template first means a
-  // template always wins, and an unknown id still falls back to a real design
-  // rather than rendering nothing.
-  const template = getTemplate(setting.cardDesign)
-  const design = getCardDesign(setting.cardDesign)
+  /*
+   * 🗑️ 2026-08-05: the ten built-in vector designs are gone.
+   *
+   * They were CSS gradients with the details laid over them, and next to ten
+   * pieces of real artwork they read as colour swatches. Keeping them meant
+   * keeping a SECOND renderer too — they had no zone spec, so exporting one
+   * meant screenshotting the DOM with html2canvas-pro, a different code path
+   * with different bugs for a design nobody would pick.
+   *
+   * A shop whose stored `cardDesign` named one of them falls back to the first
+   * template rather than to nothing. The id is left in the database untouched:
+   * it costs nothing, and rewriting rows to erase a preference the owner once
+   * chose is not this app's habit.
+   */
+  const template = getTemplate(setting.cardDesign) ?? CARD_TEMPLATES[0]
 
   const queryClient = useQueryClient()
   const [showPicker, setShowPicker] = useState(false)
@@ -102,15 +109,6 @@ export function BusinessCardDisplay({ setting, email, onDesignChange, onLogoClic
   const effective = preview ? { ...setting, ...preview } : setting
   const templateData = resolveCardData(effective, email)
 
-  const cardData: CardData = {
-    shopName: templateData.shopName,
-    ownerName: templateData.ownerName,
-    phone: templateData.phone,
-    email: templateData.email,
-    gstin: templateData.gstin,
-    address: templateData.address,
-    logoUrl: templateData.logoUrl,
-  }
 
   // vCard 3.0 for the QR — more universally supported than MECARD.
   const escapeVcard = (val: string) => val.replace(/([;,:\\])/g, '\\$1')
@@ -135,18 +133,14 @@ export function BusinessCardDisplay({ setting, email, onDesignChange, onLogoClic
    * The card as an image, returned as a data URL — see lib/card-canvas for why
    * that rather than a Blob.
    *
-   * Artwork templates are DRAWN from their zone spec, at 1500px — 428dpi at
-   * card size, regardless of the phone's screen. The legacy vector designs have
-   * no such spec (they are CSS all the way down) so they are screenshotted
-   * instead. Both paths return the same thing, so the callers do not care.
+   * DRAWN from the template's zone spec at 1500px — 428dpi at card size,
+   * regardless of the phone's screen. There is only one export path now that
+   * the CSS-only designs are gone, so there is no second renderer to disagree
+   * with this one.
    */
   const buildImage = async (): Promise<string> => {
-    if (template) {
-      const qrSvg = cardRef.current?.querySelector<SVGElement>('svg[data-card-qr]') ?? null
-      return await renderTemplateCardImage(template, templateData, { qrSvg })
-    }
-    if (!cardRef.current) throw new Error('The card is not ready yet. Please try again.')
-    return await renderNodeImage(cardRef.current)
+    const qrSvg = cardRef.current?.querySelector<SVGElement>('svg[data-card-qr]') ?? null
+    return await renderTemplateCardImage(template, templateData, { qrSvg })
   }
 
   /**
@@ -217,10 +211,7 @@ export function BusinessCardDisplay({ setting, email, onDesignChange, onLogoClic
         body: JSON.stringify({ cardDesign: designId }),
         offline: { invalidate: ['/api/settings'] },
       })
-      const name =
-        CARD_TEMPLATES.find(t => t.id === designId)?.name ??
-        BUSINESS_CARD_DESIGNS.find(d => d.id === designId)?.name ??
-        'your new design'
+      const name = CARD_TEMPLATES.find(t => t.id === designId)?.name ?? 'your new design'
       sonnerToast.success(`Design changed to ${name}`)
       // 🐛 Was `window.location.reload()`. In the Capacitor build that is a full
       // app restart — splash screen, re-auth, back to the dashboard — for what
@@ -251,36 +242,28 @@ export function BusinessCardDisplay({ setting, email, onDesignChange, onLogoClic
               Card design
             </span>
             <select
-              value={template?.id ?? design.id}
+              value={template.id}
               onChange={e => handleDesignSelect(e.target.value)}
               className="w-full h-9 rounded-lg border border-border bg-background px-2 text-sm"
               aria-label="Choose a card design by name"
             >
-              {/* Grouped by trade. With twenty designs a flat list is a wall of
-                  names; a shopkeeper looking for something for a sweet shop
-                  should not have to read all twenty. */}
-              {CARD_TEMPLATES.length > 0 &&
-                Object.entries(
+              {/* Grouped by trade. A flat list of ten-plus names is a wall; a
+                  shopkeeper looking for something for a sweet shop should not
+                  have to read all of them. */}
+              {Object.entries(
                   CARD_TEMPLATES.reduce<Record<string, typeof CARD_TEMPLATES>>((acc, t) => {
                     ;(acc[t.category] ||= []).push(t)
                     return acc
                   }, {}),
-                ).map(([category, list]) => (
-                  <optgroup key={category} label={CATEGORY_LABELS[category] ?? category}>
-                    {list.map(t => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
-                      </option>
-                    ))}
-                  </optgroup>
-                ))}
-              <optgroup label="Simple colours">
-                {BUSINESS_CARD_DESIGNS.map(d => (
-                  <option key={d.id} value={d.id}>
-                    {d.name}
-                  </option>
-                ))}
-              </optgroup>
+              ).map(([category, list]) => (
+                <optgroup key={category} label={CATEGORY_LABELS[category] ?? category}>
+                  {list.map(t => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
             </select>
           </label>
           <Button
@@ -294,80 +277,38 @@ export function BusinessCardDisplay({ setting, email, onDesignChange, onLogoClic
             {showPicker ? 'Hide' : 'Browse'}
           </Button>
         </div>
-        <p className="text-2xs text-muted-foreground">{template?.description ?? design.description}</p>
+        <p className="text-2xs text-muted-foreground">{template.description}</p>
       </div>
 
       {showPicker && (
-        <div className="space-y-3">
-          {CARD_TEMPLATES.length > 0 && (
-            <div>
-              <p className="text-3xs uppercase tracking-wider text-muted-foreground mb-1.5">
-                Designer templates
-              </p>
-              {/* A single swipeable row, not a grid. `snap-x` so a card always
-                  comes to rest square in the viewport rather than half cut off,
-                  which is what makes a strip feel deliberate on a phone. */}
-              <div className="flex gap-2 overflow-x-auto snap-x snap-mandatory pb-2 -mx-1 px-1 scrollbar-thin">
-                {CARD_TEMPLATES.map(tpl => (
-                  <button
-                    key={tpl.id}
-                    onClick={() => handleDesignSelect(tpl.id)}
-                    ref={tpl.id === template?.id ? selectedThumbRef : undefined}
-                    className={cn(
-                      'relative flex-none w-[44%] min-w-[150px] snap-start rounded-xl transition text-left',
-                      tpl.id === template?.id
-                        ? 'ring-2 ring-primary ring-offset-2 ring-offset-background'
-                        : 'opacity-90 hover:opacity-100',
-                    )}
-                    title={tpl.name}
-                    aria-pressed={tpl.id === template?.id}
-                  >
-                    <TemplateCard template={tpl} data={templateData} />
-                    <p className="text-3xs mt-1 text-center truncate text-muted-foreground">{tpl.name}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div>
-            <p className="text-3xs uppercase tracking-wider text-muted-foreground mb-1.5">Simple colours</p>
-            <div className="flex gap-2 overflow-x-auto snap-x snap-mandatory pb-2 -mx-1 px-1">
-              {BUSINESS_CARD_DESIGNS.map(d => (
-                <button
-                  key={d.id}
-                  onClick={() => handleDesignSelect(d.id)}
-                  ref={!template && d.id === design.id ? selectedThumbRef : undefined}
-                  className={cn(
-                    'relative flex-none w-[32%] min-w-[110px] snap-start rounded-xl transition text-left',
-                    !template && d.id === design.id
-                      ? 'ring-2 ring-primary ring-offset-2 ring-offset-background'
-                      : 'opacity-90 hover:opacity-100',
-                  )}
-                  title={d.name}
-                  aria-pressed={!template && d.id === design.id}
-                >
-                  <BusinessCardSurface design={d} data={cardData} qrValue={vcard} thumbnail />
-                  <p className="text-3xs mt-1 text-center truncate text-muted-foreground">{d.name}</p>
-                </button>
-              ))}
-            </div>
-          </div>
+        /* A single swipeable row, not a grid. `snap-x` so a card always comes to
+           rest square in the viewport rather than half cut off, which is what
+           makes a strip feel deliberate on a phone. */
+        <div className="flex gap-2 overflow-x-auto snap-x snap-mandatory pb-2 -mx-1 px-1">
+          {CARD_TEMPLATES.map(tpl => (
+            <button
+              key={tpl.id}
+              onClick={() => handleDesignSelect(tpl.id)}
+              ref={tpl.id === template.id ? selectedThumbRef : undefined}
+              className={cn(
+                'relative flex-none w-[44%] min-w-[150px] snap-start rounded-xl transition text-left',
+                tpl.id === template.id
+                  ? 'ring-2 ring-primary ring-offset-2 ring-offset-background'
+                  : 'opacity-90 hover:opacity-100',
+              )}
+              title={tpl.name}
+              aria-pressed={tpl.id === template.id}
+            >
+              <TemplateCard template={tpl} data={templateData} />
+              <p className="text-3xs mt-1 text-center truncate text-muted-foreground">{tpl.name}</p>
+            </button>
+          ))}
         </div>
       )}
 
       {/* ═══ The card ═══ */}
       <div className="shadow-card rounded-2xl overflow-hidden" ref={cardRef}>
-        {template ? (
-          <TemplateCard template={template} data={templateData} qrValue={vcard} onLogoClick={onLogoClick ?? scrollToMark} />
-        ) : (
-          <BusinessCardSurface
-            design={design}
-            data={cardData}
-            qrValue={vcard}
-            onLogoClick={onLogoClick ?? scrollToMark}
-          />
-        )}
+        <TemplateCard template={template} data={templateData} qrValue={vcard} onLogoClick={onLogoClick ?? scrollToMark} />
       </div>
 
       {/* ═══ Share buttons ═══
