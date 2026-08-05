@@ -143,13 +143,15 @@ export default function PrivacyPolicyPage() {
               required by the DPDP Act:
             </p>
             {/*
-              The address below is the one already published elsewhere on this
-              page, deliberately: a grievance channel that bounces is worse than
-              none. Confirm this inbox is monitored, and replace the name if the
-              role sits with someone else.
+              Name and address both taken from what this page already published
+              in its footer ("Data Protection Officer: Rahul Kothari",
+              privacy@ekbook.app) rather than invented — a grievance channel
+              that bounces is worse than none. Update both places together if
+              the role moves.
             */}
             <ul className="list-none space-y-0.5 text-sm mt-2">
-              <li><b>Designation:</b> Grievance Officer, EkBook</li>
+              <li><b>Name:</b> Rahul Kothari</li>
+              <li><b>Designation:</b> Data Protection &amp; Grievance Officer, EkBook</li>
               <li>
                 <b>Email:</b>{' '}
                 <a href="mailto:privacy@ekbook.app" className="text-primary underline">privacy@ekbook.app</a>
