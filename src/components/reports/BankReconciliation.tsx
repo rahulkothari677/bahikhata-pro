@@ -25,17 +25,22 @@ import { toast as sonnerToast } from 'sonner'
 import { haptic } from '@/lib/haptic'
 import {
   Upload, CheckCircle2, XCircle, Loader2, Banknote, TrendingUp, TrendingDown,
-  FileText, ChevronDown, ChevronUp,
+  FileText, ChevronDown, ChevronUp, Trash2,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { readError } from '@/lib/read-error'
+import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
+import { useStaffPermissions } from '@/hooks/use-staff-permissions'
 
 export function BankReconciliation() {
   const queryClient = useQueryClient()
   const [uploading, setUploading] = useState(false)
   const [bankName, setBankName] = useState('')
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const { confirmDialog, dialog: confirmDialogEl } = useConfirmDialog()
+  const { isOwner } = useStaffPermissions()
 
   const { data, isLoading } = useQuery({
     queryKey: ['bank-recon'],
@@ -77,6 +82,50 @@ export function BankReconciliation() {
       })
     } finally {
       setUploading(false)
+    }
+  }
+
+  /**
+   * 🔒 2026-08-05 (Phase 10 audit). Importing the wrong CSV used to be
+   * permanent: the screen offered upload, match and unmatch, and no way back.
+   * Wrong account, wrong month, a file from another bank — those rows stayed in
+   * reconciliation for good, and the only escape was deleting the whole
+   * account.
+   *
+   * The wording matters as much as the button. A delete control next to bank
+   * figures reads as "this will remove my money", so the confirmation names
+   * exactly what goes (this import) and what does not (the books).
+   */
+  const handleDeleteStatement = async (bs: any) => {
+    const ok = await confirmDialog(
+      `This removes the ${bs.bankName} import and its ${bs.txnCount} bank row(s) from reconciliation.\n\n` +
+        `Your sales, purchases and payments are NOT affected — a bank statement is only a copy of what the bank sent. ` +
+        `If ${bs.matchedCount} row(s) were matched to your entries, only the link is removed; the entries stay.\n\n` +
+        `You can import the correct statement again afterwards.`,
+      { title: 'Remove this bank statement?', confirmLabel: 'Remove import', destructive: true },
+    )
+    if (!ok) return
+
+    setDeletingId(bs.id)
+    try {
+      const r = await offlineFetch(`/api/bank-recon/statement/${bs.id}`, { method: 'DELETE' })
+      if (!r.ok) throw new Error(await readError(r))
+      const result = await r.json()
+      haptic.success()
+      sonnerToast.success('Bank statement removed', {
+        description: result.message,
+        duration: 6000,
+      })
+      if (expandedId === bs.id) setExpandedId(null)
+      queryClient.invalidateQueries({ queryKey: ['bank-recon'] })
+    } catch (e: any) {
+      haptic.error()
+      sonnerToast.error("Couldn't remove the bank statement", {
+        description: e?.message || 'Please try again.',
+        duration: 8000,
+      })
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -186,9 +235,10 @@ export function BankReconciliation() {
           {statements.map((bs: any) => (
             <Card key={bs.id} className="shadow-card border-border/60">
               <CardHeader className="pb-2">
+                <div className="flex items-center gap-1">
                 <button
                   onClick={() => setExpandedId(expandedId === bs.id ? null : bs.id)}
-                  className="flex items-center justify-between w-full text-left"
+                  className="flex items-center justify-between flex-1 min-w-0 text-left"
                 >
                   <div className="flex items-center gap-2">
                     <Banknote className="w-4 h-4 text-blue-600" />
@@ -211,6 +261,24 @@ export function BankReconciliation() {
                     {expandedId === bs.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                   </div>
                 </button>
+                {/* Owners only — the API refuses CAs and read-only staff, so a
+                    button they can only be rejected by would be a lie. */}
+                {isOwner && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label={`Remove the ${bs.bankName} import`}
+                    title="Remove this import"
+                    disabled={deletingId === bs.id}
+                    onClick={() => handleDeleteStatement(bs)}
+                    className="h-8 w-8 flex-shrink-0 text-muted-foreground hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                  >
+                    {deletingId === bs.id
+                      ? <Loader2 className="w-4 h-4 animate-spin" />
+                      : <Trash2 className="w-4 h-4" />}
+                  </Button>
+                )}
+                </div>
               </CardHeader>
               {expandedId === bs.id && (
                 <CardContent>
@@ -257,6 +325,7 @@ export function BankReconciliation() {
           ))}
         </div>
       )}
+      {confirmDialogEl}
     </div>
   )
 }

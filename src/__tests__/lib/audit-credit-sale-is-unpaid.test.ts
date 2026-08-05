@@ -24,6 +24,8 @@
  * This is the same shape as the V24 §1 note bug it sits beside: a default that
  * is right for one case, applied where it means the opposite.
  */
+import fs from 'fs'
+import path from 'path'
 import { resolveFinalPaid } from '@/lib/paid-amount'
 
 describe('an empty Paid field on a credit sale means nothing was paid', () => {
@@ -85,8 +87,6 @@ describe('every other payment mode is unchanged', () => {
 })
 
 describe('the interface no longer tells people the wrong thing', () => {
-  const fs = require('fs') as typeof import('fs')
-  const path = require('path') as typeof import('path')
   const entry = fs.readFileSync(
     path.join(process.cwd(), 'src/components/ledger/TransactionEntry.tsx'),
     'utf8',
@@ -104,8 +104,6 @@ describe('the interface no longer tells people the wrong thing', () => {
 })
 
 describe('both write paths pass the payment mode through', () => {
-  const fs = require('fs') as typeof import('fs')
-  const path = require('path') as typeof import('path')
 
   it.each([
     ['create', 'src/app/api/transactions/route.ts'],
