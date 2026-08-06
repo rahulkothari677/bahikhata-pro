@@ -15,7 +15,7 @@
  * it off, and a link forwarded to a group chat stops being a phone number leak.
  */
 
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import { db } from '@/lib/db'
 import { isWellFormedToken, isShareLinkUsable, DEAD_LINK_MESSAGE } from '@/lib/bill-share'
 import { buildInvoiceDocument } from '@/lib/invoice-document'
@@ -33,6 +33,27 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false, nocache: true },
 }
 
+/**
+ * This page declares its OWN viewport, and deliberately differs from the app's.
+ *
+ * 🐛 2026-08-06. Rahul opened a bill link on his phone and it rendered as a
+ * narrow column in the middle of the screen. The served HTML carried NO viewport
+ * meta at all, so the browser fell back to its ~980px desktop default and then
+ * shrank everything to fit — the page was not too narrow, the viewport was too
+ * wide.
+ *
+ * `userScalable` is TRUE here, where the app sets it false. That is right for an
+ * app, whose layout is fixed and where a stray pinch is an accident. It is wrong
+ * for a DOCUMENT: someone checking a figure on a bill should be able to zoom
+ * into it, and a customer with poor eyesight should not be locked out of reading
+ * what they owe.
+ */
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  userScalable: true,
+}
+
 // Always fresh: a bill that has been part-paid since it was sent must say so.
 // That is the whole advantage a link has over a PDF, and caching would remove it.
 export const dynamic = 'force-dynamic'
@@ -44,16 +65,34 @@ export default async function BillPage({ params }: { params: Promise<{ token: st
   // or someone probing, and neither deserves a query.
   if (!isWellFormedToken(token)) return <DeadLink />
 
+  /*
+   * ⚠️ TWO QUERIES, AND THE SECOND ONE IS NOT OPTIONAL.
+   *
+   * The obvious version of this — one `billShare.findUnique` with the
+   * transaction and its items included — SHIPPED, and every amount on the page
+   * came out 100× too large. A ₹600 bill read as ₹60,000.
+   *
+   * Money is stored as integer paise and converted to rupees by a Prisma client
+   * extension. That extension only intercepts models it has a hand-written
+   * handler for, and `BillShare` has none — so nothing in a query rooted at
+   * BillShare is converted, however deeply nested. Registering the relation
+   * would not have helped: with no handler, the extension never sees the query
+   * at all.
+   *
+   * So the bill is fetched through `db.transaction`, which IS intercepted. The
+   * share row is used for nothing but the token, the expiry and the counter —
+   * none of which are money.
+   */
   const share = await db.billShare.findUnique({
     where: { token },
-    include: {
-      transaction: {
-        include: {
-          items: true,
-          party: true,
-        },
-      },
-      user: { include: { settings: true } },
+    select: {
+      id: true,
+      userId: true,
+      transactionId: true,
+      expiresAt: true,
+      revokedAt: true,
+      token: true,
+      firstViewedAt: true,
     },
   })
 
@@ -62,13 +101,17 @@ export default async function BillPage({ params }: { params: Promise<{ token: st
   /*
    * 🔒 A DELETED BILL IS NOT VIEWABLE, even through a link minted while it was
    * live. Deleting a bill has to mean it stops being served — otherwise the
-   * link is a copy that outlives the delete, which is exactly the kind of thing
-   * a shopkeeper would not expect and could not undo.
+   * link is a copy that outlives the delete, which the shopkeeper could not
+   * undo. `deletedAt: null` in the WHERE, so a deleted bill simply is not found.
    */
-  if (share.transaction.deletedAt) return <DeadLink />
+  const txn = await db.transaction.findFirst({
+    where: { id: share.transactionId, deletedAt: null },
+    include: { items: true, party: true },
+  })
+  if (!txn) return <DeadLink />
 
-  const txn = share.transaction
-  const setting = share.user.settings[0]
+  const settingRow = await db.setting.findFirst({ where: { userId: share.userId } })
+  const setting = settingRow
 
   /*
    * Counting the view is the point of the link — sent, then opened, then paid

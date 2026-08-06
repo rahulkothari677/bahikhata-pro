@@ -153,7 +153,8 @@ ${link}` : buildCaption(doc)
     return { format: 'image', reason: chosen.reason, link }
   }
 
-  const pdfBlob = await generateInvoicePDF(src as never, shop as never)
+  // The link goes ON the PDF, because Android will not carry it beside one.
+  const pdfBlob = await generateInvoicePDF(src as never, { ...shop, shareLink: link } as never)
   const dataUrl = await blobToDataUrl(pdfBlob)
   await shareCardImage(dataUrl, filename, {
     title: `Bill ${doc.invoiceNo}`,

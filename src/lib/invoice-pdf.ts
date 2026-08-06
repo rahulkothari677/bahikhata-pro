@@ -65,6 +65,19 @@ interface ShopSetting {
   state?: string
   upiId?: string
   logoUrl?: string | null  // 🔒 PDF Redesign Spec Part 3 §2: rendered at 16×16 mm in brand band
+  /**
+   * The public bill link, when the shop has them switched on.
+   *
+   * 🐛 2026-08-06. Rahul: "in pdf there is no link". The link was in the share
+   * CAPTION, and Android does not allow a file and text in one share — its own
+   * guidance is that EXTRA_TEXT with EXTRA_STREAM is not allowed. WhatsApp
+   * honours the caption for images and drops it for documents, so a bill sent
+   * as a PDF lost its link entirely.
+   *
+   * That cannot be fixed in the share. It CAN be fixed by putting the link on
+   * the document, where nothing can strip it.
+   */
+  shareLink?: string | null
 }
 
 function formatDate(date: string | Date): string {
@@ -462,6 +475,24 @@ export async function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting)
   // ═══════════════════════════════════════════════════════════════════
   // 7. FOOTER — thin brand rule, page number, "Made with EkBook"
   // ═══════════════════════════════════════════════════════════════════
+  /*
+   * The bill link, printed on the page.
+   *
+   * Above the footer rather than in it: a customer scanning for "how do I pay
+   * this" should find it near the total, not in the small print.
+   */
+  if (setting.shareLink) {
+    const linkY = pageHeight - 26
+    doc.setFont(THEME.font, 'normal')
+    doc.setFontSize(8)
+    doc.setTextColor(textMuted.r, textMuted.g, textMuted.b)
+    doc.text('View or pay this bill online:', margin, linkY)
+    doc.setTextColor(brand.r, brand.g, brand.b)
+    // A real PDF link annotation, so it is tappable in every viewer rather
+    // than a string the reader has to retype.
+    doc.textWithLink(setting.shareLink, margin, linkY + 4, { url: setting.shareLink })
+  }
+
   drawFooter(doc, 1, 1)
 
   return doc.output('blob')

@@ -100,6 +100,19 @@ const INTENTIONALLY_UNCONVERTED: Record<string, string> = {
   'Shop.transactions': 'Shop has no money columns and no extension handler.',
   'Shop.products': 'Shop has no money columns and no extension handler.',
   'Shop.parties': 'Shop has no money columns and no extension handler.',
+
+  /*
+   * BillShare is the public bill link. It has no money columns and no extension
+   * handler, so a query ROOTED at it returns raw paise — which is precisely the
+   * 100× bug this guard now exists to catch (see the note in the test below).
+   *
+   * The page therefore never reads money through it: it takes the token and the
+   * expiry from BillShare, then fetches the bill through `db.transaction`, which
+   * the extension does intercept. Enforced by the companion test below, which
+   * fails if any caller adds an `include` back onto a billShare query.
+   */
+  'BillShare.transaction': 'Read via db.transaction instead; enforced by the billShare-include test.',
+  'BillShare.user': 'User carries no money; the shop settings are fetched separately.',
 }
 
 describe('money-bearing relations are all registered for conversion', () => {
@@ -126,11 +139,33 @@ describe('money-bearing relations are all registered for conversion', () => {
       // nested rows whose amounts need converting.
       if (!moneyModels.has(rel.toModel)) continue
 
-      // Only models the extension actually intercepts can convert anything.
-      if (!moneyModels.has(rel.fromModel)) continue
-
+      /*
+       * ⚠️ NON-MONEY MODELS ARE CHECKED TOO, since 2026-08-06.
+       *
+       * This used to `continue` whenever the FROM model had no money columns,
+       * on the reasoning that only an intercepted model can convert anything.
+       * That is true — and it is exactly why the query is dangerous. `BillShare`
+       * has no money of its own, so it was skipped here; but it is queried as a
+       * ROOT with the transaction included, and with no handler the extension
+       * never saw that query. Every amount on the public bill page came out
+       * 100× too large: a ₹600 bill read as ₹60,000.
+       *
+       * The old rule assumed a money query always starts at a money model.
+       * A join table, an audit row, a share link — any of them can be the root.
+       * So a relation into a money model must now be either DECLARED (and its
+       * model intercepted) or NAMED below with the reason it is safe.
+       */
       const key = `${rel.fromModel}.${rel.fieldName}`
       if (key in INTENTIONALLY_UNCONVERTED) continue
+
+      if (!moneyModels.has(rel.fromModel)) {
+        missing.push(
+          `${key} -> ${rel.toModel} — ${rel.fromModel} has no money columns and no extension handler, ` +
+            `so a query rooted here returns raw paise. Read the money model directly, ` +
+            `or add ${key} to INTENTIONALLY_UNCONVERTED with a reason.`,
+        )
+        continue
+      }
 
       const declared = MODEL_RELATIONS[rel.fromModel]?.[rel.fieldName]
       if (!declared) {
@@ -171,5 +206,77 @@ describe('money-bearing relations are all registered for conversion', () => {
       }
     }
     expect(stale).toEqual([])
+  })
+})
+
+/**
+ * The exemption for BillShare above is only true while no caller reads money
+ * through it. This is what keeps it true.
+ *
+ * A source scan is the right tool here precisely because the claim is "no
+ * caller does X": there is no runtime behaviour to observe until somebody
+ * writes the query, and by then a customer has been shown a 100x bill.
+ *
+ * Deliberately NOT a clever regex. The first version of this test used one to
+ * match a whole `db.billShare.findUnique({ ... })` call, passed while the bug
+ * was reintroduced on purpose, and would have shipped protecting nothing —
+ * the same failure class as the tests that read source as text and asserted
+ * their own existence. Plain string scanning is verifiable by eye.
+ */
+describe('nothing reads money through BillShare', () => {
+  function sourceFiles(dir: string): string[] {
+    const out: string[] = []
+    const walk = (d: string) => {
+      for (const entry of fs.readdirSync(d, { withFileTypes: true })) {
+        const full = path.join(d, entry.name)
+        if (entry.isDirectory()) {
+          if (entry.name === 'node_modules' || entry.name === '__tests__') continue
+          walk(full)
+        } else if (entry.name.endsWith('.ts') || entry.name.endsWith('.tsx')) {
+          out.push(full)
+        }
+      }
+    }
+    walk(dir)
+    return out
+  }
+
+  const NEEDLE = 'db.billShare.'
+  /** How far past the call to look for an `include`. One query, generously. */
+  const WINDOW = 600
+
+  test('the scan actually finds the billShare calls (guards a dead check)', () => {
+    // Without this, deleting the page would make the test below pass forever
+    // while protecting nothing.
+    const found = sourceFiles(path.join(process.cwd(), 'src')).filter(f =>
+      fs.readFileSync(f, 'utf8').includes(NEEDLE),
+    )
+    expect(found.length).toBeGreaterThan(0)
+  })
+
+  test('no billShare query pulls nested rows with include', () => {
+    const offenders: string[] = []
+
+    for (const file of sourceFiles(path.join(process.cwd(), 'src'))) {
+      const src = fs.readFileSync(file, 'utf8')
+      let from = 0
+      for (;;) {
+        const at = src.indexOf(NEEDLE, from)
+        if (at === -1) break
+        const window = src.slice(at, at + WINDOW)
+        if (window.includes('include:')) {
+          offenders.push(path.relative(process.cwd(), file))
+        }
+        from = at + NEEDLE.length
+      }
+    }
+
+    expect(
+      offenders.length === 0
+        ? 'none'
+        : 'Money read through BillShare, which the money extension does not ' +
+          'intercept — every amount will be 100x too large: ' +
+          offenders.join(' | '),
+    ).toBe('none')
   })
 })
