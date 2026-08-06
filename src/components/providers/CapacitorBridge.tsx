@@ -19,17 +19,59 @@ import { canGoBackInApp } from '@/hooks/use-browser-back-button'
 
 const SAFFRON = '#c2410c'
 
-async function applySaffronStatusBar() {
+/** The top inset currently in effect, in CSS px. 0 means "not overlaid". */
+function currentTopInset(): number {
+  const raw = getComputedStyle(document.documentElement)
+    .getPropertyValue('--safe-area-inset-top')
+    .trim()
+  return raw ? parseFloat(raw) || 0 : 0
+}
+
+/**
+ * Status bar setup.
+ *
+ * Two Android worlds exist and this has to serve both, so it reads the world
+ * it is in rather than sniffing the OS version:
+ *
+ *  - Android ≤ 14: setOverlaysWebView(false) genuinely works. The WebView
+ *    starts BELOW a saffron status bar, and the injected top inset is 0.
+ *    Saffron is dark, so the clock must be light.
+ *
+ *  - Android 15+ (we target SDK 36): edge-to-edge is mandatory. Both
+ *    setOverlaysWebView and setBackgroundColor are documented no-ops — see
+ *    Capacitor's own StatusBar.java#shouldSetStatusBarColor. The WebView
+ *    fills the screen, the inset is a real number, and the clock now sits on
+ *    whatever our header paints — so it must follow the APP's theme, not the
+ *    device's, because the app has its own dark-mode toggle.
+ *
+ * `overlaid ? follow the app theme : light on saffron` covers both without
+ * asking what version of Android this is.
+ */
+async function syncStatusBar() {
   try {
     const { StatusBar, Style } = await import('@capacitor/status-bar')
-    // Make sure status bar does NOT overlay the webview (otherwise the page
-    // background shows through and we lose our saffron color)
+
+    // Harmless where it is a no-op, correct where it is not.
     await StatusBar.setOverlaysWebView({ overlay: false })
-    // Style.Light = white text/icons (readable on saffron)
-    await StatusBar.setStyle({ style: Style.Light })
-    // Always saffron background, in both light and dark mode
     await StatusBar.setBackgroundColor({ color: SAFFRON })
-    // StatusBar applied successfully (saffron bg, white text)
+
+    // Older shells (Capacitor Android < 8.3) never inject the CSS variables,
+    // so nothing would pad. getInfo() reports the height on every version,
+    // which lets a phone running an old build of the APK pick up this fix
+    // from the web layer alone, with no reinstall.
+    if (currentTopInset() === 0) {
+      const info = await StatusBar.getInfo()
+      if (info.height > 0 && info.overlays) {
+        document.documentElement.style.setProperty('--safe-area-inset-top', `${info.height}px`)
+      }
+    }
+
+    const overlaid = currentTopInset() > 0
+    const appIsDark = document.documentElement.classList.contains('dark')
+    // Style.Dark means LIGHT text (for a dark background) — the enum is named
+    // after the background it sits on, not the text it produces.
+    const style = overlaid ? (appIsDark ? Style.Dark : Style.Light) : Style.Dark
+    await StatusBar.setStyle({ style })
   } catch (err) {
     console.warn('[Capacitor] StatusBar apply failed:', err)
   }
@@ -46,7 +88,7 @@ export function CapacitorBridge() {
     // Native platform detected, applying status bar
     // Small delay to ensure WebView is fully ready before we set the color.
     // Without this, Android sometimes overrides our color after app launch.
-    const initialTimer = setTimeout(applySaffronStatusBar, 300)
+    const initialTimer = setTimeout(syncStatusBar, 300)
 
     let cleanupListener: (() => void) | undefined
 
@@ -58,7 +100,7 @@ export function CapacitorBridge() {
         const listener = await App.addListener('appStateChange', ({ isActive }) => {
           if (isActive) {
             // App foregrounded, re-applying status bar
-            applySaffronStatusBar()
+            syncStatusBar()
           }
         })
         cleanupListener = () => listener.remove()
@@ -67,8 +109,19 @@ export function CapacitorBridge() {
       }
     })()
 
+    // The clock now sits on the header, so its colour is a function of the
+    // theme. next-themes swaps the `dark` class on <html>; without this the
+    // icons keep the previous theme's colour until the next app resume, which
+    // in light mode means a white clock on a white header — invisible.
+    const themeObserver = new MutationObserver(() => { syncStatusBar() })
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['class'],
+    })
+
     return () => {
       clearTimeout(initialTimer)
+      themeObserver.disconnect()
       if (cleanupListener) cleanupListener()
     }
   }, [])

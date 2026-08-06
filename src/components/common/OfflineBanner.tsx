@@ -38,8 +38,11 @@ export function OfflineBanner() {
 
   if (!isOffline) return null
 
+  // pt is a calc, not `pt-safe`, because the padding lives on this same
+  // element — the utility would have to win a specificity race with py-1.5.
+  // Spelling the sum out removes the race.
   return (
-    <div className="fixed top-0 left-0 right-0 z-[100] bg-amber-500 text-white text-center py-1.5 px-4 text-xs font-medium flex items-center justify-center gap-2 no-print">
+    <div className="fixed top-0 left-0 right-0 z-[100] bg-amber-500 text-white text-center pb-1.5 pt-[calc(0.375rem+var(--safe-top))] px-4 text-xs font-medium flex items-center justify-center gap-2 no-print">
       <CloudOff className="w-3.5 h-3.5 flex-shrink-0" />
       <span>You&apos;re offline. Changes will sync when you reconnect.</span>
     </div>

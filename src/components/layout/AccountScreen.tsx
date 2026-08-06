@@ -357,7 +357,7 @@ export function AccountScreen() {
   return (
     <div className="min-h-screen bg-muted/30 w-full flex-1">
       {/* Top bar with back button */}
-      <div className="sticky top-0 z-20 bg-background/80 backdrop-blur-md border-b border-border">
+      <div className="sticky top-0 z-20 pt-safe bg-background/80 backdrop-blur-md border-b border-border">
         <div className="flex items-center gap-3 px-4 py-3">
           <button
             aria-label="Go back"
@@ -375,7 +375,7 @@ export function AccountScreen() {
       {/* ═══ Dedicated Section Page (no tabs, no menu) ═══ */}
       {accountSection && (
         <div className="max-w-2xl mx-auto px-4 py-4 pb-24"
-             style={{ paddingBottom: 'calc(6rem + env(safe-area-inset-bottom))' }}>
+             style={{ paddingBottom: 'calc(6rem + var(--safe-bottom))' }}>
           <AccountSectionContent
             section={accountSection}
             setting={setting}
@@ -391,7 +391,7 @@ export function AccountScreen() {
       {/* ═══ Account Menu (profile header + 10 items) ═══ */}
       {!accountSection && (
       <div className="max-w-2xl mx-auto px-4 py-4 space-y-4 pb-24"
-           style={{ paddingBottom: 'calc(6rem + env(safe-area-inset-bottom))' }}>
+           style={{ paddingBottom: 'calc(6rem + var(--safe-bottom))' }}>
 
         {/* 🔒 V22-11 (Batch A, Phase 4e): Plan / Upgrade Card — Revolut pattern.
             Shows current plan at the TOP of the profile (before the header).

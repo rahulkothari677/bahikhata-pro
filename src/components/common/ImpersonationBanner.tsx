@@ -33,7 +33,7 @@ export function ImpersonationBanner() {
     <div
       role="alert"
       aria-live="polite"
-      className="sticky top-0 z-50 w-full bg-amber-500 text-white px-4 py-2 flex items-center justify-between gap-3 text-sm shadow-md"
+      className="sticky top-0 z-50 w-full bg-amber-500 text-white px-4 pb-2 pt-[calc(0.5rem+var(--safe-top))] flex items-center justify-between gap-3 text-sm shadow-md"
     >
       <div className="flex items-center gap-2 min-w-0">
         <ShieldAlert className="w-4 h-4 flex-shrink-0" aria-hidden="true" />

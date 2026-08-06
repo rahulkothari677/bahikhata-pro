@@ -1906,7 +1906,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
 
       {/* 🔒 V11 FIX: Mobile sticky save bar — shows total + save.
           Also disables Save when stock would go negative (block mode). */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t border-border p-2.5 flex items-center gap-2 z-30" style={{ paddingBottom: 'calc(0.625rem + env(safe-area-inset-bottom))' }}>
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t border-border p-2.5 flex items-center gap-2 z-30" style={{ paddingBottom: 'calc(0.625rem + var(--safe-bottom))' }}>
         <div className="flex-1">
           <p className="text-3xs text-muted-foreground uppercase">Total</p>
           <p className="text-lg font-bold tabular-nums">{formatINR(totalAmount)}</p>

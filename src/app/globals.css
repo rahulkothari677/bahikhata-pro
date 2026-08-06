@@ -58,6 +58,42 @@
 }
 
 :root {
+  /* ─────────────────────────────────────────────────────────────────────
+   * Safe-area tokens — the ONLY thing any component should read.
+   *
+   * WHY (2026-08-06). Every top bar in the app was written against the CSS
+   * env() safe-area values. On Android those are always 0, so the status bar
+   * (clock, wifi, battery) drew straight on top of our headers.
+   *
+   * The cause is not our CSS — it is deliberate, upstream. From Android 15
+   * (targetSdk 35+) the system forces edge-to-edge: the WebView always fills
+   * the whole screen and `StatusBar.setOverlaysWebView(false)` is a no-op.
+   * Capacitor's own code says so — StatusBar.java's shouldSetStatusBarColor()
+   * returns false outright when the app targets 16, which we do (targetSdk 36).
+   *
+   * So Capacitor hands the insets to the web layer instead. But it CANNOT use
+   * env() to do it: Chromium miscomputes safe-area values in WebView < 140
+   * (crbug 461332423), so SystemBars.java explicitly rebuilds the insets as
+   * Insets.of(0,0,0,0) before passing them on — permanently zeroing every
+   * env(safe-area-inset-*) — and then injects the real dp values as
+   * `--safe-area-inset-*` custom properties on documentElement.
+   *
+   * That is why the old code could never work: we were reading the one channel
+   * Capacitor had just switched off.
+   *
+   * Order below is therefore deliberate:
+   *   1. --safe-area-inset-*  — what Capacitor injects (Android + iOS native)
+   *   2. env(safe-area-inset-*) — real browsers, and iOS Safari PWAs
+   *   3. 0px                  — desktop, where there is no inset to respect
+   *
+   * Read these as var(--safe-top) etc. Never reach for env() directly again:
+   * on the platform that actually needed it, env() is guaranteed to be zero.
+   * ───────────────────────────────────────────────────────────────────── */
+  --safe-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  --safe-right: var(--safe-area-inset-right, env(safe-area-inset-right, 0px));
+  --safe-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+  --safe-left: var(--safe-area-inset-left, env(safe-area-inset-left, 0px));
+
   --radius: 0.75rem;
   /* Subtle warm tint background — barely visible warmth, like cream paper */
   --background: oklch(0.98 0.008 60);
@@ -145,6 +181,25 @@
   --sidebar-accent-foreground: oklch(0.96 0 0);
   --sidebar-border: oklch(1 0 0 / 8%);
   --sidebar-ring: oklch(0.7 0.18 42);
+}
+
+/* Safe-area utilities.
+ *
+ * A screen-level bar pinned to an edge must reserve room for the system bar
+ * that shares that edge. These exist as named utilities rather than repeated
+ * inline styles so the next top bar someone writes only has to remember a
+ * class name — forgetting the inline `paddingTop` on each new screen is
+ * precisely how the status bar came to sit on top of five different headers.
+ *
+ * `pt-safe` pads a top bar clear of the status bar; the bar's own background
+ * still extends behind it, so the clock sits on the header's colour rather
+ * than on the content underneath — the way WhatsApp and Instagram do it. */
+@utility pt-safe {
+  padding-top: var(--safe-top);
+}
+
+@utility pb-safe {
+  padding-bottom: var(--safe-bottom);
 }
 
 @layer base {

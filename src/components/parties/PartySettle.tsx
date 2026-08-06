@@ -350,7 +350,7 @@ export function PartySettle() {
       {/* This screen carries its own top bar, so page.tsx renders it with
           header="never" — the same pattern Account and More use. The global
           "Dashboard" header above a focused settle screen was just noise. */}
-      <div className="sticky top-0 z-20 shrink-0 border-b border-border bg-background/95 backdrop-blur">
+      <div className="sticky top-0 z-20 pt-safe shrink-0 border-b border-border bg-background/95 backdrop-blur">
         <div className="w-full px-3 lg:px-5 py-2.5 flex items-center gap-2">
           <Button
             variant="ghost"

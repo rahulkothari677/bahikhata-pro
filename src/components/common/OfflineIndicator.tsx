@@ -101,7 +101,7 @@ export function OfflineIndicator() {
       {/* Sticky top bar — most prominent */}
       {showTopBar && (
         <div
-          className={`sticky top-0 z-50 print:hidden ${
+          className={`sticky top-0 z-50 pt-safe print:hidden ${
             !online
               ? 'bg-amber-600 text-white'
               : syncing

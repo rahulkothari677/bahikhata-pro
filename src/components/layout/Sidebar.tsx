@@ -139,6 +139,10 @@ export function Sidebar() {
       <aside
         className={cn(
           'fixed lg:sticky top-0 left-0 z-50 lg:z-auto',
+          // Mobile drawer covers the full height including the status bar, so
+          // its own chrome needs the inset. Desktop has no system bar to dodge,
+          // and pt-safe resolves to 0px there anyway.
+          'pt-safe lg:pt-0',
           'h-screen flex-shrink-0',
           'bg-sidebar text-sidebar-foreground',
           'flex flex-col',
