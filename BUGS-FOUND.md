@@ -20,6 +20,94 @@ and include enough context to reproduce.
 
 <!-- Add new bugs below this line. Newest first. -->
 
+### BUG-068 — Ledger selection mode had no exit control (Medium/UX) — FIXED
+
+- **Found**: 2026-08-07, reported by the owner from the Android build
+- **File**: `src/components/ledger/Ledger.tsx` (bulk action bar)
+- **Severity**: Medium (a mode the user cannot knowingly leave)
+- **Description**: Entering "Select" showed a bar whose only exit was a button
+  labelled **"Clear"** — which reads as "clear what I have ticked", not "leave
+  this mode". `clearSelection()` did both jobs. A user with five rows ticked
+  had no control that said it would close the bar, and pressing the one that
+  did would look like it was about to discard their selection.
+- **Fix applied**: 2026-08-07. Renamed to `exitBulkMode()` and surfaced as an
+  ✕ on the left of the bar — where Gmail, Google Photos and WhatsApp put it.
+  "Clear" now only unticks, and renders only when something is ticked.
+- **Status**: FIXED
+
+### BUG-067 — Card layout crashed the entire app (Critical/Runtime) — FIXED
+
+- **Found**: 2026-08-07, reported by the owner ("when I click the GRID mode the app crashed")
+- **File**: `src/components/ledger/Ledger.tsx` (grid branch), + 5 latent siblings
+- **Severity**: **Critical** — full ErrorBoundary, "Something went wrong", app unusable until reload
+- **Description**: The grid branch bound its map parameter as `t`, shadowing the
+  `t` destructured from `useTranslation()` at the top of the component. The card
+  body then called `t('stat.paid')` — invoking the **transaction object** as if
+  it were the translator:
+
+  ```
+  TypeError: t is not a function
+  ```
+
+  Neither line is wrong on its own, which is why review never caught it; they
+  simply share a name. TypeScript cannot help — `t` is a real value and calling
+  it is only a runtime error. It also hid well: the crashing branch renders only
+  when the layout toggle is on **and** a fully paid entry is on screen, so the
+  default view was healthy.
+- **Blast radius was larger than the report**: writing the guard found the same
+  shadowing live in five more places — the detailed list in the same file, the
+  ledger search filter, `selectAll`, the CSV export, and two in
+  `IncomeExpense.tsx`. Each survived only because nothing inside it happened to
+  call the translator. One added label away from the same crash.
+- **Fix applied**: 2026-08-07. All bindings renamed to `txn`. Renames verified
+  mechanical by round-tripping the substitution against the pre-edit file.
+- **Regression guard**: `src/__tests__/components/no-translator-shadowing.test.ts`
+  — no file that destructures `t` from `useTranslation()` may bind a callback
+  parameter named `t`. The rule is the **name**, not the crash. Proved by
+  reintroducing the bug: the test fails with the exact file and line.
+- **Status**: FIXED
+
+### BUG-066 — Ledger header was never sticky, so content slid under the status bar (High/UX) — FIXED
+
+- **Found**: 2026-08-06, while verifying the safe-area fix (not from code review)
+- **File**: `src/components/layout/AppShell.tsx`
+- **Severity**: High (on Android, content rendered under the system clock)
+- **Description**: `Header` is `sticky top-0`, but AppShell wrapped it in a bare
+  `<div>` whose height was exactly the header's own — 117px of containing block
+  for a 117px element. A sticky element can only travel within its containing
+  block, so it had nowhere to go and scrolled away like static content.
+  Measured at scroll y=500: `header top: -500`.
+- **Why it mattered more after V27**: with the WebView edge-to-edge, whatever
+  followed the departed header slid up under the clock. Padding the header could
+  not have fixed this — padding a bar that is off screen changes nothing.
+- **Fix applied**: 2026-08-06. Wrapper removed; visibility classes moved onto
+  `<header>` itself. `chromeClass` split so `desktop-only` cannot make `<header>`
+  a flex container and collapse the child carrying `justify-between`.
+- **Status**: FIXED
+
+### BUG-065 — Every safe-area inset read a channel Android had switched off (High/Mobile) — FIXED
+
+- **Found**: 2026-08-06, reported by the owner with screenshots
+- **File**: `src/app/globals.css` + 11 components
+- **Severity**: High (system clock/wifi/battery drawn over app headers on every screen)
+- **Description**: All insets were read via `env(safe-area-inset-*)`, which is
+  **always 0 on Android** — deliberately. From Android 15, apps targeting SDK
+  35+ are forced edge-to-edge (we target 36), so `setOverlaysWebView(false)` is
+  a no-op per Capacitor's own `StatusBar.java#shouldSetStatusBarColor`. Capacitor
+  passes insets to the web layer instead, and cannot use `env()` because
+  Chromium miscomputes it in WebView < 140 (crbug 461332423) — so `SystemBars.java`
+  rebuilds the insets as `Insets.of(0,0,0,0)` and injects `--safe-area-inset-*`
+  instead. Neither side was buggy; they were talking past each other.
+- **Coverage gap found while fixing**: only `Header.tsx` had ever attempted an
+  inset (and was reading the dead channel). Five screen bars had none at all —
+  More, Account, GST & Tax, Money & Banking, Party Settle — plus three banners,
+  the toast viewport and the mobile sidebar.
+- **Fix applied**: 2026-08-06. `--safe-top/right/bottom/left` reading Capacitor's
+  variables first, `env()` second, `0px` last; `pt-safe`/`pb-safe` utilities so a
+  new screen inherits the behaviour from a class name. Status bar icon colour now
+  follows the app theme (it sits on our header now, not a saffron strip).
+- **Status**: FIXED
+
 ### V20-014 — Money round-trip integration test (auditor §5.2) — COMPLETED
 
 - **Found**: 2026-07-12, during V20 post-audit (auditor's §5.2 recommendation)

@@ -217,12 +217,12 @@ export function Ledger({ type }: { type: LedgerType }) {
   const transactions: any[] = infiniteData?.pages?.flatMap((page: any) => page.transactions || []) || []
   const data = infiniteData?.pages?.[0] || null
 
-  const filtered = transactions.filter(t => {
+  const filtered = transactions.filter(txn => {
     if (!search) return true
     const q = search.toLowerCase()
-    return t.invoiceNo?.toLowerCase().includes(q) ||
-      t.party?.name?.toLowerCase().includes(q) ||
-      t.notes?.toLowerCase().includes(q)
+    return txn.invoiceNo?.toLowerCase().includes(q) ||
+      txn.party?.name?.toLowerCase().includes(q) ||
+      txn.notes?.toLowerCase().includes(q)
   })
 
   // Sort filtered transactions
@@ -263,10 +263,19 @@ export function Ledger({ type }: { type: LedgerType }) {
   }
 
   const selectAll = () => {
-    setSelectedIds(new Set(sorted.map(t => t.id)))
+    setSelectedIds(new Set(sorted.map(txn => txn.id)))
   }
 
-  const clearSelection = () => {
+  /*
+   * Leave selection mode. Named for what it does, because the old name was
+   * the whole problem: this was called `clearSelection` and wired to a button
+   * labelled "Clear", so the only exit from the mode was disguised as a
+   * "deselect everything" action. Untick-only now lives inline in the bar.
+   *
+   * Still used after a bulk delete or export, where finishing the job and
+   * leaving the mode is the right pair of things to do.
+   */
+  const exitBulkMode = () => {
     setSelectedIds(new Set())
     setBulkMode(false)
   }
@@ -290,7 +299,7 @@ export function Ledger({ type }: { type: LedgerType }) {
       if (r.ok) success++
     }
     sonnerToast.success(`${success} transactions voided`)
-    clearSelection()
+    exitBulkMode()
     // 🔒 R13-1 (Round 13): Bulk delete must invalidate every money cache —
     // party balances + product stock change when transactions are voided.
     // Was: only triggerRefresh() (refreshKey-keyed queries). Now: also
@@ -303,17 +312,17 @@ export function Ledger({ type }: { type: LedgerType }) {
 
   const handleBulkExport = () => {
     if (selectedIds.size === 0) return
-    const selectedTxns = sorted.filter(t => selectedIds.has(t.id))
+    const selectedTxns = sorted.filter(txn => selectedIds.has(txn.id))
     const headers = ['Date', 'Invoice', 'Party', 'Type', 'Amount', 'Paid', 'Due', 'Payment Mode']
-    const rows = selectedTxns.map(t => [
-      formatDate(t.date),
-      t.invoiceNo || '',
-      t.party?.name || 'Walk-in',
-      t.type,
-      t.totalAmount,
-      t.paidAmount,
-      computeInvoiceDue(t),
-      t.paymentMode,
+    const rows = selectedTxns.map(txn => [
+      formatDate(txn.date),
+      txn.invoiceNo || '',
+      txn.party?.name || 'Walk-in',
+      txn.type,
+      txn.totalAmount,
+      txn.paidAmount,
+      computeInvoiceDue(txn),
+      txn.paymentMode,
     ])
     // 🔒 R13-8 (Round 13): Escape internal double-quotes per RFC 4180.
     // Was: `"${c}"` — a party named John "Big" Doe produces `"John "Big" Doe"`
@@ -328,7 +337,7 @@ export function Ledger({ type }: { type: LedgerType }) {
     a.click()
     URL.revokeObjectURL(url)
     sonnerToast.success(`${selectedTxns.length} transactions exported`)
-    clearSelection()
+    exitBulkMode()
   }
 
   // 🔒 V17 Audit Phase 0 FIX: Net of returns — credit notes/debit notes store
@@ -616,19 +625,44 @@ export function Ledger({ type }: { type: LedgerType }) {
             </div>
           )}
 
-          {/* Bulk action bar — shows when in bulk mode or items selected */}
+          {/* Selection bar.
+           *
+           * There was no way out of this mode. The only button that closed it
+           * was labelled "Clear", which reads as "clear what I have ticked" —
+           * so the exit was hidden inside a control that appears to do
+           * something else, and someone who had ticked five rows would not
+           * dare press it to escape.
+           *
+           * Two separate jobs, now two separate controls. The ✕ on the left is
+           * the way out, where every contextual action bar puts it — Gmail,
+           * Google Photos, WhatsApp all lead with it. "Clear" now only
+           * unticks, and only appears when there is something to untick. */}
           {bulkMode && (
-            <div className="mt-3 flex items-center gap-2 flex-wrap p-3 rounded-lg bg-primary/5 border border-primary/20">
+            <div className="mt-3 flex items-center gap-2 flex-wrap p-2.5 rounded-lg bg-primary/5 border border-primary/20">
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-9 w-9 p-0 -ml-1 flex-shrink-0"
+                onClick={exitBulkMode}
+                title="Done selecting"
+                aria-label="Exit selection mode"
+              >
+                <X className="w-4 h-4" />
+              </Button>
               <span className="text-xs font-medium text-primary">
                 {selectedIds.size} selected
               </span>
-              <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={selectAll}>Select All</Button>
-              <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={clearSelection}>Clear</Button>
+              <Button size="sm" variant="ghost" className="h-9 text-xs" onClick={selectAll}>Select all</Button>
+              {selectedIds.size > 0 && (
+                <Button size="sm" variant="ghost" className="h-9 text-xs" onClick={() => setSelectedIds(new Set())}>
+                  Clear
+                </Button>
+              )}
               <div className="flex-1" />
               <Button
                 size="sm"
                 variant="outline"
-                className="h-7 text-xs gap-1.5"
+                className="h-9 text-xs gap-1.5"
                 onClick={handleBulkExport}
                 disabled={selectedIds.size === 0}
               >
@@ -637,7 +671,7 @@ export function Ledger({ type }: { type: LedgerType }) {
               <Button
                 size="sm"
                 variant="destructive"
-                className="h-7 text-xs gap-1.5"
+                className="h-9 text-xs gap-1.5"
                 onClick={handleBulkDelete}
                 disabled={selectedIds.size === 0}
               >
@@ -817,29 +851,29 @@ export function Ledger({ type }: { type: LedgerType }) {
         </Card>
       ) : transactionsViewMode === 'list' ? (
         <div className="space-y-2">
-          {sorted.map((t) => {
-            const due = computeInvoiceDue(t)
+          {sorted.map((txn) => {
+            const due = computeInvoiceDue(txn)
             const contextMenuItems: ContextMenuItem[] = [
-              { label: 'View Details', icon: Eye, onClick: () => handleViewTransaction(t.id) },
+              { label: 'View Details', icon: Eye, onClick: () => handleViewTransaction(txn.id) },
               { label: 'Edit', icon: Edit2, onClick: () => {
-                setSelectedTransactionId(t.id)
+                setSelectedTransactionId(txn.id)
                 setPreviousView(isSale ? 'sales' : 'purchases')
                 setView('transaction-detail')
               }},
               { separator: true, label: '', onClick: () => {} },
               { label: 'Print Invoice', icon: Printer, onClick: () => {
-                setSelectedTransactionId(t.id)
+                setSelectedTransactionId(txn.id)
                 setPreviousView(isSale ? 'sales' : 'purchases')
                 setView('transaction-detail')
                 setTimeout(() => window.print(), 500)
               }},
               { separator: true, label: '', onClick: () => {} },
-              { label: 'Delete', icon: Trash2, onClick: () => handleDeleteTransaction(t.id), danger: true },
+              { label: 'Delete', icon: Trash2, onClick: () => handleDeleteTransaction(txn.id), danger: true },
             ]
             return (
               <SwipeToDelete
-                key={t.id}
-                onDelete={() => handleDeleteTransaction(t.id)}
+                key={txn.id}
+                onDelete={() => handleDeleteTransaction(txn.id)}
                 confirmMessage={`Delete this ${isSale ? 'sale' : 'purchase'}? This cannot be undone.`}
               >
               <ContextMenu items={contextMenuItems}>
@@ -847,9 +881,9 @@ export function Ledger({ type }: { type: LedgerType }) {
                 className={cn(
                   "shadow-card border-border/60 hover:shadow-md hover:border-primary/30 transition group",
                   bulkMode ? "cursor-default" : "cursor-pointer",
-                  selectedIds.has(t.id) && "ring-2 ring-primary"
+                  selectedIds.has(txn.id) && "ring-2 ring-primary"
                 )}
-                onClick={() => bulkMode ? toggleSelect(t.id) : handleViewTransaction(t.id)}
+                onClick={() => bulkMode ? toggleSelect(txn.id) : handleViewTransaction(txn.id)}
               >
                 <CardContent className="p-3 lg:p-4">
                   <div className="flex items-start gap-3">
@@ -857,8 +891,8 @@ export function Ledger({ type }: { type: LedgerType }) {
                     {bulkMode && (
                       <input
                         type="checkbox"
-                        checked={selectedIds.has(t.id)}
-                        onChange={() => toggleSelect(t.id)}
+                        checked={selectedIds.has(txn.id)}
+                        onChange={() => toggleSelect(txn.id)}
                         className="w-5 h-5 mt-2 rounded cursor-pointer flex-shrink-0"
                         onClick={(e) => e.stopPropagation()}
                       />
@@ -867,8 +901,8 @@ export function Ledger({ type }: { type: LedgerType }) {
                         or a shopping cart / truck icon for walk-in customers.
                         Tinted with the accent color for visual distinction. */}
                     <div className={cn('w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 font-bold text-sm', accentBg, accentColor)}>
-                      {t.party?.name
-                        ? t.party.name.charAt(0).toUpperCase()
+                      {txn.party?.name
+                        ? txn.party.name.charAt(0).toUpperCase()
                         : isSale
                           ? <ShoppingCart className="w-5 h-5" />
                           : <Truck className="w-5 h-5" />}
@@ -879,28 +913,28 @@ export function Ledger({ type }: { type: LedgerType }) {
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <p className="font-semibold text-sm truncate">
-                            {t.party?.name || 'Walk-in Customer'}
+                            {txn.party?.name || 'Walk-in Customer'}
                           </p>
                           {/* Secondary info — smaller, muted */}
                           <div className="flex items-center gap-2 mt-0.5 text-2xs text-muted-foreground flex-wrap">
-                            <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{formatDateTime(t.date)}</span>
-                            <span className="flex items-center gap-1"><User className="w-3 h-3" />{t.items?.length || 0} items</span>
+                            <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{formatDateTime(txn.date)}</span>
+                            <span className="flex items-center gap-1"><User className="w-3 h-3" />{txn.items?.length || 0} items</span>
                           </div>
                         </div>
                         {/* Amount — larger, bolder, tabular nums for alignment */}
                         <div className="text-right flex-shrink-0">
-                          <p className={cn('font-bold text-base tabular-nums', accentColor)}>{formatINR(t.totalAmount)}</p>
-                          {due > 0 && t.type !== 'estimate' && (
+                          <p className={cn('font-bold text-base tabular-nums', accentColor)}>{formatINR(txn.totalAmount)}</p>
+                          {due > 0 && txn.type !== 'estimate' && (
                             <p className="text-2xs text-rose-600 mt-0.5 tabular-nums">Due: {formatINR(due)}</p>
                           )}
                           {/* 🔒 V26 N2 follow-up: profit line only for real sales — an estimate's
                               profit isn't earned yet, and credit notes render their own line below */}
-                          {t.type === 'sale' && !hideProfit && (
-                            <p className="text-2xs text-emerald-600 dark:text-emerald-400 mt-0.5 tabular-nums">+{formatINR(t.grossProfit)}</p>
+                          {txn.type === 'sale' && !hideProfit && (
+                            <p className="text-2xs text-emerald-600 dark:text-emerald-400 mt-0.5 tabular-nums">+{formatINR(txn.grossProfit)}</p>
                           )}
                           {/* 🔒 V17 Audit Phase 4: credit-note grossProfit is NEGATIVE, so use < 0 */}
-                          {t.type === 'credit-note' && !hideProfit && t.grossProfit < 0 && (
-                            <p className="text-2xs text-rose-500 mt-0.5 tabular-nums">-{formatINR(Math.abs(t.grossProfit))}</p>
+                          {txn.type === 'credit-note' && !hideProfit && txn.grossProfit < 0 && (
+                            <p className="text-2xs text-rose-500 mt-0.5 tabular-nums">-{formatINR(Math.abs(txn.grossProfit))}</p>
                           )}
                         </div>
                       </div>
@@ -914,34 +948,34 @@ export function Ledger({ type }: { type: LedgerType }) {
                           </Badge>
                         )}
                         {/* V17-Ext Tier 3: Credit/Debit Note badge */}
-                        {t.type === 'credit-note' && (
+                        {txn.type === 'credit-note' && (
                           <Badge className="text-3xs py-0 bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400">
                             Credit Note
                           </Badge>
                         )}
-                        {t.type === 'debit-note' && (
+                        {txn.type === 'debit-note' && (
                           <Badge className="text-3xs py-0 bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-400">
                             Debit Note
                           </Badge>
                         )}
                         {/* 🔒 V26 FIX N2: Estimate badge so estimates are visually distinguishable */}
-                        {t.type === 'estimate' && (
+                        {txn.type === 'estimate' && (
                           <Badge className="text-3xs py-0 bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400">
                             Estimate
                           </Badge>
                         )}
-                        {t.invoiceNo && (
-                          <Badge variant="outline" className="text-3xs py-0">{t.invoiceNo}</Badge>
+                        {txn.invoiceNo && (
+                          <Badge variant="outline" className="text-3xs py-0">{txn.invoiceNo}</Badge>
                         )}
                         {/* 🔒 V26 N2 follow-up: estimates have no payment — the mode and
                             Paid/Unpaid badges would mislead (server stores paid=total on quotes) */}
-                        {t.type !== 'estimate' && (
+                        {txn.type !== 'estimate' && (
                           <>
-                            <Badge variant="secondary" className="text-3xs py-0 uppercase">{t.paymentMode}</Badge>
+                            <Badge variant="secondary" className="text-3xs py-0 uppercase">{txn.paymentMode}</Badge>
                             {/* Payment status badge */}
                             {due > 0 ? (
                               <Badge variant="destructive" className="text-3xs py-0">
-                                {due === t.totalAmount ? 'Unpaid' : 'Partial'}
+                                {due === txn.totalAmount ? 'Unpaid' : 'Partial'}
                               </Badge>
                             ) : (
                               <Badge className="text-3xs py-0 bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400">
@@ -952,15 +986,15 @@ export function Ledger({ type }: { type: LedgerType }) {
                         )}
                       </div>
 
-                      {t.items?.length > 0 && (
+                      {txn.items?.length > 0 && (
                         <div className="mt-2 flex flex-wrap gap-1">
-                          {t.items.slice(0, 4).map((item: any, i: number) => (
+                          {txn.items.slice(0, 4).map((item: any, i: number) => (
                             <span key={i} className="text-2xs bg-muted px-2 py-0.5 rounded-md">
                               {item.productName} × {item.quantity}
                             </span>
                           ))}
-                          {t.items.length > 4 && (
-                            <span className="text-2xs text-muted-foreground px-2 py-0.5">+{t.items.length - 4} more</span>
+                          {txn.items.length > 4 && (
+                            <span className="text-2xs text-muted-foreground px-2 py-0.5">+{txn.items.length - 4} more</span>
                           )}
                         </div>
                       )}
@@ -976,14 +1010,36 @@ export function Ledger({ type }: { type: LedgerType }) {
           })}
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-          {sorted.map((t) => {
-            const due = computeInvoiceDue(t)
+        /* Two columns on a phone, not one.
+         *
+         * grid-cols-1 made this a worse version of the detailed list — same
+         * one-card-per-row shape, less information in it — so the toggle had
+         * no reason to exist on mobile. At two-up it is what its name says:
+         * a dense overview you scan, against a detailed list you read. */
+        <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+          {/*
+           * `txn`, NOT `t`.
+           *
+           * This map used to bind `t`, which shadowed the `t` from
+           * useTranslation() declared at the top of this component. The card
+           * body then called `t('stat.paid')` — invoking the TRANSACTION as if
+           * it were the translator. "t is not a function", straight into the
+           * error boundary: the whole app showed "Something went wrong" the
+           * moment anyone switched to this layout with a paid entry on screen.
+           *
+           * It was invisible in review because both halves read perfectly on
+           * their own; only the name they share is wrong. The detailed list
+           * below binds `t` the same way and survives purely because nothing
+           * in it happens to call the translator — one added label and it
+           * would have crashed too, so it is renamed as well.
+           */}
+          {sorted.map((txn) => {
+            const due = computeInvoiceDue(txn)
             return (
               <Card
-                key={t.id}
+                key={txn.id}
                 className="shadow-card border-border/60 hover:shadow-md hover:border-primary/30 transition cursor-pointer"
-                onClick={() => handleViewTransaction(t.id)}
+                onClick={() => handleViewTransaction(txn.id)}
               >
                 <CardContent className="p-3">
                   <div className="flex items-center justify-between mb-2">
@@ -994,13 +1050,13 @@ export function Ledger({ type }: { type: LedgerType }) {
                     </div>
                     <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
                   </div>
-                  <p className="font-semibold text-sm truncate">{t.party?.name || 'Walk-in'}</p>
-                  {t.invoiceNo && <p className="text-3xs text-muted-foreground">{t.invoiceNo}</p>}
-                  <p className="text-3xs text-muted-foreground mt-1">{formatDateTime(t.date)}</p>
-                  <div className="mt-2 pt-2 border-t border-border flex items-center justify-between">
-                    <span className={cn('font-bold', accentColor)}>{formatINRCompact(t.totalAmount)}</span>
+                  <p className="font-semibold text-sm truncate">{txn.party?.name || 'Walk-in'}</p>
+                  {txn.invoiceNo && <p className="text-3xs text-muted-foreground truncate">{txn.invoiceNo}</p>}
+                  <p className="text-3xs text-muted-foreground mt-1 truncate">{formatDateTime(txn.date)}</p>
+                  <div className="mt-2 pt-2 border-t border-border flex items-center justify-between gap-1 flex-wrap">
+                    <span className={cn('font-bold', accentColor)}>{formatINRCompact(txn.totalAmount)}</span>
                     {/* 🔒 V26 N2 follow-up: quotes have no payment status */}
-                    {t.type === 'estimate' ? (
+                    {txn.type === 'estimate' ? (
                       <Badge className="text-3xs bg-indigo-100 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-400">Estimate</Badge>
                     ) : due > 0 ? (
                       <Badge variant="destructive" className="text-3xs">Due {formatINRCompact(due)}</Badge>
@@ -1008,12 +1064,12 @@ export function Ledger({ type }: { type: LedgerType }) {
                       <Badge variant="secondary" className="text-3xs bg-emerald-100 text-emerald-700 dark:text-emerald-300">{t('stat.paid')}</Badge>
                     )}
                   </div>
-                  {t.type === 'sale' && !hideProfit && (
-                    <p className="text-3xs text-emerald-600 dark:text-emerald-400 mt-1">+{formatINRCompact(t.grossProfit)} profit</p>
+                  {txn.type === 'sale' && !hideProfit && (
+                    <p className="text-3xs text-emerald-600 dark:text-emerald-400 mt-1">+{formatINRCompact(txn.grossProfit)} profit</p>
                   )}
                   {/* 🔒 V17 Audit Phase 4: credit-note grossProfit is NEGATIVE, so use < 0 */}
-                  {t.type === 'credit-note' && !hideProfit && t.grossProfit < 0 && (
-                    <p className="text-3xs text-rose-500 mt-1">-{formatINRCompact(Math.abs(t.grossProfit))} profit reversed</p>
+                  {txn.type === 'credit-note' && !hideProfit && txn.grossProfit < 0 && (
+                    <p className="text-3xs text-rose-500 mt-1">-{formatINRCompact(Math.abs(txn.grossProfit))} profit reversed</p>
                   )}
                 </CardContent>
               </Card>

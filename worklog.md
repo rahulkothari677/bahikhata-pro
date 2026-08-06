@@ -9807,3 +9807,55 @@ Phase 6: Mobile identity (4 fixes)
   - Unified app name to "EkBook" everywhere
 
 Total: 22 fixes across 6 phases, 14 PRs, all browser-verified.
+
+---
+
+Task ID: bahikhata-pro-v27-mobile-shell
+Agent: claude-opus-5 (session 2026-08-06/07)
+Task: Android status bar drawing over the app; then the ledger screen's UX
+
+Work Log:
+- Reproduced the reported bug on PRODUCTION before changing anything: injecting
+  Capacitor's own --safe-area-inset-top left header paddingTop at 0px.
+- Root cause: Android 15+ forces edge-to-edge (we target SDK 36), so
+  setOverlaysWebView(false) is a documented no-op, and Capacitor's SystemBars
+  deliberately zeroes env(safe-area-inset-*) — Chromium miscomputes it in
+  WebView < 140 — injecting --safe-area-inset-* instead. The app read env().
+- Added --safe-top/right/bottom/left tokens + pt-safe/pb-safe utilities.
+  Applied to 5 screen bars that had NO inset, 3 banners, toasts, sidebar.
+- Status bar icon colour now follows the app theme (it sits on our header now,
+  not a saffron strip; it was pinned, so dark mode gave a dark-on-dark clock).
+- FOUND WHILE VERIFYING: the header was never actually sticky. AppShell wrapped
+  it in a div exactly its own height, so it had nowhere to travel. Removed the
+  wrapper; split chromeClass so `desktop-only` cannot turn <header> into a flex
+  container and collapse its child.
+- Header 69px -> 56px (Android toolbar standard). The existing 3.5rem minHeight
+  had never bound because py-3 already exceeded it.
+- Per-view scroll memory (src/lib/scroll-memory.ts). Forward starts at top,
+  Back restores. CORRECTION: an earlier claim in report 3 that Back kept your
+  place was wrong — the destination mounts short and the browser clamps, so the
+  restore now retries across frames until the document can hold the offset.
+- Ledger toolbar: seven stacked bands -> one row + a filter sheet
+  (LedgerFilterSheet). Active choices return as removable chips. Scan Bill
+  deleted (already reachable from 3 other places). "Select multiple" promoted
+  from a 10px link to a real control beside the entry count.
+- Bottom sheet on mobile, bounded centred dialog on desktop — the Drawer was
+  covering a whole desktop screen and overlapping the app header.
+- CRITICAL: the card layout crashed the entire app. `sorted.map((t) => ...)`
+  shadowed the `t` from useTranslation(), so `t('stat.paid')` called a
+  transaction. Renamed to `txn` — and the same shadowing was live in 5 more
+  places, all surviving only because nothing inside them called the translator.
+- Guard added: src/__tests__/components/no-translator-shadowing.test.ts.
+  Proved by breaking it — reintroducing the bug fails with the exact line.
+- Selection mode had no exit; the only control that closed it said "Clear".
+  Split into an ✕ (exit) and Clear (untick only, shown only when relevant).
+
+Stage Summary:
+- 6 defects fixed; 4 of them found by verifying the first two, not by reading.
+- Every change verified on the live deployment before and after.
+- Typecheck clean, lint 0 errors, 2851 tests pass (148 suites), build green.
+- Full write-up: docs/audit/21-mobile-shell-and-ledger-ux.md
+- Known limitation: the Android APK itself could not be tested from this
+  environment (no device/emulator). The safe-area mechanism was verified by
+  feeding the live site the same variable Capacitor feeds it; final
+  confirmation came from the owner on his phone.
