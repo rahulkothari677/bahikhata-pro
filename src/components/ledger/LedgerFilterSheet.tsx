@@ -33,7 +33,7 @@ import { Switch } from '@/components/ui/switch'
 import {
   Drawer, DrawerContent, DrawerFooter, DrawerHeader, DrawerTitle, DrawerDescription,
 } from '@/components/ui/drawer'
-import { getPresetRange, type DateRange, type DatePreset } from '@/components/common/DateRangePicker'
+import { getPresetRange, getPresetLabel, type DateRange, type DatePreset } from '@/components/common/DateRangePicker'
 import { Calendar, IndianRupee, User, Receipt, LayoutGrid, List, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -55,17 +55,19 @@ export const SORT_OPTIONS: { key: SortKey; label: string; icon: typeof Calendar 
  * elsewhere (a dashboard KPI tap) still displays correctly as its own chip;
  * it just is not offered here.
  */
-const PERIODS: { id: DatePreset | 'all'; label: string }[] = [
-  { id: 'all', label: 'All time' },
-  { id: 'today', label: 'Today' },
-  { id: 'yesterday', label: 'Yesterday' },
-  { id: 'last7', label: 'Last 7 days' },
-  { id: 'last30', label: 'Last 30 days' },
-  { id: 'thisMonth', label: 'This month' },
-  { id: 'lastMonth', label: 'Last month' },
-  { id: 'thisQuarter', label: 'This quarter' },
-  { id: 'thisYear', label: 'This year' },
+const PERIOD_IDS: (DatePreset | 'all')[] = [
+  'all', 'today', 'yesterday', 'last7', 'last30',
+  'thisMonth', 'lastMonth', 'thisQuarter', 'thisYear',
 ]
+
+/**
+ * Labels come from getPresetLabel, not a list written out here.
+ *
+ * A hand-written copy drifts: the first version of this file said "This month"
+ * while the chip it produces — which reads getPresetLabel — said "This Month".
+ * Two names for one filter, three inches apart on the same screen.
+ */
+const periodLabel = (id: DatePreset | 'all') => (id === 'all' ? 'All time' : getPresetLabel(id))
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -149,7 +151,7 @@ export function LedgerFilterSheet({
 
           <Section title="Period">
             <div className="grid grid-cols-2 gap-2">
-              {PERIODS.map(({ id, label }) => (
+              {PERIOD_IDS.map((id) => (
                 <Choice
                   key={id}
                   active={activePeriod === id}
@@ -159,7 +161,7 @@ export function LedgerFilterSheet({
                   }}
                 >
                   {activePeriod === id && <Check className="w-3.5 h-3.5" />}
-                  {label}
+                  {periodLabel(id)}
                 </Choice>
               ))}
             </div>
