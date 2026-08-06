@@ -41,7 +41,13 @@ const viewTitleKeys: Record<string, { titleKey: string; subtitleKey: string }> =
 // Views where "New Entry" should trigger a dialog (not navigate)
 const dialogViews: ViewType[] = ['dashboard', 'inventory', 'sales', 'purchases', 'income-expense', 'parties']
 
-export function Header() {
+/**
+ * `className` exists so AppShell can put its show/hide rules on the <header>
+ * itself rather than on a wrapper around it. That is not a style preference —
+ * a sticky element can only travel inside its containing block, and a wrapper
+ * sized to exactly one header has no room to travel in. See AppShell.
+ */
+export function Header({ className }: { className?: string } = {}) {
   const { currentView, setView, fireTriggerNewEntry, previousView, setPreviousView, features, setSearchOpen, selectedTransactionType } = useAppStore()
   // 🔒 V26 N20: Removed `setFeature` from destructure — was unused in Header.
   const { isFlagEnabled } = useFeatureFlags()
@@ -129,7 +135,7 @@ export function Header() {
   })()
 
   return (
-    <header className="sticky top-0 z-30 bg-background/95 backdrop-blur-md border-b border-border" style={{ paddingTop: 'var(--safe-top)', minHeight: 'calc(3.5rem + var(--safe-top))' }}>
+    <header className={cn("sticky top-0 z-30 bg-background/95 backdrop-blur-md border-b border-border", className)} style={{ paddingTop: 'var(--safe-top)', minHeight: 'calc(3.5rem + var(--safe-top))' }}>
       <div className="flex items-center justify-between gap-3 px-4 lg:px-6 py-3">
         <div className="flex items-center gap-3 min-w-0">
           {/* Hamburger menu hidden on mobile — use "More" tab in bottom nav instead.
