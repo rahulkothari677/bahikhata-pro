@@ -1038,17 +1038,48 @@ export function Ledger({ type }: { type: LedgerType }) {
             return (
               <Card
                 key={txn.id}
-                className="shadow-card border-border/60 hover:shadow-md hover:border-primary/30 transition cursor-pointer"
-                onClick={() => handleViewTransaction(txn.id)}
+                className={cn(
+                  'shadow-card border-border/60 hover:shadow-md hover:border-primary/30 transition cursor-pointer',
+                  // Selected cards are outlined, the way a picked photo is in
+                  // Google Photos — the tick alone is easy to lose in a grid.
+                  bulkMode && selectedIds.has(txn.id) && 'border-primary ring-2 ring-primary/30',
+                )}
+                onClick={() => bulkMode ? toggleSelect(txn.id) : handleViewTransaction(txn.id)}
               >
                 <CardContent className="p-3">
                   <div className="flex items-center justify-between mb-2">
-                    <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center', accentBg)}>
-                      {isSale
-                        ? <ShoppingCart className={cn('w-4 h-4', accentColor)} />
-                        : <Truck className={cn('w-4 h-4', accentColor)} />}
-                    </div>
-                    <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
+                    {/*
+                     * Selection had to work here too.
+                     *
+                     * Only the detailed list rendered a checkbox, so entering
+                     * Select while on the card layout produced a bar reading
+                     * "0 selected" with Delete and Export greyed out, and no
+                     * way to select anything — a dead end you could not act on
+                     * or understand.
+                     *
+                     * That predates this session, but promoting Select from a
+                     * 10px link to a real button made it far easier to walk
+                     * into, so it belongs to this change.
+                     */}
+                    {bulkMode ? (
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(txn.id)}
+                        onChange={() => toggleSelect(txn.id)}
+                        onClick={(e) => e.stopPropagation()}
+                        className="w-5 h-5 rounded cursor-pointer flex-shrink-0"
+                        aria-label={`Select ${txn.party?.name || 'Walk-in'} ${txn.invoiceNo || ''}`.trim()}
+                      />
+                    ) : (
+                      <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center', accentBg)}>
+                        {isSale
+                          ? <ShoppingCart className={cn('w-4 h-4', accentColor)} />
+                          : <Truck className={cn('w-4 h-4', accentColor)} />}
+                      </div>
+                    )}
+                    {/* The chevron promises "opens a detail page". In selection
+                        mode a tap selects instead, so the promise is withdrawn. */}
+                    {!bulkMode && <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />}
                   </div>
                   <p className="font-semibold text-sm truncate">{txn.party?.name || 'Walk-in'}</p>
                   {txn.invoiceNo && <p className="text-3xs text-muted-foreground truncate">{txn.invoiceNo}</p>}
