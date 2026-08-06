@@ -185,7 +185,7 @@ export function CameraPreviewModal({ open, onClose, onCapture }: CameraPreviewMo
       )}
 
       {/* Top controls */}
-      <div className="absolute top-0 left-0 right-0 p-4 pt-[calc(1rem+env(safe-area-inset-top))] flex items-center justify-between z-10">
+      <div className="absolute top-0 left-0 right-0 p-4 pt-[calc(1rem+var(--safe-top))] flex items-center justify-between z-10">
         <button
           onClick={handleClose}
           className="w-10 h-10 rounded-full bg-black/50 backdrop-blur-sm flex items-center justify-center text-white active:scale-95 transition"
@@ -221,7 +221,7 @@ export function CameraPreviewModal({ open, onClose, onCapture }: CameraPreviewMo
       </div>
 
       {/* Bottom controls */}
-      <div className="absolute bottom-0 left-0 right-0 p-8 pb-[calc(2rem+env(safe-area-inset-bottom))] flex items-center justify-center z-10">
+      <div className="absolute bottom-0 left-0 right-0 p-8 pb-[calc(2rem+var(--safe-bottom))] flex items-center justify-center z-10">
         {/* Capture button */}
         <button
           onClick={handleCapture}

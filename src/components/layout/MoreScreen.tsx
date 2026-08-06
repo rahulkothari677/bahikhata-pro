@@ -157,7 +157,7 @@ export function MoreScreen() {
   return (
     <div className="min-h-screen bg-muted/30 w-full flex-1">
       {/* Top bar */}
-      <div className="sticky top-0 z-20 bg-background/80 backdrop-blur-md border-b border-border">
+      <div className="sticky top-0 z-20 pt-safe bg-background/80 backdrop-blur-md border-b border-border">
         <div className="flex items-center gap-3 px-4 py-3">
           {/* 🔒 V26 Phase 6 §5.1: 44px touch target (was p-2 = ~36px, sub-44). */}
           <button onClick={handleBack} className="min-h-[44px] min-w-[44px] flex items-center justify-center -ml-2 rounded-lg hover:bg-muted" aria-label="Go back">
@@ -169,7 +169,7 @@ export function MoreScreen() {
 
       <div
         className="max-w-2xl mx-auto px-4 py-4 space-y-3 pb-24"
-        style={{ paddingBottom: 'calc(6rem + env(safe-area-inset-bottom))' }}
+        style={{ paddingBottom: 'calc(6rem + var(--safe-bottom))' }}
       >
         {/* 🔒 V26 P9: Collapsible accordion sections.
             Each section is a tappable header that expands/collapses its items.

@@ -125,14 +125,14 @@ export function MobileBottomNav() {
     <>
       {/* Spacer to prevent content from being hidden behind the nav.
           Extra height: 80px nav + safe area for home indicator. */}
-      <div className="lg:hidden" style={{ height: 'calc(5rem + env(safe-area-inset-bottom))' }} />
+      <div className="lg:hidden" style={{ height: 'calc(5rem + var(--safe-bottom))' }} />
 
       {/* Bottom nav bar.
           safe-area-inset-bottom prevents the nav from being hidden behind
           the iPhone home indicator or Android gesture bar. */}
       <nav
         className="fixed bottom-0 left-0 right-0 z-40 lg:hidden bg-background/95 backdrop-blur-md border-t border-border"
-        style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+        style={{ paddingBottom: 'var(--safe-bottom)' }}
       >
         <div className="flex items-center justify-around h-16 px-2 relative">
           {/* Left side: Dashboard + Sales */}

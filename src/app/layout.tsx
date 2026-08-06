@@ -89,6 +89,10 @@ export default function RootLayout({
             the keyboard when filling amount fields. */}
         <SonnerToaster
           position="top-center"
+          /* Toasts land at the top on mobile, which on Android is behind the
+             status bar. --safe-top is 0 everywhere else, so this is a no-op
+             on desktop and in a browser. */
+          offset="calc(1rem + var(--safe-top))"
           richColors
           closeButton
           toastOptions={{
