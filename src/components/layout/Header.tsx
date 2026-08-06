@@ -136,7 +136,16 @@ export function Header({ className }: { className?: string } = {}) {
 
   return (
     <header className={cn("sticky top-0 z-30 bg-background/95 backdrop-blur-md border-b border-border", className)} style={{ paddingTop: 'var(--safe-top)', minHeight: 'calc(3.5rem + var(--safe-top))' }}>
-      <div className="flex items-center justify-between gap-3 px-4 lg:px-6 py-3">
+      {/* py-1.5, not py-3.
+       *
+       * The controls in this row are already 44px tall — that is the minimum
+       * touch target and it is not negotiable. py-3 added 24px on top of that,
+       * making the bar 69px: 13px taller than the 56dp Android toolbar that
+       * WhatsApp, Gmail and every Material app use, and it read as a fat empty
+       * band above the content. 44 + 6 + 6 lands exactly on 56, which is also
+       * what the minHeight above asks for, so the two now agree instead of the
+       * padding quietly overriding it. */}
+      <div className="flex items-center justify-between gap-3 px-4 lg:px-6 py-1.5">
         <div className="flex items-center gap-3 min-w-0">
           {/* Hamburger menu hidden on mobile — use "More" tab in bottom nav instead.
               On desktop, sidebar is always visible so no hamburger needed. */}
