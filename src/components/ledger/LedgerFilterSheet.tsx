@@ -33,6 +33,10 @@ import { Switch } from '@/components/ui/switch'
 import {
   Drawer, DrawerContent, DrawerFooter, DrawerHeader, DrawerTitle, DrawerDescription,
 } from '@/components/ui/drawer'
+import {
+  Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription,
+} from '@/components/ui/dialog'
+import { useIsMobile } from '@/hooks/use-mobile'
 import { getPresetRange, getPresetLabel, type DateRange, type DatePreset } from '@/components/common/DateRangePicker'
 import { Calendar, IndianRupee, User, Receipt, LayoutGrid, List, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -123,18 +127,22 @@ export function LedgerFilterSheet({
   onReset: () => void
 }) {
   const activePeriod: DatePreset | 'all' = dateRange ? datePreset : 'all'
+  /*
+   * A bottom sheet is the right shape for a thumb and the wrong shape for a
+   * mouse. On a desktop the same Drawer stretched the full width of the
+   * monitor and pushed up over the app's own header — a control panel eating
+   * a 1920px screen to offer nine short options. Desktop gets a centred
+   * dialog, which is where a pointer expects a modal to be; mobile keeps the
+   * sheet. Same body, same behaviour, two containers.
+   */
+  const isMobile = useIsMobile()
 
-  return (
-    <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent className="max-h-[88vh]">
-        <DrawerHeader className="pb-2">
-          <DrawerTitle>Filter &amp; sort</DrawerTitle>
-          <DrawerDescription className="sr-only">
-            Choose how the ledger is ordered, which period it covers, and how it is laid out.
-          </DrawerDescription>
-        </DrawerHeader>
+  const description = 'Choose how the ledger is ordered, which period it covers, and how it is laid out.'
 
-        <div className="overflow-y-auto px-4 pb-2 space-y-5">
+  /* The controls. Written once — only the frame around them differs. On desktop
+     the option grids go to three columns, because there is room for them. */
+  const body = (
+    <div className={cn('overflow-y-auto space-y-5', isMobile ? 'px-4 pb-2' : 'py-1')}>
           <Section title="Sort by">
             <div className="grid grid-cols-2 gap-2">
               {SORT_OPTIONS.map(({ key, label, icon: Icon }) => (
@@ -168,12 +176,16 @@ export function LedgerFilterSheet({
           </Section>
 
           <Section title="Layout">
+            {/* Names swapped round after looking at what each actually renders.
+                The "list" is the DETAILED one — party, date, invoice, payment
+                mode and a chip per product. The card grid is the compact
+                overview. Calling the detailed one "Compact" was backwards. */}
             <div className="grid grid-cols-2 gap-2">
-              <Choice active={viewMode === 'grid'} onClick={() => onViewMode('grid')}>
-                <LayoutGrid className="w-4 h-4" /> Cards
-              </Choice>
               <Choice active={viewMode === 'list'} onClick={() => onViewMode('list')}>
-                <List className="w-4 h-4" /> Compact
+                <List className="w-4 h-4" /> Detailed
+              </Choice>
+              <Choice active={viewMode === 'grid'} onClick={() => onViewMode('grid')}>
+                <LayoutGrid className="w-4 h-4" /> Compact
               </Choice>
             </div>
           </Section>
@@ -189,16 +201,46 @@ export function LedgerFilterSheet({
               <Switch checked={showVoided} onCheckedChange={onShowVoided} />
             </label>
           </Section>
-        </div>
+    </div>
+  )
 
-        <DrawerFooter className="flex-row gap-2 pb-safe">
-          <Button variant="outline" className="flex-1 min-h-[44px]" onClick={onReset}>
-            Reset
-          </Button>
-          <Button className="flex-[2] min-h-[44px]" onClick={() => onOpenChange(false)}>
-            Show {resultCount} {resultCount === 1 ? 'entry' : 'entries'}
-          </Button>
-        </DrawerFooter>
+  const footer = (
+    <>
+      <Button variant="outline" className="flex-1 min-h-[44px]" onClick={onReset}>
+        Reset
+      </Button>
+      <Button className="flex-[2] min-h-[44px]" onClick={() => onOpenChange(false)}>
+        Show {resultCount} {resultCount === 1 ? 'entry' : 'entries'}
+      </Button>
+    </>
+  )
+
+  if (!isMobile) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        {/* Bounded width and height. The Drawer had neither, which is how it
+            came to cover a whole desktop screen. */}
+        <DialogContent className="sm:max-w-lg max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Filter &amp; sort</DialogTitle>
+            <DialogDescription className="sr-only">{description}</DialogDescription>
+          </DialogHeader>
+          {body}
+          <DialogFooter className="flex-row gap-2 sm:justify-start">{footer}</DialogFooter>
+        </DialogContent>
+      </Dialog>
+    )
+  }
+
+  return (
+    <Drawer open={open} onOpenChange={onOpenChange}>
+      <DrawerContent className="max-h-[88vh]">
+        <DrawerHeader className="pb-2">
+          <DrawerTitle>Filter &amp; sort</DrawerTitle>
+          <DrawerDescription className="sr-only">{description}</DrawerDescription>
+        </DrawerHeader>
+        {body}
+        <DrawerFooter className="flex-row gap-2 pb-safe">{footer}</DrawerFooter>
       </DrawerContent>
     </Drawer>
   )

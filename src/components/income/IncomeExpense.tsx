@@ -118,8 +118,8 @@ export function IncomeExpense() {
   })
 
   const allTxns: any[] = data?.transactions || []
-  const txns = allTxns.filter(t => t.type === 'income' || t.type === 'expense')
-  const filtered = filter === 'all' ? txns : txns.filter(t => t.type === filter)
+  const txns = allTxns.filter(txn => txn.type === 'income' || txn.type === 'expense')
+  const filtered = filter === 'all' ? txns : txns.filter(txn => txn.type === filter)
 
   // 🔒 R9-3 fix: Headline totals now come from the server-side summary, not
   // the client-side reduce. Falls back to 0 while loading.
@@ -134,9 +134,9 @@ export function IncomeExpense() {
     ? summary.byCategory.expense.slice(0, 4).map((c) => [c.category, c.total] as [string, number])
     : (() => {
         const expensesByCategory = new Map<string, number>()
-        txns.filter(t => t.type === 'expense').forEach(t => {
-          const cat = t.category || 'Other'
-          expensesByCategory.set(cat, (expensesByCategory.get(cat) || 0) + t.totalAmount)
+        txns.filter(txn => txn.type === 'expense').forEach(txn => {
+          const cat = txn.category || 'Other'
+          expensesByCategory.set(cat, (expensesByCategory.get(cat) || 0) + txn.totalAmount)
         })
         return Array.from(expensesByCategory.entries()).sort((a, b) => b[1] - a[1]).slice(0, 4)
       })()
@@ -407,14 +407,14 @@ export function IncomeExpense() {
             </Card>
           ) : (
             <div className="space-y-1.5">
-              {filtered.map((t) => {
-                const isIncome = t.type === 'income'
+              {filtered.map((txn) => {
+                const isIncome = txn.type === 'income'
                 return (
                   <Card
-                    key={t.id}
+                    key={txn.id}
                     className="shadow-card border-border/60 hover:shadow-md hover:border-primary/30 transition group cursor-pointer"
                     onClick={() => {
-                      setSelectedTransactionId(t.id)
+                      setSelectedTransactionId(txn.id)
                       setPreviousView('income-expense')
                       setView('transaction-detail')
                     }}
@@ -428,25 +428,25 @@ export function IncomeExpense() {
                             ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400'
                             : 'bg-rose-100 dark:bg-rose-900/40 text-rose-600'
                         )}>
-                          {(t.category || 'O').charAt(0).toUpperCase()}
+                          {(txn.category || 'O').charAt(0).toUpperCase()}
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="font-semibold text-sm truncate group-hover:text-primary transition">
-                            {t.category || 'Other'}
+                            {txn.category || 'Other'}
                           </p>
                           <div className="flex items-center gap-1.5 text-2xs text-muted-foreground mt-0.5">
-                            <span>{formatDate(t.date)}</span>
+                            <span>{formatDate(txn.date)}</span>
                             <span>•</span>
-                            <span className="uppercase">{t.paymentMode}</span>
-                            {t.payeeName && (
+                            <span className="uppercase">{txn.paymentMode}</span>
+                            {txn.payeeName && (
                               <>
                                 <span>•</span>
-                                <span className="truncate">{isIncome ? 'From' : 'To'}: {t.payeeName}</span>
+                                <span className="truncate">{isIncome ? 'From' : 'To'}: {txn.payeeName}</span>
                               </>
                             )}
                           </div>
-                          {t.notes && (
-                            <p className="text-3xs text-muted-foreground mt-0.5 truncate italic">{t.notes}</p>
+                          {txn.notes && (
+                            <p className="text-3xs text-muted-foreground mt-0.5 truncate italic">{txn.notes}</p>
                           )}
                         </div>
                         <div className="text-right flex-shrink-0">
@@ -454,14 +454,14 @@ export function IncomeExpense() {
                             'font-bold text-sm tabular-nums',
                             isIncome ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600'
                           )}>
-                            {isIncome ? '+' : '-'}{formatINR(t.totalAmount)}
+                            {isIncome ? '+' : '-'}{formatINR(txn.totalAmount)}
                           </p>
                         </div>
                         <Button
                           variant="ghost"
                           size="sm"
                           className="h-7 w-7 p-0 opacity-0 group-hover:opacity-100 text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-900/30 flex-shrink-0"
-                          onClick={(e) => { e.stopPropagation(); handleDelete(t.id) }}
+                          onClick={(e) => { e.stopPropagation(); handleDelete(txn.id) }}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </Button>
