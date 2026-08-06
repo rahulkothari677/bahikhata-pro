@@ -16,17 +16,21 @@ import { roundMoney } from '@/lib/money'
 import { computeInvoiceDue } from '@/lib/invoice-due'
 import { useTranslation } from '@/hooks/use-translation'
 import { useSubscription } from '@/hooks/use-subscription'
-import { ViewModeToggle } from '@/components/common/ViewModeToggle'
-import { DateRangePicker, getPresetRange, getPresetLabel, type DateRange, type DatePreset } from '@/components/common/DateRangePicker'
+// ViewModeToggle, DateRangePicker and getPresetRange moved into
+// LedgerFilterSheet with the controls themselves; only the label helper and
+// the types are still needed out here, for the active-filter chips.
+import { getPresetLabel, type DateRange, type DatePreset } from '@/components/common/DateRangePicker'
 import { EmptyState } from '@/components/common/EmptyState'
 import { WakingUpState } from '@/components/common/WakingUpState'
 import { SwipeToDelete } from '@/components/common/SwipeToDelete'
 import { ContextMenu, type ContextMenuItem } from '@/components/common/ContextMenu'
 import {
   Search, ShoppingCart, Truck, Receipt, IndianRupee,
-  TrendingUp, Calendar, User, ScanLine, ChevronRight, Plus, X,
+  TrendingUp, Calendar, User, ChevronRight, Plus, X,
   Edit2, Trash2, Eye, Printer, AlertCircle, RefreshCw, Undo2, Loader2,
+  SlidersHorizontal, CheckSquare,
 } from 'lucide-react'
+import { LedgerFilterSheet, SORT_OPTIONS } from './LedgerFilterSheet'
 import { offlineFetch, isQueuedResponse, isOnline, OfflineError } from '@/lib/offline-fetch'
 import { invalidateMoneyCaches } from '@/lib/invalidate-money-caches'
 import { OfflineNoData } from '@/components/common/OfflineNoData'
@@ -39,7 +43,7 @@ type LedgerType = 'sale' | 'purchase'
 export function Ledger({ type }: { type: LedgerType }) {
   const { confirmDialog, dialog: confirmDialogEl } = useConfirmDialog()
   const {
-    refreshKey, triggerRefresh, setView, setScannerBillType,
+    refreshKey, triggerRefresh, setView,
     transactionsViewMode, setTransactionsViewMode, triggerNewEntry, triggerNewEntryView,
     setSelectedTransactionId, setSelectedTransactionType, setPreviousView, pendingDateRange, setPendingDateRange,
     returnMode,  // 🔒 V26 N11: reactive subscription so dismiss re-renders
@@ -50,6 +54,7 @@ export function Ledger({ type }: { type: LedgerType }) {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [bulkMode, setBulkMode] = useState(false)
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const { t } = useTranslation()
   const { hideProfit } = useSetting()
 
@@ -111,6 +116,12 @@ export function Ledger({ type }: { type: LedgerType }) {
   const [datePreset, setDatePreset] = useState<DatePreset>('thisMonth')
   // 🔒 V8 U1: Voided trail filter — toggle to show soft-deleted transactions
   const [showVoided, setShowVoided] = useState(false)
+
+  /* Drives the badge on the tune button and the chip row below it.
+     Sorting counts only when it is NOT the default (newest first): a badge
+     that is permanently lit tells you nothing. */
+  const activeFilterCount =
+    (dateRange ? 1 : 0) + (sortBy !== 'date' ? 1 : 0) + (showVoided ? 1 : 0)
 
   // Pick up pending date range from store (when navigating from dashboard KPI click)
   useEffect(() => {
@@ -527,82 +538,83 @@ export function Ledger({ type }: { type: LedgerType }) {
       {/* Toolbar */}
       <Card className="shadow-card border-border/60 border-t-2 border-t-primary/10">
         <CardContent className="p-3 lg:p-4">
-          <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
-            <div className="relative flex-1 w-full">
+          {/* ONE row: find, and everything-else.
+           *
+           * What stood here was seven stacked bands on a phone (see
+           * LedgerFilterSheet's header for the full account). Search is the only
+           * control a shopkeeper reaches for repeatedly, so it is the only one
+           * that keeps permanent space. The rest are set-once settings and now
+           * live behind the tune button, which carries a count when any are on.
+           *
+           * "Scan Bill" is gone rather than moved. The same scanner is already
+           * reachable from the dashboard hero row, the dashboard quick actions,
+           * and the + in the bottom nav. A fourth copy inside a list's filter
+           * bar is not discoverability — it is a create action sitting in the
+           * one place the user came to read. */}
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1 min-w-0">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
-                placeholder={`Search ${isSale ? 'sales' : 'purchases'} by invoice, party, notes...`}
+                placeholder={`Search ${isSale ? 'sales' : 'purchases'}...`}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-9"
               />
             </div>
-            <ViewModeToggle mode={transactionsViewMode} onChange={setTransactionsViewMode} />
-
-            {/* Date range picker.
-                🔒 R13-2 (Round 13): When dateRange is null (all-time query), show
-                an "All Time" button instead of a This Month picker. Was: the
-                picker rendered getPresetRange('thisMonth') → user saw "This Month"
-                but the ledger loaded ALL transactions (truth-vs-display mismatch).
-                Now: clicking "All Time" opens the picker at This Month (the most
-                common filter), making the transition explicit. */}
-            {dateRange ? (
-              <div className="flex items-center gap-1">
-                <DateRangePicker
-                  value={dateRange}
-                  onChange={(range, preset) => { setDateRange(range); setDatePreset(preset) }}
-                  preset={datePreset}
-                  onPresetChange={(p) => {
-                    setDatePreset(p)
-                    if (p !== 'custom') setDateRange(getPresetRange(p))
-                  }}
-                />
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-9 w-9 p-0"
-                  onClick={() => { setDateRange(null); setDatePreset('thisMonth') }}
-                  title="Clear date filter (show all)"
-                >
-                  <X className="w-4 h-4" />
-                </Button>
-              </div>
-            ) : (
-              <Button
-                variant="outline"
-                size="sm"
-                className="gap-1.5"
-                onClick={() => {
-                  // Start filtering from This Month (the most common preset).
-                  setDateRange(getPresetRange('thisMonth'))
-                  setDatePreset('thisMonth')
-                }}
-                title="Filter by date range"
-              >
-                <Calendar className="w-4 h-4" />
-                All Time
-              </Button>
-            )}
-
-            {/* 🔒 V8 U1: Voided trail toggle — show/hide soft-deleted transactions */}
-            <Button
-              variant={showVoided ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => { setShowVoided(!showVoided); setSearch('') }}
-              className="gap-1.5 flex-shrink-0"
-              title={showVoided ? 'Showing voided transactions' : 'Show voided transactions'}
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">{showVoided ? 'Voided' : 'Show Voided'}</span>
-            </Button>
             <Button
               variant="outline"
-              onClick={() => { setScannerBillType(type); setView('scanner') }}
-              className="gap-2 border-primary/30 text-primary hover:bg-primary/10"
+              onClick={() => setFiltersOpen(true)}
+              className="relative h-10 w-10 p-0 flex-shrink-0"
+              title="Filter and sort"
+              aria-label={activeFilterCount > 0 ? `Filter and sort, ${activeFilterCount} active` : 'Filter and sort'}
             >
-              <ScanLine className="w-4 h-4" /> <span className="hidden sm:inline">Scan Bill</span>
+              <SlidersHorizontal className="w-4 h-4" />
+              {activeFilterCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-3xs font-bold flex items-center justify-center">
+                  {activeFilterCount}
+                </span>
+              )}
             </Button>
           </div>
+
+          {/* What you actually chose, as chips you can dismiss. The old bar
+              showed every option and never the state; this shows the state and
+              nothing else, so an unexpectedly short ledger explains itself
+              instead of looking like missing data. */}
+          {activeFilterCount > 0 && (
+            <div className="mt-2 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+              {dateRange && (
+                <button
+                  onClick={() => { setDateRange(null); setDatePreset('thisMonth') }}
+                  className="flex-shrink-0 flex items-center gap-1 pl-2.5 pr-1.5 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium"
+                >
+                  <Calendar className="w-3 h-3" />
+                  {getPresetLabel(datePreset)}
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+              {sortBy !== 'date' && (
+                <button
+                  onClick={() => { setSortBy('date'); setSortOrder('desc') }}
+                  className="flex-shrink-0 flex items-center gap-1 pl-2.5 pr-1.5 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium"
+                >
+                  {SORT_OPTIONS.find((o) => o.key === sortBy)?.label}
+                  {sortOrder === 'asc' ? '↑' : '↓'}
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+              {showVoided && (
+                <button
+                  onClick={() => setShowVoided(false)}
+                  className="flex-shrink-0 flex items-center gap-1 pl-2.5 pr-1.5 py-1 rounded-full bg-primary/10 text-primary text-xs font-medium"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  Voided
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Bulk action bar — shows when in bulk mode or items selected */}
           {bulkMode && (
@@ -634,59 +646,63 @@ export function Ledger({ type }: { type: LedgerType }) {
             </div>
           )}
 
-          {/* Bulk mode toggle — small button to enter/exit bulk select */}
+          {/* Bulk select. Was a 10px grey text link on a line of its own —
+              "so small it doesn't serve its purpose", which is exactly right,
+              because it is the ONLY route to bulk delete and bulk export.
+              It now sits next to the count, where a list's own actions belong,
+              at a real 44px touch target. */}
           {sorted.length > 0 && !bulkMode && (
-            <button
-              onClick={() => setBulkMode(true)}
-              className="mt-2 text-2xs text-muted-foreground hover:text-primary transition"
-            >
-              Select multiple →
-            </button>
-          )}
-
-          {/* Sort buttons row */}
-          {sorted.length > 0 && (
-            <div className="mt-3 flex items-center gap-2 flex-wrap">
-              <span className="text-2xs text-muted-foreground font-medium">Sort by:</span>
-              {([
-                { key: 'date', label: 'Date', icon: Calendar },
-                { key: 'amount', label: 'Amount', icon: IndianRupee },
-                { key: 'party', label: 'Party', icon: User },
-                { key: 'status', label: 'Payment', icon: Receipt },
-              ] as const).map(({ key, label, icon: Icon }) => (
-                <button
-                  key={key}
-                  onClick={() => toggleSort(key)}
-                  className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium transition ${
-                    sortBy === key
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted/60 text-muted-foreground hover:bg-muted'
-                  }`}
-                >
-                  <Icon className="w-3 h-3" />
-                  {label}
-                  {sortBy === key && (
-                    <span className="ml-0.5">{sortOrder === 'asc' ? '↑' : '↓'}</span>
-                  )}
-                </button>
-              ))}
-            </div>
-          )}
-
-          {/* Active filter indicator */}
-          {dateRange && (
-            <div className="mt-2 flex items-center gap-2 text-xs">
-              <Badge variant="secondary" className="gap-1">
-                <Calendar className="w-3 h-3" />
-                Filtered: {getPresetLabel(datePreset)}
-              </Badge>
-              <span className="text-muted-foreground">
-                {dateRange.from.toLocaleDateString('en-IN')} — {dateRange.to.toLocaleDateString('en-IN')}
+            <div className="mt-3 flex items-center justify-between gap-3">
+              <span className="text-xs text-muted-foreground">
+                {sorted.length} {sorted.length === 1 ? 'entry' : 'entries'}
               </span>
+              <button
+                onClick={() => setBulkMode(true)}
+                className="flex items-center gap-1.5 min-h-[44px] px-2 -mr-2 text-xs font-medium text-primary hover:underline"
+              >
+                <CheckSquare className="w-3.5 h-3.5" />
+                Select
+              </button>
             </div>
+          )}
+
+          {/* The four sort buttons and the separate "Filtered:" badge that used
+              to sit here are both in the sheet / chip row above now. */}
+
+          {/* The exact dates behind the active period. The chip above names the
+              period; this says what it resolved to, which matters when someone
+              is reconciling against a bank statement. */}
+          {dateRange && (
+            <p className="mt-1.5 text-2xs text-muted-foreground">
+              {dateRange.from.toLocaleDateString('en-IN')} — {dateRange.to.toLocaleDateString('en-IN')}
+            </p>
           )}
         </CardContent>
       </Card>
+
+      <LedgerFilterSheet
+        open={filtersOpen}
+        onOpenChange={setFiltersOpen}
+        sortBy={sortBy}
+        sortOrder={sortOrder}
+        onToggleSort={toggleSort}
+        dateRange={dateRange}
+        datePreset={datePreset}
+        onDateChange={(range, preset) => { setDateRange(range); setDatePreset(preset) }}
+        viewMode={transactionsViewMode}
+        onViewMode={setTransactionsViewMode}
+        showVoided={showVoided}
+        onShowVoided={(v) => { setShowVoided(v); setSearch('') }}
+        resultCount={sorted.length}
+        onReset={() => {
+          setDateRange(null)
+          setDatePreset('thisMonth')
+          setSortBy('date')
+          setSortOrder('desc')
+          setShowVoided(false)
+          setSearch('')
+        }}
+      />
 
       {/* Transactions list */}
       {!isOnline() && !!error && !data ? (

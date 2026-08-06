@@ -216,14 +216,14 @@ export function AccountScreen() {
       const prev = useAppStore.getState().previousView
       setAccountSection(null)
       if (prev === 'more' || origin === 'more') {
-        setView('more')
+        setView('more', { back: true })
         setPreviousView(null)
         useAppStore.getState().setAccountOriginView(null)
       }
     } else {
       // If on the menu, go back to the original view
       const origin = useAppStore.getState().accountOriginView
-      setView(origin || previousView || 'dashboard')
+      setView(origin || previousView || 'dashboard', { back: true })
       setPreviousView(null)
       useAppStore.getState().setAccountOriginView(null)
     }

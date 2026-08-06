@@ -106,11 +106,10 @@ export function Header({ className }: { className?: string } = {}) {
   }
 
   const handleBack = () => {
-    if (previousView) {
-      setView(previousView)
-    } else {
-      setView('dashboard')
-    }
+    // { back: true } — restore the destination where the user left it. Coming
+    // back from a bill to a long ledger should land on the row they tapped,
+    // not at the top of the list.
+    setView(previousView || 'dashboard', { back: true })
     setPreviousView(null)
   }
 

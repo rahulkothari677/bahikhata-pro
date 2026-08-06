@@ -16,7 +16,6 @@
 import { useAppStore } from '@/store/app-store'
 import { toast as sonnerToast } from 'sonner'
 import { haptic } from '@/lib/haptic'
-import { scrollToTop } from '@/lib/scroll-to-top'
 import type { NavDestination } from '@/lib/nav-registry'
 import type { ViewType } from '@/store/app-store'
 
@@ -40,10 +39,10 @@ export function handleNavAction(
   const kind = dest.actionKind || 'navigate'
   const params = dest.actionParams || {}
 
-  // A forward navigation should start at the top of the screen it opens.
-  // 'navigate-scroll' is the one exception — it exists precisely to land on a
-  // named element, so resetting first would fight it.
-  if (kind !== 'navigate-scroll') scrollToTop()
+  // Nothing to do about scroll position here: store.setView starts every
+  // forward navigation at the top on its own. 'navigate-scroll' still works,
+  // because its target element is scrolled into view by the destination
+  // screen's own effect, which runs after the view has mounted and reset.
 
   switch (kind) {
     case 'navigate':

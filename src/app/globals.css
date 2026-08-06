@@ -292,6 +292,18 @@
   background: oklch(0.75 0.02 30);
 }
 
+/* No scrollbar at all — for horizontal chip rows that scroll by swipe.
+   A visible track under a row of filter chips reads as a stray grey line and
+   costs height the row does not have to give. The row still scrolls; only its
+   scrollbar is hidden, which is the standard treatment for this pattern. */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 /* Extra-thin scrollbar for split-view panels — almost invisible */
 .thin-scrollbar {
   scrollbar-width: thin;

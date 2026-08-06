@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { rememberScroll, restoreScroll, scrollToTop } from '@/lib/scroll-memory'
 
 export type ViewType =
   | 'dashboard'
@@ -114,7 +115,9 @@ interface NavStackEntry {
 
 interface AppState {
   currentView: ViewType
-  setView: (v: ViewType) => void
+  /** `{ back: true }` restores the destination's remembered scroll position
+   *  instead of starting it at the top. Use it from back buttons. */
+  setView: (v: ViewType, opts?: { back?: boolean }) => void
   // 🔒 AUDIT V23 FIX §9.1: Navigation stack — replaces the 5 parallel nav
   // variables (previousView, accountOriginView, pendingSettingsTab,
   // pendingReportType, accountSection) with a single stack.
@@ -255,21 +258,41 @@ interface AppState {
 export const useAppStore = create<AppState>()(
     (set, get) => ({
       currentView: 'dashboard',
-      setView: (v) => set({ currentView: v }),
+      /*
+       * Every screen change runs through here, which makes it the one place
+       * that can get scroll position right — so it does, rather than each
+       * caller remembering to.
+       *
+       * Default is forward: remember where we are leaving, then start the new
+       * screen at the top. Pass `{ back: true }` from a back button and the
+       * destination is restored to where the user left it instead. That
+       * distinction cannot be inferred here — going back sets currentView
+       * exactly like going forward does — so the back sites declare it.
+       */
+      setView: (v, opts) => {
+        const from = get().currentView
+        if (from !== v) rememberScroll(from)
+        set({ currentView: v })
+        if (opts?.back) restoreScroll(v)
+        else scrollToTop()
+      },
       // 🔒 AUDIT V23 FIX §9.1: Navigation stack implementation
       navStack: [],
-      pushView: (view, params) => set((s) => ({
-        currentView: view,
-        navStack: [...s.navStack, { view: s.currentView, params }],
-      })),
-      popView: () => set((s) => {
-        if (s.navStack.length === 0) return s
+      pushView: (view, params) => {
+        const s = get()
+        rememberScroll(s.currentView)
+        set({ currentView: view, navStack: [...s.navStack, { view: s.currentView, params }] })
+        scrollToTop()
+      },
+      popView: () => {
+        const s = get()
+        if (s.navStack.length === 0) return
         const prev = s.navStack[s.navStack.length - 1]
-        return {
-          currentView: prev.view,
-          navStack: s.navStack.slice(0, -1),
-        }
-      }),
+        rememberScroll(s.currentView)
+        set({ currentView: prev.view, navStack: s.navStack.slice(0, -1) })
+        // popView is by definition a back step, so the destination is restored.
+        restoreScroll(prev.view)
+      },
       canGoBack: () => get().navStack.length > 0,
       // 🔒 AUDIT V25 FIX §4.1: sidebarOpen/setSidebarOpen removed.
       // 🔒 AUDIT V25 FIX §3b.2 (Batch 3b): Sidebar collapsed by default on desktop.
