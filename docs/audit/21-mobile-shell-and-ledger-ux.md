@@ -9,7 +9,7 @@
 
 ## 0. What this session actually found
 
-Six defects. Two were reported; four came out of verifying the fixes for the
+Seven defects. Three were reported; four came out of verifying the fixes for the
 first two. That ratio is the point of this report.
 
 | # | Defect | Severity | Found by |
@@ -20,6 +20,7 @@ first two. That ratio is the point of this report.
 | 4 | Tab switches opened the new screen mid-scroll | Medium | Reported |
 | 5 | The card layout crashed the whole app | **Critical** | Reported |
 | 6 | Selection mode had no exit that said so | Medium | Reported |
+| 7 | The card layout could enter selection but never select | Medium | Verifying #6 |
 
 ---
 
@@ -233,11 +234,21 @@ to do something else, and someone with five rows ticked would not risk it.
 where Gmail, Google Photos and WhatsApp put it — and "Clear" only unticks, and
 only appears when there is something to untick.
 
+**And verifying that found the mode was unusable in one layout.** Only the
+detailed list rendered a checkbox. Entering Select on the card layout gave a bar
+reading "0 selected", Delete and Export greyed out, and nothing to tick —
+measured on production as 50 checkboxes in the list against **0** in the grid.
+Pre-existing, but promoting Select from a hidden link to a real button made it
+easy to walk into, so it was fixed here rather than logged: cards take a
+checkbox in place of the type icon, a tap selects instead of opening, the
+chevron's "opens a page" promise is withdrawn, and the selected card is outlined
+— a lone tick is easy to lose in a grid, which is why Photos outlines the tile.
+
 ---
 
 ## 8. What this session should be remembered for
 
-**Four of six defects came from verifying, not from reading.** The sticky
+**Four of seven defects came from verifying, not from reading.** The sticky
 header, the scroll-restore that never restored, the desktop dialog and the
 label mismatch were all invisible in the diff and obvious in the product.
 

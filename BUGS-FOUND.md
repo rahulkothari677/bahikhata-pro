@@ -20,6 +20,26 @@ and include enough context to reproduce.
 
 <!-- Add new bugs below this line. Newest first. -->
 
+### BUG-069 — Card layout could enter selection mode but never select (Medium/UX dead end) — FIXED
+
+- **Found**: 2026-08-07, browser-verifying the BUG-068 fix on production
+- **File**: `src/components/ledger/Ledger.tsx` (grid branch)
+- **Severity**: Medium (a mode you can enter, cannot use, and cannot understand)
+- **Description**: Only the detailed list rendered a selection checkbox. Tapping
+  **Select** while on the card layout produced the selection bar reading
+  "0 selected" with Delete and Export permanently greyed out, and nothing on
+  screen to tick. Measured on production: detailed layout 50 checkboxes, card
+  layout **0**.
+- **Age**: pre-existing — the grid branch never had bulk support. But promoting
+  "Select" from a hidden 10px link to a real button (BUG-068) made it far easier
+  to walk into, so it was fixed in the same pass rather than logged.
+- **Fix applied**: 2026-08-07. Cards render a checkbox in place of the type icon
+  while in selection mode, a tap toggles selection instead of opening the
+  transaction, the chevron (which promises "opens a detail page") is withdrawn,
+  and a selected card is outlined — a lone tick is easy to lose in a grid, which
+  is why Google Photos outlines the whole tile.
+- **Status**: FIXED
+
 ### BUG-068 — Ledger selection mode had no exit control (Medium/UX) — FIXED
 
 - **Found**: 2026-08-07, reported by the owner from the Android build
