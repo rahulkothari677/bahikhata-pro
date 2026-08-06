@@ -27,6 +27,31 @@ import { dataUrlBase64 } from './card-canvas'
 export interface SendBillResult {
   format: SendFormat
   reason: string
+  /** The public link, when the shop has them switched on. */
+  link?: string | null
+}
+
+/**
+ * Mints (or reuses) the shareable link for a bill.
+ *
+ * Returns null on ANY failure. A link is an enhancement to the message; a bill
+ * that will not send because the link server was slow is a worse outcome than a
+ * bill sent without one.
+ */
+async function mintLink(transactionId: string): Promise<string | null> {
+  try {
+    const r = await fetch('/api/bill-share', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ transactionId }),
+    })
+    if (!r.ok) return null
+    const data = await r.json()
+    if (!data?.token) return null
+    return `${window.location.origin}/b/${data.token}`
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -78,7 +103,14 @@ async function loadLogo(url: string | null | undefined): Promise<HTMLImageElemen
 export async function sendBill(
   src: InvoiceSource,
   shop: InvoiceShop,
-  opts: { preference?: SendFormatPreference; override?: SendFormat } = {},
+  opts: {
+    preference?: SendFormatPreference
+    override?: SendFormat
+    /** Setting.docShareLink. Off by default; see the schema note. */
+    shareLink?: boolean
+    /** The bill's id, needed to mint a link. */
+    transactionId?: string
+  } = {},
 ): Promise<SendBillResult> {
   const doc = buildInvoiceDocument(src, shop)
   const chosen = opts.override
@@ -86,7 +118,22 @@ export async function sendBill(
     : chooseSendFormat(doc, opts.preference ?? 'smart')
 
   const filename = documentFileName(doc, chosen.format)
-  const caption = buildCaption(doc)
+
+  /*
+   * The link, when the shop has it on.
+   *
+   * It also fixes something a caption alone could not. ANDROID DOES NOT ALLOW A
+   * FILE AND TEXT IN ONE SHARE — the platform's own guidance is that supplying
+   * both EXTRA_TEXT and EXTRA_STREAM is not allowed, and WhatsApp honours the
+   * text for images but drops it for documents. That is why Rahul saw a caption
+   * on a picture and none on a PDF; it is not a bug in our code and cannot be
+   * fixed in it. A LINK is text, so a bill sent as a link carries its caption.
+   */
+  const link =
+    opts.shareLink && opts.transactionId ? await mintLink(opts.transactionId) : null
+
+  const caption = link ? `${buildCaption(doc)}
+${link}` : buildCaption(doc)
 
   if (chosen.format === 'image') {
     const [qrImage, logoImage] = await Promise.all([
@@ -103,7 +150,7 @@ export async function sendBill(
       text: caption,
       dialogTitle: 'Send bill',
     })
-    return { format: 'image', reason: chosen.reason }
+    return { format: 'image', reason: chosen.reason, link }
   }
 
   const pdfBlob = await generateInvoicePDF(src as never, shop as never)
@@ -113,7 +160,7 @@ export async function sendBill(
     text: caption,
     dialogTitle: 'Send bill',
   })
-  return { format: 'pdf', reason: chosen.reason }
+  return { format: 'pdf', reason: chosen.reason, link }
 }
 
 /**

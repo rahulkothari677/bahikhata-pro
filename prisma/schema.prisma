@@ -47,6 +47,7 @@ model User {
   products         Product[]
   parties          Party[]
   transactions     Transaction[]
+  billShares       BillShare[]
   payments         Payment[]
   settings         Setting[]
   auditLogs        AuditLog[]
@@ -254,6 +255,7 @@ model Transaction {
   // 🔒 AUDIT C5: payments settled against this bill. The bill's true due is
   // totalAmount − paidAmount − Σ(paymentAllocations.amount).
   paymentAllocations PaymentAllocation[]
+  billShares         BillShare[]
   noteType              String?       // 'C' (credit) or 'D' (debit) — only for credit-note/debit-note types
   noteReason            String?       // GST reason: 'post-sale-discount' | 'deficiency' | 'return' | 'price-revision' | 'other'
   affectsStock          Boolean       @default(false) // true only when goods are physically returned
@@ -532,6 +534,14 @@ model Setting {
   // A preference rather than a prompt: a shopkeeper billing forty customers a
   // day should not answer forty format questions.
   docSendFormat    String  @default("smart")
+
+  // 📄 Whether a shareable LINK goes out alongside the bill.
+  //
+  // OFF BY DEFAULT, deliberately. A link puts a page carrying a customer's bill
+  // on the public internet behind an unguessable address, and that is a choice
+  // a shopkeeper makes rather than one made for them. Rahul asked for the
+  // toggle by name.
+  docShareLink     Boolean @default(false)
 
   cardMode         String  @default("profile")
 
@@ -1795,4 +1805,56 @@ model BreakGlassSession {
   /// page load so the banner cannot be missed.
   @@index([expiresAt, revokedAt])
   @@index([adminId, startedAt])
+}
+
+
+/**
+ * A shareable link to one bill.
+ *
+ * 📄 Phase 4 of docs/DOCUMENT-ENGINE-PLAN.md. A long bill cannot be sent as a
+ * readable picture and a PDF arrives as a grey card nobody opens, so the third
+ * option is a link: any length, payable, always current, and it reports whether
+ * the customer actually opened it.
+ *
+ * ⚠️ THIS ROW IS A CAPABILITY. Anyone holding the token can read the bill —
+ * there is no login, because the recipient is a customer who has no account.
+ * The security is therefore entirely in the token, and the design pays for that
+ * up front rather than retrofitting it:
+ *
+ *   - `token` is 32 random URL-safe characters from a CSPRNG, never a
+ *     sequential id and never derived from the transaction. Guessing one is
+ *     not a realistic attack; enumerating incrementing ids would have been.
+ *   - `expiresAt` and `revokedAt` mean a link is not forever. A shopkeeper who
+ *     shares one by mistake has a way back.
+ *   - The page is `noindex`, so a link pasted into a public group does not end
+ *     up in a search engine.
+ *   - Views are counted, which is the point for the shopkeeper chasing money —
+ *     but no IP or device data is stored with them. Knowing the bill was opened
+ *     is useful; building a profile of the customer who opened it is not ours
+ *     to do, and under the DPDP Act collecting it would need a purpose we do
+ *     not have.
+ */
+model BillShare {
+  id            String    @id @default(cuid())
+  /// 32 URL-safe characters from crypto.randomBytes. Unique, unguessable.
+  token         String    @unique
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactionId String
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  createdAt     DateTime  @default(now())
+  /// null = no expiry. The shop chooses.
+  expiresAt     DateTime?
+  /// Set when the shop kills the link. Kept rather than deleted so the audit
+  /// trail still shows a link existed and was withdrawn.
+  revokedAt     DateTime?
+
+  /// Sent → viewed → paid is what a shopkeeper chasing money wants to know.
+  viewCount     Int       @default(0)
+  firstViewedAt DateTime?
+  lastViewedAt  DateTime?
+
+  @@index([userId, createdAt])
+  @@index([transactionId])
 }

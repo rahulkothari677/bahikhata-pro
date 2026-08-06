@@ -297,7 +297,12 @@ export function TransactionDetail() {
           upiId: setting?.upiId,
           logoUrl: setting?.logoUrl,
         },
-        { preference: setting?.docSendFormat, override },
+        {
+          preference: setting?.docSendFormat,
+          override,
+          shareLink: setting?.docShareLink,
+          transactionId: txn.id,
+        },
       )
 
       /*

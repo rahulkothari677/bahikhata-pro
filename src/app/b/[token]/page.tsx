@@ -1,0 +1,165 @@
+/**
+ * The public bill page — what a customer sees when they tap the link.
+ *
+ * 📄 Phase 4 of docs/DOCUMENT-ENGINE-PLAN.md.
+ *
+ * NO LOGIN, by design: the reader is a customer with no account. The token in
+ * the URL is the entire credential, which is why it is 192 bits of CSPRNG
+ * output and why this page is `noindex`.
+ *
+ * WHAT IS DELIBERATELY NOT ON IT. A tax invoice under Rule 46 must name the
+ * recipient and carry their GSTIN and address — a customer claiming input tax
+ * credit needs them — so those are here. The party's PHONE NUMBER is not: it
+ * is not required by Rule 46, it is the most sensitive field on the record, and
+ * anyone holding the link can read this page. The bill loses nothing by leaving
+ * it off, and a link forwarded to a group chat stops being a phone number leak.
+ */
+
+import type { Metadata } from 'next'
+import { db } from '@/lib/db'
+import { isWellFormedToken, isShareLinkUsable, DEAD_LINK_MESSAGE } from '@/lib/bill-share'
+import { buildInvoiceDocument } from '@/lib/invoice-document'
+import { PublicBill } from './PublicBill'
+
+/**
+ * Never indexed.
+ *
+ * A link pasted into a public WhatsApp group would otherwise be crawled and a
+ * customer's bill would end up in a search engine — the failure that turns a
+ * convenience into a data breach.
+ */
+export const metadata: Metadata = {
+  title: 'Bill',
+  robots: { index: false, follow: false, nocache: true },
+}
+
+// Always fresh: a bill that has been part-paid since it was sent must say so.
+// That is the whole advantage a link has over a PDF, and caching would remove it.
+export const dynamic = 'force-dynamic'
+
+export default async function BillPage({ params }: { params: Promise<{ token: string }> }) {
+  const { token } = await params
+
+  // Rejected before a database round trip. A malformed token is either a typo
+  // or someone probing, and neither deserves a query.
+  if (!isWellFormedToken(token)) return <DeadLink />
+
+  const share = await db.billShare.findUnique({
+    where: { token },
+    include: {
+      transaction: {
+        include: {
+          items: true,
+          party: true,
+        },
+      },
+      user: { include: { settings: true } },
+    },
+  })
+
+  if (!share || !isShareLinkUsable(share)) return <DeadLink />
+
+  /*
+   * 🔒 A DELETED BILL IS NOT VIEWABLE, even through a link minted while it was
+   * live. Deleting a bill has to mean it stops being served — otherwise the
+   * link is a copy that outlives the delete, which is exactly the kind of thing
+   * a shopkeeper would not expect and could not undo.
+   */
+  if (share.transaction.deletedAt) return <DeadLink />
+
+  const txn = share.transaction
+  const setting = share.user.settings[0]
+
+  /*
+   * Counting the view is the point of the link — sent, then opened, then paid
+   * is what a shopkeeper chasing money wants to know.
+   *
+   * No IP, user agent or device data is stored with it. Knowing the bill was
+   * opened is useful to the shop; building a profile of the customer who opened
+   * it is not ours to do, and under the DPDP Act it would need a purpose we do
+   * not have. `updateMany` rather than `update` so a link revoked between the
+   * read above and this write simply updates nothing.
+   */
+  const now = new Date()
+  await db.billShare
+    .updateMany({
+      where: { id: share.id },
+      data: {
+        viewCount: { increment: 1 },
+        lastViewedAt: now,
+        ...(share.firstViewedAt ? {} : { firstViewedAt: now }),
+      },
+    })
+    .catch(() => {
+      // A failed counter must never cost the customer their bill.
+    })
+
+  const doc = buildInvoiceDocument(
+    {
+      invoiceNo: txn.invoiceNo,
+      date: txn.date,
+      type: txn.type,
+      party: txn.party
+        ? {
+            name: txn.party.name,
+            // Phone deliberately omitted — see the note at the top.
+            gstin: txn.party.gstin,
+            address: txn.party.address,
+            state: txn.party.state,
+          }
+        : null,
+      items: txn.items.map(i => ({
+        productName: i.productName,
+        quantity: i.quantity,
+        unitPrice: i.unitPrice,
+        gstRate: i.gstRate,
+        total: i.total,
+        unit: i.unit ?? undefined,
+        hsn: i.hsn,
+      })),
+      subtotal: txn.subtotal,
+      discountAmount: txn.discountAmount,
+      cgst: txn.cgst,
+      sgst: txn.sgst,
+      igst: txn.igst,
+      totalAmount: txn.totalAmount,
+      roundOff: txn.roundOff ?? 0,
+      paidAmount: txn.paidAmount,
+      paymentMode: txn.paymentMode,
+      isInterState: txn.isInterState ?? false,
+    } as never,
+    {
+      name: setting?.shopName || 'Shop',
+      ownerName: setting?.ownerName,
+      phone: setting?.phone,
+      email: setting?.email,
+      gstin: setting?.gstin,
+      address: setting?.address,
+      state: setting?.state,
+      upiId: setting?.upiId,
+      logoUrl: setting?.logoUrl,
+    },
+  )
+
+  return <PublicBill doc={doc} />
+}
+
+/**
+ * The same page for expired, revoked and never-existed.
+ *
+ * Telling a holder of a dead token that the bill "was withdrawn" confirms the
+ * bill and the shop exist. The shopkeeper sees the real status in their own app.
+ */
+function DeadLink() {
+  return (
+    <main className="min-h-screen grid place-items-center bg-slate-50 p-6">
+      <div className="max-w-sm text-center">
+        <div className="mx-auto w-12 h-12 rounded-full bg-slate-200 grid place-items-center mb-4">
+          <span className="text-2xl" aria-hidden>🧾</span>
+        </div>
+        <h1 className="text-lg font-semibold text-slate-800 mb-2">Bill not available</h1>
+        <p className="text-sm text-slate-600">{DEAD_LINK_MESSAGE}</p>
+      </div>
+    </main>
+  )
+}

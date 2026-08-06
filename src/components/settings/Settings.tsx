@@ -26,7 +26,7 @@ import { useAppStore, type FeatureKey } from '@/store/app-store'
 import { THEME_OPTIONS } from '@/components/providers/ThemeProvider'
 import {
   Store, Save, Database, Trash2, AlertTriangle, Moon, Keyboard,
-  Search, MessageCircle, Sparkles, Bell, Repeat, FileSpreadsheet,
+  Search, MessageCircle, Sparkles, Bell, Repeat, FileSpreadsheet, Link2 as LinkIcon,
   Users, Package, ScanLine, TrendingUp, Smartphone, RotateCcw, Palette, Check, Globe, Shield, EyeOff, Plus, Mic, Lock, Loader2, BarChart3, Home, Pencil,
 } from 'lucide-react'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
@@ -125,6 +125,9 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
   const [expenseGoal, setExpenseGoal] = useState('')
   // 🔒 V12: Invoice round-off toggle (nearest rupee on sale totals).
   const [roundOffEnabled, setRoundOffEnabled] = useState(false)
+  // 📄 How bills are delivered. See docs/DOCUMENT-ENGINE-PLAN.md.
+  const [docSendFormat, setDocSendFormat] = useState<'smart' | 'image' | 'pdf'>('smart')
+  const [docShareLink, setDocShareLink] = useState(false)
   // 🔒 V11: Stock policy toggle — 'block' (default) or 'allow' (kirana mode).
   const [stockPolicy, setStockPolicy] = useState<'block' | 'allow'>('block')
   // 🔒 V17-Ext §5.1: Period lock state. null = unlocked. Date string = locked
@@ -162,6 +165,8 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
         voiceLang: data.setting.voiceLang || 'original',
       })
       setRoundOffEnabled(data.setting.roundOffEnabled ?? false)
+      setDocSendFormat(data.setting.docSendFormat ?? 'smart')
+      setDocShareLink(data.setting.docShareLink ?? false)
       setStockPolicy(data.setting.stockPolicy === 'allow' ? 'allow' : 'block')
       // 🔒 V17-Ext §5.1: Sync period lock state from server.
       // lockedUntil is an ISO timestamp (or null). We store the full timestamp
@@ -191,6 +196,32 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
   // 🔒 R16-1 (Round 16): Revert optimistic update on failure. Was: toggle
   // showed ON while server had OFF — fixed on next page load. Now: reverts
   // to the previous value in catch, matching use-setting.ts:76-83 pattern.
+  /**
+   * Saves a bill-delivery setting on its own, immediately.
+   *
+   * Optimistic with a rollback, matching persistRoundOff: a toggle that waits
+   * for a round trip feels broken on a shop's connection, and one that lies
+   * about having saved is worse.
+   */
+  const persistDocSetting = async (
+    patch: { docSendFormat?: 'smart' | 'image' | 'pdf'; docShareLink?: boolean },
+    rollback: () => void,
+  ) => {
+    try {
+      const r = await offlineFetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+        offline: { invalidate: ['/api/settings'] },
+      })
+      if (!r.ok) throw new Error(await readError(r))
+      sonnerToast.success('Saved')
+    } catch (e: any) {
+      rollback()
+      sonnerToast.error(e?.message || "Couldn't save that setting")
+    }
+  }
+
   const persistRoundOff = async (next: boolean) => {
     const prev = roundOffEnabled
     setRoundOffEnabled(next)
@@ -1446,6 +1477,72 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
             <Switch
               checked={roundOffEnabled}
               onCheckedChange={(checked) => persistRoundOff(checked)}
+            />
+          </div>
+
+          {/* 📄 How bills go out. See docs/DOCUMENT-ENGINE-PLAN.md. */}
+          <div className="mt-3 rounded-lg bg-muted/30 border border-border/60 p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <MessageCircle className="w-4 h-4 text-muted-foreground" />
+              <div>
+                <p className="text-sm font-medium">How bills are sent</p>
+                <p className="text-2xs text-muted-foreground">
+                  A short bill sends as a picture, which opens straight in a WhatsApp chat. A long one
+                  sends as a PDF — WhatsApp shrinks tall images until the text cannot be read.
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-1.5">
+              {([
+                ['smart', 'Automatic', 'Picks by bill size'],
+                ['image', 'Always picture', 'Best for short bills'],
+                ['pdf', 'Always PDF', 'Best for long bills'],
+              ] as const).map(([value, label, hint]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => {
+                    const prev = docSendFormat
+                    setDocSendFormat(value)
+                    persistDocSetting({ docSendFormat: value }, () => setDocSendFormat(prev))
+                  }}
+                  aria-pressed={docSendFormat === value}
+                  className={
+                    'rounded-lg border px-2 py-2 text-left transition ' +
+                    (docSendFormat === value
+                      ? 'border-primary bg-primary/5 ring-1 ring-primary/25'
+                      : 'border-border/70 hover:border-border')
+                  }
+                >
+                  <span className="block text-2xs font-medium">{label}</span>
+                  <span className="block text-3xs text-muted-foreground">{hint}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 📄 The shareable link. OFF by default — it puts a page carrying a
+              customer's bill on the public internet behind an unguessable
+              address, which is the shopkeeper's decision to make. */}
+          <div className="mt-3 flex items-center justify-between rounded-lg bg-muted/30 border border-border/60 p-3">
+            <div className="flex items-center gap-2">
+              <LinkIcon className="w-4 h-4 text-muted-foreground" />
+              <div className="flex-1">
+                <p className="text-sm font-medium">Also send a bill link</p>
+                <p className="text-2xs text-muted-foreground">
+                  {docShareLink
+                    ? 'ON: a link goes with every bill. Your customer can open it on any phone and pay by UPI, and you can see when they viewed it. Long bills stay readable. Links expire after 90 days.'
+                    : 'OFF (default): only the picture or PDF is sent. Turn on to include a link your customer can open and pay from — it works for bills of any length.'}
+                </p>
+              </div>
+            </div>
+            <Switch
+              checked={docShareLink}
+              onCheckedChange={(checked) => {
+                const prev = docShareLink
+                setDocShareLink(checked)
+                persistDocSetting({ docShareLink: checked }, () => setDocShareLink(prev))
+              }}
             />
           </div>
 

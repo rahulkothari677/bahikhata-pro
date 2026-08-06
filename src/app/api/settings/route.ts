@@ -177,6 +177,10 @@ export async function PUT(req: NextRequest) {
       }
       sanitized.docSendFormat = body.docSendFormat
     }
+    // Off by default and only ever set deliberately: turning it on puts a page
+    // carrying a customer's bill on the public internet behind an unguessable
+    // token. See prisma/schema.prisma → Setting.docShareLink.
+    if (body.docShareLink !== undefined) sanitized.docShareLink = !!body.docShareLink
     if (body.cardMark !== undefined) {
       if (!['auto', 'logo', 'monogram'].includes(body.cardMark)) {
         return NextResponse.json(
