@@ -146,7 +146,7 @@ export function MoreScreen() {
 
   const handleBack = () => {
     haptic.click()
-    setView(previousView || 'dashboard')
+    setView(previousView || 'dashboard', { back: true })
     setPreviousView(null)
   }
 

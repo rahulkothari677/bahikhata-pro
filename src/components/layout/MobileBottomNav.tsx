@@ -26,7 +26,6 @@ import { useAppStore, type ViewType } from '@/store/app-store'
 import { Menu, Plus, Calculator, ShoppingCart, Truck, Wallet } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { haptic } from '@/lib/haptic'
-import { scrollToTop } from '@/lib/scroll-to-top'
 import { useStaffPermissions } from '@/hooks/use-staff-permissions'
 import { prefetchView } from '@/lib/prefetch'  // 🔒 V11 §3.3
 import { useState, useRef, useEffect, useMemo } from 'react'
@@ -112,7 +111,6 @@ export function MobileBottomNav() {
     // If the menu is showing, don't also navigate (the long-press already fired)
     if (showQuickMenu) return
     haptic.medium()
-    scrollToTop()
     setView('new-sale')
   }
 
@@ -145,7 +143,7 @@ export function MobileBottomNav() {
             return (
               <button
                 key={tab.id}
-                onClick={() => { haptic.click(); scrollToTop(); setView(tabView) }}
+                onClick={() => { haptic.click(); setView(tabView) }}
                 onTouchStart={() => prefetchView(tabView)}
                 className={cn(
                   'flex flex-col items-center justify-center gap-0.5 flex-1 h-full transition-colors',
@@ -197,7 +195,6 @@ export function MobileBottomNav() {
                           onClick={() => {
                             haptic.click()
                             setShowQuickMenu(false)
-                            scrollToTop()
                             setView(action.view)
                           }}
                           className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-muted transition text-left"
@@ -221,7 +218,7 @@ export function MobileBottomNav() {
             return (
               <button
                 key={tab.id}
-                onClick={() => { haptic.click(); scrollToTop(); setView(tabView) }}
+                onClick={() => { haptic.click(); setView(tabView) }}
                 onTouchStart={() => prefetchView(tabView)}
                 className={cn(
                   'flex flex-col items-center justify-center gap-0.5 flex-1 h-full transition-colors',
@@ -236,7 +233,7 @@ export function MobileBottomNav() {
           })}
 
           <button
-            onClick={() => { haptic.click(); scrollToTop(); setView('more') }}
+            onClick={() => { haptic.click(); setView('more') }}
             className={cn(
               'flex flex-col items-center justify-center gap-0.5 flex-1 h-full transition-colors',
               isMoreActive ? 'text-primary' : 'text-muted-foreground',

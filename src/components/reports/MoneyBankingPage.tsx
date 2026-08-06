@@ -78,7 +78,7 @@ export function MoneyBankingPage() {
 
   const handleBack = () => {
     haptic.click()
-    setView(previousView || 'more')
+    setView(previousView || 'more', { back: true })
     setPreviousView(null)
   }
 
