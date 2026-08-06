@@ -522,6 +522,17 @@ model Setting {
   // The values are kept even in 'profile' mode: toggling back and forth must
   // not destroy what the shopkeeper typed. Nothing here is ever cleared on
   // mode change — only the shopkeeper editing a field changes a field.
+  // 📄 How bills are sent — 'smart' | 'image' | 'pdf'.
+  //
+  // 'smart' (the default) picks by bill length: a short bill goes as a picture,
+  // which opens straight in a WhatsApp chat, and a long one as a PDF, because
+  // WhatsApp downsamples images to ~1600px on the longest side and a tall bill
+  // ends up squeezed too narrow to read. See lib/document-delivery.
+  //
+  // A preference rather than a prompt: a shopkeeper billing forty customers a
+  // day should not answer forty format questions.
+  docSendFormat    String  @default("smart")
+
   cardMode         String  @default("profile")
 
   // Which mark the card prints: 'auto' | 'logo' | 'monogram'.

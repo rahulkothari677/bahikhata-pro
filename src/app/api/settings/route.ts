@@ -168,6 +168,15 @@ export async function PUT(req: NextRequest) {
       }
       sanitized.cardMode = body.cardMode
     }
+    if (body.docSendFormat !== undefined) {
+      if (!['smart', 'image', 'pdf'].includes(body.docSendFormat)) {
+        return NextResponse.json(
+          { error: 'docSendFormat must be "smart", "image" or "pdf"' },
+          { status: 400 },
+        )
+      }
+      sanitized.docSendFormat = body.docSendFormat
+    }
     if (body.cardMark !== undefined) {
       if (!['auto', 'logo', 'monogram'].includes(body.cardMark)) {
         return NextResponse.json(

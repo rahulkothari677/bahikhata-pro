@@ -263,102 +263,84 @@ export function TransactionDetail() {
     })
   }
 
-  const handleWhatsAppShare = async () => {
+  /**
+   * Send the bill.
+   *
+   * 🎨 2026-08-05, Phase 3 of docs/DOCUMENT-ENGINE-PLAN.md. This built a PDF
+   * and shared it. In WhatsApp a PDF arrives as a grey document card the
+   * customer must tap, wait for a viewer, then pinch around — three decisions
+   * before they see what they owe. A short bill now goes as a PICTURE, which
+   * opens straight in the chat.
+   *
+   * Long bills still go as a PDF, and that is not a compromise: WhatsApp
+   * downsamples images to about 1600px on the longest side, so a fifteen-item
+   * bill arrives 636px wide and unreadable. `chooseSendFormat` picks by length;
+   * the shop can override it for good in Settings.
+   */
+  const handleWhatsAppShare = async (override?: 'image' | 'pdf') => {
     if (!txn) return
     haptic.click()
-    const toastId = sonnerToast.loading('Generating PDF...')
+    const toastId = sonnerToast.loading('Preparing bill…')
 
     try {
-      const pdfBlob = await generateInvoicePDF(txn, {
-        shopName: setting?.shopName || 'My Shop',
-        ownerName: setting?.ownerName,
-        phone: setting?.phone,
-        email: setting?.email,
-        gstin: setting?.gstin,
-        address: setting?.address,
-        state: setting?.state,
-        upiId: setting?.upiId, // V26 Phase 8: pass UPI ID for QR code
-        logoUrl: setting?.logoUrl, // 🔒 PDF Redesign Spec Part 3 §2: shop logo
-      })
+      const { sendBill } = await import('@/lib/send-bill')
+      const result = await sendBill(
+        txn as never,
+        {
+          name: setting?.shopName || 'My Shop',
+          ownerName: setting?.ownerName,
+          phone: setting?.phone,
+          email: setting?.email,
+          gstin: setting?.gstin,
+          address: setting?.address,
+          state: setting?.state,
+          upiId: setting?.upiId,
+          logoUrl: setting?.logoUrl,
+        },
+        { preference: setting?.docSendFormat, override },
+      )
 
-      const fileName = `invoice-${txn.invoiceNo || txn.id.slice(-6)}.pdf`
-      const shareText = `Invoice from ${setting?.shopName || 'My Shop'} \u2014 Total: \u20B9${txn.totalAmount.toFixed(2)}`
-
-      // Check if running on Capacitor (native app)
+      /*
+       * On a DESKTOP browser there is no share sheet, so `sendBill` falls back
+       * to downloading the file — which leaves the shopkeeper with a bill and
+       * no WhatsApp. This opens the conversation with the customer's number
+       * prefilled so they only have to attach it.
+       *
+       * 🔒 Kept from the code this replaced, including its audit fix:
+       * `offlineFetch` RESOLVES on a 4xx/5xx, so a server rejection used to
+       * produce an error body with no `whatsappUrl` and this did nothing at
+       * all — the file had downloaded and said so, leaving the user believing
+       * the bill was sent when WhatsApp never opened. Say it plainly instead.
+       */
       const { Capacitor } = await import('@capacitor/core')
-      if (Capacitor.isNativePlatform()) {
-        const { Share } = await import('@capacitor/share')
-        const { Filesystem, Directory } = await import('@capacitor/filesystem')
-
-        const reader = new FileReader()
-        const base64Promise = new Promise<string>((resolve, reject) => {
-          reader.onload = () => {
-            const result = reader.result as string
-            const base64 = result.split(',')[1]
-            resolve(base64)
-          }
-          reader.onerror = reject
-          reader.readAsDataURL(pdfBlob)
-        })
-        const base64Data = await base64Promise
-
-        const fileResult = await Filesystem.writeFile({
-          path: fileName,
-          data: base64Data,
-          directory: Directory.Cache,
-        })
-
-        await Share.share({
-          title: `Invoice ${txn.invoiceNo || ''}`,
-          text: shareText,
-          url: fileResult.uri,
-          dialogTitle: 'Send Invoice via',
-        })
-        sonnerToast.success('Invoice shared!', { id: toastId })
-      } else if (navigator.share && navigator.canShare && navigator.canShare({ files: [new File([pdfBlob], fileName, { type: 'application/pdf' })] })) {
-        const file = new File([pdfBlob], fileName, { type: 'application/pdf' })
-        await navigator.share({
-          files: [file],
-          title: `Invoice ${txn.invoiceNo || ''}`,
-          text: shareText,
-        })
-        sonnerToast.success('Invoice shared!', { id: toastId })
-      } else {
-        const url = URL.createObjectURL(pdfBlob)
-        const a = document.createElement('a')
-        a.href = url
-        a.download = fileName
-        a.click()
-        URL.revokeObjectURL(url)
-        sonnerToast.success('Invoice PDF downloaded', { id: toastId })
-
+      if (!Capacitor.isNativePlatform() && !navigator.canShare) {
         const r = await offlineFetch('/api/whatsapp-invoice', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ transactionId: txn.id }),
         })
-        // AUDIT 2026-07-26: offlineFetch resolves on a 4xx/5xx, so a server
-        // rejection previously produced an error body with no whatsappUrl and
-        // this simply did nothing. The PDF had already downloaded and said so,
-        // leaving the user believing the invoice was sent when WhatsApp never
-        // opened. Say it plainly instead of failing quietly.
-        const data = await r.json().catch(() => ({} as any))
+        const data = await r.json().catch(() => ({}) as Record<string, string>)
         if (r.ok && data.whatsappUrl) {
           window.open(data.whatsappUrl, '_blank')
         } else {
           sonnerToast.warning('Invoice saved, but WhatsApp could not be opened', {
-            description: data?.message || data?.error || 'Share the downloaded PDF manually.',
+            description: data?.message || data?.error || 'Share the downloaded file manually.',
             duration: 8000,
           })
         }
       }
-    } catch (err: any) {
-      if (err?.name === 'AbortError') {
+
+      // Naming the choice, so a switch between a picture and a PDF never reads
+      // as the app being unpredictable.
+      sonnerToast.success(result.reason || 'Bill ready to send', { id: toastId })
+    } catch (err: unknown) {
+      const { isShareCancelled } = await import('@/lib/share-file')
+      if (isShareCancelled(err)) {
         sonnerToast.dismiss(toastId)
         return
       }
-      sonnerToast.error("Couldn\'t share the invoice", {
-        description: String(err?.message || err).slice(0, 200),
+      sonnerToast.error("Couldn't share the invoice", {
+        description: String((err as Error)?.message || err).slice(0, 200),
         id: toastId,
         duration: 8000,
       })
@@ -418,8 +400,8 @@ export function TransactionDetail() {
         <Button variant="outline" size="touch" onClick={handleDownload} className="gap-2">
           <Download className="w-4 h-4" /> PDF
         </Button>
-        <Button variant="outline" size="touch" onClick={handleWhatsAppShare} className="gap-2 border-emerald-300 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50">
-          <MessageCircle className="w-4 h-4" /> Send PDF
+        <Button variant="outline" size="touch" onClick={() => handleWhatsAppShare()} className="gap-2 border-emerald-300 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50">
+          <MessageCircle className="w-4 h-4" /> Send bill
         </Button>
         {/*
           🔒 SETTLE, from the bill itself (2026-08-03, requested by Rahul).
