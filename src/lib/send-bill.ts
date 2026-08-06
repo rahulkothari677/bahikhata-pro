@@ -29,6 +29,17 @@ export interface SendBillResult {
   reason: string
   /** The public link, when the shop has them switched on. */
   link?: string | null
+  /**
+   * Set when money is owed but the shop has no UPI id, so the bill went out
+   * with no way to pay it.
+   *
+   * 🐛 2026-08-06. Rahul asked why there was no Pay button on his bill links.
+   * There was nothing wrong with the button — his shop had no UPI id, and
+   * `buildUpiLink` correctly returns null rather than opening a UPI app that
+   * then fails. But failing SILENTLY meant the customer saw money owed with no
+   * way to act and he had no idea why. The app should say so.
+   */
+  missingUpiId?: boolean
 }
 
 /**
@@ -110,6 +121,8 @@ export async function sendBill(
     shareLink?: boolean
     /** The bill's id, needed to mint a link. */
     transactionId?: string
+    /** The shop's invoice look. See lib/invoice-themes. */
+    themeId?: string | null
   } = {},
 ): Promise<SendBillResult> {
   const doc = buildInvoiceDocument(src, shop)
@@ -135,12 +148,15 @@ export async function sendBill(
   const caption = link ? `${buildCaption(doc)}
 ${link}` : buildCaption(doc)
 
+  // Money owed, but nowhere for it to go.
+  const missingUpiId = doc.due > 0 && !shop.upiId
+
   if (chosen.format === 'image') {
     const [qrImage, logoImage] = await Promise.all([
       doc.upiLink ? renderQr(doc.upiLink) : Promise.resolve(null),
       loadLogo(shop.logoUrl),
     ])
-    const dataUrl = renderInvoiceImage(doc, { qrImage, logoImage })
+    const dataUrl = renderInvoiceImage(doc, { qrImage, logoImage, themeId: opts.themeId })
     await shareCardImage(dataUrl, filename, {
       title: `Bill ${doc.invoiceNo}`,
       // A SHORT caption, unlike the business card which carries none. In a chat
@@ -150,7 +166,7 @@ ${link}` : buildCaption(doc)
       text: caption,
       dialogTitle: 'Send bill',
     })
-    return { format: 'image', reason: chosen.reason, link }
+    return { format: 'image', reason: chosen.reason, link, missingUpiId }
   }
 
   // The link goes ON the PDF, because Android will not carry it beside one.
@@ -161,7 +177,7 @@ ${link}` : buildCaption(doc)
     text: caption,
     dialogTitle: 'Send bill',
   })
-  return { format: 'pdf', reason: chosen.reason, link }
+  return { format: 'pdf', reason: chosen.reason, link, missingUpiId }
 }
 
 /**

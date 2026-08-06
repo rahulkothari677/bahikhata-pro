@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
 import { buildInvoiceDocument } from '@/lib/invoice-document'
 import { renderInvoiceImage } from '@/lib/invoice-share-image'
+import { INVOICE_THEMES } from '@/lib/invoice-themes'
 
 const SHOP = {
   name: 'Sharma Kirana & General Stores',
@@ -55,23 +56,54 @@ const SRC = {
 
 export default function DevInvoicePage() {
   const [url, setUrl] = useState<string | null>(null)
+  const [themeId, setThemeId] = useState('classic')
 
   useEffect(() => {
     const doc = buildInvoiceDocument(SRC as never, SHOP)
     const svg = document.querySelector('#dev-qr svg')
-    const render = (qrImage: HTMLImageElement | null) => setUrl(renderInvoiceImage(doc, { qrImage }))
+    const render = (qrImage: HTMLImageElement | null) =>
+      setUrl(renderInvoiceImage(doc, { qrImage, themeId }))
+    // Exposed so every theme can be rendered and reviewed in one pass.
+    ;(window as unknown as Record<string, unknown>).__renderAllInvoiceThemes = async () => {
+      const svg = document.querySelector('#dev-qr svg')
+      const qr = svg
+        ? await new Promise<HTMLImageElement | null>(res => {
+            const i = new Image()
+            i.onload = () => res(i)
+            i.onerror = () => res(null)
+            i.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(new XMLSerializer().serializeToString(svg))
+          })
+        : null
+      return INVOICE_THEMES.map(t => ({
+        id: t.id,
+        name: t.name,
+        url: renderInvoiceImage(doc, { qrImage: qr, themeId: t.id }),
+      }))
+    }
     if (svg && doc.upiLink) {
       const img = new Image()
       img.onload = () => render(img)
       img.onerror = () => render(null)
       img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(new XMLSerializer().serializeToString(svg))
     } else render(null)
-  }, [])
+  }, [themeId])
 
   return (
     <div className="min-h-screen bg-neutral-200 p-6">
       <div id="dev-qr" className="hidden">
         <QRCodeSVG value="upi://pay?pa=sharmakirana@okaxis&am=5062.20" size={220} level="M" />
+      </div>
+      <div className="max-w-md mx-auto mb-3">
+        <select
+          data-testid="dev-theme"
+          value={themeId}
+          onChange={e => setThemeId(e.target.value)}
+          className="border rounded px-2 py-1 text-sm bg-white"
+        >
+          {INVOICE_THEMES.map(t => (
+            <option key={t.id} value={t.id}>{t.name}</option>
+          ))}
+        </select>
       </div>
       <div className="max-w-md mx-auto" data-testid="dev-invoice">
         {url && <img src={url} alt="Invoice preview" className="w-full shadow-xl" />}

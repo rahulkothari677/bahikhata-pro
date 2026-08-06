@@ -533,6 +533,11 @@ model Setting {
   //
   // A preference rather than a prompt: a shopkeeper billing forty customers a
   // day should not answer forty format questions.
+  // 📄 Which invoice look this shop uses — see src/lib/invoice-themes.ts.
+  // One theme drives the WhatsApp picture, the link page and the PDF, so a
+  // shop's bill and its payment page cannot look like two businesses.
+  invoiceTheme     String  @default("classic")
+
   docSendFormat    String  @default("smart")
 
   // 📄 Whether a shareable LINK goes out alongside the bill.

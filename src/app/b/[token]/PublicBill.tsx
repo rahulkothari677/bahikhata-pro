@@ -12,21 +12,28 @@
  */
 
 import type { InvoiceDocument } from '@/lib/invoice-document'
+import { getInvoiceTheme } from '@/lib/invoice-themes'
 
 const money = (n: number) =>
   `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
-export function PublicBill({ doc }: { doc: InvoiceDocument }) {
+export function PublicBill({ doc, themeId }: { doc: InvoiceDocument; themeId?: string | null }) {
   const isDue = doc.due > 0
+  /*
+   * The same theme the picture and the PDF use, so a shop's bill and its
+   * payment page are recognisably one business. Applied as inline styles rather
+   * than Tailwind classes because the palette is data — a class name cannot be
+   * computed from a database column without a safelist for every theme.
+   */
+  const theme = getInvoiceTheme(themeId)
 
   return (
     <main className="min-h-screen bg-slate-100 pb-28">
       <div className="mx-auto max-w-lg bg-white shadow-sm">
         {/* ── who is billing ─────────────────────────────────────────── */}
-        <header className="bg-slate-900 text-white px-5 py-6">
+        <header className="px-5 py-6" style={{ background: theme.headerBg, color: theme.headerText }}>
           <div className="flex items-start gap-3">
             {doc.shop.logoUrl && (
-              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={doc.shop.logoUrl}
                 alt=""
@@ -35,10 +42,14 @@ export function PublicBill({ doc }: { doc: InvoiceDocument }) {
             )}
             <div className="min-w-0">
               <h1 className="text-xl font-bold leading-tight">{doc.shop.name}</h1>
-              <p className="text-xs text-white/75 mt-1">
+              <p className="text-xs mt-1" style={{ color: theme.headerMuted }}>
                 {[doc.shop.phone, doc.shop.gstin && `GSTIN ${doc.shop.gstin}`].filter(Boolean).join('  ·  ')}
               </p>
-              {doc.shop.address && <p className="text-xs text-white/60 mt-0.5">{doc.shop.address}</p>}
+              {doc.shop.address && (
+                <p className="text-xs mt-0.5" style={{ color: theme.headerMuted }}>
+                  {doc.shop.address}
+                </p>
+              )}
             </div>
           </div>
         </header>
@@ -75,7 +86,7 @@ export function PublicBill({ doc }: { doc: InvoiceDocument }) {
           {/* ── items. A page can scroll, so nothing is truncated ────── */}
           <table className="w-full mt-5 text-sm">
             <thead>
-              <tr className="text-2xs text-slate-500 border-b border-slate-200">
+              <tr className="text-2xs text-slate-500 border-b-2" style={{ borderColor: theme.accent }}>
                 <th className="text-left font-semibold py-2">ITEM</th>
                 <th className="text-right font-semibold py-2 w-16">QTY</th>
                 <th className="text-right font-semibold py-2 w-24">AMOUNT</th>
@@ -118,7 +129,8 @@ export function PublicBill({ doc }: { doc: InvoiceDocument }) {
                 </>
               ))}
             {doc.roundOff !== 0 && <Row label="Round off" value={money(doc.roundOff)} />}
-            <Row label="Total" value={money(doc.total)} bold />
+            {/* The accent on the grand total, matching the picture and the PDF. */}
+            <Row label="Total" value={money(doc.total)} bold accentColor={theme.accent} />
             {doc.paid > 0 && <Row label="Paid" value={money(doc.paid)} className="text-green-700" />}
           </dl>
 
@@ -142,14 +154,34 @@ export function PublicBill({ doc }: { doc: InvoiceDocument }) {
               {money(isDue ? doc.due : doc.total)}
             </p>
           </div>
-          {isDue && doc.upiLink && (
+          {/*
+            🐛 2026-08-06. Rahul: "there is no pay now button in both the link."
+
+            The button is gated on the shop having a UPI ID, and his shop has
+            none — `buildUpiLink` returns null without one, because a Pay button
+            that opens a UPI app and then fails is worse than no button.
+
+            But hiding it silently was the wrong answer. The customer was left
+            looking at money owed with no way to act, and the shopkeeper had no
+            idea why. So there is ALWAYS an action now: pay by UPI when the shop
+            can accept it, and call the shop when it cannot.
+          */}
+          {isDue && doc.upiLink ? (
             <a
               href={doc.upiLink}
-              className="flex-none rounded-xl bg-slate-900 text-white px-5 py-3 text-sm font-semibold"
+              className="flex-none rounded-xl px-5 py-3 text-sm font-semibold text-white"
+              style={{ background: theme.accent }}
             >
               Pay now
             </a>
-          )}
+          ) : isDue && doc.shop.phone ? (
+            <a
+              href={`tel:${doc.shop.phone.replace(/[^\d+]/g, '')}`}
+              className="flex-none rounded-xl border border-slate-300 text-slate-800 px-5 py-3 text-sm font-semibold"
+            >
+              Call shop
+            </a>
+          ) : null}
         </div>
       </div>
     </main>
@@ -161,16 +193,23 @@ function Row({
   value,
   bold,
   className = '',
+  accentColor,
 }: {
   label: string
   value: string
   bold?: boolean
   className?: string
+  accentColor?: string
 }) {
   return (
     <div className="flex justify-between">
       <dt className={bold ? 'font-bold text-slate-900' : 'text-slate-500'}>{label}</dt>
-      <dd className={`${bold ? 'font-bold text-slate-900' : 'text-slate-700'} ${className}`}>{value}</dd>
+      <dd
+        className={`${bold ? 'font-bold text-slate-900' : 'text-slate-700'} ${className}`}
+        style={accentColor ? { color: accentColor } : undefined}
+      >
+        {value}
+      </dd>
     </div>
   )
 }

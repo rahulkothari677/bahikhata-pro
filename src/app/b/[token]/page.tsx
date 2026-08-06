@@ -184,7 +184,7 @@ export default async function BillPage({ params }: { params: Promise<{ token: st
     },
   )
 
-  return <PublicBill doc={doc} />
+  return <PublicBill doc={doc} themeId={setting?.invoiceTheme} />
 }
 
 /**

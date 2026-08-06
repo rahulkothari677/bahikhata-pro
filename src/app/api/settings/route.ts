@@ -168,6 +168,15 @@ export async function PUT(req: NextRequest) {
       }
       sanitized.cardMode = body.cardMode
     }
+    if (body.invoiceTheme !== undefined) {
+      // Validated against the registry rather than a second hand-written list,
+      // so adding a theme cannot forget to allow it here.
+      const { INVOICE_THEMES } = await import('@/lib/invoice-themes')
+      if (!INVOICE_THEMES.some(t => t.id === body.invoiceTheme)) {
+        return NextResponse.json({ error: 'Unknown invoice theme' }, { status: 400 })
+      }
+      sanitized.invoiceTheme = body.invoiceTheme
+    }
     if (body.docSendFormat !== undefined) {
       if (!['smart', 'image', 'pdf'].includes(body.docSendFormat)) {
         return NextResponse.json(

@@ -34,6 +34,7 @@ import { useSetting } from '@/hooks/use-setting'
 import { cn, formatINR } from '@/lib/utils'
 import { APP_VERSION_LABEL } from '@/lib/app-version'
 import { readError } from '@/lib/read-error'
+import { INVOICE_THEMES } from '@/lib/invoice-themes'
 
 const FEATURE_CATEGORIES: { title: string; features: { key: FeatureKey; label: string; description: string; icon: any }[] }[] = [
   {
@@ -128,6 +129,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
   // 📄 How bills are delivered. See docs/DOCUMENT-ENGINE-PLAN.md.
   const [docSendFormat, setDocSendFormat] = useState<'smart' | 'image' | 'pdf'>('smart')
   const [docShareLink, setDocShareLink] = useState(false)
+  const [invoiceTheme, setInvoiceTheme] = useState('classic')
   // 🔒 V11: Stock policy toggle — 'block' (default) or 'allow' (kirana mode).
   const [stockPolicy, setStockPolicy] = useState<'block' | 'allow'>('block')
   // 🔒 V17-Ext §5.1: Period lock state. null = unlocked. Date string = locked
@@ -167,6 +169,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
       setRoundOffEnabled(data.setting.roundOffEnabled ?? false)
       setDocSendFormat(data.setting.docSendFormat ?? 'smart')
       setDocShareLink(data.setting.docShareLink ?? false)
+      setInvoiceTheme(data.setting.invoiceTheme ?? 'classic')
       setStockPolicy(data.setting.stockPolicy === 'allow' ? 'allow' : 'block')
       // 🔒 V17-Ext §5.1: Sync period lock state from server.
       // lockedUntil is an ISO timestamp (or null). We store the full timestamp
@@ -204,7 +207,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
    * about having saved is worse.
    */
   const persistDocSetting = async (
-    patch: { docSendFormat?: 'smart' | 'image' | 'pdf'; docShareLink?: boolean },
+    patch: { docSendFormat?: 'smart' | 'image' | 'pdf'; docShareLink?: boolean; invoiceTheme?: string },
     rollback: () => void,
   ) => {
     try {
@@ -1478,6 +1481,53 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
               checked={roundOffEnabled}
               onCheckedChange={(checked) => persistRoundOff(checked)}
             />
+          </div>
+
+          {/* 📄 The invoice look. ONE theme drives the WhatsApp picture, the
+              link page and the PDF — a shop's bill and its payment page should
+              not look like two different businesses. */}
+          <div className="mt-3 rounded-lg bg-muted/30 border border-border/60 p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <Palette className="w-4 h-4 text-muted-foreground" />
+              <div>
+                <p className="text-sm font-medium">Invoice design</p>
+                <p className="text-2xs text-muted-foreground">
+                  Used on the bill picture, the bill link and the PDF.
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-4 gap-1.5">
+              {INVOICE_THEMES.map(t => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => {
+                    const prev = invoiceTheme
+                    setInvoiceTheme(t.id)
+                    persistDocSetting({ invoiceTheme: t.id }, () => setInvoiceTheme(prev))
+                  }}
+                  aria-pressed={invoiceTheme === t.id}
+                  title={t.description}
+                  className={
+                    'rounded-lg border p-1.5 transition text-left ' +
+                    (invoiceTheme === t.id
+                      ? 'border-primary ring-2 ring-primary/25'
+                      : 'border-border/70 hover:border-border')
+                  }
+                >
+                  {/* A miniature of the document, not a colour dot: the header
+                      band, a rule and a total line are what actually differ. */}
+                  <span className="block rounded overflow-hidden border border-border/50">
+                    <span className="block h-4" style={{ background: t.headerBg }} />
+                    <span className="block bg-white px-1 py-1">
+                      <span className="block h-0.5 w-full" style={{ background: t.line }} />
+                      <span className="block h-1 w-2/3 mt-1 rounded-sm" style={{ background: t.accent }} />
+                    </span>
+                  </span>
+                  <span className="block text-3xs mt-1 truncate text-muted-foreground">{t.name}</span>
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* 📄 How bills go out. See docs/DOCUMENT-ENGINE-PLAN.md. */}

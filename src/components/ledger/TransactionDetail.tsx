@@ -302,6 +302,7 @@ export function TransactionDetail() {
           override,
           shareLink: setting?.docShareLink,
           transactionId: txn.id,
+          themeId: setting?.invoiceTheme,
         },
       )
 
@@ -337,7 +338,15 @@ export function TransactionDetail() {
 
       // Naming the choice, so a switch between a picture and a PDF never reads
       // as the app being unpredictable.
-      sonnerToast.success(result.reason || 'Bill ready to send', { id: toastId })
+      sonnerToast.success(result.reason || 'Bill ready to send', {
+        id: toastId,
+        // Named rather than left silent: without a UPI id the bill goes out
+        // with no way to pay it, and nothing else would tell him why.
+        description: result.missingUpiId
+          ? 'Add your UPI ID in Settings so customers can pay straight from the bill.'
+          : undefined,
+        duration: result.missingUpiId ? 7000 : 4000,
+      })
     } catch (err: unknown) {
       const { isShareCancelled } = await import('@/lib/share-file')
       if (isShareCancelled(err)) {

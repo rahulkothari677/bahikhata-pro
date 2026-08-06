@@ -26,6 +26,7 @@
  */
 
 import type { InvoiceDocument, InvoiceDocumentItem } from './invoice-document'
+import { getInvoiceTheme, type InvoiceTheme } from './invoice-themes'
 
 /**
  * 1080px wide — the size WhatsApp keeps. It re-encodes anything larger, so a
@@ -34,19 +35,29 @@ import type { InvoiceDocument, InvoiceDocumentItem } from './invoice-document'
 const W = 1080
 const PAD = 48
 
-/** Ink, chosen for readability at thumbnail size rather than for decoration. */
-const INK = {
-  bg: '#FFFFFF',
-  head: '#0F172A',
-  headText: '#FFFFFF',
-  text: '#111827',
-  muted: '#6B7280',
-  line: '#E5E7EB',
-  zebra: '#F9FAFB',
-  accent: '#C2410C',
-  due: '#B91C1C',
-  paid: '#15803D',
-  partial: '#B45309',
+/**
+ * Ink for one render, derived from the shop's theme.
+ *
+ * The status colours are NOT themed. Green for paid and red for due are read
+ * without being read — a customer glancing at a thumbnail knows which it is
+ * before any word registers — and a theme that recoloured them would trade a
+ * signal for decoration.
+ */
+function inkFor(theme: InvoiceTheme) {
+  return {
+    bg: '#FFFFFF',
+    head: theme.headerBg,
+    headText: theme.headerText,
+    headMuted: theme.headerMuted,
+    text: theme.text,
+    muted: theme.muted,
+    line: theme.line,
+    zebra: theme.accentSoft,
+    accent: theme.accent,
+    due: '#B91C1C',
+    paid: '#15803D',
+    partial: '#B45309',
+  }
 }
 
 const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
@@ -110,6 +121,8 @@ export interface InvoiceImageOptions {
   qrImage?: HTMLImageElement | null
   /** The shop's logo, already decoded. */
   logoImage?: HTMLImageElement | null
+  /** The shop's chosen look. See lib/invoice-themes. */
+  themeId?: string | null
 }
 
 /**
@@ -120,6 +133,8 @@ export interface InvoiceImageOptions {
  * directly skips a Blob and a FileReader round trip.
  */
 export function renderInvoiceImage(doc: InvoiceDocument, opts: InvoiceImageOptions = {}): string {
+  const theme = getInvoiceTheme(opts.themeId)
+  const INK = inkFor(theme)
   const addressLines = doc.party?.address ? 2 : 0
   const H = measureHeight(doc.items.length, Boolean(opts.qrImage), addressLines)
 
@@ -160,13 +175,13 @@ export function renderInvoiceImage(doc: InvoiceDocument, opts: InvoiceImageOptio
   ctx.fillText(clip(ctx, doc.shop.name, W - textLeft - PAD), textLeft, 92)
 
   font(ctx, 26, 400)
-  ctx.fillStyle = 'rgba(255,255,255,0.82)'
+  ctx.fillStyle = INK.headMuted
   const shopBits = [doc.shop.phone, doc.shop.gstin ? `GSTIN ${doc.shop.gstin}` : null]
     .filter(Boolean)
     .join('   ·   ')
   if (shopBits) ctx.fillText(clip(ctx, shopBits, W - textLeft - PAD), textLeft, 132)
   if (doc.shop.address) {
-    ctx.fillStyle = 'rgba(255,255,255,0.62)'
+    ctx.fillStyle = INK.headMuted
     font(ctx, 24, 400)
     ctx.fillText(clip(ctx, doc.shop.address, W - textLeft - PAD), textLeft, 168)
   }
@@ -232,6 +247,10 @@ export function renderInvoiceImage(doc: InvoiceDocument, opts: InvoiceImageOptio
 
   ctx.fillStyle = INK.zebra
   ctx.fillRect(PAD, y - 30, W - PAD * 2, 52)
+  // A hairline in the accent under the column heads — the rule a printed
+  // invoice would have, and the second place the theme shows.
+  ctx.fillStyle = INK.accent
+  ctx.fillRect(PAD, y + 20, W - PAD * 2, 3)
   ctx.fillStyle = INK.muted
   font(ctx, 22, 600)
   ctx.textAlign = 'left'
@@ -243,7 +262,7 @@ export function renderInvoiceImage(doc: InvoiceDocument, opts: InvoiceImageOptio
   y += 56
 
   for (const item of doc.items) {
-    drawItem(ctx, item, y, colQty, colRate, colAmt, doc.hasTax)
+    drawItem(ctx, item, y, colQty, colRate, colAmt, doc.hasTax, INK)
     y += 78
   }
 
@@ -278,7 +297,10 @@ export function renderInvoiceImage(doc: InvoiceDocument, opts: InvoiceImageOptio
     }
   }
   if (doc.roundOff !== 0) totalRow('Round off', money(doc.roundOff))
-  totalRow('Total', money(doc.total), true)
+  // The grand total carries the ACCENT, so the theme reads through the whole
+  // document rather than stopping at the header band. Before this every theme
+  // looked identical below the fold, which is not eight designs.
+  totalRow('Total', money(doc.total), true, INK.accent)
   if (doc.paid > 0) totalRow('Paid', money(doc.paid), false, INK.paid)
 
   y += 16
@@ -287,7 +309,7 @@ export function renderInvoiceImage(doc: InvoiceDocument, opts: InvoiceImageOptio
   // This is what the customer opened the message to find out, and in a chat
   // thumbnail it may be the only thing they can read.
   const dueH = 150
-  ctx.fillStyle = doc.due > 0 ? '#FEF2F2' : '#F0FDF4'
+  ctx.fillStyle = doc.due > 0 ? '#FEF2F2' : '#F0FDF4'  // status, not theme — see inkFor
   roundRect(ctx, PAD, y, W - PAD * 2, dueH, 20)
   ctx.fill()
   ctx.strokeStyle = doc.due > 0 ? '#FECACA' : '#BBF7D0'
@@ -365,6 +387,7 @@ function drawItem(
   colRate: number,
   colAmt: number,
   hasTax: boolean,
+  INK: ReturnType<typeof inkFor>,
 ) {
   ctx.textAlign = 'left'
   ctx.fillStyle = INK.text
