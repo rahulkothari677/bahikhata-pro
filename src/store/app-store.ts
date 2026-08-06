@@ -34,6 +34,25 @@ export type ViewType =
   | 'unsynced-entries'
   | 'supplier-opening-balance-review'
 
+/**
+ * Views whose content depends on WHICH record you opened.
+ *
+ * Scroll position is remembered per view name, and for these the name is not
+ * enough: 'transaction-detail' scrolled 600px down a ten-item bill would
+ * restore that same 600px onto the next bill you open, which may be three
+ * lines long. A fresh record starts at the top, always.
+ */
+const PER_RECORD_VIEWS = new Set<ViewType>([
+  'transaction-detail',
+  'party-profile',
+  'party-bills',
+  'party-settle',
+  'new-sale',
+  'new-purchase',
+  'new-estimate',
+  'scanner',
+])
+
 export type ViewMode = 'grid' | 'list'
 
 // Paywall feature type — must match GatedFeature in use-subscription.ts
@@ -263,18 +282,31 @@ export const useAppStore = create<AppState>()(
        * that can get scroll position right — so it does, rather than each
        * caller remembering to.
        *
-       * Default is forward: remember where we are leaving, then start the new
-       * screen at the top. Pass `{ back: true }` from a back button and the
-       * destination is restored to where the user left it instead. That
-       * distinction cannot be inferred here — going back sets currentView
-       * exactly like going forward does — so the back sites declare it.
+       * EVERY screen remembers its own position, and returning to it restores
+       * that position — including via the tab bar, not only via a back button.
+       * Scroll the Sales ledger, look at Purchases, come back to Sales, and
+       * you are where you left off. That is how Instagram, WhatsApp and Gmail
+       * treat tabs, and it is what makes them feel like places you return to
+       * rather than pages that reload.
+       *
+       * This is NOT the same as the bug that started this: back then a new
+       * screen INHERITED the previous screen's offset, so a scrolled dashboard
+       * made a freshly opened ledger start halfway down. Positions are keyed
+       * per view, so nothing inherits anything, and a screen never visited
+       * starts at the top.
+       *
+       * The exception is PER_RECORD_VIEWS below.
        */
       setView: (v, opts) => {
         const from = get().currentView
         if (from !== v) rememberScroll(from)
         set({ currentView: v })
-        if (opts?.back) restoreScroll(v)
-        else scrollToTop()
+        // `back` no longer changes the behaviour — every navigation restores —
+        // but the flag stays on the call sites as documentation of intent, and
+        // costs nothing.
+        void opts
+        if (PER_RECORD_VIEWS.has(v)) scrollToTop()
+        else restoreScroll(v)
       },
       // 🔒 AUDIT V23 FIX §9.1: Navigation stack implementation
       navStack: [],
@@ -282,7 +314,9 @@ export const useAppStore = create<AppState>()(
         const s = get()
         rememberScroll(s.currentView)
         set({ currentView: view, navStack: [...s.navStack, { view: s.currentView, params }] })
-        scrollToTop()
+        // Same rule as setView, so the two entry points cannot drift apart.
+        if (PER_RECORD_VIEWS.has(view)) scrollToTop()
+        else restoreScroll(view)
       },
       popView: () => {
         const s = get()

@@ -591,7 +591,7 @@ export function TransactionDetail() {
               <div className="flex-1 min-w-0">
                 <p className="text-xs text-white/70 uppercase tracking-wide">{isIncome ? 'Income' : 'Expense'}</p>
                 <h2 className="text-2xl font-bold font-heading tracking-tight truncate">{txn.category || 'Other'}</h2>
-                <p className="text-sm text-white/70">{formatDateTime(txn.date)}</p>
+                <p className="text-sm text-white/70">{formatDate(txn.date)}</p>
               </div>
               <div className="text-right flex-shrink-0">
                 <p className="text-2xl font-bold tabular-nums">
@@ -942,7 +942,7 @@ export function TransactionDetail() {
                       )}
                     </div>
                     <p className="text-2xs text-muted-foreground mt-0.5">
-                      {formatDateTime(rev.date)}
+                      {formatDate(rev.date)}
                       {rev.noteReason && ` • ${rev.noteReason.replace(/-/g, ' ')}`}
                     </p>
                   </div>
@@ -983,7 +983,7 @@ export function TransactionDetail() {
             >
               <div className="flex-1 min-w-0">
                 <span className="font-semibold text-sm">{txn.originalTransaction.invoiceNo || '—'}</span>
-                <p className="text-2xs text-muted-foreground mt-0.5">{formatDateTime(txn.originalTransaction.date)}</p>
+                <p className="text-2xs text-muted-foreground mt-0.5">{formatDate(txn.originalTransaction.date)}</p>
               </div>
               <div className="text-right flex-shrink-0 ml-2">
                 <p className="font-bold text-sm tabular-nums">{formatINR(txn.originalTransaction.totalAmount)}</p>

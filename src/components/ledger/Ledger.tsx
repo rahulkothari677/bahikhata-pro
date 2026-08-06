@@ -8,7 +8,10 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAppStore } from '@/store/app-store'
-import { formatINR, formatDate, formatDateTime, formatINRCompact, cn } from '@/lib/utils'
+// formatDateTime is deliberately NOT imported here — see the guard test
+// `no-fabricated-transaction-times`. A transaction's `date` is a business date
+// with no time in it, so rendering a clock against it invents a fact.
+import { formatINR, formatDate, formatINRCompact, cn } from '@/lib/utils'
 import { roundMoney } from '@/lib/money'
 // 🔒 AUDIT C5: ONE definition of "still due on this bill". Computing it inline
 // as `total − paidAmount` ignores Settle payments, which is the stale figure
@@ -638,45 +641,68 @@ export function Ledger({ type }: { type: LedgerType }) {
            * Google Photos, WhatsApp all lead with it. "Clear" now only
            * unticks, and only appears when there is something to untick. */}
           {bulkMode && (
-            <div className="mt-3 flex items-center gap-2 flex-wrap p-2.5 rounded-lg bg-primary/5 border border-primary/20">
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-9 w-9 p-0 -ml-1 flex-shrink-0"
-                onClick={exitBulkMode}
-                title="Done selecting"
-                aria-label="Exit selection mode"
-              >
-                <X className="w-4 h-4" />
-              </Button>
-              <span className="text-xs font-medium text-primary">
-                {selectedIds.size} selected
-              </span>
-              <Button size="sm" variant="ghost" className="h-9 text-xs" onClick={selectAll}>Select all</Button>
-              {selectedIds.size > 0 && (
-                <Button size="sm" variant="ghost" className="h-9 text-xs" onClick={() => setSelectedIds(new Set())}>
-                  Clear
+            /*
+             * Two fixed rows, and deliberately NOT flex-wrap.
+             *
+             * The first version put ✕ at the far left of a single wrapping row.
+             * On a phone the row wrapped, Delete fell to the second line at the
+             * LEFT — directly beneath the ✕ — and the way out of the mode ended
+             * up a thumb's width above "delete everything I ticked". Reported,
+             * correctly, as an accident waiting to happen.
+             *
+             * Fixed rows remove the guesswork about what lands where. ✕ sits at
+             * the top right, and the control directly under it is Export CSV,
+             * which is harmless if mis-tapped. Delete is one place further left,
+             * so the exit and the destructive action share neither a row nor a
+             * column.
+             */
+            <div className="mt-3 p-2.5 rounded-lg bg-primary/5 border border-primary/20 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-medium text-primary">
+                  {selectedIds.size} selected
+                </span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-11 w-11 p-0 -mr-1 flex-shrink-0"
+                  onClick={exitBulkMode}
+                  title="Done selecting"
+                  aria-label="Exit selection mode"
+                >
+                  <X className="w-4 h-4" />
                 </Button>
-              )}
-              <div className="flex-1" />
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-9 text-xs gap-1.5"
-                onClick={handleBulkExport}
-                disabled={selectedIds.size === 0}
-              >
-                Export CSV
-              </Button>
-              <Button
-                size="sm"
-                variant="destructive"
-                className="h-9 text-xs gap-1.5"
-                onClick={handleBulkDelete}
-                disabled={selectedIds.size === 0}
-              >
-                Delete
-              </Button>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1 min-w-0">
+                  <Button size="sm" variant="ghost" className="h-9 text-xs px-2" onClick={selectAll}>Select all</Button>
+                  {selectedIds.size > 0 && (
+                    <Button size="sm" variant="ghost" className="h-9 text-xs px-2" onClick={() => setSelectedIds(new Set())}>
+                      Clear
+                    </Button>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    className="h-9 text-xs gap-1.5"
+                    onClick={handleBulkDelete}
+                    disabled={selectedIds.size === 0}
+                  >
+                    Delete
+                  </Button>
+                  {/* Rightmost on purpose — this is what sits under the ✕. */}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-9 text-xs gap-1.5"
+                    onClick={handleBulkExport}
+                    disabled={selectedIds.size === 0}
+                  >
+                    Export CSV
+                  </Button>
+                </div>
+              </div>
             </div>
           )}
 
@@ -917,7 +943,7 @@ export function Ledger({ type }: { type: LedgerType }) {
                           </p>
                           {/* Secondary info — smaller, muted */}
                           <div className="flex items-center gap-2 mt-0.5 text-2xs text-muted-foreground flex-wrap">
-                            <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{formatDateTime(txn.date)}</span>
+                            <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{formatDate(txn.date)}</span>
                             <span className="flex items-center gap-1"><User className="w-3 h-3" />{txn.items?.length || 0} items</span>
                           </div>
                         </div>
@@ -1083,7 +1109,7 @@ export function Ledger({ type }: { type: LedgerType }) {
                   </div>
                   <p className="font-semibold text-sm truncate">{txn.party?.name || 'Walk-in'}</p>
                   {txn.invoiceNo && <p className="text-3xs text-muted-foreground truncate">{txn.invoiceNo}</p>}
-                  <p className="text-3xs text-muted-foreground mt-1 truncate">{formatDateTime(txn.date)}</p>
+                  <p className="text-3xs text-muted-foreground mt-1 truncate">{formatDate(txn.date)}</p>
                   <div className="mt-2 pt-2 border-t border-border flex items-center justify-between gap-1 flex-wrap">
                     <span className={cn('font-bold', accentColor)}>{formatINRCompact(txn.totalAmount)}</span>
                     {/* 🔒 V26 N2 follow-up: quotes have no payment status */}

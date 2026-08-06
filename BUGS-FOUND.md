@@ -20,6 +20,73 @@ and include enough context to reproduce.
 
 <!-- Add new bugs below this line. Newest first. -->
 
+### BUG-071 — Tab return did not restore the tab's own scroll position (Medium/UX) — FIXED
+
+- **Found**: 2026-08-07, reported by the owner
+- **File**: `src/store/app-store.ts`
+- **Severity**: Medium
+- **Description**: Scroll the Sales ledger, tap Purchases, tap Sales again — Sales
+  reopened at the top instead of where it was left. The previous fix restored
+  position only on explicit back navigation, so returning via the tab bar (the
+  common case) always reset.
+- **Distinction that matters**: this is NOT a return of the original bug. That
+  one was *inheritance* — a scrolled dashboard made a freshly opened ledger
+  start halfway down, because a single offset was shared by every screen.
+  Positions are keyed **per view**, so nothing inherits anything and a screen
+  never visited still starts at the top.
+- **Fix applied**: 2026-08-07. `setView` and `pushView` now restore the
+  destination's own remembered position on every navigation. `PER_RECORD_VIEWS`
+  (transaction-detail, party-profile, new-sale, scanner, …) always start at the
+  top, because there the view name is not enough to identify the content — a
+  600px offset from a ten-item bill would land partway down a three-line one.
+- **Status**: FIXED
+
+### BUG-070 — Every transaction claimed to have happened at 05:30 am (High/Trust) — FIXED
+
+- **Found**: 2026-08-07, reported by the owner
+- **File**: `src/components/ledger/Ledger.tsx`, `src/components/ledger/TransactionDetail.tsx`
+- **Severity**: High (a ledger stating a precise time for something nobody recorded)
+- **Description**: Every row read "05:30 am" — every transaction, every shop. Not
+  a wrong time, an **invented** one. The app never captures a time:
+
+  ```
+  TransactionEntry:  useState(new Date().toISOString().slice(0,10))
+                     <Input type="date">        → "2026-08-06"
+  API route:         new Date("2026-08-06")     → 2026-08-06T00:00:00Z
+  Ledger row:        formatDateTime(txn.date)   → "06/08/2026, 05:30 am"
+  ```
+
+  IST is UTC+5:30, so midnight UTC reads back as half past five in the morning.
+  "05:30 am" is the signature of a date-only value being asked what time it is.
+- **Why it matters here specifically**: this is a ledger. A shopkeeper may need
+  to say when something happened, and a screen that states a precise time for a
+  fact nobody recorded is worse than one that stays quiet.
+- **Fix applied**: 2026-08-07. Five call sites on `.date` now use `formatDate()`.
+  `formatDateTime` remains correct on genuine timestamps — `createdAt`,
+  `irnGeneratedAt`, `ewayBillExpiry` — so the rule is about the field, not the
+  helper.
+- **Regression guard**: `src/__tests__/components/no-fabricated-transaction-times.test.ts`
+  — no file may call `formatDateTime()` on a `.date`. It also pins the
+  arithmetic (a date-only string parses to midnight UTC; midnight UTC is 05:30
+  in India) so the diagnosis cannot decay into folklore. Proved by
+  reintroducing the bug: fails with the exact line.
+- **Status**: FIXED
+
+### BUG-069b — Selection bar's exit sat one thumb above Delete (Medium/Safety) — FIXED
+
+- **Found**: 2026-08-07, reported by the owner after BUG-068 shipped
+- **File**: `src/components/ledger/Ledger.tsx`
+- **Severity**: Medium (mis-tap risk on a destructive action)
+- **Description**: The ✕ was at the far left of a single `flex-wrap` row. On a
+  phone the row wrapped and **Delete** fell to the second line at the left —
+  directly beneath the ✕. The way out of the mode ended up a thumb's width
+  above "delete everything I ticked".
+- **Fix applied**: 2026-08-07. Two fixed rows, no wrapping, so nothing lands
+  anywhere unpredictable. ✕ moved to the top right; the control directly beneath
+  it is **Export CSV**, harmless if mis-tapped, with Delete one place further
+  left. Exit and destructive action now share neither a row nor a column.
+- **Status**: FIXED
+
 ### BUG-069 — Card layout could enter selection mode but never select (Medium/UX dead end) — FIXED
 
 - **Found**: 2026-08-07, browser-verifying the BUG-068 fix on production

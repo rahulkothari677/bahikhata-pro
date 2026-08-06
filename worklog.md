@@ -9859,3 +9859,33 @@ Stage Summary:
   environment (no device/emulator). The safe-area mechanism was verified by
   feeding the live site the same variable Capacitor feeds it; final
   confirmation came from the owner on his phone.
+
+---
+
+Task ID: bahikhata-pro-v27-followups
+Agent: claude-opus-5 (session 2026-08-07, round 2)
+Task: Owner feedback on the shipped fixes
+
+Work Log:
+- BUG-069b: the ✕ I added sat at the far left of a WRAPPING row, so on a phone
+  Delete wrapped to line two at the left — directly under it. Two fixed rows
+  now; ✕ top-right, and what sits under it is Export CSV, not Delete.
+- BUG-070: every transaction read "05:30 am". Not a wrong time — an invented
+  one. The app never captures a time: <input type="date"> -> "2026-08-06" ->
+  new Date() -> midnight UTC -> 05:30 IST. Five .date call sites now render a
+  date. formatDateTime stays correct on createdAt/irnGeneratedAt/ewayBillExpiry.
+- BUG-071: returning to a tab did not restore that tab's own position. The
+  earlier fix restored only on explicit back navigation, so the common case
+  (tab bar) always reset. Every navigation now restores the destination's own
+  remembered offset; PER_RECORD_VIEWS still start at the top, because there the
+  view NAME does not identify the content.
+- Two new guards, both proved by reintroducing the bug they catch:
+  no-translator-shadowing (previous round) and no-fabricated-transaction-times.
+  The owner asked that a guard, not a patch, be the default whenever a defect
+  could plausibly exist elsewhere — the shadowed `t` turned up in five more
+  places, and only the guard found them.
+
+Stage Summary:
+- 3 defects fixed, all reported by the owner from the Android build.
+- Typecheck clean, lint 0 errors, 2856 tests pass (149 suites), build green.
+- Registered as BUG-069b, BUG-070, BUG-071 in BUGS-FOUND.md.
