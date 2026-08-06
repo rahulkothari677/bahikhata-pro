@@ -94,6 +94,19 @@ function chromeClass(v: ChromeVisibility): string {
   }
 }
 
+/**
+ * The same rule, for classes that land on <header> itself rather than on a
+ * wrapper. `lg:flex` would make the header a flex container, and its single
+ * child carries the `justify-between` that lays the bar out — as a flex item
+ * that child would shrink to its content and the layout would collapse. The
+ * header must stay a block, so this maps to `lg:block`.
+ *
+ * ('never' never reaches here — showHeader gates it out before render.)
+ */
+function headerChromeClass(v: ChromeVisibility): string {
+  return v === 'desktop-only' ? 'hidden lg:block' : ''
+}
+
 export function AppShell({
   children,
   sidebar = 'always',
@@ -120,7 +133,7 @@ export function AppShell({
   // to desktop), but wrap it in a div with `hidden lg:block` so it doesn't
   // take space on mobile. For 'never', we skip rendering entirely.
   const sidebarWrapperClass = chromeClass(sidebar)
-  const headerClass = chromeClass(header)
+  const headerClass = headerChromeClass(header)
   const showSidebar = sidebar !== 'never'
   const showHeader = header !== 'never'
 
@@ -140,11 +153,19 @@ export function AppShell({
       {/* Main content column */}
       <div className="flex-1 flex flex-col min-w-0">
         <OfflineIndicator />
-        {showHeader && (
-          <div className={headerClass}>
-            <Header />
-          </div>
-        )}
+        {/* No wrapper div here, deliberately.
+         *
+         * The Header is `sticky top-0`, and a sticky element can only travel
+         * within its containing block. Wrapping it in a plain <div> made that
+         * containing block exactly one header tall — zero room to travel — so
+         * the header scrolled away with the page instead of sticking. On
+         * Android, where the WebView now runs edge-to-edge, that left the
+         * dashboard cards sliding up underneath the system clock.
+         *
+         * As a direct child of this flex column the containing block is the
+         * full 6000-odd px of content, and it sticks. The visibility rules
+         * ride on the <header> itself. */}
+        {showHeader && <Header className={headerClass} />}
         {children}
       </div>
 
