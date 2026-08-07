@@ -41,7 +41,7 @@ export function BillWiseProfit({ data }: BillWiseProfitProps) {
       {/* Summary stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard label="Total Bills" value={String(summary.totalBills)} color="text-blue-600 dark:text-blue-400" bg="bg-blue-100 dark:bg-blue-950" />
-        <StatCard label="Total Revenue" value={formatINR(summary.totalRevenue)} color="text-amber-600 dark:text-amber-400" bg="bg-amber-100 dark:bg-amber-950" />
+        <StatCard label="Revenue (excl. GST)" value={formatINR(summary.totalRevenue)} color="text-amber-600 dark:text-amber-400" bg="bg-amber-100 dark:bg-amber-950" />
         <StatCard label="Total COGS" value={formatINR(summary.totalCogs)} color="text-rose-600 dark:text-rose-400" bg="bg-rose-100 dark:bg-rose-950" />
         <StatCard label="Total Profit" value={formatINR(summary.totalProfit)} color="text-emerald-600 dark:text-emerald-400" bg="bg-emerald-100 dark:bg-emerald-950" />
       </div>
