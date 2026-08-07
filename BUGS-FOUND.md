@@ -865,13 +865,30 @@ and include enough context to reproduce.
   - Each suspicious payment now includes a `warning` field: "This payment matches the 100x heuristic but may be legitimate. Only repair if you have independent confirmation."
 - **Status**: FIXED
 
-### BUG-061 — V26 AUDITOR: Write-path root cause for 100× inflated payment UNIDENTIFIED (Medium/Investigative) — OPEN
+### BUG-061 — 100× inflated payments: root cause IDENTIFIED and fixed; 10 corrupt rows still at rest — PARTIALLY RESOLVED
 - **Files**: Unknown (the code path that created Anita's ₹1,000 payment as 100,000 paise instead of 1,000 paise)
 - **Severity**: Medium (the plumbing fix in Batch 11 prevents the two balance functions from diverging, but if the write-path bug still exists in a deployed build, new payments could be created 100× inflated)
 - **Found**: 2026-07-19, auditor review of V26 Batch 11
 - **Description**: The auditor verified that the money extension code has exactly ONE conversion each way (one `toPaise` on write, one `fromPaise` on read) — the "double-conversion" blame in the Batch 11 commit message contradicts the code. The plumbing fix (raw SQL for payments in `computePartyBalance`) is harmless and guarantees the two balance functions can't diverge, but the MECHANISM that wrote bad data into Neon is unidentified. Most likely an older deployed build (the payment was created on 2026-07-08; if a pre-V18-Phase-4 build was deployed at that time, the `* 100` SQL pattern from the old code could have been applied twice).
 - **Standing watch**: Weekly 5-minute check — create a ₹10 payment on Neon, verify both the party-detail and party-list screens show ₹10. If it ever recurs, it's a live hunt for the write-path bug.
-- **Status**: OPEN — root cause unidentified. Plumbing fix prevents divergence; standing watch will catch recurrence.
+- **UPDATE 2026-08-07 (investigation)**: this entry was **stale in one direction and understated in another**.
+
+  **The root cause WAS identified.** Commit `dd85acd` — "M11 ACTUAL ROOT CAUSE: extension handlers were not keyed by model". `generateModelHandlers()` returned handlers UNKEYED, so all 10 spreads collided and one model's handlers became a top-level catch-all bound to `RevenueSchedule`, which Prisma then ran on top of every other model's — double-converting on write. Models sharing an `amount` column with RevenueSchedule (Payment, Subscription, BankTransaction) were affected. **Already guarded**: `src/__tests__/lib/m11-extension-handler-shape.test.ts`, 6 tests, passing. The weekly manual "standing watch" is obsolete.
+
+  **The write path is confirmed fixed on live data.** Every payment created from 2026-07-22 onward reads correctly (₹100, ₹200, ₹500, ₹1,000). Verified against production via `/api/debug/paise-audit`.
+
+  **But 10 corrupt rows were never repaired.** They sit in Payment, all created 2026-07-20/21 — precisely the window the bug was live:
+
+  | Rows | Raw paise | Displays as | True value |
+  |---|---|---|---|
+  | 9 | 1,000,000 | ₹10,000 | ₹100 |
+  | 1 | 5,000,000 | ₹50,000 | ₹500 |
+
+  Parties: Anita Singh (×2), Mahalaxmi Suppliers (×2), rahul1, rahul2, rahul3, navin 1, Sunita Devi, Mohammed Irfan.
+
+  **Why the audit's own row-level counters missed them** — and this is the part worth keeping: `suspiciousRows` and `almostCertainlyCorruptRows` both report **0**, because they use ABSOLUTE ceilings and ₹10,000 sits far below them. That is the exact blind spot the 2026-07-22 note in the endpoint already describes. Only the `maxToMedianRatio` spread heuristic flags these columns, which is why that heuristic must not be "tidied away" for being noisy — it is the only check that sees them.
+
+- **Status**: PARTIALLY RESOLVED — cause found, fixed and guarded; write path clean since 2026-07-22. **10 historical rows remain corrupt at rest.** Repair needs `ALLOW_REPAIR_ENDPOINTS=true` set in Vercel (deliberately blank in production) and then `POST /api/debug/repair-payment-amount` by explicit id. AWAITING OWNER DECISION — all current data is dummy, so impact is presentational only.
 
 ### BUG-062 — V26 AUDITOR: B2CS-vs-CDNUR classification uses note's own value/state, not original invoice lookup (Low/GST-filing) — OPEN
 - **File**: `src/lib/gstr1-builder.ts` (buildB2CS + buildCDNUR)
