@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { suggestGstTreatment } from '@/lib/gst-treatment'
 import { db, withConnectionRetry } from '@/lib/db'
 import { getAuthContext, getAuthUserIdWithModule } from '@/lib/get-auth'
 import { canAccessModule } from '@/lib/staff-permissions'
@@ -112,7 +113,21 @@ export async function POST(req: NextRequest) {
         // (pre-existing bug — the checkbox had no effect on the stored product).
         // Now persisted. Also persist gstTreatment (§4.2).
         priceIncludesGst: v.priceIncludesGst,
-        gstTreatment: v.gstTreatment,
+        /*
+         * Suggest the treatment from the HSN when the client did not state one.
+         *
+         * gstTreatment defaults to 'taxable' in the schema, and nothing ever
+         * set it — so every zero-tax product a shopkeeper created sat in the
+         * wrong Table 8 box until they thought to change it. A kirana owner has
+         * no reason to know that milk is "exempt" while a 0% cereal is
+         * "nil-rated"; the distinction is real in law and invisible in a shop.
+         *
+         * Only ever fills a gap: an explicit choice from the client wins, and
+         * the suggester returns null wherever it is not confident.
+         */
+        gstTreatment: v.gstTreatment && v.gstTreatment !== 'taxable'
+          ? v.gstTreatment
+          : (suggestGstTreatment(v.hsn, v.gstRate ?? 0) ?? v.gstTreatment),
       },
     })
     return NextResponse.json({ product })
@@ -186,7 +201,13 @@ export async function PUT(req: NextRequest) {
     if (v.notes !== undefined) updateData.notes = v.notes
     // 🔒 V17 Audit Phase 5: Persist priceIncludesGst (was missing) + gstTreatment
     if (v.priceIncludesGst !== undefined) updateData.priceIncludesGst = v.priceIncludesGst
-    if (v.gstTreatment !== undefined) updateData.gstTreatment = v.gstTreatment
+    if (v.gstTreatment !== undefined) {
+      // Same rule on edit: an explicit non-default choice is respected; the
+      // untouched 'taxable' default on a zero-tax good gets the suggestion.
+      updateData.gstTreatment = v.gstTreatment !== 'taxable'
+        ? v.gstTreatment
+        : (suggestGstTreatment(v.hsn, v.gstRate ?? 0) ?? v.gstTreatment)
+    }
 
     // 🔒 V26 R11 (Phase 5): Concurrent-edit warning (same pattern as parties PUT).
     // Client sends `updatedAt` as loaded. Server compares; on mismatch, still
