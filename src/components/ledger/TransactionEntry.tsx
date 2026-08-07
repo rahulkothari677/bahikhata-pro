@@ -138,7 +138,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   // counter via handle-nav-action; here we subscribe and toggle the dialog
   // open. Was: nav entry just opened new-sale, user had to find the mic /
   // scan button themselves.
-  const lastVoiceTriggerRef = useRef(0)
+  const lastVoiceTriggerRef = useRef(triggerVoiceOpen)
   useEffect(() => {
     if (triggerVoiceOpen > lastVoiceTriggerRef.current) {
       lastVoiceTriggerRef.current = triggerVoiceOpen
@@ -146,7 +146,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
     }
   }, [triggerVoiceOpen])
 
-  const lastBarcodeTriggerRef = useRef(0)
+  const lastBarcodeTriggerRef = useRef(triggerBarcodeOpen)
   useEffect(() => {
     if (triggerBarcodeOpen > lastBarcodeTriggerRef.current) {
       lastBarcodeTriggerRef.current = triggerBarcodeOpen

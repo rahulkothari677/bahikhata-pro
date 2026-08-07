@@ -54,7 +54,7 @@ export function IncomeExpense() {
   const [choiceOpen, setChoiceOpen] = useState(false)
 
   // Listen for global "New Entry" trigger from Header (only if fired on this view)
-  const lastTriggerRef = useRef(0)
+  const lastTriggerRef = useRef(triggerNewEntry)
   useEffect(() => {
     if (triggerNewEntry > lastTriggerRef.current && triggerNewEntryView === 'income-expense') {
       lastTriggerRef.current = triggerNewEntry

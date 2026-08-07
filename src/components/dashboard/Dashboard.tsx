@@ -76,7 +76,7 @@ export function Dashboard() {
   // tapped, it calls fireTriggerDayEnd() + setView('dashboard'). This effect
   // detects the counter increment + opens the Close Drawer dialog. Skips the
   // initial mount (counter starts at 0).
-  const prevTriggerDayEnd = useRef(0)
+  const prevTriggerDayEnd = useRef(triggerDayEnd)
   useEffect(() => {
     if (triggerDayEnd > prevTriggerDayEnd.current) {
       prevTriggerDayEnd.current = triggerDayEnd

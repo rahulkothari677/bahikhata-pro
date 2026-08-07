@@ -66,7 +66,7 @@ export function Inventory() {
   const products: any[] = data?.products || []
 
   // Listen for global "New Entry" trigger from Header (only if it was fired on this view)
-  const lastTriggerRef = useRef(0)
+  const lastTriggerRef = useRef(triggerNewEntry)
   useEffect(() => {
     if (triggerNewEntry > lastTriggerRef.current && triggerNewEntryView === 'inventory') {
       lastTriggerRef.current = triggerNewEntry

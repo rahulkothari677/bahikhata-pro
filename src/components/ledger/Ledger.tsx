@@ -405,7 +405,7 @@ export function Ledger({ type }: { type: LedgerType }) {
   const totalDue = totalAmount - totalPaid
 
   // Listen for global "New Entry" trigger from Header (only if fired on this view)
-  const lastTriggerRef = useRef(0)
+  const lastTriggerRef = useRef(triggerNewEntry)
   const targetView = isSale ? 'sales' : 'purchases'
   useEffect(() => {
     if (triggerNewEntry > lastTriggerRef.current && triggerNewEntryView === targetView) {
