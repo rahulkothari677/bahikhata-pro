@@ -943,7 +943,31 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       )}
       {/* Drafts button — opens modal showing all saved drafts from last 24h.
           Shows a badge with the count if there are any drafts. */}
-      {hasDrafts && (
+      {/*
+       * Only while the form is EMPTY.
+       *
+       * Autosave writes a draft the moment the first product is added, so this
+       * banner appeared as a reward for starting work — announcing "1 saved
+       * draft / Editing a restored draft" about the very sale still being
+       * typed. It told the user something they already knew, at the top of the
+       * screen, in the space the work needed.
+       *
+       * Old drafts are worth offering when there is nothing in progress: that
+       * is the moment "carry on where you left off" is an answer. Once items
+       * are on the form the offer is noise, and the draft is still being saved
+       * either way — the banner was never what protected the work.
+       *
+       * Nothing is lost by hiding it: autosave still writes the draft on every
+       * change, so leaving mid-sale keeps the work, and the banner reappears
+       * next time the form opens empty — which is exactly when "restore a
+       * draft" is a useful offer.
+       *
+       * (Checked rather than assumed: there is NO unsaved-changes guard on
+       * exit today. markDirty() only resumes autosave. So leaving is currently
+       * silent-but-safe. An explicit "leave / discard" confirmation on the way
+       * out is the right completion of this and is tracked separately.)
+       */}
+      {hasDrafts && items.length === 0 && (
         <button
           onClick={() => { haptic.click(); setDraftModalOpen(true) }}
           className="w-full flex items-center justify-between gap-2 p-3 rounded-xl border border-primary/30 bg-primary/5 hover:bg-primary/10 transition text-left"
@@ -1006,7 +1030,14 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
               ? <ShoppingCart className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
               : <Truck className="w-5 h-5 text-amber-600 dark:text-amber-400" />}
           </div>
-          <div>
+          {/*
+           * The app header already says "New Sale". Repeating it here, with
+           * "Fill in the details below" underneath, spent a whole band of a
+           * phone screen restating the title and describing a form the user is
+           * already looking at. On desktop there is room for it; on a phone
+           * there is not, and the instruction earns nothing either way.
+           */}
+          <div className="hidden lg:block">
             <h2 className="text-lg font-bold font-heading tracking-tight">
               {isCreditNote ? 'Credit Note' : isDebitNote ? 'Debit Note' : estimateMode ? 'New Estimate' : `New ${isSale ? 'Sale' : 'Purchase'}`}
             </h2>
@@ -1031,7 +1062,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       {/* Voice Entry Section */}
       {showVoiceEntry && (
         <Card className="shadow-card border-border/60 border-primary/30">
-          <CardContent className="p-4">
+          <CardContent className="p-3 sm:p-4">
             <h3 className="font-semibold text-sm flex items-center gap-2 mb-3">
               <Mic className="w-4 h-4 text-primary" /> Voice Entry
             </h3>
@@ -1087,13 +1118,38 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
         </Card>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      {/*
+       * MOBILE ORDER IS NOT DOM ORDER, deliberately.
+       *
+       * On a phone this used to stack as the desktop columns happen to sit in
+       * the markup: products, items, NOTES, customer, details, summary. Measured
+       * on production, "Customer" began 1120px down — past a screen and a half —
+       * and Notes, the least urgent field on the form, came before it.
+       *
+       * A sale is answered in a fixed order: who is it for, what did they buy,
+       * how are they paying. Every billing app worth copying (Vyapar, myBillBook,
+       * Zoho Invoice, Swipe) leads with the customer, because that choice decides
+       * the GST treatment and the pricing for everything after it. Asking last
+       * for the thing that governs the rest is backwards.
+       *
+       * `contents` dissolves the two column wrappers on mobile so their cards
+       * become direct flex children and `order-*` can sequence them. At lg the
+       * wrappers become blocks again and the original two-column grid is restored
+       * EXACTLY — no desktop regression, because desktop never sees the reorder.
+       */}
+      <div className="flex flex-col gap-3 lg:grid lg:grid-cols-3 lg:gap-4">
         {/* LEFT: Product selection + items list (takes 2 cols) */}
-        <div className="lg:col-span-2 space-y-4">
+        <div className="contents lg:block lg:col-span-2 lg:space-y-4">
           {/* Product selector card */}
-          <Card className="shadow-card border-border/60">
-            <div className="p-4 border-b border-border bg-muted/30">
-              <h3 className="font-semibold text-sm flex items-center gap-2 mb-3">
+          <Card className="shadow-card border-border/60 order-2 lg:order-none">
+            {/* p-3 on mobile, p-4 from sm up. Every card on this form paid 4px
+                of padding on all four sides for a look that costs a phone user
+                a visible slice of the product list. */}
+            <div className="p-3 sm:p-4 border-b border-border bg-muted/30">
+              {/* "Add Products" is hidden on mobile: a category dropdown and a
+                  search box captioned "SEARCH PRODUCT" sit directly beneath it,
+                  so the heading names something the controls already say. */}
+              <h3 className="font-semibold text-sm items-center gap-2 mb-3 hidden sm:flex">
                 <Package className="w-4 h-4" /> Add Products
               </h3>
 
@@ -1182,7 +1238,10 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
 
               {/* Product list - clickable to add */}
               {filteredProducts.length > 0 && (
-                <div className="mt-3 max-h-48 overflow-y-auto rounded-lg border border-border bg-background">
+                /* Taller on a phone (max-h-72 ≈ 288px vs 192px), because this
+                   list IS the job. It was showing barely three rows inside a
+                   192px window while the form around it had room to spare. */
+                <div className="mt-3 max-h-72 sm:max-h-48 overflow-y-auto rounded-lg border border-border bg-background">
                   {filteredProducts.slice(0, 20).map(p => {
                     const inList = items.find(i => i.productId === p.id)
                     const qty = inList?.quantity ?? 0
@@ -1199,14 +1258,19 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                        */
                       <div
                         key={p.id}
-                        className="w-full flex items-center gap-3 p-2.5 transition border-b border-border/30 last:border-0 hover:bg-muted/50"
+                        className="w-full flex items-center gap-2 sm:gap-3 px-2 sm:px-2.5 py-2 transition border-b border-border/30 last:border-0 hover:bg-muted/50"
                       >
                       <button
                         onClick={() => handleAddProduct(p)}
                         aria-label={qty > 0 ? `Add another ${p.name}` : `Add ${p.name}`}
-                        className="flex-1 min-w-0 flex items-center gap-3 text-left"
+                        className="flex-1 min-w-0 flex items-center gap-2 sm:gap-3 text-left"
                       >
-                        <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                        {/* The box icon is hidden on mobile. It is the same
+                            generic box on every row, so it distinguishes
+                            nothing — it just takes 36px off the width of the
+                            product NAME, which is the one thing being read.
+                            Desktop has the width to spare, so it keeps it. */}
+                        <div className="w-9 h-9 rounded-lg bg-muted items-center justify-center flex-shrink-0 hidden sm:flex">
                           <Package className="w-4 h-4 text-muted-foreground" />
                         </div>
                         <div className="flex-1 min-w-0">
@@ -1324,7 +1388,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
             </div>
 
             {/* Items list */}
-            <div className="p-4">
+            <div className="p-3 sm:p-4">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="font-semibold text-sm flex items-center gap-2">
                   <ShoppingCart className="w-4 h-4" /> Selected Items
@@ -1345,7 +1409,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
               {/* Inline voice entry for adding more items */}
               {showVoiceEntry && items.length > 0 && (
                 <Card className="shadow-card border-border/60 border-primary/30 mb-3">
-                  <CardContent className="p-4">
+                  <CardContent className="p-3 sm:p-4">
                     <h3 className="font-semibold text-sm flex items-center gap-2 mb-3">
                       <Mic className="w-4 h-4 text-primary" /> Add More Items via Voice
                     </h3>
@@ -1557,8 +1621,8 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
           </Card>
 
           {/* Notes */}
-          <Card className="shadow-card border-border/60">
-            <div className="p-4">
+          <Card className="shadow-card border-border/60 order-5 lg:order-none">
+            <div className="p-3 sm:p-4">
               <Label htmlFor="field-notes-optional">Notes (optional)</Label>
               <Input id="field-notes-optional"
                 value={notes}
@@ -1606,10 +1670,10 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
         </div>
 
         {/* RIGHT: Party, date, payment, summary */}
-        <div className="space-y-4">
+        <div className="contents lg:block lg:space-y-4">
           {/* Party selection */}
-          <Card className="shadow-card border-border/60">
-            <div className="p-4">
+          <Card className="shadow-card border-border/60 order-1 lg:order-none">
+            <div className="p-3 sm:p-4">
               {/*
                 🔒 "Add New" lives beside the heading (2026-08-03, reported by
                 Rahul). It used to exist only at the BOTTOM of the dropdown's
@@ -1751,7 +1815,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
           </Card>
 
           {/* Transaction details */}
-          <Card className="shadow-card border-border/60">
+          <Card className="shadow-card border-border/60 order-3 lg:order-none">
             <div className="p-4 space-y-3">
               <h3 className="font-semibold text-sm flex items-center gap-2">
                 <Calendar className="w-4 h-4" /> Details
@@ -1894,8 +1958,8 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
           </Card>
 
           {/* Live summary */}
-          <Card className="shadow-card border-border/60 sticky top-20">
-            <div className="p-4">
+          <Card className="shadow-card border-border/60 sticky top-20 order-4 lg:order-none">
+            <div className="p-3 sm:p-4">
               <h3 className="font-semibold text-sm flex items-center gap-2 mb-3">
                 <IndianRupee className="w-4 h-4" /> Summary
               </h3>
