@@ -11,6 +11,7 @@
  */
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { ReportUnavailable } from '@/components/reports/ReportUnavailable'
 import { Badge } from '@/components/ui/badge'
 import { formatINR, cn } from '@/lib/utils'
 import { CheckCircle2, Scale } from 'lucide-react'
@@ -20,7 +21,13 @@ interface TrialBalanceProps {
 }
 
 export function TrialBalance({ data }: TrialBalanceProps) {
-  const summary = data?.summary || { totalDebit: 0, totalCredit: 0, difference: 0, isBalanced: true }
+  /*
+   * isBalanced: true was the dangerous part of this default. A trial balance
+   * that failed to load would have declared the books balanced — the single
+   * assurance the report exists to give.
+   */
+  if (!data?.summary) return <ReportUnavailable what="trial balance" />
+  const summary = data.summary
   const accounts = data?.accounts || []
 
   return (

@@ -11,6 +11,7 @@
  */
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { ReportUnavailable } from '@/components/reports/ReportUnavailable'
 import { Badge } from '@/components/ui/badge'
 import { formatINR, cn } from '@/lib/utils'
 import { Hash, AlertTriangle } from 'lucide-react'
@@ -20,7 +21,9 @@ interface HsnSummaryProps {
 }
 
 export function HsnSummary({ data }: HsnSummaryProps) {
-  const summary = data?.summary || { totalHsnCodes: 0, totalTaxableValue: 0, totalTax: 0 }
+  // No invented zeros — see ReportUnavailable for why a blank beats a wrong total.
+  if (!data?.summary) return <ReportUnavailable what="HSN summary" />
+  const summary = data.summary
   const hsnSummary = data?.hsnSummary || []
   const missing = data?.missingHsn
 

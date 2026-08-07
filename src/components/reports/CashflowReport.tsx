@@ -10,6 +10,7 @@
  */
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { ReportUnavailable } from '@/components/reports/ReportUnavailable'
 import { formatINR, cn } from '@/lib/utils'
 import { ArrowDownLeft, ArrowUpRight, Wallet } from 'lucide-react'
 
@@ -18,7 +19,9 @@ interface CashflowReportProps {
 }
 
 export function CashflowReport({ data }: CashflowReportProps) {
-  const summary = data?.summary || { totalInflow: 0, totalOutflow: 0, netCashflow: 0 }
+  // No invented zeros — see ReportUnavailable for why a blank beats a wrong total.
+  if (!data?.summary) return <ReportUnavailable what="cashflow report" />
+  const summary = data.summary
   const inflows = data?.inflows || []
   const outflows = data?.outflows || []
 

@@ -10,6 +10,7 @@
  */
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { ReportUnavailable } from '@/components/reports/ReportUnavailable'
 import { Badge } from '@/components/ui/badge'
 import { formatINR, cn, formatDate } from '@/lib/utils'
 import { TrendingUp, TrendingDown, FileText, AlertTriangle } from 'lucide-react'
@@ -19,7 +20,9 @@ interface BillWiseProfitProps {
 }
 
 export function BillWiseProfit({ data }: BillWiseProfitProps) {
-  const summary = data?.summary || { totalBills: 0, totalRevenue: 0, totalCogs: 0, totalProfit: 0, avgMargin: 0 }
+  // No invented zeros — see ReportUnavailable for why a blank beats a wrong total.
+  if (!data?.summary) return <ReportUnavailable what="profit report" />
+  const summary = data.summary
   const bills = data?.bills || []
   // 🔒 AUDIT V23 FIX §8.5: Show truncation warning when data is truncated.
   const truncated = data?.truncated === true

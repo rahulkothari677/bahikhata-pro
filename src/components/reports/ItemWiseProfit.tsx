@@ -12,6 +12,7 @@
  */
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { ReportUnavailable } from '@/components/reports/ReportUnavailable'
 import { formatINR, cn } from '@/lib/utils'
 import { TrendingUp, TrendingDown, Package } from 'lucide-react'
 
@@ -20,7 +21,9 @@ interface ItemWiseProfitProps {
 }
 
 export function ItemWiseProfit({ data }: ItemWiseProfitProps) {
-  const summary = data?.summary || { totalProducts: 0, totalRevenue: 0, totalCogs: 0, totalProfit: 0, avgMargin: 0 }
+  // No invented zeros — see ReportUnavailable for why a blank beats a wrong total.
+  if (!data?.summary) return <ReportUnavailable what="profit report" />
+  const summary = data.summary
   const items = data?.items || []
 
   return (

@@ -1,6 +1,7 @@
 'use client'
 
 import { useTranslation } from '@/hooks/use-translation'
+import { ReportUnavailable } from '@/components/reports/ReportUnavailable'
 import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { useState, useEffect } from 'react'
 import { useAppStore } from '@/store/app-store'
@@ -479,8 +480,10 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
 
 function PLReport({ data }: { data: any }) {
   const { t } = useTranslation()
-  // 🔒 V11 FIX: Defensive destructuring with defaults.
-  const summary = data?.summary || { totalRevenue: 0, grossProfit: 0, totalExpenses: 0, otherIncome: 0, netProfit: 0, profitMargin: 0 }
+  // Defensive, but never by inventing figures: a P&L showing ₹0 revenue and
+  // ₹0 profit reads as a month with no trade, not as data that failed to load.
+  if (!data?.summary) return <ReportUnavailable what="P&L" />
+  const summary = data.summary
   const expensesByCategory = data?.expensesByCategory || []
   const incomeByCategory = data?.incomeByCategory || []
   // 🔒 R14-1/R14-2 (Round 14): Detect hideProfit via stripped server fields
@@ -638,8 +641,10 @@ function GSTReport({ data }: { data: any }) {
   // inputPurchases, netGSTPayable } = data` — if any field was undefined (e.g.,
   // partial API response, cache corruption, old cached data from a previous
   // deploy), the component crashed on `outputSales.outputTax`.
-  const outputSales = data?.outputSales || { outputTax: 0, taxableValue: 0, bySlab: [] }
-  const inputPurchases = data?.inputPurchases || { inputTax: 0, taxableValue: 0, bySlab: [] }
+  // ₹0 output tax shown to someone about to file is worse than no number.
+  if (!data?.outputSales || !data?.inputPurchases) return <ReportUnavailable what="GST summary" />
+  const outputSales = data.outputSales
+  const inputPurchases = data.inputPurchases
   const netGSTPayable = data?.netGSTPayable ?? 0
   return (
     <div className="space-y-4">

@@ -12,6 +12,7 @@
  */
 
 import { useState, useRef } from 'react'
+import { ReportUnavailable } from '@/components/reports/ReportUnavailable'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -139,7 +140,9 @@ export function BankReconciliation() {
   }
 
   const statements = data?.bankStatements || []
-  const summary = data?.summary || { totalStatements: 0, totalBankTxns: 0, matchedCount: 0, unmatchedCount: 0 }
+  // No invented zeros — see ReportUnavailable for why a blank beats a wrong total.
+  if (!data?.summary) return <ReportUnavailable what="reconciliation" />
+  const summary = data.summary
 
   return (
     <div className="space-y-4">

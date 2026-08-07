@@ -290,7 +290,17 @@ export function Dashboard() {
   const categoryBreakdown = data.categoryBreakdown || []
   const paymentModeSplit = data.paymentModeSplit || []
   const lowStockProducts = data.lowStockProducts || []
-  const gstSummary = data.gstSummary || { totalTaxableSales: 0, totalCGST: 0, totalSGST: 0, totalIGST: 0, totalTax: 0 }
+  /*
+   * No zero-filled fallback here either — and this one was worse than a
+   * fabricated zero. The object it substituted had keys totalCGST / totalTax,
+   * while every reader below wants cgst / netPayable / outputTax. Had it ever
+   * fired, the GST card would have rendered `undefined` through formatINR, not
+   * even an honest ₹0. A fallback nobody checked against its own consumers.
+   *
+   * Now it stays undefined and the card says "—", which is what the app knows.
+   */
+  const gstSummary = data.gstSummary
+  const hasGst = !!gstSummary
   const recentTransactions = data.recentTransactions || []
   const setting = data.setting || { shopName: 'My Shop' }
 
@@ -761,7 +771,7 @@ export function Dashboard() {
         />
         <MiniStatCard
           label={`${t('dash.gst_summary')} (${rangeLabel})`}
-          value={formatINR(gstSummary.netPayable)}
+          value={hasGst ? formatINR(gstSummary.netPayable) : '—'}
           icon={Receipt}
           color="text-violet-600"
           onClick={() => setView('reports')}
@@ -983,12 +993,25 @@ export function Dashboard() {
             </div>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <GstMiniStat label="Output Tax (Sales)" value={gstSummary.outputTax} color="text-amber-600 dark:text-amber-400" />
-              <GstMiniStat label="Input Tax (Purchase)" value={gstSummary.inputTax} color="text-emerald-600 dark:text-emerald-400" />
-              <GstMiniStat label="CGST + SGST" value={gstSummary.cgst + gstSummary.sgst} color="text-violet-600" />
-              <GstMiniStat label="Net GST Payable" value={gstSummary.netPayable} color={gstSummary.netPayable >= 0 ? 'text-rose-600' : 'text-emerald-600 dark:text-emerald-400'} highlight />
-            </div>
+            {/*
+              * Guarded, not defaulted. The card itself stays — a GST card that
+              * disappears looks like the shop has no GST — but the figures are
+              * only drawn when they were actually read. Saying "not available"
+              * about tax is recoverable; showing a confident ₹0 output tax to
+              * someone about to file is not.
+              */}
+            {hasGst ? (
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <GstMiniStat label="Output Tax (Sales)" value={gstSummary.outputTax} color="text-amber-600 dark:text-amber-400" />
+                <GstMiniStat label="Input Tax (Purchase)" value={gstSummary.inputTax} color="text-emerald-600 dark:text-emerald-400" />
+                <GstMiniStat label="CGST + SGST" value={gstSummary.cgst + gstSummary.sgst} color="text-violet-600" />
+                <GstMiniStat label="Net GST Payable" value={gstSummary.netPayable} color={gstSummary.netPayable >= 0 ? 'text-rose-600' : 'text-emerald-600 dark:text-emerald-400'} highlight />
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                GST figures aren&apos;t available right now. Pull down to refresh.
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>
