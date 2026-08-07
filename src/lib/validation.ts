@@ -70,6 +70,17 @@ export const createTransactionSchema = z.object({
   noteType: z.enum(['C', 'D']).optional(),
   noteReason: z.enum(['post-sale-discount', 'deficiency', 'return', 'price-revision', 'other']).optional(),
   affectsStock: z.coerce.boolean().optional().default(false),
+  /*
+   * Reverse charge (RCM) on a PURCHASE: the buyer pays the GST directly to the
+   * government instead of the supplier collecting it. Common for transport
+   * (GTA), legal services, and buying from unregistered dealers.
+   *
+   * The column has existed since V17-Ext and GSTR-3B reads it in six places —
+   * it drives section 3.1(d), the tax owed, and the matching ITC in 4(A)(3).
+   * It was simply never accepted here, so nothing could ever set it and 3.1(d)
+   * reported zero for every shop, forever.
+   */
+  isReverseCharge: z.coerce.boolean().optional().default(false),
 })
 
 // Transaction update schema (same but all fields optional)

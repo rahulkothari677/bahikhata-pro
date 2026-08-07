@@ -249,7 +249,7 @@ export async function POST(req: NextRequest) {
       }, { status: 400 })
     }
 
-    const { type, partyId, date, items, discountAmount, paymentMode, notes, invoiceNo, category, paidAmount, payeeName, payeePhone, originalTransactionId, noteType, noteReason, affectsStock } = validation.data as any
+    const { type, partyId, date, items, discountAmount, paymentMode, notes, invoiceNo, category, paidAmount, payeeName, payeePhone, originalTransactionId, noteType, noteReason, affectsStock, isReverseCharge } = validation.data as any
 
     // 🔒 FIX H1: Check staff permission based on transaction type
     // V17-Ext Tier 3: credit-note maps to sales, debit-note maps to purchases
@@ -691,6 +691,16 @@ export async function POST(req: NextRequest) {
           paidAmount: roundMoney(finalPaid),
           paymentMode: paymentMode || 'cash',
           isInterState: !!isInterState,
+          /*
+           * Reverse charge applies to PURCHASES only, and the server decides
+           * that rather than trusting the flag it was handed.
+           *
+           * The column drives GSTR-3B 3.1(d) — tax the shop owes directly — so
+           * a stray `true` arriving on a sale would invent a liability that
+           * does not exist. The form only offers the toggle on purchases; this
+           * makes that a rule instead of an expectation.
+           */
+          isReverseCharge: type === 'purchase' ? !!isReverseCharge : false,
           notes: notes || null,
           invoiceNo: finalInvoiceNo,
           invoiceSequence,

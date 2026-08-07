@@ -116,6 +116,8 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
   const [invoiceNo, setInvoiceNo] = useState('')
   const [isInterState, setIsInterState] = useState(false)
+  /* Purchases only — see the toggle in the details section. */
+  const [isReverseCharge, setIsReverseCharge] = useState(false)
   const [paymentMode, setPaymentMode] = useState('cash')
   const [paidAmount, setPaidAmount] = useState('')
   // 🔒 AUDIT V24 §1: For credit/debit notes, paidAmount means "cash refunded".
@@ -866,6 +868,8 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
             : date,
           invoiceNo: invoiceNo || null,
           isInterState,
+          // Purchases only; the server also enforces that (see the route).
+          isReverseCharge: !isSale && !isNote ? isReverseCharge : false,
           paymentMode: estimateMode ? 'cash' : paymentMode,  // Estimates don't have payment
           // 🔒 AUDIT V24 §1: Notes ALWAYS send an explicit paidAmount (cash
           // refunded): 0 when the refund toggle is off (khata adjustment — the
@@ -2174,6 +2178,51 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                   </p>
                 )}
               </div>
+
+              {/*
+               * REVERSE CHARGE — purchases only.
+               *
+               * The column has existed since V17-Ext and GSTR-3B reads it in
+               * six places: it drives 3.1(d), the tax the shop owes directly,
+               * and the matching credit in 4(A)(3). Nothing in the app could
+               * ever set it, so 3.1(d) reported zero for every shop, always. A
+               * kirana paying a transporter owes that tax and the return did
+               * not say so — invisible until an audit.
+               *
+               * Placed under GST type because it answers the same question
+               * from the other side: that one decides WHICH tax, this one
+               * decides WHO pays it.
+               *
+               * The GST amounts are still computed from the item rates exactly
+               * as before. Under reverse charge the supplier does not collect
+               * the tax, but it is still owed at the same rate — which is why
+               * GSTR-3B sums cgst/sgst/igst on these rows too. Nothing about
+               * the money maths changes; only who hands it over.
+               */}
+              {!isSale && !isNote && (
+                <div className="rounded-lg bg-muted/50 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <Label className="text-sm" htmlFor="field-reverse-charge">Reverse charge</Label>
+                      <p className="text-2xs text-muted-foreground mt-0.5">
+                        The supplier did not charge GST — you pay it directly
+                      </p>
+                    </div>
+                    <Switch
+                      id="field-reverse-charge"
+                      checked={isReverseCharge}
+                      onCheckedChange={(v) => { markDirty(); setIsReverseCharge(v) }}
+                    />
+                  </div>
+                  {isReverseCharge && (
+                    <p className="text-2xs text-amber-700 dark:text-amber-400 mt-2">
+                      {formatINR(totalGst)} will be added to what you owe in GSTR-3B, and claimed
+                      back as credit in the same return. Usual for transport, legal services, and
+                      unregistered suppliers.
+                    </p>
+                  )}
+                </div>
+              )}
 
               <div>
                 <Label htmlFor="field-discount">Discount (₹)</Label>
