@@ -90,6 +90,40 @@ export async function PUT(req: NextRequest) {
     }
     if (body.hideProfit !== undefined) sanitized.hideProfit = !!body.hideProfit
     if (body.roundOffEnabled !== undefined) sanitized.roundOffEnabled = !!body.roundOffEnabled
+
+    /*
+     * Declared previous-FY turnover, in RUPEES from the client.
+     *
+     * Stored as paise via the money extension, like every other money column —
+     * the extension converts on write, so what arrives here must be rupees and
+     * nothing may pre-multiply it. That is the discipline the 100x payment bug
+     * came from getting wrong.
+     *
+     * null is meaningful and distinct from 0: null means "not declared, compute
+     * it from my transactions", 0 means "I declare that I turned over nothing".
+     * A shop genuinely in its first year needs to be able to say the second.
+     */
+    if (body.priorFyTurnover !== undefined) {
+      if (body.priorFyTurnover === null || body.priorFyTurnover === '') {
+        sanitized.priorFyTurnover = null
+      } else {
+        const n = Number(body.priorFyTurnover)
+        if (!Number.isFinite(n) || n < 0) {
+          return NextResponse.json(
+            { error: 'Previous year turnover must be a number and cannot be negative' },
+            { status: 400 },
+          )
+        }
+        // Guard against a fat-fingered figure becoming a filing threshold.
+        if (n > 1e12) {
+          return NextResponse.json(
+            { error: 'Previous year turnover looks too large — please check the figure' },
+            { status: 400 },
+          )
+        }
+        sanitized.priorFyTurnover = n
+      }
+    }
     if (body.scanLang !== undefined) {
       if (typeof body.scanLang !== 'string') {
         return NextResponse.json({ error: 'scanLang must be text' }, { status: 400 })

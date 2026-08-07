@@ -480,8 +480,21 @@ describe('🔒 V20-014: Money round-trip integration test (auditor §5.2)', () =
     // new model must fail this test and force a deliberate update rather than
     // slipping in unnoticed.
     // 15 → 16: PaymentAllocation (AUDIT C5).
-    test('MONEY_COLUMNS has the expected count (16 models)', () => {
-      expect(Object.keys(MONEY_COLUMNS)).toHaveLength(16)
+    test('MONEY_COLUMNS has the expected count (17 models)', () => {
+      /*
+       * 16 → 17 on 2026-08-08: Setting.priorFyTurnover, the shopkeeper's
+       * declared previous-FY turnover.
+       *
+       * This number is a deliberate tripwire, not bookkeeping. It fires when a
+       * money model is added so that someone confirms the model was wired
+       * COMPLETELY — MONEY_COLUMNS, a generateModelHandlers line, and
+       * MODEL_RELATIONS if it has nested money. It caught this addition being
+       * half-done: the column was registered and the handler was not, which
+       * would have left the model looking converted while reading back raw
+       * paise. That is the 100x class of fault, and this assertion is why it
+       * was found in seconds rather than in a filed return.
+       */
+      expect(Object.keys(MONEY_COLUMNS)).toHaveLength(17)
     })
   })
 })

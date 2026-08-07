@@ -88,6 +88,19 @@ const INTENTIONALLY_UNCONVERTED: Record<string, string> = {
   'User.transactions': 'User has no money columns and no extension handler.',
   'User.payments': 'User has no money columns and no extension handler.',
   'User.products': 'User has no money columns and no extension handler.',
+  /*
+   * Added 2026-08-08 when Setting gained priorFyTurnover and so became a money
+   * model. Same reasoning as its siblings above — User has no handler, so
+   * convertRowOnRead never traverses its relations.
+   *
+   * Verified rather than assumed before exempting: nothing in src/app/api or
+   * src/lib queries User with settings included. Every read of Setting goes
+   * through db.setting directly, which IS intercepted. If that ever changes,
+   * this exemption becomes wrong and the reader would see a turnover 100x too
+   * large — which would push a shop over the ₹5 crore HSN and e-invoicing
+   * thresholds and make the app demand things it should not.
+   */
+  'User.settings': 'User has no money columns and no extension handler; nothing includes settings from User.',
   'User.subscriptions': 'User has no money columns and no extension handler.',
   'User.bankTransactions': 'User has no money columns and no extension handler.',
   'User.bankStatements': 'User has no money columns and no extension handler.',

@@ -50,6 +50,9 @@ import { toPaise, fromPaise } from './money'
 const MONEY_COLUMNS: Record<string, string[]> = {
   Product: ['purchasePrice', 'salePrice', 'mrp'],
   Party: ['openingBalance'],
+  // Declared prior-FY turnover. Registered because it is a money column, per the
+  // rule in this file's docblock — unregistered money reads back as raw paise.
+  Setting: ['priorFyTurnover'],
   Transaction: ['subtotal', 'discountAmount', 'cgst', 'sgst', 'igst', 'totalAmount', 'roundOff', 'paidAmount', 'grossProfit'],
   TransactionItem: ['unitPrice', 'purchasePriceAtSale', 'discountAmount', 'cgst', 'sgst', 'igst', 'csamt', 'total'],
   Payment: ['amount'],
@@ -695,6 +698,11 @@ export function withMoneyConversion(client: PrismaClient) {
       // is listed but never intercepted, which is the worst of both worlds:
       // it LOOKS registered.
       ...generateModelHandlers('PaymentAllocation', 'paymentAllocation'),
+      // Setting.priorFyTurnover — same rule as PaymentAllocation above. Listing
+      // a model in MONEY_COLUMNS without a handler is the worst of both worlds:
+      // it LOOKS registered and converts nothing. The M11 guard caught exactly
+      // that when this column was first added.
+      ...generateModelHandlers('Setting', 'setting'),
     },
   })
 }

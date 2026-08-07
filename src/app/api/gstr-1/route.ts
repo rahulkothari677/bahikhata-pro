@@ -69,7 +69,7 @@ export async function GET(req: NextRequest) {
     // Fetch shop settings for GSTIN + state
     const setting = await db.setting.findUnique({
       where: { userId },
-      select: { gstin: true, state: true, shopName: true },
+      select: { gstin: true, state: true, shopName: true, priorFyTurnover: true },
     })
 
     const shopGstin = setting?.gstin || null
@@ -99,7 +99,24 @@ export async function GET(req: NextRequest) {
         AND "date" >= ${priorFY.start}
         AND "date" < ${priorFY.end}
     `
-    const priorFyTurnover = fromPaise(Number(priorFyRows[0]?.turnoverPaise ?? 0))
+    const computedPriorFy = fromPaise(Number(priorFyRows[0]?.turnoverPaise ?? 0))
+    /*
+     * A declared figure wins over the computed one.
+     *
+     * Computing from the app's own transactions is right for a shop that has
+     * used it all along, and wrong for one that traded on paper for years and
+     * started here in July — that shop's real prior-year turnover is not in the
+     * database, so the computed value reads 0 and understates them. Turnover
+     * decides HSN digit requirements and e-invoicing applicability, so a wrong
+     * zero is not cosmetic.
+     *
+     * `?? computed` and not `|| computed`: a shopkeeper who genuinely turned
+     * over nothing last year and says so must not have that answer overwritten
+     * by the same zero arriving from a different route. Null means "I have not
+     * said"; zero means "I have said, and it is zero".
+     */
+    const declaredPriorFy = setting?.priorFyTurnover
+    const priorFyTurnover = declaredPriorFy ?? computedPriorFy
 
     // Transform DB rows to builder input
     const builderTxns: Gstr1Transaction[] = txns.map(t => ({
@@ -303,7 +320,7 @@ export async function POST(req: NextRequest) {
 
     const setting = await db.setting.findUnique({
       where: { userId },
-      select: { gstin: true, state: true },
+      select: { gstin: true, state: true, priorFyTurnover: true },
     })
     const shopGstin = setting?.gstin || null
     const shopState = setting?.state || null
@@ -324,7 +341,24 @@ export async function POST(req: NextRequest) {
         AND "date" >= ${priorFY.start}
         AND "date" < ${priorFY.end}
     `
-    const priorFyTurnover = fromPaise(Number(priorFyRows[0]?.turnoverPaise ?? 0))
+    const computedPriorFy = fromPaise(Number(priorFyRows[0]?.turnoverPaise ?? 0))
+    /*
+     * A declared figure wins over the computed one.
+     *
+     * Computing from the app's own transactions is right for a shop that has
+     * used it all along, and wrong for one that traded on paper for years and
+     * started here in July — that shop's real prior-year turnover is not in the
+     * database, so the computed value reads 0 and understates them. Turnover
+     * decides HSN digit requirements and e-invoicing applicability, so a wrong
+     * zero is not cosmetic.
+     *
+     * `?? computed` and not `|| computed`: a shopkeeper who genuinely turned
+     * over nothing last year and says so must not have that answer overwritten
+     * by the same zero arriving from a different route. Null means "I have not
+     * said"; zero means "I have said, and it is zero".
+     */
+    const declaredPriorFy = setting?.priorFyTurnover
+    const priorFyTurnover = declaredPriorFy ?? computedPriorFy
 
     const builderTxns: Gstr1Transaction[] = txns.map(t => ({
       id: t.id,

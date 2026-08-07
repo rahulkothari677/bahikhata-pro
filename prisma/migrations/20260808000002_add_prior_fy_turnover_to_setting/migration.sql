@@ -1,0 +1,11 @@
+-- Declared previous-FY aggregate turnover, in paise.
+--
+-- GSTR-1's `gt` is computed from the app's own prior-year transactions, which is
+-- correct for a shop that has used the app throughout. A shop migrating from
+-- paper mid-year has no such history, so the computed value reads 0 and
+-- understates them — and turnover decides HSN digit requirements (Notification
+-- 78/2020: 4 digits below Rs 5 crore, 6 above) and e-invoicing applicability.
+--
+-- Nullable, no default: null means "not declared, compute it", so every existing
+-- shop keeps its current behaviour.
+ALTER TABLE "Setting" ADD COLUMN "priorFyTurnover" INTEGER;

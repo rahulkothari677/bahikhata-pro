@@ -620,6 +620,23 @@ model Setting {
   cardEmail         String?
   cardAddress       String?
   cardGstin         String?
+  /**
+   * Previous financial year's aggregate turnover, in PAISE, as declared by the
+   * shopkeeper. Optional override for GSTR-1's `gt`.
+   * gt is normally computed from the app's own prior-FY transactions, which is
+   * right for a shop that has used the app all along. A shop that traded for
+   * years on paper and started here in the middle of a year has no such history,
+   * so the computed figure reads 0 and understates them.
+   * That is not cosmetic: turnover decides HSN digit requirements under
+   * Notification 78/2020 (4 digits below ₹5 crore, 6 above) and e-invoicing
+   * applicability. An app that believes a ₹6-crore business turned over nothing
+   * cannot warn them they owe 6-digit HSN.
+   * Null means "not declared — compute it", so existing shops are unaffected.
+   * REGISTERED in MONEY_COLUMNS (prisma-money-extension): an unregistered money
+   * column reads back as raw paise and is exactly the 100x class of bug that
+   * file exists to prevent.
+   */
+  priorFyTurnover   Int?
 }
 
 // ==================== ANNOUNCEMENTS (broadcast messages) ====================
