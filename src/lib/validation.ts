@@ -17,6 +17,35 @@ import { isCountUnit } from './units'
 // Transaction item schema (used in both POST and PUT)
 // 🔒 V11 §2.4: Use z.coerce.number() for all numeric fields so string values
 // from HTML inputs are auto-converted. Same defensive fix as products.
+/**
+ * Rule 46(b) invoice number.
+ *
+ * A tax invoice number is not free text. CGST Rule 46(b) requires a consecutive
+ * serial number, not exceeding SIXTEEN characters, made only of alphanumerics,
+ * hyphen and slash, unique within a financial year.
+ *
+ * This accepted `z.string().max(100)` — a hundred characters of anything. A
+ * real generated GSTR-1 for August 2026 carried an invoice numbered
+ * "qnip535d" sitting among INV-0041…INV-0075: a random-looking string filed as
+ * a legal document number. The transactions route takes the client's value in
+ * preference to its own series (`invoiceNo || generated`), so whatever is sent
+ * becomes the number of record.
+ *
+ * Left permissive enough for the legitimate case this override exists for —
+ * a shopkeeper continuing an existing paper series like "2026/RG/001", or
+ * recording a supplier's own bill number on a purchase. Tightened only to what
+ * the rule actually says, so nothing legal is refused and nothing illegal is
+ * accepted.
+ */
+export const invoiceNoSchema = z
+  .string()
+  .trim()
+  .max(16, 'Invoice number cannot exceed 16 characters (GST Rule 46)')
+  .regex(
+    /^[A-Za-z0-9/-]+$/,
+    'Invoice number may contain only letters, numbers, hyphen and slash (GST Rule 46)',
+  )
+
 export const transactionItemSchema = z.object({
   productId: z.string().nullable().optional(),
   productName: z.string().min(1, 'Product name is required').max(200, 'Product name too long'),
@@ -59,7 +88,7 @@ export const createTransactionSchema = z.object({
   discountAmount: z.coerce.number().min(0).optional(),
   paymentMode: z.enum(['cash', 'upi', 'card', 'bank', 'credit']).optional().default('cash'),
   notes: z.string().max(5000, 'Notes too long').nullable().optional(),
-  invoiceNo: z.string().max(100).nullable().optional(),
+  invoiceNo: invoiceNoSchema.nullable().optional(),
   category: z.string().max(200).nullable().optional(),
   paidAmount: z.coerce.number().min(0).optional(),
   payeeName: z.string().max(200).nullable().optional(),
@@ -103,7 +132,7 @@ export const updateTransactionSchema = z.object({
   discountAmount: z.coerce.number().min(0).optional(),
   paymentMode: z.enum(['cash', 'upi', 'card', 'bank', 'credit']).optional().default('cash'),
   notes: z.string().max(5000, 'Notes too long').nullable().optional(),
-  invoiceNo: z.string().max(100).nullable().optional(),
+  invoiceNo: invoiceNoSchema.nullable().optional(),
   category: z.string().max(200).nullable().optional(),
   paidAmount: z.coerce.number().min(0).optional(),
   payeeName: z.string().max(200).nullable().optional(),
