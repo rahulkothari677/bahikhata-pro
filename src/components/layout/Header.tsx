@@ -9,7 +9,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { getInitials, cn } from '@/lib/utils'
 import { haptic } from '@/lib/haptic'
-import { confirmExit } from '@/lib/exit-guard'
+import { confirmExit, hasExitGuard } from '@/lib/exit-guard'
 import { useQuery } from '@tanstack/react-query'
 import { useSession, signOut } from 'next-auth/react'
 import { clearAllOfflineData } from '@/lib/offline-db'
@@ -110,10 +110,10 @@ export function Header({ className }: { className?: string } = {}) {
   }
 
   const handleBack = async () => {
-    // The mounted screen gets a say first — a half-written sale asks whether
-    // the user meant to leave it. Resolves true immediately when no screen has
-    // registered a guard, which is every screen but the entry forms.
-    if (!(await confirmExit())) return
+    // Same rule as the Android back handler: only ask when a screen has
+    // actually registered a guard, so every other screen keeps a synchronous
+    // path from tap to navigation.
+    if (hasExitGuard() && !(await confirmExit())) return
     // { back: true } — restore the destination where the user left it. Coming
     // back from a bill to a long ledger should land on the row they tapped,
     // not at the top of the list.

@@ -16,7 +16,7 @@
 import { useEffect } from 'react'
 import { Capacitor } from '@capacitor/core'
 import { canGoBackInApp } from '@/hooks/use-browser-back-button'
-import { confirmExit } from '@/lib/exit-guard'
+import { confirmExit, hasExitGuard } from '@/lib/exit-guard'
 
 const SAFFRON = '#c2410c'
 
@@ -142,11 +142,22 @@ export function CapacitorBridge() {
         // App lifecycle — handle Android back button
         const { App } = await import('@capacitor/app')
         const listener = await App.addListener('backButton', async ({ canGoBack }) => {
-          // The hardware back button is an exit like any other, so the mounted
-          // screen gets the same say the header's arrow gives it. Without this
-          // the guard would cover the arrow and not the button most Android
-          // users actually press.
-          if (!(await confirmExit())) return
+          /*
+           * The hardware back button is an exit like any other, so the mounted
+           * screen gets the same say the header's arrow gives it.
+           *
+           * But ONLY when a screen has actually registered a guard. Making this
+           * handler unconditionally async put an await in front of the
+           * navigation on EVERY screen, so the whole back path — including
+           * App.exitApp() at the root — started running a microtask later than
+           * Capacitor delivered the event. Nothing else on this screen needed
+           * that, and a back button is the last place to add a suspension point
+           * for a question nobody is asking.
+           *
+           * hasExitGuard() is synchronous, so screens without a guard keep the
+           * exact code path they had before the guard existed.
+           */
+          if (hasExitGuard() && !(await confirmExit())) return
           // 🔒 V11 FIX: Don't trust Capacitor's `canGoBack` — it checks Android
           // WebView's URL-based history. This app uses pushState with the SAME
           // URL (no URL change), so canGoBack always returned false →

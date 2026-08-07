@@ -66,12 +66,40 @@ export function registerExitGuard(guard: ExitGuard): () => void {
  * treated as "yes" — a broken confirmation must never trap someone on a
  * screen they are trying to leave.
  */
+/**
+ * Is any screen currently asking to be consulted?
+ *
+ * Synchronous on purpose. Callers that must not become async unless they
+ * genuinely have to — the Android hardware back handler above all — can check
+ * this first and keep their original, entirely synchronous path when no guard
+ * is registered, which is every screen but the entry forms.
+ */
+export function hasExitGuard(): boolean {
+  return stack.length > 0
+}
+
+/** True while a guard is mid-question, so a second press cannot start another. */
+let asking = false
+
 export async function confirmExit(): Promise<boolean> {
   const top = stack[stack.length - 1]
   if (!top) return true
+
+  /*
+   * A second back press while the dialog is already open must not open a
+   * second one. The guard resolves a promise held in a ref, so re-entering
+   * overwrites that ref and abandons the first promise unresolved — the
+   * handler awaiting it never continues, and the press is silently swallowed.
+   * Refusing re-entry keeps exactly one question in flight.
+   */
+  if (asking) return false
+
+  asking = true
   try {
     return await top()
   } catch {
     return true
+  } finally {
+    asking = false
   }
 }
