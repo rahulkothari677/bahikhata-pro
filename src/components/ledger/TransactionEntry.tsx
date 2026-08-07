@@ -1,6 +1,7 @@
 'use client'
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { findProductByScannedCode } from '@/lib/find-product-by-code'
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useAppStore } from '@/store/app-store'
 import { Card, CardContent } from '@/components/ui/card'
@@ -1170,10 +1171,8 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
         <BarcodeScanner
           onScan={(code) => {
             setBarcodeOpen(false)
-            // Match scanned code against product SKU or name
-            const match = products.find((p) =>
-              p.sku === code || p.name?.toLowerCase() === code.toLowerCase()
-            )
+            // Barcode, then SKU, then exact name — see find-product-by-code.
+            const match = findProductByScannedCode(products, code)
             if (match) {
               handleAddProduct(match)
             } else {

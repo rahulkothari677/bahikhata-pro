@@ -104,6 +104,23 @@ model Product {
   shopId            String? // multi-shop: null = all shops (backward compatible)
   name              String
   sku               String?
+  /*
+   * The manufacturer's barcode (EAN-13, UPC-A, …) — NOT the same thing as sku.
+   *
+   * sku is the shop's own code, typed by the shopkeeper ("ATA001"). barcode is
+   * printed on the packet by whoever made it, and is what the camera reads.
+   *
+   * Before this column the app had a working scanner and nowhere to put what it
+   * scanned: ProductPicker and Inventory both matched on `p.barcode`, a field
+   * that did not exist, so every scan silently matched nothing. Storing the EAN
+   * in sku was the only workaround, and it costs the shopkeeper their own code.
+   *
+   * Nullable, and deliberately NOT unique: loose goods have no barcode, and two
+   * rows can legitimately carry the same one (a 500g and a 1kg pack of the same
+   * brand sometimes share a code, and re-used codes exist in the wild). Matching
+   * takes the first hit rather than promising there is only one.
+   */
+  barcode           String?
   hsn               String? // HSN/SAC code for GST
   category          String?
   unit              String   @default("pcs") // pcs, kg, ltr, m, box
@@ -141,6 +158,9 @@ model Product {
   @@unique([userId, sku])
   // Performance: list products per user, search by name within user
   @@index([userId, name])
+  // Scan lookup: exact code within a shop. Mirrors the partial index created in
+  // migration 20260807000001 (Prisma cannot express the WHERE clause).
+  @@index([userId, barcode])
   @@index([userId, category])
   @@index([userId, shopId])
 }

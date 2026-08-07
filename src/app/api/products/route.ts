@@ -96,6 +96,7 @@ export async function POST(req: NextRequest) {
         userId,
         name: v.name,
         sku: v.sku || null,
+        barcode: v.barcode || null,
         hsn: v.hsn || null,
         category: v.category || null,
         unit: v.unit || 'pcs',
@@ -146,6 +147,7 @@ export async function PUT(req: NextRequest) {
     const updateData: any = {}
     if (v.name !== undefined) updateData.name = v.name
     if (v.sku !== undefined) updateData.sku = v.sku
+    if (v.barcode !== undefined) updateData.barcode = v.barcode || null
     if (v.hsn !== undefined) updateData.hsn = v.hsn
     if (v.category !== undefined) updateData.category = v.category
     if (v.unit !== undefined) updateData.unit = v.unit

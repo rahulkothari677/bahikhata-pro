@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { findProductByScannedCode } from '@/lib/find-product-by-code'
 import { useQuery } from '@tanstack/react-query'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -167,10 +168,8 @@ export function ProductPicker({
         <BarcodeScanner
           onScan={(code) => {
             setBarcodeOpen(false)
-            // Match scanned code against product SKU or barcode
-            const match = products.find((p) =>
-              p.sku === code || p.barcode === code
-            )
+            // Barcode, then SKU, then exact name — see find-product-by-code.
+            const match = findProductByScannedCode(products, code)
             if (match) {
               handleSelect(match)
             } else {

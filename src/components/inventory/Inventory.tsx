@@ -1,6 +1,7 @@
 'use client'
 
 import { useQuery, keepPreviousData } from '@tanstack/react-query'
+import { findProductByScannedCode } from '@/lib/find-product-by-code'
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from '@/hooks/use-translation'
 import { useSetting } from '@/hooks/use-setting'
@@ -415,13 +416,11 @@ export function Inventory() {
       {barcodeOpen && (
         <BarcodeScanner
           onScan={(code) => {
-            // Search for the scanned code in the product list
+            // Barcode, then SKU, then exact name — see find-product-by-code.
             setSearch(code)
             setBarcodeOpen(false)
             // Check if any product matches
-            const match = products.find((p: any) =>
-              p.sku === code || p.barcode === code || p.name?.toLowerCase() === code.toLowerCase()
-            )
+            const match = findProductByScannedCode(products as any[], code)
             if (match) {
               sonnerToast.success(`Found: ${match.name}`)
             } else {
