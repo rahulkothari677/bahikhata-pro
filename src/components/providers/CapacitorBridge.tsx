@@ -17,6 +17,7 @@ import { useEffect } from 'react'
 import { Capacitor } from '@capacitor/core'
 import { canGoBackInApp } from '@/hooks/use-browser-back-button'
 import { confirmExit, hasExitGuard } from '@/lib/exit-guard'
+import { useAppStore } from '@/store/app-store'
 
 const SAFFRON = '#c2410c'
 
@@ -169,10 +170,36 @@ export function CapacitorBridge() {
           if (canGoBackInApp()) {
             window.history.back()
           } else if (!canGoBack) {
-            // Fallback: if neither the app stack nor the WebView has back
-            // history, exit the app. This handles the case where the user
-            // is at the dashboard with no app history.
-            App.exitApp()
+            /*
+             * NEVER exit from a screen the user was working on.
+             *
+             * This is defence in depth, not the cure. The reported "back from
+             * New Sale restarts the app" was caused by making this handler
+             * unconditionally async, and the hasExitGuard() check above fixed
+             * it — confirmed on the device.
+             *
+             * Worth recording how nearly that was missed: the report said it
+             * happened on an EMPTY form too, and I read that as proof the
+             * leave-confirmation was innocent, because an empty form registers
+             * no guard. Wrong inference. Guard REGISTRATION was never the
+             * issue — the unconditional `await` wrapped every screen whether a
+             * guard existed or not. The evidence pointed at the change all
+             * along; the reasoning about it was what failed.
+             *
+             * The rule below stands on its own merits regardless: if
+             * canGoBackInApp() ever reads false while the user is mid-entry,
+             * the app's idea of its own stack is wrong, and the answer to "I
+             * am not sure where back should go" must never be "quit and lose
+             * what is on screen". Exiting is only correct from a root tab.
+             */
+            const view = useAppStore.getState().currentView
+            const onRootTab = view === 'dashboard' || view === 'sales'
+              || view === 'purchases' || view === 'more'
+            if (onRootTab) {
+              App.exitApp()
+            } else {
+              useAppStore.getState().setView('dashboard', { back: true })
+            }
           } else {
             // Edge case: app stack is empty but WebView has history (e.g.,
             // user arrived from an external page). Let the WebView go back.

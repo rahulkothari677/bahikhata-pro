@@ -1860,12 +1860,34 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                   </Avatar>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{selectedParty.name}</p>
-                    <div className="flex items-center gap-2 text-2xs text-muted-foreground">
+                    <div className="flex items-center gap-2 text-2xs text-muted-foreground flex-wrap">
                       {selectedParty.phone && <span className="flex items-center gap-0.5"><Phone className="w-2.5 h-2.5" />{selectedParty.phone}</span>}
                       {selectedParty.balance !== 0 && (
                         <Badge variant="outline" className={cn('text-3xs py-0', selectedParty.balance > 0 ? 'text-emerald-600 dark:text-emerald-400 border-emerald-300' : 'text-rose-600 border-rose-300')}>
                           {selectedParty.balance > 0 ? `Owes ₹${selectedParty.balance}` : `You owe ₹${Math.abs(selectedParty.balance)}`}
                         </Badge>
+                      )}
+                      {/*
+                       * The supplier's GSTIN, shown on purchases only.
+                       *
+                       * It is half the key GSTR-2B reconciles on — the other
+                       * half is their bill number below. Without it the
+                       * purchase can never be matched, and therefore the input
+                       * tax credit can never be confirmed. That was invisible:
+                       * nothing on this screen mentioned GSTIN at all, so a
+                       * supplier saved without one looked complete. Six of the
+                       * sixteen suppliers in this shop have one.
+                       */}
+                      {!isSale && (
+                        selectedParty.gstin ? (
+                          <Badge variant="outline" className="text-3xs py-0 font-mono">
+                            {selectedParty.gstin}
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-3xs py-0 text-amber-600 border-amber-300 gap-0.5">
+                            <AlertTriangle className="w-2.5 h-2.5" /> No GSTIN — can&apos;t claim GST
+                          </Badge>
+                        )
                       )}
                     </div>
                   </div>
@@ -2033,10 +2055,20 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                   <Label htmlFor="field-date">Date</Label>
                   <Input id="field-date" type="date" value={date} onChange={(e) => { markDirty(); setDate(e.target.value) }} className="mt-1" />
                 </div>
-                <div>
-                  <Label htmlFor="field-invoice-no">Invoice No.</Label>
-                  <Input id="field-invoice-no" value={invoiceNo} onChange={(e) => { markDirty(); setInvoiceNo(e.target.value) }} placeholder="Optional" className="mt-1" />
-                </div>
+                {/*
+                 * On a SALE this field stays here and stays optional — the
+                 * invoice number is ours to issue, and the app assigns one.
+                 *
+                 * On a PURCHASE it is the supplier's document number, and it
+                 * has moved out of this collapsed section entirely (see the
+                 * block above the item list). It is rendered there instead.
+                 */}
+                {isSale && (
+                  <div>
+                    <Label htmlFor="field-invoice-no">Invoice No.</Label>
+                    <Input id="field-invoice-no" value={invoiceNo} onChange={(e) => { markDirty(); setInvoiceNo(e.target.value) }} placeholder="Auto" className="mt-1" />
+                  </div>
+                )}
               </div>
 
               {/* 🔒 R10-1: the tax head is DERIVED, not chosen.
