@@ -1256,18 +1256,22 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                             <button
                               onClick={() => handleDecrementProduct(p.id)}
                               aria-label={qty === 1 ? `Remove ${p.name} from this sale` : `Reduce ${p.name} to ${qty - 1}`}
-                              className="w-9 h-9 flex items-center justify-center text-primary hover:bg-primary/15 active:scale-95 transition"
+                              className="w-11 h-11 flex items-center justify-center text-primary hover:bg-primary/15 active:scale-95 transition"
                             >
                               {/* At one, the next press removes the line, so say so. */}
                               {qty === 1 ? <Trash2 className="w-3.5 h-3.5" /> : <Minus className="w-4 h-4" />}
                             </button>
+                            {/* 44px targets, not 36. This is the control a
+                                shopkeeper taps most often while billing, and
+                                36px is below the minimum the rest of this
+                                codebase holds itself to (V26 Phase 6 §5.1). */}
                             <span className="min-w-[26px] text-center text-sm font-bold text-primary tabular-nums">
                               {qty}
                             </span>
                             <button
                               onClick={() => handleAddProduct(p)}
                               aria-label={`Add another ${p.name}`}
-                              className="w-9 h-9 flex items-center justify-center text-primary hover:bg-primary/15 active:scale-95 transition"
+                              className="w-11 h-11 flex items-center justify-center text-primary hover:bg-primary/15 active:scale-95 transition"
                             >
                               <Plus className="w-4 h-4" />
                             </button>
@@ -1276,7 +1280,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                           <button
                             onClick={() => handleAddProduct(p)}
                             aria-label={`Add ${p.name}`}
-                            className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center hover:bg-primary/20 active:scale-95 transition"
+                            className="w-11 h-11 rounded-lg bg-primary/10 flex items-center justify-center hover:bg-primary/20 active:scale-95 transition"
                           >
                             <Plus className="w-4 h-4 text-primary" />
                           </button>
