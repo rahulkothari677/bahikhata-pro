@@ -129,6 +129,12 @@ export const updateTransactionSchema = z.object({
 export const createProductSchema = z.object({
   name: z.string().min(1, 'Product name is required').max(200),
   sku: z.string().max(100).nullable().optional(),
+  /*
+   * The manufacturer's barcode — distinct from `sku`, the shop's own code.
+   * Max 64: the longest common symbology (GS1-128) tops out well under that,
+   * and a longer string is a scan error rather than a code.
+   */
+  barcode: z.string().max(64).nullable().optional(),
   hsn: z.string().max(20).nullable().optional(),
   category: z.string().max(200).nullable().optional(),
   unit: z.string().max(20).optional().default('pcs'),
@@ -191,6 +197,12 @@ export const createPartySchema = z.object({
 export const updateProductSchema = z.object({
   name: z.string().min(1, 'Product name cannot be empty').max(200).optional(),
   sku: z.string().max(100).nullable().optional(),
+  /*
+   * The manufacturer's barcode — distinct from `sku`, the shop's own code.
+   * Max 64: the longest common symbology (GS1-128) tops out well under that,
+   * and a longer string is a scan error rather than a code.
+   */
+  barcode: z.string().max(64).nullable().optional(),
   hsn: z.string().max(20).nullable().optional(),
   category: z.string().max(200).nullable().optional(),
   unit: z.string().max(20).optional(),

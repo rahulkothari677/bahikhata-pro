@@ -6,6 +6,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { NumberField } from '@/components/ui/number-field'
 import { Label } from '@/components/ui/label'
+import { ScanLine } from 'lucide-react'
+import { BarcodeScanner } from '@/components/common/BarcodeScanner'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { toast as sonnerToast } from 'sonner'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
@@ -27,7 +29,7 @@ const GST_TREATMENTS = [
 ]
 
 const EMPTY_FORM = {
-  name: '', sku: '', hsn: '', category: '', unit: 'pcs',
+  name: '', sku: '', barcode: '', hsn: '', category: '', unit: 'pcs',
   purchasePrice: '', salePrice: '', mrp: '', gstRate: '0',
   openingStock: '', lowStockThreshold: '5', notes: '',
   priceIncludesGst: false,
@@ -41,6 +43,7 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
   onSuccess?: () => void
 }) {
   const [form, setForm] = useState(EMPTY_FORM)
+  const [barcodeOpen, setBarcodeOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   // 🔒 R15-5 (Round 15): Read hideProfit so the margin preview box is hidden
   // for staff-with-hideProfit. Was: shown unconditionally when both prices > 0.
@@ -53,6 +56,7 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
         setForm({
           name: product.name || '',
           sku: product.sku || '',
+          barcode: product.barcode || '',
           hsn: product.hsn || '',
           category: product.category || '',
           unit: product.unit || 'pcs',
@@ -113,6 +117,7 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
       const payload = {
         name: form.name.trim(),
         sku: form.sku.trim() || null,
+        barcode: form.barcode.trim() || null,
         hsn: form.hsn.trim() || null,
         category: form.category.trim() || null,
         unit: form.unit || 'pcs',
@@ -172,6 +177,46 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
           <div>
             <Label htmlFor="field-sku-code">SKU / Code</Label>
             <Input id="field-sku-code" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} placeholder="e.g. ATA001" />
+          </div>
+          {/*
+           * Barcode — the thing the camera reads, and the reason the scanner
+           * has never worked.
+           *
+           * The app has had a barcode scanner since V8 and nowhere to store
+           * what it scanned: ProductPicker and Inventory both matched on
+           * `p.barcode`, a field that did not exist on the model, so every scan
+           * silently matched nothing. Storing the EAN in "SKU" was the only
+           * workaround, and it costs the shopkeeper their own code.
+           *
+           * The scan button matters more than the field. A 13-digit EAN typed
+           * by hand is a transcription error waiting to happen, and the whole
+           * point of a barcode is not typing it.
+           */}
+          <div>
+            <Label htmlFor="field-barcode">Barcode</Label>
+            <div className="flex gap-2 mt-1">
+              <Input
+                id="field-barcode"
+                value={form.barcode}
+                onChange={(e) => setForm({ ...form, barcode: e.target.value })}
+                placeholder="Scan or type the code on the packet"
+                inputMode="numeric"
+                className="flex-1 font-mono"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setBarcodeOpen(true)}
+                className="flex-shrink-0 gap-1.5"
+                aria-label="Scan barcode for this product"
+              >
+                <ScanLine className="w-4 h-4" />
+                <span className="hidden sm:inline">Scan</span>
+              </Button>
+            </div>
+            <p className="text-2xs text-muted-foreground mt-1">
+              Scan it once here and this product comes up instantly at billing.
+            </p>
           </div>
           <div>
             <Label htmlFor="field-category">Category</Label>
@@ -281,6 +326,14 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
           </Button>
         </DialogFooter>
       </DialogContent>
+      {/* Sits outside DialogContent: it is a full-screen overlay of its own and
+          must not be clipped by the dialog it was opened from. */}
+      {barcodeOpen && (
+        <BarcodeScanner
+          onScan={(code) => { setForm(f => ({ ...f, barcode: code })); setBarcodeOpen(false) }}
+          onClose={() => setBarcodeOpen(false)}
+        />
+      )}
     </Dialog>
   )
 }
