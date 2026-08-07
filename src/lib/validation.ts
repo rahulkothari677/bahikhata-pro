@@ -81,6 +81,16 @@ export const createTransactionSchema = z.object({
    * reported zero for every shop, forever.
    */
   isReverseCharge: z.coerce.boolean().optional().default(false),
+  /*
+   * On a PURCHASE, write each line's price back to the product as its new cost.
+   *
+   * Deliberately a boolean and not a list of prices: the server already has the
+   * line items and recomputes the costs itself. A client-supplied {productId,
+   * price} list would be an unauthenticated way to rewrite what every product
+   * costs, which is the number stock valuation and every future profit figure
+   * are built on.
+   */
+  updateProductCosts: z.coerce.boolean().optional().default(false),
 })
 
 // Transaction update schema (same but all fields optional)

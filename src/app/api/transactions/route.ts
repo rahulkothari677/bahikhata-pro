@@ -249,7 +249,7 @@ export async function POST(req: NextRequest) {
       }, { status: 400 })
     }
 
-    const { type, partyId, date, items, discountAmount, paymentMode, notes, invoiceNo, category, paidAmount, payeeName, payeePhone, originalTransactionId, noteType, noteReason, affectsStock, isReverseCharge } = validation.data as any
+    const { type, partyId, date, items, discountAmount, paymentMode, notes, invoiceNo, category, paidAmount, payeeName, payeePhone, originalTransactionId, noteType, noteReason, affectsStock, isReverseCharge, updateProductCosts } = validation.data as any
 
     // 🔒 FIX H1: Check staff permission based on transaction type
     // V17-Ext Tier 3: credit-note maps to sales, debit-note maps to purchases
@@ -809,6 +809,50 @@ export async function POST(req: NextRequest) {
             })
           }
         }))
+      }
+
+      /*
+       * Write the bill's prices back as each product's cost — purchases only,
+       * and only when the user asked.
+       *
+       * Nothing did this before. `purchasePrice` was read everywhere — stock
+       * valuation on the dashboard is currentStock × purchasePrice, and every
+       * sale's profit is salePrice − purchasePrice — and written by nothing
+       * except editing a product by hand. So a shop whose supplier raised
+       * prices kept valuing stock at last year's cost and reporting profit it
+       * had not made, until someone remembered to go and edit each product.
+       *
+       * INSIDE the same transaction as the stock update, deliberately: a bill
+       * that adds 10 units at a new price must not be able to land the units
+       * without the price, or the valuation is wrong in a way nobody would
+       * think to look for.
+       *
+       * `item.unitPrice` here is the TAXABLE (ex-GST) price per the PRODUCT's
+       * unit — computeLineItems normalises quantity into the product's unit and
+       * the entered price is already per that unit. It is the same basis
+       * `purchasePrice` is held in, which is what the profit calculation
+       * already assumes when it subtracts one from the other.
+       *
+       * Same product twice on one bill: the last line wins. Predictable beats
+       * clever here — a shopkeeper who lists a product twice at two prices can
+       * see which line is last, whereas a weighted average is a number they
+       * cannot check by looking.
+       */
+      if (type === 'purchase' && updateProductCosts) {
+        const costByProduct = new Map<string, number>()
+        for (const item of txItems) {
+          if (!item.productId) continue
+          if (!(item.unitPrice > 0)) continue
+          costByProduct.set(item.productId, item.unitPrice)
+        }
+        await Promise.all(
+          [...costByProduct.entries()].map(([productId, cost]) =>
+            tx.product.updateMany({
+              where: { id: productId, userId },
+              data: { purchasePrice: cost },
+            }),
+          ),
+        )
       }
       // If !shouldAffectStock (e.g., credit/debit note without affectsStock,
       // or income/expense), skip stock adjustment entirely.
