@@ -59,7 +59,7 @@ export function Parties() {
   const parties: any[] = data?.parties || []
 
   // Listen for global "New Entry" trigger from Header (only if fired on this view)
-  const lastTriggerRef = useRef(0)
+  const lastTriggerRef = useRef(triggerNewEntry)
   useEffect(() => {
     if (triggerNewEntry > lastTriggerRef.current && triggerNewEntryView === 'parties') {
       lastTriggerRef.current = triggerNewEntry
@@ -72,7 +72,7 @@ export function Parties() {
   // 🔒 AUDIT V25 FIX BUG-032 (Batch 6): When MoreScreen's "WhatsApp Reminders"
   // is tapped, it calls fireTriggerBulkReminders() + setView('parties'). This
   // effect detects the counter increment + opens the BulkRemindersModal.
-  const lastBulkTriggerRef = useRef(0)
+  const lastBulkTriggerRef = useRef(triggerBulkReminders)
   useEffect(() => {
     if (triggerBulkReminders > lastBulkTriggerRef.current) {
       lastBulkTriggerRef.current = triggerBulkReminders
