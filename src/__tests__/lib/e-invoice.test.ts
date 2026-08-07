@@ -210,10 +210,36 @@ describe('🔒 V17 Audit Phase 5 — IRN request builder', () => {
     expect(request!.ItemList[0].Unit).toBe('KGS')
   })
 
-  test('null HSN → defaults to 9999', () => {
-    const txnNoHsn = { ...B2B_SALE, items: [{ ...B2B_SALE.items[0], hsn: null }] }
-    const request = buildIrnRequest(txnNoHsn, SHOP)
-    expect(request!.ItemList[0].HsnCd).toBe('9999')
+  /*
+   * EXPECTATION CHANGED 2026-08-08, deliberately — this asserted the bug.
+   *
+   * HsnCd is mandatory in the NIC e-invoice schema, and an IRN request is not a
+   * report: it is a legal document submitted for a government signature. 9999
+   * is a SERVICES code (SAC 9999xx), so goods sent under it are misdeclared.
+   * The portal validates HSN against its master, so the real-world outcome was
+   * a rejected submission with an opaque error code — while the shopkeeper
+   * stood at the counter holding a customer's goods, with nothing telling them
+   * a missing product code was the cause.
+   *
+   * Refusing to build the request, and NAMING the products, is the point: "Tata
+   * Tea Gold needs an HSN code" is fixable in thirty seconds.
+   */
+  test('refuses to build a request when an item has no HSN, and names it', () => {
+    const txnNoHsn = {
+      ...B2B_SALE,
+      items: [{ ...B2B_SALE.items[0], hsn: null, productName: 'Tata Tea Gold 500g' }],
+    }
+    expect(() => buildIrnRequest(txnNoHsn, SHOP)).toThrow(/Tata Tea Gold 500g/)
+    expect(() => buildIrnRequest(txnNoHsn, SHOP)).toThrow(/HSN code is required/)
+  })
+
+  test('builds normally when every item has an HSN', () => {
+    // The refusal must be specific to the missing case — a valid invoice with
+    // codes on every line still produces a request.
+    const request = buildIrnRequest(B2B_SALE, SHOP)
+    expect(request).not.toBeNull()
+    expect(request!.ItemList[0].HsnCd).toBeTruthy()
+    expect(request!.ItemList[0].HsnCd).not.toBe('9999')
   })
 
   test('pincode extraction from address', () => {

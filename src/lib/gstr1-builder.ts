@@ -531,7 +531,33 @@ export function buildHSN(txns: Gstr1Transaction[]): { data: Gstr1HsnEntry[] } {
 
   for (const txn of outward) {
     for (const item of txn.items) {
-      const hsn = item.hsn || '9999'  // default HSN for unclassified
+      /*
+       * A line with no HSN is LEFT OUT of Table 12. It is not given a made-up one.
+       *
+       * WAS: `item.hsn || '9999'`. Verified in a generated August 2026 return,
+       * where Tata Tea, Toor Dal and Colgate were all filed as HSN "9999" — the
+       * same Colgate appearing correctly as 3306 a few rows below, from sales
+       * made after HSN snapshotting was fixed.
+       *
+       * 9999 is not a valid HSN for goods. It belongs to the SERVICES code
+       * range (SAC 9999xx, "other services"), so filing goods under it is not a
+       * harmless placeholder — it declares the wrong thing. Since the 2025
+       * Table 12 phases the portal validates HSN against a master list and this
+       * would be rejected outright; before that it would simply have been
+       * accepted and wrong, which is worse, because nothing would have told
+       * anyone.
+       *
+       * Omitting is the honest option: a missing row is visibly missing and the
+       * HSN report already names every sale lacking a code, so the shopkeeper
+       * is told what to fix. A fabricated row looks complete and is false.
+       *
+       * NOTE this deliberately makes Table 12 total LESS than the return's
+       * turnover when codes are missing. That gap is the point — it is a true
+       * statement about incomplete data, where "9999" was a false statement
+       * about complete data.
+       */
+      if (!item.hsn || !String(item.hsn).trim()) continue
+      const hsn = String(item.hsn).trim()
       // 🔒 AUDIT G2: the UQC is part of the aggregation key.
       //
       // WAS: `${hsn}|${item.gstRate}` — so every line sharing an HSN and a rate

@@ -217,13 +217,42 @@ describe('🔒 V17 Audit Phase 3 — HSN section', () => {
     expect(hsn1006!.txval).toBe(700)  // 1000 - 300
   })
 
-  test('null HSN → defaults to "9999"', () => {
+  /*
+   * EXPECTATION CHANGED 2026-08-08, and deliberately.
+   *
+   * This test previously asserted `hsn_sc === '9999'` — it encoded the bug as
+   * the requirement. Seen in a real generated August 2026 return: Tata Tea,
+   * Toor Dal and Colgate were all filed under HSN "9999", with the same Colgate
+   * appearing correctly as 3306 a few rows below.
+   *
+   * 9999 is not a valid HSN for goods; it is in the SERVICES range (SAC
+   * 9999xx). Filing goods under it is a false declaration, not a neutral
+   * placeholder, and since the 2025 Table 12 phases the portal validates HSN
+   * against a master list and rejects it.
+   *
+   * A line with no HSN is now OMITTED. That makes Table 12 total less than the
+   * return's turnover — which is the honest signal, and which the HSN report's
+   * missing-HSN warning already explains to the shopkeeper by name.
+   */
+  test('a line with no HSN is omitted, never given a placeholder code', () => {
     const noHsnSale: Gstr1Transaction = {
       ...B2C_SALE,
       items: [{ ...SALE_ITEM_5, hsn: null }],
     }
     const result = buildHSN([noHsnSale])
-    expect(result.data[0].hsn_sc).toBe('9999')
+    expect(result.data).toEqual([])
+    expect(result.data.some(d => d.hsn_sc === '9999')).toBe(false)
+  })
+
+  test('lines WITH an HSN still report, even when another line lacks one', () => {
+    // The omission must be surgical: one unclassified product must not remove
+    // the properly-coded products sold on the same bill from Table 12.
+    const mixed: Gstr1Transaction = {
+      ...B2C_SALE,
+      items: [{ ...SALE_ITEM_5, hsn: null }, { ...SALE_ITEM_5, hsn: '1006' }],
+    }
+    const result = buildHSN([mixed])
+    expect(result.data.map(d => d.hsn_sc)).toEqual(['1006'])
   })
 
   test('unit mapping: kg → KGS, pcs → PCS', () => {

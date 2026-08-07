@@ -221,6 +221,29 @@ export function buildIrnRequest(
     : 'INV'
   const docType = tranType
 
+  /*
+   * HSN is MANDATORY in the NIC e-invoice schema, so refuse to build a request
+   * without it rather than substitute a placeholder.
+   *
+   * WAS: `item.hsn || '9999'` inside the item mapping. 9999 is a SERVICES code
+   * (SAC 9999xx); goods submitted under it are misdeclared. The portal
+   * validates HSN against its master, so the realistic outcome was a rejected
+   * submission with an opaque government error — while the shopkeeper stood at
+   * the counter with a customer's goods and no idea that a missing product code
+   * was the cause.
+   *
+   * Naming the products is the whole value of failing here: "Tata Tea Gold
+   * needs an HSN code" is something a shopkeeper can act on in thirty seconds.
+   */
+  const missingHsn = txn.items.filter((i) => !i.hsn || !String(i.hsn).trim())
+  if (missingHsn.length > 0) {
+    const names = [...new Set(missingHsn.map((i) => i.productName))].join(', ')
+    throw new Error(
+      `Cannot generate an e-invoice: HSN code is required for every item, and these have none — ${names}. ` +
+      'Add the HSN code on each product, then try again.',
+    )
+  }
+
   // Build item list
   const itemList: IRNRequest['ItemList'] = txn.items.map((item, i) => {
     const grossAmt = roundMoney(item.quantity * item.unitPrice)
@@ -229,7 +252,7 @@ export function buildIrnRequest(
     return {
       SlNo: String(i + 1),
       PrdDesc: item.productName,
-      HsnCd: item.hsn || '9999',
+      HsnCd: String(item.hsn).trim(),  // guaranteed present by the check above
       Qty: roundMoney(item.quantity),
       Unit: mapUnitToNicUqc(item.unit),
       UnitPrice: roundMoney(item.unitPrice),
