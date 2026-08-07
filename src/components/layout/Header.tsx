@@ -3,12 +3,13 @@
 import { useState } from 'react'
 import { useAppStore, type ViewType } from '@/store/app-store'
 import { useTranslation } from '@/hooks/use-translation'
-import { Plus, Sparkles, ArrowLeft, Search, Check, Globe } from 'lucide-react'
+import { Plus, Sparkles, ArrowLeft, Search, Check, Globe, Mic, ScanLine } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { getInitials, cn } from '@/lib/utils'
 import { haptic } from '@/lib/haptic'
+import { confirmExit } from '@/lib/exit-guard'
 import { useQuery } from '@tanstack/react-query'
 import { useSession, signOut } from 'next-auth/react'
 import { clearAllOfflineData } from '@/lib/offline-db'
@@ -85,6 +86,9 @@ export function Header({ className }: { className?: string } = {}) {
   // settings + document-vault ADDED — they previously had NO back affordance
   // on either platform (desktop users had to click an unrelated sidebar item).
   const isDetailView = currentView === 'transaction-detail' || currentView === 'party-profile' || currentView === 'new-sale' || currentView === 'new-purchase' || currentView === 'new-estimate' || currentView === 'settings' || currentView === 'document-vault'
+  /* Also the two views where the mic and the scanner outrank the bell —
+     see the header actions below. One predicate, not two: I briefly added
+     an `isNewEntryView` with this exact body before spotting this line. */
   const isNewEntryView = currentView === 'new-sale' || currentView === 'new-purchase' || currentView === 'new-estimate'
   const showNewEntry = dialogViews.includes(currentView) && !isDetailView && !isNewEntryView
 
@@ -105,7 +109,11 @@ export function Header({ className }: { className?: string } = {}) {
     }
   }
 
-  const handleBack = () => {
+  const handleBack = async () => {
+    // The mounted screen gets a say first — a half-written sale asks whether
+    // the user meant to leave it. Resolves true immediately when no screen has
+    // registered a guard, which is every screen but the entry forms.
+    if (!(await confirmExit())) return
     // { back: true } — restore the destination where the user left it. Coming
     // back from a bill to a long ledger should land on the row they tapped,
     // not at the top of the list.
@@ -225,11 +233,53 @@ export function Header({ className }: { className?: string } = {}) {
               navigated anywhere — desktop users living in the Sales split-view
               never saw notifications. NotificationCenter uses useDashboardThisMonth
               (React Query cache) so it doesn't make extra API calls per view. */}
-          <NotificationCenter />
+          {/*
+           * ENTRY SCREENS GET A DIFFERENT HEADER ON MOBILE.
+           *
+           * While a sale is being written, the bell and the language switch are
+           * not what the hand is reaching for — the mic and the scanner are.
+           * Those two lived in a strip of their own INSIDE the form, costing a
+           * whole row of a phone screen to hold two buttons. Promoting them to
+           * the header deletes that row outright.
+           *
+           * Notifications and language are not lost, only stood down for the
+           * minute or two this screen is open; every other view still shows
+           * them, and desktop keeps the lot because it has the width.
+           *
+           * They fire the store's existing voice/barcode triggers, which
+           * TransactionEntry already listens for — the same channel Ctrl+K and
+           * the nav registry use, so there is no second mechanism to keep in
+           * step.
+           */}
+          <div className={cn(isNewEntryView && 'hidden lg:contents')}>
+            <NotificationCenter />
+            {/* 🔒 V8 U7: Language toggle — prominent in header for regional users.
+                Cycles through the available languages. Quick access from any screen. */}
+            <LanguageToggle />
+          </div>
 
-          {/* 🔒 V8 U7: Language toggle — prominent in header for regional users.
-              Cycles through the available languages. Quick access from any screen. */}
-          <LanguageToggle />
+          {isNewEntryView && (
+            <div className="flex items-center gap-1 lg:hidden">
+              <Button
+                size="iconTouch"
+                variant="ghost"
+                onClick={() => { haptic.click(); useAppStore.getState().fireTriggerVoiceOpen() }}
+                title="Add items by voice"
+                aria-label="Add items by voice"
+              >
+                <Mic className="w-5 h-5" />
+              </Button>
+              <Button
+                size="iconTouch"
+                variant="ghost"
+                onClick={() => { haptic.click(); useAppStore.getState().fireTriggerBarcodeOpen() }}
+                title="Scan a barcode"
+                aria-label="Scan a barcode"
+              >
+                <ScanLine className="w-5 h-5" />
+              </Button>
+            </div>
+          )}
 
           {/* Dark mode toggle — removed from header, now in Settings */}
 
