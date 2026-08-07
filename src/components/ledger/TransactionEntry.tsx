@@ -722,7 +722,22 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
         body: JSON.stringify({
           type: actualType,  // 🔒 Feature Phase 3: sends 'estimate' when in estimateMode
           partyId: partyId || null,
-          date,
+          /*
+           * Send a real clock time when the entry is for TODAY.
+           *
+           * The date picker yields "2026-08-06", which the server turns into
+           * midnight UTC — and midnight UTC read back in IST is 05:30, which is
+           * why every row in the ledger used to claim it happened at half past
+           * five in the morning.
+           *
+           * For a same-day entry the moment of entry IS the moment of the sale,
+           * near enough for a shop, so we record it. For a BACKDATED entry we
+           * genuinely do not know what time it happened, so the date-only value
+           * stands and the UI shows no time rather than inventing one.
+           */
+          date: date === new Date().toISOString().slice(0, 10)
+            ? new Date().toISOString()
+            : date,
           invoiceNo: invoiceNo || null,
           isInterState,
           paymentMode: estimateMode ? 'cash' : paymentMode,  // Estimates don't have payment

@@ -74,6 +74,43 @@ export function formatDateTime(date: Date | string): string {
   return `${dateStr}, ${time}`
 }
 
+/**
+ * True when a stored date actually carries a clock time.
+ *
+ * A value that came from a date picker is exactly midnight UTC — the API does
+ * `new Date("2026-08-06")` and gets `2026-08-06T00:00:00.000Z`. Nothing in the
+ * app can produce that by recording a real moment: it would need to land on the
+ * exact millisecond of UTC midnight, which in IST is 05:30:00.000 am.
+ *
+ * So "exactly midnight UTC" is a reliable marker for "no time was recorded",
+ * and that is the question this answers.
+ */
+export function hasRecordedTime(date: Date | string): boolean {
+  const d = new Date(date)
+  if (Number.isNaN(d.getTime())) return false
+  return !(
+    d.getUTCHours() === 0 &&
+    d.getUTCMinutes() === 0 &&
+    d.getUTCSeconds() === 0 &&
+    d.getUTCMilliseconds() === 0
+  )
+}
+
+/**
+ * Show the time when there is one, and only the date when there is not.
+ *
+ * The first version of this fix removed the time everywhere, because every row
+ * was claiming 05:30 am. That was right about the lie and wrong about the
+ * remedy — the time is genuinely useful, it just has to be a real one.
+ *
+ * New same-day entries now record an actual moment (see TransactionEntry), so
+ * they show it. Backdated entries and everything created before this change
+ * carry no time, and those show a date alone rather than a fabricated hour.
+ */
+export function formatDateMaybeTime(date: Date | string): string {
+  return hasRecordedTime(date) ? formatDateTime(date) : formatDate(date)
+}
+
 export function relativeTime(date: Date | string): string {
   const d = new Date(date)
   const now = new Date()

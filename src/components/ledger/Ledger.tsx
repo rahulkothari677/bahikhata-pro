@@ -8,10 +8,11 @@ import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAppStore } from '@/store/app-store'
-// formatDateTime is deliberately NOT imported here — see the guard test
-// `no-fabricated-transaction-times`. A transaction's `date` is a business date
-// with no time in it, so rendering a clock against it invents a fact.
-import { formatINR, formatDate, formatINRCompact, cn } from '@/lib/utils'
+// formatDateMaybeTime, not formatDateTime — see the guard test
+// `no-fabricated-transaction-times`. It shows the clock when the row actually
+// recorded one and the date alone when it did not, so a backdated entry cannot
+// be made to claim an hour nobody wrote down.
+import { formatINR, formatDate, formatDateMaybeTime, formatINRCompact, cn } from '@/lib/utils'
 import { roundMoney } from '@/lib/money'
 // 🔒 AUDIT C5: ONE definition of "still due on this bill". Computing it inline
 // as `total − paidAmount` ignores Settle payments, which is the stale figure
@@ -318,7 +319,7 @@ export function Ledger({ type }: { type: LedgerType }) {
     const selectedTxns = sorted.filter(txn => selectedIds.has(txn.id))
     const headers = ['Date', 'Invoice', 'Party', 'Type', 'Amount', 'Paid', 'Due', 'Payment Mode']
     const rows = selectedTxns.map(txn => [
-      formatDate(txn.date),
+      formatDateMaybeTime(txn.date),
       txn.invoiceNo || '',
       txn.party?.name || 'Walk-in',
       txn.type,
@@ -943,7 +944,7 @@ export function Ledger({ type }: { type: LedgerType }) {
                           </p>
                           {/* Secondary info — smaller, muted */}
                           <div className="flex items-center gap-2 mt-0.5 text-2xs text-muted-foreground flex-wrap">
-                            <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{formatDate(txn.date)}</span>
+                            <span className="flex items-center gap-1"><Calendar className="w-3 h-3" />{formatDateMaybeTime(txn.date)}</span>
                             <span className="flex items-center gap-1"><User className="w-3 h-3" />{txn.items?.length || 0} items</span>
                           </div>
                         </div>
@@ -1109,7 +1110,7 @@ export function Ledger({ type }: { type: LedgerType }) {
                   </div>
                   <p className="font-semibold text-sm truncate">{txn.party?.name || 'Walk-in'}</p>
                   {txn.invoiceNo && <p className="text-3xs text-muted-foreground truncate">{txn.invoiceNo}</p>}
-                  <p className="text-3xs text-muted-foreground mt-1 truncate">{formatDate(txn.date)}</p>
+                  <p className="text-3xs text-muted-foreground mt-1 truncate">{formatDateMaybeTime(txn.date)}</p>
                   <div className="mt-2 pt-2 border-t border-border flex items-center justify-between gap-1 flex-wrap">
                     <span className={cn('font-bold', accentColor)}>{formatINRCompact(txn.totalAmount)}</span>
                     {/* 🔒 V26 N2 follow-up: quotes have no payment status */}
