@@ -38,6 +38,16 @@ export interface ScanEngine {
 
 export interface ScanCallbacks {
   onCode: (code: string, format: string) => void
+  /**
+   * Fired every frame while MORE THAN ONE barcode is in view, and once with an
+   * empty array when that stops being true.
+   *
+   * Shipping boxes and medicine strips routinely carry two or three codes.
+   * Silently taking found[0] means the app picks one by whichever the engine
+   * happened to list first — invisible to the shopkeeper, and wrong often
+   * enough to matter when the codes are a product code and a courier code.
+   */
+  onCandidates?: (codes: DetectedCode[]) => void
   /** Fired if the engine changes after start — see the native path's bail-out. */
   onEngineChange?: (engine: EngineName) => void
   /**
@@ -50,6 +60,89 @@ export interface ScanCallbacks {
    * barcode — the shopkeeper would keep trying, with no way to know.
    */
   onError?: (message: string) => void
+}
+
+/** One barcode the camera can currently see. */
+export interface DetectedCode {
+  value: string
+  format: string
+  /** Where it sits, in the video's own pixels — not screen pixels. */
+  box: { x: number; y: number; width: number; height: number }
+}
+
+export interface Rect { left: number; top: number; width: number; height: number }
+
+/**
+ * Convert a box in video pixels to a box in element pixels.
+ *
+ * Needed because the preview is `object-cover`: the video is scaled up until it
+ * fills the element and the overflow is cropped, so a barcode at video pixel
+ * (100, 50) is NOT at element pixel (100, 50). Without this the tap targets for
+ * choosing between barcodes would sit next to the barcodes rather than on them,
+ * which is worse than not offering the choice at all.
+ *
+ * object-cover scales by the LARGER of the two ratios (so neither axis leaves a
+ * gap) and centres the result, which is what the offsets undo. A pure function
+ * so it can be tested without a camera — the one part of the multi-code picker
+ * a machine can actually verify.
+ */
+export function mapBoxToElement(
+  box: { x: number; y: number; width: number; height: number },
+  videoW: number,
+  videoH: number,
+  elW: number,
+  elH: number,
+): Rect {
+  if (!videoW || !videoH) return { left: 0, top: 0, width: 0, height: 0 }
+
+  const scale = Math.max(elW / videoW, elH / videoH)
+  const shownW = videoW * scale
+  const shownH = videoH * scale
+  // Negative: the amount cropped off each side by the centring.
+  const offsetX = (elW - shownW) / 2
+  const offsetY = (elH - shownH) / 2
+
+  return {
+    left: box.x * scale + offsetX,
+    top: box.y * scale + offsetY,
+    width: box.width * scale,
+    height: box.height * scale,
+  }
+}
+
+/** Can this camera turn its light on? */
+export function torchSupported(stream: MediaStream | null): boolean {
+  const track = stream?.getVideoTracks?.()[0]
+  if (!track?.getCapabilities) return false
+  try {
+    return !!(track.getCapabilities() as any).torch
+  } catch {
+    return false
+  }
+}
+
+/**
+ * Turn the camera light on or off.
+ *
+ * Deliberately not called anywhere on startup: the torch stays OFF until the
+ * shopkeeper asks for it. A light that comes on by itself in a customer's face
+ * is startling, and it drains the battery of a phone that spends all day on the
+ * counter.
+ */
+export async function setTorch(stream: MediaStream | null, on: boolean): Promise<void> {
+  const track = stream?.getVideoTracks?.()[0]
+  if (!track) return
+  await track.applyConstraints({ advanced: [{ torch: on }] } as any)
+}
+
+/** BarcodeDetector's result shape, reduced to what the UI needs. */
+function toDetected(b: any): DetectedCode {
+  const r = b.boundingBox || {}
+  return {
+    value: b.rawValue,
+    format: b.format || 'UNKNOWN',
+    box: { x: r.x || 0, y: r.y || 0, width: r.width || 0, height: r.height || 0 },
+  }
 }
 
 /** Formats worth looking for, in BarcodeDetector's naming. */
@@ -112,7 +205,7 @@ export async function nativeEngineAvailable(): Promise<boolean> {
 export async function startDecoding(
   stream: MediaStream,
   video: HTMLVideoElement,
-  { onCode, onEngineChange, onError }: ScanCallbacks,
+  { onCode, onCandidates, onEngineChange, onError }: ScanCallbacks,
 ): Promise<ScanEngine> {
   if (await nativeEngineAvailable()) {
     const Detector = (globalThis as any).BarcodeDetector
@@ -153,13 +246,47 @@ export async function startDecoding(
      */
     let closed = false
 
+    /*
+     * Confirm a lone barcode across a few frames before accepting it.
+     *
+     * Two barcodes on one box do not necessarily appear on the same frame: the
+     * engine may resolve one a frame before the other. Accepting the instant a
+     * single code appears would therefore grab whichever resolved first and
+     * close the scanner before the second was ever seen — so the picker this
+     * exists to show would rarely appear on exactly the labels that need it.
+     *
+     * Three frames is about 100ms at 30fps. Below noticing, and it doubles as a
+     * guard against a one-frame misread being taken as truth.
+     */
+    let sameCodeStreak = 0
+    let streakValue: string | null = null
+    let hadCandidates = false
+
     const loop = async () => {
       if (stopped) return
       try {
-        const found = await detector.detect(video)
+        const found: any[] = await detector.detect(video)
         consecutiveErrors = 0
-        if (!stopped && found && found.length) {
-          onCode(found[0].rawValue, found[0].format || 'UNKNOWN')
+
+        if (!stopped && found && found.length > 1) {
+          // Let the shopkeeper choose. Reported every frame so the boxes track
+          // the label as the phone moves.
+          sameCodeStreak = 0
+          streakValue = null
+          hadCandidates = true
+          onCandidates?.(found.map(toDetected))
+        } else if (!stopped && found && found.length === 1) {
+          if (hadCandidates) { hadCandidates = false; onCandidates?.([]) }
+          const value = found[0].rawValue
+          sameCodeStreak = value === streakValue ? sameCodeStreak + 1 : 1
+          streakValue = value
+          if (sameCodeStreak >= 3) {
+            onCode(value, found[0].format || 'UNKNOWN')
+          }
+        } else if (!stopped) {
+          sameCodeStreak = 0
+          streakValue = null
+          if (hadCandidates) { hadCandidates = false; onCandidates?.([]) }
         }
       } catch {
         consecutiveErrors++

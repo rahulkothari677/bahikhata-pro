@@ -22,8 +22,11 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { registerExitGuard } from '@/lib/exit-guard'
-import { openCamera, startDecoding, type ScanEngine, type EngineName } from '@/lib/barcode-engine'
-import { X, Camera, SwitchCamera, Loader2, AlertCircle, ScanLine } from 'lucide-react'
+import {
+  openCamera, startDecoding, mapBoxToElement, torchSupported, setTorch,
+  type ScanEngine, type EngineName, type DetectedCode,
+} from '@/lib/barcode-engine'
+import { X, Camera, SwitchCamera, Loader2, AlertCircle, ScanLine, Flashlight, FlashlightOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -62,6 +65,9 @@ export function BarcodeScanner({
   const videoRef = useRef<HTMLVideoElement>(null)
   const engineRef = useRef<ScanEngine | null>(null)
   const [engine, setEngine] = useState<EngineName | null>(null)
+  const [candidates, setCandidates] = useState<DetectedCode[]>([])
+  const [canTorch, setCanTorch] = useState(false)
+  const [torchOn, setTorchOn] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [starting, setStarting] = useState(true)
   const [scannedCode, setScannedCode] = useState<string | null>(null)
@@ -71,10 +77,35 @@ export function BarcodeScanner({
 
   // Stop the camera and clean up
   const stopCamera = useCallback(() => {
+    setCandidates([])
+    setTorchOn(false)
     if (engineRef.current) {
       engineRef.current.stop()
       engineRef.current = null
     }
+  }, [])
+
+  /*
+   * Candidates arrive on EVERY frame, ~30 a second. Handing each one straight
+   * to setState would re-render the scanner 30 times a second on a phone that
+   * is already running ML Kit and a camera preview — the stutter would show up
+   * as harder aiming, which is the opposite of the point.
+   *
+   * So only re-render when something a thumb would notice changed: a different
+   * set of codes, or a box that has moved more than 12px. Below that the target
+   * is still under the finger.
+   */
+  const handleCandidates = useCallback((next: DetectedCode[]) => {
+    setCandidates((prev) => {
+      if (prev.length !== next.length) return next
+      const same = next.every((c, i) => {
+        const p = prev[i]
+        return p && p.value === c.value
+          && Math.abs(p.box.x - c.box.x) < 12
+          && Math.abs(p.box.y - c.box.y) < 12
+      })
+      return same ? prev : next
+    })
   }, [])
 
   /**
@@ -144,12 +175,18 @@ export function BarcodeScanner({
         onCode: handleCode,
         // The native engine can give up mid-scan on a device where it is
         // present but broken; keep the label honest when it does.
+        onCandidates: handleCandidates,
         onEngineChange: setEngine,
         // Reached only if BOTH engines fail after the camera opened; startup
         // failures reject startDecoding and land in the catch below.
         onError: setError,
       })
       setEngine(engineRef.current.engine)
+      // Off by default, always. Only offer the button where the camera can
+      // actually do it — on a laptop or an unsupported phone it would be a
+      // control that does nothing.
+      setCanTorch(torchSupported(stream))
+      setTorchOn(false)
 
       /*
        * Enumerate AFTER the stream is live, not before.
@@ -236,6 +273,30 @@ export function BarcodeScanner({
     startCamera(devices[nextIdx]?.deviceId)
   }
 
+  /** The shopkeeper tapped one of several barcodes on the label. */
+  const handleChoose = (code: DetectedCode) => {
+    setCandidates([])
+    lastScanRef.current = { code: code.value, time: Date.now() }
+    setScannedCode(code.value)
+    safeHaptic([10, 40, 20])
+    setTimeout(() => {
+      onScan(code.value, code.format)
+      stopCamera()
+    }, 600)
+  }
+
+  const handleToggleTorch = async () => {
+    const next = !torchOn
+    try {
+      await setTorch(engineRef.current?.stream || null, next)
+      setTorchOn(next)
+    } catch {
+      // Some cameras advertise the torch and then refuse it. Leave the button
+      // showing its real state rather than lying about a light that is off.
+      setTorchOn(false)
+    }
+  }
+
   const handleRescan = () => {
     setScannedCode(null)
     lastScanRef.current = { code: '', time: 0 }
@@ -285,7 +346,7 @@ export function BarcodeScanner({
         />
 
         {/* Scan frame overlay */}
-        {!scannedCode && !error && (
+        {!scannedCode && !error && candidates.length <= 1 && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
             {/*
               * A guide, not a gate. The whole frame is decoded, so a barcode
@@ -304,6 +365,60 @@ export function BarcodeScanner({
             </div>
             <div className="absolute bottom-8 left-0 right-0 text-center text-white/80 text-sm">
               {starting ? 'Starting camera...' : 'Hold the barcode anywhere in view'}
+            </div>
+          </div>
+        )}
+
+        {/*
+          * Choose-your-barcode overlay.
+          *
+          * Shipping boxes and medicine strips often carry two or three codes —
+          * a product code and a courier or batch code. Taking the first one the
+          * engine listed would be a silent coin-flip, so when more than one is
+          * in view the app stops and asks.
+          *
+          * Boxes are positioned through mapBoxToElement because the preview is
+          * object-cover: video pixels are not element pixels, and tap targets
+          * that sit NEXT to the barcodes would be worse than no choice at all.
+          */}
+        {candidates.length > 1 && !scannedCode && !error && (
+          <div className="absolute inset-0">
+            {candidates.map((c, i) => {
+              const v = videoRef.current
+              const r = mapBoxToElement(
+                c.box,
+                v?.videoWidth || 0,
+                v?.videoHeight || 0,
+                v?.clientWidth || 0,
+                v?.clientHeight || 0,
+              )
+              return (
+                <button
+                  key={`${c.value}-${i}`}
+                  onClick={() => handleChoose(c)}
+                  aria-label={`Use barcode ${c.value}`}
+                  className="absolute border-2 border-primary bg-primary/20 rounded-md active:bg-primary/40"
+                  style={{
+                    left: r.left,
+                    top: r.top,
+                    // A correctly-mapped box can still be a thin sliver on a
+                    // 1D barcode seen edge-on. 44px is this app's thumb-size
+                    // standard, and an accurate target too small to hit is
+                    // just an inaccurate one.
+                    width: Math.max(r.width, 44),
+                    height: Math.max(r.height, 44),
+                  }}
+                >
+                  <span className="absolute -top-2 -left-2 w-6 h-6 rounded-full bg-primary text-white text-xs font-bold flex items-center justify-center">
+                    {i + 1}
+                  </span>
+                </button>
+              )
+            })}
+            <div className="absolute bottom-8 left-0 right-0 text-center px-4 pointer-events-none">
+              <span className="inline-block px-3 py-1.5 rounded-full bg-black/70 text-white text-sm">
+                {candidates.length} barcodes found — tap the one you want
+              </span>
             </div>
           </div>
         )}
@@ -359,6 +474,19 @@ export function BarcodeScanner({
 
       {/* Bottom controls */}
       <div className="p-4 bg-black/80 flex items-center justify-center gap-3">
+        {canTorch && !scannedCode && !error && (
+          <Button
+            onClick={handleToggleTorch}
+            size="sm"
+            aria-pressed={torchOn}
+            className={cn('gap-2', torchOn
+              ? 'bg-amber-400 text-black hover:bg-amber-300 border border-amber-300'
+              : ON_BLACK_BUTTON)}
+          >
+            {torchOn ? <Flashlight className="w-4 h-4" /> : <FlashlightOff className="w-4 h-4" />}
+            {torchOn ? 'Light on' : 'Light'}
+          </Button>
+        )}
         {devices.length > 1 && !scannedCode && !error && (
           <Button
             onClick={handleSwitchCamera}

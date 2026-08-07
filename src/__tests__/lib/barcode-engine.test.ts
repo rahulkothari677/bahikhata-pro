@@ -10,7 +10,10 @@
  *  - Fail to release and the phone keeps filming after the sheet is closed,
  *    with the camera light on. That is a privacy problem, not a battery one.
  */
-import { nativeEngineAvailable, openCamera, startDecoding } from '@/lib/barcode-engine'
+import {
+  nativeEngineAvailable, openCamera, startDecoding,
+  mapBoxToElement, torchSupported, setTorch,
+} from '@/lib/barcode-engine'
 
 const g = globalThis as any
 
@@ -185,5 +188,147 @@ describe('when the native engine is present but broken', () => {
     expect(onEngineChange).not.toHaveBeenCalled()
     expect(n).toBeGreaterThan(15)  // it really did keep going
     engine.stop()
+  })
+})
+
+describe('mapping a barcode box onto the preview', () => {
+  // The preview is object-cover, so video pixels are not element pixels. Get
+  // this wrong and the tap targets sit next to the barcodes instead of on them.
+
+  it('places a box correctly when the video is wider than the element', () => {
+    // 1920x1080 video in a 400x800 portrait element: scales by height
+    // (800/1080 = 0.74), and the sides get cropped.
+    const r = mapBoxToElement({ x: 960, y: 540, width: 100, height: 50 }, 1920, 1080, 400, 800)
+    const scale = 800 / 1080
+    expect(r.width).toBeCloseTo(100 * scale)
+    expect(r.height).toBeCloseTo(50 * scale)
+    // The centre of the video must land on the centre of the element.
+    expect(r.left).toBeCloseTo(400 / 2)
+    expect(r.top).toBeCloseTo(800 / 2)
+  })
+
+  it('places a box correctly when the video is taller than the element', () => {
+    const r = mapBoxToElement({ x: 540, y: 960, width: 50, height: 100 }, 1080, 1920, 800, 400)
+    const scale = 800 / 1080
+    expect(r.left).toBeCloseTo(800 / 2)
+    expect(r.top).toBeCloseTo(400 / 2)
+    expect(r.width).toBeCloseTo(50 * scale)
+  })
+
+  it('maps the video origin to a negative offset, since cover crops', () => {
+    // Point (0,0) of the video is off-screen when the sides are cropped —
+    // returning 0 here would bunch every box against the left edge.
+    const r = mapBoxToElement({ x: 0, y: 0, width: 10, height: 10 }, 1920, 1080, 400, 800)
+    expect(r.left).toBeLessThan(0)
+    expect(r.top).toBeCloseTo(0)
+  })
+
+  it('returns an empty box before the video has reported its size', () => {
+    // videoWidth is 0 until metadata loads; dividing by it would give NaN and
+    // React would drop the style silently, stacking every target at 0,0.
+    const r = mapBoxToElement({ x: 10, y: 10, width: 10, height: 10 }, 0, 0, 400, 800)
+    expect(r).toEqual({ left: 0, top: 0, width: 0, height: 0 })
+  })
+})
+
+describe('more than one barcode in view', () => {
+  function tickingVideo(maxFrames = 60) {
+    const el = document.createElement('video') as any
+    let frames = 0
+    el.play = jest.fn().mockResolvedValue(undefined)
+    el.requestVideoFrameCallback = (cb: any) => { if (frames++ < maxFrames) setTimeout(() => cb(), 1) }
+    return el as HTMLVideoElement
+  }
+
+  const box = (x: number) => ({ x, y: 0, width: 10, height: 10 })
+
+  it('does not silently pick one — it offers both', async () => {
+    g.BarcodeDetector = class {
+      static getSupportedFormats() { return Promise.resolve(['code_128']) }
+      detect() {
+        return Promise.resolve([
+          { rawValue: 'PRODUCT-1', format: 'code_128', boundingBox: box(0) },
+          { rawValue: 'COURIER-2', format: 'code_128', boundingBox: box(200) },
+        ])
+      }
+    }
+    const onCode = jest.fn()
+    const onCandidates = jest.fn()
+    const engine = await startDecoding(fakeStream(), tickingVideo(), { onCode, onCandidates })
+    await new Promise((r) => setTimeout(r, 120))
+
+    // The whole point: taking found[0] would be a silent coin-flip between a
+    // product code and a courier code.
+    expect(onCode).not.toHaveBeenCalled()
+    expect(onCandidates).toHaveBeenCalled()
+    const offered = onCandidates.mock.calls.at(-1)![0]
+    expect(offered.map((c: any) => c.value)).toEqual(['PRODUCT-1', 'COURIER-2'])
+    engine.stop()
+  })
+
+  it('still accepts a lone barcode automatically, which is the fast path', async () => {
+    g.BarcodeDetector = class {
+      static getSupportedFormats() { return Promise.resolve(['ean_13']) }
+      detect() { return Promise.resolve([{ rawValue: '8901030865278', format: 'ean_13', boundingBox: box(0) }]) }
+    }
+    const onCode = jest.fn()
+    const engine = await startDecoding(fakeStream(), tickingVideo(), { onCode })
+    await new Promise((r) => setTimeout(r, 120))
+    expect(onCode).toHaveBeenCalledWith('8901030865278', 'ean_13')
+    engine.stop()
+  })
+
+  it('waits for a lone code to repeat before accepting it', async () => {
+    // Two codes on a box do not always resolve on the same frame. Accepting the
+    // instant one appears would close the scanner before the second was seen,
+    // so the picker would rarely appear on the very labels that need it.
+    let frame = 0
+    g.BarcodeDetector = class {
+      static getSupportedFormats() { return Promise.resolve(['code_128']) }
+      detect() {
+        frame++
+        return Promise.resolve(frame === 1
+          ? [{ rawValue: 'FIRST', format: 'code_128', boundingBox: box(0) }]
+          : [
+              { rawValue: 'FIRST', format: 'code_128', boundingBox: box(0) },
+              { rawValue: 'SECOND', format: 'code_128', boundingBox: box(200) },
+            ])
+      }
+    }
+    const onCode = jest.fn()
+    const onCandidates = jest.fn()
+    const engine = await startDecoding(fakeStream(), tickingVideo(), { onCode, onCandidates })
+    await new Promise((r) => setTimeout(r, 120))
+
+    expect(onCode).not.toHaveBeenCalled()
+    expect(onCandidates).toHaveBeenCalled()
+    engine.stop()
+  })
+})
+
+describe('the torch', () => {
+  it('is not offered when the camera cannot do it', () => {
+    const track = { ...fakeTrack(), getCapabilities: () => ({}) }
+    expect(torchSupported({ getVideoTracks: () => [track] } as any)).toBe(false)
+  })
+
+  it('is not offered when the browser has no getCapabilities at all', () => {
+    expect(torchSupported({ getVideoTracks: () => [fakeTrack()] } as any)).toBe(false)
+  })
+
+  it('is offered when the camera reports a torch', () => {
+    const track = { ...fakeTrack(), getCapabilities: () => ({ torch: true }) }
+    expect(torchSupported({ getVideoTracks: () => [track] } as any)).toBe(true)
+  })
+
+  it('turns on only when asked, and can be turned back off', async () => {
+    const applyConstraints = jest.fn().mockResolvedValue(undefined)
+    const stream = { getVideoTracks: () => [{ applyConstraints }] } as any
+
+    await setTorch(stream, true)
+    expect(applyConstraints).toHaveBeenCalledWith({ advanced: [{ torch: true }] })
+
+    await setTorch(stream, false)
+    expect(applyConstraints).toHaveBeenLastCalledWith({ advanced: [{ torch: false }] })
   })
 })
