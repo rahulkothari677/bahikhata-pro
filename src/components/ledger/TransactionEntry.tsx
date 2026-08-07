@@ -44,8 +44,11 @@ import { computeLineItems } from '@/lib/line-items'
 import { baseUnitOf, subUnitsFor, normalizeUnitName, resolveEnteredQuantity, normalizeToUnit, isCountUnit, stepForUnit } from '@/lib/units'
 import { readError } from '@/lib/read-error'
 import { invalidateMoneyCaches } from '@/lib/invalidate-money-caches'
-import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
 import { registerExitGuard } from '@/lib/exit-guard'
+import {
+  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogFooter,
+  AlertDialogTitle, AlertDialogDescription, AlertDialogCancel,
+} from '@/components/ui/alert-dialog'
 
 const PAYMENT_MODES = [
   { value: 'cash', label: 'Cash' },
@@ -81,7 +84,6 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   const [affectsStock, setAffectsStock] = useState(false)
   const [originalTransactionId, setOriginalTransactionId] = useState<string | null>(null)
   const { setView, triggerRefresh, setScannerBillType, previousView, setPreviousView, features, triggerVoiceOpen, triggerBarcodeOpen } = useAppStore()
-  const { confirmDialog: confirmLeave, dialog: leaveDialogEl } = useConfirmDialog()
 
   const queryClient = useQueryClient()
   // 🔒 ROUND 10b (2026-07-22): the New Sale screen printed "Gross Profit
@@ -103,6 +105,8 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   /* Details starts closed on mobile; the lg: rules keep it open on desktop
      regardless, so this only ever governs the phone. */
   const [detailsOpen, setDetailsOpen] = useState(false)
+  const [leavePromptOpen, setLeavePromptOpen] = useState(false)
+  const leaveResolverRef = useRef<((allow: boolean) => void) | null>(null)
   const [addPartyOpen, setAddPartyOpen] = useState(false)
   // 🔒 V9 4.4: Persistent stock warning banner (not just a toast)
   const [stockWarnings, setStockWarnings] = useState<any[]>([])
@@ -517,23 +521,58 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
    * is ours, not the user's, and must not be interrupted.
    */
   useEffect(() => {
-    if (items.length === 0 || saving) {
-      registerExitGuard(null)
-      return
-    }
-    registerExitGuard(async () =>
-      confirmLeave(
-        `This ${estimateMode ? 'estimate' : isSale ? 'sale' : 'purchase'} is saved in Drafts — you can finish it later.`,
-        { title: 'Leave without saving?', confirmLabel: 'Leave', destructive: false },
-      ),
+    if (items.length === 0 || saving) return
+    return registerExitGuard(
+      () =>
+        new Promise<boolean>((resolve) => {
+          leaveResolverRef.current = resolve
+          setLeavePromptOpen(true)
+        }),
     )
-    return () => registerExitGuard(null)
-  }, [items.length, saving, confirmLeave, estimateMode, isSale])
+  }, [items.length, saving])
+
+  /*
+   * Three answers, because there are three.
+   *
+   * The first version offered Leave and Cancel — and BOTH kept the draft, so a
+   * sale typed by mistake could only be got rid of by leaving, going to Drafts,
+   * and deleting it there. Reported as "there is no option to discard".
+   *
+   * Keep editing / Discard / Keep draft are genuinely distinct intents, and a
+   * two-button dialog cannot express three. Discard deletes the autosaved
+   * draft before navigating, so the mistake leaves nothing behind.
+   */
+  const resolveLeave = (allow: boolean) => {
+    setLeavePromptOpen(false)
+    leaveResolverRef.current?.(allow)
+    leaveResolverRef.current = null
+  }
+
+  const handleDiscardAndLeave = () => {
+    if (activeDraftId) deleteDraft(activeDraftId)
+    clearActive()
+    resolveLeave(true)
+  }
 
 
   const handleAddProduct = (product: any) => {
     // User manually added a product — clear presetLoaded so autosave resumes
     setPresetLoaded(false)
+    /*
+     * Adding a product by hand closes the voice panel.
+     *
+     * The two panels are chosen by whether the form has items, so leaving
+     * "Voice Entry" open and then tapping + in the list SWAPPED it for "Add
+     * More Items via Voice" — a different tool, with a different heading, that
+     * the user never asked for and which simply appeared at the bottom of the
+     * screen. Reported exactly that way.
+     *
+     * Closing is the honest response: the user has just answered the question
+     * the panel was open to ask, and by hand. If they want to keep dictating,
+     * the mic is one tap away and will now open the right panel for a form
+     * that has items in it.
+     */
+    setShowVoiceEntry(false)
     // Check if product already in list
     const existing = items.find(i => i.productId === product.id)
     if (existing) {
@@ -1027,8 +1066,31 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
         </button>
       )}
 
-      {/* Confirmation shown when leaving a half-written entry. */}
-      {leaveDialogEl}
+      {/* Leaving a half-written entry — three answers, not two. */}
+      <AlertDialog open={leavePromptOpen} onOpenChange={(o) => { if (!o) resolveLeave(false) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Leave this {estimateMode ? 'estimate' : isSale ? 'sale' : 'purchase'}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              It is saved in Drafts, so you can finish it later — or discard it now and
+              keep your drafts clean.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="flex-col-reverse sm:flex-row gap-2">
+            <AlertDialogCancel className="mt-0 min-h-[44px]" onClick={() => resolveLeave(false)}>
+              Keep editing
+            </AlertDialogCancel>
+            <Button variant="destructive" className="min-h-[44px]" onClick={handleDiscardAndLeave}>
+              Discard
+            </Button>
+            <Button variant="outline" className="min-h-[44px]" onClick={() => resolveLeave(true)}>
+              Keep draft
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Draft manager modal */}
       <DraftManagerModal
@@ -2213,12 +2275,31 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       {/* 🔒 V11 FIX: Mobile sticky save bar — shows total + save.
           Also disables Save when stock would go negative (block mode). */}
       <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t border-border p-2.5 flex items-center gap-2 z-30" style={{ paddingBottom: 'calc(0.625rem + var(--safe-bottom))' }}>
-        <div className="flex-1">
-          <p className="text-3xs text-muted-foreground uppercase">Total</p>
-          <p className="text-lg font-bold tabular-nums">{formatINR(totalAmount)}</p>
-          {hasStockBlock && (
+        {/*
+         * The two numbers that decide a sale, always visible.
+         *
+         * This strip is the most valuable space on a phone and it held one
+         * figure. The item count answers "did everything I scanned go in?"
+         * without scrolling back up, and the amount due answers "how much am I
+         * collecting right now?" — which matters more since Paid Amount moved
+         * into the collapsed Details section and is no longer on screen.
+         *
+         * Due is shown only when it differs from the total, because on a
+         * paid-in-full cash sale — most of them — repeating the same number
+         * under a second label teaches the eye to stop reading the strip.
+         */}
+        <div className="flex-1 min-w-0">
+          <p className="text-3xs text-muted-foreground uppercase">
+            Total{items.length > 0 && ` · ${items.length} item${items.length === 1 ? '' : 's'}`}
+          </p>
+          <p className="text-lg font-bold tabular-nums leading-tight">{formatINR(totalAmount)}</p>
+          {hasStockBlock ? (
             <p className="text-3xs text-rose-600 font-medium">Not enough stock</p>
-          )}
+          ) : due > 0 && items.length > 0 ? (
+            <p className="text-3xs text-rose-600 font-medium tabular-nums">
+              {formatINR(due)} due
+            </p>
+          ) : null}
         </div>
         <Button variant="outline" size="sm" onClick={handleCancel} className="h-11 px-4">
           Cancel
@@ -2233,10 +2314,19 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
           a sticky bar at the bottom of the content area on lg+ screens. */}
       <div className="hidden lg:flex sticky bottom-0 bg-background/95 backdrop-blur-md border-t border-border p-3 items-center gap-3 z-20 -mx-4 px-4">
         <div className="flex-1 flex items-center gap-4">
+          {/* Same two numbers as the mobile bar. The platforms should not
+              disagree about what a sale's headline figures are. */}
           <div>
-            <p className="text-xs text-muted-foreground uppercase">Total</p>
+            <p className="text-xs text-muted-foreground uppercase">
+              Total{items.length > 0 && ` · ${items.length} item${items.length === 1 ? '' : 's'}`}
+            </p>
             <p className="text-xl font-bold tabular-nums">{formatINR(totalAmount)}</p>
           </div>
+          {due > 0 && items.length > 0 && !hasStockBlock && (
+            <div className="text-sm font-medium text-rose-600 tabular-nums">
+              {formatINR(due)} due
+            </div>
+          )}
           {hasStockBlock && (
             <div className="flex items-center gap-1.5 text-sm text-rose-600 font-medium bg-rose-50 dark:bg-rose-950/30 px-3 py-1.5 rounded-lg">
               <AlertTriangle className="w-4 h-4 flex-shrink-0" />

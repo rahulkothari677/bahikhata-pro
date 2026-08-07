@@ -21,6 +21,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { registerExitGuard } from '@/lib/exit-guard'
 import { BrowserMultiFormatReader, IScannerControls } from '@zxing/browser'
 import { DecodeHintType, BarcodeFormat } from '@zxing/library'
 import { X, Camera, SwitchCamera, Loader2, AlertCircle, ScanLine } from 'lucide-react'
@@ -174,6 +175,26 @@ export function BarcodeScanner({
     return () => window.removeEventListener('keydown', handleKey)
   }, [onClose, stopCamera])
 
+  /*
+   * Android's back button closes the scanner rather than navigating.
+   *
+   * Escape covers a desktop keyboard, and nothing covered the button most
+   * Android users actually press — so back went to whatever was behind the
+   * form. Worse, with items already on the form it hit the sale's own
+   * leave-confirmation instead, asking about abandoning a sale when all the
+   * user wanted was to put the camera away.
+   *
+   * Returning false means "handled, do not navigate": the guard's job here is
+   * to consume the press, not to ask a question.
+   */
+  useEffect(() => {
+    return registerExitGuard(async () => {
+      stopCamera()
+      onClose()
+      return false
+    })
+  }, [onClose, stopCamera])
+
   const handleClose = () => {
     stopCamera()
     onClose()
@@ -193,8 +214,21 @@ export function BarcodeScanner({
 
   return (
     <div className="fixed inset-0 z-[100] bg-black flex flex-col">
-      {/* Top bar */}
-      <div className="flex items-center justify-between p-4 bg-black/80">
+      {/*
+       * pt-safe, and it was missing.
+       *
+       * This overlay is `fixed inset-0`, so on Android — where the WebView now
+       * runs edge-to-edge — its top bar sat UNDER the system status bar. The
+       * title collided with the clock, and worse, the ✕ was in the strip the
+       * system owns, so tapping it did nothing. Reported as "it blocked the
+       * whole screen and I couldn't cancel it", which is exactly right: the
+       * only way out was underneath the status bar.
+       *
+       * CameraPreviewModal already did this. This file was missed in the
+       * original safe-area sweep because that sweep went looking for sticky
+       * headers, and this is a full-screen overlay.
+       */}
+      <div className="flex items-center justify-between p-4 pt-safe bg-black/80">
         <div className="flex items-center gap-2 text-white">
           <ScanLine className="w-5 h-5 text-primary" />
           <h2 className="text-base font-semibold">Scan Barcode</h2>
