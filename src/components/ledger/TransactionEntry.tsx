@@ -1106,12 +1106,38 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       </div>
 
       {/* Voice Entry Section */}
-      {showVoiceEntry && (
+      {/*
+       * ONE voice panel at a time — `items.length === 0` here, and the
+       * "add more items" panel below carries `items.length > 0`.
+       *
+       * Both were driven by the same showVoiceEntry flag with no such split, so
+       * the moment a product was on the form BOTH opened: "Voice Entry" at the
+       * top of the screen and "Add More Items via Voice" further down, two
+       * microphones listening for different things. Reported, fairly, as a mess.
+       *
+       * They are genuinely different jobs — this one parses a whole sale
+       * (customer, items, payment), the other only appends items — so the right
+       * fix is to pick by what the form already holds, not to merge them.
+       */}
+      {showVoiceEntry && items.length === 0 && (
         <Card className="shadow-card border-border/60 border-primary/30">
           <CardContent className="p-3 sm:p-4">
-            <h3 className="font-semibold text-sm flex items-center gap-2 mb-3">
-              <Mic className="w-4 h-4 text-primary" /> Voice Entry
-            </h3>
+            <div className="flex items-start justify-between gap-2 mb-3">
+              <h3 className="font-semibold text-sm flex items-center gap-2">
+                <Mic className="w-4 h-4 text-primary" /> Voice Entry
+              </h3>
+              {/* There was no way out of this panel. It opened from the header
+                  mic and then stayed, with nothing on it that closed it. */}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-9 w-9 p-0 -mr-1 -mt-1 flex-shrink-0"
+                onClick={() => setShowVoiceEntry(false)}
+                aria-label="Close voice entry"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
             <p className="text-xs text-muted-foreground mb-3">
               Speak naturally: &quot;Sold 2 kg sugar to Ramesh at 50 rupees cash&quot;
             </p>
@@ -1456,9 +1482,20 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
               {showVoiceEntry && items.length > 0 && (
                 <Card className="shadow-card border-border/60 border-primary/30 mb-3">
                   <CardContent className="p-3 sm:p-4">
-                    <h3 className="font-semibold text-sm flex items-center gap-2 mb-3">
-                      <Mic className="w-4 h-4 text-primary" /> Add More Items via Voice
-                    </h3>
+                    <div className="flex items-start justify-between gap-2 mb-3">
+                      <h3 className="font-semibold text-sm flex items-center gap-2">
+                        <Mic className="w-4 h-4 text-primary" /> Add More Items via Voice
+                      </h3>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-9 w-9 p-0 -mr-1 -mt-1 flex-shrink-0"
+                        onClick={() => setShowVoiceEntry(false)}
+                        aria-label="Close voice entry"
+                      >
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
                     <p className="text-xs text-muted-foreground mb-3">
                       Speak items to ADD to the existing sale. Previous items will not be removed.
                     </p>
@@ -1798,13 +1835,23 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                       setPartyDropdownOpen(true)
                       const el = e.currentTarget
                       setTimeout(() => {
-                        const top = el.getBoundingClientRect().top
-                        // ~96px clears the sticky app header and leaves the rest
-                        // of the visible area to the results list.
-                        window.scrollBy({ top: top - 96, behavior: 'smooth' })
+                        // scrollIntoView, not a computed scrollBy.
+                        //
+                        // The first version measured the field and scrolled by
+                        // the difference. Verified on production: the handler
+                        // ran, the dropdown opened, and the page did not move —
+                        // the measurement was taken before the dropdown had
+                        // finished changing the layout under it, so the sum it
+                        // scrolled by was already wrong.
+                        //
+                        // Letting the browser do it removes the arithmetic:
+                        // scroll-mt-24 below declares how much room to leave for
+                        // the sticky header, and the browser resolves the rest
+                        // against whatever the layout actually is at that moment.
+                        el.scrollIntoView({ block: 'start', behavior: 'smooth' })
                       }, 320)
                     }}
-                    className="pl-9"
+                    className="pl-9 scroll-mt-24"
                   />
 
                   {partyDropdownOpen && (
