@@ -5,7 +5,7 @@
  * copied. This pins what the rule actually is, so that "change it in one place"
  * means something.
  */
-import { findProductByScannedCode, matchesProductSearch } from '@/lib/find-product-by-code'
+import { findProductByScannedCode, matchesProductSearch, resolveProductForEnterKey } from '@/lib/find-product-by-code'
 
 const products = [
   { id: 'a', name: 'Aashirvaad Atta 5kg', sku: 'ATA001', barcode: '8901030865278' },
@@ -87,5 +87,34 @@ describe('matchesProductSearch', () => {
 
   it('does not crash on a product with no codes at all', () => {
     expect(matchesProductSearch(products[2], '8901030865278')).toBe(false)
+  })
+})
+
+describe('resolveProductForEnterKey', () => {
+  it('takes an exact barcode even when the visible list is showing many rows', () => {
+    // The scanner-gun case: it typed a full code, which names one product no
+    // matter what the list happens to be filtered to.
+    expect(resolveProductForEnterKey('8901030865278', products, products)?.id).toBe('a')
+  })
+
+  it('takes the only visible row when a human narrowed it down by typing', () => {
+    expect(resolveProductForEnterKey('salt', products, [products[1]])?.id).toBe('b')
+  })
+
+  it('refuses to choose when two products are still on screen', () => {
+    // Adding the wrong item to a customer's bill is worse than doing nothing:
+    // "nothing happened" gets noticed, a wrong line gets billed and found weeks
+    // later.
+    expect(resolveProductForEnterKey('a', products, [products[0], products[1]])).toBeNull()
+  })
+
+  it('does nothing on an empty box, so a stray Enter cannot add anything', () => {
+    expect(resolveProductForEnterKey('', products, products)).toBeNull()
+    expect(resolveProductForEnterKey('  ', products, [products[0]])).toBeNull()
+  })
+
+  it('prefers the exact code over the single visible row when they disagree', () => {
+    // A stale filter must not beat a code the gun just read.
+    expect(resolveProductForEnterKey('8901058000313', products, [products[0]])?.id).toBe('b')
   })
 })

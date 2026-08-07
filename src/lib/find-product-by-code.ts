@@ -90,6 +90,38 @@ export function findProductByScannedCode<T extends ScannableProduct>(
  * mid-sale). Inventory keeps its category check alongside this call, so no
  * screen's behaviour changes except that barcodes now match.
  */
+/**
+ * Which product does pressing Enter in a search box mean?
+ *
+ * WHY (2026-08-07). Most shop barcode scanners are "keyboard wedge" guns: they
+ * type the digits into whatever field has focus, then press Enter. The app was
+ * listening for neither. A gun would fill the search box and stop, and the
+ * shopkeeper had to reach over and tap the product by hand — one extra tap per
+ * item, all day, which is the entire reason a shop buys a gun.
+ *
+ * Two ways to resolve, in order:
+ *
+ *  1. An exact code match anywhere in the catalogue. This is the gun's case:
+ *     it typed a full barcode, and that identifies one product regardless of
+ *     what the visible list has been filtered down to.
+ *  2. Exactly one product visible. This is the human's case: they typed
+ *     "surf", one row is left, Enter takes it.
+ *
+ * Otherwise NULL, deliberately. If two products are on screen there is no
+ * honest way to choose, and quietly adding the wrong item to a bill is far
+ * worse than doing nothing — the shopkeeper sees "nothing happened" and looks,
+ * whereas a wrong line gets billed to a customer and found weeks later.
+ */
+export function resolveProductForEnterKey<T extends ScannableProduct>(
+  query: string,
+  allProducts: T[],
+  visibleMatches: T[],
+): T | null {
+  if (!(query || '').trim()) return null
+  return findProductByScannedCode(allProducts, query) ||
+    (visibleMatches.length === 1 ? visibleMatches[0] : null)
+}
+
 export function matchesProductSearch<T extends ScannableProduct & { hsn?: string | null }>(
   product: T,
   query: string,

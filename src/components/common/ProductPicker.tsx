@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { findProductByScannedCode, matchesProductSearch } from '@/lib/find-product-by-code'
+import { findProductByScannedCode, matchesProductSearch, resolveProductForEnterKey } from '@/lib/find-product-by-code'
 import { useQuery } from '@tanstack/react-query'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -144,6 +144,13 @@ export function ProductPicker({
             value={search}
             onChange={(e) => { setSearch(e.target.value); setOpen(true) }}
             onFocus={() => setOpen(true)}
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter') return
+              e.preventDefault()
+              // A wedge scanner gun types the code then presses Enter.
+              const match = resolveProductForEnterKey(search, products, filtered)
+              if (match) handleSelect(match)
+            }}
             className="pl-9 pr-12"
           />
           {features?.barcodeScanner && (

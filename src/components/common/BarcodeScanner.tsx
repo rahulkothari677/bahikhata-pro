@@ -39,6 +39,20 @@ function safeHaptic(pattern: number | number[]) {
   }
 }
 
+/*
+ * Controls sitting on this screen must be styled for black, not for the theme.
+ *
+ * The overlay is `bg-black` always — it is a camera viewfinder, it does not
+ * follow light/dark mode. `variant="outline"` DOES follow the theme: it renders
+ * `bg-background`, which in light mode is near-white. Pairing that with
+ * `text-white`, as the Switch camera button did, produced white text on a white
+ * pill — invisible, and reported from a real phone.
+ *
+ * Explicit colours, no variant, so the theme cannot reach in and repaint them.
+ */
+const ON_BLACK_BUTTON =
+  'bg-white/10 text-white border border-white/30 hover:bg-white/20 hover:text-white backdrop-blur-sm'
+
 export function BarcodeScanner({
   onScan,
   onClose,
@@ -63,8 +77,31 @@ export function BarcodeScanner({
     }
   }, [])
 
-  // Start the camera with the selected device
-  const startCamera = useCallback(async (deviceIdx: number) => {
+  /**
+   * Start scanning.
+   *
+   * `deviceId` undefined means "pick the right camera yourself" — which is what
+   * happens on open. Passing an id is only for the Switch camera button.
+   *
+   * WHY NOT PICK BY LABEL (2026-08-07). The old code asked for the device list
+   * and looked for /back|rear|environment/ in the labels. Two things were wrong
+   * with that, and together they meant the front camera opened every time:
+   *
+   *  1. It never ran. Mount called startCamera(0), and the guard was
+   *     `deviceIdx >= 0 && deviceIdx < length ? deviceIdx : backIdx`. Zero is a
+   *     valid index, so the back-camera branch was unreachable dead code and
+   *     index 0 — the front camera on essentially every Android — was used.
+   *
+   *  2. Even reached, it could not have worked. Browsers return EMPTY labels
+   *     from enumerateDevices until camera permission has been granted, and on
+   *     open it has not been. There was nothing for the regex to match.
+   *
+   * facingMode: 'environment' asks the browser for the rear camera directly.
+   * It needs no permission to express, no labels, and no guessing at names in
+   * whatever language the phone is set to. `ideal` rather than `exact` so a
+   * laptop with only a front camera still opens instead of throwing.
+   */
+  const startCamera = useCallback(async (deviceId?: string) => {
     setStarting(true)
     setError(null)
     stopCamera()
@@ -91,53 +128,87 @@ export function BarcodeScanner({
       ])
       hints.set(DecodeHintType.TRY_HARDER, true)
 
-      const reader = new BrowserMultiFormatReader(hints)
+      /*
+       * delayBetweenScanAttempts defaults to 500ms — TWO looks per second.
+       * A shopkeeper holds a packet up for about a second and expects a beep,
+       * so the old scanner got roughly two chances to read a barcode that was
+       * also being filmed by the wrong camera. It read nothing, which is
+       * exactly what was reported.
+       *
+       * 150ms is ~6-7 looks per second. Not lower: each attempt decodes a full
+       * frame across ten formats with TRY_HARDER on, and pinning a budget
+       * Android's CPU makes the preview stutter, which makes aiming harder.
+       */
+      const reader = new BrowserMultiFormatReader(hints, {
+        delayBetweenScanAttempts: 150,
+        delayBetweenScanSuccess: 500,
+      })
 
-      // Get available video devices
+      const handleResult = (result: any) => {
+        if (!result) return
+        const code = result.getText()
+        const format = result.getBarcodeFormat?.toString?.() || 'UNKNOWN'
+        const now = Date.now()
+        // Debounce: ignore same code within 2 seconds
+        if (code === lastScanRef.current.code && now - lastScanRef.current.time < 2000) {
+          return
+        }
+        lastScanRef.current = { code, time: now }
+        setScannedCode(code)
+        safeHaptic([10, 40, 20])
+        // Brief delay so user sees the scanned code before closing
+        setTimeout(() => {
+          onScan(code, format)
+          stopCamera()
+        }, 600)
+        // err is expected (continuous scanning) — ignore unless it's a fatal error
+      }
+
+      if (deviceId) {
+        // Explicit switch — the user picked this camera themselves.
+        controlsRef.current = await reader.decodeFromVideoDevice(
+          deviceId,
+          videoRef.current,
+          handleResult,
+        )
+      } else {
+        /*
+         * Resolution matters more here than anywhere else in the app. An EAN-13
+         * on a small packet is a few millimetres of stripe; at the 640x480 a
+         * browser hands out by default, neighbouring bars land in the same pixel
+         * and the code is not merely hard to read, it is unreadable. `ideal`
+         * lets a weaker camera give what it has rather than failing outright.
+         */
+        controlsRef.current = await reader.decodeFromConstraints(
+          {
+            video: {
+              facingMode: { ideal: 'environment' },
+              width: { ideal: 1920 },
+              height: { ideal: 1080 },
+            },
+          },
+          videoRef.current,
+          handleResult,
+        )
+      }
+
+      /*
+       * Enumerate AFTER the stream is live, not before.
+       *
+       * Permission has now been granted, so labels are populated and the Switch
+       * camera button can show something meaningful. Asking first — as the old
+       * code did — returns unlabelled entries and taught the scanner nothing.
+       */
       const videoDevices = await BrowserMultiFormatReader.listVideoInputDevices()
       setDevices(videoDevices)
 
-      if (videoDevices.length === 0) {
-        setError('No camera found on this device')
-        setStarting(false)
-        return
-      }
+      // Highlight whichever camera actually ended up live, so that Switch
+      // advances from the real starting point rather than from index 0.
+      const stream = videoRef.current?.srcObject as MediaStream | null
+      const liveId = stream?.getVideoTracks?.()[0]?.getSettings?.().deviceId
+      const liveIdx = liveId ? videoDevices.findIndex((d) => d.deviceId === liveId) : -1
+      setSelectedDeviceIdx(liveIdx >= 0 ? liveIdx : 0)
 
-      // Default to back camera (usually has "back" or "environment" in label)
-      const backIdx = videoDevices.findIndex((d) =>
-        /back|rear|environment/i.test(d.label)
-      )
-      const idx = deviceIdx >= 0 && deviceIdx < videoDevices.length
-        ? deviceIdx
-        : (backIdx >= 0 ? backIdx : 0)
-      setSelectedDeviceIdx(idx)
-
-      const deviceId = videoDevices[idx]?.deviceId
-
-      controlsRef.current = await reader.decodeFromVideoDevice(
-        deviceId,
-        videoRef.current,
-        (result, err) => {
-          if (result) {
-            const code = result.getText()
-            const format = result.getBarcodeFormat?.toString?.() || 'UNKNOWN'
-            const now = Date.now()
-            // Debounce: ignore same code within 2 seconds
-            if (code === lastScanRef.current.code && now - lastScanRef.current.time < 2000) {
-              return
-            }
-            lastScanRef.current = { code, time: now }
-            setScannedCode(code)
-            safeHaptic([10, 40, 20])
-            // Brief delay so user sees the scanned code before closing
-            setTimeout(() => {
-              onScan(code, format)
-              stopCamera()
-            }, 600)
-          }
-          // err is expected (continuous scanning) — ignore unless it's a fatal error
-        }
-      )
       setStarting(false)
     } catch (err: any) {
       console.error('[BarcodeScanner] Camera start failed:', err)
@@ -154,9 +225,9 @@ export function BarcodeScanner({
     }
   }, [onScan, stopCamera])
 
-  // Start camera on mount
+  // Start camera on mount. No argument: let facingMode pick the rear camera.
   useEffect(() => {
-    startCamera(0)
+    startCamera()
     return () => {
       stopCamera()
     }
@@ -203,13 +274,15 @@ export function BarcodeScanner({
   const handleSwitchCamera = () => {
     if (devices.length < 2) return
     const nextIdx = (selectedDeviceIdx + 1) % devices.length
-    startCamera(nextIdx)
+    startCamera(devices[nextIdx]?.deviceId)
   }
 
   const handleRescan = () => {
     setScannedCode(null)
     lastScanRef.current = { code: '', time: 0 }
-    startCamera(selectedDeviceIdx)
+    // Re-open the camera the user was already on, not the default one — if they
+    // switched to get a better angle, "Scan again" must not undo that.
+    startCamera(devices[selectedDeviceIdx]?.deviceId)
   }
 
   return (
@@ -285,7 +358,7 @@ export function BarcodeScanner({
             </div>
             <h3 className="text-white font-semibold mb-2">Camera Error</h3>
             <p className="text-white/70 text-sm max-w-xs mb-4">{error}</p>
-            <Button onClick={handleClose} variant="outline" className="gap-2">
+            <Button onClick={handleClose} className={cn('gap-2', ON_BLACK_BUTTON)}>
               <X className="w-4 h-4" />
               Close
             </Button>
@@ -301,7 +374,7 @@ export function BarcodeScanner({
             <p className="text-white/70 text-sm mb-1">Scanned:</p>
             <p className="text-white text-2xl font-bold font-mono mb-4 break-all">{scannedCode}</p>
             <div className="flex gap-2">
-              <Button onClick={handleRescan} variant="outline" className="gap-2">
+              <Button onClick={handleRescan} className={cn('gap-2', ON_BLACK_BUTTON)}>
                 <Camera className="w-4 h-4" />
                 Scan again
               </Button>
@@ -324,9 +397,8 @@ export function BarcodeScanner({
         {devices.length > 1 && !scannedCode && !error && (
           <Button
             onClick={handleSwitchCamera}
-            variant="outline"
             size="sm"
-            className="gap-2 text-white border-white/30 hover:bg-white/10"
+            className={cn('gap-2', ON_BLACK_BUTTON)}
           >
             <SwitchCamera className="w-4 h-4" />
             Switch camera

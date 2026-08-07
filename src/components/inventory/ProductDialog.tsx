@@ -199,6 +199,12 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
                 id="field-barcode"
                 value={form.barcode}
                 onChange={(e) => setForm({ ...form, barcode: e.target.value })}
+                onKeyDown={(e) => {
+                  // A wedge scanner gun presses Enter after typing the code.
+                  // The product is still half-entered at this point, so Enter
+                  // must not save it — swallow the key, keep the value.
+                  if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLInputElement).blur() }
+                }}
                 placeholder="Scan or type the code on the packet"
                 inputMode="numeric"
                 className="flex-1 font-mono"
@@ -320,7 +326,17 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
         )}
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          {/*
+            * type="button" stated explicitly.
+            *
+            * There is no <form> around these fields today, so a button defaults
+            * to submit harmlessly — I checked, and that is why this was not a
+            * live bug. But the safety is a property of the markup AROUND this
+            * line, not of the line itself: wrap these fields in a <form> for
+            * any reason and Cancel silently starts SAVING the product it exists
+            * to discard. One word now, versus a very confusing bug report later.
+            */}
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button onClick={handleSave} disabled={saving} className="bg-gradient-saffron">
             {saving ? 'Saving...' : (product ? 'Update Product' : 'Add Product')}
           </Button>

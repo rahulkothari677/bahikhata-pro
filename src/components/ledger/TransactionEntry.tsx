@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { findProductByScannedCode, matchesProductSearch } from '@/lib/find-product-by-code'
+import { findProductByScannedCode, matchesProductSearch, resolveProductForEnterKey } from '@/lib/find-product-by-code'
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useAppStore } from '@/store/app-store'
 import { Card, CardContent } from '@/components/ui/card'
@@ -1382,6 +1382,16 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                       placeholder="Type name, SKU, barcode, or scan..."
                       value={productSearch}
                       onChange={(e) => setProductSearch(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key !== 'Enter') return
+                        e.preventDefault()
+                        // A wedge scanner gun types the code then presses Enter.
+                        const match = resolveProductForEnterKey(productSearch, products, filteredProducts)
+                        if (match) {
+                          handleAddProduct(match)
+                          setProductSearch('')  // ready for the next scan
+                        }
+                      }}
                       className="pl-9 pr-12"
                     />
                     {features?.barcodeScanner && (
