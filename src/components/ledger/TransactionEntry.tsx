@@ -44,6 +44,7 @@ import { computeLineItems } from '@/lib/line-items'
 import { baseUnitOf, subUnitsFor, normalizeUnitName, resolveEnteredQuantity, normalizeToUnit, isCountUnit, stepForUnit } from '@/lib/units'
 import { readError } from '@/lib/read-error'
 import { invalidateMoneyCaches } from '@/lib/invalidate-money-caches'
+import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
 import { registerExitGuard } from '@/lib/exit-guard'
 import {
   AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogFooter,
@@ -105,6 +106,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   /* Details starts closed on mobile; the lg: rules keep it open on desktop
      regardless, so this only ever governs the phone. */
   const [detailsOpen, setDetailsOpen] = useState(false)
+  const { confirmDialog: confirmSave, dialog: saveDialogEl } = useConfirmDialog()
   const [leavePromptOpen, setLeavePromptOpen] = useState(false)
   const leaveResolverRef = useRef<((allow: boolean) => void) | null>(null)
   const [addPartyOpen, setAddPartyOpen] = useState(false)
@@ -803,6 +805,29 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       })
       return
     }
+    /*
+     * A purchase with no supplier bill number can never be matched to GSTR-2B,
+     * and since Rule 36(4) changed on 1 Jan 2022 that is the only lawful route
+     * to input tax credit. Left blank, the API assigns PUR-0001 — our number
+     * for their document — so the record LOOKS complete while being unusable
+     * for the one thing it is needed for.
+     *
+     * Asked, not blocked. A shopkeeper entering a bill from memory, or a cash
+     * purchase from an unregistered seller, genuinely may not have a number,
+     * and refusing to save would be worse than saving something imperfect. The
+     * point is that they find out now, while the bill is still in their hand,
+     * rather than at filing time.
+     */
+    if (!isSale && !isNote && !invoiceNo.trim()) {
+      const proceed = await confirmSave(
+        'Without it, this purchase cannot be matched to your GSTR-2B, so you may not be able to claim the GST back on it.',
+        { title: 'Save without the supplier’s bill number?', confirmLabel: 'Save anyway', destructive: false },
+      )
+      if (!proceed) {
+        document.getElementById('field-supplier-bill-no')?.focus()
+        return
+      }
+    }
     // 🔒 V11 STOCK POLICY: Block save if stock would go negative (block mode).
     // The Save button is also disabled, but the user might press Enter to save.
     if (hasStockBlock) {
@@ -1065,6 +1090,9 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
           <ChevronRight className="w-4 h-4 text-primary flex-shrink-0" />
         </button>
       )}
+
+      {/* Asked before saving a purchase with no supplier bill number. */}
+      {saveDialogEl}
 
       {/* Leaving a half-written entry — three answers, not two. */}
       <AlertDialog open={leavePromptOpen} onOpenChange={(o) => { if (!o) resolveLeave(false) }}>
@@ -2008,6 +2036,49 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                       )}
                     </div>
                   )}
+                </div>
+              )}
+
+              {/*
+               * THE SUPPLIER'S BILL NUMBER — purchases only, and not optional
+               * in the way the old field pretended.
+               *
+               * This is the single field that decides whether a purchase can
+               * be matched to GSTR-2B, and since Rule 36(4) changed on
+               * 1 Jan 2022, appearing in GSTR-2B is the ONLY lawful route to
+               * input tax credit. Reconciliation keys on
+               * supplier GSTIN + this number.
+               *
+               * It used to sit in the collapsed Details section labelled
+               * "Invoice No." with the placeholder "Optional" — our words for
+               * their document. Left blank, the API generates PUR-0001 and
+               * stores THAT as the invoice number, so the record looks complete
+               * and can never match. Measured on this shop: 10 of 16 purchases
+               * could never reconcile.
+               *
+               * On a sale the number is genuinely ours to issue and can stay
+               * auto-assigned and out of the way. That asymmetry is the real
+               * difference between the two screens.
+               */}
+              {!isSale && (
+                <div className="mt-3 pt-3 border-t border-border">
+                  <Label htmlFor="field-supplier-bill-no" className="flex items-center gap-1.5">
+                    Supplier&apos;s bill no.
+                    {!invoiceNo.trim() && (
+                      <span className="text-2xs font-normal text-amber-600">needed to claim GST</span>
+                    )}
+                  </Label>
+                  <Input
+                    id="field-supplier-bill-no"
+                    value={invoiceNo}
+                    onChange={(e) => { markDirty(); setInvoiceNo(e.target.value) }}
+                    placeholder="As printed on their bill"
+                    className="mt-1"
+                  />
+                  <p className="text-2xs text-muted-foreground mt-1">
+                    Copy it exactly. GST matches your purchase to the supplier&apos;s filing
+                    using their bill number — a different number will not match.
+                  </p>
                 </div>
               )}
             </div>
