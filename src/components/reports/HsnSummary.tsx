@@ -13,7 +13,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { formatINR, cn } from '@/lib/utils'
-import { Hash } from 'lucide-react'
+import { Hash, AlertTriangle } from 'lucide-react'
 
 interface HsnSummaryProps {
   data: any
@@ -22,9 +22,44 @@ interface HsnSummaryProps {
 export function HsnSummary({ data }: HsnSummaryProps) {
   const summary = data?.summary || { totalHsnCodes: 0, totalTaxableValue: 0, totalTax: 0 }
   const hsnSummary = data?.hsnSummary || []
+  const missing = data?.missingHsn
 
   return (
     <div className="space-y-4">
+      {/*
+        * Sales this table cannot account for.
+        *
+        * The report groups by HSN, so a sale whose product has no HSN simply is
+        * not here. Without this banner the only clue is that Table 12 totals
+        * less than the turnover on the same GSTR-1 — a discrepancy a CA finds
+        * on filing day, when it is too late to do anything but explain it.
+        *
+        * HSN is mandatory on B2B invoices (Notification 78/2020: 4 digits below
+        * ₹5 crore turnover, 6 above) and optional for small B2C, so the app is
+        * right to allow these sales. It is not right to stay quiet about them.
+        */}
+      {missing && missing.lineCount > 0 && (
+        <div className="rounded-2xl border border-amber-300 bg-amber-50 dark:bg-amber-950/40 dark:border-amber-800 p-4">
+          <div className="flex gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+            <div className="min-w-0">
+              <p className="font-semibold text-amber-900 dark:text-amber-200 text-sm">
+                {formatINR(missing.taxableValue)} of sales are missing from this table
+              </p>
+              <p className="text-xs text-amber-800 dark:text-amber-300 mt-1">
+                {missing.lineCount} {missing.lineCount === 1 ? 'line has' : 'lines have'} no HSN code, so
+                they cannot appear in GSTR-1 Table 12. Add the HSN code on these products and future
+                sales will be included.
+              </p>
+              {missing.products?.length > 0 && (
+                <p className="text-xs text-amber-800 dark:text-amber-300 mt-1.5">
+                  <span className="font-medium">Products:</span> {missing.products.join(', ')}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       {/* Summary stat cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="rounded-2xl bg-card border border-border/60 shadow-card p-4">

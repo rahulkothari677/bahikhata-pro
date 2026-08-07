@@ -954,6 +954,38 @@ export async function GET(req: NextRequest) {
         ORDER BY "taxableValue" DESC
       `
 
+      /*
+       * What this table is NOT covering, and why it has to be said out loud.
+       *
+       * The query above requires hsn IS NOT NULL AND != '' — correct, since a
+       * blank cannot be a Table 12 row. But it means sales without an HSN
+       * silently vanish from this report. The CA then sees a Table 12 whose
+       * total is short of the turnover in the same GSTR-1, with nothing on
+       * screen explaining the difference, and finds out on filing day.
+       *
+       * HSN is mandatory on B2B invoices under Notification 78/2020 (4 digits
+       * below ₹5 crore turnover, 6 above) and optional for small B2C supplies —
+       * so the app is right to allow the sale, and wrong to stay quiet about it.
+       * This surfaces the gap while it is still fixable: set the HSN on the
+       * product, and future sales carry it.
+       */
+      const [missingHsn] = await db.$queryRaw<Array<{
+        lineCount: bigint; taxableValue: bigint; productNames: string | null
+      }>>`
+        SELECT
+          COUNT(*) AS "lineCount",
+          COALESCE(SUM(ti."unitPrice" * ti."quantity" - ti."discountAmount"), 0) AS "taxableValue",
+          STRING_AGG(DISTINCT ti."productName", ', ') AS "productNames"
+        FROM "TransactionItem" ti
+        JOIN "Transaction" t ON ti."transactionId" = t."id"
+        WHERE t."userId" = ${userId}
+          AND t."deletedAt" IS NULL
+          AND t."type" IN ('sale', 'credit-note')
+          AND t."date" >= ${from}
+          AND t."date" <= ${to}
+          AND (ti."hsn" IS NULL OR ti."hsn" = '')
+      `
+
       // Also fetch product names for each HSN (for the description column)
       const hsnCodes = hsnRows.map(r => r.hsn)
       const productsWithHsn = await db.product.findMany({
@@ -993,6 +1025,13 @@ export async function GET(req: NextRequest) {
           totalHsnCodes: hsnSummary.length,
           totalTaxableValue: roundMoney(totalTaxable),
           totalTax: roundMoney(totalTax),
+        },
+        // Sales this table cannot account for, because their product carries no
+        // HSN. Zero means Table 12 covers the whole period.
+        missingHsn: {
+          lineCount: Number(missingHsn?.lineCount || 0),
+          taxableValue: roundMoney(fromPaise(Number(missingHsn?.taxableValue || 0))),
+          products: (missingHsn?.productNames || '').split(', ').filter(Boolean).slice(0, 10),
         },
         hsnSummary,
       })
