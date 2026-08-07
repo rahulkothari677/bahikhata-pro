@@ -232,10 +232,11 @@ describe('mapping a barcode box onto the preview', () => {
 })
 
 describe('more than one barcode in view', () => {
-  function tickingVideo(maxFrames = 60) {
+  function tickingVideo(maxFrames = 200) {
     const el = document.createElement('video') as any
     let frames = 0
     el.play = jest.fn().mockResolvedValue(undefined)
+    el.pause = jest.fn()
     el.requestVideoFrameCallback = (cb: any) => { if (frames++ < maxFrames) setTimeout(() => cb(), 1) }
     return el as HTMLVideoElement
   }
@@ -255,14 +256,65 @@ describe('more than one barcode in view', () => {
     const onCode = jest.fn()
     const onCandidates = jest.fn()
     const engine = await startDecoding(fakeStream(), tickingVideo(), { onCode, onCandidates })
-    await new Promise((r) => setTimeout(r, 120))
+    await new Promise((r) => setTimeout(r, 150))
 
-    // The whole point: taking found[0] would be a silent coin-flip between a
-    // product code and a courier code.
+    // Taking found[0] would be a silent coin-flip between a product code and a
+    // courier code.
     expect(onCode).not.toHaveBeenCalled()
-    expect(onCandidates).toHaveBeenCalled()
     const offered = onCandidates.mock.calls.at(-1)![0]
-    expect(offered.map((c: any) => c.value)).toEqual(['PRODUCT-1', 'COURIER-2'])
+    expect(offered.map((c: any) => c.value).sort()).toEqual(['COURIER-2', 'PRODUCT-1'])
+    engine.stop()
+  })
+
+  it('offers both even when they NEVER appear on the same frame', async () => {
+    /*
+     * The bug from the screen recording, as a test.
+     *
+     * A phone carton with two IMEI barcodes: ML Kit resolves long, thin,
+     * closely-stacked 1D codes one per frame, whichever is sharpest as the hand
+     * moves. The first implementation only offered a choice when a single frame
+     * held two codes — that frame never arrived, so it accepted whichever code
+     * repeated and closed. "It doesn't stop on the specific code and randomly
+     * selects one."
+     */
+    let frame = 0
+    g.BarcodeDetector = class {
+      static getSupportedFormats() { return Promise.resolve(['code_128']) }
+      detect() {
+        frame++
+        // Strictly alternating. Never two in one frame.
+        return Promise.resolve([frame % 2
+          ? { rawValue: 'IMEI-A', format: 'code_128', boundingBox: box(0) }
+          : { rawValue: 'IMEI-B', format: 'code_128', boundingBox: box(60) }])
+      }
+    }
+    const onCode = jest.fn()
+    const onCandidates = jest.fn()
+    const engine = await startDecoding(fakeStream(), tickingVideo(), { onCode, onCandidates })
+    await new Promise((r) => setTimeout(r, 600))
+
+    expect(onCode).not.toHaveBeenCalled()
+    const offered = onCandidates.mock.calls.at(-1)![0]
+    expect(offered.map((c: any) => c.value).sort()).toEqual(['IMEI-A', 'IMEI-B'])
+    engine.stop()
+  })
+
+  it('freezes the picture while the shopkeeper chooses', async () => {
+    // Tap targets sit on the video. A live preview means they drift under the
+    // thumb while it is reaching.
+    const video = tickingVideo()
+    g.BarcodeDetector = class {
+      static getSupportedFormats() { return Promise.resolve(['code_128']) }
+      detect() {
+        return Promise.resolve([
+          { rawValue: 'A', format: 'code_128', boundingBox: box(0) },
+          { rawValue: 'B', format: 'code_128', boundingBox: box(60) },
+        ])
+      }
+    }
+    const engine = await startDecoding(fakeStream(), video, { onCode: jest.fn(), onCandidates: jest.fn() })
+    await new Promise((r) => setTimeout(r, 150))
+    expect((video as any).pause).toHaveBeenCalled()
     engine.stop()
   })
 
@@ -273,35 +325,45 @@ describe('more than one barcode in view', () => {
     }
     const onCode = jest.fn()
     const engine = await startDecoding(fakeStream(), tickingVideo(), { onCode })
-    await new Promise((r) => setTimeout(r, 120))
+    // Longer than the collection window: a single code is accepted once the app
+    // has satisfied itself there is no second one.
+    await new Promise((r) => setTimeout(r, 600))
     expect(onCode).toHaveBeenCalledWith('8901030865278', 'ean_13')
     engine.stop()
   })
 
-  it('waits for a lone code to repeat before accepting it', async () => {
-    // Two codes on a box do not always resolve on the same frame. Accepting the
-    // instant one appears would close the scanner before the second was seen,
-    // so the picker would rarely appear on the very labels that need it.
-    let frame = 0
+  it('does not accept a lone barcode before the collection window is up', async () => {
+    // The whole reason the picker was being skipped: deciding too early.
+    g.BarcodeDetector = class {
+      static getSupportedFormats() { return Promise.resolve(['ean_13']) }
+      detect() { return Promise.resolve([{ rawValue: 'ONLY-ONE', format: 'ean_13', boundingBox: box(0) }]) }
+    }
+    const onCode = jest.fn()
+    const engine = await startDecoding(fakeStream(), tickingVideo(), { onCode })
+    await new Promise((r) => setTimeout(r, 120))
+    expect(onCode).not.toHaveBeenCalled()
+    engine.stop()
+  })
+
+  it('resumes scanning when the picker is dismissed', async () => {
+    const video = tickingVideo()
     g.BarcodeDetector = class {
       static getSupportedFormats() { return Promise.resolve(['code_128']) }
       detect() {
-        frame++
-        return Promise.resolve(frame === 1
-          ? [{ rawValue: 'FIRST', format: 'code_128', boundingBox: box(0) }]
-          : [
-              { rawValue: 'FIRST', format: 'code_128', boundingBox: box(0) },
-              { rawValue: 'SECOND', format: 'code_128', boundingBox: box(200) },
-            ])
+        return Promise.resolve([
+          { rawValue: 'A', format: 'code_128', boundingBox: box(0) },
+          { rawValue: 'B', format: 'code_128', boundingBox: box(60) },
+        ])
       }
     }
-    const onCode = jest.fn()
-    const onCandidates = jest.fn()
-    const engine = await startDecoding(fakeStream(), tickingVideo(), { onCode, onCandidates })
-    await new Promise((r) => setTimeout(r, 120))
+    const engine = await startDecoding(fakeStream(), video, { onCode: jest.fn(), onCandidates: jest.fn() })
+    await new Promise((r) => setTimeout(r, 150))
 
-    expect(onCode).not.toHaveBeenCalled()
-    expect(onCandidates).toHaveBeenCalled()
+    expect(engine.resume).toBeDefined()
+    engine.resume!()
+    // Plays again rather than re-opening the camera, which would black the
+    // preview and re-run the engine handshake for nothing.
+    expect((video as any).play).toHaveBeenCalledTimes(2)
     engine.stop()
   })
 })

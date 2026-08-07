@@ -33,6 +33,13 @@ export interface ScanEngine {
   /** Which decoder ended up running — surfaced so the UI can say so. */
   engine: EngineName
   stream: MediaStream
+  /**
+   * Start looking again after the picker was dismissed.
+   *
+   * Optional because only the native path can reach the picker — ZXing's
+   * browser reader returns one result at a time and never pauses.
+   */
+  resume?: () => void
   stop: () => void
 }
 
@@ -235,6 +242,7 @@ export async function startDecoding(
      * shopkeeper only notices the scan took a moment longer to get going.
      */
     let consecutiveErrors = 0
+    let paused = false
     let zxingControls: IScannerControls | null = null
     /*
      * Distinct from `stopped`, which the mid-scan bail-out also sets to end the
@@ -247,46 +255,77 @@ export async function startDecoding(
     let closed = false
 
     /*
-     * Confirm a lone barcode across a few frames before accepting it.
+     * Collect every code seen in a short window, THEN decide.
      *
-     * Two barcodes on one box do not necessarily appear on the same frame: the
-     * engine may resolve one a frame before the other. Accepting the instant a
-     * single code appears would therefore grab whichever resolved first and
-     * close the scanner before the second was ever seen — so the picker this
-     * exists to show would rarely appear on exactly the labels that need it.
+     * WHY THIS IS NOT PER-FRAME (2026-08-07, from a screen recording). The
+     * first version only offered a choice when a SINGLE frame contained more
+     * than one code. On the label in that recording — a phone box with two IMEI
+     * barcodes and a QR — that frame never came. ML Kit resolves long, thin,
+     * closely-stacked 1D codes ONE PER FRAME, depending on which happens to be
+     * sharpest as the hand moves. So the app saw one code at a time, the
+     * three-frame streak below was satisfied by whichever code repeated, and it
+     * accepted that one and closed.
      *
-     * Three frames is about 100ms at 30fps. Below noticing, and it doubles as a
-     * guard against a one-frame misread being taken as truth.
+     * From the outside that is exactly "it doesn't stop on the specific code
+     * and randomly selects one" — and it is worse than a missing feature,
+     * because the shopkeeper cannot tell a choice was made at all.
+     *
+     * So: from the first sighting, keep looking for COLLECT_MS and remember
+     * every distinct value. Then one decision, on the whole set.
+     *
+     * 400ms is the trade. Long enough that a second code on the same label has
+     * several frames to surface; short enough that a single barcode still feels
+     * instant, which is the behaviour just reported as "too fast" and worth
+     * protecting. A frame that genuinely contains two codes short-circuits the
+     * wait, because there is nothing left to learn by waiting.
      */
-    let sameCodeStreak = 0
-    let streakValue: string | null = null
-    let hadCandidates = false
+    const COLLECT_MS = 400
+    const seen = new Map<string, DetectedCode>()
+    let collectingSince = 0
+
+    const decide = () => {
+      const list = [...seen.values()]
+      if (list.length === 1) {
+        onCode(list[0].value, list[0].format)
+        return
+      }
+      /*
+       * Freeze the picture while the shopkeeper chooses.
+       *
+       * The boxes are drawn over the video, so a live preview means the tap
+       * targets drift under the thumb while it is reaching. Pausing makes them
+       * hold still, which is what "hold on all the codes" needs to mean to be
+       * usable. It also stops the decode loop, so nothing can be accepted
+       * behind the picker.
+       */
+      paused = true
+      video.pause()
+      onCandidates?.(list)
+    }
 
     const loop = async () => {
-      if (stopped) return
+      if (stopped || paused) return
       try {
         const found: any[] = await detector.detect(video)
         consecutiveErrors = 0
+        if (stopped || paused) return
 
-        if (!stopped && found && found.length > 1) {
-          // Let the shopkeeper choose. Reported every frame so the boxes track
-          // the label as the phone moves.
-          sameCodeStreak = 0
-          streakValue = null
-          hadCandidates = true
-          onCandidates?.(found.map(toDetected))
-        } else if (!stopped && found && found.length === 1) {
-          if (hadCandidates) { hadCandidates = false; onCandidates?.([]) }
-          const value = found[0].rawValue
-          sameCodeStreak = value === streakValue ? sameCodeStreak + 1 : 1
-          streakValue = value
-          if (sameCodeStreak >= 3) {
-            onCode(value, found[0].format || 'UNKNOWN')
+        const now = Date.now()
+
+        if (found && found.length) {
+          if (!collectingSince) collectingSince = now
+          for (const b of found) {
+            const d = toDetected(b)
+            seen.set(d.value, d)
           }
-        } else if (!stopped) {
-          sameCodeStreak = 0
-          streakValue = null
-          if (hadCandidates) { hadCandidates = false; onCandidates?.([]) }
+          // Two in one frame settles it: both are demonstrably in view.
+          if (found.length > 1 || now - collectingSince >= COLLECT_MS) decide()
+        } else if (collectingSince && now - collectingSince >= COLLECT_MS) {
+          // Everything left the frame mid-collection. Decide on what was seen
+          // rather than discarding it — the codes were real a moment ago.
+          decide()
+        } else if (!collectingSince) {
+          seen.clear()
         }
       } catch {
         consecutiveErrors++
@@ -329,6 +368,15 @@ export async function startDecoding(
     return {
       engine: 'native',
       stream,
+      /** Called by "Scan again" after the shopkeeper dismisses the picker. */
+      resume: () => {
+        if (stopped || closed) return
+        seen.clear()
+        collectingSince = 0
+        paused = false
+        void video.play().catch(() => {})
+        requestFrame()
+      },
       stop: () => {
         stopped = true
         closed = true

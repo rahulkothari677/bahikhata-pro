@@ -85,29 +85,6 @@ export function BarcodeScanner({
     }
   }, [])
 
-  /*
-   * Candidates arrive on EVERY frame, ~30 a second. Handing each one straight
-   * to setState would re-render the scanner 30 times a second on a phone that
-   * is already running ML Kit and a camera preview — the stutter would show up
-   * as harder aiming, which is the opposite of the point.
-   *
-   * So only re-render when something a thumb would notice changed: a different
-   * set of codes, or a box that has moved more than 12px. Below that the target
-   * is still under the finger.
-   */
-  const handleCandidates = useCallback((next: DetectedCode[]) => {
-    setCandidates((prev) => {
-      if (prev.length !== next.length) return next
-      const same = next.every((c, i) => {
-        const p = prev[i]
-        return p && p.value === c.value
-          && Math.abs(p.box.x - c.box.x) < 12
-          && Math.abs(p.box.y - c.box.y) < 12
-      })
-      return same ? prev : next
-    })
-  }, [])
-
   /**
    * Start scanning.
    *
@@ -175,7 +152,7 @@ export function BarcodeScanner({
         onCode: handleCode,
         // The native engine can give up mid-scan on a device where it is
         // present but broken; keep the label honest when it does.
-        onCandidates: handleCandidates,
+        onCandidates: setCandidates,
         onEngineChange: setEngine,
         // Reached only if BOTH engines fail after the camera opened; startup
         // failures reject startDecoding and land in the catch below.
@@ -271,6 +248,18 @@ export function BarcodeScanner({
     if (devices.length < 2) return
     const nextIdx = (selectedDeviceIdx + 1) % devices.length
     startCamera(devices[nextIdx]?.deviceId)
+  }
+
+  /**
+   * Dismiss the picker and keep looking.
+   *
+   * resume() rather than startCamera(): the camera is still open and permission
+   * is still granted, so restarting it would black the preview for a moment and
+   * re-run the whole engine handshake for nothing.
+   */
+  const handleKeepLooking = () => {
+    setCandidates([])
+    engineRef.current?.resume?.()
   }
 
   /** The shopkeeper tapped one of several barcodes on the label. */
@@ -415,10 +404,42 @@ export function BarcodeScanner({
                 </button>
               )
             })}
-            <div className="absolute bottom-8 left-0 right-0 text-center px-4 pointer-events-none">
-              <span className="inline-block px-3 py-1.5 rounded-full bg-black/70 text-white text-sm">
-                {candidates.length} barcodes found — tap the one you want
-              </span>
+            {/*
+              * The values, spelled out.
+              *
+              * Boxes alone are not enough. The label that exposed this bug was a
+              * phone carton carrying two IMEI barcodes — visually identical
+              * stripes, one digit different. Tapping the right rectangle is not
+              * the same as knowing which code you took, so the list shows the
+              * actual digits and doubles as a second, larger tap target.
+              */}
+            <div className="absolute bottom-0 left-0 right-0 bg-black/85 pb-safe">
+              <p className="text-white text-sm text-center pt-3 pb-2">
+                {candidates.length} codes found — which one?
+              </p>
+              <div className="max-h-52 overflow-y-auto px-3 pb-3 space-y-2">
+                {candidates.map((c, i) => (
+                  <button
+                    key={`row-${c.value}-${i}`}
+                    onClick={() => handleChoose(c)}
+                    className={cn('w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left', ON_BLACK_BUTTON)}
+                  >
+                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-primary text-white text-xs font-bold flex items-center justify-center">
+                      {i + 1}
+                    </span>
+                    <span className="flex-1 min-w-0">
+                      <span className="block font-mono text-sm text-white break-all">{c.value}</span>
+                      <span className="block text-2xs text-white/50 uppercase">{c.format.replace(/_/g, ' ')}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <div className="px-3 pb-3">
+                <Button onClick={handleKeepLooking} className={cn('w-full gap-2', ON_BLACK_BUTTON)}>
+                  <Camera className="w-4 h-4" />
+                  None of these — keep scanning
+                </Button>
+              </div>
             </div>
           </div>
         )}
