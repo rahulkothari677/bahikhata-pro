@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { findProductByScannedCode } from '@/lib/find-product-by-code'
+import { findProductByScannedCode, matchesProductSearch } from '@/lib/find-product-by-code'
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useAppStore } from '@/store/app-store'
 import { Card, CardContent } from '@/components/ui/card'
@@ -362,10 +362,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
 
   const filteredProducts = useMemo(() => productsInCategory.filter(p => {
     if (!productSearch) return true
-    const q = productSearch.toLowerCase()
-    return p.name?.toLowerCase().includes(q) ||
-      p.sku?.toLowerCase().includes(q) ||
-      p.hsn?.toLowerCase().includes(q)
+    return matchesProductSearch(p, productSearch)
   }), [productsInCategory, productSearch])
 
   // Check for preset data (from scanner, party profile, or repeat last sale)
@@ -1382,7 +1379,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                   <div className="relative mt-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input id="field-search-product"
-                      placeholder="Type name, SKU, HSN, or scan barcode..."
+                      placeholder="Type name, SKU, barcode, or scan..."
                       value={productSearch}
                       onChange={(e) => setProductSearch(e.target.value)}
                       className="pl-9 pr-12"

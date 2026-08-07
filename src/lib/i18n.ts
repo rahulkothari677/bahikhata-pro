@@ -131,7 +131,7 @@ export const translations = {
     'action.whatsapp': 'WhatsApp',
 
     // Inventory
-    'inv.search_placeholder': 'Search products, SKU, HSN...',
+    'inv.search_placeholder': 'Search products, SKU, barcode...',
     'inv.all_products': 'All Products',
     'inv.low_stock': 'Low Stock',
     'inv.out_stock': 'Out of Stock',
@@ -537,7 +537,7 @@ export const translations = {
     'action.whatsapp': 'व्हाट्सएप',
 
     // Inventory
-    'inv.search_placeholder': 'सामान, SKU, HSN खोजें...',
+    'inv.search_placeholder': 'सामान, SKU, बारकोड खोजें...',
     'inv.all_products': 'सभी सामान',
     'inv.low_stock': 'कम स्टॉक',
     'inv.out_stock': 'स्टॉक खत्म',

@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery, keepPreviousData } from '@tanstack/react-query'
-import { findProductByScannedCode } from '@/lib/find-product-by-code'
+import { findProductByScannedCode, matchesProductSearch } from '@/lib/find-product-by-code'
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from '@/hooks/use-translation'
 import { useSetting } from '@/hooks/use-setting'
@@ -102,10 +102,9 @@ export function Inventory() {
     if (inventoryCategory && (p.category || 'Uncategorized') !== inventoryCategory) return false
     if (search) {
       const q = search.toLowerCase()
-      const matchSearch = p.name?.toLowerCase().includes(q) ||
-        p.sku?.toLowerCase().includes(q) ||
-        p.category?.toLowerCase().includes(q) ||
-        p.hsn?.toLowerCase().includes(q)
+      // Identifiers (name/sku/barcode/hsn) are shared with every other
+      // product search; category is Inventory's alone, so it stays here.
+      const matchSearch = matchesProductSearch(p, search) || p.category?.toLowerCase().includes(q)
       if (!matchSearch) return false
     }
     if (filter === 'low' && !p.isLowStock) return false

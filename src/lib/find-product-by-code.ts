@@ -61,3 +61,44 @@ export function findProductByScannedCode<T extends ScannableProduct>(
     null
   )
 }
+
+/**
+ * Does this product match what someone typed into a search box?
+ *
+ * WHY THIS EXISTS (2026-08-07). Scanning and typing are the same task. A
+ * scanner misreads a crushed packet, the code is worn off, the phone camera
+ * will not focus — so the shopkeeper reads the digits and types them. Verified
+ * on production the day barcode shipped: a product with a saved barcode
+ * returned "No products match your search" when its own barcode was typed in.
+ *
+ * The three search filters had drifted exactly like the three scan matchers
+ * had, on exactly the same three screens:
+ *
+ *   ProductPicker      name, sku, hsn
+ *   Inventory          name, sku, hsn, category
+ *   TransactionEntry   name, sku, ...
+ *
+ * None knew about barcode, because none of them could have — the column was
+ * a day old. Sharing the identifier set means the next column added to Product
+ * becomes searchable in one edit rather than three, or in zero, which is what
+ * actually happened here.
+ *
+ * SCOPE: name, sku, barcode, hsn — the identifiers all three screens already
+ * agreed on, plus the new one. Category is deliberately NOT here: only
+ * Inventory searched it, and folding it in would change what billing search
+ * returns (typing "tea" would pull in every product in the Tea category
+ * mid-sale). Inventory keeps its category check alongside this call, so no
+ * screen's behaviour changes except that barcodes now match.
+ */
+export function matchesProductSearch<T extends ScannableProduct & { hsn?: string | null }>(
+  product: T,
+  query: string,
+): boolean {
+  const q = (query || '').trim().toLowerCase()
+  if (!q) return true
+
+  const has = (value: string | null | undefined) =>
+    !!value && value.toLowerCase().includes(q)
+
+  return has(product.name) || has(product.sku) || has(product.barcode) || has(product.hsn)
+}

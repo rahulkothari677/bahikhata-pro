@@ -83,6 +83,23 @@ function sourceFiles(dir: string, out: string[] = []): string[] {
  */
 const HAND_ROLLED = /\.(sku|barcode)\b[^\n=]{0,40}===/g
 
+/**
+ * Hand-rolled SEARCHING of a typed query against a product identifier.
+ *
+ * Scanning and typing are the same task with different input hardware, and
+ * they drifted the same way on the same three screens. On the day barcode
+ * shipped, a product with a saved barcode returned "No products match your
+ * search" when its own barcode was typed into Inventory — because all three
+ * search filters listed their fields by hand and none had been told about the
+ * new column.
+ *
+ * Matches `p.sku?.toLowerCase().includes(q)` and friends. `.name` is not
+ * listed: plenty of legitimate code lowercases a name for reasons that have
+ * nothing to do with product search, and a guard that fires on those gets
+ * switched off.
+ */
+const HAND_ROLLED_SEARCH = /\.(sku|barcode|hsn)\b[^\n]{0,40}\.includes\(/g
+
 const files = sourceFiles(SRC)
 
 describe('the scan is not vacuous', () => {
@@ -118,6 +135,29 @@ describe('only one place decides which product a scanned code means', () => {
             'That is how the billing screen ended up ignoring barcodes while two other ' +
             'screens honoured them. Use findProductByScannedCode() from ' +
             '@/lib/find-product-by-code so every scanner agrees, and change the rule there.',
+        )
+      }
+    }
+
+    expect(offenders).toEqual([])
+  })
+
+  it('no screen searches products by listing identifier fields by hand', () => {
+    const offenders: string[] = []
+
+    for (const file of files) {
+      const rel = slash(path.relative(process.cwd(), file))
+      if (ALLOWED.has(rel)) continue
+
+      const src = fs.readFileSync(file, 'utf8')
+      for (const m of src.matchAll(HAND_ROLLED_SEARCH)) {
+        const line = src.slice(0, m.index).split('\n').length
+        offenders.push(
+          `${rel}:${line} — ${m[0].trim()}\n` +
+            '    This screen lists the searchable fields itself, so the next identifier ' +
+            'added to Product will be searchable here and nowhere else — which is exactly ' +
+            'how a saved barcode became untypeable on all three screens at once. Use ' +
+            'matchesProductSearch() from @/lib/find-product-by-code.',
         )
       }
     }

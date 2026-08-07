@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { findProductByScannedCode } from '@/lib/find-product-by-code'
+import { findProductByScannedCode, matchesProductSearch } from '@/lib/find-product-by-code'
 import { useQuery } from '@tanstack/react-query'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -58,10 +58,7 @@ export function ProductPicker({
   const filtered = products.filter(p => {
     if (categoryFilter && (p.category || 'Uncategorized') !== categoryFilter) return false
     if (search) {
-      const q = search.toLowerCase()
-      return p.name?.toLowerCase().includes(q) ||
-        p.sku?.toLowerCase().includes(q) ||
-        p.hsn?.toLowerCase().includes(q)
+      return matchesProductSearch(p, search)
     }
     return true
   })
@@ -143,7 +140,7 @@ export function ProductPicker({
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="Search product by name, SKU, HSN..."
+            placeholder="Search by name, SKU, barcode..."
             value={search}
             onChange={(e) => { setSearch(e.target.value); setOpen(true) }}
             onFocus={() => setOpen(true)}

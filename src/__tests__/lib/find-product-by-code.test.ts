@@ -5,7 +5,7 @@
  * copied. This pins what the rule actually is, so that "change it in one place"
  * means something.
  */
-import { findProductByScannedCode } from '@/lib/find-product-by-code'
+import { findProductByScannedCode, matchesProductSearch } from '@/lib/find-product-by-code'
 
 const products = [
   { id: 'a', name: 'Aashirvaad Atta 5kg', sku: 'ATA001', barcode: '8901030865278' },
@@ -53,5 +53,39 @@ describe('findProductByScannedCode', () => {
       { id: 'new', name: 'Atta (scanned in)', sku: 'ATA002', barcode: '8901030865278' },
     ]
     expect(findProductByScannedCode(overlapping, '8901030865278')?.id).toBe('new')
+  })
+})
+
+describe('matchesProductSearch', () => {
+  const atta = products[0]
+
+  it('finds a product by its barcode when the shopkeeper types it', () => {
+    // The case seen on production: a scanner that will not read a crushed
+    // packet, so the digits get typed instead. This returned "no products
+    // match" for a product whose own barcode was in the box.
+    expect(matchesProductSearch(atta, '8901030865278')).toBe(true)
+  })
+
+  it('finds by a partial barcode, since long codes get typed a few digits at a time', () => {
+    expect(matchesProductSearch(atta, '890103')).toBe(true)
+  })
+
+  it('still finds by name, sku and hsn', () => {
+    expect(matchesProductSearch({ ...atta, hsn: '1101' }, 'aashirvaad')).toBe(true)
+    expect(matchesProductSearch(atta, 'ata0')).toBe(true)
+    expect(matchesProductSearch({ ...atta, hsn: '1101' }, '1101')).toBe(true)
+  })
+
+  it('does not match an unrelated query', () => {
+    expect(matchesProductSearch(atta, 'colgate')).toBe(false)
+  })
+
+  it('treats an empty query as "show everything", not "show nothing"', () => {
+    expect(matchesProductSearch(atta, '')).toBe(true)
+    expect(matchesProductSearch(atta, '   ')).toBe(true)
+  })
+
+  it('does not crash on a product with no codes at all', () => {
+    expect(matchesProductSearch(products[2], '8901030865278')).toBe(false)
   })
 })
