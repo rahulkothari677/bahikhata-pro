@@ -118,6 +118,8 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   const [isInterState, setIsInterState] = useState(false)
   /* Purchases only — see the toggle in the details section. */
   const [isReverseCharge, setIsReverseCharge] = useState(false)
+  /* Purchases only — offer to write the bill's prices back as product cost. */
+  const [updateProductCosts, setUpdateProductCosts] = useState(true)
   const [paymentMode, setPaymentMode] = useState('cash')
   const [paidAmount, setPaidAmount] = useState('')
   // 🔒 AUDIT V24 §1: For credit/debit notes, paidAmount means "cash refunded".
@@ -709,6 +711,33 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   })
   const subtotal = preview.subtotal
   const totalGst = roundMoney(preview.cgst + preview.sgst + preview.igst)
+
+  /*
+   * Which products this bill would re-cost, and by how much.
+   *
+   * Compares each line's TAXABLE price per the product's unit against the cost
+   * currently stored on the product — the same two numbers the profit
+   * calculation subtracts, so they are on the same basis by construction.
+   *
+   * Only shown when something actually differs. A bill at the usual prices
+   * should say nothing at all; a panel that appears on every purchase to report
+   * "no change" is a panel people stop reading.
+   */
+  const costChanges = useMemo(() => {
+    if (isSale || isNote) return []
+    const seen = new Map<string, { name: string; unit: string; from: number; to: number }>()
+    for (const line of preview.txItems) {
+      if (!line.productId || !(line.unitPrice > 0)) continue
+      const product = products.find((p: any) => p.id === line.productId)
+      if (!product) continue
+      const from = roundMoney(product.purchasePrice || 0)
+      const to = roundMoney(line.unitPrice)
+      if (Math.abs(to - from) < 0.01) continue
+      // Last line wins, matching what the server will store.
+      seen.set(line.productId, { name: product.name, unit: line.unit, from, to })
+    }
+    return [...seen.entries()].map(([productId, v]) => ({ productId, ...v }))
+  }, [preview.txItems, products, isSale, isNote])
   // 🔒 BUG-11 (Phase 6): Was: computed unconditionally even when hideProfit.
   // For staff with hideProfit, purchasePrice is stripped from /api/products,
   // so cost=0 → whole sale = profit (wrong value in memory). Now: skip the
@@ -870,6 +899,8 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
           isInterState,
           // Purchases only; the server also enforces that (see the route).
           isReverseCharge: !isSale && !isNote ? isReverseCharge : false,
+          // Only meaningful on a purchase, and only when something differs.
+          updateProductCosts: !isSale && !isNote && costChanges.length > 0 && updateProductCosts,
           paymentMode: estimateMode ? 'cash' : paymentMode,  // Estimates don't have payment
           // 🔒 AUDIT V24 §1: Notes ALWAYS send an explicit paidAmount (cash
           // refunded): 0 when the refund toggle is off (khata adjustment — the
@@ -2317,6 +2348,59 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
               </div>
             </div>
           </Card>
+
+          {/*
+           * COST PRICE — offered only when this bill actually changes one.
+           *
+           * `purchasePrice` was read everywhere and written by nothing: stock
+           * valuation is currentStock × purchasePrice, and every sale's profit
+           * is salePrice − purchasePrice. A shop whose supplier raised prices
+           * kept valuing stock at the old cost and reporting profit it had not
+           * made, until someone remembered to edit each product by hand.
+           *
+           * Asked rather than done silently. Cost is the number the shop's
+           * profit is measured against, and a bill can legitimately be a
+           * one-off — a rush purchase at a bad price should not quietly
+           * redefine what everything is worth. Default on, because the usual
+           * case is that the price genuinely moved.
+           */}
+          {costChanges.length > 0 && (
+            <Card className="shadow-card border-border/60 border-primary/30 order-3 lg:order-none">
+              <div className="p-3 sm:p-4">
+                <label className="flex items-start justify-between gap-3 cursor-pointer">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold">
+                      Update cost {costChanges.length === 1 ? 'price' : 'prices'}?
+                    </p>
+                    <p className="text-2xs text-muted-foreground mt-0.5">
+                      This bill has {costChanges.length === 1 ? 'a different price' : 'different prices'} from
+                      what {costChanges.length === 1 ? 'this product is' : 'these products are'} costed at.
+                      Stock value and future profit use this number.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={updateProductCosts}
+                    onCheckedChange={(v) => { markDirty(); setUpdateProductCosts(v) }}
+                  />
+                </label>
+                <div className="mt-3 space-y-1.5">
+                  {costChanges.map((c) => (
+                    <div key={c.productId} className="flex items-center justify-between gap-2 text-xs">
+                      <span className="truncate min-w-0">{c.name}</span>
+                      <span className="flex-shrink-0 tabular-nums">
+                        <span className="text-muted-foreground line-through">{formatINR(c.from)}</span>
+                        {' → '}
+                        <span className={cn('font-semibold', c.to > c.from ? 'text-rose-600' : 'text-emerald-600')}>
+                          {formatINR(c.to)}
+                        </span>
+                        <span className="text-muted-foreground">/{c.unit}</span>
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </Card>
+          )}
 
           {/* Live summary */}
           <Card className="shadow-card border-border/60 sticky top-20 order-4 lg:order-none">
