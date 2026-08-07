@@ -117,3 +117,32 @@ describe('the other snapshots a return or report depends on', () => {
     expect(line.gstRate).toBe(5)                // Table 12 groups by HSN AND rate
   })
 })
+
+describe('GST treatment reaches the saved line', () => {
+  it('snapshots the product treatment, so Table 8 can tell the three apart', () => {
+    // nil-rated, exempt and non-GST are different things in law and are
+    // reported in different boxes. Without this on the line, buildNIL can only
+    // see the rate and everything at 0% lands in nil_amt.
+    const exemptMilk = { ...PRODUCT, name: 'Amul Taaza Milk', hsn: '0401', gstRate: 0, gstTreatment: 'exempt' }
+    const r = saleOf(exemptMilk, { unitPrice: 28, gstRate: 0 })
+    expect(r.txItems[0].gstTreatment).toBe('exempt')
+  })
+
+  it('is a snapshot — reclassifying a product cannot rewrite a filed return', () => {
+    const before = saleOf({ ...PRODUCT, gstRate: 0, gstTreatment: 'nil' }, { gstRate: 0 })
+    const after = saleOf({ ...PRODUCT, gstRate: 0, gstTreatment: 'exempt' }, { gstRate: 0 })
+    expect(before.txItems[0].gstTreatment).toBe('nil')
+    expect(after.txItems[0].gstTreatment).toBe('exempt')
+  })
+
+  it('leaves it null for an unlinked counter line rather than assuming taxable', () => {
+    const r = computeLineItems({
+      items: [{ productName: 'Loose item', quantity: 1, unitPrice: 50, gstRate: 0, unit: 'pcs' }],
+      productMap: new Map(),
+      isInterState: false,
+      orderDiscount: 0,
+      type: 'sale',
+    })
+    expect(r.txItems[0].gstTreatment).toBeNull()
+  })
+})

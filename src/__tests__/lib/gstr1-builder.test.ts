@@ -758,3 +758,54 @@ describe('Table 13 — cancelled documents are declared', () => {
     expect(notes.totnum).toBe(2)
   })
 })
+
+describe('Table 8 — nil-rated, exempt and non-GST go to different boxes', () => {
+  /*
+   * WHY (2026-08-08). buildNIL bucketed every 0% line into nil_amt because the
+   * treatment never reached it, so expt_amt and ngsup_amt were structurally
+   * always zero. Most of a kirana's zero-tax stock — fresh milk, unbranded rice
+   * and flour — is EXEMPT by notification, not nil-rated, and was being
+   * reported in the wrong box of a filed return.
+   */
+  const zeroSale = (gstTreatment: string | null) => ({
+    ...B2C_SALE,
+    cgst: 0, sgst: 0, igst: 0,
+    items: [{ ...B2C_SALE.items[0], gstRate: 0, cgst: 0, sgst: 0, igst: 0, gstTreatment }],
+  }) as Gstr1Transaction
+
+  const box = (t: string | null) => {
+    const e = buildNIL([zeroSale(t)]).inv[0]
+    return { nil: e.nil_amt, expt: e.expt_amt, ngs: e.ngsup_amt }
+  }
+
+  it('sends exempt supplies to expt_amt', () => {
+    const b = box('exempt')
+    expect(b.expt).toBeGreaterThan(0)
+    expect(b.nil).toBe(0)
+  })
+
+  it('sends non-GST supplies to ngsup_amt', () => {
+    const b = box('nonGst')
+    expect(b.ngs).toBeGreaterThan(0)
+    expect(b.nil).toBe(0)
+  })
+
+  it('sends nil-rated supplies to nil_amt', () => {
+    const b = box('nil')
+    expect(b.nil).toBeGreaterThan(0)
+    expect(b.expt).toBe(0)
+  })
+
+  it('falls back to the old rate-based rule when treatment is absent', () => {
+    /*
+     * Rows written before the column existed genuinely do not know their
+     * treatment. They must keep reporting exactly what they reported before —
+     * a historical period must not silently move amounts between boxes because
+     * new code shipped.
+     */
+    const b = box(null)
+    expect(b.nil).toBeGreaterThan(0)
+    expect(b.expt).toBe(0)
+    expect(b.ngs).toBe(0)
+  })
+})

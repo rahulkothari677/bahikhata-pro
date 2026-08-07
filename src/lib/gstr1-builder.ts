@@ -81,6 +81,8 @@ export interface Gstr1Item {
   productId: string | null
   productName: string
   hsn: string | null
+  /** taxable | nil | exempt | nonGst as at sale time. Null on pre-2026-08 rows. */
+  gstTreatment?: string | null
   quantity: number
   unit: string
   unitPrice: number
@@ -675,15 +677,26 @@ export function buildNIL(txns: Gstr1Transaction[]): { inv: Gstr1NilEntry[] } {
 
     for (const item of txn.items) {
       const taxable = itemTaxable(item)
-      // nil-rated = gstRate is 0 (0% GST but still a taxable supply)
-      if (item.gstRate === 0) {
+      /*
+       * Three legally distinct things, three boxes.
+       *
+       *   nil-rated — taxable supply at 0% (salt)
+       *   exempt    — exempted by notification (fresh milk, unbranded rice)
+       *   non-GST   — outside GST altogether (petrol, alcohol)
+       *
+       * The treatment is snapshotted on the line. Where it is absent — rows
+       * written before the column existed — fall back to the old rate-based
+       * rule rather than guessing, so historical periods report exactly what
+       * they reported before and nothing silently moves between boxes.
+       */
+      const treatment = item.gstTreatment
+      if (treatment === 'exempt') {
+        buckets[sply_ty].expt_amt = roundMoney(buckets[sply_ty].expt_amt + taxable)
+      } else if (treatment === 'nonGst') {
+        buckets[sply_ty].ngsup_amt = roundMoney(buckets[sply_ty].ngsup_amt + taxable)
+      } else if (treatment === 'nil' || item.gstRate === 0) {
         buckets[sply_ty].nil_amt = roundMoney(buckets[sply_ty].nil_amt + taxable)
       }
-      // expt_amt and ngsup_amt stay 0 — the app doesn't track gstTreatment
-      // on items yet (Product.gstTreatment exists in the schema but isn't
-      // passed to the builder). When it is, add:
-      //   if (item.gstTreatment === 'exempt') buckets[sply_ty].expt_amt += taxable
-      //   if (item.gstTreatment === 'nonGst') buckets[sply_ty].ngsup_amt += taxable
     }
   }
 

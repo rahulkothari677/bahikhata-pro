@@ -1,0 +1,12 @@
+-- GST treatment snapshotted onto each sale line.
+--
+-- GSTR-1 Table 8 reports nil-rated, exempt and non-GST supplies in separate
+-- boxes. Product.gstTreatment already held the distinction; it never reached
+-- the line item, so buildNIL could only bucket by rate and expt_amt/ngsup_amt
+-- were structurally always zero.
+--
+-- Nullable with no default and no backfill: existing rows genuinely do not know
+-- their treatment, and writing "taxable" across history would assert something
+-- unverified about already-filed periods. The builder falls back to the old
+-- rate-based behaviour where this is null.
+ALTER TABLE "TransactionItem" ADD COLUMN "gstTreatment" TEXT;

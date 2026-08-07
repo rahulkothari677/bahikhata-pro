@@ -50,6 +50,8 @@ export interface StoredLineItem {
    * 78/2020, so the gap is reported at filing time rather than blocking a sale.
    */
   hsn: string | null
+  /** taxable | nil | exempt | nonGst, as it was when the line was saved. */
+  gstTreatment: string | null
   discountAmount: number
   cgst: number
   sgst: number
@@ -259,6 +261,13 @@ export function computeLineItems(opts: {
        * The gap is surfaced at filing time instead, which is when a CA needs it.
        */
       hsn: p.product?.hsn || null,
+      /*
+       * GST treatment snapshotted for the same reason as hsn above: Table 8
+       * reports nil-rated, exempt and non-GST in separate boxes, and buildNIL
+       * could only ever see the rate. Reclassifying a product next year must
+       * not rewrite a return already filed under the old treatment.
+       */
+      gstTreatment: p.product?.gstTreatment || null,
       discountAmount: fromPaise(itemDiscountPaise),
       cgst: fromPaise(itemCgstPaise),
       sgst: fromPaise(itemSgstPaise),
