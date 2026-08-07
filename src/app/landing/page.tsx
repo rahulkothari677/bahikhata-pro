@@ -240,6 +240,13 @@ export default function LandingPage() {
           </div>
           <div className="flex gap-6">
             <a href="/privacy" className="hover:text-foreground">Privacy Policy</a>
+            {/*
+              * /terms has existed all along — it was simply never linked from
+              * anywhere a visitor could reach. A terms page nobody can find is
+              * the same as not having one, and this is a product that holds a
+              * shop's sales, customer names and GST filings.
+              */}
+            <a href="/terms" className="hover:text-foreground">Terms</a>
             <a href="/" className="hover:text-foreground">Open App</a>
             <a href="mailto:support@ekbook.app" className="hover:text-foreground">Contact</a>
           </div>

@@ -503,8 +503,22 @@ export function Ledger({ type }: { type: LedgerType }) {
               <p className="text-3xs text-muted-foreground uppercase tracking-wide font-medium">{isSale ? 'Total Sales' : 'Total Purchases'}</p>
             </div>
             <p className="text-xl font-bold tabular-nums">{formatINR(totalAmount)}</p>
-            {/* 🔒 V19-019 FIX: Label makes clear this is the loaded subset, not all-time total */}
-            <p className="text-2xs text-muted-foreground">{filtered.length} transactions{hasNextPage ? ' (loaded)' : ''}</p>
+            {/*
+              * This total covers only the rows fetched so far, not all time —
+              * the warning is necessary and must stay.
+              *
+              * It used to read "50 transactions (loaded)". "Loaded" is a
+              * programmer's word for a programmer's concern: it describes what
+              * the app did, not what the shopkeeper is looking at. Someone
+              * reading it has no way to know whether ₹10,052 is their whole
+              * month or the first page of it — which is the one thing the line
+              * exists to tell them.
+              */}
+            <p className="text-2xs text-muted-foreground">
+              {hasNextPage
+                ? `First ${filtered.length} · scroll for more`
+                : `${filtered.length} transactions`}
+            </p>
           </div>
         </div>
         {isSale && !hideProfit && (

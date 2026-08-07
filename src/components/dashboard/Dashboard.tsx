@@ -236,7 +236,25 @@ export function Dashboard() {
     )
   }
 
-  if (isLoading || !data) {
+  /*
+   * `!data.kpis` belongs here, with loading — not below with the defaults.
+   *
+   * The line below used to substitute a full set of ZEROS when a response
+   * arrived without kpis, to stop an older crash. It stops the crash, but what
+   * it puts on screen is a shop that took ₹0 today, made ₹0 profit and is owed
+   * ₹0 — stated as confidently as real figures, with no way to tell.
+   *
+   * For a ledger that is the worst possible failure. A blank or a spinner says
+   * "I don't know yet" and the shopkeeper waits; a fabricated ₹0 says "your
+   * day was empty" and they believe it. Falling through to the skeleton keeps
+   * the crash fixed and tells the truth.
+   *
+   * I could not reproduce the symptom I originally logged this as — the
+   * dashboard's first load already shows a proper skeleton, and every other
+   * screen reading these numbers guards with a dash or a null. This is the one
+   * path that could still put an invented zero on screen.
+   */
+  if (isLoading || !data || !data.kpis) {
     return (
       <div className="space-y-3 lg:space-y-5">
         <DateRangeHeader
@@ -262,8 +280,11 @@ export function Dashboard() {
 
   // 🔒 BUG FIX V5: Add null checks to prevent crash when API returns error
   // Was: const { kpis, ... } = data → if data is partial/missing, crash
-  // Now: provide defaults for every field
-  const kpis = data.kpis || { todayRevenue: 0, todayProfit: 0, todayTxnCount: 0, todayCreditNoteCount: 0, rangeRevenue: 0, rangeProfit: 0, rangeExpenses: 0, rangePurchases: 0, rangeIncome: 0, revenueGrowth: 0, profitGrowth: 0, totalReceivable: 0, totalPayable: 0, rangeSaleCount: 0 }
+  // The zero-filled default that used to live here has moved into the loading
+  // check above: money the app has not actually read must not be printed as a
+  // number. The lists below keep their [] defaults — an empty chart says
+  // "nothing to show", which is honest, whereas ₹0 asserts a fact.
+  const kpis = data.kpis
   const salesTrend = data.salesTrend || []
   const topProducts = data.topProducts || []
   const categoryBreakdown = data.categoryBreakdown || []

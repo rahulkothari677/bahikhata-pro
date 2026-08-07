@@ -886,6 +886,31 @@ and include enough context to reproduce.
 
   Parties: Anita Singh (×2), Mahalaxmi Suppliers (×2), rahul1, rahul2, rahul3, navin 1, Sunita Devi, Mohammed Irfan.
 
+  **UPDATE 2026-08-07 (repair blocked on an env var — by design).** The 10 rows
+  were re-confirmed live via `GET /api/debug/paise-audit`, same parties as
+  recorded above, and their ids captured so the repair is a single paste:
+
+  ```
+  cmruktjtx0001jx04dgprhsqz,cmrujm24j0001jx04bmgzp4cp,cmruifiot0001ky04lh34osv8,cmruh43ow0009l8049r8wrzm7,cmruh0w0e0001ib04dvl8wir3,cmrugyena0001l804q60b848r,cmruc7sae0001ih043qmqwpgm,cmruc6g5j0001jr0419ffuliu,cmrua2ovl0001ju04csa2ye8j,cmrtd9ro40003jo048q7eh1vk
+  ```
+
+  Nine hold 1,000,000 paise (reads ₹10,000, true ₹100); one — Anita Singh,
+  `cmruc7sae0001ih043qmqwpgm` — holds 5,000,000 (reads ₹50,000, true ₹500). All
+  created 2026-07-20/21, the window the handler-keying bug was live. Payments on
+  2026-07-22 and after are clean, so the write path is genuinely fixed.
+
+  **Cannot be repaired from here.** `POST /api/debug/repair-payment-amount`
+  returns 403 "Repair endpoints disabled in production" — `isRepairAllowed()`
+  requires `ALLOW_REPAIR_ENDPOINTS=true`, which is deliberately unset on Vercel.
+  That gate is correct and must not be worked around: an endpoint that divides
+  money by 100 should not be reachable on a live shop by default.
+
+  To repair, the owner must: set `ALLOW_REPAIR_ENDPOINTS=true` in Vercel →
+  redeploy → `POST /api/debug/repair-payment-amount?paymentIds=<the csv above>`
+  → verify with `/api/debug/party-balance-recon` → **remove the env var and
+  redeploy again**. Leaving it set would leave the repair tool live in
+  production, which is a far worse problem than ten wrong dummy rows.
+
   **Why the audit's own row-level counters missed them** — and this is the part worth keeping: `suspiciousRows` and `almostCertainlyCorruptRows` both report **0**, because they use ABSOLUTE ceilings and ₹10,000 sits far below them. That is the exact blind spot the 2026-07-22 note in the endpoint already describes. Only the `maxToMedianRatio` spread heuristic flags these columns, which is why that heuristic must not be "tidied away" for being noisy — it is the only check that sees them.
 
 - **Status**: PARTIALLY RESOLVED — cause found, fixed and guarded; write path clean since 2026-07-22. **10 historical rows remain corrupt at rest.** Repair needs `ALLOW_REPAIR_ENDPOINTS=true` set in Vercel (deliberately blank in production) and then `POST /api/debug/repair-payment-amount` by explicit id. AWAITING OWNER DECISION — all current data is dummy, so impact is presentational only.
