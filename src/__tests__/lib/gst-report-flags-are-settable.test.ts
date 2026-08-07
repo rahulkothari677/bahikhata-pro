@@ -39,6 +39,55 @@ function gstRouteFiles(dir: string, out: string[] = []): string[] {
 const routes = gstRouteFiles(GST_ROUTES)
 const validationSrc = fs.readFileSync(VALIDATION, 'utf8')
 
+/**
+ * Every app source file, read once.
+ *
+ * Needed because "settable" is too narrow a question. Some columns a return
+ * reads are deliberately NOT client-settable — cgst, sgst and igst are derived
+ * from the line items, and accepting them from a request would let a caller
+ * state their own tax. The real question is whether ANYTHING writes them.
+ */
+function allSource(dir: string, out: string[] = []): string[] {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name)
+    if (entry.isDirectory()) {
+      if (entry.name === 'node_modules' || entry.name === '__tests__') continue
+      allSource(full, out)
+    } else if (/\.tsx?$/.test(entry.name)) {
+      out.push(fs.readFileSync(full, 'utf8'))
+    }
+  }
+  return out
+}
+const APP_SOURCE = allSource(path.join(ROOT, 'src'))
+
+/**
+ * Columns a GST return SELECTS — `field: true` inside a Prisma select.
+ *
+ * WHY THIS EXISTS (2026-08-07). The FLAG_FILTER above was written after
+ * Transaction.isReverseCharge turned out to be read by GSTR-3B and written by
+ * nothing. I scoped it to `isX: true|false`, which caught that one instance and
+ * was blind to every other shape it could take.
+ *
+ * TransactionItem.hsn then failed in exactly the same way and walked straight
+ * past this guard: a STRING column, read by GSTR-1 Table 12, by the HSN summary
+ * and by the e-invoice IRN builder, and written by nothing but a backup
+ * restore. Every invoice the app had ever produced carried a blank HSN, so
+ * Table 12 returned zero rows against ₹9,938.90 of reported sales — a GSTR-1
+ * that cannot be filed, and an e-invoice the NIC portal would reject.
+ *
+ * Twice is a pattern, and the pattern was mine: drawing the class around the
+ * single instance in front of me. A column a return depends on needs a write
+ * path whatever its type — boolean, string or number.
+ */
+const SELECTED_COLUMN = /\b(\w+)\s*:\s*true\b/g
+
+/** Prisma query plumbing that looks like a column but is not one. */
+const NOT_A_COLUMN = new Set<string>([
+  'select', 'include', 'where', 'orderBy', 'take', 'skip', 'distinct',
+  'by', 'having', 'cursor', '_sum', '_count', '_avg', '_min', '_max',
+])
+
 /*
  * Boolean flags used as Prisma filters, e.g. `isReverseCharge: true`.
  *
