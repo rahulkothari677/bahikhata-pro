@@ -28,17 +28,34 @@
 /** Resolve true to allow the navigation, false to stay put. */
 type ExitGuard = () => Promise<boolean>
 
-let current: ExitGuard | null = null
+/*
+ * A STACK, not a single slot.
+ *
+ * The first version of this was one slot, on the reasoning that two screens are
+ * never leavable at once. That was wrong, and the barcode scanner proved it: it
+ * opens as a full-screen overlay ON TOP of the sale form, which already has a
+ * guard registered. With one slot the scanner's guard overwrote the form's, and
+ * unregistering on close set it to null — leaving the form underneath with no
+ * guard at all until it happened to re-register.
+ *
+ * Overlays nest. The stack lets the innermost one answer, and popping restores
+ * whatever was beneath it, which is the behaviour the DOM already implies.
+ */
+const stack: ExitGuard[] = []
 
 /**
- * Register (or clear, with null) the guard for the mounted screen.
+ * Register a guard for as long as the caller is mounted.
  *
- * Deliberately single-slot: two screens are never mounted and leavable at the
- * same time, and a stack would only invite a stale guard to outlive its screen
- * and block navigation from somewhere else entirely.
+ * Returns its own unregister function rather than taking `null` later, so a
+ * caller cannot accidentally clear somebody else's guard — the only thing it
+ * can remove is the one it added.
  */
-export function registerExitGuard(guard: ExitGuard | null) {
-  current = guard
+export function registerExitGuard(guard: ExitGuard): () => void {
+  stack.push(guard)
+  return () => {
+    const i = stack.lastIndexOf(guard)
+    if (i !== -1) stack.splice(i, 1)
+  }
 }
 
 /**
@@ -50,9 +67,10 @@ export function registerExitGuard(guard: ExitGuard | null) {
  * screen they are trying to leave.
  */
 export async function confirmExit(): Promise<boolean> {
-  if (!current) return true
+  const top = stack[stack.length - 1]
+  if (!top) return true
   try {
-    return await current()
+    return await top()
   } catch {
     return true
   }

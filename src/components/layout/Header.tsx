@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useAppStore, type ViewType } from '@/store/app-store'
 import { useTranslation } from '@/hooks/use-translation'
-import { Plus, Sparkles, ArrowLeft, Search, Check, Globe, Mic, ScanLine } from 'lucide-react'
+import { Plus, Sparkles, ArrowLeft, Search, Check, Globe, Mic } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu'
@@ -269,14 +269,44 @@ export function Header({ className }: { className?: string } = {}) {
               >
                 <Mic className="w-5 h-5" />
               </Button>
+              {/*
+               * AI bill scan, NOT the barcode scanner.
+               *
+               * I put a barcode scanner here and it was the wrong tool twice
+               * over: the barcode scanner already lives inside the product
+               * search field, an inch below, so this duplicated it — and it
+               * displaced the AI bill scan, which had no other home on a phone.
+               * Two buttons for one job, and none for the other.
+               *
+               * They are different jobs. Barcode identifies ONE product you are
+               * holding; the AI scan reads a whole supplier bill and fills the
+               * form from it. The second is the one worth a permanent slot.
+               */}
               <Button
                 size="iconTouch"
                 variant="ghost"
-                onClick={() => { haptic.click(); useAppStore.getState().fireTriggerBarcodeOpen() }}
-                title="Scan a barcode"
-                aria-label="Scan a barcode"
+                onClick={() => {
+                  haptic.click()
+                  /*
+                   * Say which kind of bill, every time.
+                   *
+                   * setView('scanner') alone inherits whatever scannerBillType
+                   * was last set to — so opening the scanner from a Sale could
+                   * land you in purchase mode because that is where you used it
+                   * an hour ago. State that outlives the intent behind it.
+                   *
+                   * A sale is the overwhelmingly common case, so it is the
+                   * default everywhere; only the purchase form says otherwise.
+                   */
+                  useAppStore.getState().setScannerBillType(
+                    currentView === 'new-purchase' ? 'purchase' : 'sale',
+                  )
+                  setView('scanner')
+                }}
+                title={t('action.scan_bill')}
+                aria-label={t('action.scan_bill')}
               >
-                <ScanLine className="w-5 h-5" />
+                <Sparkles className="w-5 h-5" />
               </Button>
             </div>
           )}
@@ -288,7 +318,14 @@ export function Header({ className }: { className?: string } = {}) {
             <Button
               size="sm"
               variant="outline"
-              onClick={() => setView('scanner')}
+              /* Same inherited-state trap as the mobile button above — this one
+                 had it too, and on desktop it is the ONLY scan entry point. */
+              onClick={() => {
+                useAppStore.getState().setScannerBillType(
+                  currentView === 'new-purchase' ? 'purchase' : 'sale',
+                )
+                setView('scanner')
+              }}
               className="hidden lg:flex gap-2 border-primary/30 text-primary hover:bg-primary/10"
             >
               <Sparkles className="w-4 h-4" />
