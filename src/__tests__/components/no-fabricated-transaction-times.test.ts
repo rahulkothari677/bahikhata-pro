@@ -29,6 +29,7 @@
  */
 import fs from 'fs'
 import path from 'path'
+import { hasRecordedTime, formatDateMaybeTime, formatDate } from '@/lib/utils'
 
 const SRC = path.join(process.cwd(), 'src')
 
@@ -82,6 +83,39 @@ describe('no screen invents a time for a business date', () => {
     }
 
     expect(offenders).toEqual([])
+  })
+})
+
+describe('formatDateMaybeTime shows a time only when one was recorded', () => {
+  /*
+   * The first version of this fix removed the time from the ledger entirely.
+   * That was right about the lie and wrong about the remedy — the owner wanted
+   * the time back, and he was right to: it is genuinely useful. The answer is
+   * to record a real one and show it, and to stay silent only where there is
+   * nothing to show.
+   */
+  it('stays silent on a date-only value (the old 05:30 case)', () => {
+    expect(hasRecordedTime('2026-08-06')).toBe(false)
+    expect(formatDateMaybeTime('2026-08-06')).toBe(formatDate('2026-08-06'))
+    expect(formatDateMaybeTime('2026-08-06')).not.toMatch(/\d{1,2}:\d{2}/)
+  })
+
+  it('shows the clock on a value that carries a real moment', () => {
+    const real = '2026-08-06T09:42:17.000Z'
+    expect(hasRecordedTime(real)).toBe(true)
+    expect(formatDateMaybeTime(real)).toMatch(/\d{1,2}:\d{2}/)
+  })
+
+  it('treats exactly-midnight-UTC as "no time", including with a Date object', () => {
+    // This is the whole basis of the distinction, so it is pinned rather than
+    // assumed: only an exact UTC midnight counts as date-only.
+    expect(hasRecordedTime(new Date('2026-08-06T00:00:00.000Z'))).toBe(false)
+    expect(hasRecordedTime(new Date('2026-08-06T00:00:00.001Z'))).toBe(true)
+    expect(hasRecordedTime(new Date('2026-08-06T00:00:01.000Z'))).toBe(true)
+  })
+
+  it('does not throw on rubbish input', () => {
+    expect(hasRecordedTime('not a date')).toBe(false)
   })
 })
 

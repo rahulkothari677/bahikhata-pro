@@ -15,7 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { toast as sonnerToast } from 'sonner'
 import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
-import { formatINR, formatDateTime, formatDate, cn } from '@/lib/utils'
+import { formatINR, formatDateTime, formatDate, formatDateMaybeTime, cn } from '@/lib/utils'
 import { roundMoney } from '@/lib/money'
 // 🔒 AUDIT C5: shared due rule + the breakdown that lets a bill explain where
 // its money went, instead of a total that quietly shrinks.
@@ -591,7 +591,7 @@ export function TransactionDetail() {
               <div className="flex-1 min-w-0">
                 <p className="text-xs text-white/70 uppercase tracking-wide">{isIncome ? 'Income' : 'Expense'}</p>
                 <h2 className="text-2xl font-bold font-heading tracking-tight truncate">{txn.category || 'Other'}</h2>
-                <p className="text-sm text-white/70">{formatDate(txn.date)}</p>
+                <p className="text-sm text-white/70">{formatDateMaybeTime(txn.date)}</p>
               </div>
               <div className="text-right flex-shrink-0">
                 <p className="text-2xl font-bold tabular-nums">
@@ -705,7 +705,7 @@ export function TransactionDetail() {
               <CardContent className="space-y-2 text-sm">
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5" /> Date</span>
-                  <span className="font-medium">{formatDate(txn.date)}</span>
+                  <span className="font-medium">{formatDateMaybeTime(txn.date)}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Payment</span>
@@ -942,7 +942,7 @@ export function TransactionDetail() {
                       )}
                     </div>
                     <p className="text-2xs text-muted-foreground mt-0.5">
-                      {formatDate(rev.date)}
+                      {formatDateMaybeTime(rev.date)}
                       {rev.noteReason && ` • ${rev.noteReason.replace(/-/g, ' ')}`}
                     </p>
                   </div>
@@ -983,7 +983,7 @@ export function TransactionDetail() {
             >
               <div className="flex-1 min-w-0">
                 <span className="font-semibold text-sm">{txn.originalTransaction.invoiceNo || '—'}</span>
-                <p className="text-2xs text-muted-foreground mt-0.5">{formatDate(txn.originalTransaction.date)}</p>
+                <p className="text-2xs text-muted-foreground mt-0.5">{formatDateMaybeTime(txn.originalTransaction.date)}</p>
               </div>
               <div className="text-right flex-shrink-0 ml-2">
                 <p className="font-bold text-sm tabular-nums">{formatINR(txn.originalTransaction.totalAmount)}</p>
@@ -1535,7 +1535,7 @@ function PrintInvoiceContent({ txn, setting, hideProfit }: { txn: any; setting: 
           <h2 className="text-lg font-bold tracking-wide uppercase">{isSale ? 'Tax Invoice' : 'Purchase Bill'}</h2>
           <div className="text-xs text-gray-700 mt-1 space-y-0.5">
             <p><span className="text-gray-500">Invoice No:</span> <span className="font-mono font-medium">{txn.invoiceNo || txn.id.slice(-8)}</span></p>
-            <p><span className="text-gray-500">Date:</span> <span className="font-medium">{formatDate(txn.date)}</span></p>
+            <p><span className="text-gray-500">Date:</span> <span className="font-medium">{formatDateMaybeTime(txn.date)}</span></p>
             <p><span className="text-gray-500">Payment:</span> <span className="font-medium uppercase">{txn.paymentMode}</span></p>
           </div>
         </div>

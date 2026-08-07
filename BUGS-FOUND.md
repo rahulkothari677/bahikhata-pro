@@ -41,6 +41,29 @@ and include enough context to reproduce.
   600px offset from a ten-item bill would land partway down a three-line one.
 - **Status**: FIXED
 
+### BUG-070b — Removing the fabricated time removed a useful one (Medium/UX) — FIXED
+
+- **Found**: 2026-08-07, reported by the owner after BUG-070 shipped ("now time is not visible in the app")
+- **File**: `src/lib/utils.ts`, `src/components/ledger/TransactionEntry.tsx`
+- **Severity**: Medium
+- **Description**: BUG-070 was right that "05:30 am" was invented, and wrong about
+  the remedy. Dropping the time everywhere also removed information the
+  shopkeeper actually wants. The correct answer is to RECORD a real time and
+  show it, and to stay silent only where none exists.
+- **Fix applied**: 2026-08-07. An entry dated **today** now sends a full
+  timestamp, because for a same-day sale the moment of entry is the moment of
+  the sale. A **backdated** entry still sends date-only, because nobody knows
+  what time it happened. `formatDateMaybeTime()` shows the clock when the value
+  carries one and the date alone when it does not — so old rows and backdated
+  rows stay honest while new entries show a real time.
+- **Why "exactly midnight UTC" is a safe marker for date-only**: the API does
+  `new Date("2026-08-06")` → `2026-08-06T00:00:00.000Z`. A recorded moment
+  would have to land on that exact millisecond to be mistaken for it.
+- **Regression guard**: extended `no-fabricated-transaction-times.test.ts` —
+  date-only renders with no clock, a real timestamp renders one, and the
+  midnight boundary is pinned to the millisecond.
+- **Status**: FIXED
+
 ### BUG-070 — Every transaction claimed to have happened at 05:30 am (High/Trust) — FIXED
 
 - **Found**: 2026-08-07, reported by the owner
