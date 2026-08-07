@@ -35,6 +35,21 @@
  * (flour, rice, pulses, honey) attract 5%, which is why the rate is checked
  * before any of this is applied.
  */
+/*
+ * REMOVED 1701 (sugar) on first live run, and the reason is the useful part.
+ *
+ * Sugar is 5% GST. I had listed it with a comment reasoning that the rate check
+ * would stop it being misapplied — and the rate check DOES work. But the shop's
+ * dummy record had sugar at 0%, so the rate check passed it through and the
+ * suggester confidently classified a 5% commodity as exempt.
+ *
+ * The lesson: the rate guard protects against a correctly-priced product with a
+ * misleading HSN. It cannot protect against a MIS-priced product, and a
+ * shopkeeper who has typed the wrong rate is exactly who most needs the
+ * suggestion to be conservative. So the list now carries only goods that are
+ * genuinely zero-tax in their ordinary retail form, and anything whose
+ * exemption depends on branding, packaging or grade stays off it.
+ */
 const EXEMPT_PREFIXES = [
   '0401', // fresh milk and cream, not concentrated or sweetened
   '0403', // curd, lassi, buttermilk
@@ -55,9 +70,6 @@ const EXEMPT_PREFIXES = [
   '1006', // rice (unbranded)
   '1101', // wheat or meslin flour — atta (unbranded)
   '1102', // other cereal flours (unbranded)
-  '1701', // NOTE: most sugar is 5%. Only specific unrefined forms are exempt —
-          // see the rate check in suggestGstTreatment, which stops this from
-          // being applied to a 5% product.
   '2501', // salt
 ]
 

@@ -82,3 +82,20 @@ describe('a shopkeeper’s own decision is never overwritten', () => {
     expect(shouldApplySuggestion(null, null)).toBe(false)
   })
 })
+
+describe('goods whose zero rate would be a data error, not a fact', () => {
+  it('does not call sugar exempt, even at 0%', () => {
+    /*
+     * Sugar (1701) is 5% GST. It was on the exempt list initially, reasoned
+     * safe because the rate check would catch it — and the rate check does
+     * work. But a shop's record had sugar at 0%, so the check passed and the
+     * suggester confidently classified a 5% commodity as exempt.
+     *
+     * The rate guard protects a correctly-priced product with a misleading HSN.
+     * It cannot protect a MIS-priced one — and a shopkeeper who typed the wrong
+     * rate is precisely who needs this to be conservative.
+     */
+    expect(suggestGstTreatment('1701', 0)).toBe('nil')
+    expect(suggestGstTreatment('1701', 5)).toBe('taxable')
+  })
+})
