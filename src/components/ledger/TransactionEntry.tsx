@@ -44,6 +44,8 @@ import { computeLineItems } from '@/lib/line-items'
 import { baseUnitOf, subUnitsFor, normalizeUnitName, resolveEnteredQuantity, normalizeToUnit, isCountUnit, stepForUnit } from '@/lib/units'
 import { readError } from '@/lib/read-error'
 import { invalidateMoneyCaches } from '@/lib/invalidate-money-caches'
+import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
+import { registerExitGuard } from '@/lib/exit-guard'
 
 const PAYMENT_MODES = [
   { value: 'cash', label: 'Cash' },
@@ -79,6 +81,8 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   const [affectsStock, setAffectsStock] = useState(false)
   const [originalTransactionId, setOriginalTransactionId] = useState<string | null>(null)
   const { setView, triggerRefresh, setScannerBillType, previousView, setPreviousView, features, triggerVoiceOpen, triggerBarcodeOpen } = useAppStore()
+  const { confirmDialog: confirmLeave, dialog: leaveDialogEl } = useConfirmDialog()
+
   const queryClient = useQueryClient()
   // 🔒 ROUND 10b (2026-07-22): the New Sale screen printed "Gross Profit
   // ₹X (Y%)" in the summary with NO staff gate — so a shop assistant with
@@ -96,6 +100,9 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   const [partyId, setPartyId] = useState('')
   const [partySearch, setPartySearch] = useState('')
   const [partyDropdownOpen, setPartyDropdownOpen] = useState(false)
+  /* Details starts closed on mobile; the lg: rules keep it open on desktop
+     regardless, so this only ever governs the phone. */
+  const [detailsOpen, setDetailsOpen] = useState(false)
   const [addPartyOpen, setAddPartyOpen] = useState(false)
   // 🔒 V9 4.4: Persistent stock warning banner (not just a toast)
   const [stockWarnings, setStockWarnings] = useState<any[]>([])
@@ -492,6 +499,37 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   // refreshed or closed the tab, all of those changes were lost silently.
   // Now: every input onChange calls markDirty() first.
   const markDirty = useCallback(() => { setPresetLoaded(false) }, [])
+
+  /*
+   * Ask before leaving a half-written sale.
+   *
+   * Autosave has already stored it, so nothing is at risk — what was missing
+   * was the user KNOWING that. Backing out used to drop the screen in silence,
+   * and recovering the work meant already knowing Drafts existed and that this
+   * is where it went. Nothing said so.
+   *
+   * The prompt is therefore about location, not rescue: "it is in Drafts".
+   * Offering a "Save" button would be theatre — the save has happened. Deleting
+   * it is a separate, deliberate act and lives in the Drafts manager, where the
+   * user can see what they are deleting.
+   *
+   * Not registered while saving: the navigation that follows a successful save
+   * is ours, not the user's, and must not be interrupted.
+   */
+  useEffect(() => {
+    if (items.length === 0 || saving) {
+      registerExitGuard(null)
+      return
+    }
+    registerExitGuard(async () =>
+      confirmLeave(
+        `This ${estimateMode ? 'estimate' : isSale ? 'sale' : 'purchase'} is saved in Drafts — you can finish it later.`,
+        { title: 'Leave without saving?', confirmLabel: 'Leave', destructive: false },
+      ),
+    )
+    return () => registerExitGuard(null)
+  }, [items.length, saving, confirmLeave, estimateMode, isSale])
+
 
   const handleAddProduct = (product: any) => {
     // User manually added a product — clear presetLoaded so autosave resumes
@@ -989,6 +1027,9 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
         </button>
       )}
 
+      {/* Confirmation shown when leaving a half-written entry. */}
+      {leaveDialogEl}
+
       {/* Draft manager modal */}
       <DraftManagerModal
         open={draftModalOpen}
@@ -1019,8 +1060,20 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
         />
       )}
 
-      {/* Top action bar — no Back button (app header has it) and no Save button (bottom bar has it) */}
-      <div className="flex items-center justify-between gap-3">
+      {/*
+       * This whole strip is desktop-only now.
+       *
+       * On a phone it had become an empty band: the title was already in the
+       * app header, so hiding the duplicate left a lone coloured cart icon
+       * floating beside two buttons — decoration occupying a row on the screen
+       * where room is scarcest. The mic and the scanner moved up into the app
+       * header (see Header.tsx), which is where a hand reaching for them
+       * already is, and the row goes with them.
+       *
+       * Desktop keeps it: there the header is wide, the title reads as a page
+       * heading rather than a repetition, and nothing is competing for space.
+       */}
+      <div className="hidden lg:flex items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
           <div className={cn(
             'w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0',
@@ -1030,14 +1083,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
               ? <ShoppingCart className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
               : <Truck className="w-5 h-5 text-amber-600 dark:text-amber-400" />}
           </div>
-          {/*
-           * The app header already says "New Sale". Repeating it here, with
-           * "Fill in the details below" underneath, spent a whole band of a
-           * phone screen restating the title and describing a form the user is
-           * already looking at. On desktop there is room for it; on a phone
-           * there is not, and the instruction earns nothing either way.
-           */}
-          <div className="hidden lg:block">
+          <div>
             <h2 className="text-lg font-bold font-heading tracking-tight">
               {isCreditNote ? 'Credit Note' : isDebitNote ? 'Debit Note' : estimateMode ? 'New Estimate' : `New ${isSale ? 'Sale' : 'Purchase'}`}
             </h2>
@@ -1735,7 +1781,29 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                     placeholder={`Search ${isSale ? 'customer' : 'supplier'} by name or phone...`}
                     value={partySearch}
                     onChange={(e) => { setPartySearch(e.target.value); setPartyDropdownOpen(true) }}
-                    onFocus={() => setPartyDropdownOpen(true)}
+                    /*
+                     * Lift the field towards the top of the screen on focus.
+                     *
+                     * The dropdown opens BELOW the input, and the on-screen
+                     * keyboard covers roughly the bottom half of a phone. With
+                     * the field sitting mid-screen, the results it opened were
+                     * behind the keyboard — you typed a name and could not see
+                     * whether it had matched.
+                     *
+                     * The delay lets the keyboard finish animating in, so the
+                     * scroll is measured against the viewport that will actually
+                     * exist rather than the one being replaced.
+                     */
+                    onFocus={(e) => {
+                      setPartyDropdownOpen(true)
+                      const el = e.currentTarget
+                      setTimeout(() => {
+                        const top = el.getBoundingClientRect().top
+                        // ~96px clears the sticky app header and leaves the rest
+                        // of the visible area to the results list.
+                        window.scrollBy({ top: top - 96, behavior: 'smooth' })
+                      }, 320)
+                    }}
                     className="pl-9"
                   />
 
@@ -1752,19 +1820,19 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                         </div>
                       ) : (
                         <>
-                          {/* Sticky, so it stays put while the list scrolls —
-                              it used to sit below every result. */}
-                          <div className="sticky top-0 z-10 bg-popover p-2 border-b border-border">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              className="w-full gap-1 border-primary/40 text-primary hover:bg-primary/5"
-                              onClick={() => { setPartyDropdownOpen(false); setAddPartyOpen(true) }}
-                            >
-                              <Plus className="w-3.5 h-3.5" /> Add New {isSale ? 'Customer' : 'Supplier'}
-                            </Button>
-                          </div>
+                          {/*
+                           * The sticky "Add New Customer" that used to head this
+                           * list is gone. There is an "Add New" button beside the
+                           * Customer heading, three centimetres above and always
+                           * visible, doing exactly the same thing — so the
+                           * dropdown was spending its first row, and a chunk of
+                           * the little space left above the keyboard, on a
+                           * duplicate of a button already on screen.
+                           *
+                           * The empty-state button below is NOT a duplicate: when
+                           * there are no matches it is the only thing to do, and
+                           * it carries the searched name into the new record.
+                           */}
                           {partySearch && (
                             <div className="px-3 py-1.5 text-3xs text-muted-foreground uppercase font-medium border-b border-border">
                               {filteredParties.length} match{filteredParties.length !== 1 ? 'es' : ''}
@@ -1815,11 +1883,42 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
           </Card>
 
           {/* Transaction details */}
+          {/*
+           * Collapsed on a phone, open on desktop.
+           *
+           * Details holds Date, Invoice No., GST type, Discount, Payment mode
+           * and Paid amount — roughly 470px of form. On the overwhelming
+           * majority of sales none of it is touched: the date defaults to
+           * today, the invoice number is optional and auto-assigned, GST is
+           * derived from the customer, there is no discount, and payment is
+           * cash in full. Six controls held permanent space to be left alone.
+           *
+           * The header states what is inside, so it never has to be opened to
+           * be checked — "7 Aug · Cash" answers the question the section exists
+           * to answer. Desktop keeps everything expanded, because there the
+           * right-hand column is otherwise empty space.
+           */}
           <Card className="shadow-card border-border/60 order-3 lg:order-none">
-            <div className="p-4 space-y-3">
-              <h3 className="font-semibold text-sm flex items-center gap-2">
-                <Calendar className="w-4 h-4" /> Details
-              </h3>
+            <div className="p-3 sm:p-4 space-y-3">
+              <button
+                type="button"
+                onClick={() => setDetailsOpen(v => !v)}
+                className="w-full flex items-center justify-between gap-2 min-h-[44px] lg:pointer-events-none"
+                aria-expanded={detailsOpen}
+              >
+                <h3 className="font-semibold text-sm flex items-center gap-2">
+                  <Calendar className="w-4 h-4" /> Details
+                </h3>
+                <span className="flex items-center gap-2 lg:hidden">
+                  <span className="text-xs text-muted-foreground truncate max-w-[150px]">
+                    {new Date(date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                    {' · '}
+                    {paymentMode.charAt(0).toUpperCase() + paymentMode.slice(1)}
+                  </span>
+                  <ChevronDown className={cn('w-4 h-4 text-muted-foreground transition-transform', detailsOpen && 'rotate-180')} />
+                </span>
+              </button>
+              <div className={cn('space-y-3', !detailsOpen && 'hidden lg:block')}>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label htmlFor="field-date">Date</Label>
@@ -1954,6 +2053,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                   </p>
                 </div>
               ) : null}
+              </div>
             </div>
           </Card>
 
