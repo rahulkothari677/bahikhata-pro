@@ -140,7 +140,15 @@ export function BarcodeScanner({
         }, 600)
       }
 
-      engineRef.current = await startDecoding(stream, videoRef.current, { onCode: handleCode })
+      engineRef.current = await startDecoding(stream, videoRef.current, {
+        onCode: handleCode,
+        // The native engine can give up mid-scan on a device where it is
+        // present but broken; keep the label honest when it does.
+        onEngineChange: setEngine,
+        // Reached only if BOTH engines fail after the camera opened; startup
+        // failures reject startDecoding and land in the catch below.
+        onError: setError,
+      })
       setEngine(engineRef.current.engine)
 
       /*

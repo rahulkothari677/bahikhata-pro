@@ -38,6 +38,18 @@ export interface ScanEngine {
 
 export interface ScanCallbacks {
   onCode: (code: string, format: string) => void
+  /** Fired if the engine changes after start — see the native path's bail-out. */
+  onEngineChange?: (engine: EngineName) => void
+  /**
+   * Fired when scanning has failed in a way the user must be told about.
+   *
+   * Only the mid-scan fallback can reach this: failures during startup reject
+   * startDecoding itself and are handled by the caller's try/catch. But once
+   * the loop is running there is no promise left to reject into, and a scanner
+   * that has quietly stopped decoding looks exactly like one pointed at a bad
+   * barcode — the shopkeeper would keep trying, with no way to know.
+   */
+  onError?: (message: string) => void
 }
 
 /** Formats worth looking for, in BarcodeDetector's naming. */
@@ -100,7 +112,7 @@ export async function nativeEngineAvailable(): Promise<boolean> {
 export async function startDecoding(
   stream: MediaStream,
   video: HTMLVideoElement,
-  { onCode }: ScanCallbacks,
+  { onCode, onEngineChange, onError }: ScanCallbacks,
 ): Promise<ScanEngine> {
   if (await nativeEngineAvailable()) {
     const Detector = (globalThis as any).BarcodeDetector
@@ -113,16 +125,63 @@ export async function startDecoding(
 
     let stopped = false
 
+    /*
+     * Give up on the native engine if it cannot actually decode.
+     *
+     * BarcodeDetector's presence is not a promise that it works. On Android it
+     * is backed by a Play Services module that can be missing, mid-download, or
+     * broken on a particular build — and in those states detect() throws on
+     * every frame rather than failing to construct. Swallowing that silently
+     * would put the shop straight back to "it does not scan at all", with no
+     * clue why, which is the exact fault this whole change exists to fix.
+     *
+     * Consecutive, not cumulative: an occasional throw is normal (a frame can
+     * arrive mid-resize, the detector can be busy) and must not accumulate over
+     * a long session into a false verdict. Ten in a row is about a third of a
+     * second — long enough that it cannot be a hiccup, short enough that the
+     * shopkeeper only notices the scan took a moment longer to get going.
+     */
+    let consecutiveErrors = 0
+    let zxingControls: IScannerControls | null = null
+    /*
+     * Distinct from `stopped`, which the mid-scan bail-out also sets to end the
+     * native loop. `closed` means the user shut the scanner, and it is the only
+     * thing that can answer "should the fallback still be starting?" — without
+     * it, closing the sheet during that await leaves a ZXing decode loop
+     * running against a dead stream, because stop() ran while zxingControls was
+     * still null and had nothing to cancel.
+     */
+    let closed = false
+
     const loop = async () => {
       if (stopped) return
       try {
         const found = await detector.detect(video)
+        consecutiveErrors = 0
         if (!stopped && found && found.length) {
           onCode(found[0].rawValue, found[0].format || 'UNKNOWN')
         }
       } catch {
-        // A frame can arrive mid-resize, or the detector can be busy. Neither
-        // is worth reporting — the next frame is 33ms away.
+        consecutiveErrors++
+        if (consecutiveErrors >= 10 && !stopped) {
+          stopped = true
+          // Hand the SAME stream to ZXing — the camera is already open and
+          // permission is already granted, so this is invisible to the user
+          // beyond the engine label changing.
+          onEngineChange?.('zxing')
+          startZxing(stream, video, onCode).then(
+            (c) => {
+              if (closed) c.stop()
+              else zxingControls = c
+            },
+            (err) => {
+              // Both engines are down. Say so rather than leaving a live
+              // preview that will never read anything.
+              if (!closed) onError?.(err?.message || 'Scanning failed on this device.')
+            },
+          )
+          return
+        }
       }
       if (!stopped) requestFrame()
     }
@@ -145,6 +204,10 @@ export async function startDecoding(
       stream,
       stop: () => {
         stopped = true
+        closed = true
+        // May have fallen back mid-scan; that reader owns a decode loop of its
+        // own and would keep running behind a closed sheet.
+        zxingControls?.stop()
         stream.getTracks().forEach((t) => t.stop())
         video.srcObject = null
       },
@@ -152,6 +215,26 @@ export async function startDecoding(
   }
 
   // ---- Fallback: ZXing in JavaScript ----
+  const controls = await startZxing(stream, video, onCode)
+
+  return {
+    engine: 'zxing',
+    stream,
+    stop: () => {
+      controls.stop()
+      stream.getTracks().forEach((t) => t.stop())
+    },
+  }
+}
+
+/** ZXing set up over an already-open stream. Used as the fallback, twice over:
+ *  chosen up front when BarcodeDetector is absent, and switched to mid-scan if
+ *  a present-but-broken BarcodeDetector keeps throwing. */
+async function startZxing(
+  stream: MediaStream,
+  video: HTMLVideoElement,
+  onCode: (code: string, format: string) => void,
+): Promise<IScannerControls> {
   const { BrowserMultiFormatReader } = await import('@zxing/browser')
   const { DecodeHintType, BarcodeFormat } = await import('@zxing/library')
 
@@ -176,17 +259,7 @@ export async function startDecoding(
     delayBetweenScanSuccess: 500,
   })
 
-  let controls: IScannerControls | null = null
-  controls = await reader.decodeFromStream(stream, video, (result) => {
+  return reader.decodeFromStream(stream, video, (result) => {
     if (result) onCode(result.getText(), result.getBarcodeFormat?.toString?.() || 'UNKNOWN')
   })
-
-  return {
-    engine: 'zxing',
-    stream,
-    stop: () => {
-      controls?.stop()
-      stream.getTracks().forEach((t) => t.stop())
-    },
-  }
 }

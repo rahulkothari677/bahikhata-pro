@@ -126,3 +126,64 @@ describe('opening the camera', () => {
     expect(v.facingMode).toBeUndefined()
   })
 })
+
+describe('when the native engine is present but broken', () => {
+  /**
+   * A video element whose frame callback fires on a real timer, so the decode
+   * loop actually iterates. The element is a genuine <video> so that the ZXing
+   * fallback has something plausible to attach to.
+   */
+  function tickingVideo(maxFrames = 60) {
+    const el = document.createElement('video') as any
+    let frames = 0
+    el.play = jest.fn().mockResolvedValue(undefined)
+    el.requestVideoFrameCallback = (cb: any) => {
+      if (frames++ < maxFrames) setTimeout(() => cb(), 1)
+    }
+    return el as HTMLVideoElement
+  }
+
+  it('gives up after repeated failures instead of silently scanning nothing', async () => {
+    // Real Android case: Play Services is installed so BarcodeDetector exists
+    // and reports formats, but its barcode module is missing or mid-download,
+    // so every detect() throws. Swallowing that would put the shop back to
+    // "it does not scan", with no clue why.
+    g.BarcodeDetector = class {
+      static getSupportedFormats() { return Promise.resolve(['ean_13']) }
+      detect() { return Promise.reject(new Error('module unavailable')) }
+    }
+
+    const onEngineChange = jest.fn()
+    const engine = await startDecoding(fakeStream(), tickingVideo(), {
+      onCode: jest.fn(), onEngineChange, onError: jest.fn(),
+    })
+
+    // It starts on the fast path — the failure is only discoverable by trying.
+    expect(engine.engine).toBe('native')
+
+    await new Promise((r) => setTimeout(r, 250))
+    expect(onEngineChange).toHaveBeenCalledWith('zxing')
+
+    engine.stop()
+  })
+
+  it('does not give up over occasional throws, which are normal', async () => {
+    let n = 0
+    // Every third frame throws — a busy detector, not a broken one. A
+    // cumulative counter would eventually condemn this device wrongly.
+    g.BarcodeDetector = class {
+      static getSupportedFormats() { return Promise.resolve(['ean_13']) }
+      detect() { n++; return n % 3 === 0 ? Promise.reject(new Error('busy')) : Promise.resolve([]) }
+    }
+
+    const onEngineChange = jest.fn()
+    const engine = await startDecoding(fakeStream(), tickingVideo(), {
+      onCode: jest.fn(), onEngineChange, onError: jest.fn(),
+    })
+    await new Promise((r) => setTimeout(r, 250))
+
+    expect(onEngineChange).not.toHaveBeenCalled()
+    expect(n).toBeGreaterThan(15)  // it really did keep going
+    engine.stop()
+  })
+})
