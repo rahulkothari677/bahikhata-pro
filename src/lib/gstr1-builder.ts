@@ -702,9 +702,40 @@ export function buildNIL(txns: Gstr1Transaction[]): { inv: Gstr1NilEntry[] } {
   return { inv }
 }
 
+
+/*
+ * The issued range must span CANCELLED numbers too.
+ *
+ * Table 13 declares which numbers left the book. A cancelled invoice consumed
+ * its number — that is precisely why the portal asks for a cancelled count
+ * rather than letting the number quietly disappear. If the range covered only
+ * surviving invoices, a cancelled one at either end would leave a hole that the
+ * return does not explain, which is the gap seen in the August 2026 file:
+ * INV-0044 jumping to INV-0053 while the return declared nothing cancelled.
+ *
+ * Numbers are compared as strings, matching the existing sort. A shop mixing
+ * series ("INV-0041" and "2026/RG/001") gets a range spanning both, which is
+ * what the portal expects when one series is declared.
+ */
+function issuedNumbers(active: string[], cancelled: Gstr1Transaction[]): string[] {
+  const cancelledNos = cancelled
+    .map(t => t.invoiceNo)
+    .filter((n): n is string => !!n && n.trim().length > 0)
+  return [...active, ...cancelledNos].sort()
+}
+
+function rangeFrom(active: string[], cancelled: Gstr1Transaction[]): string {
+  return issuedNumbers(active, cancelled)[0] || ''
+}
+
+function rangeTo(active: string[], cancelled: Gstr1Transaction[]): string {
+  const all = issuedNumbers(active, cancelled)
+  return all.length > 0 ? all[all.length - 1] : ''
+}
+
 /**
  * Build DOC section: document issuance summary.
- * Counts invoices and credit notes issued (no cancellation tracking yet).
+ * Counts invoices and credit notes issued, including cancelled ones.
  *
  * 🔒 V26 BUG-056: Was using `t.invoiceNo || t.id` as the document number
  * fallback. When a sale has no user-provided invoiceNo, `t.id` is a CUID
@@ -717,9 +748,14 @@ export function buildNIL(txns: Gstr1Transaction[]): { inv: Gstr1NilEntry[] } {
  * count), but they don't appear in the from/to range. This matches the
  * portal's intent: from/to is the range of NUMBERED documents.
  */
-export function buildDOC(txns: Gstr1Transaction[]): { doc_det: Gstr1DocEntry[] } {
+export function buildDOC(
+  txns: Gstr1Transaction[],
+  cancelled: Gstr1Transaction[] = [],
+): { doc_det: Gstr1DocEntry[] } {
   const sales = txns.filter(t => t.type === 'sale')
   const creditNotes = txns.filter(t => t.type === 'credit-note')
+  const cancelledSales = cancelled.filter(t => t.type === 'sale')
+  const cancelledCNs = cancelled.filter(t => t.type === 'credit-note')
 
   const doc_det: Gstr1DocEntry[] = []
 
@@ -733,10 +769,12 @@ export function buildDOC(txns: Gstr1Transaction[]): { doc_det: Gstr1DocEntry[] }
       doc_typ: 'Invoices for outward supply',
       docs: [{
         num: 1,
-        from: invoiceNos[0] || '',
-        to: invoiceNos.length > 0 ? invoiceNos[invoiceNos.length - 1] : '',
-        totnum: sales.length,  // total count includes unnumbered
-        cancel: 0,  // no cancellation tracking yet
+        from: rangeFrom(invoiceNos, cancelledSales),
+        to: rangeTo(invoiceNos, cancelledSales),
+        // Table 13 counts documents ISSUED, which includes ones later
+        // cancelled — a cancelled number was still consumed from the series.
+        totnum: sales.length + cancelledSales.length,
+        cancel: cancelledSales.length,
         net_issue: sales.length,
       }],
     })
@@ -751,10 +789,10 @@ export function buildDOC(txns: Gstr1Transaction[]): { doc_det: Gstr1DocEntry[] }
       doc_typ: 'Credit Notes',
       docs: [{
         num: 1,
-        from: cnNos[0] || '',
-        to: cnNos.length > 0 ? cnNos[cnNos.length - 1] : '',
-        totnum: creditNotes.length,
-        cancel: 0,
+        from: rangeFrom(cnNos, cancelledCNs),
+        to: rangeTo(cnNos, cancelledCNs),
+        totnum: creditNotes.length + cancelledCNs.length,
+        cancel: cancelledCNs.length,
         net_issue: creditNotes.length,
       }],
     })
@@ -822,7 +860,7 @@ export function buildGstr1(
   txns: Gstr1Transaction[],
   shop: ShopInfo,
   monthYear: string,
-  options?: { priorFyTurnover?: number },
+  options?: { priorFyTurnover?: number; cancelled?: Gstr1Transaction[] },
 ): Gstr1Result {
   // 🔒 V26 N9: cur_gt = current-period outward turnover (computed from txns).
   // gt = prior-FY outward turnover (passed by caller; defaults to 0).
@@ -841,6 +879,6 @@ export function buildGstr1(
     cdnur: buildCDNUR(txns, shop),
     hsn: buildHSN(txns),
     nil: buildNIL(txns),
-    doc_issue: buildDOC(txns),
+    doc_issue: buildDOC(txns, options?.cancelled || []),
   }
 }

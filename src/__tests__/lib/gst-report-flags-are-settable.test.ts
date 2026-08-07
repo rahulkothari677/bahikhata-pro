@@ -105,7 +105,26 @@ const FLAG_FILTER = /\b(is[A-Z]\w*)\s*:\s*(?:true|false)\b/g
  * which makes `.has(someString)` a type error the moment anything is checked
  * against it. Left explicit so adding the first entry does not break the build.
  */
-const SERVER_DERIVED = new Set<string>([])
+const SERVER_DERIVED = new Set<string>([
+  /*
+   * isInterState — added 2026-08-08, its first genuine entry.
+   *
+   * Whether a supply crosses a state line is not the shop's opinion. It is
+   * determined from the two GSTINs' state codes, and letting a client assert it
+   * would let a caller choose IGST over CGST+SGST — sending tax to the wrong
+   * government and breaking the customer's input credit. Correctly derived on
+   * the server and correctly absent from createTransactionSchema.
+   *
+   * The guard flagged it only after the Table 13 work built a plain object
+   * containing `isInterState: false` as DATA, which the FLAG_FILTER regex
+   * cannot distinguish from a Prisma where-clause. So this entry records two
+   * things: that the flag is legitimately server-derived, and that the guard
+   * reads literals rather than semantics — the limit of a source scan, and the
+   * reason this allowlist has to exist rather than the check being tightened
+   * into something that silently stops catching the real fault.
+   */
+  'isInterState',
+])
 
 describe('the scan is not vacuous', () => {
   it('found the GST return routes', () => {

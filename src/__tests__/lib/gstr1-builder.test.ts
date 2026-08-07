@@ -702,3 +702,59 @@ describe('🔒 V26 N2 — B2C credit notes: B2CS netting + CDNUR filter', () => 
     expect(b2cs[0].txval).toBe(2000)
   })
 })
+
+describe('Table 13 — cancelled documents are declared', () => {
+  /*
+   * WHY (2026-08-08). buildDOC hardcoded `cancel: 0` with the comment "no
+   * cancellation tracking yet". A real August 2026 return showed INV-0044
+   * jumping to INV-0053 — eight numbers missing — while declaring that nothing
+   * had been cancelled. One of those statements had to be false.
+   *
+   * A cancelled invoice consumed its number. That is why the portal asks for a
+   * count rather than letting the number quietly disappear from the series.
+   */
+  const sale = (invoiceNo: string): Gstr1Transaction => ({
+    ...B2C_SALE, id: 'x' + invoiceNo, invoiceNo, type: 'sale',
+  })
+
+  it('counts cancelled invoices instead of always reporting zero', () => {
+    const doc = buildDOC([sale('INV-0041'), sale('INV-0042')], [sale('INV-0043')])
+    const d = doc.doc_det[0].docs[0]
+    expect(d.cancel).toBe(1)
+    // totnum is documents ISSUED, which includes the cancelled one.
+    expect(d.totnum).toBe(3)
+    expect(d.net_issue).toBe(2)
+    // The portal's own arithmetic must hold.
+    expect(d.totnum - d.cancel).toBe(d.net_issue)
+  })
+
+  it('includes a cancelled number in the issued range', () => {
+    // The gap is the whole problem: if the range stopped at the last surviving
+    // invoice, a cancelled one at the end would leave a hole the return never
+    // explains.
+    const doc = buildDOC([sale('INV-0041')], [sale('INV-0042')])
+    const d = doc.doc_det[0].docs[0]
+    expect(d.from).toBe('INV-0041')
+    expect(d.to).toBe('INV-0042')
+  })
+
+  it('reports zero when nothing was actually cancelled', () => {
+    // The old value must remain correct in the ordinary case — this fix must
+    // not invent cancellations any more than it hid them.
+    const doc = buildDOC([sale('INV-0041'), sale('INV-0042')])
+    const d = doc.doc_det[0].docs[0]
+    expect(d.cancel).toBe(0)
+    expect(d.totnum).toBe(2)
+    expect(d.net_issue).toBe(2)
+  })
+
+  it('tracks credit-note cancellations separately from invoices', () => {
+    const cn = (n: string): Gstr1Transaction => ({ ...CREDIT_NOTE, id: 'c'+n, invoiceNo: n, type: 'credit-note' })
+    const doc = buildDOC([sale('INV-0041'), cn('CN-0001')], [cn('CN-0002')])
+    const invoices = doc.doc_det.find(d => d.doc_num === 1)!.docs[0]
+    const notes = doc.doc_det.find(d => d.doc_num === 2)!.docs[0]
+    expect(invoices.cancel).toBe(0)   // no invoice was cancelled
+    expect(notes.cancel).toBe(1)      // one credit note was
+    expect(notes.totnum).toBe(2)
+  })
+})

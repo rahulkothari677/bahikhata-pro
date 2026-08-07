@@ -139,8 +139,39 @@ export async function GET(req: NextRequest) {
       })),
     }))
 
+    /*
+     * Cancelled documents, for Table 13.
+     *
+     * buildDOC used to hardcode `cancel: 0` with the comment "no cancellation
+     * tracking yet", so the return declared that nothing had been cancelled
+     * regardless of the truth. A real August 2026 file showed INV-0044 jumping
+     * to INV-0053 — eight numbers gone — beside `cancel: 0`. One of those two
+     * statements had to be false, and it was the declared one.
+     *
+     * A cancelled invoice still CONSUMED its number, which is exactly why the
+     * portal asks for a count instead of letting it vanish. Only numbered
+     * documents matter here: an unnumbered draft never entered the series.
+     */
+    const cancelledTxns = await db.transaction.findMany({
+      where: {
+        userId,
+        deletedAt: { not: null },
+        type: { in: ['sale', 'credit-note'] },
+        date: { gte: periodStart, lt: periodEnd },
+        invoiceNo: { not: null },
+      },
+      select: { id: true, type: true, invoiceNo: true, date: true },
+    })
+    const cancelledForDoc = cancelledTxns.map(t => ({
+      id: t.id, type: t.type, invoiceNo: t.invoiceNo, date: t.date,
+      totalAmount: 0, subtotal: 0, discountAmount: 0, cgst: 0, sgst: 0, igst: 0,
+      isInterState: false, isReverseCharge: false,
+      partyId: null, partyName: null, partyGstin: null, partyState: null,
+      items: [],
+    }))
+
     // Build the GSTR-1 JSON
-    const gstr1 = buildGstr1(builderTxns, shop, monthYear, { priorFyTurnover })
+    const gstr1 = buildGstr1(builderTxns, shop, monthYear, { priorFyTurnover, cancelled: cancelledForDoc })
 
     // Compute summary totals
     const totalTaxableValue = roundMoney(
