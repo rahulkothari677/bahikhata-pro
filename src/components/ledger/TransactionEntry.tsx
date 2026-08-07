@@ -18,7 +18,7 @@ import { formatINR, cn, getInitials } from '@/lib/utils'
 import {
   ShoppingCart, Truck, Plus, X, Search, ChevronDown, ChevronRight,
   TrendingUp, TrendingDown, Calendar, User, ScanLine, Folder, FolderOpen,
-  Package, Phone, IndianRupee, Save, Trash2, Check, AlertCircle, Mic, Clock, AlertTriangle,
+  Package, Phone, IndianRupee, Save, Trash2, Check, AlertCircle, Mic, Clock, AlertTriangle, Minus,
   FileDown,
 } from 'lucide-react'
 import { VoiceEntry } from '@/components/common/VoiceEntry'
@@ -516,6 +516,30 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       }])
     }
     setProductSearch('')
+  }
+
+  /**
+   * Take one off a product's quantity from the PICKER, dropping the line when
+   * it reaches zero.
+   *
+   * The picker previously offered no way down. Once a product was in the sale
+   * it showed a static "✓ Added" badge — a statement, not a control — so the
+   * only way to correct an over-tap was to hunt for the line further down the
+   * form. And because the badge replaced the "+", nothing suggested you could
+   * add a second one either. Reported exactly that way: "how does the user
+   * know he has to click the added".
+   */
+  const handleDecrementProduct = (productId: string) => {
+    setPresetLoaded(false)
+    const existing = items.find(i => i.productId === productId)
+    if (!existing) return
+    if (existing.quantity <= 1) {
+      setItems(items.filter(i => i.productId !== productId))
+    } else {
+      setItems(items.map(i =>
+        i.productId === productId ? { ...i, quantity: i.quantity - 1 } : i
+      ))
+    }
   }
 
   const handleUpdateItem = (index: number, field: keyof ItemRow, value: any) => {
@@ -1161,11 +1185,26 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                 <div className="mt-3 max-h-48 overflow-y-auto rounded-lg border border-border bg-background">
                   {filteredProducts.slice(0, 20).map(p => {
                     const inList = items.find(i => i.productId === p.id)
+                    const qty = inList?.quantity ?? 0
                     return (
-                      <button
+                      /*
+                       * A row, not one big button.
+                       *
+                       * The whole row used to be a single <button>, which is why
+                       * the added state could only ever be a label: a stepper
+                       * needs its own buttons, and a button inside a button is
+                       * invalid HTML that browsers quietly flatten. Splitting the
+                       * row lets the info area stay tappable to add, while − and
+                       * + become real controls beside it.
+                       */
+                      <div
                         key={p.id}
+                        className="w-full flex items-center gap-3 p-2.5 transition border-b border-border/30 last:border-0 hover:bg-muted/50"
+                      >
+                      <button
                         onClick={() => handleAddProduct(p)}
-                        className="w-full flex items-center gap-3 p-2.5 hover:bg-muted/50 transition text-left border-b border-border/30 last:border-0"
+                        aria-label={qty > 0 ? `Add another ${p.name}` : `Add ${p.name}`}
+                        className="flex-1 min-w-0 flex items-center gap-3 text-left"
                       >
                         <div className="w-9 h-9 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
                           <Package className="w-4 h-4 text-muted-foreground" />
@@ -1195,18 +1234,55 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                             <span className="text-3xs font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 px-1.5 py-0.5 rounded-full">LOW</span>
                           )}
                         </div>
-                        <div className="flex-shrink-0">
-                          {inList ? (
-                            <Badge className="bg-emerald-100 text-emerald-700 dark:text-emerald-300 text-3xs gap-1">
-                              <Check className="w-2.5 h-2.5" /> Added
-                            </Badge>
-                          ) : (
-                            <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center">
-                              <Plus className="w-4 h-4 text-primary" />
-                            </div>
-                          )}
-                        </div>
                       </button>
+                      {/*
+                       * A stepper once it is in the sale — "− 2 +" — instead of
+                       * a "✓ Added" badge.
+                       *
+                       * The badge answered a question nobody asked (is it in?)
+                       * and hid the two the shopkeeper actually has: how many,
+                       * and how do I change it. Worse, it replaced the "+", so
+                       * the one affordance that said "tap me for another" was
+                       * removed at exactly the moment it became useful.
+                       *
+                       * This is the pattern every counter app uses — Blinkit,
+                       * Zepto, Swiggy, BigBasket — because billing is a counting
+                       * job: three of one thing, then two of the next. The count
+                       * is the feedback, and it is a control.
+                       */}
+                      <div className="flex-shrink-0">
+                        {qty > 0 ? (
+                          <div className="flex items-center rounded-lg border border-primary/40 bg-primary/5 overflow-hidden">
+                            <button
+                              onClick={() => handleDecrementProduct(p.id)}
+                              aria-label={qty === 1 ? `Remove ${p.name} from this sale` : `Reduce ${p.name} to ${qty - 1}`}
+                              className="w-9 h-9 flex items-center justify-center text-primary hover:bg-primary/15 active:scale-95 transition"
+                            >
+                              {/* At one, the next press removes the line, so say so. */}
+                              {qty === 1 ? <Trash2 className="w-3.5 h-3.5" /> : <Minus className="w-4 h-4" />}
+                            </button>
+                            <span className="min-w-[26px] text-center text-sm font-bold text-primary tabular-nums">
+                              {qty}
+                            </span>
+                            <button
+                              onClick={() => handleAddProduct(p)}
+                              aria-label={`Add another ${p.name}`}
+                              className="w-9 h-9 flex items-center justify-center text-primary hover:bg-primary/15 active:scale-95 transition"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => handleAddProduct(p)}
+                            aria-label={`Add ${p.name}`}
+                            className="w-9 h-9 rounded-lg bg-primary/10 flex items-center justify-center hover:bg-primary/20 active:scale-95 transition"
+                          >
+                            <Plus className="w-4 h-4 text-primary" />
+                          </button>
+                        )}
+                      </div>
+                      </div>
                     )
                   })}
                   {filteredProducts.length > 20 && (
