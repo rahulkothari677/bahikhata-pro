@@ -22,8 +22,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { registerExitGuard } from '@/lib/exit-guard'
-import { BrowserMultiFormatReader, IScannerControls } from '@zxing/browser'
-import { DecodeHintType, BarcodeFormat } from '@zxing/library'
+import { openCamera, startDecoding, type ScanEngine, type EngineName } from '@/lib/barcode-engine'
 import { X, Camera, SwitchCamera, Loader2, AlertCircle, ScanLine } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
@@ -61,7 +60,8 @@ export function BarcodeScanner({
   onClose: () => void
 }) {
   const videoRef = useRef<HTMLVideoElement>(null)
-  const controlsRef = useRef<IScannerControls | null>(null)
+  const engineRef = useRef<ScanEngine | null>(null)
+  const [engine, setEngine] = useState<EngineName | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [starting, setStarting] = useState(true)
   const [scannedCode, setScannedCode] = useState<string | null>(null)
@@ -71,9 +71,9 @@ export function BarcodeScanner({
 
   // Stop the camera and clean up
   const stopCamera = useCallback(() => {
-    if (controlsRef.current) {
-      controlsRef.current.stop()
-      controlsRef.current = null
+    if (engineRef.current) {
+      engineRef.current.stop()
+      engineRef.current = null
     }
   }, [])
 
@@ -112,42 +112,19 @@ export function BarcodeScanner({
     }
 
     try {
-      // Configure hints to support common retail barcodes
-      const hints = new Map()
-      hints.set(DecodeHintType.POSSIBLE_FORMATS, [
-        BarcodeFormat.EAN_13,
-        BarcodeFormat.EAN_8,
-        BarcodeFormat.UPC_A,
-        BarcodeFormat.UPC_E,
-        BarcodeFormat.CODE_128,
-        BarcodeFormat.CODE_39,
-        BarcodeFormat.CODE_93,
-        BarcodeFormat.ITF,
-        BarcodeFormat.QR_CODE,
-        BarcodeFormat.DATA_MATRIX,
-      ])
-      hints.set(DecodeHintType.TRY_HARDER, true)
-
       /*
-       * delayBetweenScanAttempts defaults to 500ms — TWO looks per second.
-       * A shopkeeper holds a packet up for about a second and expects a beep,
-       * so the old scanner got roughly two chances to read a barcode that was
-       * also being filmed by the wrong camera. It read nothing, which is
-       * exactly what was reported.
+       * One camera acquisition, two possible decoders.
        *
-       * 150ms is ~6-7 looks per second. Not lower: each attempt decodes a full
-       * frame across ten formats with TRY_HARDER on, and pinning a budget
-       * Android's CPU makes the preview stutter, which makes aiming harder.
+       * openCamera asks for facingMode environment, 1920x1080 and continuous
+       * autofocus; startDecoding then uses the phone's own ML Kit engine via
+       * BarcodeDetector where it exists and falls back to ZXing where it does
+       * not. See src/lib/barcode-engine.ts for why that split exists — briefly,
+       * a JavaScript decoder cannot catch a native one, and on Android the
+       * native one is available to us for free.
        */
-      const reader = new BrowserMultiFormatReader(hints, {
-        delayBetweenScanAttempts: 150,
-        delayBetweenScanSuccess: 500,
-      })
+      const stream = await openCamera(deviceId)
 
-      const handleResult = (result: any) => {
-        if (!result) return
-        const code = result.getText()
-        const format = result.getBarcodeFormat?.toString?.() || 'UNKNOWN'
+      const handleCode = (code: string, format: string) => {
         const now = Date.now()
         // Debounce: ignore same code within 2 seconds
         if (code === lastScanRef.current.code && now - lastScanRef.current.time < 2000) {
@@ -161,36 +138,10 @@ export function BarcodeScanner({
           onScan(code, format)
           stopCamera()
         }, 600)
-        // err is expected (continuous scanning) — ignore unless it's a fatal error
       }
 
-      if (deviceId) {
-        // Explicit switch — the user picked this camera themselves.
-        controlsRef.current = await reader.decodeFromVideoDevice(
-          deviceId,
-          videoRef.current,
-          handleResult,
-        )
-      } else {
-        /*
-         * Resolution matters more here than anywhere else in the app. An EAN-13
-         * on a small packet is a few millimetres of stripe; at the 640x480 a
-         * browser hands out by default, neighbouring bars land in the same pixel
-         * and the code is not merely hard to read, it is unreadable. `ideal`
-         * lets a weaker camera give what it has rather than failing outright.
-         */
-        controlsRef.current = await reader.decodeFromConstraints(
-          {
-            video: {
-              facingMode: { ideal: 'environment' },
-              width: { ideal: 1920 },
-              height: { ideal: 1080 },
-            },
-          },
-          videoRef.current,
-          handleResult,
-        )
-      }
+      engineRef.current = await startDecoding(stream, videoRef.current, { onCode: handleCode })
+      setEngine(engineRef.current.engine)
 
       /*
        * Enumerate AFTER the stream is live, not before.
@@ -199,13 +150,13 @@ export function BarcodeScanner({
        * camera button can show something meaningful. Asking first — as the old
        * code did — returns unlabelled entries and taught the scanner nothing.
        */
-      const videoDevices = await BrowserMultiFormatReader.listVideoInputDevices()
+      const videoDevices = (await navigator.mediaDevices.enumerateDevices())
+        .filter((d) => d.kind === 'videoinput')
       setDevices(videoDevices)
 
       // Highlight whichever camera actually ended up live, so that Switch
       // advances from the real starting point rather than from index 0.
-      const stream = videoRef.current?.srcObject as MediaStream | null
-      const liveId = stream?.getVideoTracks?.()[0]?.getSettings?.().deviceId
+      const liveId = stream.getVideoTracks()[0]?.getSettings?.().deviceId
       const liveIdx = liveId ? videoDevices.findIndex((d) => d.deviceId === liveId) : -1
       setSelectedDeviceIdx(liveIdx >= 0 ? liveIdx : 0)
 
@@ -328,7 +279,13 @@ export function BarcodeScanner({
         {/* Scan frame overlay */}
         {!scannedCode && !error && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="relative w-64 h-40 max-w-[80vw]">
+            {/*
+              * A guide, not a gate. The whole frame is decoded, so a barcode
+              * anywhere on screen reads — but a small tight box teaches the
+              * opposite, and "I have to position it very perfectly" was
+              * exactly the complaint. Wider, and the caption below says so.
+              */}
+            <div className="relative w-72 h-44 max-w-[86vw]">
               {/* Corner brackets */}
               <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-primary rounded-tl-lg" />
               <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-primary rounded-tr-lg" />
@@ -338,7 +295,7 @@ export function BarcodeScanner({
               <div className="absolute left-0 right-0 top-1/2 h-0.5 bg-primary shadow-lg shadow-primary/50 animate-pulse" />
             </div>
             <div className="absolute bottom-8 left-0 right-0 text-center text-white/80 text-sm">
-              {starting ? 'Starting camera...' : 'Point camera at a barcode'}
+              {starting ? 'Starting camera...' : 'Hold the barcode anywhere in view'}
             </div>
           </div>
         )}
@@ -404,8 +361,17 @@ export function BarcodeScanner({
             Switch camera
           </Button>
         )}
+        {/*
+          * "2 cameras detected" told a shopkeeper nothing. Which ENGINE is
+          * running is the thing worth knowing: on the fast path this is the
+          * phone's own scanner and reads are near-instant, on the fallback it
+          * is JavaScript and wants a steadier hand. It also lets a real
+          * device confirm which path it actually took, which no amount of
+          * testing on a laptop can establish.
+          */}
         <p className="text-white/50 text-xs">
-          {devices.length > 0 && `${devices.length} camera${devices.length === 1 ? '' : 's'} detected`}
+          {engine === 'native' && 'Fast scan'}
+          {engine === 'zxing' && 'Basic scan — hold steady'}
         </p>
       </div>
     </div>
