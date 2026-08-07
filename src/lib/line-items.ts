@@ -43,6 +43,13 @@ export interface StoredLineItem {
   unitPrice: number      // TAXABLE (ex-GST) price per `unit`
   purchasePriceAtSale: number
   gstRate: number
+  /**
+   * HSN as it was when the line was saved — a snapshot, not a live join.
+   * GSTR-1 Table 12, the HSN summary and the e-invoice IRN all read this.
+   * Null is legal: HSN is optional for small B2C supplies under Notification
+   * 78/2020, so the gap is reported at filing time rather than blocking a sale.
+   */
+  hsn: string | null
   discountAmount: number
   cgst: number
   sgst: number
@@ -226,6 +233,32 @@ export function computeLineItems(opts: {
       unitPrice: p.unitPriceRupees,
       purchasePriceAtSale,
       gstRate: p.gstRate,
+      /*
+       * HSN snapshotted at sale time, like purchasePriceAtSale above.
+       *
+       * WHY (2026-08-07, money sweep). The column existed, GSTR-1 Table 12 read
+       * it, the HSN summary read it and the e-invoice IRN builder read it — and
+       * nothing had ever written it. The only code that put an HSN on a sale
+       * line was restoring from a backup. So every invoice the app had ever
+       * produced carried a blank HSN, Table 12 came back with zero rows against
+       * ₹9,938.90 of reported sales, and that return cannot be filed: an empty
+       * HSN table beside a non-zero turnover is precisely the contradiction the
+       * department picks up. E-invoicing would have rejected it too — HSN is a
+       * required field in the NIC schema.
+       *
+       * A SNAPSHOT, not a join to the product, and that distinction is the
+       * whole point. Edit a product's HSN next year and last year's filed
+       * GSTR-1 must not silently change underneath you; a filed return is a
+       * historical fact. Same reasoning as purchasePriceAtSale, which exists so
+       * that changing a cost price today cannot rewrite last year's profit.
+       *
+       * Null stays null. Under Notification 78/2020 HSN is mandatory on B2B
+       * invoices — four digits below ₹5 crore turnover, six above — but optional
+       * for small B2C supplies, so refusing to save a counter sale without one
+       * would be stricter than the law and would stop a shopkeeper mid-sale.
+       * The gap is surfaced at filing time instead, which is when a CA needs it.
+       */
+      hsn: p.product?.hsn || null,
       discountAmount: fromPaise(itemDiscountPaise),
       cgst: fromPaise(itemCgstPaise),
       sgst: fromPaise(itemSgstPaise),
