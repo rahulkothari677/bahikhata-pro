@@ -140,6 +140,33 @@ export function computeLineItems(opts: {
   let cgstPaise = 0, sgstPaise = 0, igstPaise = 0
   let grossProfitPaise = 0
 
+  /*
+   * CGST/SGST are split ONCE across the invoice, allocated line by line.
+   *
+   * WHY (2026-08-07, money sweep). splitGstPaise gives the odd paisa to CGST —
+   * a deliberate, documented rule, and correct when applied once. It was being
+   * applied to EVERY line, so each line with an odd-paise tax handed CGST
+   * another paisa. Three lines of ₹10.10 at 5% (invoice INV-0060, verified on
+   * the live invoice screen) printed CGST ₹0.78 against SGST ₹0.75 — three
+   * paise apart, on a GST invoice where the two are by definition equal halves.
+   * A 40-line grocery bill could be 40 paise apart, on every sale.
+   *
+   * The rupees are trivial; being visibly wrong on a tax document is not.
+   *
+   * The allocation below keeps a running total of intra-state GST and gives
+   * each line the difference between the ideal CGST for the running total and
+   * what has already been allocated. Two properties matter:
+   *
+   *   - The line values still SUM to the invoice values, which the header
+   *     derivation below depends on, and which the HSN summary reads.
+   *   - No line can go negative. The naive fix — dump the whole correction on
+   *     the last line — breaks exactly that: forty lines of one paise tax each
+   *     would need a 20 paise correction taken out of a line holding one, and
+   *     the last line's SGST would go through zero into negative territory.
+   */
+  let runningIntraGstPaise = 0
+  let allocatedCgstPaise = 0
+
   const txItems: StoredLineItem[] = prepared.map((p, idx) => {
     const grossAmountPaise = grossAmountsPaise[idx]
     const itemDiscountPaise = perItemDiscountsPaise[idx]
@@ -153,11 +180,16 @@ export function computeLineItems(opts: {
       itemIgstPaise = itemGstPaise
       igstPaise = addPaise(igstPaise, itemGstPaise)
     } else {
-      const { cgst, sgst } = splitGstPaise(itemGstPaise)  // integer split, exact
-      itemCgstPaise = cgst
-      itemSgstPaise = sgst
-      cgstPaise = addPaise(cgstPaise, cgst)
-      sgstPaise = addPaise(sgstPaise, sgst)
+      // Split the RUNNING TOTAL, then give this line only the increment. The
+      // odd-paisa-to-CGST rule therefore applies once per invoice, not once
+      // per line — see the note above the declarations.
+      runningIntraGstPaise = addPaise(runningIntraGstPaise, itemGstPaise)
+      const idealCgstSoFar = splitGstPaise(runningIntraGstPaise).cgst
+      itemCgstPaise = idealCgstSoFar - allocatedCgstPaise
+      itemSgstPaise = itemGstPaise - itemCgstPaise  // line total tax unchanged
+      allocatedCgstPaise = idealCgstSoFar
+      cgstPaise = addPaise(cgstPaise, itemCgstPaise)
+      sgstPaise = addPaise(sgstPaise, itemSgstPaise)
     }
 
     // Profit on the post-discount realized price (V10 §2.4).
