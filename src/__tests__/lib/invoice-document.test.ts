@@ -154,3 +154,44 @@ describe('presentation', () => {
     expect(buildInvoiceDocument({ ...BASE, invoiceNo: null }, SHOP).invoiceNo).toBe('—')
   })
 })
+
+describe('e-invoice details reach the printed document', () => {
+  /*
+   * WHY (2026-08-08). Rule 48(4) requires the IRN and the SIGNED QR from the
+   * portal to appear on an invoice covered by e-invoicing. An invoice issued
+   * without them counts as NON-ISSUANCE — penalties under Section 122, and the
+   * buyer's input tax credit on it is at risk.
+   *
+   * The app stored both on the transaction and printed neither. Every document
+   * it produced for an e-invoicing shop — PDF, WhatsApp image, share page — was
+   * legally not an invoice.
+   */
+  it('carries the IRN and signed QR through to the document', () => {
+    const doc = buildInvoiceDocument(
+      { ...BASE, irn: 'a'.repeat(64), signedQR: 'eyJhbGciOiJSUzI1NiJ9.signed-payload' } as never,
+      SHOP,
+    )
+    expect(doc.irn).toBe('a'.repeat(64))
+    expect(doc.signedQR).toBe('eyJhbGciOiJSUzI1NiJ9.signed-payload')
+  })
+
+  it('leaves both null for a shop that does not e-invoice', () => {
+    // The great majority: under ₹5 crore, correctly no IRN. The block must not
+    // render an empty e-invoice section on an ordinary bill.
+    const doc = buildInvoiceDocument(BASE as never, SHOP)
+    expect(doc.irn).toBeNull()
+    expect(doc.signedQR).toBeNull()
+  })
+
+  it('keeps the IRN even when the QR is missing', () => {
+    /*
+     * These arrive together from the portal, but a partial store is possible —
+     * the app lets a shopkeeper paste the IRN and the QR separately. The IRN
+     * alone still identifies the e-invoice, so it must not be dropped because
+     * its companion is absent.
+     */
+    const doc = buildInvoiceDocument({ ...BASE, irn: 'b'.repeat(64) } as never, SHOP)
+    expect(doc.irn).toBe('b'.repeat(64))
+    expect(doc.signedQR).toBeNull()
+  })
+})

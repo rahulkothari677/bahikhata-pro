@@ -11,6 +11,7 @@
  * should not be shown a nav bar for an app they do not have.
  */
 
+import { QRCodeSVG } from 'qrcode.react'
 import type { InvoiceDocument } from '@/lib/invoice-document'
 import { getInvoiceTheme } from '@/lib/invoice-themes'
 
@@ -135,6 +136,42 @@ export function PublicBill({ doc, themeId }: { doc: InvoiceDocument; themeId?: s
           </dl>
 
           <p className="mt-4 text-2xs text-slate-500">{doc.totalInWords}</p>
+
+          {/*
+            * e-invoice block. Rule 48(4) requires the IRN and the SIGNED QR
+            * from the portal to appear on the invoice — an invoice without them
+            * counts as non-issuance, with penalties under Section 122 and the
+            * buyer's input credit at risk.
+            *
+            * The QR must carry the SIGNED string exactly as the portal returned
+            * it. It is what a GST officer's app scans and verifies against the
+            * government's own record; re-encoding anything else would produce a
+            * QR that looks right and fails verification.
+            *
+            * Absent for the great majority of shops, who are below the ₹5 crore
+            * threshold and correctly have no IRN.
+            */}
+          {doc.irn && (
+            <div className="mt-5 pt-4 border-t border-slate-200 flex items-start gap-3">
+              {/*
+                * Rendered LOCALLY with qrcode.react, never via an image service.
+                * The signed QR is the government's cryptographic attestation of
+                * this invoice; posting it to a third-party generator would hand
+                * a stranger every bill the shop issues, and would leave the
+                * legally required element blank whenever that service is down or
+                * the phone is offline.
+                */}
+              {doc.signedQR && (
+                <div className="flex-shrink-0">
+                  <QRCodeSVG value={doc.signedQR} size={80} level="M" />
+                </div>
+              )}
+              <div className="min-w-0">
+                <p className="text-2xs font-semibold text-slate-700">e-Invoice</p>
+                <p className="text-3xs text-slate-500 break-all font-mono mt-0.5">IRN: {doc.irn}</p>
+              </div>
+            </div>
+          )}
 
           <div className="mt-5 pt-4 border-t border-slate-200 text-2xs text-slate-500 flex justify-between">
             {doc.placeOfSupply ? <span>Place of supply: {doc.placeOfSupply}</span> : <span />}

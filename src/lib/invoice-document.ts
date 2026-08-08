@@ -99,6 +99,25 @@ export interface InvoiceDocument {
 
   /** `upi://pay?...`, or null when the shop has no VPA or nothing is owed. */
   upiLink: string | null
+
+  /*
+   * e-invoice details, when this invoice has been registered with the portal.
+   *
+   * Rule 48(4): an invoice covered by e-invoicing must carry the IRN and the
+   * SIGNED QR code returned by the IRP. An invoice issued without them counts
+   * as non-issuance — penalties under Section 122, and the buyer can lose their
+   * input tax credit on it.
+   *
+   * The app stored both on the transaction and printed neither: every document
+   * it produced for an e-invoicing shop — PDF, WhatsApp image, share page —
+   * was legally not an invoice.
+   *
+   * Null for the overwhelming majority of shops, who are under the ₹5 crore
+   * threshold and correctly have no IRN at all.
+   */
+  irn: string | null
+  /** The signed QR string from the IRP. Rendered as a QR image, not as text. */
+  signedQR: string | null
 }
 
 interface SourceItem {
@@ -112,6 +131,8 @@ interface SourceItem {
 }
 
 export interface InvoiceSource {
+  irn?: string | null
+  signedQR?: string | null
   invoiceNo?: string | null
   date: string | Date
   type?: string | null
@@ -213,6 +234,10 @@ export function buildInvoiceDocument(src: InvoiceSource, shop: InvoiceShop): Inv
     hasTax: taxTotal > 0,
 
     upiLink: buildUpiLink(shop, due),
+    // Carried through so every renderer — PDF, share image, public page — can
+    // print them. Rule 48(4) requires both on an e-invoice.
+    irn: src.irn ?? null,
+    signedQR: src.signedQR ?? null,
   }
 }
 

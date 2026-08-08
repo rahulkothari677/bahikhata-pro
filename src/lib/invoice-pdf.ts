@@ -35,6 +35,13 @@ interface InvoiceItem {
 interface InvoiceData {
   invoiceNo: string | null
   date: string | Date
+  /*
+   * e-invoice details, when the invoice has been registered with the portal.
+   * Rule 48(4) requires both to be printed; absent for shops below the ₹5
+   * crore threshold, which is nearly all of them.
+   */
+  irn?: string | null
+  signedQR?: string | null
   party?: {
     name: string
     phone?: string
@@ -491,6 +498,52 @@ export async function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting)
     // A real PDF link annotation, so it is tappable in every viewer rather
     // than a string the reader has to retype.
     doc.textWithLink(setting.shareLink, margin, linkY + 4, { url: setting.shareLink })
+  }
+
+  /*
+   * e-Invoice block — IRN and the signed QR from the portal.
+   *
+   * Rule 48(4) requires both on an invoice covered by e-invoicing. Without
+   * them the document counts as NON-ISSUANCE: penalties under Section 122, and
+   * the buyer's input tax credit on it is at risk. The app stored both on the
+   * transaction and printed neither, so every PDF it produced for an
+   * e-invoicing shop was legally not an invoice.
+   *
+   * Drawn ABOVE the footer and near the totals, where a tax officer looks.
+   *
+   * The QR encodes the SIGNED string exactly as the portal returned it — that
+   * string is the government's own attestation, and re-encoding anything else
+   * would produce a QR that looks correct and fails verification. Generated
+   * locally, never through an image service: it is the shop's invoice data.
+   *
+   * Skipped entirely for the great majority of shops, who are under the ₹5
+   * crore threshold and correctly have no IRN.
+   */
+  if (txn.irn) {
+    const eY = pageHeight - 60
+    try {
+      if (txn.signedQR) {
+        const QRCode = (await import('qrcode')).default
+        const qrDataUrl = await QRCode.toDataURL(txn.signedQR, { margin: 0, width: 256 })
+        doc.addImage(qrDataUrl, 'PNG', margin, eY, 22, 22)
+      }
+      doc.setFont(THEME.font, 'bold')
+      doc.setFontSize(8)
+      doc.setTextColor(textMuted.r, textMuted.g, textMuted.b)
+      doc.text('e-Invoice', margin + 26, eY + 5)
+      doc.setFont(THEME.font, 'normal')
+      doc.setFontSize(6.5)
+      // The IRN is 64 characters — split so it does not run off the page.
+      const irnStr = String(txn.irn)
+      doc.text('IRN: ' + irnStr.slice(0, 32), margin + 26, eY + 10)
+      doc.text(irnStr.slice(32), margin + 26, eY + 14)
+    } catch {
+      /*
+       * A QR that fails to draw must not take the invoice with it. The IRN
+       * text alone still identifies the e-invoice, and a bill the shopkeeper
+       * can hand over beats an exception at the counter.
+       */
+    }
   }
 
   drawFooter(doc, 1, 1)

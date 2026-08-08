@@ -142,6 +142,11 @@ export default async function BillPage({ params }: { params: Promise<{ token: st
       invoiceNo: txn.invoiceNo,
       date: txn.date,
       type: txn.type,
+      // Rule 48(4): both must appear on an e-invoice. This mapping is explicit,
+      // so a field added to InvoiceSource does NOT arrive here on its own —
+      // which is precisely how TransactionItem.hsn stayed blank for a year.
+      irn: txn.irn,
+      signedQR: txn.signedQR,
       party: txn.party
         ? {
             name: txn.party.name,
