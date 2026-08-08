@@ -201,10 +201,43 @@ describe('🔒 V17 Audit Phase 5 — IRN request builder', () => {
     expect(rcm!.TranDtls.RegRev).toBe('Y')
   })
 
-  test('every item declares whether it is a service', () => {
+  test('goods declare IsServc = N', () => {
     // IsServc is mandatory in the NIC schema and was absent from every line.
     const request = buildIrnRequest(B2B_SALE, SHOP)
     for (const item of request!.ItemList) expect(item.IsServc).toBe('N')
+  })
+
+  test('a service declares IsServc = Y, from its SAC code', () => {
+    /*
+     * This app is a ledger for every kind of shop, not only a kirana. The
+     * product field is labelled "HSN/SAC Code", so a salon or repair shop has
+     * always been able to use it — and IsServc was hardcoded 'N', declaring
+     * their service as goods on every e-invoice they raised.
+     *
+     * No new field was needed: every SAC code begins with 99 (services are
+     * Chapter 99), goods are chapters 01-98. The code already on the line
+     * answers the question.
+     */
+    const service = {
+      ...B2B_SALE,
+      items: [{ ...B2B_SALE.items[0], hsn: '998314', productName: 'IT consulting' }],
+    }
+    const request = buildIrnRequest(service, SHOP)
+    expect(request!.ItemList[0].IsServc).toBe('Y')
+  })
+
+  test('a bill mixing goods and services labels each line correctly', () => {
+    // A repair shop bills a part (goods) and the labour (service) on one
+    // invoice. Declaring the whole bill one way would be wrong either way.
+    const mixed = {
+      ...B2B_SALE,
+      items: [
+        { ...B2B_SALE.items[0], hsn: '8708', productName: 'Brake pad' },
+        { ...B2B_SALE.items[0], hsn: '998714', productName: 'Fitting charges' },
+      ],
+    }
+    const request = buildIrnRequest(mixed, SHOP)
+    expect(request!.ItemList.map(i => i.IsServc)).toEqual(['N', 'Y'])
   })
 
   test('item list: HSN, quantity, unit price, GST', () => {

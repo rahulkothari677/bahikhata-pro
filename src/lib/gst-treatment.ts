@@ -126,6 +126,22 @@ export function suggestGstTreatment(
   }
 
   const code = String(hsn).trim()
+
+  /*
+   * A SERVICE (SAC, Chapter 99) gets no suggestion at all.
+   *
+   * ADDED 2026-08-08, when it became clear this app serves every kind of shop
+   * and not only a kirana. The lists below are goods, exempted by Notification
+   * 2/2017. Services are exempted by a DIFFERENT notification (12/2017) with a
+   * different list, which this does not carry — so for a zero-rated service the
+   * honest answer is "I do not know", not the residual "nil-rated" below.
+   *
+   * Consistent with the rule this whole file is built on: silence where it is
+   * not confident. A salon's exempt service filed as nil-rated is the same
+   * class of wrong return as milk filed as nil-rated was.
+   */
+  if (code.replace(/\D/g, '').startsWith('99')) return null
+
   if (matches(code, NON_GST_PREFIXES)) return 'nonGst'
   if (matches(code, EXEMPT_PREFIXES)) return 'exempt'
 

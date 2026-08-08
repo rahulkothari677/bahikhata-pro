@@ -99,3 +99,27 @@ describe('goods whose zero rate would be a data error, not a fact', () => {
     expect(suggestGstTreatment('1701', 5)).toBe('taxable')
   })
 })
+
+describe('services are not guessed at', () => {
+  it('offers no suggestion for a zero-rated service', () => {
+    /*
+     * This app serves every kind of shop, not only a kirana. The exempt list
+     * here is GOODS, exempted by Notification 2/2017. Services are exempted by
+     * a different notification (12/2017) with a different list, which this file
+     * does not carry — so for a zero-rated service the honest answer is "I do
+     * not know", not the residual "nil-rated".
+     */
+    expect(suggestGstTreatment('998314', 0)).toBeNull()   // IT consulting
+    expect(suggestGstTreatment('9963', 0)).toBeNull()     // accommodation, food
+  })
+
+  it('still calls a taxed service taxable', () => {
+    // The rate answers this one regardless of goods-vs-services.
+    expect(suggestGstTreatment('998314', 18)).toBe('taxable')
+  })
+
+  it('does not mistake a goods code beginning with 9 for a service', () => {
+    // 9503 is toys — goods. Only the two-digit prefix 99 means services.
+    expect(suggestGstTreatment('9503', 0)).toBe('nil')
+  })
+})

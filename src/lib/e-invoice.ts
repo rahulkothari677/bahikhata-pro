@@ -128,8 +128,9 @@ export interface IRNRequest {
     PrdDesc: string
     /**
      * Is this a service? Mandatory per the NIC schema and previously absent.
-     * A shop selling goods reports 'N'; the app has no service catalogue, so
-     * that is what it states rather than guessing per line.
+     * Derived from the code on the line: SAC codes begin with 99 (Chapter 99 is
+     * services), goods occupy chapters 01-98. See the builder for why this is
+     * derived rather than hardcoded.
      */
     IsServc: 'Y' | 'N'
     HsnCd: string
@@ -279,9 +280,24 @@ export function buildIrnRequest(
     return {
       SlNo: String(i + 1),
       PrdDesc: item.productName,
-      // Goods, not services. The app has no service catalogue, so this states
-      // what is true rather than guessing per line.
-      IsServc: 'N',
+      /*
+       * Service or goods, derived from the code the shopkeeper already entered.
+       *
+       * CORRECTED 2026-08-08. I first hardcoded 'N', reasoning that the app had
+       * no service catalogue. It does: the product field is labelled "HSN/SAC
+       * Code" and the summary reports "HSN/SAC-wise", so a salon, repair shop
+       * or consultant has always been able to use this app — and every
+       * e-invoice they raised would have declared their service as goods.
+       *
+       * The rule needs no new field and no question. Every SAC code begins with
+       * 99 (services sit in Chapter 99 of the GST tariff); goods occupy
+       * chapters 01 to 98. So the code already on the line answers it.
+       *
+       * This is what "a ledger for every kind of shop" costs if you assume the
+       * shop is a kirana: the assumption is invisible in the code and shows up
+       * on someone's tax document.
+       */
+      IsServc: String(item.hsn).trim().startsWith('99') ? 'Y' : 'N',
       HsnCd: String(item.hsn).trim(),  // guaranteed present by the check above
       Qty: roundMoney(item.quantity),
       Unit: mapUnitToNicUqc(item.unit),
