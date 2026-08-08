@@ -1039,9 +1039,17 @@ describe('V17 Phase 2G — paise-read-pattern regression guard (gstr-3b)', () =>
     if (!source) return
     const queries = extractRawSql(source)
 
-    // Nil-rated + exempt outward queries: have gstTreatment + gstRate = 0
+    // Outward supply-classification query: reads gstTreatment / gstRate.
+    //
+    // Was >= 2 until 2026-08-08. There were two queries here, one for nil-rated
+    // and one for exempt, each carrying its own copy of the classification rule
+    // in SQL — which is how GSTR-3B came to disagree with GSTR-1 about the same
+    // supplies. They are now ONE query that groups by the two fields and lets
+    // `classifySupplyLine` (shared with GSTR-1) do the sorting in TypeScript.
+    // One is the correct count; a second would mean the rule had been copied
+    // back into SQL.
     const nilRatedQueries = queries.filter(q => q.includes('"gstRate" = 0') || q.includes('"gstTreatment"'))
-    expect(nilRatedQueries.length).toBeGreaterThanOrEqual(2)
+    expect(nilRatedQueries.length).toBeGreaterThanOrEqual(1)
     for (const q of nilRatedQueries) {
       expect(q).toContain('"totalValuePaise"')
       expect(q).not.toMatch(/AS\s+"totalValue"\s/)
@@ -1070,7 +1078,10 @@ describe('V17 Phase 2G — paise-read-pattern regression guard (gstr-3b)', () =>
     if (!source) return
     const queries = extractRawSql(source)
     const moneyQueries = queries.filter(q => q.includes('Paise'))
-    expect(moneyQueries.length).toBeGreaterThanOrEqual(4)
+    // Was >= 4; the nil-rated and exempt queries were merged into one on
+    // 2026-08-08 (see the note above), so 3 money queries remain. The check that
+    // matters is the loop below — none of them may multiply by 100.
+    expect(moneyQueries.length).toBeGreaterThanOrEqual(3)
     for (const q of moneyQueries) {
       expect(q).not.toMatch(/\*\s*100/)
     }

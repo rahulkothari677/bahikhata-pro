@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { getAuthContext, assertCanWrite } from '@/lib/get-auth'
 import { canAccessModule } from '@/lib/staff-permissions'
 import { roundMoney, fromPaise } from '@/lib/money'
+import { classifySupplyLine } from '@/lib/supply-classification'
 import { istMonthStartOffset, getISTDateParts } from '@/lib/timezone'
 import { apiError } from '@/lib/api-error'
 import { captureGstFilingError } from '@/lib/sentry-gst'
@@ -63,7 +64,7 @@ async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd:
 
   // === Batch 1: Simple aggregates + nil-rated/exempt (wakes the DB if cold) ===
   const [
-    outwardSalesAgg, rcmInwardAgg, creditNoteAgg, nilRatedAgg, exemptAgg, nonGstAgg,
+    outwardSalesAgg, rcmInwardAgg, creditNoteAgg, supplyClassRows, nonGstAgg,
   ] = await Promise.all([
     db.transaction.aggregate({
       where: { userId, type: 'sale', deletedAt: null, isReverseCharge: false, date: { gte: periodStart, lt: periodEnd } },
@@ -80,43 +81,41 @@ async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd:
       _sum: { subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true },
       _count: true,
     }),
-    db.$queryRaw<Array<{ totalValuePaise: string }>>`
-      SELECT COALESCE(SUM(
-        ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 0)
-      ), 0)::text AS "totalValuePaise"
+    /*
+     * 3.1(c) inputs: the month's sale lines, grouped but NOT yet classified.
+     *
+     * WHY IT IS SHAPED THIS WAY (2026-08-08). There used to be two queries here,
+     * one for nil-rated and one for exempt, each carrying its own copy of the
+     * classification rule in SQL — and each joined LIVE to Product. GSTR-1 was
+     * meanwhile applying a different rule, in TypeScript, to the snapshot on the
+     * line. The two returns disagreed about the same shop's supplies: for August
+     * 2026, GSTR-1 reported ₹2,959 nil + ₹100 exempt while this reported ₹0 nil
+     * + ₹3,034 exempt, leaving ₹25 sitting in outward taxable supplies.
+     *
+     * So SQL no longer decides anything. It groups by the two fields the rule
+     * looks at and returns the totals; `classifySupplyLine` — the same function
+     * GSTR-1 calls — sorts the groups into boxes below. The rule cannot drift
+     * between the two returns because there is only one of it.
+     *
+     * Reading ti."gstTreatment" rather than p."gstTreatment" is the other half:
+     * a return must reflect what the product was when it was sold, not what the
+     * product list says today.
+     */
+    db.$queryRaw<Array<{ treatment: string | null; gstRate: number; totalValuePaise: string }>>`
+      SELECT ti."gstTreatment" AS "treatment",
+             ti."gstRate" AS "gstRate",
+             COALESCE(SUM(
+               ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 0)
+             ), 0)::text AS "totalValuePaise"
       FROM "TransactionItem" ti
       JOIN "Transaction" t ON ti."transactionId" = t.id
-      LEFT JOIN "Product" p ON ti."productId" = p.id
       WHERE t."userId" = ${userId}
         AND t."deletedAt" IS NULL
         AND t."type" = 'sale'
         AND t."isReverseCharge" = false
         AND t."date" >= ${periodStart}
         AND t."date" < ${periodEnd}
-        AND ti."gstRate" = 0
-        -- 🔒 V26 M13 FIX: Was: (p."gstTreatment" IS NULL OR p."gstTreatment" = 'taxable' OR p."gstTreatment" = 'nil')
-        -- This folded legacy products with NULL gstTreatment into nil-rated (3.1c).
-        -- A legacy product that was actually taxable@0% got counted as nil-rated
-        -- instead of taxable (3.1a) — wrong GST return classification.
-        -- Now: only count as nil-rated if explicitly marked 'nil'. NULL and 'taxable'
-        -- with gstRate=0 go to 3.1(a) outward taxable supplies (which is correct —
-        -- 0% GST is still a taxable supply, not nil-rated).
-        AND p."gstTreatment" = 'nil'
-    `,
-    db.$queryRaw<Array<{ totalValuePaise: string }>>`
-      SELECT COALESCE(SUM(
-        ROUND((ti."quantity"::numeric * ti."unitPrice"::numeric - COALESCE(ti."discountAmount", 0)::numeric)::numeric, 0)
-      ), 0)::text AS "totalValuePaise"
-      FROM "TransactionItem" ti
-      JOIN "Transaction" t ON ti."transactionId" = t.id
-      LEFT JOIN "Product" p ON ti."productId" = p.id
-      WHERE t."userId" = ${userId}
-        AND t."deletedAt" IS NULL
-        AND t."type" = 'sale'
-        AND t."isReverseCharge" = false
-        AND t."date" >= ${periodStart}
-        AND t."date" < ${periodEnd}
-        AND p."gstTreatment" = 'exempt'
+      GROUP BY ti."gstTreatment", ti."gstRate"
     `,
     // 🔒 AUDIT V23 FIX §13.9i: nonGstValue (GSTR-3B 3.1(e) "Non-GST outward
     // supplies") was previously computed from ALL income transactions. But
@@ -196,10 +195,23 @@ async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd:
   // 3.1(c): Nil-rated + exempt + non-GST (computed FIRST so 3.1(a) can subtract them)
   // 🔒 V17 Audit §4.1: Nil-rated now sums 0%-rated line items (not whole invoices)
   // 🔒 V17 PAISE MIGRATION Phase 2G: SQL returns paise; convert to rupees via fromPaise().
-  const nilRatedValue = fromPaise(Number(nilRatedAgg[0]?.totalValuePaise || 0))
-  // 🔒 V17 Audit §4.2: Exempt now reads from Product.gstTreatment='exempt' (was: hardcoded 0)
-  const exemptValue = fromPaise(Number(exemptAgg[0]?.totalValuePaise || 0))
-  const nonGstValue = roundMoney(nonGstAgg._sum.totalAmount || 0)
+  /*
+   * Sort the grouped sale lines into 3.1(c)'s three boxes using the SAME
+   * classifier GSTR-1 uses for its Table 8, so the two returns cannot disagree.
+   */
+  const classTotalsPaise = { taxable: 0, nil: 0, exempt: 0, nonGst: 0 }
+  for (const row of supplyClassRows) {
+    const cls = classifySupplyLine({ gstTreatment: row.treatment, gstRate: Number(row.gstRate) || 0 })
+    classTotalsPaise[cls] += Number(row.totalValuePaise || 0)
+  }
+  const nilRatedValue = fromPaise(classTotalsPaise.nil)
+  const exemptValue = fromPaise(classTotalsPaise.exempt)
+  /*
+   * Non-GST comes from two places and they are different things: lines on a
+   * sale explicitly marked nonGst, plus the Scrap Sale income category (see the
+   * note on that query). Both are 3.1(e).
+   */
+  const nonGstValue = roundMoney(fromPaise(classTotalsPaise.nonGst) + (nonGstAgg._sum.totalAmount || 0))
 
   // 3.1(a): Outward taxable supplies (other than zero rated, nil rated and exempted)
   // 🔒 AUDIT V23 FIX §13.2: Was SUM(subtotal - discount) over ALL sales → included

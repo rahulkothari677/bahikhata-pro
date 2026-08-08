@@ -159,7 +159,7 @@ describe('when the native engine is present but broken', () => {
    * loop actually iterates. The element is a genuine <video> so that the ZXing
    * fallback has something plausible to attach to.
    */
-  function tickingVideo(maxFrames = 60) {
+  function tickingVideo(maxFrames = 5000) {
     const el = document.createElement('video') as any
     let frames = 0
     el.play = jest.fn().mockResolvedValue(undefined)
@@ -187,7 +187,7 @@ describe('when the native engine is present but broken', () => {
     // It starts on the fast path — the failure is only discoverable by trying.
     expect(engine.engine).toBe('native')
 
-    await new Promise((r) => setTimeout(r, 250))
+    await until(() => onEngineChange.mock.calls.length > 0, 'the fallback to zxing')
     expect(onEngineChange).toHaveBeenCalledWith('zxing')
 
     engine.stop()
@@ -206,10 +206,12 @@ describe('when the native engine is present but broken', () => {
     const engine = await startDecoding(fakeStream(), tickingVideo(), {
       onCode: jest.fn(), onEngineChange, onError: jest.fn(),
     })
-    await new Promise((r) => setTimeout(r, 250))
+    // Wait for the loop to have really run, rather than for a fixed 250ms that
+    // a loaded machine can spend without delivering many frames.
+    await until(() => n > 15, 'the decode loop to keep going through the throws')
 
     expect(onEngineChange).not.toHaveBeenCalled()
-    expect(n).toBeGreaterThan(15)  // it really did keep going
+    expect(n).toBeGreaterThan(15)
     engine.stop()
   })
 })
@@ -376,10 +378,23 @@ describe('more than one barcode in view', () => {
       static getSupportedFormats() { return Promise.resolve(['ean_13']) }
       detect() { return Promise.resolve([{ rawValue: 'ONLY-ONE', format: 'ean_13', boundingBox: box(0) }]) }
     }
+    /*
+     * Stated as "it waits", not as "nothing had happened 120ms in". Sleeping a
+     * short time and asserting the absence of a call is only meaningful if the
+     * machine really was awake for those 120ms — a stalled worker would satisfy
+     * it for the wrong reason, or blow past the window and fail for one. Timing
+     * the acceptance instead can only be made LATER by a slow machine, never
+     * earlier, so it cannot flake.
+     */
     const onCode = jest.fn()
+    const startedAt = Date.now()
     const engine = await startDecoding(fakeStream(), tickingVideo(), { onCode })
-    await new Promise((r) => setTimeout(r, 120))
-    expect(onCode).not.toHaveBeenCalled()
+    await until(() => onCode.mock.calls.length > 0, 'the lone barcode to be accepted')
+    const waited = Date.now() - startedAt
+
+    expect(onCode).toHaveBeenCalledWith('ONLY-ONE', 'ean_13')
+    // A small tolerance below the 400ms window, for timer granularity.
+    expect(waited).toBeGreaterThanOrEqual(350)
     engine.stop()
   })
 
@@ -394,8 +409,9 @@ describe('more than one barcode in view', () => {
         ])
       }
     }
-    const engine = await startDecoding(fakeStream(), video, { onCode: jest.fn(), onCandidates: jest.fn() })
-    await new Promise((r) => setTimeout(r, 150))
+    const onCandidates = jest.fn()
+    const engine = await startDecoding(fakeStream(), video, { onCode: jest.fn(), onCandidates })
+    await until(() => onCandidates.mock.calls.length > 0, 'the picker to be offered')
 
     expect(engine.resume).toBeDefined()
     engine.resume!()

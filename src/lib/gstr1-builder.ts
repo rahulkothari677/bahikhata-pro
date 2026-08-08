@@ -30,6 +30,7 @@
 
 import { roundMoney } from '@/lib/money'
 import { deriveStateCode } from '@/lib/gst-states'
+import { classifySupplyLine, isTaxableSupply } from '@/lib/supply-classification'
 
 // ─── Input types ──────────────────────────────────────────────────────────
 
@@ -248,6 +249,27 @@ function itemTaxable(item: Gstr1Item): number {
   return roundMoney(item.quantity * item.unitPrice - (item.discountAmount || 0))
 }
 
+/**
+ * The lines that belong in the taxable tables (4 / 5 / 7).
+ *
+ * WHY (2026-08-08). B2B, B2CL and B2CS were built from `txn.items` wholesale,
+ * so a nil-rated or exempt line was emitted here as a 0%-rated row AND counted
+ * again by buildNIL in Table 8. For August 2026 that was ₹3,059 reported twice
+ * in the same return — ₹120 of it inside B2B, ₹2,939 inside B2CS.
+ *
+ * A supply belongs in the taxable tables OR in Table 8, never both. Double
+ * reporting inflates GSTR-1 turnover against the books and against GSTR-3B,
+ * which is exactly the mismatch the department reconciles on.
+ *
+ * The invoice-level `val` is deliberately NOT reduced: that field is the
+ * invoice's total value, which does include the exempt lines. Only the itms —
+ * the rate-wise breakdown that the portal totals into outward supplies — are
+ * filtered.
+ */
+function taxableItems(items: Gstr1Item[]): Gstr1Item[] {
+  return items.filter(isTaxableSupply)
+}
+
 // ─── B2CL threshold ──────────────────────────────────────────────
 // 🔒 AUDIT V24 §4: Inter-state B2C invoices ABOVE this value (GST-inclusive
 // invoice value) are reported invoice-wise in B2CL; at or below, they are
@@ -270,6 +292,10 @@ export function buildB2B(txns: Gstr1Transaction[], shop: ShopInfo): Gstr1B2bEntr
   for (const txn of b2bSales) {
     const ctin = txn.partyGstin!
     const pos = placeOfSupply(txn, shop)
+    const items = taxableItems(txn.items)
+    // An invoice that is entirely exempt/nil belongs in Table 8 alone. Emitting
+    // it here with an empty itms array would declare an invoice with no supply.
+    if (items.length === 0) continue
     const inv: Gstr1B2bInvoice = {
       inum: txn.invoiceNo || txn.id,
       idt: formatPortalDate(txn.date),
@@ -277,7 +303,7 @@ export function buildB2B(txns: Gstr1Transaction[], shop: ShopInfo): Gstr1B2bEntr
       pos,
       rchrg: txn.isReverseCharge ? 'Y' : 'N',
       inv_typ: 'R',  // Regular (no export tracking)
-      itms: txn.items.map((item, i) => ({
+      itms: items.map((item, i) => ({
         num: i + 1,
         itm_det: {
           rt: item.gstRate,
@@ -311,11 +337,14 @@ export function buildB2CL(txns: Gstr1Transaction[], shop: ShopInfo): Gstr1B2clEn
 
   for (const txn of b2clSales) {
     const pos = placeOfSupply(txn, shop)
+    const items = taxableItems(txn.items)
+    // Entirely exempt/nil invoices belong in Table 8 alone — see taxableItems.
+    if (items.length === 0) continue
     const inv = {
       inum: txn.invoiceNo || txn.id,
       idt: formatPortalDate(txn.date),
       val: roundMoney(txn.totalAmount),
-      itms: txn.items.map((item, i) => ({
+      itms: items.map((item, i) => ({
         num: i + 1,
         itm_det: {
           rt: item.gstRate,
@@ -417,13 +446,16 @@ export function buildB2CS(txns: Gstr1Transaction[], shop: ShopInfo): Gstr1B2csEn
 
   for (const txn of b2csSales) {
     const pos = placeOfSupply(txn, shop)
-    for (const item of txn.items) addToAgg(item, pos, 1)
+    // Nil/exempt lines are Table 8's, not Table 7's — see taxableItems.
+    for (const item of taxableItems(txn.items)) addToAgg(item, pos, 1)
   }
   // 🔒 V26 N2: Subtract B2CS notes (credit notes reduce, debit notes increase)
   for (const txn of b2csNotes) {
     const pos = placeOfSupply(txn, shop)
     const sign: 1 | -1 = txn.type === 'credit-note' ? -1 : 1
-    for (const item of txn.items) addToAgg(item, pos, sign)
+    // A note against an exempt supply adjusts Table 8, not the rate-wise
+    // aggregate — so it is filtered on the same rule as the sale it reverses.
+    for (const item of taxableItems(txn.items)) addToAgg(item, pos, sign)
   }
 
   return Array.from(agg.values()).map(a => ({
@@ -689,12 +721,12 @@ export function buildNIL(txns: Gstr1Transaction[]): { inv: Gstr1NilEntry[] } {
        * rule rather than guessing, so historical periods report exactly what
        * they reported before and nothing silently moves between boxes.
        */
-      const treatment = item.gstTreatment
-      if (treatment === 'exempt') {
+      const cls = classifySupplyLine(item)
+      if (cls === 'exempt') {
         buckets[sply_ty].expt_amt = roundMoney(buckets[sply_ty].expt_amt + taxable)
-      } else if (treatment === 'nonGst') {
+      } else if (cls === 'nonGst') {
         buckets[sply_ty].ngsup_amt = roundMoney(buckets[sply_ty].ngsup_amt + taxable)
-      } else if (treatment === 'nil' || item.gstRate === 0) {
+      } else if (cls === 'nil') {
         buckets[sply_ty].nil_amt = roundMoney(buckets[sply_ty].nil_amt + taxable)
       }
     }
