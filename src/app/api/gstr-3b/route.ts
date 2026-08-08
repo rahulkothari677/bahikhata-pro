@@ -436,6 +436,18 @@ export async function GET(req: NextRequest) {
       creditNoteTaxableValue, creditNoteCgst, creditNoteSgst, creditNoteIgst,
       interstateB2cTaxableValue, interstateB2cIgst,
       itcTaxableValue, itcCgst, itcSgst, itcIgst,
+      /*
+       * These must be destructured AND returned, or they are computed and
+       * silently dropped. This GET names every field explicitly, so a value
+       * added to computeGstr3bValues does not reach the client on its own —
+       * which is exactly how the ITC warnings shipped invisible on the first
+       * attempt, and the same shape as TransactionItem.hsn and the public
+       * bill page before it.
+       */
+      itcBasis,
+      deferredItcTaxableValue, deferredItcCgst, deferredItcSgst, deferredItcIgst,
+      blockedItcTaxableValue, blockedItcCgst, blockedItcSgst, blockedItcIgst, blockedItcCount,
+      bookItcTaxableValue, bookItcCgst, bookItcSgst, bookItcIgst,
       rcmItcTaxableValue, rcmItcCgst, rcmItcSgst, rcmItcIgst,
       debitNoteTaxableValue, debitNoteCgst, debitNoteSgst, debitNoteIgst,
       exemptInwardValue,
@@ -473,6 +485,22 @@ export async function GET(req: NextRequest) {
       itcCgst,
       itcSgst,
       itcIgst,
+      // How that claim was arrived at, and what is being held back or blocked.
+      // A claim shown without its basis invites a shopkeeper to file it.
+      itcBasis,
+      deferredItcTaxableValue,
+      deferredItcCgst,
+      deferredItcSgst,
+      deferredItcIgst,
+      blockedItcTaxableValue,
+      blockedItcCgst,
+      blockedItcSgst,
+      blockedItcIgst,
+      blockedItcCount,
+      bookItcTaxableValue,
+      bookItcCgst,
+      bookItcSgst,
+      bookItcIgst,
       rcmItcTaxableValue,
       rcmItcCgst,
       rcmItcSgst,
