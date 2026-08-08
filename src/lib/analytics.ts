@@ -55,7 +55,16 @@ export function setAnalyticsConsent(consent: boolean) {
   } catch {}
 }
 
-export function hasAnalyticsConsent(): boolean { return hasConsent }
+/**
+ * Has the shopkeeper agreed to anonymous analytics?
+ *
+ * Reads the stored answer rather than the module variable. `hasConsent` starts
+ * false on every page load and is only assigned by initAnalytics/setConsent, so
+ * returning it reported "no" to any caller that asked before init ran — which
+ * is how the Settings screen came to show a privacy switch that disagreed with
+ * the real gate. The stored value is the truth; there is no reason to cache it.
+ */
+export function hasAnalyticsConsent(): boolean { return checkConsent() }
 
 export function identifyUser(userId: string, traits?: any) {
   if (typeof window === 'undefined') return

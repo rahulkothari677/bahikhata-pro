@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Shield, Check, X } from 'lucide-react'
@@ -10,6 +10,9 @@ const STORAGE_KEY = 'bahikhata-analytics-consent'
 
 export function ConsentModal() {
   const [open, setOpen] = useState(false)
+  /* Guards against recording the answer twice: the footer buttons close the
+     dialog themselves, which then also fires onOpenChange. */
+  const decided = useRef(false)
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -22,21 +25,35 @@ export function ConsentModal() {
     } catch {}
   }, [])
 
-  const handleAccept = () => {
-    setAnalyticsConsent(true)
-    initAnalytics()
-    track(EVENTS.ONBOARDING_COMPLETED, { consent: true })
+  /**
+   * Record the answer once, and treat every close as an answer.
+   *
+   * WHY (2026-08-08, found in browser). This dialog can be closed four ways:
+   * the two footer buttons, the X, Escape, and a click on the overlay. Only the
+   * two buttons wrote anything, so the other three left the stored value null —
+   * and the effect above reopens the dialog two seconds after every mount while
+   * it is null. Declining by pressing Escape therefore asked again on the next
+   * screen, and the next, forever.
+   *
+   * A dismissal is now recorded as a DECLINE, never as consent. Silence is not
+   * agreement, so the safe reading of "closed it without choosing" is no. The
+   * shopkeeper can still turn it on later in Settings → Data & Privacy, which
+   * is why making this sticky is safe.
+   */
+  const decide = (consent: boolean) => {
+    if (decided.current) return
+    decided.current = true
+    setAnalyticsConsent(consent)
+    if (consent) initAnalytics()
+    track(EVENTS.ONBOARDING_COMPLETED, { consent })
     setOpen(false)
   }
 
-  const handleDecline = () => {
-    setAnalyticsConsent(false)
-    track(EVENTS.ONBOARDING_COMPLETED, { consent: false })
-    setOpen(false)
-  }
+  const handleAccept = () => decide(true)
+  const handleDecline = () => decide(false)
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(next) => { if (!next) decide(false); else setOpen(true) }}>
       <DialogContent className="max-w-md">
         <DialogHeader>
           <div className="flex items-center gap-3 mb-2">

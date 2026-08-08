@@ -23,6 +23,7 @@ import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
 import { toast as sonnerToast } from 'sonner'
 import { haptic } from '@/lib/haptic'
 import { useAppStore, type FeatureKey } from '@/store/app-store'
+import { hasAnalyticsConsent, setAnalyticsConsent, initAnalytics } from '@/lib/analytics'
 import { THEME_OPTIONS } from '@/components/providers/ThemeProvider'
 import {
   Store, Save, Database, Trash2, AlertTriangle, Moon, Keyboard,
@@ -520,6 +521,28 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
   // 🔒 V22-7 (Phase 5): Feature search query — filters FEATURE_CATEGORIES by
   // keyword (label + description + category title). Empty = show all.
   const [featureSearch, setFeatureSearch] = useState('')
+
+  /*
+   * "Anonymous Analytics" reads and writes the REAL consent, not a feature flag.
+   *
+   * WHY (2026-08-08, found in browser). This row was an ordinary entry in
+   * FEATURE_CATEGORIES, so it rendered `features.analyticsTracking` — a Zustand
+   * flag that defaults to TRUE and that nothing else reads. Actual analytics is
+   * gated solely by the `bahikhata-analytics-consent` value the consent modal
+   * writes, which defaults to off. The two never spoke.
+   *
+   * So the privacy screen showed "Anonymous Analytics — ON" with a green badge
+   * to a shopkeeper who had declined, and turning the switch off did not stop
+   * anything, because nothing was running in the first place. A privacy control
+   * that reports the opposite of the truth is worse than no control at all, and
+   * this codebase has removed one placebo toggle already (see the App Lock note
+   * above). This one is wired to the real gate instead.
+   *
+   * Read after mount, not during render: the value lives in localStorage and
+   * reading it while rendering on the server would hydrate to the wrong state.
+   */
+  const [analyticsOn, setAnalyticsOn] = useState(false)
+  useEffect(() => { setAnalyticsOn(hasAnalyticsConsent()) }, [])
 
   // 🔒 V26 (V23 §4 cleanup): App Lock placebo state/handler REMOVED. The toggle
   // UI was already replaced with an honest "Coming Soon" row, but the dead
@@ -1928,30 +1951,40 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
             <div key={category.title}>
               <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">{category.title}</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {category.features.map(({ key, label, description, icon: Icon }) => (
+                {category.features.map(({ key, label, description, icon: Icon }) => {
+                  /* Analytics is the one row backed by real consent rather than
+                     a feature flag — see the note beside `analyticsOn`. */
+                  const isAnalytics = key === 'analyticsTracking'
+                  const on = isAnalytics ? analyticsOn : features[key]
+                  const setOn = (checked: boolean) => {
+                    if (isAnalytics) {
+                      setAnalyticsConsent(checked)
+                      if (checked) initAnalytics()
+                      setAnalyticsOn(checked)
+                    } else {
+                      setFeature(key, checked)
+                    }
+                    sonnerToast.success(`${label} ${checked ? 'enabled' : 'disabled'}`)
+                  }
+                  return (
                   <div
                     key={key}
-                    className={`rounded-lg border p-3 flex items-start gap-3 transition ${features[key] ? 'border-primary/30 bg-primary/5' : 'border-border'}`}
+                    className={`rounded-lg border p-3 flex items-start gap-3 transition ${on ? 'border-primary/30 bg-primary/5' : 'border-border'}`}
                   >
-                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${features[key] ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>
+                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${on ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>
                       <Icon className="w-4 h-4" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="text-sm font-medium">{label}</p>
-                        {features[key] && <Badge className="text-3xs bg-emerald-100 text-emerald-700 dark:text-emerald-300">ON</Badge>}
+                        {on && <Badge className="text-3xs bg-emerald-100 text-emerald-700 dark:text-emerald-300">ON</Badge>}
                       </div>
                       <p className="text-2xs text-muted-foreground mt-0.5">{description}</p>
                     </div>
-                    <Switch
-                      checked={features[key]}
-                      onCheckedChange={(checked) => {
-                        setFeature(key, checked)
-                        sonnerToast.success(`${label} ${checked ? 'enabled' : 'disabled'}`)
-                      }}
-                    />
+                    <Switch checked={on} onCheckedChange={setOn} />
                   </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
           ))
