@@ -159,17 +159,15 @@ export function Gstr3bReport() {
   if (isLoading) {
     return (
       <div className="space-y-4">
-      {/*
-        * One answer to "can I file?", above everything else.
-        *
-        * This replaces four separate warning boxes that had accumulated on this
-        * screen — each correct, each added beside the last. Stacked they read as
-        * an app in trouble rather than a shop with two things to check, and
-        * nothing told a shopkeeper which of them actually stopped them filing.
-        */}
-      <FilingReadiness from={readinessFrom} to={readinessTo} />
-
+        {/* Stands in for the month picker, so the readiness card below it does
+            not jump when the figures arrive. */}
         <Skeleton className="h-16 w-full rounded-xl" />
+
+        {/* Readiness has its own query and answers for the SELECTED month, so it
+            can be useful while the 3B figures are still loading. It sits in the
+            same slot here as in the loaded state — see the note there. */}
+        <FilingReadiness from={readinessFrom} to={readinessTo} />
+
         <Skeleton className="h-32 w-full rounded-xl" />
         <Skeleton className="h-64 w-full rounded-xl" />
       </div>
@@ -226,6 +224,23 @@ export function Gstr3bReport() {
           </Button>
         </div>
       </div>
+
+      {/*
+        * One answer to "can I file?", above the figures.
+        *
+        * This replaces four separate warning boxes that had accumulated on this
+        * screen — each correct, each added beside the last. Stacked they read as
+        * an app in trouble rather than a shop with two things to check, and
+        * nothing told a shopkeeper which of them actually stopped them filing.
+        *
+        * It must be rendered HERE, in the loaded branch. It was first added only
+        * to the isLoading branch above, so it flashed during load and then
+        * vanished — leaving the screen with no warnings at all, which is worse
+        * than the stack it replaced. Both branches now render it, in the same
+        * slot, and `gstr-3b-shows-filing-readiness.test.tsx` fails if either
+        * one stops.
+        */}
+      <FilingReadiness from={readinessFrom} to={readinessTo} />
 
       {/* 🔒 V17 Audit Phase 1 P0.2: Filed-vs-live divergence warning.
           Shows when a filed snapshot's netTaxPayable differs from the live value —
