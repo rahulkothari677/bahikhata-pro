@@ -298,6 +298,22 @@ model Transaction {
   // re-conversion (double billing, double stock decrement). Null = not converted.
   convertedToTransactionId String?
   convertedAt              DateTime?
+  /**
+   * Why input credit on this purchase cannot be claimed — NULL means it can.
+   * Section 17(5) blocks credit on specific things however genuine the business
+   * purpose: motor vehicles carrying people, food and staff welfare, works
+   * contract and construction of premises, goods given away or lost, and
+   * anything bought for personal use. GSTR-3B claimed credit on every purchase
+   * in the books, so a shop buying a car or a staff lunch was told it could
+   * claim tax the law refuses — under-paying, with interest running under
+   * Section 50 until a notice arrives.
+   * A REASON rather than a boolean. "Blocked" alone tells a CA nothing at
+   * assessment time, and the shopkeeper who marked it will not remember why in
+   * eighteen months. The reason is the audit trail.
+   * Values: personal | staffWelfare | motorVehicle | construction | lostOrFree
+   * | compositionSupplier | other
+   */
+  itcBlockedReason         String?
 
   // 🔒 M6: Unique invoice number per user (GST compliance — no duplicates)
   @@unique([userId, invoiceNo])

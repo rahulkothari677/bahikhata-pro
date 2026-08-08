@@ -249,7 +249,7 @@ export async function POST(req: NextRequest) {
       }, { status: 400 })
     }
 
-    const { type, partyId, date, items, discountAmount, paymentMode, notes, invoiceNo, category, paidAmount, payeeName, payeePhone, originalTransactionId, noteType, noteReason, affectsStock, isReverseCharge, updateProductCosts } = validation.data as any
+    const { type, partyId, date, items, discountAmount, paymentMode, notes, invoiceNo, category, paidAmount, payeeName, payeePhone, originalTransactionId, noteType, noteReason, affectsStock, isReverseCharge, updateProductCosts, itcBlockedReason } = validation.data as any
 
     // 🔒 FIX H1: Check staff permission based on transaction type
     // V17-Ext Tier 3: credit-note maps to sales, debit-note maps to purchases
@@ -701,6 +701,10 @@ export async function POST(req: NextRequest) {
            * makes that a rule instead of an expectation.
            */
           isReverseCharge: type === 'purchase' ? !!isReverseCharge : false,
+          // Section 17(5) applies only to purchases — a sale has no input
+          // credit to block, so the field is forced null there rather than
+          // trusted from the client.
+          itcBlockedReason: type === 'purchase' ? (itcBlockedReason || null) : null,
           notes: notes || null,
           invoiceNo: finalInvoiceNo,
           invoiceSequence,

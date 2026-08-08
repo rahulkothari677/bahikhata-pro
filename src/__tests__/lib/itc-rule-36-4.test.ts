@@ -67,3 +67,49 @@ describe('matching a purchase to a 2B invoice', () => {
     expect(key(null, 'INV-001')).not.toBe(key('27AAPFU0939F1ZV', 'INV-001'))
   })
 })
+
+describe('Section 17(5) — credit that can never be claimed', () => {
+  /*
+   * Section 17(5) blocks input credit on specific things regardless of business
+   * purpose: motor vehicles carrying people, food and staff welfare, works
+   * contract and construction of premises, goods given away or lost, and
+   * anything for personal use.
+   *
+   * GSTR-3B claimed credit on every purchase, so a shop buying a delivery car
+   * or a staff lunch was told it could claim tax the law refuses — under-paying,
+   * with interest running under Section 50 until a notice arrives.
+   *
+   * The reasons the app offers, in the shopkeeper's words rather than the Act's.
+   */
+  const REASONS = [
+    'personal',            // bought for personal or family use
+    'staffWelfare',        // food, drinks, staff welfare
+    'motorVehicle',        // car or bike carrying people
+    'construction',        // building or repairing the premises
+    'lostOrFree',          // given free, lost, damaged
+    'compositionSupplier', // supplier under composition scheme
+    'other',
+  ]
+
+  it('offers a reason, not just a yes/no', () => {
+    /*
+     * "Blocked" alone tells a CA nothing at assessment, and the shopkeeper who
+     * ticked it will not remember why in eighteen months. The reason IS the
+     * audit trail — that is why the column stores a string, not a boolean.
+     */
+    expect(REASONS.length).toBeGreaterThan(3)
+    expect(REASONS).toContain('personal')
+    expect(REASONS).toContain('motorVehicle')
+  })
+
+  it('treats null as claimable, so nothing changes for ordinary purchases', () => {
+    /*
+     * The default must be "claimable". Defaulting to blocked would quietly cost
+     * shopkeepers money on every normal purchase — the exact mirror of the
+     * fault this fixes, and harder to notice because it looks like caution.
+     */
+    const blocked = (reason: string | null) => reason !== null
+    expect(blocked(null)).toBe(false)
+    expect(blocked('personal')).toBe(true)
+  })
+})

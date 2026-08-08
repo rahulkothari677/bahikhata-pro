@@ -260,6 +260,25 @@ export function Gstr3bReport() {
             </div>
           </div>
         )}
+        {(data?.blockedItcCount || 0) > 0 && (
+          <div className="sm:col-span-2 lg:col-span-4 rounded-2xl border border-slate-300 bg-slate-50 dark:bg-slate-900/40 dark:border-slate-700 p-4">
+            <div className="flex gap-3">
+              <AlertTriangle className="w-5 h-5 text-slate-500 flex-shrink-0 mt-0.5" />
+              <div className="min-w-0">
+                <p className="font-semibold text-slate-800 dark:text-slate-200 text-sm">
+                  {formatINR((data?.blockedItcCgst || 0) + (data?.blockedItcSgst || 0) + (data?.blockedItcIgst || 0))}
+                  {' '}of GST cannot be claimed
+                </p>
+                <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
+                  You marked {data?.blockedItcCount} {data?.blockedItcCount === 1 ? 'purchase' : 'purchases'} as
+                  not eligible for input credit — things like personal use, staff food, or a vehicle.
+                  The law doesn&apos;t allow credit on these, so they&apos;re left out of the claim.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {data?.itcBasis === 'gstr2b' && (data?.deferredItcCgst || data?.deferredItcSgst || data?.deferredItcIgst) > 0 && (
           <div className="sm:col-span-2 lg:col-span-4 rounded-2xl border border-blue-300 bg-blue-50 dark:bg-blue-950/40 dark:border-blue-800 p-4">
             <div className="flex gap-3">

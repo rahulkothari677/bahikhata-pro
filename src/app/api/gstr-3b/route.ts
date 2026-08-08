@@ -161,7 +161,13 @@ async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd:
         AND (p."gstin" IS NULL OR p."gstin" = '')
     `,
     db.transaction.aggregate({
-      where: { userId, type: 'purchase', deletedAt: null, isReverseCharge: false, date: { gte: periodStart, lt: periodEnd } },
+      where: {
+        userId, type: 'purchase', deletedAt: null, isReverseCharge: false,
+        date: { gte: periodStart, lt: periodEnd },
+        // Section 17(5): credit on these is blocked outright, so they never
+        // enter the claim — before Rule 36(4) matching is even considered.
+        itcBlockedReason: null,
+      },
       _sum: { subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true },
       _count: true,
     }),
@@ -244,6 +250,28 @@ async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd:
    *                  figure and marks it unverified rather than presenting a
    *                  guess as a filing figure
    */
+  /*
+   * What Section 17(5) removed, reported rather than silently dropped.
+   *
+   * A shopkeeper whose credit falls needs to see WHY, or the app looks like it
+   * lost their money. It is also the figure a CA checks at assessment: not
+   * "was any credit blocked" but "was the right credit blocked, and for what".
+   */
+  const blockedAgg = await db.transaction.aggregate({
+    where: {
+      userId, type: 'purchase', deletedAt: null, isReverseCharge: false,
+      date: { gte: periodStart, lt: periodEnd },
+      itcBlockedReason: { not: null },
+    },
+    _sum: { subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true },
+    _count: true,
+  })
+  const blockedItcTaxableValue = roundMoney((blockedAgg._sum.subtotal || 0) - (blockedAgg._sum.discountAmount || 0))
+  const blockedItcCgst = roundMoney(blockedAgg._sum.cgst || 0)
+  const blockedItcSgst = roundMoney(blockedAgg._sum.sgst || 0)
+  const blockedItcIgst = roundMoney(blockedAgg._sum.igst || 0)
+  const blockedItcCount = blockedAgg._count
+
   const gstr2b = await db.gstr2bImport.findFirst({
     where: { userId, monthYear: monthYearOf(periodStart) },
     include: { invoices: true },
@@ -276,7 +304,13 @@ async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd:
     const in2b = new Set(gstr2b.invoices.map((i) => key(i.supplierGstin, i.invoiceNumber)))
 
     const purchases = await db.transaction.findMany({
-      where: { userId, type: 'purchase', deletedAt: null, isReverseCharge: false, date: { gte: periodStart, lt: periodEnd } },
+      where: {
+        userId, type: 'purchase', deletedAt: null, isReverseCharge: false,
+        date: { gte: periodStart, lt: periodEnd },
+        // Section 17(5): credit on these is blocked outright, so they never
+        // enter the claim — before Rule 36(4) matching is even considered.
+        itcBlockedReason: null,
+      },
       select: { subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true, invoiceNo: true, party: { select: { gstin: true } } },
     })
 
@@ -327,6 +361,7 @@ async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd:
     // that shows the claim without showing the basis is repeating the fault.
     itcBasis,
     deferredItcTaxableValue, deferredItcCgst, deferredItcSgst, deferredItcIgst,
+    blockedItcTaxableValue, blockedItcCgst, blockedItcSgst, blockedItcIgst, blockedItcCount,
     bookItcTaxableValue: bookItcTaxable, bookItcCgst, bookItcSgst, bookItcIgst,
     rcmItcTaxableValue, rcmItcCgst, rcmItcSgst, rcmItcIgst,
     debitNoteTaxableValue, debitNoteCgst, debitNoteSgst, debitNoteIgst,

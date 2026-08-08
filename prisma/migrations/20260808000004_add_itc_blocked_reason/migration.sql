@@ -1,0 +1,14 @@
+-- Why input credit on a purchase cannot be claimed. NULL means it can.
+--
+-- Section 17(5) blocks credit on specific things regardless of business
+-- purpose: motor vehicles carrying people, food and staff welfare, works
+-- contract and construction of premises, goods given away or lost, and anything
+-- for personal use. GSTR-3B claimed credit on every purchase, so a shop buying
+-- a car was told it could claim tax the law refuses.
+--
+-- A reason rather than a boolean: "blocked" alone tells a CA nothing at
+-- assessment, and the shopkeeper will not remember why in eighteen months.
+--
+-- Nullable, no default, no backfill: existing purchases are presumed claimable,
+-- which is what the app has always reported for them.
+ALTER TABLE "Transaction" ADD COLUMN "itcBlockedReason" TEXT;

@@ -111,6 +111,15 @@ export const createTransactionSchema = z.object({
    */
   isReverseCharge: z.coerce.boolean().optional().default(false),
   /*
+   * Section 17(5): why credit on this purchase cannot be claimed. Null/absent
+   * means it can. A reason rather than a boolean, because "blocked" alone tells
+   * a CA nothing at assessment and the shopkeeper will not remember why.
+   */
+  itcBlockedReason: z
+    .enum(['personal', 'staffWelfare', 'motorVehicle', 'construction', 'lostOrFree', 'compositionSupplier', 'other'])
+    .nullable()
+    .optional(),
+  /*
    * On a PURCHASE, write each line's price back to the product as its new cost.
    *
    * Deliberately a boolean and not a list of prices: the server already has the

@@ -119,6 +119,8 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   const [isInterState, setIsInterState] = useState(false)
   /* Purchases only — see the toggle in the details section. */
   const [isReverseCharge, setIsReverseCharge] = useState(false)
+  // Section 17(5) — '' means credit is claimable, which is the normal case.
+  const [itcBlockedReason, setItcBlockedReason] = useState('')
   /* Purchases only — offer to write the bill's prices back as product cost. */
   const [updateProductCosts, setUpdateProductCosts] = useState(true)
   const [paymentMode, setPaymentMode] = useState('cash')
@@ -897,6 +899,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
           isInterState,
           // Purchases only; the server also enforces that (see the route).
           isReverseCharge: !isSale && !isNote ? isReverseCharge : false,
+          itcBlockedReason: !isSale && !isNote ? (itcBlockedReason || null) : null,
           // Only meaningful on a purchase, and only when something differs.
           updateProductCosts: !isSale && !isNote && costChanges.length > 0 && updateProductCosts,
           paymentMode: estimateMode ? 'cash' : paymentMode,  // Estimates don't have payment
@@ -2257,6 +2260,60 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                       back as credit in the same return. Usual for transport, legal services, and
                       unregistered suppliers.
                     </p>
+                  )}
+                </div>
+              )}
+
+              {/*
+                * Section 17(5) — purchases whose GST can never be claimed back.
+                *
+                * Worded as the shopkeeper experiences it, not as the Act states
+                * it. Nobody buying a delivery van thinks "clause (a) of
+                * sub-section (5)"; they think "can I get this tax back?". So
+                * the control asks that, and the reasons are the things a real
+                * shop actually buys.
+                *
+                * Off by default: most purchases ARE claimable, and defaulting
+                * to blocked would quietly cost shopkeepers money — the mirror
+                * of the fault this fixes.
+                */}
+              {!isSale && !isNote && totalGst > 0 && (
+                <div className="rounded-lg bg-muted/50 p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <Label className="text-sm" htmlFor="field-itc-blocked">Can&apos;t claim this GST back</Label>
+                      <p className="text-2xs text-muted-foreground mt-0.5">
+                        Some purchases don&apos;t give input credit, whatever they&apos;re for
+                      </p>
+                    </div>
+                    <Switch
+                      id="field-itc-blocked"
+                      checked={!!itcBlockedReason}
+                      onCheckedChange={(v) => { markDirty(); setItcBlockedReason(v ? 'personal' : '') }}
+                    />
+                  </div>
+                  {!!itcBlockedReason && (
+                    <div className="mt-3">
+                      <Label className="text-2xs uppercase text-muted-foreground" htmlFor="field-itc-reason">Reason</Label>
+                      <select
+                        id="field-itc-reason"
+                        value={itcBlockedReason}
+                        onChange={(e) => { markDirty(); setItcBlockedReason(e.target.value) }}
+                        className="mt-1 w-full h-11 rounded-lg border border-input bg-background px-3 text-sm"
+                      >
+                        <option value="personal">For personal or family use</option>
+                        <option value="staffWelfare">Food, drinks or staff welfare</option>
+                        <option value="motorVehicle">Car or bike for carrying people</option>
+                        <option value="construction">Building or repairing the shop</option>
+                        <option value="lostOrFree">Given free, lost or damaged</option>
+                        <option value="compositionSupplier">Supplier is under composition scheme</option>
+                        <option value="other">Something else</option>
+                      </select>
+                      <p className="text-2xs text-amber-700 dark:text-amber-400 mt-2">
+                        {formatINR(totalGst)} won&apos;t be claimed as credit in GSTR-3B. Keep this
+                        on — claiming it anyway means paying it back later with interest.
+                      </p>
+                    </div>
                   )}
                 </div>
               )}
