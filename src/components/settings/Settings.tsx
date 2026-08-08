@@ -108,7 +108,6 @@ export type SettingsSection =
   | 'invoices'        // bill design, delivery, round off, e-invoice
   | 'preferences'     // landing page, hide profit, goals, stock policy
   | 'notifications'   // which alerts reach the bell
-  | 'app-lock'        // rendered on the Security page
   | 'accounting'      // period lock, reconciliation
   | 'data-backup'     // backup, restore, cache, delete account
   | 'staff'           // staff and CA access
@@ -134,10 +133,26 @@ const TAB_SECTIONS: Record<string, SettingsSection[]> = {
 export function Settings({
   singleTab,
   sections,
+  hostTitle,
 }: {
   singleTab?: 'profile' | 'features' | 'appearance' | 'data' | 'staff'
   /** Render exactly these cards. Takes precedence over `singleTab`. */
   sections?: SettingsSection[]
+  /**
+   * The heading the HOST page already shows above these cards.
+   *
+   * 🐛 2026-08-08. Rahul: "profile section and shop profile is the same."
+   * He was reading the Shop Profile page, which said "Shop Profile" in the
+   * top bar and then "Shop Profile" again on the card directly beneath it.
+   * Every page this split created did the same — Invoices & Bills,
+   * Preferences, Notifications, Accounting Controls, Data & Backup.
+   *
+   * These card titles were correct when the cards were stacked in one long
+   * tab and needed to announce themselves. Once each got its own page with
+   * its own title bar, the announcement became an echo. Passing the host's
+   * title lets a card notice it is about to repeat and stay quiet.
+   */
+  hostTitle?: string
 }) {
   const { confirmDialog, dialog: confirmDialogEl } = useConfirmDialog()
   const queryClient = useQueryClient()
@@ -577,6 +592,24 @@ export function Settings({
   )
   const show = (key: SettingsSection) => activeSections.has(key)
 
+  /*
+   * Would this card title just repeat the page heading?
+   *
+   * Compared loosely — case, punctuation and the difference between "&" and
+   * "and" all folded away — because the pairs that actually collide are near
+   * misses, not exact ones: the page says "Staff & Access" while the card says
+   * "Staff Access". Genuinely different headings like "Appearance & Language"
+   * over a "Theme & Appearance" card survive this and still render, which is
+   * what we want: the card is naming a subsection, not echoing the page.
+   */
+  const echoesHost = (title: string) => {
+    if (!hostTitle) return false
+    // '&' and the word 'and' both fold away, so a "Staff Access" card sitting
+    // under a "Staff & Access" page is recognised as the echo it is.
+    const fold = (t: string) => t.toLowerCase().replace(/&/g, ' ').replace(/and/g, ' ').replace(/[^a-z0-9]/g, '')
+    return fold(hostTitle) === fold(title)
+  }
+
   // 🔒 V22-7 (Phase 5): Feature search query — filters FEATURE_CATEGORIES by
   // keyword (label + description + category title). Empty = show all.
   const [featureSearch, setFeatureSearch] = useState('')
@@ -784,9 +817,11 @@ export function Settings({
       {show('shop-profile') && (
       <Card className="shadow-card border-border/60">
         <CardHeader>
+          {!echoesHost('Shop Profile') && (
           <CardTitle className="flex items-center gap-2">
             <Store className="w-5 h-5 text-amber-600 dark:text-amber-400" /> Shop Profile
           </CardTitle>
+          )}
           <p className="text-xs text-muted-foreground">This information appears on invoices and reports</p>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -850,9 +885,11 @@ export function Settings({
       {show('manage-shops') && (
         <Card className="shadow-card border-border/60">
           <CardHeader>
+            {!echoesHost('Manage Shops') && (
             <CardTitle className="flex items-center gap-2">
               <Store className="w-5 h-5 text-primary" /> Manage Shops
             </CardTitle>
+            )}
             <p className="text-xs text-muted-foreground">Add shops and their GSTINs for consolidated reporting</p>
           </CardHeader>
           <CardContent>
@@ -962,9 +999,11 @@ export function Settings({
       {show('accounting') && isOwner && (
       <Card className="shadow-card border-border/60">
         <CardHeader>
+          {!echoesHost('Accounting Controls') && (
           <CardTitle className="flex items-center gap-2">
             <ShieldCheck className="w-5 h-5 text-primary" /> Accounting Controls
           </CardTitle>
+          )}
           <p className="text-xs text-muted-foreground">Reconciliation and period lock — for filing integrity</p>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -1116,9 +1155,11 @@ export function Settings({
       {show('data-backup') && isOwner && (
       <Card className="shadow-card border-border/60">
         <CardHeader>
+          {!echoesHost('Data & Backup') && (
           <CardTitle className="flex items-center gap-2">
             <Database className="w-5 h-5 text-primary" /> Data & Backup
           </CardTitle>
+          )}
           <p className="text-xs text-muted-foreground">Backup, restore, offline cache, delete account</p>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -1367,9 +1408,11 @@ export function Settings({
       {show('appearance') && (
       <Card className="shadow-card border-border/60">
         <CardHeader>
+          {!echoesHost('Theme & Appearance') && (
           <CardTitle className="flex items-center gap-2">
             <Palette className="w-5 h-5 text-primary" /> Theme & Appearance
           </CardTitle>
+          )}
           <p className="text-xs text-muted-foreground">Colours, dark mode, and the languages the app and the AI use</p>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -1450,9 +1493,11 @@ export function Settings({
       {show('invoices') && (
       <Card className="shadow-card border-border/60">
         <CardHeader>
+          {!echoesHost('Invoices & Bills') && (
           <CardTitle className="flex items-center gap-2">
             <Receipt className="w-5 h-5 text-primary" /> Invoices & Bills
           </CardTitle>
+          )}
           <p className="text-xs text-muted-foreground">How your bill looks and how it reaches the customer</p>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -1622,9 +1667,11 @@ export function Settings({
         <>
       <Card className="shadow-card border-border/60">
         <CardHeader>
+          {!echoesHost('Preferences') && (
           <CardTitle className="flex items-center gap-2">
             <SettingsIcon className="w-5 h-5 text-primary" /> Preferences
           </CardTitle>
+          )}
           <p className="text-xs text-muted-foreground">How the app behaves day to day</p>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -1719,9 +1766,11 @@ export function Settings({
           {/* Business Goals — monthly revenue/expense targets */}
           <Card className="shadow-card border-border/60">
             <CardHeader>
+              {!echoesHost('Monthly Business Goals') && (
               <CardTitle className="flex items-center gap-2">
                 <Target className="w-5 h-5 text-primary" /> Monthly Business Goals
               </CardTitle>
+              )}
               <p className="text-xs text-muted-foreground">Set targets for this month and track progress on dashboard</p>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -1795,9 +1844,11 @@ export function Settings({
       {show('notifications') && (
       <Card className="shadow-card border-border/60">
         <CardHeader>
+          {!echoesHost('Notifications') && (
           <CardTitle className="flex items-center gap-2">
             <Bell className="w-5 h-5 text-primary" /> Notifications
           </CardTitle>
+          )}
           <p className="text-xs text-muted-foreground">Choose which alerts appear in the bell icon</p>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -1838,37 +1889,18 @@ export function Settings({
       </Card>
       )}
 
-      {show('app-lock') && (
-        <>
-          {/* 🔒 AUDIT V23 FIX §4: App Lock replaced with "Coming Soon" row.
-              The previous toggle was a placebo — it toasted "will require PIN"
-              but no enforcement existed. A false security promise is worse than
-              no feature. Replaced with a disabled row that honestly says Coming Soon. */}
-          <div className="mt-3 flex items-center justify-between rounded-lg bg-muted/50 border border-border/60 p-3 opacity-70">
-            <div className="flex items-center gap-2">
-              <Lock className="w-4 h-4 text-muted-foreground" />
-              <div>
-                <p className="text-sm font-medium">App Lock</p>
-                <p className="text-2xs text-muted-foreground">
-                  Require PIN or biometric to open the app.
-                </p>
-              </div>
-            </div>
-            <span className="text-3xs font-bold uppercase tracking-wide bg-muted text-muted-foreground px-2 py-1 rounded-full">
-              Coming Soon
-            </span>
-          </div>
-        </>
-      )}
+
 
 
       {/* ── AI SCANNER LANGUAGE (in Profile tab) ─────────────────────── */}
       {show('appearance') && (
         <Card className="shadow-card border-border/60">
           <CardHeader>
+            {!echoesHost('AI Bill Scanner Language') && (
             <CardTitle className="flex items-center gap-2">
               <ScanLine className="w-5 h-5 text-primary" /> AI Bill Scanner Language
             </CardTitle>
+            )}
             <CardDescription>Choose the language for scanned item names</CardDescription>
           </CardHeader>
           <CardContent>
@@ -1917,9 +1949,11 @@ export function Settings({
       {show('appearance') && (
         <Card className="shadow-card border-border/60">
           <CardHeader>
+            {!echoesHost('AI Voice Entry Language') && (
             <CardTitle className="flex items-center gap-2">
               <Mic className="w-5 h-5 text-primary" /> AI Voice Entry Language
             </CardTitle>
+            )}
             <CardDescription>Choose the language for voice recognition &amp; parsed item names</CardDescription>
           </CardHeader>
           <CardContent>
@@ -1978,9 +2012,11 @@ export function Settings({
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
+              {!echoesHost('Features & Preferences') && (
               <CardTitle className="flex items-center gap-2">
                 <Sparkles className="w-5 h-5 text-primary" /> Features & Preferences
               </CardTitle>
+              )}
               <p className="text-xs text-muted-foreground mt-1">Toggle features on/off — only use what you need</p>
             </div>
             <Button variant="outline" size="sm" onClick={() => { resetFeatures(); sonnerToast.success('All features reset to defaults') }} className="gap-1">
@@ -2066,10 +2102,12 @@ export function Settings({
       {show('ai-tools') && (
         <Card className="shadow-card border-primary/30 bg-primary/5">
           <CardHeader>
+            {!echoesHost('AI Tools') && (
             <CardTitle className="flex items-center gap-2 text-base">
               <Sparkles className="w-4 h-4 text-primary" />
               AI Tools
             </CardTitle>
+            )}
             <p className="text-xs text-muted-foreground">
               Compare AI providers and track real-time token usage & costs
             </p>
@@ -2087,30 +2125,23 @@ export function Settings({
         </Card>
       )}
 
+      {/* 🐛 2026-08-08: These two buttons nearly vanished.
+          They lived in an ungated "About EkBook" card that rendered at the
+          foot of EVERY settings tab — which is why About showed up inside App
+          Settings, one of the things Rahul reported. Removing that card took
+          Replay Tour and Replay Theme Picker with it, leaving no way to see
+          the intro again. Rebuilt as what it always was: two actions, on the
+          About page, without repeating the version the page already shows. */}
       {show('about-card') && (
       <Card className="shadow-card border-border/60">
         <CardHeader>
-          <CardTitle className="text-base">About EkBook</CardTitle>
+          {!echoesHost('Show me around again') && (
+          <CardTitle className="text-base">Show me around again</CardTitle>
+          )}
+          <p className="text-xs text-muted-foreground">Replay the first-run guides any time.</p>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">
-            India&apos;s smartest ledger app for small shop owners. Track sales, purchases, inventory, GST, and profit — all in one place. Built with love for Bharat.
-          </p>
-          <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-            <div className="rounded-lg bg-muted/50 p-2">
-              <p className="font-medium">Version</p>
-              {/* 🔒 Feature Phase 2: Use APP_VERSION_LABEL (was hardcoded "1.0.0" —
-                  same bug class as BUG-022, version string drift). */}
-              <p className="text-muted-foreground">{APP_VERSION_LABEL}</p>
-            </div>
-            <div className="rounded-lg bg-muted/50 p-2">
-              <p className="font-medium">Built for</p>
-              <p className="text-muted-foreground">Indian Shop Owners</p>
-            </div>
-          </div>
-
-          {/* Quick actions */}
-          <div className="mt-4 pt-4 border-t border-border flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button
               variant="outline"
               size="sm"

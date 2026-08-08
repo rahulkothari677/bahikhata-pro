@@ -402,6 +402,7 @@ export function AccountScreen() {
              style={{ paddingBottom: 'calc(6rem + var(--safe-bottom))' }}>
           <AccountSectionContent
             section={accountSection}
+            hostTitle={sectionTitles[accountSection] || 'Account'}
             setting={setting}
             session={session}
             isOwner={isOwner}
@@ -659,6 +660,7 @@ export function AccountScreen() {
  */
 function AccountSectionContent({
   section,
+  hostTitle,
   setting,
   session,
   isOwner,
@@ -667,6 +669,8 @@ function AccountSectionContent({
   usage,
 }: {
   section: string
+  /** What the top bar already says. Cards use it to avoid echoing it. */
+  hostTitle: string
   setting: any
   session: any
   isOwner: boolean
@@ -699,6 +703,9 @@ function AccountSectionContent({
     'accounting':    ['accounting'],
     'data':          ['data-backup'],
     'staff':         ['staff'],
+    // Restores Replay Tour + Replay Theme Picker, which the removal of the
+    // ungated About card had orphaned. See the note in Settings.tsx.
+    'about':         ['about-card'],
   }
 
   // For subscription, redirect to pricing page
@@ -947,7 +954,7 @@ function AccountSectionContent({
 
         {/* Settings form (profile tab) */}
         <Suspense fallback={<div className="bg-card rounded-2xl shadow-card border border-border/60 p-8 text-center"><p className="text-muted-foreground text-sm">Loading...</p></div>}>
-          <SettingsComponent sections={['shop-profile']} />
+          <SettingsComponent sections={['shop-profile']} hostTitle={hostTitle} />
         </Suspense>
       </div>
     )
@@ -1221,6 +1228,15 @@ function AccountSectionContent({
             Made with ❤️ for Bharat 🇮🇳
           </p>
         </div>
+
+        {/* 🐛 2026-08-08: Replay Tour + Replay Theme Picker. They used to
+            ride along in an ungated About card that appeared at the foot of
+            every settings tab; removing that card orphaned them. This is a
+            bespoke page that returns before the generic Settings render, so
+            it has to ask for the card itself. */}
+        <Suspense fallback={null}>
+          <SettingsComponent sections={['about-card']} hostTitle={hostTitle} />
+        </Suspense>
       </div>
     )
   }
@@ -1241,7 +1257,7 @@ function AccountSectionContent({
   // 🔒 V22-6 fix: SettingsComponent is now declared at module scope (above).
   return (
     <Suspense fallback={<div className="bg-card rounded-2xl shadow-card border border-border/60 p-8 text-center"><p className="text-muted-foreground text-sm">Loading...</p></div>}>
-      <SettingsComponent sections={sectionCards[section]} />
+      <SettingsComponent sections={sectionCards[section]} hostTitle={hostTitle} />
     </Suspense>
   )
 }
