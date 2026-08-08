@@ -1,0 +1,11 @@
+-- Has this shop's turnover ever crossed Rs 5 crore in a year since 2017-18?
+--
+-- e-invoicing is mandatory above that threshold (Notification 10/2023-Central
+-- Tax). The app cannot work this out: the rule tests ANY financial year from
+-- 2017-18, does not lapse if turnover later falls, and aggregates every GSTIN
+-- under the PAN — years before the app existed, other registrations, and a
+-- liability that outlives the figures that created it.
+--
+-- Nullable with no default: NULL means "never asked", which is deliberately
+-- distinct from false. Existing shops are unaffected and simply get asked.
+ALTER TABLE "Setting" ADD COLUMN "eInvoiceApplicable" BOOLEAN;

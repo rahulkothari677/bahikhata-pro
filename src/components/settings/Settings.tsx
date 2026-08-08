@@ -18,7 +18,7 @@ import { ShopLogoUploader } from '@/components/settings/ShopLogoUploader'
 import { useShops } from '@/hooks/use-shops'
 import { exportBackup } from '@/lib/data-backup'
 import { useBusinessGoals } from '@/hooks/use-business-goals'
-import { Target, Download, Upload, Calendar, Clock, Coins, PackageX, UserX } from 'lucide-react'
+import { Target, Download, Upload, Calendar, Clock, Coins, PackageX, UserX, FileText} from 'lucide-react'
 import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
 import { toast as sonnerToast } from 'sonner'
 import { haptic } from '@/lib/haptic'
@@ -126,6 +126,8 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
   const [expenseGoal, setExpenseGoal] = useState('')
   // 🔒 V12: Invoice round-off toggle (nearest rupee on sale totals).
   const [roundOffEnabled, setRoundOffEnabled] = useState(false)
+  // null = never answered, which is deliberately distinct from false.
+  const [eInvoiceApplicable, setEInvoiceApplicable] = useState<boolean | null>(null)
   // 📄 How bills are delivered. See docs/DOCUMENT-ENGINE-PLAN.md.
   const [docSendFormat, setDocSendFormat] = useState<'smart' | 'image' | 'pdf'>('smart')
   const [docShareLink, setDocShareLink] = useState(false)
@@ -167,6 +169,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
         voiceLang: data.setting.voiceLang || 'original',
       })
       setRoundOffEnabled(data.setting.roundOffEnabled ?? false)
+      setEInvoiceApplicable(data.setting.eInvoiceApplicable ?? null)
       setDocSendFormat(data.setting.docSendFormat ?? 'smart')
       setDocShareLink(data.setting.docShareLink ?? false)
       setInvoiceTheme(data.setting.invoiceTheme ?? 'classic')
@@ -222,6 +225,26 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
     } catch (e: any) {
       rollback()
       sonnerToast.error(e?.message || "Couldn't save that setting")
+    }
+  }
+
+  const persistEInvoice = async (next: boolean) => {
+    const prev = eInvoiceApplicable
+    setEInvoiceApplicable(next)
+    try {
+      const r = await offlineFetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eInvoiceApplicable: next }),
+        offline: { invalidate: ['/api/settings'] },
+      })
+      if (!r.ok) throw new Error(await readError(r))
+      queryClient.invalidateQueries({ queryKey: ['setting'] })
+      queryClient.invalidateQueries({ queryKey: ['settings'] })
+      sonnerToast.success(next ? 'e-Invoicing turned on' : 'e-Invoicing turned off')
+    } catch (e: any) {
+      setEInvoiceApplicable(prev)
+      sonnerToast.error(e?.message || 'Could not save the e-invoicing setting')
     }
   }
 
@@ -1480,6 +1503,39 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
             <Switch
               checked={roundOffEnabled}
               onCheckedChange={(checked) => persistRoundOff(checked)}
+            />
+          </div>
+
+          {/*
+            * e-invoicing applicability.
+            *
+            * Asked rather than computed. The rule (Notification 10/2023) tests
+            * whether turnover crossed ₹5 crore in ANY year since 2017-18, does
+            * not lapse if turnover later falls, and aggregates every GSTIN under
+            * the PAN — years before this app existed, other registrations, and a
+            * liability that outlives the figures that created it. None of that
+            * is knowable from the data here.
+            *
+            * Until it is answered the invoice screen still shows the e-invoice
+            * card, with a note saying it may not apply. Hiding it from a shop
+            * that turns out to be liable is the worse mistake.
+            */}
+          <div className="mt-3 flex items-center justify-between rounded-lg bg-muted/30 border border-border/60 p-3">
+            <div className="flex items-center gap-2">
+              <FileText className="w-4 h-4 text-muted-foreground" />
+              <div>
+                <p className="text-sm font-medium">My shop needs e-Invoicing</p>
+                <p className="text-2xs text-muted-foreground">
+                  Turn this on only if your turnover crossed ₹5 crore in any year since 2017-18 —
+                  counting every GSTIN on your PAN, and even if it has dropped since. Most small
+                  shops do not need it.
+                  {eInvoiceApplicable === null && ' You haven’t answered this yet.'}
+                </p>
+              </div>
+            </div>
+            <Switch
+              checked={eInvoiceApplicable === true}
+              onCheckedChange={(checked) => persistEInvoice(checked)}
             />
           </div>
 

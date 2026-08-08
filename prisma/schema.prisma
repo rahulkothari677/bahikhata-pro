@@ -597,7 +597,7 @@ model Setting {
   // 'auto' (default) — logo when one is uploaded, initials when not. That is
   // what a shop expects without touching anything, and it means uploading a
   // logo is enough to see it on the card.
-  cardMark          String  @default("auto")
+  cardMark           String   @default("auto")
   // Typeface per element of the card — see src/lib/monogram-fonts.ts.
   // null = that element keeps the app's default face.
   //
@@ -609,17 +609,17 @@ model Setting {
   //
   // cardFontId is the LOGO/monogram face and predates the others; it keeps its
   // name so existing rows keep their chosen mark.
-  cardFontId        String?
-  cardShopFontId    String?
-  cardTaglineFontId String?
-  cardContactFontId String?
-  cardShopName      String?
-  cardOwnerName     String?
-  cardTagline       String?
-  cardPhone         String?
-  cardEmail         String?
-  cardAddress       String?
-  cardGstin         String?
+  cardFontId         String?
+  cardShopFontId     String?
+  cardTaglineFontId  String?
+  cardContactFontId  String?
+  cardShopName       String?
+  cardOwnerName      String?
+  cardTagline        String?
+  cardPhone          String?
+  cardEmail          String?
+  cardAddress        String?
+  cardGstin          String?
   /**
    * Previous financial year's aggregate turnover, in PAISE, as declared by the
    * shopkeeper. Optional override for GSTR-1's `gt`.
@@ -636,7 +636,20 @@ model Setting {
    * column reads back as raw paise and is exactly the 100x class of bug that
    * file exists to prevent.
    */
-  priorFyTurnover   Int?
+  priorFyTurnover    Int?
+  /**
+   * Has this shop's turnover ever crossed ₹5 crore in a year since 2017-18?
+   * Three-valued on purpose. NULL means "never asked" and is not the same as
+   * false: one means the app should ask, the other means it should stay quiet.
+   * Collapsing them would either nag a shop that has already answered, or
+   * silently treat an unanswered shop as exempt.
+   * Declared rather than computed because the rule (Notification 10/2023) tests
+   * ANY financial year from 2017-18, does not lapse if turnover later falls,
+   * and aggregates every GSTIN under the PAN. Each of those is information this
+   * app does not have: years before it existed, other registrations, and a
+   * liability that outlives the figures that created it.
+   */
+  eInvoiceApplicable Boolean?
 }
 
 // ==================== ANNOUNCEMENTS (broadcast messages) ====================

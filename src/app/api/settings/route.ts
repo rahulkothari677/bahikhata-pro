@@ -92,6 +92,17 @@ export async function PUT(req: NextRequest) {
     if (body.roundOffEnabled !== undefined) sanitized.roundOffEnabled = !!body.roundOffEnabled
 
     /*
+     * e-invoicing declaration. null clears it back to "not answered", which is
+     * a distinct state from false — see the schema comment.
+     */
+    if (body.eInvoiceApplicable !== undefined) {
+      sanitized.eInvoiceApplicable =
+        body.eInvoiceApplicable === null || body.eInvoiceApplicable === ''
+          ? null
+          : !!body.eInvoiceApplicable
+    }
+
+    /*
      * Declared previous-FY turnover, in RUPEES from the client.
      *
      * Stored as paise via the money extension, like every other money column —

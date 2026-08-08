@@ -1,6 +1,7 @@
 'use client'
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { eInvoiceApplicability } from '@/lib/einvoice-applicability'
 import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
 import { useAppStore } from '@/store/app-store'
@@ -1674,6 +1675,29 @@ function formatAuditValue(value: any, fieldName?: string): string {
  */
 function EInvoiceCard({ txn }: { txn: any }) {
   const [loading, setLoading] = useState(false)
+  /*
+   * Only offer e-invoicing to shops that are actually required to do it.
+   *
+   * This card used to appear on every B2B invoice for every shop. e-invoicing
+   * is mandatory only above ₹5 crore turnover (Notification 10/2023), which is
+   * far above almost everyone using this app — so it was presenting a
+   * regulatory obligation to people who do not have one, with nothing to tell
+   * them whether it applied.
+   *
+   * Where it is genuinely unknown the card still shows, because the opposite
+   * failure is worse: hiding it from a liable shop would let them miss a duty
+   * they do have. Unknown gets an explanation and a question, not silence.
+   */
+  const { data: settingData } = useQuery({
+    queryKey: ['settings'],
+    queryFn: async () => (await offlineFetch('/api/settings')).json(),
+    staleTime: 5 * 60 * 1000,
+  })
+  const applicability = eInvoiceApplicability(
+    settingData?.setting?.eInvoiceApplicable,
+    settingData?.setting?.priorFyTurnover,
+  )
+  if (applicability.status === 'not-required') return null
   const [irnInput, setIrnInput] = useState('')
   const [qrInput, setQrInput] = useState('')
   const [showStoreForm, setShowStoreForm] = useState(false)
@@ -1777,6 +1801,23 @@ function EInvoiceCard({ txn }: { txn: any }) {
         </CardTitle>
       </CardHeader>
       <CardContent>
+        {/*
+          * Say whether this shop actually has to do this.
+          *
+          * "Unknown" is shown rather than hidden — hiding it from a shop that
+          * turns out to be liable is the worse failure — but it says plainly
+          * that the obligation depends on years this app cannot see, so nobody
+          * concludes from the card's presence that it applies to them.
+          */}
+        {applicability.status === 'unknown' && !hasIrn && (
+          <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/40 dark:border-amber-800 p-3">
+            <p className="text-xs text-amber-900 dark:text-amber-200">
+              <span className="font-semibold">Not sure this applies to you.</span>{' '}
+              {applicability.reason} Set it once in Settings and this card will
+              follow your answer.
+            </p>
+          </div>
+        )}
         {hasIrn ? (
           <div className="space-y-3">
             <div className="rounded-lg bg-muted/30 p-3 space-y-1.5">
