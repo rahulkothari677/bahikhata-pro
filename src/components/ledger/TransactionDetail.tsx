@@ -1693,17 +1693,34 @@ function EInvoiceCard({ txn }: { txn: any }) {
     queryFn: async () => (await offlineFetch('/api/settings')).json(),
     staleTime: 5 * 60 * 1000,
   })
-  const applicability = eInvoiceApplicability(
-    settingData?.setting?.eInvoiceApplicable,
-    settingData?.setting?.priorFyTurnover,
-  )
-  if (applicability.status === 'not-required') return null
   const [irnInput, setIrnInput] = useState('')
   const [qrInput, setQrInput] = useState('')
   const [showStoreForm, setShowStoreForm] = useState(false)
   // 🔒 R11-3 (Round 11): queryClient for invalidating ['transaction', id]
   // after storing the IRN. Was: window.location.reload() (heavy-handed).
   const queryClient = useQueryClient()
+
+  const applicability = eInvoiceApplicability(
+    settingData?.setting?.eInvoiceApplicable,
+    settingData?.setting?.priorFyTurnover,
+  )
+  /*
+   * 🔒 Hooks first — this return must stay BELOW every hook above it.
+   *
+   * It was originally written directly under the settings query, above the four
+   * hooks that now precede it, and that crashed the invoice screen for exactly
+   * the shops this app is built for. The settings query resolves after the first
+   * render: pass one has `settingData` undefined, so status is 'unknown', the
+   * return is skipped and all seven hooks run. When the response arrives for a
+   * shop that has declared itself under ₹5 crore, status becomes 'not-required'
+   * and the component returns after only three — so React sees fewer hooks than
+   * last time and throws "Rendered fewer hooks than expected", taking the whole
+   * transaction detail screen down with it.
+   *
+   * eslint's react-hooks/rules-of-hooks catches this shape; see the note in
+   * .github/workflows about lint being part of CI.
+   */
+  if (applicability.status === 'not-required') return null
 
   const handleGenerate = async () => {
     setLoading(true)
