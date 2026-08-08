@@ -29,6 +29,7 @@
  */
 
 import { useState } from 'react'
+import { FilingReadiness } from '@/components/reports/FilingReadiness'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -52,6 +53,17 @@ export function Gstr3bReport() {
     `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   )
   const [saving, setSaving] = useState(false)
+
+  /*
+   * The selected month as a date range, for the readiness check.
+   *
+   * Derived from `month` ("YYYY-MM") rather than from the response, so the card
+   * asks about the month the shopkeeper is LOOKING at even while the 3B figures
+   * are still loading — otherwise it would flash the previous month's answer.
+   */
+  const [readinessYear, readinessMonth] = month.split('-').map(Number)
+  const readinessFrom = new Date(readinessYear, readinessMonth - 1, 1)
+  const readinessTo = new Date(readinessYear, readinessMonth, 0, 23, 59, 59)
 
   // 🔒 Hooks first — always called unconditionally
   const { data, isLoading, error } = useQuery({
@@ -147,6 +159,16 @@ export function Gstr3bReport() {
   if (isLoading) {
     return (
       <div className="space-y-4">
+      {/*
+        * One answer to "can I file?", above everything else.
+        *
+        * This replaces four separate warning boxes that had accumulated on this
+        * screen — each correct, each added beside the last. Stacked they read as
+        * an app in trouble rather than a shop with two things to check, and
+        * nothing told a shopkeeper which of them actually stopped them filing.
+        */}
+      <FilingReadiness from={readinessFrom} to={readinessTo} />
+
         <Skeleton className="h-16 w-full rounded-xl" />
         <Skeleton className="h-32 w-full rounded-xl" />
         <Skeleton className="h-64 w-full rounded-xl" />
@@ -234,70 +256,6 @@ export function Gstr3bReport() {
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {/*
-          * Where the ITC figure came from.
-          *
-          * Rule 36(4) allows credit only on invoices appearing in GSTR-2B. A
-          * claim figure shown without its basis invites a shopkeeper to file it
-          * — and if the basis is "everything in my books", that is more credit
-          * than the law allows, tax under-paid, and interest under Section 50
-          * running quietly from the due date.
-          */}
-        {data?.itcBasis === 'books-unverified' && (data?.totalItc || 0) > 0 && (
-          <div className="sm:col-span-2 lg:col-span-4 rounded-2xl border border-amber-300 bg-amber-50 dark:bg-amber-950/40 dark:border-amber-800 p-4">
-            <div className="flex gap-3">
-              <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
-              <div className="min-w-0">
-                <p className="font-semibold text-amber-900 dark:text-amber-200 text-sm">
-                  This input credit has not been checked against GSTR-2B
-                </p>
-                <p className="text-xs text-amber-800 dark:text-amber-300 mt-1">
-                  It is the total from your purchase entries. You can only claim credit on invoices
-                  your suppliers have actually filed, so the real figure may be lower. Import this
-                  month&apos;s GSTR-2B and the claim will be worked out properly.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-        {(data?.blockedItcCount || 0) > 0 && (
-          <div className="sm:col-span-2 lg:col-span-4 rounded-2xl border border-slate-300 bg-slate-50 dark:bg-slate-900/40 dark:border-slate-700 p-4">
-            <div className="flex gap-3">
-              <AlertTriangle className="w-5 h-5 text-slate-500 flex-shrink-0 mt-0.5" />
-              <div className="min-w-0">
-                <p className="font-semibold text-slate-800 dark:text-slate-200 text-sm">
-                  {formatINR((data?.blockedItcCgst || 0) + (data?.blockedItcSgst || 0) + (data?.blockedItcIgst || 0))}
-                  {' '}of GST cannot be claimed
-                </p>
-                <p className="text-xs text-slate-600 dark:text-slate-400 mt-1">
-                  You marked {data?.blockedItcCount} {data?.blockedItcCount === 1 ? 'purchase' : 'purchases'} as
-                  not eligible for input credit — things like personal use, staff food, or a vehicle.
-                  The law doesn&apos;t allow credit on these, so they&apos;re left out of the claim.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {data?.itcBasis === 'gstr2b' && (data?.deferredItcCgst || data?.deferredItcSgst || data?.deferredItcIgst) > 0 && (
-          <div className="sm:col-span-2 lg:col-span-4 rounded-2xl border border-blue-300 bg-blue-50 dark:bg-blue-950/40 dark:border-blue-800 p-4">
-            <div className="flex gap-3">
-              <AlertTriangle className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
-              <div className="min-w-0">
-                <p className="font-semibold text-blue-900 dark:text-blue-200 text-sm">
-                  {formatINR((data?.deferredItcCgst || 0) + (data?.deferredItcSgst || 0) + (data?.deferredItcIgst || 0))}
-                  {' '}of credit is being held back
-                </p>
-                <p className="text-xs text-blue-800 dark:text-blue-300 mt-1">
-                  These purchases are in your books but not in this month&apos;s GSTR-2B, so they
-                  cannot be claimed yet. Once the supplier files, they will appear and you can claim
-                  them in that month. Nothing is lost.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
         <SummaryCard
           icon={<TrendingUp className="w-4 h-4" />}
           label="Output Tax"
