@@ -41,6 +41,19 @@ export const maxDuration = 60
 // 🔒 V19-035 FIX: Extracted shared query + computation function.
 // Previously the GET and POST handlers had copy-pasted 200+ line blocks.
 // Now both call this single function — any change automatically applies to both.
+/**
+ * "MMYYYY" for a period start, matching the key Gstr2bImport is stored under.
+ *
+ * Computed in IST, because a period that begins at midnight IST is the previous
+ * day in UTC — reading the month off the raw Date would look up the wrong 2B
+ * for every period, and the failure would be a silently empty match rather than
+ * an error.
+ */
+function monthYearOf(periodStart: Date): string {
+  const ist = new Date(periodStart.getTime() + 5.5 * 60 * 60 * 1000)
+  return String(ist.getUTCMonth() + 1).padStart(2, '0') + String(ist.getUTCFullYear())
+}
+
 async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd: Date) {
   // 🔒 BUG-014 FIX (V22-15 Phase 9): Split 11 parallel queries into 2 batches.
   // Was: all 11 in one Promise.all → connection pool exhaustion on Neon
@@ -203,10 +216,85 @@ async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd:
   const creditNoteIgst = roundMoney(creditNoteAgg._sum.igst || 0)
   const interstateB2cTaxableValue = fromPaise(Number(interstateB2cAgg[0]?.taxableValuePaise || 0))
   const interstateB2cIgst = fromPaise(Number(interstateB2cAgg[0]?.igstPaise || 0))
-  const itcTaxableValue = roundMoney((itcPurchasesAgg._sum.subtotal || 0) - (itcPurchasesAgg._sum.discountAmount || 0))
-  const itcCgst = roundMoney(itcPurchasesAgg._sum.cgst || 0)
-  const itcSgst = roundMoney(itcPurchasesAgg._sum.sgst || 0)
-  const itcIgst = roundMoney(itcPurchasesAgg._sum.igst || 0)
+  /*
+   * ITC — and whether the shop is actually ENTITLED to it.
+   *
+   * WHY THIS IS NOT JUST A SUM (2026-08-08). Rule 36(4), as it has stood since
+   * 1 January 2022, allows input tax credit ONLY on invoices that appear in the
+   * shop's GSTR-2B. A supplier who has not filed means no credit that month,
+   * however genuine the purchase and however carefully it was recorded.
+   *
+   * This claimed every purchase in the books. So the app told a shopkeeper they
+   * could claim credit the law does not allow, they paid LESS tax than owed, and
+   * under-payment is the expensive direction: interest under Section 50 runs
+   * from the due date, plus penalty, and it compounds quietly until a notice
+   * arrives.
+   *
+   * The app already knew the right answer. api/gstr-2b/reconcile computes
+   * matched (claimable) against booksOnly (in the books, absent from 2B, so
+   * deferred) — and GSTR-3B never consulted it. Two halves, each complete,
+   * never connected. That is the fourth time this exact shape has appeared in
+   * this codebase.
+   *
+   * The figures below therefore depend on whether a 2B has been imported:
+   *
+   *   imported     — claim only what is matched in 2B, and report the deferred
+   *                  amount separately so nothing simply vanishes
+   *   not imported — the app CANNOT know eligibility, so it reports the books
+   *                  figure and marks it unverified rather than presenting a
+   *                  guess as a filing figure
+   */
+  const gstr2b = await db.gstr2bImport.findFirst({
+    where: { userId, monthYear: monthYearOf(periodStart) },
+    include: { invoices: true },
+  })
+
+  const bookItcTaxable = roundMoney((itcPurchasesAgg._sum.subtotal || 0) - (itcPurchasesAgg._sum.discountAmount || 0))
+  const bookItcCgst = roundMoney(itcPurchasesAgg._sum.cgst || 0)
+  const bookItcSgst = roundMoney(itcPurchasesAgg._sum.sgst || 0)
+  const bookItcIgst = roundMoney(itcPurchasesAgg._sum.igst || 0)
+
+  let itcTaxableValue = bookItcTaxable
+  let itcCgst = bookItcCgst
+  let itcSgst = bookItcSgst
+  let itcIgst = bookItcIgst
+  let itcBasis: 'gstr2b' | 'books-unverified' = 'books-unverified'
+  let deferredItcTaxableValue = 0
+  let deferredItcCgst = 0
+  let deferredItcSgst = 0
+  let deferredItcIgst = 0
+
+  if (gstr2b) {
+    /*
+     * Matched on supplier GSTIN + invoice number, the same key the
+     * reconciliation screen uses. Both are normalised because a shopkeeper
+     * types "inv-001" where the portal carries "INV-001", and a case
+     * difference must not cost someone their credit.
+     */
+    const key = (gstin: string | null | undefined, no: string | null | undefined) =>
+      `${(gstin || '').trim().toUpperCase()}|${(no || '').trim().toUpperCase()}`
+    const in2b = new Set(gstr2b.invoices.map((i) => key(i.supplierGstin, i.invoiceNumber)))
+
+    const purchases = await db.transaction.findMany({
+      where: { userId, type: 'purchase', deletedAt: null, isReverseCharge: false, date: { gte: periodStart, lt: periodEnd } },
+      select: { subtotal: true, discountAmount: true, cgst: true, sgst: true, igst: true, invoiceNo: true, party: { select: { gstin: true } } },
+    })
+
+    let mT = 0, mC = 0, mS = 0, mI = 0
+    let dT = 0, dC = 0, dS = 0, dI = 0
+    for (const p of purchases) {
+      const taxable = (p.subtotal || 0) - (p.discountAmount || 0)
+      if (in2b.has(key(p.party?.gstin, p.invoiceNo))) {
+        mT += taxable; mC += p.cgst || 0; mS += p.sgst || 0; mI += p.igst || 0
+      } else {
+        dT += taxable; dC += p.cgst || 0; dS += p.sgst || 0; dI += p.igst || 0
+      }
+    }
+    itcTaxableValue = roundMoney(mT); itcCgst = roundMoney(mC); itcSgst = roundMoney(mS); itcIgst = roundMoney(mI)
+    deferredItcTaxableValue = roundMoney(dT); deferredItcCgst = roundMoney(dC)
+    deferredItcSgst = roundMoney(dS); deferredItcIgst = roundMoney(dI)
+    itcBasis = 'gstr2b'
+  }
   const rcmItcTaxableValue = roundMoney((rcmItcAgg._sum.subtotal || 0) - (rcmItcAgg._sum.discountAmount || 0))
   const rcmItcCgst = roundMoney(rcmItcAgg._sum.cgst || 0)
   const rcmItcSgst = roundMoney(rcmItcAgg._sum.sgst || 0)
@@ -235,6 +323,11 @@ async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd:
     creditNoteTaxableValue, creditNoteCgst, creditNoteSgst, creditNoteIgst,
     interstateB2cTaxableValue, interstateB2cIgst,
     itcTaxableValue, itcCgst, itcSgst, itcIgst,
+    // How the ITC figure was arrived at, and what is being held back. A caller
+    // that shows the claim without showing the basis is repeating the fault.
+    itcBasis,
+    deferredItcTaxableValue, deferredItcCgst, deferredItcSgst, deferredItcIgst,
+    bookItcTaxableValue: bookItcTaxable, bookItcCgst, bookItcSgst, bookItcIgst,
     rcmItcTaxableValue, rcmItcCgst, rcmItcSgst, rcmItcIgst,
     debitNoteTaxableValue, debitNoteCgst, debitNoteSgst, debitNoteIgst,
     exemptInwardValue,

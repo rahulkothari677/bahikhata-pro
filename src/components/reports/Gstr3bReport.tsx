@@ -41,8 +41,7 @@ import { haptic } from '@/lib/haptic'
 import {
   ChevronLeft, ChevronRight, Download, FileCheck, Save,
   Receipt, TrendingDown, TrendingUp, Wallet, Loader2,
-  ArrowRight, ArrowDownRight, ArrowUpRight, FileText, AlertCircle,
-} from 'lucide-react'
+  ArrowRight, ArrowDownRight, ArrowUpRight, FileText, AlertCircle, AlertTriangle } from 'lucide-react'
 
 export function Gstr3bReport() {
   const queryClient = useQueryClient()
@@ -235,6 +234,51 @@ export function Gstr3bReport() {
 
       {/* Summary cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {/*
+          * Where the ITC figure came from.
+          *
+          * Rule 36(4) allows credit only on invoices appearing in GSTR-2B. A
+          * claim figure shown without its basis invites a shopkeeper to file it
+          * — and if the basis is "everything in my books", that is more credit
+          * than the law allows, tax under-paid, and interest under Section 50
+          * running quietly from the due date.
+          */}
+        {data?.itcBasis === 'books-unverified' && (data?.totalItc || 0) > 0 && (
+          <div className="sm:col-span-2 lg:col-span-4 rounded-2xl border border-amber-300 bg-amber-50 dark:bg-amber-950/40 dark:border-amber-800 p-4">
+            <div className="flex gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+              <div className="min-w-0">
+                <p className="font-semibold text-amber-900 dark:text-amber-200 text-sm">
+                  This input credit has not been checked against GSTR-2B
+                </p>
+                <p className="text-xs text-amber-800 dark:text-amber-300 mt-1">
+                  It is the total from your purchase entries. You can only claim credit on invoices
+                  your suppliers have actually filed, so the real figure may be lower. Import this
+                  month&apos;s GSTR-2B and the claim will be worked out properly.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+        {data?.itcBasis === 'gstr2b' && (data?.deferredItcCgst || data?.deferredItcSgst || data?.deferredItcIgst) > 0 && (
+          <div className="sm:col-span-2 lg:col-span-4 rounded-2xl border border-blue-300 bg-blue-50 dark:bg-blue-950/40 dark:border-blue-800 p-4">
+            <div className="flex gap-3">
+              <AlertTriangle className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+              <div className="min-w-0">
+                <p className="font-semibold text-blue-900 dark:text-blue-200 text-sm">
+                  {formatINR((data?.deferredItcCgst || 0) + (data?.deferredItcSgst || 0) + (data?.deferredItcIgst || 0))}
+                  {' '}of credit is being held back
+                </p>
+                <p className="text-xs text-blue-800 dark:text-blue-300 mt-1">
+                  These purchases are in your books but not in this month&apos;s GSTR-2B, so they
+                  cannot be claimed yet. Once the supplier files, they will appear and you can claim
+                  them in that month. Nothing is lost.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         <SummaryCard
           icon={<TrendingUp className="w-4 h-4" />}
           label="Output Tax"
