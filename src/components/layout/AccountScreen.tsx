@@ -50,7 +50,7 @@ import { formatINRCompact } from '@/lib/utils'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { getInitials, cn } from '@/lib/utils'
 // 🔒 AUDIT V25 §6.1 (Batch 8 Phase 7): AccountScreen now renders from the NavRegistry.
-import { NAV_REGISTRY, type NavDestination } from '@/lib/nav-registry'
+import { NAV_REGISTRY, type NavDestination, type AccountGroupId } from '@/lib/nav-registry'
 import { handleNavAction } from '@/lib/handle-nav-action'
 import { APP_VERSION_LABEL } from '@/lib/app-version'
 import {
@@ -65,6 +65,7 @@ import type { ViewType } from '@/store/app-store'
 // 🔒 AUDIT V23 FIX §13.7: Use real ReferralCard instead of fake email-prefix code
 import { ReferralCard } from '@/components/referral/ReferralCard'
 import { BusinessCardDisplay } from '@/components/common/BusinessCardDisplay'
+import { AppLockCard } from '@/components/security/AppLockCard'
 import { useTranslation } from '@/hooks/use-translation'
 
 // 🔒 V22-6 (Phase 4) FIX: Move lazy() to module scope.
@@ -75,18 +76,33 @@ import { useTranslation } from '@/hooks/use-translation'
 const SettingsComponent = lazy(() =>
   import('@/components/settings/Settings').then(m => ({ default: m.Settings }))
 )
+// Type-only, so it does not pull the 2000-line Settings module into this chunk.
+import type { SettingsSection } from '@/components/settings/Settings'
+// The plan comparison, shown inline on the Subscription page. Lazy for the
+// same reason Settings is: most visits to Account never open Subscription.
+const PricingPlansComponent = lazy(() =>
+  import('@/components/subscription/PricingPlans').then(m => ({ default: m.PricingPlans }))
+)
 
 // 🔒 AUDIT V25 §6.1 (Batch 8 Phase 7): AccountScreen now renders from the NavRegistry.
 // AccountMenuItem + AccountMenuSection interfaces removed — registry types replace them.
 // sections array + handleItemClick replaced with registry-driven grouping + handleNavAction().
 
-// Section metadata: maps subcategory → title for AccountScreen sections.
-const ACCOUNT_SECTION_META: Partial<Record<string, { title: string }>> = {
-  'account-info': { title: 'Account' },
-  'preferences':  { title: 'Preferences' },
-  'business':     { title: 'Business' },
-  'support':      { title: 'Support' },
-}
+/**
+ * The Account menu, top to bottom.
+ *
+ * 🎨 2026-08-08. Ordered by how often a shopkeeper needs it, which is roughly
+ * the reverse of how the old screen was ordered: settings the app author cares
+ * about first, the shop's own details buried in the middle. Five groups —
+ * enough to separate genuinely different things, few enough to scan.
+ */
+const ACCOUNT_GROUP_ORDER: { id: AccountGroupId; title: string }[] = [
+  { id: 'business',      title: 'Business' },
+  { id: 'plan',          title: 'Plan & Rewards' },
+  { id: 'app',           title: 'App' },
+  { id: 'data-security', title: 'Data & Security' },
+  { id: 'support',       title: 'Help' },
+]
 
 export function AccountScreen() {
   const { t } = useTranslation()
@@ -291,19 +307,27 @@ export function AccountScreen() {
   // ═══ Section titles for dedicated pages ═══
   // 🔒 AUDIT V25 §6.1 (Batch 8 Phase 7): Was a hardcoded Record. Now derived
   // from the registry — the label field IS the section title.
-  const sectionTitles: Record<string, string> = {
-    'profile': 'My Profile',
-    'business-card': 'Business Card',
-    'security': 'Security',
-    'subscription': 'Subscription',
-    'app-settings': 'App Settings',
-    'features': 'Feature Toggles',
-    'data': 'Data & Accounting',
-    'staff': 'Staff & Access',
-    'referral': 'Refer & Earn',
-    'help': 'Help & Support',
-    'about': 'About',
-  }
+  /*
+   * Page titles. Derived from the registry so a row and the page it opens can
+   * never disagree — "Data & Backup" used to open a page headed "Data &
+   * Accounting", and "Accounting Controls" opened that same page.
+   */
+  const sectionTitles = useMemo(() => {
+    const titles: Record<string, string> = {}
+    /*
+     * 🐛 2026-08-08: only rows that actually appear IN this menu may name its
+     * pages. Reports-hub entries deep-link here too — 'reconciliation' and
+     * 'period-lock' both open accountSection 'accounting' — and taking the
+     * first match in registry order titled the Accounting Controls page
+     * "Reconciliation", after a row the user had not tapped.
+     */
+    for (const d of NAV_REGISTRY) {
+      if (!d.surfaces?.includes('account')) continue
+      const s = d.actionParams?.accountSection
+      if (s && !titles[s]) titles[s] = d.label
+    }
+    return titles
+  }, [])
 
   // 🔒 AUDIT V25 §6.1 (Batch 8 Phase 7): Menu sections from NavRegistry,
   // filtered by surfaces: ['account'] + permissions. Grouped by subcategory.
@@ -314,25 +338,25 @@ export function AccountScreen() {
       .filter(d => !d.ownerOnly || isOwner)  // owner-only gating
       .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
 
-    // Group by subcategory
-    const grouped = new Map<string, NavDestination[]>()
+    /*
+     * Group by `accountGroup`, in the fixed order below.
+     *
+     * 🎨 2026-08-08. Was grouped by `subcategory`, which MoreScreen also groups
+     * by — so "Manage Shops" and "Staff & Access" landed wherever MoreScreen
+     * needed them, and the account groups came out in Map insertion order,
+     * i.e. whatever order the registry array happened to be written in.
+     * Both are now explicit.
+     */
+    const grouped = new Map<AccountGroupId, NavDestination[]>()
     for (const d of items) {
-      const key = d.subcategory || 'other'
-      if (!grouped.has(key)) grouped.set(key, [])
-      grouped.get(key)!.push(d)
+      if (!d.accountGroup) continue  // guarded by nav-registry-account-groups.test.ts
+      if (!grouped.has(d.accountGroup)) grouped.set(d.accountGroup, [])
+      grouped.get(d.accountGroup)!.push(d)
     }
 
-    // Build ordered section list based on ACCOUNT_SECTION_META
-    const sections: { subcategory: string; title: string; items: NavDestination[] }[] = []
-    for (const [subcat, sectionItems] of grouped) {
-      if (ACCOUNT_SECTION_META[subcat]) {
-        sections.push({
-          subcategory: subcat,
-          title: ACCOUNT_SECTION_META[subcat]!.title,
-          items: sectionItems,
-        })
-      }
-    }
+    const sections = ACCOUNT_GROUP_ORDER
+      .filter(g => (grouped.get(g.id)?.length ?? 0) > 0)
+      .map(g => ({ subcategory: g.id, title: g.title, items: grouped.get(g.id)! }))
 
     // Click handler — uses handleNavAction for standard items, custom for Rate/Logout
     const handleClick = (dest: NavDestination) => {
@@ -393,294 +417,142 @@ export function AccountScreen() {
       <div className="max-w-2xl mx-auto px-4 py-4 space-y-4 pb-24"
            style={{ paddingBottom: 'calc(6rem + var(--safe-bottom))' }}>
 
-        {/* 🔒 V22-11 (Batch A, Phase 4e): Plan / Upgrade Card — Revolut pattern.
-            Shows current plan at the TOP of the profile (before the header).
-            - Free users: gradient card with "Upgrade to Pro" CTA + benefits
-            - Pro users: amber card with "You're on Pro" + renewal info
-            - Elite users: violet card with "You're on Elite" + premium badge
-            Tapping navigates to the pricing page. */}
-        {!isCA && (
-          <button
-            onClick={() => {
-              haptic.click()
-              setPreviousView('account')
-              useAppStore.getState().setAccountOriginView('account')
-              setView('pricing')
-            }}
-            className={cn(
-              'w-full rounded-2xl shadow-card relative overflow-hidden text-white transition active:scale-[0.98] text-left',
-              plan === 'elite'
-                ? 'bg-gradient-to-br from-violet-500 to-purple-700'
-                : plan === 'pro'
-                  ? 'bg-gradient-to-br from-amber-400 to-orange-600'
-                  : 'bg-gradient-to-br from-slate-700 to-slate-900',
-            )}
-          >
-            <div className="p-4 relative">
-              {/* Decorative circle */}
-              <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -mr-12 -mt-12 pointer-events-none" />
-              <div className="relative flex items-center gap-3">
-                <div className="w-11 h-11 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
-                  {plan === 'free' ? (
-                    <Sparkles className="w-5 h-5 text-white" />
-                  ) : (
-                    <Crown className="w-5 h-5 text-white" />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  {plan === 'free' ? (
-                    <>
-                      <p className="font-bold text-sm">Upgrade to Pro</p>
-                      <p className="text-2xs text-white/80 mt-0.5">
-                        AI Scanner · GST Export · WhatsApp · Voice Entry
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      <p className="font-bold text-sm">
-                        You're on {plan === 'elite' ? 'Elite' : 'Pro'} {plan === 'elite' && '👑'}
-                      </p>
-                      <p className="text-2xs text-white/80 mt-0.5">
-                        {plan === 'elite'
-                          ? 'All features unlocked · Priority support'
-                          : 'Pro features active · Upgrade to Elite for more'}
-                      </p>
-                    </>
-                  )}
-                </div>
-                <div className="flex-shrink-0">
-                  <span className="text-3xs font-bold uppercase tracking-wide bg-white/20 px-2 py-1 rounded-full">
-                    {plan === 'free' ? 'View Plans' : 'Manage'}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </button>
-        )}
+        {/* ═══ Who this is ═══════════════════════════════════════════════
+            🎨 2026-08-08. Rahul: "the design of the profile section is too
+            bad where it's most of the space of the screen".
 
-        {/* ═══ Profile Header — premium gradient banner ═══ */}
+            Measured before this change, on a 694px viewport: the upgrade
+            banner (76px) + identity banner (134px) + stats (88px) + the
+            completion checklist (316px) put the first menu row at y=779.
+            Every pixel of the first screen was header; you had to scroll to
+            discover that Account had a menu at all.
+
+            The banner is now one row tall. Same information — avatar, name,
+            shop, plan — in the space a phone can actually spare. The upgrade
+            card that used to sit above it has moved below the menu, where a
+            promotion belongs. */}
         <button
           onClick={isCA ? undefined : handleEditProfile}
           disabled={isCA}
           className={cn(
-            "w-full rounded-2xl shadow-card relative overflow-hidden text-white transition",
-            isCA ? "cursor-default" : "active:scale-[0.98]"
+            'w-full rounded-2xl shadow-card relative overflow-hidden text-white transition text-left',
+            isCA ? 'cursor-default' : 'active:scale-[0.98]',
           )}
         >
           <div className={cn(
-            "p-6 relative",
-            isCA ? "bg-gradient-to-br from-violet-600 to-purple-700" : "bg-gradient-saffron"
+            'px-4 py-3.5 relative',
+            isCA ? 'bg-gradient-to-br from-violet-600 to-purple-700' : 'bg-gradient-saffron',
           )}>
-            {/* Decorative circles for depth */}
-            <div className="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full -mr-20 -mt-20 pointer-events-none" />
-            <div className="absolute bottom-0 right-20 w-28 h-28 bg-white/5 rounded-full -mb-14 pointer-events-none" />
-            <div className="absolute top-1/2 left-0 w-20 h-20 bg-white/5 rounded-full -ml-10 pointer-events-none" />
-
-            <div className="relative flex items-center gap-4">
-              {/* 🔒 V22-6 (Phase 4): Avatar with CRED-style plan ring.
-                  - Free: subtle white ring (default)
-                  - Pro: amber-to-orange gradient ring (premium feel)
-                  - Elite: violet-to-purple gradient ring (top-tier feel)
-                  The ring is a conic-gradient via Tailwind's bg-gradient-to-br
-                  applied to a wrapper div, with the avatar inside. */}
-              <div className="relative flex-shrink-0">
-                {/* Plan ring — gradient wrapper around the avatar */}
-                <div className={cn(
-                  "p-[3px] rounded-full bg-gradient-to-br shadow-lg",
-                  planBadge.ringGradient,
-                )}>
-                  <Avatar className="w-20 h-20 border-2 border-white/40">
-                    <AvatarFallback className="bg-white/20 backdrop-blur-sm text-white text-2xl font-bold">
-                      {getInitials(userName)}
-                    </AvatarFallback>
-                  </Avatar>
-                </div>
-                {/* Plan badge on avatar (bottom-right) */}
-                <div className={cn(
-                  "absolute -bottom-1 -right-1 px-2 py-0.5 rounded-full text-3xs font-bold flex items-center gap-1 shadow-lg ring-2 ring-white/80",
-                  planBadge.badgeClassName
-                )}>
-                  {PlanIcon && <PlanIcon className="w-2.5 h-2.5" />}
-                  {planBadge.label}
-                </div>
+            <div className="absolute top-0 right-0 w-28 h-28 bg-white/10 rounded-full -mr-14 -mt-14 pointer-events-none" />
+            <div className="relative flex items-center gap-3">
+              <div className={cn('p-[2px] rounded-full bg-gradient-to-br flex-shrink-0', planBadge.ringGradient)}>
+                <Avatar className="w-12 h-12 border-2 border-white/40">
+                  <AvatarFallback className="bg-white/20 backdrop-blur-sm text-white text-base font-bold">
+                    {getInitials(userName)}
+                  </AvatarFallback>
+                </Avatar>
               </div>
 
-              {/* Name + shop + contact */}
-              <div className="flex-1 min-w-0 text-left">
-                <div className="flex items-center gap-2">
-                  <p className="font-bold text-xl font-heading tracking-tight truncate">
-                    {userName}
-                  </p>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5">
+                  <p className="font-bold text-base font-heading tracking-tight truncate">{userName}</p>
                   {isCA && (
-                    <span className="text-3xs px-1.5 py-0.5 rounded-full font-bold bg-white/25 text-white whitespace-nowrap flex items-center gap-1">
+                    <span className="text-3xs px-1.5 py-0.5 rounded-full font-bold bg-white/25 whitespace-nowrap flex items-center gap-1 flex-shrink-0">
                       <Calculator className="w-2.5 h-2.5" /> CA
                     </span>
                   )}
                 </div>
-                <p className="text-sm text-white/85 truncate flex items-center gap-1.5 mt-0.5">
-                  <Store className="w-3.5 h-3.5 flex-shrink-0" />
+                {/* Shop, phone and email were three stacked lines. They are one
+                    line now: on a phone the shop name is what identifies the
+                    account, and the rest is a tap away in Shop Profile. */}
+                <p className="text-xs text-white/85 truncate flex items-center gap-1.5 mt-0.5">
+                  <Store className="w-3 h-3 flex-shrink-0" />
                   <span className="truncate">{shopName}</span>
+                  {phone && <span className="text-white/50">·</span>}
+                  {phone && <span className="truncate">{phone}</span>}
                 </p>
-                {phone && (
-                  <p className="text-xs text-white/75 truncate flex items-center gap-1.5 mt-0.5">
-                    <Phone className="w-3 h-3" />
-                    {phone}
-                  </p>
-                )}
-                {email && (
-                  <p className="text-xs text-white/65 truncate flex items-center gap-1.5 mt-0.5">
-                    <Mail className="w-3 h-3" />
-                    {email}
-                  </p>
-                )}
-                {isCA && (
-                  <p className="text-2xs text-white/60 truncate mt-1">
-                    Read-only access — ask the owner to make changes
-                  </p>
-                )}
               </div>
 
-              {/* Edit button (hidden for CA) */}
-              {!isCA && (
-                <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
-                  <Pencil className="w-4 h-4" />
-                </div>
-              )}
+              <span className={cn(
+                'text-3xs font-bold uppercase tracking-wide px-2 py-1 rounded-full flex items-center gap-1 flex-shrink-0',
+                planBadge.badgeClassName,
+              )}>
+                {PlanIcon && <PlanIcon className="w-2.5 h-2.5" />}
+                {planBadge.label}
+              </span>
+              {!isCA && <Pencil className="w-4 h-4 text-white/70 flex-shrink-0" />}
             </div>
           </div>
         </button>
 
-        {/* 🔒 V22-6 (Phase 4): Business Stats Row — 4 quick stats in a grid.
-            Uses dashboard data (cached via useDashboardThisMonth).
-            Shown as compact cards below the profile header. */}
+        {/* Business stats — unchanged in substance, tightened in height. */}
         <div className="grid grid-cols-4 gap-2">
           {businessStats.map((stat) => {
             const StatIcon = stat.icon
             return (
               <div
                 key={stat.label}
-                className="card-hover bg-card rounded-2xl border border-border/60 shadow-card p-2.5 flex flex-col items-center text-center"
+                className="card-hover bg-card rounded-xl border border-border/60 shadow-card px-1.5 py-2 flex flex-col items-center text-center"
               >
-                <div className={cn(
-                  'w-7 h-7 rounded-lg flex items-center justify-center mb-1.5',
-                  stat.bg,
-                )}>
-                  <StatIcon className={cn('w-3.5 h-3.5', stat.color)} />
-                </div>
+                <StatIcon className={cn('w-3.5 h-3.5 mb-1', stat.color)} />
                 <p className="text-sm font-bold tabular-nums leading-tight">{stat.value}</p>
-                <p className="text-3xs text-muted-foreground leading-tight mt-0.5">{stat.label}</p>
+                <p className="text-3xs text-muted-foreground leading-tight">{stat.label}</p>
               </div>
             )
           })}
         </div>
 
-        {/* 🔒 AUDIT V23 FIX §13.1: Switch Shop removed — it was cosmetic.
-            No API route writes shopId on create, so "switching" shops shows
-            the same merged data. This is worse than missing — it manufactures
-            confidence that two sets of books exist when there is one.
-            Replaced with a "Coming Soon" card. The Consolidated Report
-            (which does read shopId) remains functional.
-            To re-enable: stamp shopId on every write + filter every read. */}
-        {shops.length > 1 && !isCA && (
-          <div className="bg-card rounded-2xl border border-border/60 shadow-card p-3 opacity-70">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-amber-100 dark:bg-amber-950 flex items-center justify-center flex-shrink-0">
-                <Store className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+        {/* ═══ What is still missing ══════════════════════════════════════
+            🎨 Rahul: "what is added is cut through the line".
+
+            The checklist listed all seven fields and drew a strikethrough
+            through the six he had already filled — so the card was mostly a
+            list of finished work, presented in the one text style that
+            universally means cancelled or no longer valid. It stood 316px
+            tall to tell him about one empty field.
+
+            Progress-meter guidance is to credit what is done and point at
+            what is next. So: the bar keeps the credit, and only the fields
+            still missing get a row. At 100% the whole thing disappears
+            rather than becoming a badge that congratulates him forever. */}
+        {!isCA && profileCompletion.pct < 100 && (
+          <button
+            onClick={handleEditProfile}
+            className="w-full bg-card rounded-2xl border border-border/60 shadow-card p-3 text-left hover:bg-muted/40 transition"
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-950 flex items-center justify-center flex-shrink-0">
+                <AlertCircle className="w-4 h-4 text-blue-600 dark:text-blue-400" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-xs text-muted-foreground">Multi-Shop Switching</p>
-                <p className="text-sm font-medium truncate">{shops.length} shops created</p>
-              </div>
-              <span className="text-3xs font-bold uppercase tracking-wide bg-muted text-muted-foreground px-2 py-1 rounded-full">
-                Coming Soon
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* 🐛 UI/UX Phase 5 Fix 2: Profile Completion — tappable checklist.
-            Was: a simple progress bar with "Add: X, Y, Z" text. User had to
-            tap the whole card → go to Settings → Profile → find the field.
-            Now: each missing field is a tappable row that deep-links directly
-            to the profile editor. Shows checkmarks for completed fields. */}
-        {profileCompletion.pct === 100 ? (
-          // 100% — green confirmation badge
-          <div className="w-full bg-emerald-50 dark:bg-emerald-950/30 rounded-2xl border border-emerald-200 dark:border-emerald-800 p-3.5 flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-emerald-100 dark:bg-emerald-900 flex items-center justify-center">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-            </div>
-            <div>
-              <p className="text-xs font-semibold text-emerald-700 dark:text-emerald-300">Profile complete!</p>
-              <p className="text-3xs text-emerald-600 dark:text-emerald-400">All business details are filled in</p>
-            </div>
-          </div>
-        ) : (
-          <div className="w-full bg-card rounded-2xl border border-border/60 shadow-card p-3.5">
-            {/* Header with progress */}
-            <button
-              onClick={handleEditProfile}
-              disabled={isCA}
-              className={cn(
-                "w-full text-left mb-3",
-                isCA ? "cursor-default" : "cursor-pointer",
-              )}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-lg bg-blue-100 dark:bg-blue-950 flex items-center justify-center">
-                    <AlertCircle className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold">Profile {profileCompletion.pct}% complete</p>
-                    <p className="text-3xs text-muted-foreground">{profileCompletion.filledCount} of {profileCompletion.total} fields filled</p>
-                  </div>
+                <p className="text-xs font-semibold">
+                  Profile {profileCompletion.pct}% complete
+                </p>
+                <div className="h-1.5 bg-muted rounded-full overflow-hidden mt-1.5">
+                  <div
+                    className={cn(
+                      'h-full rounded-full transition-all duration-500',
+                      profileCompletion.pct >= 67 ? 'bg-emerald-400'
+                        : profileCompletion.pct >= 34 ? 'bg-amber-400' : 'bg-rose-400',
+                    )}
+                    style={{ width: `${profileCompletion.pct}%` }}
+                  />
                 </div>
-                {!isCA && (
-                  <span className="text-3xs font-medium text-primary">Complete →</span>
-                )}
               </div>
-              {/* Progress bar */}
-              <div className="h-2 bg-muted rounded-full overflow-hidden">
-                <div
-                  className={cn(
-                    'h-full rounded-full transition-all duration-500',
-                    profileCompletion.pct >= 67
-                      ? 'bg-emerald-400'
-                      : profileCompletion.pct >= 34
-                        ? 'bg-amber-400'
-                        : 'bg-rose-400',
-                  )}
-                  style={{ width: `${profileCompletion.pct}%` }}
-                />
-              </div>
-            </button>
-            {/* 🐛 Phase 5 Fix 2: Tappable checklist — each missing field is a row */}
-            {!isCA && (
-              <div className="space-y-1 pt-2 border-t border-border/40">
-                {profileCompletion.fields.map((field) => (
-                  <button
-                    key={field.label}
-                    onClick={handleEditProfile}
-                    className="w-full flex items-center gap-2 py-1.5 px-2 rounded-lg hover:bg-muted/50 transition text-left"
-                  >
-                    {field.filled ? (
-                      <div className="w-4 h-4 rounded-full bg-emerald-500 flex items-center justify-center flex-shrink-0">
-                        <Check className="w-2.5 h-2.5 text-white" />
-                      </div>
-                    ) : (
-                      <div className="w-4 h-4 rounded-full border-2 border-muted-foreground/30 flex-shrink-0" />
-                    )}
-                    <span className={cn('text-xs', field.filled ? 'text-muted-foreground line-through' : 'font-medium')}>
-                      {field.label}
-                    </span>
-                    {!field.filled && (
-                      <span className="text-3xs text-primary ml-auto">+{Math.round(100 / profileCompletion.total)}%</span>
-                    )}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
+              <span className="text-3xs font-medium text-primary flex-shrink-0">Complete →</span>
+            </div>
+            {/* Only the gaps, as chips — a 28px row instead of a 240px list. */}
+            <div className="flex flex-wrap gap-1.5 mt-2.5">
+              {profileCompletion.fields.filter(f => !f.filled).map(field => (
+                <span
+                  key={field.label}
+                  className="text-3xs font-medium px-2 py-1 rounded-full bg-muted text-muted-foreground"
+                >
+                  + {field.label}
+                </span>
+              ))}
+            </div>
+          </button>
         )}
 
         {/* ═══ Menu Sections — rendered from NavRegistry (V25 §6.1 Phase 7) ═══ */}
@@ -726,40 +598,49 @@ export function AccountScreen() {
           )
         })}
 
-        {/* ═══ Logout Button ═══ */}
-        <button
-          onClick={async () => {
-            haptic.warning()
-            // 🔒 AUDIT V23 FIX §13.9d: Was a chain of dynamic-import .then()
-            // calls with no .catch. If clearAllOfflineData() threw (e.g.,
-            // IndexedDB blocked by browser), signOut never ran — the button
-            // silently did nothing. Now: signOut runs unconditionally at the
-            // end, and offline-clear failures are logged but non-fatal.
-            try {
-              const { clearAllOfflineData } = await import('@/lib/offline-db')
-              try {
-                await clearAllOfflineData()
-              } catch (e) {
-                console.warn('[logout] clearAllOfflineData failed (non-fatal):', e)
-              }
-            } catch (e) {
-              console.warn('[logout] offline-db module load failed (non-fatal):', e)
-            }
-            try {
-              const { signOut } = await import('next-auth/react')
-              await signOut({ callbackUrl: '/' })
-            } catch (e) {
-              console.error('[logout] signOut failed:', e)
-              // Last-resort hard redirect so the user is never stuck on a
-              // button that does nothing.
-              if (typeof window !== 'undefined') window.location.href = '/'
-            }
-          }}
-          className="w-full bg-card rounded-2xl p-4 shadow-card border border-rose-200 flex items-center justify-center gap-2 text-rose-600 hover:bg-rose-50 transition active:scale-[0.98]"
-        >
-          <LogOut className="w-5 h-5" />
-          <span className="font-semibold">Logout</span>
-        </button>
+        {/* ═══ Upgrade ════════════════════════════════════════════════════
+            🎨 Rahul: "there is an subscription manage in the top which should
+            not be on the top."
+
+            He is right, and not only about the position. It was the first
+            thing on the screen — above his own name — and it duplicated the
+            Subscription row that already sits in Plan & Rewards. A promotion
+            that outranks the user's identity reads as an ad, and the shop
+            owner opening Account is usually there to do something else.
+
+            Kept, because a free user does need a way to find Pro, but placed
+            after the menu: visible on the way out, in nobody's way on the
+            way in. Hidden entirely for paying users — they have the
+            Subscription row, and there is nothing left to sell them. */}
+        {!isCA && plan === 'free' && (
+          <button
+            onClick={() => {
+              haptic.click()
+              setPreviousView('account')
+              useAppStore.getState().setAccountOriginView('account')
+              setView('pricing')
+            }}
+            className="w-full rounded-2xl shadow-card relative overflow-hidden text-white transition active:scale-[0.98] text-left bg-gradient-to-br from-slate-700 to-slate-900"
+          >
+            <div className="p-4 relative">
+              <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -mr-12 -mt-12 pointer-events-none" />
+              <div className="relative flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-bold text-sm">Upgrade to Pro</p>
+                  <p className="text-2xs text-white/80 mt-0.5">
+                    AI Scanner · GST Export · WhatsApp · Voice Entry
+                  </p>
+                </div>
+                <span className="text-3xs font-bold uppercase tracking-wide bg-white/20 px-2 py-1 rounded-full flex-shrink-0">
+                  View Plans
+                </span>
+              </div>
+            </div>
+          </button>
+        )}
 
         {/* Version footer */}
         <p className="text-center text-xs text-muted-foreground pt-2">
@@ -793,19 +674,31 @@ function AccountSectionContent({
   plan: string
   usage: any
 }) {
-  // Render the Settings component with a singleTab prop that hides the tab bar
-  // and locks to the relevant tab. This reuses all the existing Settings logic
-  // (forms, API calls, state management) without duplicating code.
-  const tabMap: Record<string, 'profile' | 'features' | 'appearance' | 'data' | 'staff'> = {
-    'profile': 'profile',
-    'security': 'profile',
-    'app-settings': 'appearance',
-    'features': 'features',
-    'data': 'data',
-    'staff': 'staff',
-    'referral': 'profile',
-    'help': 'profile',
-    'about': 'profile',
+  /*
+   * Which Settings cards each Account page is made of.
+   *
+   * 🎨 2026-08-08. This replaces a map from nine sections onto five tabs, in
+   * which five of them — profile, security, referral, help and about — all
+   * pointed at 'profile'. That is the whole reason Rahul's My Profile page
+   * held the AI Bill Scanner language and Manage Shops: those cards were
+   * written inside the profile tab, and every section that fell through to
+   * 'profile' inherited them.
+   *
+   * A section absent from this map renders no Settings cards at all — the
+   * bespoke pages below (subscription, security, referral, help, about,
+   * business card) supply their own content.
+   */
+  const sectionCards: Record<string, SettingsSection[]> = {
+    'profile':       ['shop-profile'],
+    'shops':         ['manage-shops'],
+    'invoices':      ['invoices'],
+    'appearance':    ['appearance'],
+    'preferences':   ['preferences'],
+    'notifications': ['notifications'],
+    'features':      ['features', 'ai-tools'],
+    'accounting':    ['accounting'],
+    'data':          ['data-backup'],
+    'staff':         ['staff'],
   }
 
   // For subscription, redirect to pricing page
@@ -933,22 +826,38 @@ function AccountSectionContent({
           </div>
         )}
 
-        {/* Manage / View all plans */}
-        <button
-          onClick={() => {
-            useAppStore.getState().setPreviousView('account')
-            useAppStore.getState().setView('pricing')
-          }}
-          className="w-full py-2.5 rounded-lg border border-border text-sm font-medium text-muted-foreground hover:bg-muted/50 transition"
-        >
-          View All Plans & Pricing
-        </button>
+        {/* ═══ The plans themselves ═══════════════════════════════════════
+            🎨 Rahul: "subscription section is mostly blank and plans aren't
+            visible."
+
+            Measured: this page was exactly one viewport tall (694px of 694px)
+            and held a plan name and two usage counters. The Free/Pro/Elite
+            comparison did exist — behind a button labelled "View All Plans &
+            Pricing", on a separate screen.
+
+            So nothing here had to be built; the page just had to stop hiding
+            the one thing a page called Subscription is for. Same component
+            the pricing screen uses, so there is still only one place that
+            knows what a plan costs. */}
+        <div className="pt-2">
+          <div className="mb-3 px-1">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+              Plans &amp; Pricing
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Change or cancel any time. Prices include GST.
+            </p>
+          </div>
+          <Suspense fallback={<div className="h-64 bg-muted animate-pulse rounded-2xl" />}>
+            <PricingPlansComponent />
+          </Suspense>
+        </div>
       </div>
     )
   }
 
   // For sections that don't have dedicated content yet, show a placeholder
-  const hasContent = tabMap[section]
+  const hasContent = sectionCards[section]
 
   // ═══ Profile Page — QR Code card + Settings form ═══
   // 🔒 V22-6 (Phase 4): Show a QR code at the top of the profile page that
@@ -1038,7 +947,7 @@ function AccountSectionContent({
 
         {/* Settings form (profile tab) */}
         <Suspense fallback={<div className="bg-card rounded-2xl shadow-card border border-border/60 p-8 text-center"><p className="text-muted-foreground text-sm">Loading...</p></div>}>
-          <SettingsComponent singleTab="profile" />
+          <SettingsComponent sections={['shop-profile']} />
         </Suspense>
       </div>
     )
@@ -1093,39 +1002,14 @@ function AccountSectionContent({
           </button>
         </div>
 
-        {/* App Lock — honest "coming soon" with device-level workaround */}
-        <div className="bg-card rounded-2xl shadow-card border border-border/60 overflow-hidden">
-          <div className="p-4 border-b border-border/40">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-950 flex items-center justify-center">
-                <Shield className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-              </div>
-              <div>
-                <p className="font-semibold text-sm">App Lock</p>
-                <p className="text-xs text-muted-foreground">Require PIN/biometric to open app</p>
-              </div>
-            </div>
-          </div>
-          <div className="p-4">
-            <div className="flex items-start gap-2 mb-3">
-              <Info className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
-              <div>
-                <p className="text-xs text-muted-foreground mb-1">
-                  <span className="font-medium text-foreground">In-app app lock is coming soon.</span> Until then, protect your data with your phone&apos;s built-in screen lock:
-                </p>
-                <p className="text-2xs text-muted-foreground mt-2">
-                  📱 <span className="font-medium">Android:</span> Settings → Security → Screen lock (PIN/Pattern/Fingerprint)
-                </p>
-                <p className="text-2xs text-muted-foreground mt-1">
-                  📱 <span className="font-medium">iPhone:</span> Settings → Face ID & Passcode
-                </p>
-              </div>
-            </div>
-            <div className="text-2xs text-center text-muted-foreground bg-muted/30 rounded-lg py-2">
-              🔒 In-app PIN/biometric lock — Coming soon
-            </div>
-          </div>
-        </div>
+        {/* ═══ App Lock ═══════════════════════════════════════════════════
+            🔒 Rahul: "security has no real feature."
+
+            This was two "Coming Soon" notices — one here, one in App Settings
+            — plus instructions for using the phone's own screen lock instead.
+            It is now built. See src/lib/app-lock.ts for the threat model and
+            for why every failure path unlocks rather than locks. */}
+        <AppLockCard />
 
         {/* Data Security — what's actually protecting the user's data */}
         <div className="bg-card rounded-2xl shadow-card border border-border/60 p-4">
@@ -1357,7 +1241,7 @@ function AccountSectionContent({
   // 🔒 V22-6 fix: SettingsComponent is now declared at module scope (above).
   return (
     <Suspense fallback={<div className="bg-card rounded-2xl shadow-card border border-border/60 p-8 text-center"><p className="text-muted-foreground text-sm">Loading...</p></div>}>
-      <SettingsComponent singleTab={tabMap[section]} />
+      <SettingsComponent sections={sectionCards[section]} />
     </Suspense>
   )
 }

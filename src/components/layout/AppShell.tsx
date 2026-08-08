@@ -50,6 +50,18 @@ import { ConsentModal } from '@/components/common/ConsentModal'
 import { RatePromptModal } from '@/components/common/RatePromptModal'
 import { PWAInstallPrompt } from '@/components/common/PWAInstallPrompt'
 import { PaywallModal } from '@/components/common/PaywallModal'
+/*
+ * 🔒 2026-08-08: App Lock. Mounted here rather than in Providers because
+ * Providers also wraps /login and the public bill page at /b/[token] — a
+ * customer opening a shopkeeper's bill link must never meet the shopkeeper's
+ * PIN pad. Every authenticated branch in page.tsx renders through AppShell,
+ * so this is the one place that covers the app and nothing else.
+ *
+ * Renders children untouched when no PIN is set, which is every user by
+ * default. See src/lib/app-lock.ts.
+ */
+import { AppLockGate } from '@/components/security/AppLockGate'
+
 
 /** When to show a chrome element (Sidebar / Header). */
 type ChromeVisibility = 'always' | 'desktop-only' | 'never'
@@ -138,6 +150,7 @@ export function AppShell({
   const showHeader = header !== 'never'
 
   return (
+    <AppLockGate>
     <div className="flex min-h-screen bg-background">
       {/* Global overlays — always present regardless of branch */}
       {features?.keyboardShortcuts && <KeyboardShortcuts />}
@@ -196,6 +209,7 @@ export function AppShell({
       {firstRunComplete && <RatePromptModal open={shouldShowRatePrompt} onRated={onRated} onDismiss={onDismiss} />}
       <PaywallModal feature={paywallFeature} open={paywallOpen} onClose={closePaywall} />
     </div>
+    </AppLockGate>
   )
 }
 

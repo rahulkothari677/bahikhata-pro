@@ -106,10 +106,15 @@ describe('Navigation Registry (V25 §6.1 Phase 1)', () => {
   // ─── Coverage: AccountScreen (14 items across 4 sections) ─────────
 
   it('should cover all AccountScreen destinations', () => {
+    // 🎨 2026-08-08: 'app-settings' is gone — it was one page holding six
+    // unrelated domains, split into appearance / invoice-settings /
+    // preferences / notifications.
     const accountIds = [
-      'my-profile', 'business-card', 'subscription', 'security',
-      'app-settings', 'feature-toggles', 'accounting-controls', 'data-backup',
-      'staff-access', 'refer-earn',
+      'my-profile', 'business-card', 'invoice-settings', 'multi-shop-management',
+      'staff-access',
+      'subscription', 'refer-earn',
+      'appearance', 'preferences', 'notifications', 'feature-toggles',
+      'security', 'accounting-controls', 'data-backup',
       'help-support', 'rate-ekbook', 'about', 'logout',
     ]
     for (const id of accountIds) {

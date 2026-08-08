@@ -12,20 +12,41 @@ import { CheckoutButton } from '@/components/subscription/CheckoutButton'
 export function PricingPlans() {
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly')
 
+  /*
+   * 🐛 2026-08-08. This rendered an EMPTY grid — no Free, no Pro, no Elite —
+   * whenever the cache held the bootstrap copy of this key.
+   *
+   * `['subscription-status']` has two writers with two different shapes.
+   * /api/subscription/status returns { current, usage, plans, degraded };
+   * use-bootstrap primes the same key from /api/bootstrap, which deliberately
+   * omits `plans` because they are static config nobody needs on app start.
+   * Both are "the subscription status", so both used the obvious key.
+   *
+   * With the primed entry in hand this component saw isLoading === false and
+   * plans === undefined, so it fell to `|| []` and drew a grid of nothing.
+   * Not a blank flash either — setQueryData marks data fresh, so without a
+   * refetch it stayed empty. The page said "Plans & Pricing" over a gap.
+   *
+   * Two changes. `refetchOnMount: 'always'` gets the full payload whatever is
+   * cached; and missing `plans` now counts as loading rather than as an empty
+   * catalogue, because a shop being shown zero plans is never the truth.
+   */
   const { data, isLoading } = useQuery({
     queryKey: ['subscription-status'],
     queryFn: async () => {
       const r = await offlineFetch('/api/subscription/status')
       return r.json()
     },
+    refetchOnMount: 'always',
   })
 
-  if (isLoading) {
+  const plans = data?.plans as any[] | undefined
+
+  if (isLoading || !plans) {
     return <div className="space-y-3">{[...Array(3)].map((_, i) => <div key={i} className="h-48 bg-muted animate-pulse rounded-2xl" />)}</div>
   }
 
   const currentPlan = data?.current?.plan || 'free'
-  const plans = data?.plans || []
   const displayPlans = plans.filter((p: any) => p.id !== 'enterprise')
 
   return (

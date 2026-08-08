@@ -30,8 +30,9 @@ import {
   FileBarChart, ScanLine, FolderOpen, Bot, ShieldCheck, Lock,
   Undo2, FilePlus2, FileText, FileCheck, Banknote, Coins, Repeat,
   Send, AlertTriangle, Mic, ScanBarcode, Sparkles, BarChart3,
-  User, Store, CreditCard, Shield, Settings as SettingsIcon, Check,
+  Store, CreditCard, Shield, Settings as SettingsIcon, Check,
   Database, UserCog, Gift, HelpCircle, Star, LogOut, Info,
+  Palette, Bell, Crown,
   TrendingUp, Clock, Scale, Receipt, Hash, Wallet as WalletIcon,
   Plus, UserPlus,
   type LucideIcon,
@@ -78,6 +79,28 @@ export type NavSubcategoryId =
   | 'preferences'       // account: Preferences section in AccountScreen
   | 'business'          // account: Business section in AccountScreen
   | 'support'           // account: Support section in AccountScreen
+
+/**
+ * How the Account screen groups its rows.
+ *
+ * 🎨 2026-08-08. Deliberately SEPARATE from `subcategory`, which MoreScreen and
+ * the Sidebar group by. Two of the account rows (Manage Shops, Staff & Access)
+ * also appear in MoreScreen, and a single `subcategory` field cannot put a row
+ * under "Business" there and under "Data & Security" here. Sharing one field
+ * across surfaces is what forced those two rows into whichever grouping the
+ * other surface wanted — the exact cross-surface coupling this registry exists
+ * to prevent.
+ *
+ * Five groups, following the rule that a settings screen stays scannable at
+ * four or five top-level categories. Each is named for what the shopkeeper is
+ * trying to do, not for which component implements it.
+ */
+export type AccountGroupId =
+  | 'business'       // the shop itself: identity, bills, branches, people
+  | 'plan'           // what they pay and what they earn back
+  | 'app'            // how the app looks and behaves
+  | 'data-security'  // who can get in, and what happens to the books
+  | 'support'        // help, legal, and the way out
 
 export type NavFrequency = 'primary' | 'secondary' | 'tertiary'
 // primary   = Sidebar main nav + BottomNav tabs + GlobalSearch commands
@@ -148,6 +171,13 @@ export interface NavDestination {
   category: NavCategoryId
   /** Sub-category for grouping within surfaces */
   subcategory?: NavSubcategoryId
+  /**
+   * Which group this row sits in on the Account screen. Required for anything
+   * with 'account' in `surfaces` — a row without one would render ungrouped at
+   * the bottom, which is how "Multi-Shop Management" ended up orphaned before.
+   * Enforced by src/__tests__/lib/nav-registry-account-groups.test.ts.
+   */
+  accountGroup?: AccountGroupId
 
   // ─── Visibility ──────────────────────────────────────
   /** Which surfaces show this destination */
@@ -509,7 +539,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     iconColor: BLUE,
     iconBg: BLUE_BG,
     actionKind: 'navigate-account',
-    actionParams: { accountSection: 'data' },
+    actionParams: { accountSection: 'accounting' },
     category: 'reports',
     subcategory: 'gst-tax',
     frequency: 'secondary',
@@ -526,7 +556,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     iconColor: BLUE,
     iconBg: BLUE_BG,
     actionKind: 'navigate-account',
-    actionParams: { accountSection: 'data' },
+    actionParams: { accountSection: 'accounting' },
     category: 'reports',
     subcategory: 'gst-tax',
     frequency: 'secondary',
@@ -1020,21 +1050,42 @@ export const NAV_REGISTRY: NavDestination[] = [
   },
 
   // ═══ account ═════════════════════════════════════════════════════════
-  // Account section (AccountScreen)
+  //
+  // 🎨 2026-08-08 — rebuilt. Rahul: "the design and structure is not good.
+  // everything look like a mess. things aren't added in structed way."
+  //
+  // What was wrong, measured in the running app:
+  //   · 'accounting-controls' and 'data-backup' both pointed at accountSection
+  //     'data' — two rows, byte-identical destination (2222 chars each).
+  //   · 'multi-shop-management' pointed at settingsTab 'profile', which is why
+  //     "Manage Shops" rendered INSIDE My Profile as well as being its own row.
+  //   · 'app-settings' was one page holding six unrelated domains, 4.3 screens
+  //     tall, ending in an About card that also had its own row.
+  //
+  // Now every row owns exactly one destination and every destination has
+  // exactly one row. Grouped by what the shopkeeper is doing, not by which
+  // component happens to render it.
+
+  // ─── BUSINESS: the shop itself ────────────────────────────────────────
   {
     id: 'my-profile',
-    label: 'My Profile',
-    description: 'Shop name, GSTIN, address, contact',
-    icon: User,
+    // Renamed from "My Profile". It is the SHOP's identity — name, GSTIN,
+    // address, UPI — not the person's. The old name is why unrelated personal
+    // preferences kept getting filed under it.
+    label: 'Shop Profile',
+    description: 'Name, GSTIN, address, logo, UPI',
+    icon: Store,
     iconColor: 'text-blue-600',
     iconBg: 'bg-blue-100',
     actionKind: 'navigate-account',
     actionParams: { accountSection: 'profile' },
     category: 'account',
     subcategory: 'account-info',
+    accountGroup: 'business',
     frequency: 'tertiary',
     surfaces: ['account'],
     sortOrder: 1,
+    keywords: 'shop profile gstin address logo upi business name',
     labelKey: 'nav.label.my-profile',
     descKey: 'nav.desc.my-profile',
   },
@@ -1042,13 +1093,14 @@ export const NAV_REGISTRY: NavDestination[] = [
     id: 'business-card',
     label: 'Business Card',
     description: 'Shareable digital visiting card with QR',
-    icon: Store,
+    icon: CreditCard,
     iconColor: VIOLET,
     iconBg: VIOLET_BG,
     actionKind: 'navigate-account',
     actionParams: { accountSection: 'business-card' },
     category: 'account',
     subcategory: 'account-info',
+    accountGroup: 'business',
     frequency: 'tertiary',
     surfaces: ['account'],
     sortOrder: 2,
@@ -1056,126 +1108,46 @@ export const NAV_REGISTRY: NavDestination[] = [
     descKey: 'nav.desc.business-card',
   },
   {
-    id: 'subscription',
-    label: 'Subscription',
-    description: 'Plan, usage, billing, upgrade',
-    icon: CreditCard,
-    iconColor: AMBER,
-    iconBg: 'bg-amber-100',
-    actionKind: 'navigate-account',
-    actionParams: { accountSection: 'subscription' },
-    category: 'account',
-    subcategory: 'account-info',
-    frequency: 'tertiary',
-    surfaces: ['account'],
-    sortOrder: 3,
-    labelKey: 'nav.label.subscription',
-    descKey: 'nav.desc.subscription',
-  },
-  {
-    id: 'security',
-    label: 'Security',
-    description: 'App lock, change password',
-    icon: Shield,
+    id: 'invoice-settings',
+    // NEW. Collects the bill settings that were buried under "Business Rules
+    // & Goals" inside App Settings: invoice design, how bills are sent, the
+    // share link, round-off, e-invoicing. A shopkeeper looking for "how my
+    // bill looks" had no reason to open a page called App Settings.
+    label: 'Invoices & Bills',
+    description: 'Bill design, how bills are sent, round off, e-invoice',
+    icon: Receipt,
     iconColor: EMERALD,
-    iconBg: 'bg-emerald-100',
+    iconBg: EMERALD_BG,
     actionKind: 'navigate-account',
-    actionParams: { accountSection: 'security' },
+    actionParams: { accountSection: 'invoices' },
     category: 'account',
     subcategory: 'account-info',
+    accountGroup: 'business',
     frequency: 'tertiary',
-    surfaces: ['account'],
-    sortOrder: 4,
-    labelKey: 'nav.label.security',
-    descKey: 'nav.desc.security',
-  },
-  // Preferences section (AccountScreen)
-  {
-    id: 'app-settings',
-    label: 'App Settings',
-    description: 'Language, dark mode, theme, app lock, backup',
-    icon: SettingsIcon,
-    iconColor: SLATE,
-    iconBg: SLATE_BG,
-    actionKind: 'navigate-account',
-    actionParams: { accountSection: 'app-settings' },
-    category: 'account',
-    subcategory: 'preferences',
-    frequency: 'tertiary',
-    surfaces: ['account'],
-    sortOrder: 1,
-    labelKey: 'nav.label.app-settings',
-    descKey: 'nav.desc.app-settings',
-  },
-  {
-    id: 'feature-toggles',
-    label: 'Feature Toggles',
-    description: 'Search & toggle 20+ features on/off',
-    icon: Check,
-    iconColor: VIOLET,
-    iconBg: VIOLET_BG,
-    actionKind: 'navigate-account',
-    actionParams: { accountSection: 'features' },
-    category: 'account',
-    subcategory: 'preferences',
-    frequency: 'tertiary',
-    surfaces: ['account'],
-    sortOrder: 2,
-    labelKey: 'nav.label.feature-toggles',
-    descKey: 'nav.desc.feature-toggles',
-  },
-  {
-    id: 'accounting-controls',
-    label: 'Accounting Controls',
-    description: 'Reconciliation health check, period lock',
-    icon: ShieldCheck,
-    iconColor: AMBER,
-    iconBg: AMBER_BG,
-    actionKind: 'navigate-account',
-    actionParams: { accountSection: 'data' },
-    category: 'account',
-    subcategory: 'preferences',
-    frequency: 'tertiary',
-    surfaces: ['account'],
+    surfaces: ['account', 'global-search'],
     sortOrder: 3,
-    labelKey: 'nav.label.accounting-controls',
-    descKey: 'nav.desc.accounting-controls',
+    keywords: 'invoice bill design theme pdf whatsapp share link round off e-invoice irn template',
+    labelKey: 'nav.label.invoice-settings',
+    descKey: 'nav.desc.invoice-settings',
   },
-  {
-    id: 'data-backup',
-    label: 'Data & Backup',
-    description: 'Backup, restore, clear cache, delete account',
-    icon: Database,
-    iconColor: BLUE,
-    iconBg: BLUE_BG,
-    actionKind: 'navigate-account',
-    actionParams: { accountSection: 'data' },
-    category: 'account',
-    subcategory: 'preferences',
-    frequency: 'tertiary',
-    surfaces: ['account'],
-    sortOrder: 4,
-    labelKey: 'nav.label.data-backup',
-    descKey: 'nav.desc.data-backup',
-  },
-  // Business section (AccountScreen)
   {
     id: 'multi-shop-management',
-    label: 'Multi-Shop Management',
-    description: 'Manage shops for consolidated reporting',  // 🔒 V26 N14: was "Switch or add shops" — switching was removed in V26 N4
+    label: 'Manage Shops',
+    description: 'Add shops and GSTINs for consolidated reporting',
     icon: Store,
     iconColor: AMBER,
     iconBg: AMBER_BG,
-    actionKind: 'navigate-settings',
-    actionParams: { settingsTab: 'profile' },
+    // Was navigate-settings → settingsTab 'profile', which rendered this
+    // inside My Profile instead of on its own page.
+    actionKind: 'navigate-account',
+    actionParams: { accountSection: 'shops' },
     category: 'account',
     subcategory: 'business',
+    accountGroup: 'business',
     frequency: 'secondary',
-    // 🔒 V26 P4: Added 'account' surface so it's reachable from AccountScreen
-    // (was: only 'more' + 'global-search' → unreachable on desktop except Ctrl+K)
     surfaces: ['more', 'global-search', 'account'],
     keywords: 'multi shop manage shops branch add new shop',
-    sortOrder: 1,
+    sortOrder: 4,
     labelKey: 'nav.label.multi-shop-management',
     descKey: 'nav.desc.multi-shop-management',
   },
@@ -1186,21 +1158,43 @@ export const NAV_REGISTRY: NavDestination[] = [
     icon: UserCog,
     iconColor: 'text-indigo-600',
     iconBg: 'bg-indigo-100',
-    actionKind: 'navigate-settings',
-    actionParams: { settingsTab: 'staff' },
+    actionKind: 'navigate-account',
+    actionParams: { accountSection: 'staff' },
     category: 'account',
     subcategory: 'business',
+    accountGroup: 'business',
     frequency: 'secondary',
     surfaces: ['more', 'account'],
-    sortOrder: 2,
+    sortOrder: 5,
     labelKey: 'nav.label.staff-access',
     descKey: 'nav.desc.staff-access',
     ownerOnly: true,
   },
+
+  // ─── PLAN: what they pay, what they earn back ─────────────────────────
+  {
+    id: 'subscription',
+    label: 'Subscription',
+    description: 'Your plan, usage and upgrades',
+    icon: Crown,
+    iconColor: AMBER,
+    iconBg: 'bg-amber-100',
+    actionKind: 'navigate-account',
+    actionParams: { accountSection: 'subscription' },
+    category: 'account',
+    subcategory: 'account-info',
+    accountGroup: 'plan',
+    frequency: 'tertiary',
+    surfaces: ['account'],
+    sortOrder: 1,
+    keywords: 'subscription plan pricing pro elite upgrade billing',
+    labelKey: 'nav.label.subscription',
+    descKey: 'nav.desc.subscription',
+  },
   {
     id: 'refer-earn',
     label: 'Refer & Earn',
-    description: 'Invite friends, earn rewards',
+    description: 'Refer 3 shops, get 1 year Pro free',
     icon: Gift,
     iconColor: 'text-rose-600',
     iconBg: 'bg-rose-100',
@@ -1208,13 +1202,153 @@ export const NAV_REGISTRY: NavDestination[] = [
     actionParams: { accountSection: 'referral' },
     category: 'account',
     subcategory: 'business',
+    accountGroup: 'plan',
     frequency: 'tertiary',
     surfaces: ['account'],
-    sortOrder: 1,
+    sortOrder: 2,
     labelKey: 'nav.label.refer-earn',
     descKey: 'nav.desc.refer-earn',
   },
-  // Support section (AccountScreen)
+
+  // ─── APP: how it looks and behaves ────────────────────────────────────
+  {
+    id: 'appearance',
+    // Was part of 'app-settings'. Theme + dark mode + every language choice,
+    // including the two AI language pickers that used to sit inside My Profile
+    // for no reason anyone could explain.
+    label: 'Appearance & Language',
+    description: 'Theme, dark mode, app and AI languages',
+    icon: Palette,
+    iconColor: VIOLET,
+    iconBg: VIOLET_BG,
+    actionKind: 'navigate-account',
+    actionParams: { accountSection: 'appearance' },
+    category: 'account',
+    subcategory: 'preferences',
+    accountGroup: 'app',
+    frequency: 'tertiary',
+    surfaces: ['account', 'global-search'],
+    sortOrder: 1,
+    keywords: 'theme colour color dark mode language hindi gujarati marathi tamil telugu ai voice scanner',
+    labelKey: 'nav.label.appearance',
+    descKey: 'nav.desc.appearance',
+  },
+  {
+    id: 'preferences',
+    label: 'Preferences',
+    description: 'Landing page, hide profit, goals, stock rules',
+    icon: SettingsIcon,
+    iconColor: SLATE,
+    iconBg: SLATE_BG,
+    actionKind: 'navigate-account',
+    actionParams: { accountSection: 'preferences' },
+    category: 'account',
+    subcategory: 'preferences',
+    accountGroup: 'app',
+    frequency: 'tertiary',
+    surfaces: ['account'],
+    sortOrder: 2,
+    keywords: 'preferences landing page hide profit target goal overselling day end',
+    labelKey: 'nav.label.preferences',
+    descKey: 'nav.desc.preferences',
+  },
+  {
+    id: 'notifications',
+    label: 'Notifications',
+    description: 'Choose which alerts you receive',
+    icon: Bell,
+    iconColor: AMBER,
+    iconBg: AMBER_BG,
+    actionKind: 'navigate-account',
+    actionParams: { accountSection: 'notifications' },
+    category: 'account',
+    subcategory: 'preferences',
+    accountGroup: 'app',
+    frequency: 'tertiary',
+    surfaces: ['account', 'global-search'],
+    sortOrder: 3,
+    keywords: 'notifications alerts low stock udhaar sync announcements digest backup reminder',
+    labelKey: 'nav.label.notifications',
+    descKey: 'nav.desc.notifications',
+  },
+  {
+    id: 'feature-toggles',
+    label: 'Feature Toggles',
+    description: 'Turn app features on or off',
+    icon: Check,
+    iconColor: BLUE,
+    iconBg: BLUE_BG,
+    actionKind: 'navigate-account',
+    actionParams: { accountSection: 'features' },
+    category: 'account',
+    subcategory: 'preferences',
+    accountGroup: 'app',
+    frequency: 'tertiary',
+    surfaces: ['account'],
+    sortOrder: 4,
+    labelKey: 'nav.label.feature-toggles',
+    descKey: 'nav.desc.feature-toggles',
+  },
+
+  // ─── DATA & SECURITY: who gets in, what happens to the books ──────────
+  {
+    id: 'security',
+    label: 'Security',
+    description: 'Password, app lock, active devices',
+    icon: Shield,
+    iconColor: EMERALD,
+    iconBg: 'bg-emerald-100',
+    actionKind: 'navigate-account',
+    actionParams: { accountSection: 'security' },
+    category: 'account',
+    subcategory: 'account-info',
+    accountGroup: 'data-security',
+    frequency: 'tertiary',
+    surfaces: ['account'],
+    sortOrder: 1,
+    keywords: 'security password app lock pin biometric devices sessions sign out',
+    labelKey: 'nav.label.security',
+    descKey: 'nav.desc.security',
+  },
+  {
+    id: 'accounting-controls',
+    label: 'Accounting Controls',
+    description: 'Period lock and reconciliation health check',
+    icon: ShieldCheck,
+    iconColor: AMBER,
+    iconBg: AMBER_BG,
+    // Was accountSection 'data' — the SAME page as Data & Backup below.
+    actionKind: 'navigate-account',
+    actionParams: { accountSection: 'accounting' },
+    category: 'account',
+    subcategory: 'preferences',
+    accountGroup: 'data-security',
+    frequency: 'tertiary',
+    surfaces: ['account'],
+    sortOrder: 2,
+    labelKey: 'nav.label.accounting-controls',
+    descKey: 'nav.desc.accounting-controls',
+  },
+  {
+    id: 'data-backup',
+    label: 'Data & Backup',
+    description: 'Backup, restore, offline cache, delete account',
+    icon: Database,
+    iconColor: BLUE,
+    iconBg: BLUE_BG,
+    actionKind: 'navigate-account',
+    actionParams: { accountSection: 'data' },
+    category: 'account',
+    subcategory: 'preferences',
+    accountGroup: 'data-security',
+    frequency: 'tertiary',
+    surfaces: ['account'],
+    sortOrder: 3,
+    labelKey: 'nav.label.data-backup',
+    descKey: 'nav.desc.data-backup',
+  },
+
+  // ─── SUPPORT ──────────────────────────────────────────────────────────
   {
     id: 'help-support',
     label: 'Help & Support',
@@ -1226,6 +1360,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     actionParams: { accountSection: 'help' },
     category: 'account',
     subcategory: 'support',
+    accountGroup: 'support',
     frequency: 'tertiary',
     surfaces: ['account'],
     sortOrder: 1,
@@ -1242,6 +1377,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     actionKind: 'custom',
     category: 'account',
     subcategory: 'support',
+    accountGroup: 'support',
     frequency: 'tertiary',
     surfaces: ['account'],
     sortOrder: 2,
@@ -1259,6 +1395,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     actionParams: { accountSection: 'about' },
     category: 'account',
     subcategory: 'support',
+    accountGroup: 'support',
     frequency: 'tertiary',
     surfaces: ['account'],
     sortOrder: 3,
@@ -1275,6 +1412,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     actionKind: 'custom',
     category: 'account',
     subcategory: 'support',
+    accountGroup: 'support',
     frequency: 'tertiary',
     surfaces: ['account'],
     sortOrder: 4,

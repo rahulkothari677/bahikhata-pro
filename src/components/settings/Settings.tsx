@@ -27,6 +27,7 @@ import { hasAnalyticsConsent, setAnalyticsConsent, initAnalytics } from '@/lib/a
 import { THEME_OPTIONS } from '@/components/providers/ThemeProvider'
 import {
   Store, Save, Database, Trash2, AlertTriangle, Moon, Keyboard,
+  ShieldCheck, Receipt, Settings as SettingsIcon,
   Search, MessageCircle, Sparkles, Bell, Repeat, FileSpreadsheet, Link2 as LinkIcon,
   Users, Package, ScanLine, TrendingUp, Smartphone, RotateCcw, Palette, Check, Globe, Shield, EyeOff, Plus, Mic, Lock, Loader2, BarChart3, Home, Pencil,
 } from 'lucide-react'
@@ -90,10 +91,54 @@ const FEATURE_CATEGORIES: { title: string; features: { key: FeatureKey; label: s
   },
 ]
 
+/**
+ * The settings cards this file can render, addressed one at a time.
+ *
+ * 🎨 2026-08-08. Before this, the Account screen asked for one of five TABS,
+ * and a tab was whatever cards happened to be gated on its name. That is how
+ * "My Profile" came to hold the AI Bill Scanner language, the AI Voice language
+ * and Manage Shops: they were written inside `settingsTab === 'profile'` and
+ * nothing said they didn't belong. Naming each card makes the pages composable
+ * and makes a card in the wrong place obvious at the call site.
+ */
+export type SettingsSection =
+  | 'shop-profile'    // the shop's identity: name, GSTIN, address, logo, UPI
+  | 'manage-shops'    // branches and their GSTINs
+  | 'appearance'      // theme, dark mode, app + AI languages
+  | 'invoices'        // bill design, delivery, round off, e-invoice
+  | 'preferences'     // landing page, hide profit, goals, stock policy
+  | 'notifications'   // which alerts reach the bell
+  | 'app-lock'        // rendered on the Security page
+  | 'accounting'      // period lock, reconciliation
+  | 'data-backup'     // backup, restore, cache, delete account
+  | 'staff'           // staff and CA access
+  | 'features'        // feature toggles
+  | 'ai-tools'        // AI usage + cost dashboard
+  | 'about-card'      // version + replay tour
+
+/**
+ * Legacy tab → sections. The full-page /settings view still has a tab bar, so
+ * each tab keeps meaning exactly what it meant, expressed as a section list.
+ */
+const TAB_SECTIONS: Record<string, SettingsSection[]> = {
+  profile:    ['shop-profile', 'manage-shops'],
+  appearance: ['appearance', 'invoices', 'preferences', 'notifications'],
+  data:       ['accounting', 'data-backup'],
+  staff:      ['staff'],
+  features:   ['features', 'ai-tools'],
+}
+
 // 🔒 V21-014 (Phase 6): singleTab prop — when set, hides the tab bar and
 // locks to that tab. Used by the Account page to render each section as a
 // dedicated standalone page (no tab navigation visible).
-export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | 'appearance' | 'data' | 'staff' }) {
+export function Settings({
+  singleTab,
+  sections,
+}: {
+  singleTab?: 'profile' | 'features' | 'appearance' | 'data' | 'staff'
+  /** Render exactly these cards. Takes precedence over `singleTab`. */
+  sections?: SettingsSection[]
+}) {
   const { confirmDialog, dialog: confirmDialogEl } = useConfirmDialog()
   const queryClient = useQueryClient()
   const { data: session } = useSession()
@@ -518,6 +563,20 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
   // 🔒 V21-014 (Phase 6): If singleTab is set, use it as the initial tab.
   const [settingsTab, setSettingsTab] = useState<'profile' | 'features' | 'appearance' | 'data' | 'staff'>(singleTab || 'profile')
 
+  /*
+   * Which cards to draw. An explicit `sections` list wins; otherwise the
+   * active tab decides, so the tabbed /settings page behaves exactly as before.
+   *
+   * A Set, not an array: `show()` runs once per card on every render, and a
+   * linear scan per card is the kind of thing that is free at 13 cards and
+   * embarrassing at 130.
+   */
+  const activeSections = useMemo(
+    () => new Set<SettingsSection>(sections ?? TAB_SECTIONS[settingsTab] ?? []),
+    [sections, settingsTab]
+  )
+  const show = (key: SettingsSection) => activeSections.has(key)
+
   // 🔒 V22-7 (Phase 5): Feature search query — filters FEATURE_CATEGORIES by
   // keyword (label + description + category title). Empty = show all.
   const [featureSearch, setFeatureSearch] = useState('')
@@ -694,7 +753,12 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
   return (
     <div className="space-y-4 max-w-3xl">
       {/* Tab bar — hidden when singleTab is set (Account page dedicated sections) */}
-      {!singleTab && (
+      {/* 🐛 2026-08-08: `!singleTab` alone let the tab bar leak onto every
+          Account page once they started passing `sections` instead — each
+          dedicated page rendered "Profile | Features | Appearance | Data |
+          Staff" above its own heading. Either prop means "you are embedded,
+          the host owns navigation". */}
+      {!singleTab && !sections && (
       <div className="flex gap-1 overflow-x-auto border-b border-border">
         {tabs.map(tab => {
           const Icon = tab.icon
@@ -717,7 +781,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
       )}
 
       {/* ── PROFILE TAB ─────────────────────────────────────────────── */}
-      {settingsTab === 'profile' && (
+      {show('shop-profile') && (
       <Card className="shadow-card border-border/60">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
@@ -783,7 +847,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
           is built. Was: users could CREATE shops but NOT switch between them
           (one-way trap). Now: shows existing shops but hides the "Add New Shop"
           button with an honest "Coming Soon" message. */}
-      {settingsTab === 'profile' && (
+      {show('manage-shops') && (
         <Card className="shadow-card border-border/60">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -889,46 +953,21 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
           — but revenue/expense targets are business configuration, not
           profile data. Profile tab now contains only owner/shop info. */}
 
-      {/* ── DATA TAB ────────────────────────────────────────────────── */}
-      {settingsTab === 'data' && isOwner && (
+      {/* ── DATA & ACCOUNTING ───────────────────────────────────────
+          Was ONE card reached by TWO menu rows: "Accounting Controls"
+          and "Data & Backup" both navigated to accountSection 'data'
+          and rendered byte-identical pages. Now they are two pages,
+          because a period lock and a cache purge have nothing to do
+          with each other. ─────────────────────────────────────────── */}
+      {show('accounting') && isOwner && (
       <Card className="shadow-card border-border/60">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Database className="w-5 h-5 text-violet-600 dark:text-violet-400" /> Data Management
+            <ShieldCheck className="w-5 h-5 text-primary" /> Accounting Controls
           </CardTitle>
-          <p className="text-xs text-muted-foreground">Manage your app data</p>
+          <p className="text-xs text-muted-foreground">Reconciliation and period lock — for filing integrity</p>
         </CardHeader>
         <CardContent className="space-y-3">
-          {/* Offline cache management */}
-          <div className="rounded-lg border border-blue-200 dark:border-blue-900/40 bg-blue-50 dark:bg-blue-950/20 p-4">
-            <div className="flex items-start gap-3">
-              <Database className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <p className="font-semibold text-blue-900 dark:text-blue-100 text-sm">Offline Data</p>
-                <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
-                  Clear locally cached data or stuck pending writes. Your cloud data is never affected.
-                </p>
-                <div className="flex gap-2 mt-3 flex-wrap">
-                  <Button variant="outline" size="sm" className="gap-2 border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/40" onClick={handleClearPendingWrites}>
-                    <Trash2 className="w-4 h-4" /> Clear Pending Writes
-                  </Button>
-                  <Button variant="outline" size="sm" className="gap-2 border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/40" onClick={handleClearOfflineCache}>
-                    <Database className="w-4 h-4" /> Clear Offline Cache
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* 🔒 AUDIT V25 FIX §3.5 (Batch 3b): Visual sub-group header.
-              Separates accounting controls (Period Lock, Reconciliation) from
-              data/backup concerns below. A CA looking for period lock will
-              now see "Accounting Controls" as a clear signpost. */}
-          <div className="pt-2 pb-1 px-1">
-            <p className="text-3xs font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Accounting Controls</p>
-            <p className="text-3xs text-muted-foreground mt-0.5">Reconciliation & period lock — for filing integrity</p>
-          </div>
-
           {/* 🔒 V17-Ext §5.1: Period Lock — protect filed GST periods from edits */}
           <div className="rounded-lg border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-950/20 p-4">
             <div className="flex items-start gap-3">
@@ -1070,15 +1109,39 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
               </div>
             </div>
           </div>
+        </CardContent>
+      </Card>
+      )}
 
-          {/* 🔒 AUDIT V25 FIX §3.5 (Batch 3b): Visual sub-group header.
-              Separates data/backup concerns (Backup, Restore, Danger Zone)
-              from accounting controls above. */}
-          <div className="pt-2 pb-1 px-1">
-            <p className="text-3xs font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">Data &amp; Backup</p>
-            <p className="text-3xs text-muted-foreground mt-0.5">Backup, restore, clear cache, delete account</p>
+      {show('data-backup') && isOwner && (
+      <Card className="shadow-card border-border/60">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Database className="w-5 h-5 text-primary" /> Data & Backup
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">Backup, restore, offline cache, delete account</p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {/* Offline cache management */}
+          <div className="rounded-lg border border-blue-200 dark:border-blue-900/40 bg-blue-50 dark:bg-blue-950/20 p-4">
+            <div className="flex items-start gap-3">
+              <Database className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <p className="font-semibold text-blue-900 dark:text-blue-100 text-sm">Offline Data</p>
+                <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                  Clear locally cached data or stuck pending writes. Your cloud data is never affected.
+                </p>
+                <div className="flex gap-2 mt-3 flex-wrap">
+                  <Button variant="outline" size="sm" className="gap-2 border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/40" onClick={handleClearPendingWrites}>
+                    <Trash2 className="w-4 h-4" /> Clear Pending Writes
+                  </Button>
+                  <Button variant="outline" size="sm" className="gap-2 border-blue-300 dark:border-blue-800 text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/40" onClick={handleClearOfflineCache}>
+                    <Database className="w-4 h-4" /> Clear Offline Cache
+                  </Button>
+                </div>
+              </div>
+            </div>
           </div>
-
           {/* 🔒 V17 Audit Phase 1 P1.6: Backup card moved OUT of the Danger Zone.
               Was: safe "Download Backup" action grouped with destructive "Reset All Data"
               inside a rose-bordered danger card. Now: separate blue card above the danger
@@ -1293,20 +1356,23 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
       </Card>
       )}
 
-      {/* ── APPEARANCE TAB ──────────────────────────────────────────── */}
-      {settingsTab === 'appearance' && (
+
+      {/* ── APPEARANCE & LANGUAGE ───────────────────────────────────
+          🎨 2026-08-08. Was one card holding six unrelated domains and
+          running 4.3 screens tall. Rahul: "app settings has about".
+          It also had theme, language, profit privacy, revenue targets,
+          invoice design, bill delivery, stock policy, the app lock and
+          every notification switch. Split by what the shopkeeper came
+          looking for. ───────────────────────────────────────────── */}
+      {show('appearance') && (
       <Card className="shadow-card border-border/60">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Palette className="w-5 h-5 text-primary" /> Theme & Appearance
           </CardTitle>
-          <p className="text-xs text-muted-foreground">Choose a theme — sidebar, buttons, charts & accents all update together</p>
+          <p className="text-xs text-muted-foreground">Colours, dark mode, and the languages the app and the AI use</p>
         </CardHeader>
-        <CardContent>
-          {/* ─── Group: Theme & Language ─── */}
-          <div className="mb-2 px-1">
-            <p className="text-3xs font-bold uppercase tracking-wider text-muted-foreground">Theme &amp; Language</p>
-          </div>
+        <CardContent className="space-y-3">
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             {THEME_OPTIONS.map((theme) => (
               <button
@@ -1335,8 +1401,20 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
               </button>
             ))}
           </div>
-          {/* 🔒 V19-034: Removed duplicate Dark Mode toggle — keep the one below */}
-
+          {/* Dark Mode Toggle (moved from header) */}
+          <div className="mt-3 flex items-center justify-between rounded-lg bg-muted/50 p-3">
+            <div className="flex items-center gap-2">
+              <Moon className="w-4 h-4 text-muted-foreground" />
+              <div>
+                <p className="text-sm font-medium">Dark Mode</p>
+                <p className="text-2xs text-muted-foreground">Switch between light and dark themes</p>
+              </div>
+            </div>
+            <Switch
+              checked={features.darkMode}
+              onCheckedChange={(checked) => { setFeature('darkMode', checked); sonnerToast.success(`Dark mode ${checked ? 'enabled' : 'disabled'}`) }}
+            />
+          </div>
           {/* Language Toggle — 6 languages */}
           <div className="mt-3 flex items-center justify-between rounded-lg bg-muted/50 p-3 flex-wrap gap-2">
             <div className="flex items-center gap-2">
@@ -1365,7 +1443,217 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
               ))}
             </div>
           </div>
+        </CardContent>
+      </Card>
+      )}
 
+      {show('invoices') && (
+      <Card className="shadow-card border-border/60">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Receipt className="w-5 h-5 text-primary" /> Invoices & Bills
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">How your bill looks and how it reaches the customer</p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {/* 📄 The invoice look. ONE theme drives the WhatsApp picture, the
+              link page and the PDF — a shop's bill and its payment page should
+              not look like two different businesses. */}
+          <div className="mt-3 rounded-lg bg-muted/30 border border-border/60 p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <Palette className="w-4 h-4 text-muted-foreground" />
+              <div>
+                <p className="text-sm font-medium">Invoice design</p>
+                <p className="text-2xs text-muted-foreground">
+                  Used on the bill picture, the bill link and the PDF.
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-4 gap-1.5">
+              {INVOICE_THEMES.map(t => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => {
+                    const prev = invoiceTheme
+                    setInvoiceTheme(t.id)
+                    persistDocSetting({ invoiceTheme: t.id }, () => setInvoiceTheme(prev))
+                  }}
+                  aria-pressed={invoiceTheme === t.id}
+                  title={t.description}
+                  className={
+                    'rounded-lg border p-1.5 transition text-left ' +
+                    (invoiceTheme === t.id
+                      ? 'border-primary ring-2 ring-primary/25'
+                      : 'border-border/70 hover:border-border')
+                  }
+                >
+                  {/* A miniature of the document, not a colour dot: the header
+                      band, a rule and a total line are what actually differ. */}
+                  <span className="block rounded overflow-hidden border border-border/50">
+                    <span className="block h-4" style={{ background: t.headerBg }} />
+                    <span className="block bg-white px-1 py-1">
+                      <span className="block h-0.5 w-full" style={{ background: t.line }} />
+                      <span className="block h-1 w-2/3 mt-1 rounded-sm" style={{ background: t.accent }} />
+                    </span>
+                  </span>
+                  <span className="block text-3xs mt-1 truncate text-muted-foreground">{t.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          {/* 📄 How bills go out. See docs/DOCUMENT-ENGINE-PLAN.md. */}
+          <div className="mt-3 rounded-lg bg-muted/30 border border-border/60 p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <MessageCircle className="w-4 h-4 text-muted-foreground" />
+              <div>
+                <p className="text-sm font-medium">How bills are sent</p>
+                <p className="text-2xs text-muted-foreground">
+                  A short bill sends as a picture, which opens straight in a WhatsApp chat. A long one
+                  sends as a PDF — WhatsApp shrinks tall images until the text cannot be read.
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-1.5">
+              {([
+                ['smart', 'Automatic', 'Picks by bill size'],
+                ['image', 'Always picture', 'Best for short bills'],
+                ['pdf', 'Always PDF', 'Best for long bills'],
+              ] as const).map(([value, label, hint]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => {
+                    const prev = docSendFormat
+                    setDocSendFormat(value)
+                    persistDocSetting({ docSendFormat: value }, () => setDocSendFormat(prev))
+                  }}
+                  aria-pressed={docSendFormat === value}
+                  className={
+                    'rounded-lg border px-2 py-2 text-left transition ' +
+                    (docSendFormat === value
+                      ? 'border-primary bg-primary/5 ring-1 ring-primary/25'
+                      : 'border-border/70 hover:border-border')
+                  }
+                >
+                  <span className="block text-2xs font-medium">{label}</span>
+                  <span className="block text-3xs text-muted-foreground">{hint}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          {/* 📄 The shareable link. OFF by default — it puts a page carrying a
+              customer's bill on the public internet behind an unguessable
+              address, which is the shopkeeper's decision to make. */}
+          <div className="mt-3 flex items-center justify-between rounded-lg bg-muted/30 border border-border/60 p-3">
+            <div className="flex items-center gap-2">
+              <LinkIcon className="w-4 h-4 text-muted-foreground" />
+              <div className="flex-1">
+                <p className="text-sm font-medium">Also send a bill link</p>
+                <p className="text-2xs text-muted-foreground">
+                  {docShareLink
+                    ? 'ON: a link goes with every bill. Your customer can open it on any phone and pay by UPI, and you can see when they viewed it. Long bills stay readable. Links expire after 90 days.'
+                    : 'OFF (default): only the picture or PDF is sent. Turn on to include a link your customer can open and pay from — it works for bills of any length.'}
+                </p>
+              </div>
+            </div>
+            <Switch
+              checked={docShareLink}
+              onCheckedChange={(checked) => {
+                const prev = docShareLink
+                setDocShareLink(checked)
+                persistDocSetting({ docShareLink: checked }, () => setDocShareLink(prev))
+              }}
+            />
+          </div>
+          {/* 🔒 V12: Invoice round-off toggle */}
+          <div className="mt-3 flex items-center justify-between rounded-lg bg-muted/30 border border-border/60 p-3">
+            <div className="flex items-center gap-2">
+              <Coins className="w-4 h-4 text-muted-foreground" />
+              <div>
+                <p className="text-sm font-medium">Round off invoice total</p>
+                <p className="text-2xs text-muted-foreground">
+                  Round the grand total of each sale to the nearest rupee and show a &ldquo;Round Off&rdquo; line on the invoice (e.g. ₹1,062.40 → ₹1,062).
+                </p>
+              </div>
+            </div>
+            <Switch
+              checked={roundOffEnabled}
+              onCheckedChange={(checked) => persistRoundOff(checked)}
+            />
+          </div>
+          {/*
+            * e-invoicing applicability.
+            *
+            * Asked rather than computed. The rule (Notification 10/2023) tests
+            * whether turnover crossed ₹5 crore in ANY year since 2017-18, does
+            * not lapse if turnover later falls, and aggregates every GSTIN under
+            * the PAN — years before this app existed, other registrations, and a
+            * liability that outlives the figures that created it. None of that
+            * is knowable from the data here.
+            *
+            * Until it is answered the invoice screen still shows the e-invoice
+            * card, with a note saying it may not apply. Hiding it from a shop
+            * that turns out to be liable is the worse mistake.
+            */}
+          <div className="mt-3 flex items-center justify-between rounded-lg bg-muted/30 border border-border/60 p-3">
+            <div className="flex items-center gap-2">
+              <FileText className="w-4 h-4 text-muted-foreground" />
+              <div>
+                <p className="text-sm font-medium">My shop needs e-Invoicing</p>
+                <p className="text-2xs text-muted-foreground">
+                  Turn this on only if your turnover crossed ₹5 crore in any year since 2017-18 —
+                  counting every GSTIN on your PAN, and even if it has dropped since. Most small
+                  shops do not need it.
+                  {eInvoiceApplicable === null && ' You haven’t answered this yet.'}
+                </p>
+              </div>
+            </div>
+            <Switch
+              checked={eInvoiceApplicable === true}
+              onCheckedChange={(checked) => persistEInvoice(checked)}
+            />
+          </div>
+        </CardContent>
+      </Card>
+      )}
+
+      {show('preferences') && (
+        <>
+      <Card className="shadow-card border-border/60">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <SettingsIcon className="w-5 h-5 text-primary" /> Preferences
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">How the app behaves day to day</p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {/* 🔒 V22-11 (Batch A, Phase 5g): Default Landing Page setting.
+              Lets users choose which view opens on app launch.
+              Persisted to localStorage, applied in page.tsx. */}
+          <div className="mt-3 flex items-center justify-between rounded-lg bg-violet-50 dark:bg-violet-950/20 border border-violet-200 dark:border-violet-900/40 p-3">
+            <div className="flex items-center gap-2">
+              <Home className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+              <div>
+                <p className="text-sm font-medium">Default Landing Page</p>
+                <p className="text-2xs text-muted-foreground">
+                  Choose which screen opens when you launch the app.
+                </p>
+              </div>
+            </div>
+            <Select value={defaultLanding} onValueChange={(v) => persistDefaultLanding(v)}>
+              <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="dashboard">Dashboard</SelectItem>
+                <SelectItem value="sales">Sales Ledger</SelectItem>
+                <SelectItem value="purchases">Purchase Ledger</SelectItem>
+                <SelectItem value="inventory">Inventory</SelectItem>
+                <SelectItem value="parties">Parties</SelectItem>
+                <SelectItem value="reports">Reports</SelectItem>
+                <SelectItem value="scanner">AI Scanner</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
           {/* Day-End Summary Time setting */}
           <div className="mt-3 flex items-center justify-between rounded-lg bg-muted/50 p-3">
             <div className="flex items-center gap-2">
@@ -1384,31 +1672,6 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
               </SelectContent>
             </Select>
           </div>
-
-          {/* 🔒 V22-13 (Batch C, Phase 5b): Grouped section headers for better
-              discoverability. The Appearance tab has 11 settings — adding
-              visual group dividers makes them scannable. */}
-
-          {/* ─── Group: Display & Privacy ─── */}
-          <div className="mt-4 mb-2 px-1">
-            <p className="text-3xs font-bold uppercase tracking-wider text-muted-foreground">Display &amp; Privacy</p>
-          </div>
-
-          {/* Dark Mode Toggle (moved from header) */}
-          <div className="mt-3 flex items-center justify-between rounded-lg bg-muted/50 p-3">
-            <div className="flex items-center gap-2">
-              <Moon className="w-4 h-4 text-muted-foreground" />
-              <div>
-                <p className="text-sm font-medium">Dark Mode</p>
-                <p className="text-2xs text-muted-foreground">Switch between light and dark themes</p>
-              </div>
-            </div>
-            <Switch
-              checked={features.darkMode}
-              onCheckedChange={(checked) => { setFeature('darkMode', checked); sonnerToast.success(`Dark mode ${checked ? 'enabled' : 'disabled'}`) }}
-            />
-          </div>
-
           {/* Hide Profit Toggle */}
           <div className="mt-3 flex items-center justify-between rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 p-3">
             <div className="flex items-center gap-2">
@@ -1428,16 +1691,31 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
               }}
             />
           </div>
-
-          {/* 🔒 AUDIT V25 FIX §3.5 (Batch 3b): Business Goals card MOVED here
-              from Profile tab. Revenue/expense targets are business
-              configuration, not profile data. Now lives in the Business
-              Rules & Goals group alongside Round-off + Stock Policy. */}
-          {/* ─── Group: Business Rules & Goals ─── */}
-          <div className="mt-4 mb-2 px-1">
-            <p className="text-3xs font-bold uppercase tracking-wider text-muted-foreground">Business Rules &amp; Goals</p>
+          {/* 🔒 V11: Stock policy toggle — block or allow overselling */}
+          <div className="mt-3 flex items-center justify-between rounded-lg bg-muted/30 border border-border/60 p-3">
+            <div className="flex items-center gap-2">
+              <PackageX className="w-4 h-4 text-muted-foreground" />
+              <div className="flex-1">
+                <p className="text-sm font-medium">Allow overselling (kirana mode)</p>
+                <p className="text-2xs text-muted-foreground">
+                  {stockPolicy === 'allow'
+                    ? 'ON: You can sell more than you have in stock. A warning shows, but the sale goes through. Useful for shops that sell first and record purchases later.'
+                    : 'OFF (default): You cannot sell more than you have in stock. The sale is blocked until you record a purchase. Keeps your stock numbers accurate.'}
+                </p>
+              </div>
+            </div>
+            <Switch
+              checked={stockPolicy === 'allow'}
+              onCheckedChange={(checked) => persistStockPolicy(checked ? 'allow' : 'block')}
+            />
           </div>
+        </CardContent>
+      </Card>
+        </>
+      )}
 
+      {show('preferences') && (
+        <>
           {/* Business Goals — monthly revenue/expense targets */}
           <Card className="shadow-card border-border/60">
             <CardHeader>
@@ -1511,245 +1789,18 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
               </div>
             </CardContent>
           </Card>
+        </>
+      )}
 
-          {/* 🔒 V12: Invoice round-off toggle */}
-          <div className="mt-3 flex items-center justify-between rounded-lg bg-muted/30 border border-border/60 p-3">
-            <div className="flex items-center gap-2">
-              <Coins className="w-4 h-4 text-muted-foreground" />
-              <div>
-                <p className="text-sm font-medium">Round off invoice total</p>
-                <p className="text-2xs text-muted-foreground">
-                  Round the grand total of each sale to the nearest rupee and show a &ldquo;Round Off&rdquo; line on the invoice (e.g. ₹1,062.40 → ₹1,062).
-                </p>
-              </div>
-            </div>
-            <Switch
-              checked={roundOffEnabled}
-              onCheckedChange={(checked) => persistRoundOff(checked)}
-            />
-          </div>
-
-          {/*
-            * e-invoicing applicability.
-            *
-            * Asked rather than computed. The rule (Notification 10/2023) tests
-            * whether turnover crossed ₹5 crore in ANY year since 2017-18, does
-            * not lapse if turnover later falls, and aggregates every GSTIN under
-            * the PAN — years before this app existed, other registrations, and a
-            * liability that outlives the figures that created it. None of that
-            * is knowable from the data here.
-            *
-            * Until it is answered the invoice screen still shows the e-invoice
-            * card, with a note saying it may not apply. Hiding it from a shop
-            * that turns out to be liable is the worse mistake.
-            */}
-          <div className="mt-3 flex items-center justify-between rounded-lg bg-muted/30 border border-border/60 p-3">
-            <div className="flex items-center gap-2">
-              <FileText className="w-4 h-4 text-muted-foreground" />
-              <div>
-                <p className="text-sm font-medium">My shop needs e-Invoicing</p>
-                <p className="text-2xs text-muted-foreground">
-                  Turn this on only if your turnover crossed ₹5 crore in any year since 2017-18 —
-                  counting every GSTIN on your PAN, and even if it has dropped since. Most small
-                  shops do not need it.
-                  {eInvoiceApplicable === null && ' You haven’t answered this yet.'}
-                </p>
-              </div>
-            </div>
-            <Switch
-              checked={eInvoiceApplicable === true}
-              onCheckedChange={(checked) => persistEInvoice(checked)}
-            />
-          </div>
-
-          {/* 📄 The invoice look. ONE theme drives the WhatsApp picture, the
-              link page and the PDF — a shop's bill and its payment page should
-              not look like two different businesses. */}
-          <div className="mt-3 rounded-lg bg-muted/30 border border-border/60 p-3">
-            <div className="flex items-center gap-2 mb-2">
-              <Palette className="w-4 h-4 text-muted-foreground" />
-              <div>
-                <p className="text-sm font-medium">Invoice design</p>
-                <p className="text-2xs text-muted-foreground">
-                  Used on the bill picture, the bill link and the PDF.
-                </p>
-              </div>
-            </div>
-            <div className="grid grid-cols-4 gap-1.5">
-              {INVOICE_THEMES.map(t => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => {
-                    const prev = invoiceTheme
-                    setInvoiceTheme(t.id)
-                    persistDocSetting({ invoiceTheme: t.id }, () => setInvoiceTheme(prev))
-                  }}
-                  aria-pressed={invoiceTheme === t.id}
-                  title={t.description}
-                  className={
-                    'rounded-lg border p-1.5 transition text-left ' +
-                    (invoiceTheme === t.id
-                      ? 'border-primary ring-2 ring-primary/25'
-                      : 'border-border/70 hover:border-border')
-                  }
-                >
-                  {/* A miniature of the document, not a colour dot: the header
-                      band, a rule and a total line are what actually differ. */}
-                  <span className="block rounded overflow-hidden border border-border/50">
-                    <span className="block h-4" style={{ background: t.headerBg }} />
-                    <span className="block bg-white px-1 py-1">
-                      <span className="block h-0.5 w-full" style={{ background: t.line }} />
-                      <span className="block h-1 w-2/3 mt-1 rounded-sm" style={{ background: t.accent }} />
-                    </span>
-                  </span>
-                  <span className="block text-3xs mt-1 truncate text-muted-foreground">{t.name}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* 📄 How bills go out. See docs/DOCUMENT-ENGINE-PLAN.md. */}
-          <div className="mt-3 rounded-lg bg-muted/30 border border-border/60 p-3">
-            <div className="flex items-center gap-2 mb-2">
-              <MessageCircle className="w-4 h-4 text-muted-foreground" />
-              <div>
-                <p className="text-sm font-medium">How bills are sent</p>
-                <p className="text-2xs text-muted-foreground">
-                  A short bill sends as a picture, which opens straight in a WhatsApp chat. A long one
-                  sends as a PDF — WhatsApp shrinks tall images until the text cannot be read.
-                </p>
-              </div>
-            </div>
-            <div className="grid grid-cols-3 gap-1.5">
-              {([
-                ['smart', 'Automatic', 'Picks by bill size'],
-                ['image', 'Always picture', 'Best for short bills'],
-                ['pdf', 'Always PDF', 'Best for long bills'],
-              ] as const).map(([value, label, hint]) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => {
-                    const prev = docSendFormat
-                    setDocSendFormat(value)
-                    persistDocSetting({ docSendFormat: value }, () => setDocSendFormat(prev))
-                  }}
-                  aria-pressed={docSendFormat === value}
-                  className={
-                    'rounded-lg border px-2 py-2 text-left transition ' +
-                    (docSendFormat === value
-                      ? 'border-primary bg-primary/5 ring-1 ring-primary/25'
-                      : 'border-border/70 hover:border-border')
-                  }
-                >
-                  <span className="block text-2xs font-medium">{label}</span>
-                  <span className="block text-3xs text-muted-foreground">{hint}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* 📄 The shareable link. OFF by default — it puts a page carrying a
-              customer's bill on the public internet behind an unguessable
-              address, which is the shopkeeper's decision to make. */}
-          <div className="mt-3 flex items-center justify-between rounded-lg bg-muted/30 border border-border/60 p-3">
-            <div className="flex items-center gap-2">
-              <LinkIcon className="w-4 h-4 text-muted-foreground" />
-              <div className="flex-1">
-                <p className="text-sm font-medium">Also send a bill link</p>
-                <p className="text-2xs text-muted-foreground">
-                  {docShareLink
-                    ? 'ON: a link goes with every bill. Your customer can open it on any phone and pay by UPI, and you can see when they viewed it. Long bills stay readable. Links expire after 90 days.'
-                    : 'OFF (default): only the picture or PDF is sent. Turn on to include a link your customer can open and pay from — it works for bills of any length.'}
-                </p>
-              </div>
-            </div>
-            <Switch
-              checked={docShareLink}
-              onCheckedChange={(checked) => {
-                const prev = docShareLink
-                setDocShareLink(checked)
-                persistDocSetting({ docShareLink: checked }, () => setDocShareLink(prev))
-              }}
-            />
-          </div>
-
-          {/* 🔒 V11: Stock policy toggle — block or allow overselling */}
-          <div className="mt-3 flex items-center justify-between rounded-lg bg-muted/30 border border-border/60 p-3">
-            <div className="flex items-center gap-2">
-              <PackageX className="w-4 h-4 text-muted-foreground" />
-              <div className="flex-1">
-                <p className="text-sm font-medium">Allow overselling (kirana mode)</p>
-                <p className="text-2xs text-muted-foreground">
-                  {stockPolicy === 'allow'
-                    ? 'ON: You can sell more than you have in stock. A warning shows, but the sale goes through. Useful for shops that sell first and record purchases later.'
-                    : 'OFF (default): You cannot sell more than you have in stock. The sale is blocked until you record a purchase. Keeps your stock numbers accurate.'}
-                </p>
-              </div>
-            </div>
-            <Switch
-              checked={stockPolicy === 'allow'}
-              onCheckedChange={(checked) => persistStockPolicy(checked ? 'allow' : 'block')}
-            />
-          </div>
-
-          {/* ─── Group: Security & Backup ─── */}
-          <div className="mt-4 mb-2 px-1">
-            <p className="text-3xs font-bold uppercase tracking-wider text-muted-foreground">Security &amp; Backup</p>
-          </div>
-
-          {/* 🔒 AUDIT V23 FIX §4: App Lock replaced with "Coming Soon" row.
-              The previous toggle was a placebo — it toasted "will require PIN"
-              but no enforcement existed. A false security promise is worse than
-              no feature. Replaced with a disabled row that honestly says Coming Soon. */}
-          <div className="mt-3 flex items-center justify-between rounded-lg bg-muted/50 border border-border/60 p-3 opacity-70">
-            <div className="flex items-center gap-2">
-              <Lock className="w-4 h-4 text-muted-foreground" />
-              <div>
-                <p className="text-sm font-medium">App Lock</p>
-                <p className="text-2xs text-muted-foreground">
-                  Require PIN or biometric to open the app.
-                </p>
-              </div>
-            </div>
-            <span className="text-3xs font-bold uppercase tracking-wide bg-muted text-muted-foreground px-2 py-1 rounded-full">
-              Coming Soon
-            </span>
-          </div>
-
-          {/* 🔒 V22-11 (Batch A, Phase 5g): Default Landing Page setting.
-              Lets users choose which view opens on app launch.
-              Persisted to localStorage, applied in page.tsx. */}
-          <div className="mt-3 flex items-center justify-between rounded-lg bg-violet-50 dark:bg-violet-950/20 border border-violet-200 dark:border-violet-900/40 p-3">
-            <div className="flex items-center gap-2">
-              <Home className="w-4 h-4 text-violet-600 dark:text-violet-400" />
-              <div>
-                <p className="text-sm font-medium">Default Landing Page</p>
-                <p className="text-2xs text-muted-foreground">
-                  Choose which screen opens when you launch the app.
-                </p>
-              </div>
-            </div>
-            <Select value={defaultLanding} onValueChange={(v) => persistDefaultLanding(v)}>
-              <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="dashboard">Dashboard</SelectItem>
-                <SelectItem value="sales">Sales Ledger</SelectItem>
-                <SelectItem value="purchases">Purchase Ledger</SelectItem>
-                <SelectItem value="inventory">Inventory</SelectItem>
-                <SelectItem value="parties">Parties</SelectItem>
-                <SelectItem value="reports">Reports</SelectItem>
-                <SelectItem value="scanner">AI Scanner</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* ─── Group: Notifications ─── */}
-          <div className="mt-4 mb-2 px-1">
-            <p className="text-3xs font-bold uppercase tracking-wider text-muted-foreground">Notifications</p>
-          </div>
-
+      {show('notifications') && (
+      <Card className="shadow-card border-border/60">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Bell className="w-5 h-5 text-primary" /> Notifications
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">Choose which alerts appear in the bell icon</p>
+        </CardHeader>
+        <CardContent className="space-y-3">
           {/* 🔒 V22-12 (Batch B, Phase 5d): Notification Preferences — granular
               toggles for each notification type. Controls which notifications
               appear in the NotificationCenter bell icon. */}
@@ -1783,18 +1834,36 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
               ))}
             </div>
           </div>
-
-          {/* 🔒 AUDIT V25 FIX §3 row 7 (Batch 3): Removed duplicate "Backup &
-              Restore" card from Appearance tab. The canonical backup card now
-              lives in the Data tab (with last-backup timestamp + Backup Now
-              button + Restore from Backup below). The Appearance tab duplicate
-              was 1 of 3 backup cards in Settings — confusing. */}
         </CardContent>
       </Card>
       )}
 
+      {show('app-lock') && (
+        <>
+          {/* 🔒 AUDIT V23 FIX §4: App Lock replaced with "Coming Soon" row.
+              The previous toggle was a placebo — it toasted "will require PIN"
+              but no enforcement existed. A false security promise is worse than
+              no feature. Replaced with a disabled row that honestly says Coming Soon. */}
+          <div className="mt-3 flex items-center justify-between rounded-lg bg-muted/50 border border-border/60 p-3 opacity-70">
+            <div className="flex items-center gap-2">
+              <Lock className="w-4 h-4 text-muted-foreground" />
+              <div>
+                <p className="text-sm font-medium">App Lock</p>
+                <p className="text-2xs text-muted-foreground">
+                  Require PIN or biometric to open the app.
+                </p>
+              </div>
+            </div>
+            <span className="text-3xs font-bold uppercase tracking-wide bg-muted text-muted-foreground px-2 py-1 rounded-full">
+              Coming Soon
+            </span>
+          </div>
+        </>
+      )}
+
+
       {/* ── AI SCANNER LANGUAGE (in Profile tab) ─────────────────────── */}
-      {settingsTab === 'profile' && (
+      {show('appearance') && (
         <Card className="shadow-card border-border/60">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -1845,7 +1914,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
       )}
 
       {/* ── AI VOICE ENTRY LANGUAGE (in Profile tab) ────────────────── */}
-      {settingsTab === 'profile' && (
+      {show('appearance') && (
         <Card className="shadow-card border-border/60">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -1896,7 +1965,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
       )}
 
       {/* ── STAFF TAB ───────────────────────────────────────────────── */}
-      {settingsTab === 'staff' && isOwner && (
+      {show('staff') && isOwner && (
         <div className="space-y-4">
           <StaffManagement />
           <CAAccess />
@@ -1904,7 +1973,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
       )}
 
       {/* ── FEATURES TAB ────────────────────────────────────────────── */}
-      {settingsTab === 'features' && isOwner && (
+      {show('features') && isOwner && (
       <Card className="shadow-card border-border/60">
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -1994,7 +2063,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
       )}
 
       {/* AI Provider Comparison tool — admin only */}
-      {settingsTab === 'features' && (
+      {show('ai-tools') && (
         <Card className="shadow-card border-primary/30 bg-primary/5">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
@@ -2018,7 +2087,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
         </Card>
       )}
 
-      {/* About card — always visible at bottom */}
+      {show('about-card') && (
       <Card className="shadow-card border-border/60">
         <CardHeader>
           <CardTitle className="text-base">About EkBook</CardTitle>
@@ -2071,6 +2140,7 @@ export function Settings({ singleTab }: { singleTab?: 'profile' | 'features' | '
           </div>
         </CardContent>
       </Card>
+      )}
       {confirmDialogEl}
     </div>
   )
