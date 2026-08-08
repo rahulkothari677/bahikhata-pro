@@ -150,9 +150,22 @@ describe('🔒 V17 Audit Phase 5 — IRN request builder', () => {
   test('builds valid IRN request for B2B sale', () => {
     const request = buildIrnRequest(B2B_SALE, SHOP)
     expect(request).not.toBeNull()
-    expect(request!.Version).toBe('1.03')
-    expect(request!.TranType).toBe('INV')
+    /*
+     * EXPECTATION CHANGED 2026-08-08 — these asserted a shape the portal does
+     * not accept. Verified against the NIC schema (v1.1) and against this app's
+     * live output: the payload carried TranType and DocType at the top level,
+     * and neither is a NIC field, while the MANDATORY TranDtls block was absent
+     * entirely. Every IRN request this app produced would have been rejected.
+     */
+    expect(request!.Version).toBe('1.1')
+    expect(request!.TranDtls.TaxSch).toBe('GST')
+    expect(request!.TranDtls.SupTyp).toBe('B2B')
+    expect(request!.TranDtls.IgstOnIntra).toBe('N')
+    expect(request!.DocDtls.Typ).toBe('INV')
     expect(request!.DocDtls.No).toBe('INV-001')
+    // Trade names — in the schema, previously omitted.
+    expect(request!.SellerDtls.TrdNm).toBeTruthy()
+    expect(request!.BuyerDtls.TrdNm).toBeTruthy()
     expect(request!.SellerDtls.Gstin).toBe('27ABCDE1234F1Z5')
     expect(request!.BuyerDtls.Gstin).toBe('27AAAPL1234C1Z5')
   })
@@ -167,10 +180,31 @@ describe('🔒 V17 Audit Phase 5 — IRN request builder', () => {
     expect(request).toBeNull()
   })
 
-  test('credit note → TranType = CRN', () => {
+  test('credit note → document type CRN', () => {
+    // The document type lives in DocDtls.Typ, which is where the portal reads
+    // it. The old top-level DocType was invented and read by nothing.
     const request = buildIrnRequest({ ...B2B_SALE, type: 'credit-note' }, SHOP)
-    expect(request!.TranType).toBe('CRN')
-    expect(request!.DocType).toBe('CRN')
+    expect(request!.DocDtls.Typ).toBe('CRN')
+  })
+
+  test('reverse charge reaches the payload as RegRev', () => {
+    /*
+     * isReverseCharge was made settable earlier in this work, after turning out
+     * to be readable by GSTR-3B and writable by nothing. It was still absent
+     * from the IRN payload — so an invoice a shop had correctly marked as
+     * reverse-charge would have been signed by the government as an ordinary
+     * one, its own copy contradicting the return.
+     */
+    const normal = buildIrnRequest(B2B_SALE, SHOP)
+    const rcm = buildIrnRequest({ ...B2B_SALE, isReverseCharge: true }, SHOP)
+    expect(normal!.TranDtls.RegRev).toBe('N')
+    expect(rcm!.TranDtls.RegRev).toBe('Y')
+  })
+
+  test('every item declares whether it is a service', () => {
+    // IsServc is mandatory in the NIC schema and was absent from every line.
+    const request = buildIrnRequest(B2B_SALE, SHOP)
+    for (const item of request!.ItemList) expect(item.IsServc).toBe('N')
   })
 
   test('item list: HSN, quantity, unit price, GST', () => {

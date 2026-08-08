@@ -14,7 +14,7 @@
  *   3. Once the IRN + signed QR are obtained, they can be stored on the
  *      Transaction and displayed in the UI
  *
- * The IRN request JSON follows the NIC e-Invoice schema (v1.03):
+ * The IRN request JSON follows the NIC e-Invoice schema (v1.1):
  *   https://einvoice.nic.in/api/specs/einv-standards.pdf
  *
  * TESTING: Pure functions — no DB, no network. Fully testable.
@@ -74,8 +74,25 @@ export interface EInvoiceShopInfo {
 
 export interface IRNRequest {
   Version: string
-  TranType: string  // 'INV' for invoice, 'CRN' for credit note, 'DBN' for debit note
-  DocType: string   // 'INV' or 'CRN' or 'DBN'
+  /*
+   * TranDtls — MANDATORY, and it was missing entirely.
+   *
+   * Verified against the NIC schema (v1.1) and against this app's own live
+   * output on 2026-08-08: the generated payload carried `TranType` and
+   * `DocType` at the top level instead, and neither is a NIC field. The portal
+   * requires TranDtls, so every IRN request this app has ever produced would
+   * have been rejected on upload — the invoice type was being stated in a
+   * shape the portal does not read.
+   */
+  TranDtls: {
+    TaxSch: 'GST'
+    /** B2B | SEZWP | SEZWOP | EXPWP | EXPWOP | DEXP */
+    SupTyp: string
+    /** 'Y' when the tax is payable by the recipient under reverse charge. */
+    RegRev: 'Y' | 'N'
+    /** 'Y' only for the rare intra-state supply that carries IGST. */
+    IgstOnIntra: 'Y' | 'N'
+  }
   DocDtls: {
     Typ: string     // 'INV' | 'CRN' | 'DBN'
     No: string      // invoice number
@@ -84,6 +101,8 @@ export interface IRNRequest {
   SellerDtls: {
     Gstin: string
     LglNm: string
+    /** Trade name. Present in the NIC schema; was omitted. */
+    TrdNm: string
     Addr1: string
     Loc: string
     Pin: number
@@ -94,6 +113,8 @@ export interface IRNRequest {
   BuyerDtls: {
     Gstin: string
     LglNm: string
+    /** Trade name. Present in the NIC schema; was omitted. */
+    TrdNm: string
     Addr1: string
     Loc: string
     Pin: number
@@ -105,6 +126,12 @@ export interface IRNRequest {
   ItemList: Array<{
     SlNo: string
     PrdDesc: string
+    /**
+     * Is this a service? Mandatory per the NIC schema and previously absent.
+     * A shop selling goods reports 'N'; the app has no service catalogue, so
+     * that is what it states rather than guessing per line.
+     */
+    IsServc: 'Y' | 'N'
     HsnCd: string
     Qty: number
     Unit: string
@@ -252,6 +279,9 @@ export function buildIrnRequest(
     return {
       SlNo: String(i + 1),
       PrdDesc: item.productName,
+      // Goods, not services. The app has no service catalogue, so this states
+      // what is true rather than guessing per line.
+      IsServc: 'N',
       HsnCd: String(item.hsn).trim(),  // guaranteed present by the check above
       Qty: roundMoney(item.quantity),
       Unit: mapUnitToNicUqc(item.unit),
@@ -293,9 +323,39 @@ export function buildIrnRequest(
   const pos = txn.isInterState ? buyerStateCode : shopStateCode
 
   const request: IRNRequest = {
-    Version: '1.03',
-    TranType: tranType,
-    DocType: docType,
+    Version: '1.1',
+    TranDtls: {
+      TaxSch: 'GST',
+      /*
+       * SupTyp is B2B for everything this app can produce.
+       *
+       * The other values — SEZWP, SEZWOP, EXPWP, EXPWOP, DEXP — describe SEZ
+       * supplies, exports and deemed exports. None is representable here: the
+       * app has no export flag, no shipping-bill fields and no SEZ marker, and
+       * e-invoicing is already restricted to parties with a GSTIN above. Stating
+       * B2B is therefore accurate for every invoice that reaches this line, not
+       * a default standing in for something unknown. If exports are added, this
+       * must become a real decision and the export block (ExpDtls) with it.
+       */
+      SupTyp: 'B2B',
+      /*
+       * The reverse-charge flag finally has somewhere to go.
+       *
+       * Transaction.isReverseCharge was made settable earlier in this work after
+       * turning out to be readable by GSTR-3B and writable by nothing. It was
+       * still absent from the IRN payload, so an invoice the shop had correctly
+       * marked as reverse-charge would have been signed as an ordinary one —
+       * the government's copy contradicting the return.
+       */
+      RegRev: txn.isReverseCharge ? 'Y' : 'N',
+      /*
+       * IgstOnIntra is 'Y' only for the rare intra-state supply that carries
+       * IGST. computeLineItems charges CGST+SGST for every intra-state sale, so
+       * that case cannot arise here — and claiming 'Y' would contradict the tax
+       * amounts in the same payload.
+       */
+      IgstOnIntra: 'N',
+    },
     DocDtls: {
       Typ: docType,
       No: txn.invoiceNo || txn.id,
@@ -304,6 +364,9 @@ export function buildIrnRequest(
     SellerDtls: {
       Gstin: shop.gstin,
       LglNm: shop.shopName || shop.ownerName || 'Unknown',
+      // Trade name. A kirana trades under its shop name, so the two coincide —
+      // stated explicitly because the field is in the schema and was absent.
+      TrdNm: shop.shopName || shop.ownerName || 'Unknown',
       Addr1: shop.address || '',
       Loc: extractLocality(shop.address),
       Pin: extractPincode(shop.address),
@@ -314,6 +377,8 @@ export function buildIrnRequest(
     BuyerDtls: {
       Gstin: txn.partyGstin,
       LglNm: txn.partyName || 'Unknown',
+      // The app records one name per party, so legal and trade name coincide.
+      TrdNm: txn.partyName || 'Unknown',
       Addr1: txn.partyAddress || '',
       Loc: extractLocality(txn.partyAddress),
       Pin: extractPincode(txn.partyAddress),
