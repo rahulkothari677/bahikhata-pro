@@ -17,6 +17,29 @@ import {
 
 const g = globalThis as any
 
+/**
+ * Wait for something to become true, rather than for a fixed number of ms.
+ *
+ * WHY (2026-08-08). These tests used to sleep past the engine's 400ms
+ * collection window — `setTimeout(r, 600)` — and then assert. That passed on a
+ * developer machine and failed on CI, where the frame callbacks are driven by
+ * `setTimeout(cb, 1)` and a loaded runner delivers them far apart: the window
+ * had elapsed but not enough frames had arrived to carry the decision, so
+ * `onCandidates` had simply not been called yet. Two tests went red on main and
+ * the suite was blocked on a race, not a defect.
+ *
+ * Polling waits exactly as long as the machine needs and no longer, so the
+ * tests stay fast locally and stop lying on slow hardware. A real regression
+ * still fails them — the condition never comes true and the timeout fires.
+ */
+async function until(cond: () => boolean, label: string, timeoutMs = 5000) {
+  const started = Date.now()
+  while (!cond()) {
+    if (Date.now() - started > timeoutMs) throw new Error(`timed out waiting for: ${label}`)
+    await new Promise((r) => setTimeout(r, 5))
+  }
+}
+
 function fakeTrack() {
   return { stop: jest.fn(), getSettings: () => ({ deviceId: 'cam-1' }) }
 }
@@ -232,7 +255,21 @@ describe('mapping a barcode box onto the preview', () => {
 })
 
 describe('more than one barcode in view', () => {
-  function tickingVideo(maxFrames = 200) {
+  /*
+   * The frame budget must outlast the engine's 400ms collection window.
+   *
+   * It was 200 frames at `setTimeout(cb, 1)`. Node clamps that to roughly 1-4ms,
+   * so the budget was worth somewhere between 200ms and 800ms depending on the
+   * machine — straddling the 400ms window. Where frames ran out first the engine
+   * never got the frame that carries the decision, so `onCandidates`/`onCode`
+   * were simply never called and the test failed with no callback at all. That
+   * is what went red on CI while passing locally.
+   *
+   * 5000 frames is unambiguously longer than the window on any machine. The
+   * cost is nothing: `stop()` ends the loop, and the polling helper returns as
+   * soon as the callback lands.
+   */
+  function tickingVideo(maxFrames = 5000) {
     const el = document.createElement('video') as any
     let frames = 0
     el.play = jest.fn().mockResolvedValue(undefined)
@@ -256,7 +293,7 @@ describe('more than one barcode in view', () => {
     const onCode = jest.fn()
     const onCandidates = jest.fn()
     const engine = await startDecoding(fakeStream(), tickingVideo(), { onCode, onCandidates })
-    await new Promise((r) => setTimeout(r, 150))
+    await until(() => onCandidates.mock.calls.length > 0, 'both codes to be offered')
 
     // Taking found[0] would be a silent coin-flip between a product code and a
     // courier code.
@@ -291,7 +328,7 @@ describe('more than one barcode in view', () => {
     const onCode = jest.fn()
     const onCandidates = jest.fn()
     const engine = await startDecoding(fakeStream(), tickingVideo(), { onCode, onCandidates })
-    await new Promise((r) => setTimeout(r, 600))
+    await until(() => onCandidates.mock.calls.length > 0, 'the alternating codes to be offered')
 
     expect(onCode).not.toHaveBeenCalled()
     const offered = onCandidates.mock.calls.at(-1)![0]
@@ -313,7 +350,7 @@ describe('more than one barcode in view', () => {
       }
     }
     const engine = await startDecoding(fakeStream(), video, { onCode: jest.fn(), onCandidates: jest.fn() })
-    await new Promise((r) => setTimeout(r, 150))
+    await until(() => (video as any).pause.mock.calls.length > 0, 'the preview to freeze')
     expect((video as any).pause).toHaveBeenCalled()
     engine.stop()
   })
@@ -325,9 +362,10 @@ describe('more than one barcode in view', () => {
     }
     const onCode = jest.fn()
     const engine = await startDecoding(fakeStream(), tickingVideo(), { onCode })
-    // Longer than the collection window: a single code is accepted once the app
-    // has satisfied itself there is no second one.
-    await new Promise((r) => setTimeout(r, 600))
+    // A single code is accepted once the app has satisfied itself there is no
+    // second one — i.e. after the collection window, however long that takes to
+    // arrive on this machine.
+    await until(() => onCode.mock.calls.length > 0, 'the lone barcode to be accepted')
     expect(onCode).toHaveBeenCalledWith('8901030865278', 'ean_13')
     engine.stop()
   })
