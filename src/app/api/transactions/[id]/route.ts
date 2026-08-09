@@ -250,7 +250,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           paidAmount: amount,
           paymentMode: paymentMode || 'cash',
           notes: notes || null,
-          invoiceNo: invoiceNo || null,
+          // 🔒 An OMITTED field must not erase a stored one. `invoiceNo || null`
+          // turned "not sent" into "clear it", so any edit that did not
+          // re-send the number wiped it — and on a FILED invoice that destroys
+          // its identity in GSTR-1, breaks the audit trail, and leaves a hole
+          // in the document series declared in Table 13. Found by editing a
+          // filed July invoice: it came back with invoiceNo null.
+          // Same shape already used for partyId/payeeName above.
+          invoiceNo: invoiceNo !== undefined ? (invoiceNo || null) : existing.invoiceNo,
         },
         include: { items: true, party: true },
       })
@@ -636,7 +643,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           paymentMode: paymentMode || 'cash',
           isInterState: !!isInterState,
           notes: notes || null,
-          invoiceNo: invoiceNo || null,
+          // 🔒 An OMITTED field must not erase a stored one. `invoiceNo || null`
+          // turned "not sent" into "clear it", so any edit that did not
+          // re-send the number wiped it — and on a FILED invoice that destroys
+          // its identity in GSTR-1, breaks the audit trail, and leaves a hole
+          // in the document series declared in Table 13. Found by editing a
+          // filed July invoice: it came back with invoiceNo null.
+          // Same shape already used for partyId/payeeName above.
+          invoiceNo: invoiceNo !== undefined ? (invoiceNo || null) : existing.invoiceNo,
           grossProfit: roundMoney(grossProfit),
           // V17-Ext Tier 3: Credit/Debit Notes fields — use the EFFECTIVE
           // values (with fallback to existing) computed above for the stock-
