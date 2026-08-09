@@ -694,6 +694,30 @@ export const NAV_REGISTRY: NavDestination[] = [
   },
   // GST reports (ReportsHub + More)
   {
+    /*
+     * The composition dealer's two returns.
+     *
+     * Listed for every shop rather than hidden behind the scheme flag: a
+     * regular shop opening it is told plainly that these are not their forms,
+     * which is safer than hiding a return from someone who has opted in and
+     * cannot find it.
+     */
+    id: 'composition-returns',
+    label: 'CMP-08 & GSTR-4',
+    description: 'Composition scheme — quarterly payment and annual return',
+    icon: FileText,
+    iconColor: BLUE,
+    iconBg: BLUE_BG,
+    actionKind: 'navigate-report',
+    actionParams: { reportType: 'composition' },
+    category: 'reports',
+    subcategory: 'gst',
+    frequency: 'secondary',
+    surfaces: ['more', 'reports-hub'],
+    sortOrder: 6,
+    moduleKey: 'reports',
+  },
+  {
     id: 'gstr-1',
     label: 'GSTR-1',
     description: 'Outward supplies return — file monthly with GST portal',
