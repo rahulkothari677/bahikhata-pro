@@ -68,8 +68,29 @@ export function EwayBillNotice({
   }
   // Only outward movement of goods. A purchase is the supplier's consignment.
   if (type && type !== 'sale') return null
-  // Already generated — the shopkeeper has dealt with it.
-  if (ewayBillNo) return null
+
+  /*
+   * Already generated — show the number, quietly.
+   *
+   * It used to return null here, and the only place the number appeared was
+   * inside the e-invoice card. That card is hidden for any shop below the ₹5
+   * crore e-invoicing threshold — which is almost every shop this app is for —
+   * so a shopkeeper could save the number and never see it again. E-way bills
+   * and e-invoices are unrelated obligations and must not share a surface.
+   *
+   * This is also the number an officer asks for at a checkpoint, so it belongs
+   * on the bill, not two screens away.
+   */
+  if (ewayBillNo) {
+    return (
+      <div className="rounded-2xl border border-border/60 bg-muted/30 px-4 py-3 flex items-center gap-3">
+        <Truck className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+        <p className="text-xs text-muted-foreground">
+          E-way bill <span className="font-mono font-medium text-foreground">{ewayBillNo}</span>
+        </p>
+      </div>
+    )
+  }
 
   const need = ewayBillNeed({
     consignmentValue: totalAmount,
