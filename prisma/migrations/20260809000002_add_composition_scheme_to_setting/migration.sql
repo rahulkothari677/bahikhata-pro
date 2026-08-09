@@ -1,0 +1,23 @@
+-- Is this shop registered under the GST composition scheme, and as what?
+--
+-- WHY. The app assumes the regular scheme everywhere: it charges GST on
+-- invoices, claims input credit, and files GSTR-1 and GSTR-3B monthly. A
+-- composition dealer does none of those things, so the app cannot serve them
+-- at all — and they are a large segment, every shop under Rs1.5 crore that
+-- opted in for the simpler life.
+--
+-- The rule that outranks the rest: a composition dealer CANNOT COLLECT GST.
+-- They pay a flat percentage of turnover out of their own margin and issue a
+-- Bill of Supply, not a tax invoice. Charging tax on their bill would break the
+-- law and overcharge their customer in the same stroke, so the app has to know.
+--
+-- TWO COLUMNS, BOTH NULLABLE, AND NULL MEANS REGULAR. There is no boolean here
+-- on purpose: knowing a shop is under composition is useless without knowing
+-- WHICH category, because the rate follows from it (1% trader/manufacturer,
+-- 5% restaurant, 6% services). A boolean plus a rate could disagree; a single
+-- category cannot.
+--
+-- No backfill: every existing shop keeps meaning "regular scheme", which is
+-- what the app has always assumed and is correct for all of them today.
+ALTER TABLE "Setting" ADD COLUMN "compositionCategory" TEXT;
+ALTER TABLE "Setting" ADD COLUMN "compositionFrom" TIMESTAMP(3);

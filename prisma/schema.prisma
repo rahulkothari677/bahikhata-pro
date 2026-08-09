@@ -498,6 +498,17 @@ model PaymentAllocation {
 
 // ==================== APP SETTINGS (per user) ====================
 model Setting {
+  /*
+   * Composition scheme registration. NULL = the regular scheme.
+   *
+   * A CATEGORY rather than a boolean: the rate follows from it (1% trader or
+   * manufacturer, 5% restaurant, 6% services), and a boolean plus a separate
+   * rate could contradict each other. See migration 20260809000002.
+   */
+  compositionCategory String?
+  /** When the shop entered the scheme — returns before this stay regular. */
+  compositionFrom     DateTime?
+
   id                   String    @id @default(cuid())
   userId               String    @unique // one setting per user
   user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
