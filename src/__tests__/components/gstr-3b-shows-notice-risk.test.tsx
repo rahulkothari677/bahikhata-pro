@@ -151,12 +151,17 @@ describe('GSTR-3B screen surfaces the notice risk', () => {
     renderReport()
 
     expect(await screen.findByText(/No automatic notice from this filing/)).toBeInTheDocument()
-    expect(screen.getByText(/Rule 88C/)).toBeInTheDocument()
+    expect(screen.getByText(/Rules 88C and 88D/)).toBeInTheDocument()
   })
 
-  it('does not claim Rule 88D was checked when no GSTR-2B was imported', async () => {
-    // Treating a missing 2B as "zero credit available" would accuse an ordinary
-    // shop of over-claiming its whole ITC. Say it was not checked instead.
+  it('names ONE rule when only one was checked', async () => {
+    /*
+     * Caught on the live site, not by a test: the clear-state copy read
+     * "Checked against Rule 88C — the two rules that…" when no GSTR-2B had
+     * been imported and only 88C had actually run. Wrong grammatically, and
+     * wrong about what was checked, on the card whose whole job is to say
+     * exactly what was checked.
+     */
     mockOfflineFetch.mockImplementation(route({
       ...RISK_CLEAR,
       rules: [RISK_CLEAR.rules[0]],
@@ -164,6 +169,9 @@ describe('GSTR-3B screen surfaces the notice risk', () => {
     }))
     renderReport()
 
-    expect(await screen.findByText(/Rule 88D not checked/)).toBeInTheDocument()
+    expect(await screen.findByText(/Checked against Rule 88C/)).toBeInTheDocument()
+    expect(screen.queryByText(/Rules 88C and 88D/)).not.toBeInTheDocument()
+    // and it still points at the missing input
+    expect(screen.getByText(/import your GSTR-2B/i)).toBeInTheDocument()
   })
 })

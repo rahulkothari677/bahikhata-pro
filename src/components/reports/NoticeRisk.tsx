@@ -67,6 +67,34 @@ export function NoticeRisk({ month }: { month: string }) {
         icon: <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />,
       }
 
+  /*
+   * A CLEAN MONTH GETS ONE LINE, NOT A CARD.
+   *
+   * This sits third in a row of reassurance: "Ready to file", "Your returns
+   * agree", and then this. Three full green boxes before the shopkeeper
+   * reaches a single figure — and the note on ReturnsAgree records why that
+   * is a mistake, because four stacked boxes on this exact screen once read
+   * as an app in trouble rather than a shop with nothing to do.
+   *
+   * So the good news is quiet and the bad news is loud. When something is
+   * actually at stake the full card returns below.
+   */
+  if (!isNotice && differences.length === 0) {
+    const checked = data.inputs?.hasGstr2b
+      ? 'Rules 88C and 88D'
+      : 'Rule 88C'
+    return (
+      <div className="flex items-start gap-2 px-1 text-xs text-muted-foreground">
+        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
+        <p>
+          <span className="font-medium text-foreground">No automatic notice from this filing.</span>{' '}
+          Checked against {checked}
+          {!data.inputs?.hasGstr2b && <> — import your GSTR-2B and Rule 88D is checked too</>}.
+        </p>
+      </div>
+    )
+  }
+
   return (
     <div className={`rounded-2xl border ${tone.border} ${tone.bg} overflow-hidden`}>
       <div className="p-4 flex items-start gap-3">
@@ -75,21 +103,8 @@ export function NoticeRisk({ month }: { month: string }) {
           <p className={`font-semibold text-sm ${tone.title}`}>
             {isNotice
               ? 'Filing this would trigger an automatic notice'
-              : differences.length > 0
-                ? 'No notice — but this period is short-paid'
-                : 'No automatic notice from this filing'}
+              : 'No notice — but this period is short-paid'}
           </p>
-
-          {/* The clear case still earns a sentence. "Nothing to report" with no
-              reasoning reads as a feature that did not run. */}
-          {!isNotice && differences.length === 0 && (
-            <p className={`text-xs mt-1 ${tone.body}`}>
-              Checked against <span className="font-medium">Rule 88C</span>
-              {data.inputs?.hasGstr2b && <> and <span className="font-medium">Rule 88D</span></>} —
-              the two rules that issue an intimation on their own and block your next
-              GSTR-1 until you answer.
-            </p>
-          )}
 
           <div className="mt-3 space-y-3">
             {[...notices, ...differences].map((r: any) => (
