@@ -86,3 +86,26 @@ export function ewayBillNeed(c: EwayBillCheck): EwayBillNeed {
       : 'Goods worth over ₹50,000 usually need an e-way bill. Some states allow a higher limit within the state — check yours.',
   }
 }
+
+/**
+ * Does this invoice move physical goods?
+ *
+ * SAC codes — services — all begin with 99; goods sit in chapters 01–98. That
+ * is the only reliable signal the app has, and it is the same rule the
+ * e-invoice builder already uses for its IsServc flag.
+ *
+ * A LINE WITH NO CODE COUNTS AS GOODS. That is the safe direction: most sales
+ * in this app are goods, most missing codes are on goods, and treating an
+ * uncoded line as a service would silently switch the warning off for the
+ * shops most likely to need it — the ones who have not filled in their HSN
+ * codes yet. An invoice only escapes the check when EVERY line is explicitly
+ * a service.
+ */
+export function invoiceMovesGoods(items: Array<{ hsn?: string | null }>): boolean {
+  if (!items || items.length === 0) return false
+  return items.some((i) => {
+    const hsn = (i.hsn || '').trim()
+    if (!hsn) return true          // uncoded — assume goods
+    return !hsn.startsWith('99')   // 99xx is a service
+  })
+}

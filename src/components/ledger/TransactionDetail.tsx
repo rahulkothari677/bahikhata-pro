@@ -1,6 +1,7 @@
 'use client'
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { EwayBillNotice } from '@/components/ledger/EwayBillNotice'
 import { eInvoiceApplicability } from '@/lib/einvoice-applicability'
 import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
@@ -645,6 +646,21 @@ export function TransactionDetail() {
               </div>
             </div>
           </div>
+
+          {/*
+            * E-way bill, directly under the invoice header.
+            *
+            * This is the last screen before the goods go out — it is where
+            * Print and Send bill are — so it is the moment the decision still
+            * matters. It goes quiet once a number is recorded.
+            */}
+          <EwayBillNotice
+            totalAmount={txn.totalAmount}
+            isInterState={!!txn.isInterState}
+            items={txn.items || []}
+            ewayBillNo={txn.ewayBillNo}
+            type={txn.type}
+          />
 
           {/* Party + meta info */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

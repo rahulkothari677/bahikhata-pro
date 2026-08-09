@@ -11,7 +11,7 @@
  * intra-state check deliberately uses ₹50,000 rather than the higher limits
  * some states notified — see the note in eway-bill.ts.
  */
-import { ewayBillNeed, EWAY_BILL_THRESHOLD } from '@/lib/eway-bill'
+import { ewayBillNeed, invoiceMovesGoods, EWAY_BILL_THRESHOLD } from '@/lib/eway-bill'
 
 const goods = (consignmentValue: number, isInterState = false) =>
   ewayBillNeed({ consignmentValue, isInterState, movesGoods: true })
@@ -60,5 +60,35 @@ describe('services', () => {
     const r = ewayBillNeed({ consignmentValue: 500000, isInterState: true, movesGoods: false })
     expect(r.status).toBe('not-required')
     expect(r.reason).toMatch(/Nothing is being transported/)
+  })
+})
+
+describe('deciding whether an invoice moves goods', () => {
+  it('treats a normal HSN as goods', () => {
+    expect(invoiceMovesGoods([{ hsn: '3306' }])).toBe(true)
+  })
+
+  it('treats a 99xx SAC as a service', () => {
+    expect(invoiceMovesGoods([{ hsn: '998314' }])).toBe(false)
+  })
+
+  it('counts a mixed invoice as moving goods', () => {
+    // One physical item is enough to put a consignment on a vehicle.
+    expect(invoiceMovesGoods([{ hsn: '998314' }, { hsn: '3306' }])).toBe(true)
+  })
+
+  it('treats an UNCODED line as goods — the safe direction', () => {
+    /*
+     * Treating a missing code as a service would switch the warning off for
+     * exactly the shops most likely to need it: the ones who have not filled
+     * in their HSN codes yet.
+     */
+    expect(invoiceMovesGoods([{ hsn: null }])).toBe(true)
+    expect(invoiceMovesGoods([{ hsn: '' }])).toBe(true)
+    expect(invoiceMovesGoods([{}])).toBe(true)
+  })
+
+  it('says no for an invoice with no lines at all', () => {
+    expect(invoiceMovesGoods([])).toBe(false)
   })
 })
