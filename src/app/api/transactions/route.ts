@@ -8,6 +8,7 @@ import { withCache, noStore } from '@/lib/cache'
 import { roundMoney, calculateGst, splitGst, distributeDiscountProportionally, toMoney } from '@/lib/money'
 import { deriveInterStateStatus } from '@/lib/gst'
 import { validateBody, createTransactionSchema } from '@/lib/validation'
+import { findUnknownFields, schemaFields } from '@/lib/unknown-fields'
 import { apiError } from '@/lib/api-error'
 import { prismaErrorResponse } from '@/lib/prisma-error-response'
 import { friendlyValidationMessage } from '@/lib/friendly-validation'
@@ -239,6 +240,26 @@ export async function POST(req: NextRequest) {
     const userId = authCtx.userId
 
     const body = await req.json()
+
+    /*
+     * Unknown fields are rejected rather than dropped. See lib/unknown-fields.
+     *
+     * The two allowed extras are read directly off the body further down and
+     * are deliberately NOT schema fields:
+     *   isInterState    — the client's own place-of-supply determination, used
+     *                     only as a fallback when the server cannot derive it
+     *   confirmOversell — a UI acknowledgement, not part of the document
+     * Naming them here is what lets everything else be an error.
+     */
+    const unknownFields = findUnknownFields(body, schemaFields(createTransactionSchema), ['isInterState', 'confirmOversell'])
+    if (unknownFields) {
+      return NextResponse.json({
+        error: 'Unknown field',
+        message: unknownFields.message,
+        unknownFields: unknownFields.unknown,
+        suggestions: unknownFields.suggestions,
+      }, { status: 400 })
+    }
 
     // 🔒 AUDIT FIX H7: Validate request body with zod before processing.
     const validation = validateBody(createTransactionSchema, body)

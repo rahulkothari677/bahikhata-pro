@@ -8,6 +8,7 @@ import { apiError } from '@/lib/api-error'
 import { computePartyBalance } from '@/lib/party-balance'
 import { assertPeriodNotLocked, PeriodLockedError } from '@/lib/period-lock'
 import { validateBody, createPaymentSchema } from '@/lib/validation'
+import { findUnknownFields, schemaFields } from '@/lib/unknown-fields'
 // 🔒 AUDIT C5: oldest-first allocation + the guard that stops a payment being
 // applied to an already-settled bill.
 import { planAllocationOldestFirst, validateAllocations } from '@/lib/invoice-due'
@@ -108,6 +109,19 @@ export async function POST(req: NextRequest) {
 
     // 🔒 V18 Zod validation: replaces manual field checks
     const body = await req.json()
+
+    // `clientMutationId` is normally a header, but a body fallback is kept for
+    // backward compatibility (see below), so it is an allowed extra here.
+    const unknownFields = findUnknownFields(body, schemaFields(createPaymentSchema), ['clientMutationId'])
+    if (unknownFields) {
+      return NextResponse.json({
+        error: 'Unknown field',
+        message: unknownFields.message,
+        unknownFields: unknownFields.unknown,
+        suggestions: unknownFields.suggestions,
+      }, { status: 400 })
+    }
+
     const validation = validateBody(createPaymentSchema, body)
     if (!validation.success) {
       return NextResponse.json({ error: validation.error }, { status: 400 })

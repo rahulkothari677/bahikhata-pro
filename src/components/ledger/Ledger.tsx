@@ -500,7 +500,24 @@ export function Ledger({ type }: { type: LedgerType }) {
               <div className="w-7 h-7 rounded-lg bg-amber-500/10 flex items-center justify-center">
                 <Receipt className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
               </div>
-              <p className="text-3xs text-muted-foreground uppercase tracking-wide font-medium">{isSale ? 'Total Sales' : 'Total Purchases'}</p>
+              {/*
+                * Say WHICH basis, because two screens report this month's sales
+                * as two different numbers and neither used to say why.
+                *
+                * Here it is the sum of bill totals — GST included, the money
+                * that came through the till. The P&L reports Rs 100 less for
+                * the same month, and is also right: tax you collect is not
+                * income, it is held for the government, so accounting revenue
+                * excludes it (that card already reads "Revenue (excl. GST)").
+                *
+                * The gap IS the GST. Without the labels a shopkeeper who spots
+                * it has no way to tell which figure to trust — and that doubt
+                * spreads to every other number we show, which is expensive for
+                * an app whose whole claim is that you can rely on it.
+                */}
+              <p className="text-3xs text-muted-foreground uppercase tracking-wide font-medium">
+                {isSale ? 'Total Sales' : 'Total Purchases'} <span className="normal-case">({t('dash.incl_gst')})</span>
+              </p>
             </div>
             <p className="text-xl font-bold tabular-nums">{formatINR(totalAmount)}</p>
             {/*

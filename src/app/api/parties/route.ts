@@ -7,6 +7,7 @@ import { roundMoney } from '@/lib/money'
 import { apiError } from '@/lib/api-error'
 import { getReceivablePayable } from '@/lib/party-balance'
 import { validateBody, createPartySchema } from '@/lib/validation'
+import { findUnknownFields, schemaFields } from '@/lib/unknown-fields'
 
 export async function GET() {
   try {
@@ -110,6 +111,16 @@ export async function POST(req: NextRequest) {
     // like "abc" into ₹0 opening balance (a real money value) with no error.
     // Now: zod rejects non-numeric input with a clear 400 error.
     // Same pattern as transactions POST and products POST.
+    const unknownFields = findUnknownFields(body, schemaFields(createPartySchema))
+    if (unknownFields) {
+      return NextResponse.json({
+        error: 'Unknown field',
+        message: unknownFields.message,
+        unknownFields: unknownFields.unknown,
+        suggestions: unknownFields.suggestions,
+      }, { status: 400 })
+    }
+
     const validation = validateBody(createPartySchema, body)
     if (!validation.success) {
       return NextResponse.json({ error: 'Validation failed', detail: validation.error }, { status: 400 })

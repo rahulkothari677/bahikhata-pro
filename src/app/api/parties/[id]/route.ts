@@ -7,6 +7,7 @@ import { istMonthStartOffset, getISTDateParts } from '@/lib/timezone'
 import { computePartyBalance } from '@/lib/party-balance'
 import { encodeKeysetCursor, buildKeysetWhere } from '@/lib/pagination'
 import { validateBody, updatePartySchema } from '@/lib/validation'
+import { findUnknownFields, schemaFields } from '@/lib/unknown-fields'
 import { apiError } from '@/lib/api-error'
 
 // GET /api/parties/[id] - get party with paginated transactions + SQL aggregates
@@ -372,6 +373,17 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     const body = await req.json()
+
+    // `updatedAt` is the concurrent-edit token, read off the body below.
+    const unknownFields = findUnknownFields(body, schemaFields(updatePartySchema), ['id', 'updatedAt'])
+    if (unknownFields) {
+      return NextResponse.json({
+        error: 'Unknown field',
+        message: unknownFields.message,
+        unknownFields: unknownFields.unknown,
+        suggestions: unknownFields.suggestions,
+      }, { status: 400 })
+    }
 
     // 🔒 V18 Zod validation: validate input before processing
     const validation = validateBody(updatePartySchema, body)

@@ -6,6 +6,7 @@ import { shouldHideProfit, stripTransactionProfit } from '@/lib/profit-visibilit
 import { roundMoney, toMoney } from '@/lib/money'
 import { deriveInterStateStatus } from '@/lib/gst'
 import { validateBody, updateTransactionSchema } from '@/lib/validation'
+import { findUnknownFields, schemaFields } from '@/lib/unknown-fields'
 import { computeLineItems } from '@/lib/line-items'
 import { normalizeToUnit } from '@/lib/units'
 import { tracksStock, stockAffectingLines, tracksStockForReversal } from '@/lib/inventory-tracking'
@@ -160,6 +161,17 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (writeError) return writeError
 
     const body = await req.json()
+
+    // Same allowed extras as POST — see the note there.
+    const unknownFields = findUnknownFields(body, schemaFields(updateTransactionSchema), ['isInterState', 'confirmOversell', 'isReverseCharge', 'itcBlockedReason', 'updateProductCosts'])
+    if (unknownFields) {
+      return NextResponse.json({
+        error: 'Unknown field',
+        message: unknownFields.message,
+        unknownFields: unknownFields.unknown,
+        suggestions: unknownFields.suggestions,
+      }, { status: 400 })
+    }
 
     // 🔒 AUDIT FIX H7: Validate request body with zod
     const validation = validateBody(updateTransactionSchema, body)

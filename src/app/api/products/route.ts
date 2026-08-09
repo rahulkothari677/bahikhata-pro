@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { suggestGstTreatment } from '@/lib/gst-treatment'
 import { defaultTracksInventory, tracksStock } from '@/lib/inventory-tracking'
+import { findUnknownFields, schemaFields } from '@/lib/unknown-fields'
 import { db, withConnectionRetry } from '@/lib/db'
 import { getAuthContext, getAuthUserIdWithModule } from '@/lib/get-auth'
 import { canAccessModule } from '@/lib/staff-permissions'
@@ -100,6 +101,27 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json()
 
+    /*
+     * A field we do not understand is an error, not a shrug.
+     *
+     * `{ name: 'Rice', stock: 100 }` used to return 200 and create the product
+     * with ZERO stock — the field is `openingStock`, and zod dropped `stock`
+     * without a word. The shopkeeper found out when the till said there was
+     * nothing to sell.
+     *
+     * No allowed extras here: this route reads nothing off the body that the
+     * schema does not declare.
+     */
+    const unknownFields = findUnknownFields(body, schemaFields(createProductSchema))
+    if (unknownFields) {
+      return NextResponse.json({
+        error: 'Unknown field',
+        message: unknownFields.message,
+        unknownFields: unknownFields.unknown,
+        suggestions: unknownFields.suggestions,
+      }, { status: 400 })
+    }
+
     // 🔒 AUDIT FIX V7 M4: Validate with zod. Was: parseFloat(body.x) || 0
     // with no validation → negative prices accepted, missing name → 500.
     // Now: zod rejects negative prices/stock/GST and missing name with 400.
@@ -181,6 +203,19 @@ export async function PUT(req: NextRequest) {
     if (!existing) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
     const body = await req.json()
+
+    // Same rejection as POST. `updatedAt` is read straight off the body for the
+    // concurrent-edit check below and is not a schema field, so it is named
+    // here rather than left to be silently tolerated.
+    const unknownFields = findUnknownFields(body, schemaFields(updateProductSchema), ['id', 'updatedAt'])
+    if (unknownFields) {
+      return NextResponse.json({
+        error: 'Unknown field',
+        message: unknownFields.message,
+        unknownFields: unknownFields.unknown,
+        suggestions: unknownFields.suggestions,
+      }, { status: 400 })
+    }
 
     // 🔒 AUDIT FIX V7 M4: Validate with zod on update too.
     const validation = validateBody(updateProductSchema, body)
