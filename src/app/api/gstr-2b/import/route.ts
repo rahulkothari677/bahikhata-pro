@@ -82,9 +82,29 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'data is required (the GSTR-2B JSON from the GST portal)' }, { status: 400 })
     }
 
+    /*
+     * === Find the payload, whatever wrapper it arrived in ===
+     *
+     * WHY (2026-08-09, found by uploading a real file). This parser was written
+     * against a FLAT shape — `{ gstin, rtnprd, b2b: [...] }` — which is not what
+     * the GST portal produces. A genuine GSTR-2B download looks like:
+     *
+     *     { "chksum": "…", "data": { "gstin": "…", "rtnprd": "082026",
+     *                                "docdata": { "b2b": [ … ] } } }
+     *
+     * So the real file was rejected outright with "does not contain a GSTIN",
+     * which is exactly the file the error message tells you to go and download.
+     * The only files that imported were hand-flattened ones nobody would have.
+     *
+     * Both shapes are accepted now. The portal's own nesting first, because
+     * that is what a shopkeeper actually has.
+     */
+    const root = data?.data && typeof data.data === 'object' ? data.data : data
+    const docdata = root?.docdata && typeof root.docdata === 'object' ? root.docdata : root
+
     // === Validate GSTIN match ===
     // The GSTIN in the 2B file must match the shop's GSTIN
-    const fileGstin = data.gstin
+    const fileGstin = root.gstin
     if (!fileGstin) {
       return NextResponse.json({ error: 'The uploaded file does not contain a GSTIN. Please download the GSTR-2B JSON from the GST portal.' }, { status: 400 })
     }
@@ -102,7 +122,8 @@ export async function POST(req: NextRequest) {
     }
 
     // === Validate filing period match ===
-    const fileFp = data.fp
+    // The portal calls it `rtnprd`; `fp` is the flat variant.
+    const fileFp = root.rtnprd || root.fp
     if (fileFp && fileFp !== monthYear) {
       return NextResponse.json({
         error: 'Period mismatch',
@@ -111,7 +132,7 @@ export async function POST(req: NextRequest) {
     }
 
     // === Parse the 2B JSON into normalized invoice rows ===
-    const b2bEntries = data.b2b || []
+    const b2bEntries = docdata.b2b || []
     const parsedInvoices: Array<{
       supplierGstin: string
       invoiceNumber: string
@@ -131,14 +152,37 @@ export async function POST(req: NextRequest) {
       const invs = b2bEntry.inv || []
       for (const inv of invs) {
         const inum = inv.inum || inv.inum_inv || 'UNKNOWN'
+        /*
+         * The money is on the ITEMS, not on the invoice.
+         *
+         * A 2B invoice carries `val` (the gross invoice value) and a rate-wise
+         * `itms: [{ itm_det: { txval, iamt, camt, samt } }]`. Reading `txval`
+         * and `camt` off the invoice itself found nothing and defaulted to
+         * zero — so a file could import "1 invoice" worth ₹0 and report
+         * success. Under Rule 36(4) the app then limits input credit to what
+         * 2B contains, so a silent zero does not merely lose information: it
+         * tells the shopkeeper they may claim nothing, and they pay tax they
+         * did not owe.
+         *
+         * Invoice-level fields are still honoured as a fallback for the
+         * flattened shape.
+         */
+        const items = Array.isArray(inv.itms) ? inv.itms : []
+        const sumItems = (f: string) =>
+          items.reduce((s: number, it: any) => s + (Number(it?.itm_det?.[f]) || 0), 0)
+        const taxable = items.length ? sumItems('txval') : Number(inv.txval) || 0
+        const igst = items.length ? sumItems('iamt') : Number(inv.iamt) || 0
+        const cgst = items.length ? sumItems('camt') : Number(inv.camt) || 0
+        const sgst = items.length ? sumItems('samt') : Number(inv.samt) || 0
+
         parsedInvoices.push({
           supplierGstin: String(ctin).toUpperCase(),
           invoiceNumber: String(inum),
           invoiceDate: inv.idt || inv.dt || null,
-          taxableValue: roundMoney(Number(inv.txval) || 0),
-          igst: roundMoney(Number(inv.iamt) || 0),
-          cgst: roundMoney(Number(inv.camt) || 0),
-          sgst: roundMoney(Number(inv.samt) || 0),
+          taxableValue: roundMoney(taxable),
+          igst: roundMoney(igst),
+          cgst: roundMoney(cgst),
+          sgst: roundMoney(sgst),
           totalAmount: roundMoney(Number(inv.val) || Number(inv.itcval) || 0),
           isReverseCharge: String(inv.rchrg || inv.rchrgitc || 'N').toUpperCase() === 'Y',
         })
@@ -146,6 +190,24 @@ export async function POST(req: NextRequest) {
     }
 
     // Compute summary totals
+    /*
+     * A file we could not read is not a successful import.
+     *
+     * The original returned `success: true` with "0 invoice(s) found" for a
+     * real 2B whose shape it did not understand. The shopkeeper sees a green
+     * toast, the readiness card then says input credit HAS been checked against
+     * 2B, and Rule 36(4) limits their claim to the nothing that was imported.
+     * A silent no-op dressed as success is worse here than an error, because
+     * the consequence is paying tax they did not owe.
+     */
+    if (b2bEntries.length === 0 && parsedInvoices.length === 0) {
+      return NextResponse.json({
+        error: 'No purchase invoices found in this file',
+        message:
+          'This file has no B2B section, so there is nothing to match against. Download GSTR-2B for this month from the GST portal and upload that file — not GSTR-2A or a summary PDF.',
+      }, { status: 400 })
+    }
+
     const taxableTotal = roundMoney(parsedInvoices.reduce((s, i) => s + i.taxableValue, 0))
     const igstTotal = roundMoney(parsedInvoices.reduce((s, i) => s + i.igst, 0))
     const cgstTotal = roundMoney(parsedInvoices.reduce((s, i) => s + i.cgst, 0))
