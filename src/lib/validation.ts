@@ -197,6 +197,12 @@ export const createProductSchema = z.object({
   mrp: z.coerce.number().min(0, 'MRP cannot be negative').nullable().optional(),
   gstRate: z.coerce.number().min(0, 'GST rate cannot be negative').max(100, 'GST rate cannot exceed 100%').optional().default(0),
   openingStock: z.coerce.number().min(0, 'Opening stock cannot be negative').optional().default(0),
+  // False = a SERVICE: no stock, no low-stock alert, no valuation, and above
+  // all no "not enough stock" refusal on the shop's first ever invoice.
+  // Defaulted by the ROUTE from the HSN/SAC code (99xx ⇒ service) rather than
+  // here, so that an explicit `false` from the form is never overwritten by a
+  // zod default. See app/api/products/route.ts.
+  tracksInventory: z.coerce.boolean().optional(),
   lowStockThreshold: z.coerce.number().min(0, 'Low stock threshold cannot be negative').optional().default(5),
   notes: z.string().max(5000).nullable().optional(),
   // 🔒 V12: MRP / GST-inclusive pricing flag.
@@ -262,6 +268,9 @@ export const updateProductSchema = z.object({
   mrp: z.coerce.number().min(0, 'MRP cannot be negative').nullable().optional(),
   gstRate: z.coerce.number().min(0, 'GST rate cannot be negative').max(100, 'GST rate cannot exceed 100%').optional(),
   openingStock: z.coerce.number().min(0, 'Opening stock cannot be negative').optional(),
+  // Optional on update; if omitted, unchanged. Editing a product must never
+  // silently flip goods into a service or back.
+  tracksInventory: z.coerce.boolean().optional(),
   lowStockThreshold: z.coerce.number().min(0, 'Low stock threshold cannot be negative').optional(),
   notes: z.string().max(5000).nullable().optional(),
   // 🔒 V12: MRP / GST-inclusive pricing flag.

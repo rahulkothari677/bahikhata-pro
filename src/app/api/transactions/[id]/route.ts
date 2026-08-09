@@ -8,6 +8,7 @@ import { deriveInterStateStatus } from '@/lib/gst'
 import { validateBody, updateTransactionSchema } from '@/lib/validation'
 import { computeLineItems } from '@/lib/line-items'
 import { normalizeToUnit } from '@/lib/units'
+import { tracksStock, stockAffectingLines, tracksStockForReversal } from '@/lib/inventory-tracking'
 import { apiError } from '@/lib/api-error'
 import { prismaErrorResponse } from '@/lib/prisma-error-response'
 import { friendlyValidationMessage } from '@/lib/friendly-validation'
@@ -281,10 +282,6 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: 'At least one item is required' }, { status: 400 })
     }
 
-    const productIds = items.map((i: any) => i.productId).filter(Boolean)
-    const products = productIds.length > 0 ? await db.product.findMany({ where: { id: { in: productIds }, userId } }) : []
-    const productMap = new Map(products.map(p => [p.id, p]))
-
     // 🔒 V11 STOCK POLICY: Fetch the shop's stock policy + roundOffEnabled early.
     // Also fetch old items BEFORE the $transaction so we can compute the NET
     // stock impact (old items reversed + new items applied) and block/warn.
@@ -295,6 +292,25 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       }),
       db.transactionItem.findMany({ where: { transactionId: id } }),
     ])
+
+    // The map must cover the OLD lines as well as the new ones.
+    //
+    // It used to be built from `items` alone — the lines the edit is sending.
+    // A line REMOVED by this edit therefore missed the map entirely, and the
+    // reversal below fell back to the raw stored quantity with no unit
+    // normalisation. That was survivable while every product was tracked;
+    // it is not survivable now, because "is this a service?" is read from the
+    // product, and a missing product would make a removed goods line look
+    // like a service and quietly skip giving its stock back.
+    //
+    // Both queries above are already awaited together, so widening the ID set
+    // costs no extra round trip — the findMany was always a second step.
+    const productIds = [...new Set([
+      ...items.map((i: any) => i.productId),
+      ...oldItems.map(i => i.productId),
+    ].filter(Boolean) as string[])]
+    const products = productIds.length > 0 ? await db.product.findMany({ where: { id: { in: productIds }, userId } }) : []
+    const productMap = new Map(products.map(p => [p.id, p]))
     const stockPolicy = setting?.stockPolicy || 'block'
 
     // V17-Ext Tier 3: Stock direction (same logic as POST)
@@ -347,6 +363,8 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       if (existingAffectsStock) {
         for (const oldItem of oldItems) {
           if (!oldItem.productId) continue
+          // A service was never counted, so there is nothing to un-count.
+          if (!tracksStockForReversal(oldItem.productId, productMap)) continue
           const product = productMap.get(oldItem.productId)
           const oldQty = product?.unit
             ? normalizeToUnit(Number(oldItem.quantity) || 0, oldItem.unit || product.unit, product.unit).quantity
@@ -364,6 +382,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           if (!item.productId) continue
           const product = productMap.get(item.productId)
           if (!product) continue
+          if (!tracksStock(product)) continue
           const newQty = normalizeToUnit(
             Number(item.quantity) || 0,
             item.unit || product.unit,
@@ -580,6 +599,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       const reversalByProduct = new Map<string, number>()
       for (const oldItem of lockedOldItems) {
         if (!oldItem.productId) continue
+        // Services were never incremented or decremented, so they have
+        // nothing to give back. Anything we cannot positively identify as a
+        // service IS reversed — see tracksStockForReversal for why the
+        // unknown case defaults the opposite way here than when applying.
+        if (!tracksStockForReversal(oldItem.productId, productMap)) continue
         reversalByProduct.set(
           oldItem.productId,
           (reversalByProduct.get(oldItem.productId) || 0) + (oldItem.quantity || 0),
@@ -671,7 +695,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       // V17-Ext Tier 3: Uses direction variables (same pattern as POST)
       // 🔒 P2028 FIX: same per-product grouping as Step 1 (see the note there).
       const applyByProduct = new Map<string, { qty: number; name: string }>()
-      for (const item of txItems) {
+      for (const item of stockAffectingLines(txItems, productMap)) {
         if (!item.productId) continue
         const prev = applyByProduct.get(item.productId)
         applyByProduct.set(item.productId, {
@@ -927,9 +951,21 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
         // Grouping also makes the gte guard correct when one product appears on
         // several lines: the check now tests the product's TOTAL reversal
         // quantity rather than each line separately.
+        // Which of these products actually carry stock? DELETE never loaded
+        // products at all — it had no reason to until services existed. One
+        // extra indexed read on a handful of IDs, inside the lock so it cannot
+        // disagree with what the reversal below writes.
+        const delProducts = await tx.product.findMany({
+          where: { id: { in: [...new Set(items.map(i => i.productId).filter(Boolean) as string[])] }, userId },
+          select: { id: true, tracksInventory: true },
+        })
+        const delProductMap = new Map(delProducts.map(p => [p.id, p]))
+
         const reversalByProduct = new Map<string, number>()
         for (const item of items) {
           if (!item.productId) continue
+          // A service was never counted, so voiding the bill un-counts nothing.
+          if (!tracksStockForReversal(item.productId, delProductMap)) continue
           reversalByProduct.set(
             item.productId,
             (reversalByProduct.get(item.productId) || 0) + (item.quantity || 0),

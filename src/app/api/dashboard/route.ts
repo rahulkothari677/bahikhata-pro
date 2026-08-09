@@ -171,6 +171,10 @@ export async function GET(req: NextRequest) {
             )::numeric AS "stockValuePaise"
           FROM "Product"
           WHERE "userId" = ${userId}
+            -- Services hold no stock. Without this a salon's "Haircut" sits at
+            -- 0 <= threshold forever, so the dashboard's "N products need
+            -- restocking" headline counts every service the shop offers.
+            AND "tracksInventory" = true
         `,
         // The display list only — capped. Same ordering as the old JS sort
         // (most-depleted first).
@@ -191,6 +195,7 @@ export async function GET(req: NextRequest) {
             "unit"
           FROM "Product"
           WHERE "userId" = ${userId}
+            AND "tracksInventory" = true  -- see the count query above
             AND "currentStock" <= "lowStockThreshold"
           ORDER BY "currentStock" ASC
           LIMIT ${LOW_STOCK_LIMIT}

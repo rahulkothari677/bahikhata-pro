@@ -465,6 +465,11 @@ export async function GET(req: NextRequest) {
             COUNT(*)::bigint AS "productCount"
           FROM "Product"
           WHERE "userId" = ${userId}
+            -- This is a STOCK report. A service holds no stock, so it is not
+            -- a row here at all — including it would report every haircut a
+            -- salon offers as permanently out of stock, and inflate the
+            -- low-stock count by the number of services the shop provides.
+            AND "tracksInventory" = true
         `,
         db.$queryRaw<Array<{
           id: string; name: string; category: string | null; hsn: string | null
@@ -477,6 +482,7 @@ export async function GET(req: NextRequest) {
             "gstRate", "lowStockThreshold"
           FROM "Product"
           WHERE "userId" = ${userId}
+            AND "tracksInventory" = true  -- see the totals query above
           ORDER BY ROUND(GREATEST("currentStock", 0)::numeric * "purchasePrice"::numeric) DESC
           LIMIT ${STOCK_REPORT_LIMIT}
         `,

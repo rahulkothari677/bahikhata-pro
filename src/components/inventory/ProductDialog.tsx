@@ -17,6 +17,7 @@ import { TrendingUp } from 'lucide-react'
 import { formatINR } from '@/lib/utils'
 import { readError } from '@/lib/read-error'
 import { useSetting } from '@/hooks/use-setting'
+import { defaultTracksInventory } from '@/lib/inventory-tracking'
 
 const GST_RATES = [0, 5, 12, 18, 28]
 const UNITS = ['pcs', 'kg', 'gm', 'ltr', 'ml', 'm', 'box', 'dozen', 'packet']
@@ -34,6 +35,9 @@ const EMPTY_FORM = {
   openingStock: '', lowStockThreshold: '5', notes: '',
   priceIncludesGst: false,
   gstTreatment: 'taxable',  // 🔒 V17 Audit §4.2
+  // Goods by default. Flipped automatically when the shopkeeper types a SAC
+  // (99xx), and always overridable — see the effect below.
+  tracksInventory: true,
 }
 
 export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
@@ -43,6 +47,9 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
   onSuccess?: () => void
 }) {
   const [form, setForm] = useState(EMPTY_FORM)
+  // Has the shopkeeper answered the goods/service question themselves? Once
+  // they have, typing an HSN must stop re-deciding it for them.
+  const [serviceTouched, setServiceTouched] = useState(false)
   const [barcodeOpen, setBarcodeOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   // 🔒 R15-5 (Round 15): Read hideProfit so the margin preview box is hidden
@@ -69,10 +76,16 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
           notes: product.notes || '',
           priceIncludesGst: product.priceIncludesGst ?? false,
           gstTreatment: product.gstTreatment || 'taxable',  // 🔒 V17 Audit §4.2
+          tracksInventory: product.tracksInventory ?? true,
         })
       } else {
         setForm(EMPTY_FORM)
       }
+      // Reset per-open: the next product this dialog is used for starts with
+      // the HSN hint live again. Without this, ticking the box once would
+      // suppress the suggestion for every product added afterwards, since the
+      // dialog instance is reused.
+      setServiceTouched(false)
     }
   }, [open, product])
 
@@ -130,6 +143,7 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
         notes: form.notes.trim() || null,
         priceIncludesGst: form.priceIncludesGst,
         gstTreatment: form.gstTreatment,  // 🔒 V17 Audit §4.2
+        tracksInventory: form.tracksInventory,
       }
       const r = await offlineFetch(url, {
         method,
@@ -230,7 +244,24 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
           </div>
           <div>
             <Label htmlFor="field-hsn-sac-code">HSN/SAC Code</Label>
-            <Input id="field-hsn-sac-code" value={form.hsn} onChange={(e) => setForm({ ...form, hsn: e.target.value })} placeholder="e.g. 1101" />
+            <Input
+              id="field-hsn-sac-code"
+              value={form.hsn}
+              onChange={(e) => {
+                const hsn = e.target.value
+                // A SAC (99xx) says "service" — pre-tick the box for someone
+                // who would never think to look for it. Only until they touch
+                // the box themselves: after that their choice is the answer,
+                // because a shop may legitimately want to count something the
+                // code calls a service, and nothing here should argue.
+                setForm(f => ({
+                  ...f,
+                  hsn,
+                  ...(serviceTouched || product ? {} : { tracksInventory: defaultTracksInventory(hsn) }),
+                }))
+              }}
+              placeholder="e.g. 1101 (goods) or 9971 (service)"
+            />
           </div>
           <div>
             <Label htmlFor="field-unit">Unit</Label>
@@ -297,14 +328,44 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
               </span>
             </label>
           </div>
-          <div>
-            <Label htmlFor="field-opening-stock">Opening Stock</Label>
-            <NumberField id="field-opening-stock" value={form.openingStock} onValueChange={(v) => setForm({ ...form, openingStock: v })} placeholder="0" min={0} step={1} decimals={3} />
+          {/* Goods or a service? The single question that decides whether this
+              product is counted at all. Placed directly above the stock fields
+              it controls, so the two boxes disappearing is an obvious
+              consequence of the tick rather than a mystery. */}
+          <div className="sm:col-span-2 flex items-start gap-3 rounded-lg border border-border/60 p-3">
+            <input
+              id="isService"
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 accent-[var(--primary)]"
+              checked={!form.tracksInventory}
+              onChange={(e) => {
+                setServiceTouched(true)
+                setForm({ ...form, tracksInventory: !e.target.checked, openingStock: e.target.checked ? '' : form.openingStock })
+              }}
+            />
+            <label htmlFor="isService" className="text-sm cursor-pointer">
+              <span className="font-medium">This is a service — don&apos;t track stock</span>
+              <span className="block text-xs text-muted-foreground">
+                For work you do rather than goods you keep: stitching, repairs, haircuts, consulting.
+                No stock count, no low-stock alerts, and it never blocks a bill.
+              </span>
+            </label>
           </div>
-          <div>
-            <Label htmlFor="field-low-stock-alert-at">Low Stock Alert At</Label>
-            <NumberField id="field-low-stock-alert-at" value={form.lowStockThreshold} onValueChange={(v) => setForm({ ...form, lowStockThreshold: v })} placeholder="5" min={0} step={1} decimals={3} />
-          </div>
+          {/* Hidden, not disabled, for a service. A greyed-out "Opening Stock: 0"
+              still asks the shopkeeper to think about a number that does not
+              exist for a haircut. */}
+          {form.tracksInventory && (
+            <>
+              <div>
+                <Label htmlFor="field-opening-stock">Opening Stock</Label>
+                <NumberField id="field-opening-stock" value={form.openingStock} onValueChange={(v) => setForm({ ...form, openingStock: v })} placeholder="0" min={0} step={1} decimals={3} />
+              </div>
+              <div>
+                <Label htmlFor="field-low-stock-alert-at">Low Stock Alert At</Label>
+                <NumberField id="field-low-stock-alert-at" value={form.lowStockThreshold} onValueChange={(v) => setForm({ ...form, lowStockThreshold: v })} placeholder="5" min={0} step={1} decimals={3} />
+              </div>
+            </>
+          )}
         </div>
 
         {/* 🔒 R15-5 (Round 15): Hide profit preview for hideProfit.

@@ -72,7 +72,12 @@ export async function GET() {
       // arbitrary 5,000 in primary-key order. Truncation should degrade the
       // tail of the list, not its usefulness.
       db.product.findMany({
-        where: { userId },
+        // Services excluded at the query: every insight built from these rows
+        // is a stock insight ("OUT OF STOCK", "below threshold", "Record
+        // Purchase"), and none of them means anything for a haircut. A service
+        // would otherwise generate a permanent, undismissable OUT OF STOCK
+        // alert from the moment it is created.
+        where: { userId, tracksInventory: true },
         select: {
           id: true,
           name: true,

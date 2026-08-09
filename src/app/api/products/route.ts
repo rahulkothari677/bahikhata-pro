@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { suggestGstTreatment } from '@/lib/gst-treatment'
+import { defaultTracksInventory, tracksStock } from '@/lib/inventory-tracking'
 import { db, withConnectionRetry } from '@/lib/db'
 import { getAuthContext, getAuthUserIdWithModule } from '@/lib/get-auth'
 import { canAccessModule } from '@/lib/staff-permissions'
@@ -37,12 +38,28 @@ export async function GET() {
     }))
 
     const productsWithStock = products.map(p => {
+      /*
+       * A service has no stock, so every stock-derived flag must be OFF.
+       *
+       * Derived HERE rather than in each screen on purpose. currentStock for a
+       * service is a permanent 0, and 0 <= lowStockThreshold is true — so
+       * without this, the moment a salon adds "Haircut" it is reported as low
+       * stock forever, and the dashboard, the low-stock filter, SmartInsights,
+       * the notification bell and the CSV export ALL inherit that from these
+       * three fields. One correction at the source fixes every one of them,
+       * and no future screen can miss it.
+       *
+       * stockValue is 0 rather than absent: a service genuinely contributes
+       * nothing to what the shop's stock is worth, and the totals that sum
+       * this field must keep summing a number.
+       */
+      const counts = tracksStock(p)
       const base: any = {
         ...p,
         currentStock: p.currentStock,
-        stockValue: roundMoney(Math.max(0, p.currentStock) * p.purchasePrice),
-        isLowStock: p.currentStock <= p.lowStockThreshold,
-        isOversold: p.currentStock < 0,
+        stockValue: counts ? roundMoney(Math.max(0, p.currentStock) * p.purchasePrice) : 0,
+        isLowStock: counts && p.currentStock <= p.lowStockThreshold,
+        isOversold: counts && p.currentStock < 0,
       }
       // 🔒 R15 v2 (Verification Ledger): Strip purchasePrice + stockValue for
       // staff+hideProfit. purchasePrice is the cost price — combined with
@@ -107,6 +124,20 @@ export async function POST(req: NextRequest) {
         gstRate: v.gstRate,
         openingStock: v.openingStock,
         currentStock: v.openingStock,  // currentStock starts at openingStock
+        /*
+         * Goods unless the shopkeeper says otherwise, or the code says so.
+         *
+         * The same "only ever fill a gap" rule as gstTreatment below: an
+         * explicit choice from the client always wins — `?? ` only fires on
+         * undefined, so a deliberate `false` survives — and the SAC prefix
+         * merely supplies a sensible default for someone who typed 9971 and
+         * has no idea the app has a stock model at all.
+         *
+         * Deliberately NOT defaulted in the zod schema: a zod `.default()`
+         * would turn "the client said nothing" into "the client said true"
+         * before this line could tell the two apart.
+         */
+        tracksInventory: v.tracksInventory ?? defaultTracksInventory(v.hsn),
         lowStockThreshold: v.lowStockThreshold,
         notes: v.notes || null,
         // 🔒 V17 Audit Phase 5: priceIncludesGst was in the schema but NOT persisted
@@ -198,6 +229,11 @@ export async function PUT(req: NextRequest) {
       delete updateData.openingStock
     }
     if (v.lowStockThreshold !== undefined) updateData.lowStockThreshold = v.lowStockThreshold
+    // No HSN fallback on edit, unlike create. Once a product exists, its
+    // goods/service nature is a decision someone made; re-deriving it from a
+    // code they happened to edit could silently flip a tracked product to
+    // untracked and strand its stock. Only an explicit value changes it.
+    if (v.tracksInventory !== undefined) updateData.tracksInventory = v.tracksInventory
     if (v.notes !== undefined) updateData.notes = v.notes
     // 🔒 V17 Audit Phase 5: Persist priceIncludesGst (was missing) + gstTreatment
     if (v.priceIncludesGst !== undefined) updateData.priceIncludesGst = v.priceIncludesGst

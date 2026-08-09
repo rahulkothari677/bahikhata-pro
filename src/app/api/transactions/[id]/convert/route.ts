@@ -5,6 +5,7 @@ import { canAccessModule } from '@/lib/staff-permissions'
 import { shouldHideProfit, stripTransactionProfit } from '@/lib/profit-visibility'
 import { computeLineItems } from '@/lib/line-items'
 import { normalizeToUnit } from '@/lib/units'
+import { stockAffectingLines } from '@/lib/inventory-tracking'
 import { roundMoney, toMoney } from '@/lib/money'
 import { deriveInterStateStatus } from '@/lib/gst'
 import { assertPeriodNotLocked, PeriodLockedError } from '@/lib/period-lock'
@@ -214,7 +215,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         // conversion back with P2028. Grouping also makes the gte check test
         // the estimate's TOTAL demand per product rather than each line alone.
         const decrementByProduct = new Map<string, { qty: number; name: string }>()
-        for (const item of computed.txItems) {
+        for (const item of stockAffectingLines(computed.txItems, productMap)) {
           if (!item.productId) continue
           const prev = decrementByProduct.get(item.productId)
           decrementByProduct.set(item.productId, {
@@ -253,8 +254,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         }
       } else {
         await Promise.all(
-          computed.txItems
-            .filter(i => i.productId)
+          stockAffectingLines(computed.txItems, productMap)
             .map(item => tx.product.updateMany({
               where: { id: item.productId!, userId },
               data: { currentStock: { decrement: item.quantity || 0 } },

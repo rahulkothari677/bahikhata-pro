@@ -130,6 +130,29 @@ model Product {
   // taxable value = price × 100/(100+rate) instead of adding GST on top.
   // Default false = old behaviour (price is taxable value, GST added on top).
   priceIncludesGst  Boolean  @default(false)
+  /**
+   * False for a SERVICE — something sold without a countable stock of it.
+   *
+   * Was: every row was stock-tracked, unconditionally. A tailor selling
+   * "Blouse stitching", a salon selling "Haircut", a photographer selling
+   * "Wedding shoot" all start at currentStock = 0, and the default stock
+   * policy is 'block' — so the FIRST sale they ever try to make is refused
+   * with "Not enough stock — record a purchase or enable overselling in
+   * Settings". There is no purchase to record. The only escape was to turn
+   * off overselling protection for the whole shop, which is exactly the
+   * guard a shop that ALSO sells goods needs to keep.
+   *
+   * Nothing about a service has a stock level, so nothing about it should be
+   * counted, warned about, valued, or reported as low. `tracksStock()` in
+   * lib/inventory-tracking.ts is the single predicate; every stock read and
+   * write goes through it, and a guard test fails the build if a new one
+   * does not.
+   *
+   * Default TRUE so every existing row keeps today's behaviour exactly.
+   * New products default from the HSN/SAC code (99xx ⇒ service) but the
+   * shopkeeper can always override — the code is a hint, not the truth.
+   */
+  tracksInventory   Boolean  @default(true)
   openingStock      Float    @default(0)
   // 🔒 AUDIT FIX H1: Authoritative stock count, maintained transactionally.
   // Was: stock computed at read time (openingStock + purchases - sales) — no

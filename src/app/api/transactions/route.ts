@@ -13,6 +13,7 @@ import { prismaErrorResponse } from '@/lib/prisma-error-response'
 import { friendlyValidationMessage } from '@/lib/friendly-validation'
 import { computeLineItems, buildPriceWarnings } from '@/lib/line-items'
 import { normalizeToUnit } from '@/lib/units'
+import { tracksStock, stockAffectingLines } from '@/lib/inventory-tracking'
 import { encodeKeysetCursor, buildKeysetWhere } from '@/lib/pagination'
 import { assertPeriodNotLocked, PeriodLockedError } from '@/lib/period-lock'
 import { resolveFinalPaid, isNoteType } from '@/lib/paid-amount'
@@ -458,6 +459,11 @@ export async function POST(req: NextRequest) {
         if (!item.productId) continue
         const product = productMap.get(item.productId)
         if (!product) continue
+        // A service has no stock to be short of. Skipping it here is what
+        // lets a tailor bill "Blouse stitching" at all: otherwise it starts
+        // at currentStock = 0, every sale reads as overselling, and the
+        // default 'block' policy refuses the invoice outright.
+        if (!tracksStock(product)) continue
         const requestedQty = normalizeToUnit(
           Number(item.quantity) || 0,
           item.unit || product.unit,
@@ -759,6 +765,11 @@ export async function POST(req: NextRequest) {
         const decrementByProduct = new Map<string, { qty: number; name: string }>()
         for (const item of txItems) {
           if (!item.productId) continue
+          // Services carry no stock, so the conditional update below
+          // (currentStock >= qty) would match 0 rows and throw STOCK_BLOCK.
+          // This is the write-side twin of the warning skip above; both must
+          // agree or the sale passes the check and then fails the commit.
+          if (!tracksStock(productMap.get(item.productId))) continue
           const prev = decrementByProduct.get(item.productId)
           decrementByProduct.set(item.productId, {
             qty: (prev?.qty || 0) + (item.quantity || 0),
@@ -801,7 +812,9 @@ export async function POST(req: NextRequest) {
         }
       } else if (shouldAffectStock) {
         // 🔒 FIX H12: Allow mode + purchases + credit/debit notes — batch
-        await Promise.all(txItems.filter(i => i.productId).map(item => {
+        // stockAffectingLines drops both free-text lines and services, so a
+        // purchase of "Tailoring labour" does not invent a stock of it.
+        await Promise.all(stockAffectingLines(txItems, productMap).map(item => {
           const qty = item.quantity || 0
           if (shouldDecrementStock) {
             return tx.product.updateMany({

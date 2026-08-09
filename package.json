@@ -23,7 +23,7 @@
     "postinstall": "prisma generate",
     "analyze": "next experimental-analyze",
     "analyze:output": "next experimental-analyze --output",
-    "verify:build": "DATABASE_URL=postgresql://dummy:dummy@localhost:5432/dummy NEXTAUTH_SECRET=ci-build-dummy-secret NEXTAUTH_URL=http://localhost:3000 npx next build"
+    "verify:build": "node scripts/verify-build.js"
   },
   "dependencies": {
     "@capacitor-community/camera-preview": "^8.0.1",

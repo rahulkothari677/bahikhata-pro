@@ -43,6 +43,7 @@ import { useRatePrompt } from '@/hooks/use-rate-prompt'
 import { roundMoney, splitGst } from '@/lib/money'
 import { computeLineItems } from '@/lib/line-items'
 import { baseUnitOf, subUnitsFor, normalizeUnitName, resolveEnteredQuantity, normalizeToUnit, isCountUnit, stepForUnit } from '@/lib/units'
+import { tracksStock, isService } from '@/lib/inventory-tracking'
 import { readError } from '@/lib/read-error'
 import { invalidateMoneyCaches } from '@/lib/invalidate-money-caches'
 import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
@@ -799,6 +800,11 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
       if (!item.productId) return
       const product = productMap.get(item.productId)
       if (!product) return
+      // A service has no stock to run out of. This must mirror the server
+      // exactly (POST /api/transactions skips the same rows): if the screen
+      // warned where the server does not, the tailor would see a red "Not
+      // enough stock" and a disabled Save on a bill that would have saved.
+      if (!tracksStock(product)) return
       // Normalize the entered quantity into the product's unit (e.g., 500 gm → 0.5 kg)
       const enteredQty = Number(item.quantity) || 0
       const requestedQty = product.unit

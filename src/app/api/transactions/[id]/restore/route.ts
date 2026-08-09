@@ -4,6 +4,7 @@ import { getAuthContext, assertCanWrite } from '@/lib/get-auth'
 import { canAccessModule, type ModuleKey } from '@/lib/staff-permissions'
 import { assertPeriodNotLocked, PeriodLockedError } from '@/lib/period-lock'
 import { apiError } from '@/lib/api-error'
+import { stockAffectingLines } from '@/lib/inventory-tracking'
 
 /**
  * POST /api/transactions/[id]/restore
@@ -96,8 +97,18 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         // lines: the check now tests the TOTAL quantity being re-applied rather
         // than each line in isolation, so the clamp-at-0 fallback triggers on
         // the real shortfall instead of a partial one.
+        // Restoring re-applies what the void gave back. The void skipped
+        // services, so the restore must skip exactly the same rows or an
+        // un-void would invent stock the product never had. Loaded inside the
+        // lock, like the DELETE side, so the two cannot disagree.
+        const restoreProducts = await tx.product.findMany({
+          where: { id: { in: [...new Set(items.map(i => i.productId).filter(Boolean) as string[])] }, userId },
+          select: { id: true, tracksInventory: true },
+        })
+        const restoreProductMap = new Map(restoreProducts.map(p => [p.id, p]))
+
         const applyByProduct = new Map<string, number>()
-        for (const item of items) {
+        for (const item of stockAffectingLines(items, restoreProductMap)) {
           if (!item.productId) continue
           applyByProduct.set(
             item.productId,

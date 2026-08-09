@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Search, Package, ChevronDown, X, Folder, ScanLine } from 'lucide-react'
 import { cn, formatINR } from '@/lib/utils'
+import { isService } from '@/lib/inventory-tracking'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { useAppStore } from '@/store/app-store'
 import { BarcodeScanner } from '@/components/common/BarcodeScanner'
@@ -114,7 +115,12 @@ export function ProductPicker({
               <span>{formatINR(value.unitPrice)}</span>
               <span>•</span>
               <span>GST {value.gstRate}%</span>
-              {selectedProduct.currentStock !== undefined && (
+              {isService(selectedProduct) ? (
+                <>
+                  <span>•</span>
+                  <span className="text-violet-600 dark:text-violet-400">Service</span>
+                </>
+              ) : selectedProduct.currentStock !== undefined && (
                 <>
                   <span>•</span>
                   <span className={cn(
@@ -249,13 +255,18 @@ export function ProductPicker({
                       <span>GST {p.gstRate}%</span>
                     </div>
                   </div>
+                  {/* The stock column is the reason a shopkeeper hesitates
+                      over a row. For a service there is nothing to hesitate
+                      about — showing "0 pcs" in red would say the opposite of
+                      the truth, which is that it can always be sold. */}
                   <div className="text-right flex-shrink-0">
                     <p className={cn(
                       'text-2xs font-medium',
+                      isService(p) ? 'text-violet-600 dark:text-violet-400' :
                       p.currentStock <= 0 ? 'text-rose-600' :
                       p.isLowStock ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'
                     )}>
-                      {p.currentStock} {p.unit}
+                      {isService(p) ? 'Service' : `${p.currentStock} ${p.unit}`}
                     </p>
                   </div>
                 </button>

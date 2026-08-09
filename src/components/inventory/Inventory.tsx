@@ -15,6 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useAppStore } from '@/store/app-store'
 import { toast as sonnerToast } from 'sonner'
 import { formatINR, cn } from '@/lib/utils'
+import { isService } from '@/lib/inventory-tracking'
 import { ProductDialog } from './ProductDialog'
 import { ViewModeToggle } from '@/components/common/ViewModeToggle'
 import { EmptyState } from '@/components/common/EmptyState'
@@ -108,12 +109,14 @@ export function Inventory() {
       if (!matchSearch) return false
     }
     if (filter === 'low' && !p.isLowStock) return false
-    if (filter === 'out' && p.currentStock > 0) return false
+    // "Out of stock" means a good you have run out of. A service is never in
+    // that list — its currentStock is a permanent 0 that means nothing.
+    if (filter === 'out' && (p.currentStock > 0 || isService(p))) return false
     return true
   })
 
   const lowStockCount = products.filter(p => p.isLowStock).length
-  const outOfStockCount = products.filter(p => p.currentStock <= 0).length
+  const outOfStockCount = products.filter(p => !isService(p) && p.currentStock <= 0).length
   const totalStockValue = products.reduce((s, p) => s + (p.stockValue || 0), 0)
   // 🔒 R15-4 (Round 15): Clamp negative stock at 0 for profit calculation.
   // Was: `(p.currentStock || 0) * margin` — an oversold product (stock -50,
@@ -361,13 +364,19 @@ export function Inventory() {
                       </td>
                       <td className="py-3 px-2 text-right">{formatINR(p.purchasePrice)}</td>
                       <td className="py-3 px-2 text-right">{formatINR(p.salePrice)}</td>
+                      {/* A service has no stock number. Printing "0" in red
+                          would be a fabricated fact — the same rule the money
+                          sweep applied to ₹0 — so it prints an em dash. */}
                       <td className={cn('py-3 px-2 text-right font-medium',
+                        isService(p) ? 'text-muted-foreground' :
                         p.currentStock <= 0 ? 'text-rose-600' :
                         p.isLowStock ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'
                       )}>
-                        {p.currentStock} <span className="text-3xs text-muted-foreground">{p.unit}</span>
+                        {isService(p)
+                          ? <span title="Service — no stock is counted">—</span>
+                          : <>{p.currentStock} <span className="text-3xs text-muted-foreground">{p.unit}</span></>}
                       </td>
-                      <td className="py-3 px-2 text-right">{formatINR(p.stockValue)}</td>
+                      <td className="py-3 px-2 text-right">{isService(p) ? '—' : formatINR(p.stockValue)}</td>
                       {/* 🔒 R15-2 (Round 15): Hide profit cell for hideProfit. */}
                       {!hideProfit && (
                         <td className="py-3 px-2 text-right text-emerald-600 dark:text-emerald-400 font-medium">
@@ -376,7 +385,9 @@ export function Inventory() {
                         </td>
                       )}
                       <td className="py-3 px-2 text-center">
-                        {p.isLowStock ? (
+                        {isService(p) ? (
+                          <Badge variant="outline" className="text-3xs">Service</Badge>
+                        ) : p.isLowStock ? (
                           <Badge variant="destructive" className="text-3xs">
                             {p.currentStock <= 0 ? 'Out' : 'Low'}
                           </Badge>
@@ -477,6 +488,7 @@ function ProductGridCard({ product: p, onEdit }: { product: any; onEdit: () => v
           {/* Product icon — colored circle with first letter */}
           <div className={cn(
             'w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 font-bold text-sm text-white',
+            isService(p) ? 'bg-gradient-to-br from-violet-500 to-purple-600' :
             p.currentStock <= 0 ? 'bg-gradient-to-br from-rose-500 to-red-600' :
             p.isLowStock ? 'bg-gradient-to-br from-amber-500 to-orange-600' :
             'bg-gradient-to-br from-blue-500 to-indigo-600'
@@ -519,33 +531,43 @@ function ProductGridCard({ product: p, onEdit }: { product: any; onEdit: () => v
           )}
         </div>
 
-        {/* Stock indicator — visual bar */}
-        <div className="mt-2 pt-2 border-t border-border">
-          <div className="flex items-center justify-between mb-1">
-            <span className="text-3xs text-muted-foreground uppercase">Stock</span>
-            <span className={cn(
-              'text-xs font-bold tabular-nums',
-              p.currentStock <= 0 ? 'text-rose-600' :
-              p.isLowStock ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'
-            )}>
-              {p.currentStock} {p.unit}
-            </span>
+        {/* Stock indicator — visual bar.
+            A service gets a plain label instead. An empty bar and a bold red
+            "0 pcs" would be a statement about a quantity that does not exist,
+            and it is the exact thing that made services look broken. */}
+        {isService(p) ? (
+          <div className="mt-2 pt-2 border-t border-border flex items-center justify-between">
+            <span className="text-3xs text-muted-foreground uppercase">Type</span>
+            <span className="text-xs font-semibold text-violet-600 dark:text-violet-400">Service — no stock</span>
           </div>
-          {/* Stock level bar — visual indicator */}
-          <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-            <div
-              className={cn(
-                'h-full rounded-full transition-all',
-                p.currentStock <= 0 ? 'bg-rose-500' :
-                p.isLowStock ? 'bg-amber-500' : 'bg-emerald-500'
-              )}
-              style={{ width: `${stockPct}%` }}
-            />
+        ) : (
+          <div className="mt-2 pt-2 border-t border-border">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-3xs text-muted-foreground uppercase">Stock</span>
+              <span className={cn(
+                'text-xs font-bold tabular-nums',
+                p.currentStock <= 0 ? 'text-rose-600' :
+                p.isLowStock ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'
+              )}>
+                {p.currentStock} {p.unit}
+              </span>
+            </div>
+            {/* Stock level bar — visual indicator */}
+            <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+              <div
+                className={cn(
+                  'h-full rounded-full transition-all',
+                  p.currentStock <= 0 ? 'bg-rose-500' :
+                  p.isLowStock ? 'bg-amber-500' : 'bg-emerald-500'
+                )}
+                style={{ width: `${stockPct}%` }}
+              />
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* Low stock alert / Oversold alert */}
-        {p.currentStock < 0 ? (
+        {/* Low stock alert / Oversold alert — neither can apply to a service */}
+        {isService(p) ? null : p.currentStock < 0 ? (
           // 🔒 V11: Distinct OVERSOLD badge for negative stock (separate from "Out").
           // 🔒 DI-2 (auditor spec): badge is now a BUTTON — tap to open New
           // Purchase pre-filled with this product + the shortfall quantity.
