@@ -263,6 +263,30 @@ describe('every stock write consults the predicate', () => {
     expect(calls.length).toBe(2)  // block mode and allow mode
   })
 
+  test('the dashboard counts services as products but not as stock', () => {
+    /*
+     * I got this wrong on the first pass and browser verification caught it.
+     *
+     * The filter was put on the WHERE clause, which applies to all three
+     * aggregates at once — so a salon with eight services and two goods
+     * reported "Total products: 2". A service is a product; it is just not
+     * a product with a stock level.
+     *
+     * The two populations must stay separate: productCount over everything,
+     * lowStockCount and stockValue over goods only.
+     */
+    const src = fs.readFileSync(path.join(API_DIR, 'dashboard', 'route.ts'), 'utf8')
+    const totals = src.slice(src.indexOf('AS "productCount"') - 400, src.indexOf('AS "stockValuePaise"') + 200)
+
+    // The stock aggregates carry their own FILTER ...
+    expect(totals).toMatch(/FILTER \(\s*WHERE "tracksInventory" = true AND "currentStock" <= "lowStockThreshold"\s*\)/)
+    expect(totals).toMatch(/FILTER \(WHERE "tracksInventory" = true\)/)
+    // ... and the WHERE clause does NOT, or it would silently re-apply to
+    // productCount and put the bug straight back.
+    const whereClause = src.slice(src.indexOf('AS "stockValuePaise"'), src.indexOf('AS "stockValuePaise"') + 300)
+    expect(whereClause).not.toMatch(/WHERE "userId" = \$\{userId\}\s*\n\s*AND "tracksInventory"/)
+  })
+
   test('the sweep actually looks at the known stock-writing routes', () => {
     // A sweep that silently matches nothing passes forever. This asserts the
     // walk and the pattern still find the five paths the fix touched — if a

@@ -162,19 +162,30 @@ export async function GET(req: NextRequest) {
           lowStockCount: bigint
           stockValuePaise: string
         }>>`
+          -- Three numbers, TWO different populations. The filter belongs on
+          -- the stock ones only:
+          --
+          --   productCount   -- every product, INCLUDING services. A salon
+          --                     that sells eight services sells eight things;
+          --                     "Total products: 0" would be absurd. Filtering
+          --                     this was a bug caught in browser verification.
+          --   lowStockCount  -- goods only. A service sits at 0 <= threshold
+          --                     forever, so it would report as needing a
+          --                     restock that can never happen.
+          --   stockValue     -- goods only. A service is worth nothing in a
+          --                     godown because it is not in one.
           SELECT
             COUNT(*)::bigint AS "productCount",
-            COUNT(*) FILTER (WHERE "currentStock" <= "lowStockThreshold")::bigint AS "lowStockCount",
+            COUNT(*) FILTER (
+              WHERE "tracksInventory" = true AND "currentStock" <= "lowStockThreshold"
+            )::bigint AS "lowStockCount",
             COALESCE(
-              SUM(ROUND(GREATEST("currentStock", 0)::numeric * "purchasePrice"::numeric)),
+              SUM(ROUND(GREATEST("currentStock", 0)::numeric * "purchasePrice"::numeric))
+                FILTER (WHERE "tracksInventory" = true),
               0
             )::numeric AS "stockValuePaise"
           FROM "Product"
           WHERE "userId" = ${userId}
-            -- Services hold no stock. Without this a salon's "Haircut" sits at
-            -- 0 <= threshold forever, so the dashboard's "N products need
-            -- restocking" headline counts every service the shop offers.
-            AND "tracksInventory" = true
         `,
         // The display list only — capped. Same ordering as the old JS sort
         // (most-depleted first).
