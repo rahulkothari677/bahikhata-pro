@@ -92,7 +92,7 @@ export async function GET(req: NextRequest) {
      * Computed from the same books the quarterly CMP-08 was, so the two agree
      * by construction. Four quarters, Apr-Jun, Jul-Sep, Oct-Dec, Jan-Mar.
      */
-    const quarters = []
+    const quarters: Array<{ quarter: string; turnover: number; tax: number }> = []
     let paidTotal = 0
     for (let q = 0; q < 4; q++) {
       const qStart = new Date(startYear, 3 + q * 3, 1)
