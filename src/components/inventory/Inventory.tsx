@@ -379,7 +379,8 @@ export function Inventory() {
                       <td className="py-3 px-2 text-right">{isService(p) ? '—' : formatINR(p.stockValue)}</td>
                       {/* 🔒 R15-2 (Round 15): Hide profit cell for hideProfit. */}
                       {!hideProfit && (
-                        <td className="py-3 px-2 text-right text-emerald-600 dark:text-emerald-400 font-medium">
+                        <td className={cn('py-3 px-2 text-right font-medium',
+                          profit < 0 ? 'text-rose-600' : 'text-emerald-600 dark:text-emerald-400')}>
                           {formatINR(profit)}
                           <span className="text-3xs text-muted-foreground ml-1">({margin.toFixed(0)}%)</span>
                         </td>
@@ -522,9 +523,14 @@ function ProductGridCard({ product: p, onEdit }: { product: any; onEdit: () => v
           </div>
           {!hideProfit && (
             <div className="text-right">
-              <p className="text-3xs text-muted-foreground uppercase">Profit</p>
-              <p className="text-sm font-semibold text-emerald-600 dark:text-emerald-400 tabular-nums">
-                +{formatINR(profit)}
+              <p className="text-3xs text-muted-foreground uppercase">{profit < 0 ? 'Loss' : 'Profit'}</p>
+              {/* The "+" used to be hardcoded, so a product sold below cost
+                  read "+-₹180" in green — a loss painted as a gain, with a
+                  stray double sign. The sign, the colour and the word now all
+                  follow the number. */}
+              <p className={cn('text-sm font-semibold tabular-nums',
+                profit < 0 ? 'text-rose-600' : 'text-emerald-600 dark:text-emerald-400')}>
+                {profit >= 0 ? '+' : ''}{formatINR(profit)}
                 <span className="text-3xs text-muted-foreground ml-0.5">({margin.toFixed(0)}%)</span>
               </p>
             </div>
