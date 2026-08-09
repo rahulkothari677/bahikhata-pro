@@ -9,6 +9,7 @@ import { captureGstFilingError } from '@/lib/sentry-gst'
 import { logAudit } from '@/lib/audit'
 import { deriveStateCode } from '@/lib/gst'
 import { getAdvancesForPeriod } from '@/lib/advances-for-period'
+import { buildAmendments, filedInvoicesFrom } from '@/lib/gstr1-amendments'
 import { buildGstr1, type Gstr1Transaction, type ShopInfo } from '@/lib/gstr1-builder'
 import { getPriorFYBounds } from '@/lib/fiscal-year'
 
@@ -193,8 +194,90 @@ export async function GET(req: NextRequest) {
     // helper GSTR-3B uses, so the two returns cannot disagree about advances.
     const advances = await getAdvancesForPeriod(userId, periodStart, periodEnd, shopStateCode)
 
+    /*
+     * Table 9A — invoices from earlier FILED returns that have since changed.
+     *
+     * Only FILED periods produce amendments: a draft can still be corrected in
+     * place, and amending something never filed would declare a correction to a
+     * return the department has never seen.
+     *
+     * The comparison is against the books as they stand, not against an "edited"
+     * flag, because a total can move by routes no flag would catch — a line
+     * deleted, a price corrected, a discount applied later. The honest question
+     * is whether the invoice still says what we told the department it said.
+     */
+    const filedSnapshots = await db.gstr1Snapshot.findMany({
+      where: { userId, filingStatus: 'filed', monthYear: { not: monthYear } },
+      take: 120,  // ten years of monthly filings — a shop cannot have more
+      select: { monthYear: true, rawJson: true, periodStart: true },
+    })
+    const filedInvoices = filedSnapshots
+      .filter((s) => s.periodStart < periodStart)   // earlier periods only
+      .flatMap((s) => filedInvoicesFrom(s.rawJson, s.monthYear))
+
+    let amendments: { b2ba: Array<{ ctin: string; inv: unknown[] }>; b2cla: Array<{ pos: string; inv: unknown[] }> } =
+      { b2ba: [], b2cla: [] }
+    if (filedInvoices.length > 0) {
+      const nums = [...new Set(filedInvoices.map((f) => f.inum))]
+      /*
+       * Two queries, not one with the soft-delete filter dropped.
+       *
+       * Cancellation matters here — an invoice deleted after filing must still
+       * be amended to nil, or the buyer keeps claiming credit on a bill that no
+       * longer exists. The lazy way to get both is to omit `deletedAt`
+       * entirely, but this file has other transaction queries that must keep
+       * filtering it, and the sweep guard works per FILE: one blanket exception
+       * would stop protecting those too. So each query says explicitly which
+       * set it wants.
+       */
+      const [live, cancelled] = await Promise.all([
+        db.transaction.findMany({
+          where: { userId, invoiceNo: { in: nums }, type: 'sale', deletedAt: null },
+          take: 5000,
+          select: {
+            invoiceNo: true, date: true, totalAmount: true,
+            party: { select: { gstin: true, state: true } },
+          },
+        }),
+        db.transaction.findMany({
+          where: { userId, invoiceNo: { in: nums }, type: 'sale', deletedAt: { not: null } },
+          take: 5000,
+          select: { invoiceNo: true },
+        }),
+      ])
+      const cancelledNums = new Set(cancelled.map((t) => String(t.invoiceNo)))
+
+      const current = new Map(
+        live.map((t) => {
+          const partyState = deriveStateCode(t.party?.state || null, null, t.party?.gstin || null, null)
+          return [String(t.invoiceNo), {
+            inum: String(t.invoiceNo),
+            idt: formatPortalDateForAmendment(t.date),
+            val: roundMoney(t.totalAmount),
+            pos: partyState || shopStateCode || '',
+            ctin: t.party?.gstin || undefined,
+            // These came from the live query, so they exist by construction.
+            exists: true,
+          }]
+        }),
+      )
+      /*
+       * A cancelled invoice is absent from `live`, and buildAmendments already
+       * treats "not present" as cancelled. Adding it explicitly makes the
+       * intent legible rather than relying on an absence, and keeps working if
+       * the live query ever grows a narrower filter.
+       */
+      for (const inum of cancelledNums) {
+        if (!current.has(inum)) {
+          current.set(inum, { inum, idt: '', val: 0, pos: '', ctin: undefined, exists: false })
+        }
+      }
+      amendments = buildAmendments(filedInvoices, current) as typeof amendments
+    }
+
     // Build the GSTR-1 JSON
     const gstr1 = buildGstr1(builderTxns, shop, monthYear, {
+      amendments,
       priorFyTurnover,
       cancelled: cancelledForDoc,
       advancesReceivedThisPeriod: advances.receivedThisPeriod,
@@ -487,4 +570,12 @@ export async function POST(req: NextRequest) {
     })
     return apiError(err, 'Failed to save GSTR-1', 500)
   }
+}
+
+
+/** dd-mm-yyyy, the only date format the portal accepts. Matches the builder. */
+function formatPortalDateForAmendment(date: Date): string {
+  const d = String(date.getDate()).padStart(2, '0')
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  return d + '-' + m + '-' + date.getFullYear()
 }

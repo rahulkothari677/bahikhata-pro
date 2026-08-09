@@ -233,6 +233,9 @@ export interface Gstr1Result {
   hsn: { data: Gstr1HsnEntry[] }
   nil: { inv: Gstr1NilEntry[] }
   doc_issue: { doc_det: Gstr1DocEntry[] }
+  /** Table 9A — invoices from earlier FILED returns that have since changed. */
+  b2ba: Array<{ ctin: string; inv: unknown[] }>
+  b2cla: Array<{ pos: string; inv: unknown[] }>
   /** Table 11A — advances received this period on which tax is due. */
   at: Gstr1AdvanceEntry[]
   /** Table 11B — earlier advances released against invoices raised this period. */
@@ -1019,6 +1022,8 @@ export function buildGstr1(
      */
     advancesReceivedThisPeriod?: AdvanceReceipt[]
     advancesFromEarlierPeriods?: AdvanceReceipt[]
+    /** Table 9A, computed by the caller — it needs the filed snapshots. */
+    amendments?: { b2ba: Array<{ ctin: string; inv: unknown[] }>; b2cla: Array<{ pos: string; inv: unknown[] }> }
   },
 ): Gstr1Result {
   // 🔒 V26 N9: cur_gt = current-period outward turnover (computed from txns).
@@ -1039,6 +1044,8 @@ export function buildGstr1(
     hsn: buildHSN(txns),
     nil: buildNIL(txns),
     doc_issue: buildDOC(txns, options?.cancelled || []),
+    b2ba: options?.amendments?.b2ba || [],
+    b2cla: options?.amendments?.b2cla || [],
     at: buildAT(options?.advancesReceivedThisPeriod || []),
     txpd: buildTXPD(options?.advancesFromEarlierPeriods || []),
   }
