@@ -96,8 +96,15 @@ export function computeLineItems(opts: {
   isInterState: boolean
   orderDiscount: number
   type: string
+  /*
+   * A composition dealer may NOT collect GST — they pay a flat percentage of
+   * turnover from their own margin. Passing this forces every line to 0%, so
+   * the rule is enforced where the rate is decided rather than trusted to each
+   * screen that could send one.
+   */
+  isComposition?: boolean
 }): LineItemResult {
-  const { items, productMap, isInterState, orderDiscount, type } = opts
+  const { items, productMap, isInterState, orderDiscount, type, isComposition } = opts
 
   // 🔒 V17 Phase 3: Convert order discount to paise once (integer for all math)
   const orderDiscountPaise = toPaise(toMoney(orderDiscount))
@@ -118,7 +125,15 @@ export function computeLineItems(opts: {
     const norm = resolveEnteredQuantity(rawQuantity, rawUnit, product?.unit)
     const quantity = norm.quantity
     const unit = norm.unit
-    const gstRate = toMoney(item.gstRate) || 0
+    /*
+     * A composition dealer charges nothing, whatever arrived in the request.
+     *
+     * Enforced here rather than merely hidden in the UI: a cached screen, a
+     * sale queued offline before the shop switched schemes, or a direct API
+     * call would otherwise put tax on a Bill of Supply — which is illegal and
+     * overcharges the customer at the same time.
+     */
+    const gstRate = isComposition ? 0 : (toMoney(item.gstRate) || 0)
     const enteredPriceRupees = toMoney(item.unitPrice)
     // GST-inclusive: back-calculate the taxable (ex-GST) unit price so the
     // stored line and all reports stay GST-correct. Falls back to product flag.

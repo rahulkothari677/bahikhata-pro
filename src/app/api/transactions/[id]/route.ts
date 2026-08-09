@@ -291,7 +291,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const [setting, oldItems] = await Promise.all([
       db.setting.findUnique({
         where: { userId },
-        select: { roundOffEnabled: true, stockPolicy: true },
+        select: { roundOffEnabled: true, stockPolicy: true, compositionCategory: true },
       }),
       db.transactionItem.findMany({ where: { transactionId: id } }),
     ])
@@ -414,7 +414,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     // 🔒 AUDITOR FIX: Was a duplicated preSubtotal block (same as POST). Now:
     // call computeLineItems FIRST, then use computed.subtotal for the
     // over-discount check. Same pattern, same guarantee — no drift possible.
-    const computed = computeLineItems({ items, productMap, isInterState, orderDiscount, type })
+    // A composition dealer collects no GST — forced at the rate, not left to
+    // the screen that sent it. See line-items.ts.
+    const computed = computeLineItems({ items, productMap, isInterState, orderDiscount, type, isComposition: !!setting?.compositionCategory })
     const txItems = computed.txItems
     const subtotal = computed.subtotal
     const cgst = computed.cgst
