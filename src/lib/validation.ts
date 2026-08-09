@@ -52,6 +52,18 @@ export const transactionItemSchema = z.object({
   quantity: z.coerce.number().positive('Quantity must be positive').max(1000000, 'Quantity too large'),
   unitPrice: z.coerce.number().min(0, 'Unit price cannot be negative').max(10000000, 'Unit price too large'),
   gstRate: z.coerce.number().min(0).max(100).optional().default(0),
+  /*
+   * HSN/SAC for a line with no product behind it.
+   *
+   * Zod strips what it does not declare, so a code sent on a free-text line was
+   * being discarded here — before line-items.ts ever saw it. The line then
+   * stored no HSN, could not reach GSTR-1 Table 12, and (because a missing code
+   * reads as "goods") raised a false e-way bill warning on every free-text
+   * service over ₹50,000.
+   *
+   * Product-linked lines ignore this and keep using the product's own code.
+   */
+  hsn: z.string().max(20).nullable().optional(),
   // 🔒 V18 BUG-010: Removed the per-item `discountAmount` input. It was
   // accepted here but NEVER read by computeLineItems — the discount is entered
   // at the ORDER level and distributed proportionally across items. Accepting a
