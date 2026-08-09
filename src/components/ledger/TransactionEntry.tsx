@@ -1494,19 +1494,25 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                             <span>GST {p.gstRate}%</span>
                           </div>
                         </div>
+                        {/* The stock column while billing. For a service this
+                            read "0 pcs" in red with an OUT badge — telling the
+                            tailor mid-bill that the thing they are about to
+                            sell is unavailable, when in fact it always is.
+                            The sale saved regardless; the screen was the lie. */}
                         <div className="text-right flex-shrink-0">
                           <p className={cn(
                             'text-2xs font-medium',
+                            isService(p) ? 'text-violet-600 dark:text-violet-400' :
                             p.currentStock <= 0 ? 'text-rose-600' :
                             p.isLowStock ? 'text-amber-600 dark:text-amber-400' : 'text-emerald-600 dark:text-emerald-400'
                           )}>
-                            {p.currentStock} {p.unit}
+                            {isService(p) ? 'Service' : `${p.currentStock} ${p.unit}`}
                           </p>
                           {/* 🔒 V8 U6: Inline stock badge for quick visibility while billing */}
-                          {p.currentStock <= 0 && (
+                          {!isService(p) && p.currentStock <= 0 && (
                             <span className="text-3xs font-bold text-rose-600 bg-rose-50 dark:bg-rose-950/30 px-1.5 py-0.5 rounded-full">OUT</span>
                           )}
-                          {p.currentStock > 0 && p.isLowStock && (
+                          {!isService(p) && p.currentStock > 0 && p.isLowStock && (
                             <span className="text-3xs font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/30 px-1.5 py-0.5 rounded-full">LOW</span>
                           )}
                         </div>
