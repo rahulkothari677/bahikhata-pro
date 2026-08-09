@@ -292,3 +292,69 @@ export async function POST(req: NextRequest) {
     return apiError(err, 'Failed to import GSTR-2B', 500)
   }
 }
+
+/**
+ * DELETE /api/gstr-2b/import?monthYear=082026
+ *
+ * Remove a GSTR-2B import.
+ *
+ * WHY THIS HAS TO EXIST (2026-08-09). There was no way to undo an import. That
+ * is not a missing convenience: this app limits input credit to what GSTR-2B
+ * contains under Rule 36(4), so an import DIRECTLY decides how much tax the
+ * shopkeeper pays. Upload the wrong month, or a file that parsed badly, and the
+ * claim was wrong with no way back — and the readiness card would report that
+ * credit HAD been checked, which is worse than it reporting nothing.
+ *
+ * This codebase has been here before: the bank-statement importer offered
+ * upload, match and unmatch with no way back, and that was fixed for the same
+ * reason. An import that cannot be undone is a one-way door on someone's money.
+ *
+ * Deleting the import removes its invoices with it, and the ITC basis falls
+ * back to the books — the state the shop was in before uploading.
+ */
+export async function DELETE(req: NextRequest) {
+  try {
+    const authCtx = await getAuthContext()
+    if (authCtx.error || !authCtx.userId) {
+      return authCtx.error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    if (!canAccessModule(authCtx.role, authCtx.permissions, 'reports')) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+    const writeError = assertCanWrite(authCtx)
+    if (writeError) return writeError
+    const userId = authCtx.userId
+
+    const monthYear = new URL(req.url).searchParams.get('monthYear')
+    if (!monthYear || !/^\d{6}$/.test(monthYear)) {
+      return NextResponse.json({ error: 'monthYear is required (MMYYYY, e.g. 082026)' }, { status: 400 })
+    }
+
+    const existing = await db.gstr2bImport.findUnique({
+      where: { userId_monthYear: { userId, monthYear } },
+      select: { id: true, invoiceCount: true },
+    })
+    if (!existing) {
+      return NextResponse.json({ error: 'No GSTR-2B import found for that month' }, { status: 404 })
+    }
+
+    await db.gstr2bImport.delete({ where: { id: existing.id } })
+
+    await logAudit({
+      userId,
+      action: 'delete',
+      entityType: 'gstr2bImport',
+      entityId: existing.id,
+      // A deletion that changes how much tax is claimable must be answerable
+      // later, so the month and the size of what went are both recorded.
+      metadata: { monthYear, invoiceCount: existing.invoiceCount },
+    })
+
+    return NextResponse.json({
+      success: true,
+      message: `GSTR-2B for ${monthYear} removed. Input credit is back on your own books until you import again.`,
+    })
+  } catch (err) {
+    return apiError(err, 'Failed to remove the GSTR-2B import', 500)
+  }
+}
