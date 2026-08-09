@@ -99,13 +99,32 @@ export function compositionLimitFor(category: CompositionCategory, stateCode: st
 export function compositionTaxFor(turnover: number, category: CompositionCategory) {
   const rate = COMPOSITION_RATES[category]
   const t = Math.max(0, Number(turnover) || 0)
-  const round2 = (n: number) => Math.round(n * 100) / 100
+
+  /*
+   * The TOTAL is computed first and the halves are carved out of it — CGST is
+   * half rounded down, SGST is whatever remains.
+   *
+   * Rounding each half independently let them miss the total by a paisa: 1% of
+   * ₹5,56,230.53 is ₹5,562.31, but half of it rounds to ₹2,781.15 twice, which
+   * sums to ₹5,562.30. CMP-08 declares the total, so it did not break a filing
+   * — but a CA reconciling the two heads against the total finds a difference
+   * that has no explanation, and unexplained paise are how trust in a figure
+   * goes. Same allocation rule the sale lines already use for CGST/SGST.
+   *
+   * Tax in paise is `rupees × rate` exactly: converting rupees to paise (×100)
+   * and taking a percentage (÷100) cancel out. Doing it in one step keeps the
+   * whole calculation on integers, with no intermediate float to drift.
+   */
+  const taxPaise = Math.round(t * rate.total)
+  const cgstPaise = Math.floor(taxPaise / 2)
+  const sgstPaise = taxPaise - cgstPaise
+
   return {
-    turnover: round2(t),
+    turnover: Math.round(t * 100) / 100,
     rate: rate.total,
-    cgst: round2((t * rate.cgst) / 100),
-    sgst: round2((t * rate.sgst) / 100),
-    total: round2((t * rate.total) / 100),
+    cgst: cgstPaise / 100,
+    sgst: sgstPaise / 100,
+    total: taxPaise / 100,
   }
 }
 
@@ -133,4 +152,36 @@ export function cmp08DueDate(year: number, quarterEndMonth: number): Date {
   const m = quarterEndMonth % 12          // December rolls into January
   const y = quarterEndMonth === 12 ? year + 1 : year
   return new Date(y, m, 18)
+}
+
+/**
+ * What a composition dealer's sale document is called, and what it may show.
+ *
+ * A composition dealer may NOT issue a tax invoice, because they may not
+ * collect tax. They issue a BILL OF SUPPLY: same list of goods, same total, no
+ * tax lines at all, and the prescribed declaration on its face telling the
+ * customer they cannot claim credit from it.
+ *
+ * Returned as one object rather than three separate helpers so a screen cannot
+ * pick up the title without also picking up the rule about tax — printing
+ * "Bill of Supply" over a CGST column would be worse than printing neither.
+ */
+export interface SaleDocumentKind {
+  /** What to print at the top. */
+  title: string
+  /** May this document show tax columns and a tax breakdown? */
+  showsTax: boolean
+  /** Line that must appear on the document, or null on a normal tax invoice. */
+  declaration: string | null
+}
+
+export function saleDocumentKind(compositionCategory: string | null | undefined): SaleDocumentKind {
+  if (compositionCategory) {
+    return {
+      title: 'Bill of Supply',
+      showsTax: false,
+      declaration: BILL_OF_SUPPLY_DECLARATION,
+    }
+  }
+  return { title: 'Tax Invoice', showsTax: true, declaration: null }
 }

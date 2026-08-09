@@ -2,6 +2,7 @@
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { EwayBillNotice } from '@/components/ledger/EwayBillNotice'
+import { BillOfSupplyNotice } from '@/components/ledger/BillOfSupplyNotice'
 import { eInvoiceApplicability } from '@/lib/einvoice-applicability'
 import { useState, useEffect } from 'react'
 import { useSession } from 'next-auth/react'
@@ -654,6 +655,13 @@ export function TransactionDetail() {
             * Print and Send bill are — so it is the moment the decision still
             * matters. It goes quiet once a number is recorded.
             */}
+          {/*
+            * A composition dealer issues a Bill of Supply, not a tax invoice.
+            * Above the e-way bill notice because it changes what this document
+            * IS, not merely what still has to be done about it.
+            */}
+          <BillOfSupplyNotice compositionCategory={settingData?.setting?.compositionCategory} type={txn.type} />
+
           <EwayBillNotice
             totalAmount={txn.totalAmount}
             isInterState={!!txn.isInterState}

@@ -13,7 +13,7 @@
  */
 import {
   COMPOSITION_RATES, COMPOSITION_LIMITS, compositionLimitFor, compositionTaxFor,
-  canCollectTax, cmp08DueDate, BILL_OF_SUPPLY_DECLARATION,
+  canCollectTax, cmp08DueDate, BILL_OF_SUPPLY_DECLARATION, saleDocumentKind,
 } from '@/lib/composition-scheme'
 
 describe('a composition dealer cannot collect tax', () => {
@@ -99,5 +99,66 @@ describe('CMP-08 is quarterly, not monthly', () => {
     expect(d.getFullYear()).toBe(2027)
     expect(d.getMonth()).toBe(0)
     expect(d.getDate()).toBe(18)
+  })
+})
+
+describe('the two heads always add up to the total', () => {
+  /*
+   * Rounding each half independently let them miss by a paisa: 1% of
+   * ₹5,56,230.53 is ₹5,562.31, but half rounds to ₹2,781.15 twice and sums to
+   * ₹5,562.30. CMP-08 declares the total so no filing broke — but a CA
+   * reconciling the heads against the total finds a difference with no
+   * explanation, and that is how trust in a figure goes.
+   */
+  it('reconciles on the real figure that exposed it', () => {
+    const r = compositionTaxFor(556230.53, 'trader')
+    expect(r.total).toBe(5562.31)
+    expect(Math.round((r.cgst + r.sgst) * 100) / 100).toBe(r.total)
+  })
+
+  it('never splits unevenly by more than a paisa', () => {
+    for (const t of [1, 33.33, 100.01, 999.99, 12345.67, 556230.53, 7777777.77]) {
+      for (const c of ['trader', 'restaurant', 'service'] as const) {
+        const r = compositionTaxFor(t, c)
+        // Compared in PAISE. `0.01` in floats is 0.010000000000000009, so a
+        // rupee comparison fails on a difference that is exactly one paisa.
+        expect(Math.round(r.cgst * 100) + Math.round(r.sgst * 100))
+          .toBe(Math.round(r.total * 100))
+        expect(Math.abs(Math.round(r.cgst * 100) - Math.round(r.sgst * 100)))
+          .toBeLessThanOrEqual(1)
+      }
+    }
+  })
+})
+
+describe('the document a composition dealer issues', () => {
+  it('is a Bill of Supply, never a tax invoice', () => {
+    const d = saleDocumentKind('trader')
+    expect(d.title).toBe('Bill of Supply')
+    expect(d.showsTax).toBe(false)
+  })
+
+  it('carries the declaration that stops the customer claiming credit', () => {
+    expect(saleDocumentKind('restaurant').declaration).toBe(BILL_OF_SUPPLY_DECLARATION)
+  })
+
+  it('is a normal tax invoice for a regular shop', () => {
+    const d = saleDocumentKind(null)
+    expect(d.title).toBe('Tax Invoice')
+    expect(d.showsTax).toBe(true)
+    expect(d.declaration).toBeNull()
+  })
+
+  it('ties the title and the tax rule together, so neither can be used alone', () => {
+    /*
+     * Printing "Bill of Supply" above a CGST column would be worse than
+     * printing neither — it asserts no tax was charged while showing tax. They
+     * are returned as one object for that reason.
+     */
+    for (const c of [null, 'trader', 'manufacturer', 'restaurant', 'service']) {
+      const d = saleDocumentKind(c)
+      expect(d.showsTax).toBe(d.title === 'Tax Invoice')
+      expect(d.declaration === null).toBe(d.showsTax)
+    }
   })
 })
