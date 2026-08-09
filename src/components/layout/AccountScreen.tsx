@@ -96,12 +96,14 @@ const PricingPlansComponent = lazy(() =>
  * about first, the shop's own details buried in the middle. Five groups —
  * enough to separate genuinely different things, few enough to scan.
  */
-const ACCOUNT_GROUP_ORDER: { id: AccountGroupId; title: string }[] = [
-  { id: 'business',      title: 'Business' },
-  { id: 'plan',          title: 'Plan & Rewards' },
-  { id: 'app',           title: 'App' },
-  { id: 'data-security', title: 'Data & Security' },
-  { id: 'support',       title: 'Help' },
+// 🐛 2026-08-09: titleKey, not a literal. These five headings stayed English
+// when the rows beneath them switched to Hindi.
+const ACCOUNT_GROUP_ORDER: { id: AccountGroupId; titleKey: string; title: string }[] = [
+  { id: 'business',      titleKey: 'account.group.business',      title: 'Business' },
+  { id: 'plan',          titleKey: 'account.group.plan',          title: 'Plan & Rewards' },
+  { id: 'app',           titleKey: 'account.group.app',           title: 'App' },
+  { id: 'data-security', titleKey: 'account.group.data-security', title: 'Data & Security' },
+  { id: 'support',       titleKey: 'account.group.support',       title: 'Help' },
 ]
 
 export function AccountScreen() {
@@ -160,53 +162,53 @@ export function AccountScreen() {
   // shopName only counts as "filled" if it's NOT the placeholder "My Shop".
   const profileCompletion = useMemo(() => {
     const fields = [
-      { label: 'Shop Name', filled: !!(setting.shopName && setting.shopName.trim() && setting.shopName.trim() !== 'My Shop') },
-      { label: 'Owner Name', filled: !!(setting.ownerName && setting.ownerName.trim()) },
-      { label: 'Phone', filled: !!(setting.phone && setting.phone.trim()) },
-      { label: 'GSTIN', filled: !!(setting.gstin && setting.gstin.trim()) },
-      { label: 'Address', filled: !!(setting.address && setting.address.trim()) },
-      { label: 'Email', filled: !!email },
-      { label: 'Shop Logo', filled: !!setting.logoUrl },
+      { label: t('account.field.shopName'), filled: !!(setting.shopName && setting.shopName.trim() && setting.shopName.trim() !== 'My Shop') },
+      { label: t('account.field.ownerName'), filled: !!(setting.ownerName && setting.ownerName.trim()) },
+      { label: t('account.field.phone'), filled: !!(setting.phone && setting.phone.trim()) },
+      { label: t('account.field.gstin'), filled: !!(setting.gstin && setting.gstin.trim()) },
+      { label: t('account.field.address'), filled: !!(setting.address && setting.address.trim()) },
+      { label: t('account.field.email'), filled: !!email },
+      { label: t('account.field.logo'), filled: !!setting.logoUrl },
     ]
     const filledCount = fields.filter(f => f.filled).length
     const pct = Math.round((filledCount / fields.length) * 100)
     const missing = fields.filter(f => !f.filled).map(f => f.label)
     return { pct, filledCount, total: fields.length, missing, fields }
-  }, [setting.ownerName, setting.shopName, setting.phone, setting.gstin, setting.address, setting.logoUrl, email])
+  }, [setting.ownerName, setting.shopName, setting.phone, setting.gstin, setting.address, setting.logoUrl, email, t])
 
   // 🔒 V22-6 (Phase 4): Business stats from dashboard data.
   // Defensive defaults — if dashboard hasn't loaded yet, show 0/—.
   const kpis = dashboardData?.kpis
   const businessStats = useMemo(() => [
     {
-      label: 'Products',
+      label: t('account.stat.products'),
       value: kpis?.productCount != null ? String(kpis.productCount) : '—',
       icon: Package,
       color: 'text-amber-600 dark:text-amber-400',
       bg: 'bg-amber-100 dark:bg-amber-950',
     },
     {
-      label: 'Customers',
+      label: t('account.stat.customers'),
       value: kpis?.partyCount != null ? String(kpis.partyCount) : '—',
       icon: Users,
       color: 'text-blue-600 dark:text-blue-400',
       bg: 'bg-blue-100 dark:bg-blue-950',
     },
     {
-      label: 'This Month',
+      label: t('account.stat.thisMonth'),
       value: kpis?.rangeRevenue != null ? formatINRCompact(kpis.rangeRevenue) : '—',
       icon: TrendingUp,
       color: 'text-emerald-600 dark:text-emerald-400',
       bg: 'bg-emerald-100 dark:bg-emerald-950',
     },
     {
-      label: 'Receivable',
+      label: t('account.stat.receivable'),
       value: kpis?.totalReceivable != null ? formatINRCompact(kpis.totalReceivable) : '—',
       icon: Wallet,
       color: 'text-rose-600 dark:text-rose-400',
       bg: 'bg-rose-100 dark:bg-rose-950',
     },
-  ], [kpis?.productCount, kpis?.partyCount, kpis?.rangeRevenue, kpis?.totalReceivable])
+  ], [kpis?.productCount, kpis?.partyCount, kpis?.rangeRevenue, kpis?.totalReceivable, t])
 
   const handleBack = () => {
     haptic.click()
@@ -324,10 +326,14 @@ export function AccountScreen() {
     for (const d of NAV_REGISTRY) {
       if (!d.surfaces?.includes('account')) continue
       const s = d.actionParams?.accountSection
-      if (s && !titles[s]) titles[s] = d.label
+      // 🐛 2026-08-09: t(labelKey), not the raw label. The MENU ROW runs its
+      // label through t() but this map did not, so with Hindi selected the
+      // row read "दुकान प्रोफ़ाइल" and the page it opened was headed
+      // "Shop Profile". Same string, two languages, one tap apart.
+      if (s && !titles[s]) titles[s] = d.labelKey ? t(d.labelKey) : d.label
     }
     return titles
-  }, [])
+  }, [t])
 
   // 🔒 AUDIT V25 §6.1 (Batch 8 Phase 7): Menu sections from NavRegistry,
   // filtered by surfaces: ['account'] + permissions. Grouped by subcategory.
@@ -356,7 +362,7 @@ export function AccountScreen() {
 
     const sections = ACCOUNT_GROUP_ORDER
       .filter(g => (grouped.get(g.id)?.length ?? 0) > 0)
-      .map(g => ({ subcategory: g.id, title: g.title, items: grouped.get(g.id)! }))
+      .map(g => ({ subcategory: g.id, title: t(g.titleKey) || g.title, items: grouped.get(g.id)! }))
 
     // Click handler — uses handleNavAction for standard items, custom for Rate/Logout
     const handleClick = (dest: NavDestination) => {
@@ -376,7 +382,7 @@ export function AccountScreen() {
     }
 
     return { accountSections: sections, handleAccountItemClick: handleClick }
-  }, [isOwner])
+  }, [isOwner, t])
 
   return (
     <div className="min-h-screen bg-muted/30 w-full flex-1">
@@ -391,7 +397,7 @@ export function AccountScreen() {
             <ArrowLeft className="w-5 h-5" />
           </button>
           <h2 className="text-lg font-bold">
-            {accountSection ? (sectionTitles[accountSection] || 'Account') : 'Account'}
+            {accountSection ? (sectionTitles[accountSection] || t('account.title')) : t('account.title')}
           </h2>
         </div>
       </div>
@@ -527,7 +533,7 @@ export function AccountScreen() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-semibold">
-                  Profile {profileCompletion.pct}% complete
+                  {t('account.completion.title').replace('{pct}', String(profileCompletion.pct))}
                 </p>
                 <div className="h-1.5 bg-muted rounded-full overflow-hidden mt-1.5">
                   <div
@@ -540,7 +546,7 @@ export function AccountScreen() {
                   />
                 </div>
               </div>
-              <span className="text-3xs font-medium text-primary flex-shrink-0">Complete →</span>
+              <span className="text-3xs font-medium text-primary flex-shrink-0">{t('account.completion.cta')} →</span>
             </div>
             {/* Only the gaps, as chips — a 28px row instead of a 240px list. */}
             <div className="flex flex-wrap gap-1.5 mt-2.5">
@@ -585,9 +591,28 @@ export function AccountScreen() {
                         <Icon className={cn('w-5 h-5', item.iconColor || 'text-muted-foreground')} />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm">{item.labelKey ? t(item.labelKey) : item.label}</p>
-                        {item.description && (
-                          <p className="text-xs text-muted-foreground truncate">{item.description}</p>
+                        <p className="font-medium text-sm flex items-center gap-1.5">
+                          {item.labelKey ? t(item.labelKey) : item.label}
+                          {/* 🐛 2026-08-09: the Account menu never rendered badges, so a row
+                              could not say "Soon" even when the registry marked it. Manage
+                              Shops needed it: the page has one working control. */}
+                          {item.badge && (
+                            <span className={cn(
+                              'text-3xs font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full',
+                              item.badgeColor || 'bg-muted text-muted-foreground',
+                            )}>
+                              {item.badge}
+                            </span>
+                          )}
+                        </p>
+                        {/* 🐛 2026-08-09: t(descKey), not the raw string. The label above
+                            already went through t(), so with Hindi selected every row read
+                            as a Hindi title over an English sentence. i18n.ts carries 126
+                            nav.desc.* translations that nothing had ever rendered. */}
+                        {(item.descKey || item.description) && (
+                          <p className="text-xs text-muted-foreground truncate">
+                            {item.descKey ? t(item.descKey) : item.description}
+                          </p>
                         )}
                       </div>
                       <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition flex-shrink-0" />

@@ -1133,7 +1133,15 @@ export const NAV_REGISTRY: NavDestination[] = [
   {
     id: 'multi-shop-management',
     label: 'Manage Shops',
-    description: 'Add shops and GSTINs for consolidated reporting',
+    // 🐛 2026-08-09: was 'Add shops and GSTINs for consolidated reporting'.
+    // Verified in the browser: the page's only working control is Rename.
+    // Adding a shop is not built — the page itself says 'Multi-shop switching
+    // coming soon'. A menu row must not advertise a capability the page
+    // then apologises for; that is the same false promise the placebo App
+    // Lock made. Honest label + a Soon badge until the real thing ships.
+    description: 'View your shop and GSTIN · switching coming soon',
+    badge: 'Soon',
+    badgeColor: 'bg-muted text-muted-foreground',
     icon: Store,
     iconColor: AMBER,
     iconBg: AMBER_BG,

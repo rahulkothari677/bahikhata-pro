@@ -64,11 +64,30 @@ export function useSetting() {
 
     // Persist to server in background
     try {
-      const currentSetting = setting || {}
+      /*
+       * 🔒 2026-08-09: send ONLY the field being changed.
+       *
+       * This used to PUT `{ ...currentSetting, hideProfit: newValue }` — the
+       * whole settings row, as this client last read it. /api/settings applies
+       * every key present in the body, so that turned a one-field toggle into
+       * a full-row overwrite from a possibly stale snapshot: any change made
+       * since this tab loaded — on the shopkeeper's desktop, by staff, or on a
+       * second phone — was silently reverted.
+       *
+       * Reproduced in a browser against a real database: with the Preferences
+       * page open, setting a UPI ID from elsewhere and then flipping Hide
+       * Profit erased it. Nothing warned anyone; the shop would simply stop
+       * collecting payments, and the Pay button on every bill link would
+       * vanish, because buildUpiLink returns null without a VPA.
+       *
+       * Every other toggle in Settings already sends a single key, and the
+       * route builds its update from `body.X !== undefined`, so partial
+       * writes are what it expects. This was the one outlier.
+       */
       const r = await offlineFetch('/api/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...currentSetting, hideProfit: newValue }),
+        body: JSON.stringify({ hideProfit: newValue }),
         offline: { invalidate: ['/api/settings', '/api/dashboard'] },
       })
       // 🔒 2026-07-22: this is the pattern Settings.tsx cited as its model,
