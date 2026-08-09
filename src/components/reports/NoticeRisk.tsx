@@ -78,8 +78,21 @@ export function NoticeRisk({ month }: { month: string }) {
    *
    * So the good news is quiet and the bad news is loud. When something is
    * actually at stake the full card returns below.
+   *
+   * `data.avoided` COUNTS AS SOMETHING AT STAKE.
+   *
+   * I got this wrong the first time. The condition was `!isNotice &&
+   * differences.length === 0`, which returned this one-liner while credit was
+   * being held back — so "we held back ₹1,620 that is not in your GSTR-2B",
+   * the single most useful number this card produces, rendered nowhere. Found
+   * live, by importing a 2B smaller than the books and looking at the screen.
+   *
+   * It is the same bug as FilingReadiness, in the same file, in the commit
+   * whose message said "good news quiet, bad news loud": I made the good news
+   * so quiet it swallowed a real finding. Held-back credit is not reassurance
+   * — it is money the shopkeeper can still recover by chasing a supplier.
    */
-  if (!isNotice && differences.length === 0) {
+  if (!isNotice && differences.length === 0 && !data.avoided) {
     const checked = data.inputs?.hasGstr2b
       ? 'Rules 88C and 88D'
       : 'Rule 88C'
@@ -100,10 +113,15 @@ export function NoticeRisk({ month }: { month: string }) {
       <div className="p-4 flex items-start gap-3">
         {tone.icon}
         <div className="min-w-0 flex-1">
+          {/* Three cases, not two. The filing can be perfectly safe AND have
+              credit held back — saying "short-paid" there would be plainly
+              wrong, and saying nothing would waste the card. */}
           <p className={`font-semibold text-sm ${tone.title}`}>
             {isNotice
               ? 'Filing this would trigger an automatic notice'
-              : 'No notice — but this period is short-paid'}
+              : differences.length > 0
+                ? 'No notice — but this period is short-paid'
+                : 'No notice — and here is credit worth chasing'}
           </p>
 
           <div className="mt-3 space-y-3">

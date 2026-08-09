@@ -154,6 +154,41 @@ describe('GSTR-3B screen surfaces the notice risk', () => {
     expect(screen.getByText(/Rules 88C and 88D/)).toBeInTheDocument()
   })
 
+  it('shows held-back credit even when the filing itself is clean', async () => {
+    /*
+     * THE BUG THIS CATCHES, found live and not by any test.
+     *
+     * The compact clear-state returned on `!isNotice && differences.length
+     * === 0` — which is TRUE when the filing is safe but Rule 36(4) has held
+     * credit back. So "we held back ₹1,620 that is not in your GSTR-2B", the
+     * single most useful number this card produces, rendered nowhere.
+     *
+     * Same shape as the FilingReadiness bug, in the same file, in the commit
+     * whose message said "good news quiet, bad news loud". The old fixtures
+     * all had avoided: null, so nothing failed.
+     *
+     * Held-back credit is not reassurance. It is money the shopkeeper can
+     * still recover by chasing a supplier, so it must be on screen.
+     */
+    mockOfflineFetch.mockImplementation(route({
+      ...RISK_CLEAR,
+      avoided: {
+        rule: '88D', level: 'difference', excess: 1620, heldBack: 1620,
+        excessPercent: 900, base: 180, crossedPercent: true, crossedAbsolute: false,
+        headline: 'You are claiming ₹1,620 more input credit than your GSTR-2B contains.',
+        consequence: 'No notice, but credit not in your 2B cannot be claimed under Rule 36(4).',
+        action: 'Chase the supplier who has not filed.',
+      },
+    }))
+    renderReport()
+
+    expect(await screen.findByText(/held back/i)).toBeInTheDocument()
+    expect(screen.getByText(/₹1,620/)).toBeInTheDocument()
+    expect(screen.getByText(/chase the supplier/i)).toBeInTheDocument()
+    // and it must NOT claim the period is short-paid, because it is not
+    expect(screen.queryByText(/short-paid/i)).not.toBeInTheDocument()
+  })
+
   it('names ONE rule when only one was checked', async () => {
     /*
      * Caught on the live site, not by a test: the clear-state copy read
