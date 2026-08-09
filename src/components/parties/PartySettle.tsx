@@ -535,8 +535,11 @@ export function PartySettle() {
                         /* The tax comes OUT of the money received, it is not added
                            on top. Showing the split stops that being a surprise. */
                         <p className="text-2xs text-muted-foreground mt-2">
+                          {/* Explicit {' '} after the amount: JSX drops the newline
+                              between an expression and the next line, so this rendered
+                              as "₹1,000is your earning" on screen. */}
                           Of {formatINR(heldOnAccount)}, <b>{formatINR(advancePreview.tax)}</b> is
-                          GST and {formatINR(advancePreview.taxable)} is your earning. It goes into
+                          GST and {formatINR(advancePreview.taxable)}{' '}is your earning. It goes into
                           this month&apos;s return, and is adjusted automatically when you bill.
                         </p>
                       )}
