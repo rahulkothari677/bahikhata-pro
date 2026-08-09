@@ -42,13 +42,21 @@ interface AmendedInvoice {
 export function NeedsAmending({
   b2ba,
   b2cla,
+  cdnra,
+  cdnura,
 }: {
   b2ba?: Array<{ ctin: string; inv: AmendedInvoice[] }>
   b2cla?: Array<{ pos: string; inv: AmendedInvoice[] }>
+  cdnra?: Array<{ ctin: string; nt: AmendedInvoice[] }>
+  cdnura?: AmendedInvoice[]
 }) {
   const rows: Array<{ key: string; who: string; inv: AmendedInvoice }> = []
   for (const g of b2ba || []) for (const inv of g.inv) rows.push({ key: `b2b-${g.ctin}-${inv.oinum}`, who: g.ctin, inv })
   for (const g of b2cla || []) for (const inv of g.inv) rows.push({ key: `b2cl-${g.pos}-${inv.oinum}`, who: `Place of supply ${g.pos}`, inv })
+  // Notes amend into 9C, but to a shopkeeper a corrected note is the same job
+  // as a corrected bill, so they are listed together rather than in a second card.
+  for (const g of cdnra || []) for (const inv of g.nt) rows.push({ key: `cdnra-${g.ctin}-${inv.oinum}`, who: `Note · ${g.ctin}`, inv })
+  for (const inv of cdnura || []) rows.push({ key: `cdnura-${inv.oinum}`, who: 'Note · unregistered customer', inv })
 
   // Nothing to declare is the normal case, and it says nothing at all.
   if (rows.length === 0) return null

@@ -9,7 +9,7 @@ import { captureGstFilingError } from '@/lib/sentry-gst'
 import { logAudit } from '@/lib/audit'
 import { deriveStateCode } from '@/lib/gst'
 import { getAdvancesForPeriod } from '@/lib/advances-for-period'
-import { buildAmendments, filedInvoicesFrom } from '@/lib/gstr1-amendments'
+import { buildAmendments, filedInvoicesFrom, type AmendmentTables } from '@/lib/gstr1-amendments'
 import { buildGstr1, type Gstr1Transaction, type ShopInfo } from '@/lib/gstr1-builder'
 import { getPriorFYBounds } from '@/lib/fiscal-year'
 
@@ -215,8 +215,9 @@ export async function GET(req: NextRequest) {
       .filter((s) => s.periodStart < periodStart)   // earlier periods only
       .flatMap((s) => filedInvoicesFrom(s.rawJson, s.monthYear))
 
-    let amendments: { b2ba: Array<{ ctin: string; inv: unknown[] }>; b2cla: Array<{ pos: string; inv: unknown[] }> } =
-      { b2ba: [], b2cla: [] }
+    // Typed from the builder itself, so adding a table there cannot leave this
+    // silently dropping it — which is how the b2ba/b2cla shape drifted once.
+    let amendments: AmendmentTables = { b2ba: [], b2cla: [], cdnra: [], cdnura: [] }
     if (filedInvoices.length > 0) {
       const nums = [...new Set(filedInvoices.map((f) => f.inum))]
       /*
@@ -232,7 +233,7 @@ export async function GET(req: NextRequest) {
        */
       const [live, cancelled] = await Promise.all([
         db.transaction.findMany({
-          where: { userId, invoiceNo: { in: nums }, type: 'sale', deletedAt: null },
+          where: { userId, invoiceNo: { in: nums }, type: { in: ['sale', 'credit-note', 'debit-note'] }, deletedAt: null },
           take: 5000,
           select: {
             invoiceNo: true, date: true, totalAmount: true,
@@ -240,7 +241,7 @@ export async function GET(req: NextRequest) {
           },
         }),
         db.transaction.findMany({
-          where: { userId, invoiceNo: { in: nums }, type: 'sale', deletedAt: { not: null } },
+          where: { userId, invoiceNo: { in: nums }, type: { in: ['sale', 'credit-note', 'debit-note'] }, deletedAt: { not: null } },
           take: 5000,
           select: { invoiceNo: true },
         }),
@@ -272,7 +273,7 @@ export async function GET(req: NextRequest) {
           current.set(inum, { inum, idt: '', val: 0, pos: '', ctin: undefined, exists: false })
         }
       }
-      amendments = buildAmendments(filedInvoices, current) as typeof amendments
+      amendments = buildAmendments(filedInvoices, current)
     }
 
     // Build the GSTR-1 JSON

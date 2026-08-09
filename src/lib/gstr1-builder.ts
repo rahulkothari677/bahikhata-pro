@@ -236,6 +236,9 @@ export interface Gstr1Result {
   /** Table 9A — invoices from earlier FILED returns that have since changed. */
   b2ba: Array<{ ctin: string; inv: unknown[] }>
   b2cla: Array<{ pos: string; inv: unknown[] }>
+  /** Table 9C — amended credit/debit notes. */
+  cdnra: Array<{ ctin: string; nt: unknown[] }>
+  cdnura: unknown[]
   /** Table 11A — advances received this period on which tax is due. */
   at: Gstr1AdvanceEntry[]
   /** Table 11B — earlier advances released against invoices raised this period. */
@@ -1023,7 +1026,7 @@ export function buildGstr1(
     advancesReceivedThisPeriod?: AdvanceReceipt[]
     advancesFromEarlierPeriods?: AdvanceReceipt[]
     /** Table 9A, computed by the caller — it needs the filed snapshots. */
-    amendments?: { b2ba: Array<{ ctin: string; inv: unknown[] }>; b2cla: Array<{ pos: string; inv: unknown[] }> }
+    amendments?: { b2ba: Array<{ ctin: string; inv: unknown[] }>; b2cla: Array<{ pos: string; inv: unknown[] }>; cdnra: Array<{ ctin: string; nt: unknown[] }>; cdnura: unknown[] }
   },
 ): Gstr1Result {
   // 🔒 V26 N9: cur_gt = current-period outward turnover (computed from txns).
@@ -1046,6 +1049,8 @@ export function buildGstr1(
     doc_issue: buildDOC(txns, options?.cancelled || []),
     b2ba: options?.amendments?.b2ba || [],
     b2cla: options?.amendments?.b2cla || [],
+    cdnra: options?.amendments?.cdnra || [],
+    cdnura: options?.amendments?.cdnura || [],
     at: buildAT(options?.advancesReceivedThisPeriod || []),
     txpd: buildTXPD(options?.advancesFromEarlierPeriods || []),
   }

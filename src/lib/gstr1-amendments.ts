@@ -27,9 +27,17 @@
  */
 import { roundMoney } from '@/lib/money'
 
-/** An invoice as a filed return recorded it. */
+/** An invoice or note as a filed return recorded it. */
 export interface FiledInvoice {
-  section: 'b2b' | 'b2cl'
+  /*
+   * Notes amend into their own tables (9C): cdnra for notes against a
+   * registered buyer, cdnura for the rest. They are carried here rather than in
+   * a parallel structure because the QUESTION is identical — does this document
+   * still say what we filed? — and only the destination table differs.
+   */
+  section: 'b2b' | 'b2cl' | 'cdnr' | 'cdnur'
+  /** 'C' or 'D' for notes. Absent on invoices. */
+  ntty?: 'C' | 'D'
   /** Counterparty GSTIN — B2B only. */
   ctin?: string
   inum: string
@@ -69,6 +77,15 @@ export interface AmendmentTables {
   b2ba: Array<{ ctin: string; inv: AmendedInvoice[] }>
   /** Table 9A — amended large inter-state B2C invoices, grouped by POS. */
   b2cla: Array<{ pos: string; inv: AmendedInvoice[] }>
+  /** Table 9C — amended credit/debit notes against a REGISTERED buyer. */
+  cdnra: Array<{ ctin: string; nt: AmendedNote[] }>
+  /** Table 9C — amended notes against an unregistered buyer. */
+  cdnura: AmendedNote[]
+}
+
+export interface AmendedNote extends AmendedInvoice {
+  /** Credit or debit. The portal needs it to know which way the money moved. */
+  ntty: 'C' | 'D'
 }
 
 /**
@@ -89,6 +106,20 @@ export function buildAmendments(
 ): AmendmentTables {
   const b2ba = new Map<string, AmendedInvoice[]>()
   const b2cla = new Map<string, AmendedInvoice[]>()
+  const cdnra = new Map<string, AmendedNote[]>()
+  const cdnura: AmendedNote[] = []
+
+  /*
+   * One document, one destination. A note never lands in an invoice table and
+   * an invoice never lands in a note table, so the routing is written once
+   * rather than repeated at each emit site.
+   */
+  const route = (f: FiledInvoice, amended: AmendedInvoice) => {
+    if (f.section === 'cdnr' && f.ctin) push(cdnra, f.ctin, { ...amended, ntty: f.ntty || 'C' })
+    else if (f.section === 'cdnur') cdnura.push({ ...amended, ntty: f.ntty || 'C' })
+    else if (f.section === 'b2b' && f.ctin) push(b2ba, f.ctin, amended)
+    else push(b2cla, f.pos, amended)
+  }
 
   for (const f of filed) {
     const now = current.get(f.inum)
@@ -107,8 +138,7 @@ export function buildAmendments(
         val: 0, pos: f.pos,
         changes: ['This invoice was cancelled after the return was filed'],
       }
-      if (f.section === 'b2b' && f.ctin) push(b2ba, f.ctin, amended)
-      else push(b2cla, f.pos, amended)
+      route(f, amended)
       continue
     }
 
@@ -140,13 +170,14 @@ export function buildAmendments(
      * portal has to find the original entry before it can replace it, and it
      * looks under the counterparty it was told about.
      */
-    if (f.section === 'b2b' && f.ctin) push(b2ba, f.ctin, amended)
-    else push(b2cla, f.pos, amended)
+    route(f, amended)
   }
 
   return {
     b2ba: [...b2ba.entries()].map(([ctin, inv]) => ({ ctin, inv })),
     b2cla: [...b2cla.entries()].map(([pos, inv]) => ({ pos, inv })),
+    cdnra: [...cdnra.entries()].map(([ctin, nt]) => ({ ctin, nt })),
+    cdnura,
   }
 }
 
@@ -170,6 +201,14 @@ export function filedInvoicesFrom(rawJson: unknown, fp: string): FiledInvoice[] 
     for (const inv of group.inv || []) {
       out.push({ section: 'b2cl', inum: String(inv.inum), idt: inv.idt, val: Number(inv.val) || 0, pos: group.pos, fp })
     }
+  }
+  for (const party of g.cdnr || []) {
+    for (const n of party.nt || []) {
+      out.push({ section: 'cdnr', ctin: party.ctin, ntty: n.ntty, inum: String(n.nt_num), idt: n.nt_dt, val: Number(n.val) || 0, pos: n.pos, fp })
+    }
+  }
+  for (const n of g.cdnur || []) {
+    out.push({ section: 'cdnur', ntty: n.ntty, inum: String(n.nt_num), idt: n.nt_dt, val: Number(n.val) || 0, pos: n.pos, fp })
   }
   return out
 }

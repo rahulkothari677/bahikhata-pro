@@ -282,7 +282,7 @@ export function Gstr1Report() {
         * ago with nothing on screen to show it — the same way the filing
         * readiness card once shipped invisible.
         */}
-      <NeedsAmending b2ba={data?.gstr1?.b2ba} b2cla={data?.gstr1?.b2cla} />
+      <NeedsAmending b2ba={data?.gstr1?.b2ba} b2cla={data?.gstr1?.b2cla} cdnra={data?.gstr1?.cdnra} cdnura={data?.gstr1?.cdnura} />
 
       {/* Filed-vs-live divergence warning */}
       {hasDivergence && (

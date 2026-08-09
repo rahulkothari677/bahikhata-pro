@@ -113,3 +113,58 @@ describe('reading a filed return back', () => {
     expect(filedInvoicesFrom({}, '072026')).toEqual([])
   })
 })
+
+describe('credit and debit notes amend into their own tables (9C)', () => {
+  const filedNote = (over: Partial<FiledInvoice> = {}): FiledInvoice => ({
+    section: 'cdnr', ctin: '27BBBPB1234B1Z5', ntty: 'C',
+    inum: 'CN-9', idt: '10-07-2026', val: 2360, pos: '27', fp: '072026', ...over,
+  })
+
+  it('sends a registered-buyer note to cdnra, not to an invoice table', () => {
+    const r = buildAmendments([filedNote()], map(now({ inum: 'CN-9', val: 3000 })))
+    expect(r.cdnra[0].ctin).toBe('27BBBPB1234B1Z5')
+    expect(r.cdnra[0].nt[0].oinum).toBe('CN-9')
+    expect(r.cdnra[0].nt[0].val).toBe(3000)
+    // A note must never leak into the invoice tables.
+    expect(r.b2ba).toHaveLength(0)
+    expect(r.b2cla).toHaveLength(0)
+  })
+
+  it('keeps credit and debit apart — the portal needs to know which way money moved', () => {
+    const dr = buildAmendments([filedNote({ ntty: 'D' })], map(now({ inum: 'CN-9', val: 3000 })))
+    expect(dr.cdnra[0].nt[0].ntty).toBe('D')
+    const cr = buildAmendments([filedNote({ ntty: 'C' })], map(now({ inum: 'CN-9', val: 3000 })))
+    expect(cr.cdnra[0].nt[0].ntty).toBe('C')
+  })
+
+  it('sends an unregistered-buyer note to cdnura', () => {
+    const r = buildAmendments([filedNote({ section: 'cdnur', ctin: undefined })], map(now({ inum: 'CN-9', val: 3000 })))
+    expect(r.cdnura).toHaveLength(1)
+    expect(r.cdnura[0].oinum).toBe('CN-9')
+    expect(r.cdnra).toHaveLength(0)
+  })
+
+  it('amends a note cancelled after filing to nil', () => {
+    const r = buildAmendments([filedNote()], new Map())
+    expect(r.cdnra[0].nt[0].val).toBe(0)
+  })
+
+  it('stays silent when a note is unchanged', () => {
+    // Date must match the filed one too — otherwise this asserts silence while
+    // the date has quietly changed, and would pass for the wrong reason.
+    const r = buildAmendments([filedNote()], map(now({ inum: 'CN-9', val: 2360, idt: '10-07-2026' })))
+    expect(r.cdnra).toHaveLength(0)
+    expect(r.cdnura).toHaveLength(0)
+  })
+
+  it('reads notes back out of a filed return', () => {
+    const raw = {
+      cdnr: [{ ctin: '27BBBPB1234B1Z5', nt: [{ nt_num: 'CN-9', nt_dt: '10-07-2026', val: 2360, ntty: 'C', pos: '27' }] }],
+      cdnur: [{ nt_num: 'CN-10', nt_dt: '11-07-2026', val: 500, ntty: 'D', pos: '29' }],
+    }
+    const out = filedInvoicesFrom(raw, '072026')
+    expect(out).toHaveLength(2)
+    expect(out[0]).toMatchObject({ section: 'cdnr', ntty: 'C', inum: 'CN-9' })
+    expect(out[1]).toMatchObject({ section: 'cdnur', ntty: 'D', inum: 'CN-10' })
+  })
+})
