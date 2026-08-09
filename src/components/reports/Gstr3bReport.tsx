@@ -30,6 +30,7 @@
 
 import { useState } from 'react'
 import { FilingReadiness } from '@/components/reports/FilingReadiness'
+import { ReturnsAgree } from '@/components/reports/ReturnsAgree'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -241,6 +242,14 @@ export function Gstr3bReport() {
         * one stops.
         */}
       <FilingReadiness from={readinessFrom} to={readinessTo} />
+
+      {/*
+        * "Your two returns agree" — directly under the readiness card, because
+        * the two answer the same question from different sides: can I file, and
+        * will what I file hold together. A mismatch here is the most common
+        * notice trigger, and the app can now say so honestly.
+        */}
+      <ReturnsAgree month={month} />
 
       {/* 🔒 V17 Audit Phase 1 P0.2: Filed-vs-live divergence warning.
           Shows when a filed snapshot's netTaxPayable differs from the live value —
