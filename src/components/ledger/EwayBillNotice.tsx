@@ -18,7 +18,13 @@
  * job is done is how people learn to ignore warnings.
  */
 
-import { Truck } from 'lucide-react'
+import { useState } from 'react'
+import { Truck, Loader2 } from 'lucide-react'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import { offlineFetch } from '@/lib/offline-fetch'
+import { toast as sonnerToast } from 'sonner'
+import { useQueryClient } from '@tanstack/react-query'
 import { formatINR } from '@/lib/utils'
 import { ewayBillNeed, invoiceMovesGoods } from '@/lib/eway-bill'
 
@@ -28,13 +34,38 @@ export function EwayBillNotice({
   items,
   ewayBillNo,
   type,
+  transactionId,
 }: {
   totalAmount: number
   isInterState: boolean
   items: Array<{ hsn?: string | null }>
   ewayBillNo?: string | null
   type?: string
+  transactionId?: string
 }) {
+  const [num, setNum] = useState('')
+  const [saving, setSaving] = useState(false)
+  const qc = useQueryClient()
+
+  /*
+   * Saving the number is what makes the warning go away, so it lives ON the
+   * warning. Sending the shopkeeper to an edit screen to record it would leave
+   * the alert up while they hunted for the field.
+   */
+  const save = async () => {
+    if (!transactionId) return
+    setSaving(true)
+    try {
+      const r = await offlineFetch('/api/eway-bill', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transactionId, ewayBillNo: num.trim() }),
+      })
+      const b = await r.json().catch(() => ({}))
+      if (!r.ok) { sonnerToast.error(b.message || b.error || 'Could not save'); return }
+      sonnerToast.success('E-way bill number saved')
+      qc.invalidateQueries({ queryKey: ['transaction'] })
+    } finally { setSaving(false) }
+  }
   // Only outward movement of goods. A purchase is the supplier's consignment.
   if (type && type !== 'sale') return null
   // Already generated — the shopkeeper has dealt with it.
@@ -64,6 +95,28 @@ export function EwayBillNotice({
           This bill is {formatINR(totalAmount)}. Generate it on the e-way bill portal before the
           goods leave, then save the number here.
         </p>
+
+        {/*
+          * The number goes in on the warning itself. Sending the shopkeeper to
+          * an edit screen would leave the alert up while they hunted for the
+          * field — and a warning that cannot be resolved where it appears is
+          * one people learn to scroll past.
+          */}
+        {transactionId && (
+          <div className="mt-3 flex items-center gap-2">
+            <Input
+              value={num}
+              onChange={(e) => setNum(e.target.value)}
+              inputMode="numeric"
+              placeholder="12-digit number"
+              className="h-9 text-sm bg-white dark:bg-background"
+              aria-label="E-way bill number"
+            />
+            <Button size="sm" className="h-9 flex-shrink-0" onClick={save} disabled={saving || num.trim().length === 0}>
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save'}
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   )
