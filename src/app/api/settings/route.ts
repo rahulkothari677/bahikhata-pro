@@ -103,6 +103,33 @@ export async function PUT(req: NextRequest) {
     }
 
     /*
+     * Composition scheme registration. NULL means the regular scheme.
+     *
+     * Only the four categories the law defines are accepted. A free string
+     * would let a typo through, and the rate is looked up BY this value — an
+     * unrecognised category would silently produce no tax at all, which is the
+     * worst possible way for a typo to fail.
+     */
+    if (body.compositionCategory !== undefined) {
+      const allowed = ['trader', 'manufacturer', 'restaurant', 'service']
+      const v = body.compositionCategory
+      if (v === null || v === '') {
+        sanitized.compositionCategory = null
+        sanitized.compositionFrom = null
+      } else if (allowed.includes(v)) {
+        sanitized.compositionCategory = v
+        // Record when they entered, so earlier periods stay on the regular
+        // scheme rather than being retrospectively restated.
+        sanitized.compositionFrom = new Date()
+      } else {
+        return NextResponse.json({
+          error: 'Invalid composition category',
+          message: 'Choose trader, manufacturer, restaurant or service.',
+        }, { status: 400 })
+      }
+    }
+
+    /*
      * Declared previous-FY turnover, in RUPEES from the client.
      *
      * Stored as paise via the money extension, like every other money column —
