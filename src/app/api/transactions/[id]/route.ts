@@ -470,10 +470,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     // 🔒 AUDIT V25 FIX §6.2 (Batch 7): Block credit/debit notes without a party
     // on edit too (same check as POST). A note without a party is a silent no-op.
+    // Same wording as POST — see the note there on why the old advice to
+    // "adjust stock instead" was costing shops money.
     if (isNoteType(type) && !partyId) {
       return NextResponse.json({
-        error: 'Credit/debit notes require a party',
-        message: 'A return must be linked to a customer or supplier so their balance can be adjusted.',
+        error: 'Add a customer to this return',
+        message: 'A return has to be linked to a customer so their balance can be adjusted. Pick the customer above — or add them in one tap if they are not on your list yet.',
       }, { status: 400 })
     }
 

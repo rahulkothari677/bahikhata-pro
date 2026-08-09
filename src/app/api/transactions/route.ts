@@ -578,17 +578,27 @@ export async function POST(req: NextRequest) {
     // (uses subtotal, not paidAmount), but the party balance, dashboard
     // receivable, debt-aging, and WhatsApp reminder all ignore it. The user
     // thinks they recorded a return, but nothing changed in the khata.
-    // Fix: reject with a clear error message. If the user genuinely has a
-    // walk-in return (no customer account), they should use the cash-refund
-    // path (paidAmount = totalAmount) so the money is at least reflected in
-    // cash/day-end. But that requires a party for the payment record too.
-    // Simplest honest answer: returns require a party. Walk-in returns are
-    // a stock adjustment, not a khata transaction — record them via inventory
-    // stock adjustment instead.
+    // The requirement stands. The ADVICE that used to accompany it did not:
+    // it told the shopkeeper to "adjust the stock in Inventory instead".
+    //
+    // A stock adjustment does not reduce output GST. So a shop refunding a
+    // walk-in customer followed our instructions and then PAID TAX ON A SALE
+    // THAT CAME BACK — every time, permanently. The rejection protected the
+    // khata and quietly cost real money instead.
+    //
+    // GST law allows this note perfectly well: a credit note to an
+    // unregistered customer is netted into GSTR-1 Table 7 (B2CS) at small
+    // values, and buildNIL/buildB2CS already do exactly that. Only the khata
+    // needs somebody to credit.
+    //
+    // So: point them at the action that is actually correct — attach a
+    // customer — and never again at the one that overstates their liability.
+    // Task #37 tracks removing the requirement altogether by carrying these
+    // returns on a real "Walk-in Customer" party.
     if (isNoteType(type) && !partyId) {
       return NextResponse.json({
-        error: 'Credit/debit notes require a party',
-        message: 'A return must be linked to a customer or supplier so their balance can be adjusted. For walk-in returns with no customer account, adjust the stock directly in Inventory instead.',
+        error: 'Add a customer to this return',
+        message: 'A return has to be linked to a customer so their balance can be adjusted. Pick the customer above — or add them in one tap if they are not on your list yet. Do NOT record it as a stock adjustment: that changes your stock but not your GST, so you would end up paying tax on a sale that came back.',
       }, { status: 400 })
     }
 

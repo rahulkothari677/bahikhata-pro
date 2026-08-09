@@ -835,11 +835,16 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
     // 🔒 AUDIT V25 FIX §6.2 (Batch 7): Credit/debit notes require a party.
     // A return without a party can't reduce any balance — it's a silent no-op.
     // Block early on the client so the user gets immediate feedback.
+    // The old copy here sent walk-in returns to a stock adjustment, which
+    // does not reduce output GST — so the shop paid tax on a sale that came
+    // back. See the note in app/api/transactions/route.ts. Point at the
+    // action that is actually correct instead.
     if (isNote && !partyId) {
-      sonnerToast.error('Party required for returns', {
-        description: 'A credit/debit note must be linked to a customer or supplier so their balance can be adjusted. For walk-in returns, adjust stock in Inventory instead.',
-        duration: 6000,
+      sonnerToast.error('Add a customer to this return', {
+        description: 'Pick the customer above, or add them in one tap. Recording it as a stock adjustment instead would change your stock but not your GST — you would pay tax on a sale that came back.',
+        duration: 8000,
       })
+      document.getElementById('field-party-search')?.focus()
       return
     }
     /*
@@ -1983,6 +1988,11 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                 <div className="relative" ref={partyDropdownRef}>
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground z-10" />
                   <Input
+                    /* Named so the "add a customer to this return" error can
+                       put the cursor here. Without an id that focus call is a
+                       silent no-op — the toast tells you to pick a customer
+                       and then leaves you to find the field yourself. */
+                    id="field-party-search"
                     placeholder={`Search ${isSale ? 'customer' : 'supplier'} by name or phone...`}
                     value={partySearch}
                     onChange={(e) => { setPartySearch(e.target.value); setPartyDropdownOpen(true) }}

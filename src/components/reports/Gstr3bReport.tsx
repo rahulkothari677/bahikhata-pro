@@ -31,6 +31,7 @@
 import { useState } from 'react'
 import { FilingReadiness } from '@/components/reports/FilingReadiness'
 import { ReturnsAgree } from '@/components/reports/ReturnsAgree'
+import { NoticeRisk } from '@/components/reports/NoticeRisk'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -250,6 +251,25 @@ export function Gstr3bReport() {
         * notice trigger, and the app can now say so honestly.
         */}
       <ReturnsAgree month={month} />
+
+      {/*
+        * The consequence of what the card above just measured.
+        *
+        * ReturnsAgree says whether the two returns tell the same story. This
+        * says what the DEPARTMENT does about it — Rules 88C and 88D issue an
+        * intimation on their own and block the next GSTR-1 until it is
+        * answered. Directly beneath, because "they disagree" and "here is what
+        * that costs you" are one thought; split apart, the shopkeeper is left
+        * guessing whether a difference actually matters.
+        *
+        * BEFORE filing, deliberately. Afterwards this is not a warning, it is
+        * just bad news.
+        *
+        * Mounted in the loaded branch, like FilingReadiness above — and
+        * `gstr-3b-shows-notice-risk.test.tsx` fails if this line goes. That
+        * test was proved by deleting this mount and watching all six fail.
+        */}
+      <NoticeRisk month={month} />
 
       {/* 🔒 V17 Audit Phase 1 P0.2: Filed-vs-live divergence warning.
           Shows when a filed snapshot's netTaxPayable differs from the live value —
