@@ -4,6 +4,7 @@ import { useTranslation } from '@/hooks/use-translation'
 import { ReportUnavailable } from '@/components/reports/ReportUnavailable'
 import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { useState, useEffect } from 'react'
+import { CompositionReturns } from '@/components/reports/CompositionReturns'
 import { useAppStore } from '@/store/app-store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -57,7 +58,7 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
   // can switch to single-report mode WITHOUT remounting (no setView call).
   const pendingReportType = useAppStore(s => s.pendingReportType)
   const setPendingReportType = useAppStore(s => s.setPendingReportType)
-  const [reportType, setReportType] = useState<'pl' | 'gst' | 'stock' | 'party' | 'debt-aging' | 'inventory-aging' | 'gstr-1' | 'gstr-3b' | 'gstr-2b' | 'bank-recon' | 'consolidated' | 'bill-profit' | 'hsn' | 'cashflow' | 'trial-balance' | 'item-profit'>(singleReportType as any || 'pl')
+  const [reportType, setReportType] = useState<'pl' | 'gst' | 'stock' | 'party' | 'debt-aging' | 'inventory-aging' | 'gstr-1' | 'gstr-3b' | 'gstr-2b' | 'bank-recon' | 'consolidated' | 'bill-profit' | 'hsn' | 'cashflow' | 'trial-balance' | 'item-profit' | 'composition'>(singleReportType as any || 'pl')
   const [dateRange, setDateRange] = useState<DateRange>(() => getPresetRange('thisMonth'))
   const [datePreset, setDatePreset] = useState<DatePreset>('thisMonth')
   const [exportingGstr, setExportingGstr] = useState(false)
@@ -270,6 +271,7 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
 
   // 🔒 V22-3 (Phase 1): Title + back button for single-report mode
   const reportTitles: Record<string, string> = {
+    'composition': 'Composition Returns',
     'gstr-1': 'GSTR-1 Report',
     'gstr-3b': 'GSTR-3B Report',
     'gstr-2b': 'GSTR-2B Reconciliation',
@@ -460,6 +462,7 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
           {reportType === 'party' && (error ? <ReportError message={(error as Error).message} /> : isLoading || !data ? <ReportSkeleton /> : <PartyReport data={data} />)}
           {reportType === 'debt-aging' && (error ? <ReportError message={(error as Error).message} /> : isLoading || !data ? <ReportSkeleton /> : <DebtAgingReport data={data} />)}
           {reportType === 'inventory-aging' && (error ? <ReportError message={(error as Error).message} /> : isLoading || !data ? <ReportSkeleton /> : <InventoryAgingReport data={data} />)}
+          {reportType === 'composition' && <CompositionReturns />}
           {reportType === 'gstr-1' && <Gstr1Report />}
           {reportType === 'gstr-3b' && <Gstr3bReport />}
           {reportType === 'gstr-2b' && <Gstr2bReconciliation />}

@@ -13,7 +13,7 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:report": "playwright show-report",
     "lint": "eslint .",
-    "verify": "npm run lint && npx tsc --noEmit && npx jest && npx next build",
+    "verify": "npm run lint && npx tsc --noEmit && npx jest && npm run verify:build",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
@@ -22,7 +22,8 @@
     "db:reset": "prisma migrate reset",
     "postinstall": "prisma generate",
     "analyze": "next experimental-analyze",
-    "analyze:output": "next experimental-analyze --output"
+    "analyze:output": "next experimental-analyze --output",
+    "verify:build": "DATABASE_URL=postgresql://dummy:dummy@localhost:5432/dummy NEXTAUTH_SECRET=ci-build-dummy-secret NEXTAUTH_URL=http://localhost:3000 npx next build"
   },
   "dependencies": {
     "@capacitor-community/camera-preview": "^8.0.1",
