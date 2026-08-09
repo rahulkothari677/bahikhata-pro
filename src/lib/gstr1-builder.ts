@@ -31,6 +31,7 @@
 import { roundMoney } from '@/lib/money'
 import { deriveStateCode } from '@/lib/gst-states'
 import { classifySupplyLine, isTaxableSupply } from '@/lib/supply-classification'
+import { advanceTax, isTaxableAdvance, type AdvanceReceipt } from '@/lib/advance-tax'
 
 // ─── Input types ──────────────────────────────────────────────────────────
 
@@ -232,6 +233,28 @@ export interface Gstr1Result {
   hsn: { data: Gstr1HsnEntry[] }
   nil: { inv: Gstr1NilEntry[] }
   doc_issue: { doc_det: Gstr1DocEntry[] }
+  /** Table 11A — advances received this period on which tax is due. */
+  at: Gstr1AdvanceEntry[]
+  /** Table 11B — earlier advances released against invoices raised this period. */
+  txpd: Gstr1AdvanceEntry[]
+}
+
+/**
+ * Tables 11A (`at`) and 11B (`txpd`) share one shape on the portal: grouped by
+ * place of supply and inter/intra, then rate-wise inside.
+ */
+export interface Gstr1AdvanceEntry {
+  pos: string
+  sply_ty: 'INTER' | 'INTRA'
+  itms: Array<{
+    rt: number
+    /** Taxable value of the advance — the money less the tax inside it. */
+    ad_amt: number
+    iamt: number
+    camt: number
+    samt: number
+    csamt: number
+  }>
 }
 
 // ─── Helper ───────────────────────────────────────────────────────────────
@@ -748,6 +771,87 @@ export function buildNIL(txns: Gstr1Transaction[]): { inv: Gstr1NilEntry[] } {
 }
 
 
+/**
+ * Tables 11A and 11B — money taken before the bill existed.
+ *
+ * WHY (2026-08-09). Advances for GOODS carry no GST (Notification 66/2017), but
+ * advances for SERVICES are taxable the moment the money arrives. The liability
+ * is declared in 11A while no invoice exists, and released in 11B in the period
+ * the invoice is finally raised. Neither table was built, so a salon, tailor or
+ * repair shop taking a deposit had a liability the app could not report.
+ *
+ * WHICH TABLE A RECEIPT LANDS IN:
+ *
+ *   11A — received in THIS period and still unbilled at the end of it. If the
+ *         invoice went out in the same period there is nothing to declare: the
+ *         invoice itself already carries the tax, and reporting both would tax
+ *         the same money twice.
+ *   11B — received in an EARLIER period (so already declared in that period's
+ *         11A) and settled against an invoice during THIS one.
+ *
+ * Those two are deliberately mutually exclusive, and they are the same two
+ * quantities GSTR-3B adds to and subtracts from 3.1(a), so the returns agree by
+ * construction rather than by coincidence.
+ */
+function buildAdvanceTable(
+  receipts: AdvanceReceipt[],
+  amountOf: (r: AdvanceReceipt) => number,
+): Gstr1AdvanceEntry[] {
+  const byGroup = new Map<string, Gstr1AdvanceEntry>()
+
+  for (const r of receipts) {
+    if (!isTaxableAdvance(r)) continue
+    const amount = roundMoney(amountOf(r))
+    if (amount <= 0) continue
+
+    const rate = r.advanceGstRate as number
+    const t = advanceTax(amount, rate, r.isInterState)
+    const sply_ty: 'INTER' | 'INTRA' = r.isInterState ? 'INTER' : 'INTRA'
+    const key = `${r.pos}|${sply_ty}`
+
+    let entry = byGroup.get(key)
+    if (!entry) {
+      entry = { pos: r.pos, sply_ty, itms: [] }
+      byGroup.set(key, entry)
+    }
+    let itm = entry.itms.find((i) => i.rt === rate)
+    if (!itm) {
+      itm = { rt: rate, ad_amt: 0, iamt: 0, camt: 0, samt: 0, csamt: 0 }
+      entry.itms.push(itm)
+    }
+    itm.ad_amt = roundMoney(itm.ad_amt + t.adAmt)
+    itm.iamt = roundMoney(itm.iamt + t.igst)
+    itm.camt = roundMoney(itm.camt + t.cgst)
+    itm.samt = roundMoney(itm.samt + t.sgst)
+  }
+
+  return [...byGroup.values()].filter((e) => e.itms.some((i) => i.ad_amt > 0))
+}
+
+/**
+ * Table 11A — advances received THIS period and still unbilled at the end of it.
+ *
+ * Pass only receipts dated inside the period. Handing this the whole ledger
+ * would re-declare an old advance that is still sitting unbilled, and the shop
+ * would pay tax on the same money every month until it was invoiced.
+ */
+export function buildAT(receivedThisPeriod: AdvanceReceipt[]): Gstr1AdvanceEntry[] {
+  return buildAdvanceTable(receivedThisPeriod, (r) => r.amount - r.adjustedByPeriodEnd)
+}
+
+/**
+ * Table 11B — advances from EARLIER periods released against invoices raised
+ * this period.
+ *
+ * Pass only receipts dated before the period. A receipt taken and billed within
+ * the same month belongs in neither table: it never reached an 11A, so there is
+ * nothing to release, and the invoice already carries the tax.
+ */
+export function buildTXPD(receivedEarlier: AdvanceReceipt[]): Gstr1AdvanceEntry[] {
+  return buildAdvanceTable(receivedEarlier, (r) => r.adjustedInPeriod)
+}
+
+
 /*
  * The issued range must span CANCELLED numbers too.
  *
@@ -905,7 +1009,17 @@ export function buildGstr1(
   txns: Gstr1Transaction[],
   shop: ShopInfo,
   monthYear: string,
-  options?: { priorFyTurnover?: number; cancelled?: Gstr1Transaction[] },
+  options?: {
+    priorFyTurnover?: number
+    cancelled?: Gstr1Transaction[]
+    /*
+     * The two advance windows, kept apart on purpose. They are different sets
+     * of receipts answering different questions, and passing one list for both
+     * would double-declare — see buildAT / buildTXPD.
+     */
+    advancesReceivedThisPeriod?: AdvanceReceipt[]
+    advancesFromEarlierPeriods?: AdvanceReceipt[]
+  },
 ): Gstr1Result {
   // 🔒 V26 N9: cur_gt = current-period outward turnover (computed from txns).
   // gt = prior-FY outward turnover (passed by caller; defaults to 0).
@@ -925,5 +1039,7 @@ export function buildGstr1(
     hsn: buildHSN(txns),
     nil: buildNIL(txns),
     doc_issue: buildDOC(txns, options?.cancelled || []),
+    at: buildAT(options?.advancesReceivedThisPeriod || []),
+    txpd: buildTXPD(options?.advancesFromEarlierPeriods || []),
   }
 }

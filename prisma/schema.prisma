@@ -432,6 +432,19 @@ model Payment {
   // (an advance), which is legitimate — shopkeepers take money before billing.
   allocations PaymentAllocation[]
 
+  /*
+   * GST rate on an advance receipt. NULL = no GST due on it.
+   *
+   * Advances for GOODS are exempt (Notification 66/2017); advances for SERVICES
+   * are taxable the moment the money arrives, and must be declared in GSTR-1
+   * Table 11A then released in 11B when the invoice is raised. Set the rate and
+   * this receipt carries a liability; leave it NULL and it does not.
+   *
+   * Deliberately one column and not a rate plus an "is service" flag, which
+   * could contradict each other. See the migration note.
+   */
+  advanceGstRate Float?
+
   // ⚡ PERFORMANCE (Audit fix Phase 5): Indexes on foreign keys + hot query
   // patterns. Without these, every payment query does a full table scan.
   @@index([userId, date])

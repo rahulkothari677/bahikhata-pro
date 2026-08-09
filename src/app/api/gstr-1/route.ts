@@ -8,6 +8,7 @@ import { apiError } from '@/lib/api-error'
 import { captureGstFilingError } from '@/lib/sentry-gst'
 import { logAudit } from '@/lib/audit'
 import { deriveStateCode } from '@/lib/gst'
+import { getAdvancesForPeriod } from '@/lib/advances-for-period'
 import { buildGstr1, type Gstr1Transaction, type ShopInfo } from '@/lib/gstr1-builder'
 import { getPriorFYBounds } from '@/lib/fiscal-year'
 
@@ -188,8 +189,18 @@ export async function GET(req: NextRequest) {
       items: [],
     }))
 
+    // Tables 11A/11B — money taken before the bill existed. Fetched by the same
+    // helper GSTR-3B uses, so the two returns cannot disagree about advances.
+    const advances = await getAdvancesForPeriod(userId, periodStart, periodEnd, shopStateCode)
+
     // Build the GSTR-1 JSON
-    const gstr1 = buildGstr1(builderTxns, shop, monthYear, { priorFyTurnover, cancelled: cancelledForDoc })
+    const gstr1 = buildGstr1(builderTxns, shop, monthYear, {
+      priorFyTurnover,
+      cancelled: cancelledForDoc,
+      advancesReceivedThisPeriod: advances.receivedThisPeriod,
+      // 11B releases only what an earlier period's 11A already declared.
+      advancesFromEarlierPeriods: advances.fromEarlierPeriods,
+    })
 
     // Compute summary totals
     const totalTaxableValue = roundMoney(

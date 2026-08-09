@@ -4,6 +4,8 @@ import { getAuthContext, assertCanWrite } from '@/lib/get-auth'
 import { canAccessModule } from '@/lib/staff-permissions'
 import { roundMoney, fromPaise } from '@/lib/money'
 import { classifySupplyLine } from '@/lib/supply-classification'
+import { getAdvancesForPeriod } from '@/lib/advances-for-period'
+import { deriveStateCode } from '@/lib/gst'
 import { istMonthStartOffset, getISTDateParts } from '@/lib/timezone'
 import { apiError } from '@/lib/api-error'
 import { captureGstFilingError } from '@/lib/sentry-gst'
@@ -190,6 +192,20 @@ async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd:
     `,
   ])
 
+  /*
+   * Advances, from the same helper GSTR-1 uses for Tables 11A/11B.
+   *
+   * 3B does not show advances on their own line — they are folded into 3.1(a).
+   * Fetching them here rather than recomputing keeps the two returns saying the
+   * same thing about the same money.
+   */
+  const shopSetting = await db.setting.findUnique({
+    where: { userId },
+    select: { gstin: true, state: true },
+  })
+  const shopStateCode = deriveStateCode(null, null, shopSetting?.gstin || null, shopSetting?.state || null)
+  const { totals: advanceTotals } = await getAdvancesForPeriod(userId, periodStart, periodEnd, shopStateCode)
+
   // === Compute structured 3B values ===
 
   // 3.1(c): Nil-rated + exempt + non-GST (computed FIRST so 3.1(a) can subtract them)
@@ -218,10 +234,27 @@ async function computeGstr3bValues(userId: string, periodStart: Date, periodEnd:
   // 0%-GST and exempt items → double-counted with 3.1(c). Now: subtract nilRatedValue
   // and exemptValue from the header total so 3.1(a) only covers taxable supplies.
   const rawOutwardTaxable = roundMoney((outwardSalesAgg._sum.subtotal || 0) - (outwardSalesAgg._sum.discountAmount || 0))
-  const outwardTaxableValue = roundMoney(rawOutwardTaxable - nilRatedValue - exemptValue)
-  const outwardCgst = roundMoney(outwardSalesAgg._sum.cgst || 0)
-  const outwardSgst = roundMoney(outwardSalesAgg._sum.sgst || 0)
-  const outwardIgst = roundMoney(outwardSalesAgg._sum.igst || 0)
+  /*
+   * Advances move 3.1(a) in both directions.
+   *
+   * The value in 3.1(a) is: invoices + debit notes − credit notes + advances
+   * received on which no invoice was issued this period − advances adjusted
+   * against invoices issued this period. Advances are NOT shown separately in
+   * 3B; they are folded into this one line.
+   *
+   * These are the same two quantities GSTR-1 declares in Tables 11A and 11B, and
+   * they are computed from the same `advanceTax` function, so the returns move
+   * together. Computing them separately here is how GSTR-1 and 3B drifted apart
+   * over nil/exempt supplies, and that is not being repeated.
+   */
+  const advanceAdded = advanceTotals.received      // 11A — liability arising
+  const advanceReleased = advanceTotals.adjusted   // 11B — liability released
+  const outwardTaxableValue = roundMoney(
+    rawOutwardTaxable - nilRatedValue - exemptValue + advanceAdded.adAmt - advanceReleased.adAmt,
+  )
+  const outwardCgst = roundMoney((outwardSalesAgg._sum.cgst || 0) + advanceAdded.cgst - advanceReleased.cgst)
+  const outwardSgst = roundMoney((outwardSalesAgg._sum.sgst || 0) + advanceAdded.sgst - advanceReleased.sgst)
+  const outwardIgst = roundMoney((outwardSalesAgg._sum.igst || 0) + advanceAdded.igst - advanceReleased.igst)
   const zeroRatedTaxableValue = 0
   const zeroRatedIgst = 0
   const rcmTaxableValue = roundMoney((rcmInwardAgg._sum.subtotal || 0) - (rcmInwardAgg._sum.discountAmount || 0))

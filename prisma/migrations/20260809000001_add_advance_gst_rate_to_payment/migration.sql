@@ -1,0 +1,22 @@
+-- The GST rate on an advance receipt. NULL means no GST is due on it.
+--
+-- WHY. Notification 66/2017 removed GST on advances for GOODS, but advances for
+-- SERVICES are still taxable at the moment the money is received — before any
+-- invoice exists. The liability then has to be declared in GSTR-1 Table 11A and
+-- released in Table 11B when the invoice is finally raised.
+--
+-- The app already models an advance: Payment.allocations empty (or short) means
+-- money held on account, which the schema comment there already calls out. What
+-- it could not say was whether that money carried a tax liability, so a salon,
+-- tailor, photographer or repair shop taking a booking deposit had an
+-- undeclared liability and no way to record it.
+--
+-- ONE COLUMN, NOT TWO. A separate "is this a service?" boolean could disagree
+-- with the rate — a service advance with no rate, or a rate on a goods advance.
+-- The rate alone carries the whole meaning: set means taxable, NULL means not.
+-- There is no combination that can contradict itself.
+--
+-- Nullable, no default, no backfill: every existing receipt keeps meaning "no
+-- GST on this advance", which is exactly what the app has reported so far and
+-- is correct for goods.
+ALTER TABLE "Payment" ADD COLUMN "advanceGstRate" DOUBLE PRECISION;
