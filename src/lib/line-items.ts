@@ -260,7 +260,23 @@ export function computeLineItems(opts: {
        * would be stricter than the law and would stop a shopkeeper mid-sale.
        * The gap is surfaced at filing time instead, which is when a CA needs it.
        */
-      hsn: p.product?.hsn || null,
+      /*
+       * The product's code wins; a line WITHOUT a product falls back to the one
+       * supplied on the line itself.
+       *
+       * `p.product?.hsn || null` alone discarded any HSN sent on a free-text
+       * line, because those have no product to read from. Two consequences, and
+       * the second is the one that bites: such a line can never reach GSTR-1
+       * Table 12, and — since a missing code is read as "goods" — every service
+       * billed as free text over ₹50,000 raised a false e-way bill warning.
+       * That lands on exactly the service shops this app just added advances
+       * for.
+       *
+       * Still a snapshot either way: whatever is resolved here is frozen on the
+       * line, so editing a product's HSN next year cannot rewrite a filed
+       * return.
+       */
+      hsn: p.product?.hsn || (p as { hsn?: string | null }).hsn || null,
       /*
        * GST treatment snapshotted for the same reason as hsn above: Table 8
        * reports nil-rated, exempt and non-GST in separate boxes, and buildNIL

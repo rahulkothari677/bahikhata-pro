@@ -92,3 +92,19 @@ describe('deciding whether an invoice moves goods', () => {
     expect(invoiceMovesGoods([])).toBe(false)
   })
 })
+
+describe('a free-text line keeps the HSN it was given', () => {
+  /*
+   * Regression guard for the data side of this feature. HSN used to come only
+   * from the product master, so a line typed by hand lost its code — and a
+   * missing code reads as "goods", which raised a false e-way bill warning on
+   * every free-text SERVICE invoice over ₹50,000. See line-items.ts.
+   */
+  it('a SAC on the line marks it a service once the code survives', () => {
+    expect(invoiceMovesGoods([{ hsn: '998314' }])).toBe(false)
+  })
+
+  it('and without the code it would have warned — which is why the fallback exists', () => {
+    expect(invoiceMovesGoods([{ hsn: null }])).toBe(true)
+  })
+})
