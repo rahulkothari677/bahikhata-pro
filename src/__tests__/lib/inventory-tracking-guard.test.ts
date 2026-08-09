@@ -211,6 +211,58 @@ describe('every stock write consults the predicate', () => {
     expect(offenders.map(f => path.relative(process.cwd(), f))).toEqual([])
   })
 
+  /**
+   * Importing the module is necessary but not sufficient — a route could
+   * import it and consult it in only one of its several stock paths. These
+   * pin the specific call site in each, because each is a separate way for a
+   * tailor's bill to fail. Source assertions, matching the pattern in
+   * transaction-tx-budget.test.ts.
+   */
+  const routeSrc = (rel: string) =>
+    fs.readFileSync(path.join(API_DIR, rel), 'utf8')
+
+  test('POST skips services in BOTH the warning and the write', () => {
+    // These two must agree. If the warning skipped and the write did not, the
+    // bill would pass the friendly check and then die inside the transaction
+    // with a STOCK_BLOCK the shopkeeper cannot act on.
+    const src = routeSrc('transactions/route.ts')
+    expect(src).toMatch(/if \(!tracksStock\(product\)\) continue/)              // warning loop
+    expect(src).toMatch(/if \(!tracksStock\(productMap\.get\(item\.productId\)\)\) continue/) // block-mode write
+    expect(src).toMatch(/stockAffectingLines\(txItems, productMap\)/)           // allow-mode write
+  })
+
+  test('PUT skips services when reversing AND when re-applying', () => {
+    const src = routeSrc('transactions/[id]/route.ts')
+    expect(src).toMatch(/tracksStockForReversal\(oldItem\.productId, productMap\)/)
+    expect(src).toMatch(/stockAffectingLines\(txItems, productMap\)/)
+  })
+
+  test('PUT loads the OLD lines products, not just the incoming ones', () => {
+    // The map used to be built from `items` alone, so a line REMOVED by an
+    // edit was absent from it — and an absent product cannot be identified as
+    // a good, so its stock would not be given back.
+    const src = routeSrc('transactions/[id]/route.ts')
+    expect(src).toMatch(/oldItems\.map\(i => i\.productId\)/)
+  })
+
+  test('DELETE skips services when reversing a void', () => {
+    const src = routeSrc('transactions/[id]/route.ts')
+    expect(src).toMatch(/tracksStockForReversal\(item\.productId, delProductMap\)/)
+  })
+
+  test('restore skips exactly what the void skipped', () => {
+    // Asymmetry here would invent stock: the void gave nothing back for a
+    // service, so the un-void must not take anything either.
+    const src = routeSrc('transactions/[id]/restore/route.ts')
+    expect(src).toMatch(/stockAffectingLines\(items, restoreProductMap\)/)
+  })
+
+  test('estimate-to-invoice convert skips services in both stock modes', () => {
+    const src = routeSrc('transactions/[id]/convert/route.ts')
+    const calls = src.match(/stockAffectingLines\(computed\.txItems, productMap\)/g) || []
+    expect(calls.length).toBe(2)  // block mode and allow mode
+  })
+
   test('the sweep actually looks at the known stock-writing routes', () => {
     // A sweep that silently matches nothing passes forever. This asserts the
     // walk and the pattern still find the five paths the fix touched — if a
