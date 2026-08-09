@@ -159,7 +159,13 @@ export function Inventory() {
                 <TrendingUp className="w-4 h-4 text-violet-600" />
                 <p className="text-2xs text-muted-foreground uppercase tracking-wide font-medium">{t('stat.potential_profit')}</p>
               </div>
-              <p className="text-xl font-bold">{formatINR(totalPotentialProfit)}</p>
+              {/* Same rule as the per-product figure: a negative total is a
+                  LOSS and must not be printed in the same neutral weight as a
+                  gain. A shop whose stock is worth less than it paid needs
+                  that to be the loudest number on the screen. */}
+              <p className={cn('text-xl font-bold', totalPotentialProfit < 0 && 'text-rose-600')}>
+                {formatINR(totalPotentialProfit)}
+              </p>
             </CardContent>
           </Card>
         )}
