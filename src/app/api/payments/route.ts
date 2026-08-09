@@ -112,7 +112,7 @@ export async function POST(req: NextRequest) {
     if (!validation.success) {
       return NextResponse.json({ error: validation.error }, { status: 400 })
     }
-    const { partyId, amount, type, mode, date, notes } = validation.data
+    const { partyId, amount, type, mode, date, notes, advanceGstRate } = validation.data
     const amt = amount
     // 🔒 V26 R2 (Phase 5): Read x-client-mutation-id from HEADER (where the
     // offline queue puts it) instead of body (where no client sends it).
@@ -345,6 +345,13 @@ export async function POST(req: NextRequest) {
             date: paymentDate,
             notes: notes || null,
             clientMutationId: clientMutationId || null,  // 🔒 V19-007: idempotency
+            /*
+             * Only a RECEIPT can be a taxable advance. Money paid OUT to a
+             * supplier creates no output liability for this shop, and storing a
+             * rate on one would put the shop's own payment into its GSTR-1
+             * Table 11A as a supply it never made.
+             */
+            advanceGstRate: type === 'received' ? (advanceGstRate ?? null) : null,
           },
         })
 

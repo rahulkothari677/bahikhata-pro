@@ -31,6 +31,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from '@/components/ui/select'
 import { useAppStore } from '@/store/app-store'
+import { Switch } from '@/components/ui/switch'
 import { formatINR, formatDate, cn } from '@/lib/utils'
 import { roundMoney } from '@/lib/money'
 import { computeInvoiceDue, planAllocationOldestFirst } from '@/lib/invoice-due'
@@ -91,6 +92,16 @@ export function PartySettle() {
    * want a plain oldest-first split instead.
    */
   const [intentBillId, setIntentBillId] = useState<string | null>(null)
+  /**
+   * GST rate on money taken before the bill exists. Null = no tax on it.
+   *
+   * Only ever offered for money RECEIVED that is not settling a bill, because
+   * that is the only shape an advance has. Kept off by default: advances for
+   * goods carry no GST (Notification 66/2017), so for most shops the honest
+   * answer is nothing, and a control that defaults to charging tax would create
+   * a liability the shopkeeper never had.
+   */
+  const [advanceGstRate, setAdvanceGstRate] = useState<number | null>(null)
 
   const { data, isLoading } = useQuery({
     queryKey: ['party', selectedPartyId, 'settle'],
@@ -256,6 +267,21 @@ export function PartySettle() {
   const overAllocated = allocatedTotal > parsedAmount
   const canSave = parsedAmount > 0 && !overAllocated && !overBill && !saving
 
+  /*
+   * Money received that is not settling any bill — the only thing an advance
+   * can be. The GST question is asked here and nowhere else, so a shopkeeper
+   * clearing an ordinary bill never sees it.
+   */
+  const heldOnAccount = roundMoney(Math.max(0, parsedAmount - allocatedTotal))
+  const couldBeAdvance = paymentType === 'received' && heldOnAccount > 0
+  /* Tax sits INSIDE the money received (Rule 35) — see advance-tax.ts. */
+  const advancePreview = advanceGstRate
+    ? {
+        taxable: roundMoney((heldOnAccount * 100) / (100 + advanceGstRate)),
+        tax: roundMoney(heldOnAccount - (heldOnAccount * 100) / (100 + advanceGstRate)),
+      }
+    : null
+
   const handleSave = async () => {
     if (!canSave) return
 
@@ -298,6 +324,9 @@ export function PartySettle() {
           // which bills the money is going to, so sending anything else would
           // mean the screen and the result could differ.
           allocations: allocations.length > 0 ? allocations : undefined,
+          // Only meaningful on a receipt held on account; the server ignores it
+          // on a payment out, and clears it if the money settles bills.
+          advanceGstRate: paymentType === 'received' ? advanceGstRate : null,
         }),
         offline: { invalidate: ['/api/parties', '/api/dashboard'] },
       })
@@ -449,6 +478,72 @@ export function PartySettle() {
                   autoFocus
                 />
               </div>
+
+              {/*
+                * Advance for a service — GST is due before the bill exists.
+                *
+                * Shown ONLY when money received is not settling a bill, which is
+                * the only shape an advance has. A kirana clearing a khata never
+                * meets this control.
+                *
+                * Off by default and phrased as a question about the WORK, not
+                * about tax law: a shopkeeper knows whether they are doing a job
+                * for the money; they do not know Notification 66/2017. Advances
+                * for goods carry no GST, so silence is the correct default and
+                * defaulting to a rate would invent a liability.
+                */}
+              {couldBeAdvance && (
+                <div className="rounded-xl border border-border/60 bg-muted/30 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium">Is this an advance for a service?</p>
+                      <p className="text-2xs text-muted-foreground mt-0.5">
+                        {formatINR(heldOnAccount)} is not against any bill. If it is a booking or
+                        part-payment for <span className="font-medium">work you will do</span> —
+                        tailoring, repairs, a salon appointment — GST is due now, not when you bill.
+                        For goods, leave this off.
+                      </p>
+                    </div>
+                    <Switch
+                      checked={advanceGstRate !== null}
+                      onCheckedChange={(on) => setAdvanceGstRate(on ? 18 : null)}
+                      aria-label="This advance is for a service"
+                    />
+                  </div>
+
+                  {advanceGstRate !== null && (
+                    <div className="mt-3">
+                      <p className="text-2xs font-medium text-muted-foreground mb-1.5">GST rate</p>
+                      <div className="flex gap-2">
+                        {[5, 12, 18, 28].map((r) => (
+                          <button
+                            key={r}
+                            type="button"
+                            onClick={() => setAdvanceGstRate(r)}
+                            className={cn(
+                              'flex-1 h-9 rounded-lg text-sm font-medium border transition',
+                              advanceGstRate === r
+                                ? 'border-primary bg-primary/10 text-primary'
+                                : 'border-border text-muted-foreground',
+                            )}
+                          >
+                            {r}%
+                          </button>
+                        ))}
+                      </div>
+                      {advancePreview && (
+                        /* The tax comes OUT of the money received, it is not added
+                           on top. Showing the split stops that being a surprise. */
+                        <p className="text-2xs text-muted-foreground mt-2">
+                          Of {formatINR(heldOnAccount)}, <b>{formatINR(advancePreview.tax)}</b> is
+                          GST and {formatINR(advancePreview.taxable)} is your earning. It goes into
+                          this month&apos;s return, and is adjusted automatically when you bill.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div>
                 <Label htmlFor="settle-notes" className="text-sm">Notes (optional)</Label>

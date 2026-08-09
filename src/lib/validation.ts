@@ -304,6 +304,17 @@ export const createPaymentSchema = z.object({
     transactionId: z.string().min(1),
     amount: z.coerce.number().min(0.01, 'Allocation must be greater than 0'),
   })).max(200).optional(),
+  /*
+   * GST rate on a service advance. Omit (the normal case) and no tax is due.
+   *
+   * Advances for goods are exempt (Notification 66/2017); advances for services
+   * are taxable on receipt and go into GSTR-1 Table 11A, then 11B when the
+   * invoice is raised. Only the rates GST actually uses are accepted — a typo
+   * like 1.8 would understate the liability by a factor of ten and nothing
+   * downstream would question it.
+   */
+  advanceGstRate: z.union([z.literal(5), z.literal(12), z.literal(18), z.literal(28)])
+    .nullable().optional(),
 })
 
 // Payment update schema (for editing/deleting)
