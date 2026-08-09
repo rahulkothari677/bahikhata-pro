@@ -276,7 +276,7 @@ export function computeLineItems(opts: {
        * line, so editing a product's HSN next year cannot rewrite a filed
        * return.
        */
-      hsn: p.product?.hsn || (p as { hsn?: string | null }).hsn || null,
+      hsn: p.product?.hsn || (p.item as { hsn?: string | null })?.hsn || null,
       /*
        * GST treatment snapshotted for the same reason as hsn above: Table 8
        * reports nil-rated, exempt and non-GST in separate boxes, and buildNIL
