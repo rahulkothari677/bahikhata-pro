@@ -15,6 +15,7 @@
  */
 
 import { useState } from 'react'
+import { NeedsAmending } from '@/components/reports/NeedsAmending'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -272,6 +273,16 @@ export function Gstr1Report() {
           </Button>
         </div>
       </div>
+
+      {/*
+        * Invoices that no longer match what was filed.
+        *
+        * Sits under the month picker because it is about THIS return: these
+        * amendments are carried in it. The engine emitted Table 9A a commit
+        * ago with nothing on screen to show it — the same way the filing
+        * readiness card once shipped invisible.
+        */}
+      <NeedsAmending b2ba={data?.gstr1?.b2ba} b2cla={data?.gstr1?.b2cla} />
 
       {/* Filed-vs-live divergence warning */}
       {hasDivergence && (
