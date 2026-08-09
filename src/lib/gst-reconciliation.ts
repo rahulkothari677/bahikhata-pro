@@ -33,6 +33,8 @@ export interface ReconcilingItem {
   amount: number
   /** Plain-language reason this difference is correct. */
   why: string
+  /** Rupee figure the reason refers to, when it has one. Formatted by the UI. */
+  value?: number
 }
 
 export interface ReconciliationResult {
@@ -112,7 +114,15 @@ export function reconcileReturns(input: ReconciliationInput): ReconciliationResu
     items.push({
       label: 'Nil-rated, exempt and non-GST sales',
       amount: 0,
-      why: `${roundMoney(input.nilExemptNonGst)} of supplies carry no tax. GSTR-1 reports them in Table 8 and GSTR-3B in 3.1(c) — neither counts them as taxable supplies.`,
+      /*
+       * `nilExemptNonGst` is carried as a NUMBER on the item, and the component
+       * formats it. Interpolating it raw into this sentence printed "2959 of
+       * supplies carry no tax" on screen beside properly formatted rupee
+       * figures — money written two ways in one card, on a tax document.
+       */
+      why: 'These supplies carry no tax. GSTR-1 reports them in Table 8 and GSTR-3B in 3.1(c) — neither counts them as taxable supplies.',
+      /** Rupee value of the nil/exempt/non-GST supplies, for the UI to format. */
+      value: roundMoney(input.nilExemptNonGst),
     })
   }
 

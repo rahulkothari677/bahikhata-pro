@@ -85,7 +85,20 @@ describe('differences that are supposed to be there', () => {
     const r = reconcileReturns({ ...clean, nilExemptNonGst: 2959 })
     expect(r.matched).toBe(true)
     expect(r.reconcilingItems[0].amount).toBe(0)
-    expect(r.reconcilingItems[0].why).toContain('2959')
+    expect(r.reconcilingItems[0].value).toBe(2959)
+  })
+
+  it('carries the rupee figure as a number, never baked into the sentence', () => {
+    /*
+     * It was interpolated into `why`, and the card printed "2959 of supplies
+     * carry no tax" next to properly formatted figures — money written two ways
+     * in one card, on a tax document. The UI owns formatting; this owns the
+     * number.
+     */
+    const r = reconcileReturns({ ...clean, nilExemptNonGst: 2959 })
+    // Table references like "Table 8" and "3.1(c)" are fine — the amount is not.
+    expect(r.reconcilingItems[0].why).not.toContain('2959')
+    expect(r.reconcilingItems[0].value).toBe(2959)
   })
 })
 

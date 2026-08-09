@@ -98,7 +98,7 @@ export function ReturnsAgree({ month }: { month: string }) {
                 {formatINR(data.gstr1Tax)}
               </span>
             </div>
-            {items.map((it: { label: string; amount: number; why: string }) => (
+            {items.map((it: { label: string; amount: number; why: string; value?: number }) => (
               <div key={it.label} className="text-xs">
                 <div className="flex items-baseline justify-between gap-3">
                   <span className="text-emerald-900 dark:text-emerald-200">{it.label}</span>
@@ -108,7 +108,9 @@ export function ReturnsAgree({ month }: { month: string }) {
                     </span>
                   )}
                 </div>
-                <p className="text-emerald-800/80 dark:text-emerald-300/80 mt-0.5">{it.why}</p>
+                <p className="text-emerald-800/80 dark:text-emerald-300/80 mt-0.5">
+                  {it.value !== undefined && <b>{formatINR(it.value)} </b>}{it.why}
+                </p>
               </div>
             ))}
             <div className="flex items-baseline justify-between gap-3 text-xs pt-2 border-t border-emerald-200 dark:border-emerald-900">
