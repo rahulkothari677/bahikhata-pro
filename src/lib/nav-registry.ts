@@ -32,7 +32,7 @@ import {
   Send, AlertTriangle, Mic, ScanBarcode, Sparkles, BarChart3,
   Store, CreditCard, Shield, Settings as SettingsIcon, Check,
   Database, UserCog, Gift, HelpCircle, Star, LogOut, Info,
-  Palette, Bell, Crown, Search,
+  Palette, Bell, Crown, Search, MessageCircleQuestion,
   TrendingUp, Clock, Scale, Receipt, Hash, Wallet as WalletIcon,
   Plus, UserPlus,
   type LucideIcon,
@@ -409,7 +409,13 @@ export const NAV_REGISTRY: NavDestination[] = [
     subcategory: 'smart-tools',
     label: 'Ask your books',
     description: 'Type or say a question — get the answer with its bills',
-    icon: Search,
+    /*
+     * NOT a magnifying glass. It was `Search`, and in the collapsed
+     * icon-only desktop sidebar that is indistinguishable from the search
+     * button — Rahul reported the feature as MISSING on desktop when it was
+     * sitting at the top of the sidebar wearing the wrong hat.
+     */
+    icon: MessageCircleQuestion,
     iconColor: BLUE,
     iconBg: BLUE_BG,
     view: 'ask',
