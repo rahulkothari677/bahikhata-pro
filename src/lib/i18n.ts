@@ -347,6 +347,7 @@ export const translations = {
     'nav.desc.hsn-summary': 'HSN/SAC-wise tax summary for GSTR-1 filing',
     'nav.desc.income-expense': 'Rent, salary, other income',
     'nav.desc.inventory': 'Products, stock, prices',
+    'nav.desc.ask': 'Type or say a question about your books',
     'nav.desc.inventory-aging': 'Slow-moving & dead stock by age bucket',
     'nav.desc.item-profit': 'Per-product profit, qty sold & margins',
     'nav.desc.logout': 'Sign out of your account',
@@ -407,6 +408,7 @@ export const translations = {
     'nav.label.hsn-summary': 'HSN Summary',
     'nav.label.income-expense': 'Income & Expense',
     'nav.label.inventory': 'Inventory',
+    'nav.label.ask': 'Ask your books',
     'nav.label.inventory-aging': 'Inventory Aging',
     'nav.label.item-profit': 'Item-wise Profit',
     'nav.label.logout': 'Logout',
@@ -755,6 +757,7 @@ export const translations = {
     'nav.desc.estimates': 'ग्राहक के लिए कोट बनाएं',
     'nav.desc.income-expense': 'किराया, वेतन, अन्य आय',
     'nav.desc.inventory': 'उत्पाद, स्टॉक, कीमतें',
+    'nav.desc.ask': 'Type or say a question about your books',
     'nav.desc.logout': 'अपने खाते से साइन आउट करें',
     'nav.desc.new-purchase': 'खरीद बिल दर्ज करें',
     'nav.desc.new-sale': 'बिक्री चालान दर्ज करें',
@@ -772,6 +775,7 @@ export const translations = {
     'nav.label.estimates': 'नया अनुमान / कोटेशन',
     'nav.label.income-expense': 'आय और व्यय',
     'nav.label.inventory': 'इन्वेंट्री',
+    'nav.label.ask': 'Ask your books',
     'nav.label.logout': 'लॉगआउट',
     'nav.label.new-purchase': 'नई खरीद',
     'nav.label.new-sale': 'नई बिक्री',
@@ -995,6 +999,7 @@ export const translations = {
     // 🔒 Nav Registry i18n keys (Phase 1) — fallback to English
     'nav.label.dashboard': 'ડેશબોર્ડ',
     'nav.label.inventory': 'ઇન્વેન્ટરી',
+    'nav.label.ask': 'Ask your books',
     'nav.label.parties': 'પાર્ટી',
     'nav.label.purchases': 'ખરીદ',
     'nav.label.reports': 'રિપોર્ટ',
@@ -1120,6 +1125,7 @@ export const translations = {
     // 🔒 Nav Registry i18n keys (Phase 1) — fallback to English
     'nav.label.dashboard': 'डॅशबोर्ड',
     'nav.label.inventory': 'इन्व्हेंटरी',
+    'nav.label.ask': 'Ask your books',
     'nav.label.parties': 'पक्ष',
     'nav.label.purchases': 'खरेदी',
     'nav.label.reports': 'अहवाल',
@@ -1245,6 +1251,7 @@ export const translations = {
     // 🔒 Nav Registry i18n keys (Phase 1) — fallback to English
     'nav.label.dashboard': 'டாஷ்போர்டு',
     'nav.label.inventory': 'இன்வென்டரி',
+    'nav.label.ask': 'Ask your books',
     'nav.label.parties': 'தரப்பினர்',
     'nav.label.purchases': 'கொள்முதல்',
     'nav.label.reports': 'அறிக்கைகள்',
@@ -1370,6 +1377,7 @@ export const translations = {
     // 🔒 Nav Registry i18n keys (Phase 1) — fallback to English
     'nav.label.dashboard': 'డాష్‌బోర్డ్',
     'nav.label.inventory': 'ఇన్వెంటరీ',
+    'nav.label.ask': 'Ask your books',
     'nav.label.parties': 'పార్టీలు',
     'nav.label.purchases': 'కొనుగోళ్లు',
     'nav.label.reports': 'నివేదికలు',

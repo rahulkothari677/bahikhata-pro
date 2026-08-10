@@ -3,6 +3,7 @@ import { rememberScroll, restoreScroll, scrollToTop } from '@/lib/scroll-memory'
 
 export type ViewType =
   | 'dashboard'
+  | 'ask'
   | 'inventory'
   | 'sales'
   | 'purchases'

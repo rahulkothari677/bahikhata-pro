@@ -63,6 +63,7 @@ const PartyBills = dynamic(() => import('@/components/parties/PartyBills').then(
 const PartySettle = dynamic(() => import('@/components/parties/PartySettle').then(m => ({ default: m.PartySettle })), { ssr: false })
 const BillScanner = dynamic(() => import('@/components/scanner/BillScanner').then(m => ({ default: m.BillScanner })), { ssr: false })
 const Reports = dynamic(() => import('@/components/reports/Reports').then(m => ({ default: m.Reports })), { ssr: false })
+const AskBox = dynamic(() => import('@/components/ask/AskBox').then(m => ({ default: m.AskBox })), { ssr: false })
 const ToolsHub = dynamic(() => import('@/components/layout/ToolsHub').then(m => ({ default: m.ToolsHub })), { ssr: false })
 const Settings = dynamic(() => import('@/components/settings/Settings').then(m => ({ default: m.Settings })), { ssr: false })
 const PricingPlans = dynamic(() => import('@/components/subscription/PricingPlans').then(m => ({ default: m.PricingPlans })), { ssr: false })
@@ -534,6 +535,7 @@ export default function Home() {
             {currentView === 'parties' && <Parties />}
             {currentView === 'scanner' && <BillScanner />}
             {currentView === 'reports' && <Reports />}
+            {currentView === 'ask' && <AskBox />}
             {currentView === 'tools' && <ToolsHub />}
             {currentView === 'settings' && <Settings />}
             {currentView === 'pricing' && (
