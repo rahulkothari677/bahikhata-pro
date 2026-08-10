@@ -114,8 +114,24 @@ export async function POST(req: NextRequest) {
       /* ───────────────────────────── PARTY BALANCE ─────────────────── */
       case 'party_balance': {
         const name = q.partyName || ''
+        /*
+         * `deletedAt: null` IS NOT OPTIONAL, and leaving it out is what Rahul
+         * hit: his Parties page listed one customer while Ask offered three to
+         * choose between — the other two deleted, each with their phone number
+         * and balance printed next to their name.
+         *
+         * A deleted party is deleted. Bringing one back inside a chat answer
+         * republishes a contact the shopkeeper removed on purpose, and makes
+         * Ask disagree with the screen it is supposed to be a shortcut to.
+         * /api/parties has always filtered this way; this query simply never
+         * copied it.
+         */
         const parties = await db.party.findMany({
-          where: { userId, name: { contains: escapeLikeWildcards(name), mode: 'insensitive' } },
+          where: {
+            userId,
+            deletedAt: null,
+            name: { contains: escapeLikeWildcards(name), mode: 'insensitive' },
+          },
           select: { id: true, name: true, type: true, phone: true },
           take: 5,
         })
@@ -341,8 +357,10 @@ export async function POST(req: NextRequest) {
          * would have been a fresh opportunity to reintroduce exactly that.
          */
         const { partyBalances } = await getReceivablePayable(userId)
+        // Same omission as the balance lookup above: a deleted party must not
+        // be named in the receivables or payables list either.
         const names = await db.party.findMany({
-          where: { userId }, select: { id: true, name: true }, take: 500,
+          where: { userId, deletedAt: null }, select: { id: true, name: true }, take: 500,
         })
         const nameById = new Map(names.map(n => [n.id, n.name]))
         const parties = [...partyBalances.entries()]

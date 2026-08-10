@@ -36,6 +36,19 @@ describe('🔒 V16 C5 — Soft-delete filter sweep (no query may miss deletedAt:
   // Endpoints that legitimately need to see soft-deleted rows.
   // Each entry: [fileRelativePath, reasonForException]
   const ALLOWED_EXCEPTIONS: Array<[string, string]> = [
+    /*
+     * MUST see soft-deleted parties, and this is not a loose end — filtering
+     * here would silently change the tax on existing invoices.
+     *
+     * deriveInterStateStatus looks a party up by primary key to decide place
+     * of supply. Its own comment says "if party not found, treat as walk-in
+     * (intra-state default)". So excluding a deleted party does not hide it —
+     * it flips an INTER-state sale to INTRA-state, turning IGST into
+     * CGST+SGST on a bill that was already issued and possibly already filed.
+     *
+     * Deleting a customer must never restate the GST on their old invoices.
+     */
+    ['lib/gst.ts', 'place-of-supply lookup by primary key: a deleted party must still resolve, or an inter-state invoice silently becomes intra-state and IGST becomes CGST+SGST'],
     ['app/api/account/export/route.ts', 'data export includes everything for backup/restore'],
     ['app/api/export/full/route.ts', 'full data export includes everything for backup/restore'],
     ['app/api/import/restore/route.ts', 'restore endpoint imports data — no deletedAt filter needed on create'],
@@ -107,16 +120,57 @@ describe('🔒 V16 C5 — Soft-delete filter sweep (no query may miss deletedAt:
       const rawSrc = fs.readFileSync(file, 'utf-8')
       const src = stripComments(rawSrc)
 
-      // Match `db.payment.<method>` or `db.transaction.<method>` calls.
+      /*
+       * EVERY soft-deletable model, not just the two this sweep was born for.
+       *
+       * `deletedAt` exists on Document, Party, Payment and Transaction. This
+       * scan covered only payment and transaction, so `db.party.*` was never
+       * checked — and Ask your books shipped with two unfiltered party
+       * queries. The effect Rahul saw: his Parties page listed one customer
+       * while Ask offered three to choose between, the other two deleted, each
+       * with their phone number and balance beside their name.
+       *
+       * A guard that covers two of the four models is not a guard against the
+       * class; it is a guard against two instances of it. If a fifth model
+       * gains a deletedAt column, add it here.
+       */
       // Skip delete/create/update/upsert — they target specific rows or insert.
       // Skip findUnique — it fetches a specific row by ID (not a list query).
-      const callRegex = /\bdb\.(payment|transaction)\.(aggregate|findMany|findFirst|count|groupBy)\b/g
+      const callRegex = /\bdb\.(payment|transaction|party|document)\.(aggregate|findMany|findFirst|count|groupBy)\b/g
       let match: RegExpExecArray | null
       while ((match = callRegex.exec(src)) !== null) {
         const model = match[1]
         const callStart = match.index
-        // Look at the next 1500 chars for the where: clause.
-        const window = src.slice(callStart, callStart + 1500)
+
+        /*
+         * THE CALL'S OWN ARGUMENTS, not a fixed slice of the file.
+         *
+         * This used to read `src.slice(callStart, callStart + 1500)`, and that
+         * is a false negative waiting to happen: 1500 characters routinely
+         * spans the NEXT query, so an unfiltered call passed because a
+         * different, properly filtered call further down happened to contain
+         * `deletedAt: null`.
+         *
+         * Proved on the real bug. After removing the filter from the party
+         * lookup in api/ask, this sweep still went green — the second party
+         * query 200 lines away was inside the window and vouched for it.
+         *
+         * Walking from the opening paren to its matching close bounds the
+         * check to the arguments of THIS call and nothing else.
+         */
+        const open = src.indexOf('(', callStart)
+        let window = src.slice(callStart, callStart + 1500)   // fallback if unparseable
+        if (open !== -1) {
+          let depth = 0
+          for (let i = open; i < src.length; i++) {
+            const ch = src[i]
+            if (ch === '(') depth++
+            else if (ch === ')') {
+              depth--
+              if (depth === 0) { window = src.slice(callStart, i + 1); break }
+            }
+          }
+        }
 
         // Exemption 1: uses activeTransactionWhere helper (filters deletedAt)
         if (/activeTransactionWhere\s*\(/.test(window)) continue
