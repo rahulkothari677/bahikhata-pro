@@ -35,6 +35,7 @@ import { Switch } from '@/components/ui/switch'
 import { formatINR, formatDate, cn } from '@/lib/utils'
 import { roundMoney } from '@/lib/money'
 import { computeInvoiceDue, planAllocationOldestFirst } from '@/lib/invoice-due'
+import { defaultSettleDirection } from '@/lib/settle-direction'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { invalidateMoneyCaches } from '@/lib/invalidate-money-caches'
 import { readError } from '@/lib/read-error'
@@ -167,27 +168,37 @@ export function PartySettle() {
   const overpayAmount = Math.max(0, parsedAmount - Math.abs(balance))
 
   /**
-   * Default the direction once, when the party loads.
+   * Point the direction at whichever way the money actually sits.
    *
-   * Two things point at "money going out", not one:
-   *  - a supplier, who is normally paid rather than collected from; and
-   *  - ANY party whose balance is negative, which by this app's convention
-   *    (see the "You owe them" label below) means we owe them — a customer who
-   *    overpaid, or whose credit notes exceed their bills. Settling that means
-   *    handing money back.
+   * The rule itself lives in lib/settle-direction, with the invariant it
+   * protects: the dropdown must never contradict the "They owe you" / "You owe
+   * them" label above it, because a payment recorded backwards moves the
+   * balance the wrong way by twice the amount.
    *
-   * Dropping the second branch would let the page read "You owe them" while the
-   * direction box said "Received", and a shopkeeper who didn't catch it would
-   * record the payment backwards — moving the balance the wrong way by twice
-   * the amount.
+   * THIS USED TO LATCH ON THE FIRST RENDER, and that was wrong twice.
    *
-   * Guarded by a ref so a manual change to the dropdown is never overwritten.
+   * It ran `if (!data || defaulted.current) return; defaulted.current = true`.
+   * With React Query, the first truthy `data` is the CACHED copy — so opening
+   * Settle for a party whose balance had changed since it was last viewed
+   * defaulted from the stale figure and then locked, and the fresh balance
+   * arriving a moment later could no longer correct it. Found live: a customer
+   * at −₹1,025 was invoiced ₹2,100, and Settle opened reading "They owe you
+   * ₹1,075" with the direction box saying "Paid to supplier" — exactly the
+   * contradiction the old comment here warned about, arrived at by a route it
+   * did not anticipate.
+   *
+   * The old rule also asked `party.type === 'supplier'` first, which contradicts
+   * the label for any supplier who owes US after a return or an overpayment.
+   *
+   * So the latch is now "has the shopkeeper chosen?", not "have we run?". The
+   * default keeps following the balance until they touch the dropdown, and
+   * from that moment their choice is never overwritten — which was the only
+   * thing the original ref was actually for.
    */
-  const directionDefaulted = useRef(false)
+  const userChoseDirection = useRef(false)
   useEffect(() => {
-    if (!data || directionDefaulted.current) return
-    directionDefaulted.current = true
-    if (party?.type === 'supplier' || balance < 0) setPaymentType('paid')
+    if (!data || userChoseDirection.current) return
+    setPaymentType(defaultSettleDirection(party?.type, balance))
   }, [data, party?.type, balance])
 
   /**
@@ -453,7 +464,16 @@ export function PartySettle() {
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <div>
                 <Label htmlFor="settle-type" className="text-sm">Payment Type</Label>
-                <Select value={paymentType} onValueChange={(v) => setPaymentType(v as 'received' | 'paid')}>
+                <Select
+                  value={paymentType}
+                  onValueChange={(v) => {
+                    // From here on the shopkeeper owns this field. The effect
+                    // above stops re-deriving it, which is what the old ref was
+                    // really guarding — it just guarded it from the wrong thing.
+                    userChoseDirection.current = true
+                    setPaymentType(v as 'received' | 'paid')
+                  }}
+                >
                   <SelectTrigger id="settle-type" className="mt-1"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="received">Received from customer</SelectItem>
