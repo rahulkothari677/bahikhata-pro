@@ -215,21 +215,34 @@ export async function POST(req: NextRequest) {
             message: 'Profit figures are not shown on your login. Ask the shop owner.',
           })
         }
-        // Gross profit as the books already define it, so this AGREES with the
-        // P&L screen rather than offering a second opinion.
+        /*
+         * THE SIGN IS ALREADY IN THE STORED VALUE. Do not apply it twice.
+         *
+         * A credit note's grossProfit is persisted NEGATIVE (a ₹1,000 return
+         * stores −1000). I first wrote `sales − notes`, which turned the
+         * subtraction into an addition and reported ₹3,880 where the P&L said
+         * ₹1,740 — the same month, two screens, two answers.
+         *
+         * Caught by checking this answer against the P&L on live data, which
+         * is the rule this feature lives by: an answer must agree with the
+         * screen it came from, to the paisa. Same family as the GSTR-9
+         * double-subtraction — assuming a sign that had already been applied.
+         *
+         * So: one aggregate over sales AND credit notes together, letting the
+         * stored signs do the work.
+         */
         const sales = await db.transaction.aggregate({
+          where: { userId, deletedAt: null, type: { in: ['sale', 'credit-note'] }, date: { gte: from, lt: to } },
+          _sum: { grossProfit: true }, _count: true,
+        })
+        const saleCount = await db.transaction.count({
           where: { userId, deletedAt: null, type: 'sale', date: { gte: from, lt: to } },
-          _sum: { grossProfit: true, subtotal: true }, _count: true,
         })
-        const notes = await db.transaction.aggregate({
-          where: { userId, deletedAt: null, type: 'credit-note', date: { gte: from, lt: to } },
-          _sum: { grossProfit: true },
-        })
-        const profit = roundMoney((sales._sum.grossProfit || 0) - (notes._sum.grossProfit || 0))
+        const profit = roundMoney(sales._sum.grossProfit || 0)
         return NextResponse.json({
           answered: true, question, understoodAs: q.understoodAs,
           headline: `${money(profit)} gross profit ${label}`,
-          detail: `From ${sales._count} sale${sales._count === 1 ? '' : 's'}. Sale price less cost price, before expenses and excluding GST.`,
+          detail: `From ${saleCount} sale${saleCount === 1 ? '' : 's'}, net of returns. Sale price less cost price, before expenses and excluding GST.`,
           sources: [],
         })
       }
