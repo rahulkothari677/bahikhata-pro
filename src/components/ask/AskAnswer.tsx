@@ -18,10 +18,16 @@
  * disambiguation list is for.
  */
 
-import { Receipt, User, Package, Info, CheckCircle2, AlertTriangle } from 'lucide-react'
+import { useState } from 'react'
+import {
+  Receipt, User, Package, Info, CheckCircle2, AlertTriangle,
+  MessageCircle, HandCoins, Loader2,
+} from 'lucide-react'
+import { toast } from 'sonner'
 import { formatINR } from '@/lib/utils'
+import { offlineFetch } from '@/lib/offline-fetch'
 import { useAppStore } from '@/store/app-store'
-import type { AskAnswerPayload, AskSource, AskChoice } from '@/lib/ask-thread'
+import type { AskAnswerPayload, AskSource, AskChoice, AskAction } from '@/lib/ask-thread'
 
 function SourceIcon({ kind }: { kind: AskSource['kind'] }) {
   const cls = 'w-4 h-4 text-muted-foreground flex-shrink-0'
@@ -80,11 +86,100 @@ export function AskAnswer({
   onAsk: (q: string) => void
 }) {
   const setView = useAppStore(s => s.setView)
+  const setPreviousView = useAppStore(s => s.setPreviousView)
+  const setSelectedTransactionId = useAppStore(s => s.setSelectedTransactionId)
+  const setSelectedPartyId = useAppStore(s => s.setSelectedPartyId)
+  const setPendingSettle = useAppStore(s => s.setPendingSettle)
+  /*
+   * The SAME toggle PartyProfile checks before it shows its reminder button.
+   * A shopkeeper who switched Payment Reminders off in Settings has said they
+   * do not want this; offering it here anyway would mean the party screen and
+   * the chat disagree about what the app does.
+   */
+  const remindersOn = useAppStore(s => s.features?.paymentReminders)
+  const [busy, setBusy] = useState<AskAction['kind'] | null>(null)
+
+  /*
+   * A RECEIPT OPENS THE RECORD IT NAMES.
+   *
+   * This used to send you to the LIST — tap "INV-0001" under an answer and you
+   * landed on the sales screen with fifty bills and no INV-0001 in sight. The
+   * whole promise of this feature is that a figure is checkable in one tap, and
+   * a list is not the bill.
+   *
+   * Same navigation GlobalSearch has always used for the same job, including
+   * `previousView`, so Back comes straight back to the conversation instead of
+   * stranding you in the ledger.
+   */
+  /*
+   * ACTIONS REUSE THE SCREENS, they do not reimplement them.
+   *
+   * `settle` hands off to the Settle page exactly as PartyBills does, including
+   * `pendingSettle` when we know which bill — so allocation, payment direction
+   * and the paise arithmetic all stay in the one place that is already tested.
+   * A second payment path written for the chat would be a second chance to get
+   * money wrong.
+   *
+   * `remind` calls the same /api/whatsapp-reminder PartyProfile calls, and like
+   * PartyProfile it OPENS WhatsApp with the message ready rather than sending
+   * anything. Nothing here messages a customer without the shopkeeper pressing
+   * send themselves.
+   */
+  const runAction = async (a: AskAction) => {
+    const from = useAppStore.getState().currentView
+    if (a.kind === 'remind') {
+      setBusy('remind')
+      try {
+        const r = await offlineFetch('/api/whatsapp-reminder', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ partyId: a.partyId }),
+        })
+        const data = await r.json()
+        if (data.success) {
+          window.open(data.whatsappUrl, '_blank')
+          toast.success('Opening WhatsApp with the reminder ready to send')
+        } else {
+          toast.error(data.error || "Couldn't prepare the reminder")
+        }
+      } catch (e: any) {
+        toast.error(e?.message || "Couldn't prepare the reminder")
+      } finally {
+        setBusy(null)
+      }
+      return
+    }
+    setSelectedPartyId(a.partyId)
+    setPreviousView(from)
+    if (a.kind === 'settle') {
+      // Only when there is exactly one unpaid bill does the server name it.
+      // With several it sends none, and Settle asks which — allocating a
+      // payment to the wrong invoice is a real error, not a guess worth making.
+      setPendingSettle(
+        a.transactionId
+          ? { transactionId: a.transactionId, invoiceNo: a.invoiceNo ?? null, amount: a.amount ?? 0 }
+          : null,
+      )
+      setView('party-settle')
+    } else {
+      setView('party-profile')
+    }
+  }
 
   const open = (s: AskSource) => {
-    if (s.kind === 'transaction') setView('sales')
-    else if (s.kind === 'party') setView('parties')
-    else setView('inventory')
+    const from = useAppStore.getState().currentView
+    if (s.kind === 'transaction') {
+      setSelectedTransactionId(s.id)
+      setPreviousView(from)
+      setView('transaction-detail')
+    } else if (s.kind === 'party') {
+      setSelectedPartyId(s.id)
+      setPreviousView(from)
+      setView('party-profile')
+    } else {
+      setPreviousView(from)
+      setView('inventory')
+    }
   }
 
   return (
@@ -133,6 +228,32 @@ export function AskAnswer({
           </div>
         </div>
       )}
+
+      {/* What to do about it. Above the receipts, because the receipts are for
+          checking and this is for acting — and acting is why they asked. */}
+      {payload.actions?.length ? (
+        <div className="flex flex-wrap gap-2 pt-1">
+          {payload.actions.filter(a => a.kind !== 'remind' || remindersOn).map(a => (
+            <button
+              key={a.kind}
+              onClick={() => runAction(a)}
+              disabled={busy === a.kind}
+              className={
+                a.kind === 'open-party'
+                  ? 'inline-flex items-center gap-1.5 rounded-full border border-border/60 px-4 py-2.5 text-sm font-medium hover:bg-muted disabled:opacity-50'
+                  : 'inline-flex items-center gap-1.5 rounded-full bg-primary text-primary-foreground px-4 py-2.5 text-sm font-semibold disabled:opacity-50'
+              }
+            >
+              {busy === a.kind
+                ? <Loader2 className="w-4 h-4 animate-spin" />
+                : a.kind === 'remind' ? <MessageCircle className="w-4 h-4" />
+                : a.kind === 'settle' ? <HandCoins className="w-4 h-4" />
+                : <User className="w-4 h-4" />}
+              {a.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       {/* The receipts. */}
       {payload.sources?.length ? (

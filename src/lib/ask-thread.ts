@@ -41,6 +41,34 @@ export interface AskChoice {
   lastInvoiceNo?: string | null
 }
 
+/**
+ * THE NEXT STEP, ON THE ANSWER ITSELF.
+ *
+ * Knowing Ramesh owes ₹1,025 is not the job. Chasing it is. Every other
+ * assistant stops at the sentence and leaves you to go and find the screen;
+ * ours puts the actual button on the answer, because the shopkeeper asked the
+ * question for a reason and we already know what it was.
+ *
+ * NOTHING HERE PERFORMS THE ACTION. An action carries an intent and the ids it
+ * needs, and the client hands it to the SAME screen the rest of the app uses —
+ * Settle for a payment, the existing WhatsApp reminder endpoint for a chase.
+ * No second implementation of anything that touches money, which is the only
+ * way the figure on the answer and the figure on the screen stay equal.
+ *
+ * `remind` is the one exception that leaves the app, and it still does not
+ * send: it opens WhatsApp with the message prepared, so the shopkeeper presses
+ * send. We never message a customer on their behalf without them seeing it.
+ */
+export interface AskAction {
+  kind: 'remind' | 'settle' | 'open-party'
+  label: string
+  partyId: string
+  /** Settle a specific bill rather than the running balance, when we know it. */
+  transactionId?: string
+  invoiceNo?: string | null
+  amount?: number
+}
+
 export interface AskAnswerPayload {
   answered: boolean
   understoodAs?: string
@@ -50,6 +78,7 @@ export interface AskAnswerPayload {
   examples?: readonly string[]
   choices?: AskChoice[]
   sources?: AskSource[]
+  actions?: AskAction[]
 }
 
 export type AskMessage =

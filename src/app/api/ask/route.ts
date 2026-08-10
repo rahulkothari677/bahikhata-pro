@@ -9,6 +9,7 @@ import { escapeLikeWildcards } from '@/lib/escape-like'
 import { computePartyBalance, getReceivablePayable } from '@/lib/party-balance'
 import { computeInvoiceDue } from '@/lib/invoice-due'
 import { shouldHideProfit } from '@/lib/profit-visibility'
+import { buildBalanceActions } from '@/lib/ask-actions'
 
 /**
  * "Ask your books" — Phase 1. NO LANGUAGE MODEL IS INVOLVED.
@@ -195,6 +196,39 @@ export async function POST(req: NextRequest) {
         }))
         const unpaid = withDue.filter(b => b.due > 0.005)
         const owed = stats.balance
+
+        /*
+         * WHAT TO DO ABOUT IT — Phase 2.2.
+         *
+         * The answer already tells the shopkeeper Anil owes ₹1,025. They asked
+         * because they intend to do something about it, and we know what: chase
+         * it, or record what came in. So the button goes on the answer.
+         *
+         * DIRECTION DECIDES THE VERBS, and getting this wrong is not cosmetic —
+         * offering "send reminder" on a supplier would have us nagging someone
+         * we owe money to. Positive balance means they owe us; negative means we
+         * owe them, and then the only sane action is recording what we paid.
+         *
+         * A REMINDER NEEDS A PHONE NUMBER. Without one the endpoint has nowhere
+         * to send it, so the button is not offered rather than offered and then
+         * failing — a dead button teaches the shopkeeper not to trust the row.
+         *
+         * SETTLE AGAINST A SPECIFIC BILL when there is exactly one unpaid, which
+         * is what PartyBills does. With several, we deliberately do NOT choose:
+         * allocating a payment to the wrong invoice is a real accounting error,
+         * and the Settle page already lets them pick.
+         *
+         * The 0.005 threshold is half a paisa — the same rounding guard used on
+         * `unpaid` two lines up, so a balance of exactly zero never offers a
+         * payment button.
+         */
+        const actions = buildBalanceActions({
+          partyId: p.id,
+          phone: p.phone,
+          balance: owed,
+          unpaid: unpaid.map(b => ({ id: b.id, invoiceNo: b.invoiceNo, due: b.due })),
+        })
+
         return NextResponse.json({
           answered: true, question, understoodAs: q.understoodAs,
           headline: owed >= 0
@@ -209,6 +243,7 @@ export async function POST(req: NextRequest) {
             amount: b.due,
             date: b.date,
           })),
+          actions,
         })
       }
 
