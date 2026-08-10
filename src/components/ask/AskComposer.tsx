@@ -45,19 +45,35 @@
 import { useEffect, useRef, useState } from 'react'
 import { Mic, MicOff, AudioLines, Square, ArrowUp, X, Keyboard, Plus, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useSetting } from '@/hooks/use-setting'
 
 /**
- * The shopkeeper's chosen voice language, as a BCP-47 locale.
- * Mirrors VoiceEntry: the app already stores `voiceLang` and respects it for
- * voice ENTRY, so asking a question must not listen in a different language
- * from the one they set. 'original' means "keep what I speak" — Hindi.
+ * ASKING LISTENS IN en-IN. Deliberately, and deliberately NOT the user's
+ * `voiceLang` setting.
+ *
+ * I wired this to voiceLang so that asking would respect the same language as
+ * entering a sale. It defaults to 'original' → hi-IN, so every spoken question
+ * came back in Devanagari: "रमेश का कितना बाकी है".
+ *
+ * Which is a perfectly good transcription and completely useless to us,
+ * because `lib/ask-patterns` is Latin-only. I tested it: every Devanagari
+ * question returns null. So the chain was voice works → text appears → nothing
+ * understands it.
+ *
+ * en-IN is the right locale for THIS job. It transcribes spoken Hinglish as
+ * romanised words — "ramesh ka kitna baaki hai" — which is exactly the dialect
+ * the patterns are written for, and exactly what Rahul asked for: English and
+ * Hinglish first.
+ *
+ * VOICE ENTRY IS A DIFFERENT JOB and keeps voiceLang. There, Devanagari is
+ * wanted: a shopkeeper naming "चीनी" should get "चीनी" on the product.
+ * Understanding a question and recording a product name are not the same task
+ * and should not share a setting.
+ *
+ * Hindi asking (a Devanagari branch in the patterns, plus transliterating
+ * names so "रमेश" finds a customer stored as "Ramesh") is Phase 2.7. When it
+ * lands, this becomes a real choice again rather than a constant.
  */
-const VOICE_LOCALE: Record<string, string> = {
-  original: 'hi-IN', hi: 'hi-IN', en: 'en-IN', mr: 'mr-IN',
-  gu: 'gu-IN', ta: 'ta-IN', te: 'te-IN', kn: 'kn-IN',
-  ml: 'ml-IN', bn: 'bn-IN', pa: 'pa-IN',
-}
+const ASK_LOCALE = 'en-IN'
 
 export type ComposerMode = 'idle' | 'dictating' | 'voice'
 
@@ -100,11 +116,6 @@ export function AskComposer({
   speaking: boolean
   statusLine: string | null
 }) {
-  // `useSetting` exposes the whole record on `.setting`; voiceLang is not one
-  // of its named conveniences (only hideProfit is).
-  const { setting } = useSetting()
-  const locale = VOICE_LOCALE[setting?.voiceLang || 'original'] || 'hi-IN'
-
   const [voiceError, setVoiceError] = useState<string | null>(null)
   const [hearing, setHearing] = useState(false)   // words currently arriving
   const [tick, setTick] = useState(0)
@@ -159,7 +170,7 @@ export function AskComposer({
     // Chrome — the session runs but often yields no final result at all.
     rec.continuous = false
     rec.interimResults = true
-    rec.lang = locale
+    rec.lang = ASK_LOCALE
     rec.maxAlternatives = 1
 
     rec.onresult = (e: any) => {

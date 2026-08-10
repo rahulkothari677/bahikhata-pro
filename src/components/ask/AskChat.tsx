@@ -3,83 +3,98 @@
 /**
  * Ask your books — the conversation.
  *
- * WHY A THREAD RATHER THAN A SEARCH BOX. Not for the look of it. A question
- * about a person is rarely the last question about that person: you ask what
- * they owe, then when they last paid, then you want to chase them. A box that
- * forgets between questions makes you retype the name every time.
+ * OWNS THE WHOLE SCREEN, including the bottom edge, and for a concrete reason:
+ * it first shipped inside the ordinary shell, so the composer sat under the
+ * fixed bottom nav and the text field, waveform and send button were all
+ * hidden. Voice had been working the entire time; none of its controls were
+ * visible. Same treatment as `party-settle`, whose comment records the same
+ * collision months earlier.
  *
  * WHAT IS DELIBERATELY DIFFERENT FROM GEMINI AND CHATGPT:
+ *   No model picker — a shopkeeper must never think about which model ran.
+ *   No "AI can make mistakes" — they generated the number; ours is computed
+ *     and carries its bills.
+ *   The resting state is not empty. A general assistant knows nothing until
+ *     you speak; we know the time, the unpaid bills and the GST deadline.
+ *     (Live counts are 2.5; the shape is here.)
  *
- *   THE RESTING STATE IS NOT EMPTY. Theirs must be — a general assistant knows
- *   nothing about you until you speak. We know it is 3pm, we know four bills
- *   are unpaid, and we know the GST deadline. An empty box would be us
- *   pretending to know nothing about a business we know everything about.
- *   (Live counts land in Phase 2.5; the shape is here.)
- *
- *   NO "AI CAN MAKE MISTAKES" DISCLAIMER. They need it — they generated the
- *   number. Ours is computed and carries its bills.
- *
- *   NO MODEL PICKER. A shopkeeper must never think about which model answered.
- *
- * SPEAKING BACK, AND WHEN NOT TO. In voice mode the headline is read aloud,
- * because the point is not looking at the screen. It reads the HEADLINE only —
- * never the list of bills, which would be a minute of droning account numbers.
+ * HISTORY IS CONVERSATIONS, NOT QUESTIONS. Opening one restores it — no
+ * re-asking, no second round trip, and stored answers keep their original
+ * timestamps, because a balance from Tuesday is not a claim about today.
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { Sparkles, History, Trash2, X, ArrowLeft } from 'lucide-react'
+import { Sparkles, Menu, Plus, ArrowLeft, Lightbulb, X } from 'lucide-react'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { AskComposer, type ComposerMode } from '@/components/ask/AskComposer'
 import { AskAnswer } from '@/components/ask/AskAnswer'
+import { AskDrawer } from '@/components/ask/AskDrawer'
 import {
-  loadThread, saveThread, clearThread, recentQuestions, newId, whenLabel,
-  type AskMessage,
+  loadConversations, saveConversations, newId, whenLabel, titleFor,
+  type AskMessage, type AskConversation,
 } from '@/lib/ask-thread'
 import { ASK_EXAMPLES } from '@/lib/ask-patterns'
 import { useAppStore } from '@/store/app-store'
 
 export function AskChat() {
+  const [conversations, setConversations] = useState<AskConversation[]>([])
+  const [currentId, setCurrentId] = useState<string | null>(null)
   const [messages, setMessages] = useState<AskMessage[]>([])
   const [draft, setDraft] = useState('')
   const [mode, setMode] = useState<ComposerMode>('idle')
   const [busy, setBusy] = useState(false)
   const [speaking, setSpeaking] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
-  const [historyOpen, setHistoryOpen] = useState(false)
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const [tipsOpen, setTipsOpen] = useState(false)
   const setView = useAppStore(st => st.setView)
   const threadRef = useRef<HTMLDivElement>(null)
   const modeRef = useRef<ComposerMode>('idle')
+  const lastCount = useRef(0)
 
   useEffect(() => { modeRef.current = mode }, [mode])
-  useEffect(() => { setMessages(loadThread()) }, [])
-  useEffect(() => { if (messages.length) saveThread(messages) }, [messages])
+
+  // Load saved conversations, and resume the most recent one.
+  useEffect(() => {
+    const list = loadConversations()
+    setConversations(list)
+    if (list.length) { setCurrentId(list[0].id); setMessages(list[0].messages) }
+  }, [])
+
+  /** Persist the live thread into its conversation on every change. */
+  useEffect(() => {
+    if (!messages.length) return
+    setConversations(prev => {
+      const now = Date.now()
+      const id = currentId || newId()
+      const existing = prev.find(c => c.id === id)
+      const updated: AskConversation = existing
+        ? { ...existing, messages, title: existing.title || titleFor(messages), updatedAt: now }
+        : { id, title: titleFor(messages), messages, createdAt: now, updatedAt: now }
+      const next = [updated, ...prev.filter(c => c.id !== id)]
+      saveConversations(next)
+      if (!currentId) setCurrentId(id)
+      return next
+    })
+  }, [messages, currentId])
 
   /*
-   * SCROLL TO THE BOTTOM ONLY WHEN A MESSAGE IS ADDED — and only inside the
-   * thread.
-   *
-   * Two bugs in one line before this. `scrollIntoView` scrolls every scrollable
-   * ANCESTOR, so it dragged the whole page as well as the thread — which is
-   * the "it jumps down" Rahul reported. And it ran on every `messages` change,
-   * including the restore-from-storage on mount, so opening the screen threw
-   * you to the bottom of an old conversation instead of showing its start.
-   *
-   * Now: track the count, scroll only when it GROWS, and move the thread's own
-   * scrollTop rather than asking the browser to reveal an element.
+   * Scroll only when a message is ADDED, and only the thread's own scrollTop.
+   * `scrollIntoView` scrolls every scrollable ancestor, which dragged the page
+   * as well — the "it jumps down" report. Restoring a conversation must land
+   * at the newest message without animating through the whole history.
    */
-  const lastCount = useRef(0)
   useEffect(() => {
     const el = threadRef.current
     if (!el) return
     if (messages.length > lastCount.current && lastCount.current !== 0) {
       el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
-    } else if (lastCount.current === 0 && messages.length > 0) {
-      el.scrollTop = el.scrollHeight   // first paint: land at the newest, no animation
+    } else if (messages.length > 0) {
+      el.scrollTop = el.scrollHeight
     }
     lastCount.current = messages.length
   }, [messages])
 
-  /** Read the headline aloud — voice mode only, headline only. */
   const speak = useCallback((text: string) => {
     if (typeof window === 'undefined' || !window.speechSynthesis) return
     try {
@@ -97,6 +112,7 @@ export function AskChat() {
     const t = text.trim()
     if (!t) return
     setDraft('')
+    setTipsOpen(false)
     setBusy(true)
     setStatus(viaVoice ? 'Checking your books…' : null)
 
@@ -111,114 +127,86 @@ export function AskChat() {
         body: JSON.stringify({ question: t }),
       })
       const payload = await r.json()
-      setMessages(m => [
-        ...m.filter(x => x.id !== thinking.id),
-        { id: newId(), role: 'answer', payload, at: Date.now() },
-      ])
-      // Only in voice mode, and only the headline.
+      setMessages(m => [...m.filter(x => x.id !== thinking.id),
+        { id: newId(), role: 'answer', payload, at: Date.now() }])
       if (modeRef.current === 'voice') {
         speak(payload.answered ? (payload.headline || '') : (payload.message || ''))
       }
     } catch {
-      setMessages(m => [
-        ...m.filter(x => x.id !== thinking.id),
-        {
-          id: newId(), role: 'answer', at: Date.now(),
-          payload: { answered: false, message: 'Could not reach your books just now. Try again.' },
-        },
-      ])
+      setMessages(m => [...m.filter(x => x.id !== thinking.id), {
+        id: newId(), role: 'answer', at: Date.now(),
+        payload: { answered: false, message: 'Could not reach your books just now. Try again.' },
+      }])
     } finally {
       setBusy(false)
       setStatus(null)
     }
   }, [speak])
 
-  const history = recentQuestions(messages)
+  /** File the current conversation away and start an empty one. */
+  const newChat = () => {
+    setMessages([])
+    setCurrentId(null)
+    lastCount.current = 0
+    setDraft('')
+    setTipsOpen(false)
+  }
+
+  const openConversation = (id: string) => {
+    const c = conversations.find(x => x.id === id)
+    if (!c) return
+    setCurrentId(id)
+    setMessages(c.messages)
+    lastCount.current = 0        // restore lands at the bottom, without animating
+  }
+
+  const deleteConversation = (id: string) => {
+    setConversations(prev => {
+      const next = prev.filter(c => c.id !== id)
+      saveConversations(next)
+      if (id === currentId) { setMessages([]); setCurrentId(null); lastCount.current = 0 }
+      return next
+    })
+  }
+
   const isEmpty = messages.length === 0
 
   return (
-    /*
-     * OWNS THE WHOLE SCREEN, including the bottom edge.
-     *
-     * This used to render inside the ordinary shell, so the composer sat under
-     * the fixed bottom nav — the text field, the dictation waveform and the
-     * send button were all hidden behind it. Voice had been working the whole
-     * time; you simply could not see any of its controls.
-     *
-     * 100dvh, not 100vh: on a phone the browser chrome grows and shrinks as
-     * you scroll, and vh is measured against the largest state — which puts
-     * the composer below the fold at exactly the moment the keyboard opens.
-     */
-    /*
-     * PAD FOR THE STATUS BAR, do not merely subtract it.
-     *
-     * My first attempt took the safe areas OUT OF THE HEIGHT and stopped
-     * there — so the box was the right size but still started at y=0, and the
-     * title sat on top of the phone's clock and signal icons.
-     *
-     * Header.tsx has done this correctly all along: `paddingTop:
-     * var(--safe-top)`. On Android these values are injected by Capacitor
-     * because env() is permanently zero there (see the note in globals.css),
-     * which is why guessing a fixed pixel offset would work on one device and
-     * fail on the next.
-     */
     <div
       className="flex flex-col"
-      style={{
-        height: '100dvh',
-        paddingTop: 'var(--safe-top)',
-        paddingBottom: 'var(--safe-bottom)',
-      }}
+      style={{ height: '100dvh', paddingTop: 'var(--safe-top)', paddingBottom: 'var(--safe-bottom)' }}
     >
-      {/* ── Its own top bar, since the global one is gone ───────────── */}
-      <div className="flex items-center gap-2 pb-2 flex-shrink-0">
-        <button
-          onClick={() => setView('more')}
-          aria-label="Go back"
-          className="w-9 h-9 rounded-full hover:bg-muted flex items-center justify-center flex-shrink-0 -ml-1"
-        >
-          <ArrowLeft className="w-5 h-5" />
+      <AskDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        conversations={conversations}
+        currentId={currentId}
+        onOpenConversation={openConversation}
+        onNewChat={newChat}
+        onDelete={deleteConversation}
+      />
+
+      {/* ── Top bar ─────────────────────────────────────────────────── */}
+      <div className="flex items-center gap-1 pb-2 flex-shrink-0">
+        <button onClick={() => setDrawerOpen(true)} aria-label="Conversations"
+          className="w-9 h-9 rounded-full hover:bg-muted flex items-center justify-center flex-shrink-0 -ml-1">
+          <Menu className="w-5 h-5" />
         </button>
-        <div className="min-w-0 flex-1">
+        <div className="min-w-0 flex-1 px-1">
           <h2 className="text-base font-bold truncate leading-tight">Ask your books</h2>
           <p className="text-2xs text-muted-foreground">English or Hinglish · type or speak</p>
         </div>
-        <div className="flex items-center gap-1 flex-shrink-0">
-          {history.length > 0 && (
-            <button onClick={() => setHistoryOpen(o => !o)} aria-label="Recent questions"
-              className="w-9 h-9 rounded-full hover:bg-muted flex items-center justify-center">
-              <History className="w-4 h-4" />
-            </button>
-          )}
-          {!isEmpty && (
-            <button
-              onClick={() => { clearThread(); setMessages([]); setHistoryOpen(false) }}
-              aria-label="Clear conversation"
-              className="w-9 h-9 rounded-full hover:bg-muted flex items-center justify-center text-muted-foreground"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-          )}
-        </div>
+        {!isEmpty && (
+          <button onClick={newChat} aria-label="New chat"
+            className="w-9 h-9 rounded-full hover:bg-muted flex items-center justify-center flex-shrink-0">
+            <Plus className="w-5 h-5" />
+          </button>
+        )}
+        <button onClick={() => setView('more')} aria-label="Go back"
+          className="w-9 h-9 rounded-full hover:bg-muted flex items-center justify-center flex-shrink-0">
+          <ArrowLeft className="w-5 h-5" />
+        </button>
       </div>
-
-      {/* ── Recent questions ───────────────────────────────────────── */}
-      {historyOpen && history.length > 0 && (
-        <div className="mb-2 rounded-xl border border-border/60 bg-card p-2">
-          <div className="flex items-center justify-between mb-1 px-1">
-            <p className="text-3xs uppercase tracking-wide text-muted-foreground">Recent questions</p>
-            <button onClick={() => setHistoryOpen(false)} aria-label="Close" className="p-1"><X className="w-3.5 h-3.5" /></button>
-          </div>
-          <div className="max-h-40 overflow-y-auto">
-            {history.map(h => (
-              <button key={h} onClick={() => { setHistoryOpen(false); ask(h) }}
-                className="w-full text-left text-xs px-2 py-1.5 rounded-md hover:bg-muted truncate">
-                {h}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* ── Thread ─────────────────────────────────────────────────── */}
       <div ref={threadRef} className="flex-1 overflow-y-auto overscroll-contain space-y-3 pb-3">
@@ -277,8 +265,37 @@ export function AskChat() {
         )}
       </div>
 
+      {/* ── Suggestions, available at any point ─────────────────────── */}
+      {tipsOpen && (
+        <div className="mb-2 rounded-2xl border border-border/60 bg-card p-3 flex-shrink-0">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-3xs uppercase tracking-wide text-muted-foreground">Things you can ask</p>
+            <button onClick={() => setTipsOpen(false)} aria-label="Close suggestions" className="p-1">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {ASK_EXAMPLES.map(ex => (
+              <button key={ex} onClick={() => ask(ex)}
+                className="text-2xs px-2.5 py-1.5 rounded-full border border-border/60 hover:bg-muted">
+                {ex}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ── Composer ───────────────────────────────────────────────── */}
-      <div className="pt-1">
+      <div className="pt-1 flex-shrink-0">
+        {/* The suggestions button lives beside the composer rather than only on
+            the empty screen: the moment you have asked one thing, the examples
+            vanished and there was no way back to them. */}
+        {!isEmpty && !tipsOpen && mode === 'idle' && (
+          <button onClick={() => setTipsOpen(true)}
+            className="mb-1.5 ml-1 inline-flex items-center gap-1.5 text-2xs text-muted-foreground hover:text-foreground">
+            <Lightbulb className="w-3.5 h-3.5" /> Things you can ask
+          </button>
+        )}
         <AskComposer
           mode={mode}
           setMode={setMode}

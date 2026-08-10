@@ -57,64 +57,107 @@ export type AskMessage =
   | { id: string; role: 'answer'; payload: AskAnswerPayload; at: number }
   | { id: string; role: 'thinking'; at: number }
 
-const KEY = 'ekbook:ask-thread'
-/** Enough to scroll back through a week of asking; small enough to stay fast. */
+/**
+ * MANY CONVERSATIONS, NOT ONE.
+ *
+ * The first version kept a single running thread, so history was a list of
+ * past QUESTIONS and tapping one re-asked it. That is wrong twice over:
+ * re-asking costs a round trip to say something already on screen, and it
+ * loses the thing you actually wanted — the conversation that question was
+ * part of, with its answer, its receipts and whatever you asked next.
+ *
+ * So the unit of history is a CONVERSATION. "New chat" files the current one
+ * away exactly as ChatGPT does; opening one from the drawer RESTORES it
+ * rather than replaying it. Nothing is re-fetched, and a stored answer keeps
+ * its original timestamp because a balance from Tuesday is not a claim about
+ * today.
+ */
+export interface AskConversation {
+  id: string
+  /** Taken from the first question asked — the only title anyone would write. */
+  title: string
+  messages: AskMessage[]
+  createdAt: number
+  updatedAt: number
+}
+
+const STORE_KEY = 'ekbook:ask-conversations'
+const LEGACY_KEY = 'ekbook:ask-thread'
+/** Enough to scroll back through weeks; small enough to stay fast. */
 const MAX_MESSAGES = 100
+const MAX_CONVERSATIONS = 50
 
 export function newId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 
-export function loadThread(): AskMessage[] {
+function isMessage(m: unknown): m is AskMessage {
+  const x = m as AskMessage
+  return !!x && typeof x === 'object' && 'role' in x && 'id' in x
+}
+
+/** First question, trimmed to something that fits a drawer row. */
+export function titleFor(messages: AskMessage[]): string {
+  const first = messages.find(m => m.role === 'user')
+  if (!first || first.role !== 'user') return 'New conversation'
+  const t = first.text.trim()
+  return t.length > 42 ? `${t.slice(0, 42)}…` : t
+}
+
+export function loadConversations(): AskConversation[] {
   if (typeof window === 'undefined') return []
   try {
-    const raw = window.localStorage.getItem(KEY)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return []
-    // A half-written or hand-edited entry must not break the screen: drop
-    // anything that does not look like a message rather than throwing.
-    return parsed.filter((m: unknown) => {
-      const x = m as AskMessage
-      return x && typeof x === 'object' && 'role' in x && 'id' in x
-    })
+    const raw = window.localStorage.getItem(STORE_KEY)
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (!Array.isArray(parsed)) return []
+      return parsed
+        .filter(c => c && Array.isArray(c.messages) && c.id)
+        .map(c => ({ ...c, messages: c.messages.filter(isMessage) }))
+        .sort((a, b) => b.updatedAt - a.updatedAt)
+    }
+    /*
+     * MIGRATE THE OLD SINGLE THREAD rather than dropping it. Someone who has
+     * been using this since yesterday should not lose their questions because
+     * the storage shape changed underneath them.
+     */
+    const legacy = window.localStorage.getItem(LEGACY_KEY)
+    if (legacy) {
+      const msgs = (JSON.parse(legacy) as unknown[]).filter(isMessage)
+      window.localStorage.removeItem(LEGACY_KEY)
+      if (msgs.length) {
+        const conv: AskConversation = {
+          id: newId(), title: titleFor(msgs), messages: msgs,
+          createdAt: msgs[0].at, updatedAt: msgs[msgs.length - 1].at,
+        }
+        saveConversations([conv])
+        return [conv]
+      }
+    }
+    return []
   } catch {
     return []
   }
 }
 
-export function saveThread(messages: AskMessage[]): void {
+export function saveConversations(list: AskConversation[]): void {
   if (typeof window === 'undefined') return
   try {
-    // 'thinking' is a transient UI state, never history — persisting it would
-    // restore a spinner that can never resolve.
-    const durable = messages.filter(m => m.role !== 'thinking').slice(-MAX_MESSAGES)
-    window.localStorage.setItem(KEY, JSON.stringify(durable))
+    const durable = list
+      .map(c => ({
+        ...c,
+        // 'thinking' is transient UI, never history — storing it would restore
+        // a spinner that can never resolve.
+        messages: c.messages.filter(m => m.role !== 'thinking').slice(-MAX_MESSAGES),
+      }))
+      .filter(c => c.messages.length > 0)
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .slice(0, MAX_CONVERSATIONS)
+    window.localStorage.setItem(STORE_KEY, JSON.stringify(durable))
   } catch {
     /* Storage full or blocked (private mode). The conversation still works for
        this session; losing history is better than losing the answer. */
   }
-}
-
-export function clearThread(): void {
-  if (typeof window === 'undefined') return
-  try { window.localStorage.removeItem(KEY) } catch { /* see above */ }
-}
-
-/** Distinct questions, most recent first — for the history drawer. */
-export function recentQuestions(messages: AskMessage[], limit = 20): string[] {
-  const seen = new Set<string>()
-  const out: string[] = []
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const m = messages[i]
-    if (m.role !== 'user') continue
-    const key = m.text.trim().toLowerCase()
-    if (!key || seen.has(key)) continue
-    seen.add(key)
-    out.push(m.text)
-    if (out.length >= limit) break
-  }
-  return out
 }
 
 /**
