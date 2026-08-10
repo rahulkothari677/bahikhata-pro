@@ -65,6 +65,23 @@ function resolvePeriod(period: AskPeriod): { from: Date; to: Date; label: string
 
 const money = (n: number) => `₹${roundMoney(n).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
+/**
+ * "3 days ago" / "2 months ago" — how people place a customer in time.
+ *
+ * A date ("09/08/2026") makes the reader do arithmetic; "last week" is what
+ * they already remember. Used only to help tell two same-named people apart,
+ * so approximate is not merely acceptable, it is the point.
+ */
+function relativeDay(d: Date): string {
+  const days = Math.floor((Date.now() - new Date(d).getTime()) / 86_400_000)
+  if (days <= 0) return 'today'
+  if (days === 1) return 'yesterday'
+  if (days < 7) return `${days} days ago`
+  if (days < 30) return `${Math.floor(days / 7)} week${days < 14 ? '' : 's'} ago`
+  if (days < 365) return `${Math.floor(days / 30)} month${days < 60 ? '' : 's'} ago`
+  return `${Math.floor(days / 365)} year${days < 730 ? '' : 's'} ago`
+}
+
 export async function POST(req: NextRequest) {
   try {
     const auth = await getAuthContext()
@@ -98,7 +115,7 @@ export async function POST(req: NextRequest) {
         const name = q.partyName || ''
         const parties = await db.party.findMany({
           where: { userId, name: { contains: escapeLikeWildcards(name), mode: 'insensitive' } },
-          select: { id: true, name: true, type: true },
+          select: { id: true, name: true, type: true, phone: true },
           take: 5,
         })
         if (parties.length === 0) {
@@ -107,12 +124,42 @@ export async function POST(req: NextRequest) {
             message: `No customer or supplier named “${name}”. Check the spelling, or add them first.`,
           })
         }
-        // Never pick between two people with similar names — ask.
+        /*
+         * MORE THAN ONE MATCH: ASK, NEVER PICK.
+         *
+         * And a bare list of identical names is no better than picking — two
+         * customers called Ramesh tell the shopkeeper nothing. So each choice
+         * carries the things people actually remember someone by: their phone,
+         * what they owe, and WHEN YOU LAST DEALT WITH THEM. "The Ramesh I saw
+         * last week" is how this recall actually works.
+         *
+         * Costs one extra query on a path that only runs when there IS an
+         * ambiguity, which is rare — and being fast is worth nothing here if
+         * the shopkeeper cannot tell the two apart.
+         */
         if (parties.length > 1) {
+          const enriched = await Promise.all(parties.map(async p => {
+            const [stats, last] = await Promise.all([
+              computePartyBalance(userId, p.id),
+              db.transaction.findFirst({
+                where: { userId, deletedAt: null, partyId: p.id },
+                select: { invoiceNo: true, date: true },
+                orderBy: { date: 'desc' },
+              }),
+            ])
+            return {
+              id: p.id,
+              name: p.name,
+              phone: p.phone,
+              balance: stats.balance,
+              lastInvoiceNo: last?.invoiceNo ?? null,
+              lastActivity: last?.date ? relativeDay(last.date) : null,
+            }
+          }))
           return NextResponse.json({
             answered: false, question, understoodAs: q.understoodAs,
-            message: `More than one match for “${name}”. Which did you mean?`,
-            choices: parties.map(p => ({ id: p.id, name: p.name })),
+            message: `${enriched.length} matches for “${name}”. Which one?`,
+            choices: enriched,
           })
         }
         const p = parties[0]
