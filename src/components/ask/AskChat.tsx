@@ -325,7 +325,7 @@ export function AskChat() {
             vanished and there was no way back to them. */}
         {!isEmpty && !tipsOpen && mode === 'idle' && (
           <button onClick={() => setTipsOpen(true)}
-            className="mb-2 ml-1 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground py-1.5">
+            className="mb-1 ml-1 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground py-3">
             <Lightbulb className="w-4 h-4" /> Things you can ask
           </button>
         )}

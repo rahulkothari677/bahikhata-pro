@@ -56,6 +56,33 @@ function withoutComments(text: string): string {
 
 const lineOf = (text: string, index: number) => text.slice(0, index).split('\n').length
 
+/**
+ * Every `<button …>` opening tag, in full.
+ *
+ * A plain `/<button[\s\S]*?>/` regex does NOT work here and quietly under-
+ * reports: it stops at the first `>`, which in `onClick={() => …}` is the
+ * arrow, so the className is never examined and the button looks compliant.
+ * Tracking brace depth means a `>` inside `{…}` is skipped, and the tag ends
+ * at the real one.
+ */
+function buttonTags(src: string): { text: string; index: number }[] {
+  const tags: { text: string; index: number }[] = []
+  const OPEN = /<button\b/g
+  for (const m of src.matchAll(OPEN)) {
+    let depth = 0
+    for (let i = m.index!; i < src.length; i++) {
+      const ch = src[i]
+      if (ch === '{') depth++
+      else if (ch === '}') depth--
+      else if (ch === '>' && depth === 0) {
+        tags.push({ text: src.slice(m.index!, i + 1), index: m.index! })
+        break
+      }
+    }
+  }
+  return tags
+}
+
 describe('Ask surface — platform sizing', () => {
   test('no icon button below 44px (Material 48dp / iOS HIG 44pt)', () => {
     const violations: string[] = []
@@ -67,16 +94,47 @@ describe('Ask surface — platform sizing', () => {
       const src = withoutComments(text)
       // <button> opening tags only. An avatar circle or a decorative glyph is
       // not pressed and may be any size it likes — the rule is about fingers.
-      for (const tag of src.matchAll(/<button\b[\s\S]*?>/g)) {
-        for (const m of tag[0].matchAll(TOO_SMALL)) {
+      for (const tag of buttonTags(src)) {
+        for (const m of tag.text.matchAll(TOO_SMALL)) {
           const w = Number(m[1]) * 4
           const h = Number(m[2]) * 4
           if (w < MIN_TOUCH_PX || h < MIN_TOUCH_PX) {
             violations.push(
-              `${name}:${lineOf(src, tag.index!)}: ${w}x${h}px — ` +
-              tag[0].replace(/\s+/g, ' ').slice(0, 90),
+              `${name}:${lineOf(src, tag.index)}: ${w}x${h}px — ` +
+              tag.text.replace(/\s+/g, ' ').slice(0, 90),
             )
           }
+        }
+      }
+    }
+
+    /*
+     * The version of this guard that shipped first only looked at explicit
+     * `w-N h-N`, so it passed a "Things you can ask" button that measured
+     * 150x32 in the live browser — sized entirely by `py-1.5` and a 20px line
+     * box. Static analysis missed what a ruler found, so the rule now also
+     * covers buttons sized by padding alone.
+     *
+     * CHIPS ARE EXEMPT, and not as a loophole: Material 3 specifies assist and
+     * suggestion chips at 32dp, below the 48dp target rule, because they come
+     * in rows where a 48dp box would swallow the layout. Ours run 36-40px,
+     * above Material's own chip height. `rounded-full` is what marks them.
+     */
+    for (const { name, text } of askFiles()) {
+      const src = withoutComments(text)
+      for (const tag of buttonTags(src)) {
+        const t = tag.text
+        if (/\bw-\d+\s+h-\d+\b/.test(t)) continue         // sized explicitly, checked above
+        if (/\bmin-h-\[/.test(t)) continue                // sized by a floor
+        if (/\brounded-full\b/.test(t)) continue          // chip — Material 3 allows 32dp
+        const py = /\bpy-(\d+(?:\.\d+)?)\b/.exec(t)
+        // 20px line box + 2x12px padding = 44px. py-3 is the smallest that clears it.
+        if (!py || Number(py[1]) < 3) {
+          violations.push(
+            `${name}:${lineOf(src, tag.index)}: padding-sized, ` +
+            `${py ? `py-${py[1]}` : 'no py-'} — under 44px — ` +
+            t.replace(/\s+/g, ' ').slice(0, 90),
+          )
         }
       }
     }
