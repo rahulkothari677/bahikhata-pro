@@ -31,7 +31,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
-import { Mic, AudioLines, Square, ArrowUp, X, Keyboard, Plus, Loader2 } from 'lucide-react'
+import { Mic, MicOff, AudioLines, Square, ArrowUp, X, Keyboard, Plus, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export type ComposerMode = 'idle' | 'dictating' | 'voice'
@@ -70,6 +70,20 @@ export function AskComposer({
   speaking: boolean
   statusLine: string | null
 }) {
+  /*
+   * WHY THE MICROPHONE CAN FAIL SILENTLY, AND WHY THAT IS NOT ALLOWED.
+   *
+   * Found in browser testing: tapping the mic did nothing at all. Speech
+   * recognition raises an error the instant the microphone is unavailable —
+   * permission denied, no device, or a browser that blocks it — and the error
+   * handler dropped straight back to typing. Correct behaviour, invisible
+   * execution: the shopkeeper taps a button, the screen does not change, and
+   * they are left tapping it again.
+   *
+   * Reverting to typing IS right. Saying nothing is not. A refusal has to be
+   * legible, exactly like the ones the answers give.
+   */
+  const [voiceError, setVoiceError] = useState<string | null>(null)
   const [level, setLevel] = useState(0)
   const [, force] = useState(0)
   const recognitionRef = useRef<any>(null)
@@ -126,7 +140,12 @@ export function AskComposer({
 
   const beginListening = async (forMode: 'dictating' | 'voice') => {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
-    if (!SR) return
+    if (!SR) {
+      setVoiceError('Voice isn’t available in this browser. You can type instead.')
+      setMode('idle')
+      return
+    }
+    setVoiceError(null)
     draftRef.current = ''
     const rec = new SR()
     /*
@@ -161,7 +180,17 @@ export function AskComposer({
         }
       }
     }
-    rec.onerror = () => { if (forMode === 'dictating') endAll() }
+    rec.onerror = (e: any) => {
+      // Name the reason. "not-allowed" is by far the most common and the one
+      // the shopkeeper can actually do something about.
+      const why = e?.error === 'not-allowed' || e?.error === 'service-not-allowed'
+        ? 'Microphone blocked. Allow it in your browser settings, or type instead.'
+        : e?.error === 'no-speech'
+          ? 'Didn’t catch that. Try again, or type instead.'
+          : 'Voice isn’t available on this device. You can type instead.'
+      setVoiceError(why)
+      endAll()
+    }
     rec.onend = () => {
       // Conversation mode should keep listening between turns; dictation stops.
       if (forMode === 'voice' && recognitionRef.current) {
@@ -243,6 +272,18 @@ export function AskComposer({
 
   /* ── IDLE ──────────────────────────────────────────────────────────── */
   return (
+    <div className="space-y-1.5">
+    {/* The refusal, said out loud. Dismissed the moment they start typing,
+        because by then they have already worked around it. */}
+    {voiceError && (
+      <div className="flex items-start gap-2 px-2 text-2xs text-muted-foreground">
+        <MicOff className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+        <p className="flex-1">{voiceError}</p>
+        <button onClick={() => setVoiceError(null)} aria-label="Dismiss" className="p-0.5">
+          <X className="w-3 h-3" />
+        </button>
+      </div>
+    )}
     <div className="flex items-center gap-2 rounded-full border border-border/60 bg-card pl-2 pr-2 py-1.5 shadow-sm">
       <button
         aria-label="Add a bill or photo"
@@ -277,6 +318,7 @@ export function AskComposer({
           </button>
         </>
       ) : null}
+    </div>
     </div>
   )
 }
