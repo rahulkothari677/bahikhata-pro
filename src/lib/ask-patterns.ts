@@ -98,6 +98,47 @@ function cleanName(raw: string): string | undefined {
  * rather than guess. "I cannot answer that yet" is a correct answer; a
  * plausible wrong one is not.
  */
+/**
+ * Subjects the books DO hold but this parser cannot yet answer about.
+ *
+ * WHY THIS EXISTS. Two branches below are deliberately greedy — the stock
+ * branch fires on the bare word "maal", and the sales branch takes anything
+ * with "kitna" and a period that nothing more specific claimed. Between them
+ * they were answering questions about entirely different subjects, and
+ * answering them CONFIDENTLY:
+ *
+ *   "is mahine kitna kharcha hua"      → "₹2,212.00 of sales this month"
+ *   "kal kitna bijli ka bill tha"      → "₹2,212.00 of sales yesterday"
+ *   "is hafte kitna transport kharcha" → "₹0.00 of sales this week"
+ *   "kal kitna maal kharida"           → "3 products, lowest stock first"
+ *
+ * All four came back with answered: true. A shopkeeper who asks what they
+ * SPENT and is shown in bold what they EARNED has been actively misled, and
+ * the entire claim of this feature is that its figures can be trusted. The
+ * "Showing: Sales · this month" line discloses the misreading, but nobody
+ * reads the caption over a number in 24px type.
+ *
+ * Refusing is not a lesser answer here — it is the correct one. The same
+ * reasoning as the advice guard below: being wrong confidently is worse than
+ * saying we cannot do it yet, because only one of those two gets corrected.
+ *
+ * Stems rather than whole words, so kharcha/kharche/kharch and
+ * kharida/kharidi/kharidna are all caught by one entry.
+ */
+const NAMES_A_SUBJECT_WE_CANNOT_ANSWER =
+  /\b(kharch\w*|kharid\w*|khareed\w*|expense\w*|purchase\w*|spent|spending|salary|tankh\w*|bijli|rent|kiraya|transport|bhada|bhaada)\b/
+
+/**
+ * Words that say outright "this is about selling".
+ *
+ * Kept as a constant because the stock branch needs it too. "kal kitna maal
+ * becha" — how much did I SELL yesterday — was being answered with a list of
+ * stock levels, because "maal" reaches the stock branch first and "kitna" was
+ * enough to make it look like a stock query. An explicit verb beats a greedy
+ * noun; the sales branch further down is the right owner of that sentence.
+ */
+const NAMES_SALES = /\b(sale|sales|bikri|bikree|becha|bika|revenue|turnover)\b/
+
 export function parseAsk(question: string): AskQuery | null {
   const q = normalise(question)
   if (!q) return null
@@ -143,8 +184,7 @@ export function parseAsk(question: string): AskQuery | null {
 
   // ── STOCK ───────────────────────────────────────────────────────────
   // "chawal kitna stock hai", "stock of rice", "how much rice is left"
-  const stockMatch = q.match(/\b(?:stock|maal|inventory)\b/) ? q : null
-  if (stockMatch) {
+  if (/\b(?:stock|maal|inventory)\b/.test(q)) {
     const m = q.match(/(?:stock (?:of|me|mein)\s+)([a-z0-9 ]+)/) || q.match(/^([a-z0-9 ]+?)\s+(?:ka|ki)\s+stock/)
     const item = m ? cleanName(m[1]) : undefined
     // Require either a named item, or a shape that is clearly a QUERY. The
@@ -152,8 +192,26 @@ export function parseAsk(question: string): AskQuery | null {
     // about stock levels.
     const looksLikeQuery = !!item || /\b(kitna|kitne|how much|how many|show|dikhao|level|levels)\b/.test(q)
     if (!looksLikeQuery) return null
-    return { intent: 'stock_item', itemName: item, period: 'all_time', source: 'pattern',
-      understoodAs: item ? `Stock of "${titleCase(item)}"` : 'Stock levels' }
+
+    /*
+     * WITH NO ITEM NAMED this branch is guessing from the bare word "maal",
+     * and a plainly stated subject beats a guess. Two ways that happened, both
+     * seen answering real questions wrongly:
+     *
+     *   "kal kitna maal kharida" — a PURCHASE question, answered with stock
+     *     levels. We cannot answer it at all, so refuse.
+     *   "kal kitna maal becha"   — a SALES question, answered with stock
+     *     levels. We CAN answer it, so fall through to the sales branch.
+     *
+     * When an item IS named the sentence has said what it is about, and stock
+     * is no longer a guess — so neither check applies.
+     */
+    const guessingFromMaal = !item
+    if (guessingFromMaal && NAMES_A_SUBJECT_WE_CANNOT_ANSWER.test(q)) return null
+    if (!(guessingFromMaal && NAMES_SALES.test(q))) {
+      return { intent: 'stock_item', itemName: item, period: 'all_time', source: 'pattern',
+        understoodAs: item ? `Stock of "${titleCase(item)}"` : 'Stock levels' }
+    }
   }
 
   // ── RECEIVABLES / PAYABLES (no specific person) ─────────────────────
@@ -185,8 +243,13 @@ export function parseAsk(question: string): AskQuery | null {
   // ── SALES ───────────────────────────────────────────────────────────
   // Last, because it is the broadest: any question mentioning a period and
   // "kitna" that has not matched something more specific is a sales question.
+  // The second clause is the greedy one: "kitna" plus a period, with nothing
+  // more specific claimed. It must not fire when the question plainly names a
+  // different subject — that is where the four wrong answers came from. An
+  // EXPLICIT sales word still wins, so "kal kitna maal becha" is unaffected.
   if (/\b(sale|sales|bikri|bikree|becha|bika|revenue|turnover)\b/.test(q)
-    || (/\bkitna\b/.test(q) && period !== 'all_time')) {
+    || (/\bkitna\b/.test(q) && period !== 'all_time'
+        && !NAMES_A_SUBJECT_WE_CANNOT_ANSWER.test(q))) {
     return { intent: 'sales_period', period: period === 'all_time' ? 'today' : period, source: 'pattern',
       understoodAs: `Sales · ${period === 'all_time' ? 'today' : periodLabel}` }
   }
