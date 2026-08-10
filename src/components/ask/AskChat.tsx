@@ -195,7 +195,15 @@ export function AskChat() {
 
   return (
     <div
-      className="flex flex-col"
+      /*
+       * max-w-3xl (768px) and centred, because on a 1280px desktop this
+       * column measured 1195px wide and the answer cards 1098px. A line of
+       * text that long is genuinely hard to read — the eye loses its place
+       * on the return sweep — which is why every assistant, ours included
+       * now, caps the conversation at roughly 45-75 characters. On a phone
+       * the cap never binds and the 16px margin is what does the work.
+       */
+      className="flex flex-col w-full max-w-3xl mx-auto"
       style={{
         height: '100dvh',
         paddingTop: 'var(--safe-top)',
