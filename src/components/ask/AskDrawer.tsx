@@ -68,17 +68,17 @@ export function AskDrawer({
         )}
         style={{ paddingTop: 'var(--safe-top)', paddingBottom: 'var(--safe-bottom)' }}
       >
-        <div className="flex items-center justify-between gap-2 px-3 py-3 flex-shrink-0">
-          <p className="text-sm font-bold">Conversations</p>
+        <div className="flex items-center justify-between gap-2 px-4 py-3 flex-shrink-0">
+          <p className="text-xl font-bold">Conversations</p>
           <button onClick={onClose} aria-label="Close conversations"
-            className="w-9 h-9 rounded-full hover:bg-muted flex items-center justify-center">
-            <X className="w-4 h-4" />
+            className="w-12 h-12 rounded-full hover:bg-muted flex items-center justify-center -mr-2.5">
+            <X className="w-6 h-6" />
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto overscroll-contain px-2 pb-2">
+        <div className="flex-1 overflow-y-auto overscroll-contain px-3 pb-2">
           {conversations.length === 0 ? (
-            <p className="text-xs text-muted-foreground px-2 py-6 text-center">
+            <p className="text-sm text-muted-foreground px-2 py-6 text-center">
               Nothing saved yet. Ask something and it will appear here.
             </p>
           ) : (
@@ -92,12 +92,12 @@ export function AskDrawer({
               >
                 <button
                   onClick={() => { onOpenConversation(c.id); onClose() }}
-                  className="flex-1 min-w-0 text-left px-2.5 py-2.5 flex items-start gap-2.5"
+                  className="flex-1 min-w-0 text-left px-3 py-3 min-h-[3rem] flex items-start gap-3"
                 >
-                  <MessageSquare className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                  <MessageSquare className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
                   <span className="min-w-0 flex-1">
-                    <span className="block text-sm truncate">{c.title}</span>
-                    <span className="block text-3xs text-muted-foreground">
+                    <span className="block text-base truncate">{c.title}</span>
+                    <span className="block text-xs text-muted-foreground">
                       {whenLabel(c.updatedAt)} · {c.messages.filter(m => m.role === 'user').length} question
                       {c.messages.filter(m => m.role === 'user').length === 1 ? '' : 's'}
                     </span>
@@ -106,9 +106,9 @@ export function AskDrawer({
                 <button
                   onClick={() => onDelete(c.id)}
                   aria-label={`Delete conversation: ${c.title}`}
-                  className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 text-muted-foreground opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-rose-600"
+                  className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 text-muted-foreground opacity-60 group-hover:opacity-100 focus:opacity-100 hover:text-rose-600"
                 >
-                  <Trash2 className="w-3.5 h-3.5" />
+                  <Trash2 className="w-5 h-5" />
                 </button>
               </div>
             ))
@@ -117,12 +117,12 @@ export function AskDrawer({
 
         {/* Pinned at the bottom, where the thumb already is — the one action
             you always want from this panel. */}
-        <div className="p-2 border-t border-border flex-shrink-0">
+        <div className="p-3 border-t border-border flex-shrink-0">
           <button
             onClick={() => { onNewChat(); onClose() }}
-            className="w-full flex items-center justify-center gap-2 rounded-full bg-primary text-primary-foreground py-2.5 text-sm font-medium"
+            className="w-full flex items-center justify-center gap-2 rounded-full bg-primary text-primary-foreground py-3.5 text-base font-semibold"
           >
-            <Plus className="w-4 h-4" /> New chat
+            <Plus className="w-5 h-5" /> New chat
           </button>
         </div>
       </aside>

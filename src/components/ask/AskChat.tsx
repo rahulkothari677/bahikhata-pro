@@ -23,6 +23,28 @@
  * timestamps, because a balance from Tuesday is not a claim about today.
  */
 
+/*
+ * SIZING FOLLOWS THE PLATFORM, NOT MY EYE.
+ *
+ * Checked against Material Design 3 (this ships as an Android app) and the
+ * apps a shopkeeper already has open all day:
+ *
+ *   Touch target   48dp minimum (Material) / 44pt (iOS HIG). Ours were 36px.
+ *   Bar icons      24dp — what WhatsApp, Instagram and Gmail use. Ours 16px,
+ *                  which is Material's "small/inline" size, not an action.
+ *   Screen margin  16dp. AppShell passes children through untouched, so this
+ *                  screen had NONE and every control touched the glass.
+ *   Body text      14-16sp. I had used 10px and 11px in fourteen places —
+ *                  those tokens exist for chart ticks and badges, and
+ *                  globals.css says outright that 9px was "below any
+ *                  legibility floor on mid-range Android in bright shops".
+ *                  A shopkeeper reading a rupee figure in sunlight is the
+ *                  exact case those sizes fail.
+ *
+ * The rule going forward: nothing a finger presses is under 44px, nothing a
+ * person reads is under 12px, and money is the largest thing on screen.
+ */
+
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { Sparkles, Menu, Plus, ArrowLeft, Lightbulb, X } from 'lucide-react'
 import { offlineFetch } from '@/lib/offline-fetch'
@@ -174,7 +196,13 @@ export function AskChat() {
   return (
     <div
       className="flex flex-col"
-      style={{ height: '100dvh', paddingTop: 'var(--safe-top)', paddingBottom: 'var(--safe-bottom)' }}
+      style={{
+        height: '100dvh',
+        paddingTop: 'var(--safe-top)',
+        paddingBottom: 'var(--safe-bottom)',
+        paddingLeft: 'max(1rem, var(--safe-left))',
+        paddingRight: 'max(1rem, var(--safe-right))',
+      }}
     >
       <AskDrawer
         open={drawerOpen}
@@ -189,22 +217,26 @@ export function AskChat() {
       {/* ── Top bar ─────────────────────────────────────────────────── */}
       <div className="flex items-center gap-1 pb-2 flex-shrink-0">
         <button onClick={() => setDrawerOpen(true)} aria-label="Conversations"
-          className="w-9 h-9 rounded-full hover:bg-muted flex items-center justify-center flex-shrink-0 -ml-1">
-          <Menu className="w-5 h-5" />
+          className="w-12 h-12 rounded-full hover:bg-muted flex items-center justify-center flex-shrink-0 -ml-2.5">
+          <Menu className="w-6 h-6" />
         </button>
         <div className="min-w-0 flex-1 px-1">
-          <h2 className="text-base font-bold truncate leading-tight">Ask your books</h2>
-          <p className="text-2xs text-muted-foreground">English or Hinglish · type or speak</p>
+          <h2 className="text-xl font-bold truncate leading-tight">Ask your books</h2>
+          <p className="text-xs text-muted-foreground">English or Hinglish · type or speak</p>
         </div>
         {!isEmpty && (
           <button onClick={newChat} aria-label="New chat"
-            className="w-9 h-9 rounded-full hover:bg-muted flex items-center justify-center flex-shrink-0">
-            <Plus className="w-5 h-5" />
+            className="w-12 h-12 rounded-full hover:bg-muted flex items-center justify-center flex-shrink-0">
+            <Plus className="w-6 h-6" />
           </button>
         )}
+        {/* Negative margin of 10px against the screen's 16px: the 48px target
+            keeps its full size, but the 24px GLYPH lands 18px from the glass —
+            Material puts app-bar icons at 16dp. Without it the icon sat 28px
+            in and the bar looked indented rather than aligned. */}
         <button onClick={() => setView('more')} aria-label="Go back"
-          className="w-9 h-9 rounded-full hover:bg-muted flex items-center justify-center flex-shrink-0">
-          <ArrowLeft className="w-5 h-5" />
+          className="w-12 h-12 rounded-full hover:bg-muted flex items-center justify-center flex-shrink-0 -mr-2.5">
+          <ArrowLeft className="w-6 h-6" />
         </button>
       </div>
 
@@ -212,15 +244,15 @@ export function AskChat() {
       <div ref={threadRef} className="flex-1 overflow-y-auto overscroll-contain space-y-3 pb-3">
         {isEmpty ? (
           <div className="h-full flex flex-col items-center justify-center text-center px-4">
-            <Sparkles className="w-7 h-7 text-primary mb-3" />
-            <p className="text-sm font-medium">What would you like to know?</p>
-            <p className="text-xs text-muted-foreground mt-1 max-w-xs">
+            <Sparkles className="w-9 h-9 text-primary mb-4" />
+            <p className="text-lg font-semibold">What would you like to know?</p>
+            <p className="text-sm text-muted-foreground mt-1.5 max-w-xs">
               Every answer shows the bills it came from, so you can check it.
             </p>
             <div className="flex flex-wrap gap-1.5 justify-center mt-4">
               {ASK_EXAMPLES.map(ex => (
                 <button key={ex} onClick={() => ask(ex)}
-                  className="text-2xs px-2.5 py-1.5 rounded-full border border-border/60 hover:bg-muted">
+                  className="text-sm px-3.5 py-2 rounded-full border border-border/60 hover:bg-muted">
                   {ex}
                 </button>
               ))}
@@ -232,10 +264,10 @@ export function AskChat() {
               return (
                 <div key={m.id} className="flex justify-end">
                   <div className="max-w-[85%]">
-                    <div className="rounded-2xl rounded-br-md bg-primary text-primary-foreground px-3.5 py-2 text-sm">
+                    <div className="rounded-2xl rounded-br-md bg-primary text-primary-foreground px-4 py-2.5 text-base">
                       {m.text}
                     </div>
-                    <p className="text-3xs text-muted-foreground text-right mt-0.5 pr-1">
+                    <p className="text-xs text-muted-foreground text-right mt-1 pr-1">
                       {m.viaVoice ? 'spoken · ' : ''}{whenLabel(m.at)}
                     </p>
                   </div>
@@ -244,7 +276,7 @@ export function AskChat() {
             }
             if (m.role === 'thinking') {
               return (
-                <div key={m.id} className="flex items-center gap-2 text-xs text-muted-foreground px-1">
+                <div key={m.id} className="flex items-center gap-2 text-sm text-muted-foreground px-1">
                   <span className="flex gap-1">
                     {[0, 1, 2].map(i => (
                       <span key={i} className="w-1.5 h-1.5 rounded-full bg-current animate-pulse"
@@ -258,7 +290,7 @@ export function AskChat() {
             return (
               <div key={m.id} className="max-w-[95%]">
                 <AskAnswer payload={m.payload} onAsk={ask} />
-                <p className="text-3xs text-muted-foreground mt-0.5 pl-1">{whenLabel(m.at)}</p>
+                <p className="text-xs text-muted-foreground mt-1 pl-1">{whenLabel(m.at)}</p>
               </div>
             )
           })
@@ -269,15 +301,16 @@ export function AskChat() {
       {tipsOpen && (
         <div className="mb-2 rounded-2xl border border-border/60 bg-card p-3 flex-shrink-0">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-3xs uppercase tracking-wide text-muted-foreground">Things you can ask</p>
-            <button onClick={() => setTipsOpen(false)} aria-label="Close suggestions" className="p-1">
-              <X className="w-3.5 h-3.5" />
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Things you can ask</p>
+            <button onClick={() => setTipsOpen(false)} aria-label="Close suggestions"
+              className="w-11 h-11 -my-2.5 -mr-2.5 flex items-center justify-center flex-shrink-0">
+              <X className="w-5 h-5" />
             </button>
           </div>
           <div className="flex flex-wrap gap-1.5">
             {ASK_EXAMPLES.map(ex => (
               <button key={ex} onClick={() => ask(ex)}
-                className="text-2xs px-2.5 py-1.5 rounded-full border border-border/60 hover:bg-muted">
+                className="text-sm px-3.5 py-2 rounded-full border border-border/60 hover:bg-muted">
                 {ex}
               </button>
             ))}
@@ -292,8 +325,8 @@ export function AskChat() {
             vanished and there was no way back to them. */}
         {!isEmpty && !tipsOpen && mode === 'idle' && (
           <button onClick={() => setTipsOpen(true)}
-            className="mb-1.5 ml-1 inline-flex items-center gap-1.5 text-2xs text-muted-foreground hover:text-foreground">
-            <Lightbulb className="w-3.5 h-3.5" /> Things you can ask
+            className="mb-2 ml-1 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground py-1.5">
+            <Lightbulb className="w-4 h-4" /> Things you can ask
           </button>
         )}
         <AskComposer
