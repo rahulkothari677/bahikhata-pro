@@ -62,14 +62,27 @@ export function PartySettle() {
   /**
    * Where Back / Cancel / a successful save return to.
    *
-   * Settle can now be reached from the party profile, the Bills page, or a
-   * bill itself. Hard-coding 'party-profile' would strand anyone who arrived
-   * from a bill on a screen they did not come from — and after recording a
-   * payment, the bill is exactly what they want to see.
+   * Settle can now be reached from the party profile, the Bills page, a bill
+   * itself, or an answer in Ask your books. Hard-coding 'party-profile' would
+   * strand anyone who arrived from a bill on a screen they did not come from —
+   * and after recording a payment, the bill is exactly what they want to see.
+   *
+   * THIS LIST IS A LIABILITY AND IT HAS NOW BITTEN ONCE. Ask shipped with a
+   * "Record payment" button on its answers, set previousView to 'ask' like
+   * every other caller, and Cancel still dumped the shopkeeper on the party
+   * profile — the allowlist silently swallowed the new entry point. It is the
+   * same stranding the comment above warns about, one level up.
+   *
+   * `ask-settle-return-allowlist.test.ts` now reads every setView('party-settle')
+   * call site in the app and fails if the view it came from is missing here, so
+   * the next entry point cannot be forgotten quietly.
    */
-  const returnView = previousView === 'transaction-detail' || previousView === 'party-bills'
-    ? previousView
-    : 'party-profile'
+  const returnView =
+    previousView === 'transaction-detail' ||
+    previousView === 'party-bills' ||
+    previousView === 'ask'
+      ? previousView
+      : 'party-profile'
   const goBack = () => {
     setPreviousView(null)
     setView(returnView)
