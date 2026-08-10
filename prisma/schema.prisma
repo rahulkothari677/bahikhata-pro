@@ -529,7 +529,13 @@ model Setting {
    * rate could contradict each other. See migration 20260809000002.
    */
   compositionCategory String?
-  /** When the shop entered the scheme — returns before this stay regular. */
+  /**
+   * When the shop entered the scheme. Stamped with "now" on switch-on.
+   *
+   * NOT YET READ BY ANYTHING. This previously claimed "returns before this
+   * stay regular" — that is not implemented; CMP-08 and GSTR-4 filter on the
+   * requested period alone. See task #42 and the note in api/settings/route.ts.
+   */
   compositionFrom     DateTime?
 
   id                   String    @id @default(cuid())

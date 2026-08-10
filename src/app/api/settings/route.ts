@@ -118,8 +118,26 @@ export async function PUT(req: NextRequest) {
         sanitized.compositionFrom = null
       } else if (allowed.includes(v)) {
         sanitized.compositionCategory = v
-        // Record when they entered, so earlier periods stay on the regular
-        // scheme rather than being retrospectively restated.
+        /*
+         * Stamped with today, and — be honest — CURRENTLY UNUSED.
+         *
+         * This used to say it existed "so earlier periods stay on the regular
+         * scheme rather than being retrospectively restated". That is not
+         * implemented: nothing reads this column. /api/cmp-08 and /api/gstr-4
+         * filter on the requested quarter alone, so a shop that switched
+         * mid-quarter gets composition tax charged on turnover from the part
+         * of the quarter when it was still regular — and already remitted GST
+         * on those sales.
+         *
+         * The comment is corrected rather than the behaviour because the right
+         * treatment for a mid-period switch is a tax question, not a coding
+         * one: under GST you normally opt in before the financial year via
+         * CMP-02, so mid-quarter switching is unusual and I will not invent a
+         * proration rule. See task #42 and CA question Q4.7.
+         *
+         * A false comment is worse than none — it is a guarantee a future
+         * reader will trust without checking. It cost me several minutes today.
+         */
         sanitized.compositionFrom = new Date()
       } else {
         return NextResponse.json({
