@@ -27,7 +27,7 @@
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { Sparkles, History, Trash2, X } from 'lucide-react'
+import { Sparkles, History, Trash2, X, ArrowLeft } from 'lucide-react'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { AskComposer, type ComposerMode } from '@/components/ask/AskComposer'
 import { AskAnswer } from '@/components/ask/AskAnswer'
@@ -36,6 +36,7 @@ import {
   type AskMessage,
 } from '@/lib/ask-thread'
 import { ASK_EXAMPLES } from '@/lib/ask-patterns'
+import { useAppStore } from '@/store/app-store'
 
 export function AskChat() {
   const [messages, setMessages] = useState<AskMessage[]>([])
@@ -45,13 +46,38 @@ export function AskChat() {
   const [speaking, setSpeaking] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
   const [historyOpen, setHistoryOpen] = useState(false)
-  const bottomRef = useRef<HTMLDivElement>(null)
+  const setView = useAppStore(st => st.setView)
+  const threadRef = useRef<HTMLDivElement>(null)
   const modeRef = useRef<ComposerMode>('idle')
 
   useEffect(() => { modeRef.current = mode }, [mode])
   useEffect(() => { setMessages(loadThread()) }, [])
   useEffect(() => { if (messages.length) saveThread(messages) }, [messages])
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }) }, [messages])
+
+  /*
+   * SCROLL TO THE BOTTOM ONLY WHEN A MESSAGE IS ADDED — and only inside the
+   * thread.
+   *
+   * Two bugs in one line before this. `scrollIntoView` scrolls every scrollable
+   * ANCESTOR, so it dragged the whole page as well as the thread — which is
+   * the "it jumps down" Rahul reported. And it ran on every `messages` change,
+   * including the restore-from-storage on mount, so opening the screen threw
+   * you to the bottom of an old conversation instead of showing its start.
+   *
+   * Now: track the count, scroll only when it GROWS, and move the thread's own
+   * scrollTop rather than asking the browser to reveal an element.
+   */
+  const lastCount = useRef(0)
+  useEffect(() => {
+    const el = threadRef.current
+    if (!el) return
+    if (messages.length > lastCount.current && lastCount.current !== 0) {
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+    } else if (lastCount.current === 0 && messages.length > 0) {
+      el.scrollTop = el.scrollHeight   // first paint: land at the newest, no animation
+    }
+    lastCount.current = messages.length
+  }, [messages])
 
   /** Read the headline aloud — voice mode only, headline only. */
   const speak = useCallback((text: string) => {
@@ -111,11 +137,33 @@ export function AskChat() {
   const isEmpty = messages.length === 0
 
   return (
-    <div className="flex flex-col h-[calc(100dvh-11rem)] min-h-[24rem]">
-      {/* ── Header ─────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between gap-2 pb-2">
-        <div className="min-w-0">
-          <h2 className="text-base font-bold truncate">Ask your books</h2>
+    /*
+     * OWNS THE WHOLE SCREEN, including the bottom edge.
+     *
+     * This used to render inside the ordinary shell, so the composer sat under
+     * the fixed bottom nav — the text field, the dictation waveform and the
+     * send button were all hidden behind it. Voice had been working the whole
+     * time; you simply could not see any of its controls.
+     *
+     * 100dvh, not 100vh: on a phone the browser chrome grows and shrinks as
+     * you scroll, and vh is measured against the largest state — which puts
+     * the composer below the fold at exactly the moment the keyboard opens.
+     */
+    <div
+      className="flex flex-col"
+      style={{ height: 'calc(100dvh - var(--safe-top) - var(--safe-bottom))' }}
+    >
+      {/* ── Its own top bar, since the global one is gone ───────────── */}
+      <div className="flex items-center gap-2 pb-2 flex-shrink-0">
+        <button
+          onClick={() => setView('more')}
+          aria-label="Go back"
+          className="w-9 h-9 rounded-full hover:bg-muted flex items-center justify-center flex-shrink-0 -ml-1"
+        >
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-base font-bold truncate leading-tight">Ask your books</h2>
           <p className="text-2xs text-muted-foreground">English or Hinglish · type or speak</p>
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
@@ -156,7 +204,7 @@ export function AskChat() {
       )}
 
       {/* ── Thread ─────────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto space-y-3 pb-3">
+      <div ref={threadRef} className="flex-1 overflow-y-auto overscroll-contain space-y-3 pb-3">
         {isEmpty ? (
           <div className="h-full flex flex-col items-center justify-center text-center px-4">
             <Sparkles className="w-7 h-7 text-primary mb-3" />
@@ -210,7 +258,6 @@ export function AskChat() {
             )
           })
         )}
-        <div ref={bottomRef} />
       </div>
 
       {/* ── Composer ───────────────────────────────────────────────── */}

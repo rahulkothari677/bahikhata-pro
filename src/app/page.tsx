@@ -504,6 +504,27 @@ export default function Home() {
     )
   }
 
+  /*
+   * Ask your books — the same treatment as Settle, and for the same reason.
+   *
+   * It shipped inside the ordinary shell, so its composer sat under the fixed
+   * `bottom-0` nav bar. On a phone that hid the input almost entirely: you
+   * could not see the text field, the waveform while dictating, or the send
+   * button. Voice was working the whole time — the recordings show the
+   * waveform animating and a dictated question being answered — but with the
+   * controls behind the nav it was indistinguishable from broken.
+   *
+   * A conversation is a full-screen job. It owns the bottom edge, it has its
+   * own back button, and it needs every pixel of height for the thread.
+   */
+  if (currentView === 'ask') {
+    return (
+      <AppShell {...shellProps} sidebar="desktop-only" header="never" mobileBottomNav={false}>
+        <AskChat />
+      </AppShell>
+    )
+  }
+
   return (
     <>
       {showSplash && <SplashScreen
@@ -535,7 +556,6 @@ export default function Home() {
             {currentView === 'parties' && <Parties />}
             {currentView === 'scanner' && <BillScanner />}
             {currentView === 'reports' && <Reports />}
-            {currentView === 'ask' && <AskChat />}
             {currentView === 'tools' && <ToolsHub />}
             {currentView === 'settings' && <Settings />}
             {currentView === 'pricing' && (
