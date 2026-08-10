@@ -167,12 +167,47 @@ export interface Gstr9Result {
   checks: { id: string; passes: boolean; detail: string }[]
 }
 
-/** Sum the B2B/B2C split out of a stored GSTR-1 portal JSON. */
-function splitFromGstr1(raw: unknown): { b2b: TaxAmounts; b2c: TaxAmounts } {
+/**
+ * Sum the B2B / B2C split, and the credit notes that belong in row 4I, out of
+ * a stored GSTR-1 portal JSON.
+ *
+ * WHY CREDIT NOTES COME FROM HERE AND NOT FROM THE GSTR-3B TOTAL — this was a
+ * real bug, caught on live data before release.
+ *
+ * Read row 4I in the actual form: "Credit Notes issued in respect of
+ * transactions specified in **(B) to (E)** above". (B) to (E) are B2B,
+ * exports, SEZ and deemed exports. **4A (B2C) is deliberately excluded**,
+ * because a B2C credit note is netted straight into the B2C figure rather
+ * than shown separately — which is exactly what GSTR-1's own B2CS table does.
+ *
+ * So taking 4I from GstReturn.creditNoteTaxableValue — every credit note the
+ * month contained — subtracted B2C credit notes a SECOND time, after GSTR-1
+ * had already netted them off B2CS. On the test account that turned a true
+ * turnover of ₹2,100 into ₹850: a 60% understatement, on the return that
+ * declares a year's turnover.
+ *
+ * CDNR is credit notes to REGISTERED persons, which is precisely "(B) to
+ * (E)". CDNUR is to unregistered persons — B2C — and stays netted where it
+ * already is.
+ */
+function splitFromGstr1(raw: unknown): { b2b: TaxAmounts; b2c: TaxAmounts; creditNotesB2b: TaxAmounts } {
   let b2b = { ...ZERO }
   let b2c = { ...ZERO }
+  let creditNotesB2b = { ...ZERO }
   const r = raw as Record<string, any> | null
-  if (!r || typeof r !== 'object') return { b2b, b2c }
+  if (!r || typeof r !== 'object') return { b2b, b2c, creditNotesB2b }
+
+  // CDNR — credit/debit notes against registered counterparties. Only these
+  // belong in 4I; note the sign is carried by ntty ('C' credit, 'D' debit).
+  for (const party of (r.cdnr || [])) {
+    for (const note of (party.nt || [])) {
+      if (note.ntty === 'D') continue   // debit notes are row 4J, not 4I
+      for (const item of (note.itms || [])) {
+        const d = item.itm_det || {}
+        creditNotesB2b = add(creditNotesB2b, { taxableValue: d.txval, cgst: d.camt, sgst: d.samt, igst: d.iamt, cess: d.csamt })
+      }
+    }
+  }
 
   // B2B: one entry per counterparty, each with invoices, each with items.
   for (const party of (r.b2b || [])) {
@@ -195,7 +230,7 @@ function splitFromGstr1(raw: unknown): { b2b: TaxAmounts; b2c: TaxAmounts } {
       }
     }
   }
-  return { b2b, b2c }
+  return { b2b, b2c, creditNotesB2b }
 }
 
 export function buildGstr9(input: {
@@ -214,22 +249,27 @@ export function buildGstr9(input: {
   // ── Table 4 ────────────────────────────────────────────────────────────
   let b2b = { ...ZERO }
   let b2c = { ...ZERO }
+  let creditNotes = { ...ZERO }   // row 4I — B2B/export notes ONLY, from CDNR
   for (const m of filed1Rows) {
     const s = splitFromGstr1(m.rawJson)
     b2b = add(b2b, s.b2b)
     b2c = add(b2c, s.b2c)
+    creditNotes = add(creditNotes, s.creditNotesB2b)
   }
 
   let rcmInward = { ...ZERO }
-  let creditNotes = { ...ZERO }
   let debitNotes = { ...ZERO }
+  /* Every credit note the month contained, per GSTR-3B. NOT row 4I (see
+     splitFromGstr1) — used only to put the 3B on a net basis for the
+     cross-check below. */
+  let creditNotes3b = { ...ZERO }
   let outputTax = { ...ZERO }
   let itcClaimed = { ...ZERO }
   let exempted = 0, nilRated = 0, nonGst = 0
 
   for (const m of filed3bRows) {
     rcmInward = add(rcmInward, { taxableValue: m.rcmTaxableValue, cgst: m.rcmCgst, sgst: m.rcmSgst, igst: m.rcmIgst })
-    creditNotes = add(creditNotes, { taxableValue: m.creditNoteTaxableValue, cgst: m.creditNoteCgst, sgst: m.creditNoteSgst, igst: m.creditNoteIgst })
+    creditNotes3b = add(creditNotes3b, { taxableValue: m.creditNoteTaxableValue, cgst: m.creditNoteCgst, sgst: m.creditNoteSgst, igst: m.creditNoteIgst })
     debitNotes = add(debitNotes, { taxableValue: m.debitNoteTaxableValue, cgst: m.debitNoteCgst, sgst: m.debitNoteSgst, igst: m.debitNoteIgst })
     outputTax = add(outputTax, { taxableValue: m.outwardTaxableValue, cgst: m.outwardCgst, sgst: m.outwardSgst, igst: m.outwardIgst })
     itcClaimed = add(itcClaimed, { taxableValue: m.itcTaxableValue, cgst: m.itcCgst, sgst: m.itcSgst, igst: m.itcIgst })
@@ -264,11 +304,18 @@ export function buildGstr9(input: {
     },
     {
       id: 'Table 4 outward tax agrees with the filed GSTR-3B',
-      // b2b + b2c come from GSTR-1; outputTax comes from GSTR-3B. If the two
-      // disagree across a whole year, one of the twelve months was filed with
-      // returns that did not match — exactly what Rule 88C polices.
-      passes: Math.abs(totalTax(add(b2b, b2c)) - totalTax(outputTax)) < 1,
-      detail: `GSTR-1 ${totalTax(add(b2b, b2c))} vs GSTR-3B ${totalTax(outputTax)}`,
+      /*
+       * COMPARE NET WITH NET. This check first compared GSTR-1's figure —
+       * which is already net of credit notes, because B2CS nets them — against
+       * GSTR-3B's outward tax, which is GROSS and carries its credit notes in
+       * a separate field. Net against gross always "fails", and a check that
+       * cries wolf every month is worse than no check at all.
+       *
+       * Same class of mistake as the ₹25 gap: two figures on different bases
+       * compared as though they were the same thing.
+       */
+      passes: Math.abs(totalTax(add(b2b, b2c)) - (totalTax(outputTax) - totalTax(creditNotes3b))) < 1,
+      detail: `GSTR-1 ${totalTax(add(b2b, b2c))} vs GSTR-3B net ${roundMoney(totalTax(outputTax) - totalTax(creditNotes3b))}`,
     },
     {
       id: 'All twelve months filed',

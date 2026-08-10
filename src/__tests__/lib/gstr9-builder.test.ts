@@ -127,16 +127,95 @@ describe('Table 4 — outward supplies on which tax is payable', () => {
     expect(r.table4.b2c.taxableValue).toBe(75000)
   })
 
-  test('credit notes REDUCE and debit notes INCREASE the sub-total', () => {
-    // Getting these two the wrong way round would understate or overstate the
-    // year's liability, and the error scales with the size of the business.
+  test('a B2C credit note is NOT subtracted twice', () => {
+    /*
+     * THE BUG THIS CATCHES — found on live data, not by a test.
+     *
+     * Row 4I of the real form reads "Credit Notes issued in respect of
+     * transactions specified in (B) to (E) above". (B) to (E) are B2B,
+     * exports, SEZ, deemed exports. **4A (B2C) is excluded on purpose**,
+     * because a B2C credit note is netted straight into the B2C figure — and
+     * GSTR-1's own B2CS table does exactly that netting.
+     *
+     * I originally took 4I from GstReturn.creditNoteTaxableValue: every
+     * credit note the month contained. So a B2C credit note came off twice —
+     * once inside B2CS, once again in 4I.
+     *
+     * Below: GSTR-1 reports B2CS of 2,100 already net of a 1,250 credit note,
+     * and the month's GSTR-3B carries that 1,250 in its credit-note field.
+     * Turnover must stay 2,100. The bug produced 850 — a 60% understatement
+     * on the return that declares a whole year's turnover.
+     */
     const r = buildGstr9({
       fy: '2026-27',
       months3b: [month3b('042026', {
-        creditNoteTaxableValue: 10000, creditNoteCgst: 900, creditNoteSgst: 900,
+        outwardTaxableValue: 3350,
+        creditNoteTaxableValue: 1250, creditNoteCgst: 62.5, creditNoteSgst: 0,
+      })],
+      months1: [month1('042026', { b2c: 2100 })],   // already net, no cdnr
+    })
+    expect(r.table4.creditNotesI.taxableValue).toBe(0)   // nothing belongs in 4I
+    expect(r.table4.totalN.taxableValue).toBe(2100)      // not 850
+    expect(r.table5.totalTurnoverN).toBe(2100)
+  })
+
+  test('a B2B credit note DOES land in 4I, from CDNR', () => {
+    // The other half: notes to a registered counterparty are exactly what
+    // "(B) to (E)" means, and they must reduce the total.
+    const r = buildGstr9({
+      fy: '2026-27',
+      months3b: [month3b('042026')],
+      months1: [{
+        monthYear: '042026', filingStatus: 'filed',
+        rawJson: {
+          b2b: [{ ctin: '27AAAAA0000A1Z5', inv: [{ inum: 'INV-1', itms: [{ itm_det: { txval: 100000, camt: 9000, samt: 9000 } }] }] }],
+          b2cs: [], b2cl: [],
+          cdnr: [{ ctin: '27AAAAA0000A1Z5', nt: [{ ntty: 'C', nt_num: 'CN-1', itms: [{ itm_det: { txval: 10000, camt: 900, samt: 900 } }] }] }],
+        },
+      }],
+    })
+    expect(r.table4.creditNotesI.taxableValue).toBe(10000)
+    expect(r.table4.totalN.taxableValue).toBe(90000)
+  })
+
+  test('a DEBIT note in the CDNR table does not get treated as a credit note', () => {
+    // CDNR carries both; ntty tells them apart. Getting it wrong would
+    // subtract an amount that should have been added — a double error.
+    const r = buildGstr9({
+      fy: '2026-27',
+      months3b: [month3b('042026')],
+      months1: [{
+        monthYear: '042026', filingStatus: 'filed',
+        rawJson: {
+          b2b: [{ ctin: 'X', inv: [{ inum: 'I', itms: [{ itm_det: { txval: 50000, camt: 4500, samt: 4500 } }] }] }],
+          b2cs: [], b2cl: [],
+          cdnr: [{ ctin: 'X', nt: [{ ntty: 'D', nt_num: 'DN-1', itms: [{ itm_det: { txval: 5000, camt: 450, samt: 450 } }] }] }],
+        },
+      }],
+    })
+    expect(r.table4.creditNotesI.taxableValue).toBe(0)
+  })
+
+  test('credit notes REDUCE and debit notes INCREASE the sub-total', () => {
+    // Getting these two the wrong way round would understate or overstate the
+    // year's liability, and the error scales with the size of the business.
+    //
+    // The credit note goes in CDNR, because 4I is B2B-and-above only — this
+    // fixture originally put it in the GSTR-3B total, which is precisely the
+    // double-subtraction bug the tests above now pin.
+    const r = buildGstr9({
+      fy: '2026-27',
+      months3b: [month3b('042026', {
         debitNoteTaxableValue: 4000, debitNoteCgst: 360, debitNoteSgst: 360,
       })],
-      months1: [month1('042026', { b2b: 100000 })],
+      months1: [{
+        monthYear: '042026', filingStatus: 'filed',
+        rawJson: {
+          b2b: [{ ctin: 'X', inv: [{ inum: 'I', itms: [{ itm_det: { txval: 100000, camt: 9000, samt: 9000 } }] }] }],
+          b2cs: [], b2cl: [],
+          cdnr: [{ ctin: 'X', nt: [{ ntty: 'C', nt_num: 'CN-1', itms: [{ itm_det: { txval: 10000, camt: 900, samt: 900 } }] }] }],
+        },
+      }],
     })
     expect(r.table4.subTotalM.taxableValue).toBe(-6000)     // 4000 − 10000
     expect(r.table4.totalN.taxableValue).toBe(94000)        // 100000 − 6000
