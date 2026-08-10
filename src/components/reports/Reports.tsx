@@ -30,6 +30,7 @@ import { exportToTally } from '@/lib/tally-export'
 import { DebtAgingReport } from '@/components/reports/DebtAgingReport'
 import { InventoryAgingReport } from '@/components/reports/InventoryAgingReport'
 import { Gstr1Report } from '@/components/reports/Gstr1Report'
+import { Gstr9Report } from '@/components/reports/Gstr9Report'
 import { Gstr3bReport } from '@/components/reports/Gstr3bReport'
 import { Gstr2bReconciliation } from '@/components/reports/Gstr2bReconciliation'
 import { BankReconciliation } from '@/components/reports/BankReconciliation'
@@ -58,7 +59,7 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
   // can switch to single-report mode WITHOUT remounting (no setView call).
   const pendingReportType = useAppStore(s => s.pendingReportType)
   const setPendingReportType = useAppStore(s => s.setPendingReportType)
-  const [reportType, setReportType] = useState<'pl' | 'gst' | 'stock' | 'party' | 'debt-aging' | 'inventory-aging' | 'gstr-1' | 'gstr-3b' | 'gstr-2b' | 'bank-recon' | 'consolidated' | 'bill-profit' | 'hsn' | 'cashflow' | 'trial-balance' | 'item-profit' | 'composition'>(singleReportType as any || 'pl')
+  const [reportType, setReportType] = useState<'pl' | 'gst' | 'stock' | 'party' | 'debt-aging' | 'inventory-aging' | 'gstr-1' | 'gstr-3b' | 'gstr-9' | 'gstr-2b' | 'bank-recon' | 'consolidated' | 'bill-profit' | 'hsn' | 'cashflow' | 'trial-balance' | 'item-profit' | 'composition'>(singleReportType as any || 'pl')
   const [dateRange, setDateRange] = useState<DateRange>(() => getPresetRange('thisMonth'))
   const [datePreset, setDatePreset] = useState<DatePreset>('thisMonth')
   const [exportingGstr, setExportingGstr] = useState(false)
@@ -159,7 +160,7 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
     // the default reportType='pl', wasting a request for data we never show.
     // 🔒 V22-9 (Phase 7): Added bill-profit, hsn, cashflow, trial-balance — these
     // DO use the API (unlike gstr-1/3b/2b/bank-recon/consolidated which have their own).
-    enabled: isSingleReport && reportType !== 'gstr-1' && reportType !== 'gstr-3b' && reportType !== 'gstr-2b' && reportType !== 'bank-recon' && reportType !== 'consolidated',
+    enabled: isSingleReport && reportType !== 'gstr-1' && reportType !== 'gstr-3b' && reportType !== 'gstr-9' && reportType !== 'gstr-2b' && reportType !== 'bank-recon' && reportType !== 'consolidated',
     queryFn: async () => {
       // Debt aging uses party report data (includes transactions per party)
       // Inventory aging uses stock report data (includes products with createdAt)
@@ -274,6 +275,7 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
     'composition': 'Composition Returns',
     'gstr-1': 'GSTR-1 Report',
     'gstr-3b': 'GSTR-3B Report',
+    'gstr-9': 'GSTR-9 Annual Return',
     'gstr-2b': 'GSTR-2B Reconciliation',
     'gst': 'GST Summary Report',
     'bank-recon': 'Bank Reconciliation',
@@ -381,7 +383,7 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
           (not on the ReportsHub grid).
           🔒 V22-9 (Phase 7): bill-profit, hsn, cashflow, trial-balance DO use the
           date range toolbar (unlike gstr-1/3b/2b/bank-recon/consolidated). */}
-      {isSingleReport && reportType !== 'gstr-1' && reportType !== 'gstr-3b' && reportType !== 'gstr-2b' && reportType !== 'bank-recon' && reportType !== 'consolidated' && (
+      {isSingleReport && reportType !== 'gstr-1' && reportType !== 'gstr-3b' && reportType !== 'gstr-9' && reportType !== 'gstr-2b' && reportType !== 'bank-recon' && reportType !== 'consolidated' && (
       <Card className="shadow-card border-border/60 no-print">
         <CardContent className="p-3 lg:p-4">
           <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
@@ -465,6 +467,7 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
           {reportType === 'composition' && <CompositionReturns />}
           {reportType === 'gstr-1' && <Gstr1Report />}
           {reportType === 'gstr-3b' && <Gstr3bReport />}
+          {reportType === 'gstr-9' && <Gstr9Report />}
           {reportType === 'gstr-2b' && <Gstr2bReconciliation />}
           {reportType === 'bank-recon' && <BankReconciliation />}
           {reportType === 'consolidated' && <ConsolidatedReport />}
