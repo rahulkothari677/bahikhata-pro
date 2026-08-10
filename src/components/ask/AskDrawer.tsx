@@ -76,7 +76,7 @@ export function AskDrawer({
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto overscroll-contain px-3 pb-2">
+        <div className="flex-1 overflow-y-auto overscroll-contain scrollbar-hide px-3 pb-2">
           {conversations.length === 0 ? (
             <p className="text-sm text-muted-foreground px-2 py-6 text-center">
               Nothing saved yet. Ask something and it will appear here.

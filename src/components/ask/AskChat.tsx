@@ -196,14 +196,22 @@ export function AskChat() {
   return (
     <div
       /*
-       * max-w-3xl (768px) and centred, because on a 1280px desktop this
-       * column measured 1195px wide and the answer cards 1098px. A line of
-       * text that long is genuinely hard to read — the eye loses its place
-       * on the return sweep — which is why every assistant, ours included
-       * now, caps the conversation at roughly 45-75 characters. On a phone
-       * the cap never binds and the 16px margin is what does the work.
+       * FULL WIDTH ON DESKTOP, deliberately, and this reverses a decision I
+       * made an hour earlier.
+       *
+       * I had capped this at max-w-3xl on the reading-measure argument — 45-75
+       * characters a line, which is what ChatGPT and Gemini do. Rahul looked at
+       * it beside our own Profit & Loss report and overruled it: every other
+       * screen in EkBook spans the full width and reflows when the sidebar
+       * expands, and a page that stops two thirds of the way across looks
+       * broken next to them. Consistency inside our own app beats matching
+       * someone else's chat layout.
+       *
+       * Width therefore comes entirely from the shell. `w-full` inside
+       * AppShell's flex column means the sidebar opening or collapsing moves
+       * this straight away, with nothing to keep in sync.
        */
-      className="flex flex-col w-full max-w-3xl mx-auto"
+      className="flex flex-col w-full"
       style={{
         height: '100dvh',
         paddingTop: 'var(--safe-top)',
@@ -249,7 +257,11 @@ export function AskChat() {
       </div>
 
       {/* ── Thread ─────────────────────────────────────────────────── */}
-      <div ref={threadRef} className="flex-1 overflow-y-auto overscroll-contain space-y-3 pb-3">
+      {/* scrollbar-hide, not a new utility — globals.css has carried this since
+          the pill tab strips, and Dashboard, DocumentVault and Ledger all use
+          it. A visible track down the side of a conversation is something no
+          messaging app shows; the content itself is the position indicator. */}
+      <div ref={threadRef} className="flex-1 overflow-y-auto overscroll-contain scrollbar-hide space-y-3 pb-3">
         {isEmpty ? (
           <div className="h-full flex flex-col items-center justify-center text-center px-4">
             <Sparkles className="w-9 h-9 text-primary mb-4" />
