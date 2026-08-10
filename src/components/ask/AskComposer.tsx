@@ -33,6 +33,21 @@
 import { useEffect, useRef, useState } from 'react'
 import { Mic, MicOff, AudioLines, Square, ArrowUp, X, Keyboard, Plus, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useSetting } from '@/hooks/use-setting'
+
+/**
+ * The shopkeeper's chosen voice language, as a BCP-47 locale.
+ *
+ * Mirrors VoiceEntry: the app already stores `voiceLang` and already respects
+ * it for voice ENTRY, so asking a question must not suddenly listen in a
+ * different language from the one they set. 'original' means "keep what I
+ * speak", which for recognition purposes is Hindi.
+ */
+const VOICE_LOCALE: Record<string, string> = {
+  original: 'hi-IN', hi: 'hi-IN', en: 'en-IN', mr: 'mr-IN',
+  gu: 'gu-IN', ta: 'ta-IN', te: 'te-IN', kn: 'kn-IN',
+  ml: 'ml-IN', bn: 'bn-IN', pa: 'pa-IN',
+}
 
 export type ComposerMode = 'idle' | 'dictating' | 'voice'
 
@@ -83,6 +98,10 @@ export function AskComposer({
    * Reverting to typing IS right. Saying nothing is not. A refusal has to be
    * legible, exactly like the ones the answers give.
    */
+  // `useSetting` exposes the whole record on `.setting`; voiceLang is not one
+  // of its named conveniences (only hideProfit is).
+  const { setting } = useSetting()
+  const locale = VOICE_LOCALE[setting?.voiceLang || 'original'] || 'hi-IN'
   const [voiceError, setVoiceError] = useState<string | null>(null)
   const [level, setLevel] = useState(0)
   const [, force] = useState(0)
@@ -138,6 +157,29 @@ export function AskComposer({
     recognitionRef.current = null
   }
 
+  /*
+   * SPEECH RECOGNITION, COPIED FROM THE ONE IN THIS APP THAT ALREADY WORKS.
+   *
+   * My first version was written from scratch and captured nothing — the
+   * waveform moved and the box stayed empty. `components/common/VoiceEntry`
+   * has been doing this correctly for months, and three of its choices are
+   * the reason it works:
+   *
+   *   continuous = false. I used `true` for conversation mode. On Android
+   *     Chrome continuous recognition frequently delivers no final result at
+   *     all — the session simply runs until it is stopped. False, restarted
+   *     on `onend`, is the pattern that actually fires.
+   *
+   *   Loop the results FROM ZERO, not from `event.resultIndex`. With
+   *     continuous=false the result set is short and re-read each time;
+   *     starting at resultIndex skipped the very text we were waiting for.
+   *
+   *   Build the recogniser ONCE per language, not on every tap. Constructing
+   *     a new one per press races the previous instance's teardown.
+   *
+   * The lesson is the boring one: the answer was three files away and I wrote
+   * my own instead of reading it.
+   */
   const beginListening = async (forMode: 'dictating' | 'voice') => {
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
     if (!SR) {
@@ -147,56 +189,55 @@ export function AskComposer({
     }
     setVoiceError(null)
     draftRef.current = ''
+
     const rec = new SR()
-    /*
-     * en-IN even for Hinglish and Hindi, for now. It returns romanised words
-     * our patterns can read; hi-IN returns Devanagari, which they cannot match
-     * yet. When the Devanagari branch lands (Phase 2.7) this follows the
-     * chosen language instead.
-     */
-    rec.lang = 'en-IN'
+    rec.continuous = false
     rec.interimResults = true
-    rec.continuous = forMode === 'voice'
+    rec.lang = locale
+    rec.maxAlternatives = 1
+
     rec.onresult = (e: any) => {
       let finalText = ''
       let interim = ''
-      for (let i = e.resultIndex; i < e.results.length; i++) {
+      for (let i = 0; i < e.results.length; i++) {
         const r = e.results[i]
         if (r.isFinal) finalText += r[0].transcript
         else interim += r[0].transcript
       }
-      if (interim) onChange(draftRef.current + interim)
-      if (finalText) {
-        draftRef.current = (draftRef.current + finalText).trim()
+      // Show the words as they are heard — an empty box next to a moving
+      // waveform is what made this look broken.
+      if (interim) onChange((draftRef.current ? draftRef.current + ' ' : '') + interim)
+      if (finalText.trim()) {
+        draftRef.current = (draftRef.current ? draftRef.current + ' ' : '') + finalText.trim()
         onChange(draftRef.current)
-        // In conversation mode a finished sentence IS the send. In dictation
-        // it only fills the box — you still press send, which is the whole
-        // reason the two modes exist.
-        if (forMode === 'voice') {
-          const said = draftRef.current
-          draftRef.current = ''
-          onChange('')
-          onSend(said, true)
-        }
       }
     }
+
     rec.onerror = (e: any) => {
-      // Name the reason. "not-allowed" is by far the most common and the one
-      // the shopkeeper can actually do something about.
+      // 'no-speech' is a pause, not a failure — VoiceEntry ignores it too, and
+      // treating it as fatal would end the session every time someone thinks.
+      if (e?.error === 'no-speech' || e?.error === 'aborted') return
       const why = e?.error === 'not-allowed' || e?.error === 'service-not-allowed'
         ? 'Microphone blocked. Allow it in your browser settings, or type instead.'
-        : e?.error === 'no-speech'
-          ? 'Didn’t catch that. Try again, or type instead.'
-          : 'Voice isn’t available on this device. You can type instead.'
+        : 'Voice isn’t available on this device. You can type instead.'
       setVoiceError(why)
       endAll()
     }
+
     rec.onend = () => {
-      // Conversation mode should keep listening between turns; dictation stops.
-      if (forMode === 'voice' && recognitionRef.current) {
-        try { rec.start() } catch { /* restarting too fast; next tick is fine */ }
+      if (!recognitionRef.current) return          // we stopped it deliberately
+      if (forMode === 'voice') {
+        // A finished sentence IS the question in conversation mode.
+        const said = draftRef.current.trim()
+        if (said) { draftRef.current = ''; onChange(''); onSend(said, true) }
+        try { rec.start() } catch { /* too soon; the next tick restarts it */ }
+      } else {
+        // Dictation: one utterance, then hand control back. The words stay in
+        // the box so they can be read and corrected before sending.
+        try { rec.start() } catch { /* ignore */ }
       }
     }
+
     recognitionRef.current = rec
     try { rec.start() } catch { /* already running */ }
     await startMeter()
@@ -284,7 +325,7 @@ export function AskComposer({
         </button>
       </div>
     )}
-    <div className="flex items-center gap-2 rounded-full border border-border/60 bg-card pl-2 pr-2 py-1.5 shadow-sm">
+    <div className="flex items-center gap-1.5 rounded-[1.75rem] border border-border/60 bg-card pl-1.5 pr-1.5 py-1.5 shadow-sm">
       <button
         aria-label="Add a bill or photo"
         title="Coming soon"
@@ -299,7 +340,7 @@ export function AskComposer({
         onChange={e => onChange(e.target.value)}
         onKeyDown={e => { if (e.key === 'Enter' && value.trim()) onSend(value.trim(), false) }}
         placeholder="Ask your books…"
-        className="flex-1 bg-transparent outline-none text-sm min-w-0"
+        className="flex-1 bg-transparent outline-none text-base min-w-0 py-2.5 px-1 placeholder:text-muted-foreground"
       />
       {value.trim() ? (
         <button onClick={() => onSend(value.trim(), false)} disabled={busy} aria-label="Send"

@@ -149,9 +149,26 @@ export function AskChat() {
      * you scroll, and vh is measured against the largest state — which puts
      * the composer below the fold at exactly the moment the keyboard opens.
      */
+    /*
+     * PAD FOR THE STATUS BAR, do not merely subtract it.
+     *
+     * My first attempt took the safe areas OUT OF THE HEIGHT and stopped
+     * there — so the box was the right size but still started at y=0, and the
+     * title sat on top of the phone's clock and signal icons.
+     *
+     * Header.tsx has done this correctly all along: `paddingTop:
+     * var(--safe-top)`. On Android these values are injected by Capacitor
+     * because env() is permanently zero there (see the note in globals.css),
+     * which is why guessing a fixed pixel offset would work on one device and
+     * fail on the next.
+     */
     <div
       className="flex flex-col"
-      style={{ height: 'calc(100dvh - var(--safe-top) - var(--safe-bottom))' }}
+      style={{
+        height: '100dvh',
+        paddingTop: 'var(--safe-top)',
+        paddingBottom: 'var(--safe-bottom)',
+      }}
     >
       {/* ── Its own top bar, since the global one is gone ───────────── */}
       <div className="flex items-center gap-2 pb-2 flex-shrink-0">
