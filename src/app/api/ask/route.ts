@@ -154,7 +154,9 @@ export async function POST(req: NextRequest) {
         question,
         message: refusal === 'prediction'
           ? 'I can only tell you what your books already record — I can’t predict what’s coming.'
-          : 'I can show you the figures, but I can’t tell you what you should do.',
+          : refusal === 'bad_date'
+            ? 'That date range doesn’t look right — check the dates and ask me again.'
+            : 'I can show you the figures, but I can’t tell you what you should do.',
         examples: ASK_EXAMPLES,
       })
     }

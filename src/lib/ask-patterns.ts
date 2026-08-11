@@ -222,11 +222,28 @@ function categoryFrom(q: string): string | undefined {
  * is a rule: the route calls it before the model is ever consulted, so the
  * refusal does not depend on a model complying.
  */
-export type RefusalReason = 'advice' | 'prediction'
+export type RefusalReason = 'advice' | 'prediction' | 'bad_date'
 
 export function mustRefuse(question: string): RefusalReason | null {
   const q = normalise(question)
   if (!q) return null
+
+  /*
+   * AN IMPOSSIBLE DATE — and I put this check in the wrong place the first
+   * time, hours after learning the lesson from predictions.
+   *
+   * "31 february to 5 march ki sale" was answered "₹0.00 of sales today". I
+   * fixed that inside parseAsk, which made the PARSER refuse — and the model
+   * then took its turn and answered "Sales · this financial year · read by AI",
+   * ₹2,212. A worse outcome than before, because now it carried a confident
+   * figure and a period nobody mentioned.
+   *
+   * `parseAsk` returning null means "no rule matched" — the same signal as an
+   * unusual phrasing. It can never mean "refuse this", because the model is
+   * what happens next. Anything that must not be answered belongs HERE, where
+   * the route checks before consulting anyone.
+   */
+  if (hasDateRangeShape(q) && !parseDateRange(q)) return 'bad_date'
 
   /*
    * ADVICE IS NOT A QUESTION ABOUT THE BOOKS. An opinion question often
@@ -326,23 +343,6 @@ const NAMES_SALES = /\b(sale|sales|bikri|bikree|becha|bika|revenue|turnover)\b/
  * do it once, where it cannot be missed.
  */
 export function parseAsk(question: string): AskQuery | null {
-  /*
-   * A RANGE THAT WAS ATTEMPTED AND IS INVALID REFUSES THE WHOLE QUESTION.
-   *
-   * "31 february to 5 march ki sale" was answered "₹0.00 of sales TODAY": the
-   * range parser correctly refused an impossible date, detectPeriod then found
-   * no period word, and the sales branch defaulted to today. A refusal had
-   * quietly become an answer to a different question — the exact failure this
-   * codebase keeps producing in new costumes.
-   *
-   * Checked here rather than inside detectPeriod, because detectPeriod's job
-   * is to name a period and its "nothing found" answer is legitimately
-   * all_time. This is a different statement: something WAS found, and it is
-   * not usable.
-   */
-  const normalised = normalise(question)
-  if (hasDateRangeShape(normalised) && !parseDateRange(normalised)) return null
-
   const q = matchAsk(question)
   if (!q || q.period !== 'custom') return q
   const range = parseDateRange(normalise(question))
