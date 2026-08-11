@@ -64,6 +64,24 @@ the person who caught my mistakes. That is the defect this file fixes.
 **Reporting a miss is not fixing it. Go and do the missed items before
 reporting.**
 
+### A tick requires evidence in this session, not intention
+
+**I ticked "tasklog updated" without having edited the file.** Rahul asked; the
+file still said `NOT STARTED`. A false tick is worse than a missed step,
+because the whole point of publishing the checklist is that he does not have to
+re-check it.
+
+**So: no box is ticked from memory or intent.** Each tick names the evidence —
+the command that ran, the file that was edited, the screenshot that was taken.
+If I cannot name it, the box is ❌ and the item gets done before I report.
+
+**Ticks that need a named artefact:**
+- *tasklog updated* → the Edit call, in this session
+- *screenshot* → the screenshot call
+- *verify green* → the command output
+- *pushed* → the commit hash
+- *test data cleaned* → the re-check showing the books restored
+
 ---
 
 ## EVERY REPORT CONTAINS
