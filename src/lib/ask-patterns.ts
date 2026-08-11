@@ -177,15 +177,31 @@ export function parseAsk(question: string): AskQuery | null {
 
   // ── TOP PRODUCTS ────────────────────────────────────────────────────
   // "sabse zyada kya bika", "best selling", "top product"
-  if (/\b(sabse|sab se)\s+(zyada|jyada|adhik)\b/.test(q) || /\b(top|best|highest)\s+(selling|sold|product|item)\b/.test(q) || /\bbest\s?seller\b/.test(q)) {
+  // Plurals matter here too: "top items this month" and "best products" are
+  // more natural than the singular, and both missed.
+  if (/\b(sabse|sab se)\s+(zyada|jyada|adhik)\b/.test(q) || /\b(top|best|highest)\s+(selling|sold|products?|items?)\b/.test(q) || /\bbest\s?sellers?\b/.test(q)) {
     return { intent: 'top_products', period: period === 'all_time' ? 'this_month' : period, source: 'pattern',
       understoodAs: `Top selling products · ${period === 'all_time' ? 'this month' : periodLabel}` }
   }
 
   // ── STOCK ───────────────────────────────────────────────────────────
   // "chawal kitna stock hai", "stock of rice", "how much rice is left"
-  if (/\b(?:stock|maal|inventory)\b/.test(q)) {
-    const m = q.match(/(?:stock (?:of|me|mein)\s+)([a-z0-9 ]+)/) || q.match(/^([a-z0-9 ]+?)\s+(?:ka|ki)\s+stock/)
+  /*
+   * "how much rice is left" names no stock word at all, and was answered by
+   * nothing. It is the plainest way an English speaker asks this.
+   *
+   * NOT "bacha" alone and CERTAINLY NOT "baaki": this branch runs BEFORE party
+   * balance, so a pattern matching "kitna baaki hai" here would swallow
+   * "ramesh ka kitna baaki hai" and answer a balance question with a stock
+   * count. The Hinglish word for stock remaining is "bacha"; "baaki" is money.
+   */
+  const leftOver = q.match(/how much\s+(.+?)\s+(?:is\s+|are\s+)?(?:left|remaining)\b/)
+    || q.match(/^(.+?)\s+kitna\s+bach(?:a|i|e)\b/)
+
+  if (/\b(?:stock|maal|inventory)\b/.test(q) || leftOver) {
+    const m = q.match(/(?:stock (?:of|me|mein)\s+)([a-z0-9 ]+)/)
+      || q.match(/^([a-z0-9 ]+?)\s+(?:ka|ki)\s+stock/)
+      || leftOver
     const item = m ? cleanName(m[1]) : undefined
     // Require either a named item, or a shape that is clearly a QUERY. The
     // bare word "stock" appears in plenty of sentences that are not questions
@@ -220,7 +236,10 @@ export function parseAsk(question: string): AskQuery | null {
     || /\b(receivables?|outstanding)\b/.test(q)) {
     return { intent: 'receivables', period: 'all_time', source: 'pattern', understoodAs: 'Money owed to you' }
   }
-  if (/\b(payable|dena hai|maine dena|i owe)\b/.test(q)) {
+  // `payables?` — the singular-only version missed the commonest English
+  // phrasing of all, "total payables", because \b after "payable" will not
+  // match before the "s". Found by the capability registry's own examples.
+  if (/\b(payables?|dena hai|maine dena|i owe)\b/.test(q)) {
     return { intent: 'payables', period: 'all_time', source: 'pattern', understoodAs: 'Money you owe' }
   }
 
