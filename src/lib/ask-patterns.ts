@@ -53,8 +53,15 @@ export interface AskQuery {
    */
   categoryName?: string
   period: AskPeriod
-  /** How this was understood — 'pattern' here; 'llm' once that exists. */
-  source: 'pattern'
+  /**
+   * How this was understood. 'pattern' means a rule in this file matched it
+   * exactly; 'llm' means a model decided which capability was meant.
+   *
+   * The distinction is surfaced to the shopkeeper — an interpreted question is
+   * the kind that can be wrong about what they meant, and they should be able
+   * to see which kind they got.
+   */
+  source: 'pattern' | 'llm'
   /** Echoed back to the user so a misread question is visible, not silent. */
   understoodAs: string
 }

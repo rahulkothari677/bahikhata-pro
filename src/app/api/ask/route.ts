@@ -12,20 +12,30 @@ import { shouldHideProfit } from '@/lib/profit-visibility'
 import { buildBalanceActions } from '@/lib/ask-actions'
 import { describeParties } from '@/lib/describe-parties'
 import { activeTransactionWhere } from '@/lib/query-helpers'
+import { routeWithAi } from '@/lib/ask-router'
+import { getCapability } from '@/lib/ask-capabilities'
 
 /**
- * "Ask your books" — Phase 1. NO LANGUAGE MODEL IS INVOLVED.
+ * "Ask your books" — A MODEL CHOOSES THE QUESTION. IT NEVER TOUCHES THE MONEY.
  *
- * The question is matched against known shapes locally (lib/ask-patterns), and
- * the ANSWER is computed here, from the same tables the screens read. Nothing
- * is generated: every figure below is arithmetic over rows.
+ * (This header used to read "NO LANGUAGE MODEL IS INVOLVED", which was true
+ * until P4.3 and is now not. Left visible rather than quietly reworded,
+ * because the promise it was protecting has NOT changed — only which part of
+ * the pipeline keeps it.)
+ *
+ * The question is matched against known shapes locally (lib/ask-patterns)
+ * first. Only if no rule matches does a model see it, and all it returns is
+ * WHICH capability was meant and with what arguments (lib/ask-router). The
+ * ANSWER is computed here, from the same tables the screens read. Nothing is
+ * generated: every figure below is arithmetic over rows.
  *
  * WHY THAT MATTERS MORE THAN ANY FEATURE IN THIS FILE. A model that produces
  * money figures will eventually produce a confident wrong one. Once is enough:
  * the shopkeeper who catches it stops trusting every other number in the app,
- * including the ones that took weeks to make provably correct. So the model —
- * when Phase 2 adds one — will only ever translate the QUESTION. It will never
- * see a rupee, and it will never emit one.
+ * including the ones that took weeks to make provably correct. So the model
+ * only ever translates the QUESTION. It never sees a rupee, and it never
+ * emits one. If it misreads, the shopkeeper gets the wrong SCREEN — visible,
+ * and labelled "read by AI" — rather than a wrong NUMBER, which is not.
  *
  * EVERY ANSWER CARRIES ITS RECEIPTS. `sources` lists the actual documents
  * behind the figure so the user can tap through and check. A number a
@@ -100,13 +110,65 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'question is required' }, { status: 400 })
     }
 
-    const q = parseAsk(question)
+    /*
+     * PATTERNS FIRST, ALWAYS. They are instant, free, work with no signal and
+     * cannot hallucinate. The model is for the long tail — the phrasings
+     * nobody wrote a rule for — so the common questions never cost a paisa.
+     */
+    let q = parseAsk(question)
+
+    if (!q) {
+      const routed = await routeWithAi(question)
+      q = routed.query
+
+      /*
+       * Cost and latency are logged whether or not the answer was usable,
+       * because a model that keeps returning nothing is a thing we need to
+       * see. Fire-and-forget: a logging failure must never cost the shopkeeper
+       * their answer.
+       */
+      if (routed.provider) {
+        import('@/lib/ai-pricing').then(({ calculateCostInr }) => {
+          db.aiUsageLog.create({
+            data: {
+              userId, feature: 'ask', provider: routed.provider!, model: routed.model!,
+              inputTokens: routed.inputTokens || 0,
+              outputTokens: routed.outputTokens || 0,
+              totalTokens: (routed.inputTokens || 0) + (routed.outputTokens || 0),
+              costInr: calculateCostInr(
+                routed.provider!, routed.model!, routed.inputTokens || 0, routed.outputTokens || 0,
+              ),
+              durationMs: routed.durationMs || 0,
+              success: !!routed.query,
+            },
+          }).catch(() => {})
+        }).catch(() => {})
+      }
+    }
+
     if (!q) {
       return NextResponse.json({
         answered: false,
         question,
         message: 'I can’t answer that one yet.',
         examples: ASK_EXAMPLES,
+      })
+    }
+
+    /*
+     * PERMISSION IS CHECKED AFTER ROUTING AND BY US, NEVER BY THE MODEL.
+     *
+     * The model is not told which module gates which capability — the registry
+     * deliberately withholds that from the wire. It names a capability; we
+     * decide whether THIS user may have it. Otherwise "show me the profit"
+     * phrased cleverly enough becomes a way around a permission, and a staff
+     * member who cannot open the P&L could read it out of a chat box.
+     */
+    const capability = getCapability(q.intent)
+    if (capability && !canAccessModule(auth.role, auth.permissions, capability.module)) {
+      return NextResponse.json({
+        answered: false, question, understoodAs: q.understoodAs,
+        message: 'You don’t have permission to see that in this shop.',
       })
     }
 
