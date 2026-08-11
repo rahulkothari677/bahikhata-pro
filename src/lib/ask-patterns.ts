@@ -35,6 +35,8 @@ export type AskIntent =
   | 'tax_due'            // what GST do I owe
   | 'expenses_period'    // what did I spend on running the shop
   | 'purchases_period'   // what did I spend buying stock
+  | 'open_screen'        // take me to a screen
+  | 'open_invoice'       // take me to one bill
 
 /** A named stretch of time. Resolved to real dates by the caller, in IST. */
 export type AskPeriod = 'today' | 'yesterday' | 'this_week' | 'this_month' | 'last_month' | 'this_fy' | 'all_time'
@@ -45,6 +47,10 @@ export interface AskQuery {
   partyName?: string
   /** Product the question is about, as typed. */
   itemName?: string
+  /** Screen the user asked to open, as typed. Resolved by nav-match later. */
+  screenName?: string
+  /** Bill number the user asked for, e.g. "INV-0001". */
+  invoiceNo?: string
   /**
    * Expense category the question narrows to — "rent", "salary", "bijli".
    * Resolved against the shop's real categories later, exactly as itemName is
@@ -277,6 +283,46 @@ export function parseAsk(question: string): AskQuery | null {
 
   const { period, label: periodLabel } = detectPeriod(q)
 
+  /*
+   * ── AN EXPLICIT NAVIGATION COMMAND, checked BEFORE the data intents ──
+   *
+   * "open profit and loss report" was being answered with a profit FIGURE,
+   * and "stock report dikhao" with stock levels, because the profit and stock
+   * branches see the sentence first and both keywords are present.
+   *
+   * The discriminator is not the verb alone — "stock dikhao" is an ordinary
+   * request for stock levels and the figure is the better answer there. It is
+   * the verb PLUS a word that names a destination rather than a subject:
+   * report, page, screen. Someone who says "report" is asking to be taken
+   * somewhere; someone who says "stock dikhao" is asking what the number is.
+   *
+   * The looser verb-only check still exists, far below, for sentences that no
+   * data branch claimed at all — "GSTR-1 kholo".
+   */
+  const OPEN_VERB = /\b(kholo|khol|kholna|dikhao|dikha|open|show|jao|le chalo|navigate)\b/
+  const NAMES_A_DESTINATION = /\b(report|reports|page|screen|section|tab|statement)\b/
+  if (OPEN_VERB.test(q) && NAMES_A_DESTINATION.test(q)) {
+    const target = q.replace(OPEN_VERB, ' ').replace(/\s+/g, ' ').trim()
+    if (target.length >= 2) {
+      return { intent: 'open_screen', screenName: target, period: 'all_time', source: 'pattern',
+        understoodAs: `Open ${target}` }
+    }
+  }
+
+  /*
+   * "Anil ka last bill" — a bill identified by WHOSE it is, not by its number.
+   * Checked before party balance, which would otherwise claim the sentence on
+   * its "X ka ..." shape and answer with a balance.
+   */
+  const lastBill = q.match(/^(.+?)\s+(?:ka|ki|ke)\s+(?:last|latest|recent|pichla|pichhla|aakhri)\s+(?:bill|invoice|sale)/)
+  if (lastBill) {
+    const who = cleanName(lastBill[1])
+    if (who) {
+      return { intent: 'open_invoice', partyName: who, period: 'all_time', source: 'pattern',
+        understoodAs: `Latest bill for "${titleCase(who)}"` }
+    }
+  }
+
   // ── TAX ─────────────────────────────────────────────────────────────
   // Before sales/profit: "is mahine kitna gst bharna hai" contains "kitna"
   // and a period, and would otherwise be read as a sales question.
@@ -413,6 +459,44 @@ export function parseAsk(question: string): AskQuery | null {
   // ── SALES ───────────────────────────────────────────────────────────
   // Last, because it is the broadest: any question mentioning a period and
   // "kitna" that has not matched something more specific is a sales question.
+  /*
+   * ── OPEN A BILL ─────────────────────────────────────────────────────
+   *
+   * A bill number is unmistakable — INV-0001, CN-0002, SUP-2B-TEST-1. Nobody
+   * types one except to look at that bill, so no verb is required.
+   */
+  const billNo = q.match(/\b((?:inv|cn|dn|sup|est|po)[-\s]?[a-z0-9-]{2,})\b/i)
+  if (billNo) {
+    const no = billNo[1].replace(/\s+/g, '-').toUpperCase()
+    return { intent: 'open_invoice', invoiceNo: no, period: 'all_time', source: 'pattern',
+      understoodAs: `Bill ${no}` }
+  }
+
+  /*
+   * ── OPEN A SCREEN ───────────────────────────────────────────────────
+   *
+   * LAST, and deliberately so. Placing it earlier would steal questions that
+   * already have better answers: "stock dikhao" currently returns stock LEVELS,
+   * which is more useful than dropping someone on the inventory screen, and
+   * "dikhao" is a perfectly ordinary word in a data question.
+   *
+   * So a command only wins when nothing else claimed the sentence. By then
+   * "GSTR-1 kholo" has been declined by every data branch, which is exactly
+   * the case this is for.
+   *
+   * The verb must be present. Resolving the screen NAME is not done here —
+   * nav-match does it, against the same keywords the search box uses.
+   */
+  // Same OPEN_VERB the early check uses — one definition, so the strict and
+  // loose passes can never disagree about what an open command looks like.
+  if (OPEN_VERB.test(q)) {
+    const target = q.replace(OPEN_VERB, ' ').replace(/\s+/g, ' ').trim()
+    if (target.length >= 2) {
+      return { intent: 'open_screen', screenName: target, period: 'all_time', source: 'pattern',
+        understoodAs: `Open ${target}` }
+    }
+  }
+
   // The second clause is the greedy one: "kitna" plus a period, with nothing
   // more specific claimed. It no longer needs a list of subjects to stand down
   // for — spending questions are claimed by the two branches near the top of

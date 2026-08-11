@@ -126,6 +126,8 @@ export function interpretToolCall(call: RawToolCall): InterpretResult {
       partyName: str('party_name'),
       itemName: str('item_name'),
       categoryName: str('category'),
+      screenName: str('screen'),
+      invoiceNo: str('invoice_no'),
       period,
       source: 'llm',
       /*
@@ -159,6 +161,12 @@ function describeCapability(name: string, args: Record<string, unknown>): string
         ? `${category} spending · ${period ?? 'this month'}`
         : `Expenses · ${period ?? 'this month'}`
     case 'purchases_period': return `Purchases · ${period ?? 'this month'}`
+    case 'open_screen': return `Open ${typeof args.screen === 'string' ? args.screen : 'screen'}`
+    case 'open_invoice': {
+      const no = typeof args.invoice_no === 'string' ? args.invoice_no : undefined
+      if (no) return `Bill ${no}`
+      return party ? `Latest bill for "${party}"` : 'Bill'
+    }
     default: return name
   }
 }

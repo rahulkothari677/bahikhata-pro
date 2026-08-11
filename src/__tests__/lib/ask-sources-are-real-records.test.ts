@@ -90,7 +90,15 @@ describe('Ask receipts point at real records', () => {
     const bad: string[] = []
     for (const m of src.matchAll(/\bid:\s*([^,\n}]+)/g)) {
       const value = m[1].trim()
-      if (/^[a-zA-Z_$][\w$]*\.id$/.test(value)) continue      // r.id
+      /*
+       * A dotted path ending in `.id`. Allows `r.id` and also
+       * `m.destination.id` — the nav matcher returns wrapped results, and its
+       * id is every bit as real as a row's. My first version permitted only
+       * ONE dot and flagged that as suspicious, which is the guard being
+       * strict about the wrong thing: what matters is that the value is READ
+       * from an object, not how deeply it is nested.
+       */
+      if (/^[a-zA-Z_$][\w$.]*\.id$/.test(value)) continue     // r.id, m.destination.id
       if (/^[a-zA-Z_$][\w$]*$/.test(value)) continue          // id (shorthand var)
       bad.push(value.slice(0, 60))
     }

@@ -14,6 +14,8 @@ import { describeParties } from '@/lib/describe-parties'
 import { activeTransactionWhere } from '@/lib/query-helpers'
 import { routeWithAi } from '@/lib/ask-router'
 import { getCapability } from '@/lib/ask-capabilities'
+import { findDestinations } from '@/lib/nav-match'
+import { NAV_REGISTRY, filterByPermissions } from '@/lib/nav-registry'
 
 /**
  * "Ask your books" — A MODEL CHOOSES THE QUESTION. IT NEVER TOUCHES THE MONEY.
@@ -724,6 +726,102 @@ export async function POST(req: NextRequest) {
             kind: 'transaction' as const, id: r.id,
             label: r.invoiceNo || '(no number)', amount: r.totalAmount, date: r.date,
           })),
+        })
+      }
+
+      /* ────────────────────── OPEN A SCREEN ────────────────────────── */
+      case 'open_screen': {
+        const asked = q.screenName || ''
+        /*
+         * PERMISSIONS ARE APPLIED BEFORE MATCHING, not after.
+         *
+         * Filtering the results would still have searched a list containing
+         * screens this user may not open — and with a choice list, would show
+         * their names. A command must not become a way to enumerate what the
+         * menus deliberately hide.
+         *
+         * Feature flags are NOT evaluated here: they live in the client store
+         * and the server has no view of them. The client checks those again
+         * before navigating, so each side filters on what it actually knows.
+         */
+        const allowed = filterByPermissions(NAV_REGISTRY, {
+          canAccess: (m) => canAccessModule(auth.role, auth.permissions, m),
+          isFlagEnabled: () => true,
+          isOwner: auth.role === 'owner',
+        })
+        const allowedIds = new Set(allowed.map(d => d.id))
+        const matches = findDestinations(asked).filter(m => allowedIds.has(m.destination.id))
+
+        if (matches.length === 0) {
+          return NextResponse.json({
+            answered: false, question, understoodAs: q.understoodAs,
+            message: `I couldn’t find a screen called “${asked}”.`,
+            examples: ASK_EXAMPLES,
+          })
+        }
+
+        if (matches.length > 1) {
+          /*
+           * Several screens fit. Offer them rather than picking — the same
+           * treatment two customers named Ramesh get. "profit and loss"
+           * legitimately means either the P&L Statement or the Reports hub.
+           */
+          return NextResponse.json({
+            answered: false, question, understoodAs: q.understoodAs,
+            message: `Which one did you mean?`,
+            choices: matches.map(m => ({ id: m.destination.id, name: m.destination.label })),
+          })
+        }
+
+        const dest = matches[0].destination
+        return NextResponse.json({
+          answered: true, question, understoodAs: q.understoodAs,
+          headline: `Opening ${dest.label}`,
+          detail: dest.description || undefined,
+          navigate: { kind: 'screen' as const, destinationId: dest.id, label: dest.label },
+          sources: [],
+        })
+      }
+
+      /* ────────────────────── OPEN ONE BILL ────────────────────────── */
+      case 'open_invoice': {
+        const no = q.invoiceNo?.trim()
+        const partyName = q.partyName?.trim()
+
+        /*
+         * The filter is written INSIDE the call rather than built into a
+         * variable above it, on purpose. The soft-delete sweep reads each
+         * query's own arguments — a `where` assembled elsewhere is invisible
+         * to it, and it flagged this line for exactly that reason. Making the
+         * guard able to see the filter is worth two extra lines.
+         */
+        const extra = no
+          ? { invoiceNo: { equals: no, mode: 'insensitive' as const } }
+          : { party: { is: { name: { contains: escapeLikeWildcards(partyName || ''), mode: 'insensitive' as const }, deletedAt: null } } }
+
+        // Newest first, so "Anil ka last bill" means his LAST one.
+        const bill = await db.transaction.findFirst({
+          where: activeTransactionWhere(userId, extra),
+          orderBy: { date: 'desc' },
+          select: { id: true, invoiceNo: true, type: true, totalAmount: true, date: true, party: { select: { name: true } } },
+        })
+
+        if (!bill) {
+          return NextResponse.json({
+            answered: false, question, understoodAs: q.understoodAs,
+            message: no
+              ? `No bill numbered “${no}”. Check the number, or open the ledger to browse.`
+              : `No bills found for “${partyName}”.`,
+          })
+        }
+
+        const label = bill.invoiceNo || '(no number)'
+        return NextResponse.json({
+          answered: true, question, understoodAs: q.understoodAs,
+          headline: `Opening ${label}`,
+          detail: `${bill.party?.name || 'Walk-in'} · ${money(bill.totalAmount)}`,
+          navigate: { kind: 'record' as const, transactionId: bill.id, label },
+          sources: [{ kind: 'transaction' as const, id: bill.id, label, amount: bill.totalAmount, date: bill.date }],
         })
       }
     }

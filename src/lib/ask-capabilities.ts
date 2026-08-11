@@ -251,6 +251,53 @@ export const CAPABILITIES: readonly Capability[] = [
     examples: ['kal kitna maal kharida', 'how much did I purchase this month', 'is mahine kitna khareeda'],
     hasFastPath: true,
   },
+  {
+    name: 'open_screen',
+    description:
+      'Take the shopkeeper to a screen or report in the app. Use when they ask to OPEN, SHOW or GO ' +
+      'TO something rather than asking a question about a figure — "open GSTR-1", "GSTR-1 kholo", ' +
+      '"profit and loss report dikhao". Pass the screen name exactly as they said it.',
+    parameters: {
+      type: 'object',
+      properties: {
+        screen: {
+          type: 'string',
+          description:
+            'The screen or report name as the user said it, without the command word. ' +
+            '"GSTR-1 kholo" gives "GSTR-1". Do not guess an internal id.',
+        },
+      },
+      required: ['screen'],
+    },
+    module: 'dashboard',
+    dataLivesAt: 'dashboard',
+    examples: ['GSTR-1 kholo', 'open profit and loss report', 'stock report dikhao'],
+    hasFastPath: true,
+  },
+  {
+    name: 'open_invoice',
+    description:
+      'Open one specific bill. Use when a bill number is named ("INV-0001 dikhao"), or when they ' +
+      'ask for the most recent bill of a named party ("Anil ka last bill"). Not for totals — ' +
+      'sales_period answers "how much did I sell".',
+    parameters: {
+      type: 'object',
+      properties: {
+        invoice_no: {
+          type: 'string',
+          description: 'The bill number if one is named, e.g. "INV-0001". Omit if not.',
+        },
+        party_name: {
+          type: 'string',
+          description: 'The customer or supplier, when they ask for the latest bill of that party.',
+        },
+      },
+    },
+    module: 'sales',
+    dataLivesAt: 'transaction-detail',
+    examples: ['INV-0001 dikhao', 'show me bill INV-0002', 'Anil ka last bill'],
+    hasFastPath: true,
+  },
 ] as const
 
 /* ── Derived views. One source of truth, several shapes. ──────────────── */

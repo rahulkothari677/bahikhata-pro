@@ -79,6 +79,22 @@ export interface AskAnswerPayload {
   choices?: AskChoice[]
   sources?: AskSource[]
   actions?: AskAction[]
+  /**
+   * Where to take the shopkeeper, when they asked to be taken somewhere.
+   *
+   * EXECUTED ONCE, AT ASK TIME — never on render. A restored conversation
+   * re-renders every card it contains, and navigating from render would
+   * teleport someone out of their own history the moment they opened it.
+   * AskChat performs this in the send handler, which restoring never calls.
+   */
+  navigate?: {
+    kind: 'screen' | 'record'
+    /** nav-registry destination id, for kind 'screen'. */
+    destinationId?: string
+    /** Transaction id, for kind 'record'. */
+    transactionId?: string
+    label: string
+  }
 }
 
 export type AskMessage =

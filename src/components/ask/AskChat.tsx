@@ -57,6 +57,8 @@ import {
 } from '@/lib/ask-thread'
 import { ASK_EXAMPLES } from '@/lib/ask-patterns'
 import { useAppStore } from '@/store/app-store'
+import { handleNavAction } from '@/lib/handle-nav-action'
+import { getById } from '@/lib/nav-registry'
 
 export function AskChat() {
   const [conversations, setConversations] = useState<AskConversation[]>([])
@@ -151,6 +153,40 @@ export function AskChat() {
       const payload = await r.json()
       setMessages(m => [...m.filter(x => x.id !== thinking.id),
         { id: newId(), role: 'answer', payload, at: Date.now() }])
+      /*
+       * "GSTR-1 kholo" — GO THERE.
+       *
+       * DELIBERATELY HERE AND NOT IN AskAnswer's render. A restored
+       * conversation re-renders every card it holds, so navigating from render
+       * would fling the shopkeeper out of their own history the instant they
+       * opened it — and again every time they scrolled back. This function is
+       * only called when someone actually asks something, which is exactly the
+       * moment the navigation was requested.
+       *
+       * Feature flags are checked HERE and not on the server, because they
+       * live in this store and the server has no view of them. The server
+       * already filtered by module permission and owner-only; between the two,
+       * a command cannot reach a screen the menus hide.
+       */
+      const nav = payload.navigate
+      if (nav) {
+        setTimeout(() => {
+          if (nav.kind === 'record' && nav.transactionId) {
+            useAppStore.getState().setSelectedTransactionId(nav.transactionId)
+            useAppStore.getState().setPreviousView('ask')
+            setView('transaction-detail')
+            return
+          }
+          if (nav.kind === 'screen' && nav.destinationId) {
+            const dest = getById(nav.destinationId)
+            if (!dest) return
+            const features = useAppStore.getState().features
+            if (dest.featureFlag && !features?.[dest.featureFlag as keyof typeof features]) return
+            handleNavAction(dest, { previousView: 'ask' })
+          }
+        }, 400)   // let the answer paint first, so the move is legible
+      }
+
       if (modeRef.current === 'voice') {
         speak(payload.answered ? (payload.headline || '') : (payload.message || ''))
       }
