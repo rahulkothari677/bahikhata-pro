@@ -135,9 +135,28 @@ export async function POST(req: NextRequest) {
               inputTokens: routed.inputTokens || 0,
               outputTokens: routed.outputTokens || 0,
               totalTokens: (routed.inputTokens || 0) + (routed.outputTokens || 0),
-              costInr: calculateCostInr(
+              /*
+               * ROUNDED, because `costInr` is an Int column — and that is a
+               * real mismatch, logged as its own task rather than fixed here.
+               *
+               * calculateCostInr returns RUPEES AS A FLOAT ("@returns cost in
+               * INR (paisa precision)"), and every reader formats it as rupees
+               * — formatCostInr renders anything under ₹1 as paise. But the
+               * column cannot hold ₹0.02. A routing call costs roughly 1–3
+               * paise, so the honest value here rounds to zero.
+               *
+               * Passing the float unrounded is worse than useless: Prisma
+               * rejects it, and the `.catch(() => {})` below swallows the
+               * rejection, so the row is silently never written. scan-bill and
+               * voice-parse pass it unrounded today.
+               *
+               * So: round, and record the truth about it. Token counts and
+               * duration are still exact, which is what actually tells us
+               * whether routing is behaving.
+               */
+              costInr: Math.round(calculateCostInr(
                 routed.provider!, routed.model!, routed.inputTokens || 0, routed.outputTokens || 0,
-              ),
+              )),
               durationMs: routed.durationMs || 0,
               success: !!routed.query,
             },
