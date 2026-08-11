@@ -166,6 +166,56 @@ function categoryFrom(q: string): string | undefined {
  * A sentence SHAPED like a balance question is a balance question, whatever
  * words the party's name happens to contain. Shape beats vocabulary.
  */
+/**
+ * Questions this app refuses on principle — checked BEFORE any routing, and
+ * exported so the AI path is bound by it too.
+ *
+ * WHY EXPORTED. These used to be two early `return null`s inside parseAsk. That
+ * was enough while patterns were the only route: no match, no answer. Once a
+ * model was added, `null` from the parser just meant "your turn" — so the model
+ * saw the question and could answer it. Adversarial testing found exactly that:
+ *
+ *     "next month kitni sale hogi"  →  "₹3,262.00 of sales this month"
+ *
+ * A question about the FUTURE, answered with the PAST, labelled "this month",
+ * and read by the shopkeeper as the forecast they asked for. The plan's own
+ * list of things I will not build says it plainly: "Predictions dressed as
+ * facts. If we ever forecast, it will be labelled a forecast."
+ *
+ * A rule the model is merely ASKED to follow in a prompt is a preference. This
+ * is a rule: the route calls it before the model is ever consulted, so the
+ * refusal does not depend on a model complying.
+ */
+export type RefusalReason = 'advice' | 'prediction'
+
+export function mustRefuse(question: string): RefusalReason | null {
+  const q = normalise(question)
+  if (!q) return null
+
+  /*
+   * ADVICE IS NOT A QUESTION ABOUT THE BOOKS. An opinion question often
+   * carries the same keywords as a factual one — "should I buy more stock"
+   * was once answered with a quantity, which reads as a yes.
+   */
+  if (/\b(should i|shall i|kya mujhe|better|cheapest|worth it|recommend|suggest|advice|kya karu|kya karoon)\b/.test(q)) {
+    return 'advice'
+  }
+
+  /*
+   * Future tense in Hinglish is hoga/hogi/honge; in English, will/forecast.
+   * "hui" and "hua" are PAST and must keep working — "aaj kitni sale hui" is
+   * an ordinary question and stays answerable.
+   */
+  if (/\b(hoga|hogi|honge|hongi)\b/.test(q)
+    || /\b(agle|agla|agli)\s+(mahine|maheene|hafte|saal|month|week|year)\b/.test(q)
+    || /\bnext\s+(month|week|year|quarter)\b/.test(q)
+    || /\b(will i|will my|forecast|predict|projection|expected)\b/.test(q)) {
+    return 'prediction'
+  }
+
+  return null
+}
+
 function partyBalanceShape(q: string): RegExpMatchArray | null {
   return q.match(/^(.+?)\s+(?:ka|ke|ki)\s+(?:kitna|kitne|kitni)?\s*(?:baaki|baki|bakaya|balance|udhaar|udhar|due)/)
     || q.match(/how much does\s+(.+?)\s+owe/)
@@ -223,9 +273,7 @@ export function parseAsk(question: string): AskQuery | null {
    * "Which supplier is cheapest", "should I", "is it worth" — all judgements
    * that depend on things the books do not contain. Refusing is correct.
    */
-  if (/\b(should i|shall i|kya mujhe|better|cheapest|worth it|recommend|suggest|advice|kya karu|kya karoon)\b/.test(q)) {
-    return null
-  }
+  if (mustRefuse(q)) return null
 
   const { period, label: periodLabel } = detectPeriod(q)
 

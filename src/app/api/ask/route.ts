@@ -4,7 +4,7 @@ import { getAuthContext } from '@/lib/get-auth'
 import { canAccessModule } from '@/lib/staff-permissions'
 import { apiError } from '@/lib/api-error'
 import { roundMoney } from '@/lib/money'
-import { parseAsk, ASK_EXAMPLES, type AskPeriod } from '@/lib/ask-patterns'
+import { parseAsk, mustRefuse, ASK_EXAMPLES, type AskPeriod } from '@/lib/ask-patterns'
 import { escapeLikeWildcards } from '@/lib/escape-like'
 import { computePartyBalance, getReceivablePayable } from '@/lib/party-balance'
 import { computeInvoiceDue } from '@/lib/invoice-due'
@@ -116,6 +116,31 @@ export async function POST(req: NextRequest) {
      * nobody wrote a rule for — so the common questions never cost a paisa.
      */
     let q = parseAsk(question)
+
+    /*
+     * SOME QUESTIONS ARE REFUSED BEFORE A MODEL IS EVEN ASKED.
+     *
+     * Advice and predictions. `parseAsk` already returns null for both, but
+     * null from the parser only means "no rule matched" — it is the same
+     * signal as an unusual phrasing, so the model would take its turn and
+     * answer. Adversarial testing caught it: "next month kitni sale hogi" came
+     * back as "₹3,262.00 of sales this month", a forecast question answered
+     * with history.
+     *
+     * Asking the model nicely in a prompt is a preference. Checking here is a
+     * rule, and it also saves the call.
+     */
+    const refusal = mustRefuse(question)
+    if (refusal) {
+      return NextResponse.json({
+        answered: false,
+        question,
+        message: refusal === 'prediction'
+          ? 'I can only tell you what your books already record — I can’t predict what’s coming.'
+          : 'I can show you the figures, but I can’t tell you what you should do.',
+        examples: ASK_EXAMPLES,
+      })
+    }
 
     if (!q) {
       const routed = await routeWithAi(question)
