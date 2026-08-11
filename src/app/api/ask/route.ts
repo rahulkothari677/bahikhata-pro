@@ -774,11 +774,26 @@ export async function POST(req: NextRequest) {
         }
 
         const dest = matches[0].destination
+        /*
+         * CARRY THE PERIOD, when one was named. "pichhle mahine ki P&L" should
+         * land on the P&L already showing last month — opening the report and
+         * leaving the shopkeeper to change the date picker is half the job.
+         *
+         * The dates are sent, not a preset name: which preset (if any) matches
+         * exactly is decided on the client, where the picker's own definitions
+         * live. See lib/ask-period-preset for why "this week" and "this FY"
+         * deliberately map to no preset at all.
+         */
         return NextResponse.json({
           answered: true, question, understoodAs: q.understoodAs,
           headline: `Opening ${dest.label}`,
           detail: dest.description || undefined,
-          navigate: { kind: 'screen' as const, destinationId: dest.id, label: dest.label },
+          navigate: {
+            kind: 'screen' as const, destinationId: dest.id, label: dest.label,
+            ...(q.period !== 'all_time'
+              ? { period: q.period, from: from.toISOString(), to: to.toISOString() }
+              : {}),
+          },
           sources: [],
         })
       }

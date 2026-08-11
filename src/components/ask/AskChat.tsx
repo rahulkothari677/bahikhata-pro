@@ -59,6 +59,9 @@ import { ASK_EXAMPLES } from '@/lib/ask-patterns'
 import { useAppStore } from '@/store/app-store'
 import { handleNavAction } from '@/lib/handle-nav-action'
 import { getById } from '@/lib/nav-registry'
+import { presetForAskPeriod } from '@/lib/ask-period-preset'
+import { getPresetLabel } from '@/components/common/DateRangePicker'
+import type { AskPeriod } from '@/lib/ask-patterns'
 
 export function AskChat() {
   const [conversations, setConversations] = useState<AskConversation[]>([])
@@ -182,6 +185,28 @@ export function AskChat() {
             if (!dest) return
             const features = useAppStore.getState().features
             if (dest.featureFlag && !features?.[dest.featureFlag as keyof typeof features]) return
+
+            /*
+             * ARM THE PERIOD BEFORE NAVIGATING, not after — the destination
+             * reads `pendingDateRange` in a mount effect, so setting it
+             * afterwards would arrive too late and the report would render
+             * this month before jumping.
+             *
+             * `preset` is the picker's LABEL, because that is the contract
+             * pendingDateRange already has with Ledger: it matches on
+             * getPresetLabel(p). Where no preset is exactly this range —
+             * "this week", "this financial year" — the label is "Custom",
+             * which is the honest thing for the picker to show.
+             */
+            if (nav.from && nav.to) {
+              const preset = presetForAskPeriod(nav.period as AskPeriod)
+              useAppStore.getState().setPendingDateRange({
+                from: nav.from,
+                to: nav.to,
+                preset: preset ? getPresetLabel(preset) : 'Custom',
+              })
+            }
+
             handleNavAction(dest, { previousView: 'ask' })
           }
         }, 400)   // let the answer paint first, so the move is legible

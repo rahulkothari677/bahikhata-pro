@@ -94,6 +94,17 @@ export interface AskAnswerPayload {
     /** Transaction id, for kind 'record'. */
     transactionId?: string
     label: string
+    /**
+     * The period asked for, when one was — "pichhle mahine ki P&L".
+     *
+     * Dates, not a preset name. Which preset (if any) is EXACTLY this range is
+     * decided on the client, where the picker's own definitions live: "this
+     * week" and "this financial year" match none of them, and forcing them
+     * onto last7/thisYear would show a different period than was asked for.
+     */
+    period?: string
+    from?: string
+    to?: string
   }
 }
 

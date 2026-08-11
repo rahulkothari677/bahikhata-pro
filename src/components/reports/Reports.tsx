@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { DateRangePicker, getPresetRange, type DateRange, type DatePreset } from '@/components/common/DateRangePicker'
+import { DateRangePicker, getPresetRange, getPresetLabel, type DateRange, type DatePreset } from '@/components/common/DateRangePicker'
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   CartesianGrid, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer,
@@ -63,6 +63,32 @@ export function Reports({ singleReportType }: { singleReportType?: string }) {
   const [dateRange, setDateRange] = useState<DateRange>(() => getPresetRange('thisMonth'))
   const [datePreset, setDatePreset] = useState<DatePreset>('thisMonth')
   const [exportingGstr, setExportingGstr] = useState(false)
+
+  /*
+   * A PERIOD HANDED OVER FROM SOMEWHERE ELSE — "pichhle mahine ki P&L kholo".
+   *
+   * `pendingDateRange` already existed as a one-way channel from the Dashboard
+   * to the Ledger; this screen simply never read it, so a report could be
+   * opened at a chosen period but not AT that period. Ask needed the same
+   * hand-off, and inventing a second store field for it would have been two
+   * mechanisms for one job.
+   *
+   * Cleared immediately after consuming, exactly as Ledger does — otherwise
+   * the next visit to Reports would silently inherit a period from whatever
+   * was asked ten minutes ago.
+   */
+  const pendingDateRange = useAppStore(s => s.pendingDateRange)
+  const setPendingDateRange = useAppStore(s => s.setPendingDateRange)
+  useEffect(() => {
+    if (!pendingDateRange) return
+    Promise.resolve().then(() => {
+      setDateRange({ from: new Date(pendingDateRange.from), to: new Date(pendingDateRange.to) })
+      const matched = (['today', 'yesterday', 'last7', 'last30', 'thisMonth', 'lastMonth', 'thisQuarter', 'thisYear'] as DatePreset[])
+        .find(p => getPresetLabel(p) === pendingDateRange.preset)
+      setDatePreset(matched || 'custom')
+      setPendingDateRange(null)
+    })
+  }, [pendingDateRange, setPendingDateRange])
   // 🔒 V22-3 fix: Track whether we're in single-report mode (from prop OR store)
   const [isSingleReport, setIsSingleReport] = useState(!!singleReportType)
 

@@ -222,6 +222,28 @@ export function mustRefuse(question: string): RefusalReason | null {
   return null
 }
 
+/**
+ * Remove the words that named a PERIOD, leaving only the thing being opened.
+ *
+ * "pichhle mahine ki P&L nikalo" carries two facts: WHICH report, and WHEN.
+ * The period is captured separately by detectPeriod; if its words are left in
+ * the screen name, nav-match tries to find a destination called "pichhle
+ * mahine ki p&l" and either misses or scores badly against unrelated screens.
+ *
+ * Deliberately only the period vocabulary detectPeriod itself recognises —
+ * stripping more would start eating report names ("this year's summary").
+ */
+function stripPeriodWords(s: string): string {
+  return s
+    .replace(/\b(aaj|today|aj|kal|yesterday)\b/g, ' ')
+    .replace(/\b(pichhle|pichle|last|previous)\s+(mahine|month|maheene)\b/g, ' ')
+    .replace(/\b(is|this|es)\s+(mahine|month|maheene|hafte|week|hafta|saal|year)\b/g, ' ')
+    .replace(/\b(mahine|maheene|mahina|hafte|hafta|saal|varsh)\b/g, ' ')
+    .replace(/\b(ka|ki|ke|of|for)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 function partyBalanceShape(q: string): RegExpMatchArray | null {
   return q.match(/^(.+?)\s+(?:ka|ke|ki)\s+(?:kitna|kitne|kitni)?\s*(?:baaki|baki|bakaya|balance|udhaar|udhar|due)/)
     || q.match(/how much does\s+(.+?)\s+owe/)
@@ -301,12 +323,26 @@ export function parseAsk(question: string): AskQuery | null {
    */
   const OPEN_VERB = /\b(kholo|khol|kholna|dikhao|dikha|open|show|jao|le chalo|navigate)\b/
   const NAMES_A_DESTINATION = /\b(report|reports|page|screen|section|tab|statement)\b/
-  if (OPEN_VERB.test(q) && NAMES_A_DESTINATION.test(q)) {
-    const target = q.replace(OPEN_VERB, ' ').replace(/\s+/g, ' ').trim()
-    if (target.length >= 2) {
-      return { intent: 'open_screen', screenName: target, period: 'all_time', source: 'pattern',
-        understoodAs: `Open ${target}` }
+  /*
+   * ONE extraction, used by both the strict pass here and the loose pass far
+   * below. They previously differed: the loose one neither stripped period
+   * words nor carried the period, so "pichhle mahine ki P&L kholo" asked for a
+   * screen literally named "pichhle mahine ki p&l" and lost the period
+   * entirely. Two branches doing the same job differently is the drift this
+   * file keeps getting bitten by.
+   */
+  const asOpenCommand = (): AskQuery | null => {
+    const target = stripPeriodWords(q.replace(OPEN_VERB, ' '))
+    if (target.length < 2) return null
+    return {
+      intent: 'open_screen', screenName: target, period, source: 'pattern',
+      understoodAs: period === 'all_time' ? `Open ${target}` : `Open ${target} · ${periodLabel}`,
     }
+  }
+
+  if (OPEN_VERB.test(q) && NAMES_A_DESTINATION.test(q)) {
+    const cmd = asOpenCommand()
+    if (cmd) return cmd
   }
 
   /*
@@ -487,14 +523,11 @@ export function parseAsk(question: string): AskQuery | null {
    * The verb must be present. Resolving the screen NAME is not done here —
    * nav-match does it, against the same keywords the search box uses.
    */
-  // Same OPEN_VERB the early check uses — one definition, so the strict and
-  // loose passes can never disagree about what an open command looks like.
+  // Same OPEN_VERB and the same extraction the strict pass uses, so the two
+  // can never disagree about what an open command looks like or what it means.
   if (OPEN_VERB.test(q)) {
-    const target = q.replace(OPEN_VERB, ' ').replace(/\s+/g, ' ').trim()
-    if (target.length >= 2) {
-      return { intent: 'open_screen', screenName: target, period: 'all_time', source: 'pattern',
-        understoodAs: `Open ${target}` }
-    }
+    const cmd = asOpenCommand()
+    if (cmd) return cmd
   }
 
   // The second clause is the greedy one: "kitna" plus a period, with nothing
