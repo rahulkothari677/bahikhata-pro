@@ -24,7 +24,7 @@
  * rather than assuming one spelling.
  */
 
-import { parseDateRange } from '@/lib/ask-date-range'
+import { parseDateRange, hasDateRangeShape } from '@/lib/ask-date-range'
 
 export type AskIntent =
   | 'party_balance'      // what does X owe me
@@ -326,6 +326,23 @@ const NAMES_SALES = /\b(sale|sales|bikri|bikree|becha|bika|revenue|turnover)\b/
  * do it once, where it cannot be missed.
  */
 export function parseAsk(question: string): AskQuery | null {
+  /*
+   * A RANGE THAT WAS ATTEMPTED AND IS INVALID REFUSES THE WHOLE QUESTION.
+   *
+   * "31 february to 5 march ki sale" was answered "₹0.00 of sales TODAY": the
+   * range parser correctly refused an impossible date, detectPeriod then found
+   * no period word, and the sales branch defaulted to today. A refusal had
+   * quietly become an answer to a different question — the exact failure this
+   * codebase keeps producing in new costumes.
+   *
+   * Checked here rather than inside detectPeriod, because detectPeriod's job
+   * is to name a period and its "nothing found" answer is legitimately
+   * all_time. This is a different statement: something WAS found, and it is
+   * not usable.
+   */
+  const normalised = normalise(question)
+  if (hasDateRangeShape(normalised) && !parseDateRange(normalised)) return null
+
   const q = matchAsk(question)
   if (!q || q.period !== 'custom') return q
   const range = parseDateRange(normalise(question))

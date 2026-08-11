@@ -96,6 +96,24 @@ function yearForMonths(startMonth: number, now: Date): number {
  * `now` is injectable so the year inference can be tested without waiting for
  * the calendar.
  */
+/**
+ * Does this sentence LOOK like it names a range, whether or not it parses?
+ *
+ * The distinction matters more than it sounds. "31 february to 5 march" is
+ * refused by the parser — correctly, the date does not exist — and the caller
+ * then fell through to its default period and answered about TODAY. So a
+ * refusal became a different answer, under the shopkeeper's own words.
+ *
+ * With this, the caller can tell "no range here, carry on" apart from "a range
+ * was attempted and it was not valid", and refuse the whole question.
+ */
+export function hasDateRangeShape(question: string): boolean {
+  const q = question.toLowerCase().replace(/[,]/g, ' ').replace(/\s+/g, ' ').trim()
+  return new RegExp(
+    `\\b(?:\\d{1,2}\\s*(?:st|nd|rd|th)?\\s*)?(${MONTH_WORDS})\\b\\s*${RANGE_SEP}\\s*(?:\\d{1,2}\\s*(?:st|nd|rd|th)?\\s*)?(${MONTH_WORDS})\\b`,
+  ).test(q)
+}
+
 export function parseDateRange(question: string, now: Date = new Date()): AskDateRange | null {
   const q = question.toLowerCase().replace(/[,]/g, ' ').replace(/\s+/g, ' ').trim()
   const nowIst = new Date(now.getTime() + IST_OFFSET_MS)

@@ -12,7 +12,7 @@
  */
 
 import { describe, test, expect } from '@jest/globals'
-import { parseDateRange } from '@/lib/ask-date-range'
+import { parseDateRange, hasDateRangeShape } from '@/lib/ask-date-range'
 
 const IST = 5.5 * 60 * 60 * 1000
 /** Read a returned instant back as its IST calendar day. */
@@ -141,5 +141,22 @@ describe('the label reads back what was understood', () => {
     expect(r.label).toMatch(/14 Jun 2026/)
     // The LAST day, not the exclusive boundary — nobody says "to 28 July".
     expect(r.label).toMatch(/27 Jul 2026/)
+  })
+})
+
+describe('an attempted-but-invalid range refuses the whole question', () => {
+  test('hasDateRangeShape tells "no range" apart from "bad range"', () => {
+    /*
+     * THE DISTINCTION THAT WAS MISSING. "31 february to 5 march ki sale" was
+     * answered "₹0.00 of sales TODAY": the parser correctly refused an
+     * impossible date, no period word was found, and the sales branch fell
+     * back to its default. A refusal had become an answer to a different
+     * question.
+     */
+    expect(hasDateRangeShape('31 february to 5 march ki sale')).toBe(true)
+    expect(parseDateRange('31 february to 5 march ki sale')).toBeNull()
+    // No range attempted at all — the caller should carry on normally.
+    expect(hasDateRangeShape('aaj ki sale')).toBe(false)
+    expect(hasDateRangeShape('is mahine ka profit')).toBe(false)
   })
 })

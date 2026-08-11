@@ -594,6 +594,34 @@ export async function POST(req: NextRequest) {
 
       /* ───────────────────────────── TAX ───────────────────────────── */
       case 'tax_due': {
+        /*
+         * GST IS FILED ONE MONTH AT A TIME, so a multi-month range cannot be
+         * answered as a single GSTR-3B figure.
+         *
+         * "1 april to 30 june ka GST" returned "₹0.00 of GST payable for APRIL
+         * 2026" while the caption above it read "1 Apr 2026 to 30 Jun 2026".
+         * The label promised a quarter and the number was one month — the
+         * caption and the figure disagreeing, which is the same defect as
+         * calling a customer a supplier, in a place where it would be quoted
+         * to a tax officer.
+         *
+         * Adding three months together would be worse: no such figure appears
+         * on any return, so nobody could check it. Saying what we can do is
+         * the only honest answer.
+         */
+        if (q.period === 'custom') {
+          const a = new Date(from.getTime() + IST_OFFSET_MS)
+          const lastDay = new Date(to.getTime() + IST_OFFSET_MS - 86_400_000)
+          const sameMonth = a.getUTCFullYear() === lastDay.getUTCFullYear()
+            && a.getUTCMonth() === lastDay.getUTCMonth()
+          if (!sameMonth) {
+            return NextResponse.json({
+              answered: false, question, understoodAs: q.understoodAs,
+              message: 'GST is filed one month at a time, so I can’t total it across a range. Ask me for a single month — “April ka GST” — and I’ll give you the figure that gets filed.',
+            })
+          }
+        }
+
         // Ask the GSTR-3B route rather than recomputing: the answer must be
         // the number that will actually be filed, not a second opinion.
         const monthIst = new Date(from.getTime() + IST_OFFSET_MS)
