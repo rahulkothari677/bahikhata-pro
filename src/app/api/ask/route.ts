@@ -14,7 +14,7 @@ import { describeParties } from '@/lib/describe-parties'
 import { activeTransactionWhere } from '@/lib/query-helpers'
 import { routeWithAi } from '@/lib/ask-router'
 import { getCapability } from '@/lib/ask-capabilities'
-import { RESPONSE_DAYS } from '@/lib/notice-risk'
+import { buildNoticeLine } from '@/lib/ask-notice-line'
 import { findDestinations } from '@/lib/nav-match'
 import { NAV_REGISTRY, filterByPermissions } from '@/lib/nav-registry'
 
@@ -665,64 +665,40 @@ export async function POST(req: NextRequest) {
          * A failure here must never cost the shopkeeper their tax figure, so
          * the risk block is additive and the answer survives without it.
          */
-        let riskLine: string | null = null
-        let riskActions: { kind: 'open-screen'; label: string; destinationId: string }[] = []
+        /*
+         * The wording lives in lib/ask-notice-line so all three states can be
+         * tested — a real `notice` needs GSTR-1 to exceed 3B by over ₹25 lakh,
+         * so it could never be reached from this shop's books.
+         *
+         * The ASSESSMENT is not made here. /api/notice-risk assembles the
+         * GSTR-1 tax, the 3B tax, the claimed ITC and the imported 2B totals
+         * and applies Rule 88C/88D. One thing decides risk; this only speaks.
+         *
+         * Wrapped, because a failure fetching the risk must never cost the
+         * shopkeeper their tax figure. No note is honest; a broken answer is not.
+         */
+        let notice = buildNoticeLine(null)
         try {
           const rr = await fetch(`${origin}/api/notice-risk?month=${month}`, {
             headers: { cookie: req.headers.get('cookie') || '' }, cache: 'no-store',
           })
           if (rr.ok) {
             const risk = await rr.json()
-            const c88 = (risk.rules || []).find((x: any) => x.rule === '88C') || (risk.rules || [])[0]
-
-            if (risk.overall === 'notice') {
-              /*
-               * Both limits crossed. Say what actually happens, in the order
-               * it happens — the notice, the deadline, then the consequence
-               * that costs them customers.
-               */
-              /*
-               * `headline` and `consequence`, NOT `summary` — I wrote
-               * `c88?.summary` first and it is not a field on RuleAssessment,
-               * so every notice would have fallen back to generic text with no
-               * figures in it. Caught by reading the live payload rather than
-               * trusting the shape I assumed.
-               */
-              riskLine = `⚠️ ${c88?.headline || 'Filing this would trigger a DRC-01B notice.'} ${c88?.consequence || `You would have ${RESPONSE_DAYS} days to respond, and your next GSTR-1 would be blocked — which stops your B2B customers claiming input credit from you.`}`
-              riskActions = [{ kind: 'open-screen', label: 'Fix before filing', destinationId: 'gstr-3b' }]
-            } else if (risk.overall === 'difference') {
-              /*
-               * Under the threshold is NOT "safe", and saying so would be the
-               * one lie this feature cannot afford. A difference is still a
-               * difference; it is simply not yet a notice.
-               */
-              riskLine = `${c88?.headline || 'Your GSTR-1 and GSTR-3B do not match.'} It is below the level that triggers a notice, but a difference is the commonest reason a shop gets one.`
-              riskActions = [{ kind: 'open-screen', label: 'See the difference', destinationId: 'gstr-3b' }]
-            } else {
-              /*
-               * §4.2 "calm when fine": a clean month gets ONE line, not four
-               * green ticks. An app that celebrates every month teaches people
-               * to stop reading it.
-               */
-              riskLine = c88?.headline
-                ? `${c88.headline} Nothing here that triggers a notice.`
-                : 'GSTR-1 and GSTR-3B agree — nothing here that triggers a notice.'
-            }
+            notice = buildNoticeLine({
+              overall: risk.overall,
+              rule: (risk.rules || []).find((x: any) => x.rule === '88C') || (risk.rules || [])[0] || null,
+            })
           }
-        } catch {
-          // Leave riskLine null. A tax figure without the risk note is worth
-          // more than an error, and silence is honest — we simply do not add
-          // a claim we could not check.
-        }
+        } catch { /* leave it unassessed — see above */ }
 
         return NextResponse.json({
           answered: true, question, understoodAs: q.understoodAs,
           headline: `${money(net)} of GST payable for ${g3.period?.monthLabel || month}`,
           detail: [
-            riskLine,
+            notice.line,
             `Output tax ${money(g3.totalOutputTax || 0)} less credit notes ${money(g3.totalCreditNoteTax || 0)} and input credit ${money(g3.totalItc || 0)}. This is the GSTR-3B figure.`,
           ].filter(Boolean).join('\n\n'),
-          actions: riskActions.length ? riskActions : undefined,
+          actions: notice.action ? [notice.action] : undefined,
           sources: [],
         })
       }
