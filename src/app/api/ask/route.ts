@@ -53,7 +53,22 @@ export const maxDuration = 30
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000
 
 /** Resolve a named period to a real [from, to) in UTC, on IST day boundaries. */
-function resolvePeriod(period: AskPeriod): { from: Date; to: Date; label: string } {
+function resolvePeriod(
+  period: AskPeriod,
+  custom?: { from?: string; to?: string },
+): { from: Date; to: Date; label: string } {
+  /*
+   * An explicit range the shopkeeper gave us — "14 June to 27 July". The dates
+   * were parsed and validated locally; here they are simply honoured.
+   */
+  if (period === 'custom' && custom?.from && custom?.to) {
+    const from = new Date(custom.from)
+    const to = new Date(custom.to)
+    const d = (x: Date) => new Date(x.getTime() + IST_OFFSET_MS)
+      .toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
+    return { from, to, label: `${d(from)} to ${d(new Date(to.getTime() - 86_400_000))}` }
+  }
+
   const nowIst = new Date(Date.now() + IST_OFFSET_MS)
   const y = nowIst.getUTCFullYear()
   const m = nowIst.getUTCMonth()
@@ -218,7 +233,7 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    const { from, to, label } = resolvePeriod(q.period)
+    const { from, to, label } = resolvePeriod(q.period, { from: q.customFrom, to: q.customTo })
 
     switch (q.intent) {
       /* ───────────────────────────── PARTY BALANCE ─────────────────── */

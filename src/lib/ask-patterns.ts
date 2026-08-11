@@ -24,6 +24,8 @@
  * rather than assuming one spelling.
  */
 
+import { parseDateRange } from '@/lib/ask-date-range'
+
 export type AskIntent =
   | 'party_balance'      // what does X owe me
   | 'sales_period'       // sales for a period
@@ -38,8 +40,14 @@ export type AskIntent =
   | 'open_screen'        // take me to a screen
   | 'open_invoice'       // take me to one bill
 
-/** A named stretch of time. Resolved to real dates by the caller, in IST. */
-export type AskPeriod = 'today' | 'yesterday' | 'this_week' | 'this_month' | 'last_month' | 'this_fy' | 'all_time'
+/**
+ * A named stretch of time — plus 'custom', which carries its own dates.
+ *
+ * 'custom' is produced ONLY by the local parser, never by a model: it is
+ * absent from the tool schema's enum, so a model cannot ask for it and then
+ * fail to supply the dates that give it meaning.
+ */
+export type AskPeriod = 'today' | 'yesterday' | 'this_week' | 'this_month' | 'last_month' | 'this_fy' | 'all_time' | 'custom'
 
 export interface AskQuery {
   intent: AskIntent
@@ -49,6 +57,12 @@ export interface AskQuery {
   itemName?: string
   /** Screen the user asked to open, as typed. Resolved by nav-match later. */
   screenName?: string
+  /**
+   * The actual dates, when period is 'custom' — "14 June to 27 July".
+   * ISO strings; `to` is EXCLUSIVE, matching every other range in the app.
+   */
+  customFrom?: string
+  customTo?: string
   /** Bill number the user asked for, e.g. "INV-0001". */
   invoiceNo?: string
   /**
@@ -84,7 +98,23 @@ function normalise(q: string): string {
  * Order matters: "last month" must be tested before "month", or every
  * question about last month is answered about this one.
  */
-function detectPeriod(q: string): { period: AskPeriod; label: string } {
+function detectPeriod(q: string): { period: AskPeriod; label: string; from?: string; to?: string } {
+  /*
+   * AN EXPLICIT RANGE BEATS EVERY NAMED PERIOD, and must be tested first.
+   *
+   * "1 April to 30 June" contains no period word we match on — but "sales from
+   * May to July" would fall through to all_time, and "14 June to 27 July ka
+   * hisaab" contains neither. Worse, a range naming a month could collide with
+   * a future month rule. Asking first means an explicit range is never
+   * reinterpreted as something vaguer.
+   */
+  const explicit = parseDateRange(q)
+  if (explicit) {
+    return {
+      period: 'custom', label: explicit.label,
+      from: explicit.from.toISOString(), to: explicit.to.toISOString(),
+    }
+  }
   if (/\b(aaj|today|aj)\b/.test(q)) return { period: 'today', label: 'today' }
   if (/\b(kal|yesterday)\b/.test(q)) return { period: 'yesterday', label: 'yesterday' }
   if (/\b(pichhle|pichle|last|previous)\s+(mahine|month|maheene)\b/.test(q)) return { period: 'last_month', label: 'last month' }
@@ -285,7 +315,32 @@ function partyBalanceShape(q: string): RegExpMatchArray | null {
  */
 const NAMES_SALES = /\b(sale|sales|bikri|bikree|becha|bika|revenue|turnover)\b/
 
+/**
+ * The public entry point. Wraps the matcher so that a custom date range is
+ * attached to WHATEVER intent came back, in one place.
+ *
+ * The alternative was threading customFrom/customTo through every one of the
+ * dozen `return { intent: ... }` sites below, which is a dozen chances to
+ * forget one — and forgetting one means a question with an explicit range
+ * silently answered over all time. Same reasoning as the capability registry:
+ * do it once, where it cannot be missed.
+ */
 export function parseAsk(question: string): AskQuery | null {
+  const q = matchAsk(question)
+  if (!q || q.period !== 'custom') return q
+  const range = parseDateRange(normalise(question))
+  if (!range) {
+    /*
+     * detectPeriod said 'custom' but the range no longer parses. That should
+     * be impossible — they call the same function — so treat it as a bug
+     * rather than answering over all time by accident.
+     */
+    return null
+  }
+  return { ...q, customFrom: range.from.toISOString(), customTo: range.to.toISOString() }
+}
+
+function matchAsk(question: string): AskQuery | null {
   const q = normalise(question)
   if (!q) return null
 
