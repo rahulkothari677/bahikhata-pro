@@ -68,6 +68,30 @@ describe('abbreviations people actually write', () => {
     expect(top('pl')).toBe('pl')
   })
 
+  test('"P&L report" still finds the P&L — adding a generic noun must not lose it', () => {
+    /*
+     * FOUND LIVE IN P5.2. "is hafte ka P&L report kholo" offered Stock Report,
+     * Reports, Cashflow Report and Consolidated Report — and NOT the P&L. The
+     * shopkeeper asked for the P&L and was handed a list that did not contain
+     * it, which is worse than finding nothing.
+     *
+     * Two causes, both fixed here:
+     *   · "P&L" strips to "p l", two single letters, both discarded as too
+     *     short — leaving only "report", which brushes every *Report screen.
+     *     Runs of single letters are now joined into "pl" first.
+     *   · Even then the generic Reports HUB outscored the P&L, because
+     *     "report" hits its id, label and keywords while "pl" hit one field.
+     *     A word that is exactly a destination's id now outranks that.
+     */
+    const ids = all('p&l report')
+    expect(ids).toContain('pl')
+    expect(ids[0]).toBe('pl')
+  })
+
+  test('the same holds without the ampersand', () => {
+    expect(all('pl report')[0]).toBe('pl')
+  })
+
   test('gstr 3b, with or without the hyphen', () => {
     expect(top('gstr 3b')).toBe('gstr-3b')
     expect(top('gstr-3b')).toBe('gstr-3b')

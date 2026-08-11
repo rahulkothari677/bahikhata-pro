@@ -56,7 +56,23 @@ const STOP_WORDS = new Set([
 ])
 
 function meaningfulWords(s: string): string[] {
-  return normalise(s).split(' ').filter(w => w.length > 1 && !STOP_WORDS.has(w))
+  /*
+   * ADJACENT SINGLE LETTERS ARE AN ABBREVIATION, not noise.
+   *
+   * "P&L" normalises to "p l" — two one-character tokens, both discarded as
+   * too short to score with. On its own that was survivable, because the
+   * compact-id check catches the whole query. But add one more word and it
+   * breaks badly:
+   *
+   *   "P&L report"  ->  ["report"]  ->  offers Stock Report, Reports,
+   *                                     Cashflow Report … and NOT the P&L.
+   *
+   * The shopkeeper asked for the P&L and was handed a list that did not
+   * contain it, which is worse than finding nothing. Joining runs of single
+   * letters restores "pl" as a real token before anything is filtered.
+   */
+  const joined = normalise(s).replace(/\b([\p{L}])(?:\s+([\p{L}])\b)+/gu, m => m.replace(/\s+/g, ''))
+  return joined.split(' ').filter(w => w.length > 1 && !STOP_WORDS.has(w))
 }
 
 /**
@@ -108,7 +124,17 @@ function scoreDestination(d: NavDestination, words: string[]): number {
   if (keywords.includes(phrase) || label.includes(phrase)) score += 200
 
   for (const w of words) {
-    if (id === w) score += 100
+    /*
+     * A WORD THAT IS EXACTLY A DESTINATION'S ID outranks everything short of
+     * a whole-phrase match, and it has to.
+     *
+     * "p&l report" scored the Reports HUB above the P&L Statement, because
+     * "report" brushes the hub's id, label and keywords while "pl" only hit
+     * one field. But "pl" IS the P&L's id and "report" is a generic noun that
+     * half the registry contains. Someone naming a screen exactly means that
+     * screen; someone saying "report" has said almost nothing.
+     */
+    if (id === w) score += 160
     else if (id.includes(w)) score += 40
     if (label === w) score += 100
     else if (label.split(' ').includes(w)) score += 30
