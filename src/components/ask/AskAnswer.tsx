@@ -27,6 +27,8 @@ import { toast } from 'sonner'
 import { formatINR } from '@/lib/utils'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { useAppStore } from '@/store/app-store'
+import { handleNavAction } from '@/lib/handle-nav-action'
+import { getById } from '@/lib/nav-registry'
 import type { AskAnswerPayload, AskSource, AskChoice, AskAction } from '@/lib/ask-thread'
 
 function SourceIcon({ kind }: { kind: AskSource['kind'] }) {
@@ -127,6 +129,21 @@ export function AskAnswer({
    */
   const runAction = async (a: AskAction) => {
     const from = useAppStore.getState().currentView
+
+    /*
+     * "Fix before filing" on a notice-risk answer. Reuses handleNavAction — the
+     * one shared navigator — rather than a second way to reach a screen.
+     */
+    if (a.kind === 'open-screen') {
+      const dest = a.destinationId ? getById(a.destinationId) : undefined
+      if (dest) {
+        setPreviousView(from)
+        handleNavAction(dest, { previousView: from })
+      }
+      return
+    }
+
+    if (!a.partyId) return   // party actions cannot run without one
     if (a.kind === 'remind') {
       setBusy('remind')
       try {
@@ -248,6 +265,7 @@ export function AskAnswer({
                 ? <Loader2 className="w-4 h-4 animate-spin" />
                 : a.kind === 'remind' ? <MessageCircle className="w-4 h-4" />
                 : a.kind === 'settle' ? <HandCoins className="w-4 h-4" />
+                : a.kind === 'open-screen' ? <AlertTriangle className="w-4 h-4" />
                 : <User className="w-4 h-4" />}
               {a.label}
             </button>

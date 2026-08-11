@@ -14,6 +14,7 @@ import { describeParties } from '@/lib/describe-parties'
 import { activeTransactionWhere } from '@/lib/query-helpers'
 import { routeWithAi } from '@/lib/ask-router'
 import { getCapability } from '@/lib/ask-capabilities'
+import { RESPONSE_DAYS } from '@/lib/notice-risk'
 import { findDestinations } from '@/lib/nav-match'
 import { NAV_REGISTRY, filterByPermissions } from '@/lib/nav-registry'
 
@@ -635,10 +636,84 @@ export async function POST(req: NextRequest) {
         if (!r.ok) throw new Error(`gstr-3b returned ${r.status}`)
         const g3 = await r.json()
         const net = g3.netTaxPayable || 0
+
+        /*
+         * ── THE ANSWER CARRIES THE FILING RISK ────────────────────────
+         *
+         * Master plan §0: "Every competitor built a REGISTER that shows you
+         * your numbers. We build a COMPLIANCE ENGINE that tells you whether
+         * your numbers will survive the department."
+         *
+         * This answer was a register answer. It returned "₹112 of GST payable"
+         * and stopped — the single most-asked GST question, answered exactly
+         * as Vyapar would answer it, while the thing that makes us different
+         * sat computed and unread on a screen most people never open.
+         *
+         * Rule 88C: GSTR-1 tax exceeding 3B by more than 20% AND more than
+         * ₹25 lakh triggers DRC-01B automatically. Seven days to respond, and
+         * then the next GSTR-1 is BLOCKED — which stops the shop's B2B
+         * customers receiving input credit, so they stop buying. Vyapar sells
+         * a separate product for this. We compute it already.
+         *
+         * CALLING THE ENDPOINT, NOT THE LIBRARY. assessNoticeRisk() needs the
+         * GSTR-1 tax, the 3B tax, the claimed ITC and the imported 2B totals.
+         * /api/notice-risk assembles all four. Importing the library here and
+         * re-assembling those inputs would be a SECOND thing deciding notice
+         * risk, and the answer would drift from the panel — rule B6, and the
+         * shape of four bugs already fixed this week.
+         *
+         * A failure here must never cost the shopkeeper their tax figure, so
+         * the risk block is additive and the answer survives without it.
+         */
+        let riskLine: string | null = null
+        let riskActions: { kind: 'open-screen'; label: string; destinationId: string }[] = []
+        try {
+          const rr = await fetch(`${origin}/api/notice-risk?month=${month}`, {
+            headers: { cookie: req.headers.get('cookie') || '' }, cache: 'no-store',
+          })
+          if (rr.ok) {
+            const risk = await rr.json()
+            const c88 = (risk.rules || []).find((x: any) => x.rule === '88C') || (risk.rules || [])[0]
+
+            if (risk.overall === 'notice') {
+              /*
+               * Both limits crossed. Say what actually happens, in the order
+               * it happens — the notice, the deadline, then the consequence
+               * that costs them customers.
+               */
+              riskLine = `⚠️ Filing this would trigger a DRC-01B notice. ${c88?.summary || 'GSTR-1 exceeds GSTR-3B beyond both limits.'} You would have ${RESPONSE_DAYS} days to respond, and your next GSTR-1 would be blocked — which stops your B2B customers claiming input credit from you.`
+              riskActions = [{ kind: 'open-screen', label: 'Fix before filing', destinationId: 'gstr-3b' }]
+            } else if (risk.overall === 'difference') {
+              /*
+               * Under the threshold is NOT "safe", and saying so would be the
+               * one lie this feature cannot afford. A difference is still a
+               * difference; it is simply not yet a notice.
+               */
+              riskLine = `Your GSTR-1 and GSTR-3B do not match. ${c88?.summary || ''} It is below the level that triggers a notice, but a difference is the commonest reason a shop gets one.`
+              riskActions = [{ kind: 'open-screen', label: 'See the difference', destinationId: 'gstr-3b' }]
+            } else {
+              /*
+               * §4.2 "calm when fine": a clean month gets ONE line, not four
+               * green ticks. An app that celebrates every month teaches people
+               * to stop reading it.
+               */
+              riskLine = 'GSTR-1 and GSTR-3B agree — nothing here that triggers a notice.'
+            }
+          }
+        } catch {
+          // Leave riskLine null. A tax figure without the risk note is worth
+          // more than an error, and silence is honest — we simply do not add
+          // a claim we could not check.
+        }
+
         return NextResponse.json({
           answered: true, question, understoodAs: q.understoodAs,
           headline: `${money(net)} of GST payable for ${g3.period?.monthLabel || month}`,
-          detail: `Output tax ${money(g3.totalOutputTax || 0)} less credit notes ${money(g3.totalCreditNoteTax || 0)} and input credit ${money(g3.totalItc || 0)}. This is the GSTR-3B figure.`,
+          detail: [
+            riskLine,
+            `Output tax ${money(g3.totalOutputTax || 0)} less credit notes ${money(g3.totalCreditNoteTax || 0)} and input credit ${money(g3.totalItc || 0)}. This is the GSTR-3B figure.`,
+          ].filter(Boolean).join('\n\n'),
+          actions: riskActions.length ? riskActions : undefined,
           sources: [],
         })
       }

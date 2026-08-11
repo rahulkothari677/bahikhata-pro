@@ -60,9 +60,17 @@ export interface AskChoice {
  * send. We never message a customer on their behalf without them seeing it.
  */
 export interface AskAction {
-  kind: 'remind' | 'settle' | 'open-party'
+  /**
+   * 'open-screen' was nearly added as a SECOND array (`navigateActions`) beside
+   * this one, which would have been two mechanisms for "a button on an answer".
+   * That is the drift shape behind four bugs already fixed. One list.
+   */
+  kind: 'remind' | 'settle' | 'open-party' | 'open-screen'
   label: string
-  partyId: string
+  /** Required for the party actions; absent for 'open-screen'. */
+  partyId?: string
+  /** nav-registry destination id, for 'open-screen'. */
+  destinationId?: string
   /** Settle a specific bill rather than the running balance, when we know it. */
   transactionId?: string
   invoiceNo?: string | null
