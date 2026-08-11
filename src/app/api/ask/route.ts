@@ -542,14 +542,16 @@ export async function POST(req: NextRequest) {
 
         const total = roundMoney(matching.reduce((s, r) => s + r.totalAmount, 0))
 
-        // Group by category so the answer shows WHERE the money went, not just
-        // how much — the breakdown is the part a shopkeeper acts on.
+        // Where the money went, as words. The breakdown is what a shopkeeper
+        // acts on, but it belongs in the sentence — see below for why it is
+        // not the receipts.
         const byCategory = new Map<string, number>()
         for (const r of matching) {
           const key = r.category || 'Uncategorised'
           byCategory.set(key, roundMoney((byCategory.get(key) || 0) + r.totalAmount))
         }
         const groups = [...byCategory.entries()].sort((a, b) => b[1] - a[1])
+        const breakdown = groups.map(([n, v]) => `${n} ${money(v)}`).join(', ')
 
         return NextResponse.json({
           answered: true, question, understoodAs: q.understoodAs,
@@ -557,16 +559,33 @@ export async function POST(req: NextRequest) {
           detail: matching.length
             ? wanted
               ? `Across ${matching.length} ${q.categoryName} entr${matching.length === 1 ? 'y' : 'ies'}. Running costs only — buying stock is counted separately.`
-              : `Across ${groups.length} categor${groups.length === 1 ? 'y' : 'ies'}. Running costs only — buying stock is counted separately.`
+              : `${breakdown}. Running costs only — buying stock is counted separately.`
             : `Nothing recorded ${label}.`,
-          sources: groups.slice(0, 10).map(([name, amount]) => ({
+          /*
+           * REAL DOCUMENTS, NOT CATEGORY TOTALS.
+           *
+           * This first shipped grouped by category, with ids like
+           * "category:Rent" and a comment claiming the tap would fall back to
+           * the income-and-expense screen. It does not — the client sets that
+           * string as a transaction id and navigates, so tapping "Rent ₹5,000"
+           * landed on "Transaction not found".
+           *
+           * I had verified this answer against a shop with NO expenses, where
+           * there were no rows to tap and the bug could not appear. Rahul's
+           * instruction to record the data and re-check is what surfaced it.
+           *
+           * Receipts are the promise of this feature: every figure opens the
+           * document behind it. A category total has no document. So the rows
+           * are the actual expense entries — the same shape sales and
+           * purchases already use — and the category breakdown moved into the
+           * sentence above, where it reads better anyway.
+           */
+          sources: matching.slice(0, 10).map(r => ({
             kind: 'transaction' as const,
-            // The category, not a document — grouped rows have no single id.
-            // `open` falls back to the income-and-expense screen, which is
-            // where these live.
-            id: `category:${name}`,
-            label: name,
-            amount,
+            id: r.id,
+            label: r.category || 'Uncategorised',
+            amount: r.totalAmount,
+            date: r.date,
           })),
         })
       }
