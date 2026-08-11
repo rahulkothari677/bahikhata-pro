@@ -215,7 +215,21 @@ export function AskAnswer({
             <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-1.5" />
             <p className="text-2xl font-bold leading-snug">{payload.headline}</p>
           </div>
-          {payload.detail && <p className="text-sm text-muted-foreground">{payload.detail}</p>}
+          {/*
+            * `whitespace-pre-line` because a detail can now be TWO things: a
+            * compliance verdict, then the arithmetic behind the figure. Without
+            * it the newlines collapsed and the GST answer rendered as one grey
+            * blob — "nothing here triggers a notice" buried mid-paragraph next
+            * to "output tax less credit notes". Found by looking at the screen;
+            * the API response was correct and told me nothing about this.
+            *
+            * §4.2 wants the workings behind a tap rather than merely on a new
+            * line. That is the better fix and it is logged (#60) — this makes
+            * the verdict readable now without pretending to be the whole job.
+            */}
+          {payload.detail && (
+            <p className="text-sm text-muted-foreground whitespace-pre-line">{payload.detail}</p>
+          )}
         </>
       ) : (
         <div className="flex items-start gap-2">
