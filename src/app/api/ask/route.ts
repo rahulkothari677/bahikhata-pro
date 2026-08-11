@@ -681,7 +681,14 @@ export async function POST(req: NextRequest) {
                * it happens — the notice, the deadline, then the consequence
                * that costs them customers.
                */
-              riskLine = `⚠️ Filing this would trigger a DRC-01B notice. ${c88?.summary || 'GSTR-1 exceeds GSTR-3B beyond both limits.'} You would have ${RESPONSE_DAYS} days to respond, and your next GSTR-1 would be blocked — which stops your B2B customers claiming input credit from you.`
+              /*
+               * `headline` and `consequence`, NOT `summary` — I wrote
+               * `c88?.summary` first and it is not a field on RuleAssessment,
+               * so every notice would have fallen back to generic text with no
+               * figures in it. Caught by reading the live payload rather than
+               * trusting the shape I assumed.
+               */
+              riskLine = `⚠️ ${c88?.headline || 'Filing this would trigger a DRC-01B notice.'} ${c88?.consequence || `You would have ${RESPONSE_DAYS} days to respond, and your next GSTR-1 would be blocked — which stops your B2B customers claiming input credit from you.`}`
               riskActions = [{ kind: 'open-screen', label: 'Fix before filing', destinationId: 'gstr-3b' }]
             } else if (risk.overall === 'difference') {
               /*
@@ -689,7 +696,7 @@ export async function POST(req: NextRequest) {
                * one lie this feature cannot afford. A difference is still a
                * difference; it is simply not yet a notice.
                */
-              riskLine = `Your GSTR-1 and GSTR-3B do not match. ${c88?.summary || ''} It is below the level that triggers a notice, but a difference is the commonest reason a shop gets one.`
+              riskLine = `${c88?.headline || 'Your GSTR-1 and GSTR-3B do not match.'} It is below the level that triggers a notice, but a difference is the commonest reason a shop gets one.`
               riskActions = [{ kind: 'open-screen', label: 'See the difference', destinationId: 'gstr-3b' }]
             } else {
               /*
@@ -697,7 +704,9 @@ export async function POST(req: NextRequest) {
                * green ticks. An app that celebrates every month teaches people
                * to stop reading it.
                */
-              riskLine = 'GSTR-1 and GSTR-3B agree — nothing here that triggers a notice.'
+              riskLine = c88?.headline
+                ? `${c88.headline} Nothing here that triggers a notice.`
+                : 'GSTR-1 and GSTR-3B agree — nothing here that triggers a notice.'
             }
           }
         } catch {
