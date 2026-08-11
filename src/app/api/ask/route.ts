@@ -11,6 +11,7 @@ import { computeInvoiceDue } from '@/lib/invoice-due'
 import { shouldHideProfit } from '@/lib/profit-visibility'
 import { buildBalanceActions } from '@/lib/ask-actions'
 import { describeParties } from '@/lib/describe-parties'
+import { activeTransactionWhere } from '@/lib/query-helpers'
 
 /**
  * "Ask your books" — Phase 1. NO LANGUAGE MODEL IS INVOLVED.
@@ -486,6 +487,118 @@ export async function POST(req: NextRequest) {
           headline: `${money(net)} of GST payable for ${g3.period?.monthLabel || month}`,
           detail: `Output tax ${money(g3.totalOutputTax || 0)} less credit notes ${money(g3.totalCreditNoteTax || 0)} and input credit ${money(g3.totalItc || 0)}. This is the GSTR-3B figure.`,
           sources: [],
+        })
+      }
+
+      /* ────────────────────── EXPENSES (running costs) ─────────────── */
+      case 'expenses_period': {
+        /*
+         * WHAT THIS COUNTS, and why it is not "everything that left the till".
+         *
+         * `type: 'expense'` only — rent, salary, electricity. Buying stock is a
+         * PURCHASE and has its own capability, because a shopkeeper does not
+         * think of them as the same thing and neither does the P&L: purchases
+         * become cost of goods sold, expenses sit below the gross-profit line.
+         * Adding them together would produce a number that appears on no
+         * report we publish, which is the definition of a figure nobody can
+         * check.
+         *
+         * activeTransactionWhere, not a hand-written where clause: it puts
+         * userId and deletedAt LAST so neither can be overridden, and it is
+         * the same helper the reports use. Rule G8 — a deleted record stays
+         * deleted everywhere.
+         */
+        const rows = await db.transaction.findMany({
+          where: activeTransactionWhere(userId, { type: 'expense', date: { gte: from, lt: to } }),
+          select: { id: true, category: true, totalAmount: true, date: true, notes: true },
+          orderBy: { date: 'desc' },
+          take: 200,
+        })
+
+        /*
+         * A NAMED CATEGORY IS RESOLVED, NEVER ASSUMED.
+         *
+         * "kitni salary di" narrows to one category. If the shop has no
+         * category by that name we say so — exactly as the stock answer says
+         * "no stocked product named rice" rather than quietly widening to
+         * every product. Silently answering the broader question would hand
+         * back a bigger number under the label the user asked for, which is
+         * the wrong-subject bug all over again.
+         */
+        const wanted = q.categoryName?.toLowerCase()
+        const matching = wanted
+          ? rows.filter(r => (r.category || '').toLowerCase().includes(wanted))
+          : rows
+
+        if (wanted && matching.length === 0) {
+          const known = [...new Set(rows.map(r => r.category).filter(Boolean))]
+          return NextResponse.json({
+            answered: false, question, understoodAs: q.understoodAs,
+            message: known.length
+              ? `No “${q.categoryName}” spending recorded ${label}. Recorded categories: ${known.join(', ')}.`
+              : `No expenses recorded ${label} at all.`,
+          })
+        }
+
+        const total = roundMoney(matching.reduce((s, r) => s + r.totalAmount, 0))
+
+        // Group by category so the answer shows WHERE the money went, not just
+        // how much — the breakdown is the part a shopkeeper acts on.
+        const byCategory = new Map<string, number>()
+        for (const r of matching) {
+          const key = r.category || 'Uncategorised'
+          byCategory.set(key, roundMoney((byCategory.get(key) || 0) + r.totalAmount))
+        }
+        const groups = [...byCategory.entries()].sort((a, b) => b[1] - a[1])
+
+        return NextResponse.json({
+          answered: true, question, understoodAs: q.understoodAs,
+          headline: `${money(total)} spent ${label}`,
+          detail: matching.length
+            ? wanted
+              ? `Across ${matching.length} ${q.categoryName} entr${matching.length === 1 ? 'y' : 'ies'}. Running costs only — buying stock is counted separately.`
+              : `Across ${groups.length} categor${groups.length === 1 ? 'y' : 'ies'}. Running costs only — buying stock is counted separately.`
+            : `Nothing recorded ${label}.`,
+          sources: groups.slice(0, 10).map(([name, amount]) => ({
+            kind: 'transaction' as const,
+            // The category, not a document — grouped rows have no single id.
+            // `open` falls back to the income-and-expense screen, which is
+            // where these live.
+            id: `category:${name}`,
+            label: name,
+            amount,
+          })),
+        })
+      }
+
+      /* ────────────────────── PURCHASES (buying stock) ─────────────── */
+      case 'purchases_period': {
+        // Purchases net of debit notes, mirroring how sales are shown net of
+        // credit notes. Anything else and the two answers would not be
+        // comparable, which is the first thing a shopkeeper does with them.
+        const rows = await db.transaction.findMany({
+          where: activeTransactionWhere(userId, { type: 'purchase', date: { gte: from, lt: to } }),
+          select: { id: true, invoiceNo: true, date: true, totalAmount: true },
+          orderBy: { date: 'desc' },
+          take: 50,
+        })
+        const returns = await db.transaction.aggregate({
+          where: activeTransactionWhere(userId, { type: 'debit-note', date: { gte: from, lt: to } }),
+          _sum: { totalAmount: true },
+        })
+        const gross = roundMoney(rows.reduce((s, r) => s + r.totalAmount, 0))
+        const returned = roundMoney(returns._sum.totalAmount || 0)
+
+        return NextResponse.json({
+          answered: true, question, understoodAs: q.understoodAs,
+          headline: `${money(gross - returned)} of purchases ${label}`,
+          detail: returned > 0
+            ? `${rows.length} bill${rows.length === 1 ? '' : 's'} totalling ${money(gross)}, less ${money(returned)} returned. Includes GST.`
+            : `${rows.length} bill${rows.length === 1 ? '' : 's'}. Includes GST. This is stock bought — running costs are counted separately.`,
+          sources: rows.slice(0, 10).map(r => ({
+            kind: 'transaction' as const, id: r.id,
+            label: r.invoiceNo || '(no number)', amount: r.totalAmount, date: r.date,
+          })),
         })
       }
     }

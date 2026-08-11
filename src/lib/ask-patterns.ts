@@ -33,6 +33,8 @@ export type AskIntent =
   | 'top_products'       // what sold most
   | 'stock_item'         // how much of X is left
   | 'tax_due'            // what GST do I owe
+  | 'expenses_period'    // what did I spend on running the shop
+  | 'purchases_period'   // what did I spend buying stock
 
 /** A named stretch of time. Resolved to real dates by the caller, in IST. */
 export type AskPeriod = 'today' | 'yesterday' | 'this_week' | 'this_month' | 'last_month' | 'this_fy' | 'all_time'
@@ -43,6 +45,13 @@ export interface AskQuery {
   partyName?: string
   /** Product the question is about, as typed. */
   itemName?: string
+  /**
+   * Expense category the question narrows to — "rent", "salary", "bijli".
+   * Resolved against the shop's real categories later, exactly as itemName is
+   * resolved against real products: named-but-unknown is answered honestly
+   * rather than silently widened to everything.
+   */
+  categoryName?: string
   period: AskPeriod
   /** How this was understood — 'pattern' here; 'llm' once that exists. */
   source: 'pattern'
@@ -99,34 +108,86 @@ function cleanName(raw: string): string | undefined {
  * plausible wrong one is not.
  */
 /**
- * Subjects the books DO hold but this parser cannot yet answer about.
+ * SPENDING WORDS, split the way a shopkeeper already splits them.
  *
- * WHY THIS EXISTS. Two branches below are deliberately greedy — the stock
- * branch fires on the bare word "maal", and the sales branch takes anything
- * with "kitna" and a period that nothing more specific claimed. Between them
- * they were answering questions about entirely different subjects, and
- * answering them CONFIDENTLY:
+ * "kharcha" is what it costs to keep the shop open — rent, salary, bijli.
+ * "kharida" is buying stock to sell. They are different words because they
+ * are different things, and the shopkeeper never confuses them. So we do not
+ * have to guess between them either: the word chosen answers the question.
+ *
+ * This is why these two intents could be split cleanly rather than shipped as
+ * one vague "spending" answer. Where the language makes a distinction, honour
+ * it; where it does not, ask.
+ */
+const NAMES_RUNNING_COSTS =
+  // `spen(d|t)\w*` — "spend", "spent" and "spending" in one. Listing only the
+  // last two missed "how much did I spend this month", which is the plainest
+  // English form of the question.
+  /\b(kharch\w*|expense\w*|spen(?:d|t)\w*|salary|tankh\w*|bijli|electricity|rent|kiraya|transport|bhada|bhaada|overhead\w*)\b/
+const NAMES_BUYING_STOCK =
+  /\b(kharid\w*|khareed\w*|purchase\w*|maal liya|stock liya)\b/
+
+/**
+ * Category words we can pass through as a filter. Deliberately the ones a
+ * shopkeeper actually says — the value is matched against the shop's OWN
+ * category names later, so an unrecognised one is reported, never ignored.
+ */
+const CATEGORY_WORDS: ReadonlyArray<[RegExp, string]> = [
+  [/\b(salary|tankh\w*)\b/, 'salary'],
+  [/\b(bijli|electricity)\b/, 'electricity'],
+  [/\b(rent|kiraya)\b/, 'rent'],
+  [/\b(transport|bhada|bhaada)\b/, 'transport'],
+]
+
+function categoryFrom(q: string): string | undefined {
+  for (const [re, name] of CATEGORY_WORDS) if (re.test(q)) return name
+  return undefined
+}
+
+/**
+ * "X ka kitna baaki hai" — a question about ONE named party's balance.
+ *
+ * Lives here, above everything, because two branches need it and a second copy
+ * of this regex is the drift bug I keep finding. The party-balance branch uses
+ * it to answer; the spending branches use it to STAND DOWN.
+ *
+ * WHY THE SPENDING BRANCHES NEED IT. They run early, so they see the sentence
+ * first — and a customer called "Kharid Traders" contains the stem for buying.
+ * "Kharid Traders ka kitna baaki hai" came back as a purchases total. My own
+ * test caught it, which is the only reason it is not live.
+ *
+ * A sentence SHAPED like a balance question is a balance question, whatever
+ * words the party's name happens to contain. Shape beats vocabulary.
+ */
+function partyBalanceShape(q: string): RegExpMatchArray | null {
+  return q.match(/^(.+?)\s+(?:ka|ke|ki)\s+(?:kitna|kitne|kitni)?\s*(?:baaki|baki|bakaya|balance|udhaar|udhar|due)/)
+    || q.match(/how much does\s+(.+?)\s+owe/)
+    || q.match(/^(.+?)\s+(?:ka|ki)\s+balance/)
+}
+
+/*
+ * ── A REFUSAL LIST LIVED HERE, AND HAS BEEN REPLACED ON PURPOSE ──────
+ *
+ * Yesterday these four came back CONFIDENTLY WRONG, all with answered: true:
  *
  *   "is mahine kitna kharcha hua"      → "₹2,212.00 of sales this month"
  *   "kal kitna bijli ka bill tha"      → "₹2,212.00 of sales yesterday"
  *   "is hafte kitna transport kharcha" → "₹0.00 of sales this week"
  *   "kal kitna maal kharida"           → "3 products, lowest stock first"
  *
- * All four came back with answered: true. A shopkeeper who asks what they
- * SPENT and is shown in bold what they EARNED has been actively misled, and
- * the entire claim of this feature is that its figures can be trusted. The
- * "Showing: Sales · this month" line discloses the misreading, but nobody
- * reads the caption over a number in 24px type.
+ * The stopgap was NAMES_A_SUBJECT_WE_CANNOT_ANSWER: a list of spending words
+ * that made the greedy branches stand down and say "I can't answer that yet".
+ * Honest, and useless — the shopkeeper still did not learn what they spent.
  *
- * Refusing is not a lesser answer here — it is the correct one. The same
- * reasoning as the advice guard below: being wrong confidently is worse than
- * saying we cannot do it yet, because only one of those two gets corrected.
+ * Those words now route to `purchases_period` and `expenses_period` above,
+ * BEFORE the greedy branches can reach them. That is strictly stronger than
+ * the refusal was: a question claimed by a correct branch cannot be swallowed
+ * by a greedy one, and the shopkeeper gets the answer instead of an apology.
  *
- * Stems rather than whole words, so kharcha/kharche/kharch and
- * kharida/kharidi/kharidna are all caught by one entry.
+ * The refusal constant is therefore deleted rather than left empty — every
+ * word it held is now covered by NAMES_RUNNING_COSTS or NAMES_BUYING_STOCK,
+ * which was checked word by word before removing it.
  */
-const NAMES_A_SUBJECT_WE_CANNOT_ANSWER =
-  /\b(kharch\w*|kharid\w*|khareed\w*|expense\w*|purchase\w*|spent|spending|salary|tankh\w*|bijli|rent|kiraya|transport|bhada|bhaada)\b/
 
 /**
  * Words that say outright "this is about selling".
@@ -175,6 +236,40 @@ export function parseAsk(question: string): AskQuery | null {
       understoodAs: `Profit · ${period === 'all_time' ? 'this month' : periodLabel}` }
   }
 
+  /*
+   * ── SPENDING ────────────────────────────────────────────────────────
+   *
+   * BEFORE top products, stock and sales, and that ordering is the whole fix.
+   * These questions used to fall through to the greedy branches below and come
+   * back answered with the WRONG SUBJECT — "is mahine kitna kharcha hua" was
+   * answered "₹2,212.00 of sales this month". They were then made to refuse,
+   * which was honest but useless.
+   *
+   * Routing them here is strictly better than either: the shopkeeper asked a
+   * question the books can answer, and now they get the answer.
+   *
+   * Buying stock is checked FIRST because "kal kitna maal kharida" contains
+   * "maal", which the stock branch would otherwise claim.
+   */
+  const looksLikeABalanceQuestion = !!partyBalanceShape(q)
+
+  if (NAMES_BUYING_STOCK.test(q) && !looksLikeABalanceQuestion) {
+    return { intent: 'purchases_period', period: period === 'all_time' ? 'this_month' : period, source: 'pattern',
+      understoodAs: `Purchases · ${period === 'all_time' ? 'this month' : periodLabel}` }
+  }
+  if (NAMES_RUNNING_COSTS.test(q) && !looksLikeABalanceQuestion) {
+    const categoryName = categoryFrom(q)
+    return {
+      intent: 'expenses_period',
+      categoryName,
+      period: period === 'all_time' ? 'this_month' : period,
+      source: 'pattern',
+      understoodAs: categoryName
+        ? `${titleCase(categoryName)} spending · ${period === 'all_time' ? 'this month' : periodLabel}`
+        : `Expenses · ${period === 'all_time' ? 'this month' : periodLabel}`,
+    }
+  }
+
   // ── TOP PRODUCTS ────────────────────────────────────────────────────
   // "sabse zyada kya bika", "best selling", "top product"
   // Plurals matter here too: "top items this month" and "best products" are
@@ -214,16 +309,17 @@ export function parseAsk(question: string): AskQuery | null {
      * and a plainly stated subject beats a guess. Two ways that happened, both
      * seen answering real questions wrongly:
      *
-     *   "kal kitna maal kharida" — a PURCHASE question, answered with stock
-     *     levels. We cannot answer it at all, so refuse.
-     *   "kal kitna maal becha"   — a SALES question, answered with stock
-     *     levels. We CAN answer it, so fall through to the sales branch.
+     *   "kal kitna maal becha" — a SALES question, answered with stock levels.
+     *     It falls through to the sales branch, which can answer it.
+     *
+     * "kal kitna maal kharida" no longer reaches here at all: the purchases
+     * branch above claims it first, which is why the old refusal check on this
+     * line could be deleted.
      *
      * When an item IS named the sentence has said what it is about, and stock
-     * is no longer a guess — so neither check applies.
+     * is no longer a guess — so the check does not apply.
      */
     const guessingFromMaal = !item
-    if (guessingFromMaal && NAMES_A_SUBJECT_WE_CANNOT_ANSWER.test(q)) return null
     if (!(guessingFromMaal && NAMES_SALES.test(q))) {
       return { intent: 'stock_item', itemName: item, period: 'all_time', source: 'pattern',
         understoodAs: item ? `Stock of "${titleCase(item)}"` : 'Stock levels' }
@@ -245,9 +341,9 @@ export function parseAsk(question: string): AskQuery | null {
 
   // ── PARTY BALANCE ───────────────────────────────────────────────────
   // "ramesh ka kitna baaki hai" / "how much does ramesh owe"
-  let m = q.match(/^(.+?)\s+(?:ka|ke|ki)\s+(?:kitna|kitne|kitni)?\s*(?:baaki|baki|bakaya|balance|udhaar|udhar|due)/)
-    || q.match(/how much does\s+(.+?)\s+owe/)
-    || q.match(/^(.+?)\s+(?:ka|ki)\s+balance/)
+  // Same matcher the spending branches stand down for — one definition, so the
+  // two can never disagree about what a balance question looks like.
+  const m = partyBalanceShape(q)
   if (m) {
     const name = cleanName(m[1])
     if (name) {
@@ -263,12 +359,11 @@ export function parseAsk(question: string): AskQuery | null {
   // Last, because it is the broadest: any question mentioning a period and
   // "kitna" that has not matched something more specific is a sales question.
   // The second clause is the greedy one: "kitna" plus a period, with nothing
-  // more specific claimed. It must not fire when the question plainly names a
-  // different subject — that is where the four wrong answers came from. An
-  // EXPLICIT sales word still wins, so "kal kitna maal becha" is unaffected.
-  if (/\b(sale|sales|bikri|bikree|becha|bika|revenue|turnover)\b/.test(q)
-    || (/\bkitna\b/.test(q) && period !== 'all_time'
-        && !NAMES_A_SUBJECT_WE_CANNOT_ANSWER.test(q))) {
+  // more specific claimed. It no longer needs a list of subjects to stand down
+  // for — spending questions are claimed by the two branches near the top of
+  // this function, long before control reaches here.
+  if (NAMES_SALES.test(q)
+    || (/\bkitna\b/.test(q) && period !== 'all_time')) {
     return { intent: 'sales_period', period: period === 'all_time' ? 'today' : period, source: 'pattern',
       understoodAs: `Sales · ${period === 'all_time' ? 'today' : periodLabel}` }
   }

@@ -215,6 +215,42 @@ export const CAPABILITIES: readonly Capability[] = [
     examples: ['kitna GST bharna hai', 'GST payable this month', 'tax due'],
     hasFastPath: true,
   },
+  {
+    name: 'expenses_period',
+    description:
+      'What the shop SPENT on running itself over a period — rent, salary, electricity, ' +
+      'transport. Money going OUT, and specifically NOT stock bought for resale, which is ' +
+      'purchases_period. Give category to narrow to one kind of spending.',
+    parameters: {
+      type: 'object',
+      properties: {
+        period: periodProperty,
+        category: {
+          type: 'string',
+          description:
+            'One kind of spending, if the question names one — "rent", "salary", ' +
+            '"electricity", "transport". Omit for all spending, broken down by category.',
+        },
+      },
+      required: ['period'],
+    },
+    module: 'incomeExpense',
+    dataLivesAt: 'income-expense',
+    examples: ['is mahine kitna kharcha hua', 'how much did I spend this month', 'kitna rent diya'],
+    hasFastPath: true,
+  },
+  {
+    name: 'purchases_period',
+    description:
+      'What the shop spent BUYING STOCK to sell, over a period, after returns to suppliers. ' +
+      'Not the same as expenses_period: this is goods for resale, that is the cost of keeping ' +
+      'the shop open.',
+    parameters: { type: 'object', properties: { period: periodProperty }, required: ['period'] },
+    module: 'purchases',
+    dataLivesAt: 'purchases',
+    examples: ['kal kitna maal kharida', 'how much did I purchase this month', 'is mahine kitna khareeda'],
+    hasFastPath: true,
+  },
 ] as const
 
 /* ── Derived views. One source of truth, several shapes. ──────────────── */
