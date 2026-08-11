@@ -368,6 +368,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     // (Ledger.tsx filter type=estimate). Was labeled "Estimates / Quotations"
     // which read as a list destination.
     label: 'New Estimate / Quotation',
+    keywords: 'estimate quotation quote quotation banao proforma bhav',
     description: 'Create a quote for a customer',
     icon: FilePlus2,
     iconColor: INDIGO,
@@ -559,6 +560,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   {
     id: 'reconciliation',
     label: 'Reconciliation',
+    keywords: 'reconcile match milaan mismatch check',
     description: 'Health check — do books tie out?',
     icon: ShieldCheck,
     iconColor: BLUE,
@@ -576,6 +578,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   {
     id: 'period-lock',
     label: 'Period Lock',
+    keywords: 'lock close books band period taala freeze',
     description: 'Lock filed GST periods',
     icon: Lock,
     iconColor: BLUE,
@@ -593,6 +596,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   {
     id: 'bank-reconciliation',
     label: 'Bank Reconciliation',
+    keywords: 'bank statement reconcile passbook bank milaan',
     description: 'Match bank transactions',
     icon: Banknote,
     iconColor: EMERALD,
@@ -612,6 +616,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   {
     id: 'pl',
     label: 'P&L Statement',
+    keywords: 'profit loss pl p&l income statement munafa nuksan profit and loss statement kamai',
     description: 'Profit & loss — revenue, expenses, net profit',
     icon: TrendingUp,
     iconColor: ROSE,
@@ -630,6 +635,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   {
     id: 'bill-profit',
     label: 'Bill-wise Profit',
+    keywords: 'profit per bill invoice profit bill wise munafa',
     description: 'Per-invoice profit breakdown with margin %',
     icon: FileText,
     iconColor: ROSE,
@@ -648,6 +654,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   {
     id: 'item-profit',
     label: 'Item-wise Profit',
+    keywords: 'profit per item product profit item wise munafa saman',
     description: 'Per-product profit, qty sold & margins',
     icon: Package,
     iconColor: ROSE,
@@ -666,6 +673,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   {
     id: 'party-statement',
     label: 'Party Statement',
+    keywords: 'customer statement supplier statement ledger khata account party hisaab',
     description: 'Customer & supplier balances, sales, purchases',
     icon: Users,
     iconColor: ROSE,
@@ -684,6 +692,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   {
     id: 'debt-aging',
     label: 'Debt Aging',
+    keywords: 'overdue old dues ageing aging purana udhaar baaki days',
     description: 'Outstanding receivables by age bucket',
     icon: Clock,
     iconColor: ROSE,
@@ -702,6 +711,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   {
     id: 'trial-balance',
     label: 'Account Summary',
+    keywords: 'trial balance account summary ledger accounts khata',
     description: 'Debit/credit balances — sales, purchases, receivables',
     icon: Scale,
     iconColor: ROSE,
@@ -729,6 +739,7 @@ export const NAV_REGISTRY: NavDestination[] = [
      */
     id: 'composition-returns',
     label: 'CMP-08 & GSTR-4',
+    keywords: 'cmp08 cmp-08 gstr4 gstr-4 composition scheme',
     description: 'Composition scheme — quarterly payment and annual return',
     icon: FileText,
     iconColor: BLUE,
@@ -745,6 +756,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   {
     id: 'gstr-1',
     label: 'GSTR-1',
+    keywords: 'gstr1 gstr-1 sales return outward supplies gst filing',
     description: 'Outward supplies return — file monthly with GST portal',
     icon: FileText,
     iconColor: BLUE,
@@ -763,6 +775,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   {
     id: 'gstr-3b',
     label: 'GSTR-3B',
+    keywords: 'gstr3b gstr-3b summary return monthly gst filing tax payable',
     description: 'Monthly summary return — output tax vs input credit',
     icon: FileCheck,
     iconColor: BLUE,
@@ -781,6 +794,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   {
     id: 'gstr-2b',
     label: 'GSTR-2B Reconciliation',
+    keywords: 'gstr2b gstr-2b purchase reconcile input credit itc match',
     description: 'Match purchase ITC with auto-generated GSTR-2B',
     icon: ShieldCheck,
     iconColor: BLUE,
@@ -799,6 +813,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   {
     id: 'gst-summary',
     label: 'GST Summary',
+    keywords: 'gst summary tax summary total gst kitna gst',
     description: 'Tax liability by slab — 5/12/18/28%',
     icon: Receipt,
     iconColor: BLUE,
@@ -817,6 +832,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   {
     id: 'hsn-summary',
     label: 'HSN Summary',
+    keywords: 'hsn sac code summary hsn wise',
     description: 'HSN/SAC-wise tax summary for GSTR-1 filing',
     icon: Hash,
     iconColor: BLUE,
@@ -835,6 +851,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   {
     id: 'gstr-9',
     label: 'GSTR-9',
+    keywords: 'gstr9 gstr-9 annual return yearly gst saal',
     description: 'Annual return — the whole year, from the returns you filed',
     icon: FileCheck,
     iconColor: BLUE,
@@ -854,6 +871,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   {
     id: 'stock-report',
     label: 'Stock Report',
+    keywords: 'stock report inventory report maal stock list saman',
     description: 'Stock valuation, sale value, potential profit',
     icon: Package,
     iconColor: AMBER,
@@ -872,6 +890,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   {
     id: 'inventory-aging',
     label: 'Inventory Aging',
+    keywords: 'slow moving dead stock old inventory ageing aging purana maal',
     description: 'Slow-moving & dead stock by age bucket',
     icon: AlertTriangle,
     iconColor: AMBER,
@@ -891,6 +910,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   {
     id: 'cashflow',
     label: 'Cashflow Report',
+    keywords: 'cash flow cashflow money in out paisa aana jana',
     description: 'Cash inflow vs outflow by category',
     icon: WalletIcon,
     iconColor: EMERALD,
@@ -909,6 +929,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   {
     id: 'consolidated',
     label: 'Consolidated Report',
+    keywords: 'consolidated all shops combined total multi shop',
     description: 'Multi-shop combined P&L, GST, stock',
     icon: Store,
     iconColor: EMERALD,
@@ -952,6 +973,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     id: 'document-vault',
     subcategory: 'smart-tools',
     label: 'Document Vault',
+    keywords: 'documents files vault upload papers kagaz',
     description: 'Store bills, invoices, GST certificates',
     icon: FolderOpen,
     iconColor: VIOLET,
@@ -970,6 +992,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     id: 'ai-usage',
     subcategory: 'smart-tools',
     label: 'AI Usage',
+    keywords: 'ai usage cost tokens spending ai kharcha',
     description: 'Track AI scans & cost',
     icon: Bot,
     iconColor: VIOLET,
@@ -991,6 +1014,7 @@ export const NAV_REGISTRY: NavDestination[] = [
     id: 'ai-comparison',
     subcategory: 'smart-tools',
     label: 'AI Comparison',
+    keywords: 'ai comparison compare models scan compare',
     description: 'Compare AI providers',
     icon: Bot,
     iconColor: VIOLET,
@@ -1159,6 +1183,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   {
     id: 'business-card',
     label: 'Business Card',
+    keywords: 'business card visiting card share card',
     description: 'Shareable digital visiting card with QR',
     icon: CreditCard,
     iconColor: VIOLET,
@@ -1229,6 +1254,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   {
     id: 'staff-access',
     label: 'Staff & Access',
+    keywords: 'staff employee access permissions team karmchari worker',
     description: 'Manage staff, CA access',
     icon: UserCog,
     iconColor: 'text-indigo-600',
@@ -1269,6 +1295,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   {
     id: 'refer-earn',
     label: 'Refer & Earn',
+    keywords: 'refer earn referral invite friend',
     description: 'Refer 3 shops, get 1 year Pro free',
     icon: Gift,
     iconColor: 'text-rose-600',
@@ -1349,6 +1376,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   {
     id: 'feature-toggles',
     label: 'Feature Toggles',
+    keywords: 'features toggle enable disable settings on off',
     description: 'Turn app features on or off',
     icon: Check,
     iconColor: BLUE,
@@ -1388,6 +1416,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   {
     id: 'accounting-controls',
     label: 'Accounting Controls',
+    keywords: 'accounting controls voucher settings rules',
     description: 'Period lock and reconciliation health check',
     icon: ShieldCheck,
     iconColor: AMBER,
@@ -1407,6 +1436,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   {
     id: 'data-backup',
     label: 'Data & Backup',
+    keywords: 'backup restore export data download save',
     description: 'Backup, restore, offline cache, delete account',
     icon: Database,
     iconColor: BLUE,
@@ -1427,6 +1457,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   {
     id: 'help-support',
     label: 'Help & Support',
+    keywords: 'help support contact problem madad sahayata',
     description: 'FAQ, contact us, report a bug',
     icon: HelpCircle,
     iconColor: 'text-blue-600',
@@ -1445,6 +1476,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   {
     id: 'rate-ekbook',
     label: 'Rate EkBook',
+    keywords: 'rate review rating feedback stars',
     description: 'Help others discover us',
     icon: Star,
     iconColor: 'text-amber-600',
@@ -1462,6 +1494,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   {
     id: 'about',
     label: 'About',
+    keywords: 'about version app info',
     description: 'Version, privacy policy, terms',
     icon: Info,
     iconColor: 'text-blue-600',
@@ -1480,6 +1513,7 @@ export const NAV_REGISTRY: NavDestination[] = [
   {
     id: 'logout',
     label: 'Logout',
+    keywords: 'logout sign out log out nikal',
     description: 'Sign out of your account',
     icon: LogOut,
     iconColor: 'text-rose-600',
