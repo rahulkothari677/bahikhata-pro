@@ -10,6 +10,7 @@ import { computePartyBalance, getReceivablePayable } from '@/lib/party-balance'
 import { computeInvoiceDue } from '@/lib/invoice-due'
 import { shouldHideProfit } from '@/lib/profit-visibility'
 import { buildBalanceActions } from '@/lib/ask-actions'
+import { describeParties } from '@/lib/describe-parties'
 
 /**
  * "Ask your books" — Phase 1. NO LANGUAGE MODEL IS INVOLVED.
@@ -360,11 +361,18 @@ export async function POST(req: NextRequest) {
         // Same omission as the balance lookup above: a deleted party must not
         // be named in the receivables or payables list either.
         const names = await db.party.findMany({
-          where: { userId, deletedAt: null }, select: { id: true, name: true }, take: 500,
+          where: { userId, deletedAt: null },
+          // `type` too — see the wording note below. Without it this answer
+          // guesses what someone is from which way their money points.
+          select: { id: true, name: true, type: true }, take: 500,
         })
         const nameById = new Map(names.map(n => [n.id, n.name]))
+        const typeById = new Map(names.map(n => [n.id, n.type]))
         const parties = [...partyBalances.entries()]
-          .map(([id, v]) => ({ id, name: nameById.get(id) || '(unnamed)', balance: v.balance }))
+          .map(([id, v]) => ({
+            id, name: nameById.get(id) || '(unnamed)',
+            type: typeById.get(id), balance: v.balance,
+          }))
           .filter(p => wantOwedToMe ? p.balance > 0.005 : p.balance < -0.005)
           .sort((a, b) => wantOwedToMe ? b.balance - a.balance : a.balance - b.balance)
           .slice(0, 20)
@@ -374,8 +382,22 @@ export async function POST(req: NextRequest) {
           headline: wantOwedToMe
             ? `${money(total)} is owed to you`
             : `You owe ${money(total)}`,
+          /*
+           * NAME THEM BY WHAT THEY ARE, not by which way their money points.
+           *
+           * This read `wantOwedToMe ? 'customer' : 'supplier'` — inferring the
+           * relationship from the direction of the balance. Those are
+           * independent, and the app already contains the counter-example:
+           * Anil Kumar is a CUSTOMER whose credit notes exceed his bills, so
+           * the shop owes him. "Total payables" called him "1 supplier".
+           *
+           * The same mistake as Settle's payment direction earlier today —
+           * asking who somebody is instead of reading the fact recorded about
+           * them. A shopkeeper who sees their customer described as a supplier
+           * has been told something untrue about their own books.
+           */
           detail: parties.length
-            ? `Across ${parties.length} ${wantOwedToMe ? 'customer' : 'supplier'}${parties.length === 1 ? '' : 's'}. Largest first.`
+            ? `Across ${parties.length} ${describeParties(parties)}. Largest first.`
             : 'Nobody has an outstanding balance.',
           sources: parties.slice(0, 10).map(p => ({
             kind: 'party', id: p.id, label: p.name, amount: Math.abs(p.balance),
