@@ -124,6 +124,13 @@ If I cannot name it, the box is ❌ and the item gets done before I report.
 - **A stale bundle looks exactly like a bug.** Hard-reload before believing it.
 - **I cannot verify on a real phone** (§4.2 requires it). Say "checked at mobile
   width", never "verified on mobile", and ask Rahul for a phone check.
+- **A simulated network is not a network.** I "verified" offline behaviour by
+  flipping `navigator.onLine` and stubbing `fetch`. Hours later Rahul's phone
+  showed **5G in the status bar while every request failed to resolve** — so
+  the flag I had been flipping was the very thing that lies, and the app was
+  logging him out and stranding him on `/api/auth/error`. When I simulate a
+  failure I am testing my assumption about it, not the failure. Say which was
+  simulated, and put anything network-shaped on Rahul's list for the device.
 
 ---
 
