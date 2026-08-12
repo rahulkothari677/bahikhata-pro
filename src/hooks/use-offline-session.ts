@@ -53,6 +53,40 @@ export function useOfflineSession(): OfflineSessionState {
     return unsub
   }, [])
 
+  /*
+   * 🔒 IS THE SERVER ACTUALLY REACHABLE? `navigator.onLine` does not know.
+   *
+   * Reported from a real phone, and the screenshot is the proof: the status
+   * bar showed 5G while every request died with ERR_NAME_NOT_RESOLVED. The
+   * radio was up, so `navigator.onLine` was true — it only ever means "this
+   * device has a network interface", never "the server can be reached".
+   *
+   * That single wrong assumption produced the whole failure. NextAuth reports
+   * `unauthenticated` both when the server says you are logged out AND when
+   * the session request never completed; we treated the second as the first,
+   * decided the shopkeeper was genuinely logged out, and showed the login
+   * screen to someone who had been logged in for weeks. Signing in then
+   * failed for the same network reason and left them on a dead error page.
+   *
+   * So when we hold a cached session and NextAuth says unauthenticated, ASK
+   * THE SERVER. A rejected fetch means unreachable — keep them logged in. A
+   * response means the server really did answer, and if it says no session,
+   * they really are logged out and the login screen is correct.
+   */
+  const [reachable, setReachable] = useState<boolean | null>(null)
+  const hasCachedSession = Boolean(cached?.user?.id)
+  useEffect(() => {
+    if (status !== 'unauthenticated' || !hasCachedSession) {
+      setReachable(null)
+      return
+    }
+    let cancelled = false
+    fetch('/api/auth/session', { cache: 'no-store' })
+      .then(() => { if (!cancelled) setReachable(true) })
+      .catch(() => { if (!cancelled) setReachable(false) })
+    return () => { cancelled = true }
+  }, [status, hasCachedSession])
+
   // Whenever NextAuth gives us a real session, persist it to IndexedDB
   useEffect(() => {
     if (status === 'authenticated' && session?.user) {
@@ -112,7 +146,22 @@ export function useOfflineSession(): OfflineSessionState {
   // Use BOTH the React `online` state AND navigator.onLine for redundancy,
   // in case the online state hasn't updated yet.
   if (status === 'unauthenticated') {
-    const effectivelyOffline = !online || !navigator.onLine
+    /*
+     * Don't decide while the reachability probe is still in flight: showing
+     * the login screen and then replacing it a moment later is how someone
+     * starts typing a password they did not need to type.
+     */
+    if (hasCachedSession && reachable === null) {
+      return { session: null, status: 'loading', isOfflineSession: false }
+    }
+
+    /*
+     * `reachable === false` is the case the phone hit: the radio is up, so
+     * both onLine checks say we are online, but nothing can actually be
+     * reached. Without it, a cached session is discarded and the shopkeeper is
+     * asked to log in — over a connection that cannot carry a login.
+     */
+    const effectivelyOffline = !online || !navigator.onLine || reachable === false
     if (effectivelyOffline && cached && cached.user?.id) {
       // Offline + cached session → use it
       return {

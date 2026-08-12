@@ -133,7 +133,20 @@ export function AuthScreen() {
         setLoading(false)
       }
     } catch (error) {
-      sonnerToast.error('Something went wrong. Please try again.')
+      /*
+       * 🔒 A failed sign-in on a bad connection is not "something went wrong".
+       *
+       * From the phone report: the sign-in request could not resolve the
+       * server at all, and this message told the shopkeeper to try again —
+       * which they will, repeatedly, over a connection that cannot carry it.
+       * Say which of the two it was, exactly as the Ask screen now does.
+       */
+      const offline = typeof navigator !== 'undefined' && !navigator.onLine
+      sonnerToast.error(
+        offline
+          ? 'You’re offline — sign in needs a connection.'
+          : 'Couldn’t reach the server. Check your connection and try again.',
+      )
     } finally {
       setLoading(false)
     }

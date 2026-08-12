@@ -166,6 +166,22 @@ export const authOptions: NextAuthOptions = {
     // The app uses AuthScreen component at / (not a separate /login route)
     // NextAuth redirect callbacks go to / which renders the login form
     signIn: '/',
+    /*
+     * 🔒 Reported from a real phone: the app had navigated the whole webview
+     * to `/api/auth/error` and died there with ERR_NAME_NOT_RESOLVED.
+     *
+     * `error` was not set, so NextAuth used its own default page — which is
+     * server-rendered at that URL. Two things make that fatal in the Android
+     * build rather than merely ugly: it is a FULL PAGE NAVIGATION out of the
+     * app shell, and it cannot be fetched at all without a network. So the one
+     * moment it appears — a failed sign-in, which on a bad connection is
+     * exactly when the network is unavailable — is the moment it cannot load,
+     * and the webview is left on a dead page with no way back into the app.
+     *
+     * Sending errors to '/' keeps the user inside the app, where AuthScreen
+     * shows a real message and the cached session can still take over.
+     */
+    error: '/',
   },
   callbacks: {
     async jwt({ token, user }) {
