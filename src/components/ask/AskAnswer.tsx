@@ -270,9 +270,14 @@ export function AskAnswer({
               onClick={() => runAction(a)}
               disabled={busy === a.kind}
               className={
+                /* min-h-[44px]: measured 43px at 1280 — padding alone lands a
+                   pixel under the iOS 44pt / Material 48dp floor, and only the
+                   outlined variant cleared it, by its 1px border. A2 puts one
+                   of these under EVERY answer, so the miss stopped being one
+                   button and became the whole feature. */
                 a.kind === 'open-party'
-                  ? 'inline-flex items-center gap-1.5 rounded-full border border-border/60 px-4 py-2.5 text-sm font-medium hover:bg-muted disabled:opacity-50'
-                  : 'inline-flex items-center gap-1.5 rounded-full bg-primary text-primary-foreground px-4 py-2.5 text-sm font-semibold disabled:opacity-50'
+                  ? 'inline-flex items-center gap-1.5 rounded-full border border-border/60 px-4 py-2.5 min-h-[44px] text-sm font-medium hover:bg-muted disabled:opacity-50'
+                  : 'inline-flex items-center gap-1.5 rounded-full bg-primary text-primary-foreground px-4 py-2.5 min-h-[44px] text-sm font-semibold disabled:opacity-50'
               }
             >
               {busy === a.kind
