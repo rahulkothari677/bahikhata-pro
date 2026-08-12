@@ -52,15 +52,34 @@ function SourceIcon({ kind }: { kind: AskSource['kind'] }) {
 function ChoiceList({ choices, onPick }: { choices: AskChoice[]; onPick: (c: AskChoice) => void }) {
   return (
     <div className="mt-2 rounded-xl border border-border/60 divide-y divide-border overflow-hidden">
-      {choices.map(c => (
+      {choices.map(c => {
+        /*
+         * 🔒 B2: NOT EVERY CHOICE IS A PERSON.
+         *
+         * This list was built for two customers with the same name, so it puts
+         * initials in a circle and "No other details" underneath. B2 offers the
+         * two halves of a compound question through the same list, and on
+         * screen that rendered "aaj ki sale" as a contact called **AK** with no
+         * other details. A person's row and a question's row are not the same
+         * row. Only the party lookup sends phone/balance, so that is the test.
+         */
+        const isPerson = c.phone !== undefined || c.balance !== undefined
+        return (
         <button
           key={c.id}
           onClick={() => onPick(c)}
           className="w-full text-left px-3 py-3 min-h-[3rem] hover:bg-muted flex items-start gap-3"
         >
+          {isPerson ? (
           <span className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-bold flex-shrink-0">
             {c.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
           </span>
+          ) : (
+            <MessageCircle className="w-5 h-5 text-muted-foreground flex-shrink-0 mt-0.5" />
+          )}
+          {!isPerson ? (
+            <span className="min-w-0 flex-1 text-base font-medium">{c.name}</span>
+          ) : (
           <span className="min-w-0 flex-1">
             <span className="flex items-baseline justify-between gap-2">
               <span className="text-base font-medium truncate">{c.name}</span>
@@ -75,8 +94,9 @@ function ChoiceList({ choices, onPick }: { choices: AskChoice[]; onPick: (c: Ask
                 .filter(Boolean).join(' · ') || 'No other details'}
             </span>
           </span>
+          )}
         </button>
-      ))}
+      )})}
     </div>
   )
 }
