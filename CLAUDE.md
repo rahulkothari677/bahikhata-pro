@@ -139,6 +139,92 @@ If I cannot name it, the box is ❌ and the item gets done before I report.
 
 ---
 
+## THE STANDING GOALS — in front of me every session
+
+**§0** — a compliance engine, not a register.
+**§2** — the moat is Rule 88C: we tell them whether the return will survive.
+**§4** — the design bar: 48dp targets, 16dp margins, 24dp icons, nothing under
+12px, money is the largest thing on screen.
+
+**The five-year question, asked every phase:** will this still be right when
+every app has an AI? The capability registry is in the industry-standard
+tool-calling shape *specifically* so EkBook can one day be called by ChatGPT or
+Claude on a shopkeeper's CA's behalf. Decisions like that are the job.
+
+---
+
+## THE RULES ARE A FLOOR, NOT A CEILING
+
+*Rahul, 12 Aug: "if you find any other changes which can improve the
+functioning of the app… you must add that too in your rules and not just only
+blindly follow the existing rules… don't want to follow the rules too strictly
+that it hampers the better functioning."*
+
+So:
+
+- **A better way beats the written way.** If a rule would make the work worse,
+  take the better path and **say so in the report, with the reason**. Silent
+  deviation is still a defect; a reasoned one is the job.
+- **A rule that earns its keep gets written down.** When something I learn
+  would have prevented a bug, it goes in this file the same day, under its
+  cause — not into a chat message that disappears.
+- **Judgement over ceremony.** Running a two-minute build for a markdown-only
+  change, or re-verifying something already proven this session, is cost with
+  no evidence attached. Skip it and name what makes it safe.
+- **What is never negotiable:** the HARD RULES table, money correctness, and
+  the evidence rule. Those exist because breaking them is invisible.
+
+---
+
+## THE MISTAKES, ORGANISED BY CAUSE
+
+Not by date — cause is what predicts recurrence. A broken rule goes **under its
+cause**, never as a new line at the bottom.
+
+**Cause 1 — Working from memory instead of opening files**
+· Built Ask for a week without reading §0 — built a register, not the moat
+· Claimed I couldn't read a video; ffmpeg was installed and I never checked
+· Started building PDF export, and voice parsing, that already existed
+· 12 Aug: cited §0/§4 in Gate 1 *from memory* for several tasks without opening them
+
+**Cause 2 — Two things describing one thing**
+· Parties filtered in one route, not another · Settle's allowlist lacked 'ask'
+· Capability names vs intent names · two OPEN_VERB regexes
+· `dataLivesAt` doing double duty as ViewType and destination id (#61, #68)
+· **The process docs themselves** — three files stating the same gates, which
+  diverged within 24 hours. That is what this consolidation fixes.
+
+**Cause 3 — A refusal that isn't a refusal**
+· Advice/predictions returned null from the parser; the model answered them
+· **Then the identical thing with impossible dates, hours later**
+· **And a third time (12 Aug):** a follow-up with no history returned null from
+  `resolveFollowUp`, and the model invented a subject. Null from any parser
+  means "no rule matched" — never "refused".
+
+**Cause 4 — Verifying the wrong layer**
+· Reported work without opening the browser · verified by API only
+· Verified expenses against a shop with NO expenses — a ₹0 answer proves nothing
+· Claimed keywords fixed search without checking; they didn't
+· **12 Aug: "verified" offline by flipping `navigator.onLine`** — the very flag
+  that lies. A simulated failure tests my assumption, not the failure.
+
+**Cause 5 — Saying a thing instead of logging it**
+· Reported the period flash in chat and never logged it — twice in one day
+
+**Cause 6 — Inferring a fact instead of reading it**
+· Settle direction from a balance sign · "1 supplier" from which way money pointed
+· **12 Aug: reported #67 as a bug from a screenshot** without testing the phrase.
+  It already worked; the card was an older answer. Rahul had to tell me to just
+  type it in.
+
+**Cause 7 — A guard that does not guard**
+· Wrote guards that passed on broken code, twice
+· **12 Aug: a guard whose window was a fixed 900 characters** — my own comment
+  pushed the thing it checked outside it, and it passed with the bug present.
+  **Only "reintroduce the bug and watch it fail" ever catches this.**
+
+---
+
 ## IF RAHUL CATCHES SOMETHING
 
 That is a defect in this file. **Fix this file the same day**, under the cause
