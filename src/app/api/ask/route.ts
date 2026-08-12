@@ -235,7 +235,15 @@ export async function POST(req: NextRequest) {
           ? 'I can only tell you what your books already record — I can’t predict what’s coming.'
           : refusal === 'bad_date'
             ? 'That date range doesn’t look right — check the dates and ask me again.'
-            : 'I can show you the figures, but I can’t tell you what you should do.',
+            /*
+             * NAMES THE GAP, and names what we DO have beside it. "I can't
+             * answer that" alone teaches nothing; this tells them the one
+             * question that is close and really works, so the next thing they
+             * type succeeds.
+             */
+            : refusal === 'not_built'
+              ? 'I can’t answer that one yet — I can tell you what sold the MOST, but not the least. Ask me “sabse zyada kya bika” and I’ll show you that.'
+              : 'I can show you the figures, but I can’t tell you what you should do.',
         examples: ASK_EXAMPLES,
       })
     }

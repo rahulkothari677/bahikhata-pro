@@ -222,11 +222,42 @@ function categoryFrom(q: string): string | undefined {
  * is a rule: the route calls it before the model is ever consulted, so the
  * refusal does not depend on a model complying.
  */
-export type RefusalReason = 'advice' | 'prediction' | 'bad_date'
+export type RefusalReason = 'advice' | 'prediction' | 'bad_date' | 'not_built'
+
+/**
+ * Questions that ask for the OPPOSITE of something we can answer.
+ *
+ * 🔒 Found by Rahul, 12 Aug, and it is the worst class of bug this app can
+ * have — two wrong answers, both of which read perfectly:
+ *
+ *   "sabse kam kya bika"          → "₹0.00 of sales today"
+ *   "which product is not selling" → "Shirt Stitching sold MOST all time"
+ *
+ * Two different causes, one refusal. The first was claimed by the local sales
+ * pattern, because NAMES_SALES contains `bika` and nothing was watching for
+ * "sabse kam". The second went to the model, which must pick the nearest of
+ * the twelve capabilities — and the nearest thing to "least sold" is "most
+ * sold", so it answered the exact inverse and labelled it "read by AI".
+ *
+ * We have no least-sold capability. Until someone builds one, saying so is the
+ * only honest outcome: a shopkeeper who is told "I can't do that yet" asks
+ * differently, while a shopkeeper shown the best-selling item when they asked
+ * for the worst restocks the wrong thing.
+ */
+const ASKS_FOR_THE_LEAST =
+  /\b(sabse|sab se)\s+(kam|kum)\b|\bleast\b|\blowest\b|\bworst\b|\bslowest\b|\bnot\s+selling\b|\bnahi\s+bik|\bdead\s+stock\b|\bslow[\s-]?moving\b/
 
 export function mustRefuse(question: string): RefusalReason | null {
   const q = normalise(question)
   if (!q) return null
+
+  /*
+   * Checked HERE, with the other refusals, and therefore before the parser and
+   * before the model — the placement I have now got wrong three times. A
+   * refusal that lives in a parser is not a refusal: null means "no rule
+   * matched", which is exactly the signal that hands the question to a model.
+   */
+  if (ASKS_FOR_THE_LEAST.test(q)) return 'not_built'
 
   /*
    * AN IMPOSSIBLE DATE — and I put this check in the wrong place the first
