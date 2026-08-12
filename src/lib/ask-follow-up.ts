@@ -97,9 +97,10 @@ export function resolveFollowUp(
   const base = earlier.find(q => typeof q === 'string' && q.trim() && !isBarePeriod(q))
   /*
    * Nothing to attach to — the shopkeeper's first ever message was "pichhle
-   * mahine?". Returning null sends it down the normal path, which will say it
-   * cannot answer and offer examples. That is the honest outcome: inventing a
-   * subject here would answer a question nobody asked.
+   * mahine?". Null here means only "I could not resolve this"; it is NOT a
+   * refusal, and must not be mistaken for one. Verified live: left to the
+   * normal path, the model answers it with a subject it invented. The route
+   * refuses it explicitly, beside its other refusals — see the caller.
    */
   if (!base) return null
 

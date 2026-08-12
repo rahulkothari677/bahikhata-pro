@@ -15,7 +15,7 @@ import { activeTransactionWhere } from '@/lib/query-helpers'
 import { routeWithAi } from '@/lib/ask-router'
 import { getCapability } from '@/lib/ask-capabilities'
 import { buildNoticeLine } from '@/lib/ask-notice-line'
-import { resolveFollowUp } from '@/lib/ask-follow-up'
+import { resolveFollowUp, isBarePeriod } from '@/lib/ask-follow-up'
 import { findDestinations } from '@/lib/nav-match'
 import { NAV_REGISTRY, filterByPermissions, getById } from '@/lib/nav-registry'
 import { withNavAction } from '@/lib/ask-nav-action'
@@ -148,6 +148,29 @@ export async function POST(req: NextRequest) {
       : []
     const followUp = resolveFollowUp(question, recent)
     const toAnswer = followUp ? followUp.question : question
+
+    /*
+     * A FOLLOW-UP TO NOTHING IS REFUSED HERE, BY THE CALLER.
+     *
+     * resolveFollowUp returns null when there is no earlier question to
+     * continue — and I wrote in its comments that null "sends it down the
+     * normal path, which will say it cannot answer". Verifying on the live
+     * site proved that wrong: null means only "no rule matched", so the model
+     * takes its turn and answers "aur pichhle mahine?" with "₹0.00 of sales
+     * last month" — a subject it invented, presented as a figure.
+     *
+     * This is the third time the same shape has caught me: a refusal that
+     * lives in a parser is not a refusal. It belongs where the caller checks
+     * it, beside mustRefuse, before a model ever sees the question.
+     */
+    if (!followUp && isBarePeriod(question)) {
+      return NextResponse.json({
+        answered: false,
+        question,
+        message: 'I don’t know what you’re asking about — ask the whole question, then “aur pichhle mahine?” will follow it.',
+        examples: ASK_EXAMPLES,
+      })
+    }
 
     /*
      * PATTERNS FIRST, ALWAYS. They are instant, free, work with no signal and
