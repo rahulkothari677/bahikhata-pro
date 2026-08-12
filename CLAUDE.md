@@ -84,6 +84,31 @@ If I cannot name it, the box is ❌ and the item gets done before I report.
 
 ---
 
+## EVERY REPORT OPENS WITH TWO PLAIN SENTENCES
+
+*Rahul, 12 Aug: "explain me in simple words about the work you do… because I
+didn't understand at all. That you completed C1 or not."*
+
+He had to ask whether a finished task was finished. That is a failure of the
+report, not of his reading. Before any table, any gate, any detail:
+
+> **Sentence 1 — what I did**, in words a shopkeeper would use.
+> **Sentence 2 — is it finished: yes, no, or partly** (and if partly, what is left).
+
+Then the detail, and **keep that simple too**. Rules for the whole report:
+
+- **No jargon without the plain word beside it.** "pg_trgm (fuzzy matching —
+  finds names spelt slightly wrong)".
+- **Short sentences.** If a sentence needs a comma to survive, split it.
+- **Say the thing, then explain it.** Never build up to the point.
+- The gate tables are proof I did the work — they are **evidence, not the
+  report**. They go after the plain explanation, never instead of it.
+
+A report Rahul has to decode costs him the time this whole process exists to
+save.
+
+---
+
 ## EVERY REPORT CONTAINS
 
 1. What it serves (§0), one line
