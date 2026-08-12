@@ -47,7 +47,8 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { Sparkles, Menu, Plus, ArrowLeft, Lightbulb, X } from 'lucide-react'
-import { offlineFetch } from '@/lib/offline-fetch'
+import { offlineFetch, isOnline } from '@/lib/offline-fetch'
+import { askFailureMessage } from '@/lib/ask-offline-message'
 import { AskComposer, type ComposerMode } from '@/components/ask/AskComposer'
 import { AskAnswer } from '@/components/ask/AskAnswer'
 import { AskDrawer } from '@/components/ask/AskDrawer'
@@ -242,9 +243,17 @@ export function AskChat() {
         speak(payload.answered ? (payload.headline || '') : (payload.message || ''))
       }
     } catch {
+      /*
+       * 🔒 B3: WHICH failure it was decides what we say. `isOnline` is the
+       * same signal the rest of the app's offline handling uses, read at the
+       * moment it failed — one message for both cases told a shopkeeper on a
+       * dead network that we "could not reach" the books, which reads as our
+       * server being down, and told them the same thing when it really was.
+       */
+      const failure = askFailureMessage(isOnline())
       setMessages(m => [...m.filter(x => x.id !== thinking.id), {
         id: newId(), role: 'answer', at: Date.now(),
-        payload: { answered: false, message: 'Could not reach your books just now. Try again.' },
+        payload: { answered: false, message: failure.message },
       }])
     } finally {
       setBusy(false)

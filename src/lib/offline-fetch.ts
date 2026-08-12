@@ -183,6 +183,20 @@ export async function offlineFetch(
     '/api/scan-bill',
     '/api/voice-parse',
     '/api/whatsapp-',
+    /*
+     * 🔒 B3: /api/ask is a READ that happens to be a POST — it never changes a
+     * row. Without this line it fell through to handleMutation, which queued
+     * the QUESTION as a pending write and returned the synthetic 202. Ask then
+     * rendered that as the answer, so a shopkeeper with no signal was told
+     * "Saved offline. Will sync when internet returns." — nothing had been
+     * saved, and the question really was sitting in the write queue waiting to
+     * be replayed at a server that would answer into the void.
+     *
+     * It belongs here with scan-bill and voice-parse for the same reason they
+     * are here: the answer is computed on the server, so there is nothing to
+     * queue and nothing to replay.
+     */
+    '/api/ask',
   ]
   if (REQUIRES_ONLINE.some((p) => url.includes(p))) {
     return fetch(url, fetchOpts)
