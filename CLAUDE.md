@@ -131,6 +131,11 @@ If I cannot name it, the box is ❌ and the item gets done before I report.
   logging him out and stranding him on `/api/auth/error`. When I simulate a
   failure I am testing my assumption about it, not the failure. Say which was
   simulated, and put anything network-shaped on Rahul's list for the device.
+- **`navigator.onLine === false` is trustworthy. `true` is not.** It means the
+  device has a network interface, never that the server can be reached. I
+  learned this from #63 and then, in the same hour, shipped #64 by asking the
+  same flag one file over. **When a fix teaches me a fact, grep for every other
+  place that assumes the opposite before I call it done.**
 
 ---
 
