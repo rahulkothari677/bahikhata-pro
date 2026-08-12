@@ -627,7 +627,26 @@ function matchAsk(question: string): AskQuery | null {
   // more specific claimed. It no longer needs a list of subjects to stand down
   // for — spending questions are claimed by the two branches near the top of
   // this function, long before control reaches here.
+  /*
+   * 🔒 #67: "kitna maal bika" — HOW MUCH sold, not WHICH item sold most.
+   *
+   * Rahul asked this on his phone and got "Top selling products". No pattern
+   * here claimed it — the clause below needs `kitna` AND a period word, and
+   * this has no period — so it fell through to the model, which chose
+   * top_products. The answer read perfectly: a real product, a real figure,
+   * a confident label. Nothing about it looked wrong.
+   *
+   * `kya bika` is which item. `kitna ... bika` is the total. The top-products
+   * rule is far above this one and needs "sabse zyada" or "top/best selling",
+   * so it still claims "sabse zyada kya bika" before control ever reaches
+   * here — but the two readings are now decided by a rule instead of by a
+   * model, which is the whole point of matching locally first.
+   */
+  const soldVerb = /\b(bika|bike|bika|becha|beche|bech|sold)\b/.test(q)
+  const askedHowMuch = /\b(kitna|kitni|kitne|how\s+much|total)\b/.test(q)
+
   if (NAMES_SALES.test(q)
+    || (soldVerb && askedHowMuch)
     || (/\bkitna\b/.test(q) && period !== 'all_time')) {
     return { intent: 'sales_period', period: period === 'all_time' ? 'today' : period, source: 'pattern',
       understoodAs: `Sales · ${period === 'all_time' ? 'today' : periodLabel}` }
