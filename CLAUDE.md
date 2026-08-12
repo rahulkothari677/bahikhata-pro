@@ -178,6 +178,38 @@ Claude on a shopkeeper's CA's behalf. Decisions like that are the job.
 
 ---
 
+## BUILD FOR MILLIONS — THIS IS NOT A PROTOTYPE
+
+*Rahul, 12 Aug: "you are making the architecture for millions and billions of
+users and transactions… these kind of mistakes should never happen again."*
+
+I chose a name-matcher that works for one shop over one that works for a
+million, because the small one was easier to test. That is the wrong trade for
+this company, and it was mine to raise with him, not to settle quietly.
+
+**Before writing any query, list or lookup, answer these — in the reply:**
+
+1. **What happens at 10,000 rows? At 10 million?** If the answer is "it gets
+   slower", fine. If the answer is **"it returns a different number"**, stop:
+   that is a wrong answer, not a performance issue, and it is invisible.
+2. **Does the database do the work, or does the app?** Totals, filtering,
+   sorting and searching belong in the database. Pulling rows into memory to
+   count them stops working long before anyone notices it started failing.
+3. **Is there a `take:` or `limit`?** Then say — on screen — that the answer is
+   partial, or remove the need for it. **A silent cap is a lie with a number
+   on it.**
+4. **Does one shop's data depend on our code remembering to filter it?** That
+   is not isolation, it is discipline. The database must refuse.
+5. **Would this still work if a shop had five years of history?** Reports that
+   re-read every transaction ever written do not survive year two.
+
+**Anything failing these goes in the tasklog the moment I see it**, even
+mid-task, even if I am not fixing it — flagged so Rahul can hand it to another
+agent. Noticing and moving on is the failure; the tasklog is how a finding
+survives me.
+
+---
+
 ## THE RULES ARE A FLOOR, NOT A CEILING
 
 *Rahul, 12 Aug: "if you find any other changes which can improve the
