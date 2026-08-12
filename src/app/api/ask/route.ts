@@ -369,7 +369,13 @@ export async function POST(req: NextRequest) {
      */
     const navTarget = (() => {
       if (!capability) return null
-      const dest = getById(capability.dataLivesAt)
+      /*
+       * #61/#68: `opensAt` when the capability names one, else `dataLivesAt`.
+       * The two answer different questions — see the comment on the field —
+       * and only nine of the twelve capabilities can honestly use the same
+       * value for both.
+       */
+      const dest = getById(capability.opensAt || capability.dataLivesAt)
       if (!dest) return null
       const [permitted] = filterByPermissions([dest], {
         canAccess: (m) => canAccessModule(auth.role, auth.permissions, m),

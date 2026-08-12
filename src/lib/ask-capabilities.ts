@@ -80,8 +80,28 @@ export interface Capability {
   parameters: CapabilityParameters
   /** Permission gate, enforced server-side. Never by the model. */
   module: ModuleKey
-  /** The screen this answer's data lives on — the "open where this came from" button. */
+  /** The screen this answer's data lives on — a ViewType, checked by ask-capabilities-guard. */
   dataLivesAt: string
+  /**
+   * WHERE THE BUTTON SENDS THEM — a nav-registry destination id.
+   *
+   * 🔒 #61 + #68. These look like the same fact and are not, which is what
+   * caused both bugs. `dataLivesAt` answers "which screen computes this
+   * figure" and must stay a ViewType because its own guard says so. This
+   * answers "where do I send the shopkeeper", and the nav registry is keyed
+   * by destination id — and its most useful destinations are not ViewTypes at
+   * all: `item-profit` has `actionKind: 'navigate-report'` and no `view`,
+   * because reports open by report type.
+   *
+   * Conflating the two meant top_products sent people to the whole Reports
+   * hub when Item-wise Profit is the actual source (#68), and tax_due
+   * resolved to nothing at all, so a clean GST month — the moat's own answer
+   * — was the one answer with no way out (#61).
+   *
+   * Optional: when absent, `dataLivesAt` is used, which is correct for the
+   * nine capabilities whose screen and destination genuinely are the same.
+   */
+  opensAt?: string
   /** Real phrasings, English and Hinglish. Used for docs, tests, and few-shot. */
   examples: readonly string[]
   /** True when a pattern in ask-patterns.ts can answer it with no model call. */
@@ -171,6 +191,8 @@ export const CAPABILITIES: readonly Capability[] = [
     parameters: { type: 'object', properties: { period: periodProperty }, required: ['period'] },
     module: 'reports',
     dataLivesAt: 'reports',
+    // The P&L Statement is where this figure is shown, not the Reports hub.
+    opensAt: 'pl',
     examples: ['is mahine ka profit', 'kitna munafa hua', 'profit this month'],
     hasFastPath: true,
   },
@@ -182,6 +204,8 @@ export const CAPABILITIES: readonly Capability[] = [
     parameters: { type: 'object', properties: { period: periodProperty }, required: ['period'] },
     module: 'reports',
     dataLivesAt: 'reports',
+    // #68: this figure comes from the Item-wise Profit report, not the hub.
+    opensAt: 'item-profit',
     examples: ['sabse zyada kya bika', 'best selling product', 'top items this month'],
     hasFastPath: true,
   },
@@ -212,6 +236,10 @@ export const CAPABILITIES: readonly Capability[] = [
     parameters: { type: 'object', properties: { period: periodProperty } },
     module: 'reports',
     dataLivesAt: 'gst-tax',
+    // #61: 'gst-tax' is a valid ViewType but no registry destination, so the
+    // GST answer had no button at all. GST Summary is where this figure is
+    // shown on screen.
+    opensAt: 'gst-summary',
     examples: ['kitna GST bharna hai', 'GST payable this month', 'tax due'],
     hasFastPath: true,
   },

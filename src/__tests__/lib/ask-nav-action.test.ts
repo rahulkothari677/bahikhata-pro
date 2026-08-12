@@ -95,15 +95,40 @@ describe('which capabilities can offer a way out at all', () => {
    * the button would simply stop appearing, on every answer, with no test
    * failing. This is the test that fails instead.
    */
-  const NO_SINGLE_SCREEN = ['party_balance', 'party_transactions', 'tax_due', 'open_invoice']
+  /*
+   * 🔒 #61/#68 changed this list. `tax_due` used to be here — its ViewType
+   * `gst-tax` is no registry destination, so a clean GST month had NO button
+   * at all, on the one answer that carries the moat. It now declares
+   * `opensAt: 'gst-summary'` and resolves.
+   *
+   * The three that remain are record screens, correctly: a party profile and
+   * a bill are reached with a record id, not from a "where can I go" list.
+   */
+  const NO_SINGLE_SCREEN = ['party_balance', 'party_transactions', 'open_invoice']
 
-  test.each(CAPABILITIES.map(c => [c.name, c.dataLivesAt] as const))(
+  test.each(CAPABILITIES.map(c => [c.name, c.opensAt || c.dataLivesAt] as const))(
     '%s → %s',
-    (name, dataLivesAt) => {
-      const resolved = Boolean(getById(dataLivesAt))
+    (name, destinationId) => {
+      const resolved = Boolean(getById(destinationId))
       expect(resolved).toBe(!NO_SINGLE_SCREEN.includes(name))
     },
   )
+
+  test('#61: the GST answer resolves to a real screen', () => {
+    const gst = CAPABILITIES.find(c => c.name === 'tax_due')!
+    expect(getById(gst.opensAt!)?.label).toBe('GST Summary')
+  })
+
+  test('#68: top products opens the report it came from, not the hub', () => {
+    /*
+     * It resolved before — to `reports`, the whole hub — so this cannot be a
+     * "does it resolve" check. The bug was landing somewhere too vague, which
+     * only a named destination catches.
+     */
+    const top = CAPABILITIES.find(c => c.name === 'top_products')!
+    expect(top.opensAt).toBe('item-profit')
+    expect(getById('item-profit')?.label).toBe('Item-wise Profit')
+  })
 })
 
 describe('the route has one exit, so the next answer cannot forget', () => {
