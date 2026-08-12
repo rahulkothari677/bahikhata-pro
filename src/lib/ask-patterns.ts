@@ -281,12 +281,33 @@ export function mustRefuse(question: string): RefusalReason | null {
  * stripping more would start eating report names ("this year's summary").
  */
 function stripPeriodWords(s: string): string {
+  /*
+   * The particles go too, because this half is used to pull a NAME out of a
+   * sentence and "Anil ka" is not part of anyone's name.
+   */
+  return removePeriodWords(s)
+    .replace(/\b(ka|ki|ke|of|for)\b/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/**
+ * The period words alone, with the sentence otherwise intact.
+ *
+ * Split out for follow-ups (lib/ask-follow-up), which REBUILD a question:
+ * "aur pichhle mahine?" after "Anil ka kitna baaki hai" has to become
+ * "pichhle mahine Anil ka kitna baaki hai", and the full stripPeriodWords
+ * would have removed the `ka` that partyBalanceShape matches on.
+ *
+ * Shared rather than copied — two lists of period words WILL disagree, and
+ * the one that drifts would silently answer about the wrong month.
+ */
+export function removePeriodWords(s: string): string {
   return s
     .replace(/\b(aaj|today|aj|kal|yesterday)\b/g, ' ')
     .replace(/\b(pichhle|pichle|last|previous)\s+(mahine|month|maheene)\b/g, ' ')
     .replace(/\b(is|this|es)\s+(mahine|month|maheene|hafte|week|hafta|saal|year)\b/g, ' ')
     .replace(/\b(mahine|maheene|mahina|hafte|hafta|saal|varsh)\b/g, ' ')
-    .replace(/\b(ka|ki|ke|of|for)\b/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
 }

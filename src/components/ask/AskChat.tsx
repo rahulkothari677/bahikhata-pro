@@ -75,6 +75,15 @@ export function AskChat() {
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [tipsOpen, setTipsOpen] = useState(false)
   const setView = useAppStore(st => st.setView)
+  /*
+   * The conversation as it stands RIGHT NOW, for follow-ups.
+   *
+   * `ask` is a useCallback and would close over a stale `messages`; a stale
+   * list here would resolve "aur pichhle mahine?" against the wrong earlier
+   * question, which is worse than not resolving it at all. A ref is read at
+   * call time, so it cannot go stale.
+   */
+  const messagesRef = useRef<AskMessage[]>([])
   const threadRef = useRef<HTMLDivElement>(null)
   const modeRef = useRef<ComposerMode>('idle')
   const lastCount = useRef(0)
@@ -122,6 +131,11 @@ export function AskChat() {
     lastCount.current = messages.length
   }, [messages])
 
+  // Keep the follow-up ref in step with the conversation, including one
+  // restored from history — "aur pichhle mahine?" must work when you re-open
+  // a chat from last week, not only in a thread you started this minute.
+  useEffect(() => { messagesRef.current = messages }, [messages])
+
   const speak = useCallback((text: string) => {
     if (typeof window === 'undefined' || !window.speechSynthesis) return
     try {
@@ -147,11 +161,23 @@ export function AskChat() {
     const thinking: AskMessage = { id: newId(), role: 'thinking', at: Date.now() }
     setMessages(m => [...m, userMsg, thinking])
 
+    /*
+     * The questions already asked in THIS conversation, newest first — so
+     * "aur pichhle mahine?" can be resolved against the last one that had a
+     * subject. Questions only: the answers are ours, and a follow-up continues
+     * what the shopkeeper asked, not what we replied.
+     */
+    const recentQuestions = messagesRef.current
+      .filter((m): m is Extract<AskMessage, { role: 'user' }> => m.role === 'user')
+      .slice(-8)
+      .reverse()
+      .map(m => m.text)
+
     try {
       const r = await offlineFetch('/api/ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: t }),
+        body: JSON.stringify({ question: t, recentQuestions }),
       })
       const payload = await r.json()
       setMessages(m => [...m.filter(x => x.id !== thinking.id),

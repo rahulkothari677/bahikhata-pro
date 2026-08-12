@@ -15,6 +15,7 @@ import { activeTransactionWhere } from '@/lib/query-helpers'
 import { routeWithAi } from '@/lib/ask-router'
 import { getCapability } from '@/lib/ask-capabilities'
 import { buildNoticeLine } from '@/lib/ask-notice-line'
+import { resolveFollowUp } from '@/lib/ask-follow-up'
 import { findDestinations } from '@/lib/nav-match'
 import { NAV_REGISTRY, filterByPermissions, getById } from '@/lib/nav-registry'
 import { withNavAction } from '@/lib/ask-nav-action'
@@ -130,11 +131,30 @@ export async function POST(req: NextRequest) {
     }
 
     /*
+     * "aur pichhle mahine?" — B1.
+     *
+     * Resolved HERE, before the refusal check and before the parser, so that
+     * everything downstream sees one whole question and nothing has to know
+     * that a follow-up is a special kind of input. In particular the refusals
+     * still run on the real question: a follow-up naming an impossible date is
+     * refused for the same reason and by the same code as any other.
+     *
+     * `toAnswer` is what the pipeline reads; `question` stays exactly what was
+     * TYPED and is what goes back in every reply — the transcript must keep
+     * showing the shopkeeper's own words, not our reconstruction of them.
+     */
+    const recent: string[] = Array.isArray(body.recentQuestions)
+      ? body.recentQuestions.filter((x: unknown): x is string => typeof x === 'string').slice(0, 8)
+      : []
+    const followUp = resolveFollowUp(question, recent)
+    const toAnswer = followUp ? followUp.question : question
+
+    /*
      * PATTERNS FIRST, ALWAYS. They are instant, free, work with no signal and
      * cannot hallucinate. The model is for the long tail — the phrasings
      * nobody wrote a rule for — so the common questions never cost a paisa.
      */
-    let q = parseAsk(question)
+    let q = parseAsk(toAnswer)
 
     /*
      * SOME QUESTIONS ARE REFUSED BEFORE A MODEL IS EVEN ASKED.
@@ -149,7 +169,7 @@ export async function POST(req: NextRequest) {
      * Asking the model nicely in a prompt is a preference. Checking here is a
      * rule, and it also saves the call.
      */
-    const refusal = mustRefuse(question)
+    const refusal = mustRefuse(toAnswer)
     if (refusal) {
       return NextResponse.json({
         answered: false,
@@ -164,7 +184,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (!q) {
-      const routed = await routeWithAi(question)
+      const routed = await routeWithAi(toAnswer)
       q = routed.query
 
       /*
@@ -218,6 +238,44 @@ export async function POST(req: NextRequest) {
         message: 'I can’t answer that one yet.',
         examples: ASK_EXAMPLES,
       })
+    }
+
+    /*
+     * SAY THAT WE CONTINUED THE LAST QUESTION.
+     *
+     * "aur pichhle mahine?" answered with a bare figure would be the app
+     * quietly deciding what someone meant. The "understood as" line is where
+     * this feature admits its interpretation — it is why a misread produces a
+     * visible wrong reading rather than an invisible wrong number — so a
+     * resolved follow-up has to show up there too. The question it continues
+     * is directly above it in the transcript, so naming the period it landed
+     * on is enough; repeating the whole earlier question would push the
+     * figure off the line.
+     */
+    /*
+     * SOME QUESTIONS HAVE NO "LAST MONTH", and saying so beats answering.
+     *
+     * Found by running the rebuilt questions through the parser rather than
+     * assuming: `party_balance` and `stock_item` come back as `all_time` in
+     * every phrasing, because a balance and a shelf are what is true NOW —
+     * there is no monthly version of them. Left alone, "Anil ka kitna baaki
+     * hai" followed by "aur pichhle mahine?" would return the identical figure
+     * wearing a "follow-up" label: the app appearing to answer a question it
+     * silently ignored, which is the exact failure this whole feature is built
+     * to avoid. It is also invisible — the number looks perfectly reasonable.
+     */
+    if (followUp && q.period === 'all_time') {
+      return NextResponse.json({
+        answered: false,
+        question,
+        understoodAs: q.understoodAs,
+        message: 'That one doesn’t change by month — it’s what’s true right now. Ask it in full if you meant something else.',
+        examples: ASK_EXAMPLES,
+      })
+    }
+
+    if (followUp && q.understoodAs) {
+      q = { ...q, understoodAs: `${q.understoodAs} · follow-up` }
     }
 
     /*
