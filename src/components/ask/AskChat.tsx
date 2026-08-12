@@ -174,12 +174,21 @@ export function AskChat() {
       .reverse()
       .map(m => m.text)
 
+    /*
+     * Whether anything came back at all — the one reliable way to tell "the
+     * connection never got through" from "the server failed". Declared out
+     * here so the catch below can read it; `navigator.onLine` cannot answer
+     * this, as Rahul's 5G-with-no-DNS screenshot showed.
+     */
+    let reachedServer = false
+
     try {
       const r = await offlineFetch('/api/ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question: t, recentQuestions }),
       })
+      reachedServer = true
       const payload = await r.json()
       setMessages(m => [...m.filter(x => x.id !== thinking.id),
         { id: newId(), role: 'answer', payload, at: Date.now() }])
@@ -250,7 +259,7 @@ export function AskChat() {
        * dead network that we "could not reach" the books, which reads as our
        * server being down, and told them the same thing when it really was.
        */
-      const failure = askFailureMessage(isOnline())
+      const failure = askFailureMessage({ online: isOnline(), reachedServer })
       setMessages(m => [...m.filter(x => x.id !== thinking.id), {
         id: newId(), role: 'answer', at: Date.now(),
         payload: { answered: false, message: failure.message },

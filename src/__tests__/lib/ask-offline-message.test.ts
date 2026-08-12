@@ -19,9 +19,16 @@ import { readFileSync } from 'fs'
 import { join } from 'path'
 import { askFailureMessage } from '@/lib/ask-offline-message'
 
+/** Every combination the caller can produce. */
+const ALL_CASES = [
+  { online: false, reachedServer: false },
+  { online: true, reachedServer: false },
+  { online: true, reachedServer: true },
+]
+
 describe('offline and unreachable are different sentences', () => {
   test('offline says so, and says the books are safe', () => {
-    const r = askFailureMessage(false)
+    const r = askFailureMessage({ online: false, reachedServer: false })
     expect(r.offline).toBe(true)
     expect(r.message).toMatch(/offline/i)
     // The shopkeeper has just watched a question vanish. The ledger is the one
@@ -34,10 +41,37 @@ describe('offline and unreachable are different sentences', () => {
      * Telling someone with a working connection that they are offline sends
      * them to restart a router that is fine, and hides a real server fault.
      */
-    const r = askFailureMessage(true)
+    const r = askFailureMessage({ online: true, reachedServer: true })
     expect(r.offline).toBe(false)
     expect(r.message.toLowerCase()).not.toMatch(/\boffline\b/)
     expect(r.message).toMatch(/try again/i)
+  })
+
+  test('the phone case: device says online, nothing got through', () => {
+    /*
+     * THE BUG RAHUL PHOTOGRAPHED, and the combination my first version of this
+     * file could not express — it took a single boolean, so this row did not
+     * exist. His status bar showed 5G while DNS was dead, so `online` was
+     * true, and Ask told him "that's on us, not on your question". It was not
+     * on us: nothing had left the phone.
+     *
+     * `reachedServer` is what settles it, and it needs no guessing — if fetch
+     * threw, we never reached the server, whatever the radio claims.
+     */
+    const r = askFailureMessage({ online: true, reachedServer: false })
+    expect(r.offline).toBe(true)
+    expect(r.message).not.toMatch(/on us/i)
+    expect(r.message).toMatch(/connection/i)
+    expect(r.message).toMatch(/nothing is lost/i)
+  })
+
+  test('"that\'s on us" is reserved for when the server really did answer', () => {
+    // Blaming ourselves for a dead connection is not humility, it is a wrong
+    // diagnosis: it tells the shopkeeper to wait when they should move nearer
+    // a window.
+    expect(askFailureMessage({ online: true, reachedServer: false }).message).not.toMatch(/on us/i)
+    expect(askFailureMessage({ online: false, reachedServer: false }).message).not.toMatch(/on us/i)
+    expect(askFailureMessage({ online: true, reachedServer: true }).message).toMatch(/on us/i)
   })
 
   test('neither message ever claims anything was saved', () => {
@@ -45,8 +79,8 @@ describe('offline and unreachable are different sentences', () => {
      * THE EXACT STRING THAT SHIPPED. A question is not a write, and promising
      * to "sync" it is promising to replay it.
      */
-    for (const online of [true, false]) {
-      const m = askFailureMessage(online).message.toLowerCase()
+    for (const f of ALL_CASES) {
+      const m = askFailureMessage(f).message.toLowerCase()
       expect(m).not.toMatch(/saved/)
       expect(m).not.toMatch(/will sync/)
       expect(m).not.toMatch(/queued/)
@@ -56,8 +90,8 @@ describe('offline and unreachable are different sentences', () => {
   test('neither message blames the question', () => {
     // "I can't answer that" is a different failure, and saying it here tells
     // the shopkeeper their question was wrong when the network was.
-    for (const online of [true, false]) {
-      expect(askFailureMessage(online).message.toLowerCase()).not.toMatch(/can.?t answer/)
+    for (const f of ALL_CASES) {
+      expect(askFailureMessage(f).message.toLowerCase()).not.toMatch(/can.?t answer/)
     }
   })
 })
