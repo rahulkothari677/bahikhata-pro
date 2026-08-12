@@ -19,6 +19,9 @@ import {
   Receipt, Boxes, PiggyBank, ScanLine, ArrowRight, Plus, CloudOff, Repeat, Loader2,
   BookOpenText, Share2, Calendar, Target, HandCoins, FileText,
   AlertCircle, Send, ShoppingCart, Check,
+  // Same icon the nav registry gives Ask — deliberately NOT a magnifying
+  // glass, which was reported as the feature "missing" when it wore one.
+  MessageCircleQuestion,
 } from 'lucide-react'
 import { formatINR, formatINRCompact, relativeTime, cn } from '@/lib/utils'
 import { motion } from 'framer-motion'
@@ -644,6 +647,23 @@ export function Dashboard() {
           CTA, FAB/Header is the secondary, this row shows OTHER quick actions. */}
       <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-hide">
         {[
+          /*
+           * 🔒 B4: ASK GOES FIRST, and it is here at all because of where it
+           * was NOT.
+           *
+           * Its nav-registry entry is surfaces: ['sidebar-main', 'more',
+           * 'global-search'] — so on desktop it sits in the sidebar, and on a
+           * PHONE it is inside More. Two taps, and only for someone who
+           * already knows it exists. That is the wrong place for the one
+           * screen that now tells a shopkeeper their GSTR-1 would trigger a
+           * DRC-01B notice (A1).
+           *
+           * It is not added to the registry instead, because there is no
+           * 'dashboard' surface in NavSurface and this row is a plain array —
+           * inventing a surface for one row would be a second navigation
+           * vocabulary, and those disagree eventually.
+           */
+          { label: 'Ask', icon: MessageCircleQuestion, view: 'ask' as const, color: 'bg-primary/10 text-primary' },
           { label: 'Add Product', icon: Package, view: 'inventory' as const, color: 'bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400' },
           { label: 'Scan Bill', icon: ScanLine, view: 'scanner' as const, color: 'bg-violet-100 dark:bg-violet-950 text-violet-600 dark:text-violet-400' },
           { label: 'Add Party', icon: Wallet, view: 'parties' as const, color: 'bg-amber-100 dark:bg-amber-950 text-amber-600 dark:text-amber-400' },
