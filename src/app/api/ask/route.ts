@@ -16,6 +16,7 @@ import { routeWithAi } from '@/lib/ask-router'
 import { getCapability } from '@/lib/ask-capabilities'
 import { buildNoticeLine } from '@/lib/ask-notice-line'
 import { resolveFollowUp, isBarePeriod } from '@/lib/ask-follow-up'
+import { splitCompound } from '@/lib/ask-compound'
 import { findDestinations } from '@/lib/nav-match'
 import { NAV_REGISTRY, filterByPermissions, getById } from '@/lib/nav-registry'
 import { withNavAction } from '@/lib/ask-nav-action'
@@ -169,6 +170,39 @@ export async function POST(req: NextRequest) {
         question,
         message: 'I don’t know what you’re asking about — ask the whole question, then “aur pichhle mahine?” will follow it.',
         examples: ASK_EXAMPLES,
+      })
+    }
+
+    /*
+     * TWO QUESTIONS IN ONE LINE — B2, and it is a REFUSAL, so it lives here
+     * with the others rather than inside a parser.
+     *
+     * Measured before writing any of this: "aaj ki sale and kitna GST bharna
+     * hai" was answered as "GST payable · TODAY". Not the first half, not the
+     * second — the second half wearing the FIRST half's period. A figure
+     * assembled from two different questions, with nothing on screen to say a
+     * word of it had been dropped.
+     *
+     * We offer both halves instead of answering either. That is the same rule
+     * two customers named Ramesh get: ambiguity produces a choice, never a
+     * pick. Answering the first and mentioning the second would still be
+     * choosing for them.
+     */
+    const compound = splitCompound(toAnswer)
+    if (compound) {
+      return NextResponse.json({
+        answered: false,
+        question,
+        message: 'That’s two questions — I’ll do them one at a time. Which first?',
+        /*
+         * The half IS its own identity — no synthesised id. The receipts guard
+         * rejects any `id:` built from a template string in this file, and it
+         * is right to: those ids reach the client as primary keys, and the last
+         * fabricated one ("category:Rent") produced a normal-looking row that
+         * said "Transaction not found" when tapped. A choice is not a record,
+         * so it gets no record-shaped id.
+         */
+        choices: compound.halves.map(half => ({ id: half, name: half, ask: half })),
       })
     }
 
@@ -989,7 +1023,16 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({
             answered: false, question, understoodAs: q.understoodAs,
             message: `Which one did you mean?`,
-            choices: matches.map(m => ({ id: m.destination.id, name: m.destination.label })),
+            /*
+             * `ask` so that picking one OPENS it. Without it the client fell
+             * back to the balance phrasing and asked "P&L Statement ka kitna
+             * baaki hai" — shipped in P5.1b, found in B2.
+             */
+            choices: matches.map(m => ({
+              id: m.destination.id,
+              name: m.destination.label,
+              ask: `${m.destination.label} kholo`,
+            })),
           })
         }
 

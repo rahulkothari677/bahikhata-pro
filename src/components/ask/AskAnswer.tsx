@@ -242,7 +242,14 @@ export function AskAnswer({
             {payload.choices?.length ? (
               <ChoiceList
                 choices={payload.choices}
-                onPick={c => onAsk(`${c.name} ka kitna baaki hai`)}
+                /* 🔒 B2: a choice carries its own follow-through. This was
+                   hard-coded to the balance phrasing, which was right when the
+                   only choices were two customers of the same name — but
+                   P5.1b started offering SCREENS through the same list, so
+                   picking "P&L Statement" asked "P&L Statement ka kitna baaki
+                   hai". The party phrasing stays the default, so the
+                   disambiguation path behaves exactly as before. */
+                onPick={c => onAsk(c.ask || `${c.name} ka kitna baaki hai`)}
               />
             ) : null}
 

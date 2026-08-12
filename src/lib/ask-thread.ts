@@ -39,6 +39,17 @@ export interface AskChoice {
   balance?: number
   lastActivity?: string | null
   lastInvoiceNo?: string | null
+  /**
+   * What to ask when this one is picked.
+   *
+   * 🔒 B2. Picking used to be hard-coded to `${name} ka kitna baaki hai`,
+   * because the only thing that ever offered choices was two customers with
+   * the same name. P5.1b then started offering SCREENS the same way, so
+   * picking "P&L Statement" asked "P&L Statement ka kitna baaki hai" — live,
+   * and nonsense. A choice now carries its own follow-through; the party
+   * phrasing stays the default so the disambiguation path is unchanged.
+   */
+  ask?: string
 }
 
 /**
