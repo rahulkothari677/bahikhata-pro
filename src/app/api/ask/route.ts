@@ -16,7 +16,8 @@ import { routeWithAi } from '@/lib/ask-router'
 import { getCapability } from '@/lib/ask-capabilities'
 import { buildNoticeLine } from '@/lib/ask-notice-line'
 import { findDestinations } from '@/lib/nav-match'
-import { NAV_REGISTRY, filterByPermissions } from '@/lib/nav-registry'
+import { NAV_REGISTRY, filterByPermissions, getById } from '@/lib/nav-registry'
+import { withNavAction } from '@/lib/ask-nav-action'
 
 /**
  * "Ask your books" — A MODEL CHOOSES THE QUESTION. IT NEVER TOUCHES THE MONEY.
@@ -236,6 +237,39 @@ export async function POST(req: NextRequest) {
       })
     }
 
+    /*
+     * A2 — THE WAY OUT OF EVERY ANSWER, decided once.
+     *
+     * `capability.dataLivesAt` names the screen the answer was computed from.
+     * Resolving it here, at the single exit, rather than at each of the twelve
+     * places an answer is returned, is what stops the thirteenth answer from
+     * being the one that forgets. `withNavAction` leaves alone any answer that
+     * already acts or already navigates — see lib/ask-nav-action.
+     *
+     * Permissions again, deliberately: the module check above allows the
+     * ANSWER, but a destination can be gated further (owner-only, founder-only,
+     * behind a flag). filterByPermissions is the app's single enforcement point
+     * for that, so it is what decides here too — never a second copy of the
+     * rules, and never a model.
+     */
+    const navTarget = (() => {
+      if (!capability) return null
+      const dest = getById(capability.dataLivesAt)
+      if (!dest) return null
+      const [permitted] = filterByPermissions([dest], {
+        canAccess: (m) => canAccessModule(auth.role, auth.permissions, m),
+        isFlagEnabled: () => true,
+        isOwner: auth.role === 'owner',
+      })
+      return permitted ? { id: permitted.id, label: permitted.label } : null
+    })()
+
+    /** Every answered reply leaves through here. Never call NextResponse.json
+     *  directly for an answer — the guard test in ask-nav-action.test.ts fails
+     *  the build if one does. */
+    const ok = (payload: Record<string, unknown> & { actions?: readonly unknown[]; navigate?: unknown }) =>
+      NextResponse.json(withNavAction(payload, navTarget))
+
     const { from, to, label } = resolvePeriod(q.period, { from: q.customFrom, to: q.customTo })
 
     switch (q.intent) {
@@ -373,7 +407,7 @@ export async function POST(req: NextRequest) {
           unpaid: unpaid.map(b => ({ id: b.id, invoiceNo: b.invoiceNo, due: b.due })),
         })
 
-        return NextResponse.json({
+        return ok({
           answered: true, question, understoodAs: q.understoodAs,
           headline: owed >= 0
             ? `${p.name} owes you ${money(owed)}`
@@ -405,7 +439,7 @@ export async function POST(req: NextRequest) {
         })
         const gross = rows.reduce((s, r) => s + r.totalAmount, 0)
         const returned = notes._sum.totalAmount || 0
-        return NextResponse.json({
+        return ok({
           answered: true, question, understoodAs: q.understoodAs,
           headline: `${money(gross - returned)} of sales ${label}`,
           detail: returned > 0
@@ -465,7 +499,7 @@ export async function POST(req: NextRequest) {
           where: { userId, deletedAt: null, type: 'sale', date: { gte: from, lt: to } },
         })
         const profit = roundMoney(sales._sum.grossProfit || 0)
-        return NextResponse.json({
+        return ok({
           answered: true, question, understoodAs: q.understoodAs,
           headline: `${money(profit)} gross profit ${label}`,
           detail: `From ${saleCount} sale${saleCount === 1 ? '' : 's'}, net of returns. Sale price less cost price, before expenses and excluding GST.`,
@@ -504,7 +538,7 @@ export async function POST(req: NextRequest) {
           .sort((a, b) => wantOwedToMe ? b.balance - a.balance : a.balance - b.balance)
           .slice(0, 20)
         const total = roundMoney(parties.reduce((s, p) => s + Math.abs(p.balance), 0))
-        return NextResponse.json({
+        return ok({
           answered: true, question, understoodAs: q.understoodAs,
           headline: wantOwedToMe
             ? `${money(total)} is owed to you`
@@ -551,12 +585,12 @@ export async function POST(req: NextRequest) {
         }
         const top = [...byProduct.entries()].sort((a, b) => b[1].value - a[1].value).slice(0, 5)
         if (top.length === 0) {
-          return NextResponse.json({
+          return ok({
             answered: true, question, understoodAs: q.understoodAs,
             headline: `No sales ${label}`, detail: 'Nothing was sold in this period.', sources: [],
           })
         }
-        return NextResponse.json({
+        return ok({
           answered: true, question, understoodAs: q.understoodAs,
           headline: `${top[0][1].name} sold most ${label}`,
           detail: `${money(top[0][1].value)} from ${top[0][1].qty} sold. Top ${top.length} below, by value.`,
@@ -583,7 +617,7 @@ export async function POST(req: NextRequest) {
           })
         }
         const p = products[0]
-        return NextResponse.json({
+        return ok({
           answered: true, question, understoodAs: q.understoodAs,
           headline: q.itemName
             ? `${p.name}: ${p.currentStock} ${p.unit} left`
@@ -691,7 +725,7 @@ export async function POST(req: NextRequest) {
           }
         } catch { /* leave it unassessed — see above */ }
 
-        return NextResponse.json({
+        return ok({
           answered: true, question, understoodAs: q.understoodAs,
           headline: `${money(net)} of GST payable for ${g3.period?.monthLabel || month}`,
           detail: [
@@ -766,7 +800,7 @@ export async function POST(req: NextRequest) {
         const groups = [...byCategory.entries()].sort((a, b) => b[1] - a[1])
         const breakdown = groups.map(([n, v]) => `${n} ${money(v)}`).join(', ')
 
-        return NextResponse.json({
+        return ok({
           answered: true, question, understoodAs: q.understoodAs,
           headline: `${money(total)} spent ${label}`,
           detail: matching.length
@@ -821,7 +855,7 @@ export async function POST(req: NextRequest) {
         const gross = roundMoney(rows.reduce((s, r) => s + r.totalAmount, 0))
         const returned = roundMoney(returns._sum.totalAmount || 0)
 
-        return NextResponse.json({
+        return ok({
           answered: true, question, understoodAs: q.understoodAs,
           headline: `${money(gross - returned)} of purchases ${label}`,
           detail: returned > 0
@@ -889,7 +923,7 @@ export async function POST(req: NextRequest) {
          * live. See lib/ask-period-preset for why "this week" and "this FY"
          * deliberately map to no preset at all.
          */
-        return NextResponse.json({
+        return ok({
           answered: true, question, understoodAs: q.understoodAs,
           headline: `Opening ${dest.label}`,
           detail: dest.description || undefined,
@@ -936,7 +970,7 @@ export async function POST(req: NextRequest) {
         }
 
         const label = bill.invoiceNo || '(no number)'
-        return NextResponse.json({
+        return ok({
           answered: true, question, understoodAs: q.understoodAs,
           headline: `Opening ${label}`,
           detail: `${bill.party?.name || 'Walk-in'} · ${money(bill.totalAmount)}`,

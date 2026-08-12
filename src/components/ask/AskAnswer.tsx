@@ -20,7 +20,7 @@
 
 import { useState } from 'react'
 import {
-  Receipt, User, Package, Info, CheckCircle2, AlertTriangle,
+  Receipt, User, Package, Info, CheckCircle2, AlertTriangle, ArrowRight,
   MessageCircle, HandCoins, Loader2,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -279,7 +279,13 @@ export function AskAnswer({
                 ? <Loader2 className="w-4 h-4 animate-spin" />
                 : a.kind === 'remind' ? <MessageCircle className="w-4 h-4" />
                 : a.kind === 'settle' ? <HandCoins className="w-4 h-4" />
-                : a.kind === 'open-screen' ? <AlertTriangle className="w-4 h-4" />
+                /* 🔒 A2: was AlertTriangle, chosen in A1 when 'open-screen'
+                   only ever meant a filing risk. A2 gives every answer a way
+                   out through the same kind, so a warning triangle would now
+                   sit on "Open Sales" — and an app that warns about everything
+                   warns about nothing. The urgency stays in the sentence,
+                   which still opens with ⚠️. */
+                : a.kind === 'open-screen' ? <ArrowRight className="w-4 h-4" />
                 : <User className="w-4 h-4" />}
               {a.label}
             </button>
