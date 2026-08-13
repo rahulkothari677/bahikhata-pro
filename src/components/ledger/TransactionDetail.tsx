@@ -1,6 +1,7 @@
 'use client'
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { describeSaveOutcome } from '@/lib/edit-conflict'
 import { EwayBillNotice } from '@/components/ledger/EwayBillNotice'
 import { BillOfSupplyNotice } from '@/components/ledger/BillOfSupplyNotice'
 import { eInvoiceApplicability } from '@/lib/einvoice-applicability'
@@ -1274,12 +1275,46 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
       const r = await offlineFetch(`/api/transactions/${transaction.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        /*
+         * 🔒 2026-08-13 (#18): send the stamp this bill carried when it was
+         * opened, so the server can tell whether anyone else changed it since.
+         *
+         * Without this the server's check is `if (null && ...)` — permanently
+         * false. That is exactly the state parties and products were left in:
+         * the server-side detection was written months ago, and the client
+         * never sent the field, so it has never once fired.
+         */
+        body: JSON.stringify({ ...body, expectedUpdatedAt: transaction.updatedAt ?? null }),
         offline: { invalidate: ['/api/transactions', '/api/dashboard', '/api/products', '/api/parties'] },
       })
       if (!r.ok) throw new Error(await readError(r))
-      sonnerToast.success(isQueuedResponse(r) ? 'Saved offline — will sync when online' : 'Transaction updated')
-      haptic.success()
+
+      /*
+       * 🔒 2026-08-13 (#18): SHOW the conflict warning.
+       *
+       * A warning the server returns and the client drops is not a warning.
+       * parties and products have produced `conflictWarning` since Phase 5 and
+       * nothing has ever read it.
+       *
+       * The choice of message lives in describeSaveOutcome() so it can be
+       * tested by calling it. Written as an `if` here first, and break-testing
+       * showed the guard passed on dead code — the same mistake the
+       * parties/products guards make.
+       */
+      const queuedOffline = isQueuedResponse(r)
+      const saved = queuedOffline ? null : await r.clone().json().catch(() => null)
+      const outcome = describeSaveOutcome(saved, { queuedOffline })
+
+      if (outcome.kind === 'warning') {
+        haptic.warning()
+        sonnerToast.warning(outcome.title, {
+          description: outcome.description,
+          duration: outcome.durationMs,
+        })
+      } else {
+        sonnerToast.success(outcome.title, { duration: outcome.durationMs })
+        haptic.success()
+      }
       onSuccess?.()
       onOpenChange(false)
     } catch (e: any) {

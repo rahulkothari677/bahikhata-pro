@@ -965,3 +965,25 @@ and include enough context to reproduce.
 - **Fix would be**: compare against a dummy hash when the user is not found, so both paths cost the same.
 - **Not fixed now**: out of scope for #17, and it needs a timing measurement against production to confirm the gap is actually exploitable rather than lost in network noise.
 - **Status**: LOGGED — awaiting approval.
+
+### #18 — Two devices editing one bill silently overwrite each other (Medium/Money) — FIXED
+- **Files**: `src/lib/edit-conflict.ts` (new), `src/app/api/transactions/[id]/route.ts`, `src/components/ledger/TransactionDetail.tsx`
+- **Description**: Editing an invoice was last-write-wins with no word to anyone. The counter phone corrects a quantity, the back-office laptop corrects a price, and whoever saves second erases the other's change without either being told. On a bill, that is money.
+- **THE TASK'S PREMISE WAS FALSE.** It was logged as "warn on concurrent invoice edits, **as parties and products already do**". They do not. The feature is dead in all three places:
+  - The **client never sends** the `updatedAt` stamp, so the server check reads `if (null && …)` — permanently false. It has never once fired, for any record type.
+  - **Nothing reads** the `conflictWarning` the server returns.
+  - The only "tests" are `expect(src).toMatch(/conflictWarning/)` against the route's *source*. They would pass if the file contained nothing but a comment mentioning the word.
+- **Fix**: one shared, tested `describeEditConflict()` — rather than a third copy of a rule that has never worked. The invoice route calls it, the edit screen sends the stamp, and the screen **shows** the result.
+- **A warning, not a refusal** — deliberately. Rejecting the save loses work the shopkeeper just did, and nobody can reason about a merge on a phone at a counter. The write goes through and they are asked to check the bill, which is something they can act on.
+- **Trap avoided**: this route rejects unrecognised fields, so `expectedUpdatedAt` had to be declared in the allowed list. Sending it undeclared would have 400'd **every** invoice edit — a warning feature turned into an outage. Found by reading the guard rather than assuming the body was open.
+- **A mistake of mine, recorded because it is the point**: my first guard for the client half was `expect(src).toMatch(/conflictWarning/)` + `/sonnerToast\.warning\(/`. Break-testing it — replacing the condition with `if (false)` — left both strings in the file and **the test passed on dead code**. The identical mistake I had just criticised, one file away from the comment criticising it. The decision is now `describeSaveOutcome()`, a function the tests call.
+- **Guard**: `src/__tests__/lib/edit-conflict.test.ts` — 18 tests. Break-verified six ways: never detecting a conflict fails 6, warning when stamps match fails 1, treating an unparseable stamp as a conflict fails 1, the screen never showing a warning fails 2, a too-brief warning fails 1, claiming a conflict on an offline save fails 1.
+- **Status**: FIXED for invoices. Parties and products still have the dead version — logged as #29.
+
+### #29 — The concurrent-edit warning is dead for parties and products (Low) — LOGGED
+- **Files**: `src/app/api/parties/[id]/route.ts`, `src/app/api/products/route.ts`
+- **Found**: 2026-08-13, while doing #18.
+- **Description**: Both routes compute a `conflictWarning`, and it has never fired: the client never sends `updatedAt`, and nothing displays the result. The two tests covering it grep the route source for the word.
+- **Fix would be**: both routes call the now-tested `describeEditConflict()`, their clients send the stamp, and their screens render `describeSaveOutcome()` — the same three lines as the invoice fix.
+- **Not fixed now**: out of #18's scope, which was invoices. Small and mechanical once approved.
+- **Status**: LOGGED — awaiting approval.

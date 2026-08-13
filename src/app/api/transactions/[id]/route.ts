@@ -11,6 +11,7 @@ import { computeLineItems } from '@/lib/line-items'
 import { normalizeToUnit } from '@/lib/units'
 import { tracksStock, stockAffectingLines, tracksStockForReversal } from '@/lib/inventory-tracking'
 import { apiError } from '@/lib/api-error'
+import { describeEditConflict } from '@/lib/edit-conflict'
 import { prismaErrorResponse } from '@/lib/prisma-error-response'
 import { friendlyValidationMessage } from '@/lib/friendly-validation'
 import { assertPeriodNotLocked, PeriodLockedError } from '@/lib/period-lock'
@@ -163,7 +164,15 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const body = await req.json()
 
     // Same allowed extras as POST — see the note there.
-    const unknownFields = findUnknownFields(body, schemaFields(updateTransactionSchema), ['isInterState', 'confirmOversell', 'isReverseCharge', 'itcBlockedReason', 'updateProductCosts'])
+    /*
+     * 🔒 2026-08-13 (#18): `expectedUpdatedAt` MUST be listed here.
+     *
+     * This route rejects any field it does not recognise, so sending the
+     * concurrent-edit stamp without declaring it would 400 every single invoice
+     * edit — turning a warning feature into an outage. Caught before shipping
+     * by reading this guard rather than assuming the body was open.
+     */
+    const unknownFields = findUnknownFields(body, schemaFields(updateTransactionSchema), ['isInterState', 'confirmOversell', 'isReverseCharge', 'itcBlockedReason', 'updateProductCosts', 'expectedUpdatedAt'])
     if (unknownFields) {
       return NextResponse.json({
         error: 'Unknown field',
@@ -798,7 +807,28 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       }
     }
 
-    return NextResponse.json({ transaction, warning })
+    /*
+     * 🔒 2026-08-13 (#18): tell the shopkeeper when someone else changed this
+     * bill while they had it open.
+     *
+     * Two devices editing one invoice is silent last-write-wins today. The
+     * counter phone corrects the quantity, the back-office laptop corrects the
+     * price, and whoever saves second erases the other's change without either
+     * of them being told. On a bill, that is money.
+     *
+     * The write still goes through, deliberately. A 409-and-merge engine is the
+     * wrong shape for a shop: refusing the save loses work the shopkeeper just
+     * did, and they cannot reason about a merge on a phone at a counter. What
+     * they can do is look at the bill and check it — which is what the warning
+     * asks for.
+     *
+     * `expectedUpdatedAt` is what the client held when it loaded the invoice.
+     * Absent (an older app build, or an API caller) means no check, which is
+     * the same behaviour as before rather than a new failure.
+     */
+    const conflictWarning = describeEditConflict(body.expectedUpdatedAt, existing.updatedAt, 'bill')
+
+    return NextResponse.json({ transaction, warning, conflictWarning })
   } catch (error: any) {
     // 🔒 FIX H1: Catch the STOCK_BLOCK error from inside the $transaction.
     if (error?.code === 'STOCK_BLOCK') {
