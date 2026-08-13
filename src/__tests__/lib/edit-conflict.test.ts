@@ -117,6 +117,38 @@ describe('the routes and the screen are actually wired to it', () => {
     expect(read('components/ledger/TransactionDetail.tsx')).toMatch(/expectedUpdatedAt:/)
   })
 
+  it('the PRODUCT route asks the question too, using the shared rule', () => {
+    // #29: it had its own inline copy, with different wording, and it was
+    // dead. Two copies of a rule disagree eventually — these already had.
+    const src = read('app/api/products/route.ts')
+    expect(src).toMatch(/describeEditConflict\(/)
+    expect(src).not.toMatch(/const clientUpdatedAt =/)
+  })
+
+  it('the PRODUCT dialog sends the stamp', () => {
+    // Without this the server check reads `if (null && …)` — which is exactly
+    // why it had never fired.
+    expect(read('components/inventory/ProductDialog.tsx')).toMatch(/updatedAt: product\.updatedAt/)
+  })
+
+  it('the PRODUCT dialog renders the shared outcome', () => {
+    const src = read('components/inventory/ProductDialog.tsx')
+    expect(src).toMatch(/describeSaveOutcome\(/)
+    expect(src).toContain("outcome.kind === 'warning'")
+  })
+
+  it('the PRODUCT dialog asks for the PRODUCT wording', () => {
+    /*
+     * Added after break-testing found nothing here. Changing this screen's
+     * subject to 'bill' left every test green, and the shopkeeper would have
+     * been told "this bill changed elsewhere" while editing a product.
+     *
+     * Structural, because rendering this dialog needs most of the app. The
+     * wording itself is proven by calling describeSaveOutcome directly below.
+     */
+    expect(read('components/inventory/ProductDialog.tsx')).toContain("subject: 'product'")
+  })
+
   it('the edit screen renders whatever describeSaveOutcome returns', () => {
     // Structural only. The BEHAVIOUR is covered by the describeSaveOutcome
     // tests below, which is the point: an earlier version of this guard was a
@@ -157,6 +189,20 @@ describe('what the screen is told to show', () => {
     expect(describeSaveOutcome({ conflictWarning: null }, { queuedOffline: false }).kind).toBe('success')
     expect(describeSaveOutcome({}, { queuedOffline: false }).kind).toBe('success')
     expect(describeSaveOutcome(null, { queuedOffline: false }).kind).toBe('success')
+  })
+
+  it('names the record in the headline, so the warning matches the screen', () => {
+    // #29: the same helper now serves invoices and products. A product screen
+    // headed "this bill changed elsewhere" would read as the wrong record.
+    const bill = describeSaveOutcome({ conflictWarning: 'x' }, { queuedOffline: false, subject: 'bill' })
+    const product = describeSaveOutcome({ conflictWarning: 'x' }, { queuedOffline: false, subject: 'product' })
+    expect(bill.title).toMatch(/bill/i)
+    expect(product.title).toMatch(/product/i)
+  })
+
+  it('uses the caller’s success wording', () => {
+    const out = describeSaveOutcome(null, { queuedOffline: false, successTitle: 'Product updated' })
+    expect(out.title).toBe('Product updated')
   })
 
   it('says "saved offline" when the edit was queued, and does not claim a conflict', () => {

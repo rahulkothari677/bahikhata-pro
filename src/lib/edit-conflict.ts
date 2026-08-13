@@ -100,7 +100,13 @@ export type SaveOutcome =
  */
 export function describeSaveOutcome(
   response: { conflictWarning?: string | null } | null | undefined,
-  opts: { queuedOffline: boolean },
+  opts: {
+    queuedOffline: boolean
+    /** What to say when it saved cleanly. Defaults to the invoice wording. */
+    successTitle?: string
+    /** Names the record in the warning headline. Defaults to 'bill'. */
+    subject?: ConflictSubject
+  },
 ): SaveOutcome {
   if (opts.queuedOffline) {
     return { kind: 'success', title: 'Saved offline — will sync when online', durationMs: 4000 }
@@ -110,12 +116,12 @@ export function describeSaveOutcome(
   if (conflict) {
     return {
       kind: 'warning',
-      title: 'Saved — but this bill changed elsewhere',
+      title: `Saved — but this ${SUBJECT_WORD[opts.subject ?? 'bill']} changed elsewhere`,
       description: conflict,
       // Long, because it asks the shopkeeper to go and look at something.
       durationMs: 15000,
     }
   }
 
-  return { kind: 'success', title: 'Transaction updated', durationMs: 4000 }
+  return { kind: 'success', title: opts.successTitle ?? 'Transaction updated', durationMs: 4000 }
 }

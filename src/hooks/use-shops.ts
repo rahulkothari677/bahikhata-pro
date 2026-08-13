@@ -122,6 +122,59 @@ export function useShops() {
     }
   }, [queryClient])
 
+  /**
+   * Put a shop away, or remove one that holds nothing.
+   *
+   * 🔒 #30 (2026-08-13). The API for this shipped with #21 and had no caller,
+   * so a shopkeeper still could not do either — the same shape as the bank
+   * statement, where the endpoint existed a day before its button.
+   *
+   * ONE function for both, because the server decides which is allowed and its
+   * refusal is the useful part. Asking to delete a shop that traded comes back
+   * with "holds 12 bill(s), 3 customer(s)… you can put it away instead", and
+   * that sentence is worth far more than a client-side guess at the counts.
+   *
+   * The active shop is cleared if it was the one that left, so the app does not
+   * keep pointing at a shop that is gone.
+   */
+  const removeShop = useCallback(async (shopId: string, mode: 'archive' | 'delete') => {
+    const shop = shops.find(s => s.id === shopId)
+    try {
+      const qs = mode === 'archive' ? `?id=${shopId}&archive=1` : `?id=${shopId}`
+      const r = await offlineFetch(`/api/shops${qs}`, {
+        method: 'DELETE',
+        offline: { invalidate: ['/api/shops'] },
+      })
+      if (!r.ok) throw new Error(await readError(r))
+      const data = await r.json().catch(() => null)
+
+      if (activeShopId === shopId) {
+        setActiveShopId(null)
+        try { localStorage.removeItem(ACTIVE_SHOP_KEY) } catch {}
+      }
+      queryClient.invalidateQueries()
+
+      sonnerToast.success(
+        mode === 'archive' ? 'Shop put away' : 'Shop removed',
+        // The server's own sentence — it is the one that says the books are
+        // still there, which is the part a shopkeeper needs to hear.
+        { description: data?.message, duration: 8000 },
+      )
+      return true
+    } catch (e: any) {
+      sonnerToast.error(
+        mode === 'archive' ? "Couldn't put the shop away" : "Couldn't remove the shop",
+        {
+          // The refusal explains what the shop holds and what to do instead.
+          // Long, because it is an instruction rather than a notification.
+          description: e?.message || `"${shop?.name ?? 'That shop'}" could not be changed. Please try again.`,
+          duration: 12000,
+        },
+      )
+      return false
+    }
+  }, [shops, activeShopId, queryClient])
+
   const activeShop = shops.find(s => s.id === activeShopId) || shops[0] || null
 
   return {
@@ -131,6 +184,7 @@ export function useShops() {
     switchShop,
     createShop,
     renameShop,
+    removeShop,
     isLoading,
   }
 }

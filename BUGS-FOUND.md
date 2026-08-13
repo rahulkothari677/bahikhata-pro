@@ -1008,3 +1008,25 @@ and include enough context to reproduce.
 - **Description**: `DELETE /api/shops` now supports archive and empty-shop delete, with tests. Nothing in the Manage Shops screen calls it, so a shopkeeper still cannot do either.
 - **Why logged rather than done**: the same lesson as #27, where the bank-statement API shipped a day before its button. The API half is finished and proven; the screen is a separate, visible change worth doing deliberately — including an "archived shops" view so an archived shop can be brought back.
 - **Status**: LOGGED — awaiting approval.
+
+### #29 — The concurrent-edit warning was dead for products (Low) — FIXED
+- **Files**: `src/app/api/products/route.ts`, `src/components/inventory/ProductDialog.tsx`, `src/lib/edit-conflict.ts`
+- **Fix**: the products route now calls the shared, tested `describeEditConflict()` instead of its own inline copy; the product dialog sends `updatedAt` and renders `describeSaveOutcome()`. The helper is subject-aware, so a product screen says "product" and not "bill".
+- **The old guard is gone.** The two R11 tests in `v26-phase5-timeouts-webhook-quickwins.test.ts` asserted the route source contained the strings `conflictWarning`, `clientUpdatedAt` and `edited on another device`. They passed for months while the feature was completely dead — and then **failed when it was fixed**, because the dead inline copy was replaced by the shared function. A test that passes on a broken feature and fails on a working one is worse than no test. Replaced with a check that the routes still ask, and a pointer to the 23 real tests.
+- **A weak assertion of my own, caught by break-testing**: my new guard searched the whole of `use-shops.ts` for `description: e?.message`, which also appears in `createShop` and `renameShop` — so deleting it from `removeShop` left the test green. Now scoped to the `removeShop` function body.
+- **Status**: FIXED for products.
+
+### #31 — There is no way to edit a customer or supplier (Medium/Data) — LOGGED
+- **Found**: 2026-08-13, while doing #29.
+- **Description**: `PUT /api/parties/[id]` exists, is tested, and works — I called it against production and got 200. **Nothing in the app calls it.** There is no party edit screen at all, so a shopkeeper cannot correct a customer's phone number, address, or **GSTIN**.
+- **Why it matters more than it looks**: GSTIN drives `deriveInterStateStatus`, which decides IGST vs CGST+SGST on that customer's bills. A GSTIN typed wrong at creation is permanent, and every future invoice to that customer carries the consequence.
+- **This is also why #29 stopped at products**: wiring a concurrent-edit warning into parties is pointless while nothing can edit a party. The warning should follow the screen.
+- **Status**: LOGGED — awaiting approval.
+
+### #30 — Shop archive/delete had no button (Low) — FIXED
+- **Files**: `src/hooks/use-shops.ts`, `src/components/settings/Settings.tsx`
+- **Fix**: a remove control on each shop row in Settings → Manage Shops, plus `removeShop()` in the hook.
+- **One control, not two.** The shopkeeper should not have to know whether their shop counts as "empty". They ask to remove it; the delete is tried first; if the shop traded, the **server's refusal names what is inside** ("holds 12 bill(s), 3 customer(s)…") and a second, shorter question offers to put it away. Two questions only in the case that deserves two, and the counts come from the server rather than a client-side guess at a rule the server already owns.
+- Hidden when only one shop remains — the server refuses that anyway, and a button whose only outcome is a rejection is worse than no button.
+- **Guard**: `src/__tests__/components/shop-remove-button.test.ts` — 11 tests. Break-verified four ways: removing the button fails 1, dropping the `archive=1` flag (which would turn every "put away" into a delete attempt) fails 1, throwing away the server's explanation fails 1, showing it for the last shop fails 1.
+- **Status**: FIXED.

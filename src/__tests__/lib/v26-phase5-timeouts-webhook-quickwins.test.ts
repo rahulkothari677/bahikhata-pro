@@ -129,18 +129,38 @@ describe('V26 Phase 5 Batch 4 — Timeouts + webhook + DELETE-replay + concurren
 
   // ─── R11: Concurrent-edit warning ─────────────────────────────────────────
 
-  test('R11: parties PUT returns conflictWarning on updatedAt mismatch', () => {
-    const src = readFile('app/api/parties/[id]/route.ts')
-    expect(src).toMatch(/conflictWarning/)
-    expect(src).toMatch(/clientUpdatedAt/)
-    expect(src).toMatch(/edited on another device/)
+  /*
+   * 🔒 #29 (2026-08-13): these two tests used to read
+   *
+   *     expect(src).toMatch(/conflictWarning/)
+   *     expect(src).toMatch(/clientUpdatedAt/)
+   *     expect(src).toMatch(/edited on another device/)
+   *
+   * against the ROUTE SOURCE. They would have passed on a file containing
+   * nothing but a comment mentioning those words — and they did pass, for
+   * months, while the feature was completely dead: the client never sent the
+   * stamp, so the server check read `if (null && …)` and had never once fired,
+   * and nothing displayed the warning either.
+   *
+   * They then FAILED when the feature was fixed, because the dead inline copy
+   * (`clientUpdatedAt`) was replaced by the shared, tested describeEditConflict.
+   * A test that passes on a broken feature and fails on a working one is worse
+   * than no test.
+   *
+   * The real coverage now lives in src/__tests__/lib/edit-conflict.test.ts —
+   * 23 tests that CALL the rule, break-verified. What is kept here is only the
+   * one thing this file is placed to notice: that these routes still ask.
+   */
+  test('R11: parties PUT asks the shared concurrent-edit rule', () => {
+    expect(readFile('app/api/parties/[id]/route.ts')).toMatch(/conflictWarning/)
   })
 
-  test('R11: products PUT returns conflictWarning on updatedAt mismatch', () => {
+  test('R11: products PUT uses the shared rule, not its own copy', () => {
     const src = readFile('app/api/products/route.ts')
-    expect(src).toMatch(/conflictWarning/)
-    expect(src).toMatch(/clientUpdatedAt/)
-    expect(src).toMatch(/edited on another device/)
+    expect(src).toMatch(/describeEditConflict\(/)
+    // The inline copy is gone. Two copies of one rule disagree eventually, and
+    // these two already had different wording.
+    expect(src).not.toMatch(/const clientUpdatedAt =/)
   })
 
   // ─── R12: Web Locks mutex ─────────────────────────────────────────────────

@@ -11,6 +11,7 @@ import { checkEntityLimit } from '@/lib/usage-limits'
 import { roundMoney } from '@/lib/money'
 import { validateBody, createProductSchema, updateProductSchema } from '@/lib/validation'
 import { apiError } from '@/lib/api-error'
+import { describeEditConflict } from '@/lib/edit-conflict'
 
 export async function GET() {
   try {
@@ -287,15 +288,19 @@ export async function PUT(req: NextRequest) {
         : (suggestGstTreatment(v.hsn, v.gstRate ?? 0) ?? v.gstTreatment)
     }
 
-    // 🔒 V26 R11 (Phase 5): Concurrent-edit warning (same pattern as parties PUT).
-    // Client sends `updatedAt` as loaded. Server compares; on mismatch, still
-    // applies the write but returns a `conflictWarning`.
-    const clientUpdatedAt = body.updatedAt ? new Date(body.updatedAt) : null
-    let conflictWarning: string | null = null
-    if (clientUpdatedAt && existing.updatedAt && clientUpdatedAt.getTime() !== existing.updatedAt.getTime()) {
-      const serverTime = new Date(existing.updatedAt).toLocaleString('en-IN')
-      conflictWarning = `This product was also edited on another device at ${serverTime} — please verify the details.`
-    }
+    /*
+     * 🔒 V26 R11 (Phase 5): Concurrent-edit warning.
+     *
+     * 🔒 #29 (2026-08-13): this was an inline copy of the rule, and it was
+     * dead — the product dialog never sent `updatedAt`, so the comparison read
+     * `if (null && …)` and had never once fired. Its only test grepped this
+     * file for the word "conflictWarning", which would pass on a comment.
+     *
+     * Now it calls the same tested function the invoice route uses. One rule,
+     * one implementation: two copies of a rule disagree eventually, and these
+     * two already had different wording.
+     */
+    const conflictWarning = describeEditConflict(body.updatedAt, existing.updatedAt, 'product')
 
     const product = await db.product.update({
       where: { id },

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { describeSaveOutcome } from '@/lib/edit-conflict'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -144,6 +145,17 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
         priceIncludesGst: form.priceIncludesGst,
         gstTreatment: form.gstTreatment,  // 🔒 V17 Audit §4.2
         tracksInventory: form.tracksInventory,
+        /*
+         * 🔒 #29 (2026-08-13): the stamp this product carried when it was
+         * opened, so the server can tell whether anyone else changed it since.
+         *
+         * The server has computed a conflict warning since Phase 5, and it has
+         * never fired once — because this line did not exist, so the check read
+         * `if (null && …)`. Sending it is what turns the feature on.
+         *
+         * Only on an edit. A create has nothing to have conflicted with.
+         */
+        ...(product ? { updatedAt: product.updatedAt ?? null } : {}),
       }
       const r = await offlineFetch(url, {
         method,
@@ -152,16 +164,39 @@ export function ProductDialog({ open, onOpenChange, product, onSuccess }: {
         offline: { invalidate: ['/api/products', '/api/dashboard'] },
       })
       if (!r.ok) throw new Error(await readError(r))
-      if (isQueuedResponse(r)) {
-        sonnerToast.success('Saved offline — will sync when online')
+
+      /*
+       * 🔒 #29 (2026-08-13): SHOW the conflict warning.
+       *
+       * The server has returned `conflictWarning` for products since Phase 5
+       * and nothing ever read it. A warning the server sends and the client
+       * drops is not a warning.
+       *
+       * Same shared decision the invoice screen uses, so the two cannot drift.
+       */
+      const queuedOffline = isQueuedResponse(r)
+      const saved = queuedOffline ? null : await r.clone().json().catch(() => null)
+      const outcome = describeSaveOutcome(saved, {
+        queuedOffline,
+        subject: 'product',
+        successTitle: product ? 'Product updated' : 'Product added successfully',
+      })
+
+      if (outcome.kind === 'warning') {
+        haptic.warning()
+        sonnerToast.warning(outcome.title, {
+          description: outcome.description,
+          duration: outcome.durationMs,
+        })
       } else {
-        sonnerToast.success(product ? 'Product updated' : 'Product added successfully')
-        // 🔒 V20-025: Track product added/updated event
-        if (!product) {
-          track(EVENTS.PRODUCT_ADDED, { gstRate: payload.gstRate, unit: payload.unit })
-        }
+        sonnerToast.success(outcome.title, { duration: outcome.durationMs })
+        haptic.success()
       }
-      haptic.success()
+
+      // 🔒 V20-025: Track product added/updated event
+      if (!queuedOffline && !product) {
+        track(EVENTS.PRODUCT_ADDED, { gstRate: payload.gstRate, unit: payload.unit })
+      }
       onSuccess?.()
       onOpenChange(false)
     } catch (e: any) {

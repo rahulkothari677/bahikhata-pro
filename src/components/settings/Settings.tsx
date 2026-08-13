@@ -172,7 +172,7 @@ export function Settings({
 
   // useSetting hook — provides hideProfit + updateHideProfit (persists instantly)
   const { hideProfit, updateHideProfit } = useSetting()
-  const { shops, activeShop, createShop, renameShop } = useShops()
+  const { shops, activeShop, createShop, renameShop, removeShop } = useShops()
   // 🔒 V26 N20: Removed `switchShop` from destructure — was unused after
   // the V26 N4 removal of the Switch button (copy still references switching
   // but the actual UI no longer offers it; see V26 N14 copy fix).
@@ -181,6 +181,7 @@ export function Settings({
   const [newShopName, setNewShopName] = useState('')
   // Inline shop rename (audit 2026-08-03).
   const [renameShopId, setRenameShopId] = useState<string | null>(null)
+  const [removingShopId, setRemovingShopId] = useState<string | null>(null)
   const [renameValue, setRenameValue] = useState('')
   const [renameSaving, setRenameSaving] = useState(false)
   const [revenueGoal, setRevenueGoal] = useState('')
@@ -458,6 +459,48 @@ export function Settings({
       if (result) setRenameShopId(null)
     } finally {
       setRenameSaving(false)
+    }
+  }
+
+  /**
+   * 🔒 #30 (2026-08-13): remove a shop, or put it away.
+   *
+   * The shopkeeper is asked once, in plain words, and the SERVER decides which
+   * of the two actually happens. Trying the delete first is deliberate: if the
+   * shop is empty it simply goes, and if it is not, the refusal carries the
+   * counts ("holds 12 bill(s), 3 customer(s)…") — which is a far better basis
+   * for the follow-up question than anything guessed on the client.
+   *
+   * So a traded shop produces a SECOND confirmation, naming what is inside it,
+   * offering to archive. Two questions only in the case that deserves two.
+   */
+  const handleRemoveShop = async (shop: { id: string; name: string }) => {
+    const ok = await confirmDialog(
+      `Remove "${shop.name}"?\n\n` +
+        `If this shop has no bills, customers or products, it will be deleted. ` +
+        `If it has any, nothing is lost — we'll offer to put it away instead, and everything in it is kept.`,
+      { title: 'Remove this shop?', confirmLabel: 'Continue', destructive: true },
+    )
+    if (!ok) return
+
+    setRemovingShopId(shop.id)
+    try {
+      const deleted = await removeShop(shop.id, 'delete')
+      if (deleted) return
+
+      /*
+       * The delete was refused. removeShop has already shown the server's
+       * explanation, which names what the shop holds — so this question can be
+       * short, and the shopkeeper has already read the reason.
+       */
+      const archive = await confirmDialog(
+        `"${shop.name}" has records in it, so it cannot be deleted.\n\n` +
+          `Put it away instead? It disappears from this list, and every bill, customer and product in it is kept.`,
+        { title: 'Put this shop away?', confirmLabel: 'Put it away', destructive: false },
+      )
+      if (archive) await removeShop(shop.id, 'archive')
+    } finally {
+      setRemovingShopId(null)
     }
   }
 
@@ -964,6 +1007,37 @@ export function Settings({
                       >
                         <Pencil className="w-4 h-4 text-muted-foreground" />
                       </Button>
+                      {/*
+                        🔒 #30 (2026-08-13): a shop can now be put away.
+                        The API shipped with #21 and had no caller, so a shop
+                        created by mistake still sat here forever.
+
+                        ONE control, not two. The shopkeeper should not have to
+                        know whether their shop counts as "empty" — they ask to
+                        remove it, and the SERVER decides. If it holds books the
+                        refusal explains what is in there and offers to put it
+                        away instead, which is a better sentence than any
+                        client-side guess at the counts.
+
+                        Hidden for the last remaining shop: the server refuses
+                        that anyway, and a button whose only outcome is a
+                        rejection is worse than no button.
+                      */}
+                      {shops.length > 1 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-9 w-9 p-0 flex-shrink-0 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30"
+                          aria-label={`Remove ${shop.name}`}
+                          disabled={removingShopId === shop.id}
+                          onClick={() => void handleRemoveShop(shop)}
+                        >
+                          {removingShopId === shop.id
+                            ? <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+                            : <Trash2 className="w-4 h-4 text-muted-foreground" />}
+                        </Button>
+                      )}
                     </>
                   )}
                 </div>
