@@ -172,17 +172,23 @@ export default async function globalSetup(config: FullConfig) {
        * localStorage alongside cookies, so every test inherits it and none of
        * them ever sees the dialog.
        */
-      const decline = page.getByRole('button', { name: /No thanks/i }).first()
-      if (await decline.isVisible({ timeout: 15_000 }).catch(() => false)) {
-        await decline.click()
-        await decline.waitFor({ state: 'hidden', timeout: 10_000 }).catch(() => {})
-        console.log('[e2e-seed] privacy dialog declined')
-      } else {
-        // Not fatal — it may legitimately not appear — but say so, because if
-        // it silently stops appearing the tests would start failing on modals
-        // again and this line is the clue.
-        console.log('[e2e-seed] no privacy dialog appeared')
-      }
+      /*
+       * Set the stored answer directly rather than clicking the dialog.
+       *
+       * Clicking it was tried first and did not work: the run logged "no
+       * privacy dialog appeared" because at that instant it had not rendered
+       * yet — it arrives a beat after the dashboard settles. Waiting for it
+       * would be racing a modal, and the race is what the tests kept losing.
+       *
+       * ConsentModal reads exactly this key (src/components/common/ConsentModal.tsx)
+       * and shows itself only when the value is null. 'false' is the DECLINE
+       * that the component itself writes when a shopkeeper says no — the same
+       * state, reached the same way, just without the timing.
+       */
+      await page.evaluate(() => {
+        localStorage.setItem('bahikhata-analytics-consent', 'false')
+      })
+      console.log('[e2e-seed] analytics consent recorded as declined')
 
       fs.mkdirSync(path.dirname(STORAGE_STATE), { recursive: true })
       await page.context().storageState({ path: STORAGE_STATE })
