@@ -31,10 +31,22 @@ export async function GET() {
     // 🔒 V26 R15 (Phase 5): Wrapped in withConnectionRetry — Neon cold-start
     // pool timeouts surface as raw 500s on the first tap after idle. Was: only
     // the dashboard had the retry wrapper.
+    /*
+     * 🔒 #71: THE FUSE STAYS. THE SILENCE DOES NOT.
+     *
+     * `take: 5000` is a deliberate fuse, and removing it would be the wrong
+     * fix — loading 50,000 parties onto a phone is a worse app, not a better
+     * one. What was wrong is that the shop was never TOLD. Party 5,001 simply
+     * did not exist, on this screen and in everything that reads it.
+     *
+     * So the true count comes back beside the rows, and the client can say
+     * "showing 5,000 of 6,200 — use search". A cap that is declared is a
+     * design decision; a cap that is hidden is a lie with a number on it.
+     */
     const parties = await withConnectionRetry(() => db.party.findMany({
       where: { userId, deletedAt: null },
       orderBy: { name: 'asc' },
-      take: 5000,  // 🔒 V26 R20 (Phase 5): fuse — not pagination. Kirana scale ≤2k parties.
+      take: 5000,
       select: {
         id: true,
         name: true,
@@ -88,7 +100,13 @@ export async function GET() {
     // browser HTTP cache served the old response. Now noStore (always fresh).
     // React-query invalidation still refetches after a mutation; this fix ensures
     // the refetch actually hits the server instead of returning the cached 200.
-    return noStore({ parties: partiesWithBalance })
+    // The true number, so nothing on screen can imply the list is all of it.
+    const totalParties = await db.party.count({ where: { userId, deletedAt: null } })
+    return noStore({
+      parties: partiesWithBalance,
+      total: totalParties,
+      truncated: totalParties > parties.length,
+    })
   } catch (error) {
     // 🔒 V11 §4.2: Use apiError() for consistent errorId logging.
     return apiError(error, 'Failed to load parties. The database might be warming up — please retry.', 503)

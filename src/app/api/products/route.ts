@@ -32,10 +32,12 @@ export async function GET() {
     // Now: O(1) — just read the column. The column is maintained atomically
     // on every transaction create/edit/delete (inside $transaction).
     // 🔒 V26 R15 (Phase 5): Wrapped in withConnectionRetry for Neon cold-start.
+    // 🔒 #71: same as parties — the fuse stays, the silence goes. See the
+    // comment there for why removing the cap would be the wrong fix.
     const products = await withConnectionRetry(() => db.product.findMany({
       where: { userId },
       orderBy: { name: 'asc' },
-      take: 5000,  // 🔒 V26 R20 (Phase 5): fuse — not pagination. Kirana scale ≤2k products.
+      take: 5000,
     }))
 
     const productsWithStock = products.map(p => {
@@ -75,7 +77,12 @@ export async function GET() {
     // 🔒 AUDIT V25 FIX BUG-031 (Batch 5): Was withCache({ maxAge: 60, swr: 300 }).
     // Money-bearing endpoint — stock counts + sale prices must always be fresh.
     // A shopkeeper who just made a sale would see stale stock for up to 60s.
-    return noStore({ products: productsWithStock })
+    const totalProducts = await db.product.count({ where: { userId } })
+    return noStore({
+      products: productsWithStock,
+      total: totalProducts,
+      truncated: totalProducts > products.length,
+    })
   } catch (error) {
     // 🔒 V11 §4.2: Use apiError() for consistent errorId logging.
     // Was: console.error + generic 503 with no errorId.

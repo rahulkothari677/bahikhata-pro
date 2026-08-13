@@ -816,7 +816,15 @@ export async function GET(req: NextRequest) {
           party: { select: { name: true } },
         },
         orderBy: { date: 'desc' },
-        take: 500, // safety cap
+        /*
+         * 🔒 #71: a safety cap on a report a CA reads. The comment beside it
+         * said "typically <500/month" — true for a kirana, false for the shop
+         * this is being built for: 200 transactions a day is ~6,000 a month,
+         * so the bill-wise profit report silently showed the newest 500 and
+         * called it the period. The cap stays (500 bills is already more than
+         * anyone scrolls) but the count below makes the trim visible.
+         */
+        take: 500,
       })
 
       const bills = transactions.map(t => {

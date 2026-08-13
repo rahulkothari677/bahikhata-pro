@@ -95,3 +95,40 @@ describe('GST filings check every invoice that was filed', () => {
     expect(src).not.toContain('take: 5000')
   })
 })
+
+describe('a cap is allowed — being silent about it is not', () => {
+  /*
+   * 🔒 #71, second pass. Auditing the five remaining caps found that THREE
+   * were already honest — the party statement returns true bill and payment
+   * counts, and the bill-wise report returns `totalBills` beside the 500 it
+   * shows. My own logged list had over-counted the problem, which is worth
+   * recording: a cap next to a true count is a design decision, and only a
+   * cap with no count is a lie.
+   *
+   * The fuse itself STAYS. Loading 50,000 parties onto a phone would be a
+   * worse app, not a better one.
+   */
+  test.each([
+    ['src/app/api/parties/route.ts', 'party'],
+    ['src/app/api/products/route.ts', 'product'],
+  ])('%s returns the true total beside the capped list', (file) => {
+    const src = read(file)
+    expect(src).toMatch(/\.count\(/)
+    expect(src).toMatch(/truncated:/)
+    expect(src).toContain('take: 5000')   // the fuse is deliberate and stays
+  })
+
+  test('the margin trend is summed by the database, not from capped rows', () => {
+    /*
+     * The one real number in this pass. "Your margin dropped 5.2%" was
+     * computed by reducing over a 5,000-row slice of a 60-day window — about
+     * 12,000 bills at 200 a day — and the rows dropped were the OLDEST in
+     * each half, which is the direction that fabricates a trend.
+     */
+    const src = read('src/app/api/insights/route.ts')
+    expect(src).toContain('marginTotals')
+    expect(src).toMatch(/groupBy/)
+    expect(src).not.toMatch(/last30Sales\.reduce/)
+    expect(src).not.toMatch(/prev30Sales\.reduce/)
+  })
+})

@@ -295,14 +295,50 @@ export async function GET() {
     // hid — surfacing "margin dropped 5.2%" leaks both the absolute margin and
     // the delta. Stock/dues/sales insights remain (they don't reveal profit).
     if (!hideProfit && last30Sales.length > 0 && prev30Sales.length > 0) {
-      const lastProfit = last30Sales.reduce((s, t) => s + (t.grossProfit || 0), 0)
-      const lastRevenue = last30Sales.reduce((s, t) => {
-        return t.type === 'credit-note' ? s - t.totalAmount : s + t.totalAmount
-      }, 0)
-      const prevProfit = prev30Sales.reduce((s, t) => s + (t.grossProfit || 0), 0)
-      const prevRevenue = prev30Sales.reduce((s, t) => {
-        return t.type === 'credit-note' ? s - t.totalAmount : s + t.totalAmount
-      }, 0)
+      /*
+       * 🔒 #71: THE MARGIN IS SUMMED BY THE DATABASE, OVER EVERY BILL.
+       *
+       * These four totals were `reduce` over `last30Sales` / `prev30Sales` —
+       * slices of a fetch capped at 5,000 rows across 60 days. A shop doing
+       * 200 transactions a day writes about 12,000 in that window, so "your
+       * margin dropped 5.2%" was computed from roughly 40% of the bills, and
+       * the missing 60% were the OLDEST ones in each half — which is exactly
+       * the direction that fabricates a trend. A made-up trend on the owner's
+       * profit is worse than no insight at all.
+       *
+       * Grouping by type keeps the credit-note arithmetic identical: profit
+       * is the plain sum (credit notes carry negative grossProfit), revenue
+       * subtracts credit-note totals.
+       */
+      const marginTotals = async (gte: Date, lt: Date) => {
+        const rows = await db.transaction.groupBy({
+          by: ['type'],
+          where: {
+            userId, deletedAt: null,
+            type: { in: ['sale', 'credit-note'] },
+            date: { gte, lt },
+          },
+          _sum: { grossProfit: true, totalAmount: true },
+        })
+        let profit = 0
+        let revenue = 0
+        for (const r of rows) {
+          profit += r._sum.grossProfit || 0
+          revenue += r.type === 'credit-note'
+            ? -(r._sum.totalAmount || 0)
+            : (r._sum.totalAmount || 0)
+        }
+        return { profit, revenue }
+      }
+
+      const [lastTotals, prevTotals] = await Promise.all([
+        marginTotals(thirtyDaysAgo, now),
+        marginTotals(sixtyDaysAgo, thirtyDaysAgo),
+      ])
+      const lastProfit = lastTotals.profit
+      const lastRevenue = lastTotals.revenue
+      const prevProfit = prevTotals.profit
+      const prevRevenue = prevTotals.revenue
 
       const lastMargin = lastRevenue > 0 ? (lastProfit / lastRevenue) * 100 : 0
       const prevMargin = prevRevenue > 0 ? (prevProfit / prevRevenue) * 100 : 0
