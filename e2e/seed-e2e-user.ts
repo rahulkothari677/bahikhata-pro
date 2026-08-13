@@ -154,6 +154,36 @@ export default async function globalSetup(config: FullConfig) {
         .first()
         .waitFor({ state: 'visible', timeout: 60_000 })
 
+      /*
+       * 🔒 2026-08-13: answer the privacy consent dialog once, here.
+       *
+       * This is what was actually failing the last three tests, and it was not
+       * a selector problem at all. "Your Privacy Matters" is a modal shown to
+       * every new session; it covers the screen, so nothing behind it can be
+       * clicked. The page snapshots from the failed run show it sitting on top
+       * with the app unreachable underneath.
+       *
+       * Answered "No thanks" — the choice that turns tracking OFF. A test suite
+       * should not be opting a shop into analytics, and the declining path is
+       * also the one more shopkeepers will take, so it is the state worth
+       * testing against.
+       *
+       * The answer is stored client-side, and storageState captures
+       * localStorage alongside cookies, so every test inherits it and none of
+       * them ever sees the dialog.
+       */
+      const decline = page.getByRole('button', { name: /No thanks/i }).first()
+      if (await decline.isVisible({ timeout: 15_000 }).catch(() => false)) {
+        await decline.click()
+        await decline.waitFor({ state: 'hidden', timeout: 10_000 }).catch(() => {})
+        console.log('[e2e-seed] privacy dialog declined')
+      } else {
+        // Not fatal — it may legitimately not appear — but say so, because if
+        // it silently stops appearing the tests would start failing on modals
+        // again and this line is the clue.
+        console.log('[e2e-seed] no privacy dialog appeared')
+      }
+
       fs.mkdirSync(path.dirname(STORAGE_STATE), { recursive: true })
       await page.context().storageState({ path: STORAGE_STATE })
       console.log(`[e2e-seed] signed in once; session saved to ${STORAGE_STATE}`)

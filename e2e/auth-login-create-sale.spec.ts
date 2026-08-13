@@ -48,8 +48,14 @@ test.describe('Critical Flow: record a sale and find it in the ledger', () => {
   test('a sale reaches the ledger with the right total', async ({ loggedInPage }) => {
     const page = loggedInPage
 
-    // ── Open the sale form ────────────────────────────────────────────────
-    await page.getByRole('button', { name: 'New Sale' }).first().click()
+    /*
+     * ── Open the sale form ───────────────────────────────────────────────
+     * `exact` matters. The dashboard carries three controls whose name starts
+     * "New Sale", including the floating button labelled
+     * "New Sale (long-press for more options)", which opens a MENU rather than
+     * the form. A substring match plus .first() is a coin toss between them.
+     */
+    await page.getByRole('button', { name: 'New Sale', exact: true }).first().click()
     await expect(page.locator('#field-search-product')).toBeVisible({ timeout: 20_000 })
 
     // ── Add the product ───────────────────────────────────────────────────
