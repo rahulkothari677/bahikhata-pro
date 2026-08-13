@@ -38,21 +38,18 @@ type Fixtures = {
 
 export const test = base.extend<Fixtures>({
   loggedInPage: async ({ page }, use) => {
+    /*
+     * No login happens here any more. globalSetup signs in once and saves the
+     * cookies; playwright.config.ts hands them to every test via storageState.
+     *
+     * The first real CI run showed why. 8 tests retried twice meant ~22 logins
+     * for one account in ten minutes, and login is rate limited — 10/min per
+     * address, and since #17, 10 per 15 minutes per account. Early tests signed
+     * in, everything after was refused. That was the limiter working correctly;
+     * the suite was wrong to log in 22 times. A shopkeeper signs in once and
+     * works for hours.
+     */
     await page.goto('/')
-
-    const emailInput = page.locator('input[type="email"], input[name="email"]').first()
-
-    // Already signed in from a reused browser context? Nothing to do.
-    const needsLogin = await emailInput
-      .waitFor({ state: 'visible', timeout: 15_000 })
-      .then(() => true)
-      .catch(() => false)
-
-    if (needsLogin) {
-      await emailInput.fill(E2E_EMAIL)
-      await page.locator('input[type="password"]').first().fill(E2E_PASSWORD)
-      await page.locator('button[type="submit"]').first().click()
-    }
 
     /*
      * The signed-in signal: the bottom navigation only renders once there is a
@@ -62,9 +59,9 @@ export const test = base.extend<Fixtures>({
     const signedIn = page.getByRole('button', { name: 'Dashboard' }).first()
     await signedIn.waitFor({ state: 'visible', timeout: 45_000 }).catch(() => {
       throw new Error(
-        `E2E login failed for ${E2E_EMAIL}. The app did not reach a signed-in ` +
-          `state. Check that e2e/seed-e2e-user.ts ran against the same database ` +
-          `the dev server is using, and that migrations were applied.`,
+        `E2E session not usable for ${E2E_EMAIL}. The saved storageState did not ` +
+          `produce a signed-in page. Check that globalSetup logged in successfully ` +
+          `(see e2e/seed-e2e-user.ts) and that its cookies were written.`,
       )
     })
 

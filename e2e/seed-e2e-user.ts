@@ -20,6 +20,12 @@
  */
 import { PrismaClient } from '@prisma/client'
 import bcrypt from 'bcryptjs'
+import { chromium, type FullConfig } from '@playwright/test'
+import fs from 'fs'
+import path from 'path'
+
+/** Where the signed-in cookies are parked for every test to reuse. */
+export const STORAGE_STATE = path.join(__dirname, '.auth', 'state.json')
 
 /** Must match e2e/fixtures.ts. Both read these, so they cannot drift. */
 export const E2E_EMAIL = 'test@bahikhata.dev'
@@ -33,7 +39,7 @@ export const E2E_PASSWORD = 'test1234'
  * looks like a broken app rather than a missing seed. As globalSetup it runs
  * before every test run, locally and in CI, or the run does not start.
  */
-export default async function globalSetup() {
+export default async function globalSetup(config: FullConfig) {
   const db = new PrismaClient()
   try {
     const password = await bcrypt.hash(E2E_PASSWORD, 10)
@@ -61,6 +67,45 @@ export default async function globalSetup() {
     })
 
     console.log(`[e2e-seed] ready: ${E2E_EMAIL} (user ${user.id})`)
+
+    /*
+     * 🔒 2026-08-13: log in ONCE here and save the cookies, instead of logging
+     * in inside every test.
+     *
+     * The first CI run of this suite proved why that matters. 8 tests, each
+     * retried twice, meant about 22 logins for one account in ten minutes —
+     * and login is rate limited, 10 per minute per address and (since #17) 10
+     * per fifteen minutes per account. So the early tests signed in fine and
+     * everything after was refused. The evidence was a passing test whose trace
+     * shows a fully loaded dashboard, alongside later tests stuck on the login
+     * form with the right credentials typed in.
+     *
+     * That is the rate limiter doing exactly its job. The suite was wrong to
+     * log in 22 times: a shopkeeper signs in once and works for hours. One
+     * login, reused, is both faster and closer to how the app is really used.
+     */
+    const baseURL = config.projects[0]?.use?.baseURL ?? 'http://localhost:3000'
+    const browser = await chromium.launch()
+    try {
+      const page = await browser.newPage({ baseURL })
+      await page.goto('/')
+      await page.locator('input[type="email"], input[name="email"]').first().fill(E2E_EMAIL)
+      await page.locator('input[type="password"]').first().fill(E2E_PASSWORD)
+      await page.locator('button[type="submit"]').first().click()
+
+      // Wait for something the app really renders once signed in. There is no
+      // /dashboard URL to wait for — this is one page at / that swaps views.
+      await page
+        .getByRole('button', { name: 'Dashboard' })
+        .first()
+        .waitFor({ state: 'visible', timeout: 60_000 })
+
+      fs.mkdirSync(path.dirname(STORAGE_STATE), { recursive: true })
+      await page.context().storageState({ path: STORAGE_STATE })
+      console.log(`[e2e-seed] signed in once; session saved to ${STORAGE_STATE}`)
+    } finally {
+      await browser.close()
+    }
   } catch (err) {
     /*
      * Rethrow. Playwright aborts the whole run when globalSetup throws, which

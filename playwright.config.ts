@@ -30,6 +30,16 @@ export default defineConfig({
   reporter: 'html',
   use: {
     baseURL: 'http://localhost:3000',
+    /*
+     * 🔒 2026-08-13 (#22): every test starts already signed in, from the single
+     * login globalSetup performs. Tests used to log in individually — about 22
+     * logins for one account in ten minutes once retries are counted — and
+     * login is rate limited (10/min per address, and since #17, 10 per 15
+     * minutes per account). The early tests passed and the rest were refused,
+     * which is the limiter working correctly against a suite behaving like an
+     * attacker. A shopkeeper signs in once and works for hours.
+     */
+    storageState: './e2e/.auth/state.json',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
