@@ -15,6 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { toast as sonnerToast } from 'sonner'
+import { resolveName } from '@/lib/resolve-name'
 import { formatINR, cn, getInitials } from '@/lib/utils'
 import {
   ShoppingCart, Truck, Plus, X, Search, ChevronDown, ChevronRight,
@@ -1280,12 +1281,47 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
               products={products}
               onTransactionParsed={(data) => {
               // Apply parsed data to the form
+              /*
+               * 🔒 D1: A NAME THEY SAID IS NEVER SILENTLY DROPPED.
+               *
+               * This was `if (matched) setPartyId(matched.id)` with no else.
+               * Say "sold 2 kg sugar to Ramesh", have the name not match, and
+               * the customer simply vanished — the sale kept whatever party
+               * was already selected, or none. A sale recorded against the
+               * wrong person is a debt the right person never sees, and the
+               * shopkeeper had no way to know it happened.
+               *
+               * The matching was also substring-both-ways, which is the weak
+               * lookup the resolver replaces: "Ramesh" would match "Rameshwar
+               * Traders", and one misheard letter matched nothing at all.
+               * Same resolver as Ask uses — one idea of who a name means,
+               * everywhere.
+               */
               if (data.partyName) {
-                const matched = allParties.find(p =>
-                  p.name.toLowerCase().includes(data.partyName.toLowerCase()) ||
-                  data.partyName.toLowerCase().includes(p.name.toLowerCase())
+                const decision = resolveName(
+                  data.partyName,
+                  allParties.map(p => ({ id: p.id, name: p.name })),
                 )
-                if (matched) setPartyId(matched.id)
+
+                if (decision.status === 'exact' || decision.status === 'confident') {
+                  setPartyId(decision.matches[0].candidate.id)
+                } else if (decision.status === 'ambiguous') {
+                  /*
+                   * Several people could be meant. Picking one would be the
+                   * guess this whole resolver exists to refuse — so say so and
+                   * leave the field for them, with the names in the message so
+                   * they know what it is asking between.
+                   */
+                  sonnerToast.warning(
+                    `Which ${decision.matches.map(m => m.candidate.name).join(' or ')}?`,
+                    { description: 'Choose the customer below — I did not want to guess.' },
+                  )
+                } else {
+                  sonnerToast.warning(
+                    `No customer called “${data.partyName}”`,
+                    { description: 'Everything else was filled in. Choose or add the customer below.' },
+                  )
+                }
               }
               if (data.paymentMode) setPaymentMode(data.paymentMode)
               if (data.items?.length > 0) {
