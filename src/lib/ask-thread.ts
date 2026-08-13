@@ -96,6 +96,15 @@ export interface AskAnswerPayload {
   message?: string
   examples?: readonly string[]
   choices?: AskChoice[]
+  /**
+   * The name the shopkeeper actually typed, when this answer is a "which one?"
+   * question about a party.
+   *
+   * 🔒 C2c: needed so that picking one can TEACH the app. It was only ever in
+   * the display string ("2 matches for 'anil'"), and parsing a sentence back
+   * into data is how the two drift apart the first time the wording changes.
+   */
+  searchedFor?: string
   sources?: AskSource[]
   actions?: AskAction[]
   /**

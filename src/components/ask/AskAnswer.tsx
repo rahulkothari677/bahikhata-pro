@@ -277,7 +277,32 @@ export function AskAnswer({
                    picking "P&L Statement" asked "P&L Statement ka kitna baaki
                    hai". The party phrasing stays the default, so the
                    disambiguation path behaves exactly as before. */
-                onPick={c => onAsk(c.ask || `${c.name} ka kitna baaki hai`)}
+                onPick={c => {
+                  /*
+                   * 🔒 C2c: THE TAP IS THE LESSON.
+                   *
+                   * They just told us which Ramesh they meant. Learning from
+                   * that costs them nothing — a settings screen asking them to
+                   * type nicknames would be filled in by nobody, and the
+                   * feature would quietly do nothing forever.
+                   *
+                   * Only for PEOPLE (a compound question's halves have no
+                   * party), and only when we know what was typed. Refusing to
+                   * learn is the common, correct outcome — see
+                   * lib/can-learn-alias — so this is fire-and-forget with no
+                   * toast either way: a message for "we correctly did nothing"
+                   * would teach them to distrust it.
+                   */
+                  const isParty = c.phone !== undefined || c.balance !== undefined
+                  if (isParty && payload.searchedFor) {
+                    void offlineFetch(`/api/parties/${c.id}/aliases`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ said: payload.searchedFor }),
+                    }).catch(() => {})
+                  }
+                  onAsk(c.ask || `${c.name} ka kitna baaki hai`)
+                }}
               />
             ) : null}
 

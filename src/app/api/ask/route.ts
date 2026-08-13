@@ -481,6 +481,9 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({
             answered: false, question, understoodAs: q.understoodAs,
             message: `${enriched.length} matches for “${name}”. Which one?`,
+            // What they typed — so a tap can teach us what they call this
+            // person. See lib/can-learn-alias for when that is allowed.
+            searchedFor: name,
             choices: enriched.map(({ _at, ...choice }) => choice),
           })
         }

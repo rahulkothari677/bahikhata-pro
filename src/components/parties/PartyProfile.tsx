@@ -17,7 +17,7 @@ import { useCountUp } from '@/hooks/use-count-up'
 import { roundMoney } from '@/lib/money'
 import { computeInvoiceDue, planAllocationOldestFirst } from '@/lib/invoice-due'
 import {
-  Phone, Building2, MapPin, User, Plus, ShoppingCart, Truck,
+  Phone, Building2, MapPin, User, Plus, ShoppingCart, Truck, X,
   ArrowDownRight, ArrowUpRight, IndianRupee, Calendar, TrendingUp,
   Receipt, Edit2, Trash2, MessageCircle, Loader2, FileDown, Printer,
   HandCoins,
@@ -84,6 +84,34 @@ export function PartyProfile() {
     },
     enabled: !!selectedPartyId,
   })
+
+  /*
+   * 🔒 C2c: THE NAMES THIS SHOP USES FOR THIS PERSON.
+   *
+   * Learned from a tap in Ask — "which Ramesh?" answered — never typed into a
+   * form. Shown here for one reason above all: a mis-tap teaches the app the
+   * wrong thing, and without somewhere to SEE it and remove it, every future
+   * question about that name quietly goes to the wrong ledger.
+   */
+  const { data: aliasData } = useQuery({
+    queryKey: ['party-aliases', selectedPartyId],
+    queryFn: async () => {
+      const r = await offlineFetch(`/api/parties/${selectedPartyId}/aliases`)
+      return r.json()
+    },
+    enabled: !!selectedPartyId,
+  })
+  const aliases: { id: string; saidAs: string }[] = aliasData?.aliases || []
+
+  const forgetAlias = async (aliasId: string) => {
+    try {
+      await offlineFetch(`/api/parties/${selectedPartyId}/aliases?aliasId=${aliasId}`, { method: 'DELETE' })
+      queryClient.invalidateQueries({ queryKey: ['party-aliases', selectedPartyId] })
+    } catch {
+      // Silent: the list simply does not change, and they can try again. A red
+      // toast for a name that failed to delete is more alarming than the fact.
+    }
+  }
 
   // Fetch shop settings for statement header
   const { data: settingData } = useQuery({
@@ -998,6 +1026,39 @@ export function PartyProfile() {
         />
         )}
       </div>
+
+      {/* 🔒 C2c: what this shop calls them. Only rendered when the app has
+          actually learned something — an empty "Also known as" card would be
+          chrome explaining a feature instead of doing one. */}
+      {aliases.length > 0 && (
+        <Card className="shadow-card border-border/60">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Also known as</CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <p className="text-xs text-muted-foreground mb-2">
+              Names you have used for {party.name}. Ask understands these too.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {aliases.map(a => (
+                <span
+                  key={a.id}
+                  className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-muted/40 pl-3 pr-1 py-1 text-sm"
+                >
+                  {a.saidAs}
+                  <button
+                    onClick={() => forgetAlias(a.id)}
+                    aria-label={`Forget the name ${a.saidAs}`}
+                    className="w-8 h-8 min-w-[2rem] rounded-full flex items-center justify-center hover:bg-muted text-muted-foreground"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </span>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Contact details */}
       {(party.gstin || party.email || party.address) && (
