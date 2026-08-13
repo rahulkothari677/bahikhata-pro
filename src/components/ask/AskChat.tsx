@@ -177,6 +177,26 @@ export function AskChat() {
       if (idx !== null) {
         const chosen = waiting[idx]
         setDraft('')
+
+        /*
+         * 🔒 TEACH FROM THIS PICK TOO.
+         *
+         * Found by testing: saying "pehla" confirmed the choice but taught
+         * the app nothing, because learning was wired only to the TAP handler
+         * in AskAnswer. Two ways to confirm the same thing, one of which
+         * learned — the "two things doing one thing" shape again, and the one
+         * that silently did less was the voice path, which is the one this
+         * whole feature is for.
+         */
+        const isParty = chosen.phone !== undefined || chosen.balance !== undefined
+        if (isParty && lastAnswer?.payload?.searchedFor) {
+          void offlineFetch(`/api/parties/${chosen.id}/aliases`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ said: lastAnswer.payload.searchedFor }),
+          }).catch(() => {})
+        }
+
         // Ask the question that choice stands for — the same path a tap takes,
         // so there is one way to follow a choice and not two.
         void ask(chosen.ask || `${chosen.name} ka kitna baaki hai`)

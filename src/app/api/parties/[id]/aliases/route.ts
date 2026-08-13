@@ -4,6 +4,7 @@ import { getAuthContext } from '@/lib/get-auth'
 import { canAccessModule } from '@/lib/staff-permissions'
 import { apiError } from '@/lib/api-error'
 import { canLearnAlias } from '@/lib/can-learn-alias'
+import { normalise } from '@/lib/resolve-name'
 
 /**
  * The names THIS shop uses for a party — C2c.
@@ -88,26 +89,35 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (!party) return NextResponse.json({ error: 'Party not found' }, { status: 404 })
 
     /*
-     * ONLY THE NAMES THAT COULD CONFLICT — not every party in the shop.
+     * NAMES THAT COULD CONFLICT — FOUND IN THE SAME SPELLING THE RULE USES.
      *
-     * My first version read every name, which the unbounded-query guard
-     * rightly rejected: a shop with 20,000 customers would load 20,000 rows
-     * to answer one yes/no question. Filtering by prefix is both bounded and
-     * more precise, because the dangerous case IS a literal prefix — "anil"
-     * with an Anil Kumar and an Anil Sharma.
+     * 🔒 Found live, and it had already gone wrong once: the app learned
+     * "aneel" -> Anil Kumar in a shop that has BOTH an Anil Kumar and an Anil
+     * Sharma. "aneel" folds to "anil", which is precisely the ambiguous term
+     * the rule exists to refuse — but the conflict query searched for parties
+     * whose RAW name starts with "aneel", found none, and reported no
+     * conflict.
      *
-     * The case this misses is a name that only collides after spelling is
-     * folded ("aneel" against "Anil"), and missing it is harmless: that alias
-     * would point at the same person the ordinary matching already finds.
-     * The destructive case — learning a prefix that genuinely means two
-     * different people — is caught exactly.
+     * Filtering in raw spelling while deciding in folded spelling is the same
+     * mistake as the pg_trgm probe one layer down, and it produced the exact
+     * outcome the rule was written to prevent: a taught name that hides a
+     * real customer.
+     *
+     * So the conflict search now uses the SAME normalised probe and the same
+     * similarity narrowing as the lookup. One spelling, everywhere a name is
+     * compared.
      */
-    const firstWord = said.split(/\s+/)[0] || said
-    const couldConflict = await db.party.findMany({
-      where: { userId, deletedAt: null, name: { startsWith: firstWord, mode: 'insensitive' } },
-      select: { name: true },
-      take: 20,
-    })
+    const probe = normalise(said)
+    const couldConflict = probe
+      ? await db.$queryRaw<Array<{ name: string }>>`
+          SELECT name FROM "Party"
+          WHERE "userId" = ${userId}
+            AND "deletedAt" IS NULL
+            AND similarity(lower(name), ${probe}) > 0.2
+          ORDER BY similarity(lower(name), ${probe}) DESC
+          LIMIT 20
+        `
+      : []
 
     const verdict = canLearnAlias({ said, allPartyNames: couldConflict.map(p => p.name) })
     if (!verdict.learn) {

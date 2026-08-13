@@ -59,6 +59,49 @@ describe('the tap teaches', () => {
   })
 })
 
+describe('BOTH ways of confirming teach — found live', () => {
+  const chat = read('src/components/ask/AskChat.tsx')
+
+  test('saying "pehla" teaches, not just tapping the row', () => {
+    /*
+     * THE BUG THIS PINS, and it was invisible until tested end to end.
+     * Learning was wired only to the tap handler in AskAnswer, so confirming
+     * by VOICE — the path this whole feature exists for — silently taught
+     * nothing. Two ways to confirm one thing, one of which quietly did less.
+     */
+    expect(chat).toMatch(/aliases`, \{/)
+    expect(chat).toContain('lastAnswer?.payload?.searchedFor')
+  })
+
+  test('and it too is people-only', () => {
+    expect(chat).toMatch(/const isParty = chosen\.phone !== undefined \|\| chosen\.balance !== undefined/)
+  })
+})
+
+describe('one spelling everywhere a name is compared', () => {
+  test('the conflict check uses the same normalised probe as the lookup', () => {
+    /*
+     * FOUND LIVE, after it had already gone wrong: the app learned
+     * "aneel" -> Anil Kumar in a shop with BOTH an Anil Kumar and an Anil
+     * Sharma. "aneel" folds to "anil" — precisely the ambiguous term the rule
+     * refuses — but the conflict query searched RAW names starting with
+     * "aneel", found none, and reported no conflict.
+     *
+     * Filtering in one spelling while deciding in another is the same mistake
+     * as the pg_trgm probe one layer down. Same fix: normalise both.
+     */
+    const api = read('src/app/api/parties/[id]/aliases/route.ts')
+    expect(api).toContain('normalise(said)')
+    expect(api).toMatch(/similarity\(lower\(name\)/)
+    expect(api).not.toMatch(/startsWith: firstWord/)
+  })
+
+  test('the party lookup probes with the folded form too', () => {
+    const route = read('src/app/api/ask/route.ts')
+    expect(route).toContain('const probe = normalise(name)')
+  })
+})
+
 describe('the shopkeeper can see and undo it', () => {
   const profile = read('src/components/parties/PartyProfile.tsx')
 
