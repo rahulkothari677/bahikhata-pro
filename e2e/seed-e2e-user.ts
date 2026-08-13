@@ -40,7 +40,25 @@ export const E2E_PASSWORD = 'test1234'
  * unit tests' job, and a tax fraction here would only make a failure ambiguous.
  * 2 × ₹150 must appear as ₹300, and nothing else can explain it.
  */
-export const E2E_PRODUCT = { name: 'E2E Test Widget', price: 150, gstRate: 0 }
+export const E2E_PRODUCT = {
+  name: 'E2E Test Widget',
+  /**
+   * ₹150, written as PAISE.
+   *
+   * This file uses a bare PrismaClient. The app wraps its client in a money
+   * extension that turns rupees into paise on the way in, and this one is not
+   * wrapped — so whatever number goes here lands in the column verbatim.
+   *
+   * Seeded as 150 the first time, and the test caught it: the picker showed
+   * "₹1.50/pcs" and two of them came to ₹3, not ₹300. That is the same
+   * rupees-versus-paise confusion this audit has been chasing all along, and
+   * it is a good sign that a test written this week found it in an hour.
+   */
+  pricePaise: 15_000,
+  /** What the shopkeeper sees, and what the test asserts against. */
+  priceRupees: 150,
+  gstRate: 0,
+}
 export const E2E_CUSTOMER = { name: 'E2E Test Customer' }
 
 /**
@@ -91,14 +109,14 @@ export default async function globalSetup(config: FullConfig) {
     if (existingProduct) {
       await db.product.update({
         where: { id: existingProduct.id },
-        data: { salePrice: E2E_PRODUCT.price, gstRate: E2E_PRODUCT.gstRate, currentStock: 1000 },
+        data: { salePrice: E2E_PRODUCT.pricePaise, gstRate: E2E_PRODUCT.gstRate, currentStock: 1000 },
       })
     } else {
       await db.product.create({
         data: {
           userId: user.id,
           name: E2E_PRODUCT.name,
-          salePrice: E2E_PRODUCT.price,
+          salePrice: E2E_PRODUCT.pricePaise,
           gstRate: E2E_PRODUCT.gstRate,
           // Plenty, so the sale is never blocked by an out-of-stock guard.
           openingStock: 1000,

@@ -29,7 +29,7 @@ import { E2E_PRODUCT, E2E_CUSTOMER } from './seed-e2e-user'
  */
 
 const QTY = 2
-const EXPECTED_TOTAL = E2E_PRODUCT.price * QTY // 300
+const EXPECTED_TOTAL = E2E_PRODUCT.priceRupees * QTY // 300 — what the shopkeeper sees
 
 test.describe('Critical Flow: record a sale and find it in the ledger', () => {
   test('the dashboard loads for a signed-in shopkeeper', async ({ loggedInPage }) => {
