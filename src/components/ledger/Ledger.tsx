@@ -2,6 +2,7 @@
 
 import { useQuery, useQueryClient, useInfiniteQuery, keepPreviousData } from '@tanstack/react-query'
 import { useState, useEffect, useRef } from 'react'
+import { listCountLabel } from '@/lib/list-count-label'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -745,8 +746,17 @@ export function Ledger({ type }: { type: LedgerType }) {
               at a real 44px touch target. */}
           {sorted.length > 0 && !bulkMode && (
             <div className="mt-3 flex items-center justify-between gap-3">
+              {/* 🔒 #73: how many MATCHED, not how many are loaded. This read
+                  `sorted.length` — the size of the page — so searching a big
+                  ledger showed "5 entries" and looked as though only the
+                  loaded rows had been searched. They had not been: the search
+                  runs in the database across every record. */}
               <span className="text-xs text-muted-foreground">
-                {sorted.length} {sorted.length === 1 ? 'entry' : 'entries'}
+                {listCountLabel({
+                  shown: sorted.length,
+                  matched: data?.matched,
+                  matchedIsExact: data?.matchedIsExact,
+                })}
               </span>
               <button
                 onClick={() => setBulkMode(true)}

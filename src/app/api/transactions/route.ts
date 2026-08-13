@@ -214,7 +214,37 @@ export async function GET(req: NextRequest) {
     // 🔒 AUDIT V25 FIX BUG-031 (Batch 5): Was withCache({ maxAge: 30, swr: 300 }).
     // Money-bearing endpoint — transaction totals + profit must always be fresh.
     // A shopkeeper who just created a sale would see stale ledger for up to 30s.
-    return noStore({ transactions: finalTransactions, hasMore, nextCursor })
+    /*
+     * 🔒 #73: HOW MANY MATCHED, NOT HOW MANY WE SENT.
+     *
+     * Rahul searched the sales ledger, saw "5 entries", and reasonably
+     * concluded the app had only searched the fifty rows on screen. It had
+     * not — the search runs in the database across every record — but the
+     * only number we returned was the size of the page, so no screen could
+     * say otherwise. A count that makes someone doubt their own books is its
+     * own kind of wrong answer.
+     *
+     * COUNTED WITH A CEILING, ON PURPOSE. A bare `count(*)` over a filtered
+     * set of millions is itself slow, and trading a misleading number for a
+     * slow screen is not a fix. We ask for at most CAP+1 ids: at or under the
+     * cap the number is exact, above it the client says "500+", which is
+     * true, useful and cheap. Ids only, so the rows are never materialised.
+     */
+    const COUNT_CAP = 500
+    const counted = await db.transaction.findMany({
+      where,
+      select: { id: true },
+      take: COUNT_CAP + 1,
+    })
+    const matchedIsExact = counted.length <= COUNT_CAP
+
+    return noStore({
+      transactions: finalTransactions,
+      hasMore,
+      nextCursor,
+      matched: matchedIsExact ? counted.length : COUNT_CAP,
+      matchedIsExact,
+    })
   } catch (error) {
     // 🔒 V7 H4: Return 503 on DB error, NOT an empty 200. Was: returned
     // { transactions: [] } → user saw empty ledger during a DB blip and
