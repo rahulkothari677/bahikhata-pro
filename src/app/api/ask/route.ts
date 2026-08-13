@@ -462,12 +462,26 @@ export async function POST(req: NextRequest) {
               balance: stats.balance,
               lastInvoiceNo: last?.invoiceNo ?? null,
               lastActivity: last?.date ? relativeDay(last.date) : null,
+              // Kept only to sort by; stripped before the reply goes out.
+              _at: last?.date ? new Date(last.date).getTime() : 0,
             }
           }))
+
+          /*
+           * 🔒 C2b: MOST RECENTLY DEALT WITH, FIRST.
+           *
+           * The order was whatever the database returned, which is arbitrary
+           * from the shopkeeper's side. Two customers called Ramesh are
+           * identical on the page — the only thing that tells them apart is
+           * which one they saw last week, and that is a stored fact, not a
+           * guess. The same rule the resolver core uses to break ties.
+           */
+          enriched.sort((a, b) => b._at - a._at)
+
           return NextResponse.json({
             answered: false, question, understoodAs: q.understoodAs,
             message: `${enriched.length} matches for “${name}”. Which one?`,
-            choices: enriched,
+            choices: enriched.map(({ _at, ...choice }) => choice),
           })
         }
         const p = parties[0]

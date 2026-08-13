@@ -49,6 +49,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { Sparkles, Menu, Plus, ArrowLeft, Lightbulb, X } from 'lucide-react'
 import { offlineFetch, isOnline } from '@/lib/offline-fetch'
 import { askFailureMessage } from '@/lib/ask-offline-message'
+import { pickFromChoices } from '@/lib/pick-from-choices'
 import { AskComposer, type ComposerMode } from '@/components/ask/AskComposer'
 import { AskAnswer } from '@/components/ask/AskAnswer'
 import { AskDrawer } from '@/components/ask/AskDrawer'
@@ -153,6 +154,36 @@ export function AskChat() {
   const ask = useCallback(async (text: string, viaVoice = false) => {
     const t = text.trim()
     if (!t) return
+
+    /*
+     * 🔒 C2b: "pehla" PICKS, it does not ask.
+     *
+     * When two customers share a name the app offers both rather than
+     * guessing. That refusal is right, but it leaves the shopkeeper with
+     * something to do — and if they asked by VOICE their hands are busy.
+     * Making them look at the phone and tap accurately is how the safe path
+     * becomes the annoying one, and an annoying safe path is how people learn
+     * to avoid the thing that protects them.
+     *
+     * Only when a list is actually waiting: "1" and "do" are ordinary words
+     * otherwise, and swallowing a real question to answer a different one is
+     * the failure this whole feature exists to avoid.
+     */
+    const lastAnswer = [...messagesRef.current].reverse()
+      .find(m => m.role === 'answer') as Extract<AskMessage, { role: 'answer' }> | undefined
+    const waiting = lastAnswer?.payload?.choices || []
+    if (waiting.length > 1) {
+      const idx = pickFromChoices(t, waiting.length)
+      if (idx !== null) {
+        const chosen = waiting[idx]
+        setDraft('')
+        // Ask the question that choice stands for — the same path a tap takes,
+        // so there is one way to follow a choice and not two.
+        void ask(chosen.ask || `${chosen.name} ka kitna baaki hai`)
+        return
+      }
+    }
+
     setDraft('')
     setTipsOpen(false)
     setBusy(true)

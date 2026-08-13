@@ -52,7 +52,7 @@ function SourceIcon({ kind }: { kind: AskSource['kind'] }) {
 function ChoiceList({ choices, onPick }: { choices: AskChoice[]; onPick: (c: AskChoice) => void }) {
   return (
     <div className="mt-2 rounded-xl border border-border/60 divide-y divide-border overflow-hidden">
-      {choices.map(c => {
+      {choices.map((c, i) => {
         /*
          * 🔒 B2: NOT EVERY CHOICE IS A PERSON.
          *
@@ -70,6 +70,14 @@ function ChoiceList({ choices, onPick }: { choices: AskChoice[]; onPick: (c: Ask
           onClick={() => onPick(c)}
           className="w-full text-left px-3 py-3 min-h-[3rem] hover:bg-muted flex items-start gap-3"
         >
+          {/* 🔒 C2b: THE NUMBER, so it can be picked without touching the
+              screen. Someone who asked by voice has their hands busy, and
+              making them look at the phone and tap accurately is how the safe
+              path — offering both Rameshes instead of guessing — becomes the
+              annoying one. Saying "pehla" now works. */}
+          <span className="w-5 text-xs font-semibold text-muted-foreground tabular-nums flex-shrink-0 mt-0.5">
+            {i + 1}.
+          </span>
           {isPerson ? (
           <span className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center text-sm font-bold flex-shrink-0">
             {c.name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
