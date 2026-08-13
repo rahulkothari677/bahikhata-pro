@@ -1329,12 +1329,44 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                 // 🔒 V12: Match to inventory, then normalize the spoken quantity
                 // into the product's (or base) unit so "500 gm @ ₹20/kg" becomes
                 // 0.5 kg × ₹20 = ₹10 instead of 500 × 20 = ₹10,000.
+                /*
+                 * 🔒 D2 (#56): WHY EVERY HINDI ITEM CAME OUT AT ₹0.
+                 *
+                 * The lookup was a substring test against Latin product names,
+                 * so "आम" matched nothing — Devanagari and Latin share no
+                 * characters. With no product matched and no price spoken, the
+                 * line below fell to `unitPrice: 0`, and the toast still said
+                 * "Added 2 items to sale". A success message for a line worth
+                 * nothing, in the app's most-used entry path.
+                 *
+                 * Same resolver as Ask and D1 — it transliterates, folds the
+                 * spelling variants Hindi-in-Latin always has (doodh/dudh,
+                 * chawal/chaval) and refuses when two products could be meant.
+                 */
+                const unmatched: string[] = []
                 const newItems = data.items.map((item: any) => {
-                  const itemName = (item.productName || item.name || '').toLowerCase()
-                  const product = item.productId
+                  const spokenName = item.productName || item.name || ''
+                  let product = item.productId
                     ? products.find(p => p.id === item.productId)
-                    : (products.find(p => p.name?.toLowerCase() === itemName) ||
-                       products.find(p => p.name?.toLowerCase().includes(itemName) || itemName.includes(p.name?.toLowerCase())))
+                    : undefined
+
+                  if (!product && spokenName) {
+                    const decision = resolveName(
+                      spokenName,
+                      products.map(p => ({ id: p.id, name: p.name })),
+                    )
+                    if (decision.status === 'exact' || decision.status === 'confident') {
+                      product = products.find(p => p.id === decision.matches[0].candidate.id)
+                    } else {
+                      /*
+                       * Ambiguous or nothing. The line is still ADDED, because
+                       * dropping what they said is the D1 mistake — but it is
+                       * named in the warning below rather than slipped in at
+                       * zero and called a success.
+                       */
+                      unmatched.push(spokenName)
+                    }
+                  }
                   const spokenPrice = Number(item.unitPrice) || 0
                   const resolved = resolveEnteredQuantity(
                     Number(item.quantity) || 1,
@@ -1352,7 +1384,23 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                   }
                 })
                 setItems(prev => [...prev, ...newItems])
-                sonnerToast.success(`Added ${newItems.length} items to sale`)
+
+                /*
+                 * NEVER CALL A ₹0 LINE A SUCCESS. The count is what actually
+                 * matched; anything else is named so the shopkeeper can price
+                 * it before saving, instead of discovering a zero later in a
+                 * report.
+                 */
+                const matchedCount = newItems.length - unmatched.length
+                if (matchedCount > 0) {
+                  sonnerToast.success(`Added ${matchedCount} item${matchedCount === 1 ? '' : 's'} to sale`)
+                }
+                if (unmatched.length > 0) {
+                  sonnerToast.warning(
+                    `Not in your products: ${unmatched.join(', ')}`,
+                    { description: 'Added with no price — set it, or pick the product, before saving.' },
+                  )
+                }
               }
               setShowVoiceEntry(false)
               sonnerToast.success('Voice entry applied! Review and save.')
@@ -1701,12 +1749,26 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                                 unit: item.unit || 'pcs',
                               }
                             }
-                            const itemName = (item.productName || item.name || '').toLowerCase()
-                            const product = products.find(p =>
-                              p.name?.toLowerCase() === itemName
-                            ) || products.find(p =>
-                              p.name?.toLowerCase().includes(itemName) || itemName.includes(p.name?.toLowerCase())
-                            )
+                            /*
+                             * 🔒 D2/D3: the SAME substring match, in the bill
+                             * scan. Found by D2's guard four hundred lines from
+                             * where I was working — which is the guard doing
+                             * its job: I would not have looked here.
+                             *
+                             * Lower stakes than voice, because a scanned bill
+                             * usually carries its own price and short-circuits
+                             * above. But when it does not, this fell through to
+                             * the same ₹0 — so it gets the same resolver rather
+                             * than a note in the tasklog saying it should.
+                             */
+                            const scannedName = item.productName || item.name || ''
+                            const scanMatch = scannedName
+                              ? resolveName(scannedName, products.map(p => ({ id: p.id, name: p.name })))
+                              : null
+                            const product = scanMatch
+                              && (scanMatch.status === 'exact' || scanMatch.status === 'confident')
+                              ? products.find(p => p.id === scanMatch.matches[0].candidate.id)
+                              : undefined
                             return {
                               productId: product?.id || '',
                               productName: item.productName || item.name,
