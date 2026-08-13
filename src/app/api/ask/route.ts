@@ -20,7 +20,7 @@ import { splitCompound } from '@/lib/ask-compound'
 import { findDestinations } from '@/lib/nav-match'
 import { NAV_REGISTRY, filterByPermissions, getById } from '@/lib/nav-registry'
 import { withNavAction } from '@/lib/ask-nav-action'
-import { resolveName, normalise, transliterate } from '@/lib/resolve-name'
+import { resolveName, normalise } from '@/lib/resolve-name'
 
 /**
  * "Ask your books" — A MODEL CHOOSES THE QUESTION. IT NEVER TOUCHES THE MONEY.
@@ -472,7 +472,23 @@ export async function POST(req: NextRequest) {
              * thresholds, so being loose here costs a few rows and being
              * strict here would hide the answer entirely.
              */
-            const probe = transliterate(name).toLowerCase()
+            /*
+             * PROBE WITH THE FOLDED FORM, not the raw one.
+             *
+             * Found by testing live: "aneel" still returned "no customer".
+             * pg_trgm compared "aneel" against "anil kumar" — almost no
+             * trigrams in common — so the database returned nothing and the
+             * resolver never got to apply the ee→i fold that would have
+             * matched it. The narrowing step has to speak the same spelling
+             * as the deciding step, or it filters out the very rows the
+             * decision was built to handle.
+             *
+             * `normalise` is that shared spelling: transliterate, lower-case,
+             * fold, drop honorifics. Comparing a folded probe against a raw
+             * column is deliberately lopsided — it widens the net, and
+             * widening is safe here because resolveName still decides.
+             */
+            const probe = normalise(name)
             const near = probe
               ? await db.$queryRaw<Array<{ id: string; name: string; type: string; phone: string | null }>>`
                   SELECT id, name, type, phone
