@@ -159,7 +159,40 @@ export default async function globalSetup(config: FullConfig) {
     const baseURL = config.projects[0]?.use?.baseURL ?? 'http://localhost:3000'
     const browser = await chromium.launch()
     try {
-      const page = await browser.newPage({ baseURL })
+      const context = await browser.newContext({ baseURL })
+
+      /*
+       * 🔒 2026-08-13: record the privacy answer BEFORE any page script runs.
+       *
+       * "Your Privacy Matters" is shown to every new session and covers the
+       * screen, so nothing behind it can be clicked. It was failing three tests
+       * — the fixture could not find the Dashboard button, the product could
+       * not be clicked, clicks timed out — three symptoms, one cause.
+       *
+       * Two earlier attempts were both races and both lost:
+       *   - clicking the dialog: it had not rendered yet, so the run logged
+       *     "no privacy dialog appeared" and carried on without answering.
+       *   - page.evaluate after login: the app was mid-navigation, so the
+       *     execution context was destroyed and globalSetup threw.
+       *
+       * addInitScript has no timing at all. It runs before the page's own
+       * scripts on EVERY navigation, so the value is already there the first
+       * time ConsentModal looks.
+       *
+       * 'false' is the DECLINE that the component itself writes (see
+       * src/components/common/ConsentModal.tsx, which shows the dialog only
+       * when this key is null). A test suite should not opt a shop into
+       * analytics, and declining is the state more shopkeepers will be in.
+       */
+      await context.addInitScript(() => {
+        try {
+          localStorage.setItem('bahikhata-analytics-consent', 'false')
+        } catch {
+          /* private mode or storage disabled — the dialog is not worth failing over */
+        }
+      })
+
+      const page = await context.newPage()
       await page.goto('/')
       await page.locator('input[type="email"], input[name="email"]').first().fill(E2E_EMAIL)
       await page.locator('input[type="password"]').first().fill(E2E_PASSWORD)
@@ -190,24 +223,6 @@ export default async function globalSetup(config: FullConfig) {
        * localStorage alongside cookies, so every test inherits it and none of
        * them ever sees the dialog.
        */
-      /*
-       * Set the stored answer directly rather than clicking the dialog.
-       *
-       * Clicking it was tried first and did not work: the run logged "no
-       * privacy dialog appeared" because at that instant it had not rendered
-       * yet — it arrives a beat after the dashboard settles. Waiting for it
-       * would be racing a modal, and the race is what the tests kept losing.
-       *
-       * ConsentModal reads exactly this key (src/components/common/ConsentModal.tsx)
-       * and shows itself only when the value is null. 'false' is the DECLINE
-       * that the component itself writes when a shopkeeper says no — the same
-       * state, reached the same way, just without the timing.
-       */
-      await page.evaluate(() => {
-        localStorage.setItem('bahikhata-analytics-consent', 'false')
-      })
-      console.log('[e2e-seed] analytics consent recorded as declined')
-
       fs.mkdirSync(path.dirname(STORAGE_STATE), { recursive: true })
       await page.context().storageState({ path: STORAGE_STATE })
       console.log(`[e2e-seed] signed in once; session saved to ${STORAGE_STATE}`)
