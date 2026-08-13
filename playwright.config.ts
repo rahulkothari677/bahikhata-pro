@@ -13,6 +13,16 @@ import { defineConfig, devices } from '@playwright/test'
  */
 export default defineConfig({
   testDir: './e2e',
+  /*
+   * 🔒 2026-08-13 (#22): creates the account the tests log in as.
+   *
+   * Every E2E test used to fail at the same point — setting up `loggedInPage` —
+   * because no such user existed. fixtures.ts said so itself: "For CI, we'd
+   * create this user in a global setup script." This is that script, and it is
+   * globalSetup rather than a CI step so it cannot be reordered, skipped, or
+   * forgotten in another workflow. If it fails, the run does not start.
+   */
+  globalSetup: './e2e/seed-e2e-user.ts',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
