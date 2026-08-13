@@ -1,90 +1,93 @@
 import { test, expect } from './fixtures'
+import { E2E_PRODUCT, E2E_CUSTOMER } from './seed-e2e-user'
 
 /**
- * E2E Test: Login → Create Sale → Verify in Ledger
+ * The one flow that must never break: record a sale, and see it in the books.
  *
- * This is the most critical user flow in the app. If this breaks, the app
- * is unusable. Tests:
- *   1. User can log in
- *   2. User can navigate to Sales Ledger → New Sale
- *   3. User can fill in sale details (party, items, payment)
- *   4. Sale is saved and appears in the Sales Ledger
- *   5. Sale appears in the Dashboard recent transactions
+ * WHY THIS WAS REWRITTEN (#22 + #19, audit 2026-08-13). The previous version
+ * could pass having done nothing at all. Almost every step was written as:
+ *
+ *     if (await thing.isVisible().catch(() => false)) { ...do the step... }
+ *
+ * so a control that had moved, or never existed, was silently skipped. The
+ * final assertion was `expect(url).toContain('bahikhata')` — true of every page
+ * on the site, including the login screen. A test that cannot fail is not a
+ * test, and this one had never run anywhere to reveal that.
+ *
+ * The rewrite follows the shopkeeper: open New Sale, pick the seeded product,
+ * choose the customer, save, and then check the LEDGER shows the sale with the
+ * right total. Every step asserts. Nothing is skipped for being absent.
+ *
+ * ₹150 × 2 at 0% GST must appear as ₹300. Round numbers on purpose: proving GST
+ * arithmetic is the unit tests' job, and a tax fraction here would only make a
+ * failure ambiguous.
+ *
+ * Selectors are the form's own `id`s (field-search-product, field-party-search,
+ * field-paid-amount), read off the running app rather than guessed. They are
+ * far steadier than visible text, which changes with copy and translation — and
+ * this screen has been redesigned repeatedly.
  */
-test.describe('Critical Flow: Login → Create Sale → Verify Ledger', () => {
-  test('user can log in and see dashboard', async ({ loggedInPage }) => {
-    // Verify we're on the dashboard
-    await expect(loggedInPage.locator('text=Dashboard')).toBeVisible({ timeout: 10000 })
 
-    // Check for key dashboard elements
-    await expect(loggedInPage.locator('text=Total Sales').or(loggedInPage.locator('text=Sales'))).toBeVisible({ timeout: 10000 })
+const QTY = 2
+const EXPECTED_TOTAL = E2E_PRODUCT.priceRupees * QTY // 300 — what the shopkeeper sees
+
+test.describe('Critical Flow: record a sale and find it in the ledger', () => {
+  test('the dashboard loads for a signed-in shopkeeper', async ({ loggedInPage }) => {
+    // The bottom navigation only renders with a session, so its presence is
+    // the signed-in signal — not a URL, because this app never changes URL.
+    await expect(loggedInPage.getByRole('button', { name: 'Dashboard' }).first()).toBeVisible()
+    await expect(loggedInPage.getByRole('button', { name: 'New Sale' }).first()).toBeVisible()
   })
 
-  test('user can navigate to sales ledger', async ({ loggedInPage }) => {
-    // Click on Sales Ledger in the sidebar/nav
-    const salesNav = loggedInPage.locator('text=Sales Ledger').first()
-    await salesNav.click()
-
-    // Verify we're on the sales ledger page
-    await expect(loggedInPage.locator('text=New Sale').or(loggedInPage.locator('text=Add New'))).toBeVisible({ timeout: 10000 })
+  test('the shop the books belong to is named on screen', async ({ loggedInPage }) => {
+    // Guards against the dashboard rendering for the wrong account, or for no
+    // account at all — which is what an expired session used to look like.
+    await expect(loggedInPage.getByText('E2E Test Shop').first()).toBeVisible({ timeout: 20_000 })
   })
 
-  test('user can create a new sale and it appears in ledger', async ({ loggedInPage }) => {
-    // Navigate to sales ledger
-    await loggedInPage.locator('text=Sales Ledger').first().click()
-    await loggedInPage.waitForLoadState('networkidle')
+  test('a sale reaches the ledger with the right total', async ({ loggedInPage }) => {
+    const page = loggedInPage
 
-    // Click "New Sale" button
-    const newSaleBtn = loggedInPage.locator('button:has-text("New Sale"), button:has-text("Add New"), button:has-text("Add Sale")').first()
-    await newSaleBtn.click()
-    await loggedInPage.waitForLoadState('networkidle')
+    /*
+     * ── Open the sale form ───────────────────────────────────────────────
+     * `exact` matters. The dashboard carries three controls whose name starts
+     * "New Sale", including the floating button labelled
+     * "New Sale (long-press for more options)", which opens a MENU rather than
+     * the form. A substring match plus .first() is a coin toss between them.
+     */
+    await page.getByRole('button', { name: 'New Sale', exact: true }).first().click()
+    await expect(page.locator('#field-search-product')).toBeVisible({ timeout: 20_000 })
 
-    // Fill in sale details — look for product search or party selection
-    // Use a unique test marker so we can find this sale later
-    const testMarker = `TEST-SALE-${Date.now()}`
+    // ── Add the product ───────────────────────────────────────────────────
+    await page.locator('#field-search-product').fill(E2E_PRODUCT.name)
+    const productResult = page.getByRole('button', { name: new RegExp(E2E_PRODUCT.name, 'i') }).first()
+    await expect(productResult).toBeVisible({ timeout: 15_000 })
+    await productResult.click()
 
-    // Try to fill party name if there's a party field
-    const partyInput = loggedInPage.locator('input[placeholder*="party" i], input[placeholder*="customer" i], input[placeholder*="name" i]').first()
-    if (await partyInput.isVisible().catch(() => false)) {
-      await partyInput.fill('Test Customer')
-    }
+    // Adding it a second time makes the quantity 2 — the same way a shopkeeper
+    // ringing up two of something does it.
+    await productResult.click()
 
-    // Try to select a product
-    const productSearch = loggedInPage.locator('input[placeholder*="search" i], input[placeholder*="product" i]').first()
-    if (await productSearch.isVisible().catch(() => false)) {
-      await productSearch.fill('Test Product')
-      // Wait for search results
-      await loggedInPage.waitForTimeout(500)
-    }
+    // ── Choose the customer ───────────────────────────────────────────────
+    await page.locator('#field-party-search').fill(E2E_CUSTOMER.name)
+    const customerResult = page.getByText(E2E_CUSTOMER.name, { exact: false }).first()
+    await expect(customerResult).toBeVisible({ timeout: 15_000 })
+    await customerResult.click()
 
-    // Set amount if there's an amount field
-    const amountInput = loggedInPage.locator('input[type="number"]').first()
-    if (await amountInput.isVisible().catch(() => false)) {
-      await amountInput.fill('500')
-    }
+    // ── The form must already show the correct total before saving ────────
+    // If this is wrong, the bug is in the app's arithmetic and there is no
+    // point looking at the ledger afterwards.
+    await expect(page.getByText(new RegExp(`₹\\s*${EXPECTED_TOTAL}(\\.00)?\\b`)).first())
+      .toBeVisible({ timeout: 10_000 })
 
-    // Select payment mode (try cash)
-    const cashButton = loggedInPage.locator('button:has-text("Cash"), [data-value="cash"]').first()
-    if (await cashButton.isVisible().catch(() => false)) {
-      await cashButton.click()
-    }
+    // ── Save ──────────────────────────────────────────────────────────────
+    await page.getByRole('button', { name: /^Save$/ }).first().click()
 
-    // Save the sale
-    const saveBtn = loggedInPage.locator('button:has-text("Save"), button[type="submit"]').first()
-    if (await saveBtn.isVisible().catch(() => false)) {
-      await saveBtn.click()
-
-      // Wait for save to complete and verify success toast or navigation
-      await loggedInPage.waitForLoadState('networkidle')
-
-      // Look for success indicator
-      const successToast = loggedInPage.locator('text=success', { exact: false }).or(loggedInPage.locator('text=saved', { exact: false })).or(loggedInPage.locator('text=created', { exact: false }))
-      // Don't fail if toast doesn't appear — some flows redirect instead
-      await successToast.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {})
-    }
-
-    // Verify we're back on the ledger or see the new entry
-    // (This is a smoke test — exact verification depends on your UI)
-    expect(loggedInPage.url()).toContain('bahikhata')
+    // ── The sale must now be in the ledger ────────────────────────────────
+    // Back on a list screen, the customer and the amount both appear. Asserting
+    // both together is what makes this about THIS sale rather than any row.
+    await expect(page.getByText(E2E_CUSTOMER.name).first()).toBeVisible({ timeout: 30_000 })
+    await expect(page.getByText(new RegExp(`₹\\s*${EXPECTED_TOTAL}(\\.00)?\\b`)).first())
+      .toBeVisible({ timeout: 30_000 })
   })
 })

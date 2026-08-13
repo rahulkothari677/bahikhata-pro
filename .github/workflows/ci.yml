@@ -36,6 +36,12 @@ jobs:
         # source is clean today, so an error here is a genuine new problem.
         run: npm run lint
 
+      - name: Type check the E2E suite
+        # tsconfig.json EXCLUDES e2e/, so the main tsc never saw these files. A
+        # wrong Prisma field name there compiled fine and failed ten minutes
+        # later inside a CI run. Seconds here instead. (#22, 2026-08-13)
+        run: npx tsc -p tsconfig.e2e.json --noEmit
+
       - name: Run TypeScript type check
         run: npx tsc --noEmit
         env:
@@ -58,10 +64,51 @@ jobs:
           DATABASE_URL: 'postgresql://dummy:dummy@localhost:5432/dummy'
           NEXTAUTH_URL: 'http://localhost:3000'
 
+  # 🔒 2026-08-13 (#22): this job now runs on PUSH as well as on pull requests,
+  # and against a REAL database.
+  #
+  # It was gated to `pull_request` only. Everything in this repo is pushed
+  # straight to main, so it had never once run — and it could not have passed if
+  # it had. Two faults kept it inert:
+  #
+  #   1. DATABASE_URL was `file:./e2e-test.db`, a SQLite path against a Postgres
+  #      schema. Nothing could connect.
+  #   2. No test user was ever created. e2e/fixtures.ts said so in its own
+  #      comment — "For CI, we'd create this user in a global setup script" —
+  #      and that script did not exist.
+  #
+  # Proven, not assumed: run locally as CI would, all 8 tests failed at the same
+  # point (setting up `loggedInPage`). A suite that cannot pass anywhere looked
+  # like coverage for months.
+  #
+  # A Postgres service + the real migrations is the only honest way to run these:
+  # a fake database tests the fake database.
   e2e-tests:
     runs-on: ubuntu-latest
     needs: quality-check
-    if: github.event_name == 'pull_request'
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ekbook_e2e
+        ports:
+          - 5432:5432
+        # Without this the first migration can race the server's startup.
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/ekbook_e2e'
+      DIRECT_URL: 'postgresql://postgres:postgres@localhost:5432/ekbook_e2e'
+      NEXTAUTH_SECRET: 'e2e-test-secret'
+      NEXTAUTH_URL: 'http://localhost:3000'
+
     steps:
       - uses: actions/checkout@v4
 
@@ -74,16 +121,23 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Apply migrations to the test database
+        # `migrate deploy`, not `db push` — the migrations are the thing that
+        # owns the schema, and running them here also proves they still apply.
+        run: npx prisma migrate deploy
+
+      # The E2E account is seeded by Playwright's globalSetup
+      # (e2e/seed-e2e-user.ts), not by a step here — a step can be reordered or
+      # forgotten, and the failure then looks like a broken app.
+
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
       - name: Run Playwright E2E tests
         run: npx playwright test
-        env:
-          # Use a dummy DATABASE_URL for E2E — tests use mock data
-          DATABASE_URL: 'file:./e2e-test.db'
-          NEXTAUTH_SECRET: 'e2e-test-secret'
-          NEXTAUTH_URL: 'http://localhost:3000'
 
       - name: Upload Playwright report
         if: always()
