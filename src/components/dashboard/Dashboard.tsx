@@ -665,7 +665,16 @@ export function Dashboard() {
            */
           { label: 'Ask', icon: MessageCircleQuestion, view: 'ask' as const, color: 'bg-primary/10 text-primary' },
           { label: 'Add Product', icon: Package, view: 'inventory' as const, color: 'bg-blue-100 dark:bg-blue-950 text-blue-600 dark:text-blue-400' },
-          { label: 'Scan Bill', icon: ScanLine, view: 'scanner' as const, color: 'bg-violet-100 dark:bg-violet-950 text-violet-600 dark:text-violet-400' },
+          /*
+           * 🔒 2026-08-13: 'Scan Bill' removed from this row on Rahul's
+           * instruction — five cards, not six.
+           *
+           * Scanning is NOT removed from the app. It stays on the hero card
+           * ("Scan a Bill", directly above this row) and in More, so this is a
+           * duplicate leaving, not a feature. Same reasoning that removed 'New
+           * Sale' from this row in UI/UX Phase 3: a shortcut row that repeats
+           * what is already one tap away costs attention and buys nothing.
+           */
           { label: 'Add Party', icon: Wallet, view: 'parties' as const, color: 'bg-amber-100 dark:bg-amber-950 text-amber-600 dark:text-amber-400' },
           { label: 'Reports', icon: Receipt, view: 'reports' as const, color: 'bg-rose-100 dark:bg-rose-950 text-rose-600 dark:text-rose-400' },
           { label: 'Income', icon: HandCoins, view: 'income-expense' as const, color: 'bg-teal-100 dark:bg-teal-950 text-teal-600 dark:text-teal-400' },

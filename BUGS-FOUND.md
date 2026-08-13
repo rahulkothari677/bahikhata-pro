@@ -922,3 +922,24 @@ and include enough context to reproduce.
 - **Description**: The V26 N2 fix classifies credit/debit notes for unregistered parties using the NOTE's own `isInterState` and `totalAmount` fields, rather than looking up the ORIGINAL invoice's `isInterState` and `totalAmount`. Per strict GST rules, the B2CS-vs-CDNUR classification should be based on the ORIGINAL supply's characteristics (the note inherits the original's supply type). The current code is defensible (the note typically inherits `isInterState` from the original at creation time), but if a note is ever created with different `isInterState` than its original (e.g. user edits), the classification could be wrong.
 - **Watch**: Verify against the real GST-portal upload. If the portal accepts it, the current approach is fine. If the portal rejects it, add a lookup to the original transaction.
 - **Status**: OPEN — deferred to Phase 1b checklist (verify during real portal upload).
+
+### BUG-072 — A sideways swipe on the dashboard refreshed the page (Medium/UX) — FIXED
+- **File**: `src/hooks/use-pull-to-refresh.tsx`
+- **Reported**: 2026-08-13, Rahul, from the Android build — *"when i swipe a bit of other than horizontal the page get refreshed in the dashboard page means a small touch can refreshed the page."*
+- **Description**: The dashboard's quick-action row is `overflow-x-auto` — it exists to be swiped sideways. `usePullToRefresh` only ever looked at `deltaY`, never at `deltaX`, and had no minimum activation distance. So **one pixel** of downward drift — which every real thumb produces on a sideways swipe — started a pull: it called `preventDefault()`, killing the sideways scroll the shopkeeper actually wanted, and translated the whole page down. Carried far enough, it refetched every active query, which is the "page refreshed" in the report.
+- **Two independent faults**, both needed fixing; either alone still leaves the symptom:
+  1. **No deadband** — any movement > 0 engaged the gesture. This is the "small touch".
+  2. **No direction** — a mostly-sideways swipe was treated identically to a pull.
+- **Fix**: an `ACTIVATION` deadband of 10px before anything happens at all, then a one-time axis decision — whichever of `|deltaX|`/`|deltaY|` is larger wins. A touch ruled horizontal stays horizontal for its whole life, because re-deciding mid-gesture is how a swipe gets stolen halfway through. Nothing calls `preventDefault()` until the gesture is committed as vertical.
+- **Also fixed in passing**: `handleTouchMove` read `pullDistance` from a stale closure (the effect deps are `[enabled, threshold]`), so the reset-on-scroll-up branch compared against a value frozen at first render. Now reset unconditionally via `abandon()`.
+- **Guard**: `src/__tests__/hooks/pull-to-refresh-respects-direction.test.tsx` — 9 tests driving the real hook with real touch events, including that a genuine downward pull *still refreshes* (a guard proving only the new restriction would pass on a hook that refuses everything). Break-verified: removing the direction check fails 3, removing the deadband fails 1.
+- **NOT verified on a real phone** — checked at 375px with synthetic touch events. Needs Rahul's device to confirm the feel.
+- **Status**: FIXED.
+
+### BUG-073 — Dashboard quick-action row had six cards; owner asked for five (Low/UX) — FIXED
+- **File**: `src/components/dashboard/Dashboard.tsx`
+- **Reported**: 2026-08-13, Rahul — *"remove scan bill from the small cards… i just want 5 cards."*
+- **Description**: The row held Ask, Add Product, Scan Bill, Add Party, Reports, Income.
+- **Fix**: 'Scan Bill' removed. Scanning is **not** removed from the app — it stays on the hero card directly above this row (verified: `ScanLine` is still used at two other sites in the same file) and in More. Same reasoning that removed 'New Sale' from this row in UI/UX Phase 3: a shortcut repeating something already one tap away costs attention and buys nothing.
+- **Guard**: `src/__tests__/components/dashboard-quick-actions.test.ts` — finds the array by balancing brackets rather than slicing a fixed window, and strips comments before counting, because the comment explaining the removal names 'Scan Bill' and a naive grep would fail on the *fixed* code. Both are mistakes this repo has already made (CLAUDE.md, Cause 7). Break-verified: restoring the card fails 3, adding a seventh fails 2.
+- **Status**: FIXED.

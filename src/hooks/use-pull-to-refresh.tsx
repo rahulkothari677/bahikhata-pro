@@ -23,6 +23,30 @@ import { cn } from '@/lib/utils'
 const THRESHOLD = 70
 const MAX_PULL = 120
 
+/**
+ * 🔒 2026-08-13 (BUG-072). How far a finger must travel before this decides
+ * the gesture is a pull at all.
+ *
+ * Rahul, from the Android build: "when i swipe a bit of other than horizontal
+ * the page get refreshed in the dashboard page means a small touch can
+ * refreshed the page."
+ *
+ * The dashboard's quick-action row is `overflow-x-auto` — it is MEANT to be
+ * swiped sideways. No human swipes a perfectly horizontal line, so those swipes
+ * carried a few pixels of downward drift. This hook only ever looked at deltaY,
+ * so any drift > 0 counted as a pull: it called preventDefault() (killing the
+ * sideways scroll the shopkeeper actually wanted) and translated the whole page
+ * down. Carry on to 140px of drift and the books reload.
+ *
+ * Two separate faults, and both need fixing:
+ *   - No deadband: ONE pixel of drift started a pull. Hence "a small touch".
+ *   - No direction: a mostly-sideways swipe was treated the same as a pull.
+ */
+const ACTIVATION = 10
+
+/** Which way this touch turned out to be going. Decided once, then obeyed. */
+type Axis = 'undecided' | 'vertical' | 'horizontal'
+
 type Options = {
   onRefresh: () => Promise<void> | void
   threshold?: number
@@ -33,6 +57,8 @@ export function usePullToRefresh({ onRefresh, threshold = THRESHOLD, enabled = t
   const [pullDistance, setPullDistance] = useState(0)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const startYRef = useRef<number | null>(null)
+  const startXRef = useRef<number | null>(null)
+  const axisRef = useRef<Axis>('undecided')
   const triggeredRef = useRef(false)
   const isRefreshingRef = useRef(false)
   const enabledRef = useRef(enabled)
@@ -56,18 +82,52 @@ export function usePullToRefresh({ onRefresh, threshold = THRESHOLD, enabled = t
       const scrollTop = window.scrollY || document.documentElement.scrollTop
       if (scrollTop > 0) return
       startYRef.current = e.touches[0].clientY
+      startXRef.current = e.touches[0].clientX
+      axisRef.current = 'undecided'
+    }
+
+    /** Give up on this touch entirely, without having disturbed it. */
+    const abandon = () => {
+      setPullDistance(0)
+      triggeredRef.current = false
+      startYRef.current = null
+      startXRef.current = null
+      axisRef.current = 'horizontal'
     }
 
     const handleTouchMove = (e: TouchEvent) => {
-      if (!enabledRef.current || isRefreshingRef.current || startYRef.current === null) return
+      if (!enabledRef.current || isRefreshingRef.current) return
+      // Already ruled a sideways swipe — stay out of its way for the rest of
+      // the touch. Re-deciding mid-gesture is how a swipe gets stolen halfway.
+      if (axisRef.current === 'horizontal') return
+      if (startYRef.current === null || startXRef.current === null) return
+
       const deltaY = e.touches[0].clientY - startYRef.current
+      const deltaX = e.touches[0].clientX - startXRef.current
+
+      /*
+       * 🔒 2026-08-13 (BUG-072): decide the axis ONCE, and only after the finger
+       * has actually committed to a direction.
+       *
+       * Below ACTIVATION nothing happens at all — no preventDefault, no page
+       * movement. That is the deadband that stops "a small touch" doing
+       * anything. Above it, whichever axis moved further wins: a swipe across
+       * the quick-action row is left to scroll that row, and only a genuine
+       * downward pull becomes a refresh.
+       */
+      if (axisRef.current === 'undecided') {
+        const absX = Math.abs(deltaX)
+        const absY = Math.abs(deltaY)
+        if (Math.max(absX, absY) < ACTIVATION) return // still ambiguous — do nothing
+        if (absX > absY) { abandon(); return }         // sideways: not ours
+        axisRef.current = 'vertical'
+      }
+
       if (deltaY <= 0) {
         // User is scrolling UP — not a pull-to-refresh gesture.
         // Reset the start ref so we don't accidentally trigger preventDefault
         // if the user reverses direction.
-        if (pullDistance !== 0) setPullDistance(0)
-        triggeredRef.current = false
-        startYRef.current = null
+        abandon()
         return
       }
       // User is pulling DOWN at the top of the page.
@@ -88,6 +148,8 @@ export function usePullToRefresh({ onRefresh, threshold = THRESHOLD, enabled = t
     const handleTouchEnd = async () => {
       if (!enabledRef.current || isRefreshingRef.current) {
         startYRef.current = null
+        startXRef.current = null
+        axisRef.current = 'undecided'
         return
       }
       if (triggeredRef.current) {
@@ -108,6 +170,8 @@ export function usePullToRefresh({ onRefresh, threshold = THRESHOLD, enabled = t
         setPullDistance(0)
       }
       startYRef.current = null
+      startXRef.current = null
+      axisRef.current = 'undecided'
       triggeredRef.current = false
     }
 
