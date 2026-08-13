@@ -46,6 +46,7 @@ model User {
   // Relations
   products            Product[]
   parties             Party[]
+  partyAliases        PartyAlias[]
   transactions        Transaction[]
   billShares          BillShare[]
   payments            Payment[]
@@ -206,6 +207,7 @@ model Party {
 
   transactions Transaction[]
   payments     Payment[]
+  aliases      PartyAlias[]
 
   // 🔒 V11 §2.2: Indexes — was ZERO indexes, caused full-table scans on every
   // Parties page load and every dashboard load (the receivable/payable query
@@ -1989,4 +1991,38 @@ model BillShare {
 
   @@index([userId, createdAt])
   @@index([transactionId])
+}
+
+/// What THIS shop calls this party — C2c.
+///
+/// The compounding half of the resolver. No amount of letter-comparing can
+/// discover that "chhota Ramesh" means Ramesh Kumar; only the shop knows, and
+/// only because they told us by tapping a choice. It is also the one part a
+/// competitor cannot copy, because it is that shop's own history.
+///
+/// WRITTEN FROM A CONFIRMATION THEY WERE ALREADY MAKING — never from a
+/// settings screen, which nobody fills in.
+model PartyAlias {
+  id      String @id @default(cuid())
+  userId  String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  partyId String
+  party   Party  @relation(fields: [partyId], references: [id], onDelete: Cascade)
+
+  /// Stored NORMALISED (lower-cased, honorifics and spelling variants folded)
+  /// so the lookup is an exact match and cannot drift from resolve-name's
+  /// comparison rules.
+  alias String
+
+  /// What they actually typed or said, kept only to show them on the party
+  /// screen. "Chhota Ramesh" reads better than "chota ramesh".
+  saidAs String
+
+  createdAt DateTime @default(now())
+
+  /// ONE ALIAS MEANS ONE PARTY, per shop. Without this, teaching the app twice
+  /// would create the very ambiguity aliases exist to remove — and the second
+  /// lesson would silently disagree with the first.
+  @@unique([userId, alias])
+  @@index([userId, partyId])
 }

@@ -83,6 +83,19 @@ function parseSchemaRelations(): { relations: Relation[]; models: Set<string> } 
  * MODEL_RELATIONS entry. Each needs a stated reason.
  */
 const INTENTIONALLY_UNCONVERTED: Record<string, string> = {
+  /*
+   * Added 2026-08-13 with C2c's PartyAlias table. PartyAlias holds no money
+   * and has no extension handler, so a query rooted here would return raw
+   * paise for any included Party.
+   *
+   * The commitment that makes this safe, and it is a commitment rather than a
+   * mechanism: NOTHING READS A BALANCE THROUGH AN ALIAS. The alias endpoints
+   * return names and ids only; every figure about a party is read from Party
+   * directly, the way the rest of the app already does. Checked when written
+   * rather than assumed — the alias routes select id, alias, saidAs and
+   * createdAt, and nothing else.
+   */
+  'PartyAlias.party': 'PartyAlias has no money columns and no handler; alias reads never include money fields.',
   // The extension only intercepts models it has handlers for. User is not one
   // of them, so its relations are never traversed by convertRowOnRead.
   'User.transactions': 'User has no money columns and no extension handler.',
