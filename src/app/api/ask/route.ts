@@ -20,6 +20,7 @@ import { splitCompound } from '@/lib/ask-compound'
 import { findDestinations } from '@/lib/nav-match'
 import { NAV_REGISTRY, filterByPermissions, getById } from '@/lib/nav-registry'
 import { withNavAction } from '@/lib/ask-nav-action'
+import { resolveName, normalise, transliterate } from '@/lib/resolve-name'
 
 /**
  * "Ask your books" — A MODEL CHOOSES THE QUESTION. IT NEVER TOUCHES THE MONEY.
@@ -417,7 +418,7 @@ export async function POST(req: NextRequest) {
          * /api/parties has always filtered this way; this query simply never
          * copied it.
          */
-        const parties = await db.party.findMany({
+        let parties = await db.party.findMany({
           where: {
             userId,
             deletedAt: null,
@@ -426,6 +427,90 @@ export async function POST(req: NextRequest) {
           select: { id: true, name: true, type: true, phone: true },
           take: 5,
         })
+        /*
+         * ─────────── C2d: NOTHING MATCHED EXACTLY. NOW TRY PROPERLY. ───────
+         *
+         * Until now this said "no customer named anil kumaar" and stopped —
+         * because the only lookup was a SQL substring, so one wrong letter or
+         * one word of Hindi was a dead end (#50, #56).
+         *
+         * Two more layers, in this order, and only when the cheap exact path
+         * found nothing — so the common case pays nothing for them:
+         *
+         *   1. A NAME THIS SHOP TAUGHT US. Exact, indexed, one row. "chhota
+         *      Ramesh" is knowledge no spelling rule could ever derive.
+         *   2. SIMILAR NAMES, narrowed by Postgres and decided by us. pg_trgm
+         *      picks the plausible few out of however many the shop has —
+         *      that is the part that survives a million customers — and
+         *      resolveName then applies transliteration, spelling folding and
+         *      the confidence rules to those few. The database narrows; our
+         *      code decides. Neither could do the other's half.
+         */
+        if (parties.length === 0) {
+          const searchedNormalised = normalise(name)
+
+          // 1. Taught by this shop.
+          const taught = searchedNormalised
+            ? await db.partyAlias.findFirst({
+                where: { userId, alias: searchedNormalised },
+                select: { party: { select: { id: true, name: true, type: true, phone: true, deletedAt: true } } },
+              })
+            : null
+          if (taught?.party && !taught.party.deletedAt) {
+            parties = [{
+              id: taught.party.id, name: taught.party.name,
+              type: taught.party.type, phone: taught.party.phone,
+            }]
+          } else {
+            /*
+             * 2. Similar names. Devanagari is transliterated FIRST — pg_trgm
+             * compares characters, and "आम" shares none with "Aam", so
+             * without this the whole layer scores zero for Hindi input.
+             *
+             * The 0.2 floor is deliberately generous: it only decides which
+             * rows are worth looking at. resolveName applies the real
+             * thresholds, so being loose here costs a few rows and being
+             * strict here would hide the answer entirely.
+             */
+            const probe = transliterate(name).toLowerCase()
+            const near = probe
+              ? await db.$queryRaw<Array<{ id: string; name: string; type: string; phone: string | null }>>`
+                  SELECT id, name, type, phone
+                  FROM "Party"
+                  WHERE "userId" = ${userId}
+                    AND "deletedAt" IS NULL
+                    AND similarity(lower(name), ${probe}) > 0.2
+                  ORDER BY similarity(lower(name), ${probe}) DESC
+                  LIMIT 10
+                `
+              : []
+
+            const decision = resolveName(name, near.map(p => ({ id: p.id, name: p.name })))
+            const byId = new Map(near.map(p => [p.id, p]))
+
+            if (decision.status === 'exact' || decision.status === 'confident') {
+              const hit = byId.get(decision.matches[0].candidate.id)
+              if (hit) parties = [hit]
+            } else if (decision.status === 'ambiguous') {
+              /*
+               * "Did you mean…?" — and this is the tap C2c has been waiting
+               * for. A name that needed the fuzzy layer is, by definition,
+               * one the shop's own names do NOT explain, so confirming it is
+               * a lesson worth keeping.
+               */
+              const suggestions = decision.matches
+                .map(m => byId.get(m.candidate.id))
+                .filter((p): p is NonNullable<typeof p> => !!p)
+              return NextResponse.json({
+                answered: false, question, understoodAs: q.understoodAs,
+                message: `No exact match for “${name}”. Did you mean one of these?`,
+                searchedFor: name,
+                choices: suggestions.map(p => ({ id: p.id, name: p.name, phone: p.phone })),
+              })
+            }
+          }
+        }
+
         if (parties.length === 0) {
           return NextResponse.json({
             answered: false, question, understoodAs: q.understoodAs,

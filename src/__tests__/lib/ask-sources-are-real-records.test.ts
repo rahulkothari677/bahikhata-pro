@@ -117,6 +117,13 @@ describe('Ask receipts point at real records', () => {
        *    the data loss this whole task is about.
        */
       if (/^\{\s*in:/.test(value)) continue                   // where: { id: { in: ids } }
+      /*
+       * 🔒 C2d: `id: string` inside a TYPE, not a receipt. The raw SQL for the
+       * similarity search declares its result shape as
+       * `Array<{ id: string; name: string; … }>`, and the scan reported the
+       * type annotation as a synthesised id. A declaration is not a value.
+       */
+      if (/^(string|number|boolean)\b/.test(value)) continue
       if (value.split('||').every(part => /^[a-zA-Z_$][\w$.]*$/.test(part.trim()))) continue
       bad.push(value.slice(0, 60))
     }
