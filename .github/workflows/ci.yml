@@ -36,6 +36,12 @@ jobs:
         # source is clean today, so an error here is a genuine new problem.
         run: npm run lint
 
+      - name: Type check the E2E suite
+        # tsconfig.json EXCLUDES e2e/, so the main tsc never saw these files. A
+        # wrong Prisma field name there compiled fine and failed ten minutes
+        # later inside a CI run. Seconds here instead. (#22, 2026-08-13)
+        run: npx tsc -p tsconfig.e2e.json --noEmit
+
       - name: Run TypeScript type check
         run: npx tsc --noEmit
         env:

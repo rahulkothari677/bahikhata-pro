@@ -1,72 +1,46 @@
 import { test, expect } from './fixtures'
+import { E2E_CUSTOMER } from './seed-e2e-user'
 
 /**
- * E2E Test: PDF Export Flow
+ * The screens a shopkeeper reaches for when someone asks for paperwork.
  *
- * Tests the PDF generation and download flow:
- *   1. User can open a transaction
- *   2. User can click "Download PDF" or "Share"
- *   3. A download is triggered (or share sheet appears)
+ * WHY THIS WAS REWRITTEN (#22 + #19, audit 2026-08-13). The previous version
+ * asserted `expect(loggedInPage.url()).toContain('bahikhata')` — true of every
+ * page on the site, including the login screen — and wrapped each step in
+ * `if (await thing.isVisible())`, so a missing control was skipped rather than
+ * reported. Two of its three tests could pass without opening anything.
  *
- * Note: Actual PDF file validation is tricky in Playwright because
- * downloads happen via Blob URLs. We verify the download event fires
- * and the filename is correct.
+ * These assert that the screen actually opened and shows its own content. They
+ * are deliberately modest: opening a real PDF and reading it is a different and
+ * much heavier job, and a modest test that genuinely fails beats an ambitious
+ * one that cannot.
  */
-test.describe('Critical Flow: PDF Export', () => {
-  test('transaction detail has download option', async ({ loggedInPage }) => {
-    // Go to dashboard
-    await loggedInPage.goto('/')
-    await loggedInPage.waitForLoadState('networkidle')
+test.describe('Paperwork screens open and show real content', () => {
+  test('the parties screen lists the shop\'s customers', async ({ loggedInPage }) => {
+    const page = loggedInPage
+    await page.getByRole('button', { name: 'Parties' }).first().click()
 
-    // Look for any transaction in recent transactions or ledger
-    const transactionLink = loggedInPage.locator('[data-testid="transaction"], .transaction-row, tr[class*="transaction"]').first()
-
-    if (await transactionLink.isVisible().catch(() => false)) {
-      await transactionLink.click()
-      await loggedInPage.waitForLoadState('networkidle')
-
-      // Look for download/share button
-      const downloadBtn = loggedInPage.locator('button:has-text("Download"), button:has-text("PDF"), button:has-text("Share"), button:has-text("Invoice")')
-      const hasDownloadOption = await downloadBtn.first().isVisible().catch(() => false)
-
-      // Verify at least one download option exists
-      expect(hasDownloadOption || (await loggedInPage.locator('text=Invoice').count()) > 0).toBeTruthy()
-    }
+    // The seeded customer must be there. Asserting a NAMED row, not just that
+    // some list rendered — an empty list would satisfy the weaker check.
+    await expect(page.getByText(E2E_CUSTOMER.name).first()).toBeVisible({ timeout: 20_000 })
   })
 
-  test('party profile has statement download', async ({ loggedInPage }) => {
-    // Navigate to parties
-    const partiesNav = loggedInPage.locator('text=Parties').first()
-    await partiesNav.click()
-    await loggedInPage.waitForLoadState('networkidle')
+  test('the reports screen offers the reports it promises', async ({ loggedInPage }) => {
+    const page = loggedInPage
+    await page.getByRole('button', { name: 'Reports' }).first().click()
 
-    // Look for a party to click
-    const partyItem = loggedInPage.locator('[data-testid="party"], .party-row, tr[class*="party"]').first()
-
-    if (await partyItem.isVisible().catch(() => false)) {
-      await partyItem.click()
-      await loggedInPage.waitForLoadState('networkidle')
-
-      // Look for statement download option
-      const statementBtn = loggedInPage.locator('button:has-text("Statement"), button:has-text("Download"), button:has-text("PDF")')
-      const hasStatementOption = await statementBtn.first().isVisible().catch(() => false)
-
-      // Smoke test — just verify the party profile loaded
-      expect(loggedInPage.url()).toContain('bahikhata')
-    }
+    // Named reports, so a blank screen cannot pass. These are the headline
+    // promises on this screen.
+    await expect(page.getByText(/P&L Statement/i).first()).toBeVisible({ timeout: 20_000 })
+    await expect(page.getByText(/Bank Reconciliation/i).first()).toBeVisible({ timeout: 20_000 })
   })
 
-  test('reports page loads', async ({ loggedInPage }) => {
-    // Navigate to reports
-    const reportsNav = loggedInPage.locator('text=Reports').first()
-    await reportsNav.click()
-    await loggedInPage.waitForLoadState('networkidle')
+  test('a report opens when chosen', async ({ loggedInPage }) => {
+    const page = loggedInPage
+    await page.getByRole('button', { name: 'Reports' }).first().click()
+    await page.getByText(/Bank Reconciliation/i).first().click()
 
-    // Verify reports page loaded
-    expect(loggedInPage.url()).toContain('bahikhata')
-
-    // Check for common report elements
-    const reportContent = loggedInPage.locator('text=GSTR').or(loggedInPage.locator('text=GST')).or(loggedInPage.locator('text=Profit')).or(loggedInPage.locator('text=Sales'))
-    await expect(reportContent.first()).toBeVisible({ timeout: 10000 })
+    // Its own screen, not the hub it was opened from.
+    await expect(page.getByText(/Import Bank Statement/i).first()).toBeVisible({ timeout: 20_000 })
   })
 })

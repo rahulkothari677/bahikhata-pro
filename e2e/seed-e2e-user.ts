@@ -32,6 +32,18 @@ export const E2E_EMAIL = 'test@bahikhata.dev'
 export const E2E_PASSWORD = 'test1234'
 
 /**
+ * The CI database is empty apart from what this file creates, so the critical
+ * flow — record a sale — has nothing to sell until we put something in it.
+ *
+ * Deliberately round numbers at 0% GST. The point of the E2E test is that the
+ * SALE reaches the ledger with the right total; proving GST arithmetic is the
+ * unit tests' job, and a tax fraction here would only make a failure ambiguous.
+ * 2 × ₹150 must appear as ₹300, and nothing else can explain it.
+ */
+export const E2E_PRODUCT = { name: 'E2E Test Widget', price: 150, gstRate: 0 }
+export const E2E_CUSTOMER = { name: 'E2E Test Customer' }
+
+/**
  * Playwright's globalSetup — see playwright.config.ts.
  *
  * Deliberately NOT a separate CI step. As a step it could be reordered,
@@ -66,7 +78,49 @@ export default async function globalSetup(config: FullConfig) {
       },
     })
 
-    console.log(`[e2e-seed] ready: ${E2E_EMAIL} (user ${user.id})`)
+    /*
+     * Something to sell, and someone to sell it to. Both are matched on name
+     * within this user, so a re-run updates rather than duplicating — a second
+     * "E2E Test Widget" would make the product picker ambiguous and the test
+     * would fail for a reason that is not a bug.
+     */
+    const existingProduct = await db.product.findFirst({
+      where: { userId: user.id, name: E2E_PRODUCT.name },
+      select: { id: true },
+    })
+    if (existingProduct) {
+      await db.product.update({
+        where: { id: existingProduct.id },
+        data: { salePrice: E2E_PRODUCT.price, gstRate: E2E_PRODUCT.gstRate, currentStock: 1000 },
+      })
+    } else {
+      await db.product.create({
+        data: {
+          userId: user.id,
+          name: E2E_PRODUCT.name,
+          salePrice: E2E_PRODUCT.price,
+          gstRate: E2E_PRODUCT.gstRate,
+          // Plenty, so the sale is never blocked by an out-of-stock guard.
+          openingStock: 1000,
+          currentStock: 1000,
+        },
+      })
+    }
+
+    const existingParty = await db.party.findFirst({
+      where: { userId: user.id, name: E2E_CUSTOMER.name },
+      select: { id: true },
+    })
+    if (!existingParty) {
+      await db.party.create({
+        data: { userId: user.id, name: E2E_CUSTOMER.name, type: 'customer' },
+      })
+    }
+
+    console.log(
+      `[e2e-seed] ready: ${E2E_EMAIL} (user ${user.id}) ` +
+        `+ product "${E2E_PRODUCT.name}" + customer "${E2E_CUSTOMER.name}"`,
+    )
 
     /*
      * 🔒 2026-08-13: log in ONCE here and save the cookies, instead of logging

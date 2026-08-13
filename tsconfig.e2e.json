@@ -1,0 +1,6 @@
+{
+  "//": "The main tsconfig EXCLUDES e2e, so `tsc --noEmit` never checked these files. A wrong Prisma field name there compiled fine and failed 10 minutes later inside a CI run. This config type-checks them in seconds. Added 2026-08-13 (#22).",
+  "extends": "./tsconfig.json",
+  "include": ["e2e/**/*.ts", "playwright.config.ts"],
+  "exclude": ["node_modules"]
+}
