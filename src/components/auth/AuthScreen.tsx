@@ -103,8 +103,18 @@ export function AuthScreen() {
         // the correct message. NextAuth returns error='CredentialsSignin'
         // for wrong password and a 429-derived message for rate-limit.
         const isRateLimited = result.status === 429 || /too many|rate.?limit|throttl/i.test(result.error)
+        /*
+         * 🔒 2026-08-13 (#17): "a few minutes", not "a minute".
+         *
+         * There are now two login limits — 10 per minute per device, and 10
+         * per 15 minutes per account (the one that stops an attacker guessing
+         * one shopkeeper's password from many addresses). Promising "a minute"
+         * when the wait can be fifteen makes the app look broken: the
+         * shopkeeper retries at 60 seconds, is refused again, and has been
+         * told something untrue.
+         */
         sonnerToast.error(isRateLimited
-          ? 'Too many login attempts. Please wait a minute and try again.'
+          ? 'Too many login attempts. Please wait a few minutes and try again.'
           : 'Invalid email or password',
           isRateLimited ? { description: 'This is a security measure to protect your account.', duration: 10000 } : undefined
         )

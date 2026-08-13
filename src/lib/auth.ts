@@ -4,6 +4,20 @@ import bcrypt from 'bcryptjs'
 import { db } from '@/lib/db'
 import { rateLimit } from '@/lib/rate-limit'
 import { Redis } from '@upstash/redis'
+import { createHash } from 'crypto'
+
+/**
+ * 🔒 2026-08-13 (#17): one message for BOTH login limits.
+ *
+ * The per-IP and per-account limits must be indistinguishable from outside.
+ * If the account limit said something different, anyone could tell a real
+ * shopkeeper's email from a made-up one just by failing to log in eleven
+ * times — which hands an attacker the list of accounts worth attacking.
+ *
+ * The wording avoids "a minute" because the account window is fifteen.
+ */
+const TOO_MANY_ATTEMPTS =
+  'Too many login attempts. Please wait a few minutes and try again.'
 
 // 🔒 V9 2.8: Redis cache for tokenVersion — reduces revocation lag from
 // 30 minutes to ~5 seconds. On each request, we check Redis (fast, ~2ms)
@@ -116,7 +130,52 @@ export const authOptions: NextAuthOptions = {
             || 'unknown'
           const rl = await rateLimit(`login:${ip}`, { limit: 10, windowSec: 60 })
           if (!rl.success) {
-            throw new Error('Too many login attempts. Please wait a minute and try again.')
+            throw new Error(TOO_MANY_ATTEMPTS)
+          }
+
+          /*
+           * 🔒 2026-08-13 (#17): a SECOND limit, counted per ACCOUNT.
+           *
+           * The per-IP limit above stops one machine guessing quickly. It does
+           * nothing about the attack that actually matters: the same account
+           * guessed from many addresses. Botnets and residential proxies make
+           * that cheap, and every request looks like a first attempt, so
+           * before this the number of guesses against one shopkeeper's account
+           * was limited only by how many addresses the attacker could rent.
+           *
+           * 10 tries per 15 minutes per account. A real person who has
+           * forgotten their password gets several goes and can use Reset
+           * Password (limited separately). An attacker gets 40 an hour rather
+           * than as many as they can pay for — and each one still costs a full
+           * bcrypt comparison.
+           *
+           * WHY THIS AND NOT AN ACCOUNT LOCK: locking the account outright
+           * would let anyone lock a shopkeeper out of their own books by
+           * failing their login on purpose. A short rolling window means the
+           * worst an attacker can do is make someone wait, and only while they
+           * keep paying to do it. `lockedUntil` on Setting is NOT this — that
+           * is the accounting period lock, a different thing entirely.
+           *
+           * The email is hashed into the key for two reasons: it bounds the key
+           * length whatever is typed in, and it keeps shopkeepers' email
+           * addresses out of a third-party service (Upstash) that has no
+           * business holding them.
+           */
+          const accountKey = createHash('sha256')
+            .update(credentials.email.trim().toLowerCase())
+            .digest('hex')
+            .slice(0, 32)
+          const accountRl = await rateLimit(`login:acct:${accountKey}`, {
+            limit: 10,
+            windowSec: 900,
+          })
+          if (!accountRl.success) {
+            /*
+             * Deliberately the SAME message as the per-IP limit. A distinct
+             * one ("this account is locked") would confirm the account exists,
+             * turning the protection into an account-enumeration oracle.
+             */
+            throw new Error(TOO_MANY_ATTEMPTS)
           }
 
           const user = await db.user.findUnique({

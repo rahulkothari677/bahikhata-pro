@@ -943,3 +943,25 @@ and include enough context to reproduce.
 - **Fix**: 'Scan Bill' removed. Scanning is **not** removed from the app — it stays on the hero card directly above this row (verified: `ScanLine` is still used at two other sites in the same file) and in More. Same reasoning that removed 'New Sale' from this row in UI/UX Phase 3: a shortcut repeating something already one tap away costs attention and buys nothing.
 - **Guard**: `src/__tests__/components/dashboard-quick-actions.test.ts` — finds the array by balancing brackets rather than slicing a fixed window, and strips comments before counting, because the comment explaining the removal names 'Scan Bill' and a naive grep would fail on the *fixed* code. Both are mistakes this repo has already made (CLAUDE.md, Cause 7). Break-verified: restoring the card fails 3, adding a seventh fails 2.
 - **Status**: FIXED.
+
+### #17 — Login could be guessed forever by rotating IP addresses (High/Security) — FIXED
+- **File**: `src/lib/auth.ts`, `src/components/auth/AuthScreen.tsx`
+- **Description**: Login was limited to 10 attempts per minute **per IP address**, and nothing else. That stops one machine guessing quickly. It does nothing about the attack that matters — the same account guessed from many addresses at once. Botnets and residential proxy pools make that cheap, every request looks like a first attempt, and so the number of guesses against one shopkeeper's account was limited only by how many addresses an attacker could rent.
+- **A CORRECTION**: an earlier report of mine said `User` already had a `lockedUntil` column that nothing enforced, and that enforcing it was the fix. **That was wrong.** `lockedUntil` is on `Setting` and is the *accounting period lock* — locking the books before a date. Nothing to do with login. There was no lockout infrastructure at all. Verified by printing which model owns the column before building anything on the claim.
+- **Fix**: a second limit, keyed by account — 10 attempts per 15 minutes. A shopkeeper who has forgotten their password still gets several goes and can use Reset Password (limited separately). An attacker gets 40/hour instead of as many as they can pay for, each still costing a full bcrypt comparison.
+- **Why a rate limit and NOT an account lock**: locking outright would let anyone lock a shopkeeper out of their own books by deliberately failing their login. A short rolling window means the worst an attacker achieves is a wait, and only while they keep paying for it.
+- **Two details that are load-bearing**:
+  - The refusal message is **identical** to the per-IP one. A distinct "this account is locked" would confirm the account exists, turning the protection into an account-enumeration oracle.
+  - The email is **hashed** into the Redis key. It bounds the key length whatever is typed in, and keeps shopkeepers' email addresses out of Upstash, a third party with no business holding them.
+- **Also fixed**: the login screen hardcoded "Please wait a minute", which is untrue for a 15-minute window — the shopkeeper would retry at 60s, be refused, and have been told something false.
+- **Guard**: `src/__tests__/lib/login-is-limited-per-account.test.ts` — 12 tests driving the REAL `authorize()`. Break-verified four ways: removing the per-account limit fails 7; adding the IP back into the account key fails 3; using the raw email fails 2; a distinct message fails 1. (Two of the four breaks did not apply on the first attempt and proved nothing until redone with line-based edits — noted because a break that silently no-ops looks exactly like a passing guard.)
+- **NOT verified**: the limit cannot be exercised against production without 10 failed logins on a real account, which would lock Rahul out for 15 minutes. Verified by unit test against the real function instead.
+- **Status**: FIXED.
+
+### #28 — Login reveals whether an email has an account (Low/Security) — LOGGED
+- **File**: `src/lib/auth.ts`
+- **Found**: 2026-08-13, while fixing #17.
+- **Description**: `authorize()` returns `null` immediately when no user matches, but runs a full bcrypt comparison when one does. bcrypt is deliberately slow, so the response time differs measurably between "no such account" and "wrong password". An attacker can use that to work out which emails are registered before spending guesses on them.
+- **Fix would be**: compare against a dummy hash when the user is not found, so both paths cost the same.
+- **Not fixed now**: out of scope for #17, and it needs a timing measurement against production to confirm the gap is actually exploitable rather than lost in network noise.
+- **Status**: LOGGED — awaiting approval.
