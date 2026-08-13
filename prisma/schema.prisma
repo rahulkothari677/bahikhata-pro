@@ -91,10 +91,14 @@ model Shop {
   phone     String?
   state     String?
   isDefault Boolean  @default(false)
+  /// Set when the shopkeeper puts this shop away. NULL = active.
+  /// A shop that holds books can be archived but never deleted — see #21.
+  archivedAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([userId])
+  @@index([userId, archivedAt])
 }
 
 // ==================== PRODUCTS / INVENTORY ====================

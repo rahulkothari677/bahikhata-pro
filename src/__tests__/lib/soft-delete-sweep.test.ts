@@ -37,6 +37,23 @@ describe('🔒 V16 C5 — Soft-delete filter sweep (no query may miss deletedAt:
   // Each entry: [fileRelativePath, reasonForException]
   const ALLOWED_EXCEPTIONS: Array<[string, string]> = [
     /*
+     * MUST count soft-deleted rows, and this one is deliberate too.
+     *
+     * DELETE /api/shops asks "is this shop empty enough to destroy?". A
+     * soft-deleted bill is not gone — it can be restored. If the count ignored
+     * deleted rows, a shop whose every bill had been deleted would look empty,
+     * be hard-deleted, and a later restore would resurrect an invoice pointing
+     * at a shop that no longer exists.
+     *
+     * Filtering here would make the app MORE willing to destroy a shop, which
+     * is the wrong direction for this question. Counting everything means the
+     * worst case is a refusal, and the shopkeeper is offered archiving instead.
+     *
+     * Added 2026-08-13 (#21). Caught by this very sweep on the first run —
+     * which is the argument for the sweep existing.
+     */
+    ['app/api/shops/route.ts', '#21: shop emptiness must count restorable rows too — see above'],
+    /*
      * MUST see soft-deleted parties, and this is not a loose end — filtering
      * here would silently change the tax on existing invoices.
      *

@@ -6,13 +6,26 @@ import { apiError } from '@/lib/api-error'
 import { validateBody, createShopSchema, renameShopSchema } from '@/lib/validation'
 
 // GET /api/shops — list all shops for the current user
-export async function GET() {
+export async function GET(_req: NextRequest) {
   try {
     const { userId, error } = await getAuthUserIdOwnerOnly()
     if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+    /*
+     * 🔒 #21 (2026-08-13): archived shops are left out.
+     *
+     * Archiving that still showed the shop in the picker would not be
+     * archiving. `?includeArchived=1` is there for a future "closed shops"
+     * screen and for anything that needs to resolve an old shopId to its name.
+     *
+     * The last active shop cannot be archived (see DELETE), so this list can
+     * never come back empty for an established account — which matters,
+     * because the branch below treats "no shops" as a brand new user and
+     * creates one.
+     */
+    const includeArchived = new URL(_req.url).searchParams.get('includeArchived') === '1'
     const shops = await db.shop.findMany({
-      where: { userId },
+      where: { userId, ...(includeArchived ? {} : { archivedAt: null }) },
       orderBy: { createdAt: 'asc' },
     })
 
@@ -152,5 +165,117 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ shop })
   } catch (error) {
     return apiError(error, 'Failed to rename shop', 500)
+  }
+}
+
+/**
+ * DELETE /api/shops?id=…            — remove a shop that holds nothing
+ * DELETE /api/shops?id=…&archive=1  — put a shop away, keeping its books
+ *
+ * 🔒 #21 (audit 2026-08-13). A shop created by mistake, or one that has closed,
+ * had no exit at all. It sat in the picker forever, and the only way out on
+ * offer was deleting the entire account.
+ *
+ * TWO DIFFERENT ACTIONS, because they answer two different situations:
+ *
+ *   ARCHIVE  the shop traded. It has bills, customers, stock. Those are books,
+ *            and books are kept — GST and income-tax retention are not ours to
+ *            waive, and a shopkeeper who closed a branch still needs last
+ *            year's figures. Archiving hides it from the picker and nothing
+ *            else. It is reversible.
+ *
+ *   DELETE   the shop holds nothing at all. Nothing was ever recorded against
+ *            it, so there is nothing to keep and nothing to lose. This is the
+ *            typo case: "Shrama Kirana", created and immediately regretted.
+ *
+ * A shop with so much as one product is refused, and told exactly what it
+ * holds. Deleting a traded shop would take real invoices with it, and no
+ * confirmation dialog makes that safe — the shopkeeper cannot know what they
+ * are agreeing to, and neither can we.
+ */
+export async function DELETE(req: NextRequest) {
+  try {
+    const { userId, error } = await getAuthUserIdOwnerOnly()
+    if (error || !userId) return error || NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+    const url = new URL(req.url)
+    const id = url.searchParams.get('id')
+    const archive = url.searchParams.get('archive') === '1'
+    if (!id) return NextResponse.json({ error: 'Shop id is required' }, { status: 400 })
+
+    // Scoped by userId: one shop owner must not be able to touch another's
+    // shop by guessing an id.
+    const shop = await db.shop.findFirst({ where: { id, userId } })
+    if (!shop) return NextResponse.json({ error: 'Shop not found' }, { status: 404 })
+
+    /*
+     * The last ACTIVE shop cannot leave, by either route. Without this the
+     * shopkeeper can archive their way to zero shops, and GET then silently
+     * creates a fresh "My Shop" — which looks exactly like their books having
+     * been wiped.
+     */
+    const activeCount = await db.shop.count({ where: { userId, archivedAt: null } })
+    if (activeCount <= 1 && !shop.archivedAt) {
+      return NextResponse.json({
+        error: 'This is your only shop',
+        message: 'You cannot remove your last shop. Create another one first, then this one can go.',
+      }, { status: 400 })
+    }
+
+    if (archive) {
+      await db.shop.updateMany({ where: { id, userId }, data: { archivedAt: new Date() } })
+      return NextResponse.json({
+        success: true,
+        archived: true,
+        message: `"${shop.name}" has been put away. Its bills and customers are all still there — you can bring it back any time.`,
+      })
+    }
+
+    /*
+     * Counted in one round trip. Anything at all means this shop traded, and
+     * the answer is archive rather than delete.
+     *
+     * SOFT-DELETED ROWS ARE COUNTED ON PURPOSE — no `deletedAt: null` here.
+     * A deleted bill is not gone; it can be restored. Ignoring them would let
+     * a shop whose every bill had been deleted look empty, be destroyed, and a
+     * later restore would resurrect an invoice pointing at a shop that no
+     * longer exists. Counting everything means the worst case is a refusal.
+     *
+     * The soft-delete sweep flags this file for exactly that reason; the
+     * exception and its argument are recorded in
+     * src/__tests__/lib/soft-delete-sweep.test.ts.
+     */
+    const [products, parties, transactions, documents] = await Promise.all([
+      db.product.count({ where: { userId, shopId: id } }),
+      db.party.count({ where: { userId, shopId: id } }),
+      db.transaction.count({ where: { userId, shopId: id } }),
+      db.document.count({ where: { userId, shopId: id } }),
+    ])
+    const held = [
+      transactions && `${transactions} bill(s)`,
+      parties && `${parties} customer(s)`,
+      products && `${products} product(s)`,
+      documents && `${documents} document(s)`,
+    ].filter(Boolean) as string[]
+
+    if (held.length > 0) {
+      return NextResponse.json({
+        error: 'This shop has records',
+        code: 'SHOP_NOT_EMPTY',
+        message:
+          `"${shop.name}" holds ${held.join(', ')}. Those are your books, so the shop cannot be deleted. ` +
+          `You can put it away instead — it disappears from the list and everything in it is kept.`,
+        counts: { transactions, parties, products, documents },
+      }, { status: 409 })
+    }
+
+    await db.shop.deleteMany({ where: { id, userId } })
+    return NextResponse.json({
+      success: true,
+      archived: false,
+      message: `"${shop.name}" was empty, so it has been removed.`,
+    })
+  } catch (error) {
+    return apiError(error, 'Failed to remove shop', 500)
   }
 }

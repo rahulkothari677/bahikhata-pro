@@ -987,3 +987,24 @@ and include enough context to reproduce.
 - **Fix would be**: both routes call the now-tested `describeEditConflict()`, their clients send the stamp, and their screens render `describeSaveOutcome()` — the same three lines as the invoice fix.
 - **Not fixed now**: out of #18's scope, which was invoices. Small and mechanical once approved.
 - **Status**: LOGGED — awaiting approval.
+
+### #21 — A shop could be created but never removed (Medium/UX) — FIXED
+- **Files**: `src/app/api/shops/route.ts`, `prisma/schema.prisma`, `prisma/migrations/20260813000002_add_shop_archived_at/`
+- **Description**: A shop created by mistake, or one that has closed, had no exit. It sat in the picker forever, and the only way out on offer was deleting the entire account.
+- **Two actions, because there are two situations**:
+  - **Archive** — the shop traded. Bills, customers, stock. Those are books and books are kept: GST and income-tax retention are not ours to waive, and a shopkeeper who closed a branch still needs last year's figures. Hidden from the picker, nothing else changed, reversible.
+  - **Delete** — the shop holds nothing at all. The typo case: "Shrama Kirana", created and immediately regretted. Nothing to keep, nothing to lose.
+- A shop with so much as one product is **refused**, told exactly what it holds, and pointed at archiving. No confirmation dialog makes deleting a traded shop safe — the shopkeeper cannot know what they are agreeing to.
+- **The last active shop cannot leave by either route.** Without that guard a shopkeeper could archive their way to zero shops, and GET treats "no shops" as a brand new user and creates a fresh "My Shop" — which looks exactly like their books having been wiped.
+- **Soft-deleted rows are counted on purpose** when deciding emptiness. A deleted bill can be restored; ignoring them would let a shop whose every bill had been deleted look empty, be destroyed, and a later restore would resurrect an invoice pointing at a shop that no longer exists. Counting everything means the worst case is a refusal.
+- **Caught by an existing guard**: the repo's soft-delete sweep failed on my three new counts the first time I ran it. The reasoning above is recorded as its exception rather than the check being silenced — and that sweep firing on new code is the argument for it existing.
+- **Migration** is additive only (one nullable column + an index), hand-written like the others in this repo because this machine has no database credentials. Rollback is a single DROP COLUMN.
+- **Guard**: `src/__tests__/api/shop-archive-and-delete.test.ts` — 18 tests. Break-verified four ways: deleting a shop that holds books fails 6, deleting by id without the ownership scope fails 1, allowing the last shop to go fails 3, archiving by destroying the row fails 3.
+- **NOT yet built**: the UI. The API is complete and tested; no button calls it yet — logged as #30.
+- **Status**: FIXED (API).
+
+### #30 — Shop archive/delete has no button (Low) — LOGGED
+- **Found**: 2026-08-13, on finishing #21.
+- **Description**: `DELETE /api/shops` now supports archive and empty-shop delete, with tests. Nothing in the Manage Shops screen calls it, so a shopkeeper still cannot do either.
+- **Why logged rather than done**: the same lesson as #27, where the bank-statement API shipped a day before its button. The API half is finished and proven; the screen is a separate, visible change worth doing deliberately — including an "archived shops" view so an archived shop can be brought back.
+- **Status**: LOGGED — awaiting approval.
