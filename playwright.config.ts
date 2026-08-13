@@ -40,6 +40,25 @@ export default defineConfig({
      * attacker. A shopkeeper signs in once and works for hours.
      */
     storageState: './e2e/.auth/state.json',
+    /*
+     * 🔒 2026-08-13 (#19): the app blocks writes with no Origin/Referer.
+     *
+     * The accrual and GST specs call the real API through Playwright's request
+     * client, which sends neither header, and every POST came back
+     * "Missing Origin/Referer header — request blocked".
+     *
+     * That is the app's CSRF protection doing exactly its job, and finding it
+     * this way is a small piece of evidence that it works. A browser always
+     * sends these; a test client has to say so.
+     *
+     * Set here rather than per-call so no future spec has to rediscover it,
+     * and set to the SAME origin the tests run against — a wrong value would
+     * be blocked just as hard, which is the point of the check.
+     */
+    extraHTTPHeaders: {
+      Origin: 'http://localhost:3000',
+      Referer: 'http://localhost:3000/',
+    },
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
