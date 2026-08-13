@@ -650,23 +650,49 @@ export async function POST(req: NextRequest) {
         const { partyBalances } = await getReceivablePayable(userId)
         // Same omission as the balance lookup above: a deleted party must not
         // be named in the receivables or payables list either.
-        const names = await db.party.findMany({
-          where: { userId, deletedAt: null },
-          // `type` too — see the wording note below. Without it this answer
-          // guesses what someone is from which way their money points.
-          select: { id: true, name: true, type: true }, take: 500,
-        })
+        /*
+         * 🔒 #71: ASK ONLY FOR THE PARTIES WE ACTUALLY HAVE BALANCES FOR.
+         *
+         * This was `take: 500` over every party in the shop — so a shop with
+         * 600 customers rendered some of them as "(unnamed)", and a shop with
+         * 6,000 mostly so. Restricting by id is both correct and smaller: the
+         * set is already bounded by whoever has a balance, which we are
+         * holding in memory anyway.
+         *
+         * `deletedAt: null` still does the real work here — a deleted party
+         * drops out of the list entirely rather than appearing nameless.
+         */
+        const balanceIds = [...partyBalances.keys()]
+        const names = balanceIds.length
+          ? await db.party.findMany({
+              where: { userId, deletedAt: null, id: { in: balanceIds } },
+              // `type` too — see the wording note below. Without it this answer
+              // guesses what someone is from which way their money points.
+              select: { id: true, name: true, type: true },
+            })
+          : []
         const nameById = new Map(names.map(n => [n.id, n.name]))
         const typeById = new Map(names.map(n => [n.id, n.type]))
-        const parties = [...partyBalances.entries()]
+
+        const owing = [...partyBalances.entries()]
+          .filter(([id]) => nameById.has(id))   // deleted parties are gone, not "(unnamed)"
           .map(([id, v]) => ({
-            id, name: nameById.get(id) || '(unnamed)',
+            id, name: nameById.get(id) as string,
             type: typeById.get(id), balance: v.balance,
           }))
           .filter(p => wantOwedToMe ? p.balance > 0.005 : p.balance < -0.005)
           .sort((a, b) => wantOwedToMe ? b.balance - a.balance : a.balance - b.balance)
-          .slice(0, 20)
-        const total = roundMoney(parties.reduce((s, p) => s + Math.abs(p.balance), 0))
+
+        /*
+         * 🔒 #71, AND THIS IS THE SERIOUS ONE. The total was computed AFTER
+         * `.slice(0, 20)` — so "₹X is owed to you" was the sum of the twenty
+         * largest debtors, not of everyone. A shop with twenty-five people
+         * owing money was told a smaller number than the truth, on the screen
+         * they would use to decide who to chase. The list is still trimmed to
+         * twenty; the TOTAL now counts every one.
+         */
+        const total = roundMoney(owing.reduce((s, p) => s + Math.abs(p.balance), 0))
+        const parties = owing.slice(0, 20)
         return ok({
           answered: true, question, understoodAs: q.understoodAs,
           headline: wantOwedToMe
@@ -686,8 +712,17 @@ export async function POST(req: NextRequest) {
            * them. A shopkeeper who sees their customer described as a supplier
            * has been told something untrue about their own books.
            */
-          detail: parties.length
-            ? `Across ${parties.length} ${describeParties(parties)}. Largest first.`
+          /*
+           * COUNT EVERYONE, LIST THE LARGEST. Now that the total covers every
+           * party, saying "across 20" beside a figure that came from 25 would
+           * be a new version of the same lie. When there are more than we
+           * show, say so plainly rather than letting the reader assume the
+           * list is the whole of it.
+           */
+          detail: owing.length
+            ? `Across ${owing.length} ${describeParties(owing)}.${
+                owing.length > parties.length ? ` Showing the ${parties.length} largest.` : ' Largest first.'
+              }`
             : 'Nobody has an outstanding balance.',
           sources: parties.slice(0, 10).map(p => ({
             kind: 'party', id: p.id, label: p.name, amount: Math.abs(p.balance),
@@ -697,22 +732,42 @@ export async function POST(req: NextRequest) {
 
       /* ───────────────────────────── TOP PRODUCTS ──────────────────── */
       case 'top_products': {
-        const items = await db.transactionItem.findMany({
+        /*
+         * 🔒 #71: THE DATABASE GROUPS, NOT US.
+         *
+         * This used to fetch `take: 2000` sale lines and add them up in
+         * memory. That is not a speed limit — it is a WRONG ANSWER. A shop
+         * doing 200 transactions a day writes roughly a million sale lines in
+         * five years, so "your best seller" was computed from about 0.2% of
+         * their sales, and nothing on screen said so. It would have named a
+         * real product, with a real figure, and been wrong.
+         *
+         * `groupBy` sums every matching line inside Postgres and returns five
+         * rows. The cap that remains is on the ANSWER (top 5 shown), not on
+         * the data read — which is the whole difference.
+         */
+        const grouped = await db.transactionItem.groupBy({
+          by: ['productId', 'productName'],
           where: { transaction: { userId, deletedAt: null, type: 'sale', date: { gte: from, lt: to } } },
-          select: { productId: true, productName: true, quantity: true, total: true },
-          take: 2000,
+          _sum: { quantity: true, total: true },
+          orderBy: { _sum: { total: 'desc' } },
+          take: 5,
         })
-        const byProduct = new Map<string, { name: string; qty: number; value: number }>()
-        for (const it of items) {
-          const key = it.productId || it.productName
-          const prev = byProduct.get(key)
-          byProduct.set(key, {
-            name: it.productName,
-            qty: (prev?.qty || 0) + (it.quantity || 0),
-            value: roundMoney((prev?.value || 0) + (it.total || 0)),
-          })
-        }
-        const top = [...byProduct.entries()].sort((a, b) => b[1].value - a[1].value).slice(0, 5)
+
+        /*
+         * Grouped by id AND name because a walk-in line can have no productId.
+         * If one product was ever sold under two spellings it appears twice —
+         * rare, visible, and far better than the alternative of dropping
+         * every line whose product was later deleted.
+         */
+        const top: [string, { name: string; qty: number; value: number }][] = grouped.map(g => [
+          g.productId || g.productName,
+          {
+            name: g.productName,
+            qty: g._sum.quantity || 0,
+            value: roundMoney(g._sum.total || 0),
+          },
+        ])
         if (top.length === 0) {
           return ok({
             answered: true, question, understoodAs: q.understoodAs,
@@ -723,7 +778,19 @@ export async function POST(req: NextRequest) {
           answered: true, question, understoodAs: q.understoodAs,
           headline: `${top[0][1].name} sold most ${label}`,
           detail: `${money(top[0][1].value)} from ${top[0][1].qty} sold. Top ${top.length} below, by value.`,
-          sources: top.map(([id, v]) => ({ kind: 'product', id, label: v.name, amount: v.value, quantity: v.qty })),
+          /*
+           * Read straight off the grouped ROWS, so every receipt id comes
+           * from the database rather than from a value we assembled — the
+           * rule the receipts guard enforces, after a synthesised
+           * "category:Rent" id shipped and said "Transaction not found".
+           */
+          sources: grouped.map(g => ({
+            kind: 'product' as const,
+            id: g.productId || g.productName,
+            label: g.productName,
+            amount: roundMoney(g._sum.total || 0),
+            quantity: g._sum.quantity || 0,
+          })),
         })
       }
 
@@ -884,11 +951,42 @@ export async function POST(req: NextRequest) {
          * the same helper the reports use. Rule G8 — a deleted record stays
          * deleted everywhere.
          */
+        /*
+         * 🔒 #71: THE CATEGORY FILTER GOES IN THE QUERY, AND THE TOTAL COMES
+         * FROM THE DATABASE.
+         *
+         * This fetched `take: 200` expense rows, filtered them here, and
+         * summed those. So a shop with 250 expenses in a period was shown a
+         * SHORT TOTAL — not a slow answer, a wrong one, on a money figure,
+         * with nothing on screen to say rows had been left out.
+         *
+         * Now: the filter is part of the WHERE clause, the total and the
+         * per-category breakdown are computed by Postgres over every matching
+         * row, and only the receipts we actually display are fetched.
+         */
+        const expenseWhere = activeTransactionWhere(userId, {
+          type: 'expense',
+          date: { gte: from, lt: to },
+          ...(q.categoryName ? { category: { contains: q.categoryName, mode: 'insensitive' as const } } : {}),
+        })
+
+        const [sum, catGroups] = await Promise.all([
+          db.transaction.aggregate({ where: expenseWhere, _sum: { totalAmount: true }, _count: true }),
+          db.transaction.groupBy({
+            by: ['category'],
+            where: expenseWhere,
+            _sum: { totalAmount: true },
+            orderBy: { _sum: { totalAmount: 'desc' } },
+          }),
+        ])
+
+        // The receipts shown under the answer — a display limit, not a limit
+        // on what was counted.
         const rows = await db.transaction.findMany({
-          where: activeTransactionWhere(userId, { type: 'expense', date: { gte: from, lt: to } }),
+          where: expenseWhere,
           select: { id: true, category: true, totalAmount: true, date: true, notes: true },
           orderBy: { date: 'desc' },
-          take: 200,
+          take: 20,
         })
 
         /*
@@ -902,12 +1000,16 @@ export async function POST(req: NextRequest) {
          * the wrong-subject bug all over again.
          */
         const wanted = q.categoryName?.toLowerCase()
-        const matching = wanted
-          ? rows.filter(r => (r.category || '').toLowerCase().includes(wanted))
-          : rows
+        const matching = rows   // already filtered by the query above
 
-        if (wanted && matching.length === 0) {
-          const known = [...new Set(rows.map(r => r.category).filter(Boolean))]
+        if (wanted && sum._count === 0) {
+          // Which categories DO exist — asked of the database, not of the
+          // twenty rows we happened to fetch.
+          const all = await db.transaction.groupBy({
+            by: ['category'],
+            where: activeTransactionWhere(userId, { type: 'expense', date: { gte: from, lt: to } }),
+          })
+          const known = all.map(g => g.category).filter(Boolean)
           return NextResponse.json({
             answered: false, question, understoodAs: q.understoodAs,
             message: known.length
@@ -916,25 +1018,23 @@ export async function POST(req: NextRequest) {
           })
         }
 
-        const total = roundMoney(matching.reduce((s, r) => s + r.totalAmount, 0))
+        const total = roundMoney(sum._sum.totalAmount || 0)
 
         // Where the money went, as words. The breakdown is what a shopkeeper
         // acts on, but it belongs in the sentence — see below for why it is
         // not the receipts.
-        const byCategory = new Map<string, number>()
-        for (const r of matching) {
-          const key = r.category || 'Uncategorised'
-          byCategory.set(key, roundMoney((byCategory.get(key) || 0) + r.totalAmount))
-        }
-        const groups = [...byCategory.entries()].sort((a, b) => b[1] - a[1])
+        const groups: [string, number][] = catGroups.map(g => [
+          g.category || 'Uncategorised',
+          roundMoney(g._sum.totalAmount || 0),
+        ])
         const breakdown = groups.map(([n, v]) => `${n} ${money(v)}`).join(', ')
 
         return ok({
           answered: true, question, understoodAs: q.understoodAs,
           headline: `${money(total)} spent ${label}`,
-          detail: matching.length
+          detail: sum._count
             ? wanted
-              ? `Across ${matching.length} ${q.categoryName} entr${matching.length === 1 ? 'y' : 'ies'}. Running costs only — buying stock is counted separately.`
+              ? `Across ${sum._count} ${q.categoryName} entr${sum._count === 1 ? 'y' : 'ies'}. Running costs only — buying stock is counted separately.`
               : `${breakdown}. Running costs only — buying stock is counted separately.`
             : `Nothing recorded ${label}.`,
           /*

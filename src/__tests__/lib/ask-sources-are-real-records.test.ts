@@ -100,6 +100,24 @@ describe('Ask receipts point at real records', () => {
        */
       if (/^[a-zA-Z_$][\w$.]*\.id$/.test(value)) continue     // r.id, m.destination.id
       if (/^[a-zA-Z_$][\w$]*$/.test(value)) continue          // id (shorthand var)
+      /*
+       * 🔒 #71: two refinements, both found by this guard firing on correct
+       * code — which is the right time to sharpen a guard rather than weaken
+       * the code it protects.
+       *
+       * 1. `{ in: ids }` is a WHERE clause, not a receipt. The scan looks for
+       *    `id:` anywhere in the file, so bounding a query by an id-set —
+       *    exactly what we want people to do — was being reported as a
+       *    synthesised receipt id.
+       *
+       * 2. `g.productId || g.productName` is TWO field reads, not a
+       *    fabrication. A walk-in sale line has no productId, so the name is
+       *    the fallback; both are columns on the row. Requiring a single
+       *    field would push the code towards dropping those lines, which is
+       *    the data loss this whole task is about.
+       */
+      if (/^\{\s*in:/.test(value)) continue                   // where: { id: { in: ids } }
+      if (value.split('||').every(part => /^[a-zA-Z_$][\w$.]*$/.test(part.trim()))) continue
       bad.push(value.slice(0, 60))
     }
     expect({ suspiciousSourceIds: bad }).toEqual({ suspiciousSourceIds: [] })

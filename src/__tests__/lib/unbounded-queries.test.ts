@@ -32,6 +32,13 @@ const SCAN_DIRS = [path.join(SRC, 'app', 'api'), path.join(SRC, 'lib')]
  * is safe. Keyed by "<relative path>:<model>".
  */
 const ACCEPTED: Record<string, string> = {
+  // — Bounded by an explicit list of values, not by a row cap ——————————
+  'app/api/gstr-1/route.ts:transaction':
+    'Bounded by `invoiceNo: { in: nums }` — the invoice numbers already filed. '
+    + 'It carried `take: 5000` until #71; that cap could only ever drop filed '
+    + 'invoices out of the cancellation cross-check, in a return that goes to '
+    + 'the government. A shop doing 200 transactions a day files ~6,000 '
+    + 'invoices a month, so it was reachable.',
   // — Small, naturally-bounded collections —————————————————————————————
   'app/api/shops/route.ts:shop': 'A user has a handful of shops.',
   'app/api/bootstrap/route.ts:shop': 'A user has a handful of shops.',

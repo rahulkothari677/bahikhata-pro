@@ -233,16 +233,23 @@ export async function GET(req: NextRequest) {
        */
       const [live, cancelled] = await Promise.all([
         db.transaction.findMany({
+          /*
+           * 🔒 #71: cap removed. This query is ALREADY bounded — by `nums`,
+           * the invoice numbers we previously filed. `take: 5000` could only
+           * ever drop filed invoices out of a compliance cross-check: a shop
+           * doing 200 transactions a day files around 6,000 invoices a month,
+           * so beyond that some filed invoices were never checked for having
+           * been cancelled or amended, silently.
+           */
           where: { userId, invoiceNo: { in: nums }, type: { in: ['sale', 'credit-note', 'debit-note'] }, deletedAt: null },
-          take: 5000,
           select: {
             invoiceNo: true, date: true, totalAmount: true,
             party: { select: { gstin: true, state: true } },
           },
         }),
         db.transaction.findMany({
+          // Bounded by `nums` too — same reasoning as above.
           where: { userId, invoiceNo: { in: nums }, type: { in: ['sale', 'credit-note', 'debit-note'] }, deletedAt: { not: null } },
-          take: 5000,
           select: { invoiceNo: true },
         }),
       ])
