@@ -274,11 +274,32 @@ cause**, never as a new line at the bottom.
   It already worked; the card was an older answer. Rahul had to tell me to just
   type it in.
 
+**Cause 8 — Changing what I cannot check**
+· 12 Aug: swapped C1's database-side matching for my own because I could not
+  confirm the extension — Rahul's call to make, not mine to settle quietly
+· 13 Aug, the near-miss that earned this rule: I was one instruction from
+  enabling row-level security. Rahul ran the check first and it returned
+  `rolbypassrls = t` — our database user bypasses RLS entirely, so every
+  policy would have been ignored **while the app looked perfect**. I would
+  have reported it done and been wrong, and no amount of clicking would have
+  shown it.
+· **The rule: when a change cannot be tested from here, do not make it
+  carefully — find the ONE question whose answer decides everything, and ask
+  Rahul to run it first.**
+
 **Cause 7 — A guard that does not guard**
 · Wrote guards that passed on broken code, twice
 · **12 Aug: a guard whose window was a fixed 900 characters** — my own comment
   pushed the thing it checked outside it, and it passed with the bug present.
-  **Only "reintroduce the bug and watch it fail" ever catches this.**
+· 12 Aug: a guard that matched its own explanatory comments, which quote the
+  numbers it bans.
+· **13 Aug: a guard that read a 700-character window, so a `userId` belonging
+  to the query ABOVE satisfied the one below.** I deleted a real tenant filter
+  and it stayed green.
+· Three in three days, all the same shape: **measuring nearby text instead of
+  the structure.** Match the actual thing — balance the braces, parse the
+  argument — and **only "reintroduce the bug and watch it fail" ever proves
+  it.**
 
 ---
 
