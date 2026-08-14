@@ -298,12 +298,15 @@ cause**, never as a new line at the bottom.
   and it stayed green.
 · 13 Aug: a receipts guard read a TypeScript **type annotation** (`id: string`)
   as a receipt id.
-· **14 Aug, the fifth — and the first to block someone else's correct work.**
+· **14 Aug, the fifth — and the first to accuse someone else's correct work.**
   The migration guard split files on `\n` only. Windows checkouts end every
   line with a carriage return, and JavaScript's `.` **cannot match a carriage
   return**, so `/--.*$/` stripped nothing. The other agent's migration — which
   only ADDS a column — was reported as destructive DDL because its comment
-  described its own rollback. **Main went red for correct code.**
+  described its own rollback. **I first wrote that "main went red". It had
+  not:** CI checks out Unix line endings, so GitHub was green throughout. The
+  failure was local, on my machine only — which I should have checked before
+  saying it, and which is Cause 6 wearing a new coat.
 
 **Five in three days, all one shape: measuring nearby text instead of the
 structure.** Match the actual thing — balance the braces, parse the argument,
