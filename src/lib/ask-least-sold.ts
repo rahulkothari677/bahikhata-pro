@@ -69,11 +69,36 @@ export function leastSoldAnswer(
    */
   const showing = zeroCount > items.length ? `Showing ${items.length} of ${zeroCount}` : ''
 
+  /*
+   * 🐛 FOUND LIVE, 14 Aug, in the first real answer this ever gave.
+   *
+   * Sharma Tailors has 6 products; 3 sold nothing this month. The answer read:
+   *
+   *   "3 items sold nothing this month"
+   *   "None of these sold a single unit this month."
+   *
+   * — above a list whose last two rows were Cotton Fabric (2 sold) and Shirt
+   * Stitching (3 sold). The headline was right and the sentence under it
+   * contradicted the list beside it.
+   *
+   * The cause: "none of these" describes the DISPLAYED rows, but the only
+   * number in scope was the count of zero-sellers. When more items are shown
+   * than sold nothing, the bottom of the list is made up of items that DID
+   * sell — which is correct behaviour for a "least sold" list, and exactly
+   * what the sentence then misdescribed.
+   *
+   * My tests missed it because every "no stock" case I wrote happened to have
+   * zeroCount >= items.length. The shape below is now asserted both ways.
+   */
+  const allShownSoldNothing = zeroCount >= items.length
+
   const detail = nothing
     ? worst.tiedUp > 0
       ? `${worst.name} has the most money sitting in it — ${money(worst.tiedUp)} of stock.` +
         `${showing ? ` ${showing},` : ''} most stock value first.`
-      : `${showing ? `${showing}. ` : ''}None of these sold a single unit ${label}.`
+      : allShownSoldNothing
+        ? `${showing ? `${showing}. ` : ''}None of these sold a single unit ${label}.`
+        : `The top ${zeroCount} sold nothing ${label}. The rest below sold very little.`
     : `${worst.qty} ${worst.unit} sold, ${money(worst.value)}. ` +
       `Bottom ${items.length} below, least sold first.`
 

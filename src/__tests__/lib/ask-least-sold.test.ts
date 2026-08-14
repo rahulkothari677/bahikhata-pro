@@ -70,6 +70,45 @@ describe('an item that never sold', () => {
     expect(a.detail).toContain('None of these sold a single unit')
     expect(a.detail).not.toContain('sitting in it')
   })
+
+  describe('🐛 the sentence must not describe rows that are not there', () => {
+    /*
+     * FOUND LIVE, in the very first real answer this feature gave. Sharma
+     * Tailors has 6 products and 3 sold nothing, so the bottom five are three
+     * zeroes followed by two items that DID sell. The answer said:
+     *
+     *   "None of these sold a single unit this month."
+     *
+     * directly above Cotton Fabric (2 sold) and Shirt Stitching (3 sold).
+     *
+     * Every "no stock" case in this file happened to have zeroCount >=
+     * items.length, so the whole family passed while the live answer was
+     * wrong. Both directions are now asserted.
+     */
+    const five = (over: Partial<LeastSoldItem> = {}) =>
+      [1, 2, 3, 4, 5].map(n => item({ id: `p${n}`, name: `P${n}`, ...over,
+        // rows 4 and 5 sold something — the real shape that broke it
+        qty: n >= 4 ? n : 0 }))
+
+    test('fewer zeroes than rows shown: it never says "none of these"', () => {
+      const a = leastSoldAnswer(five(), 3, 'this month', money)
+      expect(a.detail).not.toContain('None of these')
+      expect(a.detail).toContain('The top 3 sold nothing')
+    })
+
+    test('every row a zero: "none of these" is true and stays', () => {
+      const allZero = [1, 2, 3].map(n => item({ id: `p${n}`, name: `P${n}` }))
+      expect(leastSoldAnswer(allZero, 3, 'this month', money).detail)
+        .toContain('None of these sold a single unit')
+    })
+
+    test('more zeroes than rows shown is still "none of these"', () => {
+      const allZero = [1, 2, 3, 4, 5].map(n => item({ id: `p${n}`, name: `P${n}` }))
+      const a = leastSoldAnswer(allZero, 14, 'this month', money)
+      expect(a.detail).toContain('Showing 5 of 14')
+      expect(a.detail).toContain('None of these sold a single unit')
+    })
+  })
 })
 
 describe('an item that sold a little', () => {
