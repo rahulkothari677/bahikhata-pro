@@ -230,6 +230,46 @@ export const CAPABILITIES: readonly Capability[] = [
     hasFastPath: true,
   },
   {
+    name: 'top_customers',
+    description:
+      'Which CUSTOMERS bought the most over a period — a ranking of people, not of items and ' +
+      'not a total. Use for "best customer", "kaunsa customer sabse zyada kharidta hai". ' +
+      'Set rank_by to "profit" only when the question actually says profit or margin; ' +
+      'otherwise rank_by is "amount", meaning how much they bought. ' +
+      'NOTE: "kharidna" means to buy — a question about what a CUSTOMER buys is about your ' +
+      'SALES to them, never about purchases_period, which is what the shop spends on stock.',
+    parameters: {
+      type: 'object',
+      properties: {
+        period: periodProperty,
+        rank_by: {
+          type: 'string',
+          enum: ['amount', 'profit'],
+          description: 'amount = how much they bought (default). profit = what they left behind.',
+        },
+      },
+      required: ['period'],
+    },
+    module: 'parties',
+    dataLivesAt: 'parties',
+    examples: ['best customer', 'kaunsa customer sabse zyada kharidta hai', 'most profitable customer'],
+    hasFastPath: true,
+  },
+  {
+    name: 'product_profit',
+    description:
+      'Profit broken down BY PRODUCT — which items make the most money after cost. Use for ' +
+      '"which product gives most profit", "item wise profit". This is NOT profit_period, ' +
+      'which is one total for the whole shop with no breakdown.',
+    parameters: { type: 'object', properties: { period: periodProperty }, required: ['period'] },
+    module: 'reports',
+    dataLivesAt: 'reports',
+    // The Item-wise Profit report has always computed exactly this.
+    opensAt: 'item-profit',
+    examples: ['which product gives most profit', 'item wise profit', 'kaunsa saman sabse zyada profit deta hai'],
+    hasFastPath: true,
+  },
+  {
     name: 'stock_item',
     description:
       'How much of an item is left in stock right now. About quantity ON HAND, not about sales ' +

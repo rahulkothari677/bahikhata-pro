@@ -128,6 +128,14 @@ export function interpretToolCall(call: RawToolCall): InterpretResult {
       categoryName: str('category'),
       screenName: str('screen'),
       invoiceNo: str('invoice_no'),
+      /*
+       * Only ever the two values in the schema's enum, and 'amount' when the
+       * model says anything else. A model that invents "revenue" here must not
+       * silently become the profit ranking — that is the one branch the staff
+       * profit setting gates, and a permission must never rest on a model's
+       * spelling.
+       */
+      rankBy: args.rank_by === 'profit' ? 'profit' : args.rank_by === 'amount' ? 'amount' : undefined,
       period,
       source: 'llm',
       /*
@@ -155,6 +163,9 @@ function describeCapability(name: string, args: Record<string, unknown>): string
     case 'profit_period': return `Profit · ${period ?? 'all time'}`
     case 'top_products': return `Top selling products · ${period ?? 'all time'}`
     case 'least_products': return `Least selling products · ${period ?? 'all time'}`
+    case 'top_customers':
+      return `${args.rank_by === 'profit' ? 'Most profitable' : 'Top'} customers · ${period ?? 'this month'}`
+    case 'product_profit': return `Profit by product · ${period ?? 'this month'}`
     case 'stock_item': return item ? `Stock of "${item}"` : 'Stock levels'
     case 'tax_due': return `GST payable · ${period ?? 'this month'}`
     case 'expenses_period':

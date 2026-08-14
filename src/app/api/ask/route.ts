@@ -19,6 +19,8 @@ import { resolveFollowUp, isBarePeriod } from '@/lib/ask-follow-up'
 import { splitCompound } from '@/lib/ask-compound'
 import { findDestinations } from '@/lib/nav-match'
 import { leastSoldAnswer, receiptAmount } from '@/lib/ask-least-sold'
+import { customerRankAnswer, productProfitAnswer, nobodyBought, needsProfitPermission } from '@/lib/ask-customer-rank'
+import { Prisma } from '@prisma/client'
 import { NAV_REGISTRY, filterByPermissions, getById } from '@/lib/nav-registry'
 import { withNavAction } from '@/lib/ask-nav-action'
 import { resolveName, normalise } from '@/lib/resolve-name'
@@ -921,6 +923,221 @@ export async function POST(req: NextRequest) {
             amount: roundMoney(g._sum.total || 0),
             quantity: g._sum.quantity || 0,
           })),
+        })
+      }
+
+      /* ─────────────────────────── TOP CUSTOMERS ───────────────────── */
+      case 'top_customers': {
+        const byProfit = q.rankBy === 'profit'
+
+        /*
+         * THE PERMISSION IS CHECKED HERE, ON THE SERVER, BEFORE THE QUERY.
+         *
+         * Only the profit ranking is gated. "Who buys the most" is not a
+         * profit figure and staff may see it; "who is most profitable" is,
+         * and they may not. Refusing rather than returning zero is the
+         * existing rule in this file — a zero would be a lie, and staff
+         * should know the answer exists and is not theirs.
+         */
+        if (needsProfitPermission('top_customers', q.rankBy) && await shouldHideProfit(userId, auth.role)) {
+          return NextResponse.json({
+            answered: false, question, understoodAs: q.understoodAs,
+            message: 'Profit figures are not shown on your login. I can tell you who buys the most instead — ask “best customer”.',
+          })
+        }
+
+        /*
+         * SUPPLIERS ARE NOT CUSTOMERS. A purchase is money going the other
+         * way, and a supplier topping a "best customer" list would be a
+         * confident, wrong answer about the wrong person.
+         *
+         * SIGNS ARE ALREADY IN THE STORED VALUES — do not apply them twice.
+         * A credit note stores grossProfit NEGATIVE, and this file already
+         * carries the scar: subtracting notes turned into an addition and
+         * reported ₹3,880 where the P&L said ₹1,740. So sales and credit
+         * notes are summed TOGETHER for profit, and totalAmount (always ≥ 0)
+         * is the one that needs an explicit sign.
+         *
+         * SCALE: one GROUP BY over the period's transactions, on
+         * @@index([userId, type, date]); six rows leave the database.
+         */
+        const ranked = await db.$queryRaw<Array<{
+          id: string
+          name: string
+          amountPaise: number
+          profitPaise: number
+          bills: number
+          buyerCount: number
+        }>>`
+          WITH per_party AS (
+            SELECT t."partyId" AS pid,
+                   SUM(CASE WHEN t."type" = 'sale'
+                            THEN t."totalAmount" ELSE -t."totalAmount" END)::float8 AS amount_paise,
+                   SUM(t."grossProfit")::float8 AS profit_paise,
+                   COUNT(*) FILTER (WHERE t."type" = 'sale')::int AS bills
+            FROM "Transaction" t
+            WHERE t."userId" = ${userId}
+              AND t."deletedAt" IS NULL
+              AND t."type" IN ('sale', 'credit-note')
+              AND t."partyId" IS NOT NULL
+              AND t."date" >= ${from}
+              AND t."date" <  ${to}
+            GROUP BY t."partyId"
+          ),
+          named AS (
+            SELECT p."id", p."name", pp.amount_paise, pp.profit_paise, pp.bills
+            FROM per_party pp
+            JOIN "Party" p ON p."id" = pp.pid
+            WHERE p."userId" = ${userId}
+              AND p."deletedAt" IS NULL
+              AND p."type" <> 'supplier'
+          )
+          SELECT n."id",
+                 n."name",
+                 n.amount_paise AS "amountPaise",
+                 n.profit_paise AS "profitPaise",
+                 n.bills,
+                 (SELECT COUNT(*) FROM named WHERE amount_paise > 0)::int AS "buyerCount"
+          FROM named n
+          ORDER BY ${byProfit ? Prisma.sql`n.profit_paise` : Prisma.sql`n.amount_paise`} DESC,
+                   n."name" ASC
+          LIMIT 5
+        `
+
+        const customers = ranked.map(r => ({
+          id: r.id,
+          name: r.name,
+          amount: roundMoney(fromPaise(Number(r.amountPaise) || 0)),
+          profit: byProfit ? roundMoney(fromPaise(Number(r.profitPaise) || 0)) : undefined,
+          bills: Number(r.bills) || 0,
+        }))
+        const totalBuyers = ranked.length ? Number(ranked[0].buyerCount) || 0 : 0
+
+        const { headline, detail } = customerRankAnswer(customers, byProfit, label, money, totalBuyers)
+
+        if (nobodyBought(customers)) {
+          return ok({ answered: true, question, understoodAs: q.understoodAs, headline, detail, sources: [] })
+        }
+
+        return ok({
+          answered: true, question, understoodAs: q.understoodAs,
+          headline, detail,
+          sources: customers.map(c => ({
+            kind: 'party' as const,
+            id: c.id,
+            label: c.name,
+            amount: byProfit ? (c.profit ?? 0) : c.amount,
+          })),
+        })
+      }
+
+      /* ────────────────────────── PROFIT BY PRODUCT ────────────────── */
+      case 'product_profit': {
+        /*
+         * Gated in full: every figure this returns is a margin. The
+         * Item-wise Profit report blocks staff for the same reason, so an
+         * ungated answer here would be a way around a setting the owner
+         * deliberately turned on.
+         */
+        if (needsProfitPermission('product_profit') && await shouldHideProfit(userId, auth.role)) {
+          return NextResponse.json({
+            answered: false, question, understoodAs: q.understoodAs,
+            message: 'Profit figures are not shown on your login. Ask the shop owner.',
+          })
+        }
+
+        /*
+         * THE SAME ARITHMETIC AS THE ITEM-WISE PROFIT REPORT, deliberately:
+         * revenue is unitPrice × quantity less the discount, cost is the
+         * purchase price SNAPSHOTTED at sale time, and credit notes subtract.
+         * Writing my own version would be a second definition of profit, and
+         * the two would disagree the first time either changed.
+         */
+        const rows = await db.$queryRaw<Array<{
+          productId: string | null
+          productName: string
+          qty: number
+          revenuePaise: number
+          cogsPaise: number
+          soldCount: number
+        }>>`
+          WITH per_item AS (
+            SELECT ti."productId" AS pid,
+                   ti."productName" AS pname,
+                   SUM(CASE WHEN t."type" = 'sale'
+                            THEN ti."quantity" ELSE -ti."quantity" END)::float8 AS qty,
+                   SUM(CASE WHEN t."type" = 'sale'
+                            THEN (ti."unitPrice" * ti."quantity" - ti."discountAmount")
+                            ELSE -(ti."unitPrice" * ti."quantity" - ti."discountAmount")
+                       END)::float8 AS revenue_paise,
+                   SUM(CASE WHEN t."type" = 'sale'
+                            THEN (ti."purchasePriceAtSale" * ti."quantity")
+                            ELSE -(ti."purchasePriceAtSale" * ti."quantity")
+                       END)::float8 AS cogs_paise
+            FROM "TransactionItem" ti
+            JOIN "Transaction" t ON t."id" = ti."transactionId"
+            WHERE t."userId" = ${userId}
+              AND t."deletedAt" IS NULL
+              AND t."type" IN ('sale', 'credit-note')
+              AND t."date" >= ${from}
+              AND t."date" <  ${to}
+            GROUP BY ti."productId", ti."productName"
+          )
+          SELECT pid AS "productId",
+                 pname AS "productName",
+                 qty,
+                 revenue_paise AS "revenuePaise",
+                 cogs_paise    AS "cogsPaise",
+                 (SELECT COUNT(*) FROM per_item)::int AS "soldCount"
+          FROM per_item
+          ORDER BY (revenue_paise - cogs_paise) DESC, pname ASC
+          LIMIT 5
+        `
+
+        const products = rows.map(r => {
+          const revenue = roundMoney(fromPaise(Number(r.revenuePaise) || 0))
+          const cogs = roundMoney(fromPaise(Number(r.cogsPaise) || 0))
+          const profit = roundMoney(revenue - cogs)
+          return {
+            id: r.productId,
+            name: r.productName,
+            revenue,
+            profit,
+            // No revenue means no margin — a percentage with nothing under
+            // the line is not zero, it is undefined. Reported as 0 and never
+            // shown, because the loss branch takes over in that case.
+            margin: revenue > 0 ? (profit / revenue) * 100 : 0,
+            qty: Number(r.qty) || 0,
+          }
+        })
+        const totalProducts = rows.length ? Number(rows[0].soldCount) || 0 : 0
+
+        const { headline, detail } = productProfitAnswer(products, label, money, totalProducts)
+
+        return ok({
+          answered: true, question, understoodAs: q.understoodAs,
+          headline, detail,
+          /*
+           * flatMap, not filter().map(), and NOT an `as string` cast.
+           *
+           * The receipts guard flagged the cast, and it was right to: it
+           * exists because a synthesised "category:Rent" id once shipped and
+           * every receipt said "Transaction not found". A cast is me telling
+           * the compiler I know better, which is exactly the move that guard
+           * is watching for. Narrowing inside the branch proves it instead.
+           *
+           * A walk-in line can have no productId, and a receipt that cannot
+           * be opened is worse than one that is absent.
+           */
+          sources: products.flatMap(p => p.id
+            ? [{
+                kind: 'product' as const,
+                id: p.id,
+                label: p.name,
+                amount: p.profit,
+                quantity: p.qty,
+              }]
+            : []),
         })
       }
 

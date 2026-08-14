@@ -34,6 +34,8 @@ export type AskIntent =
   | 'payables'           // what do I owe
   | 'top_products'       // what sold most
   | 'least_products'     // what sold least — INCLUDING what sold nothing
+  | 'top_customers'      // which customer buys most (by value, or by profit)
+  | 'product_profit'     // profit broken down BY product
   | 'stock_item'         // how much of X is left
   | 'tax_due'            // what GST do I owe
   | 'expenses_period'    // what did I spend on running the shop
@@ -66,6 +68,13 @@ export interface AskQuery {
   customTo?: string
   /** Bill number the user asked for, e.g. "INV-0001". */
   invoiceNo?: string
+  /**
+   * For `top_customers`: rank by how much they BOUGHT, or by the profit they
+   * left behind. Two different questions that share one sentence shape —
+   * "best customer" is the first, "most profitable customer" the second — and
+   * only the second is gated by the staff profit setting.
+   */
+  rankBy?: 'amount' | 'profit'
   /**
    * Expense category the question narrows to — "rent", "salary", "bijli".
    * Resolved against the shop's real categories later, exactly as itemName is
@@ -271,6 +280,59 @@ const ASKS_FOR_THE_LEAST =
  * capability we shipped teaches the shopkeeper the app cannot do something it
  * can, which is a quieter version of a wrong answer.
  */
+
+/*
+ * ─────────── WHO / WHICH — the subject words, shared by parser and refusal ───────────
+ *
+ * One definition each, used by `asksWhichPerson`, `asksWhichProductProfit`
+ * and the refusal below. Two lists describing one thing is cause 2, and the
+ * refusal drifting away from the parser is exactly how "sabse kam stock"
+ * ended up refused while "kis cheez ka stock kam hai" worked (#77).
+ */
+
+/** A PERSON who buys from the shop. Not a supplier — they sell TO the shop. */
+const NAMES_A_PERSON = /\b(customers?|grahak|gahak|graahak|clients?|buyers?|kharidar|khareedar|parties|party)\b/
+
+/** Asking for the top of something. The "least" family is handled separately. */
+const ASKS_FOR_THE_MOST =
+  /\b(sabse|sab se)\s+(zyada|jyada|jada|adhik|bada|bade|badi)\b|\b(most|best|top|highest|biggest|largest)\b/
+
+/*
+ * Money kept after cost.
+ *
+ * `profit(?:able|s)?` and not `\bprofit\b`: the word boundary after "profit"
+ * does not exist in "profitable", so "most profitable customer" was ranked by
+ * how much they SPENT rather than by what they left behind — the right five
+ * people in very possibly the wrong order, with nothing on screen to show it.
+ */
+const NAMES_PROFIT = /\bprofit(?:able|s)?\b|\b(munafa|munaafa|munafe|labh|fayda|faida|margin)\b/
+
+/** A thing on the shelf. */
+const NAMES_A_PRODUCT =
+  /\b(products?|items?|saman|samaan|cheez|cheeze|maal)\b|\bkis\s+cheez\b|\bkaun\s?sa\s+saman\b/
+
+/**
+ * "Which customer buys the most" — a question about ONE PERSON among many,
+ * not about a total. Requires both halves: the subject (a customer) and the
+ * ranking (the most). "customer ka balance" names a person with no ranking
+ * and must stay with party_balance; "sabse zyada kya bika" ranks with no
+ * person and must stay with top_products.
+ */
+export function asksWhichPerson(q: string): boolean {
+  return NAMES_A_PERSON.test(q) && ASKS_FOR_THE_MOST.test(q)
+}
+
+/**
+ * "Which product makes the most profit" — profit broken down BY item, which
+ * the Item-wise Profit report has always computed. Needs a profit word and a
+ * product word; "is mahine ka profit" has no product word and stays a total.
+ */
+export function asksWhichProductProfit(q: string): boolean {
+  if (!NAMES_PROFIT.test(q)) return false
+  if (NAMES_A_PERSON.test(q)) return false   // that is the customer question
+  // "product wise profit" needs no superlative — the breakdown IS the ask.
+  return NAMES_A_PRODUCT.test(q) || /\b(wise|war|per)\b/.test(q)
+}
 
 /** Words that mean SELLING — the subject of the answer #70 built. */
 const LEAST_ABOUT_SELLING =
@@ -555,6 +617,47 @@ function matchAsk(question: string): AskQuery | null {
   if (/\b(gst|tax|kar)\b/.test(q)) {
     return { intent: 'tax_due', period: period === 'all_time' ? 'this_month' : period, source: 'pattern',
       understoodAs: `GST payable · ${period === 'all_time' ? 'this month' : periodLabel}` }
+  }
+
+  /*
+   * ── WHICH CUSTOMER, AND WHICH PRODUCT ───────────────────────────────
+   *
+   * BOTH BEFORE PROFIT AND SPENDING, and the ordering is the entire fix.
+   * These were not "not built" — they were being ANSWERED, with a real
+   * figure, for a different question:
+   *
+   *   "kaunsa customer sabse zyada kharidta hai" → purchases_period
+   *       — what the SHOP spent buying stock. The word "kharid" means buy:
+   *         from the shop's side it is a purchase, from the customer's side
+   *         it is a sale. Same word, opposite subject.
+   *
+   *   "kaunse customer se sabse zyada profit"    → profit_period
+   *   "which product gives most profit"          → profit_period
+   *   "item wise profit"                         → profit_period
+   *       — the shop's TOTAL profit, with no hint that the "which" part of
+   *         the question was dropped on the floor.
+   *
+   * A wrong subject with a right-looking number is the #69 failure again,
+   * and it was live. Claiming these here is what stops it.
+   */
+  if (asksWhichPerson(q)) {
+    const byProfit = NAMES_PROFIT.test(q)
+    return {
+      intent: 'top_customers',
+      rankBy: byProfit ? 'profit' : 'amount',
+      period: period === 'all_time' ? 'this_month' : period,
+      source: 'pattern',
+      understoodAs: `${byProfit ? 'Most profitable' : 'Top'} customers · ${period === 'all_time' ? 'this month' : periodLabel}`,
+    }
+  }
+
+  if (asksWhichProductProfit(q)) {
+    return {
+      intent: 'product_profit',
+      period: period === 'all_time' ? 'this_month' : period,
+      source: 'pattern',
+      understoodAs: `Profit by product · ${period === 'all_time' ? 'this month' : periodLabel}`,
+    }
   }
 
   // ── PROFIT ──────────────────────────────────────────────────────────
