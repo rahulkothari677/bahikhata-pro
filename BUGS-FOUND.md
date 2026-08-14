@@ -1050,3 +1050,23 @@ and include enough context to reproduce.
 - **Fix**: when no user matches, compare the supplied password against a **dummy bcrypt hash at the same cost factor (12)**. Same work, same wall-clock, and it can never succeed — the value hashed was 32 random bytes generated once and never recorded. Both paths now exit through one `return null`.
 - **Guard**: `src/__tests__/lib/login-does-not-reveal-who-banks-here.test.ts` — 8 tests that **count the bcrypt calls** rather than reading the source, because a comparison that is skipped or short-circuited leaves the gap intact while the code still looks right. Break-verified three ways: returning early on a missing user fails 3, an empty dummy hash fails 1, a cost-4 dummy hash fails 1.
 - **Status**: FIXED.
+
+### BUG-061 — CLOSED 2026-08-14. All 10 corrupt rows repaired on live data.
+- **Repaired without enabling the repair endpoint.** `POST /api/debug/repair-payment-amount` needs `ALLOW_REPAIR_ENDPOINTS=true` in Vercel — a deliberate gate, and putting a money-dividing endpoint on a live site (even briefly) is worse than not needing to. Payment deletion is a **soft delete**, so the same correction was achievable through the app's own audited routes: create the payment at its true amount, then void the inflated one. Nothing was destroyed; the corrupt rows remain in the table with `deletedAt` set, and each replacement carries a note naming the original id.
+- **Method, and why it was piloted**: one row first (rahul3, a single payment, no allocations) with a **prediction stated before acting** — balance should move from −9,860 to +40. It landed on +40 exactly. Only then were the other 9 done.
+- **Result**: `GET /api/debug/paise-audit` now reports **0 corrupt rows**, down from 10.
+
+| Party | Was | True | Balance before → after |
+|---|---|---|---|
+| rahul3 | ₹10,000 | ₹100 | −9,860 → 40 |
+| navin 1 | ₹10,000 | ₹100 | −9,750 → 150 |
+| Sunita Devi | ₹10,000 | ₹100 | −8,444.94 → 1,455.06 |
+| rahul2 | ₹10,000 | ₹100 | −9,890 → 10 |
+| Mohammed Irfan | ₹10,000 | ₹100 | −1,933.19 → 7,966.81 |
+| Anita Singh (×2) | ₹10,000 + ₹50,000 | ₹100 + ₹500 | −38,931.60 → 668.40 |
+| Mahalaxmi Suppliers (×2) | ₹10,000 ×2 | ₹100 ×2 | 17,500 → −2,300 |
+| rahul1 | ₹10,000 | ₹100 | 9,843.50 → −56.50 |
+
+- **A verification mistake of mine, and how it was caught.** My first check predicted every balance would rise by ₹9,900 and reported **three failures**. The data was right; the formula was wrong. Those rows were not all the same kind — reducing a **received** payment by X means the customer paid X less and owes X more (balance **+X**), while reducing a **paid** payment by X means we paid X less and owe X more (balance **−X**). The three "failures" were exactly the parties holding `paid` rows, and the discrepancies were clean multiples of 9,900 — which is what pointed at the formula rather than the data. Re-checked with the correct rule, all 8 parties reconcile to the rupee. **Worth keeping: a failing check is a question, not a verdict.**
+- **Write path**: confirmed fixed since 2026-07-22 and guarded by `m11-extension-handler-shape.test.ts`. The weekly manual "standing watch" in the original entry is obsolete and is hereby retired.
+- **Status**: RESOLVED.
