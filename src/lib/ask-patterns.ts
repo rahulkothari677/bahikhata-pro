@@ -33,6 +33,7 @@ export type AskIntent =
   | 'receivables'        // who owes me, in total
   | 'payables'           // what do I owe
   | 'top_products'       // what sold most
+  | 'least_products'     // what sold least — INCLUDING what sold nothing
   | 'stock_item'         // how much of X is left
   | 'tax_due'            // what GST do I owe
   | 'expenses_period'    // what did I spend on running the shop
@@ -245,7 +246,62 @@ export type RefusalReason = 'advice' | 'prediction' | 'bad_date' | 'not_built'
  * for the worst restocks the wrong thing.
  */
 const ASKS_FOR_THE_LEAST =
-  /\b(sabse|sab se)\s+(kam|kum)\b|\bleast\b|\blowest\b|\bworst\b|\bslowest\b|\bnot\s+selling\b|\bnahi\s+bik|\bdead\s+stock\b|\bslow[\s-]?moving\b/
+  /\b(sabse|sab se)\s+(kam|kum)\b|\bleast\b|\blowest\b|\bworst\b|\bslowest\b|\bnot\s+(selling|moving)\b|\bnahi\s+bik|\bdead\s+stock\b|\b(slow|non)[\s-]?moving\b/
+
+/*
+ * ───────────── WHICH "least" QUESTIONS WE CAN ACTUALLY ANSWER ─────────────
+ *
+ * #70 built the least-SOLD answer, so the blanket refusal above stopped being
+ * correct. But removing it outright would undo #69, where the model answered
+ * "which product is not selling" with the product that sold MOST. The model
+ * picks the nearest capability, and for any "least" question we have NOT
+ * built, the nearest one is its exact opposite. That is the worst possible
+ * failure: a real product, a real figure, and backwards.
+ *
+ * So the refusal stays, and only the doors we have actually built are opened:
+ *
+ *   least SOLD   → `least_products`, built in #70
+ *   lowest STOCK → `stock_item`, which has always answered it
+ *
+ * 🐛 #77, found while building #70: the blanket regex was refusing "lowest
+ * stock" and "sabse kam stock" — questions `stock_item` ALREADY answered. Its
+ * own description says "omit item_name to list the lowest-stock items", and
+ * "kis cheez ka stock kam hai" worked, while "sabse kam stock" was refused.
+ * Two phrasings of one question, one working. A refusal that fires on a
+ * capability we shipped teaches the shopkeeper the app cannot do something it
+ * can, which is a quieter version of a wrong answer.
+ */
+
+/** Words that mean SELLING — the subject of the answer #70 built. */
+const LEAST_ABOUT_SELLING =
+  /\b(bik|bika|bike|bikta|bikri|becha|bech|beche|sold|sell|selling|sales|moving|move|chal\s?raha)\b|\bnahi\s+bik/
+
+/** Words that mean STOCK ON HAND — answered by `stock_item`, not by #70. */
+const LEAST_ABOUT_STOCK = /\b(stock|maal|inventory|bacha|bache)\b/
+
+/*
+ * A PERSON is never the subject of either. "sabse kam kharidne wala customer"
+ * contains a selling word, so without this it would slip through the door
+ * above and be answered with a list of PRODUCTS — the same shape of wrong
+ * answer as #69, arriving through the fix for #69. Profit-per-customer and
+ * worst-customer are both still unbuilt (#70 part 2).
+ */
+const LEAST_ABOUT_A_PERSON = /\b(customers?|grahak|gahak|clients?|party|parties|buyers?|supplier|vendor)\b/
+
+/**
+ * True when the question is about which items sold the LEAST — the question
+ * `least_products` answers. Exported so the parser and the refusal cannot
+ * drift apart: two lists describing one thing is cause 2, and this is exactly
+ * the shape that produced it before.
+ */
+export function asksForTheLeastSold(q: string): boolean {
+  if (!ASKS_FOR_THE_LEAST.test(q)) return false
+  if (LEAST_ABOUT_A_PERSON.test(q)) return false
+  // "dead stock" and "slow moving" name the question outright.
+  if (/\bdead\s+stock\b|\bslow[\s-]?moving\b|\bnon[\s-]?moving\b/.test(q)) return true
+  // Otherwise it must be about selling, and not merely about stock on hand.
+  return LEAST_ABOUT_SELLING.test(q)
+}
 
 export function mustRefuse(question: string): RefusalReason | null {
   const q = normalise(question)
@@ -257,7 +313,17 @@ export function mustRefuse(question: string): RefusalReason | null {
    * refusal that lives in a parser is not a refusal: null means "no rule
    * matched", which is exactly the signal that hands the question to a model.
    */
-  if (ASKS_FOR_THE_LEAST.test(q)) return 'not_built'
+  if (ASKS_FOR_THE_LEAST.test(q)) {
+    /*
+     * Two doors, both leading to a real answer, everything else still refused.
+     * Note the order: the person check lives inside `asksForTheLeastSold`, so
+     * "sabse kam kharidne wala customer" is refused rather than answered with
+     * products.
+     */
+    const answerable = asksForTheLeastSold(q) || LEAST_ABOUT_STOCK.test(q)
+    if (!answerable) return 'not_built'
+    if (LEAST_ABOUT_A_PERSON.test(q)) return 'not_built'
+  }
 
   /*
    * AN IMPOSSIBLE DATE — and I put this check in the wrong place the first
@@ -531,6 +597,23 @@ function matchAsk(question: string): AskQuery | null {
     }
   }
 
+  // ── LEAST PRODUCTS ──────────────────────────────────────────────────
+  /*
+   * "sabse kam kya bika", "which product is not selling", "dead stock".
+   *
+   * BEFORE the stock branch on purpose, because "dead stock" and "slow moving
+   * stock" contain the word "stock" while being questions about SELLING, not
+   * about how much is on the shelf.
+   *
+   * And deliberately NOT claiming a bare "sabse kam stock": that is a question
+   * about stock levels, which `stock_item` has always answered — see the
+   * shared LEAST_* patterns above `mustRefuse` for the split.
+   */
+  if (asksForTheLeastSold(q)) {
+    return { intent: 'least_products', period: period === 'all_time' ? 'this_month' : period, source: 'pattern',
+      understoodAs: `Least selling products · ${period === 'all_time' ? 'this month' : periodLabel}` }
+  }
+
   // ── TOP PRODUCTS ────────────────────────────────────────────────────
   // "sabse zyada kya bika", "best selling", "top product"
   // Plurals matter here too: "top items this month" and "best products" are
@@ -562,7 +645,21 @@ function matchAsk(question: string): AskQuery | null {
     // Require either a named item, or a shape that is clearly a QUERY. The
     // bare word "stock" appears in plenty of sentences that are not questions
     // about stock levels.
-    const looksLikeQuery = !!item || /\b(kitna|kitne|how much|how many|show|dikhao|level|levels)\b/.test(q)
+    /*
+     * 🐛 #77 (second half): "sabse kam stock" and "lowest stock" reached here
+     * and were dropped, because neither names an item nor uses one of the
+     * question words below — so they fell through to the MODEL for a question
+     * this branch has always been able to answer. Not refused any more, but
+     * being handed to a model is not the same as being answered.
+     *
+     * A "least" word beside a stock word IS the query shape: nobody types
+     * "lowest stock" as part of a sentence about something else. It means
+     * exactly what `stock_item` with no item name returns — the lowest-stock
+     * items — which is why it belongs here rather than in `least_products`.
+     */
+    const asksForTheLowest = /\b(sabse|sab se)\s+(kam|kum)\b|\b(least|lowest)\b/.test(q)
+    const looksLikeQuery = !!item || asksForTheLowest
+      || /\b(kitna|kitne|how much|how many|show|dikhao|level|levels)\b/.test(q)
     if (!looksLikeQuery) return null
 
     /*

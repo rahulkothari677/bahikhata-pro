@@ -210,6 +210,26 @@ export const CAPABILITIES: readonly Capability[] = [
     hasFastPath: true,
   },
   {
+    name: 'least_products',
+    description:
+      'Which items sold the LEAST over a period, INCLUDING items that sold nothing at all. Use ' +
+      'for "what is not selling", "dead stock", "slow moving". This is the OPPOSITE of ' +
+      'top_products — never answer it with top_products. It is about SALES, not about how much ' +
+      'is left in stock: for the items with the lowest stock on hand, use stock_item.',
+    parameters: { type: 'object', properties: { period: periodProperty }, required: ['period'] },
+    module: 'reports',
+    dataLivesAt: 'reports',
+    /*
+     * Inventory Aging is where this lives in depth — it buckets stock by how
+     * long since it last sold (Fresh / Slow / Dead). Deliberately NOT
+     * item-profit, which lists what DID sell and so cannot show the items this
+     * answer is mostly about: the ones with no sale lines at all.
+     */
+    opensAt: 'inventory-aging',
+    examples: ['sabse kam kya bika', 'which product is not selling', 'dead stock', 'slow moving items'],
+    hasFastPath: true,
+  },
+  {
     name: 'stock_item',
     description:
       'How much of an item is left in stock right now. About quantity ON HAND, not about sales ' +

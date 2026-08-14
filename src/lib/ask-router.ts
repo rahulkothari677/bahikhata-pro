@@ -154,6 +154,7 @@ function describeCapability(name: string, args: Record<string, unknown>): string
     case 'sales_period': return `Sales · ${period ?? 'all time'}`
     case 'profit_period': return `Profit · ${period ?? 'all time'}`
     case 'top_products': return `Top selling products · ${period ?? 'all time'}`
+    case 'least_products': return `Least selling products · ${period ?? 'all time'}`
     case 'stock_item': return item ? `Stock of "${item}"` : 'Stock levels'
     case 'tax_due': return `GST payable · ${period ?? 'this month'}`
     case 'expenses_period':

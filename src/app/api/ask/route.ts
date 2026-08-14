@@ -3,7 +3,7 @@ import { db } from '@/lib/db'
 import { getAuthContext } from '@/lib/get-auth'
 import { canAccessModule } from '@/lib/staff-permissions'
 import { apiError } from '@/lib/api-error'
-import { roundMoney } from '@/lib/money'
+import { roundMoney, fromPaise } from '@/lib/money'
 import { parseAsk, mustRefuse, ASK_EXAMPLES, type AskPeriod } from '@/lib/ask-patterns'
 import { escapeLikeWildcards } from '@/lib/escape-like'
 import { computePartyBalance, getReceivablePayable } from '@/lib/party-balance'
@@ -18,6 +18,7 @@ import { buildNoticeLine } from '@/lib/ask-notice-line'
 import { resolveFollowUp, isBarePeriod } from '@/lib/ask-follow-up'
 import { splitCompound } from '@/lib/ask-compound'
 import { findDestinations } from '@/lib/nav-match'
+import { leastSoldAnswer, receiptAmount } from '@/lib/ask-least-sold'
 import { NAV_REGISTRY, filterByPermissions, getById } from '@/lib/nav-registry'
 import { withNavAction } from '@/lib/ask-nav-action'
 import { resolveName, normalise } from '@/lib/resolve-name'
@@ -242,8 +243,19 @@ export async function POST(req: NextRequest) {
              * question that is close and really works, so the next thing they
              * type succeeds.
              */
+            /*
+             * REWRITTEN IN #70. This used to say "I can tell you what sold
+             * the MOST, but not the least" — which is now false: the least is
+             * built. What is still missing is the least by PERSON or by
+             * PROFIT, which is all this refusal fires on now, so the message
+             * has to name that gap instead of the old one.
+             *
+             * A refusal message that describes a limit we have removed is its
+             * own kind of wrong answer: it teaches the shopkeeper not to ask
+             * a question the app would now answer.
+             */
             : refusal === 'not_built'
-              ? 'I can’t answer that one yet — I can tell you what sold the MOST, but not the least. Ask me “sabse zyada kya bika” and I’ll show you that.'
+              ? 'I can’t answer that one yet — I can’t rank customers, or rank by profit. I can tell you which items sold the least: ask me “sabse kam kya bika”.'
               : 'I can show you the figures, but I can’t tell you what you should do.',
         examples: ASK_EXAMPLES,
       })
@@ -908,6 +920,157 @@ export async function POST(req: NextRequest) {
             label: g.productName,
             amount: roundMoney(g._sum.total || 0),
             quantity: g._sum.quantity || 0,
+          })),
+        })
+      }
+
+      /* ─────────────────────────── LEAST PRODUCTS ──────────────────── */
+      case 'least_products': {
+        /*
+         * 🔒 #70 — "sabse kam kya bika". The app used to REFUSE this.
+         *
+         * THE THING THAT MAKES THIS QUESTION DIFFERENT FROM ITS OPPOSITE:
+         * the items a shopkeeper most needs to hear about have NO SALE LINES
+         * AT ALL. `top_products` can group TransactionItem and be right,
+         * because everything it ranks was sold at least once. Ranking the
+         * bottom the same way would list the least-sold of the things that
+         * DID sell, and silently omit every item that sold nothing — the
+         * exact opposite of what was asked, and invisible in the answer.
+         *
+         * So the scan starts FROM Product and LEFT JOINs the period's sales.
+         * A product with no match keeps 0, and 0 sorts first.
+         *
+         * SCALE (all of it inside Postgres, five rows cross the wire):
+         *  - `sold` aggregates the period's sale lines once, using
+         *    @@index([userId, type, date]) on Transaction.
+         *  - the outer scan uses @@index([userId, name]) on Product.
+         *  - nothing is counted, summed or sorted in JavaScript.
+         *
+         * THE TIE-BREAK IS THE DESIGN. A shop with 20,000 products may have
+         * 14,000 that sold nothing this month, so "the 5 least-sold" is a
+         * 14,000-way tie and any 5 of them is a useless answer. Ranking the
+         * zeroes by money tied up (stock × cost) answers the question the
+         * shopkeeper actually has — which of these is my cash stuck in —
+         * and it is the SAME ordering /api/analytics already uses for dead
+         * stock, so the two screens cannot disagree.
+         *
+         * $queryRaw bypasses the money extension, so every rupee column
+         * arrives as raw PAISE and is converted explicitly below.
+         */
+        /*
+         * RETURNS ARE NETTED OFF, and this was nearly the bug that mattered.
+         *
+         * My first version counted `type = 'sale'` only — copied from
+         * top_products directly above. /api/analytics had already learned
+         * better and says so in its own comment: a line that came back
+         * through the door was not sold. For the LEAST-sold question that
+         * omission is wrong in the worst direction: a product sold 100 times
+         * and returned 100 times has genuinely not sold, and is exactly what
+         * the shopkeeper is asking about — but it would have ranked as a
+         * healthy seller and never appeared.
+         *
+         * `credit-note` rows subtract. Same convention as analytics, so the
+         * dashboard and this answer cannot contradict each other.
+         *
+         * THE COUNT COMES FROM THE SAME CTE as the ranking. It was two
+         * separate queries a moment ago — one ranking with a LEFT JOIN, one
+         * counting with NOT EXISTS — which is two definitions of "sold
+         * nothing" that agree only by luck. A fully-returned product counts
+         * as zero in one and as sold in the other, so the headline could say
+         * "3 items sold nothing" above a list of five. One definition, used
+         * twice, in one round trip.
+         */
+        const rows = await db.$queryRaw<Array<{
+          id: string
+          name: string
+          unit: string | null
+          qty: number
+          valuePaise: number
+          tiedUpPaise: number
+          zeroCount: number
+        }>>`
+          WITH sold AS (
+            SELECT ti."productId" AS pid,
+                   SUM(CASE WHEN t."type" = 'sale'
+                            THEN ti."quantity" ELSE -ti."quantity" END)::float8 AS qty,
+                   SUM(CASE WHEN t."type" = 'sale'
+                            THEN ti."total"    ELSE -ti."total"    END)::float8 AS value_paise
+            FROM "TransactionItem" ti
+            JOIN "Transaction" t ON t."id" = ti."transactionId"
+            WHERE t."userId" = ${userId}
+              AND t."deletedAt" IS NULL
+              AND t."type" IN ('sale', 'credit-note')
+              AND t."date" >= ${from}
+              AND t."date" <  ${to}
+              AND ti."productId" IS NOT NULL
+            GROUP BY ti."productId"
+          ),
+          ranked AS (
+            SELECT p."id",
+                   p."name",
+                   p."unit",
+                   COALESCE(s.qty, 0)::float8         AS qty,
+                   COALESCE(s.value_paise, 0)::float8 AS value_paise,
+                   (ROUND(GREATEST(p."currentStock", 0)::numeric
+                          * p."purchasePrice"::numeric))::float8 AS tied_up_paise
+            FROM "Product" p
+            LEFT JOIN sold s ON s.pid = p."id"
+            WHERE p."userId" = ${userId}
+          )
+          SELECT r."id",
+                 r."name",
+                 r."unit",
+                 r.qty,
+                 r.value_paise   AS "valuePaise",
+                 r.tied_up_paise AS "tiedUpPaise",
+                 (SELECT COUNT(*) FROM ranked WHERE qty <= 0)::int AS "zeroCount"
+          FROM ranked r
+          ORDER BY r.qty ASC, r.tied_up_paise DESC, r."name" ASC
+          LIMIT 5
+        `
+
+        if (rows.length === 0) {
+          return ok({
+            answered: true, question, understoodAs: q.understoodAs,
+            headline: 'No products yet',
+            detail: 'Add products to your inventory and I can tell you which ones are not selling.',
+            sources: [],
+          })
+        }
+
+        const items = rows.map(r => ({
+          id: r.id,
+          name: r.name,
+          qty: Number(r.qty) || 0,
+          value: roundMoney(fromPaise(Number(r.valuePaise) || 0)),
+          tiedUp: roundMoney(fromPaise(Number(r.tiedUpPaise) || 0)),
+          unit: r.unit || 'pcs',
+        }))
+        const zeroCount = Number(rows[0].zeroCount) || 0
+
+        /*
+         * The wording lives in lib/ask-least-sold, as a pure function that can
+         * be called with a list — see #76 this morning, where five guards in
+         * three days turned out to be untestable because the rule sat inside
+         * a walk nobody could invoke.
+         */
+        const { headline, detail } = leastSoldAnswer(items, zeroCount, label, money)
+
+        return ok({
+          answered: true, question, understoodAs: q.understoodAs,
+          headline,
+          detail,
+          /*
+           * Ids come straight off the Product rows, so every receipt opens a
+           * real record — the rule that exists because a synthesised
+           * "category:Rent" id once shipped and said "Transaction not found".
+           */
+          sources: items.map(i => ({
+            kind: 'product' as const,
+            id: i.id,
+            label: i.name,
+            amount: receiptAmount(i),
+            quantity: i.qty,
           })),
         })
       }
