@@ -19,6 +19,23 @@ import { createHash } from 'crypto'
 const TOO_MANY_ATTEMPTS =
   'Too many login attempts. Please wait a few minutes and try again.'
 
+/**
+ * 🔒 #28: a real bcrypt hash to compare against when the account does not exist.
+ *
+ * Cost 12 — the same factor register/reset/staff use — so a login for an email
+ * with no account costs the same ~240ms as one for an email that has an
+ * account. Without it, "no such account" returned in a few milliseconds and
+ * "wrong password" took a quarter of a second, which reads straight off the
+ * network tab and turns the login form into a list of who banks here.
+ *
+ * Publishing this hash costs nothing. It is bcrypt of 32 random bytes that were
+ * generated once, used here, and never written down — so there is no password
+ * that satisfies it, and no account it would let anyone into even if there were.
+ * Its only job is to take exactly as long as a real comparison.
+ */
+const TIMING_EQUALISER_HASH =
+  '$2b$12$FwBrKb2t/1OEv03YmpIZ8ePWzeH5sSVKnYBP/30yfJTMh6I/wu512'
+
 // 🔒 V9 2.8: Redis cache for tokenVersion — reduces revocation lag from
 // 30 minutes to ~5 seconds. On each request, we check Redis (fast, ~2ms)
 // instead of the DB (slow, ~50ms+). If Redis is down, falls back to the
@@ -182,13 +199,35 @@ export const authOptions: NextAuthOptions = {
             where: { email: credentials.email.toLowerCase() },
           })
 
-          if (!user) {
-            return null
-          }
+          /*
+           * 🔒 #28 (2026-08-13): both paths must cost the same.
+           *
+           * This used to `return null` the instant no user matched, and run a
+           * full bcrypt comparison when one did. bcrypt at cost 12 takes about
+           * 240ms on purpose — so "no such account" answered in a few
+           * milliseconds while "wrong password" took a quarter of a second, and
+           * the difference is large enough to read straight off the network tab.
+           *
+           * That turns the login form into a list of which emails have accounts.
+           * On its own that is only a leak; combined with a breached
+           * password dump it tells an attacker exactly which shopkeepers to
+           * spend their guesses on, and #17's per-account limit is what makes
+           * those guesses expensive.
+           *
+           * So a missing user is compared against a DUMMY hash instead. Same
+           * cost factor, same work, same wall-clock — and it can never succeed,
+           * because the value hashed was 32 random bytes that were never
+           * recorded anywhere.
+           */
+          const isValid = user
+            ? await bcrypt.compare(credentials.password, user.password)
+            : await bcrypt
+                .compare(credentials.password, TIMING_EQUALISER_HASH)
+                // The result is discarded; only the time it took matters.
+                .then(() => false)
 
-          const isValid = await bcrypt.compare(credentials.password, user.password)
-
-          if (!isValid) {
+          if (!user || !isValid) {
+            // One exit for both, so the shapes cannot drift apart later either.
             return null
           }
 

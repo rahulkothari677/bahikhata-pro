@@ -1041,3 +1041,12 @@ and include enough context to reproduce.
 - **My own wiring failure, caught by my own test**: the edit dialog was never actually passed the party — a string replacement had silently not applied. Without the test, the Edit button would have opened a blank *add* form. This is the third time this session a `node -e` replacement no-opped without complaining.
 - **Guard**: `src/__tests__/components/party-edit.test.ts` — 9 tests, plus 3 added to `edit-conflict.test.ts`. Break-verified five ways: removing the edit button fails 1, making edit create a new party fails 1, loading the supplier balance signed fails 1, Add Party reopening the last edited customer fails 1, Edit opening the profile instead of the dialog fails 1.
 - **Status**: FIXED.
+
+### #28 — Login revealed which emails have accounts, by timing (Low→Medium/Security) — FIXED
+- **File**: `src/lib/auth.ts`
+- **Description**: `authorize()` returned null the instant no user matched, and ran a full bcrypt comparison when one did. bcrypt at cost 12 is deliberately slow, so the two answers took very different times.
+- **MEASURED ON PRODUCTION, before the fix**: a real account took a median **673ms**; a non-existent one **305ms**. A **368ms gap** — readable straight off the browser's network tab, no tools needed. (Interleaved requests with the same wrong password, so network drift hit both equally.)
+- **Why it matters more than it first looks**: on its own it is only a leak. Combined with any breached password dump it tells an attacker exactly which shopkeepers are worth spending guesses on — and #17's per-account limit is what makes each guess expensive. Removing the list is worth more than rate-limiting the guessing.
+- **Fix**: when no user matches, compare the supplied password against a **dummy bcrypt hash at the same cost factor (12)**. Same work, same wall-clock, and it can never succeed — the value hashed was 32 random bytes generated once and never recorded. Both paths now exit through one `return null`.
+- **Guard**: `src/__tests__/lib/login-does-not-reveal-who-banks-here.test.ts` — 8 tests that **count the bcrypt calls** rather than reading the source, because a comparison that is skipped or short-circuited leaves the gap intact while the code still looks right. Break-verified three ways: returning early on a missing user fails 3, an empty dummy hash fails 1, a cost-4 dummy hash fails 1.
+- **Status**: FIXED.
