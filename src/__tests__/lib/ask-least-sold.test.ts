@@ -53,6 +53,24 @@ describe('an item that never sold', () => {
     expect(a.detail).toContain('₹4000.00')
   })
 
+  test('no sentence starts with a lower-case letter', () => {
+    /*
+     * The live answer printed "…₹2,500.00 of stock. most stock value first."
+     * The clause was written to follow a "Showing X of Y," and read as a
+     * fragment when nothing was hidden.
+     */
+    for (const zc of [1, 5, 14]) {
+      const list = [1, 2, 3, 4, 5].map(n => item({ id: `p${n}`, name: `P${n}`, tiedUp: 100 - n }))
+      const { detail } = leastSoldAnswer(list, zc, 'this month', money)
+      for (const sentence of detail.split('. ')) {
+        const first = sentence.trim()[0]
+        if (first && /[a-z]/.test(first)) {
+          throw new Error(`sentence starts lower-case: "${sentence.trim()}" (zeroCount ${zc})`)
+        }
+      }
+    }
+  })
+
   test('#73: showing five of fourteen SAYS fourteen', () => {
     const five = [1, 2, 3, 4, 5].map(n => item({ id: `p${n}`, name: `P${n}`, tiedUp: 100 }))
     expect(leastSoldAnswer(five, 14, 'this month', money).detail).toContain('Showing 5 of 14')

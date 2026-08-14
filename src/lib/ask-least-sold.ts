@@ -94,8 +94,14 @@ export function leastSoldAnswer(
 
   const detail = nothing
     ? worst.tiedUp > 0
+      /*
+       * The capital M is not a nicety. Without the "Showing X of Y" clause
+       * this read "…of stock. most stock value first." — a lower-case letter
+       * straight after a full stop, which is what the live answer printed the
+       * first time it had a real figure to show.
+       */
       ? `${worst.name} has the most money sitting in it — ${money(worst.tiedUp)} of stock.` +
-        `${showing ? ` ${showing},` : ''} most stock value first.`
+        (showing ? ` ${showing}, most stock value first.` : ' Most stock value first.')
       : allShownSoldNothing
         ? `${showing ? `${showing}. ` : ''}None of these sold a single unit ${label}.`
         : `The top ${zeroCount} sold nothing ${label}. The rest below sold very little.`
