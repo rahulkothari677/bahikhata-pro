@@ -37,6 +37,7 @@ import { cn, formatINR } from '@/lib/utils'
 import { APP_VERSION_LABEL } from '@/lib/app-version'
 import { readError } from '@/lib/read-error'
 import { INVOICE_THEMES } from '@/lib/invoice-themes'
+import { describeRestoreOutcome } from '@/lib/restore-outcome'
 
 const FEATURE_CATEGORIES: { title: string; features: { key: FeatureKey; label: string; description: string; icon: any }[] }[] = [
   {
@@ -1348,58 +1349,27 @@ export function Settings({
                       if (!r.ok) throw new Error(result.error || result.message || 'Restore failed')
                       // Success — clear the session marker so a future restore starts fresh.
                       localStorage.removeItem('bahikhata:restore-session')
-                      // 🔒 AUDIT V24 §5: If any rows were quarantined (header money
-                      // didn't tie to its own items), say so LOUDLY — a partial
-                      // restore that looks complete is how wrong books are born.
-                      const quarantined = result.results.transactions.quarantined || 0
-                      const relinked = result.results.relinked || 0
-                      const unmatched = result.results.unmatched || 0
-                      const stockRebuilt = result.results.stockRebuilt || 0
-                      // AUDIT 2026-07-26: skipped rows were counted by the server and
-                      // logged to the console, but NEVER shown here. A restore that
-                      // silently drops payments reports "Restore complete!" while every
-                      // affected party now appears to owe MORE than they do — the
-                      // shopkeeper chases customers for money already paid. Payments and
-                      // parties are called out by name because they move balances.
-                      const skippedPayments = result.results.payments?.skipped || 0
-                      const skippedParties = result.results.parties?.skipped || 0
-                      const skippedProducts = result.results.products?.skipped || 0
-                      const skippedTotal = skippedPayments + skippedParties + skippedProducts
-                      if (skippedPayments > 0) {
-                        sonnerToast.warning(
-                          `Restore finished — ${skippedPayments} payment(s) NOT imported`,
-                          {
-                            description:
-                              `Those payments are missing, so the affected parties will show a HIGHER balance than they really owe. ` +
-                              `Check those parties before chasing anyone for money. ` +
-                              `Imported — products: ${result.results.products.imported}, transactions: ${result.results.transactions.imported}, payments: ${result.results.payments?.imported ?? 0}.`,
-                            duration: 20000,
-                          },
-                        )
-                      } else if (quarantined > 0) {
-                        sonnerToast.warning(`Restore finished — ${quarantined} transaction(s) NOT imported`, {
-                          description: `They failed integrity checks (invoice totals don't match their items — possibly an edited or corrupted backup). Imported: ${result.results.transactions.imported}. First issues: ${(result.results.transactions.quarantineReasons || []).slice(0, 3).join('; ')}`,
-                          duration: 20000,
-                        })
-                      } else if (unmatched > 0) {
-                        sonnerToast.warning(`Restore complete — ${unmatched} item(s) not linked to catalog`, {
-                          description: `Products: ${result.results.products.imported}. Transactions: ${result.results.transactions.imported}. Stock rebuilt for ${stockRebuilt} products. ${relinked} items re-linked; ${unmatched} could not be matched by name (won't appear in product-linked reports).`,
-                          duration: 15000,
-                        })
-                      } else {
-                        sonnerToast.success(
-                          skippedTotal > 0 ? `Restore complete — ${skippedTotal} row(s) skipped` : 'Restore complete!',
-                          {
-                            description:
-                              `Products: ${result.results.products.imported}. Transactions: ${result.results.transactions.imported}. ` +
-                              `Stock rebuilt for ${stockRebuilt} products. ${relinked} items re-linked to catalog.` +
-                              (skippedTotal > 0
-                                ? ` Skipped — parties: ${skippedParties}, products: ${skippedProducts}.`
-                                : ''),
-                            duration: skippedTotal > 0 ? 15000 : 10000,
-                          },
-                        )
-                      }
+                      /*
+                       * 🔒 2026-08-14: the decision about WHAT to tell the
+                       * shopkeeper moved to lib/restore-outcome.ts so it can be
+                       * tested by being called.
+                       *
+                       * What used to be here read four counters and never
+                       * rendered the server's own `message`. A warning added on
+                       * the server was written, returned, and dropped on the
+                       * floor — the shopkeeper saw "Restore complete!". That is
+                       * the failure silent-failure-reporting.test.ts exists to
+                       * catch, reappearing one level up. The server now returns
+                       * `warnings` as a list and describeRestoreOutcome renders
+                       * all of them, so the next warning added there reaches the
+                       * user without anyone remembering to wire it up.
+                       */
+                      const outcome = describeRestoreOutcome(result)
+                      const toast = outcome.kind === 'warning' ? sonnerToast.warning : sonnerToast.success
+                      toast(outcome.title, {
+                        description: outcome.description,
+                        duration: outcome.durationMs,
+                      })
                     } catch (err: any) {
                       // 🔒 V26 P7-1: On timeout/failure, the session marker persists
                       // in localStorage → a retry with the same file carries the same

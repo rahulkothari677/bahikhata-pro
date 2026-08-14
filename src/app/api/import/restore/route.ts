@@ -3,6 +3,10 @@ import { db } from '@/lib/db'
 import { getAuthUserIdOwnerOnly, assertNotImpersonated } from '@/lib/get-auth'
 import { apiError } from '@/lib/api-error'
 import { logAudit } from '@/lib/audit'
+import { missingPaymentsWarning } from '@/lib/restore-warnings'
+import { billKey } from '@/lib/backup-keys'
+import { decideAllocation, describeRefusedAllocation } from '@/lib/restore-allocations'
+import { roundMoney } from '@/lib/money'
 import {
   relinkTransactionItemsToProducts,
   rebuildProductStock,
@@ -134,7 +138,17 @@ export async function POST(req: NextRequest) {
       transactions: { imported: 0, skipped: 0, quarantined: 0, quarantineReasons: [] as string[] },
       // skipReasons: money that does not survive a restore must be named,
       // not just counted. A bare number tells nobody what was lost.
-      payments: { imported: 0, skipped: 0, skipReasons: [] as string[] },
+      payments: {
+        imported: 0,
+        skipped: 0,
+        skipReasons: [] as string[],
+        // Which BILLS those payments settled. A payment can restore fine and
+        // still leave its invoice reading as unpaid — counted separately so the
+        // two failures are never confused for each other.
+        allocationsRestored: 0,
+        allocationsSkipped: 0,
+        allocationReasons: [] as string[],
+      },
       shops: { imported: 0, skipped: 0 },
       settings: { updated: false },
       resumed: isResume,
@@ -326,7 +340,7 @@ export async function POST(req: NextRequest) {
           select: { invoiceNo: true, date: true, totalAmount: true },
         })
         for (const t of existingTxns) {
-          const key = `${t.invoiceNo || ''}|${new Date(t.date).toISOString().slice(0, 10)}|${t.totalAmount}`
+          const key = billKey(t)
           importedKeys.add(key)
         }
       }
@@ -346,7 +360,7 @@ export async function POST(req: NextRequest) {
           continue
         }
         if (isResume) {
-          const key = `${txn.invoiceNo || ''}|${new Date(txn.date).toISOString().slice(0, 10)}|${txn.totalAmount || 0}`
+          const key = billKey(txn)
           if (importedKeys.has(key)) {
             results.transactions.skipped++
             continue
@@ -435,6 +449,39 @@ export async function POST(req: NextRequest) {
         partyIdByName.set(p.name, p.id)
       }
 
+      /*
+       * 🔒 2026-08-14: WHICH BILLS each payment settled must come back too.
+       *
+       * `due = totalAmount − paidAmount − Σ(allocations)`. Recreate the
+       * payments and not their allocations and the party's overall balance
+       * comes out right while every individual invoice still shows its money
+       * owing — the exact disagreement invoice-due.ts exists to prevent. A
+       * stale "Due" is what invites a shopkeeper to collect the same money
+       * twice, from a customer who already paid.
+       *
+       * Bills are matched on identity, not id, because the restore has just
+       * rebuilt every transaction with a fresh one. Same rule as party names,
+       * and the same refusal to guess: two bills that share a key are left
+       * alone and REPORTED, because a payment attached to the wrong invoice is
+       * worse than one attached to none.
+       */
+      const txnIdByBillKey = new Map<string, string>()
+      const ambiguousBillKeys = new Set<string>()
+      const billTotals = new Map<string, { totalAmount: number; paidAmount: number }>()
+      const restoredBills = await db.transaction.findMany({
+        where: { userId, deletedAt: null },
+        select: { id: true, invoiceNo: true, date: true, totalAmount: true, paidAmount: true },
+      })
+      for (const t of restoredBills) {
+        const k = billKey(t)
+        if (txnIdByBillKey.has(k)) ambiguousBillKeys.add(k)
+        txnIdByBillKey.set(k, t.id)
+        billTotals.set(t.id, { totalAmount: t.totalAmount || 0, paidAmount: t.paidAmount || 0 })
+      }
+      /** Running total already re-attached to each bill during this restore. */
+      const allocatedSoFar = new Map<string, number>()
+      const allocationCtx = { txnIdByBillKey, ambiguousBillKeys, billTotals, allocatedSoFar }
+
       for (const payment of data.payments) {
         try {
           const partyId = resolvePartyId(payment.partyName)
@@ -457,7 +504,7 @@ export async function POST(req: NextRequest) {
             )
             continue
           }
-          await db.payment.create({
+          const createdPayment = await db.payment.create({
             data: {
               userId,
               partyId,
@@ -469,6 +516,39 @@ export async function POST(req: NextRequest) {
             },
           })
           results.payments.imported++
+
+          // Re-attach the payment to the bills it settled (see the note above).
+          const fileAllocations = Array.isArray(payment.allocations) ? payment.allocations : []
+          for (const alloc of fileAllocations) {
+            const decision = decideAllocation(alloc, allocationCtx)
+
+            if (!decision.ok) {
+              results.payments.allocationsSkipped++
+              results.payments.allocationReasons.push(
+                describeRefusedAllocation(decision, {
+                  billKey: alloc?.billKey,
+                  amount: alloc?.amount,
+                  paymentAmount: payment.amount,
+                  paymentType: payment.type,
+                }),
+              )
+              continue
+            }
+
+            await db.paymentAllocation.create({
+              data: {
+                userId,
+                paymentId: createdPayment.id,
+                transactionId: decision.transactionId,
+                amount: decision.amount,
+              },
+            })
+            allocatedSoFar.set(
+              decision.transactionId,
+              roundMoney((allocatedSoFar.get(decision.transactionId) || 0) + decision.amount),
+            )
+            results.payments.allocationsRestored++
+          }
         } catch (e: any) {
           // 🔒 P6-6 (Phase 6): Was: silent skip. Money silently lost on restore.
           // Now the failure is reported — but see below for where.
@@ -564,9 +644,66 @@ export async function POST(req: NextRequest) {
       message += ` Note: ${rebuildResult.corrected} product(s) had a stock figure in the backup that disagreed with its own transaction history; stock was recalculated from the transactions.`
     }
 
+    /*
+     * 🔒 2026-08-14: WARNINGS ARE RETURNED AS A LIST, not only inside `message`.
+     *
+     * The restore screen composed its own toast from a few counters and never
+     * rendered `message` at all — so a warning added here was written, returned
+     * and dropped on the floor. That is the exact failure
+     * silent-failure-reporting.test.ts exists to catch, reappearing one level
+     * up: the SERVER now said the right thing and the USER still saw success.
+     *
+     * A list, so the screen can render whatever arrives without knowing what it
+     * is. The next warning added here reaches the shopkeeper by construction
+     * rather than by somebody remembering to wire it up.
+     */
+    const warnings: string[] = []
+
+    /*
+     * 🔒 2026-08-14: say so when the FILE never contained payments.
+     *
+     * Backup files written before version 2 have no `payments` key at all — the
+     * export simply never wrote one. Restoring such a file brings back every
+     * invoice with none of the money paid against it, so a customer who settled
+     * in full appears to owe the lot.
+     *
+     * Without this, the restore reports "payments: 0" and reads like a success,
+     * because the file genuinely did contain none. The shopkeeper would go
+     * looking for the mistake in their own bookkeeping.
+     *
+     * Keyed on the ABSENCE of the key, not on the version number, so a
+     * hand-edited or third-party file is judged by what it actually holds.
+     */
+    const noPaymentsWarning = missingPaymentsWarning(data, backup.version)
+    if (noPaymentsWarning) {
+      message += noPaymentsWarning
+      warnings.push(noPaymentsWarning.trim())
+    }
+
+    /*
+     * A payment that came back without its bill link is not a silent detail.
+     * The money is in the party's balance, so the overall figure is right, but
+     * the invoice it settled still reads as owing — and that is the number a
+     * shopkeeper looks at before chasing a customer.
+     */
+    if (results.payments.allocationsSkipped > 0) {
+      const note =
+        `Note: ${results.payments.allocationsSkipped} payment-to-bill link(s) could not be restored.` +
+        ` The money is counted in each customer's balance, but those individual invoices will still show as unpaid,` +
+        ` so check them before sending any reminder.` +
+        (results.payments.allocationReasons.length > 0
+          ? ` First: ${results.payments.allocationReasons.slice(0, 3).join('; ')}`
+          : '')
+      message += ` ${note}`
+      warnings.push(note)
+    }
+
     return NextResponse.json({
       success: true,
       message,
+      // See the note where `warnings` is declared: the screen renders this list
+      // whatever is in it, so a warning cannot be added here and then lost.
+      warnings,
       results: {
         ...results,
         relinked: relinkResult.relinked,

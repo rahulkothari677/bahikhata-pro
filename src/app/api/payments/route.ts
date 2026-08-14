@@ -12,6 +12,7 @@ import { findUnknownFields, schemaFields } from '@/lib/unknown-fields'
 // 🔒 AUDIT C5: oldest-first allocation + the guard that stops a payment being
 // applied to an already-settled bill.
 import { planAllocationOldestFirst, validateAllocations } from '@/lib/invoice-due'
+import { billKey } from '@/lib/backup-keys'
 
 /**
  * GET /api/payments?partyId=xxx
@@ -43,6 +44,81 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url)
     const partyId = searchParams.get('partyId')
+
+    /*
+     * 🔒 2026-08-14: `?all=1` returns every payment for the shop.
+     *
+     * Added for the Backup button, which built a file containing products,
+     * parties, transactions, settings and shops — and NO PAYMENTS, because the
+     * only way to read them was one party at a time. Restoring such a file
+     * brings back every invoice and none of the money against them, so every
+     * customer appears to owe the full amount. Silent, and only discovered at
+     * the moment of recovery, when the original is gone.
+     *
+     * Fetching 27 parties one by one would have "worked" today and fallen over
+     * for a shop with 5,000 customers. One query, and the caller is TOLD when
+     * it was capped rather than being handed a quietly short file — a backup
+     * that is silently partial is worse than one that refuses.
+     */
+    if (!partyId && searchParams.get('all') === '1') {
+      const CAP = 10_000
+      const [rows, total] = await Promise.all([
+        db.payment.findMany({
+          where: { userId, deletedAt: null },
+          orderBy: { date: 'desc' },
+          take: CAP,
+          /*
+           * The party's NAME, not just its id.
+           *
+           * A restore rebuilds every party with a fresh id, so the old partyId
+           * in a backup file points at nothing on the new device. Name is the
+           * only join key that survives the round trip — which is why the
+           * transaction export carries `partyName` too, and why the restore
+           * route resolves payments by name.
+           *
+           * Exporting the id alone produces a file that LOOKS complete and
+           * whose every payment is skipped on restore. That is the same silent
+           * failure as omitting them, dressed up to look fixed.
+           */
+          include: {
+            party: { select: { name: true } },
+            /*
+             * And WHICH BILLS each payment settled.
+             *
+             * `due = totalAmount − paidAmount − Σ(allocations)`. Restore the
+             * payments without their allocations and the party's overall
+             * balance comes out right while every individual invoice still
+             * shows its money owing. That is the exact disagreement
+             * invoice-due.ts exists to prevent, and a stale "Due" is what
+             * invites a shopkeeper to collect the same money twice.
+             *
+             * Carried by the bill's identity, not its id, for the reason in
+             * backup-keys.ts: ids do not survive a restore.
+             */
+            allocations: {
+              select: {
+                amount: true,
+                transaction: { select: { invoiceNo: true, date: true, totalAmount: true } },
+              },
+            },
+          },
+        }),
+        db.payment.count({ where: { userId, deletedAt: null } }),
+      ])
+      const payments = rows.map(({ party, allocations, ...p }) => ({
+        ...p,
+        partyName: party?.name ?? null,
+        allocations: (allocations ?? []).map(a => ({
+          amount: a.amount,
+          billKey: a.transaction ? billKey(a.transaction) : null,
+        })),
+      }))
+      return NextResponse.json({
+        payments,
+        total,
+        truncated: total > payments.length,
+      })
+    }
 
     if (!partyId) {
       return NextResponse.json({ error: 'partyId is required' }, { status: 400 })
