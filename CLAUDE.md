@@ -296,10 +296,30 @@ cause**, never as a new line at the bottom.
 · **13 Aug: a guard that read a 700-character window, so a `userId` belonging
   to the query ABOVE satisfied the one below.** I deleted a real tenant filter
   and it stayed green.
-· Three in three days, all the same shape: **measuring nearby text instead of
-  the structure.** Match the actual thing — balance the braces, parse the
-  argument — and **only "reintroduce the bug and watch it fail" ever proves
-  it.**
+· 13 Aug: a receipts guard read a TypeScript **type annotation** (`id: string`)
+  as a receipt id.
+· **14 Aug, the fifth — and the first to block someone else's correct work.**
+  The migration guard split files on `\n` only. Windows checkouts end every
+  line with a carriage return, and JavaScript's `.` **cannot match a carriage
+  return**, so `/--.*$/` stripped nothing. The other agent's migration — which
+  only ADDS a column — was reported as destructive DDL because its comment
+  described its own rollback. **Main went red for correct code.**
+
+**Five in three days, all one shape: measuring nearby text instead of the
+structure.** Match the actual thing — balance the braces, parse the argument,
+split on `/\r?\n/` — and **only "reintroduce the bug and watch it fail" ever
+proves it.**
+
+**The rule this earned: a guard must be RUNNABLE against a known-good and a
+known-bad input.** Four of the five were rules buried inside a directory walk
+or a regex sweep, so the only way to exercise them was to commit a real bug.
+A rule I cannot call with two arguments is a comment with a green tick next to
+it. **Extract the rule into a function, then test it both ways** — that is what
+turns "I believe this guards" into "I watched this catch it".
+
+**And: my checkout is Windows, CI is Linux.** Anything that reads a file as
+text — line splitting, `$` anchors, path separators — can pass in one place and
+fail in the other. Handle both, or the guard is only guarding my machine.
 
 ---
 
