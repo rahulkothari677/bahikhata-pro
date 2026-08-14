@@ -40,8 +40,28 @@ const HANDLE_SAVE = (() => {
 })()
 
 describe('there is a way in', () => {
-  it('every party row offers an edit control', () => {
-    expect(PARTIES).toMatch(/aria-label=\{`Edit \$\{p\.name\}`\}/)
+  it('offers an edit control in BOTH layouts, not just one', () => {
+    /*
+     * Counting, not just matching, and this test learned that the hard way.
+     *
+     * The first version asserted the string appeared AT ALL. It passed — and
+     * browser verification then showed no edit button anywhere, because the
+     * control had gone into the TABLE only and this screen renders CARDS by
+     * default (partiesViewMode === 'grid'). The test read the markup that the
+     * shopkeeper never sees.
+     *
+     * This repo has had precisely this bug before: "Selection worked in one
+     * layout and was a dead end in the other." Two layouts rendering one list
+     * will diverge unless something counts them.
+     */
+    const controls = PARTIES.match(/aria-label=\{`Edit \$\{p\.name\}`\}/g) ?? []
+    expect(controls.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('the table layout has one', () => {
+    // Anchored to the table, so a card-only fix cannot satisfy it.
+    const table = PARTIES.slice(PARTIES.indexOf('<tbody>'), PARTIES.indexOf('</tbody>'))
+    expect(table).toMatch(/aria-label=\{`Edit \$\{p\.name\}`\}/)
   })
 
   it('editing does not open the profile instead', () => {

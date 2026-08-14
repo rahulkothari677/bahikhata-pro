@@ -253,6 +253,27 @@ export function Parties() {
                         <h3 className="font-semibold text-sm truncate group-hover:text-primary transition">{p.name}</h3>
                         <Badge variant="secondary" className="text-xs py-0 capitalize mt-0.5">{p.type}</Badge>
                       </div>
+                      {/*
+                        🔒 #31: the SAME edit control as the table row.
+
+                        Added after browser verification: the fix went into the
+                        table only, and the card layout is what the app actually
+                        shows by default — so the button was invisible where it
+                        mattered, and the test passed because it read the table
+                        markup. This repo has had that exact bug before, in
+                        "Selection worked in one layout and was a dead end in
+                        the other".
+                      */}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0 flex-shrink-0 -mt-1"
+                        aria-label={`Edit ${p.name}`}
+                        onClick={(e) => { e.stopPropagation(); setEditingParty(p); setDialogOpen(true) }}
+                      >
+                        <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
+                      </Button>
                       <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary flex-shrink-0" />
                     </div>
 
