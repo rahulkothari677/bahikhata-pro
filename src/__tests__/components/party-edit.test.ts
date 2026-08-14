@@ -82,6 +82,22 @@ describe('there is a way in', () => {
   })
 })
 
+describe('the dialog says which thing it is doing', () => {
+  it('names the party being edited instead of saying "Add Party"', () => {
+    /*
+     * Found in the browser, not in the code. The dialog opened with Amul
+     * Distributors' real details prefilled — under a heading reading "Add
+     * Party". A shopkeeper reads that as "this will create a duplicate
+     * customer", so the careful ones cancel and the correction never happens.
+     */
+    expect(PARTIES).toMatch(/isEdit \? `Edit \$\{party!\.name\}` : 'Add Party'/)
+  })
+
+  it('the button says save, not add', () => {
+    expect(PARTIES).toMatch(/isEdit \? 'Save Changes' : 'Add Party'/)
+  })
+})
+
 describe('the save actually updates instead of creating', () => {
   it('uses PUT with the party id when editing', () => {
     expect(HANDLE_SAVE).toMatch(/method: isEdit \? 'PUT' : 'POST'/)

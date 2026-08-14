@@ -572,7 +572,14 @@ function PartyDialog({ open, onOpenChange, onSuccess, party }: {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Users className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-            Add Party
+            {/*
+              🔒 #31: the heading has to change, and browser verification is
+              what caught that it did not. Editing "Amul Distributors" under a
+              heading reading "Add Party" tells the shopkeeper they are about to
+              create a duplicate customer — so the honest ones cancel, and the
+              correction never gets made. Naming the party removes the doubt.
+            */}
+            {isEdit ? `Edit ${party!.name}` : 'Add Party'}
           </DialogTitle>
         </DialogHeader>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 py-2">
@@ -650,7 +657,7 @@ function PartyDialog({ open, onOpenChange, onSuccess, party }: {
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button onClick={handleSave} disabled={saving} className="bg-gradient-saffron">
-            {saving ? 'Saving...' : 'Add Party'}
+            {saving ? 'Saving...' : isEdit ? 'Save Changes' : 'Add Party'}
           </Button>
         </DialogFooter>
       </DialogContent>
