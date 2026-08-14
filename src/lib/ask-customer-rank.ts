@@ -53,9 +53,19 @@ export interface RankAnswer {
  * nothing rather than showing ₹0". Crowning a "best customer" who spent ₹0 is
  * the same shape as the bug where a spoken item was added at ₹0 and the toast
  * still said "Added 2 items" — a success message over a line worth nothing.
+ *
+ * 🐛 CORRECTED AGAINST LIVE DATA, 14 Aug. This first tested `amount <= 0`,
+ * and Sharma Tailors' books show why that is wrong: Anil Kumar has one sale
+ * of ₹787.50 and two credit notes totalling ₹1,312.50, so his NET is −₹525.
+ * "No customer bought anything this month" would have been false — he bought,
+ * and then returned more than he bought. Two different facts.
+ *
+ * So the test is whether any SALE BILL exists at all. A party with only
+ * credit notes in the period genuinely bought nothing in it; the returns
+ * belong to bills from an earlier month.
  */
 export function nobodyBought(customers: RankedCustomer[]): boolean {
-  return customers.length === 0 || customers.every(c => c.amount <= 0)
+  return customers.length === 0 || customers.every(c => c.bills === 0)
 }
 
 export function customerRankAnswer(
@@ -73,6 +83,46 @@ export function customerRankAnswer(
   }
 
   const top = customers[0]
+  const shown = customers.length
+  const showing = totalBuyers > shown ? `Top ${shown} of ${totalBuyers} customers who bought. ` : ''
+
+  /*
+   * RETURNS CAN OUTWEIGH PURCHASES, and then the superlative is a lie.
+   *
+   * Found on live books: the shop's only named customer had one bill and two
+   * credit notes against it, netting −₹525 and −₹860 of profit. "Anil bought
+   * the most this month" above a negative number, or "left the most profit"
+   * above a loss, is the same failure as calling a loss-making product the
+   * most profitable — technically a ranking, practically false.
+   */
+  if (byProfit && (top.profit ?? 0) < 0) {
+    return {
+      headline: `No customer made you a profit ${label}`,
+      detail: `${top.name} came closest, at a loss of ${money(Math.abs(top.profit ?? 0))} ` +
+        `on ${money(Math.abs(top.amount))} — returns outweighed sales. ${showing}Smallest loss first.`,
+    }
+  }
+  /*
+   * EXACTLY ZERO IS ITS OWN CASE, and my own test caught it: a customer with
+   * three bills netting ₹0 printed "returned more than they bought — ₹0.00
+   * net", which is both wrong (returns EQUALLED sales) and a fabricated zero.
+   * Bought-and-returned-everything is a real thing a shop sees, and it reads
+   * as its own sentence.
+   */
+  if (!byProfit && top.amount === 0 && top.bills > 0) {
+    return {
+      headline: `Everything bought was returned ${label}`,
+      detail: `${top.name} has ${top.bills} bill${top.bills === 1 ? '' : 's'} ` +
+        `fully cancelled by returns. ${showing}`.trimEnd(),
+    }
+  }
+  if (!byProfit && top.amount < 0) {
+    return {
+      headline: `Returns outweighed sales ${label}`,
+      detail: `${top.name} returned more than they bought — ${money(Math.abs(top.amount))} net, ` +
+        `across ${top.bills} bill${top.bills === 1 ? '' : 's'}. ${showing}`.trimEnd(),
+    }
+  }
 
   /*
    * The two questions share a sentence shape and mean different things.
@@ -83,9 +133,6 @@ export function customerRankAnswer(
   const headline = byProfit
     ? `${top.name} left the most profit ${label}`
     : `${top.name} bought the most ${label}`
-
-  const shown = customers.length
-  const showing = totalBuyers > shown ? `Top ${shown} of ${totalBuyers} customers who bought. ` : ''
 
   const detail = byProfit
     ? `${money(top.profit ?? 0)} profit on ${money(top.amount)} of purchases, across ` +

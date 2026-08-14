@@ -149,22 +149,76 @@ describe('nobody bought anything is a fact, not a zero', () => {
       .toBe('No customer bought anything this month')
   })
 
-  test('everyone at zero', () => {
-    expect(nobodyBought([cust({ amount: 0 }), cust({ id: 'c2', amount: 0 })])).toBe(true)
+  test('only returns in the period — the bills belong to an earlier month', () => {
+    expect(nobodyBought([cust({ amount: -500, bills: 0 })])).toBe(true)
   })
 
-  test('fully returned — a negative total is not a purchase either', () => {
-    expect(nobodyBought([cust({ amount: -500 })])).toBe(true)
+  test('one real bill is enough to rank', () => {
+    expect(nobodyBought([cust({ amount: 1, bills: 1 })])).toBe(false)
   })
 
-  test('one real buyer is enough to rank', () => {
-    expect(nobodyBought([cust({ amount: 1 })])).toBe(false)
+  describe('🐛 bought-and-returned is NOT bought-nothing', () => {
+    /*
+     * FOUND ON LIVE BOOKS. Sharma Tailors' only named customer, Anil Kumar,
+     * has this month: one sale of ₹787.50 and TWO credit notes totalling
+     * ₹1,312.50. Net −₹525, net profit −₹860.
+     *
+     * `nobodyBought` first tested `amount <= 0`, so the answer would have
+     * been "No customer bought anything this month" — which is false. He
+     * bought, and then returned more than he bought. Two different facts,
+     * and the second one is the interesting one.
+     */
+    const anil = cust({ name: 'Anil Kumar', amount: -525, profit: -860, bills: 1 })
+
+    test('a net-negative customer with a real bill did buy', () => {
+      expect(nobodyBought([anil])).toBe(false)
+    })
+
+    test('by amount: it says returns outweighed sales', () => {
+      const a = customerRankAnswer([anil], false, 'this month', money, 1)
+      expect(a.headline).toBe('Returns outweighed sales this month')
+      expect(a.detail).toContain('Anil Kumar returned more than they bought')
+      expect(a.detail).toContain('₹525.00')
+      expect(a.headline).not.toContain('bought the most')
+    })
+
+    test('by profit: it never calls a loss the most profit', () => {
+      const a = customerRankAnswer([anil], true, 'this month', money, 1)
+      expect(a.headline).toBe('No customer made you a profit this month')
+      expect(a.detail).toContain('loss of ₹860.00')
+      expect(a.headline).not.toContain('left the most profit')
+    })
+
+    test('no negative rupee figure is ever printed', () => {
+      // "-₹525.00" reads as a debt owed, not as a return.
+      for (const byProfit of [true, false]) {
+        const a = customerRankAnswer([anil], byProfit, 'this month', money, 1)
+        expect(a.detail).not.toContain('-₹')
+        expect(a.detail).not.toContain('₹-')
+      }
+    })
   })
 
   test('the empty answer never names anyone', () => {
-    const a = customerRankAnswer([cust({ amount: 0, name: 'Anil' })], false, 'this month', money, 0)
+    // bills: 0 — nobody placed an order at all. Naming a "best customer"
+    // here would crown someone on the strength of nothing.
+    const a = customerRankAnswer([cust({ amount: 0, bills: 0, name: 'Anil' })], false, 'this month', money, 0)
     expect(a.headline).not.toContain('Anil')
     expect(a.detail).not.toContain('₹0')
+  })
+
+  test('bought and returned EXACTLY as much is its own sentence', () => {
+    /*
+     * Caught by the test above, which is the case for keeping an assertion
+     * that looks redundant: three bills netting exactly ₹0 printed "returned
+     * more than they bought — ₹0.00 net". Returns EQUALLED sales, and the
+     * ₹0.00 was the fabricated-zero shape this codebase keeps re-learning.
+     */
+    const a = customerRankAnswer([cust({ amount: 0, bills: 3, name: 'Anil' })], false, 'this month', money, 1)
+    expect(a.headline).toBe('Everything bought was returned this month')
+    expect(a.detail).toContain('3 bills fully cancelled by returns')
+    expect(a.detail).not.toContain('₹0')
+    expect(a.detail).not.toContain('more than they bought')
   })
 })
 
