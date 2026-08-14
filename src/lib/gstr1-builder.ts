@@ -410,11 +410,38 @@ export function buildB2CL(txns: Gstr1Transaction[], shop: ShopInfo): Gstr1B2clEn
  * @param txns   all transactions in the filing period (for lookup)
  * @returns      { isInterState, totalAmount } from the original or the note itself
  */
+/**
+ * What a note's original invoice looked like, for classification purposes.
+ * Supplied by the caller for originals that fall OUTSIDE the filing period.
+ */
+export type OriginalInvoiceLookup = Map<string, { isInterState: boolean; totalAmount: number }>
+
 function resolveNoteClassification(
   note: Gstr1Transaction,
   txns: Gstr1Transaction[],
+  originals?: OriginalInvoiceLookup,
 ): { isInterState: boolean; totalAmount: number } {
   if (note.originalTransactionId) {
+    /*
+     * 🔒 BUG-062 (2026-08-14): look OUTSIDE this period first.
+     *
+     * The previous version searched only `txns`, which is the filing month's
+     * transactions and nothing else. A credit note is almost always issued in a
+     * LATER month than the invoice it cancels — that is the normal case, not an
+     * edge — so the original was usually absent, the lookup silently failed,
+     * and it fell back to the note's own values. Which is precisely the
+     * behaviour BUG-062 was raised about.
+     *
+     * So the fix only ever worked when a note and its original happened to land
+     * in the same month, and the comment claiming the original was looked up
+     * read as though the whole problem were solved.
+     *
+     * `originals` is fetched by the caller by id, unbounded by date. The
+     * in-period search stays as the cheap path.
+     */
+    const fromOtherPeriod = originals?.get(note.originalTransactionId)
+    if (fromOtherPeriod) return fromOtherPeriod
+
     const original = txns.find(t => t.id === note.originalTransactionId)
     if (original) {
       return {
@@ -423,8 +450,11 @@ function resolveNoteClassification(
       }
     }
   }
-  // Fallback: use the note's own values (correct when the note hasn't been
-  // edited independently of the original).
+  /*
+   * Fallback: the note's own values. Correct when the note has not been edited
+   * independently of its original, and the only option for a note that names no
+   * original at all (a standalone note, which the app does allow).
+   */
   return {
     isInterState: note.isInterState,
     totalAmount: note.totalAmount,
@@ -441,7 +471,7 @@ function resolveNoteClassification(
  * go NEGATIVE — the GST portal accepts negative B2CS adjustments. These
  * notes do NOT go to CDNUR (CDNUR is reserved for inter-state B2CL originals).
  */
-export function buildB2CS(txns: Gstr1Transaction[], shop: ShopInfo): Gstr1B2csEntry[] {
+export function buildB2CS(txns: Gstr1Transaction[], shop: ShopInfo, originals?: OriginalInvoiceLookup): Gstr1B2csEntry[] {
   // Sales that are B2CS: unregistered + (intra-state OR ≤ threshold)
   const b2csSales = txns.filter(t =>
     t.type === 'sale' &&
@@ -455,7 +485,7 @@ export function buildB2CS(txns: Gstr1Transaction[], shop: ShopInfo): Gstr1B2csEn
   const b2csNotes = txns.filter(t => {
     if (t.type !== 'credit-note' && t.type !== 'debit-note') return false
     if (t.partyGstin && t.partyGstin.length >= 15) return false  // registered → CDNR
-    const orig = resolveNoteClassification(t, txns)
+    const orig = resolveNoteClassification(t, txns, originals)
     return !orig.isInterState || orig.totalAmount <= B2CL_INVOICE_VALUE_THRESHOLD
   })
 
@@ -551,7 +581,7 @@ export function buildCDNR(txns: Gstr1Transaction[], shop: ShopInfo): Gstr1CdnrEn
  * are netted into B2CS by buildB2CS — they must NOT appear here. Exports
  * (EXPWP/EXPWOP) are out of scope until the app tracks export invoices.
  */
-export function buildCDNUR(txns: Gstr1Transaction[], shop: ShopInfo): Gstr1CdnurEntry[] {
+export function buildCDNUR(txns: Gstr1Transaction[], shop: ShopInfo, originals?: OriginalInvoiceLookup): Gstr1CdnurEntry[] {
   // 🔒 V26 N2 + BUG-062: CDNUR (Table 9B) only accepts typ B2CL or exports,
   // and B2CL implies an INTER-STATE POS. Uses resolveNoteClassification to
   // look up the original invoice's isInterState + totalAmount (falls back to
@@ -559,7 +589,7 @@ export function buildCDNUR(txns: Gstr1Transaction[], shop: ShopInfo): Gstr1Cdnur
   const notes = txns.filter(t => {
     if (t.type !== 'credit-note' && t.type !== 'debit-note') return false
     if (t.partyGstin && t.partyGstin.length >= 15) return false  // registered → CDNR
-    const orig = resolveNoteClassification(t, txns)
+    const orig = resolveNoteClassification(t, txns, originals)
     return orig.isInterState && orig.totalAmount > B2CL_INVOICE_VALUE_THRESHOLD
   })
   return notes.map(txn => ({
@@ -1025,6 +1055,12 @@ export function buildGstr1(
      */
     advancesReceivedThisPeriod?: AdvanceReceipt[]
     advancesFromEarlierPeriods?: AdvanceReceipt[]
+    /**
+     * Originals for notes whose invoice falls OUTSIDE this filing period.
+     * Fetched by id, so a credit note issued in August can be classified by
+     * the July invoice it cancels. See resolveNoteClassification.
+     */
+    originalInvoices?: OriginalInvoiceLookup
     /** Table 9A, computed by the caller — it needs the filed snapshots. */
     amendments?: { b2ba: Array<{ ctin: string; inv: unknown[] }>; b2cla: Array<{ pos: string; inv: unknown[] }>; cdnra: Array<{ ctin: string; nt: unknown[] }>; cdnura: unknown[] }
   },
@@ -1041,9 +1077,9 @@ export function buildGstr1(
     cur_gt: roundMoney(cur_gt),
     b2b: buildB2B(txns, shop),
     b2cl: buildB2CL(txns, shop),
-    b2cs: buildB2CS(txns, shop),
+    b2cs: buildB2CS(txns, shop, options?.originalInvoices),
     cdnr: buildCDNR(txns, shop),
-    cdnur: buildCDNUR(txns, shop),
+    cdnur: buildCDNUR(txns, shop, options?.originalInvoices),
     hsn: buildHSN(txns),
     nil: buildNIL(txns),
     doc_issue: buildDOC(txns, options?.cancelled || []),

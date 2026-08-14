@@ -120,6 +120,41 @@ export async function GET(req: NextRequest) {
     const declaredPriorFy = setting?.priorFyTurnover
     const priorFyTurnover = declaredPriorFy ?? computedPriorFy
 
+    /*
+     * 🔒 BUG-062 (2026-08-14): fetch the originals for notes whose invoice is
+     * NOT in this filing period.
+     *
+     * A credit/debit note is classified B2CS-vs-CDNUR by its ORIGINAL invoice's
+     * inter-state flag and value, not its own. The builder looked that up in
+     * the period's transaction array — and a note is almost always issued in a
+     * LATER month than the invoice it cancels, so the original was usually
+     * absent and it silently fell back to the note's own values. That is the
+     * normal case, not an edge case, so the lookup effectively never fired.
+     *
+     * Fetched by id, unbounded by date, and only for the ids actually missing —
+     * for a month with no cross-period notes this query does not run at all.
+     */
+    const inPeriodIds = new Set(txns.map(t => t.id))
+    const missingOriginalIds = [...new Set(
+      txns
+        .filter(t => (t.type === 'credit-note' || t.type === 'debit-note') && t.originalTransactionId)
+        .map(t => t.originalTransactionId as string)
+        .filter(id => !inPeriodIds.has(id)),
+    )]
+
+    const originalInvoices = new Map<string, { isInterState: boolean; totalAmount: number }>()
+    if (missingOriginalIds.length > 0) {
+      // userId scoped: a note must never be classified by another shop's invoice.
+      const originalRows = await db.transaction.findMany({
+        where: { userId, id: { in: missingOriginalIds }, deletedAt: null },
+        select: { id: true, isInterState: true, totalAmount: true },
+      })
+      for (const r of originalRows) {
+        originalInvoices.set(r.id, { isInterState: r.isInterState, totalAmount: roundMoney(r.totalAmount) })
+      }
+    }
+
+
     // Transform DB rows to builder input
     const builderTxns: Gstr1Transaction[] = txns.map(t => ({
       id: t.id,
@@ -287,6 +322,8 @@ export async function GET(req: NextRequest) {
     const gstr1 = buildGstr1(builderTxns, shop, monthYear, {
       amendments,
       priorFyTurnover,
+      // 🔒 BUG-062: originals for notes whose invoice is in an earlier month.
+      originalInvoices,
       cancelled: cancelledForDoc,
       advancesReceivedThisPeriod: advances.receivedThisPeriod,
       // 11B releases only what an earlier period's 11A already declared.
@@ -462,6 +499,41 @@ export async function POST(req: NextRequest) {
     const declaredPriorFy = setting?.priorFyTurnover
     const priorFyTurnover = declaredPriorFy ?? computedPriorFy
 
+    /*
+     * 🔒 BUG-062 (2026-08-14): fetch the originals for notes whose invoice is
+     * NOT in this filing period.
+     *
+     * A credit/debit note is classified B2CS-vs-CDNUR by its ORIGINAL invoice's
+     * inter-state flag and value, not its own. The builder looked that up in
+     * the period's transaction array — and a note is almost always issued in a
+     * LATER month than the invoice it cancels, so the original was usually
+     * absent and it silently fell back to the note's own values. That is the
+     * normal case, not an edge case, so the lookup effectively never fired.
+     *
+     * Fetched by id, unbounded by date, and only for the ids actually missing —
+     * for a month with no cross-period notes this query does not run at all.
+     */
+    const inPeriodIds = new Set(txns.map(t => t.id))
+    const missingOriginalIds = [...new Set(
+      txns
+        .filter(t => (t.type === 'credit-note' || t.type === 'debit-note') && t.originalTransactionId)
+        .map(t => t.originalTransactionId as string)
+        .filter(id => !inPeriodIds.has(id)),
+    )]
+
+    const originalInvoices = new Map<string, { isInterState: boolean; totalAmount: number }>()
+    if (missingOriginalIds.length > 0) {
+      // userId scoped: a note must never be classified by another shop's invoice.
+      const originalRows = await db.transaction.findMany({
+        where: { userId, id: { in: missingOriginalIds }, deletedAt: null },
+        select: { id: true, isInterState: true, totalAmount: true },
+      })
+      for (const r of originalRows) {
+        originalInvoices.set(r.id, { isInterState: r.isInterState, totalAmount: roundMoney(r.totalAmount) })
+      }
+    }
+
+
     const builderTxns: Gstr1Transaction[] = txns.map(t => ({
       id: t.id,
       type: t.type,
@@ -496,7 +568,7 @@ export async function POST(req: NextRequest) {
       })),
     }))
 
-    const gstr1 = buildGstr1(builderTxns, shop, monthYear, { priorFyTurnover })
+    const gstr1 = buildGstr1(builderTxns, shop, monthYear, { priorFyTurnover, originalInvoices })
 
     const totalTaxableValue = roundMoney(
       builderTxns.filter(t => t.type === 'sale').reduce((s, t) => s + t.subtotal - t.discountAmount, 0)
