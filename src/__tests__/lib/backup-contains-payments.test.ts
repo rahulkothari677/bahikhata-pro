@@ -35,9 +35,9 @@ const PAYMENTS = [
 ]
 
 function respond(url: string) {
-  if (url.startsWith('/api/products')) return { products: [{ id: 'prod_1', name: 'Rice' }] }
-  if (url.startsWith('/api/parties')) return { parties: [{ id: 'party_1', name: 'Anita' }] }
-  if (url.startsWith('/api/transactions')) return { transactions: [{ id: 'txn_1', totalAmount: 1000 }] }
+  if (url.startsWith('/api/products')) return { products: [{ id: 'prod_1', name: 'Rice' }], total: 1, truncated: false }
+  if (url.startsWith('/api/parties')) return { parties: [{ id: 'party_1', name: 'Anita' }], total: 1, truncated: false }
+  if (url.startsWith('/api/transactions')) return { transactions: [{ id: 'txn_1', totalAmount: 1000 }], hasMore: false }
   if (url.startsWith('/api/payments')) return { payments: PAYMENTS, total: PAYMENTS.length, truncated: false }
   if (url.startsWith('/api/settings')) return { setting: { shopName: 'Test Shop' } }
   if (url.startsWith('/api/shops')) return { shops: [{ id: 'shop_1', name: 'Test Shop' }] }
@@ -120,6 +120,85 @@ describe('the file contains the money', () => {
   })
 })
 
+describe('every transaction is in the file, not just the newest page', () => {
+  /*
+   * 🔒 THE BIGGEST ONE (audit 2026-08-14). The export asked for
+   * `/api/transactions?limit=10000`. That endpoint caps `limit` at 200 —
+   * deliberately, to protect its memory — and returns `hasMore: true` with a
+   * cursor for the rest. The export ignored both and wrote the newest 200 rows.
+   *
+   * Found on live data: the shop's oldest exported invoice was 1 June while
+   * payments plainly referred to bills from April. The file was well-formed and
+   * nothing warned; only a restore would have revealed the missing history.
+   *
+   * Worse than the missing payments, because these are the invoices themselves
+   * — the GST filed against them, the stock movements, the lot.
+   */
+  function paged(pages: { transactions: unknown[]; hasMore: boolean; nextCursor?: string }[]) {
+    let call = 0
+    mockOfflineFetch.mockImplementation(async (url: string) => ({
+      ok: true,
+      json: async () => (url.startsWith('/api/transactions') ? pages[call++] : respond(url)),
+    }))
+  }
+
+  it('follows the cursor to the end', async () => {
+    paged([
+      { transactions: [{ id: 't1' }, { id: 't2' }], hasMore: true, nextCursor: '2026-06-01|t2' },
+      { transactions: [{ id: 't3' }], hasMore: false },
+    ])
+    await exportBackup()
+    expect(backupFile().data.transactions.map((t: { id: string }) => t.id)).toEqual(['t1', 't2', 't3'])
+  })
+
+  it('sends the cursor it was given', async () => {
+    paged([
+      { transactions: [{ id: 't1' }], hasMore: true, nextCursor: '2026-06-01|t1' },
+      { transactions: [{ id: 't2' }], hasMore: false },
+    ])
+    await exportBackup()
+    const urls = mockOfflineFetch.mock.calls.map(c => String(c[0])).filter(u => u.startsWith('/api/transactions'))
+    expect(urls).toHaveLength(2)
+    expect(urls[1]).toContain('cursor=')
+    // Cursors are "date|id"; an unescaped pipe would silently truncate the query.
+    expect(urls[1]).toContain(encodeURIComponent('2026-06-01|t1'))
+  })
+
+  it('does not ask for more than the endpoint will give', async () => {
+    // Asking for 10,000 is what hid the bug: the server quietly returned 200
+    // and the export believed it had everything.
+    await exportBackup()
+    const url = mockOfflineFetch.mock.calls.map(c => String(c[0])).find(u => u.startsWith('/api/transactions'))
+    expect(url).not.toContain('limit=10000')
+  })
+
+  it('stops after one page when there is no more', async () => {
+    await exportBackup()
+    const urls = mockOfflineFetch.mock.calls.map(c => String(c[0])).filter(u => u.startsWith('/api/transactions'))
+    expect(urls).toHaveLength(1)
+  })
+
+  it('refuses rather than writing a short file when the cursor is missing', async () => {
+    // hasMore with no cursor means the paging cannot advance. Stopping quietly
+    // here would produce exactly the file this whole test exists to prevent.
+    paged([{ transactions: [{ id: 't1' }], hasMore: true }])
+    await expect(exportBackup()).rejects.toThrow(/could not read past/i)
+    expect(written).toBeNull()
+  })
+
+  it('refuses rather than looping forever on a stuck cursor', async () => {
+    mockOfflineFetch.mockImplementation(async (url: string) => ({
+      ok: true,
+      json: async () =>
+        url.startsWith('/api/transactions')
+          ? { transactions: [{ id: 'stuck' }], hasMore: true, nextCursor: 'same-forever' }
+          : respond(url),
+    }))
+    await expect(exportBackup()).rejects.toThrow(/more than/i)
+    expect(written).toBeNull()
+  })
+})
+
 describe('a partial backup is refused, not written', () => {
   it('throws rather than saving a file the server said was capped', async () => {
     /*
@@ -136,6 +215,23 @@ describe('a partial backup is refused, not written', () => {
           : respond(url),
     }))
     await expect(exportBackup()).rejects.toThrow(/12000|12,000/)
+    expect(written).toBeNull()
+  })
+
+  it.each([
+    ['products', '/api/products', 'products'],
+    ['parties', '/api/parties', 'parties'],
+  ])('refuses when the server says the %s list was capped', async (_label, prefix, key) => {
+    // These endpoints have reported `truncated` for some time and the export
+    // was reading none of them — only the payments flag it had just been given.
+    mockOfflineFetch.mockImplementation(async (url: string) => ({
+      ok: true,
+      json: async () =>
+        url.startsWith(prefix)
+          ? { [key]: [{ id: 'x' }], total: 9_000, truncated: true }
+          : respond(url),
+    }))
+    await expect(exportBackup()).rejects.toThrow(/9000|9,000/)
     expect(written).toBeNull()
   })
 

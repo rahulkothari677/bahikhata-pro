@@ -19,6 +19,74 @@ import { offlineFetch } from './offline-fetch'
  */
 export const BACKUP_VERSION = 2
 
+/**
+ * Refuse to write the file rather than write a short one.
+ *
+ * A silently partial backup is the worst possible outcome: it looks like
+ * safety, and the gap is discovered at the moment of recovery, when the
+ * original is gone.
+ */
+function assertComplete(what: string, truncated: unknown, total?: number, got?: number): void {
+  if (!truncated) return
+  throw new Error(
+    `This shop has ${total ?? 'more'} ${what} and the backup could only read ${got ?? 0}. ` +
+    `Nothing was saved, because a backup missing some of your ${what} would be worse than none. ` +
+    `Please get in touch so we can export the full history for you.`,
+  )
+}
+
+/**
+ * Every transaction, by following the server's own pagination.
+ *
+ * 🔒 2026-08-14: THE BACKUP WAS KEEPING ONLY THE NEWEST 200 INVOICES.
+ *
+ * This used to be a single `GET /api/transactions?limit=10000`. That endpoint
+ * caps `limit` at 200 — deliberately, to protect its memory — and returns
+ * `hasMore: true` with a cursor for the rest. The export ignored both, so it
+ * wrote the newest 200 rows and called it a backup.
+ *
+ * Found on live data: the shop's oldest exported invoice was 1 June while
+ * payments plainly referred to bills from April. Nothing warned, and nothing
+ * ever would have: the file was well-formed, and only a restore would reveal
+ * that a year of trading had gone.
+ *
+ * Worse than the missing payments, because these are the invoices themselves —
+ * the GST already filed against them, the stock movements, the whole history.
+ */
+async function fetchAllTransactions(): Promise<Record<string, unknown>[]> {
+  /*
+   * ~50 pages. Generous for any real shop, and a hard stop so a broken cursor
+   * cannot spin forever on someone's phone. Hitting it means the export is
+   * incomplete, which is a refusal, not a silent trim.
+   */
+  const MAX_PAGES = 50
+  const all: Record<string, unknown>[] = []
+  let cursor: string | null = null
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const url = `/api/transactions?limit=200${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''}`
+    const res = await offlineFetch(url)
+    const body = await res.json()
+    all.push(...(body.transactions || []))
+
+    if (!body.hasMore) return all
+    if (!body.nextCursor) {
+      // hasMore with no cursor means the page cannot be advanced. Stopping here
+      // would write a short file that looks whole.
+      throw new Error(
+        `The backup could not read past ${all.length} transactions. Nothing was saved — a backup ` +
+        `missing part of your history would be worse than none. Please try again in a moment.`,
+      )
+    }
+    cursor = body.nextCursor
+  }
+
+  throw new Error(
+    `This shop has more than ${all.length} transactions, which is more than the backup can read in ` +
+    `one go. Nothing was saved. Please get in touch so we can export your full history for you.`,
+  )
+}
+
 export async function exportBackup(): Promise<void> {
   /*
    * 🔒 2026-08-14: PAYMENTS ARE IN THE BACKUP.
@@ -37,37 +105,37 @@ export async function exportBackup(): Promise<void> {
    * recovery, when the original is already gone. Confirmed on live data before
    * fixing: that shop had 25 payments and the file it produced held 0.
    */
-  const [productsRes, partiesRes, txnRes, paymentsRes, settingsRes, shopsRes] = await Promise.all([
+  const [productsRes, partiesRes, paymentsRes, settingsRes, shopsRes] = await Promise.all([
     offlineFetch('/api/products'),
     offlineFetch('/api/parties'),
-    offlineFetch('/api/transactions?limit=10000'),
     offlineFetch('/api/payments?all=1'),
     offlineFetch('/api/settings'),
     offlineFetch('/api/shops'),
   ])
 
-  const [products, parties, transactions, payments, settings, shops] = await Promise.all([
+  const [products, parties, payments, settings, shops] = await Promise.all([
     productsRes.json(),
     partiesRes.json(),
-    txnRes.json(),
     paymentsRes.json(),
     settingsRes.json(),
     shopsRes.json(),
   ])
 
+  const transactions = await fetchAllTransactions()
+
   /*
-   * A backup that is quietly short is worse than one that refuses. If the
-   * server capped the payment list, say so and stop — the shopkeeper can act on
-   * "this did not save everything", and cannot act on a file that looks fine
-   * and is missing rows they will not notice until they need them.
+   * A backup that is quietly short is worse than one that refuses. The
+   * shopkeeper can act on "this did not save everything"; they cannot act on a
+   * file that looks fine and is missing rows they will not notice until the day
+   * they need them.
+   *
+   * Checked for EVERY list, not just the one that happened to be broken. The
+   * products and parties endpoints have reported `truncated` for some time and
+   * nothing here was reading it.
    */
-  if (payments?.truncated) {
-    throw new Error(
-      `This shop has ${payments.total} payments and the backup can carry ${payments.payments?.length ?? 0}. ` +
-      `Nothing was saved, because a backup missing some of your payments would be worse than none. ` +
-      `Please get in touch so we can export the full history for you.`,
-    )
-  }
+  assertComplete('payments', payments?.truncated, payments?.total, payments?.payments?.length)
+  assertComplete('products', products?.truncated, products?.total, products?.products?.length)
+  assertComplete('parties', parties?.truncated, parties?.total, parties?.parties?.length)
 
   const backup = {
     version: BACKUP_VERSION,
@@ -76,7 +144,7 @@ export async function exportBackup(): Promise<void> {
     data: {
       products: products.products || [],
       parties: parties.parties || [],
-      transactions: transactions.transactions || [],
+      transactions,
       payments: payments.payments || [],
       settings: settings.setting || {},
       shops: shops.shops || [],
