@@ -9,6 +9,7 @@ import { encodeKeysetCursor, buildKeysetWhere } from '@/lib/pagination'
 import { validateBody, updatePartySchema } from '@/lib/validation'
 import { findUnknownFields, schemaFields } from '@/lib/unknown-fields'
 import { apiError } from '@/lib/api-error'
+import { describeEditConflict } from '@/lib/edit-conflict'
 
 // GET /api/parties/[id] - get party with paginated transactions + SQL aggregates
 // ⚡ PERFORMANCE (Audit fix H4): Was loading ALL transactions with items into
@@ -415,12 +416,15 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     // which is overkill for this product's stage) but returns a
     // `conflictWarning` so the client can surface it. Queued replays surface
     // it via the sync toast.
-    const clientUpdatedAt = body.updatedAt ? new Date(body.updatedAt) : null
-    let conflictWarning: string | null = null
-    if (clientUpdatedAt && existing.updatedAt && clientUpdatedAt.getTime() !== existing.updatedAt.getTime()) {
-      const serverTime = new Date(existing.updatedAt).toLocaleString('en-IN')
-      conflictWarning = `This party was also edited on another device at ${serverTime} — please verify the details.`
-    }
+    /*
+     * 🔒 #31 (2026-08-13): now calls the shared, tested rule.
+     *
+     * This was an inline copy, and it was dead for a reason worth stating: not
+     * only did no client send the stamp, NO CLIENT CALLED THIS ROUTE AT ALL.
+     * There was no party edit screen. The warning was written for a screen that
+     * did not exist, and its only test grepped this file for the word.
+     */
+    const conflictWarning = describeEditConflict(body.updatedAt, existing.updatedAt, 'party')
 
     /*
      * 🔒 A RENAME MUST NOT CREATE A DUPLICATE (2026-08-03).

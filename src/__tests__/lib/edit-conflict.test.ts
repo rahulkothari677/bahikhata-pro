@@ -149,6 +149,28 @@ describe('the routes and the screen are actually wired to it', () => {
     expect(read('components/inventory/ProductDialog.tsx')).toContain("subject: 'product'")
   })
 
+  it('the PARTY route uses the shared rule, not its own copy', () => {
+    const src = read('app/api/parties/[id]/route.ts')
+    expect(src).toMatch(/describeEditConflict\(/)
+    expect(src).not.toMatch(/const clientUpdatedAt =/)
+  })
+
+  it('the PARTY dialog can edit at all, and sends the stamp', () => {
+    /*
+     * #31: this route had no caller of ANY kind. PUT /api/parties/[id] existed,
+     * was tested and worked — I called it against production and got 200 — and
+     * nothing in the app used it. A customer's phone, address or GSTIN could be
+     * typed once and never corrected.
+     */
+    const src = read('components/parties/Parties.tsx')
+    expect(src).toMatch(/method: isEdit \? 'PUT' : 'POST'/)
+    expect(src).toMatch(/updatedAt: party!\.updatedAt/)
+  })
+
+  it('the PARTY dialog asks for the PARTY wording', () => {
+    expect(read('components/parties/Parties.tsx')).toContain("subject: 'party'")
+  })
+
   it('the edit screen renders whatever describeSaveOutcome returns', () => {
     // Structural only. The BEHAVIOUR is covered by the describeSaveOutcome
     // tests below, which is the point: an earlier version of this guard was a

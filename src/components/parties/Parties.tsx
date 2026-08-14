@@ -20,13 +20,14 @@ import { EmptyState } from '@/components/common/EmptyState'
 import { ListItemSkeleton } from '@/components/common/Skeletons'
 import {
   Plus, Search, Users, Phone, User, ArrowDownRight, ArrowUpRight,
-  Building2, ChevronRight, Receipt, Send,
+  Building2, ChevronRight, Receipt, Send, Pencil,
 } from 'lucide-react'
 import { offlineFetch, isQueuedResponse, isOnline, OfflineError } from '@/lib/offline-fetch'
 import { OfflineNoData } from '@/components/common/OfflineNoData'
 import { haptic } from '@/lib/haptic'
 import { BulkRemindersModal } from '@/components/parties/BulkRemindersModal'
 import { readError } from '@/lib/read-error'
+import { describeSaveOutcome } from '@/lib/edit-conflict'
 
 export function Parties() {
   const {
@@ -39,6 +40,8 @@ export function Parties() {
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'all' | 'customer' | 'supplier'>('all')
   const [dialogOpen, setDialogOpen] = useState(false)
+  /** #31: the party being corrected, or null when adding a new one. */
+  const [editingParty, setEditingParty] = useState<any | null>(null)
   // 🔒 V22-13 (Batch C, Phase 7f): Bulk reminders modal state
   const [bulkRemindersOpen, setBulkRemindersOpen] = useState(false)
 
@@ -209,7 +212,7 @@ export function Parties() {
                 description="Add customers to track their outstanding dues, and suppliers to manage purchases. You can add them anytime from here or while creating a sale/purchase."
                 action={{
                   label: 'Add Customer',
-                  onClick: () => setDialogOpen(true),
+                  onClick: () => { setEditingParty(null); setDialogOpen(true) },
                 }}
               />
             ) : (
@@ -365,7 +368,29 @@ export function Parties() {
                       {p.balance > 0 ? `+${formatINRCompact(p.balance)}` : p.balance < 0 ? `-${formatINRCompact(Math.abs(p.balance))}` : 'Settled'}
                     </td>
                     <td className="py-3 px-2">
-                      <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary" />
+                      <div className="flex items-center gap-1 justify-end">
+                        {/*
+                          🔒 #31 (2026-08-13): until now a customer's details
+                          could be typed once and never corrected — there was no
+                          edit screen anywhere in the app.
+
+                          stopPropagation because the whole row opens the party
+                          profile. Without it, Edit would open the profile
+                          instead, which is the same nested-click mistake the
+                          bank-statement delete had to fix.
+                        */}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 w-8 p-0 opacity-0 group-hover:opacity-100 focus:opacity-100 transition"
+                          aria-label={`Edit ${p.name}`}
+                          onClick={(e) => { e.stopPropagation(); setEditingParty(p); setDialogOpen(true) }}
+                        >
+                          <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
+                        </Button>
+                        <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary" />
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -377,17 +402,39 @@ export function Parties() {
 
       <PartyDialog
         open={dialogOpen}
-        onOpenChange={setDialogOpen}
+        party={editingParty}
+        // Clearing on close matters: without it, the next "Add Party" would
+        // reopen the last customer that was edited and overwrite them.
+        onOpenChange={(v) => { setDialogOpen(v); if (!v) setEditingParty(null) }}
         onSuccess={() => triggerRefresh()}
       />
     </div>
   )
 }
 
-function PartyDialog({ open, onOpenChange, onSuccess }: {
+/**
+ * Create a party, or correct one.
+ *
+ * 🔒 #31 (audit 2026-08-13): editing was impossible. `PUT /api/parties/[id]`
+ * existed, was tested, and worked — I called it against production and got 200
+ * — and NOTHING in the app called it. There was no edit screen at all, so a
+ * customer's phone number, address or GSTIN could be typed once and never
+ * corrected.
+ *
+ * The GSTIN is the one that hurts. deriveInterStateStatus reads it to decide
+ * IGST versus CGST+SGST, so a GSTIN entered wrong at creation puts the wrong
+ * tax on every future bill to that customer, and the shopkeeper has no way to
+ * fix it short of creating a second party and splitting their ledger in half.
+ *
+ * One dialog for both, like ProductDialog: the fields are identical, and two
+ * forms describing one thing drift apart.
+ */
+function PartyDialog({ open, onOpenChange, onSuccess, party }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   onSuccess?: () => void
+  /** Present when correcting an existing party; absent when adding one. */
+  party?: { id: string; name: string; type: string; phone?: string | null; email?: string | null; gstin?: string | null; address?: string | null; state?: string | null; openingBalance?: number | null; updatedAt?: string | null } | null
 }) {
   const [form, setForm] = useState({
     name: '', type: 'customer', phone: '', email: '', gstin: '',
@@ -397,12 +444,33 @@ function PartyDialog({ open, onOpenChange, onSuccess }: {
   /** Duplicate name/phone rejected by the server, shown under that field. */
   const [dupError, setDupError] = useState<{ field: "name" | "phone"; message: string } | null>(null)
 
+  const isEdit = !!party
 
   useEffect(() => {
-    if (open) {
+    if (!open) return
+    setDupError(null)
+    if (party) {
+      /*
+       * The opening balance is shown as the shopkeeper entered it — a positive
+       * number — even though a supplier's is stored negative. The save path
+       * re-applies that sign, so a round trip through this form must not flip
+       * it. Showing -7410 in a box labelled "how much do you owe them?" would
+       * read as a bug, and correcting it would double the negation.
+       */
+      setForm({
+        name: party.name ?? '',
+        type: party.type ?? 'customer',
+        phone: party.phone ?? '',
+        email: party.email ?? '',
+        gstin: party.gstin ?? '',
+        address: party.address ?? '',
+        state: party.state ?? '',
+        openingBalance: party.openingBalance != null ? String(Math.abs(party.openingBalance)) : '',
+      })
+    } else {
       setForm({ name: '', type: 'customer', phone: '', email: '', gstin: '', address: '', state: '', openingBalance: '' })
     }
-  }, [open])
+  }, [open, party])
 
   const handleSave = async () => {
     if (!form.name.trim()) {
@@ -417,11 +485,21 @@ function PartyDialog({ open, onOpenChange, onSuccess }: {
     // WORSE than before the fix.
     const rawOpening = parseFloat(form.openingBalance) || 0
     const normalizedOpening = form.type === 'supplier' ? -Math.abs(rawOpening) : rawOpening
-    const payload = { ...form, openingBalance: normalizedOpening }
+    const payload = {
+      ...form,
+      openingBalance: normalizedOpening,
+      /*
+       * 🔒 #31: the stamp this party carried when it was opened, so the server
+       * can say whether someone else changed it meanwhile. The parties route
+       * has computed that warning since Phase 5 and has never once fired it,
+       * because no client existed to send this.
+       */
+      ...(isEdit ? { updatedAt: party!.updatedAt ?? null } : {}),
+    }
     setSaving(true)
     try {
-      const r = await offlineFetch('/api/parties', {
-        method: 'POST',
+      const r = await offlineFetch(isEdit ? `/api/parties/${party!.id}` : '/api/parties', {
+        method: isEdit ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
         offline: { invalidate: ['/api/parties', '/api/dashboard'] },
@@ -437,12 +515,26 @@ function PartyDialog({ open, onOpenChange, onSuccess }: {
         }
       }
       if (!r.ok) throw new Error(await readError(r))
-      if (isQueuedResponse(r)) {
-        sonnerToast.success('Saved offline — will sync when online')
+
+      /*
+       * 🔒 #31 + #29: show the concurrent-edit warning, using the same shared
+       * decision the invoice and product screens use.
+       */
+      const queuedOffline = isQueuedResponse(r)
+      const saved = queuedOffline ? null : await r.clone().json().catch(() => null)
+      const outcome = describeSaveOutcome(saved, {
+        queuedOffline,
+        subject: 'party',
+        successTitle: isEdit ? 'Customer details updated' : 'Party added successfully',
+      })
+
+      if (outcome.kind === 'warning') {
+        haptic.warning()
+        sonnerToast.warning(outcome.title, { description: outcome.description, duration: outcome.durationMs })
       } else {
-        sonnerToast.success('Party added successfully')
+        sonnerToast.success(outcome.title, { duration: outcome.durationMs })
+        haptic.success()
       }
-      haptic.success()
       onSuccess?.()
       onOpenChange(false)
     } catch (e: any) {

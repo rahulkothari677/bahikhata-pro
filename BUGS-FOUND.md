@@ -1030,3 +1030,14 @@ and include enough context to reproduce.
 - Hidden when only one shop remains — the server refuses that anyway, and a button whose only outcome is a rejection is worse than no button.
 - **Guard**: `src/__tests__/components/shop-remove-button.test.ts` — 11 tests. Break-verified four ways: removing the button fails 1, dropping the `archive=1` flag (which would turn every "put away" into a delete attempt) fails 1, throwing away the server's explanation fails 1, showing it for the last shop fails 1.
 - **Status**: FIXED.
+
+### #31 — There was no way to edit a customer or supplier (Medium/Data) — FIXED
+- **Files**: `src/components/parties/Parties.tsx`, `src/app/api/parties/[id]/route.ts`
+- **Description**: `PUT /api/parties/[id]` existed, was validated, was tested, and worked — I called it against production and got 200. **Nothing in the app called it.** There was no party edit screen at all, so a customer's phone number, address or GSTIN could be typed once and never corrected.
+- **Why the GSTIN matters most**: `deriveInterStateStatus` reads it to decide IGST vs CGST+SGST. A GSTIN entered wrong at creation put the wrong tax on **every future bill** to that customer, and the only workaround was to create a second party — splitting that customer's ledger in half.
+- **Found while doing #29**: I went to wire the concurrent-edit warning into parties and discovered there was nothing to warn about, because nothing could edit a party.
+- **Fix**: `PartyDialog` now edits as well as creates — one dialog, like `ProductDialog`, because the fields are identical and two forms describing one thing drift apart. An Edit control on each row, and the parties route now calls the shared `describeEditConflict()` instead of its own dead copy.
+- **The trap in editing a form that normalises on save**: a supplier's opening balance is **stored negative** ("they owe us" is positive, so a supplier you owe ₹7,410 is −7410), and the save path negates whatever is typed. Loading −7410 straight back into a box labelled "how much do you owe them?" would show a negative — and saving unchanged would negate it **again**, turning a debt into a credit silently, just by opening the form and pressing save. `Math.abs` on load makes the round trip a no-op.
+- **My own wiring failure, caught by my own test**: the edit dialog was never actually passed the party — a string replacement had silently not applied. Without the test, the Edit button would have opened a blank *add* form. This is the third time this session a `node -e` replacement no-opped without complaining.
+- **Guard**: `src/__tests__/components/party-edit.test.ts` — 9 tests, plus 3 added to `edit-conflict.test.ts`. Break-verified five ways: removing the edit button fails 1, making edit create a new party fails 1, loading the supplier balance signed fails 1, Add Party reopening the last edited customer fails 1, Edit opening the profile instead of the dialog fails 1.
+- **Status**: FIXED.
