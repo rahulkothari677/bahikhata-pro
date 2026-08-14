@@ -1,14 +1,38 @@
 /**
- * #70 — how the least-sold answer is WORDED.
+ * #70 / #78 — how the sold-ranking answers are WORDED, BOTH ENDS OF IT.
  *
- * A pure function, deliberately, and the reason is #76 from this morning: a
- * rule buried inside an API route can only be exercised by deploying and
- * asking. That is how five guards in three days ended up measuring the wrong
- * thing — nobody could call them with a known-good and a known-bad input.
- * Everything here can be called with a list and checked.
+ * The most-sold and least-sold answers live in one file on purpose. They are
+ * the same question asked from opposite ends, over the same rows, and #78 is
+ * what happens when they drift: "sabse zyada kya bika" measured sale value
+ * one way while every other screen measured it another, and nobody could see
+ * it because the two answers were written in different places.
+ *
+ * Pure functions, for the reason #76 taught: a rule buried inside an API
+ * route can only be exercised by deploying and asking. That is how five
+ * guards in three days ended up measuring the wrong thing.
  *
  * The database decides WHAT the answer is. This decides only how it reads.
+ *
+ * ─────────────────── THE ONE MEASURE, WRITTEN DOWN ───────────────────
+ *
+ * Sale value = quantity × unitPrice − discount, with credit notes
+ * subtracted. That is BEFORE GST, and it is the same expression the
+ * Item-wise Profit report and the dashboard's best-sellers chart use.
+ *
+ * It matters that this sentence exists somewhere. Three definitions of
+ * per-product revenue were live at once:
+ *
+ *   dashboard chart   qty × unitPrice                    Shirt Stitching ₹1,500
+ *   item-profit       qty × unitPrice − discount         Shirt Stitching ₹1,500
+ *   ask top_products  ti.total (GST in, after discount)  Shirt Stitching ₹2,625
+ *
+ * — and the Ask figure counted returns as sales on top, so it also said 5
+ * sold where the others said 3. The "Open Item-wise Profit" button (#68) led
+ * from ₹2,625 to ₹1,500 with nothing to explain the gap.
  */
+
+/** Said in the answer itself, because a bare figure invites the wrong guess. */
+export const SALE_VALUE_BASIS = 'Sale value before GST, after returns.'
 
 export interface LeastSoldItem {
   id: string
@@ -121,4 +145,62 @@ export function leastSoldAnswer(
  */
 export function receiptAmount(item: LeastSoldItem): number {
   return soldNothing(item.qty) ? item.tiedUp : item.value
+}
+
+/* ─────────────────────────── THE OTHER END ─────────────────────────── */
+
+export interface TopSoldItem {
+  id: string
+  name: string
+  /** Net units sold — returns already subtracted, so it can be ≤ 0. */
+  qty: number
+  /** Net sale value in RUPEES, before GST. See SALE_VALUE_BASIS. */
+  value: number
+}
+
+/**
+ * "Sabse zyada kya bika".
+ *
+ * `soldNothing` is reused rather than re-tested: a product whose sales were
+ * all returned is not the best seller, and the two ends of this ranking must
+ * agree about what "sold nothing" means or they will contradict each other on
+ * the same shop's books.
+ */
+export function topSoldAnswer(
+  items: TopSoldItem[],
+  label: string,
+  money: (n: number) => string,
+  soldCount: number,
+): LeastSoldAnswer {
+  if (items.length === 0) {
+    return {
+      headline: `No sales ${label}`,
+      detail: 'Nothing was sold in this period.',
+      soldNothing: true,
+    }
+  }
+
+  const top = items[0]
+
+  /*
+   * EVERY SALE CAME BACK. Calling the top row "sold most" when its net is
+   * zero or negative is the mirror of calling a loss-making product the most
+   * profitable — technically a ranking, and false to read.
+   */
+  if (soldNothing(top.qty)) {
+    return {
+      headline: `Returns cancelled out every sale ${label}`,
+      detail: `Nothing has a positive net sale ${label} once returns are ` +
+        `subtracted. ${SALE_VALUE_BASIS}`,
+      soldNothing: true,
+    }
+  }
+
+  const showing = soldCount > items.length ? `Top ${items.length} of ${soldCount} items sold. ` : ''
+
+  return {
+    headline: `${top.name} sold most ${label}`,
+    detail: `${money(top.value)} from ${top.qty} sold. ${showing}${SALE_VALUE_BASIS}`,
+    soldNothing: false,
+  }
 }

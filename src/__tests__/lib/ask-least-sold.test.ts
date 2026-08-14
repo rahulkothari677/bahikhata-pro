@@ -12,7 +12,7 @@
  */
 
 import { describe, test, expect } from '@jest/globals'
-import { leastSoldAnswer, receiptAmount, soldNothing, type LeastSoldItem } from '@/lib/ask-least-sold'
+import { leastSoldAnswer, receiptAmount, soldNothing, topSoldAnswer, SALE_VALUE_BASIS, type LeastSoldItem, type TopSoldItem } from '@/lib/ask-least-sold'
 
 /** Rupees, formatted the way the route formats them. */
 const money = (n: number) => `₹${n.toFixed(2)}`
@@ -199,5 +199,88 @@ describe('the period is always stated', () => {
     // whether it covers today or five years.
     const a = leastSoldAnswer([item()], 2, label, money)
     expect(a.headline).toContain(label)
+  })
+})
+
+/**
+ * 🔒 #78 — "sabse zyada kya bika" must agree with the two screens that
+ * already agree with each other.
+ *
+ * Measured live on Sharma Tailors' books, one product, three surfaces:
+ *
+ *   dashboard best-sellers   3 sold   ₹1,500
+ *   item-profit report       3 sold   ₹1,500
+ *   THIS ANSWER              5 sold   ₹2,625
+ *
+ * Two separate causes, and fixing only the first still leaves a gap:
+ *   1. returns counted as sales (5 vs 3)
+ *   2. ti.total carries GST; the others use qty × unitPrice − discount.
+ *      Netting returns alone lands on ₹1,575 — still ₹75 out, exactly the
+ *      5% GST on ₹1,500.
+ *
+ * And #68 had given this answer an "Open Item-wise Profit" button, so the
+ * shopkeeper's own way of checking led from one number to a different one.
+ */
+describe('#78 — the most-sold answer', () => {
+  const item = (o: Partial<TopSoldItem> = {}): TopSoldItem =>
+    ({ id: 'p1', name: 'Shirt Stitching', qty: 3, value: 1500, ...o })
+
+  test('names the item, the value and the net quantity', () => {
+    const a = topSoldAnswer([item()], 'this month', money, 1)
+    expect(a.headline).toBe('Shirt Stitching sold most this month')
+    expect(a.detail).toContain('₹1500.00 from 3 sold')
+  })
+
+  test('states the GST basis, because three numbers were live at once', () => {
+    /*
+     * The repo's own guard on this says why: a shopkeeper seeing two
+     * different figures concludes the app lost their money, and an app
+     * suspected of losing money is finished whether or not it did.
+     */
+    expect(topSoldAnswer([item()], 'this month', money, 1).detail)
+      .toContain('before GST, after returns')
+  })
+
+  test('both ends of the ranking quote the SAME basis sentence', () => {
+    // If these ever diverge, the two answers are measuring different things
+    // again — which is the whole of #78.
+    expect(SALE_VALUE_BASIS).toContain('before GST')
+    expect(topSoldAnswer([item()], 'this month', money, 1).detail).toContain(SALE_VALUE_BASIS)
+  })
+
+  test('#73: five of forty says forty', () => {
+    const five = [1, 2, 3, 4, 5].map(n => item({ id: `p${n}`, name: `P${n}` }))
+    expect(topSoldAnswer(five, 'this month', money, 40).detail).toContain('Top 5 of 40 items sold')
+  })
+
+  test('a fully-returned product is never the best seller', () => {
+    /*
+     * The mirror of calling a loss-making item the most profitable. If the
+     * top row nets to zero or less, every sale came back, and "sold most" is
+     * a ranking that reads as a lie.
+     */
+    const a = topSoldAnswer([item({ qty: 0, value: 0 })], 'this month', money, 0)
+    expect(a.headline).toBe('Returns cancelled out every sale this month')
+    expect(a.headline).not.toContain('sold most')
+    expect(a.soldNothing).toBe(true)
+  })
+
+  test('a net-negative top row too', () => {
+    const a = topSoldAnswer([item({ qty: -2, value: -1050 })], 'this month', money, 0)
+    expect(a.headline).toBe('Returns cancelled out every sale this month')
+    expect(a.detail).not.toContain('-₹')
+  })
+
+  test('nothing sold at all is said, not priced', () => {
+    const a = topSoldAnswer([], 'this month', money, 0)
+    expect(a.headline).toBe('No sales this month')
+    expect(a.detail).not.toContain('₹0')
+  })
+
+  test('the two ends agree about what "sold nothing" means', () => {
+    // One predicate, used by both, so a product cannot be the best seller on
+    // one screen and a non-seller on the other.
+    expect(soldNothing(0)).toBe(true)
+    expect(topSoldAnswer([item({ qty: 0 })], 'this month', money, 0).soldNothing).toBe(true)
   })
 })

@@ -39,19 +39,62 @@ function stripComments(s: string): string {
 
 const read = (p: string) => stripComments(readFileSync(join(process.cwd(), p), 'utf8'))
 
+/**
+ * The body of one `case 'name':` in the Ask switch, cut where it actually
+ * ends — at the next `case '` label — rather than after a guessed number of
+ * characters.
+ *
+ * 🔒 Fixed-width windows are the single most repeated defect in this repo's
+ * guards: a 900-char window that an added comment pushed the target out of, a
+ * 700-char window that let a neighbouring query satisfy a tenant check, and a
+ * 1,600-char window here. Every one of them passed on broken code or failed
+ * on correct code, and every one looked fine when it was written.
+ */
+function caseBlock(src: string, name: string): string {
+  const start = src.indexOf(`case '${name}'`)
+  if (start === -1) throw new Error(`case '${name}' not found — did it get renamed?`)
+  const next = src.indexOf("case '", start + 6)
+  return src.slice(start, next === -1 ? src.length : next)
+}
+
 describe('Ask never reads part of the books and calls it the answer', () => {
   const src = read('src/app/api/ask/route.ts')
 
   test('top products is grouped by the DATABASE, not counted in memory', () => {
     /*
-     * The fix, pinned. `groupBy` sums every matching line inside Postgres and
-     * returns five rows; the old code fetched rows and added them up here.
-     * The remaining `take: 5` is on the ANSWER, not on the data read.
+     * The fix, pinned — but pinned to the PROPERTY, not to one API call.
+     *
+     * 🐛 15 Aug, #78: this test read `expect(block).toContain('groupBy')` and
+     * failed when the answer moved from Prisma's `groupBy` to raw SQL. The
+     * new query groups inside Postgres exactly as before — arguably more
+     * plainly, since the GROUP BY is written out — so the guard was failing
+     * correct code because it had pinned HOW rather than WHAT.
+     *
+     * That is the same family as the four other guards this week that
+     * measured the wrong text. The rule it earned: assert the behaviour that
+     * matters (Postgres does the grouping; nothing is totalled in JS), and
+     * let the implementation be either shape.
+     *
+     * The 1,600-character window is gone for the same reason. It was already
+     * on the edge — the comment now explaining this query is longer than
+     * that — and a window that a comment can push the code out of is the
+     * exact defect written up five times in CLAUDE.md. The block is now cut
+     * at the next `case '` label, which is where it actually ends.
      */
-    const block = src.slice(src.indexOf("case 'top_products'"), src.indexOf("case 'top_products'") + 1600)
-    expect(block).toContain('groupBy')
-    expect(block).toMatch(/by: \['productId', 'productName'\]/)
-    expect(block).not.toContain('take: 2000')
+    const block = caseBlock(src, 'top_products')
+
+    // Grouped in the database, by either mechanism.
+    const groupsInDb = /groupBy/.test(block) || /GROUP\s+BY/i.test(block)
+    expect(groupsInDb).toBe(true)
+
+    // Grouped by the product, however it is spelled in each dialect.
+    const byProduct = /by: \['productId', 'productName'\]/.test(block)
+      || /GROUP\s+BY\s+ti\."productId",\s*ti\."productName"/i.test(block)
+    expect(byProduct).toBe(true)
+
+    // And the answer is never assembled by adding rows up in JavaScript.
+    expect(block).not.toMatch(/take: (\d{3,})/)
+    expect(block).not.toMatch(/\.reduce\(/)
   })
 
   test('no query in Ask fetches thousands of rows to add up', () => {

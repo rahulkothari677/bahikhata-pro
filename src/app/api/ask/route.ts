@@ -18,7 +18,7 @@ import { buildNoticeLine } from '@/lib/ask-notice-line'
 import { resolveFollowUp, isBarePeriod } from '@/lib/ask-follow-up'
 import { splitCompound } from '@/lib/ask-compound'
 import { findDestinations } from '@/lib/nav-match'
-import { leastSoldAnswer, receiptAmount } from '@/lib/ask-least-sold'
+import { leastSoldAnswer, receiptAmount, topSoldAnswer } from '@/lib/ask-least-sold'
 import { customerRankAnswer, productProfitAnswer, nobodyBought, needsProfitPermission } from '@/lib/ask-customer-rank'
 import { Prisma } from '@prisma/client'
 import { NAV_REGISTRY, filterByPermissions, getById } from '@/lib/nav-registry'
@@ -878,13 +878,72 @@ export async function POST(req: NextRequest) {
          * rows. The cap that remains is on the ANSWER (top 5 shown), not on
          * the data read — which is the whole difference.
          */
-        const grouped = await db.transactionItem.groupBy({
-          by: ['productId', 'productName'],
-          where: { transaction: { userId, deletedAt: null, type: 'sale', date: { gte: from, lt: to } } },
-          _sum: { quantity: true, total: true },
-          orderBy: { _sum: { total: 'desc' } },
-          take: 5,
-        })
+        /*
+         * 🔒 #78 — AND IT AGREES WITH THE SCREEN IT OPENS.
+         *
+         * This was a Prisma `groupBy` over `type: 'sale'` summing `ti.total`,
+         * and it disagreed with the rest of the app in TWO ways at once.
+         * Measured live on Sharma Tailors' books, one product, three screens:
+         *
+         *   dashboard best-sellers   3 sold   ₹1,500
+         *   item-profit report       3 sold   ₹1,500
+         *   THIS ANSWER              5 sold   ₹2,625
+         *
+         *   1. RETURNS COUNTED AS SALES. Two of the five came back on a
+         *      credit note. A product sold ₹50,000 and returned in full was a
+         *      bestseller here and nowhere else.
+         *   2. A DIFFERENT MEASURE OF MONEY. `ti.total` carries GST; the
+         *      other two screens use quantity × unitPrice − discount, which
+         *      is before GST. Fixing only the returns would have landed on
+         *      ₹1,575 — still ₹75 from the report, exactly the 5% GST.
+         *
+         * #68 gave this answer an "Open Item-wise Profit" button. So the
+         * shopkeeper's own check — tap through and see where it came from —
+         * led from one number to a different one, silently. The guard on GST
+         * labelling in this repo says why that is worse than a miscalculation:
+         * an app suspected of losing money is finished, whether or not it did.
+         *
+         * The expression below is the item-profit report's, character for
+         * character, so the two cannot drift again.
+         *
+         * $queryRaw BYPASSES THE MONEY EXTENSION. `groupBy` returned rupees
+         * for free; every column here is raw PAISE and is converted below.
+         * Getting that wrong is the BUG-061 class — a figure wrong by 100×.
+         */
+        const grouped = await db.$queryRaw<Array<{
+          productId: string | null
+          productName: string
+          qty: number
+          valuePaise: number
+          soldCount: number
+        }>>`
+          WITH per_item AS (
+            SELECT ti."productId" AS pid,
+                   ti."productName" AS pname,
+                   SUM(CASE WHEN t."type" = 'sale'
+                            THEN ti."quantity" ELSE -ti."quantity" END)::float8 AS qty,
+                   SUM(CASE WHEN t."type" = 'sale'
+                            THEN (ti."unitPrice" * ti."quantity" - ti."discountAmount")
+                            ELSE -(ti."unitPrice" * ti."quantity" - ti."discountAmount")
+                       END)::float8 AS value_paise
+            FROM "TransactionItem" ti
+            JOIN "Transaction" t ON t."id" = ti."transactionId"
+            WHERE t."userId" = ${userId}
+              AND t."deletedAt" IS NULL
+              AND t."type" IN ('sale', 'credit-note')
+              AND t."date" >= ${from}
+              AND t."date" <  ${to}
+            GROUP BY ti."productId", ti."productName"
+          )
+          SELECT pid   AS "productId",
+                 pname AS "productName",
+                 qty,
+                 value_paise AS "valuePaise",
+                 (SELECT COUNT(*) FROM per_item WHERE qty > 0)::int AS "soldCount"
+          FROM per_item
+          ORDER BY value_paise DESC, pname ASC
+          LIMIT 5
+        `
 
         /*
          * Grouped by id AND name because a walk-in line can have no productId.
@@ -892,36 +951,41 @@ export async function POST(req: NextRequest) {
          * rare, visible, and far better than the alternative of dropping
          * every line whose product was later deleted.
          */
-        const top: [string, { name: string; qty: number; value: number }][] = grouped.map(g => [
-          g.productId || g.productName,
-          {
-            name: g.productName,
-            qty: g._sum.quantity || 0,
-            value: roundMoney(g._sum.total || 0),
-          },
-        ])
-        if (top.length === 0) {
+        const top = grouped.map(g => ({
+          id: g.productId || g.productName,
+          name: g.productName,
+          qty: Number(g.qty) || 0,
+          // fromPaise, because $queryRaw handed us paise. The `groupBy` this
+          // replaced returned rupees, so dropping this line would multiply
+          // every figure by 100 and still look plausible on a small shop.
+          value: roundMoney(fromPaise(Number(g.valuePaise) || 0)),
+        }))
+        const soldCount = grouped.length ? Number(grouped[0].soldCount) || 0 : 0
+
+        const answer = topSoldAnswer(top, label, money, soldCount)
+        if (answer.soldNothing) {
           return ok({
             answered: true, question, understoodAs: q.understoodAs,
-            headline: `No sales ${label}`, detail: 'Nothing was sold in this period.', sources: [],
+            headline: answer.headline, detail: answer.detail, sources: [],
           })
         }
+
         return ok({
           answered: true, question, understoodAs: q.understoodAs,
-          headline: `${top[0][1].name} sold most ${label}`,
-          detail: `${money(top[0][1].value)} from ${top[0][1].qty} sold. Top ${top.length} below, by value.`,
+          headline: answer.headline,
+          detail: answer.detail,
           /*
            * Read straight off the grouped ROWS, so every receipt id comes
            * from the database rather than from a value we assembled — the
            * rule the receipts guard enforces, after a synthesised
            * "category:Rent" id shipped and said "Transaction not found".
            */
-          sources: grouped.map(g => ({
+          sources: top.map(t => ({
             kind: 'product' as const,
-            id: g.productId || g.productName,
-            label: g.productName,
-            amount: roundMoney(g._sum.total || 0),
-            quantity: g._sum.quantity || 0,
+            id: t.id,
+            label: t.name,
+            amount: t.value,
+            quantity: t.qty,
           })),
         })
       }
@@ -1210,8 +1274,18 @@ export async function POST(req: NextRequest) {
             SELECT ti."productId" AS pid,
                    SUM(CASE WHEN t."type" = 'sale'
                             THEN ti."quantity" ELSE -ti."quantity" END)::float8 AS qty,
+                   -- #78: quantity x unitPrice - discount, NOT ti."total".
+                   -- Written hours before #78, copying ti."total" from the
+                   -- top-sellers answer beside it, and so inheriting the very
+                   -- defect #78 exists to fix: "total" carries GST, while
+                   -- every other screen measures sale value before it.
+                   -- (SQL comments, not a JS block comment — this sits inside
+                   -- a template literal, and the backticks a JS comment
+                   -- naturally wants to use would end the string.)
                    SUM(CASE WHEN t."type" = 'sale'
-                            THEN ti."total"    ELSE -ti."total"    END)::float8 AS value_paise
+                            THEN (ti."unitPrice" * ti."quantity" - ti."discountAmount")
+                            ELSE -(ti."unitPrice" * ti."quantity" - ti."discountAmount")
+                       END)::float8 AS value_paise
             FROM "TransactionItem" ti
             JOIN "Transaction" t ON t."id" = ti."transactionId"
             WHERE t."userId" = ${userId}
