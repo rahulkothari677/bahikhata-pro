@@ -1,0 +1,147 @@
+# The invoice engine — restructuring plan
+
+**Written 2026-08-15.** Rahul supplied 13 myBillBook screenshots and 20 reference invoice designs, and asked for a plan that beats myBillBook *and* the global leaders, without copying anyone.
+
+**What this serves (§0):** a compliance engine, not a register. An invoice is the one artefact that is simultaneously the shop's face, its legal record under Rule 46, and the thing that gets it paid. Every competitor treats it as a print job.
+
+---
+
+## Part 1 — What myBillBook actually has
+
+Read from the 13 screenshots, grouped by what they *do* rather than where they sit in that app's menu.
+
+| Group | Controls |
+|---|---|
+| **Delivery** | Share as PDF or Image (radio) · Print to A4/A5 or Bluetooth thermal · "select Old format if modern doesn't work with your printer" |
+| **Identity on the doc** | Invoice number prefix + starting serial · Phone on invoice (with its own on/off + editable number) · Email on invoice · Terms & Conditions · Signature (draw by hand / camera / gallery / empty box / *receiver's* signature field) · Bank account + Payment QR · Tagline |
+| **Visibility toggles** | Show Party Balance · Item Description · Alternate Unit · Price History (last 5 prices for this party) · Free Quantity · Time on invoice · Item image |
+| **Extensibility** | Add fields to **party** (industry-suggested, e.g. FSSAI for fmcg) · Add fields to **invoice** (PO Number, Vehicle Number) · Add/remove **columns** (Quantity, Rate, MRP) · custom columns (Batch no., Exp. date, Mfg date) · "Add Custom Field/Column" everywhere |
+| **Look** | Theme Styling presets (named "Uttarakhand", "Uttarakhand 2"…) · tiers: Luxury (NEW) / Stylish / Advance GST (crown = paid) · 7 colour swatches · "Create your own Invoice Theme" |
+| **Tax behaviour** | Discount **before** tax (split among items) vs **after** tax |
+| **Compliance** | Generate e-Way Bills & e-Invoices, with GSP credentials |
+
+**The one thing they do that matters most:** *every* settings screen shows a **live preview of the actual invoice at the top**, with the field being edited highlighted in a red dashed box (see the Phone Number and Invoice Prefix screens). You never guess what a toggle does.
+
+### Where myBillBook is weak — our openings
+
+1. **Their preview is a picture of a stale invoice.** Same sample data every time. It cannot show *your* longest item name overflowing.
+2. **Theme names are meaningless.** "Uttarakhand 2" tells a shopkeeper nothing. Naming is a UX decision they lost.
+3. **Their free tier is watermarked** — the sample shows *"Invoice created using myBillBook · Download now at [Play Store] [App Store]"* printed on the customer's bill. The shopkeeper's customer sees a competitor's ad on the shop's own invoice.
+4. **Settings are scattered across five screens** with no search, and no way to see "what does my invoice look like right now" in one place.
+5. **Nothing is per-customer or per-document-type.** One global setup for every buyer and every document.
+6. **No language.** Every screenshot is English-only. Their user is the same kirana shopkeeper who prefers Hindi.
+
+---
+
+## Part 2 — What EkBook has today
+
+| | |
+|---|---|
+| **Has** | 8 colour themes (`invoiceTheme`) · send format auto/image/pdf · optional share link · round-off toggle · e-invoice applicability · shop logo · UPI QR when a VPA exists · IRN + signed QR when registered |
+| **Missing** | Terms & conditions · signature · bank details · invoice number prefix · custom fields (party or invoice) · custom columns (batch/expiry/MFG/MRP) · field visibility toggles · discount before/after tax · thermal printing · **live preview of any kind** |
+
+### Two structural faults to fix before any design work
+
+**Fault 1 — the theme setting is lying.** The setting says *"Used on the bill picture, the bill link and the PDF."* It is not used on the PDF. `src/lib/invoice-pdf.ts` hardcodes `brand: {r:217, g:110, b:27}` (saffron) and never receives `invoiceTheme`. Pick Midnight: the WhatsApp image and the link turn dark blue, **the PDF stays orange**.
+
+**Fault 2 — the PDF is off the shared document layer.** `src/lib/invoice-document.ts` exists so the arithmetic happens once and renderers only draw. The PDF ignores it and defines its own `InvoiceData`. It shares `computeInvoiceDue`, so the money agrees *today* — but nothing structural keeps it that way, and every new field has to be added twice.
+
+**Fixing these is not preparation for the feature. It IS the feature's foundation.** Adding 30 customisation options to two renderers that disagree doubles the bug surface.
+
+---
+
+## Part 3 — Research: what makes an invoice good, beyond looking nice
+
+Numbers worth designing against:
+
+- Clear layouts with online payment options are paid **28–32% faster**; firms offering online payment are paid **more than twice as fast** ([LeanLaw](https://www.leanlaw.co/blog/a-guide-to-invoice-design-layout-tweaks-that-get-you-paid-faster/), [Pricefic](https://www.pricefic.com/post/hidden-psychology-invoice-design-makes-clients-pay-faster))
+- Putting **Pay Now at the top** rather than the bottom produces **15–20% more "pay now" decisions** ([BillingBee](https://www.billingbee.co/blog/invoice-psychology-trick-get-paid-faster/))
+- **"Please pay by 15 December" beats "Net 30"** — specific dates outperform jargon ([BillingBee](https://www.billingbee.co/blog/invoice-psychology-trick-get-paid-faster/))
+- **Gratitude microcopy** ("Thank you for your business") is associated with up to **21% faster** payment ([Pricefic](https://www.pricefic.com/post/hidden-psychology-invoice-design-makes-clients-pay-faster))
+- Elaborate graphics hurt: an invoice's job is communicating payment information clearly ([InvoiceGen](https://www.invoicegenfree.com/blog/best-practices-for-invoice-design))
+
+From the global tools ([Zoho](https://www.zoho.com/us/invoice/help/invoice/invoice-preferences.html), [Zoho Books custom fields](https://www.zoho.com/us/books/videos/sales/custom-field-invoice.html)): custom **fields**, custom **columns**, editable field *labels* (not just values), per-template overrides, and recurring/scheduled invoices are table stakes at the top end.
+
+**The synthesis nobody in India is doing:** these findings are about *getting paid*, and every Indian competitor treats the invoice as a *print job*. An invoice that carries the amount due at the top, a real payment button, a specific due date and a thank-you line is a **collection instrument**. That is a product difference, not a skin.
+
+---
+
+## Part 4 — What we build: five layers
+
+The principle throughout: **one document definition, many renderers, zero duplicated arithmetic.**
+
+### Layer 1 — `InvoiceDocument` becomes the only truth
+Extend `src/lib/invoice-document.ts` to carry everything any renderer could print: terms, signature, bank block, custom fields, custom columns, visibility flags, due date, thank-you line. Every renderer — A4 PDF, WhatsApp image, share link, thermal — consumes only this. **Nothing renders from a Transaction directly, ever.**
+
+Guard: a test that fails if any renderer imports Prisma types or recomputes a total.
+
+### Layer 2 — the template contract
+A template is **data**, not code: paper size, band style, table style, which blocks appear and in what order, type scale, colour roles. Like `card-templates.ts`, which already works this way.
+
+This is what makes "20 designs" cheap instead of 20 files to maintain — and it is how we avoid copyright exposure: we are not reproducing anyone's layout, we are defining our own grammar and composing original arrangements within it.
+
+### Layer 3 — the customisation model (three kinds, deliberately separated)
+
+myBillBook mixes these; separating them is clearer *and* less code:
+
+1. **Visibility** — show/hide something the document already knows (party balance, item description, time, HSN, item image)
+2. **Content** — text the shopkeeper supplies once (terms, tagline, bank details, signature, thank-you line, prefix)
+3. **Extension** — fields and columns that do not exist yet (batch, expiry, MFG, MRP, PO number, vehicle number, FSSAI, hallmark/HUID)
+
+Extensions are typed (`text | number | date | money`), so a date column sorts and formats correctly and a money column joins the totals — rather than being a string that happens to look like a date.
+
+### Layer 4 — presets by trade
+The 20 reference designs already cluster by trade: pharma needs batch/expiry/MRP and a drug-licence header; transport needs e-way bill, vehicle, LR number, consignor/consignee; retail needs a compact memo; services need SAC and hours.
+
+So: **"What kind of shop is this?" → kirana / pharma / textile / electronics / transport / services / jewellery**, and the right columns, fields and template are switched on together. One question replaces twenty toggles. This is the single biggest usability win over myBillBook, where the shopkeeper must know they need a "Batch no." column and go find it.
+
+Presets are a **starting point, never a lock** — every toggle stays editable afterwards.
+
+### Layer 5 — live preview, the honest kind
+A preview panel on every invoice-settings screen, like myBillBook — but rendering **the shop's own most recent real invoice**, not a stock sample. If their longest product name breaks the layout, they see it while choosing, not after sending.
+
+Plus the thing myBillBook cannot do: a **format switcher** on the preview — A4 · WhatsApp image · share link · thermal — so one glance answers "what does my customer actually receive?"
+
+---
+
+## Part 5 — Execution phases
+
+Each phase ships and is verifiable on its own.
+
+| Phase | What | Why this order |
+|---|---|---|
+| **1** | Put the PDF on `InvoiceDocument`; make `invoiceTheme` reach it | Fixes a live lie; without it every later field is built twice |
+| **2** | Template contract + rebuild the 8 existing themes as data | Proves the contract before we add 20 more |
+| **3** | Content settings: terms, signature, bank, prefix, tagline, thank-you, due date | Highest-value gap vs myBillBook; pure additions, low risk |
+| **4** | Visibility toggles + the live preview panel | Preview lands with something to preview |
+| **5** | Extensions: custom fields (party + invoice) + custom columns, typed | The schema-heaviest piece; needs 1–4 stable |
+| **6** | Trade presets | Only sensible once 3–5 exist to switch on |
+| **7** | New template designs, informed by the 20 references | Design last, on a working engine |
+| **8** | Thermal (58/80mm) + A5 | Needs Rahul's printer; deferred by his own instruction |
+
+**Phases 1–2 are the ones I would start immediately.** They are correctness, not features.
+
+---
+
+## Part 6 — Copyright
+
+We take from the references: which *fields* Indian trades need, and layout *conventions* (header band, party block, item table, totals right, terms bottom-left, signature bottom-right). Those are industry standards and legal requirements — Rule 46 dictates most of them.
+
+We do not take: their exact proportions, colour values, ornaments, type pairings, or theme names. Every template is composed in our own grammar with our own tokens. The one thing we will never copy is the watermark: **no EkBook advertisement on a shopkeeper's invoice, on any plan.** Their customer is not our billboard.
+
+---
+
+## Part 7 — What I need from Rahul
+
+**Answering his question — yes, filled, and body only.** Specifically:
+
+1. **Fully filled with realistic data.** Empty cells hide the real problems. The `transport_b2b_logistic` reference has blank PACKAGES / WEIGHT / RATE-PER-TON and an amount-less freight row, so I cannot see how that layout handles numbers.
+2. **The body — the whole document, edge to edge.** No phone status bar, no app chrome, no browser frame, no desktop shadow. The `billbook_modern_gold` and `minimalist_slate_corporate` files are exactly right.
+3. **At least 5 line items**, and one deliberately long product name — that is where layouts break.
+4. **Show the totals block**, including tax breakup and amount in words.
+5. **One image per design.** Multi-page only if the design does something specific on page 2.
+6. **Legible resolution** — roughly 1200px wide or more. Several current files are ~150KB and go soft when zoomed.
+
+**Not needed:** app settings screenshots (I have those), or the same design in several colours — colour is a token, one is enough.
+
+**Also useful, if easy:** a photo of a real invoice from a shop near him. Reference designs are idealised; a real one shows what actually gets printed.
