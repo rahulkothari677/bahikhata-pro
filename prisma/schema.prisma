@@ -659,6 +659,54 @@ model Setting {
   // most Indian bill books use. See src/lib/invoice-paper.ts.
   invoicePaperSize String @default("a4")
 
+  // ═══ Phase 3 of docs/INVOICE-ENGINE-PLAN.md — what is ON the bill ═══
+  //
+  // Everything below is text or an image the shopkeeper supplies once and
+  // every invoice then carries. Read from Rahul's myBillBook screenshots:
+  // numbering, terms, signature, bank details. Nothing here changes a figure.
+
+  // ── numbering ────────────────────────────────────────────────────────
+  // Rule 46(b) requires a consecutive serial number, unique within a
+  // financial year. A prefix is how a shop keeps that true across years and
+  // branches ("RG/26-27/"). Null means bare numbers, which is still valid.
+  invoicePrefix       String?
+  // The number the NEXT invoice takes. Stored rather than derived from
+  // max(existing)+1 because a shop migrating from a paper book starts at 431,
+  // and because a deleted last invoice must not silently reissue its number.
+  invoiceNextNumber   Int      @default(1)
+
+  // ── words the shop supplies ──────────────────────────────────────────
+  invoiceTerms        String?
+  // "Thank you for your business." Behavioural research on invoice microcopy
+  // associates gratitude wording with materially faster payment, which is why
+  // it is a first-class field and not buried inside terms.
+  invoiceThankYou     String?
+  // Days until payment is due. The bill prints a real DATE, never "Net 30" —
+  // a specific date outperforms the jargon, and most shopkeepers have never
+  // met the jargon. 0 or null means no due date is printed.
+  invoiceDueDays      Int?
+
+  // ── bank details, for a customer paying by transfer ──────────────────
+  // Flat columns rather than a BankAccount model: an invoice carries exactly
+  // one set, and a table would invite a "which one?" question on every bill
+  // for a problem no shop of this size has. Revisit when multi-shop lands.
+  bankName            String?
+  bankAccountName     String?
+  bankAccountNumber   String?
+  bankIfsc            String?
+  bankBranch          String?
+
+  // ── signature ────────────────────────────────────────────────────────
+  // Cloudinary URL, from a drawn signature or an uploaded photo. Same path as
+  // logoUrl — see /api/settings/logo for why the URL is stored rather than
+  // the bytes.
+  signatureUrl        String?
+  // Print an empty ruled box instead, for a shop that signs by hand on paper.
+  showSignatureBox    Boolean  @default(true)
+  // A second box for the CUSTOMER to sign — a delivery-acknowledgement, which
+  // is what a lot of B2B suppliers actually need the paper copy for.
+  showReceiverSignature Boolean @default(false)
+
   docSendFormat String @default("smart")
 
   // 📄 Whether a shareable LINK goes out alongside the bill.

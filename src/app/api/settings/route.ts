@@ -285,6 +285,64 @@ export async function PUT(req: NextRequest) {
       }
       sanitized.invoicePaperSize = body.invoicePaperSize
     }
+
+    /*
+     * 📄 Phase 3 — what the shop puts on the bill.
+     *
+     * Text fields, length-capped like every other string here. Null and empty
+     * string both clear the field, because a shopkeeper deleting the contents
+     * of a box means 'remove this', not 'store nothing-shaped text'.
+     */
+    const TEXT_FIELDS: Array<[string, number]> = [
+      ['invoicePrefix', 20], ['invoiceTerms', MAX_TEXT], ['invoiceThankYou', 200],
+      ['bankName', MAX_NAME], ['bankAccountName', MAX_NAME],
+      ['bankAccountNumber', 40], ['bankIfsc', 20], ['bankBranch', MAX_NAME],
+      ['signatureUrl', 500],
+    ]
+    for (const [field, max] of TEXT_FIELDS) {
+      if (body[field] === undefined) continue
+      const v = body[field]
+      if (v !== null && typeof v !== 'string') {
+        return NextResponse.json({ error: `${field} must be text` }, { status: 400 })
+      }
+      sanitized[field] = v === null || v === '' ? null : v.slice(0, max)
+    }
+
+    if (body.invoiceNextNumber !== undefined) {
+      /*
+       * Rule 46(b): a consecutive serial number. A zero or negative next
+       * number is not a preference, it is an invalid invoice — rejected rather
+       * than quietly clamped, so the shopkeeper learns the rule.
+       */
+      const n = Number(body.invoiceNextNumber)
+      if (!Number.isInteger(n) || n < 1) {
+        return NextResponse.json(
+          { error: 'The next bill number must be a whole number, 1 or more.' },
+          { status: 400 },
+        )
+      }
+      sanitized.invoiceNextNumber = n
+    }
+
+    if (body.invoiceDueDays !== undefined) {
+      const v = body.invoiceDueDays
+      if (v === null || v === '') {
+        sanitized.invoiceDueDays = null
+      } else {
+        const n = Number(v)
+        // A year is already generous for a shop bill; beyond that it is a typo.
+        if (!Number.isInteger(n) || n < 0 || n > 365) {
+          return NextResponse.json(
+            { error: 'Payment days must be a whole number between 0 and 365.' },
+            { status: 400 },
+          )
+        }
+        sanitized.invoiceDueDays = n === 0 ? null : n
+      }
+    }
+
+    if (body.showSignatureBox !== undefined) sanitized.showSignatureBox = !!body.showSignatureBox
+    if (body.showReceiverSignature !== undefined) sanitized.showReceiverSignature = !!body.showReceiverSignature
     if (body.docSendFormat !== undefined) {
       if (!['smart', 'image', 'pdf'].includes(body.docSendFormat)) {
         return NextResponse.json(

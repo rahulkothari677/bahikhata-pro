@@ -238,6 +238,17 @@ export async function generateInvoicePDF(
   doc.setFontSize(9)
   doc.setTextColor(headMuted.r, headMuted.g, headMuted.b)
   doc.text(`${invoice.invoiceNo || ''}  |  ${dateStr}`, pageWidth - margin, 18, { align: 'right' })
+  /*
+   * 📄 Phase 3: the due date, printed as a DATE.
+   *
+   * High on the page rather than buried at the bottom, and worded as an
+   * instruction. Research on invoice wording is consistent that a specific
+   * date beats a term like "Net 30", and that putting the ask near the top
+   * produces materially more immediate payments.
+   */
+  if (invoice.dueDateLabel) {
+    doc.text(`Please pay by ${invoice.dueDateLabel}`, pageWidth - margin, 23, { align: 'right' })
+  }
 
   // Status pill — inside the band, below the invoice meta, right-aligned.
   const statusColor = statusColors[status]
@@ -546,6 +557,46 @@ export async function generateInvoicePDF(
   // ═══════════════════════════════════════════════════════════════════
   // 6. BOTTOM SECTION — UPI QR (left) + Signature (right)
   // ═══════════════════════════════════════════════════════════════════
+  /*
+   * 📄 Phase 3: terms and bank details, in the space between the totals and
+   * the signature. Drawn before `bottomY` is fixed so a long set of terms
+   * pushes the signature down rather than printing underneath it.
+   */
+  if (invoice.shop.terms) {
+    doc.setFont(THEME.font, 'bold')
+    doc.setFontSize(metrics.smallPt)
+    doc.setTextColor(text.r, text.g, text.b)
+    doc.text('Terms & Conditions', margin, y)
+    y += 4
+    doc.setFont(THEME.font, 'normal')
+    doc.setTextColor(textMuted.r, textMuted.g, textMuted.b)
+    // Wrapped by jsPDF rather than truncated: terms a shop wrote and cannot
+    // see in full on its own invoice are worse than none.
+    const lines: string[] = doc.splitTextToSize(invoice.shop.terms, tableWidth * 0.62)
+    for (const line of lines.slice(0, 6)) { doc.text(line, margin, y); y += 3.6 }
+    y += 2
+  }
+
+  const bank = invoice.shop.bank
+  const hasBank = !!(bank && (bank.accountNumber || bank.name))
+  if (hasBank) {
+    doc.setFont(THEME.font, 'bold')
+    doc.setFontSize(metrics.smallPt)
+    doc.setTextColor(text.r, text.g, text.b)
+    doc.text('Bank Details', margin, y)
+    y += 4
+    doc.setFont(THEME.font, 'normal')
+    doc.setTextColor(textMuted.r, textMuted.g, textMuted.b)
+    const bankLines = [
+      bank!.name && `Bank: ${bank!.name}${bank!.branch ? ', ' + bank!.branch : ''}`,
+      bank!.accountName && `A/c name: ${bank!.accountName}`,
+      bank!.accountNumber && `A/c no: ${bank!.accountNumber}`,
+      bank!.ifsc && `IFSC: ${bank!.ifsc}`,
+    ].filter(Boolean) as string[]
+    for (const line of bankLines) { doc.text(line, margin, y); y += 3.6 }
+    y += 2
+  }
+
   const bottomY = Math.max(y + 5, pageHeight - 70)
 
   // UPI QR (left side, only when upiId exists and balance > 0)
@@ -559,15 +610,74 @@ export async function generateInvoicePDF(
     })
   }
 
-  // Signature (right side)
+  /*
+   * 📄 Phase 3: the signature.
+   *
+   * Three states, and the shop chooses: their own signature image, an empty
+   * ruled box to sign by hand on the printed copy, or neither. A fourth block
+   * — the RECEIVER's signature — is off by default and exists because a lot of
+   * B2B suppliers need the paper copy as a delivery acknowledgement.
+   */
   const sigX = pageWidth - margin - 50
-  doc.setFont(THEME.font, 'normal')
-  doc.setFontSize(9)
-  doc.setTextColor(textMuted.r, textMuted.g, textMuted.b)
-  doc.text('For ' + (invoice.shop.name || 'My Shop'), sigX, bottomY)
-  doc.setDrawColor(border.r, border.g, border.b)
-  doc.line(sigX, bottomY + 12, sigX + 40, bottomY + 12)
-  doc.text('Authorised Signatory', sigX, bottomY + 16)
+  const wantsSignature = invoice.shop.showSignatureBox !== false || !!invoice.shop.signatureUrl
+  if (wantsSignature) {
+    doc.setFont(THEME.font, 'normal')
+    doc.setFontSize(9)
+    doc.setTextColor(textMuted.r, textMuted.g, textMuted.b)
+    doc.text('For ' + (invoice.shop.name || 'My Shop'), sigX, bottomY)
+
+    if (invoice.shop.signatureUrl) {
+      /*
+       * Fetched and embedded, exactly like the logo. Wrapped: a signature that
+       * fails to load must leave a signable line, never abort the bill.
+       */
+      try {
+        const res = await fetch(invoice.shop.signatureUrl)
+        if (res.ok) {
+          const blob = await res.blob()
+          const dataUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader()
+            reader.onload = () => resolve(reader.result as string)
+            reader.onerror = () => reject(new Error('FileReader failed'))
+            reader.readAsDataURL(blob)
+          })
+          const fmt = blob.type.includes('png') ? 'PNG' : blob.type.includes('webp') ? 'WEBP' : 'JPEG'
+          doc.addImage(dataUrl, fmt, sigX, bottomY + 1, 40, 10)
+        }
+      } catch (err) {
+        console.warn('[invoice-pdf] signature fetch failed, printing an empty line:', err)
+      }
+    }
+
+    doc.setDrawColor(border.r, border.g, border.b)
+    doc.line(sigX, bottomY + 12, sigX + 40, bottomY + 12)
+    doc.text('Authorised Signatory', sigX, bottomY + 16)
+  }
+
+  if (invoice.shop.showReceiverSignature) {
+    const rx = margin
+    const ry = bottomY + (invoice.shop.upiId && dueAmount > 0 ? 42 : 0)
+    doc.setFont(THEME.font, 'normal')
+    doc.setFontSize(9)
+    doc.setTextColor(textMuted.r, textMuted.g, textMuted.b)
+    doc.setDrawColor(border.r, border.g, border.b)
+    doc.line(rx, ry + 12, rx + 40, ry + 12)
+    doc.text("Receiver's Signature", rx, ry + 16)
+  }
+
+  /*
+   * 📄 Phase 3: the thank-you, centred under the signature line.
+   *
+   * A first-class field rather than a line inside Terms because behavioural
+   * work on invoice microcopy associates gratitude wording with materially
+   * faster payment — it earns its own place.
+   */
+  if (invoice.shop.thankYou) {
+    doc.setFont(THEME.font, 'normal')
+    doc.setFontSize(metrics.smallPt)
+    doc.setTextColor(textMuted.r, textMuted.g, textMuted.b)
+    doc.text(invoice.shop.thankYou.slice(0, 90), pageWidth / 2, bottomY + 24, { align: 'center' })
+  }
 
   // ═══════════════════════════════════════════════════════════════════
   // 7. FOOTER — thin brand rule, page number, "Made with EkBook"

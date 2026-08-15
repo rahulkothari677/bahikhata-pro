@@ -325,6 +325,8 @@ export function AccountScreen() {
     'invoice-design': 'Invoice design',
     'invoice-sending': 'Sending bills',
     'invoice-tax': 'Rounding & tax',
+    'invoice-content': 'On the bill',
+    'invoice-numbering': 'Numbering',
   }
 
   const sectionTitles = useMemo(() => {
@@ -739,6 +741,8 @@ function AccountSectionContent({
     'invoice-design':    ['invoice-design'],
     'invoice-sending':   ['invoice-sending'],
     'invoice-tax':       ['invoice-tax'],
+    'invoice-content':   ['invoice-content'],
+    'invoice-numbering': ['invoice-numbering'],
     'appearance':    ['appearance'],
     'preferences':   ['preferences'],
     'notifications': ['notifications'],

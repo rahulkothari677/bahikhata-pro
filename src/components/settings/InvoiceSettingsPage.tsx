@@ -32,7 +32,7 @@
 
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronRight, Palette, Send, Coins } from 'lucide-react'
+import { ChevronRight, Palette, Send, Coins, FileText, Hash } from 'lucide-react'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { haptic } from '@/lib/haptic'
 import { cn } from '@/lib/utils'
@@ -75,6 +75,27 @@ export const INVOICE_SECTIONS = [
     tint: 'text-emerald-600 dark:text-emerald-400',
     tintBg: 'bg-emerald-100 dark:bg-emerald-950',
     focus: 'footer' as PreviewFocus,
+  },
+  {
+    id: 'invoice-content',
+    label: 'On the bill',
+    summary: 'Terms, signature, bank details, thank-you',
+    icon: FileText,
+    tint: 'text-blue-600 dark:text-blue-400',
+    tintBg: 'bg-blue-100 dark:bg-blue-950',
+    focus: 'footer' as PreviewFocus,
+  },
+  {
+    id: 'invoice-numbering',
+    label: 'Numbering',
+    summary: 'Prefix and next bill number',
+    // Rule 46(b) makes this a legal matter rather than a preference, and a
+    // shopkeeper coming off a paper book will not guess that from the word.
+    hint: 'GST law needs every bill to carry a number that never repeats in a financial year. A prefix like RG/26-27/ keeps that true across years and branches. If you are moving from a paper book, set the next number to carry on from it.',
+    icon: Hash,
+    tint: 'text-rose-600 dark:text-rose-400',
+    tintBg: 'bg-rose-100 dark:bg-rose-950',
+    focus: 'header' as PreviewFocus,
   },
   {
     id: 'invoice-tax',
@@ -191,6 +212,19 @@ export function InvoiceSettingsPage({
       state: setting?.state as string,
       upiId: setting?.upiId as string,
       logoUrl: setting?.logoUrl as string,
+      // 📄 Phase 3, so the preview shows what the printed bill will carry.
+      terms: setting?.invoiceTerms as string,
+      thankYou: setting?.invoiceThankYou as string,
+      signatureUrl: setting?.signatureUrl as string,
+      showSignatureBox: setting?.showSignatureBox as boolean,
+      showReceiverSignature: setting?.showReceiverSignature as boolean,
+      bank: {
+        name: setting?.bankName as string,
+        accountName: setting?.bankAccountName as string,
+        accountNumber: setting?.bankAccountNumber as string,
+        ifsc: setting?.bankIfsc as string,
+        branch: setting?.bankBranch as string,
+      },
     }
     const latest = data?.transaction ?? data
     /*
@@ -199,8 +233,9 @@ export function InvoiceSettingsPage({
      * SAMPLE is — and it also covers a bill too incomplete to draw honestly.
      */
     const usable = isPreviewable(latest)
-    if (!usable) return { doc: buildInvoiceDocument(SAMPLE, shop), isSample: true }
-    return { doc: buildInvoiceDocument(latest as InvoiceSource, shop), isSample: false }
+    const dueDays = (setting?.invoiceDueDays as number) ?? null
+    if (!usable) return { doc: buildInvoiceDocument({ ...SAMPLE, dueDays }, shop), isSample: true }
+    return { doc: buildInvoiceDocument({ ...(latest as InvoiceSource), dueDays }, shop), isSample: false }
   }, [data, setting])
 
   /*

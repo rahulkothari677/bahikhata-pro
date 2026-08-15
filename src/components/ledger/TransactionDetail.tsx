@@ -227,6 +227,8 @@ export function TransactionDetail() {
       {
         ...txn,
         allocatedAmount: (txn as { allocatedAmount?: number }).allocatedAmount || 0,
+        // Phase 3: the shop's payment window, so the bill prints a real date.
+        dueDays: setting?.invoiceDueDays,
       } as Parameters<typeof buildInvoiceDocument>[0],
       {
         name: setting?.shopName || 'My Shop',
@@ -238,6 +240,21 @@ export function TransactionDetail() {
         state: setting?.state,
         upiId: setting?.upiId,
         logoUrl: setting?.logoUrl,
+        // 📄 Phase 3: what the shop puts on the bill. Supplied at every call
+        // site, because a field the document can carry and no caller fills is
+        // a setting that silently does nothing.
+        terms: setting?.invoiceTerms,
+        thankYou: setting?.invoiceThankYou,
+        signatureUrl: setting?.signatureUrl,
+        showSignatureBox: setting?.showSignatureBox,
+        showReceiverSignature: setting?.showReceiverSignature,
+        bank: {
+          name: setting?.bankName,
+          accountName: setting?.bankAccountName,
+          accountNumber: setting?.bankAccountNumber,
+          ifsc: setting?.bankIfsc,
+          branch: setting?.bankBranch,
+        },
       },
     )
     generateInvoicePDF(doc, {
@@ -316,7 +333,9 @@ export function TransactionDetail() {
     try {
       const { sendBill } = await import('@/lib/send-bill')
       const result = await sendBill(
-        txn as never,
+        // Phase 3: the shop's payment window rides along with the bill, so the
+        // WhatsApp copy carries the same due date as the download.
+        { ...(txn as object), dueDays: setting?.invoiceDueDays } as never,
         {
           name: setting?.shopName || 'My Shop',
           ownerName: setting?.ownerName,
@@ -327,6 +346,21 @@ export function TransactionDetail() {
           state: setting?.state,
           upiId: setting?.upiId,
           logoUrl: setting?.logoUrl,
+          // 📄 Phase 3: what the shop puts on the bill. Supplied at every call
+            // site, because a field the document can carry and no caller fills is
+            // a setting that silently does nothing.
+          terms: setting?.invoiceTerms,
+          thankYou: setting?.invoiceThankYou,
+          signatureUrl: setting?.signatureUrl,
+          showSignatureBox: setting?.showSignatureBox,
+          showReceiverSignature: setting?.showReceiverSignature,
+          bank: {
+            name: setting?.bankName,
+            accountName: setting?.bankAccountName,
+            accountNumber: setting?.bankAccountNumber,
+            ifsc: setting?.bankIfsc,
+            branch: setting?.bankBranch,
+          },
         },
         {
           preference: setting?.docSendFormat,

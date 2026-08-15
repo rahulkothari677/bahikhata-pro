@@ -39,6 +39,8 @@ import { readError } from '@/lib/read-error'
 import { INVOICE_THEMES } from '@/lib/invoice-themes'
 import { INVOICE_TEMPLATES } from '@/lib/invoice-templates'
 import { PAPER_SIZES } from '@/lib/invoice-paper'
+import { InfoHint } from '@/components/common/InfoHint'
+import { SignatureField } from '@/components/settings/SignatureField'
 import { describeRestoreOutcome } from '@/lib/restore-outcome'
 
 const FEATURE_CATEGORIES: { title: string; features: { key: FeatureKey; label: string; description: string; icon: any }[] }[] = [
@@ -111,6 +113,8 @@ export type SettingsSection =
   | 'invoice-design'  // layout + colour
   | 'invoice-sending' // how a bill reaches the customer
   | 'invoice-tax'     // round off + e-invoicing
+  | 'invoice-content' // terms, signature, bank, thank-you, due date
+  | 'invoice-numbering' // prefix + next number
   | 'preferences'     // landing page, hide profit, goals, stock policy
   | 'notifications'   // which alerts reach the bell
   | 'accounting'      // period lock, reconciliation
@@ -126,7 +130,7 @@ export type SettingsSection =
  */
 const TAB_SECTIONS: Record<string, SettingsSection[]> = {
   profile:    ['shop-profile', 'manage-shops'],
-  appearance: ['appearance', 'invoice-design', 'invoice-sending', 'invoice-tax', 'preferences', 'notifications'],
+  appearance: ['appearance', 'invoice-design', 'invoice-sending', 'invoice-tax', 'invoice-content', 'invoice-numbering', 'preferences', 'notifications'],
   data:       ['accounting', 'data-backup'],
   staff:      ['staff'],
   features:   ['features', 'ai-tools'],
@@ -201,6 +205,16 @@ export function Settings({
   const [invoiceTheme, setInvoiceTheme] = useState('classic')
   const [invoiceTemplate, setInvoiceTemplate] = useState('standard')
   const [invoicePaperSize, setInvoicePaperSize] = useState('a4')
+  // 📄 Phase 3. One object rather than ten useStates: these are saved together
+  // by one button, and ten setters is ten chances to forget one.
+  const [billContent, setBillContent] = useState({
+    invoicePrefix: '', invoiceNextNumber: '1', invoiceTerms: '', invoiceThankYou: '',
+    invoiceDueDays: '', bankName: '', bankAccountName: '', bankAccountNumber: '',
+    bankIfsc: '', bankBranch: '',
+  })
+  const [showSignatureBox, setShowSignatureBox] = useState(true)
+  const [showReceiverSignature, setShowReceiverSignature] = useState(false)
+  const [signatureUrl, setSignatureUrl] = useState<string | null>(null)
   // 🔒 V11: Stock policy toggle — 'block' (default) or 'allow' (kirana mode).
   const [stockPolicy, setStockPolicy] = useState<'block' | 'allow'>('block')
   // 🔒 V17-Ext §5.1: Period lock state. null = unlocked. Date string = locked
@@ -244,6 +258,21 @@ export function Settings({
       setInvoiceTheme(data.setting.invoiceTheme ?? 'classic')
       setInvoiceTemplate(data.setting.invoiceTemplate ?? 'standard')
       setInvoicePaperSize(data.setting.invoicePaperSize ?? 'a4')
+      setBillContent({
+        invoicePrefix: data.setting.invoicePrefix ?? '',
+        invoiceNextNumber: String(data.setting.invoiceNextNumber ?? 1),
+        invoiceTerms: data.setting.invoiceTerms ?? '',
+        invoiceThankYou: data.setting.invoiceThankYou ?? '',
+        invoiceDueDays: data.setting.invoiceDueDays != null ? String(data.setting.invoiceDueDays) : '',
+        bankName: data.setting.bankName ?? '',
+        bankAccountName: data.setting.bankAccountName ?? '',
+        bankAccountNumber: data.setting.bankAccountNumber ?? '',
+        bankIfsc: data.setting.bankIfsc ?? '',
+        bankBranch: data.setting.bankBranch ?? '',
+      })
+      setShowSignatureBox(data.setting.showSignatureBox ?? true)
+      setShowReceiverSignature(data.setting.showReceiverSignature ?? false)
+      setSignatureUrl(data.setting.signatureUrl ?? null)
       setStockPolicy(data.setting.stockPolicy === 'allow' ? 'allow' : 'block')
       // 🔒 V17-Ext §5.1: Sync period lock state from server.
       // lockedUntil is an ISO timestamp (or null). We store the full timestamp
@@ -280,6 +309,33 @@ export function Settings({
    * for a round trip feels broken on a shop's connection, and one that lies
    * about having saved is worse.
    */
+  /**
+   * 📄 Phase 3: save the typed fields.
+   *
+   * Separate from persistDocSetting because these are TYPED, not tapped —
+   * there is a Save button, so no optimistic write and no rollback dance. The
+   * cache is refreshed afterwards so the live preview picks them up.
+   */
+  const [savingBill, setSavingBill] = useState(false)
+  const persistBillContent = async (patch: Record<string, unknown>) => {
+    setSavingBill(true)
+    try {
+      const r = await offlineFetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch),
+        offline: { invalidate: ['/api/settings'] },
+      })
+      if (!r.ok) throw new Error(await readError(r))
+      queryClient.invalidateQueries({ queryKey: ['setting'] })
+      sonnerToast.success('Saved')
+    } catch (e: unknown) {
+      sonnerToast.error(e instanceof Error ? e.message : "Couldn't save that")
+    } finally {
+      setSavingBill(false)
+    }
+  }
+
   const persistDocSetting = async (
     patch: { docSendFormat?: 'smart' | 'image' | 'pdf'; docShareLink?: boolean; invoiceTheme?: string; invoiceTemplate?: string; invoicePaperSize?: string },
     rollback: () => void,
@@ -1887,6 +1943,153 @@ export function Settings({
       </Card>
       )}
 
+
+      {/* ═══ Phase 3 — what is ON the bill ═══════════════════════════════
+          Terms, signature, bank details and a thank-you. Read from Rahul's
+          myBillBook screenshots (docs/INVOICE-ENGINE-PLAN.md Part 1) — these
+          are the biggest content gap against them. Every field is optional
+          and nothing here changes a figure on the bill. */}
+      {show('invoice-content') && (
+      <Card className="shadow-card border-border/60">
+        <CardContent className="space-y-4 pt-5">
+            <div>
+              <Label htmlFor="bill-invoiceTerms">Terms & conditions</Label>
+              <Input id="bill-invoiceTerms"
+                value={billContent.invoiceTerms}
+                onChange={(e) => setBillContent({ ...billContent, invoiceTerms: e.target.value })}
+                placeholder="Goods once sold will not be taken back." className="mt-1" />
+            </div>
+            <div>
+              <Label htmlFor="bill-invoiceThankYou">Thank-you line</Label>
+              <Input id="bill-invoiceThankYou"
+                value={billContent.invoiceThankYou}
+                onChange={(e) => setBillContent({ ...billContent, invoiceThankYou: e.target.value })}
+                placeholder="Thank you for your business!" className="mt-1" />
+            </div>
+            <div>
+              <Label htmlFor="bill-invoiceDueDays">Payment due after (days)</Label>
+              <Input id="bill-invoiceDueDays" inputMode="numeric" type="number"
+                value={billContent.invoiceDueDays}
+                onChange={(e) => setBillContent({ ...billContent, invoiceDueDays: e.target.value })}
+                placeholder="e.g. 15" className="mt-1" />
+              <p className="text-2xs text-muted-foreground mt-1">
+                {/* The bill prints a real date, never "Net 30" — a specific day
+                    is understood by everyone and outperforms the jargon. */}
+                The bill will say &ldquo;Please pay by&rdquo; and the date. Leave blank for none.
+              </p>
+            </div>
+
+            <div className="pt-2 border-t border-border/50">
+              <p className="text-sm font-medium mb-2">Bank details</p>
+              <div className="space-y-3">
+            <div>
+              <Label htmlFor="bill-bankName">Bank</Label>
+              <Input id="bill-bankName"
+                value={billContent.bankName}
+                onChange={(e) => setBillContent({ ...billContent, bankName: e.target.value })}
+                placeholder="State Bank of India" className="mt-1" />
+            </div>
+            <div>
+              <Label htmlFor="bill-bankAccountName">Account name</Label>
+              <Input id="bill-bankAccountName"
+                value={billContent.bankAccountName}
+                onChange={(e) => setBillContent({ ...billContent, bankAccountName: e.target.value })}
+                placeholder="Rahul Grocery" className="mt-1" />
+            </div>
+            <div>
+              <Label htmlFor="bill-bankAccountNumber">Account number</Label>
+              <Input id="bill-bankAccountNumber"
+                value={billContent.bankAccountNumber}
+                onChange={(e) => setBillContent({ ...billContent, bankAccountNumber: e.target.value })}
+                placeholder="1234567890" className="mt-1" />
+            </div>
+            <div>
+              <Label htmlFor="bill-bankIfsc">IFSC</Label>
+              <Input id="bill-bankIfsc"
+                value={billContent.bankIfsc}
+                onChange={(e) => setBillContent({ ...billContent, bankIfsc: e.target.value })}
+                placeholder="SBIN0001234" className="mt-1 font-mono uppercase" />
+            </div>
+            <div>
+              <Label htmlFor="bill-bankBranch">Branch</Label>
+              <Input id="bill-bankBranch"
+                value={billContent.bankBranch}
+                onChange={(e) => setBillContent({ ...billContent, bankBranch: e.target.value })}
+                placeholder="M.G. Road" className="mt-1" />
+            </div>
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-border/50 space-y-3">
+              <p className="text-sm font-medium">Signature</p>
+              <SignatureField value={signatureUrl} onChange={setSignatureUrl} />
+              <div className="flex items-center justify-between rounded-lg bg-muted/30 border border-border/60 p-3">
+                <p className="text-sm font-medium">Print a signature line</p>
+                <Switch checked={showSignatureBox}
+                  onCheckedChange={(v) => { setShowSignatureBox(v); persistBillContent({ showSignatureBox: v }) }} />
+              </div>
+              <div className="flex items-center justify-between rounded-lg bg-muted/30 border border-border/60 p-3">
+                <p className="text-sm font-medium inline-flex items-center gap-1.5">
+                  Customer's signature
+                  <InfoHint label="Customer's signature"
+                    text="Adds a second line for your customer to sign when they receive the goods. Useful if you deliver and need proof it arrived." />
+                </p>
+                <Switch checked={showReceiverSignature}
+                  onCheckedChange={(v) => { setShowReceiverSignature(v); persistBillContent({ showReceiverSignature: v }) }} />
+              </div>
+            </div>
+
+            <Button className="w-full" disabled={savingBill}
+              onClick={() => persistBillContent({
+                invoiceTerms: billContent.invoiceTerms || null,
+                invoiceThankYou: billContent.invoiceThankYou || null,
+                invoiceDueDays: billContent.invoiceDueDays ? Number(billContent.invoiceDueDays) : null,
+                bankName: billContent.bankName || null,
+                bankAccountName: billContent.bankAccountName || null,
+                bankAccountNumber: billContent.bankAccountNumber || null,
+                bankIfsc: billContent.bankIfsc || null,
+                bankBranch: billContent.bankBranch || null,
+              })}>
+              {savingBill ? 'Saving…' : 'Save'}
+            </Button>
+        </CardContent>
+      </Card>
+      )}
+
+      {/* ═══ Phase 3 — numbering ════════════════════════════════════════ */}
+      {show('invoice-numbering') && (
+      <Card className="shadow-card border-border/60">
+        <CardContent className="space-y-4 pt-5">
+            <div>
+              <Label htmlFor="bill-invoicePrefix">Prefix</Label>
+              <Input id="bill-invoicePrefix"
+                value={billContent.invoicePrefix}
+                onChange={(e) => setBillContent({ ...billContent, invoicePrefix: e.target.value })}
+                placeholder="RG/26-27/" className="mt-1" />
+            </div>
+            <div>
+              <Label htmlFor="bill-invoiceNextNumber">Next bill number</Label>
+              <Input id="bill-invoiceNextNumber" inputMode="numeric" type="number"
+                value={billContent.invoiceNextNumber}
+                onChange={(e) => setBillContent({ ...billContent, invoiceNextNumber: e.target.value })}
+                className="mt-1" />
+              <p className="text-2xs text-muted-foreground mt-1">
+                Your next bill will be{' '}
+                <span className="font-mono font-medium text-foreground">
+                  {(billContent.invoicePrefix || '') + (billContent.invoiceNextNumber || '1')}
+                </span>
+              </p>
+            </div>
+            <Button className="w-full" disabled={savingBill}
+              onClick={() => persistBillContent({
+                invoicePrefix: billContent.invoicePrefix || null,
+                invoiceNextNumber: Math.max(1, Number(billContent.invoiceNextNumber) || 1),
+              })}>
+              {savingBill ? 'Saving…' : 'Save'}
+            </Button>
+        </CardContent>
+      </Card>
+      )}
 
       {show('preferences') && (
         <>

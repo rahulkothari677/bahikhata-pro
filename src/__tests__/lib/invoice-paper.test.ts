@@ -83,13 +83,19 @@ describe('the chosen sheet reaches what the customer receives', () => {
      * The clause that matters. The download path is TransactionDetail's
      * generateInvoicePDF; the WhatsApp path is sendBill. The theme bug happened
      * because one of the two was wired and the other was not.
+     *
+     * Counted rather than matched inside a character window. The first version
+     * used /sendBill\([\s\S]{0,900}paperId/ and broke the moment Phase 3 added
+     * lines between the call and the option — a window measuring nearby text
+     * instead of structure, which is CLAUDE.md's Cause 7 in miniature. Two
+     * occurrences means both exits carry it; one means a path was missed.
      */
     const detail = readCode('src/components/ledger/TransactionDetail.tsx')
-    expect(detail).toMatch(/generateInvoicePDF\([\s\S]{0,200}paperId/)
-    expect(detail).toMatch(/sendBill\([\s\S]{0,900}paperId/)
+    const occurrences = (detail.match(/paperId:\s*setting\?\.invoicePaperSize/g) || []).length
+    expect(occurrences).toBe(2)
 
     const send = readCode('src/lib/send-bill.ts')
-    expect(send).toMatch(/generateInvoicePDF\(doc,[\s\S]{0,160}paperId/)
+    expect(send).toContain('paperId: opts.paperId')
   })
 
   it('is validated against the registry by the API', () => {

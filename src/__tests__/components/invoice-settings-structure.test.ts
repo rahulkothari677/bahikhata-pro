@@ -143,13 +143,25 @@ describe('the preview never draws a bill of zeroes', () => {
 describe('the info button, used sparingly', () => {
   it('is NOT on the layout and colour tiles', () => {
     /*
-     * Reversed on 15 Aug, same day it was added. Rahul: "for so basic things
-     * like explaining standard or compact you don't need to describe it or add
-     * info button when it's clear from the layout design and preview is there
-     * too." The wireframe shows the difference and the live bill shows the
-     * result; a button repeating that is decoration.
+     * Rahul: "for so basic things like explaining standard or compact you don't
+     * need to describe it or add info button when it's clear from the layout
+     * design and preview is there too."
+     *
+     * Scoped to the two PICKER blocks rather than the whole file. The first
+     * version asserted InfoHint appeared nowhere in Settings.tsx and broke the
+     * moment Phase 3 added a legitimate one to "Customer's signature" — a
+     * genuinely non-obvious control. An over-broad guard that fails on correct
+     * work is as much a defect as one that passes on broken work: both train
+     * you to stop believing it.
      */
-    expect(settings).not.toContain('InfoHint')
+    const block = (marker: string) => {
+      const i = settings.indexOf(marker)
+      expect(i).toBeGreaterThan(-1)
+      const end = settings.indexOf('))}', i)
+      return settings.slice(i, end)
+    }
+    expect(block('INVOICE_TEMPLATES.map(')).not.toContain('InfoHint')
+    expect(block('INVOICE_THEMES.map(')).not.toContain('InfoHint')
     // The name still shows — that was never the thing to hide.
     expect(settings).toContain('{t.name}')
   })

@@ -56,6 +56,27 @@ export interface InvoiceShop {
   state?: string | null
   upiId?: string | null
   logoUrl?: string | null
+
+  /*
+   * 📄 Phase 3 — what the shop puts ON the bill.
+   *
+   * On the SHOP and not the invoice because it is identical on every bill;
+   * putting it on the document per-invoice would invite a renderer to read one
+   * from the transaction and another from settings, which is precisely how the
+   * PDF came to disagree with the picture.
+   */
+  terms?: string | null
+  thankYou?: string | null
+  signatureUrl?: string | null
+  showSignatureBox?: boolean
+  showReceiverSignature?: boolean
+  bank?: {
+    name?: string | null
+    accountName?: string | null
+    accountNumber?: string | null
+    ifsc?: string | null
+    branch?: string | null
+  } | null
 }
 
 /** Where the bill stands. Drives the stamp every surface shows. */
@@ -100,6 +121,20 @@ export interface InvoiceDocument {
   /** `upi://pay?...`, or null when the shop has no VPA or nothing is owed. */
   upiLink: string | null
 
+  /**
+   * When payment is due, as a real DATE.
+   *
+   * Computed here so every surface prints the same day. A date rather than a
+   * term: research on invoice wording is consistent that "Please pay by 15
+   * December" outperforms "Net 30" — and most shopkeepers, and most of their
+   * customers, have never met the jargon.
+   *
+   * Null when the shop has not set a period, or when nothing is owed: a paid
+   * bill with a due date on it is a demand for money already received.
+   */
+  dueDate: Date | null
+  dueDateLabel: string | null
+
   /*
    * e-invoice details, when this invoice has been registered with the portal.
    *
@@ -131,6 +166,8 @@ interface SourceItem {
 }
 
 export interface InvoiceSource {
+  /** Setting.invoiceDueDays. Null or 0 prints no due date. */
+  dueDays?: number | null
   irn?: string | null
   signedQR?: string | null
   invoiceNo?: string | null
@@ -234,10 +271,35 @@ export function buildInvoiceDocument(src: InvoiceSource, shop: InvoiceShop): Inv
     hasTax: taxTotal > 0,
 
     upiLink: buildUpiLink(shop, due),
+    ...dueDateFor(date, src.dueDays ?? null, due),
     // Carried through so every renderer — PDF, share image, public page — can
     // print them. Rule 48(4) requires both on an e-invoice.
     irn: src.irn ?? null,
     signedQR: src.signedQR ?? null,
+  }
+}
+
+/**
+ * The due date, or nulls.
+ *
+ * Exported so it can be called with two arguments and tested both ways rather
+ * than only exercised by building a whole document — the guard rule earned on
+ * 15 Aug.
+ */
+export function dueDateFor(
+  issued: Date,
+  dueDays: number | null,
+  due: number,
+): { dueDate: Date | null; dueDateLabel: string | null } {
+  // No period set, a nonsense period, or nothing left to pay.
+  if (!dueDays || dueDays <= 0 || due <= 0 || isNaN(issued.getTime())) {
+    return { dueDate: null, dueDateLabel: null }
+  }
+  const d = new Date(issued)
+  d.setDate(d.getDate() + dueDays)
+  return {
+    dueDate: d,
+    dueDateLabel: d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
   }
 }
 

@@ -266,6 +266,51 @@ export function InvoicePreview({
           {/* ── footer ────────────────────────────────────────────────── */}
           <div style={{ padding: '18px 24px 0', ...ringFor('footer') }}>
             <p className="text-sm" style={{ color: theme.muted }}>{doc.totalInWords}</p>
+
+            {/* 📄 Phase 3. Shown here for the same reason the whole preview
+                exists: a shopkeeper typing terms should see where they land and
+                how much of the page they take. */}
+            <div className="flex justify-between gap-6 mt-3">
+              <div className="min-w-0 flex-1">
+                {doc.shop.terms && (
+                  <>
+                    <p className="text-xs font-bold" style={{ color: theme.text }}>Terms &amp; Conditions</p>
+                    <p className="text-xs whitespace-pre-line" style={{ color: theme.muted }}>
+                      {doc.shop.terms.slice(0, 240)}
+                    </p>
+                  </>
+                )}
+                {(doc.shop.bank?.accountNumber || doc.shop.bank?.name) && (
+                  <div className="mt-2">
+                    <p className="text-xs font-bold" style={{ color: theme.text }}>Bank Details</p>
+                    <p className="text-xs" style={{ color: theme.muted }}>
+                      {[doc.shop.bank?.name, doc.shop.bank?.accountNumber && `A/c ${doc.shop.bank.accountNumber}`,
+                        doc.shop.bank?.ifsc && `IFSC ${doc.shop.bank.ifsc}`].filter(Boolean).join(" · ")}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {(doc.shop.showSignatureBox !== false || doc.shop.signatureUrl) && (
+                <div className="text-right flex-shrink-0" style={{ width: 200 }}>
+                  <p className="text-xs" style={{ color: theme.muted }}>For {doc.shop.name}</p>
+                  {doc.shop.signatureUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={doc.shop.signatureUrl} alt="" className="h-10 ml-auto object-contain" />
+                  ) : (
+                    <div style={{ height: 40 }} />
+                  )}
+                  <div style={{ borderTop: `1px solid ${theme.line}` }} />
+                  <p className="text-xs" style={{ color: theme.muted }}>Authorised Signatory</p>
+                </div>
+              )}
+            </div>
+
+            {doc.shop.thankYou && (
+              <p className="text-xs text-center mt-3" style={{ color: theme.muted }}>
+                {doc.shop.thankYou}
+              </p>
+            )}
             <div
               className="flex justify-between text-sm"
               style={{ marginTop: 12, paddingTop: 8, borderTop: `1px solid ${theme.line}`, color: theme.muted }}
@@ -311,6 +356,12 @@ function HeaderContent({
         <p className="text-sm font-medium" style={{ color: muted }}>
           {doc.invoiceNo} · {doc.dateLabel}
         </p>
+        {/* 📄 Phase 3: a real date, high on the page. */}
+        {doc.dueDateLabel && (
+          <p className="text-sm font-semibold" style={{ color: muted }}>
+            Please pay by {doc.dueDateLabel}
+          </p>
+        )}
       </div>
     </div>
   )
