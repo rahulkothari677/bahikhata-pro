@@ -707,6 +707,21 @@ model Setting {
   // is what a lot of B2B suppliers actually need the paper copy for.
   showReceiverSignature Boolean @default(false)
 
+  // ── what else appears on the bill ────────────────────────────────────
+  // 📄 Phase 4. The list, the labels and the defaults live in ONE place:
+  // src/lib/invoice-visibility.ts. These columns exist only to store the
+  // answers, and a guard proves every registry key matches a column here.
+  //
+  // ALL DEFAULT FALSE, deliberately: a shop that never opens these settings
+  // gets exactly the bill it got yesterday. The two Phase 3 switches above
+  // keep their existing defaults for the same reason.
+  //
+  // Nothing here can hide a Rule 46 particular — see the registry's header.
+  showPartyBalance    Boolean  @default(false)
+  showItemDescription Boolean  @default(false)
+  showAlternateUnit   Boolean  @default(false)
+  showInvoiceTime     Boolean  @default(false)
+
   docSendFormat String @default("smart")
 
   // 📄 Whether a shareable LINK goes out alongside the bill.

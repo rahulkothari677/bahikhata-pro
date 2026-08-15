@@ -32,11 +32,11 @@
 
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronRight, Palette, Send, Coins, FileText, Hash } from 'lucide-react'
+import { ChevronRight, Palette, Send, Coins, FileText, Hash, Eye } from 'lucide-react'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { haptic } from '@/lib/haptic'
 import { cn } from '@/lib/utils'
-import { buildInvoiceDocument, type InvoiceSource, type InvoiceShop } from '@/lib/invoice-document'
+import { buildInvoiceDocument, invoiceShopFromSetting, type InvoiceSource, type InvoiceShop } from '@/lib/invoice-document'
 import { InvoicePreview, type PreviewFocus } from './InvoicePreview'
 import { InfoHint } from '@/components/common/InfoHint'
 
@@ -98,6 +98,25 @@ export const INVOICE_SECTIONS = [
     focus: 'header' as PreviewFocus,
   },
   {
+    /*
+     * 📄 Phase 4. Its own category rather than more rows under "On the bill":
+     * that section is things the shop TYPES, this is things it switches on.
+     * Mixing a text area with a column of toggles is what made the old App
+     * Settings screen 4.3 screens long.
+     *
+     * No `hint` — every row carries its own where it needs one, and a
+     * paragraph explaining "extra details" would be the kind of description
+     * Rahul asked to stop adding where the label already says it.
+     */
+    id: 'invoice-visibility',
+    label: 'Extra details',
+    summary: 'Outstanding balance, description, time',
+    icon: Eye,
+    tint: 'text-cyan-600 dark:text-cyan-400',
+    tintBg: 'bg-cyan-100 dark:bg-cyan-950',
+    focus: 'items' as PreviewFocus,
+  },
+  {
     id: 'invoice-tax',
     label: 'Rounding & tax',
     summary: 'Round off, e-invoicing',
@@ -115,11 +134,24 @@ const SAMPLE: InvoiceSource = {
   invoiceNo: 'INV-0001',
   date: new Date().toISOString(),
   party: { name: 'Sharma Traders', gstin: null, state: null },
+  /*
+   * 📄 Phase 4: the sample carries a description, an alternate unit and an
+   * outstanding balance SO THE TOGGLES HAVE SOMETHING TO SHOW.
+   *
+   * Without this, a shop with no bills yet would flip "Item description",
+   * watch the preview not move, and reasonably conclude the switch is broken —
+   * which is the same complaint that started this phase, arriving by a
+   * different route. The one line WITHOUT a description is deliberate too: it
+   * shows that only items carrying notes gain a second line.
+   */
   items: [
-    { productName: 'Atta 10 kg', quantity: 2, unitPrice: 450, gstRate: 5, total: 945, unit: 'bag', hsn: '1101' },
+    { productName: 'Atta 10 kg', quantity: 2, unitPrice: 450, gstRate: 5, total: 945, unit: 'bag', hsn: '1101',
+      description: 'Chakki fresh, 10 kg bag' },
     { productName: 'Sugar 1 kg', quantity: 5, unitPrice: 45, gstRate: 5, total: 236.25, unit: 'pkt', hsn: '1701' },
-    { productName: 'Sunflower Oil 1 L', quantity: 3, unitPrice: 180, gstRate: 5, total: 567, unit: 'btl', hsn: '1512' },
+    { productName: 'Sunflower Oil 1 L', quantity: 3, unitPrice: 180, gstRate: 5, total: 567, unit: 'btl', hsn: '1512',
+      description: 'Refined, pouch', enteredQuantity: 3000, enteredUnit: 'ml' },
   ],
+  partyBalance: 12400,
   subtotal: 1665,
   discountAmount: 0,
   cgst: 41.63,
@@ -203,29 +235,14 @@ export function InvoiceSettingsPage({
   })
 
   const { doc, isSample } = useMemo(() => {
-    const shop: InvoiceShop = {
-      name: (setting?.shopName as string) || 'My Shop',
-      phone: setting?.phone as string,
-      email: setting?.email as string,
-      gstin: setting?.gstin as string,
-      address: setting?.address as string,
-      state: setting?.state as string,
-      upiId: setting?.upiId as string,
-      logoUrl: setting?.logoUrl as string,
-      // 📄 Phase 3, so the preview shows what the printed bill will carry.
-      terms: setting?.invoiceTerms as string,
-      thankYou: setting?.invoiceThankYou as string,
-      signatureUrl: setting?.signatureUrl as string,
-      showSignatureBox: setting?.showSignatureBox as boolean,
-      showReceiverSignature: setting?.showReceiverSignature as boolean,
-      bank: {
-        name: setting?.bankName as string,
-        accountName: setting?.bankAccountName as string,
-        accountNumber: setting?.bankAccountNumber as string,
-        ifsc: setting?.bankIfsc as string,
-        branch: setting?.bankBranch as string,
-      },
-    }
+    /*
+     * 📄 Phase 4: the SAME mapper the download and the WhatsApp share use.
+     *
+     * This matters more here than anywhere else: if the preview built its shop
+     * differently from the two paths that produce the real file, it would be
+     * showing the shopkeeper a bill nobody ever receives.
+     */
+    const shop: InvoiceShop = invoiceShopFromSetting(setting)
     const latest = data?.transaction ?? data
     /*
      * Rahul: "if the user didn't created any bill then there should be a bill

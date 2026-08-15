@@ -39,6 +39,7 @@ import { readError } from '@/lib/read-error'
 import { INVOICE_THEMES } from '@/lib/invoice-themes'
 import { INVOICE_TEMPLATES } from '@/lib/invoice-templates'
 import { PAPER_SIZES } from '@/lib/invoice-paper'
+import { VISIBILITY_TOGGLES } from '@/lib/invoice-visibility'
 import { InfoHint } from '@/components/common/InfoHint'
 import { SignatureField } from '@/components/settings/SignatureField'
 import { describeRestoreOutcome } from '@/lib/restore-outcome'
@@ -115,6 +116,7 @@ export type SettingsSection =
   | 'invoice-tax'     // round off + e-invoicing
   | 'invoice-content' // terms, signature, bank, thank-you, due date
   | 'invoice-numbering' // prefix + next number
+  | 'invoice-visibility' // extra details the shop can switch on
   | 'preferences'     // landing page, hide profit, goals, stock policy
   | 'notifications'   // which alerts reach the bell
   | 'accounting'      // period lock, reconciliation
@@ -214,6 +216,11 @@ export function Settings({
   })
   const [showSignatureBox, setShowSignatureBox] = useState(true)
   const [showReceiverSignature, setShowReceiverSignature] = useState(false)
+  // 📄 Phase 4 — every on/off switch that changes the bill, keyed by the
+  // registry in lib/invoice-visibility.
+  const [visibility, setVisibility] = useState<Record<string, boolean>>(
+    () => Object.fromEntries(VISIBILITY_TOGGLES.map(t => [t.key, t.default])),
+  )
   const [signatureUrl, setSignatureUrl] = useState<string | null>(null)
   // 🔒 V11: Stock policy toggle — 'block' (default) or 'allow' (kirana mode).
   const [stockPolicy, setStockPolicy] = useState<'block' | 'allow'>('block')
@@ -272,6 +279,13 @@ export function Settings({
       })
       setShowSignatureBox(data.setting.showSignatureBox ?? true)
       setShowReceiverSignature(data.setting.showReceiverSignature ?? false)
+      // 📄 Phase 4: read every toggle off the registry, so adding one to that
+      // list is the whole change — no matching line to remember here.
+      setVisibility(
+        Object.fromEntries(
+          VISIBILITY_TOGGLES.map(t => [t.key, data.setting[t.key] ?? t.default]),
+        ),
+      )
       setSignatureUrl(data.setting.signatureUrl ?? null)
       setStockPolicy(data.setting.stockPolicy === 'allow' ? 'allow' : 'block')
       // 🔒 V17-Ext §5.1: Sync period lock state from server.
@@ -2052,6 +2066,41 @@ export function Settings({
               })}>
               {savingBill ? 'Saving…' : 'Save'}
             </Button>
+        </CardContent>
+      </Card>
+      )}
+
+      {/* ═══ Phase 4 — what else appears on the bill ════════════════════
+          Rendered FROM the registry rather than hand-written, so a toggle
+          cannot exist in the schema and be missing here, or vice versa.
+
+          Only the `data` toggles. The two signature switches are in the same
+          registry — the API and the schema guard need them there — but they
+          belong on screen beside the signature pad in "On the bill", not in a
+          list they have no context in. */}
+      {show('invoice-visibility') && (
+      <Card className="shadow-card border-border/60">
+        <CardContent className="space-y-2 pt-5">
+          {VISIBILITY_TOGGLES.filter(t => t.kind === 'data').map(t => (
+            <div key={t.key}
+              className="flex items-start justify-between gap-3 rounded-lg bg-muted/30 border border-border/60 p-3">
+              <div className="min-w-0">
+                <p className="text-sm font-medium">{t.label}</p>
+                {/* Only where the label genuinely is not enough. */}
+                {t.help && <p className="text-2xs text-muted-foreground mt-0.5">{t.help}</p>}
+              </div>
+              <Switch
+                checked={visibility[t.key] ?? t.default}
+                onCheckedChange={(v) => {
+                  // Optimistic, then saved. The preview above reads the same
+                  // cache, so the bill redraws as the switch moves — feedback
+                  // under 300ms is the whole reason this screen has a preview.
+                  setVisibility(prev => ({ ...prev, [t.key]: v }))
+                  persistBillContent({ [t.key]: v })
+                }}
+              />
+            </div>
+          ))}
         </CardContent>
       </Card>
       )}

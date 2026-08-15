@@ -112,8 +112,8 @@ Each phase ships and is verifiable on its own.
 |---|---|---|
 | ~~**1**~~ ✅ | ~~Put the PDF on `InvoiceDocument`; make `invoiceTheme` reach it~~ | **Done 15 Aug** — see below |
 | ~~**2**~~ ✅ | ~~Template contract~~ | **Done 15 Aug** — see below |
-| **3** | Content settings: terms, signature, bank, prefix, tagline, thank-you, due date | Highest-value gap vs myBillBook; pure additions, low risk |
-| **4** | Visibility toggles + the live preview panel | Preview lands with something to preview |
+| ~~**3**~~ ✅ | ~~Content settings: terms, signature, bank, prefix, tagline, thank-you, due date~~ | **Done 15 Aug** |
+| ~~**4**~~ ✅ | ~~Visibility toggles + the live preview panel~~ | **Done 15 Aug** — see below |
 | **5** | Extensions: custom fields (party + invoice) + custom columns, typed | The schema-heaviest piece; needs 1–4 stable |
 | **6** | Trade presets | Only sensible once 3–5 exist to switch on |
 | **7** | New template designs, informed by the 20 references | Design last, on a working engine |
@@ -187,3 +187,75 @@ We do not take: their exact proportions, colour values, ornaments, type pairings
 **Not needed:** app settings screenshots (I have those), or the same design in several colours — colour is a token, one is enough.
 
 **Also useful, if easy:** a photo of a real invoice from a shop near him. Reference designs are idealised; a real one shows what actually gets printed.
+
+---
+
+## Phase 4, as built (15 Aug)
+
+### Four of myBillBook's seven. The other three were checked, not copied.
+
+Part 1 of this document lists seven toggles read off Rahul's screenshots. Before
+building any of them I read the schema, because **a toggle for data that does
+not exist is a placebo** — the same defect as the App Lock that locked nothing
+and the "Coming Soon" shop switcher.
+
+| Toggle | Data in EkBook | Built? |
+|---|---|---|
+| Show party balance | `computePartyBalance()` | ✅ |
+| Item description | `Product.notes`, editable in ProductDialog | ✅ |
+| Alternate unit | `enteredQuantity`/`enteredUnit`, snapshotted per line | ✅ |
+| Time on invoice | `Transaction.date` is a DateTime | ✅ |
+| Free quantity | **no column anywhere** | ❌ needs schema + entry UI |
+| Item image | **no image field on `Product`** | ❌ **and Rahul does not want it on the bill** (15 Aug) |
+| Price history (last 5 for this party) | needs a query per LINE | ❌ see below |
+
+**Price history is not a missing feature, it is a rejected one.** Five prior
+prices for each item on the bill is one query per line, and it puts the
+shopkeeper's own pricing history on a document the customer keeps. It fails the
+BUILD FOR MILLIONS check and it is the wrong audience. If it returns it belongs
+on the item-entry screen, where the shopkeeper is deciding the price.
+
+### The architecture: toggles are applied once, not four times
+
+`buildInvoiceDocument` resolves every toggle to **a value or to null**. A hidden
+field is simply absent from the document, so the PDF, the WhatsApp image, the
+shared link and the live preview never see a setting at all.
+
+This is the direct fix for the class of bug that produced `invoiceTheme`: four
+renderers each had to remember to honour one setting, and one of them didn't.
+**A renderer handed `null` has nothing left to get wrong.** A test reads all four
+renderer files and fails if any of them mentions a toggle key.
+
+### §0 — the registry refuses to hide the law
+
+`src/lib/invoice-visibility.ts` is the single list: schema column, label,
+default, and how the toggle applies. Beside it sits `MANDATORY_INVOICE_FIELDS`
+— the Rule 46 particulars — and a test that fails if any of them is ever
+offered as a switch.
+
+Every competitor treats "customise your invoice" as a free-for-all. A shopkeeper
+who switches off their GSTIN has not customised their bill, they have issued a
+document that is not an invoice, and they find out from a notice. Refusing is
+the difference between a register and a compliance engine, applied to a
+settings screen.
+
+### Two defects found and fixed while building this
+
+1. **The shared bill link was a release behind.** `/b/[token]` built its shop
+   object by hand with nine fields and silently dropped the terms, bank block
+   and signature Phase 3 added — so a customer opening the link got a different
+   bill from one sent the same invoice as a PDF. All four call sites now use one
+   `invoiceShopFromSetting()` mapper, and a test asserts they do.
+2. **A second money formatter, caught by the guard.** The balance label
+   originally baked in its own rupee string, bypassing `formatPDFMoney`'s Indian
+   digit grouping — so a lakh-rupee balance would have printed in a different
+   grouping from every other figure on the same page. The document now hands
+   over the words and each renderer formats the figure with its own formatter.
+
+### What is NOT verified
+
+The code is green (242 suites, 4,134 tests, 0 lint errors, build passes) and
+both new guards were proved by reintroducing the bug and watching them fail.
+**It has not been driven in a browser.** The local dev database was recreated on
+a new port and the embedded browser would not accept typed credentials, so
+Rahul checks this one on the deployed app.

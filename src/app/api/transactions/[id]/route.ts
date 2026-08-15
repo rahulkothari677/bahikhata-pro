@@ -19,6 +19,7 @@ import { logFieldChanges, TRACKED_TRANSACTION_FIELDS } from '@/lib/field-audit'
 import { resolveFinalPaid, isNoteType } from '@/lib/paid-amount'
 import { validateNoteAgainstOriginal } from '@/lib/note-validation'
 import { checkLinkedNotesCap } from '@/lib/linked-notes-guard'
+import { computePartyBalance } from '@/lib/party-balance'
 
 /**
  * Budget for the interactive transactions on the write paths.
@@ -60,7 +61,16 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const transaction = await db.transaction.findFirst({
       where: { id, userId, deletedAt: null },
       include: {
-        items: true,
+        /*
+         * 📄 Phase 4: the product's notes ride along, for the "Item
+         * description" toggle. `include` rather than `select` so every scalar
+         * the rest of this screen already relies on — enteredQuantity and
+         * enteredUnit among them — keeps coming back untouched.
+         *
+         * One extra batched lookup per bill, not one per line: Prisma resolves
+         * the relation for all items in a single query keyed on productId.
+         */
+        items: { include: { product: { select: { notes: true } } } },
         party: true,
         createdBy: { select: { id: true, name: true, role: true } },  // 🔒 V13 L4: staff accountability
         // 🔒 AUDIT C5: the payments settled against this bill. Returned in full
@@ -122,12 +132,52 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     // sum itself. One number, computed once, used everywhere.
     const withAllocations: any = {
       ...transaction,
+      /*
+       * 📄 Phase 4: flatten the product's notes onto the line as
+       * `description`, so no consumer has to know that the item description
+       * happens to live on Product.notes. The invoice document takes
+       * `description`; leaking `item.product.notes` outward would mean every
+       * caller learns the storage shape, and the day it moves they all break.
+       */
+      items: transaction.items.map((it: any) => ({
+        ...it,
+        description: it.product?.notes ?? null,
+        product: undefined,
+      })),
       allocatedAmount: roundMoney(
         (transaction as any).paymentAllocations?.reduce(
           (s: number, a: any) => s + (a.amount || 0), 0,
         ) || 0,
       ),
     }
+
+    /*
+     * 📄 Phase 4 — the party's TOTAL outstanding, for the bill.
+     *
+     * GATED ON THE SETTING, deliberately. This is six aggregates over the
+     * party's whole history; running it every time anyone opens any bill, to
+     * serve a toggle almost every shop leaves off, is a cost with no reader.
+     * Off by default means off in the database too.
+     *
+     * Why the server and not the renderer: the PDF and the WhatsApp image are
+     * built in the browser. An invoice renderer must never be issuing
+     * queries, and it could not filter by userId if it tried.
+     *
+     * Scale (CLAUDE.md): the database sums it — indexed on partyId, filtered
+     * to deletedAt IS NULL. The figure does not change at 10 million rows,
+     * only the time to fetch it, and there is no `take:` to cap it silently.
+     */
+    let partyBalance: number | null = null
+    if (transaction.partyId) {
+      const setting = await db.setting.findUnique({
+        where: { userId },
+        select: { showPartyBalance: true },
+      })
+      if (setting?.showPartyBalance) {
+        partyBalance = (await computePartyBalance(userId, transaction.partyId)).balance
+      }
+    }
+    withAllocations.partyBalance = partyBalance
 
     const hideProfit = await shouldHideProfit(userId, authCtx.role)
     return NextResponse.json({

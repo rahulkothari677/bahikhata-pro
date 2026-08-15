@@ -215,19 +215,34 @@ export function InvoicePreview({
             {rows.map((item, i) => (
               <div
                 key={i}
-                className="flex items-center text-sm"
                 style={{
-                  height: metrics.rowHeight * MM,
                   padding: '0 8px',
                   background: template.table === 'zebra' && i % 2 === 1 ? '#FAFBFC' : 'transparent',
                   borderBottom: template.table === 'rows' ? `1px solid ${theme.line}` : undefined,
                   border: template.table === 'grid' ? `1px solid ${theme.line}` : undefined,
                 }}
               >
-                <span className="flex-1 truncate pr-2">{item.name}</span>
-                <span className="w-20 text-right">{item.qty}</span>
-                <span className="w-28 text-right tabular-nums">{money(item.rate)}</span>
-                <span className="w-32 text-right tabular-nums">{money(item.total)}</span>
+                <div className="flex items-center text-sm" style={{ height: metrics.rowHeight * MM }}>
+                  <span className="flex-1 truncate pr-2">{item.name}</span>
+                  <span className="w-20 text-right">{item.qty}</span>
+                  <span className="w-28 text-right tabular-nums">{money(item.rate)}</span>
+                  <span className="w-32 text-right tabular-nums">{money(item.total)}</span>
+                </div>
+                {/*
+                  * 📄 Phase 4 — the same sub-line the PDF draws, in the same
+                  * two places: description under the name, unit-as-typed under
+                  * the quantity. The row grows here exactly as it grows there,
+                  * because a preview that lays the row out differently from the
+                  * file is not previewing the file.
+                  */}
+                {(item.description || item.altQty) && (
+                  <div className="flex text-2xs" style={{ paddingBottom: 5, color: readable(theme.muted) }}>
+                    <span className="flex-1 truncate pr-2">{item.description}</span>
+                    <span className="w-20 text-right">{item.altQty ? `(${item.altQty})` : ''}</span>
+                    <span className="w-28" />
+                    <span className="w-32" />
+                  </div>
+                )}
               </div>
             ))}
             {hidden > 0 && (
@@ -260,6 +275,12 @@ export function InvoicePreview({
                 <span>TOTAL</span>
                 <span className="tabular-nums">{money(doc.total)}</span>
               </div>
+              {/* 📄 Phase 4 — under the total, matching where the PDF puts it. */}
+              {doc.partyBalanceLabel && (
+                <p className="text-xs text-right" style={{ marginTop: 6, color: readable(theme.muted) }}>
+                  {doc.partyBalanceLabel}: {money(doc.partyBalance ?? 0)}
+                </p>
+              )}
             </div>
           </div>
 
@@ -354,7 +375,7 @@ function HeaderContent({
       <div className="text-right flex-shrink-0">
         <p className="text-xl font-bold">INVOICE</p>
         <p className="text-sm font-medium" style={{ color: muted }}>
-          {doc.invoiceNo} · {doc.dateLabel}
+          {doc.invoiceNo} · {doc.dateLabel}{doc.timeLabel ? `, ${doc.timeLabel}` : ''}
         </p>
         {/* 📄 Phase 3: a real date, high on the page. */}
         {doc.dueDateLabel && (

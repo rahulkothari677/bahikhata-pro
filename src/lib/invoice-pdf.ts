@@ -121,7 +121,10 @@ export async function generateInvoicePDF(
    * Due 0' on the same page. The document's `paid` is total minus due, so the
    * two lines are now arithmetically forced to agree.
    */
-  const dateStr = invoice.dateLabel
+  // 📄 Phase 4: the time joins the date rather than taking its own line — a
+  // bill header is the most crowded part of the page. Null unless the shop
+  // asked for it, so this is the date exactly as before by default.
+  const dateStr = invoice.timeLabel ? `${invoice.dateLabel}, ${invoice.timeLabel}` : invoice.dateLabel
   const dueAmount = invoice.due
   const status = invoice.status
   const statusLabels = { paid: 'PAID', partial: 'PARTIAL', due: 'DUE' }
@@ -398,9 +401,26 @@ export async function generateInvoicePDF(
   // other is how a table stops lining up.
   doc.setFont(THEME.font, 'normal')
   doc.setFontSize(metrics.bodyPt)
-  const rowHeight = metrics.rowHeight
+  const baseRowHeight = metrics.rowHeight
+
+  /*
+   * 📄 Phase 4: a row grows by one line when the shop has asked for the item
+   * description or the unit-as-typed, and by nothing at all otherwise.
+   *
+   * ONE extra line, truncated rather than wrapped. Wrapping would make the
+   * row height depend on the text, which the zebra fill, the grid rules and
+   * the page-break check all read — three things to keep in step for a field
+   * that is a note on a grocery line, not a paragraph. A predictable table is
+   * worth more here than an uncapped one.
+   *
+   * Both fields are already null when the toggle is off (see
+   * buildInvoiceDocument), so there is no setting to consult here.
+   */
+  const subLineHeight = baseRowHeight * 0.55
+  const hasSubLine = (it: (typeof invoice.items)[number]) => !!(it.description || it.altQty)
 
   invoice.items.forEach((item, i) => {
+    const rowHeight = baseRowHeight + (hasSubLine(item) ? subLineHeight : 0)
     y = newPageIfNeeded(doc, y, rowHeight + 2, () => {
       drawTableHeader(y)
       doc.setFont(THEME.font, 'normal')
@@ -447,6 +467,31 @@ export async function generateInvoicePDF(
     doc.text(item.rate.toFixed(2), cols[4].x + cols[4].w - 1, tY, { align: 'right' })
     doc.text(item.gstRate + '%', cols[5].x + cols[5].w - 1, tY, { align: 'right' })
     doc.text(formatPDFMoney(item.total), colEnd, tY, { align: 'right' })
+
+    /*
+     * The sub-line. Description under the name, unit-as-typed under the
+     * quantity — each sits below the column it qualifies, so the eye does not
+     * have to work out which number the note belongs to.
+     *
+     * Muted and a size down: it is a qualifier, not a second item. Drawn from
+     * `muted` so it follows the shop's chosen theme like everything else.
+     */
+    if (hasSubLine(item)) {
+      const subY = tY + subLineHeight
+      doc.setFontSize(metrics.smallPt)
+      doc.setTextColor(textMuted.r, textMuted.g, textMuted.b)
+      if (item.description) {
+        // Truncated to the name column so it can never run under HSN.
+        const room = cols[2].x - cols[1].x - 2
+        doc.text(doc.splitTextToSize(item.description, room)[0] ?? '', cols[1].x, subY)
+      }
+      if (item.altQty) {
+        doc.text(`(${item.altQty})`, cols[3].x + cols[3].w - 1, subY, { align: 'right' })
+      }
+      doc.setFontSize(metrics.bodyPt)
+      doc.setTextColor(text.r, text.g, text.b)
+    }
+
     y += rowHeight
   })
 
@@ -534,6 +579,39 @@ export async function generateInvoicePDF(
     doc.setTextColor(THEME.due.r, THEME.due.g, THEME.due.b)
     doc.text('Balance Due: ' + formatPDFMoney(dueAmount), totalsX, y)
     doc.setTextColor(text.r, text.g, text.b)
+    y += 5
+  }
+
+  /*
+   * 📄 Phase 4 — the customer's TOTAL outstanding, when the shop asks for it.
+   *
+   * Placed directly under Balance Due, and in muted type rather than the red
+   * used for this bill's due, because the two are different numbers and a
+   * customer reading them stacked in the same colour would take the larger
+   * one as what this bill demands. The label carries its own date for the
+   * same reason — see partyBalanceLabel in invoice-document.
+   *
+   * Null unless the toggle is on, so nothing is checked here.
+   */
+  if (invoice.partyBalanceLabel) {
+    doc.setFont(THEME.font, 'normal')
+    doc.setFontSize(8)
+    doc.setTextColor(textMuted.r, textMuted.g, textMuted.b)
+    /*
+     * Label left, figure right — the same shape as every line in the totals
+     * block above, so the eye reads it as part of that column rather than as
+     * a stray sentence.
+     *
+     * Two draw calls rather than one joined string, deliberately: the figure
+     * carries the rupee sign, and jsPDF hex-encodes any string holding a
+     * character outside Latin-1. Joined, the label became unreadable to
+     * anything inspecting the file — including the guard that proves this
+     * line is drawn at all.
+     */
+    doc.text(invoice.partyBalanceLabel, totalsX, y)
+    doc.text(formatPDFMoney(invoice.partyBalance ?? 0), totalsValueX, y, { align: 'right' })
+    doc.setTextColor(text.r, text.g, text.b)
+    doc.setFontSize(9)
     y += 5
   }
 

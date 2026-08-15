@@ -18,7 +18,8 @@
 import type { Metadata, Viewport } from 'next'
 import { db } from '@/lib/db'
 import { isWellFormedToken, isShareLinkUsable, DEAD_LINK_MESSAGE } from '@/lib/bill-share'
-import { buildInvoiceDocument } from '@/lib/invoice-document'
+import { buildInvoiceDocument, invoiceShopFromSetting } from '@/lib/invoice-document'
+import { computePartyBalance } from '@/lib/party-balance'
 import { PublicBill } from './PublicBill'
 
 /**
@@ -106,12 +107,26 @@ export default async function BillPage({ params }: { params: Promise<{ token: st
    */
   const txn = await db.transaction.findFirst({
     where: { id: share.transactionId, deletedAt: null },
-    include: { items: true, party: true },
+    // 📄 Phase 4: the product notes ride along for the item-description toggle.
+    include: { items: { include: { product: { select: { notes: true } } } }, party: true },
   })
   if (!txn) return <DeadLink />
 
   const settingRow = await db.setting.findFirst({ where: { userId: share.userId } })
   const setting = settingRow
+
+  /*
+   * 📄 Phase 4 — the customer's total outstanding, only if the shop asked.
+   *
+   * Gated on the setting for the same reason as the API route: this is six
+   * aggregates over the party's whole history, and running it for every
+   * opened link to serve a toggle that is off by default is a cost with no
+   * reader. `share.userId`, never a value from the URL — the token proves
+   * which bill, it does not get to choose whose books are read.
+   */
+  const partyBalance = setting?.showPartyBalance && txn.partyId
+    ? (await computePartyBalance(share.userId, txn.partyId)).balance
+    : null
 
   /*
    * Counting the view is the point of the link — sent, then opened, then paid
@@ -164,6 +179,12 @@ export default async function BillPage({ params }: { params: Promise<{ token: st
         total: i.total,
         unit: i.unit ?? undefined,
         hsn: i.hsn,
+        // 📄 Phase 4. Listed explicitly, like everything else here: the note
+        // above is right that a field arriving on its own is how HSN stayed
+        // blank for a year, so these three are named rather than spread.
+        description: i.product?.notes ?? null,
+        enteredQuantity: i.enteredQuantity,
+        enteredUnit: i.enteredUnit,
       })),
       subtotal: txn.subtotal,
       discountAmount: txn.discountAmount,
@@ -175,18 +196,13 @@ export default async function BillPage({ params }: { params: Promise<{ token: st
       paidAmount: txn.paidAmount,
       paymentMode: txn.paymentMode,
       isInterState: txn.isInterState ?? false,
+      partyBalance,
     } as never,
-    {
-      name: setting?.shopName || 'Shop',
-      ownerName: setting?.ownerName,
-      phone: setting?.phone,
-      email: setting?.email,
-      gstin: setting?.gstin,
-      address: setting?.address,
-      state: setting?.state,
-      upiId: setting?.upiId,
-      logoUrl: setting?.logoUrl,
-    },
+    // 📄 Phase 4: the same mapper the app's own screens use, so the page the
+    // customer opens carries the shop's choices rather than a subset of them.
+    // This call site previously passed nine fields and silently dropped the
+    // terms, the bank block and the signature that Phase 3 added.
+    invoiceShopFromSetting(setting),
   )
 
   return <PublicBill doc={doc} themeId={setting?.invoiceTheme} />

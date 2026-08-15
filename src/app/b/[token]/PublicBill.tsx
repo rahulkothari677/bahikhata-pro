@@ -61,7 +61,7 @@ export function PublicBill({ doc, themeId }: { doc: InvoiceDocument; themeId?: s
             <div>
               <h2 className="text-base font-bold text-slate-900">{doc.title}</h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                No. {doc.invoiceNo} · {doc.dateLabel}
+                No. {doc.invoiceNo} · {doc.dateLabel}{doc.timeLabel ? `, ${doc.timeLabel}` : ''}
               </p>
             </div>
             <span
@@ -98,6 +98,11 @@ export function PublicBill({ doc, themeId }: { doc: InvoiceDocument; themeId?: s
                 <tr key={i} className="border-b border-slate-100 align-top">
                   <td className="py-2.5 pr-2">
                     <span className="text-slate-900">{item.name}</span>
+                    {/* 📄 Phase 4. Null unless the shop asked for it — this
+                        page never reads a setting, it renders what it is given. */}
+                    {item.description && (
+                      <span className="block text-2xs text-slate-500">{item.description}</span>
+                    )}
                     {(item.hsn || doc.hasTax) && (
                       <span className="block text-2xs text-slate-400">
                         {[item.hsn && `HSN ${item.hsn}`, doc.hasTax && `GST ${item.gstRate}%`]
@@ -107,7 +112,12 @@ export function PublicBill({ doc, themeId }: { doc: InvoiceDocument; themeId?: s
                     )}
                     <span className="block text-2xs text-slate-400">@ {money(item.rate)}</span>
                   </td>
-                  <td className="py-2.5 text-right text-slate-700 whitespace-nowrap">{item.qty}</td>
+                  <td className="py-2.5 text-right text-slate-700 whitespace-nowrap">
+                    {item.qty}
+                    {item.altQty && (
+                      <span className="block text-2xs text-slate-400">({item.altQty})</span>
+                    )}
+                  </td>
                   <td className="py-2.5 text-right font-semibold text-slate-900 whitespace-nowrap">
                     {money(item.total)}
                   </td>
@@ -171,6 +181,16 @@ export function PublicBill({ doc, themeId }: { doc: InvoiceDocument; themeId?: s
                 <p className="text-3xs text-slate-500 break-all font-mono mt-0.5">IRN: {doc.irn}</p>
               </div>
             </div>
+          )}
+
+          {/* 📄 Phase 4 — total outstanding. Deliberately NOT in the sticky
+              pay bar below: that bar drives payment and must show exactly one
+              figure, the amount this bill asks for. Two numbers there and the
+              customer pays the wrong one. */}
+          {doc.partyBalanceLabel && (
+            <p className="mt-4 text-2xs text-slate-500">
+              {doc.partyBalanceLabel}: {money(doc.partyBalance ?? 0)}
+            </p>
           )}
 
           <div className="mt-5 pt-4 border-t border-slate-200 text-2xs text-slate-500 flex justify-between">

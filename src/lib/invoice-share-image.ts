@@ -210,7 +210,13 @@ export function renderInvoiceImage(doc: InvoiceDocument, opts: InvoiceImageOptio
   ctx.textAlign = 'left'
   ctx.fillStyle = INK.muted
   font(ctx, 26, 400)
-  ctx.fillText(`No. ${doc.invoiceNo}    ${doc.dateLabel}`, PAD, y + 44)
+  // 📄 Phase 4: the time joins the date on the existing line. `timeLabel` is
+  // null unless the shop asked for it, so this reads exactly as before.
+  ctx.fillText(
+    `No. ${doc.invoiceNo}    ${doc.dateLabel}${doc.timeLabel ? `, ${doc.timeLabel}` : ''}`,
+    PAD,
+    y + 44,
+  )
   y += 100
 
   // ── billed to ────────────────────────────────────────────────────────
@@ -324,6 +330,26 @@ export function renderInvoiceImage(doc: InvoiceDocument, opts: InvoiceImageOptio
   ctx.fillStyle = doc.due > 0 ? INK.due : INK.paid
   font(ctx, 62, 700)
   ctx.fillText(money(doc.due > 0 ? doc.due : doc.total), PAD + 32, y + 118)
+
+  /*
+   * 📄 Phase 4 — total outstanding, tucked into the SAME card, right-aligned
+   * against the big due figure. Inside the card and not below it because this
+   * number only means anything next to the one it is not: a customer seeing
+   * ₹12,400 anywhere near a ₹945 bill needs the two labelled side by side.
+   *
+   * Small and muted, deliberately. The amount due stays the largest thing on
+   * the picture — that is what the customer opened the message to find.
+   */
+  if (doc.partyBalance !== null) {
+    ctx.textAlign = 'right'
+    ctx.fillStyle = INK.muted
+    font(ctx, 22, 600)
+    ctx.fillText('TOTAL OUTSTANDING', W - PAD - 32, y + 56)
+    font(ctx, 34, 700)
+    ctx.fillText(money(doc.partyBalance), W - PAD - 32, y + 112)
+    ctx.textAlign = 'left'
+  }
+
   y += dueH + 40
 
   // ── amount in words ──────────────────────────────────────────────────
@@ -397,13 +423,28 @@ function drawItem(
   // HSN and the GST rate go UNDER the name rather than in columns of their
   // own — five columns at this width leaves nothing legible for the name,
   // which is the field a customer actually checks.
-  const sub = [item.hsn ? `HSN ${item.hsn}` : null, hasTax ? `GST ${item.gstRate}%` : null]
+  /*
+   * 📄 Phase 4 joins the description and the unit-as-typed onto this SAME
+   * line rather than adding another. The row height is fixed by the caller,
+   * and a second sub-line would need every call site to agree about the new
+   * height — the kind of change that looks right in one template and breaks
+   * the page break in the next.
+   *
+   * Both are already null when the shop has the toggle off, so there is no
+   * setting to read here. Clipped, because this is a phone-width picture.
+   */
+  const sub = [
+    item.hsn ? `HSN ${item.hsn}` : null,
+    hasTax ? `GST ${item.gstRate}%` : null,
+    item.altQty,
+    item.description,
+  ]
     .filter(Boolean)
     .join('   ·   ')
   if (sub) {
     ctx.fillStyle = INK.muted
     font(ctx, 21, 400)
-    ctx.fillText(sub, PAD + 16, y + 30)
+    ctx.fillText(clip(ctx, sub, colQty - PAD - 40), PAD + 16, y + 30)
   }
 
   ctx.textAlign = 'right'

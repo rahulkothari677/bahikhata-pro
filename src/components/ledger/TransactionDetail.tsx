@@ -33,7 +33,7 @@ import {
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { amountToWords } from '@/lib/amount-to-words'
 import { generateInvoicePDF } from '@/lib/invoice-pdf'
-import { buildInvoiceDocument } from '@/lib/invoice-document'
+import { buildInvoiceDocument, invoiceShopFromSetting } from '@/lib/invoice-document'
 import { haptic } from '@/lib/haptic'
 import { useSetting } from '@/hooks/use-setting'
 import { readError } from '@/lib/read-error'
@@ -230,32 +230,9 @@ export function TransactionDetail() {
         // Phase 3: the shop's payment window, so the bill prints a real date.
         dueDays: setting?.invoiceDueDays,
       } as Parameters<typeof buildInvoiceDocument>[0],
-      {
-        name: setting?.shopName || 'My Shop',
-        ownerName: setting?.ownerName,
-        phone: setting?.phone,
-        email: setting?.email,
-        gstin: setting?.gstin,
-        address: setting?.address,
-        state: setting?.state,
-        upiId: setting?.upiId,
-        logoUrl: setting?.logoUrl,
-        // 📄 Phase 3: what the shop puts on the bill. Supplied at every call
-        // site, because a field the document can carry and no caller fills is
-        // a setting that silently does nothing.
-        terms: setting?.invoiceTerms,
-        thankYou: setting?.invoiceThankYou,
-        signatureUrl: setting?.signatureUrl,
-        showSignatureBox: setting?.showSignatureBox,
-        showReceiverSignature: setting?.showReceiverSignature,
-        bank: {
-          name: setting?.bankName,
-          accountName: setting?.bankAccountName,
-          accountNumber: setting?.bankAccountNumber,
-          ifsc: setting?.bankIfsc,
-          branch: setting?.bankBranch,
-        },
-      },
+      // 📄 Phase 4: one mapper, so a new bill field is added in one place
+      // rather than at each of the three screens that build a shop by hand.
+      invoiceShopFromSetting(setting),
     )
     generateInvoicePDF(doc, {
       themeId: setting?.invoiceTheme,
@@ -336,32 +313,10 @@ export function TransactionDetail() {
         // Phase 3: the shop's payment window rides along with the bill, so the
         // WhatsApp copy carries the same due date as the download.
         { ...(txn as object), dueDays: setting?.invoiceDueDays } as never,
-        {
-          name: setting?.shopName || 'My Shop',
-          ownerName: setting?.ownerName,
-          phone: setting?.phone,
-          email: setting?.email,
-          gstin: setting?.gstin,
-          address: setting?.address,
-          state: setting?.state,
-          upiId: setting?.upiId,
-          logoUrl: setting?.logoUrl,
-          // 📄 Phase 3: what the shop puts on the bill. Supplied at every call
-            // site, because a field the document can carry and no caller fills is
-            // a setting that silently does nothing.
-          terms: setting?.invoiceTerms,
-          thankYou: setting?.invoiceThankYou,
-          signatureUrl: setting?.signatureUrl,
-          showSignatureBox: setting?.showSignatureBox,
-          showReceiverSignature: setting?.showReceiverSignature,
-          bank: {
-            name: setting?.bankName,
-            accountName: setting?.bankAccountName,
-            accountNumber: setting?.bankAccountNumber,
-            ifsc: setting?.bankIfsc,
-            branch: setting?.bankBranch,
-          },
-        },
+        // 📄 Phase 4: the same mapper the download uses. These two once drifted
+        // apart — the picture honoured a setting the file ignored — and sharing
+        // the mapper is what stops that happening a second time.
+        invoiceShopFromSetting(setting),
         {
           preference: setting?.docSendFormat,
           override,

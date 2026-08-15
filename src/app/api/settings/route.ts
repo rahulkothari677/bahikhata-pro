@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { getAuthUserIdWithModule } from '@/lib/get-auth'
 import { withCache, noStore } from '@/lib/cache'
 import { apiError } from '@/lib/api-error'
+import { VISIBILITY_TOGGLES } from '@/lib/invoice-visibility'
 
 // GET /api/settings
 export async function GET() {
@@ -341,8 +342,18 @@ export async function PUT(req: NextRequest) {
       }
     }
 
-    if (body.showSignatureBox !== undefined) sanitized.showSignatureBox = !!body.showSignatureBox
-    if (body.showReceiverSignature !== undefined) sanitized.showReceiverSignature = !!body.showReceiverSignature
+    /*
+     * 📄 Phase 4 — every on/off switch that affects the bill, driven off the
+     * ONE registry in lib/invoice-visibility rather than a hand-written list
+     * that drifts from it. The two signature switches are in that registry,
+     * so they are handled here too and no longer need lines of their own.
+     *
+     * A test proves each key is a real Setting column, so a typo here fails
+     * the build rather than silently discarding a shopkeeper's choice.
+     */
+    for (const toggle of VISIBILITY_TOGGLES) {
+      if (body[toggle.key] !== undefined) sanitized[toggle.key] = !!body[toggle.key]
+    }
     if (body.docSendFormat !== undefined) {
       if (!['smart', 'image', 'pdf'].includes(body.docSendFormat)) {
         return NextResponse.json(
