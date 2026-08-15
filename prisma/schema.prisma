@@ -645,6 +645,14 @@ model Setting {
   // One theme drives the WhatsApp picture, the link page and the PDF, so a
   // shop's bill and its payment page cannot look like two businesses.
   invoiceTheme String @default("classic")
+  // 📄 2026-08-15, Phase 2 of docs/INVOICE-ENGINE-PLAN.md — the STRUCTURE of
+  // the bill, chosen independently of its colour. See src/lib/invoice-templates.
+  // Deliberately a second column rather than a compound "style" value: eight
+  // themes times six templates is forty-eight looks, and storing the pair as
+  // one string would mean parsing it everywhere it is read.
+  // Defaults to "standard", which reproduces exactly what the renderer
+  // produced before templates existed, so no shop's invoice changes today.
+  invoiceTemplate String @default("standard")
 
   docSendFormat String @default("smart")
 

@@ -37,6 +37,7 @@ import { cn, formatINR } from '@/lib/utils'
 import { APP_VERSION_LABEL } from '@/lib/app-version'
 import { readError } from '@/lib/read-error'
 import { INVOICE_THEMES } from '@/lib/invoice-themes'
+import { INVOICE_TEMPLATES } from '@/lib/invoice-templates'
 import { describeRestoreOutcome } from '@/lib/restore-outcome'
 
 const FEATURE_CATEGORIES: { title: string; features: { key: FeatureKey; label: string; description: string; icon: any }[] }[] = [
@@ -195,6 +196,7 @@ export function Settings({
   const [docSendFormat, setDocSendFormat] = useState<'smart' | 'image' | 'pdf'>('smart')
   const [docShareLink, setDocShareLink] = useState(false)
   const [invoiceTheme, setInvoiceTheme] = useState('classic')
+  const [invoiceTemplate, setInvoiceTemplate] = useState('standard')
   // 🔒 V11: Stock policy toggle — 'block' (default) or 'allow' (kirana mode).
   const [stockPolicy, setStockPolicy] = useState<'block' | 'allow'>('block')
   // 🔒 V17-Ext §5.1: Period lock state. null = unlocked. Date string = locked
@@ -236,6 +238,7 @@ export function Settings({
       setDocSendFormat(data.setting.docSendFormat ?? 'smart')
       setDocShareLink(data.setting.docShareLink ?? false)
       setInvoiceTheme(data.setting.invoiceTheme ?? 'classic')
+      setInvoiceTemplate(data.setting.invoiceTemplate ?? 'standard')
       setStockPolicy(data.setting.stockPolicy === 'allow' ? 'allow' : 'block')
       // 🔒 V17-Ext §5.1: Sync period lock state from server.
       // lockedUntil is an ISO timestamp (or null). We store the full timestamp
@@ -273,7 +276,7 @@ export function Settings({
    * about having saved is worse.
    */
   const persistDocSetting = async (
-    patch: { docSendFormat?: 'smart' | 'image' | 'pdf'; docShareLink?: boolean; invoiceTheme?: string },
+    patch: { docSendFormat?: 'smart' | 'image' | 'pdf'; docShareLink?: boolean; invoiceTheme?: string; invoiceTemplate?: string },
     rollback: () => void,
   ) => {
     try {
@@ -1545,14 +1548,88 @@ export function Settings({
           <p className="text-xs text-muted-foreground">How your bill looks and how it reaches the customer</p>
         </CardHeader>
         <CardContent className="space-y-3">
-          {/* 📄 The invoice look. ONE theme drives the WhatsApp picture, the
+          {/* 📄 2026-08-15, Phase 2: LAYOUT and COLOUR are two questions.
+
+              myBillBook asks them as one — named "Theme Styling" presets plus
+              a row of colour dots, with nothing saying which decides what. Two
+              controls, each doing one thing, gives 8 x 6 = 48 looks and stays
+              explainable. Layout first, because it changes the bill more. */}
+          <div className="mt-3 rounded-lg bg-muted/30 border border-border/60 p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <FileText className="w-4 h-4 text-muted-foreground" />
+              <div>
+                <p className="text-sm font-medium">Invoice layout</p>
+                <p className="text-2xs text-muted-foreground">
+                  How the bill is arranged. Every layout carries the same GST fields.
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-1.5">
+              {INVOICE_TEMPLATES.map(t => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => {
+                    const prev = invoiceTemplate
+                    setInvoiceTemplate(t.id)
+                    persistDocSetting({ invoiceTemplate: t.id }, () => setInvoiceTemplate(prev))
+                  }}
+                  aria-pressed={invoiceTemplate === t.id}
+                  title={t.description}
+                  className={
+                    'rounded-lg border p-2 transition text-left ' +
+                    (invoiceTemplate === t.id
+                      ? 'border-primary ring-2 ring-primary/25'
+                      : 'border-border/70 hover:border-border')
+                  }
+                >
+                  {/* A wireframe of the BONES — header treatment, row rhythm,
+                      totals block. Deliberately colourless: the swatch below
+                      answers colour, and showing it twice is what makes
+                      myBillBook's two controls impossible to tell apart. */}
+                  <span className="block rounded overflow-hidden border border-border/50 bg-white p-1">
+                    <span className={
+                      'block ' +
+                      (t.header === 'band' ? 'h-2.5 bg-slate-700'
+                        : t.header === 'rule' ? 'h-2.5 bg-white border-b-2 border-slate-700'
+                        : 'h-2.5 bg-white border border-slate-500')
+                    } />
+                    <span className="block mt-1 space-y-0.5">
+                      {[0, 1, 2].map(r => (
+                        <span
+                          key={r}
+                          className={
+                            'block w-full ' +
+                            (t.density === 'compact' ? 'h-0.5' : t.density === 'airy' ? 'h-1.5' : 'h-1') + ' ' +
+                            (t.table === 'zebra' ? (r % 2 ? 'bg-slate-200' : 'bg-slate-100')
+                              : t.table === 'grid' ? 'border border-slate-300'
+                              : 'border-b border-slate-200')
+                          }
+                        />
+                      ))}
+                    </span>
+                    <span className={
+                      'block h-1.5 w-1/2 ml-auto mt-1 ' +
+                      (t.totals === 'bar' ? 'bg-slate-700'
+                        : t.totals === 'panel' ? 'border border-slate-500'
+                        : 'bg-slate-300')
+                    } />
+                  </span>
+                  <span className="block text-3xs mt-1 font-medium truncate">{t.name}</span>
+                  <span className="block text-3xs text-muted-foreground leading-tight line-clamp-2">{t.description}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 📄 The invoice colour. ONE theme drives the WhatsApp picture, the
               link page and the PDF — a shop's bill and its payment page should
               not look like two different businesses. */}
           <div className="mt-3 rounded-lg bg-muted/30 border border-border/60 p-3">
             <div className="flex items-center gap-2 mb-2">
               <Palette className="w-4 h-4 text-muted-foreground" />
               <div>
-                <p className="text-sm font-medium">Invoice design</p>
+                <p className="text-sm font-medium">Invoice colour</p>
                 <p className="text-2xs text-muted-foreground">
                   Used on the bill picture, the bill link and the PDF.
                 </p>

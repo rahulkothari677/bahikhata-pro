@@ -17,6 +17,7 @@
 
 import { registerUnicodeFont, THEME, formatPDFMoney } from './pdf/theme'
 import { paletteFor } from './pdf/palette'
+import { getInvoiceTemplate, metricsFor } from './invoice-templates'
 import type { InvoiceDocument } from './invoice-document'
 import { drawFooter, drawUPIQRBlock, newPageIfNeeded } from './pdf/primitives'
 
@@ -43,6 +44,15 @@ import { drawFooter, drawUPIQRBlock, newPageIfNeeded } from './pdf/primitives'
 export interface InvoicePdfOptions {
   /** Setting.invoiceTheme. Drives the palette — see pdf/palette.ts. */
   themeId?: string | null
+  /**
+   * Setting.invoiceTemplate. Drives the STRUCTURE — see invoice-templates.ts.
+   *
+   * Separate from the theme on purpose: the template decides the bones and
+   * the theme decides the colour, so eight themes and six templates give
+   * forty-eight looks from fourteen entries. Defaults to 'standard', which
+   * reproduces exactly what this renderer produced before templates existed.
+   */
+  templateId?: string | null
   /**
    * The public bill link, when the shop has them switched on.
    *
@@ -74,6 +84,14 @@ export async function generateInvoicePDF(
     band, onBand, onBandMuted, accent, accentSoft,
     text, textMuted, border, zebra, cardBg, white, paid, partial, due,
   } = paletteFor(opts.themeId)
+
+  /*
+   * The template supplies every structural number below. `standard` resolves
+   * to the values this file used to hardcode — 32mm band, 7mm rows, 9pt body —
+   * so no shop's invoice changes until they choose a different one.
+   */
+  const template = getInvoiceTemplate(opts.templateId)
+  const metrics = metricsFor(template)
   /*
    * Every figure below is READ, never recomputed.
    *
@@ -95,9 +113,34 @@ export async function generateInvoicePDF(
   // ═══════════════════════════════════════════════════════════════════
   // 1. BRAND BAND — 32 mm full-width, shop info left, INVOICE + meta + status right
   // ═══════════════════════════════════════════════════════════════════
-  const bandHeight = 32
-  doc.setFillColor(band.r, band.g, band.b)
-  doc.rect(0, 0, pageWidth, bandHeight, 'F')
+  const bandHeight = metrics.bandHeight
+  /*
+   * How the shop's identity is presented. `band` is the original: a filled
+   * strip across the page, so every line inside it is drawn in `onBand`.
+   * `rule` and `frame` leave the paper white, which means the same lines must
+   * be drawn in body text instead — hence `headText`/`headMuted` below rather
+   * than `onBand` used directly.
+   */
+  const filledHeader = template.header === 'band'
+  const headText = filledHeader ? onBand : text
+  const headMuted = filledHeader ? onBandMuted : textMuted
+
+  if (filledHeader) {
+    doc.setFillColor(band.r, band.g, band.b)
+    doc.rect(0, 0, pageWidth, bandHeight, 'F')
+  } else if (template.header === 'rule') {
+    // A thick accent rule under the identity block, no fill.
+    doc.setDrawColor(accent.r, accent.g, accent.b)
+    doc.setLineWidth(1.2)
+    doc.line(margin, bandHeight - 4, pageWidth - margin, bandHeight - 4)
+  } else {
+    // 'frame' — a hairline box around the whole page, the bill-book look.
+    doc.setDrawColor(accent.r, accent.g, accent.b)
+    doc.setLineWidth(0.6)
+    doc.rect(margin - 5, 6, pageWidth - (margin - 5) * 2, pageHeight - 12)
+    doc.setLineWidth(0.3)
+    doc.line(margin, bandHeight - 4, pageWidth - margin, bandHeight - 4)
+  }
 
   // 🔒 PDF Redesign Spec Part 3 §2: Shop logo at 16×16 mm in the brand band,
   // left of the shop name. If no logo, fall back to a rounded square with
@@ -140,12 +183,21 @@ export async function generateInvoicePDF(
   // shop names (often 20+ chars); 16pt keeps the band at one line.
   doc.setFont(THEME.font, 'bold')
   doc.setFontSize(16)
-  doc.setTextColor(white.r, white.g, white.b)
+  doc.setTextColor(headText.r, headText.g, headText.b)
+  /*
+   * The one place a template may change the face. Body text stays in the
+   * registered Unicode sans, which is the only font here that can draw
+   * Devanagari, Gujarati and Tamil — offering a shop a serif that cannot
+   * render its own language would not be a choice.
+   */
+  if (template.titleFace === 'serif') doc.setFont('times', 'bold')
   doc.text(invoice.shop.name || 'My Shop', textLeftX, 13)
+  doc.setFont(THEME.font, 'bold')
 
   // Left: shop details (white, 8pt) — phone | GSTIN | address (one or two lines)
   doc.setFont(THEME.font, 'normal')
   doc.setFontSize(8)
+  doc.setTextColor(headMuted.r, headMuted.g, headMuted.b)
   let detailY = 18
   const shopDetails: string[] = []
   if (invoice.shop.phone) shopDetails.push(invoice.shop.phone)
@@ -162,10 +214,11 @@ export async function generateInvoicePDF(
   // Right: INVOICE word (16 pt), invoice no + date beneath.
   doc.setFont(THEME.font, 'bold')
   doc.setFontSize(16)
-  doc.setTextColor(white.r, white.g, white.b)
+  doc.setTextColor(headText.r, headText.g, headText.b)
   doc.text('INVOICE', pageWidth - margin, 12, { align: 'right' })
   doc.setFont(THEME.font, 'normal')
   doc.setFontSize(9)
+  doc.setTextColor(headMuted.r, headMuted.g, headMuted.b)
   doc.text(`${invoice.invoiceNo || ''}  |  ${dateStr}`, pageWidth - margin, 18, { align: 'right' })
 
   // Status pill — inside the band, below the invoice meta, right-aligned.
@@ -308,40 +361,63 @@ export async function generateInvoicePDF(
     doc.setTextColor(text.r, text.g, text.b)
   }
 
-  const headerHeight = 8
+  const headerHeight = metrics.headerHeight
   drawTableHeader(y)
   y += headerHeight
 
-  // Item rows
+  // Item rows. Type moves with the row height — changing one without the
+  // other is how a table stops lining up.
   doc.setFont(THEME.font, 'normal')
-  doc.setFontSize(9)
-  const rowHeight = 7
+  doc.setFontSize(metrics.bodyPt)
+  const rowHeight = metrics.rowHeight
 
   invoice.items.forEach((item, i) => {
     y = newPageIfNeeded(doc, y, rowHeight + 2, () => {
       drawTableHeader(y)
       doc.setFont(THEME.font, 'normal')
-      doc.setFontSize(9)
+      doc.setFontSize(metrics.bodyPt)
       y += headerHeight
     })
 
-    // Zebra stripe
-    if (i % 2 === 1) {
+    /*
+     * How this row is separated from the next.
+     *
+     *   zebra — alternate tinted rows, no lines. The original.
+     *   rows  — a hairline under each row. Quietest.
+     *   grid  — every cell boxed, which is what a CA reading a stack of
+     *           bills actually wants: the eye can follow a column down the
+     *           page without losing its place.
+     */
+    if (template.table === 'zebra' && i % 2 === 1) {
       doc.setFillColor(zebra.r, zebra.g, zebra.b)
       doc.rect(colStart, y, tableWidth, rowHeight, 'F')
+    } else if (template.table === 'rows') {
+      doc.setDrawColor(border.r, border.g, border.b)
+      doc.setLineWidth(0.1)
+      doc.line(colStart, y + rowHeight, colStart + tableWidth, y + rowHeight)
+    } else if (template.table === 'grid') {
+      doc.setDrawColor(border.r, border.g, border.b)
+      doc.setLineWidth(0.1)
+      doc.rect(colStart, y, tableWidth, rowHeight)
+      // Vertical rules between columns. The first column edge is the table
+      // edge already drawn, so start from the second.
+      cols.slice(1).forEach(c => doc.line(c.x - 1, y, c.x - 1, y + rowHeight))
     }
 
     const name = item.name.length > 32 ? item.name.slice(0, 29) + '...' : item.name
+    // `baseline` rather than a fixed 5mm: at compact's 5.4mm row a 5mm drop
+    // would put the text on the row's bottom edge.
+    const tY = y + metrics.baseline
     doc.setTextColor(text.r, text.g, text.b)
-    doc.text(String(i + 1), cols[0].x, y + 5)
-    doc.text(name, cols[1].x, y + 5)
-    doc.setFontSize(7)
-    doc.text(item.hsn || '-', cols[2].x, y + 5)
-    doc.setFontSize(9)
-    doc.text(`${item.qtyValue} ${item.unit || 'pcs'}`, cols[3].x + cols[3].w - 1, y + 5, { align: 'right' })
-    doc.text(item.rate.toFixed(2), cols[4].x + cols[4].w - 1, y + 5, { align: 'right' })
-    doc.text(item.gstRate + '%', cols[5].x + cols[5].w - 1, y + 5, { align: 'right' })
-    doc.text(formatPDFMoney(item.total), colEnd, y + 5, { align: 'right' })
+    doc.text(String(i + 1), cols[0].x, tY)
+    doc.text(name, cols[1].x, tY)
+    doc.setFontSize(metrics.smallPt)
+    doc.text(item.hsn || '-', cols[2].x, tY)
+    doc.setFontSize(metrics.bodyPt)
+    doc.text(`${item.qtyValue} ${item.unit || 'pcs'}`, cols[3].x + cols[3].w - 1, tY, { align: 'right' })
+    doc.text(item.rate.toFixed(2), cols[4].x + cols[4].w - 1, tY, { align: 'right' })
+    doc.text(item.gstRate + '%', cols[5].x + cols[5].w - 1, tY, { align: 'right' })
+    doc.text(formatPDFMoney(item.total), colEnd, tY, { align: 'right' })
     y += rowHeight
   })
 
@@ -382,14 +458,38 @@ export async function generateInvoicePDF(
     totalsLine('Round Off', (invoice.roundOff > 0 ? '+ ' : '- ') + formatPDFMoney(Math.abs(invoice.roundOff)))
   }
 
-  // Grand total — filled brand box (13pt white bold per spec; using 12pt for fit)
+  /*
+   * The grand total. Three presentations, one rule: it is always the largest
+   * thing in this block, because §4 says money is the largest thing on screen
+   * and a bill is the one document where that is not a style preference.
+   *
+   *   bar   — filled accent box, white figure. The original.
+   *   panel — outlined box, accent figure on paper. Prints cheaply.
+   *   plain — no box at all, just large and bold, as in Rahul's
+   *           minimalist_slate reference where the total carries no
+   *           decoration and is still the first thing the eye lands on.
+   */
   y += 1
   const gtHeight = 11
-  doc.setFillColor(accent.r, accent.g, accent.b)
-  doc.rect(totalsX - 2, y - 4, totalsWidth + 2, gtHeight, 'F')
   doc.setFont(THEME.font, 'bold')
-  doc.setFontSize(12)
-  doc.setTextColor(white.r, white.g, white.b)
+
+  if (template.totals === 'bar') {
+    doc.setFillColor(accent.r, accent.g, accent.b)
+    doc.rect(totalsX - 2, y - 4, totalsWidth + 2, gtHeight, 'F')
+    doc.setFontSize(12)
+    doc.setTextColor(white.r, white.g, white.b)
+  } else if (template.totals === 'panel') {
+    doc.setDrawColor(accent.r, accent.g, accent.b)
+    doc.setLineWidth(0.5)
+    doc.rect(totalsX - 2, y - 4, totalsWidth + 2, gtHeight)
+    doc.setFontSize(12)
+    doc.setTextColor(accent.r, accent.g, accent.b)
+  } else {
+    // plain — nothing drawn behind it, so it may be bigger.
+    doc.setFontSize(14)
+    doc.setTextColor(text.r, text.g, text.b)
+  }
+
   doc.text('GRAND TOTAL', totalsX, y + 3)
   doc.text(formatPDFMoney(invoice.total), totalsValueX, y + 3, { align: 'right' })
   y += gtHeight + 2
