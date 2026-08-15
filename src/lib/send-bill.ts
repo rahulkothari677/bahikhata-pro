@@ -24,11 +24,32 @@ import {
 import { shareCardImage } from './share-file'
 import { dataUrlBase64 } from './card-canvas'
 
+/*
+ * 🗑️ 2026-08-15 — THE SHAREABLE BILL LINK IS GONE.
+ *
+ * Rahul: "remove the link which we can share with the bill in pdf … sharing
+ * link or directly paying option sometimes cause fear in the mind of general
+ * public."
+ *
+ * That is a product judgement about Indian customers receiving a bill on
+ * WhatsApp, and he is the one who knows them. A shopkeeper's customer who
+ * gets an unfamiliar link asking them to pay has every reason to treat it as
+ * a scam — the same instinct the whole country has been taught. The bill is
+ * now a picture or a PDF and nothing else: nothing to tap, nowhere to go.
+ *
+ * Payment stays, as a QR the customer SCANS — either generated from the
+ * shop's UPI id or an image of their own QR. Scanning a code sitting on a
+ * bill you already trust is a different act from following a link.
+ *
+ * `mintLink`, /api/bill-share, /b/[token] and lib/bill-share are deleted. The
+ * BillShare TABLE is deliberately kept, with its rows: links already minted
+ * are the shop's own records, and this codebase does not delete a user's data
+ * to tidy up a feature. Old links simply 404 now.
+ */
+
 export interface SendBillResult {
   format: SendFormat
   reason: string
-  /** The public link, when the shop has them switched on. */
-  link?: string | null
   /**
    * Set when money is owed but the shop has no UPI id, so the bill went out
    * with no way to pay it.
@@ -40,29 +61,6 @@ export interface SendBillResult {
    * way to act and he had no idea why. The app should say so.
    */
   missingUpiId?: boolean
-}
-
-/**
- * Mints (or reuses) the shareable link for a bill.
- *
- * Returns null on ANY failure. A link is an enhancement to the message; a bill
- * that will not send because the link server was slow is a worse outcome than a
- * bill sent without one.
- */
-async function mintLink(transactionId: string): Promise<string | null> {
-  try {
-    const r = await fetch('/api/bill-share', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ transactionId }),
-    })
-    if (!r.ok) return null
-    const data = await r.json()
-    if (!data?.token) return null
-    return `${window.location.origin}/b/${data.token}`
-  } catch {
-    return null
-  }
 }
 
 /**
@@ -117,10 +115,6 @@ export async function sendBill(
   opts: {
     preference?: SendFormatPreference
     override?: SendFormat
-    /** Setting.docShareLink. Off by default; see the schema note. */
-    shareLink?: boolean
-    /** The bill's id, needed to mint a link. */
-    transactionId?: string
     /** The shop's invoice look. See lib/invoice-themes. */
     themeId?: string | null
     /*
@@ -141,27 +135,32 @@ export async function sendBill(
   const filename = documentFileName(doc, chosen.format)
 
   /*
-   * The link, when the shop has it on.
+   * A caption, and nothing else in it.
    *
-   * It also fixes something a caption alone could not. ANDROID DOES NOT ALLOW A
-   * FILE AND TEXT IN ONE SHARE — the platform's own guidance is that supplying
-   * both EXTRA_TEXT and EXTRA_STREAM is not allowed, and WhatsApp honours the
-   * text for images but drops it for documents. That is why Rahul saw a caption
-   * on a picture and none on a PDF; it is not a bug in our code and cannot be
-   * fixed in it. A LINK is text, so a bill sent as a link carries its caption.
+   * Worth keeping the old note here, because it explains a limit that is still
+   * true: ANDROID DOES NOT ALLOW A FILE AND TEXT IN ONE SHARE — supplying both
+   * EXTRA_TEXT and EXTRA_STREAM is not allowed, and WhatsApp honours the text
+   * for images but drops it for documents. So a PDF still reaches the customer
+   * without its caption. That used to be the argument for putting a link on
+   * the PDF itself; with the link gone, the answer is that everything the
+   * customer needs is ON the bill, which is where it should have been.
    */
-  const link =
-    opts.shareLink && opts.transactionId ? await mintLink(opts.transactionId) : null
-
-  const caption = link ? `${buildCaption(doc)}
-${link}` : buildCaption(doc)
+  const caption = buildCaption(doc)
 
   // Money owed, but nowhere for it to go.
   const missingUpiId = doc.due > 0 && !shop.upiId
 
   if (chosen.format === 'image') {
+    /*
+     * The shop's uploaded QR wins over the generated one — the SAME order the
+     * PDF uses. If these two disagreed, the picture and the file would show
+     * the customer different ways to pay, which is the invoiceTheme bug again
+     * with money attached.
+     */
     const [qrImage, logoImage] = await Promise.all([
-      doc.upiLink ? renderQr(doc.upiLink) : Promise.resolve(null),
+      shop.paymentQrUrl
+        ? loadLogo(shop.paymentQrUrl)
+        : doc.upiLink ? renderQr(doc.upiLink) : Promise.resolve(null),
       loadLogo(shop.logoUrl),
     ])
     const dataUrl = renderInvoiceImage(doc, { qrImage, logoImage, themeId: opts.themeId })
@@ -174,10 +173,9 @@ ${link}` : buildCaption(doc)
       text: caption,
       dialogTitle: 'Send bill',
     })
-    return { format: 'image', reason: chosen.reason, link, missingUpiId }
+    return { format: 'image', reason: chosen.reason, missingUpiId }
   }
 
-  // The link goes ON the PDF, because Android will not carry it beside one.
   /*
    * 📄 2026-08-15: the SAME `doc` built at the top of this function.
    *
@@ -189,14 +187,14 @@ ${link}` : buildCaption(doc)
    * `themeId` was passed to the image renderer on the line above and not to
    * this one — the whole of the PDF theme bug, visible in one function.
    */
-  const pdfBlob = await generateInvoicePDF(doc, { themeId: opts.themeId, templateId: opts.templateId, paperId: opts.paperId, shareLink: link })
+  const pdfBlob = await generateInvoicePDF(doc, { themeId: opts.themeId, templateId: opts.templateId, paperId: opts.paperId })
   const dataUrl = await blobToDataUrl(pdfBlob)
   await shareCardImage(dataUrl, filename, {
     title: `Bill ${doc.invoiceNo}`,
     text: caption,
     dialogTitle: 'Send bill',
   })
-  return { format: 'pdf', reason: chosen.reason, link, missingUpiId }
+  return { format: 'pdf', reason: chosen.reason, missingUpiId }
 }
 
 /**

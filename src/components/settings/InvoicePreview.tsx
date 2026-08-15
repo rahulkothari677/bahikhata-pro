@@ -105,6 +105,7 @@ export function InvoicePreview({
   paperId,
   focus = null,
   isSample = false,
+  loadFailed = false,
   width = 320,
   className,
 }: {
@@ -124,6 +125,8 @@ export function InvoicePreview({
   focus?: PreviewFocus
   /** True when this is invented data because the shop has no bills yet. */
   isSample?: boolean
+  /** The shop HAS bills, and fetching one failed. Never guessed at. */
+  loadFailed?: boolean
   /** On-screen width. The page scales to fit it. */
   width?: number
   className?: string
@@ -344,10 +347,22 @@ export function InvoicePreview({
       </div>
       </PinchZoom>
 
+      {/*
+        * 🐛 2026-08-15. This said "make your first sale" to a shop with 33
+        * sales that month, because a FAILED fetch and an EMPTY ledger both
+        * arrived here as `isSample`. Rahul saw it happen while Vercel's DDoS
+        * rule was challenging his requests.
+        *
+        * Telling a shopkeeper they have never made a sale is not a cosmetic
+        * slip — for a moment it says their books are empty. Three states now,
+        * and the app only claims the ledger is empty when it actually knows.
+        */}
       <p className="text-2xs text-muted-foreground text-center mt-2 px-4">
-        {isSample
-          ? 'A sample bill — make your first sale and this shows your own.'
-          : 'Your most recent bill.'}{' '}
+        {loadFailed
+          ? "Couldn't load your latest bill, so this is a sample. Check your connection and pull to refresh."
+          : isSample
+            ? 'A sample bill — make your first sale and this shows your own.'
+            : 'Your most recent bill.'}{' '}
         Close to the printed PDF, not exact.
       </p>
     </div>

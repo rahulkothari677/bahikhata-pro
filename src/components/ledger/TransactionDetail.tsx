@@ -320,8 +320,6 @@ export function TransactionDetail() {
         {
           preference: setting?.docSendFormat,
           override,
-          shareLink: setting?.docShareLink,
-          transactionId: txn.id,
           themeId: setting?.invoiceTheme,
           // The layout and the sheet the shopkeeper chose, so the file that
           // reaches the customer is the one the preview showed them.

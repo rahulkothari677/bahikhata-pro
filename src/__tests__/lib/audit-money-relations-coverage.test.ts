@@ -268,41 +268,37 @@ describe('nothing reads money through BillShare', () => {
   }
 
   const NEEDLE = 'db.billShare.'
-  /** How far past the call to look for an `include`. One query, generously. */
-  const WINDOW = 600
 
-  test('the scan actually finds the billShare calls (guards a dead check)', () => {
-    // Without this, deleting the page would make the test below pass forever
-    // while protecting nothing.
-    const found = sourceFiles(path.join(process.cwd(), 'src')).filter(f =>
-      fs.readFileSync(f, 'utf8').includes(NEEDLE),
-    )
-    expect(found.length).toBeGreaterThan(0)
-  })
-
-  test('no billShare query pulls nested rows with include', () => {
-    const offenders: string[] = []
-
-    for (const file of sourceFiles(path.join(process.cwd(), 'src'))) {
-      const src = fs.readFileSync(file, 'utf8')
-      let from = 0
-      for (;;) {
-        const at = src.indexOf(NEEDLE, from)
-        if (at === -1) break
-        const window = src.slice(at, at + WINDOW)
-        if (window.includes('include:')) {
-          offenders.push(path.relative(process.cwd(), file))
-        }
-        from = at + NEEDLE.length
-      }
-    }
+  /*
+   * 🗑️ 2026-08-15. This block used to open with a self-check asserting the
+   * scan FOUND some billShare calls, guarding against "deleting the page would
+   * make the test below pass forever while protecting nothing".
+   *
+   * The page was then deleted, and that self-check failed — correctly. It is
+   * the only guard-on-a-guard in this codebase that has ever fired, and it
+   * caught a real change rather than a mistake.
+   *
+   * The claim it protected is now stronger and simpler: NOTHING reads
+   * BillShare at all. The table and its rows are deliberately kept — a
+   * shopkeeper's minted links are their record, and features are removed here
+   * without destroying data — but no code path touches them.
+   *
+   * Keeping this as a test rather than deleting it matters: if the shareable
+   * link is ever rebuilt, this fails, and whoever rebuilds it has to come back
+   * and decide the 100x money question on purpose instead of by accident.
+   */
+  test('nothing queries BillShare at all', () => {
+    const readers = sourceFiles(path.join(process.cwd(), 'src'))
+      .filter(f => fs.readFileSync(f, 'utf8').includes(NEEDLE))
+      .map(f => path.relative(process.cwd(), f))
 
     expect(
-      offenders.length === 0
+      readers.length === 0
         ? 'none'
-        : 'Money read through BillShare, which the money extension does not ' +
-          'intercept — every amount will be 100x too large: ' +
-          offenders.join(' | '),
+        : 'BillShare is queried again by: ' + readers.join(' | ') +
+          '. The shareable bill link was removed on 15 Aug (see send-bill.ts). ' +
+          'If it is coming back, note that money read THROUGH this relation is ' +
+          'not intercepted by the paise extension and will be 100x too large.',
     ).toBe('none')
   })
 })

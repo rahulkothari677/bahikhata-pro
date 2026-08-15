@@ -32,7 +32,7 @@
 
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronRight, Palette, Send, Coins, FileText, Hash, Eye } from 'lucide-react'
+import { ChevronRight, Palette, Send, Coins, FileText, Hash, Eye, QrCode } from 'lucide-react'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { haptic } from '@/lib/haptic'
 import { cn } from '@/lib/utils'
@@ -70,7 +70,8 @@ export const INVOICE_SECTIONS = [
   {
     id: 'invoice-sending',
     label: 'Sending',
-    summary: 'Picture or PDF, payment link',
+    // 🗑️ was "Picture or PDF, payment link" — there is no link any more.
+    summary: 'Picture or PDF',
     icon: Send,
     tint: 'text-emerald-600 dark:text-emerald-400',
     tintBg: 'bg-emerald-100 dark:bg-emerald-950',
@@ -96,6 +97,20 @@ export const INVOICE_SECTIONS = [
     tint: 'text-rose-600 dark:text-rose-400',
     tintBg: 'bg-rose-100 dark:bg-rose-950',
     focus: 'header' as PreviewFocus,
+  },
+  {
+    /*
+     * 🗑️➕ 2026-08-15. This section replaces the shareable link, and it is
+     * where "how does my customer pay me" now lives — one place, rather than
+     * a UPI id buried in Shop Profile and a link switch under Sending.
+     */
+    id: 'invoice-payment',
+    label: 'Payment',
+    summary: 'UPI ID or your own QR code',
+    icon: QrCode,
+    tint: 'text-teal-600 dark:text-teal-400',
+    tintBg: 'bg-teal-100 dark:bg-teal-950',
+    focus: 'footer' as PreviewFocus,
   },
   {
     /*
@@ -213,10 +228,23 @@ export function InvoiceSettingsPage({
    * route gives its full items. Both cached, so moving between the four pages
    * refetches nothing.
    */
-  const { data: latestId } = useQuery({
+  /*
+   * 🐛 2026-08-15: both queries now THROW on a bad response.
+   *
+   * They used to call r.json() regardless, so a 403 or a 500 came back as
+   * "no bills" — and the caption below cheerfully told a shop with 33 sales
+   * this month to "make your first sale". Rahul watched that happen while
+   * Vercel's DDoS rule was challenging his own requests.
+   *
+   * That is a silent failure wearing a friendly message, which is the exact
+   * class this codebase spent a phase removing. Distinguishing the two costs
+   * one `if` per query and turns a lie into a fact.
+   */
+  const { data: latestId, isError: idFailed } = useQuery({
     queryKey: ['invoice-preview-latest-id'],
     queryFn: async () => {
       const r = await offlineFetch('/api/transactions?type=sale&limit=1')
+      if (!r.ok) throw new Error(`Could not load your bills (${r.status})`)
       const j = await r.json()
       const first = (j?.transactions ?? j?.data ?? [])[0]
       return (first?.id as string) ?? null
@@ -224,15 +252,19 @@ export function InvoiceSettingsPage({
     staleTime: 5 * 60 * 1000,
   })
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError: fullFailed } = useQuery({
     queryKey: ['invoice-preview-full', latestId],
     enabled: !!latestId,
     queryFn: async () => {
       const r = await offlineFetch(`/api/transactions/${latestId}`)
+      if (!r.ok) throw new Error(`Could not load that bill (${r.status})`)
       return r.json()
     },
     staleTime: 5 * 60 * 1000,
   })
+
+  /** True only when we KNOW the shop has bills and we failed to fetch one. */
+  const loadFailed = idFailed || fullFailed
 
   const { doc, isSample } = useMemo(() => {
     /*
@@ -295,6 +327,7 @@ export function InvoiceSettingsPage({
             paperId={setting?.invoicePaperSize as string}
             focus={current?.focus ?? null}
             isSample={isSample}
+            loadFailed={loadFailed}
             width={previewWidth}
           />
         )}

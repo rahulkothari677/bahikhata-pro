@@ -28,8 +28,7 @@ import { THEME_OPTIONS } from '@/components/providers/ThemeProvider'
 import {
   Store, Save, Database, Trash2, AlertTriangle, Moon, Keyboard,
   ShieldCheck, Receipt, Settings as SettingsIcon,
-  Search, MessageCircle, Sparkles, Bell, Repeat, FileSpreadsheet, Link2 as LinkIcon,
-  Users, Package, ScanLine, TrendingUp, Smartphone, RotateCcw, Palette, Check, Globe, Shield, EyeOff, Plus, Mic, Lock, Loader2, BarChart3, Home, Pencil,
+  Search, MessageCircle, Sparkles, Bell, Repeat, FileSpreadsheet,   Users, Package, ScanLine, TrendingUp, Smartphone, RotateCcw, Palette, Check, Globe, Shield, EyeOff, Plus, Mic, Lock, Loader2, BarChart3, Home, Pencil,
 } from 'lucide-react'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { useSetting } from '@/hooks/use-setting'
@@ -42,6 +41,7 @@ import { PAPER_SIZES } from '@/lib/invoice-paper'
 import { VISIBILITY_TOGGLES } from '@/lib/invoice-visibility'
 import { InfoHint } from '@/components/common/InfoHint'
 import { SignatureField } from '@/components/settings/SignatureField'
+import { PaymentQrField } from '@/components/settings/PaymentQrField'
 import { describeRestoreOutcome } from '@/lib/restore-outcome'
 
 const FEATURE_CATEGORIES: { title: string; features: { key: FeatureKey; label: string; description: string; icon: any }[] }[] = [
@@ -117,6 +117,7 @@ export type SettingsSection =
   | 'invoice-content' // terms, signature, bank, thank-you, due date
   | 'invoice-numbering' // prefix + next number
   | 'invoice-visibility' // extra details the shop can switch on
+  | 'invoice-payment'    // UPI id or the shop's own QR image
   | 'preferences'     // landing page, hide profit, goals, stock policy
   | 'notifications'   // which alerts reach the bell
   | 'accounting'      // period lock, reconciliation
@@ -203,7 +204,6 @@ export function Settings({
   const [eInvoiceApplicable, setEInvoiceApplicable] = useState<boolean | null>(null)
   // 📄 How bills are delivered. See docs/DOCUMENT-ENGINE-PLAN.md.
   const [docSendFormat, setDocSendFormat] = useState<'smart' | 'image' | 'pdf'>('smart')
-  const [docShareLink, setDocShareLink] = useState(false)
   const [invoiceTheme, setInvoiceTheme] = useState('classic')
   const [invoiceTemplate, setInvoiceTemplate] = useState('standard')
   const [invoicePaperSize, setInvoicePaperSize] = useState('a4')
@@ -222,6 +222,8 @@ export function Settings({
     () => Object.fromEntries(VISIBILITY_TOGGLES.map(t => [t.key, t.default])),
   )
   const [signatureUrl, setSignatureUrl] = useState<string | null>(null)
+  // 🗑️➕ 2026-08-15: the shop's own payment QR image.
+  const [paymentQrUrl, setPaymentQrUrl] = useState<string | null>(null)
   // 🔒 V11: Stock policy toggle — 'block' (default) or 'allow' (kirana mode).
   const [stockPolicy, setStockPolicy] = useState<'block' | 'allow'>('block')
   // 🔒 V17-Ext §5.1: Period lock state. null = unlocked. Date string = locked
@@ -261,7 +263,6 @@ export function Settings({
       setRoundOffEnabled(data.setting.roundOffEnabled ?? false)
       setEInvoiceApplicable(data.setting.eInvoiceApplicable ?? null)
       setDocSendFormat(data.setting.docSendFormat ?? 'smart')
-      setDocShareLink(data.setting.docShareLink ?? false)
       setInvoiceTheme(data.setting.invoiceTheme ?? 'classic')
       setInvoiceTemplate(data.setting.invoiceTemplate ?? 'standard')
       setInvoicePaperSize(data.setting.invoicePaperSize ?? 'a4')
@@ -287,6 +288,7 @@ export function Settings({
         ),
       )
       setSignatureUrl(data.setting.signatureUrl ?? null)
+      setPaymentQrUrl(data.setting.paymentQrUrl ?? null)
       setStockPolicy(data.setting.stockPolicy === 'allow' ? 'allow' : 'block')
       // 🔒 V17-Ext §5.1: Sync period lock state from server.
       // lockedUntil is an ISO timestamp (or null). We store the full timestamp
@@ -351,7 +353,7 @@ export function Settings({
   }
 
   const persistDocSetting = async (
-    patch: { docSendFormat?: 'smart' | 'image' | 'pdf'; docShareLink?: boolean; invoiceTheme?: string; invoiceTemplate?: string; invoicePaperSize?: string },
+    patch: { docSendFormat?: 'smart' | 'image' | 'pdf'; invoiceTheme?: string; invoiceTemplate?: string; invoicePaperSize?: string },
     rollback: () => void,
   ) => {
     /*
@@ -999,15 +1001,11 @@ export function Settings({
               <Label htmlFor="field-address">Address</Label>
               <Input id="field-address" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} placeholder="Full shop address" />
             </div>
-            {/* V17-Ext 5.4: UPI ID for udhaar collection links */}
-            <div>
-              <Label htmlFor="field-upi-id-for-payment-collection">UPI ID (for payment collection)</Label>
-              <Input id="field-upi-id-for-payment-collection" value={form.upiId} onChange={(e) => setForm({ ...form, upiId: e.target.value })} placeholder="e.g. shop@paytm, 9876543210@ybl" className="font-mono lowercase" />
-              <p className="text-xs text-muted-foreground mt-1">
-                Your UPI VPA. When you send an udhaar reminder via WhatsApp, it will include a
-                one-tap payment link for this amount.
-              </p>
-            </div>
+            {/* 🗑️➕ 2026-08-15: the UPI ID moved to Invoices & Bills → Payment,
+                next to the QR upload, because "how my customer pays me" is one
+                decision and was split across two screens. `form.upiId` is still
+                loaded and still saved here, so this screen's Save keeps the
+                value intact — only the input moved. */}
           </div>
           <div className="flex justify-end">
             <Button onClick={handleSave} disabled={saving} className="bg-gradient-saffron gap-2">
@@ -1873,30 +1871,11 @@ export function Settings({
               ))}
             </div>
           </div>
-          {/* 📄 The shareable link. OFF by default — it puts a page carrying a
-              customer's bill on the public internet behind an unguessable
-              address, which is the shopkeeper's decision to make. */}
-          <div className="mt-3 flex items-center justify-between rounded-lg bg-muted/30 border border-border/60 p-3">
-            <div className="flex items-center gap-2">
-              <LinkIcon className="w-4 h-4 text-muted-foreground" />
-              <div className="flex-1">
-                <p className="text-sm font-medium">Also send a bill link</p>
-                <p className="text-2xs text-muted-foreground">
-                  {docShareLink
-                    ? 'ON: a link goes with every bill. Your customer can open it on any phone and pay by UPI, and you can see when they viewed it. Long bills stay readable. Links expire after 90 days.'
-                    : 'OFF (default): only the picture or PDF is sent. Turn on to include a link your customer can open and pay from — it works for bills of any length.'}
-                </p>
-              </div>
-            </div>
-            <Switch
-              checked={docShareLink}
-              onCheckedChange={(checked) => {
-                const prev = docShareLink
-                setDocShareLink(checked)
-                persistDocSetting({ docShareLink: checked }, () => setDocShareLink(prev))
-              }}
-            />
-          </div>
+          {/* 🗑️ 2026-08-15: the "Also send a bill link" switch is gone, along
+              with the page it pointed at. Rahul: a link asking a customer to
+              pay reads as a scam to most people in India, however genuine it
+              is. Payment is a scannable QR on the bill now — see the Payment
+              section. */}
         </CardContent>
       </Card>
       )}
@@ -2066,6 +2045,42 @@ export function Settings({
               })}>
               {savingBill ? 'Saving…' : 'Save'}
             </Button>
+        </CardContent>
+      </Card>
+      )}
+
+      {/* ═══ Payment — UPI id or the shop's own QR ══════════════════════
+          🗑️➕ 2026-08-15. Replaces the shareable link. Both routes end at the
+          same place, and shops genuinely split between them, so both are
+          offered here rather than one being guessed at for them. */}
+      {show('invoice-payment') && (
+      <Card className="shadow-card border-border/60">
+        <CardContent className="space-y-4 pt-5">
+          <div>
+            <Label htmlFor="pay-upi">UPI ID</Label>
+            <Input id="pay-upi" value={form.upiId}
+              onChange={(e) => setForm({ ...form, upiId: e.target.value })}
+              placeholder="e.g. shop@paytm, 9876543210@ybl"
+              className="font-mono lowercase mt-1" />
+            <p className="text-2xs text-muted-foreground mt-1">
+              The bill prints a QR made from this, and it already carries the
+              amount — your customer scans and pays without typing anything.
+              Also used by WhatsApp payment reminders.
+            </p>
+          </div>
+
+          <div className="pt-2 border-t border-border/50 space-y-2">
+            <p className="text-sm font-medium inline-flex items-center gap-1.5">
+              Your own QR code
+              <InfoHint label="Your own QR code"
+                text="If you upload the QR from your counter, the bill shows that one instead of the code made from your UPI ID. It is the code your regular customers already know. The one difference: a photographed QR cannot carry the amount, so your customer types it in — the bill says so underneath." />
+            </p>
+            <PaymentQrField value={paymentQrUrl} onChange={setPaymentQrUrl} />
+          </div>
+
+          <Button className="w-full" disabled={saving} onClick={handleSave}>
+            {saving ? 'Saving…' : 'Save'}
+          </Button>
         </CardContent>
       </Card>
       )}

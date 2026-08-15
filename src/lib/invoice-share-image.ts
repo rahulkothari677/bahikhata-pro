@@ -376,7 +376,19 @@ export function renderInvoiceImage(doc: InvoiceDocument, opts: InvoiceImageOptio
     ctx.fillStyle = INK.muted
     font(ctx, 24, 400)
     ctx.fillText('Any UPI app — GPay, PhonePe, Paytm', PAD + box + 32, y + 100)
-    if (doc.shop.upiId) {
+    /*
+     * 🗑️➕ 2026-08-15. Which QR this is decides what the third line can
+     * honestly say.
+     *
+     * A generated `upi://pay` code carries the amount, so naming the shop's
+     * UPI id underneath is a useful confirmation of WHO is being paid. The
+     * shop's own uploaded code carries no amount, so the customer has to
+     * type it — and saying so is the difference between a bill that works
+     * and a customer who pays a number they guessed.
+     */
+    if (doc.shop.paymentQrUrl) {
+      ctx.fillText(`Enter ${money(doc.due > 0 ? doc.due : doc.total)}`, PAD + box + 32, y + 140)
+    } else if (doc.shop.upiId) {
       ctx.fillText(clip(ctx, doc.shop.upiId, W - PAD - box - 64), PAD + box + 32, y + 140)
     }
     y += box + 40

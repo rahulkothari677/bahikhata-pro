@@ -203,6 +203,66 @@ export async function drawUPIQRBlock(
 }
 
 /**
+ * The shop's OWN payment QR, drawn from an uploaded image.
+ *
+ * 🗑️➕ 2026-08-15. Most kirana shops already have a printed PhonePe / Paytm /
+ * BharatPe code on the counter; this puts THAT on the bill.
+ *
+ * THE CAPTION IS DIFFERENT FROM THE GENERATED ONE, on purpose. A `upi://pay`
+ * QR carries the amount, so it can honestly say "Scan to pay ₹945" and the
+ * customer's app fills it in. A photographed QR carries only the payee — the
+ * customer must type the figure. Printing "Scan to pay ₹945" over a code that
+ * will open an empty amount box would be a small lie on a legal document, and
+ * the sort that ends with someone paying the wrong number.
+ *
+ * Same failure policy as its sibling above: a QR that cannot be fetched costs
+ * the bill its payment block, never the bill.
+ */
+export async function drawImageQRBlock(
+  doc: any,
+  x: number,
+  y: number,
+  opts: {
+    imageUrl: string
+    amount: number
+    palette?: Pick<PdfPalette, 'text' | 'textMuted'>
+  },
+): Promise<number> {
+  if (!opts.imageUrl || opts.amount <= 0) return y
+
+  try {
+    const res = await fetch(opts.imageUrl)
+    if (!res.ok) return y
+    const buf = await res.arrayBuffer()
+    const bytes = new Uint8Array(buf)
+    let binary = ''
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
+    const type = res.headers.get('content-type')?.includes('png') ? 'PNG' : 'JPEG'
+    const dataUrl = `data:image/${type.toLowerCase()};base64,${btoa(binary)}`
+
+    doc.addImage(dataUrl, type, x, y, 28, 28)
+
+    doc.setFont(THEME.font, 'bold')
+    doc.setFontSize(9)
+    const qrText = opts.palette?.text ?? THEME.text
+    doc.setTextColor(qrText.r, qrText.g, qrText.b)
+    doc.text('Scan to pay', x + 14, y + 32, { align: 'center' })
+
+    doc.setFont(THEME.font, 'normal')
+    doc.setFontSize(7)
+    const qrMuted = opts.palette?.textMuted ?? THEME.textMuted
+    doc.setTextColor(qrMuted.r, qrMuted.g, qrMuted.b)
+    // Says the quiet part: this code does not know the amount.
+    doc.text(`Enter ${formatPDFMoney(opts.amount)}`, x + 14, y + 36, { align: 'center' })
+
+    return y + 38
+  } catch (err) {
+    console.warn('[pdf] payment QR image failed:', err)
+    return y
+  }
+}
+
+/**
  * Check if we need a new page, and add one if needed.
  * Returns the new Y position (top of new page).
  */

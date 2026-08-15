@@ -20,7 +20,7 @@ import { paletteFor } from './pdf/palette'
 import { getInvoiceTemplate, metricsFor } from './invoice-templates'
 import { getPaperSize } from './invoice-paper'
 import type { InvoiceDocument } from './invoice-document'
-import { drawFooter, drawUPIQRBlock, newPageIfNeeded } from './pdf/primitives'
+import { drawFooter, drawUPIQRBlock, drawImageQRBlock, newPageIfNeeded } from './pdf/primitives'
 
 
 /*
@@ -63,17 +63,6 @@ export interface InvoicePdfOptions {
    * file the customer receives would be the invoiceTheme bug all over again.
    */
   paperId?: string | null
-  /**
-   * The public bill link, when the shop has them switched on.
-   *
-   * 🐛 2026-08-06. Rahul: "in pdf there is no link". The link was in the share
-   * CAPTION, and Android does not allow a file and text in one share — its own
-   * guidance is that EXTRA_TEXT with EXTRA_STREAM is not allowed. WhatsApp
-   * honours the caption for images and drops it for documents, so a bill sent
-   * as a PDF lost its link entirely. That cannot be fixed in the share. It CAN
-   * be fixed by putting the link on the document, where nothing can strip it.
-   */
-  shareLink?: string | null
 }
 
 export async function generateInvoicePDF(
@@ -677,8 +666,28 @@ export async function generateInvoicePDF(
 
   const bottomY = Math.max(y + 5, pageHeight - 70)
 
-  // UPI QR (left side, only when upiId exists and balance > 0)
-  if (invoice.shop.upiId && dueAmount > 0) {
+  /*
+   * How the customer pays: a QR they SCAN, never a link they follow.
+   *
+   * 🗑️➕ 2026-08-15. The "view or pay this bill online" link that used to sit
+   * near the footer is gone at Rahul's instruction. This block is now the
+   * whole payment path, which makes it more important rather than less.
+   *
+   * The shop's UPLOADED QR wins when there is one. A shop that photographed
+   * the code stuck to their counter means that code — it is the one their
+   * regulars already recognise, and it settles into whichever account they
+   * actually use rather than into whatever VPA this app was told about.
+   *
+   * The generated code carries the AMOUNT, which an uploaded one cannot; the
+   * caption says so, so nobody is left wondering why they had to type it.
+   */
+  if (invoice.shop.paymentQrUrl && dueAmount > 0) {
+    await drawImageQRBlock(doc, margin, bottomY, {
+      imageUrl: invoice.shop.paymentQrUrl,
+      amount: dueAmount,
+      palette: { text, textMuted },
+    })
+  } else if (invoice.shop.upiId && dueAmount > 0) {
     await drawUPIQRBlock(doc, margin, bottomY, {
       upiId: invoice.shop.upiId,
       shopName: invoice.shop.name || 'My Shop',
@@ -761,22 +770,15 @@ export async function generateInvoicePDF(
   // 7. FOOTER — thin brand rule, page number, "Made with EkBook"
   // ═══════════════════════════════════════════════════════════════════
   /*
-   * The bill link, printed on the page.
+   * 🗑️ 2026-08-15: the "View or pay this bill online" link block is GONE.
    *
-   * Above the footer rather than in it: a customer scanning for "how do I pay
-   * this" should find it near the total, not in the small print.
+   * It printed a real, tappable PDF link annotation. Rahul's call, and the
+   * right one: a customer who receives a bill on WhatsApp and finds a link
+   * asking them to pay has been trained by every scam in the country to
+   * distrust exactly that. The QR block above is the payment path now — the
+   * customer scans a code on a bill they already have, and no URL is
+   * involved. See the note at the top of send-bill.ts.
    */
-  if (opts.shareLink) {
-    const linkY = pageHeight - 26
-    doc.setFont(THEME.font, 'normal')
-    doc.setFontSize(8)
-    doc.setTextColor(textMuted.r, textMuted.g, textMuted.b)
-    doc.text('View or pay this bill online:', margin, linkY)
-    doc.setTextColor(accent.r, accent.g, accent.b)
-    // A real PDF link annotation, so it is tappable in every viewer rather
-    // than a string the reader has to retype.
-    doc.textWithLink(opts.shareLink, margin, linkY + 4, { url: opts.shareLink })
-  }
 
   /*
    * e-Invoice block — IRN and the signed QR from the portal.

@@ -363,10 +363,14 @@ export async function PUT(req: NextRequest) {
       }
       sanitized.docSendFormat = body.docSendFormat
     }
-    // Off by default and only ever set deliberately: turning it on puts a page
-    // carrying a customer's bill on the public internet behind an unguessable
-    // token. See prisma/schema.prisma → Setting.docShareLink.
-    if (body.docShareLink !== undefined) sanitized.docShareLink = !!body.docShareLink
+    /*
+     * 🗑️ 2026-08-15: docShareLink is no longer accepted.
+     *
+     * The shareable bill link is gone (see send-bill.ts). The COLUMN stays, so
+     * no shop's stored row is rewritten, but nothing can switch it on again —
+     * a setting the app still saves and never reads is how a dead feature
+     * comes back to life by accident.
+     */
     if (body.cardMark !== undefined) {
       if (!['auto', 'logo', 'monogram'].includes(body.cardMark)) {
         return NextResponse.json(

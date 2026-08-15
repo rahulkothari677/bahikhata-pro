@@ -164,10 +164,14 @@ describe('no renderer knows a toggle exists', () => {
    * If this test fails, someone has moved a decision back out into a renderer
    * — and the other three will drift from it within a release.
    */
+  /*
+   * Three renderers, not four: the public bill page was deleted on 15 Aug
+   * with the shareable link (see send-bill.ts). The rule is unchanged — every
+   * surface that draws a bill must be listed here.
+   */
   const RENDERERS = [
     'src/lib/invoice-pdf.ts',
     'src/lib/invoice-share-image.ts',
-    'src/app/b/[token]/PublicBill.tsx',
     'src/components/settings/InvoicePreview.tsx',
   ]
 
@@ -294,7 +298,6 @@ describe('one mapper builds the shop everywhere', () => {
     for (const file of [
       'src/components/ledger/TransactionDetail.tsx',
       'src/components/settings/InvoiceSettingsPage.tsx',
-      'src/app/b/[token]/page.tsx',
     ]) {
       expect({ file, uses: readCode(file).includes('invoiceShopFromSetting') })
         .toEqual({ file, uses: true })

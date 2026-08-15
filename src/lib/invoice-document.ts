@@ -69,6 +69,14 @@ export interface InvoiceShop {
   address?: string | null
   state?: string | null
   upiId?: string | null
+  /**
+   * The shop's OWN payment QR, uploaded as an image.
+   *
+   * 🗑️➕ 2026-08-15. When present it REPLACES the QR generated from `upiId`:
+   * a shop that has gone to the trouble of uploading the code stuck to their
+   * counter means that one, and it is the one their customers recognise.
+   */
+  paymentQrUrl?: string | null
   logoUrl?: string | null
 
   /*
@@ -299,6 +307,7 @@ export function invoiceShopFromSetting(setting: Record<string, unknown> | null |
     address: s.address,
     state: s.state,
     upiId: s.upiId,
+    paymentQrUrl: s.paymentQrUrl,
     logoUrl: s.logoUrl,
     terms: s.invoiceTerms,
     thankYou: s.invoiceThankYou,

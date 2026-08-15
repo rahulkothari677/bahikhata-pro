@@ -259,3 +259,65 @@ both new guards were proved by reintroducing the bug and watching them fail.
 **It has not been driven in a browser.** The local dev database was recreated on
 a new port and the embedded browser would not accept typed credentials, so
 Rahul checks this one on the deployed app.
+
+---
+
+## The shareable bill link, removed (15 Aug)
+
+Rahul: *"remove the link which we can share with the bill in pdf … i just want
+a section in the app where the user can add the image of there QR or add upi id
+for billing so if the customer wants to pay they can pay. sharing link or
+directly paying option sometimes cause fear in the mind of general public."*
+
+**He is right, and this reverses a decision made in this document.** Part 3
+argued that a payment link makes an invoice a collection instrument, citing
+research that online payment gets bills paid 28–32% faster. That research is
+about Western B2B invoicing, where a payment link from a supplier is normal.
+It says nothing about a kirana shop's customer receiving a WhatsApp message
+with a URL asking for money — where the whole country has been trained, by
+years of real fraud, to treat exactly that as a scam. A number from the wrong
+population is not evidence.
+
+### Gone
+
+`/b/[token]`, `/api/bill-share`, `lib/bill-share`, the `textWithLink`
+annotation on the PDF, the link in the WhatsApp caption, and the "Also send a
+bill link" switch.
+
+### Kept, deliberately
+
+The **`BillShare` table and every row in it.** Links a shopkeeper already
+minted are their record. Old links 404 because the page is gone, not because
+anything was erased. `Setting.docShareLink` stays for the same reason, but the
+API no longer accepts it — a setting the app saves and never reads is how a
+dead feature comes back by accident.
+
+### New: Invoices & Bills → Payment
+
+One place for "how does my customer pay me", replacing a UPI id buried in Shop
+Profile and a link switch under Sending.
+
+- **UPI ID** → the bill prints a `upi://pay` QR that already carries the
+  amount. Nothing to type.
+- **Your own QR** → upload a photo of the code on your counter. Most shops
+  already have a laminated PhonePe or Paytm code their regulars have scanned
+  fifty times; that one is more trusted than anything this app generates, and
+  the money lands in the account they actually use.
+
+**When both exist the uploaded image wins**, in the PDF *and* the WhatsApp
+picture — decided in two files, so a test asserts the order matches. If they
+diverged, the file and the image would show the customer different ways to pay.
+
+**One honest difference is printed on the bill.** A generated code carries the
+amount; a photographed one cannot. So the uploaded QR says "Scan to pay /
+Enter ₹567" rather than "Scan to pay ₹567". Printing an amount over a code
+that opens an empty box would be a small lie on a legal document, and the kind
+that ends with someone paying the wrong number.
+
+### Also fixed: "make your first sale"
+
+The preview told a shop with 33 sales that month to make its first sale,
+because a **failed fetch** and an **empty ledger** both arrived at the same
+flag. Rahul watched it happen while Vercel's DDoS rule was challenging his
+requests. Both queries now throw on a bad response, and the caption has three
+states — the app only claims the books are empty when it actually knows.

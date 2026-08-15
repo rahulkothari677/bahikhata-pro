@@ -583,6 +583,23 @@ model Setting {
   // Used to generate upi://pay?pa=... deep-links in WhatsApp reminders.
   // null = no UPI ID configured (the reminder sends without a pay link).
   upiId                String?
+  // The shop's OWN payment QR, as an uploaded image (Cloudinary URL).
+  //
+  // 🗑️➕ 2026-08-15. Rahul removed the shareable bill link because "sharing
+  // link or directly paying option sometimes cause fear in the mind of
+  // general public", and asked instead for "a section in the app where the
+  // user can add the image of their QR or add upi id for billing".
+  //
+  // Two ways to reach the same place, and shops genuinely split between them:
+  // many already have a printed PhonePe/Paytm/BharatPe QR stuck to the
+  // counter, and want the bill to carry THAT — the one their regulars
+  // recognise — rather than a code this app generated. Others have only a UPI
+  // id. When both exist the uploaded image wins, because it is the more
+  // deliberate choice.
+  //
+  // Stored as a URL for the same reason as logoUrl and signatureUrl: the row
+  // stays small and the bill re-fetches it. See /api/settings/payment-qr.
+  paymentQrUrl         String?
   // 🔒 V17-Ext §5.1: Period lock (financial-year lock). When set, NO writes
   // (create/edit/delete/restore) are allowed to transactions or payments dated
   // on or before this date. Protects filed GST returns from silent alteration.
@@ -724,12 +741,11 @@ model Setting {
 
   docSendFormat String @default("smart")
 
-  // 📄 Whether a shareable LINK goes out alongside the bill.
-  //
-  // OFF BY DEFAULT, deliberately. A link puts a page carrying a customer's bill
-  // on the public internet behind an unguessable address, and that is a choice
-  // a shopkeeper makes rather than one made for them. Rahul asked for the
-  // toggle by name.
+  // 🗑️ RETAINED, UNUSED as of 2026-08-15. The shareable bill link was removed
+  // (see src/lib/send-bill.ts). The column stays so no shop's stored row is
+  // rewritten by a feature being withdrawn, but the API no longer accepts it
+  // and nothing reads it. Payment is a scannable QR on the bill — see
+  // paymentQrUrl above.
   docShareLink Boolean @default(false)
 
   cardMode String @default("profile")
@@ -2047,6 +2063,19 @@ model BreakGlassSession {
  * is useful; building a profile of the customer who opened it is not ours
  * to do, and under the DPDP Act collecting it would need a purpose we do
  * not have.
+ *
+ * ─────────────────────────────────────────────────────────────────────────
+ * 🗑️ RETAINED, UNUSED as of 2026-08-15.
+ *
+ * The shareable link was removed at Rahul's instruction: a link asking a
+ * customer to pay reads as a scam to most people in India, however genuine
+ * it is. /b/[token], /api/bill-share and lib/bill-share are deleted, and a
+ * test asserts nothing queries this model.
+ *
+ * THE TABLE AND ITS ROWS STAY. Links a shopkeeper already minted are their
+ * own record, and this codebase does not delete a user's data to tidy up
+ * after a withdrawn feature. Old links 404 because the page is gone, not
+ * because anything was erased.
  */
 model BillShare {
   id            String      @id @default(cuid())
