@@ -16,62 +16,33 @@
  */
 
 import { registerUnicodeFont, THEME, formatPDFMoney } from './pdf/theme'
+import { paletteFor } from './pdf/palette'
+import type { InvoiceDocument } from './invoice-document'
 import { drawFooter, drawUPIQRBlock, newPageIfNeeded } from './pdf/primitives'
-import { amountToWords } from './amount-to-words'
-// 🔒 AUDIT C5: shared due rule — the printed invoice must agree with the ledger.
-import { computeInvoiceDue } from './invoice-due'
-import { roundMoney } from './money'
 
-interface InvoiceItem {
-  productName: string
-  quantity: number
-  unitPrice: number
-  gstRate: number
-  total: number
-  unit?: string
-  hsn?: string | null
-}
 
-interface InvoiceData {
-  invoiceNo: string | null
-  date: string | Date
-  /*
-   * e-invoice details, when the invoice has been registered with the portal.
-   * Rule 48(4) requires both to be printed; absent for shops below the ₹5
-   * crore threshold, which is nearly all of them.
-   */
-  irn?: string | null
-  signedQR?: string | null
-  party?: {
-    name: string
-    phone?: string
-    gstin?: string | null
-    address?: string | null
-    state?: string | null
-  } | null
-  items: InvoiceItem[]
-  subtotal: number
-  discountAmount: number
-  cgst: number
-  sgst: number
-  igst: number
-  totalAmount: number
-  roundOff?: number
-  paidAmount: number
-  paymentMode: string
-  isInterState?: boolean
-}
+/*
+ * 📄 2026-08-15, Phase 1 of docs/INVOICE-ENGINE-PLAN.md.
+ *
+ * The local InvoiceItem / InvoiceData / ShopSetting shapes that used to live
+ * here are GONE. They were a second description of an invoice, beside
+ * invoice-document.ts — the layer written so the arithmetic happens exactly
+ * once and renderers only lay out what they are handed. The PDF ignored it and
+ * recomputed the due amount, the status and the amount in words for itself.
+ *
+ * It agreed with the picture and the payment page only because both happened to
+ * call computeInvoiceDue. Nothing made that true, and every field added to a
+ * bill from here on would have had to be added in two places — which is the
+ * 'two things describing one thing' mistake that has produced four bugs in this
+ * codebase already.
+ *
+ * Now: one document in, one PDF out. If a number is wrong it is wrong
+ * everywhere, which is far easier to notice than wrong in one place.
+ */
 
-interface ShopSetting {
-  shopName: string
-  ownerName?: string
-  phone?: string
-  email?: string
-  gstin?: string
-  address?: string
-  state?: string
-  upiId?: string
-  logoUrl?: string | null  // 🔒 PDF Redesign Spec Part 3 §2: rendered at 16×16 mm in brand band
+export interface InvoicePdfOptions {
+  /** Setting.invoiceTheme. Drives the palette — see pdf/palette.ts. */
+  themeId?: string | null
   /**
    * The public bill link, when the shop has them switched on.
    *
@@ -79,53 +50,53 @@ interface ShopSetting {
    * CAPTION, and Android does not allow a file and text in one share — its own
    * guidance is that EXTRA_TEXT with EXTRA_STREAM is not allowed. WhatsApp
    * honours the caption for images and drops it for documents, so a bill sent
-   * as a PDF lost its link entirely.
-   *
-   * That cannot be fixed in the share. It CAN be fixed by putting the link on
-   * the document, where nothing can strip it.
+   * as a PDF lost its link entirely. That cannot be fixed in the share. It CAN
+   * be fixed by putting the link on the document, where nothing can strip it.
    */
   shareLink?: string | null
 }
 
-function formatDate(date: string | Date): string {
-  const d = typeof date === 'string' ? new Date(date) : date
-  if (isNaN(d.getTime())) return String(date)
-  return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-}
-
-export async function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting): Promise<Blob> {
+export async function generateInvoicePDF(
+  invoice: InvoiceDocument,
+  opts: InvoicePdfOptions = {},
+): Promise<Blob> {
   const jsPDFMod: any = await import('jspdf')
   const doc = new jsPDFMod.jsPDF({ unit: 'mm', format: 'a4' })
 
   await registerUnicodeFont(doc)
 
-  const { margin, pageWidth, pageHeight, brand, brandLight, text, textMuted, border, zebra, cardBg, white, paid, partial, due } = THEME
-  const dateStr = formatDate(txn.date)
-  // 🔒 AUDIT C5: the printed invoice must show what is ACTUALLY still owed.
-  // `total − paidAmount` ignores payments settled against this bill afterwards,
-  // so a customer handed a PDF for a bill they had part-paid would see the
-  // original amount — and the PAID/PARTIAL/DUE stamp would contradict the
-  // shop's own ledger.
-  //
-  // `allocatedAmount` is supplied by callers that fetch it; falling back to 0
-  // keeps every existing caller producing byte-identical output.
-  const allocatedAmount = (txn as any).allocatedAmount || 0
-  const dueAmount = computeInvoiceDue({
-    totalAmount: txn.totalAmount,
-    paidAmount: txn.paidAmount,
-    allocatedAmount,
-  })
-  const totalPaidOnBill = roundMoney((txn.paidAmount || 0) + allocatedAmount)
-  const status: 'paid' | 'partial' | 'due' = dueAmount <= 0 ? 'paid' : totalPaidOnBill > 0 ? 'partial' : 'due'
+  // Layout constants stay in THEME; every COLOUR now comes from the shop's
+  // chosen theme. `band` is the header; `accent` is the highlight the table
+  // header, the rules and the grand total use — the same split the WhatsApp
+  // image and the payment page already make, so all three agree.
+  const { margin, pageWidth, pageHeight } = THEME
+  const {
+    band, onBand, onBandMuted, accent, accentSoft,
+    text, textMuted, border, zebra, cardBg, white, paid, partial, due,
+  } = paletteFor(opts.themeId)
+  /*
+   * Every figure below is READ, never recomputed.
+   *
+   * This block used to call computeInvoiceDue and derive the status itself.
+   * `invoice.paid` is also a real correction, not a rename: the old code
+   * printed `invoice.paid`, which is what was paid AT THE TILL, while the due
+   * figure beside it already accounted for payments settled against the bill
+   * afterwards. A part-paid bill could therefore print 'Paid 200' and 'Balance
+   * Due 0' on the same page. The document's `paid` is total minus due, so the
+   * two lines are now arithmetically forced to agree.
+   */
+  const dateStr = invoice.dateLabel
+  const dueAmount = invoice.due
+  const status = invoice.status
   const statusLabels = { paid: 'PAID', partial: 'PARTIAL', due: 'DUE' }
   const statusColors = { paid, partial, due }
-  const hasPartyGstin = !!(txn.party?.gstin && txn.party.gstin.trim())
+  const hasPartyGstin = !!(invoice.party?.gstin && invoice.party.gstin.trim())
 
   // ═══════════════════════════════════════════════════════════════════
   // 1. BRAND BAND — 32 mm full-width, shop info left, INVOICE + meta + status right
   // ═══════════════════════════════════════════════════════════════════
   const bandHeight = 32
-  doc.setFillColor(brand.r, brand.g, brand.b)
+  doc.setFillColor(band.r, band.g, band.b)
   doc.rect(0, 0, pageWidth, bandHeight, 'F')
 
   // 🔒 PDF Redesign Spec Part 3 §2: Shop logo at 16×16 mm in the brand band,
@@ -138,13 +109,13 @@ export async function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting)
   const logoX = margin
   const logoY = (bandHeight - logoSize) / 2  // vertical center in band
   let textLeftX = margin  // text starts at left margin by default
-  if (setting.logoUrl) {
+  if (invoice.shop.logoUrl) {
     try {
       // Fetch + convert to data URL. Cloudinary returns CORS headers so this
       // works from the browser. Wrapped in try/catch — if the fetch fails
       // (offline, network error), we just skip the logo and the brand band
       // renders without it (graceful degradation).
-      const logoRes = await fetch(setting.logoUrl)
+      const logoRes = await fetch(invoice.shop.logoUrl)
       if (logoRes.ok) {
         const blob = await logoRes.blob()
         const dataUrl = await new Promise<string>((resolve, reject) => {
@@ -170,21 +141,21 @@ export async function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting)
   doc.setFont(THEME.font, 'bold')
   doc.setFontSize(16)
   doc.setTextColor(white.r, white.g, white.b)
-  doc.text(setting.shopName || 'My Shop', textLeftX, 13)
+  doc.text(invoice.shop.name || 'My Shop', textLeftX, 13)
 
   // Left: shop details (white, 8pt) — phone | GSTIN | address (one or two lines)
   doc.setFont(THEME.font, 'normal')
   doc.setFontSize(8)
   let detailY = 18
   const shopDetails: string[] = []
-  if (setting.phone) shopDetails.push(setting.phone)
-  if (setting.gstin) shopDetails.push('GSTIN: ' + setting.gstin)
+  if (invoice.shop.phone) shopDetails.push(invoice.shop.phone)
+  if (invoice.shop.gstin) shopDetails.push('GSTIN: ' + invoice.shop.gstin)
   if (shopDetails.length > 0) {
     doc.text(shopDetails.join('  |  '), textLeftX, detailY)
     detailY += 4
   }
-  if (setting.address) {
-    const truncated = setting.address.length > 70 ? setting.address.slice(0, 67) + '...' : setting.address
+  if (invoice.shop.address) {
+    const truncated = invoice.shop.address.length > 70 ? invoice.shop.address.slice(0, 67) + '...' : invoice.shop.address
     doc.text(truncated, textLeftX, detailY)
   }
 
@@ -195,7 +166,7 @@ export async function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting)
   doc.text('INVOICE', pageWidth - margin, 12, { align: 'right' })
   doc.setFont(THEME.font, 'normal')
   doc.setFontSize(9)
-  doc.text(`${txn.invoiceNo || ''}  |  ${dateStr}`, pageWidth - margin, 18, { align: 'right' })
+  doc.text(`${invoice.invoiceNo || ''}  |  ${dateStr}`, pageWidth - margin, 18, { align: 'right' })
 
   // Status pill — inside the band, below the invoice meta, right-aligned.
   const statusColor = statusColors[status]
@@ -227,11 +198,11 @@ export async function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting)
   const rightCardX = margin + leftCardW + cardGap
   // Estimate left card height from party fields present
   const leftLines: string[] = []
-  if (txn.party?.phone) leftLines.push(txn.party.phone)
-  if (txn.party?.gstin) leftLines.push('GSTIN: ' + txn.party.gstin)
-  if (txn.party?.address) {
+  if (invoice.party?.phone) leftLines.push(invoice.party.phone)
+  if (invoice.party?.gstin) leftLines.push('GSTIN: ' + invoice.party.gstin)
+  if (invoice.party?.address) {
     // split into 2 lines max at ~leftCardW-8mm
-    const addrLines = doc.splitTextToSize(txn.party.address, leftCardW - 8)
+    const addrLines = doc.splitTextToSize(invoice.party.address, leftCardW - 8)
     leftLines.push(...addrLines.slice(0, 2))
   }
   // Card body: 1 (name) + leftLines.length + label row + padding
@@ -255,7 +226,7 @@ export async function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting)
   doc.setFont(THEME.font, 'bold')
   doc.setFontSize(11)
   doc.setTextColor(text.r, text.g, text.b)
-  const partyName = txn.party?.name || 'Walk-in Customer'
+  const partyName = invoice.party?.name || 'Walk-in Customer'
   const nameLines = doc.splitTextToSize(partyName, leftCardW - 6)
   doc.text(nameLines.slice(0, 2), margin + 3, y + 11)
 
@@ -284,11 +255,11 @@ export async function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting)
     doc.setFont(THEME.font, 'normal')
     doc.setFontSize(8)
     doc.setTextColor(text.r, text.g, text.b)
-    const placeOfSupply = txn.party?.state
-      ? `${txn.party.state}${txn.isInterState ? ' (Inter-state)' : ' (Intra-state)'}`
+    const placeOfSupply = invoice.party?.state
+      ? `${invoice.party.state}${invoice.isInterState ? ' (Inter-state)' : ' (Intra-state)'}`
       : '—'
     doc.text('Place of Supply: ' + placeOfSupply, rightCardX + 3, y + 11)
-    doc.text('Payment Mode: ' + txn.paymentMode.toUpperCase(), rightCardX + 3, y + 16)
+    doc.text('Payment Mode: ' + invoice.paymentMode.toUpperCase(), rightCardX + 3, y + 16)
 
     doc.setTextColor(text.r, text.g, text.b)
   }
@@ -317,7 +288,7 @@ export async function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting)
   const drawTableHeader = (headerY: number) => {
     // Header row: brand colour at 12% opacity (spec) — emulate by drawing the
     // brand rect then overlaying a 88% white rect.
-    doc.setFillColor(brand.r, brand.g, brand.b)
+    doc.setFillColor(accent.r, accent.g, accent.b)
     doc.rect(colStart, headerY, tableWidth, 8, 'F')
     doc.setFillColor(255, 255, 255)
     doc.setGState(doc.GState({ opacity: 0.88 }))
@@ -326,7 +297,7 @@ export async function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting)
 
     doc.setFont(THEME.font, 'bold')
     doc.setFontSize(8)
-    doc.setTextColor(brand.r, brand.g, brand.b)
+    doc.setTextColor(accent.r, accent.g, accent.b)
     cols.forEach(c => {
       if (c.align === 'right') {
         doc.text(c.name, c.x + c.w - 1, headerY + 5.5, { align: 'right' })
@@ -346,7 +317,7 @@ export async function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting)
   doc.setFontSize(9)
   const rowHeight = 7
 
-  txn.items.forEach((item, i) => {
+  invoice.items.forEach((item, i) => {
     y = newPageIfNeeded(doc, y, rowHeight + 2, () => {
       drawTableHeader(y)
       doc.setFont(THEME.font, 'normal')
@@ -360,15 +331,15 @@ export async function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting)
       doc.rect(colStart, y, tableWidth, rowHeight, 'F')
     }
 
-    const name = item.productName.length > 32 ? item.productName.slice(0, 29) + '...' : item.productName
+    const name = item.name.length > 32 ? item.name.slice(0, 29) + '...' : item.name
     doc.setTextColor(text.r, text.g, text.b)
     doc.text(String(i + 1), cols[0].x, y + 5)
     doc.text(name, cols[1].x, y + 5)
     doc.setFontSize(7)
     doc.text(item.hsn || '-', cols[2].x, y + 5)
     doc.setFontSize(9)
-    doc.text(`${item.quantity} ${item.unit || 'pcs'}`, cols[3].x + cols[3].w - 1, y + 5, { align: 'right' })
-    doc.text(item.unitPrice.toFixed(2), cols[4].x + cols[4].w - 1, y + 5, { align: 'right' })
+    doc.text(`${item.qtyValue} ${item.unit || 'pcs'}`, cols[3].x + cols[3].w - 1, y + 5, { align: 'right' })
+    doc.text(item.rate.toFixed(2), cols[4].x + cols[4].w - 1, y + 5, { align: 'right' })
     doc.text(item.gstRate + '%', cols[5].x + cols[5].w - 1, y + 5, { align: 'right' })
     doc.text(formatPDFMoney(item.total), colEnd, y + 5, { align: 'right' })
     y += rowHeight
@@ -399,35 +370,35 @@ export async function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting)
     y += 5
   }
 
-  totalsLine('Subtotal', formatPDFMoney(txn.subtotal))
-  if (txn.discountAmount > 0) {
-    totalsLine('Discount', '- ' + formatPDFMoney(txn.discountAmount))
+  totalsLine('Subtotal', formatPDFMoney(invoice.subtotal))
+  if (invoice.discount > 0) {
+    totalsLine('Discount', '- ' + formatPDFMoney(invoice.discount))
   }
-  totalsLine('Taxable Value', formatPDFMoney(txn.subtotal - txn.discountAmount), true)
-  if (txn.cgst > 0) totalsLine('CGST', formatPDFMoney(txn.cgst))
-  if (txn.sgst > 0) totalsLine('SGST', formatPDFMoney(txn.sgst))
-  if (txn.igst > 0) totalsLine('IGST', formatPDFMoney(txn.igst))
-  if (txn.roundOff && Math.abs(txn.roundOff) >= 0.005) {
-    totalsLine('Round Off', (txn.roundOff > 0 ? '+ ' : '- ') + formatPDFMoney(Math.abs(txn.roundOff)))
+  totalsLine('Taxable Value', formatPDFMoney(invoice.subtotal - invoice.discount), true)
+  if (invoice.cgst > 0) totalsLine('CGST', formatPDFMoney(invoice.cgst))
+  if (invoice.sgst > 0) totalsLine('SGST', formatPDFMoney(invoice.sgst))
+  if (invoice.igst > 0) totalsLine('IGST', formatPDFMoney(invoice.igst))
+  if (invoice.roundOff && Math.abs(invoice.roundOff) >= 0.005) {
+    totalsLine('Round Off', (invoice.roundOff > 0 ? '+ ' : '- ') + formatPDFMoney(Math.abs(invoice.roundOff)))
   }
 
   // Grand total — filled brand box (13pt white bold per spec; using 12pt for fit)
   y += 1
   const gtHeight = 11
-  doc.setFillColor(brand.r, brand.g, brand.b)
+  doc.setFillColor(accent.r, accent.g, accent.b)
   doc.rect(totalsX - 2, y - 4, totalsWidth + 2, gtHeight, 'F')
   doc.setFont(THEME.font, 'bold')
   doc.setFontSize(12)
   doc.setTextColor(white.r, white.g, white.b)
   doc.text('GRAND TOTAL', totalsX, y + 3)
-  doc.text(formatPDFMoney(txn.totalAmount), totalsValueX, y + 3, { align: 'right' })
+  doc.text(formatPDFMoney(invoice.total), totalsValueX, y + 3, { align: 'right' })
   y += gtHeight + 2
 
   // Paid + Balance Due
   doc.setFont(THEME.font, 'normal')
   doc.setFontSize(9)
   doc.setTextColor(text.r, text.g, text.b)
-  doc.text('Paid: ' + formatPDFMoney(txn.paidAmount) + ' (' + txn.paymentMode.toUpperCase() + ')', totalsX, y)
+  doc.text('Paid: ' + formatPDFMoney(invoice.paid) + ' (' + invoice.paymentMode.toUpperCase() + ')', totalsX, y)
   y += 5
   if (dueAmount > 0) {
     doc.setFont(THEME.font, 'bold')
@@ -441,14 +412,14 @@ export async function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting)
   // 5. AMOUNT IN WORDS — tinted strip
   // ═══════════════════════════════════════════════════════════════════
   y += 4
-  doc.setFillColor(brandLight.r, brandLight.g, brandLight.b)
+  doc.setFillColor(accentSoft.r, accentSoft.g, accentSoft.b)
   doc.rect(margin, y - 3, tableWidth, 7, 'F')
   // DejaVu Sans does not ship an italic face — use normal to avoid jsPDF's
   // "Unable to look up font label for font 'DejaVuSans', 'italic'" warning.
   doc.setFont(THEME.font, 'normal')
   doc.setFontSize(8)
   doc.setTextColor(textMuted.r, textMuted.g, textMuted.b)
-  const wordsStr = amountToWords(txn.totalAmount)
+  const wordsStr = invoice.totalInWords
   const wordsLabel = 'Amount in words: ' + wordsStr
   const displayWords = wordsLabel.length > 100 ? wordsLabel.slice(0, 97) + '...' : wordsLabel
   doc.text(displayWords, margin + 2, y + 1)
@@ -460,12 +431,13 @@ export async function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting)
   const bottomY = Math.max(y + 5, pageHeight - 70)
 
   // UPI QR (left side, only when upiId exists and balance > 0)
-  if (setting.upiId && dueAmount > 0) {
+  if (invoice.shop.upiId && dueAmount > 0) {
     await drawUPIQRBlock(doc, margin, bottomY, {
-      upiId: setting.upiId,
-      shopName: setting.shopName || 'My Shop',
+      upiId: invoice.shop.upiId,
+      shopName: invoice.shop.name || 'My Shop',
       amount: dueAmount,
-      note: txn.invoiceNo || 'Invoice Payment',
+      note: invoice.invoiceNo || 'Invoice Payment',
+      palette: { text, textMuted },
     })
   }
 
@@ -474,7 +446,7 @@ export async function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting)
   doc.setFont(THEME.font, 'normal')
   doc.setFontSize(9)
   doc.setTextColor(textMuted.r, textMuted.g, textMuted.b)
-  doc.text('For ' + (setting.shopName || 'My Shop'), sigX, bottomY)
+  doc.text('For ' + (invoice.shop.name || 'My Shop'), sigX, bottomY)
   doc.setDrawColor(border.r, border.g, border.b)
   doc.line(sigX, bottomY + 12, sigX + 40, bottomY + 12)
   doc.text('Authorised Signatory', sigX, bottomY + 16)
@@ -488,16 +460,16 @@ export async function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting)
    * Above the footer rather than in it: a customer scanning for "how do I pay
    * this" should find it near the total, not in the small print.
    */
-  if (setting.shareLink) {
+  if (opts.shareLink) {
     const linkY = pageHeight - 26
     doc.setFont(THEME.font, 'normal')
     doc.setFontSize(8)
     doc.setTextColor(textMuted.r, textMuted.g, textMuted.b)
     doc.text('View or pay this bill online:', margin, linkY)
-    doc.setTextColor(brand.r, brand.g, brand.b)
+    doc.setTextColor(accent.r, accent.g, accent.b)
     // A real PDF link annotation, so it is tappable in every viewer rather
     // than a string the reader has to retype.
-    doc.textWithLink(setting.shareLink, margin, linkY + 4, { url: setting.shareLink })
+    doc.textWithLink(opts.shareLink, margin, linkY + 4, { url: opts.shareLink })
   }
 
   /*
@@ -519,12 +491,12 @@ export async function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting)
    * Skipped entirely for the great majority of shops, who are under the ₹5
    * crore threshold and correctly have no IRN.
    */
-  if (txn.irn) {
+  if (invoice.irn) {
     const eY = pageHeight - 60
     try {
-      if (txn.signedQR) {
+      if (invoice.signedQR) {
         const QRCode = (await import('qrcode')).default
-        const qrDataUrl = await QRCode.toDataURL(txn.signedQR, { margin: 0, width: 256 })
+        const qrDataUrl = await QRCode.toDataURL(invoice.signedQR, { margin: 0, width: 256 })
         doc.addImage(qrDataUrl, 'PNG', margin, eY, 22, 22)
       }
       doc.setFont(THEME.font, 'bold')
@@ -534,7 +506,7 @@ export async function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting)
       doc.setFont(THEME.font, 'normal')
       doc.setFontSize(6.5)
       // The IRN is 64 characters — split so it does not run off the page.
-      const irnStr = String(txn.irn)
+      const irnStr = String(invoice.irn)
       doc.text('IRN: ' + irnStr.slice(0, 32), margin + 26, eY + 10)
       doc.text(irnStr.slice(32), margin + 26, eY + 14)
     } catch {
@@ -546,7 +518,7 @@ export async function generateInvoicePDF(txn: InvoiceData, setting: ShopSetting)
     }
   }
 
-  drawFooter(doc, 1, 1)
+  drawFooter(doc, 1, 1, { accent, textMuted, text })
 
   return doc.output('blob')
 }

@@ -33,6 +33,7 @@ import {
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { amountToWords } from '@/lib/amount-to-words'
 import { generateInvoicePDF } from '@/lib/invoice-pdf'
+import { buildInvoiceDocument } from '@/lib/invoice-document'
 import { haptic } from '@/lib/haptic'
 import { useSetting } from '@/hooks/use-setting'
 import { readError } from '@/lib/read-error'
@@ -207,17 +208,39 @@ export function TransactionDetail() {
   const handleDownload = () => {
     if (!txn) return
     const toastId = sonnerToast.loading('Generating PDF...')
-    generateInvoicePDF(txn, {
-      shopName: setting?.shopName || 'My Shop',
-      ownerName: setting?.ownerName,
-      phone: setting?.phone,
-      email: setting?.email,
-      gstin: setting?.gstin,
-      address: setting?.address,
-      state: setting?.state,
-      upiId: setting?.upiId, // V26 Phase 8: pass UPI ID for QR code
-      logoUrl: setting?.logoUrl, // 🔒 PDF Redesign Spec Part 3 §2: shop logo
-    }).then(async (pdfBlob) => {
+    /*
+     * 📄 2026-08-15, Phase 1 of docs/INVOICE-ENGINE-PLAN.md.
+     *
+     * The PDF now renders from the same InvoiceDocument the WhatsApp picture
+     * and the public bill page use, instead of from a transaction plus a
+     * hand-assembled settings object. Two things follow from that:
+     *
+     *   · `themeId` finally reaches the PDF. Until now the shopkeeper could
+     *     pick any of eight invoice designs and the PDF came out saffron every
+     *     time, while the setting told them it applied to "the bill picture,
+     *     the bill link and the PDF".
+     *   · `allocatedAmount` is passed, so a bill part-paid AFTER it was raised
+     *     prints the amount actually still owed. The document computes it; this
+     *     screen no longer has an opinion about it.
+     */
+    const doc = buildInvoiceDocument(
+      {
+        ...txn,
+        allocatedAmount: (txn as { allocatedAmount?: number }).allocatedAmount || 0,
+      } as Parameters<typeof buildInvoiceDocument>[0],
+      {
+        name: setting?.shopName || 'My Shop',
+        ownerName: setting?.ownerName,
+        phone: setting?.phone,
+        email: setting?.email,
+        gstin: setting?.gstin,
+        address: setting?.address,
+        state: setting?.state,
+        upiId: setting?.upiId,
+        logoUrl: setting?.logoUrl,
+      },
+    )
+    generateInvoicePDF(doc, { themeId: setting?.invoiceTheme }).then(async (pdfBlob) => {
       // On mobile (Capacitor), use Share plugin to save/share the PDF
       const { Capacitor } = await import('@capacitor/core')
       if (Capacitor.isNativePlatform()) {

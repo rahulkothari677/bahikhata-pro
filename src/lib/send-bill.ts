@@ -170,7 +170,18 @@ ${link}` : buildCaption(doc)
   }
 
   // The link goes ON the PDF, because Android will not carry it beside one.
-  const pdfBlob = await generateInvoicePDF(src as never, { ...shop, shareLink: link } as never)
+  /*
+   * 📄 2026-08-15: the SAME `doc` built at the top of this function.
+   *
+   * This line used to pass the raw `src` with two `as never` casts, which
+   * silenced the type system precisely where it was trying to say that the
+   * PDF was being handed something different from every other surface. The
+   * document was already built eight lines above and thrown away here.
+   *
+   * `themeId` was passed to the image renderer on the line above and not to
+   * this one — the whole of the PDF theme bug, visible in one function.
+   */
+  const pdfBlob = await generateInvoicePDF(doc, { themeId: opts.themeId, shareLink: link })
   const dataUrl = await blobToDataUrl(pdfBlob)
   await shareCardImage(dataUrl, filename, {
     title: `Bill ${doc.invoiceNo}`,

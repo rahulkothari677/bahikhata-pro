@@ -8,6 +8,7 @@
  */
 
 import { THEME, formatPDFMoney } from './theme'
+import type { PdfPalette } from './palette'
 
 /**
  * Draw the brand band — full-width colored header with shop info.
@@ -100,12 +101,31 @@ export function drawStatusPill(
  * V26 Phase 8: Removed "Terms" line (user requested removal). Increased font
  * size from 7pt to 9pt for visibility. Made "Made with EkBook" bold + brand color.
  */
-export function drawFooter(doc: any, pageNum?: number, totalPages?: number): void {
-  const { margin, pageWidth, pageHeight, brand, textMuted } = THEME
+/*
+ * 📄 2026-08-15, Phase 1 of docs/INVOICE-ENGINE-PLAN.md.
+ *
+ * `palette` is optional so the STATEMENT PDF (PartyProfile) keeps its
+ * existing look untouched — a statement is not an invoice and has no theme
+ * to choose yet. The invoice passes its own, because the footer rule and the
+ * 'Made with EkBook' line were drawing in hardcoded saffron on top of a
+ * Midnight document. Found by a jsPDF font warning, not by the guard: the
+ * first version of the theme test asserted the right colours were PRESENT
+ * and never that the old one was ABSENT.
+ */
+export function drawFooter(
+  doc: any,
+  pageNum?: number,
+  totalPages?: number,
+  palette?: Pick<PdfPalette, 'accent' | 'textMuted' | 'text'>,
+): void {
+  const { margin, pageWidth, pageHeight } = THEME
+  const accent = palette?.accent ?? THEME.brand
+  const textMuted = palette?.textMuted ?? THEME.textMuted
+  const bodyText = palette?.text ?? THEME.text
   const y = pageHeight - 15
 
   // Thin brand rule
-  doc.setDrawColor(brand.r, brand.g, brand.b)
+  doc.setDrawColor(accent.r, accent.g, accent.b)
   doc.setLineWidth(0.5)
   doc.line(margin, y, pageWidth - margin, y)
 
@@ -119,10 +139,10 @@ export function drawFooter(doc: any, pageNum?: number, totalPages?: number): voi
   }
 
   doc.setFont(THEME.font, 'bold')
-  doc.setTextColor(brand.r, brand.g, brand.b)
+  doc.setTextColor(accent.r, accent.g, accent.b)
   doc.text('Made with EkBook', pageWidth - margin, y + 6, { align: 'right' })
 
-  doc.setTextColor(THEME.text.r, THEME.text.g, THEME.text.b)
+  doc.setTextColor(bodyText.r, bodyText.g, bodyText.b)
 }
 
 /**
@@ -138,6 +158,8 @@ export async function drawUPIQRBlock(
     shopName: string
     amount: number
     note?: string
+    /** Optional, for the same reason as drawFooter's. */
+    palette?: Pick<PdfPalette, 'text' | 'textMuted'>
   }
 ): Promise<number> {
   if (!opts.upiId || opts.amount <= 0) return y
@@ -153,13 +175,15 @@ export async function drawUPIQRBlock(
     // Caption below QR
     doc.setFont(THEME.font, 'bold')
     doc.setFontSize(9)
-    doc.setTextColor(THEME.text.r, THEME.text.g, THEME.text.b)
+    const qrText = opts.palette?.text ?? THEME.text
+    doc.setTextColor(qrText.r, qrText.g, qrText.b)
     doc.text(`Scan to pay ${formatPDFMoney(opts.amount)}`, x + 14, y + 32, { align: 'center' })
 
     // UPI ID below caption
     doc.setFont(THEME.font, 'normal')
     doc.setFontSize(7)
-    doc.setTextColor(THEME.textMuted.r, THEME.textMuted.g, THEME.textMuted.b)
+    const qrMuted = opts.palette?.textMuted ?? THEME.textMuted
+    doc.setTextColor(qrMuted.r, qrMuted.g, qrMuted.b)
     doc.text(opts.upiId, x + 14, y + 36, { align: 'center' })
 
     return y + 38 // return Y after the block
