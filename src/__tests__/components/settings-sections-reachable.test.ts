@@ -19,6 +19,7 @@
  */
 
 import { readFileSync } from 'fs'
+import { stripComments } from '@/test-support/read-source'
 import { join } from 'path'
 
 const root = process.cwd()
@@ -29,7 +30,18 @@ const root = process.cwd()
  * hypothetical: the first version of this test reported 'dashboard' and
  * 'original' as section keys.
  */
-const read = (rel: string) => readFileSync(join(root, rel), 'utf8').replace(/\r\n/g, '\n')
+/*
+ * 🐛 15 Aug — comments are stripped before any assertion.
+ *
+ * "Replay Tour" and "Replay Theme Picker" appear in Settings.tsx BOTH as
+ * real button labels and inside comments explaining them. So this guard
+ * would have kept passing if the buttons were deleted and only the
+ * explanation left behind — a settings section made unreachable, under a
+ * green tick. Proved on a sibling guard the same day: removing every real
+ * call to computePartyBalance left balance-reconciliation passing 9 of 9.
+ */
+const read = (rel: string) =>
+  stripComments(readFileSync(join(root, rel), 'utf8')).replace(/\r\n/g, '\n')
 const settingsSrc = read('src/components/settings/Settings.tsx')
 const accountSrc = read('src/components/layout/AccountScreen.tsx')
 

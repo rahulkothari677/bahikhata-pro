@@ -15,9 +15,15 @@
 
 import { describe, test, expect } from '@jest/globals'
 import { readFileSync } from 'fs'
+import { stripComments } from '@/test-support/read-source'
 import { join } from 'path'
 
-const read = (p: string) => readFileSync(join(process.cwd(), p), 'utf8')
+/*
+ * 🐛 15 Aug — comments stripped first. "Also known as" is both the heading
+ * this guard requires and a phrase its own explanatory comment uses, so the
+ * guard would have survived the heading being deleted.
+ */
+const read = (p: string) => stripComments(readFileSync(join(process.cwd(), p), 'utf8'))
 
 describe('the tap teaches', () => {
   const answer = read('src/components/ask/AskAnswer.tsx')

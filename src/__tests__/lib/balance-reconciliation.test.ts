@@ -15,15 +15,26 @@
  * this test fails — preventing the "three screens, three balances" bug class.
  */
 
-import * as fs from 'fs'
-import * as path from 'path'
+import { readCode } from '@/test-support/read-source'
 
 describe('🔒 V15 §1 — Balance reconciliation (all screens must agree)', () => {
-  const SRC_DIR = path.join(process.cwd(), 'src')
-
-  function readFile(relPath: string): string {
-    return fs.readFileSync(path.join(SRC_DIR, relPath), 'utf-8')
-  }
+  /*
+   * 🐛 15 Aug — THIS GUARD COULD NOT FAIL, and it was proved.
+   *
+   * `readFile` returned the file exactly as written, comments included, and
+   * these assertions are `toContain('computePartyBalance')`. Both route files
+   * discuss that helper at length in their own comments — a performance note
+   * in one, a rewrite note in the other.
+   *
+   * So the import and every real call were removed from
+   * app/api/parties/[id]/route.ts, leaving only the comments. **This suite
+   * passed 9 of 9.** The guard written to prevent "three screens, three
+   * balances" would not have noticed one screen leaving the helper behind.
+   *
+   * `readCode` strips comments first. The assertions below now describe the
+   * code, which is what they were always meant to say.
+   */
+  const readFile = readCode
 
   describe('computePartyBalance returns payment fields', () => {
     // Verify the helper includes payments in its return type
