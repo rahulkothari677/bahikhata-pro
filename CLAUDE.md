@@ -313,6 +313,14 @@ structure.** Match the actual thing — balance the braces, parse the argument,
 split on `/\r?\n/` — and **only "reintroduce the bug and watch it fail" ever
 proves it.**
 
+· **15 Aug, the sixth — and the first that could not fail at all.** A sweep of
+  all 226 test files found five assertions satisfiable by a COMMENT. Proved by
+  deleting every call to `computePartyBalance` from the party route, leaving
+  only its comments: the guard written to stop "three screens, three balances"
+  **passed 9 of 9**. Then the guard-on-guards built to catch that class was
+  caught by the same defect — it skipped files whose *comments* mentioned
+  `readCode`, so it stayed silent on the very revert used to test it.
+
 **The rule this earned: a guard must be RUNNABLE against a known-good and a
 known-bad input.** Four of the five were rules buried inside a directory walk
 or a regex sweep, so the only way to exercise them was to commit a real bug.
