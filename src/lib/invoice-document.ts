@@ -24,6 +24,7 @@ import { computeInvoiceDue } from './invoice-due'
 import { roundMoney } from './money'
 import { amountToWords } from './amount-to-words'
 import { isVisible, VISIBILITY_TOGGLES, type InvoiceVisibility } from './invoice-visibility'
+import { readCustomValues, type CustomFieldValue } from './custom-fields'
 
 export interface InvoiceDocumentItem {
   name: string
@@ -50,6 +51,14 @@ export interface InvoiceDocumentItem {
   description: string | null
   /** "500 ml" — what was typed, when it differs from how it is stored. */
   altQty: string | null
+
+  /**
+   * 📄 Phase 5 — the shop's own columns on this line (batch, expiry, MRP).
+   *
+   * Already filtered to the ones that print, and each carries the label it
+   * was issued with. A renderer lays them out and asks no questions.
+   */
+  customCols: CustomFieldValue[]
 }
 
 export interface InvoiceParty {
@@ -215,6 +224,15 @@ export interface InvoiceDocument {
   irn: string | null
   /** The signed QR string from the IRP. Rendered as a QR image, not as text. */
   signedQR: string | null
+
+  /**
+   * 📄 Phase 5 — the shop's own fields on this BILL (PO number, vehicle
+   * number), and on the CUSTOMER (FSSAI licence, route code).
+   *
+   * Filtered here to those marked to print, so no renderer decides.
+   */
+  customFields: CustomFieldValue[]
+  partyCustomFields: CustomFieldValue[]
 }
 
 interface SourceItem {
@@ -231,6 +249,8 @@ interface SourceItem {
    * (line-items.ts). "500" + "ml" where the line stores 0.5 ltr. */
   enteredQuantity?: number | null
   enteredUnit?: string | null
+  /** TransactionItem.customCols, as stored. Read defensively. */
+  customCols?: unknown
 }
 
 export interface InvoiceSource {
@@ -244,6 +264,10 @@ export interface InvoiceSource {
    * customer's bill reads as a demand rather than as their credit.
    */
   partyBalance?: number | null
+  /** Transaction.customFields, as stored. */
+  customFields?: unknown
+  /** Party.customFields, as stored. */
+  partyCustomFields?: unknown
   irn?: string | null
   signedQR?: string | null
   invoiceNo?: string | null
@@ -440,6 +464,9 @@ export function buildInvoiceDocument(src: InvoiceSource, shop: InvoiceShop): Inv
     },
     party: src.party ?? null,
 
+    customFields: readCustomValues(src.customFields).filter(v => v.show),
+    partyCustomFields: readCustomValues(src.partyCustomFields).filter(v => v.show),
+
     partyBalance: balance,
     /*
      * The WORDS only — the figure is appended by each renderer using its own
@@ -466,6 +493,8 @@ export function buildInvoiceDocument(src: InvoiceSource, shop: InvoiceShop): Inv
       gstRate: i.gstRate,
       total: roundMoney(i.total),
       description: showDescription ? (i.description?.trim() || null) : null,
+      // 📄 Phase 5: filtered to what prints, once, here.
+      customCols: readCustomValues(i.customCols).filter(v => v.show),
       altQty: showAltUnit
         ? alternateQtyLabel(i.quantity, i.unit, i.enteredQuantity, i.enteredUnit)
         : null,

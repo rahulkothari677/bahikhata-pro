@@ -49,6 +49,7 @@ model User {
   partyAliases        PartyAlias[]
   transactions        Transaction[]
   billShares          BillShare[]
+  customFieldDefs     CustomFieldDef[]
   payments            Payment[]
   settings            Setting[]
   auditLogs           AuditLog[]
@@ -82,20 +83,20 @@ model User {
 // Each owner can have multiple shops. Products, transactions, parties
 // can be tagged with a shopId. When null, shows in all shops (backward compatible).
 model Shop {
-  id        String   @id @default(cuid())
-  userId    String // owner of this shop
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  name      String // e.g. "Sharma Kirana Store"
-  gstin     String?
-  address   String?
-  phone     String?
-  state     String?
-  isDefault Boolean  @default(false)
+  id         String    @id @default(cuid())
+  userId     String // owner of this shop
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String // e.g. "Sharma Kirana Store"
+  gstin      String?
+  address    String?
+  phone      String?
+  state      String?
+  isDefault  Boolean   @default(false)
   /// Set when the shopkeeper puts this shop away. NULL = active.
   /// A shop that holds books can be archived but never deleted — see #21.
   archivedAt DateTime?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   @@index([userId])
   @@index([userId, archivedAt])
@@ -137,7 +138,6 @@ model Product {
   priceIncludesGst  Boolean  @default(false)
   /**
    * False for a SERVICE — something sold without a countable stock of it.
-   *
    * Was: every row was stock-tracked, unconditionally. A tailor selling
    * "Blouse stitching", a salon selling "Haircut", a photographer selling
    * "Wedding shoot" all start at currentStock = 0, and the default stock
@@ -146,13 +146,11 @@ model Product {
    * Settings". There is no purchase to record. The only escape was to turn
    * off overselling protection for the whole shop, which is exactly the
    * guard a shop that ALSO sells goods needs to keep.
-   *
    * Nothing about a service has a stock level, so nothing about it should be
    * counted, warned about, valued, or reported as low. `tracksStock()` in
    * lib/inventory-tracking.ts is the single predicate; every stock read and
    * write goes through it, and a guard test fails the build if a new one
    * does not.
-   *
    * Default TRUE so every existing row keeps today's behaviour exactly.
    * New products default from the HSN/SAC code (99xx ⇒ service) but the
    * shopkeeper can always override — the code is a hint, not the truth.
@@ -211,7 +209,12 @@ model Party {
 
   transactions Transaction[]
   payments     Payment[]
-  aliases      PartyAlias[]
+  // 📄 Phase 5 — the shop's own fields on this party (FSSAI licence, credit
+  // terms, route code). Snapshotted values; see src/lib/custom-fields.ts for
+  // why they live here as JSON rather than in a values table.
+  customFields Json?
+
+  aliases PartyAlias[]
 
   // 🔒 V11 §2.2: Indexes — was ZERO indexes, caused full-table scans on every
   // Parties page load and every dashboard load (the receivable/payable query
@@ -253,6 +256,11 @@ model Transaction {
   paidAmount      Int      @default(0) // amount actually paid
   paymentMode     String   @default("cash") // cash | upi | card | bank | credit
   isInterState    Boolean  @default(false)
+  // 📄 Phase 5 — the shop's own fields on this BILL (PO number, vehicle
+  // number, transport docket). Values are snapshotted with their labels, so
+  // renaming a field cannot rewrite an invoice already issued. Definitions
+  // live in CustomFieldDef; see src/lib/custom-fields.ts.
+  customFields    Json?
   // V17-Ext Tier 3: Reverse Charge Mechanism (RCM). When true on a purchase,
   // the buyer (shopkeeper) pays GST directly to the government instead of the
   // supplier charging it. Common for: GTA (transport), legal services,
@@ -414,6 +422,11 @@ model TransactionItem {
   // (before normalization). The stored `quantity`/`unit` are the NORMALIZED values
   // (e.g., 500ml → 0.5ltr). This snapshot preserves what the user actually typed
   // so credit notes can load the original intent (500ml, not 0.5ltr).
+  // 📄 Phase 5 — the shop's own COLUMNS on this line (batch no., expiry,
+  // MRP). Snapshotted with their labels, exactly like hsn above: renaming a
+  // column next year must not rewrite a bill already issued.
+  customCols Json?
+
   enteredQuantity Float? // original quantity as entered by the user
   enteredUnit     String? // original unit as entered by the user (ml, gm, etc.)
 
@@ -461,14 +474,12 @@ model Payment {
   // (an advance), which is legitimate — shopkeepers take money before billing.
   allocations PaymentAllocation[]
 
-  /*
+  /**
    * GST rate on an advance receipt. NULL = no GST due on it.
-   *
    * Advances for GOODS are exempt (Notification 66/2017); advances for SERVICES
    * are taxable the moment the money arrives, and must be declared in GSTR-1
    * Table 11A then released in 11B when the invoice is raised. Set the rate and
    * this receipt carries a liability; leave it NULL and it does not.
-   *
    * Deliberately one column and not a rate plus an "is service" flag, which
    * could contradict each other. See the migration note.
    */
@@ -527,9 +538,8 @@ model PaymentAllocation {
 
 // ==================== APP SETTINGS (per user) ====================
 model Setting {
-  /*
+  /**
    * Composition scheme registration. NULL = the regular scheme.
-   *
    * A CATEGORY rather than a boolean: the rate follows from it (1% trader or
    * manufacturer, 5% restaurant, 6% services), and a boolean plus a separate
    * rate could contradict each other. See migration 20260809000002.
@@ -537,7 +547,6 @@ model Setting {
   compositionCategory String?
   /**
    * When the shop entered the scheme. Stamped with "now" on switch-on.
-   *
    * NOT YET READ BY ANYTHING. This previously claimed "returns before this
    * stay regular" — that is not implemented; CMP-08 and GSTR-4 filter on the
    * requested period alone. See task #42 and the note in api/settings/route.ts.
@@ -661,7 +670,7 @@ model Setting {
   // 📄 Which invoice look this shop uses — see src/lib/invoice-themes.ts.
   // One theme drives the WhatsApp picture, the link page and the PDF, so a
   // shop's bill and its payment page cannot look like two businesses.
-  invoiceTheme String @default("classic")
+  invoiceTheme     String @default("classic")
   // 📄 2026-08-15, Phase 2 of docs/INVOICE-ENGINE-PLAN.md — the STRUCTURE of
   // the bill, chosen independently of its colour. See src/lib/invoice-templates.
   // Deliberately a second column rather than a compound "style" value: eight
@@ -669,7 +678,7 @@ model Setting {
   // one string would mean parsing it everywhere it is read.
   // Defaults to "standard", which reproduces exactly what the renderer
   // produced before templates existed, so no shop's invoice changes today.
-  invoiceTemplate String @default("standard")
+  invoiceTemplate  String @default("standard")
   // 📄 2026-08-15: the SHEET. A third axis beside template and theme, because
   // paper is chosen for reasons that have nothing to do with looks — what the
   // printer takes, what the counter has a pad of. A5 is half of A4 and is what
@@ -686,40 +695,40 @@ model Setting {
   // Rule 46(b) requires a consecutive serial number, unique within a
   // financial year. A prefix is how a shop keeps that true across years and
   // branches ("RG/26-27/"). Null means bare numbers, which is still valid.
-  invoicePrefix       String?
+  invoicePrefix     String?
   // The number the NEXT invoice takes. Stored rather than derived from
   // max(existing)+1 because a shop migrating from a paper book starts at 431,
   // and because a deleted last invoice must not silently reissue its number.
-  invoiceNextNumber   Int      @default(1)
+  invoiceNextNumber Int     @default(1)
 
   // ── words the shop supplies ──────────────────────────────────────────
-  invoiceTerms        String?
+  invoiceTerms    String?
   // "Thank you for your business." Behavioural research on invoice microcopy
   // associates gratitude wording with materially faster payment, which is why
   // it is a first-class field and not buried inside terms.
-  invoiceThankYou     String?
+  invoiceThankYou String?
   // Days until payment is due. The bill prints a real DATE, never "Net 30" —
   // a specific date outperforms the jargon, and most shopkeepers have never
   // met the jargon. 0 or null means no due date is printed.
-  invoiceDueDays      Int?
+  invoiceDueDays  Int?
 
   // ── bank details, for a customer paying by transfer ──────────────────
   // Flat columns rather than a BankAccount model: an invoice carries exactly
   // one set, and a table would invite a "which one?" question on every bill
   // for a problem no shop of this size has. Revisit when multi-shop lands.
-  bankName            String?
-  bankAccountName     String?
-  bankAccountNumber   String?
-  bankIfsc            String?
-  bankBranch          String?
+  bankName          String?
+  bankAccountName   String?
+  bankAccountNumber String?
+  bankIfsc          String?
+  bankBranch        String?
 
   // ── signature ────────────────────────────────────────────────────────
   // Cloudinary URL, from a drawn signature or an uploaded photo. Same path as
   // logoUrl — see /api/settings/logo for why the URL is stored rather than
   // the bytes.
-  signatureUrl        String?
+  signatureUrl          String?
   // Print an empty ruled box instead, for a shop that signs by hand on paper.
-  showSignatureBox    Boolean  @default(true)
+  showSignatureBox      Boolean @default(true)
   // A second box for the CUSTOMER to sign — a delivery-acknowledgement, which
   // is what a lot of B2B suppliers actually need the paper copy for.
   showReceiverSignature Boolean @default(false)
@@ -734,10 +743,10 @@ model Setting {
   // keep their existing defaults for the same reason.
   //
   // Nothing here can hide a Rule 46 particular — see the registry's header.
-  showPartyBalance    Boolean  @default(false)
-  showItemDescription Boolean  @default(false)
-  showAlternateUnit   Boolean  @default(false)
-  showInvoiceTime     Boolean  @default(false)
+  showPartyBalance    Boolean @default(false)
+  showItemDescription Boolean @default(false)
+  showAlternateUnit   Boolean @default(false)
+  showInvoiceTime     Boolean @default(false)
 
   docSendFormat String @default("smart")
 
@@ -2042,6 +2051,52 @@ model BreakGlassSession {
 }
 
 /**
+ * A field the shop invented, and what it means.
+ * 📄 Phase 5 of docs/INVOICE-ENGINE-PLAN.md.
+ * THE DEFINITIONS LIVE HERE; THE VALUES DO NOT. Values are snapshotted into a
+ * JSON column on the record they belong to — Party.customFields,
+ * Transaction.customFields, TransactionItem.customCols. src/lib/custom-fields.ts
+ * carries the full reasoning; the short version is that drawing one bill is the
+ * hot path, and a values table would put a join on it for every render, thirty
+ * million rows deep, to print a grocery bill.
+ * WHY A CHEMIST NEEDS THIS. The Drugs and Cosmetics Act requires the batch
+ * number and expiry date of every medicine sold to appear on the record, and
+ * Drug Inspectors check billing against it. Without custom columns a pharmacy
+ * cannot use this app for its actual job.
+ * `key` is generated once from the label and NEVER changes: issued bills are
+ * keyed on it. `label` may be renamed freely, because every bill already
+ * carries the label it was printed with.
+ */
+model CustomFieldDef {
+  id            String  @id @default(cuid())
+  userId        String
+  user          User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// party | invoice | item
+  entity        String
+  /// Stable identifier, generated from the label at creation. Never changes.
+  key           String
+  /// What the shopkeeper reads. Renaming does not touch issued bills.
+  label         String
+  /// text | number | date | money
+  type          String  @default("text")
+  /// Print it on the bill, or keep it for the shop's own records only.
+  showOnInvoice Boolean @default(true)
+  required      Boolean @default(false)
+  order         Int     @default(0)
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  /// Soft delete: an issued bill still carries values for a retired field,
+  /// and those must keep printing. Removing the definition only stops it
+  /// being offered on NEW bills.
+  deletedAt DateTime?
+
+  /// One shop cannot define the same key twice on the same entity.
+  @@unique([userId, entity, key])
+  @@index([userId, entity, deletedAt])
+}
+
+/**
  * A shareable link to one bill.
  * 📄 Phase 4 of docs/DOCUMENT-ENGINE-PLAN.md. A long bill cannot be sent as a
  * readable picture and a PDF arrives as a grey card nobody opens, so the third
@@ -2063,15 +2118,12 @@ model BreakGlassSession {
  * is useful; building a profile of the customer who opened it is not ours
  * to do, and under the DPDP Act collecting it would need a purpose we do
  * not have.
- *
  * ─────────────────────────────────────────────────────────────────────────
  * 🗑️ RETAINED, UNUSED as of 2026-08-15.
- *
  * The shareable link was removed at Rahul's instruction: a link asking a
  * customer to pay reads as a scam to most people in India, however genuine
  * it is. /b/[token], /api/bill-share and lib/bill-share are deleted, and a
  * test asserts nothing queries this model.
- *
  * THE TABLE AND ITS ROWS STAY. Links a shopkeeper already minted are their
  * own record, and this codebase does not delete a user's data to tidy up
  * after a withdrawn feature. Old links 404 because the page is gone, not

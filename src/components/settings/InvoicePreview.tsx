@@ -46,6 +46,7 @@ import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { PinchZoom } from '@/components/common/PinchZoom'
 import type { InvoiceDocument } from '@/lib/invoice-document'
+import { formatCustomValue } from '@/lib/custom-fields'
 import { getInvoiceTheme } from '@/lib/invoice-themes'
 import { getInvoiceTemplate, metricsFor } from '@/lib/invoice-templates'
 import { getPaperSize, paperPx, MM_TO_PX } from '@/lib/invoice-paper'
@@ -238,9 +239,13 @@ export function InvoicePreview({
                   * because a preview that lays the row out differently from the
                   * file is not previewing the file.
                   */}
-                {(item.description || item.altQty) && (
+                {(item.description || item.altQty || item.customCols.length > 0) && (
                   <div className="flex text-2xs" style={{ paddingBottom: 5, color: readable(theme.muted) }}>
-                    <span className="flex-1 truncate pr-2">{item.description}</span>
+                    <span className="flex-1 truncate pr-2">
+                      {/* 📄 Phase 5 — same sub-line as the PDF, same order. */}
+                      {[item.description, ...item.customCols.map(v => `${v.label}: ${formatCustomValue(v)}`)]
+                        .filter(Boolean).join("  ·  ")}
+                    </span>
                     <span className="w-20 text-right">{item.altQty ? `(${item.altQty})` : ''}</span>
                     <span className="w-28" />
                     <span className="w-32" />

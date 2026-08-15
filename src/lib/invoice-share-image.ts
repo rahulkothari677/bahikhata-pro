@@ -26,6 +26,7 @@
  */
 
 import type { InvoiceDocument, InvoiceDocumentItem } from './invoice-document'
+import { formatCustomValue } from './custom-fields'
 import { getInvoiceTheme, type InvoiceTheme } from './invoice-themes'
 
 /**
@@ -450,6 +451,8 @@ function drawItem(
     hasTax ? `GST ${item.gstRate}%` : null,
     item.altQty,
     item.description,
+    // 📄 Phase 5 — "Batch: A-118", "Exp: 12 Mar 2027". Clipped like the rest.
+    ...item.customCols.map(v => `${v.label}: ${formatCustomValue(v)}`),
   ]
     .filter(Boolean)
     .join('   ·   ')

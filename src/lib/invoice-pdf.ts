@@ -19,6 +19,7 @@ import { registerUnicodeFont, THEME, formatPDFMoney } from './pdf/theme'
 import { paletteFor } from './pdf/palette'
 import { getInvoiceTemplate, metricsFor } from './invoice-templates'
 import { getPaperSize } from './invoice-paper'
+import { formatCustomValue } from './custom-fields'
 import type { InvoiceDocument } from './invoice-document'
 import { drawFooter, drawUPIQRBlock, drawImageQRBlock, newPageIfNeeded } from './pdf/primitives'
 
@@ -406,7 +407,8 @@ export async function generateInvoicePDF(
    * buildInvoiceDocument), so there is no setting to consult here.
    */
   const subLineHeight = baseRowHeight * 0.55
-  const hasSubLine = (it: (typeof invoice.items)[number]) => !!(it.description || it.altQty)
+  const hasSubLine = (it: (typeof invoice.items)[number]) =>
+    !!(it.description || it.altQty || it.customCols.length)
 
   invoice.items.forEach((item, i) => {
     const rowHeight = baseRowHeight + (hasSubLine(item) ? subLineHeight : 0)
@@ -469,10 +471,22 @@ export async function generateInvoicePDF(
       const subY = tY + subLineHeight
       doc.setFontSize(metrics.smallPt)
       doc.setTextColor(textMuted.r, textMuted.g, textMuted.b)
-      if (item.description) {
+      /*
+       * 📄 Phase 5: the shop's own columns join the description on the same
+       * sub-line — "Batch: A-118 · Exp: 12 Mar 2027".
+       *
+       * Beside the name rather than as real table columns, deliberately. Six
+       * fixed columns already fill an A4 row; adding three more would shrink
+       * the item name, which is the field a customer actually checks. A
+       * pharmacy bill needs batch and expiry PRESENT and legible, not aligned.
+       */
+      // `cols` above is the TABLE columns — different thing, hence the name.
+      const extraCols = item.customCols.map(v => `${v.label}: ${formatCustomValue(v)}`).join("  ·  ")
+      const sub = [item.description, extraCols].filter(Boolean).join("  ·  ")
+      if (sub) {
         // Truncated to the name column so it can never run under HSN.
         const room = cols[2].x - cols[1].x - 2
-        doc.text(doc.splitTextToSize(item.description, room)[0] ?? '', cols[1].x, subY)
+        doc.text(doc.splitTextToSize(sub, room)[0] ?? '', cols[1].x, subY)
       }
       if (item.altQty) {
         doc.text(`(${item.altQty})`, cols[3].x + cols[3].w - 1, subY, { align: 'right' })

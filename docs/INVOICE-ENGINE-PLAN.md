@@ -321,3 +321,77 @@ because a **failed fetch** and an **empty ledger** both arrived at the same
 flag. Rahul watched it happen while Vercel's DDoS rule was challenging his
 requests. Both queries now throw on a bad response, and the caption has three
 states — the app only claims the books are empty when it actually knows.
+
+---
+
+## Phase 5, part 1 — the foundation (15 Aug)
+
+**Status: the storage, typing, rules and rendering are done. The screens are
+not.** A shopkeeper cannot yet define a field or fill one in — that is part 2.
+Nothing here is user-visible.
+
+### Why this is §0 work, not customisation for its own sake
+
+A pharmacy must record the **batch number and expiry date** of every medicine
+it sells. That is the Drugs and Cosmetics Act, not GST, and Drug Inspectors
+cross-reference billing records against it. EkBook can store neither, so a
+chemist cannot use this app for their actual job.
+
+Checked rather than assumed, and it corrected me: putting the **HUID on a
+jewellery invoice is voluntary** — hallmarking itself is what is mandatory. So
+it is a useful field, not a legal one, and nothing here claims otherwise.
+
+### Where the values live, and why
+
+Definitions in a table (`CustomFieldDef`); **values in a JSONB column on the
+record itself** — `Party.customFields`, `Transaction.customFields`,
+`TransactionItem.customCols`.
+
+The BUILD FOR MILLIONS question decides it. The dominant access pattern is
+"load one bill, draw it" — every renderer, every share, the preview. A values
+table puts a join on that hot path for every render, thirty million rows deep,
+to print a grocery bill. JSONB carries the fields on the row already, and
+Postgres can still index into it with GIN for the rare search by PO number.
+
+### Values are snapshots, including their labels
+
+Each stored value carries its **key, label, type and whether it printed** —
+not just the value. That is the rule `TransactionItem.hsn` already follows:
+*"editing a product's HSN next year cannot rewrite a filed return."*
+
+Rename "Batch" to "Lot No." in March and every invoice issued before March
+still prints "Batch", because a customer is holding that paper. Storing
+`{key: value}` and looking the label up at render time would silently rewrite
+history on every old bill. A test proves it.
+
+### §0 again: a custom field cannot forge a legal one
+
+`RESERVED_FIELD_LABELS` refuses GSTIN, HSN, Invoice No, Taxable Value, CGST,
+Total, Place of Supply, IRN and their variants — compared with spacing and
+punctuation collapsed, so "gst  no" and "GSTIN" are the same refusal.
+
+A bill carrying **two GSTINs that disagree** is worse than one carrying none:
+it looks authoritative and is wrong. Refused with a reason, because the
+shopkeeper is one tap from invalidating their own invoice.
+
+### Three smaller decisions worth recording
+
+- **Money custom fields stay in rupees, never paise.** The paise extension
+  intercepts named columns on known models; a number inside a JSON blob is
+  invisible to it, so storing 45000 for ₹450 would be the 100x bug with a new
+  hiding place — and one the money tests would not catch, because it is not a
+  money column.
+- **Deleting a field is always soft.** Issued bills carry values for it and
+  must keep printing them. Retiring only stops it being offered on new records.
+- **Ten fields per entity.** A cap, because there must be one; without it a
+  bill grows columns until it stops fitting the page, and the person who finds
+  the limit is a shopkeeper mid-sale.
+
+### What is left for part 2
+
+1. The **write path** — saving values when a bill or party is created or edited.
+2. **Settings UI** to define fields (Invoices & Bills → a new section).
+3. **Entry UI** to fill them, on the sale screen and the party form.
+4. Rendering the **invoice-level and party-level** fields. Item columns already
+   draw on all three surfaces; PO number and FSSAI reach the document but are
+   not yet laid out.
