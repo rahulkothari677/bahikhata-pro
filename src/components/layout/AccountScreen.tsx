@@ -66,6 +66,7 @@ import type { ViewType } from '@/store/app-store'
 import { ReferralCard } from '@/components/referral/ReferralCard'
 import { BusinessCardDisplay } from '@/components/common/BusinessCardDisplay'
 import { AppLockCard } from '@/components/security/AppLockCard'
+import { InvoiceSettingsPage } from '@/components/settings/InvoiceSettingsPage'
 import { useTranslation } from '@/hooks/use-translation'
 
 // 🔒 V22-6 (Phase 4) FIX: Move lazy() to module scope.
@@ -314,6 +315,18 @@ export function AccountScreen() {
    * never disagree — "Data & Backup" used to open a page headed "Data &
    * Accounting", and "Accounting Controls" opened that same page.
    */
+  /*
+   * 📄 2026-08-15: pages reached from INSIDE a section rather than from the
+   * Account menu. They deliberately have no registry row — adding three more
+   * rows to the menu would undo the grouping this change exists to create —
+   * so their titles live here.
+   */
+  const SUB_PAGE_TITLES: Record<string, string> = {
+    'invoice-design': 'Invoice design',
+    'invoice-sending': 'Sending bills',
+    'invoice-tax': 'Rounding & tax',
+  }
+
   const sectionTitles = useMemo(() => {
     const titles: Record<string, string> = {}
     /*
@@ -332,7 +345,7 @@ export function AccountScreen() {
       // "Shop Profile". Same string, two languages, one tap apart.
       if (s && !titles[s]) titles[s] = d.labelKey ? t(d.labelKey) : d.label
     }
-    return titles
+    return { ...titles, ...SUB_PAGE_TITLES }
   }, [t])
 
   // 🔒 AUDIT V25 §6.1 (Batch 8 Phase 7): Menu sections from NavRegistry,
@@ -720,7 +733,12 @@ function AccountSectionContent({
   const sectionCards: Record<string, SettingsSection[]> = {
     'profile':       ['shop-profile'],
     'shops':         ['manage-shops'],
-    'invoices':      ['invoices'],
+    // 📄 The hub itself renders no Settings cards — it is a list of the three
+    // pages below, with the live preview above it. See InvoiceSettingsPage.
+    'invoices':          [],
+    'invoice-design':    ['invoice-design'],
+    'invoice-sending':   ['invoice-sending'],
+    'invoice-tax':       ['invoice-tax'],
     'appearance':    ['appearance'],
     'preferences':   ['preferences'],
     'notifications': ['notifications'],
@@ -1275,6 +1293,26 @@ function AccountSectionContent({
           of top apps like PhonePe and CRED.
         </p>
       </div>
+    )
+  }
+
+  /*
+   * 📄 2026-08-15: the invoice pages carry the live preview above their
+   * controls, and the hub carries it above the list of pages. Handled here
+   * rather than inside Settings because the preview needs the shop's most
+   * recent bill, which is a query Settings has no business making.
+   */
+  if (section === 'invoices' || section.startsWith('invoice-')) {
+    return (
+      <Suspense fallback={<div className="bg-card rounded-2xl shadow-card border border-border/60 p-8 text-center"><p className="text-muted-foreground text-sm">Loading...</p></div>}>
+        <InvoiceSettingsPage
+          section={section}
+          setting={setting}
+          onOpen={(id) => useAppStore.getState().setAccountSection(id)}
+        >
+          <SettingsComponent sections={sectionCards[section]} hostTitle={hostTitle} />
+        </InvoiceSettingsPage>
+      </Suspense>
     )
   }
 

@@ -38,6 +38,7 @@ import { APP_VERSION_LABEL } from '@/lib/app-version'
 import { readError } from '@/lib/read-error'
 import { INVOICE_THEMES } from '@/lib/invoice-themes'
 import { INVOICE_TEMPLATES } from '@/lib/invoice-templates'
+import { InfoHint } from '@/components/common/InfoHint'
 import { describeRestoreOutcome } from '@/lib/restore-outcome'
 
 const FEATURE_CATEGORIES: { title: string; features: { key: FeatureKey; label: string; description: string; icon: any }[] }[] = [
@@ -107,7 +108,9 @@ export type SettingsSection =
   | 'shop-profile'    // the shop's identity: name, GSTIN, address, logo, UPI
   | 'manage-shops'    // branches and their GSTINs
   | 'appearance'      // theme, dark mode, app + AI languages
-  | 'invoices'        // bill design, delivery, round off, e-invoice
+  | 'invoice-design'  // layout + colour
+  | 'invoice-sending' // how a bill reaches the customer
+  | 'invoice-tax'     // round off + e-invoicing
   | 'preferences'     // landing page, hide profit, goals, stock policy
   | 'notifications'   // which alerts reach the bell
   | 'accounting'      // period lock, reconciliation
@@ -123,7 +126,7 @@ export type SettingsSection =
  */
 const TAB_SECTIONS: Record<string, SettingsSection[]> = {
   profile:    ['shop-profile', 'manage-shops'],
-  appearance: ['appearance', 'invoices', 'preferences', 'notifications'],
+  appearance: ['appearance', 'invoice-design', 'invoice-sending', 'invoice-tax', 'preferences', 'notifications'],
   data:       ['accounting', 'data-backup'],
   staff:      ['staff'],
   features:   ['features', 'ai-tools'],
@@ -1537,15 +1540,19 @@ export function Settings({
       </Card>
       )}
 
-      {show('invoices') && (
+      {/* 📄 2026-08-15. Rahul: "adding everything in the same section … can be
+          frustrating for the user because if the user just want to change one
+          thing then he has to scroll everything".
+
+          He is right, and it was about to get much worse — Phase 3 adds terms,
+          signature, bank details, numbering and a thank-you line to this same
+          page. So Invoices & Bills is a hub of three pages now, each with the
+          live preview above it. The cards below are the CONTENT of those pages;
+          the hub itself is InvoiceSettingsPage. */}
+      {show('invoice-design') && (
       <Card className="shadow-card border-border/60">
         <CardHeader>
-          {!echoesHost('Invoices & Bills') && (
-          <CardTitle className="flex items-center gap-2">
-            <Receipt className="w-5 h-5 text-primary" /> Invoices & Bills
-          </CardTitle>
-          )}
-          <p className="text-xs text-muted-foreground">How your bill looks and how it reaches the customer</p>
+          <p className="text-xs text-muted-foreground">Pick the shape first, then the colour.</p>
         </CardHeader>
         <CardContent className="space-y-3">
           {/* 📄 2026-08-15, Phase 2: LAYOUT and COLOUR are two questions.
@@ -1615,8 +1622,13 @@ export function Settings({
                         : 'bg-slate-300')
                     } />
                   </span>
-                  <span className="block text-3xs mt-1 font-medium truncate">{t.name}</span>
-                  <span className="block text-3xs text-muted-foreground leading-tight line-clamp-2">{t.description}</span>
+                  <span className="flex items-center justify-between gap-1 mt-1">
+                    <span className="text-3xs font-medium truncate">{t.name}</span>
+                    {/* 🎨 The sentence lives behind the ⓘ. The NAME never does —
+                        see the note in InfoHint about hiding text from someone
+                        reading a second language. */}
+                    <InfoHint text={t.description} label={t.name} />
+                  </span>
                 </button>
               ))}
             </div>
@@ -1663,12 +1675,25 @@ export function Settings({
                       <span className="block h-1 w-2/3 mt-1 rounded-sm" style={{ background: t.accent }} />
                     </span>
                   </span>
-                  <span className="block text-3xs mt-1 truncate text-muted-foreground">{t.name}</span>
+                  <span className="flex items-center justify-between gap-1 mt-1">
+                    <span className="text-3xs truncate text-muted-foreground">{t.name}</span>
+                    {/* Was a `title` attribute — which a phone never shows,
+                        because there is no hover. */}
+                    <InfoHint text={t.description} label={t.name} />
+                  </span>
                 </button>
               ))}
             </div>
           </div>
-          {/* 📄 How bills go out. See docs/DOCUMENT-ENGINE-PLAN.md. */}
+        </CardContent>
+      </Card>
+      )}
+      {show('invoice-sending') && (
+      <Card className="shadow-card border-border/60">
+        <CardHeader>
+          <p className="text-xs text-muted-foreground">How a finished bill reaches your customer.</p>
+        </CardHeader>
+        <CardContent className="space-y-3">          {/* 📄 How bills go out. See docs/DOCUMENT-ENGINE-PLAN.md. */}
           <div className="mt-3 rounded-lg bg-muted/30 border border-border/60 p-3">
             <div className="flex items-center gap-2 mb-2">
               <MessageCircle className="w-4 h-4 text-muted-foreground" />
@@ -1732,7 +1757,15 @@ export function Settings({
               }}
             />
           </div>
-          {/* 🔒 V12: Invoice round-off toggle */}
+        </CardContent>
+      </Card>
+      )}
+      {show('invoice-tax') && (
+      <Card className="shadow-card border-border/60">
+        <CardHeader>
+          <p className="text-xs text-muted-foreground">Rounding and e-invoicing. Both affect the tax you file.</p>
+        </CardHeader>
+        <CardContent className="space-y-3">          {/* 🔒 V12: Invoice round-off toggle */}
           <div className="mt-3 flex items-center justify-between rounded-lg bg-muted/30 border border-border/60 p-3">
             <div className="flex items-center gap-2">
               <Coins className="w-4 h-4 text-muted-foreground" />
@@ -1783,6 +1816,7 @@ export function Settings({
         </CardContent>
       </Card>
       )}
+
 
       {show('preferences') && (
         <>
