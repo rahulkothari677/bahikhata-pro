@@ -11,6 +11,11 @@
  * actually leaves the app.
  */
 
+// jsdom has neither, and jspdf's PNG decoder needs both.
+import { TextEncoder as NodeTextEncoder, TextDecoder as NodeTextDecoder } from 'util'
+;(globalThis as unknown as Record<string, unknown>).TextEncoder ||= NodeTextEncoder
+;(globalThis as unknown as Record<string, unknown>).TextDecoder ||= NodeTextDecoder
+
 import { readCode } from '@/test-support/read-source'
 import { PAPER_SIZES, DEFAULT_PAPER_ID, getPaperSize, paperPx, MM_TO_PX } from '@/lib/invoice-paper'
 import { isPreviewable } from '@/components/settings/InvoiceSettingsPage'
@@ -92,6 +97,72 @@ describe('the chosen sheet reaches what the customer receives', () => {
     expect(route).toContain('PAPER_SIZES')
     expect(route).toContain('Unknown paper size')
   })
+})
+
+describe('the produced PDF really is the chosen sheet', () => {
+  /*
+   * The end-to-end proof, and the one the on-screen check cannot give.
+   *
+   * A4 and A5 share the same 1:sqrt(2) ratio, so a preview that changed size
+   * would look identical either way — measuring its aspect proves nothing. The
+   * page box inside the produced file is the only honest answer.
+   *
+   * PDF units are points: 1mm = 72/25.4. A4 is 595x842pt, A5 is 420x595pt.
+   */
+  const renderTo = async (paperId: string): Promise<string> => {
+    const { buildInvoiceDocument } = await import('@/lib/invoice-document')
+    const { generateInvoicePDF } = await import('@/lib/invoice-pdf')
+    const doc = buildInvoiceDocument(
+      {
+        invoiceNo: 'INV-1', date: '2026-08-15',
+        party: { name: 'Gupta Provision' },
+        items: [{ productName: 'Atta 10kg', quantity: 2, unitPrice: 450, gstRate: 5, total: 945, unit: 'bag', hsn: '1101' }],
+        subtotal: 900, discountAmount: 0, cgst: 22.5, sgst: 22.5, igst: 0,
+        totalAmount: 945, paidAmount: 0, paymentMode: 'cash',
+      },
+      { name: 'Rahul Grocery', phone: '8340228552', gstin: '10ABCDE1234F1Z5', state: 'Bihar' },
+    )
+    const blob = await generateInvoicePDF(doc, { themeId: 'classic', paperId })
+    return new Promise<string>((resolve, reject) => {
+      const r = new FileReader()
+      r.onload = () => resolve(String(r.result))
+      r.onerror = () => reject(new Error('could not read the PDF'))
+      r.readAsBinaryString(blob)
+    })
+  }
+
+  const mediaBox = (pdf: string) => {
+    const m = pdf.match(/MediaBox\s*\[\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)/)
+    return m ? { w: Math.round(+m[3]), h: Math.round(+m[4]) } : null
+  }
+
+  it('produces an A4 page for a4', async () => {
+    expect(mediaBox(await renderTo('a4'))).toEqual({ w: 595, h: 842 })
+  }, 60000)
+
+  it('produces a genuinely SMALLER A5 page for a5', async () => {
+    const box = mediaBox(await renderTo('a5'))
+    expect(box).toEqual({ w: 420, h: 595 })
+  }, 60000)
+
+  it('falls back to A4 for an unknown size rather than failing', async () => {
+    expect(mediaBox(await renderTo('foolscap'))).toEqual({ w: 595, h: 842 })
+  }, 60000)
+
+  it('keeps the footer ON the A5 page', async () => {
+    /*
+     * The concrete risk of the old A4 constants: a footer drawn 15mm up from
+     * 297 would land at 282mm, which is 72mm past the bottom edge of an A5
+     * sheet — printed nowhere. jsPDF happily draws off-page, so this checks
+     * that the text exists AND that nothing was placed beyond the box.
+     */
+    const pdf = await renderTo('a5')
+    expect(pdf).toContain('Made with EkBook')
+    const box = mediaBox(pdf)!
+    const ys = [...pdf.matchAll(/([\d.]+) ([\d.]+) Td/g)].map(m => +m[2])
+    const offPage = ys.filter(y => y < -5 || y > box.h + 5)
+    expect(offPage).toEqual([])
+  }, 60000)
 })
 
 describe('isPreviewable — when the demo bill stands in', () => {
