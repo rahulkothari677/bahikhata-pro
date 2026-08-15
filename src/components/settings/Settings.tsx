@@ -38,7 +38,6 @@ import { APP_VERSION_LABEL } from '@/lib/app-version'
 import { readError } from '@/lib/read-error'
 import { INVOICE_THEMES } from '@/lib/invoice-themes'
 import { INVOICE_TEMPLATES } from '@/lib/invoice-templates'
-import { InfoHint } from '@/components/common/InfoHint'
 import { describeRestoreOutcome } from '@/lib/restore-outcome'
 
 const FEATURE_CATEGORIES: { title: string; features: { key: FeatureKey; label: string; description: string; icon: any }[] }[] = [
@@ -282,6 +281,22 @@ export function Settings({
     patch: { docSendFormat?: 'smart' | 'image' | 'pdf'; docShareLink?: boolean; invoiceTheme?: string; invoiceTemplate?: string },
     rollback: () => void,
   ) => {
+    /*
+     * 🐛 2026-08-15. Rahul: "preview is not working instantly".
+     *
+     * The picker updated its own local state and the server, and the preview
+     * reads Setting from the ['setting'] query — which only changed after the
+     * PUT returned and the cache was invalidated. So a tap repainted the
+     * chosen tile at once and the bill a second or more later, which reads as
+     * the app ignoring you. Guidance on live previews is that the feedback has
+     * to be immediate for exploration to feel safe, and validation feedback
+     * inside 300ms.
+     *
+     * Writing the patch into the cache first makes every reader instant, and
+     * the rollback below already restores it if the save fails.
+     */
+    queryClient.setQueryData(['setting'], (old: any) =>
+      old ? { ...old, setting: { ...old.setting, ...patch } } : old)
     try {
       const r = await offlineFetch('/api/settings', {
         method: 'PUT',
@@ -293,6 +308,9 @@ export function Settings({
       sonnerToast.success('Saved')
     } catch (e: any) {
       rollback()
+      // Put the cache back too, or the preview keeps showing a choice the
+      // server rejected.
+      queryClient.invalidateQueries({ queryKey: ['setting'] })
       sonnerToast.error(e?.message || "Couldn't save that setting")
     }
   }
@@ -1622,13 +1640,13 @@ export function Settings({
                         : 'bg-slate-300')
                     } />
                   </span>
-                  <span className="flex items-center justify-between gap-1 mt-1">
-                    <span className="text-3xs font-medium truncate">{t.name}</span>
-                    {/* 🎨 The sentence lives behind the ⓘ. The NAME never does —
-                        see the note in InfoHint about hiding text from someone
-                        reading a second language. */}
-                    <InfoHint text={t.description} label={t.name} />
-                  </span>
+                  {/* 🎨 2026-08-15. Rahul: "for so basic things like explaining
+                      standard or compact you don't need to describe it or add info
+                      button when it's clear from the layout design and preview is
+                      there too." Right — the wireframe above shows the difference
+                      and the live bill shows the result. A button explaining what
+                      the picture already says is decoration. */}
+                  <span className="block text-3xs mt-1 font-medium truncate">{t.name}</span>
                 </button>
               ))}
             </div>
@@ -1666,20 +1684,24 @@ export function Settings({
                       : 'border-border/70 hover:border-border')
                   }
                 >
-                  {/* A miniature of the document, not a colour dot: the header
-                      band, a rule and a total line are what actually differ. */}
-                  <span className="block rounded overflow-hidden border border-border/50">
-                    <span className="block h-4" style={{ background: t.headerBg }} />
-                    <span className="block bg-white px-1 py-1">
-                      <span className="block h-0.5 w-full" style={{ background: t.line }} />
-                      <span className="block h-1 w-2/3 mt-1 rounded-sm" style={{ background: t.accent }} />
-                    </span>
-                  </span>
-                  <span className="flex items-center justify-between gap-1 mt-1">
-                    <span className="text-3xs truncate text-muted-foreground">{t.name}</span>
-                    {/* Was a `title` attribute — which a phone never shows,
-                        because there is no hover. */}
-                    <InfoHint text={t.description} label={t.name} />
+                  {/* 🎨 2026-08-15. Rahul: "for just showing the invoice color you
+                      don't need to show proper layout because it takes unnecessary
+                      space and make the page scroll unnecessary."
+
+                      It was a miniature document per swatch — eight of them, each
+                      repeating a shape the layout picker directly above had already
+                      shown. Two bands of colour say the same thing in a fifth of
+                      the height. */}
+                  <span className="flex items-center gap-2">
+                    <span
+                      className="block w-7 h-7 rounded-md border border-black/10 flex-shrink-0"
+                      style={{ background: t.headerBg }}
+                    />
+                    <span
+                      className="block w-2.5 h-7 rounded-sm flex-shrink-0"
+                      style={{ background: t.accent }}
+                    />
+                    <span className="text-3xs truncate">{t.name}</span>
                   </span>
                 </button>
               ))}

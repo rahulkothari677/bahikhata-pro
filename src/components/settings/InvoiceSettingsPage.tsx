@@ -30,7 +30,7 @@
  *    Type, and nothing says which of them changes the look.
  */
 
-import { useMemo } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ChevronRight, Palette, Send, Coins } from 'lucide-react'
 import { offlineFetch } from '@/lib/offline-fetch'
@@ -41,29 +41,50 @@ import { InvoicePreview, type PreviewFocus } from './InvoicePreview'
 import { InfoHint } from '@/components/common/InfoHint'
 
 /** The three pages, and which part of the bill each one changes. */
+/**
+ * The three pages, what part of the bill each changes, and its colour.
+ *
+ * 🎨 2026-08-15, two corrections from Rahul.
+ *
+ * 1. "info button should only be there where it's hard to understand about the
+ *    topic like you add with design and sending. everyone knows what its
+ *    means." Correct — Design and Sending explain themselves, and a ⓘ beside
+ *    an obvious word is noise that teaches the eye to ignore the ⓘ that
+ *    matters. Only 'Rounding & tax' keeps one, because e-invoicing is a legal
+ *    threshold nobody can infer from two words.
+ *
+ * 2. "if you are adding then add colourful icon so it looks good." The rows
+ *    had grey glyphs on grey tiles while the Account menu one level up uses
+ *    coloured ones — so this screen looked unfinished beside its own parent.
+ */
 export const INVOICE_SECTIONS = [
   {
     id: 'invoice-design',
     label: 'Design',
-    hint: 'The shape and colour of the bill. Every design carries the same GST fields, so none of them can make your invoice invalid.',
     summary: 'Layout and colour',
     icon: Palette,
+    tint: 'text-violet-600 dark:text-violet-400',
+    tintBg: 'bg-violet-100 dark:bg-violet-950',
     focus: 'header' as PreviewFocus,
   },
   {
     id: 'invoice-sending',
     label: 'Sending',
-    hint: 'Whether a bill goes to your customer as a picture or a PDF, and whether a payment link goes with it.',
     summary: 'Picture or PDF, payment link',
     icon: Send,
+    tint: 'text-emerald-600 dark:text-emerald-400',
+    tintBg: 'bg-emerald-100 dark:bg-emerald-950',
     focus: 'footer' as PreviewFocus,
   },
   {
     id: 'invoice-tax',
     label: 'Rounding & tax',
-    hint: 'Round off changes the total your customer pays. e-Invoicing is a legal requirement above ₹5 crore turnover. Both affect what you file.',
     summary: 'Round off, e-invoicing',
+    // The one that is genuinely not guessable from its name.
+    hint: 'Round off drops the paise so the total is a whole rupee. e-Invoicing is a legal requirement once your turnover has crossed ₹5 crore in any year since 2017-18 — most shops do not need it.',
     icon: Coins,
+    tint: 'text-amber-600 dark:text-amber-400',
+    tintBg: 'bg-amber-100 dark:bg-amber-950',
     focus: 'totals' as PreviewFocus,
   },
 ] as const
@@ -171,15 +192,38 @@ export function InvoiceSettingsPage({
     return { doc: buildInvoiceDocument(latest as InvoiceSource, shop), isSample: false }
   }, [data, setting])
 
+  /*
+   * Fill the card rather than sitting at a fixed 320px inside it. Measured,
+   * because this screen is also used on a desktop sidebar where the column is
+   * far wider and a phone-sized preview would look lost.
+   */
+  const cardRef = useRef<HTMLDivElement>(null)
+  const [previewWidth, setPreviewWidth] = useState(340)
+  useLayoutEffect(() => {
+    const el = cardRef.current
+    if (!el) return
+    const measure = () => setPreviewWidth(Math.max(240, Math.min(520, el.clientWidth - 16)))
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
   const isHub = section === 'invoices'
   const current = INVOICE_SECTIONS.find(s => s.id === section)
 
   return (
     <div className="space-y-4">
-      {/* The bill, above whatever is being changed. */}
-      <div className="bg-card rounded-2xl border border-border/60 shadow-card p-3">
+      {/* The bill, above whatever is being changed.
+
+          🎨 2026-08-15. Rahul: "there is unnecessary padding everywhere … in
+          most of the part we can show the invoice." The card had 12px of its
+          own padding around a preview that already cropped itself, on a screen
+          where the page beneath adds 16px more. Down to 8px, and the preview
+          is given the width that leaves. */}
+      <div ref={cardRef} className="bg-card rounded-2xl border border-border/60 shadow-card p-2">
         {isLoading ? (
-          <div className="mx-auto bg-muted animate-pulse rounded" style={{ maxWidth: 340, aspectRatio: '210 / 297' }} />
+          <div className="mx-auto bg-muted animate-pulse rounded" style={{ maxWidth: 360, height: 240 }} />
         ) : (
           <InvoicePreview
             doc={doc}
@@ -187,6 +231,7 @@ export function InvoiceSettingsPage({
             templateId={setting?.invoiceTemplate as string}
             focus={current?.focus ?? null}
             isSample={isSample}
+            width={previewWidth}
           />
         )}
       </div>
@@ -204,13 +249,16 @@ export function InvoiceSettingsPage({
                   i > 0 && 'border-t border-border/40',
                 )}
               >
-                <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center flex-shrink-0">
-                  <Icon className="w-5 h-5 text-muted-foreground" />
+                <div className={cn(
+                  'w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0',
+                  s.tintBg,
+                )}>
+                  <Icon className={cn('w-5 h-5', s.tint)} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <span className="font-medium text-sm inline-flex items-center gap-1.5">
                     {s.label}
-                    <InfoHint text={s.hint} label={s.label} />
+                    {'hint' in s && s.hint && <InfoHint text={s.hint} label={s.label} />}
                   </span>
                   <p className="text-xs text-muted-foreground truncate">{s.summary}</p>
                 </div>

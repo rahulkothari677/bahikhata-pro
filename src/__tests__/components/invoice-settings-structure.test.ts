@@ -42,9 +42,23 @@ describe('the hub', () => {
     }
   })
 
-  it('gives every category an explanation', () => {
-    for (const s of INVOICE_SECTIONS) {
-      expect({ id: s.id, explained: s.hint.length > 20 }).toEqual({ id: s.id, explained: true })
+  it('explains only what cannot be guessed from the name', () => {
+    /*
+     * 🎨 2026-08-15. Rahul: "info button should only be there where it's hard
+     * to understand about the topic … everyone knows what its means."
+     *
+     * A ⓘ beside an obvious word is not neutral — it teaches the eye that the
+     * ⓘ carries nothing, and then the one that matters gets skipped too. So
+     * the assertion is not 'everything is explained' but 'a hint exists only
+     * where the label leaves a real question'. Rounding & tax does:
+     * e-invoicing is a legal threshold nobody infers from two words.
+     */
+    const withHint = INVOICE_SECTIONS.filter(s => 'hint' in s && s.hint)
+    expect(withHint.length).toBeGreaterThan(0)
+    expect(withHint.length).toBeLessThan(INVOICE_SECTIONS.length)
+    for (const s of withHint) {
+      expect({ id: s.id, real: (s as { hint: string }).hint.length > 40 })
+        .toEqual({ id: s.id, real: true })
     }
   })
 
@@ -117,11 +131,17 @@ describe('the preview never draws a bill of zeroes', () => {
   })
 })
 
-describe('descriptions live behind the info button', () => {
-  it('the layout and colour pickers use InfoHint', () => {
-    // Rahul: "always add with info button so the design look clean".
-    expect(settings).toContain('InfoHint')
-    // And the tile still shows the NAME — never hide what a thing is called.
+describe('the info button, used sparingly', () => {
+  it('is NOT on the layout and colour tiles', () => {
+    /*
+     * Reversed on 15 Aug, same day it was added. Rahul: "for so basic things
+     * like explaining standard or compact you don't need to describe it or add
+     * info button when it's clear from the layout design and preview is there
+     * too." The wireframe shows the difference and the live bill shows the
+     * result; a button repeating that is decoration.
+     */
+    expect(settings).not.toContain('InfoHint')
+    // The name still shows — that was never the thing to hide.
     expect(settings).toContain('{t.name}')
   })
 

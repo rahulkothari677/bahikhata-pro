@@ -62,9 +62,21 @@ export function InfoHint({
           aria-expanded={open}
           aria-describedby={open ? id : undefined}
           onClick={e => {
-            // The hint often sits inside a row that is itself a button or a
-            // link. Without this, asking what something means also chooses it.
-            e.preventDefault()
+            /*
+             * 🐛 2026-08-15: this used to call `e.preventDefault()` too, and
+             * that silently disabled every info button in the app.
+             *
+             * Radix composes its own handler onto the trigger with
+             * `checkForDefaultPrevented: true` — so a handler that prevents the
+             * default tells Radix the click was already dealt with, and the
+             * open never fires. The button looked perfect, reported
+             * aria-expanded="false" for ever, and I shipped it because I tested
+             * that the button EXISTED and never once tapped one.
+             *
+             * stopPropagation alone is what was actually wanted: the hint sits
+             * inside a row that is itself a button, and asking what something
+             * means must not also choose it.
+             */
             e.stopPropagation()
           }}
           className={cn(
