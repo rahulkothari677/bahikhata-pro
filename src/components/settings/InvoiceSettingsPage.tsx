@@ -102,16 +102,39 @@ export function InvoiceSettingsPage({
   children?: React.ReactNode
 }) {
   /*
-   * The shop's most recent bill.
+   * The shop's most recent bill, IN FULL.
    *
-   * `take: 1` and nothing else — this is a preview, not a report, so there is
-   * no question of a silent cap hiding rows from an answer. Cached by
-   * react-query, so moving between the four pages does not refetch.
+   * 🐛 2026-08-15, found in the browser on the deployed build and not before.
+   * The first version read the list route alone, and that route deliberately
+   * selects only `productName` and `quantity` per item — a performance fix, so
+   * the ledger does not load fifteen columns for a thousand rows. Every line
+   * therefore arrived with no rate and no amount, and the preview drew a real
+   * invoice whose only item read ₹0.00 beside a ₹70,800 total. On a settings
+   * screen that is worse than a sample: it looks like the shop's own books are
+   * broken.
+   *
+   * I had even written the comment about a ₹0 preview looking like a bug, and
+   * then checked only that the TRANSACTION had a total — never that its LINES
+   * did. So: two requests. The list gives the newest sale's id; the detail
+   * route gives its full items. Both cached, so moving between the four pages
+   * refetches nothing.
    */
-  const { data, isLoading } = useQuery({
-    queryKey: ['invoice-preview-latest'],
+  const { data: latestId } = useQuery({
+    queryKey: ['invoice-preview-latest-id'],
     queryFn: async () => {
       const r = await offlineFetch('/api/transactions?type=sale&limit=1')
+      const j = await r.json()
+      const first = (j?.transactions ?? j?.data ?? [])[0]
+      return (first?.id as string) ?? null
+    },
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const { data, isLoading } = useQuery({
+    queryKey: ['invoice-preview-full', latestId],
+    enabled: !!latestId,
+    queryFn: async () => {
+      const r = await offlineFetch(`/api/transactions/${latestId}`)
       return r.json()
     },
     staleTime: 5 * 60 * 1000,
@@ -128,19 +151,21 @@ export function InvoiceSettingsPage({
       upiId: setting?.upiId as string,
       logoUrl: setting?.logoUrl as string,
     }
-    const latest = (data?.transactions ?? data?.data ?? [])[0]
+    const latest = data?.transaction ?? data
     /*
-     * A real bill needs its line items to be worth previewing. The list route
-     * returns items with only name and quantity, so a row without a usable
-     * `total` falls back to the sample rather than drawing a bill of zeroes —
-     * a preview showing ₹0 would look like a bug in the shop's own books.
+     * A bill is only worth previewing if its LINES carry money. Checking the
+     * transaction total alone is what let a bill of ₹0.00 items through; a
+     * preview of zeroes reads as a fault in the shop's books, so anything
+     * short of a complete bill falls back to the clearly-labelled sample.
      */
+    const items = Array.isArray(latest?.items) ? latest.items : []
     const usable =
-      latest &&
-      Array.isArray(latest.items) &&
-      latest.items.length > 0 &&
-      typeof latest.totalAmount === 'number' &&
-      latest.totalAmount > 0
+      items.length > 0 &&
+      typeof latest?.totalAmount === 'number' &&
+      latest.totalAmount > 0 &&
+      items.some((it: { total?: number; unitPrice?: number }) =>
+        (typeof it.total === 'number' && it.total > 0) ||
+        (typeof it.unitPrice === 'number' && it.unitPrice > 0))
 
     if (!usable) return { doc: buildInvoiceDocument(SAMPLE, shop), isSample: true }
     return { doc: buildInvoiceDocument(latest as InvoiceSource, shop), isSample: false }

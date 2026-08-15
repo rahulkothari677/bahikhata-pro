@@ -94,6 +94,29 @@ describe('the preview', () => {
   })
 })
 
+describe('the preview never draws a bill of zeroes', () => {
+  /*
+   * 🐛 2026-08-15, found on the deployed build by looking at it — not by any
+   * test. The list route deliberately selects only productName and quantity
+   * per item (a performance fix), so every line arrived without a rate or an
+   * amount and the preview rendered the shop's real invoice with a ₹0.00 line
+   * beside a ₹70,800 total. On a settings screen that reads as the shop's own
+   * books being broken.
+   *
+   * Two things had to be true and only one was: fetch the FULL transaction,
+   * and refuse anything whose lines carry no money.
+   */
+  it('reads the full transaction, not the trimmed list row', () => {
+    expect(hub).toContain('/api/transactions/${latestId}')
+  })
+
+  it('falls back to the sample when the lines carry no money', () => {
+    // Checking the transaction total alone is exactly what let this through.
+    expect(hub).toMatch(/it\.total|it\.unitPrice/)
+    expect(hub).toContain('isSample: true')
+  })
+})
+
 describe('descriptions live behind the info button', () => {
   it('the layout and colour pickers use InfoHint', () => {
     // Rahul: "always add with info button so the design look clean".
