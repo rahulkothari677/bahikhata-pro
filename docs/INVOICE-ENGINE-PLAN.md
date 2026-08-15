@@ -110,8 +110,8 @@ Each phase ships and is verifiable on its own.
 
 | Phase | What | Why this order |
 |---|---|---|
-| **1** | Put the PDF on `InvoiceDocument`; make `invoiceTheme` reach it | Fixes a live lie; without it every later field is built twice |
-| **2** | Template contract + rebuild the 8 existing themes as data | Proves the contract before we add 20 more |
+| ~~**1**~~ ✅ | ~~Put the PDF on `InvoiceDocument`; make `invoiceTheme` reach it~~ | **Done 15 Aug** — see below |
+| ~~**2**~~ ✅ | ~~Template contract~~ | **Done 15 Aug** — see below |
 | **3** | Content settings: terms, signature, bank, prefix, tagline, thank-you, due date | Highest-value gap vs myBillBook; pure additions, low risk |
 | **4** | Visibility toggles + the live preview panel | Preview lands with something to preview |
 | **5** | Extensions: custom fields (party + invoice) + custom columns, typed | The schema-heaviest piece; needs 1–4 stable |
@@ -119,7 +119,49 @@ Each phase ships and is verifiable on its own.
 | **7** | New template designs, informed by the 20 references | Design last, on a working engine |
 | **8** | Thermal (58/80mm) + A5 | Needs Rahul's printer; deferred by his own instruction |
 
-**Phases 1–2 are the ones I would start immediately.** They are correctness, not features.
+### Phases 1–2, as built (15 Aug)
+
+**Phase 1.** `generateInvoicePDF` now takes an `InvoiceDocument` and nothing else.
+The rival `InvoiceData` / `ShopSetting` shapes are gone, along with the PDF's own
+calls to `computeInvoiceDue` and `amountToWords`. `send-bill.ts` hands it the
+document it had already built instead of the raw source behind two `as never`
+casts.
+
+`pdf/palette.ts` converts an `InvoiceTheme` to jsPDF's RGB, flattening `rgba()`
+over its own backdrop because a PDF has no alpha for text. Status colours stay
+unthemed.
+
+Two things this turned up:
+
+- **A second hardcoded palette in `pdf/primitives.ts`.** The footer rule and the
+  "Made with EkBook" line drew in saffron regardless of theme, so a Midnight
+  invoice had a saffron stripe across the bottom. Found in a stray jsPDF font
+  warning — *not* by the guard, whose first version only checked the chosen
+  colours were present. It now also asserts the old one is absent.
+- **A real arithmetic drift.** The PDF printed `paidAmount` (paid at the till)
+  beside a due figure that accounted for later settlements, so a part-paid bill
+  could read "Paid ₹200" and "Balance Due ₹0" on one page. Reading `doc.paid`
+  forces them to agree.
+
+**Phase 2.** A template is now data: header (`band` / `rule` / `frame`), table
+(`zebra` / `grid` / `rows`), totals (`bar` / `panel` / `plain`), density, and a
+display face. Six ship. **Layout and colour are separate controls** — 8 × 6 = 48
+looks from 14 entries — which is the one thing myBillBook gets wrong.
+
+A template may not add, remove or rename a field; a test fails if a key like
+`showGstin` appears in an entry. `standard` resolves to the exact metrics the
+renderer hardcoded before (32mm band, 7mm rows, 9pt, 5mm baseline), verified by
+rendering unset vs named and comparing text operators — so nobody's invoice
+changes until they ask.
+
+**Evidence:** `npm run verify` green — 238 suites, 4,069 tests, 0 lint errors,
+build clean. Both guards were proved by reintroducing the bug: re-adding
+`computeInvoiceDue` to the PDF fails the import guard; reverting the primitives
+fix fails the absence check.
+
+---
+
+**Phases 1–2 were the ones to do first.** They are correctness, not features.
 
 ---
 
