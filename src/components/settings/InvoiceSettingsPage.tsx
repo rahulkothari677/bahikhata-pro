@@ -305,14 +305,34 @@ export function InvoiceSettingsPage({
           {INVOICE_SECTIONS.map((s, i) => {
             const Icon = s.icon
             return (
-              <button
+              /*
+               * 🐛 2026-08-15. This row WAS a <button>, with the ⓘ rendered
+               * inside it — a button nested in a button.
+               *
+               * That is invalid HTML. React reported it as a hydration error,
+               * and the browser gives the outer control the click, so tapping
+               * the ⓘ opened the section instead of the explanation. Rahul:
+               * "icon button isn't working anywhere." I had blamed a
+               * preventDefault() call and removed it; the real cause was the
+               * nesting, and it was still here.
+               *
+               * Now: the row is a div, the tap target is one absolutely
+               * positioned button covering it, and the ⓘ sits above that on
+               * z-10 as a SIBLING. Same full-width tap area, valid markup,
+               * and two controls that can each be pressed.
+               */
+              <div
                 key={s.id}
-                onClick={() => { haptic.click(); onOpen(s.id) }}
                 className={cn(
-                  'w-full flex items-center gap-3 p-3.5 hover:bg-muted/50 transition text-left active:bg-muted group',
+                  'relative flex items-center gap-3 p-3.5 hover:bg-muted/50 transition group',
                   i > 0 && 'border-t border-border/40',
                 )}
               >
+                <button
+                  onClick={() => { haptic.click(); onOpen(s.id) }}
+                  className="absolute inset-0 w-full h-full active:bg-muted/60"
+                  aria-label={s.label}
+                />
                 <div className={cn(
                   'w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0',
                   s.tintBg,
@@ -322,12 +342,17 @@ export function InvoiceSettingsPage({
                 <div className="flex-1 min-w-0">
                   <span className="font-medium text-sm inline-flex items-center gap-1.5">
                     {s.label}
-                    {'hint' in s && s.hint && <InfoHint text={s.hint} label={s.label} />}
+                    {'hint' in s && s.hint && (
+                      // Above the row-wide button, or it never receives the tap.
+                      <span className="relative z-10">
+                        <InfoHint text={s.hint} label={s.label} />
+                      </span>
+                    )}
                   </span>
                   <p className="text-xs text-muted-foreground truncate">{s.summary}</p>
                 </div>
                 <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary group-hover:translate-x-0.5 transition flex-shrink-0" />
-              </button>
+              </div>
             )
           })}
         </div>
