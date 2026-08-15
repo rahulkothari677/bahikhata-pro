@@ -18,6 +18,7 @@
 import { registerUnicodeFont, THEME, formatPDFMoney } from './pdf/theme'
 import { paletteFor } from './pdf/palette'
 import { getInvoiceTemplate, metricsFor } from './invoice-templates'
+import { getPaperSize } from './invoice-paper'
 import type { InvoiceDocument } from './invoice-document'
 import { drawFooter, drawUPIQRBlock, newPageIfNeeded } from './pdf/primitives'
 
@@ -54,6 +55,15 @@ export interface InvoicePdfOptions {
    */
   templateId?: string | null
   /**
+   * Setting.invoicePaperSize — the SHEET. See invoice-paper.ts.
+   *
+   * 2026-08-15: Rahul asked for a size option that carries through to what is
+   * downloaded and what goes to WhatsApp, which is why it lands here and not
+   * only in the preview. A picker that changed a picture on screen but not the
+   * file the customer receives would be the invoiceTheme bug all over again.
+   */
+  paperId?: string | null
+  /**
    * The public bill link, when the shop has them switched on.
    *
    * 🐛 2026-08-06. Rahul: "in pdf there is no link". The link was in the share
@@ -71,7 +81,12 @@ export async function generateInvoicePDF(
   opts: InvoicePdfOptions = {},
 ): Promise<Blob> {
   const jsPDFMod: any = await import('jspdf')
-  const doc = new jsPDFMod.jsPDF({ unit: 'mm', format: 'a4' })
+  /*
+   * The sheet. jsPDF is created in millimetres, which is why invoice-paper.ts
+   * stores millimetres — nothing converts between the setting and the page.
+   */
+  const paper = getPaperSize(opts.paperId)
+  const doc = new jsPDFMod.jsPDF({ unit: 'mm', format: paper.id })
 
   await registerUnicodeFont(doc)
 
@@ -79,7 +94,10 @@ export async function generateInvoicePDF(
   // chosen theme. `band` is the header; `accent` is the highlight the table
   // header, the rules and the grand total use — the same split the WhatsApp
   // image and the payment page already make, so all three agree.
-  const { margin, pageWidth, pageHeight } = THEME
+  // Page geometry from the chosen sheet, not from THEME's A4 constants.
+  const margin = paper.marginMm
+  const pageWidth = paper.widthMm
+  const pageHeight = paper.heightMm
   const {
     band, onBand, onBandMuted, accent, accentSoft,
     text, textMuted, border, zebra, cardBg, white, paid, partial, due,
@@ -377,7 +395,7 @@ export async function generateInvoicePDF(
       doc.setFont(THEME.font, 'normal')
       doc.setFontSize(metrics.bodyPt)
       y += headerHeight
-    })
+    }, pageHeight)
 
     /*
      * How this row is separated from the next.
@@ -618,7 +636,7 @@ export async function generateInvoicePDF(
     }
   }
 
-  drawFooter(doc, 1, 1, { accent, textMuted, text })
+  drawFooter(doc, 1, 1, { accent, textMuted, text }, paper)
 
   return doc.output('blob')
 }

@@ -38,6 +38,7 @@ import { APP_VERSION_LABEL } from '@/lib/app-version'
 import { readError } from '@/lib/read-error'
 import { INVOICE_THEMES } from '@/lib/invoice-themes'
 import { INVOICE_TEMPLATES } from '@/lib/invoice-templates'
+import { PAPER_SIZES } from '@/lib/invoice-paper'
 import { describeRestoreOutcome } from '@/lib/restore-outcome'
 
 const FEATURE_CATEGORIES: { title: string; features: { key: FeatureKey; label: string; description: string; icon: any }[] }[] = [
@@ -199,6 +200,7 @@ export function Settings({
   const [docShareLink, setDocShareLink] = useState(false)
   const [invoiceTheme, setInvoiceTheme] = useState('classic')
   const [invoiceTemplate, setInvoiceTemplate] = useState('standard')
+  const [invoicePaperSize, setInvoicePaperSize] = useState('a4')
   // 🔒 V11: Stock policy toggle — 'block' (default) or 'allow' (kirana mode).
   const [stockPolicy, setStockPolicy] = useState<'block' | 'allow'>('block')
   // 🔒 V17-Ext §5.1: Period lock state. null = unlocked. Date string = locked
@@ -241,6 +243,7 @@ export function Settings({
       setDocShareLink(data.setting.docShareLink ?? false)
       setInvoiceTheme(data.setting.invoiceTheme ?? 'classic')
       setInvoiceTemplate(data.setting.invoiceTemplate ?? 'standard')
+      setInvoicePaperSize(data.setting.invoicePaperSize ?? 'a4')
       setStockPolicy(data.setting.stockPolicy === 'allow' ? 'allow' : 'block')
       // 🔒 V17-Ext §5.1: Sync period lock state from server.
       // lockedUntil is an ISO timestamp (or null). We store the full timestamp
@@ -278,7 +281,7 @@ export function Settings({
    * about having saved is worse.
    */
   const persistDocSetting = async (
-    patch: { docSendFormat?: 'smart' | 'image' | 'pdf'; docShareLink?: boolean; invoiceTheme?: string; invoiceTemplate?: string },
+    patch: { docSendFormat?: 'smart' | 'image' | 'pdf'; docShareLink?: boolean; invoiceTheme?: string; invoiceTemplate?: string; invoicePaperSize?: string },
     rollback: () => void,
   ) => {
     /*
@@ -1570,7 +1573,6 @@ export function Settings({
       {show('invoice-design') && (
       <Card className="shadow-card border-border/60">
         <CardHeader>
-          <p className="text-xs text-muted-foreground">Pick the shape first, then the colour.</p>
         </CardHeader>
         <CardContent className="space-y-3">
           {/* 📄 2026-08-15, Phase 2: LAYOUT and COLOUR are two questions.
@@ -1581,13 +1583,12 @@ export function Settings({
               explainable. Layout first, because it changes the bill more. */}
           <div className="mt-3 rounded-lg bg-muted/30 border border-border/60 p-3">
             <div className="flex items-center gap-2 mb-2">
-              <FileText className="w-4 h-4 text-muted-foreground" />
-              <div>
-                <p className="text-sm font-medium">Invoice layout</p>
-                <p className="text-2xs text-muted-foreground">
-                  How the bill is arranged. Every layout carries the same GST fields.
-                </p>
-              </div>
+              {/* 🎨 2026-08-15: coloured, like the Account menu one level up.
+                  A grey glyph here made the screen look unfinished beside its
+                  own parent. And the description is gone: "Invoice layout" is
+                  self-explanatory, and the wireframes below say the rest. */}
+              <FileText className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+              <p className="text-sm font-medium">Invoice layout</p>
             </div>
             <div className="grid grid-cols-3 gap-1.5">
               {INVOICE_TEMPLATES.map(t => (
@@ -1652,18 +1653,60 @@ export function Settings({
             </div>
           </div>
 
+          {/* 📄 2026-08-15: the SHEET. A third question beside shape and colour,
+              and the one with a practical answer rather than a taste: A5 is half
+              of A4 and is what most Indian bill books and counter printers use.
+              A five-line kirana bill on a full A4 sheet wastes most of the page,
+              every sale. This reaches the PDF, the download and WhatsApp — not
+              just the preview. */}
+          <div className="mt-3 rounded-lg bg-muted/30 border border-border/60 p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <FileSpreadsheet className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              <p className="text-sm font-medium">Paper size</p>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5">
+              {PAPER_SIZES.map(ps => (
+                <button
+                  key={ps.id}
+                  type="button"
+                  onClick={() => {
+                    const prev = invoicePaperSize
+                    setInvoicePaperSize(ps.id)
+                    persistDocSetting({ invoicePaperSize: ps.id }, () => setInvoicePaperSize(prev))
+                  }}
+                  aria-pressed={invoicePaperSize === ps.id}
+                  className={
+                    'rounded-lg border p-2 transition text-left ' +
+                    (invoicePaperSize === ps.id
+                      ? 'border-primary ring-2 ring-primary/25'
+                      : 'border-border/70 hover:border-border')
+                  }
+                >
+                  <span className="flex items-center gap-2">
+                    {/* The sheets at their true relative proportions, so the
+                        difference is visible rather than asserted. */}
+                    <span
+                      className="block border border-slate-400 bg-white flex-shrink-0"
+                      style={{ width: ps.id === 'a4' ? 17 : 12, height: ps.id === 'a4' ? 24 : 17 }}
+                    />
+                    <span className="min-w-0">
+                      <span className="block text-3xs font-medium">{ps.name}</span>
+                      <span className="block text-3xs text-muted-foreground leading-tight">
+                        {ps.widthMm} × {ps.heightMm} mm
+                      </span>
+                    </span>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
           {/* 📄 The invoice colour. ONE theme drives the WhatsApp picture, the
               link page and the PDF — a shop's bill and its payment page should
               not look like two different businesses. */}
           <div className="mt-3 rounded-lg bg-muted/30 border border-border/60 p-3">
             <div className="flex items-center gap-2 mb-2">
-              <Palette className="w-4 h-4 text-muted-foreground" />
-              <div>
-                <p className="text-sm font-medium">Invoice colour</p>
-                <p className="text-2xs text-muted-foreground">
-                  Used on the bill picture, the bill link and the PDF.
-                </p>
-              </div>
+              <Palette className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+              <p className="text-sm font-medium">Invoice colour</p>
             </div>
             <div className="grid grid-cols-4 gap-1.5">
               {INVOICE_THEMES.map(t => (
@@ -1701,7 +1744,13 @@ export function Settings({
                       className="block w-2.5 h-7 rounded-sm flex-shrink-0"
                       style={{ background: t.accent }}
                     />
-                    <span className="text-3xs truncate">{t.name}</span>
+                    {/* 🎨 2026-08-15. Rahul: "in mobile view there is few letters
+                        is visible with colour which is neither complete nor needed".
+                        Right — at four to a row the name truncated to two or three
+                        letters, which tells nobody anything and is worse than
+                        silence. The swatch IS the choice; the name returns when
+                        there is room for all of it. */}
+                    <span className="text-3xs truncate hidden sm:inline">{t.name}</span>
                   </span>
                 </button>
               ))}
@@ -1713,7 +1762,6 @@ export function Settings({
       {show('invoice-sending') && (
       <Card className="shadow-card border-border/60">
         <CardHeader>
-          <p className="text-xs text-muted-foreground">How a finished bill reaches your customer.</p>
         </CardHeader>
         <CardContent className="space-y-3">          {/* 📄 How bills go out. See docs/DOCUMENT-ENGINE-PLAN.md. */}
           <div className="mt-3 rounded-lg bg-muted/30 border border-border/60 p-3">

@@ -240,7 +240,11 @@ export function TransactionDetail() {
         logoUrl: setting?.logoUrl,
       },
     )
-    generateInvoicePDF(doc, { themeId: setting?.invoiceTheme }).then(async (pdfBlob) => {
+    generateInvoicePDF(doc, {
+      themeId: setting?.invoiceTheme,
+      templateId: setting?.invoiceTemplate,
+      paperId: setting?.invoicePaperSize,
+    }).then(async (pdfBlob) => {
       // On mobile (Capacitor), use Share plugin to save/share the PDF
       const { Capacitor } = await import('@capacitor/core')
       if (Capacitor.isNativePlatform()) {
@@ -330,6 +334,10 @@ export function TransactionDetail() {
           shareLink: setting?.docShareLink,
           transactionId: txn.id,
           themeId: setting?.invoiceTheme,
+          // The layout and the sheet the shopkeeper chose, so the file that
+          // reaches the customer is the one the preview showed them.
+          templateId: setting?.invoiceTemplate,
+          paperId: setting?.invoicePaperSize,
         },
       )
 

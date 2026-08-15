@@ -109,6 +109,26 @@ const SAMPLE: InvoiceSource = {
   paymentMode: 'cash',
 }
 
+/**
+ * Is this bill worth previewing, or should the demo stand in?
+ *
+ * 📄 Extracted so it can be CALLED rather than only exercised by rendering.
+ * CLAUDE.md's Cause 7 rule, earned 15 Aug: a rule buried inside a component
+ * can only be tested by committing a real bug.
+ *
+ * A bill needs lines that carry money. Checking the transaction total alone is
+ * exactly what let a real invoice render with a ₹0.00 line beside a ₹70,800
+ * total — on a settings screen that reads as the shop's books being broken.
+ */
+export function isPreviewable(tx: unknown): boolean {
+  const t = tx as { items?: unknown; totalAmount?: unknown } | null | undefined
+  if (!t || !Array.isArray(t.items) || t.items.length === 0) return false
+  if (typeof t.totalAmount !== 'number' || t.totalAmount <= 0) return false
+  return (t.items as Array<{ total?: unknown; unitPrice?: unknown }>).some(
+    it => (typeof it.total === 'number' && it.total > 0) ||
+          (typeof it.unitPrice === 'number' && it.unitPrice > 0))
+}
+
 export function InvoiceSettingsPage({
   section,
   setting,
@@ -174,20 +194,11 @@ export function InvoiceSettingsPage({
     }
     const latest = data?.transaction ?? data
     /*
-     * A bill is only worth previewing if its LINES carry money. Checking the
-     * transaction total alone is what let a bill of ₹0.00 items through; a
-     * preview of zeroes reads as a fault in the shop's books, so anything
-     * short of a complete bill falls back to the clearly-labelled sample.
+     * Rahul: "if the user didn't created any bill then there should be a bill
+     * too by default so user can check everything for demo". That is what
+     * SAMPLE is — and it also covers a bill too incomplete to draw honestly.
      */
-    const items = Array.isArray(latest?.items) ? latest.items : []
-    const usable =
-      items.length > 0 &&
-      typeof latest?.totalAmount === 'number' &&
-      latest.totalAmount > 0 &&
-      items.some((it: { total?: number; unitPrice?: number }) =>
-        (typeof it.total === 'number' && it.total > 0) ||
-        (typeof it.unitPrice === 'number' && it.unitPrice > 0))
-
+    const usable = isPreviewable(latest)
     if (!usable) return { doc: buildInvoiceDocument(SAMPLE, shop), isSample: true }
     return { doc: buildInvoiceDocument(latest as InvoiceSource, shop), isSample: false }
   }, [data, setting])
@@ -229,6 +240,7 @@ export function InvoiceSettingsPage({
             doc={doc}
             themeId={setting?.invoiceTheme as string}
             templateId={setting?.invoiceTemplate as string}
+            paperId={setting?.invoicePaperSize as string}
             focus={current?.focus ?? null}
             isSample={isSample}
             width={previewWidth}

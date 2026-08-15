@@ -277,6 +277,14 @@ export async function PUT(req: NextRequest) {
       }
       sanitized.invoiceTemplate = body.invoiceTemplate
     }
+    if (body.invoicePaperSize !== undefined) {
+      // Registry-validated, like the theme and template above.
+      const { PAPER_SIZES } = await import('@/lib/invoice-paper')
+      if (!PAPER_SIZES.some(p => p.id === body.invoicePaperSize)) {
+        return NextResponse.json({ error: 'Unknown paper size' }, { status: 400 })
+      }
+      sanitized.invoicePaperSize = body.invoicePaperSize
+    }
     if (body.docSendFormat !== undefined) {
       if (!['smart', 'image', 'pdf'].includes(body.docSendFormat)) {
         return NextResponse.json(

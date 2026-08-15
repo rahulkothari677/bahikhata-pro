@@ -653,6 +653,11 @@ model Setting {
   // Defaults to "standard", which reproduces exactly what the renderer
   // produced before templates existed, so no shop's invoice changes today.
   invoiceTemplate String @default("standard")
+  // 📄 2026-08-15: the SHEET. A third axis beside template and theme, because
+  // paper is chosen for reasons that have nothing to do with looks — what the
+  // printer takes, what the counter has a pad of. A5 is half of A4 and is what
+  // most Indian bill books use. See src/lib/invoice-paper.ts.
+  invoicePaperSize String @default("a4")
 
   docSendFormat String @default("smart")
 

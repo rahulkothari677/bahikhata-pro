@@ -123,6 +123,14 @@ export async function sendBill(
     transactionId?: string
     /** The shop's invoice look. See lib/invoice-themes. */
     themeId?: string | null
+    /*
+     * 📄 2026-08-15: the layout and the sheet, carried through to what the
+     * customer actually receives. Passing only themeId is exactly how the PDF
+     * came to ignore the shop's chosen design — the picture got the setting
+     * and the file did not.
+     */
+    templateId?: string | null
+    paperId?: string | null
   } = {},
 ): Promise<SendBillResult> {
   const doc = buildInvoiceDocument(src, shop)
@@ -181,7 +189,7 @@ ${link}` : buildCaption(doc)
    * `themeId` was passed to the image renderer on the line above and not to
    * this one — the whole of the PDF theme bug, visible in one function.
    */
-  const pdfBlob = await generateInvoicePDF(doc, { themeId: opts.themeId, shareLink: link })
+  const pdfBlob = await generateInvoicePDF(doc, { themeId: opts.themeId, templateId: opts.templateId, paperId: opts.paperId, shareLink: link })
   const dataUrl = await blobToDataUrl(pdfBlob)
   await shareCardImage(dataUrl, filename, {
     title: `Bill ${doc.invoiceNo}`,

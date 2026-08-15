@@ -48,26 +48,27 @@ import { PinchZoom } from '@/components/common/PinchZoom'
 import type { InvoiceDocument } from '@/lib/invoice-document'
 import { getInvoiceTheme } from '@/lib/invoice-themes'
 import { getInvoiceTemplate, metricsFor } from '@/lib/invoice-templates'
+import { getPaperSize, paperPx, MM_TO_PX } from '@/lib/invoice-paper'
 
 /** Which block the shopkeeper is editing, so the preview can point at it. */
 export type PreviewFocus = 'header' | 'items' | 'totals' | 'footer' | null
 
-/** A4 at 96dpi. The page is drawn at this width and then scaled down. */
-const PAGE_W = 794
-const PAGE_H = 1123
 /**
- * How much blank paper to keep below the last line.
+ * 🐛 2026-08-15, CORRECTED. I cropped the page to its content and Rahul said:
+ * "i wanted unnecessary padding removed but not what's important like you make
+ * the preview section just the size of the bill which should not be like that.
+ * it should be the A4 size".
  *
- * 🐛 2026-08-15. Rahul: "there is unnecessary padding everywhere … you don't
- * need to waste around 20-30% of space for padding in preview". The first
- * version always drew a full A4 page, so a two-line bill showed its content in
- * the top third and six hundred pixels of empty white below it — on a phone,
- * most of the screen spent on nothing. A real page IS mostly empty; a PREVIEW
- * of one should not be.
+ * He is right and I had over-corrected. The wasted space he meant was the app's
+ * own chrome — card padding around the preview — not the paper. A sheet with
+ * white below the last line IS the document; cropping it showed a shape that
+ * would never come out of a printer, so the preview stopped answering the
+ * question it exists for.
+ *
+ * The page is the chosen sheet now, at full proportion. See invoice-paper.ts.
  */
-const TAIL_PADDING = 24
 /** 1mm at 96dpi — turns the template's mm metrics into real page pixels. */
-const MM = 96 / 25.4
+const MM = MM_TO_PX
 
 /**
  * 🐛 2026-08-15. Rahul: "the fonts are too light that it's almost not visible".
@@ -101,6 +102,7 @@ export function InvoicePreview({
   doc,
   themeId,
   templateId,
+  paperId,
   focus = null,
   isSample = false,
   width = 320,
@@ -109,6 +111,8 @@ export function InvoicePreview({
   doc: InvoiceDocument
   themeId?: string | null
   templateId?: string | null
+  /** Setting.invoicePaperSize. The preview shows the sheet they will print on. */
+  paperId?: string | null
   /**
    * Ring the block being edited.
    *
@@ -129,28 +133,9 @@ export function InvoicePreview({
   const theme = { ...rawTheme, muted: readable(rawTheme.muted), text: readable(rawTheme.text) }
   const template = getInvoiceTemplate(templateId)
   const metrics = metricsFor(template)
-  const scale = width / PAGE_W
-
-  /*
-   * Crop the page to its content. Measured rather than estimated: the height
-   * depends on the item count, the density and whether a tax line shows, and
-   * every one of those is a number this component does not own.
-   */
-  const pageRef = useRef<HTMLDivElement>(null)
-  const [contentH, setContentH] = useState(PAGE_H)
-  useLayoutEffect(() => {
-    const el = pageRef.current
-    if (!el) return
-    const measure = () => {
-      const h = el.scrollHeight + TAIL_PADDING
-      setContentH(Math.min(PAGE_H, Math.max(240, h)))
-    }
-    measure()
-    // The bill, the layout and the type can all change under us.
-    const ro = new ResizeObserver(measure)
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [doc, templateId, themeId, width])
+  const paper = getPaperSize(paperId)
+  const page = paperPx(paper)
+  const scale = width / page.width
 
   const rows = useMemo(() => doc.items.slice(0, 12), [doc.items])
   const hidden = doc.items.length - rows.length
@@ -172,16 +157,13 @@ export function InvoicePreview({
       <PinchZoom label="Invoice preview" className="mx-auto">
       <div
         className="mx-auto overflow-hidden"
-        style={{ width, height: contentH * scale }}
+        style={{ width, height: page.height * scale }}
       >
         <div
-          ref={pageRef}
           className="bg-white shadow-sm border border-black/10 origin-top-left"
           style={{
-            width: PAGE_W,
-            // Height follows the content; the wrapper above crops to it.
-            minHeight: 240,
-            paddingBottom: TAIL_PADDING,
+            width: page.width,
+            height: page.height,
             transform: `scale(${scale})`,
             color: theme.text,
           }}

@@ -80,17 +80,26 @@ describe('the hub', () => {
 describe('the preview', () => {
   const preview = readCode('src/components/settings/InvoicePreview.tsx')
 
-  it('draws the page full size and scales it, rather than hand-picking tiny type', () => {
+  it('draws a real sheet at full size and scales it, rather than tiny type', () => {
     /*
-     * The first version chose font sizes by eye — text-[5px], text-[5.5px] —
-     * which the microtypography guard caught. It was right twice: those are
-     * off-scale values, and hand-tuning them made the preview's proportions my
-     * guesses instead of the document's. Drawing A4 at 794px and scaling means
-     * every proportion is the real one.
+     * Two corrections live in this one assertion.
+     *
+     * First: the preview once chose font sizes by eye — text-[5px] — which the
+     * microtypography guard caught. Drawing the page at its true size and
+     * scaling means every proportion is the document's, not mine.
+     *
+     * Second, 15 Aug: I then cropped the page to its content, and Rahul said
+     * "it should be the A4 size". He was right — the wasted space he meant was
+     * the app's own padding, not the paper. A sheet with white below the last
+     * line IS the document. So the page comes from the paper registry at full
+     * proportion, and nothing measures content to shrink it.
      */
-    expect(preview).toContain('PAGE_W')
+    expect(preview).toContain('paperPx')
+    expect(preview).toContain('page.height')
     expect(preview).toContain('transform: `scale(')
     expect(preview).not.toMatch(/text-\[\d+px\]/)
+    // No content-measuring crop.
+    expect(preview).not.toContain('contentH')
   })
 
   it('reads the document and computes nothing', () => {

@@ -9,6 +9,7 @@
 
 import { THEME, formatPDFMoney } from './theme'
 import type { PdfPalette } from './palette'
+import type { PaperSize } from '../invoice-paper'
 
 /**
  * Draw the brand band — full-width colored header with shop info.
@@ -117,8 +118,16 @@ export function drawFooter(
   pageNum?: number,
   totalPages?: number,
   palette?: Pick<PdfPalette, 'accent' | 'textMuted' | 'text'>,
+  /**
+   * The sheet. Optional so the STATEMENT pdf keeps A4; the invoice passes its
+   * own, because a footer placed 15mm up from A4's 297 would print 87mm below
+   * the bottom edge of an A5 page — i.e. not at all.
+   */
+  paper?: Pick<PaperSize, 'widthMm' | 'heightMm' | 'marginMm'>,
 ): void {
-  const { margin, pageWidth, pageHeight } = THEME
+  const margin = paper?.marginMm ?? THEME.margin
+  const pageWidth = paper?.widthMm ?? THEME.pageWidth
+  const pageHeight = paper?.heightMm ?? THEME.pageHeight
   const accent = palette?.accent ?? THEME.brand
   const textMuted = palette?.textMuted ?? THEME.textMuted
   const bodyText = palette?.text ?? THEME.text
@@ -197,8 +206,15 @@ export async function drawUPIQRBlock(
  * Check if we need a new page, and add one if needed.
  * Returns the new Y position (top of new page).
  */
-export function newPageIfNeeded(doc: any, y: number, needed: number, drawHeaderRow?: () => void): number {
-  if (y + needed > THEME.pageHeight - 25) {
+export function newPageIfNeeded(
+  doc: any,
+  y: number,
+  needed: number,
+  drawHeaderRow?: () => void,
+  /** Sheet height in mm. Defaults to A4 so existing callers are unchanged. */
+  pageHeightMm?: number,
+): number {
+  if (y + needed > (pageHeightMm ?? THEME.pageHeight) - 25) {
     doc.addPage()
     if (drawHeaderRow) drawHeaderRow()
     return 25
