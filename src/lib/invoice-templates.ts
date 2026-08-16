@@ -47,6 +47,12 @@ export type InvoiceTemplateId =
   | 'statement'
   | 'minimal'
   | 'dispensary'
+  | 'slate'
+  | 'ledger'
+  | 'emerald'
+  | 'goldleaf'
+  | 'memo'
+  | 'register'
 
 /** How the shop's identity is presented at the top of the page. */
 export type HeaderStyle =
@@ -281,6 +287,97 @@ export const INVOICE_TEMPLATES: InvoiceTemplate[] = [
     titleFace: 'sans',
     // The reason this template exists: a pharmacy bill reads DOWN a batch
     // column. A sub-line works, but it is not the format an inspector expects.
+    extraColumns: 'columns',
+  },
+  /*
+   * 📄 Phase 7b — six more, each taken from one of the reference bills and
+   * each a STRUCTURE not already in the list.
+   *
+   * Structurally distinct is not a style preference here: a guard renders
+   * every template and fails if two produce the same page, because a picker
+   * offering the same design twice under different names wastes the one
+   * decision a shopkeeper actually makes.
+   *
+   * Every one of these is checked against the maximal invoice — all toggles
+   * on, custom columns, 34 lines, A4 and A5 — before it can ship. That test
+   * is why six designs took an hour rather than a day.
+   */
+  {
+    // From the corporate consulting reference: quiet, lots of air, for services and B2B.
+    id: 'slate',
+    name: 'Slate',
+    description: 'No colour band. Name in large type, details in a corner card.',
+    paper: 'a4',
+    header: 'rule',
+    table: 'zebra',
+    totals: 'panel',
+    density: 'regular',
+    titleFace: 'sans',
+    extraColumns: 'subline',
+  },
+  {
+    // The classic Indian counter bill — every cell boxed, so a CA can follow a column down a stack.
+    id: 'ledger',
+    name: 'Ledger',
+    description: 'A boxed table with a bold total bar. For daily trade.',
+    paper: 'a4',
+    header: 'band',
+    table: 'grid',
+    totals: 'bar',
+    density: 'airy',
+    titleFace: 'sans',
+    extraColumns: 'subline',
+  },
+  {
+    // From the green GST reference: hairline rows, nothing boxed, the total carrying the weight.
+    id: 'emerald',
+    name: 'Emerald',
+    description: 'Clean rules and a strong total. Reads well at a glance.',
+    paper: 'a4',
+    header: 'band',
+    table: 'rows',
+    totals: 'plain',
+    density: 'regular',
+    titleFace: 'sans',
+    extraColumns: 'subline',
+  },
+  {
+    // From the royal gold reference. The one template with a serif shop name — see titleFace.
+    id: 'goldleaf',
+    name: 'Gold Leaf',
+    description: 'A framed page with a serif name. For jewellers and boutiques.',
+    paper: 'a4',
+    header: 'frame',
+    table: 'rows',
+    totals: 'panel',
+    density: 'airy',
+    titleFace: 'serif',
+    extraColumns: 'subline',
+  },
+  {
+    // From the retail memo reference: the least ink per bill, for a shop printing all day.
+    id: 'memo',
+    name: 'Memo',
+    description: 'Small and dense. For a quick counter slip.',
+    paper: 'a4',
+    header: 'rule',
+    table: 'grid',
+    totals: 'plain',
+    density: 'compact',
+    titleFace: 'sans',
+    extraColumns: 'subline',
+  },
+  {
+    // From the Tally-style grid. Like Dispensary but ruled throughout, for stock-heavy trades.
+    id: 'register',
+    name: 'Register',
+    description: 'Every cell ruled, batch and expiry as columns.',
+    paper: 'a4',
+    header: 'frame',
+    table: 'grid',
+    totals: 'plain',
+    density: 'compact',
+    titleFace: 'sans',
     extraColumns: 'columns',
   },
 ]

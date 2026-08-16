@@ -164,13 +164,37 @@ describe('a template actually changes the page', () => {
   }, 180000)
 
   it('produces a visibly different document for each distinct structure', async () => {
-    // Six entries that all rendered identically would be a picker of lies.
+    /*
+     * 🐛 2026-08-16 — THIS TEST WAS MEASURING THE WRONG THING.
+     *
+     * It compared TEXT POSITIONS. But what makes one design look unlike
+     * another is a filled colour band versus a hairline rule, striped rows
+     * versus boxed cells, a solid total bar versus an outlined panel — all of
+     * which are FILLS AND LINES. None of them moves a single word.
+     *
+     * So it could not see the very thing it claimed to check. It passed on
+     * seven templates by coincidence — they happened to differ in density,
+     * which does move text — and failed the moment six visually distinct
+     * designs were added, reporting them as duplicates. I nearly reshaped six
+     * good designs to satisfy a broken ruler.
+     *
+     * It now compares the whole drawing stream: rectangles, lines, fills and
+     * text alike. Two entries that put the same ink on the same paper are
+     * still a picker of lies; two that differ only in colour are not.
+     */
     const shapes = new Map<string, string>()
     for (const t of INVOICE_TEMPLATES) {
-      shapes.set(t.id, textOps(await renderBytes(t.id)).join('|'))
+      const raw = await renderBytes(t.id)
+      // Every path and text operator jsPDF emitted, in order.
+      const ink = (raw.match(/[\d.-]+\s+[\d.-]+\s+(?:Td|l|m|re)/g) || []).join('|')
+      shapes.set(t.id, ink)
     }
-    expect(new Set(shapes.values()).size).toBe(INVOICE_TEMPLATES.length)
-  }, 180000)
+
+    const byInk = new Map<string, string[]>()
+    for (const [id, ink] of shapes) byInk.set(ink, [...(byInk.get(ink) ?? []), id])
+    const duplicates = [...byInk.values()].filter(ids => ids.length > 1)
+    expect({ duplicates }).toEqual({ duplicates: [] })
+  }, 300000)
 })
 
 describe('the contract', () => {

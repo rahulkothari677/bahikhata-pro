@@ -709,3 +709,43 @@ lays out the same columns by the same rule.
 Disabling the footer pagination fails six tests, so that fix is proven. The
 bottom-block reservation is **defensive** — this suite does not independently
 prove it, and it is not claimed to.
+
+---
+
+## Phase 7b — six more designs (16 Aug)
+
+**Thirteen designs now.** Six added from the reference set, each mapped to one
+of Rahul's images and each a structure not already in the list:
+
+| Design | From | Suits |
+|---|---|---|
+| **Slate** | corporate consulting | services and B2B — no band, lots of air |
+| **Ledger** | classic counter bill | daily trade — boxed cells, bold total bar |
+| **Emerald** | green GST bill | hairline rows, the total carrying the weight |
+| **Gold Leaf** | royal gold | jewellers — framed page, the one serif name |
+| **Memo** | retail memo | least ink per bill, for printing all day |
+| **Register** | Tally grid | stock-heavy trades — ruled throughout, batch/expiry as columns |
+
+Every one was checked against the maximal invoice — all toggles on, custom
+columns, 34 lines, A4 and A5 — before it could ship. **That test is why six
+designs took an hour rather than a day.**
+
+### The distinctness test was measuring the wrong thing
+
+It compared TEXT POSITIONS, and reported the six new designs as duplicates.
+
+But what makes one design look unlike another is a **filled band versus a
+hairline rule**, **striped rows versus boxed cells**, **a solid total bar
+versus an outlined panel** — all of which are fills and lines. None of them
+moves a single word. So the test could not see the very thing it claimed to
+check.
+
+It had passed on seven templates by coincidence: those happened to differ in
+density, which does move text. **I nearly reshaped six good designs to satisfy
+a broken ruler.** It now compares the whole drawing stream — rectangles,
+lines and text alike — and all thirteen are genuinely distinct.
+
+### Note on the preview
+
+The column layout in the preview was fixed in Phase 7, before that commit
+shipped. Re-confirmed here: `ITEM | BATCH NO. | EXPIRY | QTY | RATE | AMOUNT`.
