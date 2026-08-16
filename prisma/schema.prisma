@@ -670,7 +670,7 @@ model Setting {
   // 📄 Which invoice look this shop uses — see src/lib/invoice-themes.ts.
   // One theme drives the WhatsApp picture, the link page and the PDF, so a
   // shop's bill and its payment page cannot look like two businesses.
-  invoiceTheme     String @default("classic")
+  invoiceTheme     String  @default("classic")
   // 📄 2026-08-15, Phase 2 of docs/INVOICE-ENGINE-PLAN.md — the STRUCTURE of
   // the bill, chosen independently of its colour. See src/lib/invoice-templates.
   // Deliberately a second column rather than a compound "style" value: eight
@@ -678,12 +678,25 @@ model Setting {
   // one string would mean parsing it everywhere it is read.
   // Defaults to "standard", which reproduces exactly what the renderer
   // produced before templates existed, so no shop's invoice changes today.
-  invoiceTemplate  String @default("standard")
+  invoiceTemplate  String  @default("standard")
   // 📄 2026-08-15: the SHEET. A third axis beside template and theme, because
   // paper is chosen for reasons that have nothing to do with looks — what the
   // printer takes, what the counter has a pad of. A5 is half of A4 and is what
   // most Indian bill books use. See src/lib/invoice-paper.ts.
-  invoicePaperSize String @default("a4")
+  invoicePaperSize String  @default("a4")
+  // 📄 Phase 7c — design is three separate choices, not one.
+  //
+  // invoiceTemplate holds the LAYOUT (where blocks sit), invoiceStyle the
+  // STYLE (how they are dressed), invoiceTheme the PALETTE. Rahul: "the
+  // design and layout is different" — and he was right, which is why they
+  // are three columns rather than one doing all three badly.
+  //
+  // invoicePreset is a SHORTCUT only: it writes the other three and is
+  // cleared the moment any one of them is changed by hand, because at that
+  // point "which preset am I on" honestly has no answer. Nothing renders
+  // from it.
+  invoiceStyle     String?
+  invoicePreset    String?
 
   // ═══ Phase 3 of docs/INVOICE-ENGINE-PLAN.md — what is ON the bill ═══
   //

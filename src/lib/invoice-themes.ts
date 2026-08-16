@@ -30,6 +30,13 @@ export type InvoiceThemeId =
   | 'crimson'
   | 'slate'
   | 'teal'
+  | 'ocean'
+  | 'maroon'
+  | 'forest'
+  | 'rust'
+  | 'plum'
+  | 'graphite'
+  | 'prussian'
 
 export interface InvoiceTheme {
   /** Stable id, stored in Setting.invoiceTheme. Never change or reuse. */
@@ -181,6 +188,118 @@ export const INVOICE_THEMES: InvoiceTheme[] = [
     text: '#102A28',
     muted: '#5D7B78',
     line: '#DCEAE8',
+    darkHeader: true,
+  },
+  /*
+   * 📄 Phase 7c — seven more palettes.
+   *
+   * Rahul: "you have added very less colour and most are either similar or
+   * not good." Fair. Eight single accents, several of them neighbours on the
+   * wheel, is not a colour system.
+   *
+   * Each of these is a THREE-colour combination, which is what the research
+   * on premium documents is consistent about: one accent, one soft tint of
+   * it for fills, one neutral ink — and nothing else. The tint is what makes
+   * a bill look considered rather than coloured-in; it is the cream behind
+   * the gold on the Jaipur reference, and the blush behind the maroon on the
+   * Ghaziabad one.
+   */
+  {
+    id: 'ocean',
+    name: 'Ocean',
+    description: 'Deep indigo on pale blue. Clean and trustworthy.',
+    headerBg: '#1E3A8A',
+    headerText: '#FFFFFF',
+    headerMuted: 'rgba(255,255,255,0.76)',
+    accent: '#1E3A8A',
+    accentSoft: '#E8EEF9',
+    text: '#1F2933',
+    muted: '#5B6B7F',
+    line: '#DCE4EF',
+    darkHeader: true,
+  },
+  {
+    id: 'maroon',
+    name: 'Maroon',
+    description: 'Deep maroon on blush. Formal, for wholesale.',
+    headerBg: '#7B1E32',
+    headerText: '#FFFFFF',
+    headerMuted: 'rgba(255,255,255,0.76)',
+    accent: '#7B1E32',
+    accentSoft: '#FBEEF1',
+    text: '#1A1A1A',
+    muted: '#6E5058',
+    line: '#EEDCE1',
+    darkHeader: true,
+  },
+  {
+    id: 'forest',
+    name: 'Forest',
+    description: 'Forest green on mint. Clinical and orderly.',
+    headerBg: '#14563C',
+    headerText: '#FFFFFF',
+    headerMuted: 'rgba(255,255,255,0.76)',
+    accent: '#14563C',
+    accentSoft: '#E9F5EF',
+    text: '#253238',
+    muted: '#4F6B5F',
+    line: '#D8E9E0',
+    darkHeader: true,
+  },
+  {
+    id: 'rust',
+    name: 'Rust',
+    description: 'Brick rust on sand. Industrial and practical.',
+    headerBg: '#A8432A',
+    headerText: '#FFFFFF',
+    headerMuted: 'rgba(255,255,255,0.76)',
+    accent: '#A8432A',
+    accentSoft: '#FBEFE8',
+    text: '#2A211C',
+    muted: '#7A5A4C',
+    line: '#EEDCD1',
+    darkHeader: true,
+  },
+  {
+    id: 'plum',
+    name: 'Plum',
+    description: 'Royal purple on lilac. Formal and document-first.',
+    headerBg: '#4C2A6B',
+    headerText: '#FFFFFF',
+    headerMuted: 'rgba(255,255,255,0.76)',
+    accent: '#4C2A6B',
+    accentSoft: '#F2ECF7',
+    text: '#24222B',
+    muted: '#665A75',
+    line: '#E3D8EC',
+    darkHeader: true,
+  },
+  {
+    id: 'graphite',
+    name: 'Graphite',
+    description: 'Charcoal on grey. The least ink on the page.',
+    headerBg: '#33383D',
+    headerText: '#FFFFFF',
+    headerMuted: 'rgba(255,255,255,0.76)',
+    accent: '#33383D',
+    accentSoft: '#F2F3F4',
+    text: '#000000',
+    muted: '#5F656B',
+    line: '#DFE2E5',
+    darkHeader: true,
+  },
+  {
+    id: 'prussian',
+    name: 'Prussian',
+    description: 'Prussian blue on steel. A printed bill book.',
+    headerBg: '#14456B',
+    headerText: '#FFFFFF',
+    headerMuted: 'rgba(255,255,255,0.76)',
+    accent: '#14456B',
+    accentSoft: '#E9EFF4',
+    text: '#1B2229',
+    muted: '#53687C',
+    line: '#D7E1EA',
     darkHeader: true,
   },
 ]

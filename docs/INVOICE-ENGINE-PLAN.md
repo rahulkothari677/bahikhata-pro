@@ -749,3 +749,75 @@ lines and text alike — and all thirteen are genuinely distinct.
 
 The column layout in the preview was fixed in Phase 7, before that commit
 shipped. Re-confirmed here: `ITEM | BATCH NO. | EXPIRY | QTY | RATE | AMOUNT`.
+
+---
+
+## Phase 7c — layout, style and palette pulled apart (16 Aug)
+
+Rahul: *"the design and layout is different."* He was right, and it is the
+diagnosis this whole phase needed.
+
+### What was wrong
+
+What I had called a template was a muddle of three things:
+
+- it carried **style** choices (striped rows, spacing)
+- it *pretended* to carry **layout** choices
+- and the layout was **hardcoded and identical for all of them**
+
+So the one thing that makes a bill look unlike another — the bones — was the
+one thing no design could change. Thirteen designs, one bill, thirteen times.
+His verdict, *"almost every design looks the same and useless"*, was accurate.
+
+### Three vocabularies now
+
+| | | |
+|---|---|---|
+| **Layout** | `invoice-layouts.ts` | where blocks sit — frame, header kind, meta strip, party block, columns, table fill, totals |
+| **Style** | `invoice-styles.ts` | how they are dressed — rules, zebra, density, line weight, title face, ornament |
+| **Palette** | `invoice-themes.ts` | accent, soft tint, ink |
+
+**10 layouts × 6 styles × 15 palettes.** Guards hold the separation: a layout
+that grows a colour, or a style that grows a block, fails a test — because the
+day they merge again is the day the next ten designs look like one.
+
+### Presets, then customise — Rahul's choice (c)
+
+Ten named presets, each a real reference bill: Classic Indigo, Royal Gold,
+Tally Maroon, Pharmacy Green, Transport Rust, Corporate Slate, Formal Purple,
+Counter Memo, Bill Book Blue, Boutique Teal.
+
+A preset is a **shortcut, not a fourth thing** — it writes layout, style and
+palette and the renderer never reads it. `Setting.invoicePreset` exists only so
+the picker can show which is selected, and clears the moment anything is
+changed by hand, because at that point "which preset am I on" honestly has no
+answer.
+
+### Seven more palettes
+
+Rahul: *"you have added very less colour and most are either similar or not
+good."* Fair — eight single accents, several of them neighbours on the wheel,
+is not a colour system.
+
+Added Ocean, Maroon, Forest, Rust, Plum, Graphite and Prussian, each a **three
+-colour combination**: one accent, one soft tint for fills, one neutral ink.
+The tint is what makes a bill look considered rather than coloured-in — it is
+the cream behind the gold on the Jaipur reference.
+
+### Illegal pairs fall back rather than printing broken
+
+An ornament needs a frame; eleven GST columns do not fit an airy style or an
+A5 sheet. A shopkeeper can reach an illegal pair by customising, so the style
+falls back to its nearest legal sibling and the bill still looks deliberate.
+
+### Still to do — recorded from Rahul's requirements
+
+1. **The renderer** must draw from the layout spec. Nothing above changes a
+   printed bill yet; this is the foundation, and it is honest to say so.
+2. **Multi-page rules.** Totals, bank, terms and signature belong on the LAST
+   page, once. Pagination currently pushes them to a new page without
+   guaranteeing they are last.
+3. **Legibility.** Column positions scale for A5; font sizes do not — so text
+   can overflow a narrowed column. Measurable, and untested today.
+4. **The 8-item PDF threshold should be measured, not fixed** — decide per bill
+   whether the picture can hold it.
