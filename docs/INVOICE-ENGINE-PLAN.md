@@ -457,3 +457,64 @@ by deleting one and watching the guard fail.
   yet. Item columns and bill fields both print.
 - **Trade presets** (Phase 6) will offer "you sell medicines?" and create batch
   and expiry in one tap, instead of typing them by hand.
+
+---
+
+## Phase 6 — trade presets (16 Aug)
+
+**"What do you sell?"** sits above the three lists in *Your own fields*. Pick
+Medicines and you get Batch No., Expiry and MRP in one tap.
+
+### Why this is §0 work and not a convenience
+
+Phase 5 lets a chemist add a batch number. It does not tell them they are
+**required** to record one — and a shopkeeper who does not know the rule never
+goes looking for the setting. They find out from a Drug Inspector.
+
+So every preset field carries `basis`: **`law`** (with the rule named) or
+**`practice`**. The screen shows a ⚖ and "required by law" for the first and a
+plain ✓ for the second. Every competitor offers "industry suggested fields".
+None of them says which ones you can be penalised for missing.
+
+### Only two things in this whole file are marked as law
+
+`pharmacy:Batch No.` and `pharmacy:Expiry` — the Drugs and Cosmetics Rules,
+and Drug Inspectors cross-reference billing records against them. **A test
+pins that list exactly**, so adding a third legal claim fails until somebody
+writes down which rule it comes from.
+
+Everything else is `practice`. In particular:
+
+- **HUID is NOT law.** Hallmarking is mandatory; printing the HUID on the
+  invoice is voluntary. I assumed otherwise, checked, and was wrong — the app
+  now tells jewellers the truth rather than repeating my mistake to someone
+  who would believe it.
+- **Vehicle number is NOT required on the invoice.** It is needed to raise an
+  e-way bill, which is a different document.
+
+**Only a `law` field may be `required`**, and a test enforces that. A required
+field blocks a sale; doing that for a convention would stop a shopkeeper
+billing a customer over something nobody asked them for.
+
+### Applying a preset is ordinary and repeatable
+
+It creates plain `CustomFieldDef` rows through the Phase 5 rules — reserved
+names, per-entity cap, everything. A preset that wrote rows by a private path
+would be a second vocabulary for "a field this shop has".
+
+Tapping a trade twice adds nothing and says so. Existing fields are **skipped,
+never overwritten** — the shopkeeper may have renamed one or stopped printing
+it, and a re-run that reset those would undo a deliberate choice.
+
+### Verified in a browser, on a real chemist's shop
+
+- Medicines applied → `added: [Batch No., Expiry, MRP]`
+- Applied again → `added: []`, `skipped: [all three]`
+- Stored as `Batch No./text/required`, `Expiry/date/required`, `MRP/money/optional`
+- **A sale with no batch is refused: `400 — "Batch No. is needed."`**
+- The same sale with a batch saves, and the bill prints
+  `Batch No.: AMX-7741 · Expiry: 31 Jan 2028 · MRP: —`
+- Screenshot taken and looked at: ⚖ + "required by law" on the two legal
+  fields, plain ✓ on MRP.
+
+Guard proved by marking HUID as `law`: three tests fail. Restored: 12 pass.
