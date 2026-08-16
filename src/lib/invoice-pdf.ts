@@ -367,14 +367,91 @@ export async function generateInvoicePDF(
   // Column proportions (must sum to tableWidth = 180)
   // # | Item | HSN | Qty | Rate | GST% | Amount
   // 8 | 58  | 20  | 18  | 24   | 18   | 34
+  /*
+   * 📄 Phase 7 — the shop's OWN columns become real table columns, when
+   * they fit.
+   *
+   * Rahul: "every image should work properly with all the field which user
+   * will add." So this is MEASURED, not assumed. A template asks for
+   * `columns`; it gets them only while the item name keeps a workable width.
+   * Past that the extra fields drop to the sub-line, where they cost no
+   * horizontal space at all and stay legible however many there are.
+   *
+   * A layout that looks right with two extra columns and collides with five
+   * is a trap, and the shopkeeper who finds it is mid-sale. Falling back is
+   * not a compromise here — it is the feature.
+   */
+  const wantsColumns = template.extraColumns === 'columns'
+  const extraNames = wantsColumns
+    ? Array.from(new Set(invoice.items.flatMap(i => i.customCols.map(c => c.label))))
+    : []
+
+  /*
+   * 🐛 2026-08-16 — THE TABLE NEVER FITTED A5.
+   *
+   * Found by holding A5 to the same maximal-invoice standard as A4. Every
+   * column position here was a hardcoded millimetre figure chosen for A4:
+   * AMOUNT sat 168mm from the left margin. A5 is 148mm WIDE. So every bill a
+   * shop printed on a half sheet had its rate and amount columns off the
+   * right edge — since Phase 2, when I added the paper option and checked
+   * only that the SHEET was the right size.
+   *
+   * The table is now allocated from the REAL printable width, so it fits
+   * whatever sheet it is given. A4 keeps its existing proportions exactly,
+   * because the reference width below is A4's own.
+   */
+  const tableW = (pageWidth - margin * 2) - 2
+  /** What the A4 layout was drawn against. Everything scales from this. */
+  const REFERENCE_W = 178
+  const k = tableW / REFERENCE_W
+
+  /*
+   * 🐛 Third iteration, and the one that actually works.
+   *
+   * My first allocation took the extra columns out of the ITEM name alone:
+   * 58mm of name less 22mm per column. Three columns — which is exactly what
+   * a chemist has, batch + expiry + MRP — left the name at -8mm, so the
+   * fallback fired every time and "Dispensary" never showed a single column.
+   * A template whose whole purpose never triggers is not a design.
+   *
+   * The reference pharma bill answers it: the item name is NARROWER there,
+   * and every other column is tighter too. So the extras are funded from the
+   * WHOLE table, not from one column — and the fallback stays, for the shop
+   * that defines six.
+   */
+  const hasExtras = extraNames.length > 0
+  /** Tail widths, tightened when the shop has its own columns to fit. */
+  const W = hasExtras
+    ? { num: 6, hsn: 16, qty: 14, rate: 20, gst: 12, amount: 26 }
+    : { num: 8, hsn: 20, qty: 18, rate: 24, gst: 18, amount: 30 }
+  const tailW = (W.hsn + W.qty + W.rate + W.gst + W.amount) * k
+  const forNameAndExtras = tableW - W.num * k - tailW
+
+  /** Enough for "AUG-849" or "08/2027" at the small size. */
+  const EXTRA_W = 16 * k
+  /** Below this the item name stops being an item name. */
+  const MIN_NAME_W = 26 * k
+  const nameW = forNameAndExtras - extraNames.length * EXTRA_W
+  const useColumns = hasExtras && nameW >= MIN_NAME_W
+  const extras = useColumns ? extraNames : []
+  const itemW = useColumns ? nameW : forNameAndExtras
+
+  let cx = colStart + W.num * k + itemW
+  const extraCols = extras.map(name => {
+    const col = { name: name.toUpperCase().slice(0, 8), key: name, x: cx, w: EXTRA_W, align: 'left' as const }
+    cx += EXTRA_W
+    return col
+  })
+
   const cols = [
-    { name: '#', x: colStart + 1, w: 8, align: 'left' },
-    { name: 'ITEM', x: colStart + 10, w: 58, align: 'left' },
-    { name: 'HSN', x: colStart + 68, w: 20, align: 'left' },
-    { name: 'QTY', x: colStart + 88, w: 18, align: 'right' },
-    { name: 'RATE', x: colStart + 106, w: 24, align: 'right' },
-    { name: 'GST%', x: colStart + 130, w: 18, align: 'right' },
-    { name: 'AMOUNT', x: colStart + 168, w: 0, align: 'right' },
+    { name: '#', x: colStart + 1 * k, w: W.num * k, align: 'left' },
+    { name: 'ITEM', x: colStart + W.num * k, w: itemW, align: 'left' },
+    ...extraCols.map(c => ({ name: c.name, x: c.x, w: c.w, align: c.align })),
+    { name: 'HSN', x: cx, w: W.hsn * k, align: 'left' },
+    { name: 'QTY', x: cx + W.hsn * k, w: W.qty * k, align: 'right' },
+    { name: 'RATE', x: cx + (W.hsn + W.qty) * k, w: W.rate * k, align: 'right' },
+    { name: 'GST%', x: cx + (W.hsn + W.qty + W.rate) * k, w: W.gst * k, align: 'right' },
+    { name: 'AMOUNT', x: cx + (W.hsn + W.qty + W.rate + W.gst + W.amount) * k, w: 0, align: 'right' },
   ]
   const colEnd = pageWidth - margin - 1
 
@@ -425,8 +502,10 @@ export async function generateInvoicePDF(
    * buildInvoiceDocument), so there is no setting to consult here.
    */
   const subLineHeight = baseRowHeight * 0.55
+  const shownAsColumns = new Set(extraCols.map(c => c.key))
   const hasSubLine = (it: (typeof invoice.items)[number]) =>
-    !!(it.description || it.altQty || it.customCols.length)
+    !!(it.description || it.altQty
+      || it.customCols.some(c => !shownAsColumns.has(c.label)))
 
   invoice.items.forEach((item, i) => {
     const rowHeight = baseRowHeight + (hasSubLine(item) ? subLineHeight : 0)
@@ -469,6 +548,22 @@ export async function generateInvoicePDF(
     doc.setTextColor(text.r, text.g, text.b)
     doc.text(String(i + 1), cols[0].x, tY)
     doc.text(name, cols[1].x, tY)
+    /*
+     * 📄 Phase 7 — the shop's own columns, drawn in their columns.
+     *
+     * Matched by LABEL, which is what the snapshot on the line carries. A
+     * line that predates the column simply has nothing for it and prints
+     * blank, rather than shifting every value one column left — which is how
+     * a batch number ends up under the expiry heading.
+     */
+    for (const ec of extraCols) {
+      const v = item.customCols.find(c => c.label === ec.key)
+      if (v) {
+        doc.setFontSize(metrics.smallPt)
+        doc.text(doc.splitTextToSize(formatCustomValue(v), ec.w - 1)[0] ?? '', ec.x, tY)
+        doc.setFontSize(metrics.bodyPt)
+      }
+    }
     doc.setFontSize(metrics.smallPt)
     doc.text(item.hsn || '-', cols[2].x, tY)
     doc.setFontSize(metrics.bodyPt)
@@ -499,8 +594,26 @@ export async function generateInvoicePDF(
        * pharmacy bill needs batch and expiry PRESENT and legible, not aligned.
        */
       // `cols` above is the TABLE columns — different thing, hence the name.
-      const extraCols = item.customCols.map(v => `${v.label}: ${formatCustomValue(v)}`).join("  ·  ")
-      const sub = [item.description, extraCols].filter(Boolean).join("  ·  ")
+      // Only what did NOT get a column of its own, or it prints twice.
+      const shown = new Set(extraCols.map(c => c.key))
+      const spare = item.customCols
+        .filter(v => !shown.has(v.label))
+        .map(v => `${v.label}: ${formatCustomValue(v)}`)
+        .join("  ·  ")
+      /*
+       * 🐛 Caught by the maximal-invoice guard: the shop's own fields come
+       * FIRST, the description last.
+       *
+       * The sub-line is clipped to the item column. With the description
+       * first, a long one ("Refrigerated. Store below 25°C…") ate the whole
+       * line and the BATCH NUMBER was silently truncated off the bill — the
+       * exact failure this phase was asked to rule out, on the default
+       * template, with no warning to anybody.
+       *
+       * A batch number is a legal record; a description is a courtesy. When
+       * only one of them fits, it is not a close call.
+       */
+      const sub = [spare, item.description].filter(Boolean).join("  ·  ")
       if (sub) {
         // Truncated to the name column so it can never run under HSN.
         const room = cols[2].x - cols[1].x - 2
@@ -661,6 +774,26 @@ export async function generateInvoicePDF(
    * the signature. Drawn before `bottomY` is fixed so a long set of terms
    * pushes the signature down rather than printing underneath it.
    */
+  /*
+   * 🐛 2026-08-16 — THE FOOTER RAN OFF THE BOTTOM OF THE PAGE.
+   *
+   * Found by the maximal-invoice guard, on FOUR of eight templates: a shop
+   * with a long terms paragraph and bank details, on a bill whose items had
+   * already filled the sheet, printed its terms at y = -2mm, -5mm, -9mm —
+   * below the paper. Gone. No warning, and nothing on screen would have
+   * shown it, because the preview draws one page.
+   *
+   * The item rows have paginated correctly since Phase 2; this block never
+   * asked. Rahul's question — "does every design work with all the fields" —
+   * is exactly the question that surfaced it.
+   */
+  const footerNeeded =
+    (invoice.shop.terms ? 14 : 0)
+    + (invoice.shop.bank?.accountNumber || invoice.shop.bank?.name ? 22 : 0)
+  if (footerNeeded) {
+    y = newPageIfNeeded(doc, y, footerNeeded, undefined, pageHeight)
+  }
+
   if (invoice.shop.terms) {
     doc.setFont(THEME.font, 'bold')
     doc.setFontSize(metrics.smallPt)
@@ -696,7 +829,21 @@ export async function generateInvoicePDF(
     y += 2
   }
 
-  const bottomY = Math.max(y + 5, pageHeight - 70)
+  /*
+   * 🐛 The same overflow, one block further down.
+   *
+   * `pageHeight - 70` reserves the bottom 70mm for the QR and signature —
+   * which is a sane reservation on A4 and a third of the SHEET on A5. On a
+   * compact template, where more rows fit per page, `y` was already past it
+   * and the signature block printed below the paper.
+   *
+   * Asking for the room first is the fix, and it is the same call the item
+   * rows have made since Phase 2. The reservation is now proportional to the
+   * sheet rather than a number chosen while looking at one size of paper.
+   */
+  const bottomBlockMm = Math.min(70, pageHeight * 0.24)
+  y = newPageIfNeeded(doc, y, bottomBlockMm, undefined, pageHeight)
+  const bottomY = Math.max(y + 5, pageHeight - bottomBlockMm)
 
   /*
    * How the customer pays: a QR they SCAN, never a link they follow.
@@ -775,7 +922,20 @@ export async function generateInvoicePDF(
 
   if (invoice.shop.showReceiverSignature) {
     const rx = margin
-    const ry = bottomY + (invoice.shop.upiId && dueAmount > 0 ? 42 : 0)
+    /*
+     * 🐛 2026-08-16 — this printed 7.6mm BELOW an A5 sheet.
+     *
+     * It sits 42mm under the QR block when there is one, which fits on A4 and
+     * does not on a half sheet. Found by holding A5 to the same
+     * maximal-invoice standard as A4 — a shop taking delivery signatures, on
+     * A5, with a payment QR, simply had no receiver line on its bill.
+     *
+     * Clamped to the last band of the page that can still hold it, rather
+     * than pushed to a new page: a signature line alone on page three is not
+     * a document anyone signs.
+     */
+    const wanted = bottomY + (invoice.shop.upiId && dueAmount > 0 ? 42 : 0)
+    const ry = Math.min(wanted, pageHeight - 20)
     doc.setFont(THEME.font, 'normal')
     doc.setFontSize(9)
     doc.setTextColor(textMuted.r, textMuted.g, textMuted.b)

@@ -637,3 +637,75 @@ reads it — and if you cannot, the setting does nothing and should not ship.
 
 Deliberately a list rather than a directory walk: the walk produced five false
 positives, and a sweep that cries wolf gets ignored, which is worse than none.
+
+---
+
+## Phase 7 — designs, and what checking them found (16 Aug)
+
+Rahul, handing over 18 reference invoices: *"i want you to analyse that every
+image should work properly with all the field which user will add."*
+
+That instruction turned out to be worth more than the designs.
+
+### What the references actually teach
+
+Two read closely — a pharmacy bill and a transport bill. They share one
+grammar with every other Indian invoice: **band → party cards → table with
+the trade's own columns → terms left, totals right.**
+
+The important detail is that **batch and expiry are real COLUMNS**, not a note
+under the item name. That is the format an inspector reads down a page, and it
+is what Phase 5's sub-line was standing in for.
+
+### One new design, not two
+
+**Dispensary** — batch and expiry as real table columns, compact rows.
+
+A second, *Consignment*, was written and then **deleted**. Its only
+distinguishing feature was a `metaStrip` flag, and that flag broke the
+template contract: it would have let a design decide whether the bill's own
+fields appear at all. A template composes the page; it may not remove a field
+the shopkeeper asked for. Without the strip it was byte-identical to `ruled` —
+an existing guard said so — and shipping a duplicate to claim one more design
+is padding.
+
+`extraColumns` survives the same rule because it changes **where** a field is
+drawn, never **whether**.
+
+### The guard, and the four bugs it found
+
+Every template is rendered against a deliberately hostile invoice — every
+toggle on, three custom columns per line, 34 lines, long names, terms, bank,
+signature, QR — on A4 **and** A5, and the PDF's own coordinates are read back
+to prove nothing left the paper.
+
+It found four real defects, none of them visible on screen:
+
+1. **The footer ran off the bottom of the page** on four of eight templates. A
+   long terms block plus bank details, on a bill whose items had filled the
+   sheet, printed at y = −2mm, −5mm, −9mm. Gone. The item rows have paginated
+   since Phase 2; this block never asked.
+2. **The item table never fitted A5.** Every column position was a hardcoded
+   millimetre figure chosen for A4 — AMOUNT sat 168mm out, on a 148mm-wide
+   sheet. Every bill printed on a half sheet since Phase 2 had its rate and
+   amount columns off the edge. I had checked the SHEET was the right size and
+   not the table on it.
+3. **The receiver's signature printed below an A5 page**, 7.6mm past the edge,
+   whenever a payment QR was present.
+4. **The batch number was silently truncated** on the default template when an
+   item also had a description: the sub-line put the description first and
+   clipped the rest. A batch number is a legal record; a description is a
+   courtesy. Order reversed.
+
+### And one caught before shipping
+
+The PDF grew the column layout and **the preview did not** — so choosing
+Dispensary changed the file and left the preview identical. That is the report
+Rahul filed twice already, and it would have been a third. The preview now
+lays out the same columns by the same rule.
+
+### Honest note on the guards
+
+Disabling the footer pagination fails six tests, so that fix is proven. The
+bottom-block reservation is **defensive** — this suite does not independently
+prove it, and it is not claimed to.

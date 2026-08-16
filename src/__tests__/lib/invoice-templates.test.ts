@@ -218,6 +218,17 @@ describe('the contract', () => {
      */
     const structuralKeys = new Set([
       'id', 'name', 'description', 'paper', 'header', 'table', 'totals', 'density', 'titleFace',
+      /*
+       * 📄 Phase 7. `extraColumns` decides WHERE the shop's own columns are
+       * drawn — in the table, or under the item name — never WHETHER. Both
+       * settings print every one of them.
+       *
+       * Added deliberately rather than by widening the rule: this guard exists
+       * so the conversation happens before it ships, and it did. A sibling key
+       * that WOULD have hidden a field (`metaStrip`) was caught here on the
+       * same day and deleted.
+       */
+      'extraColumns',
     ])
     for (const t of INVOICE_TEMPLATES) {
       const unexpected = Object.keys(t).filter(k => !structuralKeys.has(k))

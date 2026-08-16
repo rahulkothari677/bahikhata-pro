@@ -46,6 +46,7 @@ export type InvoiceTemplateId =
   | 'letterhead'
   | 'statement'
   | 'minimal'
+  | 'dispensary'
 
 /** How the shop's identity is presented at the top of the page. */
 export type HeaderStyle =
@@ -112,6 +113,44 @@ export interface InvoiceTemplate {
    * shop's own language is not a choice we can offer.
    */
   titleFace: 'sans' | 'serif'
+
+  /**
+   * 📄 Phase 7 — how the shop's OWN item columns are laid out.
+   *
+   * `subline`  — under the item name: "Batch No.: A-118 · Expiry: 12 Mar 2027".
+   *              Survives any number of extra fields and any paper width,
+   *              because it never competes for horizontal space.
+   * `columns`  — real table columns, as every pharmacy bill in the reference
+   *              set does it. What a Drug Inspector expects to see, and much
+   *              easier to read down a page. Costs width, so the renderer
+   *              falls back to `subline` when the columns will not fit.
+   *
+   * THE FALLBACK IS THE POINT. Rahul: "every image should work properly with
+   * all the field which user will add." A template that looks right with two
+   * extra columns and collides with five is not a design, it is a trap — so
+   * the choice below is a PREFERENCE, and the renderer decides from the real
+   * measured width.
+   */
+  extraColumns: 'subline' | 'columns'
+  /*
+   * 🗑️ `metaStrip` lived here for about an hour and is gone.
+   *
+   * It would have let a template decide whether the BILL'S OWN FIELDS —
+   * vehicle number, PO number — appear at all. Two guards caught it: one
+   * because nothing read it, the other because this contract forbids exactly
+   * that. A template composes the page; it may not remove a field the
+   * shopkeeper asked for.
+   *
+   * A second template, `consignment`, went with it. Its only distinguishing
+   * feature WAS the strip; without that it was byte-identical to `ruled`, and
+   * an existing guard said so. Shipping a duplicate to claim one more design
+   * is padding, and padding is what the reference set is meant to replace.
+   *
+   * `extraColumns` above survives that rule because it changes WHERE a field
+   * is drawn, never WHETHER. Both settings print every custom column; one
+   * puts them in the table, the other under the item name.
+   */
+
 }
 
 /**
@@ -157,6 +196,7 @@ export const INVOICE_TEMPLATES: InvoiceTemplate[] = [
     totals: 'bar',
     density: 'regular',
     titleFace: 'sans',
+    extraColumns: 'subline',
   },
   {
     id: 'compact',
@@ -168,6 +208,7 @@ export const INVOICE_TEMPLATES: InvoiceTemplate[] = [
     totals: 'bar',
     density: 'compact',
     titleFace: 'sans',
+    extraColumns: 'subline',
   },
   {
     id: 'ruled',
@@ -179,6 +220,7 @@ export const INVOICE_TEMPLATES: InvoiceTemplate[] = [
     totals: 'panel',
     density: 'regular',
     titleFace: 'sans',
+    extraColumns: 'subline',
   },
   {
     id: 'letterhead',
@@ -190,6 +232,7 @@ export const INVOICE_TEMPLATES: InvoiceTemplate[] = [
     totals: 'panel',
     density: 'airy',
     titleFace: 'serif',
+    extraColumns: 'subline',
   },
   {
     id: 'statement',
@@ -201,6 +244,7 @@ export const INVOICE_TEMPLATES: InvoiceTemplate[] = [
     totals: 'panel',
     density: 'regular',
     titleFace: 'serif',
+    extraColumns: 'subline',
   },
   {
     id: 'minimal',
@@ -212,6 +256,32 @@ export const INVOICE_TEMPLATES: InvoiceTemplate[] = [
     totals: 'plain',
     density: 'airy',
     titleFace: 'sans',
+    extraColumns: 'subline',
+  },
+  /*
+   * 📄 Phase 7 — two designs taken from the reference set Rahul supplied.
+   *
+   * Both are compositions of the SAME grammar the other six use — band,
+   * table, totals, density. Nothing here is a new drawing routine, which is
+   * the whole point of the template contract: a design is data.
+   *
+   * They are also our own arrangement rather than a copy of anyone's layout.
+   * The reference bills share a grammar that every Indian invoice shares;
+   * what we take is the grammar, not the drawing.
+   */
+  {
+    id: 'dispensary',
+    name: 'Dispensary',
+    description: 'Batch and expiry as real columns. For a chemist or medical store.',
+    paper: 'a4',
+    header: 'band',
+    table: 'rows',
+    totals: 'panel',
+    density: 'compact',
+    titleFace: 'sans',
+    // The reason this template exists: a pharmacy bill reads DOWN a batch
+    // column. A sub-line works, but it is not the format an inspector expects.
+    extraColumns: 'columns',
   },
 ]
 

@@ -158,6 +158,27 @@ export function InvoicePreview({
   const scale = width / page.width
 
   const rows = useMemo(() => doc.items.slice(0, 12), [doc.items])
+
+  /*
+   * 📄 Phase 7 — the shop's own columns, as COLUMNS, matching the PDF.
+   *
+   * 🐛 Caught before shipping: the PDF grew a column layout and this did not,
+   * so choosing "Dispensary" changed the file and left the preview identical.
+   * A shopkeeper would pick the design, see no difference, and conclude it
+   * was broken — which is precisely the report Rahul filed twice. A preview
+   * that does not show the setting is not a preview.
+   *
+   * The same fallback rule as the PDF: real columns only while the item name
+   * stays usable, otherwise back to the sub-line.
+   */
+  const extraNames = useMemo(() => {
+    if (template.extraColumns !== 'columns') return []
+    const all = Array.from(new Set(doc.items.flatMap(i => i.customCols.map(c => c.label))))
+    // The PDF's own rule: extras are funded from the whole table, and the
+    // name must survive at 26mm. See invoice-pdf for why it is not 58/22.
+    const forNameAndExtras = 178 - 6 - (16 + 14 + 20 + 12 + 26)
+    return forNameAndExtras - all.length * 16 >= 26 ? all : []
+  }, [doc.items, template.extraColumns])
   const hidden = doc.items.length - rows.length
 
   const ringFor = (block: PreviewFocus) =>
@@ -228,6 +249,9 @@ export function InvoicePreview({
               style={{ color: theme.accent, background: `${theme.accent}14`, padding: '6px 8px' }}
             >
               <span className="flex-1">Item</span>
+              {extraNames.map(n => (
+                <span key={n} className="w-24 truncate">{n}</span>
+              ))}
               <span className="w-20 text-right">Qty</span>
               <span className="w-28 text-right">Rate</span>
               <span className="w-32 text-right">Amount</span>
@@ -244,6 +268,14 @@ export function InvoicePreview({
               >
                 <div className="flex items-center text-sm" style={{ height: metrics.rowHeight * MM }}>
                   <span className="flex-1 truncate pr-2">{item.name}</span>
+                  {extraNames.map(n => {
+                    const v = item.customCols.find(cc => cc.label === n)
+                    return (
+                      <span key={n} className="w-24 truncate">
+                        {v ? formatCustomValue(v) : ''}
+                      </span>
+                    )
+                  })}
                   <span className="w-20 text-right">{item.qty}</span>
                   <span className="w-28 text-right tabular-nums">{money(item.rate)}</span>
                   <span className="w-32 text-right tabular-nums">{money(item.total)}</span>
@@ -261,7 +293,10 @@ export function InvoicePreview({
                     <span className="flex-1 truncate pr-2">
                       {/* 📄 Phase 5 — same sub-line as the PDF, same order. */}
                       {[item.description,
-                        ...item.customCols.map(v => `${v.label}: ${formatCustomValue(v)}`),
+                        // Only what did NOT get its own column.
+                        ...item.customCols
+                          .filter(v => !extraNames.includes(v.label))
+                          .map(v => `${v.label}: ${formatCustomValue(v)}`),
                         // Per LINE, not pooled: a field filled on another
                         // line is still missing from this one.
                         ...pendingFields
