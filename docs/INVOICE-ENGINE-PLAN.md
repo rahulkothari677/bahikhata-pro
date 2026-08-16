@@ -395,3 +395,65 @@ shopkeeper is one tap from invalidating their own invoice.
 4. Rendering the **invoice-level and party-level** fields. Item columns already
    draw on all three surfaces; PO number and FSSAI reach the document but are
    not yet laid out.
+
+---
+
+## Phase 5, part 2 — the screens (15 Aug)
+
+**Now usable.** A shopkeeper can define their own fields, fill them in on a
+sale, and see them on the bill.
+
+### Where it lives
+
+**Account → Invoices & Bills → Your own fields**, with three lists that say
+plainly where each one lands:
+
+| List | Appears | Real example |
+|---|---|---|
+| On every item | Under each line of the bill | Batch No., Expiry, MRP |
+| On the whole bill | Once, near the bill number | PO Number, Vehicle Number |
+| On a customer | Saved with the customer | FSSAI Licence, Route |
+
+**Three lists rather than one "Add Custom Field" button**, because the mistake
+is expensive: a batch number added as a *bill* field appears once on a bill
+with nine medicines on it, which is not the record the Drugs and Cosmetics Act
+asks for. myBillBook offers the same button on six screens without the
+distinction, and their help pages are full of people asking why their column
+printed once.
+
+Each list carries a real example rather than "Custom Field 1" — a chemist
+reading "Batch No., Expiry" knows immediately this is their row.
+
+### Two switches per field
+
+- **Must be filled** — the bill cannot be saved without it. Enforced on the
+  SERVER, so an offline client replaying a queued sale cannot skip it.
+- **Print on the bill** — off keeps it in the shop's records only. A shop's own
+  cost price is the case that matters: recorded, never shown to the customer.
+
+### Where the boxes appear
+
+Per-line boxes sit **inside each item's own card**, under its numbers. A
+chemist filling batch and expiry on a nine-item bill can see which medicine
+each pair belongs to; a separate panel would make that a memory test.
+
+The **field's type drives the keyboard** — a date opens a date picker, a number
+opens the numeric pad. Someone entering an expiry on every line does it dozens
+of times a day, and a plain text box there is the difference between a feature
+used and one abandoned.
+
+### The trap this phase walked into
+
+`validation.ts` carries a warning that Zod strips undeclared keys, written after
+an HSN code sent on a free-text line was discarded before the line-item code
+ever saw it. A custom field would have vanished the same way — typed in, saved,
+gone. Both keys are now declared, and a test fails if either is removed. Proved
+by deleting one and watching the guard fail.
+
+### What is deliberately still open
+
+- **Editing a bill** does not yet re-save custom values — only creating one does.
+- **Party fields** save and reach the document, but are not laid out on the bill
+  yet. Item columns and bill fields both print.
+- **Trade presets** (Phase 6) will offer "you sell medicines?" and create batch
+  and expiry in one tap, instead of typing them by hand.

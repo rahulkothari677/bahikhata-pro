@@ -32,7 +32,7 @@
 
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronRight, Palette, Send, Coins, FileText, Hash, Eye, QrCode } from 'lucide-react'
+import { ChevronRight, Palette, Send, Coins, FileText, Hash, Eye, QrCode, ListPlus } from 'lucide-react'
 import { offlineFetch } from '@/lib/offline-fetch'
 import { haptic } from '@/lib/haptic'
 import { cn } from '@/lib/utils'
@@ -114,6 +114,24 @@ export const INVOICE_SECTIONS = [
   },
   {
     /*
+     * 📄 Phase 5. Sits BEFORE "Extra details" deliberately: this section
+     * invents fields, that one switches existing ones on. A shopkeeper who
+     * opens the wrong one finds nothing they were looking for, and the two
+     * names are close enough that order is doing real work here.
+     */
+    id: 'invoice-extra-fields',
+    label: 'Your own fields',
+    summary: 'Batch no., expiry, PO number',
+    // Genuinely not guessable from three words, and the distinction between
+    // a bill field and a line column is the one people get wrong.
+    hint: 'Add fields the app does not have — a batch number and expiry on every medicine, a PO number on the bill, an FSSAI licence on a customer. You choose whether each one prints on the bill or stays in your records.',
+    icon: ListPlus,
+    tint: 'text-fuchsia-600 dark:text-fuchsia-400',
+    tintBg: 'bg-fuchsia-100 dark:bg-fuchsia-950',
+    focus: 'items' as PreviewFocus,
+  },
+  {
+    /*
      * 📄 Phase 4. Its own category rather than more rows under "On the bill":
      * that section is things the shop TYPES, this is things it switches on.
      * Mixing a text area with a column of toggles is what made the old App
@@ -164,7 +182,18 @@ const SAMPLE: InvoiceSource = {
       description: 'Chakki fresh, 10 kg bag' },
     { productName: 'Sugar 1 kg', quantity: 5, unitPrice: 45, gstRate: 5, total: 236.25, unit: 'pkt', hsn: '1701' },
     { productName: 'Sunflower Oil 1 L', quantity: 3, unitPrice: 180, gstRate: 5, total: 567, unit: 'btl', hsn: '1512',
-      description: 'Refined, pouch', enteredQuantity: 3000, enteredUnit: 'ml' },
+      description: 'Refined, pouch', enteredQuantity: 3000, enteredUnit: 'ml',
+      customCols: [
+        { key: 'batch', label: 'Batch', type: 'text', value: 'A-118', show: true },
+        { key: 'expiry', label: 'Expiry', type: 'date', value: '2027-03-12', show: true },
+      ] },
+  ],
+  /*
+   * 📄 Phase 5: the sample carries custom fields too, so a shop that has
+   * just defined 'Batch' can see where it lands before making a single bill.
+   */
+  customFields: [
+    { key: 'po_number', label: 'PO Number', type: 'text', value: 'PO-4471', show: true },
   ],
   partyBalance: 12400,
   subtotal: 1665,

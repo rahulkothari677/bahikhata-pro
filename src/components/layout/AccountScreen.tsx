@@ -329,6 +329,7 @@ export function AccountScreen() {
     'invoice-numbering': 'Numbering',
     'invoice-visibility': 'Extra details',
     'invoice-payment': 'Payment',
+    'invoice-extra-fields': 'Your own fields',
   }
 
   const sectionTitles = useMemo(() => {
@@ -747,6 +748,7 @@ function AccountSectionContent({
     'invoice-numbering': ['invoice-numbering'],
     'invoice-visibility': ['invoice-visibility'],
     'invoice-payment':    ['invoice-payment'],
+    'invoice-extra-fields': ['invoice-extra-fields'],
     'appearance':    ['appearance'],
     'preferences':   ['preferences'],
     'notifications': ['notifications'],

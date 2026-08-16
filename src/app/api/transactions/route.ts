@@ -19,6 +19,7 @@ import { encodeKeysetCursor, buildKeysetWhere } from '@/lib/pagination'
 import { assertPeriodNotLocked, PeriodLockedError } from '@/lib/period-lock'
 import { resolveFinalPaid, isNoteType } from '@/lib/paid-amount'
 import { validateNoteAgainstOriginal } from '@/lib/note-validation'
+import { buildCustomValues, loadFieldDefs, CustomFieldError } from '@/lib/custom-fields-server'
 
 /**
  * Budget for the interactive transactions on the write paths.
@@ -589,7 +590,52 @@ export async function POST(req: NextRequest) {
     // A composition dealer collects no GST — forced at the rate, not left to
     // the screen that sent it. See line-items.ts.
     const computed = computeLineItems({ items, productMap, isInterState, orderDiscount, type, isComposition: !!setting?.compositionCategory })
+    /*
+     * 📄 Phase 5 — the shop's own fields, validated and snapshotted.
+     *
+     * Two indexed reads per bill CREATE, and none per bill read. Writes are
+     * far rarer than renders, and a required field must be enforced even when
+     * the client sends nothing: a pharmacy that marked Batch required cannot
+     * be allowed to save a medicine line without one, because that bill is
+     * the record a Drug Inspector asks for.
+     *
+     * Item definitions load ONCE and are passed down, never fetched per line —
+     * a fifty-line bill would otherwise be fifty identical queries.
+     */
+    let billCustomFields: unknown = null
+    let itemDefs: Awaited<ReturnType<typeof loadFieldDefs>> = []
+    try {
+      billCustomFields = await buildCustomValues(userId, 'invoice', (validation.data as any).customFields)
+      itemDefs = await loadFieldDefs(userId, 'item')
+    } catch (e) {
+      if (e instanceof CustomFieldError) {
+        return NextResponse.json({ error: 'Validation failed', message: e.message }, { status: 400 })
+      }
+      throw e
+    }
+
     const txItems = computed.txItems
+
+    /*
+     * Per-line custom columns, snapshotted onto the rows about to be written.
+     *
+     * Zipped by INDEX because computeLineItems preserves the order it was
+     * given — the same assumption every other per-line field here makes.
+     */
+    if (itemDefs.length) {
+      try {
+        const rawItems = (validation.data as any).items ?? []
+        for (let i = 0; i < txItems.length; i++) {
+          const cols = await buildCustomValues(userId, 'item', rawItems[i]?.customCols, itemDefs)
+          ;(txItems[i] as any).customCols = cols
+        }
+      } catch (e) {
+        if (e instanceof CustomFieldError) {
+          return NextResponse.json({ error: 'Validation failed', message: e.message }, { status: 400 })
+        }
+        throw e
+      }
+    }
     subtotal = computed.subtotal
     cgst = computed.cgst
     sgst = computed.sgst
@@ -785,6 +831,9 @@ export async function POST(req: NextRequest) {
           noteType: noteType || null,
           noteReason: noteReason || null,
           affectsStock: affectsStock || false,
+          // 📄 Phase 5. Null when the shop has defined no fields — not [],
+          // which would be ten million empty JSON allocations at scale.
+          customFields: billCustomFields as any,
           items: { create: txItems },
         },
         include: { items: true, party: true },

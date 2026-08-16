@@ -397,6 +397,12 @@ function HeaderContent({
         <p className="text-sm font-medium" style={{ color: muted }}>
           {doc.invoiceNo} · {doc.dateLabel}{doc.timeLabel ? `, ${doc.timeLabel}` : ''}
         </p>
+        {/* 📄 Phase 5 — the bill's own fields, under the number. */}
+        {doc.customFields.slice(0, 4).map(f => (
+          <p key={f.key} className="text-sm font-medium" style={{ color: muted }}>
+            {f.label}: {formatCustomValue(f)}
+          </p>
+        ))}
         {/* 📄 Phase 3: a real date, high on the page. */}
         {doc.dueDateLabel && (
           <p className="text-sm font-semibold" style={{ color: muted }}>

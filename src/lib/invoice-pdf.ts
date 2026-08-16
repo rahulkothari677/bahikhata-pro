@@ -231,6 +231,24 @@ export async function generateInvoicePDF(
   doc.setFontSize(9)
   doc.setTextColor(headMuted.r, headMuted.g, headMuted.b)
   doc.text(`${invoice.invoiceNo || ''}  |  ${dateStr}`, pageWidth - margin, 18, { align: 'right' })
+
+  /*
+   * 📄 Phase 5 — the shop's own fields for this bill (PO number, vehicle no).
+   *
+   * Under the invoice number, where a reader already looks for "which
+   * document is this". A PO number is how the buyer's accounts department
+   * finds the bill at all, so burying it in the footer would defeat the
+   * reason anyone adds one.
+   */
+  if (invoice.customFields.length) {
+    doc.setFontSize(8)
+    doc.setTextColor(headMuted.r, headMuted.g, headMuted.b)
+    let cfY = 23
+    for (const f of invoice.customFields.slice(0, 4)) {
+      doc.text(`${f.label}: ${formatCustomValue(f)}`, pageWidth - margin, cfY, { align: 'right' })
+      cfY += 4
+    }
+  }
   /*
    * 📄 Phase 3: the due date, printed as a DATE.
    *

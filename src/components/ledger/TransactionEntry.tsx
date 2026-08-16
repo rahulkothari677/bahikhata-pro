@@ -49,6 +49,8 @@ import { readError } from '@/lib/read-error'
 import { invalidateMoneyCaches } from '@/lib/invalidate-money-caches'
 import { useConfirmDialog } from '@/hooks/use-confirm-dialog'
 import { registerExitGuard } from '@/lib/exit-guard'
+import { CustomFieldInputs } from '@/components/common/CustomFieldInputs'
+import type { CustomFieldDef } from '@/lib/custom-fields'
 import {
   AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogFooter,
   AlertDialogTitle, AlertDialogDescription, AlertDialogCancel,
@@ -133,6 +135,28 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
   const [cashRefund, setCashRefund] = useState(false)
   const [discountAmount, setDiscountAmount] = useState('')
   const [notes, setNotes] = useState('')
+
+  /*
+   * 📄 Phase 5 — the shop's own fields.
+   *
+   * `billFields` is one object for the whole bill. `itemFields` is keyed by
+   * LINE INDEX, matching how every other per-line value on this screen is
+   * held, so adding or removing a line keeps them aligned with `items`.
+   */
+  const [billFields, setBillFields] = useState<Record<string, string>>({})
+  const [itemFields, setItemFields] = useState<Record<number, Record<string, string>>>({})
+  const { data: cfData } = useQuery({
+    queryKey: ['custom-fields'],
+    queryFn: async () => {
+      const r = await offlineFetch('/api/custom-fields')
+      if (!r.ok) throw new Error('Could not load your fields')
+      return r.json()
+    },
+    staleTime: 5 * 60 * 1000,
+  })
+  const allDefs: CustomFieldDef[] = cfData?.fields ?? []
+  const billDefs = allDefs.filter(f => f.entity === 'invoice')
+  const itemDefs = allDefs.filter(f => f.entity === 'item')
 
   // Cascading product selection
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null)
@@ -931,7 +955,7 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
           noteType: isCreditNote ? 'C' : isDebitNote ? 'D' : undefined,
           noteReason: noteReason || undefined,
           affectsStock: affectsStock || undefined,
-          items: items.map(i => {
+          items: items.map((i, idx) => {
             const p = i.productId ? productMap.get(i.productId) : null
             return {
               productId: i.productId || null,
@@ -945,8 +969,12 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
               // calculate the taxable price for MRP-priced goods.
               unit: i.unit || p?.unit || 'pcs',
               priceIncludesGst: p?.priceIncludesGst ?? false,
+              // 📄 Phase 5 — typed and validated on the server against the
+              // shop's own definitions; this only carries what was typed.
+              customCols: itemFields[idx] || undefined,
             }
           }),
+          customFields: billDefs.length ? billFields : undefined,
         }),
         offline: { invalidate: ['/api/transactions', '/api/dashboard', '/api/products', '/api/parties', '/api/insights'] },
       })
@@ -1944,6 +1972,28 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
                             </div>
                           )
                         })()}
+
+                        {/*
+                          * 📄 Phase 5 — the shop's own columns for THIS line.
+                          *
+                          * Inside the line's own card, under its numbers, so a
+                          * chemist filling batch and expiry on a nine-item bill
+                          * can see which medicine each pair belongs to. A
+                          * separate panel would make that a memory test.
+                          */}
+                        {itemDefs.length > 0 && (
+                          <div className="pl-5 mt-2">
+                            <CustomFieldInputs
+                              compact
+                              idPrefix={`line-${i}`}
+                              defs={itemDefs}
+                              values={itemFields[i] || {}}
+                              onChange={(key, value) =>
+                                setItemFields(prev => ({ ...prev, [i]: { ...(prev[i] || {}), [key]: value } }))
+                              }
+                            />
+                          </div>
+                        )}
                       </div>
                     )
                   })}
@@ -1951,6 +2001,25 @@ export function TransactionEntry({ type, estimateMode = false }: { type: LedgerT
               )}
             </div>
           </Card>
+
+          {/* 📄 Phase 5 — the shop's own fields for the whole bill.
+
+              Beside Notes rather than up with the party, because these are
+              things about the SALE — a PO number, a vehicle number — and
+              the top of this screen already carries the customer and the
+              date, which is as much as fits before the item list. */}
+          {billDefs.length > 0 && (
+            <Card className="shadow-card border-border/60 order-5 lg:order-none">
+              <div className="p-3 sm:p-4">
+                <CustomFieldInputs
+                  idPrefix="bill"
+                  defs={billDefs}
+                  values={billFields}
+                  onChange={(key, value) => setBillFields(prev => ({ ...prev, [key]: value }))}
+                />
+              </div>
+            </Card>
+          )}
 
           {/* Notes */}
           <Card className="shadow-card border-border/60 order-5 lg:order-none">

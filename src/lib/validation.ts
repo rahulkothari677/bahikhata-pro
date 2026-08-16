@@ -64,6 +64,17 @@ export const transactionItemSchema = z.object({
    * Product-linked lines ignore this and keep using the product's own code.
    */
   hsn: z.string().max(20).nullable().optional(),
+  /*
+   * 📄 Phase 5 — the shop's own columns on this line, raw:
+   * { batch: "A-118", expiry: "2027-03-12" }.
+   *
+   * DECLARED HERE OR IT NEVER ARRIVES. Zod strips what it does not know, and
+   * the note on `hsn` above is this exact bug already having happened once:
+   * a code sent on a free-text line was discarded before line-items.ts ever
+   * saw it. Typing and coercion happen server-side against the shop's own
+   * definitions (snapshotCustomValues); this layer only lets them through.
+   */
+  customCols: z.record(z.string(), z.unknown()).optional(),
   // 🔒 V18 BUG-010: Removed the per-item `discountAmount` input. It was
   // accepted here but NEVER read by computeLineItems — the discount is entered
   // at the ORDER level and distributed proportionally across items. Accepting a
@@ -97,6 +108,8 @@ export const createTransactionSchema = z.object({
   partyId: z.string().nullable().optional(),
   date: z.string().optional(),
   items: z.array(transactionItemSchema).optional(),
+  /** 📄 Phase 5 — the shop's own fields on the BILL (PO number, vehicle no). */
+  customFields: z.record(z.string(), z.unknown()).optional(),
   discountAmount: z.coerce.number().min(0).optional(),
   paymentMode: z.enum(['cash', 'upi', 'card', 'bank', 'credit']).optional().default('cash'),
   notes: z.string().max(5000, 'Notes too long').nullable().optional(),
@@ -245,6 +258,8 @@ export const createPartySchema = z.object({
     .refine((v) => !isNaN(v), 'Opening balance must be a valid number')
     .optional()
     .default(0),
+  /** 📄 Phase 5 — the shop's own fields on this customer (FSSAI, route code). */
+  customFields: z.record(z.string(), z.unknown()).optional(),
 })
 
 // 🔒 AUDIT FIX V7 M4: Product update schema — all fields optional, but

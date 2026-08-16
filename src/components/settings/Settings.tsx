@@ -42,6 +42,7 @@ import { VISIBILITY_TOGGLES } from '@/lib/invoice-visibility'
 import { InfoHint } from '@/components/common/InfoHint'
 import { SignatureField } from '@/components/settings/SignatureField'
 import { PaymentQrField } from '@/components/settings/PaymentQrField'
+import { CustomFieldsCard } from '@/components/settings/CustomFieldsCard'
 import { describeRestoreOutcome } from '@/lib/restore-outcome'
 
 const FEATURE_CATEGORIES: { title: string; features: { key: FeatureKey; label: string; description: string; icon: any }[] }[] = [
@@ -118,6 +119,7 @@ export type SettingsSection =
   | 'invoice-numbering' // prefix + next number
   | 'invoice-visibility' // extra details the shop can switch on
   | 'invoice-payment'    // UPI id or the shop's own QR image
+  | 'invoice-extra-fields' // the shop's own fields and columns
   | 'preferences'     // landing page, hide profit, goals, stock policy
   | 'notifications'   // which alerts reach the bell
   | 'accounting'      // period lock, reconciliation
@@ -2084,6 +2086,9 @@ export function Settings({
         </CardContent>
       </Card>
       )}
+
+      {/* ═══ Phase 5 — the shop's own fields ════════════════════════════ */}
+      {show('invoice-extra-fields') && <CustomFieldsCard />}
 
       {/* ═══ Phase 4 — what else appears on the bill ════════════════════
           Rendered FROM the registry rather than hand-written, so a toggle

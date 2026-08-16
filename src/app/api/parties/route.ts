@@ -8,6 +8,7 @@ import { apiError } from '@/lib/api-error'
 import { getReceivablePayable } from '@/lib/party-balance'
 import { validateBody, createPartySchema } from '@/lib/validation'
 import { findUnknownFields, schemaFields } from '@/lib/unknown-fields'
+import { buildCustomValues, CustomFieldError } from '@/lib/custom-fields-server'
 
 export async function GET() {
   try {
@@ -175,6 +176,18 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    // 📄 Phase 5 — the shop's own fields on this customer. Same helper the
+    // bill uses, so the two cannot disagree about a required field.
+    let partyCustomFields: unknown = null
+    try {
+      partyCustomFields = await buildCustomValues(userId, 'party', (validation.data as any).customFields)
+    } catch (e) {
+      if (e instanceof CustomFieldError) {
+        return NextResponse.json({ error: 'Validation failed', message: e.message }, { status: 400 })
+      }
+      throw e
+    }
+
     const party = await db.party.create({
       data: {
         userId,
@@ -186,6 +199,7 @@ export async function POST(req: NextRequest) {
         address: address || null,
         state: state || null,
         openingBalance: roundMoney(openingBalance || 0),
+        customFields: partyCustomFields as any,
       },
     })
     return NextResponse.json({ party })

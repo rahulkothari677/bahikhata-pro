@@ -261,3 +261,79 @@ describe('the schema and the code agree', () => {
     expect(readCode('src/app/api/custom-fields/route.ts')).toContain('MAX_FIELDS_PER_ENTITY')
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────
+// Part 2 — the write path and the screens.
+// ─────────────────────────────────────────────────────────────────────────
+
+describe('what the shopkeeper types reaches the database', () => {
+  it('the validation schema DECLARES the fields, or Zod eats them', () => {
+    /*
+     * Zod strips what it does not declare. validation.ts already carries a
+     * note about exactly this having happened once: an HSN code sent on a
+     * free-text line was discarded before line-items.ts ever saw it, so the
+     * line stored no HSN and could not reach GSTR-1 Table 12.
+     *
+     * A custom field dropped the same way would be invisible in precisely the
+     * same manner — the shopkeeper types a batch number, the bill saves, and
+     * the value is simply gone.
+     */
+    const v = readCode('src/lib/validation.ts')
+    expect(v).toContain('customCols')
+    expect(v).toContain('customFields')
+  })
+
+  it('the sale screen sends both levels', () => {
+    const entry = readCode('src/components/ledger/TransactionEntry.tsx')
+    expect(entry).toContain('customCols: itemFields[idx]')
+    expect(entry).toContain('customFields: billDefs.length ? billFields : undefined')
+  })
+
+  it('the server snapshots them through ONE helper, not two', () => {
+    // The bill route and the party route must not each decide what a required
+    // field means — they would disagree within a release.
+    for (const file of ['src/app/api/transactions/route.ts', 'src/app/api/parties/route.ts']) {
+      expect({ file, shared: readCode(file).includes('buildCustomValues') })
+        .toEqual({ file, shared: true })
+    }
+  })
+
+  it('a bad value stops the save instead of being dropped', () => {
+    const tx = readCode('src/app/api/transactions/route.ts')
+    expect(tx).toContain('CustomFieldError')
+    expect(tx).toContain('status: 400')
+  })
+
+  it('item definitions are loaded once, not once per line', () => {
+    /*
+     * BUILD FOR MILLIONS, at the small end: a fifty-line pharmacy bill would
+     * otherwise fire fifty identical queries on a single save.
+     */
+    const tx = readCode('src/app/api/transactions/route.ts')
+    expect(tx).toContain('loadFieldDefs')
+    expect(tx).toContain('itemDefs')
+  })
+})
+
+describe('the screens exist and are reachable', () => {
+  it('a section to define fields', () => {
+    const page = readCode('src/components/settings/InvoiceSettingsPage.tsx')
+    expect(page).toContain('invoice-extra-fields')
+    // Reachable, or it is an orphan — the defect the reachability guard exists
+    // for, and one I have shipped before.
+    expect(readCode('src/components/settings/Settings.tsx')).toContain('CustomFieldsCard')
+    expect(readCode('src/components/layout/AccountScreen.tsx')).toContain('invoice-extra-fields')
+  })
+
+  it('one input component, used by every screen that collects a value', () => {
+    expect(readCode('src/components/ledger/TransactionEntry.tsx')).toContain('CustomFieldInputs')
+  })
+
+  it('the type drives the keyboard', () => {
+    // A chemist entering an expiry on every line does it dozens of times a
+    // day; a plain text box there is the difference between used and abandoned.
+    const inputs = readCode('src/components/common/CustomFieldInputs.tsx')
+    expect(inputs).toContain("'date' ? 'date'")
+    expect(inputs).toContain('inputMode')
+  })
+})
