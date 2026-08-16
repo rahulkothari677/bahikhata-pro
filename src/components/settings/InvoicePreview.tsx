@@ -107,6 +107,7 @@ export function InvoicePreview({
   focus = null,
   isSample = false,
   loadFailed = false,
+  pendingFields = [],
   width = 320,
   className,
 }: {
@@ -128,6 +129,21 @@ export function InvoicePreview({
   isSample?: boolean
   /** The shop HAS bills, and fetching one failed. Never guessed at. */
   loadFailed?: boolean
+  /**
+   * Fields the shop has DEFINED but which this bill carries no value for.
+   *
+   * 🐛 2026-08-15. Rahul: "i tried to add the field but it's not working in
+   * the preview." Nothing was broken — the preview shows the shop's most
+   * recent bill, and a bill created before a field existed has no value for
+   * it, so there was correctly nothing to draw.
+   *
+   * Correct and useless are not the same thing. A settings screen whose
+   * preview cannot show the setting is the complaint that started this whole
+   * phase, arriving by a third route. So a defined-but-unfilled field is
+   * drawn with a dash: the label lands where it will land, and the dash is
+   * honest that THIS bill has no value.
+   */
+  pendingFields?: { key: string; label: string; entity: string }[]
   /** On-screen width. The page scales to fit it. */
   width?: number
   className?: string
@@ -184,7 +200,7 @@ export function InvoicePreview({
                   padding: '18px 24px',
                 }}
               >
-                <HeaderContent doc={doc} muted={theme.headerMuted} serif={template.titleFace === 'serif'} />
+                <HeaderContent doc={doc} muted={theme.headerMuted} serif={template.titleFace === 'serif'} pendingFields={pendingFields} />
               </div>
             ) : template.header === 'rule' ? (
               <div
@@ -194,12 +210,12 @@ export function InvoicePreview({
                   borderBottom: `4px solid ${theme.accent}`,
                 }}
               >
-                <HeaderContent doc={doc} muted={theme.muted} serif={template.titleFace === 'serif'} />
+                <HeaderContent doc={doc} muted={theme.muted} serif={template.titleFace === 'serif'} pendingFields={pendingFields} />
               </div>
             ) : (
               <div style={{ padding: 10 }}>
                 <div style={{ border: `2px solid ${theme.accent}`, padding: '14px 20px' }}>
-                  <HeaderContent doc={doc} muted={theme.muted} serif={template.titleFace === 'serif'} />
+                  <HeaderContent doc={doc} muted={theme.muted} serif={template.titleFace === 'serif'} pendingFields={pendingFields} />
                 </div>
               </div>
             )}
@@ -239,11 +255,18 @@ export function InvoicePreview({
                   * because a preview that lays the row out differently from the
                   * file is not previewing the file.
                   */}
-                {(item.description || item.altQty || item.customCols.length > 0) && (
+                {(item.description || item.altQty || item.customCols.length > 0
+                  || pendingFields.some(f => f.entity === 'item')) && (
                   <div className="flex text-2xs" style={{ paddingBottom: 5, color: readable(theme.muted) }}>
                     <span className="flex-1 truncate pr-2">
                       {/* 📄 Phase 5 — same sub-line as the PDF, same order. */}
-                      {[item.description, ...item.customCols.map(v => `${v.label}: ${formatCustomValue(v)}`)]
+                      {[item.description,
+                        ...item.customCols.map(v => `${v.label}: ${formatCustomValue(v)}`),
+                        // Per LINE, not pooled: a field filled on another
+                        // line is still missing from this one.
+                        ...pendingFields
+                          .filter(f => f.entity === 'item' && !item.customCols.some(c => c.key === f.key))
+                          .map(f => `${f.label}: —`)]
                         .filter(Boolean).join("  ·  ")}
                     </span>
                     <span className="w-20 text-right">{item.altQty ? `(${item.altQty})` : ''}</span>
@@ -299,6 +322,44 @@ export function InvoicePreview({
             {/* 📄 Phase 3. Shown here for the same reason the whole preview
                 exists: a shopkeeper typing terms should see where they land and
                 how much of the page they take. */}
+            {/*
+              * 🐛 2026-08-15 — THE PAYMENT QR, which this preview never drew.
+              *
+              * Rahul: "neither QR code has been added." He was right, and the
+              * cause was mine: I wired the QR into the PDF and the WhatsApp
+              * picture and forgot the one surface he actually looks at. A
+              * shopkeeper uploads their counter QR, opens the preview, and
+              * sees no change — so the upload reads as broken.
+              *
+              * Drawn here whatever the bill's status, unlike the PDF, which
+              * shows it only when money is owed. This is a PREVIEW of the
+              * layout, and a shop whose recent bills are all cash-paid would
+              * otherwise never see where their QR lands.
+              */}
+            {(doc.shop.paymentQrUrl || doc.shop.upiId) && (
+              <div className="flex items-center gap-3 mt-3">
+                {doc.shop.paymentQrUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={doc.shop.paymentQrUrl} alt="" className="w-20 h-20 object-contain" />
+                ) : (
+                  <div className="w-20 h-20 grid place-items-center rounded"
+                    style={{ border: `1px solid ${theme.line}` }}>
+                    <span className="text-2xs text-center px-1" style={{ color: theme.muted }}>QR</span>
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <p className="text-sm font-bold" style={{ color: theme.text }}>Scan to pay</p>
+                  <p className="text-xs" style={{ color: theme.muted }}>
+                    {/* The same honest distinction the printed bill makes: an
+                        uploaded code cannot carry the amount. */}
+                    {doc.shop.paymentQrUrl
+                      ? `Enter ${money(doc.due > 0 ? doc.due : doc.total)}`
+                      : doc.shop.upiId}
+                  </p>
+                </div>
+              </div>
+            )}
+
             <div className="flex justify-between gap-6 mt-3">
               <div className="min-w-0 flex-1">
                 {doc.shop.terms && (
@@ -375,11 +436,13 @@ export function InvoicePreview({
 }
 
 function HeaderContent({
-  doc, muted, serif,
+  doc, muted, serif, pendingFields = [],
 }: {
   doc: InvoiceDocument
   muted: string
   serif: boolean
+  /** Defined by the shop, absent from THIS bill. See the prop on the parent. */
+  pendingFields?: { key: string; label: string; entity: string }[]
 }) {
   return (
     <div className="flex items-start justify-between gap-4">
@@ -401,6 +464,12 @@ function HeaderContent({
         {doc.customFields.slice(0, 4).map(f => (
           <p key={f.key} className="text-sm font-medium" style={{ color: muted }}>
             {f.label}: {formatCustomValue(f)}
+          </p>
+        ))}
+        {/* Defined, but this bill has none — see pendingFields. */}
+        {pendingFields.filter(f => f.entity === 'invoice').slice(0, 4).map(f => (
+          <p key={f.key} className="text-sm font-medium" style={{ color: muted }}>
+            {f.label}: —
           </p>
         ))}
         {/* 📄 Phase 3: a real date, high on the page. */}

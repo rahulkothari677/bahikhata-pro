@@ -292,6 +292,31 @@ export function InvoiceSettingsPage({
     staleTime: 5 * 60 * 1000,
   })
 
+  /*
+   * 🐛 2026-08-15 — the shop's field DEFINITIONS, so the preview can show a
+   * field it has just been given.
+   *
+   * Rahul: "i tried to add the field but it's not working in the preview."
+   * Nothing was broken. The preview draws the shop's most recent BILL, and a
+   * bill created before a field existed carries no value for it — so there
+   * was correctly nothing to draw.
+   *
+   * Correct is not the same as useful. A settings screen whose preview cannot
+   * show the setting is the exact complaint that started this whole phase,
+   * arriving by a third route. The preview now draws a defined-but-unfilled
+   * field with a dash: the label sits where it will sit, and the dash stays
+   * honest that THIS bill has no value for it.
+   */
+  const { data: cfData } = useQuery({
+    queryKey: ['custom-fields'],
+    queryFn: async () => {
+      const r = await offlineFetch('/api/custom-fields')
+      if (!r.ok) throw new Error('Could not load your fields')
+      return r.json()
+    },
+    staleTime: 5 * 60 * 1000,
+  })
+
   /** True only when we KNOW the shop has bills and we failed to fetch one. */
   const loadFailed = idFailed || fullFailed
 
@@ -334,6 +359,34 @@ export function InvoiceSettingsPage({
   }, [])
 
   const isHub = section === 'invoices'
+  /**
+   * Fields the shop has defined that the PREVIEWED bill carries no value for.
+   *
+   * Only the ones marked to print — a field kept for the shop's own records
+   * must not appear on a preview of what the customer receives.
+   */
+  const pendingFields = useMemo(() => {
+    const defs: { key: string; label: string; entity: string; showOnInvoice: boolean }[] =
+      cfData?.fields ?? []
+    /*
+     * 🐛 Caught while verifying, in my own first version of this.
+     *
+     * I pooled every line's columns into ONE set, so a field filled on line 3
+     * counted as filled on lines 1 and 2 and their dashes vanished. On screen
+     * that read as "Expiry just does not show up" — the same symptom Rahul
+     * reported, one layer down, and it would have shipped.
+     *
+     * The BILL is one scope and can be resolved here. A LINE is its own scope,
+     * so item fields are passed through whole and the preview subtracts each
+     * line's own columns. Presence is per-record, never pooled.
+     */
+    const onBill = new Set(doc.customFields.map(f => f.key))
+    return defs
+      .filter(f => f.showOnInvoice)
+      .filter(f => (f.entity === 'invoice' ? !onBill.has(f.key) : f.entity === 'item'))
+      .map(f => ({ key: f.key, label: f.label, entity: f.entity }))
+  }, [cfData, doc])
+
   const current = INVOICE_SECTIONS.find(s => s.id === section)
 
   return (
@@ -357,6 +410,7 @@ export function InvoiceSettingsPage({
             focus={current?.focus ?? null}
             isSample={isSample}
             loadFailed={loadFailed}
+            pendingFields={pendingFields}
             width={previewWidth}
           />
         )}
