@@ -569,3 +569,71 @@ believe that, and the gap is exactly where Rahul's report landed.
 edited from `Batch No.=TEMP` to `FIXED-9001` keeps the new value and shows it
 in the preview; the sale screen shows `Batch No. * (required) | Expiry *
 (required) | MRP` under an added item.
+
+---
+
+## The reachability sweep (16 Aug)
+
+Rahul, after finding two of these himself: *"first sweep the rest of the
+invoice settings."* Right call. The class is **built, tested, and impossible
+to reach — or reachable and connected to nothing.**
+
+Twenty-seven invoice settings were checked, in both directions: can a
+shopkeeper SET it, and does anything READ it.
+
+### It found one, and it was the worst of the three
+
+**`invoicePrefix` and `invoiceNextNumber` did nothing at all.**
+
+Saved by the settings screen. Validated by the API. Read by **nothing**. A
+shopkeeper typed `RG/26-27/`, watched the screen promise *"your next bill will
+be RG/26-27/47"*, tapped Save — and every bill still came out `INV-0001`.
+
+That is the `invoiceTheme` bug for the third time, and it was my own Phase 3
+work.
+
+**Why my test missed it.** `invoice-content-fields.test.ts` asserts the API
+*validates* `invoiceNextNumber`. It does. That is not the same sentence as
+"something uses it", and the whole bug lived in the gap between them.
+
+### Both halves had to be fixed
+
+1. **The formatter** (`lib/invoice-number.ts`) applies the prefix. With no
+   prefix the output is byte-identical to before — `INV-0001` — because an
+   invoice series that changes shape mid-year is exactly what Rule 46(b) is
+   about.
+2. **The counter is seeded** when the next number is set. Storing the number
+   and leaving the counter where it was is the other half of the same defect.
+
+**The counter is never rewound.** Going backwards would re-issue numbers
+already printed on bills a customer is holding. A shopkeeper who asks for a
+lower number is told: *"Your bills have already reached 47. The next one will
+be 48 — going back would repeat a number that is already on a bill."*
+
+### Verified in the browser
+
+| | |
+|---|---|
+| Prefix `VM/26-27/`, next number 47 | Bill came out **`VM/26-27/47`** |
+| Asked to go back to 5 | Refused with the sentence above |
+| Next bill after that | **`VM/26-27/48`** — did not repeat 47 |
+| Prefix cleared | **`INV-0049`** — old format restored exactly |
+
+### The other flags were false alarms, checked not assumed
+
+- The four visibility toggles render from a registry, so their names appear in
+  no component. Verified working in the browser earlier.
+- `roundOffEnabled` is read in an API route, not `lib/`.
+- `eInvoiceApplicable` is read by the e-invoice card.
+- `/api/transactions/[id]/audit-trail` is called via a template literal.
+- `docShareLink` is dead **on purpose** — the withdrawn share link. A test
+  now asserts that absence, so restoring it means coming here and reading why.
+
+### The guard that replaces the sweep
+
+`settings-are-reachable-and-used.test.ts` names, for every invoice setting,
+the file that consumes it. Adding a setting means adding a line saying what
+reads it — and if you cannot, the setting does nothing and should not ship.
+
+Deliberately a list rather than a directory walk: the walk produced five false
+positives, and a sweep that cries wolf gets ignored, which is worse than none.

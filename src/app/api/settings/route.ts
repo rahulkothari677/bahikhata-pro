@@ -461,6 +461,44 @@ export async function PUT(req: NextRequest) {
     })
 
     /*
+     * 🐛 2026-08-16 — "next bill number" has to MOVE THE COUNTER.
+     *
+     * Storing the number and leaving the counter where it was is the other
+     * half of the same defect: the setting saved, the screen said "your next
+     * bill will be RG/26-27/47", and the counter carried on from wherever it
+     * happened to be.
+     *
+     * The counter is still what ALLOCATES the number — atomically, inside the
+     * write transaction, because two tills issuing one invoice number is a
+     * Rule 46(b) breach rather than an inconvenience. This only seeds it, so
+     * the next allocation returns exactly what the shopkeeper asked for.
+     *
+     * NEVER MOVED BACKWARDS. Rewinding would re-issue numbers already on
+     * bills a customer is holding, which is precisely what a consecutive
+     * unique serial exists to prevent. A shopkeeper who asks for a lower
+     * number is told, rather than silently ignored — see the response below.
+     */
+    let invoiceNumberWarning: string | null = null
+    if (sanitized.invoiceNextNumber !== undefined) {
+      const wanted = Number(sanitized.invoiceNextNumber)
+      const counter = await db.invoiceCounter.findUnique({
+        where: { userId }, select: { seq: true },
+      })
+      const current = counter?.seq ?? 0
+      if (wanted > current) {
+        await db.invoiceCounter.upsert({
+          where: { userId },
+          update: { seq: wanted - 1 },
+          create: { userId, seq: wanted - 1 },
+        })
+      } else {
+        invoiceNumberWarning =
+          `Your bills have already reached ${current}. The next one will be ${current + 1} — `
+          + 'going back would repeat a number that is already on a bill.'
+      }
+    }
+
+    /*
      * 🔒 2026-08-03 (audit): carry the business name across to the default shop.
      *
      * The default Shop row is seeded ONCE from Setting.shopName (GET
@@ -505,7 +543,10 @@ export async function PUT(req: NextRequest) {
     // to refetch. The React Query invalidateQueries on the client side
     // handles the rest.
     return NextResponse.json(
-      { setting },
+      // The warning rides along so the screen can SAY a number was refused,
+      // rather than saving quietly and letting the shopkeeper discover it on
+      // their next bill.
+      { setting, invoiceNumberWarning },
       { headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate' } }
     )
   } catch (error) {

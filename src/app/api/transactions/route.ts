@@ -20,6 +20,7 @@ import { assertPeriodNotLocked, PeriodLockedError } from '@/lib/period-lock'
 import { resolveFinalPaid, isNoteType } from '@/lib/paid-amount'
 import { validateNoteAgainstOriginal } from '@/lib/note-validation'
 import { buildCustomValues, loadFieldDefs, CustomFieldError } from '@/lib/custom-fields-server'
+import { formatInvoiceNo } from '@/lib/invoice-number'
 
 /**
  * Budget for the interactive transactions on the write paths.
@@ -445,7 +446,8 @@ export async function POST(req: NextRequest) {
         : Promise.resolve([] as Awaited<ReturnType<typeof db.product.findMany>>),
       db.setting.findUnique({
         where: { userId },
-        select: { roundOffEnabled: true, stockPolicy: true, compositionCategory: true },
+        // invoicePrefix: the shop's own bill numbering. See lib/invoice-number.
+        select: { roundOffEnabled: true, stockPolicy: true, compositionCategory: true, invoicePrefix: true },
       }),
     ])
     const productMap = new Map(products.map(p => [p.id, p]))
@@ -741,7 +743,28 @@ export async function POST(req: NextRequest) {
             select: { seq: true },
           })
           invoiceSequence = counter.seq
-          finalInvoiceNo = `INV-${String(invoiceSequence).padStart(4, '0')}`
+          /*
+           * 🐛 2026-08-16 — THE SHOP'S OWN PREFIX, which this ignored.
+           *
+           * Setting.invoicePrefix and invoiceNextNumber were saved by the
+           * settings screen, validated by the API, and read by NOTHING. A
+           * shopkeeper set "RG/26-27/", saw the screen promise "your next
+           * bill will be RG/26-27/47", and every bill still came out
+           * INV-0001. The invoiceTheme bug wearing different clothes, and my
+           * own Phase 3 work — I tested that the API VALIDATED the field and
+           * never that anything used it.
+           *
+           * It matters more than it looks. Rule 46(b) needs a consecutive
+           * serial unique per financial year, and a shopkeeper moving off a
+           * paper book has to carry their existing series forward. That is
+           * the reason the setting exists at all.
+           *
+           * The COUNTER still allocates the number — it is atomic, which is
+           * what stops two tills producing one invoice number. Only the
+           * formatting changes. With no prefix the output is byte-identical
+           * to before: zero-padded INV-0001.
+           */
+          finalInvoiceNo = formatInvoiceNo(setting?.invoicePrefix, invoiceSequence ?? 1)
         }
       }
 
