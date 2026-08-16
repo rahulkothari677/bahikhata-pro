@@ -337,3 +337,71 @@ describe('the screens exist and are reachable', () => {
     expect(inputs).toContain('inputMode')
   })
 })
+
+// ─────────────────────────────────────────────────────────────────────────
+// 🐛 2026-08-16 — the two Rahul found.
+// ─────────────────────────────────────────────────────────────────────────
+
+describe('a field can be edited after it is created', () => {
+  /*
+   * Rahul: "once i add any field there is no option to edit it."
+   *
+   * Correct. I wrote the PATCH route, wrote a `patch` handler in the card,
+   * covered the route with tests — and never rendered a button for either. A
+   * tested API with no way to reach it is dead code with a green tick, and
+   * that is exactly the shape of defect this codebase keeps finding.
+   */
+  it('the settings card renders an edit control', () => {
+    const card = readCode('src/components/settings/CustomFieldsCard.tsx')
+    expect(card).toContain('Edit ${f.label}')
+    // And it must actually call the route, not just look like it does.
+    expect(card).toContain('patch(f.id')
+  })
+
+  it('renaming warns that old bills keep the old name', () => {
+    // The single most important sentence on that screen: it is what stops a
+    // shopkeeper believing a rename rewrote their history.
+    expect(readCode('src/components/settings/CustomFieldsCard.tsx'))
+      .toContain('keep the old name')
+  })
+})
+
+describe('editing a bill keeps its custom values', () => {
+  /*
+   * Rahul: the fields "aren't appear in the real bill when i downloaded it".
+   *
+   * The renderer was fine — that bill was raised BEFORE the field existed, so
+   * it carried no value and correctly printed none. The real gap was that
+   * there was no way to put one in afterwards: only CREATE ever stored a
+   * custom value.
+   *
+   * Adding it to EDIT introduced a sharper risk, which is what these guard:
+   * the server re-snapshots on every edit, so an edit dialog that did not
+   * send the existing values back would ERASE a batch number on the first
+   * unrelated change. Silent data loss on a legal record.
+   */
+  it('the edit route snapshots custom values', () => {
+    const route = readCode('src/app/api/transactions/[id]/route.ts')
+    expect(route).toContain('buildCustomValues')
+    expect(route).toContain('customFields: billCustomFields')
+  })
+
+  it('the edit dialog PRELOADS what the bill already carries', () => {
+    // Without this the round trip is lossy and every edit wipes the batch.
+    const detail = readCode('src/components/ledger/TransactionDetail.tsx')
+    expect(detail).toContain('setEditItemFields')
+    expect(detail).toContain('it.customCols')
+  })
+
+  it('the edit dialog sends them back', () => {
+    const detail = readCode('src/components/ledger/TransactionDetail.tsx')
+    expect(detail).toContain('customCols: editItemFields[idx]')
+    expect(detail).toContain('customFields: editBillDefs.length ? editBillFields : undefined')
+  })
+
+  it('the edit dialog offers the boxes to fill', () => {
+    const detail = readCode('src/components/ledger/TransactionDetail.tsx')
+    expect(detail).toContain('edit-line-')
+    expect(detail).toContain('edit-bill')
+  })
+})

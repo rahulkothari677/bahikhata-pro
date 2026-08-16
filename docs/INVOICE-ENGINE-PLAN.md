@@ -518,3 +518,54 @@ it, and a re-run that reset those would undo a deliberate choice.
   fields, plain ✓ on MRP.
 
 Guard proved by marking HUID as `law`: three tests fail. Restored: 12 pass.
+
+---
+
+## Two gaps Rahul found (16 Aug)
+
+### 1. A field could not be edited
+
+*"once i add any field there is no option to edit it."*
+
+Correct. I wrote the PATCH route, wrote a `patch` handler in the card, covered
+the route with tests — and **never rendered a button for either**. A tested API
+with no way to reach it is dead code with a green tick.
+
+Now: a pencil on each field opens rename, retype, and both switches. The rename
+box carries the sentence that matters — *"Bills you have already made keep the
+old name."*
+
+### 2. The fields did not appear on a downloaded bill
+
+*"these aren't appear in the real bill when i downloaded it or shared on
+whatsapp."*
+
+**The renderer was not at fault.** Proved by rendering a real PDF from the
+exact stored shape: batch, expiry and the bill field all print.
+
+The bill was raised **before the field existed**, so it carried no value and
+correctly printed none — a bill is a legal record and cannot be back-filled by
+a later settings change. But there was no way to put a value in afterwards
+either: **only CREATE ever stored a custom value.** So the field was
+permanently invisible on every bill made before it was defined.
+
+Editing a bill now re-snapshots its custom values, and the edit dialog offers
+the boxes.
+
+**That fix introduced a sharper risk, which is the part worth recording.** The
+server re-snapshots on every edit — so an edit dialog that did not send the
+existing values back would **erase a batch number on the first unrelated
+change**. Silent data loss on a legal record. The dialog therefore PRELOADS
+what the bill already carries, and a test fails if it stops sending them.
+
+### What my verification had missed
+
+I created every Phase 5 test sale **through the API**, never through the sale
+screen. The entry boxes were never checked in the real UI. They do work — one
+appears under each item once a product is added — but I had no right to
+believe that, and the gap is exactly where Rahul's report landed.
+
+**Verified this time, in the browser:** the pencil opens the edit panel; a bill
+edited from `Batch No.=TEMP` to `FIXED-9001` keeps the new value and shows it
+in the preview; the sale screen shows `Batch No. * (required) | Expiry *
+(required) | MRP` under an added item.

@@ -34,6 +34,8 @@ import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { amountToWords } from '@/lib/amount-to-words'
 import { generateInvoicePDF } from '@/lib/invoice-pdf'
 import { buildInvoiceDocument, invoiceShopFromSetting } from '@/lib/invoice-document'
+import { CustomFieldInputs } from '@/components/common/CustomFieldInputs'
+import type { CustomFieldDef } from '@/lib/custom-fields'
 import { haptic } from '@/lib/haptic'
 import { useSetting } from '@/hooks/use-setting'
 import { readError } from '@/lib/read-error'
@@ -1162,6 +1164,28 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
     isSale ? p.type === 'customer' || p.type === 'both' : transaction?.type === 'purchase' ? p.type === 'supplier' || p.type === 'both' : true
   )
 
+  /*
+   * 📄 Phase 5 — the shop's own fields, in the EDIT dialog too.
+   *
+   * The server re-snapshots custom values on every edit, so these must make
+   * the round trip or an unrelated edit would erase a batch number that is
+   * part of a legal record.
+   */
+  const [editBillFields, setEditBillFields] = useState<Record<string, string>>({})
+  const [editItemFields, setEditItemFields] = useState<Record<number, Record<string, string>>>({})
+  const { data: editCfData } = useQuery({
+    queryKey: ['custom-fields'],
+    queryFn: async () => {
+      const r = await offlineFetch('/api/custom-fields')
+      if (!r.ok) throw new Error('Could not load your fields')
+      return r.json()
+    },
+    staleTime: 5 * 60 * 1000,
+  })
+  const editAllDefs: CustomFieldDef[] = editCfData?.fields ?? []
+  const editBillDefs = editAllDefs.filter(f => f.entity === 'invoice')
+  const editItemDefs = editAllDefs.filter(f => f.entity === 'item')
+
   const { data: editSettingData } = useQuery({
     queryKey: ['setting'],
     queryFn: async () => {
@@ -1193,6 +1217,23 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
         category: transaction.category || '',
         totalAmount: String(transaction.totalAmount || ''),
       })
+      /*
+       * 📄 Phase 5 — preload the custom values this bill ALREADY carries.
+       *
+       * Not a nicety. The server re-snapshots on every edit, so a dialog that
+       * did not send them back would erase the batch number on the first
+       * unrelated edit — silent data loss on a legal record. Loading them
+       * here is what makes the round trip lossless.
+       */
+      setEditBillFields(Object.fromEntries(
+        (transaction.customFields ?? []).map((f: any) => [f.key, String(f.value ?? '')]),
+      ))
+      setEditItemFields(Object.fromEntries(
+        (transaction.items ?? []).map((it: any, idx: number) => [
+          idx,
+          Object.fromEntries((it.customCols ?? []).map((c: any) => [c.key, String(c.value ?? '')])),
+        ]),
+      ))
       setItems(transaction.items?.map((i: any) => ({
         productId: i.productId || '',
         productName: i.productName,
@@ -1281,14 +1322,16 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
         notes: form.notes,
         category: form.category,
         totalAmount: form.totalAmount,
-        items: isIncomeOrExpense ? [] : items.filter(i => i.productName && i.quantity > 0).map(i => ({
+        items: isIncomeOrExpense ? [] : items.filter(i => i.productName && i.quantity > 0).map((i, idx) => ({
           productId: i.productId || null,
           productName: i.productName,
           quantity: Number(i.quantity),
           unitPrice: Number(i.unitPrice),
           gstRate: Number(i.gstRate) || 0,
           discountAmount: Number(i.discountAmount) || 0,
+          customCols: editItemFields[idx] || undefined,
         })),
+        customFields: editBillDefs.length ? editBillFields : undefined,
       }
       const r = await offlineFetch(`/api/transactions/${transaction.id}`, {
         method: 'PUT',
@@ -1530,6 +1573,20 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
                           <X className="w-4 h-4" />
                         </Button>
                       </div>
+                      {/* 📄 Phase 5 — this line's own columns, editable. */}
+                      {editItemDefs.length > 0 && (
+                        <div className="col-span-12">
+                          <CustomFieldInputs
+                            compact
+                            idPrefix={`edit-line-${i}`}
+                            defs={editItemDefs}
+                            values={editItemFields[i] || {}}
+                            onChange={(key, value) =>
+                              setEditItemFields(prev => ({ ...prev, [i]: { ...(prev[i] || {}), [key]: value } }))
+                            }
+                          />
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -1555,6 +1612,15 @@ function EditTransactionDialog({ open, onOpenChange, transaction, onSuccess }: {
                 </div>
               </div>
 
+              {/* 📄 Phase 5 — the bill's own fields, editable. */}
+              {editBillDefs.length > 0 && (
+                <CustomFieldInputs
+                  idPrefix="edit-bill"
+                  defs={editBillDefs}
+                  values={editBillFields}
+                  onChange={(key, value) => setEditBillFields(prev => ({ ...prev, [key]: value }))}
+                />
+              )}
               <div>
                 <Label htmlFor="field-notes-2">Notes</Label>
                 <Input id="field-notes-2" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />

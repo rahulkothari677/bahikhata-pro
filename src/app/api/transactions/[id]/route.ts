@@ -20,6 +20,7 @@ import { resolveFinalPaid, isNoteType } from '@/lib/paid-amount'
 import { validateNoteAgainstOriginal } from '@/lib/note-validation'
 import { checkLinkedNotesCap } from '@/lib/linked-notes-guard'
 import { computePartyBalance } from '@/lib/party-balance'
+import { buildCustomValues, loadFieldDefs, CustomFieldError } from '@/lib/custom-fields-server'
 
 /**
  * Budget for the interactive transactions on the write paths.
@@ -507,6 +508,38 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     // A composition dealer collects no GST — forced at the rate, not left to
     // the screen that sent it. See line-items.ts.
     const computed = computeLineItems({ items, productMap, isInterState, orderDiscount, type, isComposition: !!setting?.compositionCategory })
+    /*
+     * 📄 Phase 5 — the shop's own fields, on EDIT as well as create.
+     *
+     * 🐛 2026-08-16. Rahul defined Batch No., downloaded a bill, and it was
+     * not there. Nothing was broken in the renderer — that bill was raised
+     * BEFORE the field existed, so it carried no value and correctly printed
+     * none. But without this, there was no way to put one in either: the only
+     * path that ever stored a custom value was creating a brand new bill.
+     *
+     * A chemist who adds the batch column on Tuesday must be able to open
+     * Monday's bill and fill it in. Same helper as create, so the two cannot
+     * disagree about a required field.
+     */
+    let billCustomFields: unknown = null
+    let itemDefs: Awaited<ReturnType<typeof loadFieldDefs>> = []
+    try {
+      billCustomFields = await buildCustomValues(userId, 'invoice', (validation.data as any).customFields)
+      itemDefs = await loadFieldDefs(userId, 'item')
+      if (itemDefs.length) {
+        const rawItems = (validation.data as any).items ?? []
+        for (let i = 0; i < computed.txItems.length; i++) {
+          ;(computed.txItems[i] as any).customCols =
+            await buildCustomValues(userId, 'item', rawItems[i]?.customCols, itemDefs)
+        }
+      }
+    } catch (e) {
+      if (e instanceof CustomFieldError) {
+        return NextResponse.json({ error: 'Validation failed', message: e.message }, { status: 400 })
+      }
+      throw e
+    }
+
     const txItems = computed.txItems
     const subtotal = computed.subtotal
     const cgst = computed.cgst
@@ -759,6 +792,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
           noteType: resolvedNoteType,
           noteReason: resolvedNoteReason ?? null,
           affectsStock: resolvedAffectsStock,
+          // 📄 Phase 5 — re-snapshotted on every edit, so a shopkeeper who
+          // adds a field later can open an old bill and fill it in.
+          customFields: billCustomFields as any,
           items: { create: txItems },
         },
         include: { items: true, party: true },

@@ -27,7 +27,7 @@
 
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Trash2, FileText, Package, Users, Scale, Check } from 'lucide-react'
+import { Plus, Trash2, Pencil, FileText, Package, Users, Scale, Check } from 'lucide-react'
 import { TRADE_PRESETS, type TradePreset } from '@/lib/trade-presets'
 import { toast as sonnerToast } from 'sonner'
 import { offlineFetch } from '@/lib/offline-fetch'
@@ -106,6 +106,8 @@ export function CustomFieldsCard() {
   const [required, setRequired] = useState(false)
   const [showOnInvoice, setShowOnInvoice] = useState(true)
   const [openPreset, setOpenPreset] = useState<string | null>(null)
+  const [editing, setEditing] = useState<string | null>(null)
+  const [editLabel, setEditLabel] = useState('')
 
   const { data } = useQuery({
     queryKey: ['custom-fields'],
@@ -291,19 +293,81 @@ export function CustomFieldsCard() {
                 <div className="space-y-1.5 mb-2">
                   {mine.map(f => (
                     <div key={f.id}
-                      className="flex items-center gap-2 rounded-lg bg-muted/30 border border-border/60 p-2.5">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium truncate">{f.label}</p>
-                        <p className="text-2xs text-muted-foreground">
-                          {TYPES.find(t => t.id === f.type)?.label}
-                          {f.required && ' · must be filled'}
-                          {!f.showOnInvoice && ' · not printed'}
-                        </p>
+                      className="rounded-lg bg-muted/30 border border-border/60 p-2.5">
+                      <div className="flex items-center gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium truncate">{f.label}</p>
+                          <p className="text-2xs text-muted-foreground">
+                            {TYPES.find(t => t.id === f.type)?.label}
+                            {f.required && ' · must be filled'}
+                            {!f.showOnInvoice && ' · not printed'}
+                          </p>
+                        </div>
+                        {/*
+                          * 🐛 2026-08-16. Rahul: "once i add any field there is
+                          * no option to edit it." Correct — I wrote the PATCH
+                          * route and the handler, tested them, and never put a
+                          * button on either. Dead code with a green tick.
+                          */}
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0"
+                          onClick={() => { setEditing(editing === f.id ? null : f.id); setEditLabel(f.label) }}
+                          aria-label={`Edit ${f.label}`}>
+                          <Pencil className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button variant="ghost" size="sm" className="text-rose-600 h-8 w-8 p-0"
+                          onClick={() => remove(f)} aria-label={`Remove ${f.label}`}>
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
                       </div>
-                      <Button variant="ghost" size="sm" className="text-rose-600 h-8 w-8 p-0"
-                        onClick={() => remove(f)} aria-label={`Remove ${f.label}`}>
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
+
+                      {editing === f.id && (
+                        <div className="mt-2.5 pt-2.5 border-t border-border/50 space-y-3">
+                          <div>
+                            <Label htmlFor={`cf-rename-${f.id}`}>Name</Label>
+                            <Input id={`cf-rename-${f.id}`} value={editLabel} autoFocus
+                              onChange={e => setEditLabel(e.target.value)} className="mt-1" />
+                            <p className="text-2xs text-muted-foreground mt-1">
+                              {/* The single most important sentence on this screen. */}
+                              Bills you have already made keep the old name.
+                            </p>
+                          </div>
+                          <div>
+                            <Label>Type</Label>
+                            <div className="flex gap-1.5 mt-1">
+                              {TYPES.map(t => (
+                                <button key={t.id} type="button"
+                                  onClick={() => patch(f.id, { type: t.id })}
+                                  className={cn(
+                                    'flex-1 rounded-lg border px-2 py-1.5 text-xs font-medium transition',
+                                    f.type === t.id
+                                      ? 'border-primary bg-primary/10 text-primary'
+                                      : 'border-border/60 hover:bg-muted/50',
+                                  )}>
+                                  {t.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-medium">Must be filled</p>
+                            <Switch checked={f.required}
+                              onCheckedChange={(v) => patch(f.id, { required: v })} />
+                          </div>
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-medium">Print on the bill</p>
+                            <Switch checked={f.showOnInvoice}
+                              onCheckedChange={(v) => patch(f.id, { showOnInvoice: v })} />
+                          </div>
+                          <div className="flex gap-2">
+                            <Button size="sm" className="flex-1"
+                              disabled={busy || !editLabel.trim() || editLabel === f.label}
+                              onClick={async () => { await patch(f.id, { label: editLabel.trim() }); setEditing(null) }}>
+                              Save name
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={() => setEditing(null)}>Done</Button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
