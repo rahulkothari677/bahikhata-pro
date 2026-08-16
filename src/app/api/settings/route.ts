@@ -272,8 +272,8 @@ export async function PUT(req: NextRequest) {
       // Same rule as the theme above: validated against the registry, never a
       // second hand-written list, so adding a template cannot forget to allow
       // it here. See src/lib/invoice-templates.ts.
-      const { INVOICE_TEMPLATES } = await import('@/lib/invoice-templates')
-      if (!INVOICE_TEMPLATES.some(t => t.id === body.invoiceTemplate)) {
+      const { INVOICE_LAYOUTS } = await import('@/lib/invoice-layouts')
+      if (!INVOICE_LAYOUTS.some(t => t.id === body.invoiceTemplate)) {
         return NextResponse.json({ error: 'Unknown invoice template' }, { status: 400 })
       }
       sanitized.invoiceTemplate = body.invoiceTemplate

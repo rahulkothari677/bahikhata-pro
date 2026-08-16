@@ -30,7 +30,7 @@ import { TextEncoder as NE, TextDecoder as ND } from 'util'
 ;(globalThis as unknown as Record<string, unknown>).TextEncoder ||= NE
 ;(globalThis as unknown as Record<string, unknown>).TextDecoder ||= ND
 
-import { INVOICE_TEMPLATES } from '@/lib/invoice-templates'
+import { INVOICE_LAYOUTS } from '@/lib/invoice-layouts'
 import { PAPER_SIZES } from '@/lib/invoice-paper'
 import { buildInvoiceDocument, type InvoiceSource, type InvoiceShop } from '@/lib/invoice-document'
 import { generateInvoicePDF } from '@/lib/invoice-pdf'
@@ -122,9 +122,9 @@ async function drawnText(blob: Blob): Promise<{ x: number; y: number }[]> {
   return out
 }
 
-describe.each(INVOICE_TEMPLATES.map(t => [t.id, t.name] as const))(
+describe.each(INVOICE_LAYOUTS.map(t => [t.id, t.name] as [string, string]))(
   'template %s (%s) survives an invoice with everything on it',
-  (templateId) => {
+  (templateId: string) => {
     it('draws nothing off the paper', async () => {
       const doc = buildInvoiceDocument(HOSTILE, LOADED_SHOP)
       const blob = await generateInvoicePDF(doc, { templateId, themeId: 'classic' })

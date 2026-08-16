@@ -160,7 +160,9 @@ describe('the info button, used sparingly', () => {
       const end = settings.indexOf('))}', i)
       return settings.slice(i, end)
     }
-    expect(block('INVOICE_TEMPLATES.map(')).not.toContain('InfoHint')
+    // 📄 Phase 7c: the picker lists LAYOUTS now — the vocabulary that
+    // replaced templates. Same claim, same block, new name.
+    expect(block('INVOICE_LAYOUTS.map(')).not.toContain('InfoHint')
     expect(block('INVOICE_THEMES.map(')).not.toContain('InfoHint')
     // The name still shows — that was never the thing to hide.
     expect(settings).toContain('{t.name}')

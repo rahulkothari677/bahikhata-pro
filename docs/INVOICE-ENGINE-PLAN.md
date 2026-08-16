@@ -821,3 +821,46 @@ falls back to its nearest legal sibling and the bill still looks deliberate.
    can overflow a narrowed column. Measurable, and untested today.
 4. **The 8-item PDF threshold should be measured, not fixed** — decide per bill
    whether the picture can hold it.
+
+---
+
+## Phase 7d — the renderer draws from the layout (16 Aug)
+
+The old template system is **deleted**. `invoice-templates.ts` and its test are
+gone; the PDF, the preview, the picker and the settings API all read the three
+new vocabularies.
+
+### Royal Gold — three of six blocks built
+
+Built and proved:
+
+- **Double frame with corner ornaments.** Two thin rules and four L-brackets,
+  drawn as lines so they scale with the sheet and need no font. On the Jaipur
+  reference this is the entire premium cue.
+- **The twelve-column GST breakup** — No, Description, HSN, Qty, Unit, Rate,
+  Disc %, Taxable, CGST %, SGST %, Cess %, Total. Offered only on A4 with a
+  dense style; `layoutFitsPaper` and `styleFitsLayout` refuse the rest rather
+  than printing off the page.
+- **Empty ruled rows padding the table**, and only while they fit on the page —
+  padding that spilled onto a second sheet would be paper the shopkeeper pays
+  for.
+
+Measured against Classic on the same bill: **720 drawing operations against
+104**, 299 lines against 18, and DISC/TAXABLE/CESS columns that Classic has no
+concept of. It is a different page, not a recolour.
+
+### Still to build for Royal — stated plainly
+
+- The **boxed invoice-details card** top right (currently plain right-aligned)
+- The **full-width ruled "Bill To" strip** (currently the one-card block)
+- **Totals as a ruled mini-table** — `ruled` currently falls through to the
+  outlined panel
+
+Three of six. The next session finishes those, and only then moves to the
+second design — Rahul's instruction was one at a time, verified.
+
+### Also carried forward
+
+Multi-page rules (totals/bank/terms/signature on the LAST page, once), font
+sizes not scaling with A5 columns, and measuring the PDF threshold per bill
+rather than fixing it at 8 items.

@@ -36,7 +36,7 @@ import { cn, formatINR } from '@/lib/utils'
 import { APP_VERSION_LABEL } from '@/lib/app-version'
 import { readError } from '@/lib/read-error'
 import { INVOICE_THEMES } from '@/lib/invoice-themes'
-import { INVOICE_TEMPLATES } from '@/lib/invoice-templates'
+import { INVOICE_LAYOUTS } from '@/lib/invoice-layouts'
 import { PAPER_SIZES } from '@/lib/invoice-paper'
 import { VISIBILITY_TOGGLES } from '@/lib/invoice-visibility'
 import { InfoHint } from '@/components/common/InfoHint'
@@ -1661,7 +1661,7 @@ export function Settings({
               <p className="text-sm font-medium">Invoice layout</p>
             </div>
             <div className="grid grid-cols-3 gap-1.5">
-              {INVOICE_TEMPLATES.map(t => (
+              {INVOICE_LAYOUTS.map(t => (
                 <button
                   key={t.id}
                   type="button"
@@ -1686,8 +1686,8 @@ export function Settings({
                   <span className="block rounded overflow-hidden border border-border/50 bg-white p-1">
                     <span className={
                       'block ' +
-                      (t.header === 'band' ? 'h-2.5 bg-slate-700'
-                        : t.header === 'rule' ? 'h-2.5 bg-white border-b-2 border-slate-700'
+                      ((t.header === 'band-name' || t.header === 'band-title') ? 'h-2.5 bg-slate-700'
+                        : t.frame === 'single' ? 'h-2.5 bg-white border-b-2 border-slate-700'
                         : 'h-2.5 bg-white border border-slate-500')
                     } />
                     <span className="block mt-1 space-y-0.5">
@@ -1696,9 +1696,9 @@ export function Settings({
                           key={r}
                           className={
                             'block w-full ' +
-                            (t.density === 'compact' ? 'h-0.5' : t.density === 'airy' ? 'h-1.5' : 'h-1') + ' ' +
-                            (t.table === 'zebra' ? (r % 2 ? 'bg-slate-200' : 'bg-slate-100')
-                              : t.table === 'grid' ? 'border border-slate-300'
+                            (t.tableFill === 'pad' ? 'h-0.5' : 'h-1') + ' ' +
+                            (t.totals === 'bar' ? (r % 2 ? 'bg-slate-200' : 'bg-slate-100')
+                              : t.columns === 'gst-full' ? 'border border-slate-300'
                               : 'border-b border-slate-200')
                           }
                         />

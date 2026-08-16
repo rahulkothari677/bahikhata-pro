@@ -82,6 +82,17 @@ export type ColumnSet =
   /** #, item, HSN, qty, rate, GST%, amount. Fits anything. */
   | 'simple'
   /**
+   * The simple set PLUS the shop's own columns as real table columns —
+   * batch and expiry down a chemist's bill, rather than as a note under the
+   * item name.
+   *
+   * The renderer measures before committing: if the extra columns would
+   * squeeze the item name below readable, they drop back to the sub-line.
+   * A layout that looks right with two and collides with five is a trap, and
+   * the shopkeeper who finds it is mid-sale.
+   */
+  | 'trade'
+  /**
    * The full breakup: #, description, HSN, qty, unit, rate, disc%, taxable
    * value, CGST%, SGST%, cess%, total. ELEVEN columns.
    *
@@ -182,7 +193,7 @@ export const INVOICE_LAYOUTS: readonly InvoiceLayout[] = [
     name: 'Dispensary',
     description: 'Batch and expiry as columns. For a chemist or medical store.',
     frame: 'none', header: 'band-name', metaStrip: false,
-    party: 'two-cards', columns: 'simple', tableFill: 'fit', totals: 'panel',
+    party: 'two-cards', columns: 'trade', tableFill: 'fit', totals: 'panel',
   },
   {
     id: 'consignment',

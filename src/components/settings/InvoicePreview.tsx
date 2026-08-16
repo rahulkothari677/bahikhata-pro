@@ -48,7 +48,8 @@ import { PinchZoom } from '@/components/common/PinchZoom'
 import type { InvoiceDocument } from '@/lib/invoice-document'
 import { formatCustomValue } from '@/lib/custom-fields'
 import { getInvoiceTheme } from '@/lib/invoice-themes'
-import { getInvoiceTemplate, metricsFor } from '@/lib/invoice-templates'
+import { getInvoiceLayout } from '@/lib/invoice-layouts'
+import { getInvoiceStyle, DENSITY_METRICS } from '@/lib/invoice-styles'
 import { getPaperSize, paperPx, MM_TO_PX } from '@/lib/invoice-paper'
 
 /** Which block the shopkeeper is editing, so the preview can point at it. */
@@ -103,6 +104,7 @@ export function InvoicePreview({
   doc,
   themeId,
   templateId,
+  styleId,
   paperId,
   focus = null,
   isSample = false,
@@ -114,6 +116,8 @@ export function InvoicePreview({
   doc: InvoiceDocument
   themeId?: string | null
   templateId?: string | null
+  /** Setting.invoiceStyle — how the blocks are dressed. See invoice-styles. */
+  styleId?: string | null
   /** Setting.invoicePaperSize. The preview shows the sheet they will print on. */
   paperId?: string | null
   /**
@@ -151,8 +155,10 @@ export function InvoicePreview({
   const rawTheme = getInvoiceTheme(themeId)
   // Secondary text darkened for the scaled view; see `readable` above.
   const theme = { ...rawTheme, muted: readable(rawTheme.muted), text: readable(rawTheme.text) }
-  const template = getInvoiceTemplate(templateId)
-  const metrics = metricsFor(template)
+  // 📄 Phase 7c — the preview reads the same three choices the PDF does.
+  const template = getInvoiceLayout(templateId)
+  const style = getInvoiceStyle(styleId)
+  const metrics = DENSITY_METRICS[style.density]
   const paper = getPaperSize(paperId)
   const page = paperPx(paper)
   const scale = width / page.width
@@ -172,13 +178,13 @@ export function InvoicePreview({
    * stays usable, otherwise back to the sub-line.
    */
   const extraNames = useMemo(() => {
-    if (template.extraColumns !== 'columns') return []
+    if (template.columns === 'simple') return []
     const all = Array.from(new Set(doc.items.flatMap(i => i.customCols.map(c => c.label))))
     // The PDF's own rule: extras are funded from the whole table, and the
     // name must survive at 26mm. See invoice-pdf for why it is not 58/22.
     const forNameAndExtras = 178 - 6 - (16 + 14 + 20 + 12 + 26)
     return forNameAndExtras - all.length * 16 >= 26 ? all : []
-  }, [doc.items, template.extraColumns])
+  }, [doc.items, template.columns])
   const hidden = doc.items.length - rows.length
 
   const ringFor = (block: PreviewFocus) =>
@@ -212,7 +218,7 @@ export function InvoicePreview({
         >
           {/* ── the shop's identity ───────────────────────────────────── */}
           <div style={ringFor('header')}>
-            {template.header === 'band' ? (
+            {(template.header === 'band-name' || template.header === 'band-title') ? (
               <div
                 style={{
                   background: theme.headerBg,
@@ -221,9 +227,9 @@ export function InvoicePreview({
                   padding: '18px 24px',
                 }}
               >
-                <HeaderContent doc={doc} muted={theme.headerMuted} serif={template.titleFace === 'serif'} pendingFields={pendingFields} />
+                <HeaderContent doc={doc} muted={theme.headerMuted} serif={style.titleFace === 'serif'} pendingFields={pendingFields} />
               </div>
-            ) : template.header === 'rule' ? (
+            ) : template.frame === 'single' ? (
               <div
                 style={{
                   padding: '18px 24px',
@@ -231,12 +237,12 @@ export function InvoicePreview({
                   borderBottom: `4px solid ${theme.accent}`,
                 }}
               >
-                <HeaderContent doc={doc} muted={theme.muted} serif={template.titleFace === 'serif'} pendingFields={pendingFields} />
+                <HeaderContent doc={doc} muted={theme.muted} serif={style.titleFace === 'serif'} pendingFields={pendingFields} />
               </div>
             ) : (
               <div style={{ padding: 10 }}>
                 <div style={{ border: `2px solid ${theme.accent}`, padding: '14px 20px' }}>
-                  <HeaderContent doc={doc} muted={theme.muted} serif={template.titleFace === 'serif'} pendingFields={pendingFields} />
+                  <HeaderContent doc={doc} muted={theme.muted} serif={style.titleFace === 'serif'} pendingFields={pendingFields} />
                 </div>
               </div>
             )}
@@ -261,9 +267,9 @@ export function InvoicePreview({
                 key={i}
                 style={{
                   padding: '0 8px',
-                  background: template.table === 'zebra' && i % 2 === 1 ? '#FAFBFC' : 'transparent',
-                  borderBottom: template.table === 'rows' ? `1px solid ${theme.line}` : undefined,
-                  border: template.table === 'grid' ? `1px solid ${theme.line}` : undefined,
+                  background: style.zebra && i % 2 === 1 ? '#FAFBFC' : 'transparent',
+                  borderBottom: style.rules === 'hairline' ? `1px solid ${theme.line}` : undefined,
+                  border: style.rules === 'boxed' ? `1px solid ${theme.line}` : undefined,
                 }}
               >
                 <div className="flex items-center text-sm" style={{ height: metrics.rowHeight * MM }}>
@@ -326,7 +332,7 @@ export function InvoicePreview({
               <div
                 className={cn(
                   'flex justify-between items-center font-bold',
-                  template.totals === 'plain' ? 'text-xl' : 'text-base',
+                  template.totals === 'lines' ? 'text-xl' : 'text-base',
                 )}
                 style={{
                   marginTop: 6,

@@ -17,7 +17,8 @@
 
 import { registerUnicodeFont, THEME, formatPDFMoney } from './pdf/theme'
 import { paletteFor } from './pdf/palette'
-import { getInvoiceTemplate, metricsFor } from './invoice-templates'
+import { getInvoiceLayout } from './invoice-layouts'
+import { getInvoiceStyle, DENSITY_METRICS } from './invoice-styles'
 import { getPaperSize } from './invoice-paper'
 import { formatCustomValue } from './custom-fields'
 import type { InvoiceDocument } from './invoice-document'
@@ -64,6 +65,14 @@ export interface InvoicePdfOptions {
    * file the customer receives would be the invoiceTheme bug all over again.
    */
   paperId?: string | null
+  /**
+   * Setting.invoiceStyle — how the blocks are DRESSED. See invoice-styles.
+   *
+   * Separate from the layout so a shopkeeper can keep their skeleton and
+   * change only the rules and spacing, and so a new style does not have to
+   * be checked against every layout by hand.
+   */
+  styleId?: string | null
 }
 
 export async function generateInvoicePDF(
@@ -98,8 +107,23 @@ export async function generateInvoicePDF(
    * to the values this file used to hardcode — 32mm band, 7mm rows, 9pt body —
    * so no shop's invoice changes until they choose a different one.
    */
-  const template = getInvoiceTemplate(opts.templateId)
-  const metrics = metricsFor(template)
+  /*
+   * 📄 Phase 7c — THREE choices, not one.
+   *
+   * `templateId` now carries the LAYOUT (where blocks sit) and `styleId` the
+   * STYLE (how they are dressed). They were one muddled value before, and
+   * because the layout half was hardcoded, thirteen designs drew one page.
+   *
+   * The option keeps its old name so no caller and no stored row has to
+   * change: Setting.invoiceTemplate held a template id and now holds a
+   * layout id, and an unrecognised one falls back to Classic — which is what
+   * every old template already looked like.
+   */
+  const layout = getInvoiceLayout(opts.templateId)
+  const style = getInvoiceStyle(opts.styleId)
+  const metrics = DENSITY_METRICS[style.density]
+  // Read by the blocks below. `template` is gone; these two replace it.
+  const lineW = style.lineWidth
   /*
    * Every figure below is READ, never recomputed.
    *
@@ -132,24 +156,64 @@ export async function generateInvoicePDF(
    * be drawn in body text instead — hence `headText`/`headMuted` below rather
    * than `onBand` used directly.
    */
-  const filledHeader = template.header === 'band'
+  // 'band-name' and 'band-title' both fill; 'plain-name' leaves the paper white.
+  const filledHeader = layout.header === 'band-name' || layout.header === 'band-title'
   const headText = filledHeader ? onBand : text
   const headMuted = filledHeader ? onBandMuted : textMuted
+
+  /*
+   * 📄 Phase 7c — THE FRAME, drawn before anything else.
+   *
+   * On the Jaipur reference this is the entire "premium" cue: two thin gold
+   * rectangles and four corner brackets. It costs six lines and does more for
+   * how the bill reads than any amount of colour — which is the lesson from
+   * the research too. Expensive documents are restrained, not decorated.
+   */
+  if (layout.frame !== 'none') {
+    doc.setDrawColor(accent.r, accent.g, accent.b)
+    const outer = 6
+    doc.setLineWidth(lineW * 2)
+    doc.rect(outer, outer, pageWidth - outer * 2, pageHeight - outer * 2)
+
+    if (layout.frame === 'double') {
+      // The inner rule sits close, so the pair reads as one border.
+      const inner = outer + 2
+      doc.setLineWidth(lineW)
+      doc.rect(inner, inner, pageWidth - inner * 2, pageHeight - inner * 2)
+
+      /*
+       * Corner brackets — an L in each corner, sitting ON the inner rule.
+       * Drawn as two lines rather than a glyph so they scale with the sheet
+       * and need no font.
+       */
+      if (style.ornament) {
+        const arm = 9
+        doc.setLineWidth(lineW * 2)
+        const corners: [number, number, number, number][] = [
+          [inner, inner, 1, 1],
+          [pageWidth - inner, inner, -1, 1],
+          [inner, pageHeight - inner, 1, -1],
+          [pageWidth - inner, pageHeight - inner, -1, -1],
+        ]
+        for (const [cxp, cyp, dx, dy] of corners) {
+          doc.line(cxp, cyp, cxp + arm * dx, cyp)
+          doc.line(cxp, cyp, cxp, cyp + arm * dy)
+        }
+      }
+    }
+  }
 
   if (filledHeader) {
     doc.setFillColor(band.r, band.g, band.b)
     doc.rect(0, 0, pageWidth, bandHeight, 'F')
-  } else if (template.header === 'rule') {
-    // A thick accent rule under the identity block, no fill.
-    doc.setDrawColor(accent.r, accent.g, accent.b)
-    doc.setLineWidth(1.2)
-    doc.line(margin, bandHeight - 4, pageWidth - margin, bandHeight - 4)
   } else {
-    // 'frame' — a hairline box around the whole page, the bill-book look.
+    /*
+     * 'plain-name' — no band. A rule under the identity block instead, so the
+     * header still reads as a block rather than as floating text. The Jaipur
+     * and Bengaluru references both do exactly this.
+     */
     doc.setDrawColor(accent.r, accent.g, accent.b)
-    doc.setLineWidth(0.6)
-    doc.rect(margin - 5, 6, pageWidth - (margin - 5) * 2, pageHeight - 12)
-    doc.setLineWidth(0.3)
+    doc.setLineWidth(lineW * 3)
     doc.line(margin, bandHeight - 4, pageWidth - margin, bandHeight - 4)
   }
 
@@ -201,7 +265,7 @@ export async function generateInvoicePDF(
    * Devanagari, Gujarati and Tamil — offering a shop a serif that cannot
    * render its own language would not be a choice.
    */
-  if (template.titleFace === 'serif') doc.setFont('times', 'bold')
+  if (style.titleFace === 'serif') doc.setFont('times', 'bold')
   doc.text(invoice.shop.name || 'My Shop', textLeftX, 13)
   doc.setFont(THEME.font, 'bold')
 
@@ -381,78 +445,102 @@ export async function generateInvoicePDF(
    * is a trap, and the shopkeeper who finds it is mid-sale. Falling back is
    * not a compromise here — it is the feature.
    */
-  const wantsColumns = template.extraColumns === 'columns'
+  const wantsColumns = layout.columns === 'trade'
   const extraNames = wantsColumns
     ? Array.from(new Set(invoice.items.flatMap(i => i.customCols.map(c => c.label))))
     : []
 
-  /*
-   * 🐛 2026-08-16 — THE TABLE NEVER FITTED A5.
-   *
-   * Found by holding A5 to the same maximal-invoice standard as A4. Every
-   * column position here was a hardcoded millimetre figure chosen for A4:
-   * AMOUNT sat 168mm from the left margin. A5 is 148mm WIDE. So every bill a
-   * shop printed on a half sheet had its rate and amount columns off the
-   * right edge — since Phase 2, when I added the paper option and checked
-   * only that the SHEET was the right size.
-   *
-   * The table is now allocated from the REAL printable width, so it fits
-   * whatever sheet it is given. A4 keeps its existing proportions exactly,
-   * because the reference width below is A4's own.
-   */
   const tableW = (pageWidth - margin * 2) - 2
   /** What the A4 layout was drawn against. Everything scales from this. */
   const REFERENCE_W = 178
   const k = tableW / REFERENCE_W
 
   /*
-   * 🐛 Third iteration, and the one that actually works.
+   * 📄 Phase 7c — THE FULL GST BREAKUP, twelve columns.
    *
-   * My first allocation took the extra columns out of the ITEM name alone:
-   * 58mm of name less 22mm per column. Three columns — which is exactly what
-   * a chemist has, batch + expiry + MRP — left the name at -8mm, so the
-   * fallback fired every time and "Dispensary" never showed a single column.
-   * A template whose whole purpose never triggers is not a design.
+   * What the Jaipur and Ghaziabad references both print, and what a
+   * wholesaler's buyer and their CA both expect: the discount, the taxable
+   * value and the CGST/SGST/cess split each in their own column rather than
+   * summarised. It is the difference between a receipt and an accounting
+   * document.
    *
-   * The reference pharma bill answers it: the item name is NARROWER there,
-   * and every other column is tighter too. So the extras are funded from the
-   * WHOLE table, not from one column — and the fallback stays, for the shop
-   * that defines six.
+   * Only offered on A4 with a dense style — `layoutFitsPaper` and
+   * `styleFitsLayout` refuse the rest rather than printing off the page,
+   * which is what the old renderer did for a whole phase before a test
+   * caught it.
    */
-  const hasExtras = extraNames.length > 0
-  /** Tail widths, tightened when the shop has its own columns to fit. */
-  const W = hasExtras
-    ? { num: 6, hsn: 16, qty: 14, rate: 20, gst: 12, amount: 26 }
-    : { num: 8, hsn: 20, qty: 18, rate: 24, gst: 18, amount: 30 }
-  const tailW = (W.hsn + W.qty + W.rate + W.gst + W.amount) * k
-  const forNameAndExtras = tableW - W.num * k - tailW
+  const gstFull = layout.columns === 'gst-full'
 
   /** Enough for "AUG-849" or "08/2027" at the small size. */
   const EXTRA_W = 16 * k
   /** Below this the item name stops being an item name. */
   const MIN_NAME_W = 26 * k
-  const nameW = forNameAndExtras - extraNames.length * EXTRA_W
-  const useColumns = hasExtras && nameW >= MIN_NAME_W
-  const extras = useColumns ? extraNames : []
-  const itemW = useColumns ? nameW : forNameAndExtras
 
-  let cx = colStart + W.num * k + itemW
-  const extraCols = extras.map(name => {
-    const col = { name: name.toUpperCase().slice(0, 8), key: name, x: cx, w: EXTRA_W, align: 'left' as const }
-    cx += EXTRA_W
-    return col
-  })
+  let cols: { name: string; x: number; w: number; align: string }[]
+  let extraCols: { name: string; key: string; x: number; w: number; align: "left" }[] = []
+  let itemW: number
+  let cx: number
 
-  const cols = [
-    { name: '#', x: colStart + 1 * k, w: W.num * k, align: 'left' },
-    { name: 'ITEM', x: colStart + W.num * k, w: itemW, align: 'left' },
-    ...extraCols.map(c => ({ name: c.name, x: c.x, w: c.w, align: c.align })),
-    { name: 'HSN', x: cx, w: W.hsn * k, align: 'left' },
-    { name: 'QTY', x: cx + W.hsn * k, w: W.qty * k, align: 'right' },
-    { name: 'RATE', x: cx + (W.hsn + W.qty) * k, w: W.rate * k, align: 'right' },
-    { name: 'GST%', x: cx + (W.hsn + W.qty + W.rate) * k, w: W.gst * k, align: 'right' },
-    { name: 'AMOUNT', x: cx + (W.hsn + W.qty + W.rate + W.gst + W.amount) * k, w: 0, align: 'right' },
-  ]
+  if (gstFull) {
+    // Twelve columns, proportioned from the reference bill.
+    const w = {
+      num: 7, item: 46, hsn: 14, qty: 10, unit: 11, rate: 17,
+      disc: 11, taxable: 20, cgst: 11, sgst: 11, cess: 9, total: 21,
+    }
+    const sum = Object.values(w).reduce((a, b) => a + b, 0)
+    const g = tableW / sum
+    let x = colStart
+    const push = (name: string, width: number, align: string) => {
+      const col = { name, x, w: width * g, align }
+      x += width * g
+      return col
+    }
+    cols = [
+      push('NO', w.num, 'left'),
+      push('DESCRIPTION OF ITEMS', w.item, 'left'),
+      push('HSN', w.hsn, 'left'),
+      push('QTY', w.qty, 'right'),
+      push('UNIT', w.unit, 'left'),
+      push('RATE', w.rate, 'right'),
+      push('DISC %', w.disc, 'right'),
+      push('TAXABLE', w.taxable, 'right'),
+      push('CGST %', w.cgst, 'right'),
+      push('SGST %', w.sgst, 'right'),
+      push('CESS %', w.cess, 'right'),
+      push('TOTAL', w.total, 'right'),
+    ]
+    itemW = w.item * g
+    cx = colStart
+  } else {
+    const hasExtras = extraNames.length > 0
+    const W = hasExtras
+      ? { num: 6, hsn: 16, qty: 14, rate: 20, gst: 12, amount: 26 }
+      : { num: 8, hsn: 20, qty: 18, rate: 24, gst: 18, amount: 30 }
+    const tailW = (W.hsn + W.qty + W.rate + W.gst + W.amount) * k
+    const forNameAndExtras = tableW - W.num * k - tailW
+    const nameW = forNameAndExtras - extraNames.length * EXTRA_W
+    const useColumns = hasExtras && nameW >= MIN_NAME_W
+    const extras = useColumns ? extraNames : []
+    itemW = useColumns ? nameW : forNameAndExtras
+
+    cx = colStart + W.num * k + itemW
+    extraCols = extras.map(name => {
+      const col = { name: name.toUpperCase().slice(0, 8), key: name, x: cx, w: EXTRA_W, align: 'left' as const }
+      cx += EXTRA_W
+      return col
+    })
+
+    cols = [
+      { name: '#', x: colStart + 1 * k, w: W.num * k, align: 'left' },
+      { name: 'ITEM', x: colStart + W.num * k, w: itemW, align: 'left' },
+      ...extraCols.map(c => ({ name: c.name, x: c.x, w: c.w, align: c.align as string })),
+      { name: 'HSN', x: cx, w: W.hsn * k, align: 'left' },
+      { name: 'QTY', x: cx + W.hsn * k, w: W.qty * k, align: 'right' },
+      { name: 'RATE', x: cx + (W.hsn + W.qty) * k, w: W.rate * k, align: 'right' },
+      { name: 'GST%', x: cx + (W.hsn + W.qty + W.rate) * k, w: W.gst * k, align: 'right' },
+      { name: 'AMOUNT', x: cx + (W.hsn + W.qty + W.rate + W.gst + W.amount) * k, w: 0, align: 'right' },
+    ]
+  }
   const colEnd = pageWidth - margin - 1
 
   const drawTableHeader = (headerY: number) => {
@@ -525,14 +613,14 @@ export async function generateInvoicePDF(
      *           bills actually wants: the eye can follow a column down the
      *           page without losing its place.
      */
-    if (template.table === 'zebra' && i % 2 === 1) {
+    if (style.zebra && i % 2 === 1) {
       doc.setFillColor(zebra.r, zebra.g, zebra.b)
       doc.rect(colStart, y, tableWidth, rowHeight, 'F')
-    } else if (template.table === 'rows') {
+    } else if (style.rules === 'hairline') {
       doc.setDrawColor(border.r, border.g, border.b)
       doc.setLineWidth(0.1)
       doc.line(colStart, y + rowHeight, colStart + tableWidth, y + rowHeight)
-    } else if (template.table === 'grid') {
+    } else if (style.rules === 'boxed') {
       doc.setDrawColor(border.r, border.g, border.b)
       doc.setLineWidth(0.1)
       doc.rect(colStart, y, tableWidth, rowHeight)
@@ -564,13 +652,36 @@ export async function generateInvoicePDF(
         doc.setFontSize(metrics.bodyPt)
       }
     }
-    doc.setFontSize(metrics.smallPt)
-    doc.text(item.hsn || '-', cols[2].x, tY)
-    doc.setFontSize(metrics.bodyPt)
-    doc.text(`${item.qtyValue} ${item.unit || 'pcs'}`, cols[3].x + cols[3].w - 1, tY, { align: 'right' })
-    doc.text(item.rate.toFixed(2), cols[4].x + cols[4].w - 1, tY, { align: 'right' })
-    doc.text(item.gstRate + '%', cols[5].x + cols[5].w - 1, tY, { align: 'right' })
-    doc.text(formatPDFMoney(item.total), colEnd, tY, { align: 'right' })
+    if (gstFull) {
+      /*
+       * The twelve-column row. Every figure READ from the document, never
+       * recomputed — the taxable value is the line total less its own tax,
+       * which the document already worked out once for every surface.
+       */
+      const halfGst = item.gstRate / 2
+      const taxable = item.rate * item.qtyValue
+      const R = (n: number) => n.toFixed(2)
+      doc.setFontSize(metrics.smallPt)
+      doc.text(item.hsn || '-', cols[2].x, tY)
+      doc.text(String(item.qtyValue), cols[3].x + cols[3].w - 1, tY, { align: 'right' })
+      doc.text(item.unit || 'pcs', cols[4].x, tY)
+      doc.text(R(item.rate), cols[5].x + cols[5].w - 1, tY, { align: 'right' })
+      doc.text('0%', cols[6].x + cols[6].w - 1, tY, { align: 'right' })
+      doc.text(R(taxable), cols[7].x + cols[7].w - 1, tY, { align: 'right' })
+      doc.text(`${halfGst}%`, cols[8].x + cols[8].w - 1, tY, { align: 'right' })
+      doc.text(`${halfGst}%`, cols[9].x + cols[9].w - 1, tY, { align: 'right' })
+      doc.text('0%', cols[10].x + cols[10].w - 1, tY, { align: 'right' })
+      doc.setFontSize(metrics.bodyPt)
+      doc.text(formatPDFMoney(item.total), colEnd, tY, { align: 'right' })
+    } else {
+      doc.setFontSize(metrics.smallPt)
+      doc.text(item.hsn || '-', cols[2].x, tY)
+      doc.setFontSize(metrics.bodyPt)
+      doc.text(`${item.qtyValue} ${item.unit || 'pcs'}`, cols[3].x + cols[3].w - 1, tY, { align: 'right' })
+      doc.text(item.rate.toFixed(2), cols[4].x + cols[4].w - 1, tY, { align: 'right' })
+      doc.text(item.gstRate + '%', cols[5].x + cols[5].w - 1, tY, { align: 'right' })
+      doc.text(formatPDFMoney(item.total), colEnd, tY, { align: 'right' })
+    }
 
     /*
      * The sub-line. Description under the name, unit-as-typed under the
@@ -629,6 +740,41 @@ export async function generateInvoicePDF(
     y += rowHeight
   })
 
+  /*
+   * 📄 Phase 7c — EMPTY RULED ROWS, padding the table to a full block.
+   *
+   * The classic Indian bill-book look, and the reason a printed pad feels
+   * deliberate where software output feels ragged: a five-item bill and a
+   * twenty-item bill are the same shape. It also stops a customer adding a
+   * line to a bill they were handed, which is why the pads are printed that
+   * way in the first place.
+   *
+   * Padded only while the rows FIT — never onto a second page. Empty ruled
+   * rows spilling over a page break would be padding for its own sake, and
+   * the shopkeeper pays for that paper.
+   */
+  if (layout.tableFill === 'pad') {
+    const reserveForFooter = Math.min(90, pageHeight * 0.30)
+    const roomLeft = (pageHeight - reserveForFooter) - y
+    const blanks = Math.max(0, Math.floor(roomLeft / baseRowHeight))
+    for (let n = 0; n < blanks; n++) {
+      if (style.zebra && (invoice.items.length + n) % 2 === 1) {
+        doc.setFillColor(zebra.r, zebra.g, zebra.b)
+        doc.rect(colStart, y, tableWidth, baseRowHeight, 'F')
+      } else if (style.rules === 'boxed') {
+        doc.setDrawColor(border.r, border.g, border.b)
+        doc.setLineWidth(lineW)
+        doc.rect(colStart, y, tableWidth, baseRowHeight)
+        cols.slice(1).forEach(c => doc.line(c.x - 1, y, c.x - 1, y + baseRowHeight))
+      } else if (style.rules === 'hairline') {
+        doc.setDrawColor(border.r, border.g, border.b)
+        doc.setLineWidth(lineW)
+        doc.line(colStart, y + baseRowHeight, colStart + tableWidth, y + baseRowHeight)
+      }
+      y += baseRowHeight
+    }
+  }
+
   // Table bottom border
   doc.setDrawColor(border.r, border.g, border.b)
   doc.setLineWidth(0.3)
@@ -681,12 +827,12 @@ export async function generateInvoicePDF(
   const gtHeight = 11
   doc.setFont(THEME.font, 'bold')
 
-  if (template.totals === 'bar') {
+  if (layout.totals === 'bar') {
     doc.setFillColor(accent.r, accent.g, accent.b)
     doc.rect(totalsX - 2, y - 4, totalsWidth + 2, gtHeight, 'F')
     doc.setFontSize(12)
     doc.setTextColor(white.r, white.g, white.b)
-  } else if (template.totals === 'panel') {
+  } else if (layout.totals === 'panel' || layout.totals === 'ruled') {
     doc.setDrawColor(accent.r, accent.g, accent.b)
     doc.setLineWidth(0.5)
     doc.rect(totalsX - 2, y - 4, totalsWidth + 2, gtHeight)
