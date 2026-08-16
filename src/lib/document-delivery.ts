@@ -27,21 +27,73 @@
  */
 
 import type { InvoiceDocument } from './invoice-document'
+import { measureHeight, IMAGE_WIDTH } from './invoice-share-image'
 
 export type SendFormat = 'image' | 'pdf'
 /** What the shop has chosen. 'smart' lets the bill decide. */
 export type SendFormatPreference = 'smart' | SendFormat
 
 /**
- * The most items that still read after WhatsApp's compression.
- *
- * Eight, measured rather than picked: a nine-item bill lands under 780px wide
- * once WhatsApp is done with it, which is where the HSN line under each item
- * stops being legible on a phone. Erring low costs a shopkeeper nothing — the
- * PDF is a perfectly good bill — while erring high sends something the customer
- * cannot read, which is the failure that matters.
+ * WhatsApp's ceiling: every image is downsampled to about this, on its LONGEST
+ * side. Confirmed again on 16 Aug 2026 — ~1600px, re-encoded at 60-70% JPEG.
+ * Sending as a *document* escapes it, but then it is no longer a picture that
+ * opens in the chat, which is the entire reason to send one.
  */
-export const IMAGE_ITEM_LIMIT = 8
+export const WHATSAPP_LONGEST_SIDE = 1600
+
+/**
+ * The narrowest a bill may arrive and still be read on a phone.
+ *
+ * A bill is a TABLE. It is not read like a photograph — the eye goes to one
+ * cell, so what matters is whether a column of digits is still separable.
+ * Below about 700px of delivered width the rate, tax and amount columns of an
+ * eleven-column bill run together, which is precisely what Rahul's A5 bill
+ * showed on paper for the same reason.
+ *
+ * Erring low costs a shopkeeper nothing — a PDF is a perfectly good bill.
+ * Erring high sends something the customer cannot read, which is the failure
+ * that matters.
+ */
+export const MIN_DELIVERED_WIDTH = 700
+
+/**
+ * What the customer's phone actually receives, in pixels of width.
+ *
+ * 🐛 2026-08-16. Rahul: *"you can add 20-25 items in a list and because of it
+ * it will be so small that the printed image will be hard to read."*
+ *
+ * He is right, and the mechanism is worse than "small". The bill is rendered
+ * 1080px wide and grows DOWNWARDS with each item. WhatsApp caps the LONGEST
+ * side — which on a bill is the height — so a long bill is squeezed SIDEWAYS.
+ * The more items, the narrower the whole document arrives:
+ *
+ *      5 items →  924px    readable
+ *     11 items →  739px    small          ← the bill he sent
+ *     25 items →  503px    unreadable
+ *     40 items →  376px    unreadable
+ *
+ * A plain function over two numbers so a test can run it at any length
+ * without rendering anything (CLAUDE.md, Cause 7).
+ */
+export function deliveredWidthPx(contentHeightPx: number, width = IMAGE_WIDTH): number {
+  const longest = Math.max(width, contentHeightPx)
+  if (longest <= WHATSAPP_LONGEST_SIDE) return width
+  return Math.round(width * (WHATSAPP_LONGEST_SIDE / longest))
+}
+
+/**
+ * Does this exact bill survive the trip as a picture?
+ *
+ * Asks the RENDERER how tall it will be rather than counting items, so a bill
+ * that is tall for any other reason — a payment QR, a long address — is judged
+ * on what it actually is.
+ */
+export function billSurvivesAsImage(doc: InvoiceDocument): boolean {
+  const addressLines = doc.party?.address ? 2 : 0
+  const hasQr = doc.due > 0 && !!(doc.shop.upiId || doc.shop.paymentQrUrl)
+  const height = measureHeight(doc.items.length, hasQr, addressLines)
+  return deliveredWidthPx(height) >= MIN_DELIVERED_WIDTH
+}
 
 export interface FormatChoice {
   format: SendFormat
@@ -62,12 +114,22 @@ export function chooseSendFormat(
     return { format: 'pdf', reason: 'Sending as a PDF, as you set', fromPreference: true }
   }
 
-  const count = doc.items.length
-  if (count > IMAGE_ITEM_LIMIT) {
+  /*
+   * 🐛 2026-08-16 — this counted ITEMS. Rahul asked the right question:
+   * "if it's just one page then it should go into image unless i choose pdf."
+   *
+   * A count cannot answer that. His eleven-item bill fits one A4 page with
+   * room to spare and was being sent as a PDF; a four-item bill with a QR, a
+   * two-line address and bank details is TALLER and was being called safe.
+   * The count was measuring the wrong thing, and it was a second opinion about
+   * a height the renderer already knew.
+   */
+  if (!billSurvivesAsImage(doc)) {
+    const count = doc.items.length
     return {
       format: 'pdf',
-      // Named plainly. "Long bill" is a reason a shopkeeper can act on; a
-      // silent switch between formats reads as the app being unpredictable.
+      // Named plainly. A reason a shopkeeper can act on; a silent switch
+      // between formats reads as the app being unpredictable.
       reason: `${count} items — sending as a PDF so it stays readable`,
       fromPreference: false,
     }

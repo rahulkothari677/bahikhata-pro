@@ -33,7 +33,14 @@ import { getInvoiceTheme, type InvoiceTheme } from './invoice-themes'
  * 1080px wide — the size WhatsApp keeps. It re-encodes anything larger, so a
  * bigger canvas buys nothing but upload time on a 3G connection.
  */
-const W = 1080
+/**
+ * The rendered width, before WhatsApp touches it.
+ *
+ * Exported so the delivery rule can work out what actually arrives on the
+ * customer's phone rather than assuming this survives — it usually does not.
+ */
+export const IMAGE_WIDTH = 1080
+const W = IMAGE_WIDTH
 const PAD = 48
 
 /**
@@ -103,7 +110,20 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, max: number, maxLines
  * height of a 30-item one — in a chat, a bill the length of its contents reads
  * as deliberate.
  */
-function measureHeight(itemCount: number, hasQr: boolean, addressLines: number): number {
+/**
+ * How tall the drawn bill will be, in pixels, at IMAGE_WIDTH.
+ *
+ * 📤 EXPORTED as of 2026-08-16, and that is the point of the change.
+ *
+ * The delivery rule used to decide image-or-PDF from an ITEM COUNT while this
+ * function decided the actual height. Two things describing one thing, and
+ * they disagreed the moment anything else grew: a four-item bill with a
+ * payment QR, a two-line address and bank details is TALLER than an eight-item
+ * bill without them, and the count called the tall one safe.
+ *
+ * Now the rule asks this. One formula, one answer. (CLAUDE.md, Cause 2.)
+ */
+export function measureHeight(itemCount: number, hasQr: boolean, addressLines: number): number {
   const header = 210
   const meta = 150
   const party = 90 + addressLines * 34

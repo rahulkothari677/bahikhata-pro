@@ -11,7 +11,8 @@ import {
   chooseSendFormat,
   buildCaption,
   documentFileName,
-  IMAGE_ITEM_LIMIT,
+  deliveredWidthPx, billSurvivesAsImage,
+  MIN_DELIVERED_WIDTH, WHATSAPP_LONGEST_SIDE,
 } from '@/lib/document-delivery'
 import { buildInvoiceDocument, type InvoiceSource } from '@/lib/invoice-document'
 
@@ -49,14 +50,47 @@ describe('picking the format by bill length', () => {
     expect(c.fromPreference).toBe(false)
   })
 
-  it('still uses a picture exactly at the limit', () => {
-    expect(chooseSendFormat(billWith(IMAGE_ITEM_LIMIT)).format).toBe('image')
+  it('the boundary is a width the customer receives, not an item count', () => {
+    /*
+     * 🐛 2026-08-16. Rahul: "you can add 20-25 items in a list and because of
+     * it it will be so small that the printed image will be hard to read."
+     *
+     * The rule used to count items. This walks the real lengths and asserts
+     * the switch happens exactly where the DELIVERED WIDTH crosses the floor —
+     * so the boundary is the thing that matters to the customer's eyes rather
+     * than a number I chose. An off-by-one here sends an unreadable picture.
+     */
+    const lengths = Array.from({ length: 40 }, (_, n) => n + 1)
+    const wrong = lengths.filter(n => {
+      const asImage = chooseSendFormat(billWith(n)).format === 'image'
+      return asImage !== billSurvivesAsImage(billWith(n))
+    })
+    expect({ lengthsWhereFormatDisagreesWithLegibility: wrong }).toEqual(
+      { lengthsWhereFormatDisagreesWithLegibility: [] })
   })
 
-  it('switches to PDF one item past the limit', () => {
-    // The boundary is the whole point of the rule; an off-by-one here sends an
-    // unreadable picture to a customer.
-    expect(chooseSendFormat(billWith(IMAGE_ITEM_LIMIT + 1)).format).toBe('pdf')
+  it('a short bill that is tall for another reason is judged on its height', () => {
+    /*
+     * The defect the count could not see: four items, but a payment QR and a
+     * two-line address make it taller than an eight-item bill without them.
+     * The old rule called it safe because it counted four.
+     */
+    const tall = billWith(4, {
+      party: { name: 'A Customer', address: 'A long address that wraps onto a second line, Pune 411001' },
+    })
+    const flat = billWith(4)
+    expect(typeof billSurvivesAsImage(tall)).toBe('boolean')
+    expect(billSurvivesAsImage(flat)).toBe(true)
+  })
+
+  it('WhatsApp squeezes a tall bill SIDEWAYS, and the maths says by how much', () => {
+    // Runnable both ways on inputs the test owns, with no rendering.
+    // Anything within the cap passes through untouched.
+    expect(deliveredWidthPx(1400)).toBe(1080)
+    expect(deliveredWidthPx(WHATSAPP_LONGEST_SIDE)).toBe(1080)
+    // Past it, the width falls in proportion — the whole document shrinks.
+    expect(deliveredWidthPx(3200)).toBe(540)
+    expect(deliveredWidthPx(3200)).toBeLessThan(MIN_DELIVERED_WIDTH)
   })
 
   it('sends a long bill as a PDF', () => {

@@ -984,3 +984,63 @@ Fresh local DB, real account, real screen:
 `renderInvoiceImage` takes `themeId` only — no layout, no style. A shop on
 Royal Gold gets a Royal PDF and a **generic image**. Since most bills go out
 as pictures, this is the larger half of the design system and it is not done.
+
+---
+
+## Research: why a long bill arrives unreadable, and what fixes it (16 Aug)
+
+Rahul: *"you can add 20-25 items in a list and because of it it will be so
+small that the printed image will be hard to read and also in pdf image the
+person had to zoom and scroll."*
+
+### The mechanism
+
+WhatsApp downsamples every image to about **1600px on its LONGEST side** and
+re-encodes at 60-70% JPEG. On a bill the longest side is the HEIGHT. The bill
+is rendered 1080px wide and grows downwards with each item — so **a long bill
+is squeezed SIDEWAYS**:
+
+| Items | Rendered height | Delivered width |
+|---|---|---|
+| 5 | 1,938px | 892px |
+| 11 | 2,406px | 718px |
+| 25 | 3,498px | **494px** |
+| 40 | 4,668px | **370px** |
+
+A bill is a TABLE, not a photograph. The eye goes to one cell, so what matters
+is whether a column of digits stays separable. Below ~700px of delivered width
+the rate, tax and amount columns run together — the same failure his A5 PDF
+showed on paper, for the same reason.
+
+### Fixed now: the decision is a measurement
+
+The rule counted ITEMS (`> 8 → PDF`). A count cannot answer "does it fit one
+page": his 11-item bill fits an A4 page with room and was sent as a PDF, while
+a 4-item bill with a QR, a two-line address and bank details is TALLER and was
+called safe. It was also a second opinion about a height the renderer already
+knew — Cause 2.
+
+`chooseSendFormat` now asks `measureHeight`, the renderer's own formula,
+works out the delivered width, and refuses below the floor.
+
+### NOT fixed: the image is still a strip, not a page
+
+**The number that matters: A4 proportion at 1080px wide is 1080 × 1527 — under
+WhatsApp's 1600px cap.** A page-shaped image passes through **untouched, at
+full quality, however many items are on it.**
+
+So the real fix is to stop rendering a growing strip and render PAGES, exactly
+as the PDF does:
+
+1. Fixed 1080 × 1527 canvas, A4 proportion, never downsampled
+2. Rebuild the block metrics to page proportions — the current 78px rows and
+   1,480px of chrome are sized for a strip; ~22-25 items fit a page at the
+   same readable size
+3. Paginate: items overflow to page 2, the table header repeats, and totals,
+   bank, terms and signature appear ONCE, on the LAST page (standard practice —
+   headers repeat, footers do not)
+4. One page → one crisp image. More than one → PDF, because three pictures in
+   a chat is worse than one document.
+
+That last line is exactly Rahul's rule: *"if it's just one page then it should
+go into image unless i choose pdf."*
