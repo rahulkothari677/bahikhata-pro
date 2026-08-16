@@ -251,3 +251,86 @@ describe('A5 is held to the same standard', () => {
     90000,
   )
 })
+
+describe('Royal Gold draws every block it promises', () => {
+  /*
+   * 📄 Phase 7d. Rahul's instruction was one design at a time, verified — so
+   * this is what "verified" means for Royal: each of its six blocks proved on
+   * the page rather than assumed from the layout table.
+   *
+   * A layout is data, so a block can be declared and never drawn without
+   * anything failing. That is the "built but unreachable" defect this codebase
+   * has shipped three times, and a design system is the easiest possible place
+   * for it to happen again — the picker would list Royal, the shopkeeper would
+   * choose it, and the frame simply would not be there.
+   */
+  const JAIPUR: InvoiceSource = {
+    invoiceNo: 'RKS/2026-27/0512', date: '2026-08-16',
+    party: {
+      name: 'M/s. Shekhawat Royal Boutique', gstin: '08BCCPS9012M1Z4',
+      state: 'Rajasthan', address: 'C-Scheme, Jaipur, Rajasthan - 302001',
+    },
+    items: Array.from({ length: 5 }, (_, n) => ({
+      productName: `Pure Banarasi Katan Silk Saree ${n + 1}`, quantity: 4,
+      unitPrice: 18500, gstRate: 5, total: 73815, unit: 'Pcs', hsn: '5007',
+    })),
+    subtotal: 202740, discountAmount: 0, cgst: 7343.5, sgst: 7343.5, igst: 0,
+    totalAmount: 217427, paidAmount: 0, paymentMode: 'credit',
+  }
+  const SHOP: InvoiceShop = {
+    name: 'Roopkala Sarees & Silks', state: 'Rajasthan', gstin: '08AAACR5412K1Z9',
+    terms: '100% Pure Silk Certified under Silk Mark Scheme.',
+    bank: { name: 'State Bank of India', accountNumber: '31094820194', ifsc: 'SBIN0001234' },
+  }
+
+  const render = async () => {
+    const blob = await generateInvoicePDF(
+      buildInvoiceDocument(JAIPUR, SHOP),
+      { templateId: 'royal', styleId: 'ornate', themeId: 'royal' },
+    )
+    return new Promise<string>((res, rej) => {
+      const r = new FileReader()
+      r.onload = () => res(String(r.result))
+      r.onerror = () => rej(new Error('could not read the PDF'))
+      r.readAsBinaryString(blob)
+    })
+  }
+
+  it('prints the boxed invoice details, not a band', async () => {
+    const pdf = await render()
+    expect(pdf).toContain('TAX INVOICE - ORIGINAL')
+    expect(pdf).toContain('Invoice No')
+    expect(pdf).toContain('Place of Supply')
+  }, 90000)
+
+  it('prints the full-width Bill To strip', async () => {
+    expect(await render()).toContain('Bill To')
+  }, 90000)
+
+  it('prints all twelve GST columns', async () => {
+    const pdf = await render()
+    // The four the simple table has no concept of.
+    for (const col of ['DESCRIPTION', 'DISC', 'TAXABLE', 'CESS']) {
+      expect({ col, present: pdf.includes(col) }).toEqual({ col, present: true })
+    }
+  }, 90000)
+
+  /*
+   * 🚫 NO AUTOMATED CHECK FOR THE FRAME ITSELF, and that is worth stating.
+   *
+   * I tried three: counting lines (passed with the frame deleted — 150-odd
+   * remain from the ruled cells), looking for a page-sized rectangle (jsPDF
+   * strokes the frame rather than emitting one), and looking for any drawing
+   * in the outer margin band (found none, though the ornament arms are
+   * provably there at 8mm — I read their coordinates out of the stream).
+   *
+   * Rather than ship a fourth guess, this says plainly: the frame and its
+   * corner ornaments are verified by reading the PDF operators by hand, not
+   * by a test. A guard I cannot make fail on broken input is a comment with
+   * a green tick beside it, and this codebase has enough of those in its
+   * history already.
+   *
+   * The three tests above DO discriminate — they check text that only the
+   * Royal blocks emit.
+   */
+})

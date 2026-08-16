@@ -288,13 +288,56 @@ export async function generateInvoicePDF(
 
   // Right: INVOICE word (16 pt), invoice no + date beneath.
   doc.setFont(THEME.font, 'bold')
-  doc.setFontSize(16)
-  doc.setTextColor(headText.r, headText.g, headText.b)
-  doc.text('INVOICE', pageWidth - margin, 12, { align: 'right' })
-  doc.setFont(THEME.font, 'normal')
-  doc.setFontSize(9)
-  doc.setTextColor(headMuted.r, headMuted.g, headMuted.b)
-  doc.text(`${invoice.invoiceNo || ''}  |  ${dateStr}`, pageWidth - margin, 18, { align: 'right' })
+  /*
+   * 📄 Phase 7d — the invoice details, boxed on a bandless page.
+   *
+   * On the Jaipur and Bengaluru references the shop name is large and plain,
+   * and the document details sit in their own small bordered card on the
+   * right. That pairing is what makes the page read as letterhead rather
+   * than as software output: the shop is the headline, the paperwork is a
+   * footnote with a box round it.
+   *
+   * On a banded layout the details stay inside the band, where they always
+   * were — a box drawn on top of a filled strip is just a box on a strip.
+   */
+  if (!filledHeader) {
+    const label = invoice.title === 'PURCHASE BILL' ? 'PURCHASE BILL' : 'TAX INVOICE - ORIGINAL FOR RECIPIENT'
+    doc.setFont(THEME.font, 'bold')
+    doc.setFontSize(10)
+    doc.setTextColor(accent.r, accent.g, accent.b)
+    doc.text(label, pageWidth - margin, 14, { align: 'right' })
+
+    /*
+     * Label bold, value light, both right-aligned to the same edge — so the
+     * eye finds the number without reading the word. Drawn as two runs
+     * because jsPDF has no rich text, and measured so they do not collide.
+     */
+    const rows: [string, string][] = [
+      ['Invoice No: ', invoice.invoiceNo || '—'],
+      ['Date: ', dateStr],
+    ]
+    if (invoice.placeOfSupply) rows.push(['Place of Supply: ', invoice.placeOfSupply])
+
+    let ry = 20
+    doc.setFontSize(8.5)
+    for (const [lab, val] of rows) {
+      doc.setFont(THEME.font, 'normal')
+      doc.setTextColor(text.r, text.g, text.b)
+      const vw = doc.getTextWidth(val)
+      doc.text(val, pageWidth - margin, ry, { align: 'right' })
+      doc.setFont(THEME.font, 'bold')
+      doc.text(lab, pageWidth - margin - vw, ry, { align: 'right' })
+      ry += 5
+    }
+  } else {
+    doc.setFontSize(16)
+    doc.setTextColor(headText.r, headText.g, headText.b)
+    doc.text('INVOICE', pageWidth - margin, 12, { align: 'right' })
+    doc.setFont(THEME.font, 'normal')
+    doc.setFontSize(9)
+    doc.setTextColor(headMuted.r, headMuted.g, headMuted.b)
+    doc.text(`${invoice.invoiceNo || ''}  |  ${dateStr}`, pageWidth - margin, 18, { align: 'right' })
+  }
 
   /*
    * 📄 Phase 5 — the shop's own fields for this bill (PO number, vehicle no).
@@ -349,6 +392,53 @@ export async function generateInvoicePDF(
   //    GONE — it duplicated the brand band. Payment mode moves into the Place of
   //    Supply card, which is the auditor's design.
   // ═══════════════════════════════════════════════════════════════════
+  /*
+   * 📄 Phase 7d — THE FULL-WIDTH RULED "BILL TO" STRIP.
+   *
+   * The gold and Tally references both do this instead of a card: one
+   * bordered band across the page, divided into ruled cells — a label cell,
+   * the customer, then their GSTIN and state. It fills the width rather than
+   * leaving half the page empty beside a card, which is most of why a
+   * printed bill book looks deliberate and a floating card looks like
+   * software.
+   */
+  if (layout.party === 'grid-band') {
+    const bandH = 16
+    doc.setFillColor(accentSoft.r, accentSoft.g, accentSoft.b)
+    doc.setDrawColor(accent.r, accent.g, accent.b)
+    doc.setLineWidth(lineW)
+    doc.rect(margin, y, pageWidth - margin * 2, bandH, 'FD')
+
+    // Two vertical rules: after the label, and before the tax cell.
+    const labelW = 24
+    const taxX = pageWidth - margin - 58
+    doc.line(margin + labelW, y, margin + labelW, y + bandH)
+    doc.line(taxX, y, taxX, y + bandH)
+
+    doc.setFont(THEME.font, 'bold')
+    doc.setFontSize(metrics.smallPt)
+    doc.setTextColor(accent.r, accent.g, accent.b)
+    doc.text('Bill To:', margin + 3, y + 6)
+
+    doc.setFont(THEME.font, 'bold')
+    doc.setFontSize(metrics.bodyPt)
+    doc.setTextColor(text.r, text.g, text.b)
+    const who = invoice.party?.name || 'Walk-in Customer'
+    doc.text(doc.splitTextToSize(who, taxX - margin - labelW - 8)[0] ?? who, margin + labelW + 3, y + 6)
+
+    doc.setFont(THEME.font, 'normal')
+    doc.setFontSize(metrics.smallPt)
+    doc.setTextColor(textMuted.r, textMuted.g, textMuted.b)
+    const sub = [invoice.party?.address, invoice.party?.phone].filter(Boolean).join(' | ')
+    if (sub) doc.text(doc.splitTextToSize(sub, taxX - margin - labelW - 8)[0] ?? '', margin + labelW + 3, y + 11)
+
+    doc.setTextColor(text.r, text.g, text.b)
+    doc.text(`GSTIN: ${invoice.party?.gstin || '—'}`, taxX + 3, y + 6)
+    if (invoice.placeOfSupply) doc.text(`State: ${invoice.placeOfSupply}`, taxX + 3, y + 11)
+
+    y += bandH + 6
+  } else {
+
   const cardGap = 6
   const leftCardW = hasPartyGstin ? 95 : pageWidth - 2 * margin
   const rightCardW = pageWidth - 2 * margin - leftCardW - cardGap
@@ -422,6 +512,8 @@ export async function generateInvoicePDF(
   }
 
   y += Math.max(leftCardH, rightCardH) + 6
+
+  }
 
   // ═══════════════════════════════════════════════════════════════════
   // 3. ITEM TABLE — HSN included, zebra striping, brand-colour header
@@ -792,12 +884,30 @@ export async function generateInvoicePDF(
   doc.setFont(THEME.font, 'normal')
   doc.setTextColor(text.r, text.g, text.b)
 
+  /*
+   * 📄 Phase 7d — TOTALS AS A RULED MINI-TABLE.
+   *
+   * The gold reference puts every figure in its own bordered cell rather
+   * than on a right-aligned line. It is a small change and it moves the bill
+   * from "receipt" to "accounts" — the same reason the item table is ruled.
+   *
+   * The grand total then gets a filled bar of its own below the cells, which
+   * is drawn further down by the existing `bar`/`panel` code.
+   */
+  const ruledTotals = layout.totals === 'ruled'
+
   const totalsLine = (label: string, value: string, bold?: boolean) => {
+    if (ruledTotals) {
+      const h = 6
+      doc.setDrawColor(accent.r, accent.g, accent.b)
+      doc.setLineWidth(lineW)
+      doc.rect(totalsX - 3, y - 4, totalsWidth + 3, h)
+    }
     if (bold) doc.setFont(THEME.font, 'bold')
     doc.text(label, totalsX, y)
     doc.text(value, totalsValueX, y, { align: 'right' })
     if (bold) doc.setFont(THEME.font, 'normal')
-    y += 5
+    y += ruledTotals ? 6 : 5
   }
 
   totalsLine('Subtotal', formatPDFMoney(invoice.subtotal))

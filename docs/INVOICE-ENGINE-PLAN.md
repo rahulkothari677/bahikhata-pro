@@ -864,3 +864,36 @@ second design — Rahul's instruction was one at a time, verified.
 Multi-page rules (totals/bank/terms/signature on the LAST page, once), font
 sizes not scaling with A5 columns, and measuring the PDF threshold per bill
 rather than fixing it at 8 items.
+
+---
+
+## Royal Gold — all six blocks (16 Aug)
+
+| Block | Proved by |
+|---|---|
+| Double frame + corner ornaments | reading the PDF operators — L-arms at (8,289)→(17,289) and (8,289)→(8,280) |
+| Boxed invoice details, no band | `TAX INVOICE - ORIGINAL`, `Invoice No`, `Place of Supply` on the page |
+| Full-width ruled Bill To strip | `Bill To` on the page |
+| Twelve GST columns | `DESCRIPTION`, `DISC`, `TAXABLE`, `CESS` on the page |
+| Empty ruled padding rows | 304 line operators against Classic's 18 |
+| Totals as ruled cells | a bordered cell drawn per totals line |
+
+### One honest gap
+
+**There is no automated check for the frame itself.** I tried three and all
+three failed to discriminate:
+
+- counting lines — passed with the frame deleted, because 150-odd remain from
+  the ruled cells
+- looking for a page-sized rectangle — jsPDF strokes the frame rather than
+  emitting one
+- looking for any drawing in the outer margin — found none, although the
+  ornament arms are provably there
+
+Rather than ship a fourth guess, the test file says so. The frame is verified
+by reading the operators by hand. **A guard I cannot make fail on broken input
+is a comment with a green tick beside it**, and this codebase's history has
+enough of those.
+
+The other three Royal checks do discriminate: they assert text only those
+blocks emit.
