@@ -18,12 +18,12 @@
 import { registerUnicodeFont, THEME, formatPDFMoney } from './pdf/theme'
 import { footerRoomMm, padStopY, bottomBlockNeedMm } from './invoice-footer-room'
 import { paletteFor } from './pdf/palette'
-import { getInvoiceLayout } from './invoice-layouts'
+import { getInvoiceLayout, layoutFitsPaper, type InvoiceLayout } from './invoice-layouts'
 import { getInvoiceStyle, DENSITY_METRICS } from './invoice-styles'
 import { getPaperSize } from './invoice-paper'
 import { formatCustomValue } from './custom-fields'
 import type { InvoiceDocument } from './invoice-document'
-import { drawFooter, drawUPIQRBlock, drawImageQRBlock, newPageIfNeeded } from './pdf/primitives'
+import { drawFooter, drawUPIQRBlock, drawImageQRBlock, newPageIfNeeded, fitToWidth } from './pdf/primitives'
 
 
 /*
@@ -120,7 +120,28 @@ export async function generateInvoicePDF(
    * layout id, and an unrecognised one falls back to Classic — which is what
    * every old template already looked like.
    */
-  const layout = getInvoiceLayout(opts.templateId)
+  const chosenLayout = getInvoiceLayout(opts.templateId)
+  /*
+   * 🐛 2026-08-16 — TWELVE COLUMNS ON A HALF SHEET.
+   *
+   * Rahul sent a real bill: A5, and every item name running straight into the
+   * HSN number beside it. "Fortune Sunflower Oil 1L1512". "GSTTEST Item
+   * 0pc 0401". Unreadable, and it went to a customer.
+   *
+   * `layoutFitsPaper` exists precisely to refuse this, and says so in its own
+   * comment — "rather than print off the page, the caller is told, and falls
+   * back". THERE WAS NO CALLER. It was reached only by `presetIsLegal`, which
+   * asks about A4. So the rule was written, tested, and never run on a bill.
+   *
+   * Falls back the COLUMNS only, not the whole design. The shop keeps the
+   * frame, header and party block it chose — the thing that makes its bill
+   * look like its bill — and gets a column set that fits the paper. Swapping
+   * the entire layout would answer a legibility problem by taking away the
+   * design, which is not a trade a shopkeeper asked for.
+   */
+  const layout: InvoiceLayout = layoutFitsPaper(chosenLayout, paper.id)
+    ? chosenLayout
+    : { ...chosenLayout, columns: 'simple' }
   const style = getInvoiceStyle(opts.styleId)
   const metrics = DENSITY_METRICS[style.density]
   // Read by the blocks below. `template` is gone; these two replace it.
@@ -142,8 +163,6 @@ export async function generateInvoicePDF(
   const dateStr = invoice.timeLabel ? `${invoice.dateLabel}, ${invoice.timeLabel}` : invoice.dateLabel
   const dueAmount = invoice.due
   const status = invoice.status
-  const statusLabels = { paid: 'PAID', partial: 'PARTIAL', due: 'DUE' }
-  const statusColors = { paid, partial, due }
   const hasPartyGstin = !!(invoice.party?.gstin && invoice.party.gstin.trim())
 
   // ═══════════════════════════════════════════════════════════════════
@@ -369,20 +388,20 @@ export async function generateInvoicePDF(
     doc.text(`Please pay by ${invoice.dueDateLabel}`, pageWidth - margin, 23, { align: 'right' })
   }
 
-  // Status pill — inside the band, below the invoice meta, right-aligned.
-  const statusColor = statusColors[status]
-  const statusLabel = statusLabels[status]
-  const pillW = 24
-  const pillH = 7
-  const pillX = pageWidth - margin - pillW
-  const pillY = 21
-  doc.setFillColor(statusColor.r, statusColor.g, statusColor.b)
-  doc.roundedRect(pillX, pillY, pillW, pillH, 1.5, 1.5, 'F')
-  doc.setFont(THEME.font, 'bold')
-  doc.setFontSize(8)
-  doc.setTextColor(white.r, white.g, white.b)
-  doc.text(statusLabel, pillX + pillW / 2, pillY + 4.8, { align: 'center' })
-
+  /*
+   * 🗑️ 2026-08-16 — THE STATUS PILL IS GONE. Rahul: "also partial should be
+   * removed."
+   *
+   * He is right, and for a better reason than crowding. The bill already
+   * states the position exactly, in the totals block: "Paid: 500.00 (CASH)"
+   * and "Balance Due: 745.82". A coloured word saying PARTIAL adds nothing a
+   * customer cannot already read, and on A5 it was landing beside the date —
+   * "16 Aug 2026, 09:34 pm  Date:  PARTIAL" — so the one thing it did add
+   * was a collision.
+   *
+   * A tax invoice is a legal record of a supply, not a payment dashboard.
+   * The figures carry the payment position; a badge editorialises it.
+   */
   doc.setTextColor(text.r, text.g, text.b)
   let y = bandHeight + 8
 
@@ -722,7 +741,22 @@ export async function generateInvoicePDF(
       cols.slice(1).forEach(c => doc.line(c.x - 1, y, c.x - 1, y + rowHeight))
     }
 
-    const name = item.name.length > 32 ? item.name.slice(0, 29) + '...' : item.name
+    /*
+     * 🐛 2026-08-16 — LONG NAMES RAN INTO THE HSN COLUMN.
+     *
+     * Rahul's bill: "Fortune Sunflower Oil 1L1512", "GSTTEST Item 0pc 0401".
+     * The name and the HSN number with no gap between them, because this
+     * truncated at a fixed 32 CHARACTERS while the column is measured in
+     * MILLIMETRES. 32 characters is wider than the name column on A5, and
+     * narrower than it on A4 — so the rule was simultaneously too tight and
+     * too loose, and never right.
+     *
+     * Now measured against the real column width, with a millimetre of air
+     * before the next column. This is the same mistake as the footer: a
+     * distance guessed in one unit and consumed in another.
+     */
+    const nameRoom = cols[2].x - cols[1].x - 1.5
+    const name = fitToWidth(doc, item.name, nameRoom)
     // `baseline` rather than a fixed 5mm: at compact's 5.4mm row a 5mm drop
     // would put the text on the row's bottom edge.
     const tY = y + metrics.baseline

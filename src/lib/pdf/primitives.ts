@@ -281,3 +281,24 @@ export function newPageIfNeeded(
   }
   return y
 }
+
+/**
+ * Shorten a string until it fits a width in MILLIMETRES.
+ *
+ * 🐛 2026-08-16. The invoice renderer truncated item names at a fixed 32
+ * characters while the column it had to fit was measured in millimetres — so
+ * "Fortune Sunflower Oil 1L" ran into the HSN number beside it on A5, and
+ * short names wasted the column on A4. A character count is not a width:
+ * "WWWWWWWW" and "iiiiiiii" are the same count and nothing like the same size.
+ *
+ * Measures with the document's CURRENT font, which is the only thing that
+ * knows the answer. Falls back to the ellipsis alone rather than looping
+ * forever on a width no character fits.
+ */
+export function fitToWidth(doc: any, text: string, maxMm: number): string {
+  if (!text) return ''
+  if (doc.getTextWidth(text) <= maxMm) return text
+  let cut = text
+  while (cut.length > 1 && doc.getTextWidth(cut + '…') > maxMm) cut = cut.slice(0, -1)
+  return cut.length > 1 ? cut + '…' : '…'
+}

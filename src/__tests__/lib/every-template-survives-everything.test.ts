@@ -398,3 +398,62 @@ describe('a bill that fits on one page comes out on one page', () => {
       expect({ layoutId, pages: pageCount(pdf) }).toEqual({ layoutId, pages: 1 })
     }, 90000)
 })
+
+describe('a real bill from Rahul: twelve columns must never reach a half sheet', () => {
+  /*
+   * 🐛 2026-08-16. He sent a real bill from the app. A5, Royal, and every
+   * item name running into the HSN number beside it:
+   *
+   *   "3 Fortune Sunflower Oil 1L1512 1 pcs 155.00 ..."
+   *   "1 GSTTEST Item 0pc 0401 1 pcs 100.00 ..."
+   *
+   * `layoutFitsPaper` exists to refuse exactly this, and its own comment says
+   * the caller "is told, and falls back". THERE WAS NO CALLER — it was reached
+   * only by `presetIsLegal`, which asks about A4. A rule written, tested, and
+   * never run on a bill.
+   *
+   * The header cells CGST %, TAXABLE and CESS % belong to the twelve-column
+   * set and to nothing else, so their absence is the proof. Runs both ways:
+   * with the fallback removed, all three come back and this fails.
+   */
+  const A5_GST_LAYOUTS = INVOICE_LAYOUTS.filter(l => l.columns === 'gst-full').map(l => [l.id] as const)
+
+  it.each(A5_GST_LAYOUTS)('%s drops to a column set that fits A5', async layoutId => {
+    const blob = await generateInvoicePDF(
+      buildInvoiceDocument(FIVE_ITEM_BILL, LOADED_SHOP),
+      { templateId: layoutId, styleId: 'ornate', themeId: 'royal', paperId: 'a5' },
+    )
+    const pdf = await readBlob(blob)
+    const crowded = ['TAXABLE', 'CESS'].filter(h => pdf.includes(h))
+    expect({ layoutId, crowded }).toEqual({ layoutId, crowded: [] })
+  }, 90000)
+
+  it('the same layout still gets its twelve columns on A4', async () => {
+    // The fallback must be about the PAPER, not a quiet removal of the
+     // feature. A shop on A4 keeps the full breakup its buyer expects.
+    const blob = await generateInvoicePDF(
+      buildInvoiceDocument(FIVE_ITEM_BILL, LOADED_SHOP),
+      { templateId: 'royal', styleId: 'ornate', themeId: 'royal', paperId: 'a4' },
+    )
+    const pdf = await readBlob(blob)
+    expect({ taxable: pdf.includes('TAXABLE'), cess: pdf.includes('CESS') })
+      .toEqual({ taxable: true, cess: true })
+  }, 90000)
+
+  it('no bill carries a PARTIAL badge any more', async () => {
+    // Rahul: "also partial should be removed". The totals block already says
+    // Paid and Balance Due; the badge only added a word to collide with.
+    const partPaid = { ...FIVE_ITEM_BILL, paidAmount: 500 }
+    const blob = await generateInvoicePDF(buildInvoiceDocument(partPaid, LOADED_SHOP),
+      { templateId: 'royal', styleId: 'ornate', themeId: 'royal' })
+    const pdf = await readBlob(blob)
+    /*
+     * 'GRAND TOTAL' rather than 'Paid:' — the Paid line carries a rupee sign,
+     * and jsPDF hex-encodes any string holding a character outside Latin-1,
+     * so it is not findable as text. My first version of this assertion fell
+     * into exactly that trap, which is the third time this file has.
+     */
+    expect({ partial: pdf.includes('PARTIAL'), totals: pdf.includes('GRAND TOTAL') })
+      .toEqual({ partial: false, totals: true })
+  }, 90000)
+})
