@@ -32,6 +32,7 @@ import {
 } from 'lucide-react'
 import { offlineFetch, isQueuedResponse } from '@/lib/offline-fetch'
 import { amountToWords } from '@/lib/amount-to-words'
+import { resolveInvoiceDesign } from '@/lib/invoice-presets'
 import { generateInvoicePDF } from '@/lib/invoice-pdf'
 import { buildInvoiceDocument, invoiceShopFromSetting } from '@/lib/invoice-document'
 import { CustomFieldInputs } from '@/components/common/CustomFieldInputs'
@@ -236,9 +237,26 @@ export function TransactionDetail() {
       // rather than at each of the three screens that build a shop by hand.
       invoiceShopFromSetting(setting),
     )
+    /*
+     * 🐛 2026-08-16 — THE STYLE NEVER REACHED THE BILL.
+     *
+     * Rahul: "i don't see where you have added the royal gold design?"
+     *
+     * This passed the layout and not the style, so every downloaded bill was
+     * drawn in the DEFAULT dressing no matter what the shop had chosen. Royal
+     * without its ornate style is a frame with no corner ornaments — the
+     * single thing that makes it look like the reference.
+     *
+     * `resolveInvoiceDesign` rather than reading the two settings raw: it is
+     * the one function that knows an ornament needs a frame to sit on, and
+     * corrects a pair a shopkeeper reached by customising instead of drawing
+     * brackets in mid-air.
+     */
+    const design = resolveInvoiceDesign(setting)
     generateInvoicePDF(doc, {
       themeId: setting?.invoiceTheme,
-      templateId: setting?.invoiceTemplate,
+      templateId: design.layout.id,
+      styleId: design.style.id,
       paperId: setting?.invoicePaperSize,
     }).then(async (pdfBlob) => {
       // On mobile (Capacitor), use Share plugin to save/share the PDF
@@ -325,7 +343,10 @@ export function TransactionDetail() {
           themeId: setting?.invoiceTheme,
           // The layout and the sheet the shopkeeper chose, so the file that
           // reaches the customer is the one the preview showed them.
-          templateId: setting?.invoiceTemplate,
+          templateId: resolveInvoiceDesign(setting).layout.id,
+          // 🐛 2026-08-16: the WhatsApp path had the same hole as the download
+          // path one function above — layout passed, style dropped.
+          styleId: resolveInvoiceDesign(setting).style.id,
           paperId: setting?.invoicePaperSize,
         },
       )

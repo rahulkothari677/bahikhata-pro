@@ -278,6 +278,62 @@ export async function PUT(req: NextRequest) {
       }
       sanitized.invoiceTemplate = body.invoiceTemplate
     }
+    /*
+     * 📄 Phase 7d — THE STYLE and THE PRESET.
+     *
+     * 🐛 2026-08-16, and Rahul found it: "i don't see where you have added the
+     * royal gold design?"
+     *
+     * He was right. I built ten layouts, six styles, fifteen palettes and ten
+     * named presets, and shipped a screen offering TWO of those four. The
+     * style and the preset were never accepted here, so even a picker would
+     * have saved nothing — the classic "built but unreachable" defect, which
+     * this codebase has now shipped four times.
+     *
+     * Registry-validated like everything above.
+     */
+    if (body.invoiceStyle !== undefined) {
+      const { INVOICE_STYLES } = await import('@/lib/invoice-styles')
+      if (body.invoiceStyle !== null && !INVOICE_STYLES.some(s => s.id === body.invoiceStyle)) {
+        return NextResponse.json({ error: 'Unknown invoice style' }, { status: 400 })
+      }
+      sanitized.invoiceStyle = body.invoiceStyle
+    }
+    /*
+     * A preset is a SHORTCUT: it writes the layout, style and palette itself.
+     *
+     * Expanded HERE rather than in the browser so the three settings can never
+     * disagree with the name shown beside them — a client that wrote only the
+     * preset id, or wrote two of the three and failed on the fourth request,
+     * would leave the shop looking at "Royal Gold" on a bill that is not one.
+     */
+    if (body.invoicePreset !== undefined) {
+      const { getInvoicePreset } = await import('@/lib/invoice-presets')
+      if (body.invoicePreset === null) {
+        sanitized.invoicePreset = null
+      } else {
+        const preset = getInvoicePreset(body.invoicePreset)
+        if (!preset) {
+          return NextResponse.json({ error: 'Unknown invoice design' }, { status: 400 })
+        }
+        sanitized.invoicePreset = preset.id
+        sanitized.invoiceTemplate = preset.layoutId
+        sanitized.invoiceStyle = preset.styleId
+        sanitized.invoiceTheme = preset.themeId
+      }
+    }
+    /*
+     * Changing any ONE piece drops the preset name.
+     *
+     * At that point the honest answer to "which design am I on" is "none of
+     * them, this is yours" — and a name that no longer describes the bill is
+     * worse than no name. Only when the preset was not set in the same request.
+     */
+    if (body.invoicePreset === undefined
+      && (body.invoiceTemplate !== undefined || body.invoiceStyle !== undefined
+        || body.invoiceTheme !== undefined)) {
+      sanitized.invoicePreset = null
+    }
     if (body.invoicePaperSize !== undefined) {
       // Registry-validated, like the theme and template above.
       const { PAPER_SIZES } = await import('@/lib/invoice-paper')

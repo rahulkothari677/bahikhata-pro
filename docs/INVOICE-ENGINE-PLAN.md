@@ -933,3 +933,54 @@ The guard renders an ordinary five-item bill through every layout and counts
 the pages. **Proved both ways:** with the old check restored, 10 of 10 fail.
 Without it, 10 of 10 pass. This is not a padded-layout bug — any shop with
 terms, bank details and a signature was getting two pages.
+
+---
+
+## 🐛 Royal Gold existed in code and nowhere in the app (16 Aug)
+
+Rahul: *"i don't see where you have added the royal gold design?"*
+
+He was right. Ten layouts, six styles, fifteen palettes and ten named designs
+were built. The app offered **two of those four**, and the chain was broken in
+**five** places:
+
+| # | Where | What was wrong |
+|---|---|---|
+| 1 | Settings screen | No named-design picker. "Royal Gold" appeared nowhere. |
+| 2 | Settings screen | No style picker. Ornate — the corner ornaments — unreachable. |
+| 3 | `PUT /api/settings` | Rejected `invoiceStyle` and `invoicePreset`. |
+| 4 | Download + WhatsApp | Passed the layout, dropped the style. |
+| 5 | The preview | Same. |
+
+So even the bones a shopkeeper *could* pick were drawn in the default
+dressing. **The ornaments could not have appeared on anybody's bill.**
+
+`resolveInvoiceDesign` — written to be the one function that knows an ornament
+needs a frame — was called by nothing but its own test.
+
+### Why no guard caught it
+
+Every existing guard checks the REGISTRY: every layout has a preset, no two
+presets collide, every preset is legal. Not one asks whether a shopkeeper can
+reach any of it. **I tested the data and called it the app.**
+
+`every-design-choice-reaches-the-bill.test.ts` now walks the path from picker
+to paper. Proved by dropping `styleId` from the download path and watching it
+fail.
+
+### Verified in a real browser
+
+Fresh local DB, real account, real screen:
+
+- "Bill design" lists all ten, Royal Gold selected
+- "Bill styling" lists all six, including Ornate
+- One tap on Royal Gold writes `template=royal, style=ornate, theme=royal`
+- Changing the colour drops the name to "your own design", keeps layout+style
+- Unknown style → 400. Unknown design → 400.
+- The live preview repaints: gold frame, serif name, batch/expiry columns
+
+## ⚠️ STILL OPEN: the WhatsApp IMAGE ignores the design
+
+`renderInvoiceImage` takes `themeId` only — no layout, no style. A shop on
+Royal Gold gets a Royal PDF and a **generic image**. Since most bills go out
+as pictures, this is the larger half of the design system and it is not done.

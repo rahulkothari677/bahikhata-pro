@@ -87,10 +87,43 @@ describe('every invoice setting has something that reads it', () => {
     invoiceNextNumber: 'src/app/api/settings/route.ts',
   }
 
+  /*
+   * A setting may be read through the RESOLVER instead of by name.
+   *
+   * 2026-08-16: `resolveInvoiceDesign(setting)` is the one function that knows
+   * an ornament needs a frame to sit on, so the download path asks it rather
+   * than reading `invoiceTemplate` and `invoiceStyle` raw. That is the correct
+   * architecture and this guard called it dead code, because it was matching a
+   * NAME rather than asking whether the value reaches the bill.
+   *
+   * Kept narrow on purpose: only the two design columns, and only via a
+   * function that provably reads them. Widening it to "any helper" would turn
+   * a guard into a wish — the exact failure CLAUDE.md records five times.
+   */
+  const RESOLVED_BY: Record<string, string> = {
+    invoiceTemplate: 'resolveInvoiceDesign',
+    invoiceStyle: 'resolveInvoiceDesign',
+  }
+
   it.each(Object.entries(CONSUMERS))('%s is read by %s', (setting, file) => {
     // Comments stripped, so prose describing a setting cannot satisfy this.
-    expect({ setting, read: readCode(file).includes(setting) })
+    const src = readCode(file)
+    const viaResolver = RESOLVED_BY[setting] ? src.includes(RESOLVED_BY[setting]) : false
+    expect({ setting, read: src.includes(setting) || viaResolver })
       .toEqual({ setting, read: true })
+  })
+
+  it('the resolver this guard trusts really does read both design columns', () => {
+    /*
+     * The escape hatch above is only honest if `resolveInvoiceDesign` reads
+     * what it claims to. Checked here rather than assumed, because an escape
+     * hatch nobody verifies is how a guard stops guarding.
+     */
+    const src = readCode('src/lib/invoice-presets.ts')
+    expect({
+      template: src.includes('invoiceTemplate'),
+      style: src.includes('invoiceStyle'),
+    }).toEqual({ template: true, style: true })
   })
 
   it('the numbering setting actually reaches the number', () => {

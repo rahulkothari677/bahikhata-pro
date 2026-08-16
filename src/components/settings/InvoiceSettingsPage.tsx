@@ -402,10 +402,15 @@ export function InvoiceSettingsPage({
         {isLoading ? (
           <div className="mx-auto bg-muted animate-pulse rounded" style={{ maxWidth: 360, height: 240 }} />
         ) : (
+          /* 🐛 2026-08-16 — this preview had the same hole as the real bill:
+             the layout was passed and the dressing dropped, so a shop that
+             chose Royal saw a plain frame here AND on its bill, with nothing
+             on either screen to explain why. */
           <InvoicePreview
             doc={doc}
             themeId={setting?.invoiceTheme as string}
             templateId={setting?.invoiceTemplate as string}
+            styleId={setting?.invoiceStyle as string}
             paperId={setting?.invoicePaperSize as string}
             focus={current?.focus ?? null}
             isSample={isSample}

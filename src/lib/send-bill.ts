@@ -124,6 +124,13 @@ export async function sendBill(
      * and the file did not.
      */
     templateId?: string | null
+    /**
+     * The STYLE — how the layout is dressed. 🐛 2026-08-16: absent, so the
+     * file the customer received was drawn in the default dressing however
+     * the shop had set its bill up. The same defect as themeId before it,
+     * one vocabulary later.
+     */
+    styleId?: string | null
     paperId?: string | null
   } = {},
 ): Promise<SendBillResult> {
@@ -187,7 +194,10 @@ export async function sendBill(
    * `themeId` was passed to the image renderer on the line above and not to
    * this one — the whole of the PDF theme bug, visible in one function.
    */
-  const pdfBlob = await generateInvoicePDF(doc, { themeId: opts.themeId, templateId: opts.templateId, paperId: opts.paperId })
+  const pdfBlob = await generateInvoicePDF(doc, {
+    themeId: opts.themeId, templateId: opts.templateId,
+    styleId: opts.styleId, paperId: opts.paperId,
+  })
   const dataUrl = await blobToDataUrl(pdfBlob)
   await shareCardImage(dataUrl, filename, {
     title: `Bill ${doc.invoiceNo}`,

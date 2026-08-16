@@ -37,6 +37,8 @@ import { APP_VERSION_LABEL } from '@/lib/app-version'
 import { readError } from '@/lib/read-error'
 import { INVOICE_THEMES } from '@/lib/invoice-themes'
 import { INVOICE_LAYOUTS } from '@/lib/invoice-layouts'
+import { INVOICE_STYLES, styleFitsLayout, getInvoiceStyle } from '@/lib/invoice-styles'
+import { INVOICE_PRESETS, getInvoicePreset } from '@/lib/invoice-presets'
 import { PAPER_SIZES } from '@/lib/invoice-paper'
 import { VISIBILITY_TOGGLES } from '@/lib/invoice-visibility'
 import { InfoHint } from '@/components/common/InfoHint'
@@ -209,6 +211,17 @@ export function Settings({
   const [invoiceTheme, setInvoiceTheme] = useState('classic')
   const [invoiceTemplate, setInvoiceTemplate] = useState('standard')
   const [invoicePaperSize, setInvoicePaperSize] = useState('a4')
+  /*
+   * 📄 Phase 7d — the STYLE and the named DESIGN.
+   *
+   * 🐛 2026-08-16, found by Rahul: "i don't see where you have added the royal
+   * gold design?" Ten layouts, six styles, fifteen palettes and ten named
+   * designs were built, and this screen offered two of the four. Royal Gold
+   * could not be chosen; picking the Royal LAYOUT gave its bones without the
+   * ornate dressing, so the corner ornaments never appeared on anyone's bill.
+   */
+  const [invoiceStyle, setInvoiceStyle] = useState<string | null>(null)
+  const [invoicePreset, setInvoicePreset] = useState<string | null>(null)
   // 📄 Phase 3. One object rather than ten useStates: these are saved together
   // by one button, and ten setters is ten chances to forget one.
   const [billContent, setBillContent] = useState({
@@ -268,6 +281,8 @@ export function Settings({
       setInvoiceTheme(data.setting.invoiceTheme ?? 'classic')
       setInvoiceTemplate(data.setting.invoiceTemplate ?? 'standard')
       setInvoicePaperSize(data.setting.invoicePaperSize ?? 'a4')
+      setInvoiceStyle(data.setting.invoiceStyle ?? null)
+      setInvoicePreset(data.setting.invoicePreset ?? null)
       setBillContent({
         invoicePrefix: data.setting.invoicePrefix ?? '',
         invoiceNextNumber: String(data.setting.invoiceNextNumber ?? 1),
@@ -355,7 +370,17 @@ export function Settings({
   }
 
   const persistDocSetting = async (
-    patch: { docSendFormat?: 'smart' | 'image' | 'pdf'; invoiceTheme?: string; invoiceTemplate?: string; invoicePaperSize?: string },
+    patch: {
+      docSendFormat?: 'smart' | 'image' | 'pdf'; invoiceTheme?: string
+      invoiceTemplate?: string; invoicePaperSize?: string
+      /*
+       * A preset writes the other three ON THE SERVER, so this screen sends
+       * only the name. Expanding it here would put a fourth opinion about
+       * what "Royal Gold" means in the browser, where it could drift from the
+       * table the renderer reads.
+       */
+      invoiceStyle?: string | null; invoicePreset?: string | null
+    },
     rollback: () => void,
   ) => {
     /*
@@ -1651,6 +1676,94 @@ export function Settings({
               a row of colour dots, with nothing saying which decides what. Two
               controls, each doing one thing, gives 8 x 6 = 48 looks and stays
               explainable. Layout first, because it changes the bill more. */}
+          {/* 📄 Phase 7d — THE NAMED DESIGNS, above the three controls.
+
+              🐛 2026-08-16, and Rahul found it: "i don't see where you have
+              added the royal gold design?" He was right — ten named designs
+              existed in code and none of them existed on screen.
+
+              This is the shape myBillBook uses and it is the right one,
+              because the two users are different people. A kirana shopkeeper
+              taps a finished design at setup and never opens this screen
+              again. A jeweller wants gold on cream rather than gold on white
+              and should not have to accept a different bill to get it — so
+              the three controls stay, below, as the customise path.
+
+              One tap writes layout + dressing + colour. The server expands
+              the name, so the three can never disagree with the label. */}
+          <div className="mt-3 rounded-lg bg-muted/30 border border-border/60 p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <Sparkles className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+              <p className="text-sm font-medium">Bill design</p>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+              {INVOICE_PRESETS.map(p => {
+                const theme = INVOICE_THEMES.find(t => t.id === p.themeId)
+                const selected = invoicePreset === p.id
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => {
+                      const prev = {
+                        preset: invoicePreset, template: invoiceTemplate,
+                        style: invoiceStyle, theme: invoiceTheme,
+                      }
+                      // Painted locally at once, because the preview reads
+                      // these and a design picker that repaints a second later
+                      // reads as the app ignoring you.
+                      setInvoicePreset(p.id)
+                      setInvoiceTemplate(p.layoutId)
+                      setInvoiceStyle(p.styleId)
+                      setInvoiceTheme(p.themeId)
+                      persistDocSetting({ invoicePreset: p.id }, () => {
+                        setInvoicePreset(prev.preset)
+                        setInvoiceTemplate(prev.template)
+                        setInvoiceStyle(prev.style)
+                        setInvoiceTheme(prev.theme)
+                      })
+                    }}
+                    aria-pressed={selected}
+                    title={p.description}
+                    className={
+                      'rounded-lg border p-2 text-left transition min-h-12 ' +
+                      (selected
+                        ? 'border-primary ring-2 ring-primary/25'
+                        : 'border-border/70 hover:border-border')
+                    }
+                  >
+                    {/* The colour belongs on the tile: it is half of what
+                        makes one named design different from another, and a
+                        row of identical grey cards is what made the earlier
+                        picker useless. */}
+                    <span className="flex items-center gap-1.5">
+                      <span
+                        className="w-3 h-3 rounded-full shrink-0 border border-black/10"
+                        style={{ background: theme?.headerBg ?? '#334155' }}
+                      />
+                      <span
+                        className="w-3 h-3 rounded-full shrink-0 border border-black/10"
+                        style={{ background: theme?.accent ?? '#94a3b8' }}
+                      />
+                      <span className="text-xs font-medium truncate">{p.name}</span>
+                    </span>
+                    <span className="block mt-1 text-3xs text-muted-foreground leading-snug line-clamp-2">
+                      {p.description}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+            {/* Says what happened when a single control is changed underneath,
+                rather than leaving a name selected that no longer describes
+                the bill. */}
+            <p className="mt-2 text-2xs text-muted-foreground">
+              {invoicePreset
+                ? `You are on ${getInvoicePreset(invoicePreset)?.name}. Change anything below and it becomes your own design.`
+                : 'Your own design. Tap one above to start from a finished one.'}
+            </p>
+          </div>
+
           <div className="mt-3 rounded-lg bg-muted/30 border border-border/60 p-3">
             <div className="flex items-center gap-2 mb-2">
               {/* 🎨 2026-08-15: coloured, like the Account menu one level up.
@@ -1667,8 +1780,16 @@ export function Settings({
                   type="button"
                   onClick={() => {
                     const prev = invoiceTemplate
+                    const prevPreset = invoicePreset
                     setInvoiceTemplate(t.id)
-                    persistDocSetting({ invoiceTemplate: t.id }, () => setInvoiceTemplate(prev))
+                    // Changing one piece makes this the shop's own design.
+                    // The server drops the name too; both are set so the
+                    // label under the designs above changes on the tap.
+                    setInvoicePreset(null)
+                    persistDocSetting({ invoiceTemplate: t.id }, () => {
+                      setInvoiceTemplate(prev)
+                      setInvoicePreset(prevPreset)
+                    })
                   }}
                   aria-pressed={invoiceTemplate === t.id}
                   title={t.description}
@@ -1720,6 +1841,64 @@ export function Settings({
                   <span className="block text-3xs mt-1 font-medium truncate">{t.name}</span>
                 </button>
               ))}
+            </div>
+          </div>
+
+          {/* 📄 Phase 7d — THE DRESSING.
+
+              Layout is the bones, this is the clothes, the swatch below is
+              the fabric. Rahul: "the design and layout is different" — he was
+              right, and this control is the half that was missing. Ornate is
+              what puts the corner ornaments on Royal's frame; without it the
+              framed layouts were plain rectangles.
+
+              Only the styles that FIT the chosen layout are offered. An
+              ornament needs a frame to sit on, and eleven GST columns cannot
+              be airy — offering a choice that silently becomes a different
+              one is worse than not offering it. */}
+          <div className="mt-3 rounded-lg bg-muted/30 border border-border/60 p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <Palette className="w-4 h-4 text-rose-600 dark:text-rose-400" />
+              <p className="text-sm font-medium">Bill styling</p>
+            </div>
+            <div className="grid grid-cols-3 gap-1.5">
+              {INVOICE_STYLES.map(st => {
+                const layout = INVOICE_LAYOUTS.find(l => l.id === invoiceTemplate)
+                  ?? INVOICE_LAYOUTS[0]
+                const fits = styleFitsLayout(st, layout)
+                const active = getInvoiceStyle(invoiceStyle).id === st.id
+                return (
+                  <button
+                    key={st.id}
+                    type="button"
+                    disabled={!fits}
+                    onClick={() => {
+                      const prev = invoiceStyle
+                      const prevPreset = invoicePreset
+                      setInvoiceStyle(st.id)
+                      setInvoicePreset(null)
+                      persistDocSetting({ invoiceStyle: st.id }, () => {
+                        setInvoiceStyle(prev)
+                        setInvoicePreset(prevPreset)
+                      })
+                    }}
+                    aria-pressed={active}
+                    title={fits ? st.description : `Not available with the ${layout.name} layout`}
+                    className={
+                      'rounded-lg border p-2 text-left transition min-h-11 ' +
+                      (!fits ? 'opacity-40 cursor-not-allowed border-border/50 ' : '') +
+                      (active && fits
+                        ? 'border-primary ring-2 ring-primary/25'
+                        : 'border-border/70 hover:border-border')
+                    }
+                  >
+                    <span className="block text-xs font-medium truncate">{st.name}</span>
+                    <span className="block text-3xs text-muted-foreground leading-snug line-clamp-2">
+                      {st.description}
+                    </span>
+                  </button>
+                )
+              })}
             </div>
           </div>
 
@@ -1785,8 +1964,15 @@ export function Settings({
                   type="button"
                   onClick={() => {
                     const prev = invoiceTheme
+                    const prevPreset = invoicePreset
                     setInvoiceTheme(t.id)
-                    persistDocSetting({ invoiceTheme: t.id }, () => setInvoiceTheme(prev))
+                    // A colour change makes it the shop's own design too —
+                    // the same rule as the layout and styling controls.
+                    setInvoicePreset(null)
+                    persistDocSetting({ invoiceTheme: t.id }, () => {
+                      setInvoiceTheme(prev)
+                      setInvoicePreset(prevPreset)
+                    })
                   }}
                   aria-pressed={invoiceTheme === t.id}
                   title={t.description}
